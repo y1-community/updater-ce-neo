@@ -182,6 +182,15 @@ class FlashPage(QWidget):
         self._method_note.setStyleSheet("font-size: 11px; color: #9ca3af;")
         layout.addWidget(self._method_note)
 
+        # Hide the method picker by default on Windows/Linux; it only
+        # appears after the user presses M. On macOS there is only one
+        # backend (MTKClient) so the combo stays hidden permanently.
+        self._method_revealed = False
+        self._method_label.setVisible(False)
+        self._method_combo.setVisible(False)
+        if not paths.IS_MAC:
+            self._method_note.setVisible(False)
+
         self._wait_status = StatusTag("idle")
         layout.addWidget(self._wait_status)
 
@@ -310,6 +319,11 @@ class FlashPage(QWidget):
         idx = self._method_combo.findData(method)
         self._method_combo.setCurrentIndex(idx if idx >= 0 else 0)
         self._method_combo.blockSignals(False)
+        if not self._method_revealed:
+            self._method_combo.setVisible(False)
+            self._method_label.setVisible(False)
+            if not paths.IS_MAC:
+                self._method_note.setVisible(False)
         self._update_method_note()
 
     def _initsteps_image(self):
@@ -347,6 +361,19 @@ class FlashPage(QWidget):
             self._method_note.setText(tr("flash_method_note_mtk"))
         else:
             self._method_note.setText(tr("flash_method_note_auto"))
+
+    # -- method picker reveal (hidden by default on Win/Linux) ----------------
+    def reveal_method_selector(self):
+        """Show the backend method picker (normally hidden; user presses M)."""
+        if paths.IS_MAC:
+            return  # only one option — nothing to choose
+        if self._method_revealed:
+            return
+        self._method_revealed = True
+        self._method_label.setVisible(True)
+        self._method_combo.setVisible(True)
+        self._method_note.setVisible(True)
+        self._update_method_note()
 
     # -- data -----------------------------------------------------------------
     def set_model(self, model):

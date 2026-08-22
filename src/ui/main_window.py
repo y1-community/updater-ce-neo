@@ -252,6 +252,16 @@ class MainWindow(QMainWindow):
         self.service.device_lost.connect(self._on_device_lost)
         self.service.monitor_error.connect(self._on_monitor_error)
 
+    # --- keyboard shortcuts ---------------------------------------------------
+    def keyPressEvent(self, event):
+        # Press M on the flash page to reveal the backend method picker
+        # (hidden by default on Windows/Linux; no-op on macOS).
+        if event.key() == 0x004D and not int(event.modifiers()):  # Qt.Key_M
+            if self._stack.currentIndex() == _PAGE_FLASH:
+                self._flash_page.reveal_method_selector()
+        super().keyPressEvent(event)
+
+    # --- navigation -----------------------------------------------------------
     def _nav_to_page(self, page_idx):
         self._stack.setCurrentIndex(page_idx)
         for key, (btn, idx) in self._nav_buttons.items():
