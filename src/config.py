@@ -21,10 +21,9 @@ GITHUB_RELEASES_PER_PAGE = 100
 RELEASE_CACHE_TTL_SECONDS = 24 * 60 * 60  # 24 h, same as CE
 
 # --- App update checking ----------------------------------------------------
-# Where this app publishes its releases. Point this at the project's own
-# release channel when it starts shipping; the community repo (which hosts the
-# CE lineage and the Linux flash-tool payload) is the default until then.
-UPDATE_REPO = "y1-community/Innioasis-Updater"
+# Where this app publishes its releases — Updater Neo lives in this repo, so
+# Check for Updates reads its release channel here.
+UPDATE_REPO = "y1-community/updater-ce-neo"
 UPDATE_CACHE_TTL_SECONDS = 24 * 60 * 60
 UPDATE_CHECK_STARTUP_DELAY_MS = 3000  # silent auto-check shortly after launch
 
