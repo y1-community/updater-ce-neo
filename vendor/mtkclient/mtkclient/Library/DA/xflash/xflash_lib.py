@@ -182,9 +182,6 @@ class DAXFlash(metaclass=LogBase):
             if status == 0xc0020053:
                 # Anti roll back DA error
                 sys.exit(1)
-            elif status == 0xc0020004:
-                # DL forbidden error
-                sys.exit(1)
         return False
 
     def send_devctrl(self, cmd, param=None, status=None):
@@ -1072,7 +1069,7 @@ class DAXFlash(metaclass=LogBase):
                             if self.set_remote_sec_policy(data=sla_signature):
                                 print("SLA Signature was accepted.")
                                 return True
-        if rsakey is not None:
+        if rsakey is None:
             res = self.get_dev_fw_info()
             if res != b"":
                 data = res[4:4 + 0x10]
