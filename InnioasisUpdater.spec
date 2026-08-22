@@ -71,6 +71,7 @@ hiddenimports = mtk_hidden + crypto_hidden + [
     "serial.tools.list_ports",  # pyserial submodule imported by mtkclient
     "Cryptodome",  # pycryptodomex: mtkclient's mtk_crypto imports it directly
     "colorama",  # mtkclient.gui_utils imports it at module level
+    "logging.config",  # stdlib module PyInstaller strips from base_library.zip
 ]
 
 a = Analysis(
