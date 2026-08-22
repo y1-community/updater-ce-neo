@@ -778,6 +778,9 @@ class FlashWorker(QThread):
             # In frozen builds a lazy mtkclient import failure must be visible,
             # not swallowed into a bare INTERNAL_ERROR at the EXTRACTING step.
             self._log(f"mtkclient import failed: {type(e).__name__}: {e}")
+            # Also write the full traceback to the on-disk log (updater.log)
+            # so frozen-only import failures are diagnosable without the UI.
+            logger.error("mtkclient import failed", exc_info=True)
             self.finished.emit(False, "MTK_IMPORT_FAILED")
             return
 
