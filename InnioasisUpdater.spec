@@ -28,6 +28,10 @@ if str(VENDOR_MTK) not in sys.path:
 from PyInstaller.utils.hooks import collect_submodules  # noqa: E402
 
 mtk_hidden = []
+# Cryptodome (pycryptodomex): the hook only bundles the C-extension binaries;
+# the pure-Python submodules must be declared explicitly because mtkclient is
+# bundled as a data directory (invisible to PyInstaller's static analysis).
+crypto_hidden = collect_submodules("Cryptodome")
 
 datas = [
     (str(ASSETS / "style.qss"), "assets"),
@@ -56,11 +60,17 @@ datas = [
 if VENDOR_MTK.exists():
     datas.append((str(VENDOR_MTK), "mtkclient"))
 
-hiddenimports = mtk_hidden + [
-    # mtkclient loads some backends lazily; keep them explicit.
+hiddenimports = mtk_hidden + crypto_hidden + [
+    # mtkclient loads some backends lazily; keep them explicit. Since
+    # mtkclient is bundled as a data directory (not analysed as Python), its
+    # third-party imports are invisible to PyInstaller's static analysis —
+    # they must be declared here or the frozen import fails (MTK_IMPORT_FAILED).
     "usb",
     "usb.backend.libusb1",
     "serial",
+    "serial.tools.list_ports",  # pyserial submodule imported by mtkclient
+    "Cryptodome",  # pycryptodomex: mtkclient's mtk_crypto imports it directly
+    "colorama",  # mtkclient.gui_utils imports it at module level
 ]
 
 a = Analysis(
