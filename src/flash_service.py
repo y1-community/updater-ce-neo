@@ -467,6 +467,14 @@ class FlashWorker(QThread):
             if IS_MAC:
                 pass  # unreachable (handled above)
             elif IS_WINDOWS:
+                # Auto mode falls back to MTKClient when the bundled SP Flash
+                # Tool payload is missing, instead of failing the flash.
+                if method == "auto" and paths.find_sp_flash_tool() is None:
+                    self._log(
+                        "SP Flash Tool not found; using MTKClient method (auto fallback)."
+                    )
+                    self._flash_via_mtkclient(extract_dir, scatter_file)
+                    return
                 if method == "sp":
                     self._log("Using SP Flash Tool method (user selected).")
                 self._flash_via_sp_flash_tool(scatter_file)

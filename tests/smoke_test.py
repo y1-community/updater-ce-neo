@@ -1003,6 +1003,37 @@ def test_package_prep_gates_flash_start():
             break
     assert page2._start_btn.isEnabled(), "start button enabled only after prep"
 
+def test_auto_falls_back_when_sp_missing():
+    """Auto method on Windows falls back to MTKClient when the SP Flash Tool
+    payload is absent, instead of failing with SP_FLASH_TOOL_NOT_FOUND."""
+    import src.flash_service as fs
+
+    if not fs.IS_WINDOWS:
+        return  # fallback path is Windows-specific
+
+    real_find = fs.paths.find_sp_flash_tool
+    fs.paths.find_sp_flash_tool = lambda: None
+    try:
+        calls = []
+        w = fs.FlashWorker("pkg.zip", method="auto")
+        w._log = lambda *a, **k: None
+        w._flash_via_sp_flash_tool = lambda s: calls.append("sp")
+        w._flash_via_mtkclient = lambda e, s: calls.append("mtk")
+        w._dispatch_backend(Path("x"), Path("s"))
+        assert calls == ["mtk"], f"auto must fall back to mtkclient when SP missing: {calls}"
+
+        # Explicit "sp" still reports the missing tool rather than silently
+        # switching backends.
+        calls = []
+        w2 = fs.FlashWorker("pkg.zip", method="sp")
+        w2._log = lambda *a, **k: None
+        w2._flash_via_sp_flash_tool = lambda s: calls.append("sp")
+        w2._flash_via_mtkclient = lambda e, s: calls.append("mtk")
+        w2._dispatch_backend(Path("x"), Path("s"))
+        assert calls == ["sp"], f"explicit sp must still attempt SP Flash Tool: {calls}"
+    finally:
+        fs.paths.find_sp_flash_tool = real_find
+
 
 def main():
     print("== Neo updater smoke test ==")
@@ -1037,6 +1068,7 @@ def main():
     check("mtk write system exit guarded", test_mtk_write_system_exit_guarded)
     check("linux sp flash validation", test_linux_sp_flash_validation)
     check("package prep gates flash start", test_package_prep_gates_flash_start)
+    check("auto falls back when SP missing", test_auto_falls_back_when_sp_missing)
     if failures:
         print(f"\n{len(failures)} FAILURES:")
         for name, err in failures:
