@@ -1,0 +1,13 @@
+Neo Prototype — Innioasis Updater
+
+The application code in src/ is provided for evaluation under the MIT License,
+unless the project maintainers choose otherwise before distribution.
+
+The bundled mtkclient (vendor/mtkclient/) is the open-source mtkclient project
+by Bjoern Kerler and contributors, distributed under the GNU General Public
+License v3 (GPLv3). See vendor/mtkclient/LICENSE. Any distributed build of this
+application that includes mtkclient must comply with GPLv3.
+
+SP Flash Tool and the MediaTek Download Agents are proprietary MediaTek
+binaries and are NOT redistributed in this repository; they are an optional
+install-time payload for Windows only.

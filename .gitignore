@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv/
+dist/
+build/
+*.spec.bak
+.cache/
+
+# Third-party runtime payloads (MediaTek-proprietary, not redistributed as source)
+# SP Flash Tool v5.2016 and UnRAR are located at runtime by INSTALL_DIR paths.
+/SP_Flash_Tool/
+/tools/

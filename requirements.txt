@@ -1,0 +1,8 @@
+PySide6>=6.5
+requests>=2.31
+pyusb>=1.2
+pycryptodome>=3.19
+pycryptodomex>=3.19
+pyserial>=3.5
+colorama>=0.4
+capstone>=5.0
