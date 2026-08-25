@@ -204,11 +204,20 @@ class MainWindow(QMainWindow):
         # so without this the combo renders unstyled and its text is
         # invisible on the dark (#111827) nav panel.
         self._lang_combo.setObjectName("lang_combo")
+        # QAbstractItemView styles the open popup list: it is a descendant of
+        # the nav widget, so without explicit colors the nav's dark
+        # background rule paints the dropdown dark too. Fully specifying
+        # light colors here also keeps the popup identical under OS
+        # dark/light palette variations.
         self._lang_combo.setStyleSheet(
             "QComboBox { background-color: #FFFFFF; color: #1A1A2E;"
             " border: 1px solid #D0D7E2; border-radius: 6px; padding: 6px 12px;"
             " font-size: 13px; }"
             "QComboBox::drop-down { border: none; width: 20px; }"
+            "QComboBox QAbstractItemView { background-color: #FFFFFF;"
+            " color: #1A1A2E; border: 1px solid #D0D7E2; border-radius: 6px;"
+            " selection-background-color: #EBF0FF; selection-color: #3B5BDB;"
+            " font-size: 13px; outline: 0; }"
         )
         self._lang_combo.addItem("中文", "zh-CN")
         self._lang_combo.addItem("English", "en")
