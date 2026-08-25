@@ -199,6 +199,17 @@ class MainWindow(QMainWindow):
         self._lang_label.setStyleSheet("font-size: 11px; color: #9ca3af; margin-top: 8px;")
         layout.addWidget(self._lang_label)
         self._lang_combo = QComboBox()
+        # Inline style (mirrors the QComboBox#lang_combo rule in style.qss):
+        # the nav panel's own inline stylesheet shadows the app-level rule,
+        # so without this the combo renders unstyled and its text is
+        # invisible on the dark (#111827) nav panel.
+        self._lang_combo.setObjectName("lang_combo")
+        self._lang_combo.setStyleSheet(
+            "QComboBox { background-color: #FFFFFF; color: #1A1A2E;"
+            " border: 1px solid #D0D7E2; border-radius: 6px; padding: 6px 12px;"
+            " font-size: 13px; }"
+            "QComboBox::drop-down { border: none; width: 20px; }"
+        )
         self._lang_combo.addItem("中文", "zh-CN")
         self._lang_combo.addItem("English", "en")
         self._lang_combo.addItem("Français", "fr")
