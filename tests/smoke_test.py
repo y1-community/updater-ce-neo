@@ -552,6 +552,9 @@ def test_flash_flow_launch():
     assert w._flash_page._stack.currentWidget() is w._flash_page._flashing_view
     # The method selector is disabled once flashing starts.
     assert not w._flash_page._method_combo.isEnabled()
+    # In-progress copy: banner and status tag both read "Install in Progress".
+    assert w._flash_page._flash_banner.text() == "Install in Progress"
+    assert w._flash_page._wait_status.text() == "Install in Progress"
     w.close()
     app.processEvents()
 
