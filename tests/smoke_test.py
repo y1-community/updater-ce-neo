@@ -689,6 +689,8 @@ def test_offline_banner_and_generic_model():
     w.show()
     banner = w._select_page._offline_banner.text()
     assert "Innioasis" in banner and "Timmkoo" in banner, banner
+    # The offline-install note belongs on the Local file tab, not the Online tab.
+    assert w._select_page._offline_banner.parent() is w._select_page._local_tab
 
     calls = []
     w.service.start_flash = lambda pkg, pre="", method="auto", **kw: calls.append(pkg)
@@ -745,6 +747,55 @@ def test_release_list_and_notes():
     md2 = page._render_release_notes(releases[1])
     assert "No release notes" in md2
     app.processEvents()
+
+
+def test_release_model_filtering():
+    """Y2 must not see releases that only carry a plain rom.zip (Y1-only)
+    from a repo without a Y2 marker, while still listing shared/dual repos.
+    Mirrors firmware_downloader.py's filter_rom_variants_for_model."""
+    from src.catalog import _parse_rom_asset_variant, _release_matches_model
+    from src.catalog import FirmwarePackage
+
+    def asset(name):
+        return {"name": name, "browser_download_url": f"https://x/{name}", "size": 10}
+
+    def release(names, repo):
+        return {
+            "rom_variants": [
+                v for v in (
+                    _parse_rom_asset_variant(asset(n), "v1.0", repo or "y1-community/x")
+                    for n in names
+                ) if v
+            ],
+            "source_repo": repo or "y1-community/x",
+        }
+
+    y1 = FirmwarePackage("original-y1", "Original Software", "Y1",
+                         "y1-community/y1-stock-rom", "rom.zip")
+    y2 = FirmwarePackage("original-y2", "Original Software", "Y2",
+                         "y1-community/y1-stock-rom", "rom_y2.zip")
+    rb_y2 = FirmwarePackage("rockbox-y2", "Rockbox", "Y2",
+                            "y1-community/rockbox-y2-rom", "rom_y2.zip")
+
+    # The reported bug: a release with only rom.zip must be hidden for Y2.
+    only_rom = release(["rom.zip"], "y1-community/y1-stock-rom")
+    assert not _release_matches_model("Y2", only_rom, y2)
+    # …but it is a valid Y1 release.
+    assert _release_matches_model("Y1", only_rom, y1)
+
+    # A release carrying rom_y2.zip shows for Y2 (even alongside a plain rom.zip).
+    both = release(["rom_y2.zip", "rom.zip"], "y1-community/y1-stock-rom")
+    assert _release_matches_model("Y2", both, y2)
+
+    # A rom_y2-only release never shows for Y1.
+    only_y2 = release(["rom_y2.zip"], "y1-community/y1-stock-rom")
+    assert not _release_matches_model("Y1", only_y2, y1)
+    assert _release_matches_model("Y2", only_y2, y2)
+
+    # A shared dual rom on a Y2-named repo still shows for both models.
+    shared = release(["rom_360p.zip"], "y1-community/rockbox-y2-rom")
+    assert _release_matches_model("Y2", shared, rb_y2)
+
 
 
 
@@ -1059,6 +1110,7 @@ def main():
     check("success dialog flow", test_success_dialog_flow)
     check("offline banner + generic model", test_offline_banner_and_generic_model)
     check("release list + notes", test_release_list_and_notes)
+    check("release model filtering", test_release_model_filtering)
     check("mtk api init", test_mtk_api_init)
     check("cancel kills SP process", test_cancel_kills_sp_process)
     check("worker switch guard", test_worker_switch_guard)

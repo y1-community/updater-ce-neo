@@ -211,13 +211,89 @@ def select_preferred_rom_asset(variants, selected_type=None, model=None):
     return variants[0]
 
 
-def _release_matches_model(model, release):
-    """True if the release carries a rom*.zip variant usable by ``model``."""
-    for v in release.get("rom_variants") or []:
-        vm = v.get("model")
-        if vm == model or vm == "dual":
+def _model_ok_for_package(variant_model, package_model, repo, model):
+    """Whether a rom*.zip variant model fits the selected device ``model``
+    given the catalogue package's target ``package_model``.
+
+    Ported from firmware_downloader.py ``filter_rom_variants_for_model``.
+    The crucial rule this captures: a *dual* rom.zip from a repo whose name
+    has no Y2 marker (e.g. ``y1-stock-rom``) is a Y1-only legacy asset and
+    must never appear for a Y2 selection.
+    """
+    variant_model = (variant_model or "dual").upper()
+    ed_model = str(model or "").upper()
+    pd = str(package_model or "").upper()
+    selecting_y2 = "Y2" in ed_model
+    repo_name = (repo or "").lower().split("/")[-1]
+
+    if selecting_y2:
+        if variant_model == "Y2":
             return True
-    return False
+        if pd == "Y1":
+            return False
+        if variant_model == "DUAL":
+            # Legacy rom.zip on a Y1-named repo (no y2 marker) is not for a Y2 device.
+            if pd == "Y2" and "y2" not in repo_name:
+                return False
+            return True
+        return False
+
+    # Y1 / generic selection
+    if pd == "Y2":
+        return False
+    if variant_model == "Y2":
+        return False
+    return variant_model in ("Y1", "DUAL")
+
+
+def filter_rom_variants_for_model(variants, model, package_model=None, repo=""):
+    """Return rom*.zip variants usable by ``model`` for a catalogue package.
+
+    Matches the upstream ``filter_rom_variants_for_model`` behaviour: explicit
+    model variants (e.g. rom_y2.zip) always win out, and dual rom.zip assets
+    are gated on the package/repo context so Y2 never inherits Y1-only legacy
+    releases.
+    """
+    if not variants:
+        return []
+    enriched = []
+    for v in variants:
+        vm = (v.get("model") or "dual").upper()
+        if vm not in ("Y1", "Y2", "DUAL"):
+            continue
+        enriched.append(v)
+    selecting_y2 = "Y2" in (model or "").upper()
+    kept = [
+        v for v in enriched
+        if _model_ok_for_package(v.get("model"), package_model, repo, model)
+    ]
+    if not kept:
+        return []
+    # When Y2 is selected, prefer explicit Y2 variants over dual rom.zip;
+    # when Y1 is selected, exclude anything Y2-specific.
+    if selecting_y2:
+        y2_explicit = [v for v in kept if (v.get("model") or "").upper() == "Y2"]
+        if y2_explicit:
+            return y2_explicit
+    else:
+        non_y2 = [v for v in kept if (v.get("model") or "").upper() != "Y2"]
+        if non_y2:
+            return non_y2
+    return kept
+
+
+def _release_matches_model(model, release, package=None):
+    """True if the release carries a rom*.zip variant usable by ``model``.
+
+    Mirrors firmware_downloader.py's ``release_supports_device_model``.
+    Without the package/repo context this would let a legacy Y1-only
+    ``rom.zip`` (classified ``dual``) leak into a Y2 list.
+    """
+    variants = release.get("rom_variants") or []
+    package_model = package.model if package is not None else None
+    repo = release.get("source_repo", "") or ""
+    filtered = filter_rom_variants_for_model(variants, model, package_model, repo)
+    return bool(filtered)
 
 
 # ---------------------------------------------------------------------------
@@ -470,13 +546,20 @@ class ReleasesClient:
         releases = self.get_all_releases(package.repo)
         out = []
         for rel in releases:
-            if not _release_matches_model(model, rel):
+            if not _release_matches_model(model, rel, package):
                 continue
             if rel.get("prerelease") and not show_nightly:
                 continue
             # Re-pick the preferred asset with the model filter so the
             # download URL points to the correct rom*.zip for this model.
-            rom_variants = rel.get("rom_variants") or []
+            # Use the model-filtered set (not all variants) so the preferred
+            # asset can never be a rom the model can't flash.
+            rom_variants = filter_rom_variants_for_model(
+                rel.get("rom_variants") or [],
+                model,
+                package.model,
+                rel.get("source_repo", "") or "",
+            )
             preferred = select_preferred_rom_asset(rom_variants, model=model)
             if preferred:
                 rel = dict(rel)  # shallow copy — don't mutate cache

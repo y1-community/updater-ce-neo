@@ -60,6 +60,15 @@ datas = [
 if VENDOR_MTK.exists():
     datas.append((str(VENDOR_MTK), "mtkclient"))
 
+# SP Flash Tool (Windows / Linux console-mode backend) lives NEXT to the
+# exe (paths.SP_FLASH_TOOL_DIR = INSTALL_DIR / "SP_Flash_Tool"), so it is
+# bundled as a whole-dir datas entry with target ``"."`` — without this a
+# --clean rebuild silently drops the payload and Auto mode (or explicit
+# SP Flash Tool) fails with "SP Flash Tool not found".
+SP_FLASH_TOOL = PROJECT_ROOT / "SP_Flash_Tool"
+if SP_FLASH_TOOL.exists():
+    datas.append((str(SP_FLASH_TOOL), "."))
+
 hiddenimports = mtk_hidden + crypto_hidden + [
     # mtkclient loads some backends lazily; keep them explicit. Since
     # mtkclient is bundled as a data directory (not analysed as Python), its

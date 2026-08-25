@@ -90,14 +90,6 @@ class SelectPackagePage(QWidget):
         self._title.setStyleSheet("font-size: 20px; font-weight: 800; color: #111827;")
         layout.addWidget(self._title)
 
-        # Offline capability note: the flash engine works with any firmware
-        # package for every Innioasis / Timmkoo player (the architectural
-        # advantage InniUpdaterChin has over the online-only Updater CE).
-        self._offline_banner = Banner()
-        self._offline_banner.set_type("info")
-        self._offline_banner.set_key("sel_offline_install")
-        layout.addWidget(self._offline_banner)
-
         self._tabs = QTabWidget()
         self._online_tab = self._build_online_tab()
         self._local_tab = self._build_local_tab()
@@ -182,6 +174,14 @@ class SelectPackagePage(QWidget):
         self._hint.setWordWrap(True)
         self._hint.setStyleSheet("font-size: 13px; color: #6b7280;")
         layout.addWidget(self._hint)
+
+        # Offline capability note: the flash engine works with any firmware
+        # package for every Innioasis / Timmkoo player (the architectural
+        # advantage InniUpdaterChin has over the online-only Updater CE).
+        self._offline_banner = Banner()
+        self._offline_banner.set_type("info")
+        self._offline_banner.set_key("sel_offline_install")
+        layout.addWidget(self._offline_banner)
 
         row = QHBoxLayout()
         self._path_edit = QLineEdit()
