@@ -531,9 +531,9 @@ _STRINGS: dict = {
     },
     "flash_banner_flashing": {
         "zh-CN": "正在刷机",
-        "en": "Flashing",
-        "fr": "Flashing en cours",
-        "es": "Flasheando",
+        "en": "Install in Progress",
+        "fr": "Installation en cours",
+        "es": "Instalación en curso",
     },
     "flash_conn_waiting": {
         "zh-CN": "等待连接",
@@ -637,9 +637,9 @@ _STRINGS: dict = {
     },
     "status_flashing": {
         "zh-CN": "刷机中",
-        "en": "Flashing",
-        "fr": "Flashing en cours",
-        "es": "Flasheando",
+        "en": "Install in Progress",
+        "fr": "Installation en cours",
+        "es": "Instalación en curso",
     },
     "status_complete": {
         "zh-CN": "完成",
