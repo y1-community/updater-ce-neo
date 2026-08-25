@@ -60,14 +60,10 @@ datas = [
 if VENDOR_MTK.exists():
     datas.append((str(VENDOR_MTK), "mtkclient"))
 
-# SP Flash Tool (Windows / Linux console-mode backend) lives NEXT to the
-# exe (paths.SP_FLASH_TOOL_DIR = INSTALL_DIR / "SP_Flash_Tool"), so it is
-# bundled as a whole-dir datas entry with target ``"."`` — without this a
-# --clean rebuild silently drops the payload and Auto mode (or explicit
-# SP Flash Tool) fails with "SP Flash Tool not found".
-SP_FLASH_TOOL = PROJECT_ROOT / "SP_Flash_Tool"
-if SP_FLASH_TOOL.exists():
-    datas.append((str(SP_FLASH_TOOL), "."))
+# NOTE: SP Flash Tool is NOT bundled through datas — the app resolves it at
+# INSTALL_DIR / "SP_Flash_Tool" (next to the exe), which datas cannot target
+# (datas always land under _internal). A post-build copy step places it next
+# to the exe; see tools/build.sh / build.bat.
 
 hiddenimports = mtk_hidden + crypto_hidden + [
     # mtkclient loads some backends lazily; keep them explicit. Since
@@ -120,3 +116,25 @@ coll = COLLECT(
     upx=False,
     name="InnioasisUpdater",
 )
+
+# ---------------------------------------------------------------------------
+# Post-build payload placement: the app resolves SP Flash Tool at
+# INSTALL_DIR / "SP_Flash_Tool" (next to the exe), which PyInstaller datas
+# cannot target (datas always land under _internal). Without this a --clean
+# rebuild silently drops the payload and Auto mode fails with
+# "SP Flash Tool not found". Copy the whole tree next to the exe after COLLECT.
+# ---------------------------------------------------------------------------
+import shutil  # noqa: E402
+
+SP_FLASH_SRC = PROJECT_ROOT / "SP_Flash_Tool"
+try:
+    _dist_root = Path(DISTPATH)  # noqa: F821  (injected by PyInstaller)
+    _app_dir = _dist_root / "InnioasisUpdater"
+    _sp_target = _app_dir / "SP_Flash_Tool"
+    if SP_FLASH_SRC.exists():
+        if _sp_target.exists():
+            shutil.rmtree(_sp_target, ignore_errors=True)
+        shutil.copytree(SP_FLASH_SRC, _sp_target)
+        print(f"[spec] copied SP_Flash_Tool payload -> {_sp_target}")
+except Exception as exc:  # noqa: BLE001  (never fail a build over payload)
+    print(f"[spec] WARNING: could not place SP_Flash_Tool payload: {exc}")
