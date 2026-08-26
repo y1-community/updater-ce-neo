@@ -35,7 +35,11 @@ def main():
     app.setApplicationName("Innioasis Updater")
     app.setOrganizationName("innioasis")
 
-    icon = paths.RESOURCES_DIR / "icon.ico"
+    import sys as _sys
+    if _sys.platform == "darwin":
+        icon = paths.RESOURCES_DIR / "icon.icns"
+    else:
+        icon = paths.RESOURCES_DIR / "icon.ico"
     if not icon.exists():
         icon = paths.RESOURCES_DIR / "icon.png"
     if icon.exists():
