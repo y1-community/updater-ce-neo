@@ -126,7 +126,6 @@ class SelectPackagePage(QWidget):
             f" border: none; background: transparent;"
         )
         self._type_combo = QComboBox()
-        self._type_combo.addItem("All", None)
         self._type_combo.addItem("Type A", "A")
         self._type_combo.addItem("Type B", "B")
         self._type_combo.currentIndexChanged.connect(self._on_type_changed)
@@ -302,10 +301,9 @@ class SelectPackagePage(QWidget):
         self._type_label.setVisible(has_types)
         self._type_combo.setVisible(has_types)
         if not has_types:
-            self._selected_type = None
-            self._type_combo.blockSignals(True)
-            self._type_combo.setCurrentIndex(0)  # "All"
-            self._type_combo.blockSignals(False)
+            self._selected_type = "A"
+        else:
+            self._selected_type = self._type_combo.currentData() or "A"
         names = catalog.software_names_for_model(model)
         self._software_combo.blockSignals(True)
         self._software_combo.clear()
