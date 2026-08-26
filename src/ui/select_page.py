@@ -157,6 +157,7 @@ class SelectPackagePage(QWidget):
 
         split = QHBoxLayout()
         self._release_list = QListWidget()
+        self._release_list.currentItemChanged.connect(self._on_release_selected)
         split.addWidget(self._release_list, 3)
         self._notes = QTextEdit()
         self._notes.setObjectName("releaseNotes")
