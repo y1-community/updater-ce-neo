@@ -282,17 +282,18 @@ def filter_rom_variants_for_model(variants, model, package_model=None, repo=""):
     return kept
 
 
-def _release_matches_model(model, release, package=None):
+def _release_matches_model(model, release, package=None, selected_type=None):
     """True if the release carries a rom*.zip variant usable by ``model``.
 
-    Mirrors firmware_downloader.py's ``release_supports_device_model``.
-    Without the package/repo context this would let a legacy Y1-only
-    ``rom.zip`` (classified ``dual``) leak into a Y2 list.
+    When ``selected_type`` (e.g. 'A' or 'B') is given, the release must
+    contain at least one variant matching that hardware type.
     """
     variants = release.get("rom_variants") or []
     package_model = package.model if package is not None else None
     repo = release.get("source_repo", "") or ""
     filtered = filter_rom_variants_for_model(variants, model, package_model, repo)
+    if selected_type:
+        filtered = [v for v in filtered if v.get("type") == selected_type]
     return bool(filtered)
 
 
@@ -535,34 +536,34 @@ class ReleasesClient:
             })
         return releases
 
-    def releases_for_package(self, package: FirmwarePackage, model: str, show_nightly=False):
+    def releases_for_package(self, package: FirmwarePackage, model: str, show_nightly=False, selected_type=None):
         """Fetch releases for a catalogue package, filtered for the device model.
 
         Only releases that carry a ``rom*.zip`` asset compatible with ``model``
-        (exact match or ``dual``) are included.  The ``download_url`` and
-        ``asset_name`` on each returned release point to the model-correct
-        asset, not just the "best" one globally.
+        (exact match or ``dual``) are included.  When ``selected_type`` is
+        given (e.g. 'A' or 'B'), only releases with a matching hardware type
+        variant are included.
         """
         releases = self.get_all_releases(package.repo)
         out = []
         for rel in releases:
-            if not _release_matches_model(model, rel, package):
+            if not _release_matches_model(model, rel, package, selected_type):
                 continue
             if rel.get("prerelease") and not show_nightly:
                 continue
             # Re-pick the preferred asset with the model filter so the
             # download URL points to the correct rom*.zip for this model.
-            # Use the model-filtered set (not all variants) so the preferred
-            # asset can never be a rom the model can't flash.
             rom_variants = filter_rom_variants_for_model(
                 rel.get("rom_variants") or [],
                 model,
                 package.model,
                 rel.get("source_repo", "") or "",
             )
-            preferred = select_preferred_rom_asset(rom_variants, model=model)
+            if selected_type:
+                rom_variants = [v for v in rom_variants if v.get("type") == selected_type] or rom_variants
+            preferred = select_preferred_rom_asset(rom_variants, selected_type=selected_type, model=model)
             if preferred:
-                rel = dict(rel)  # shallow copy — don't mutate cache
+                rel = dict(rel)  # shallow copy, don't mutate cache
                 rel["download_url"] = preferred["asset"]["browser_download_url"]
                 rel["asset_name"] = preferred["asset"]["name"]
                 rel["asset_size"] = preferred["asset"].get("size", 0)

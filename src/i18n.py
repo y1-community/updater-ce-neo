@@ -26,10 +26,10 @@ _STRINGS: dict = {
     # Navigation
     "nav_home": {"zh-CN": "首页", "en": "Home", "fr": "Accueil", "es": "Inicio"},
     "nav_select_package": {
-        "zh-CN": "选择软件包",
-        "en": "Select Package",
-        "fr": "Choisir un paquet",
-        "es": "Seleccionar paquete",
+        "zh-CN": "选择软件",
+        "en": "Select Software",
+        "fr": "Choisir un logiciel",
+        "es": "Seleccionar software",
     },
     "nav_flash": {
         "zh-CN": "开始刷机",
@@ -132,10 +132,10 @@ _STRINGS: dict = {
 
     # Select package page
     "sel_title": {
-        "zh-CN": "选择软件包",
-        "en": "Select Package",
-        "fr": "Choisir un paquet",
-        "es": "Seleccionar paquete",
+        "zh-CN": "选择软件",
+        "en": "Select Software",
+        "fr": "Choisir un logiciel",
+        "es": "Seleccionar software",
     },
     "sel_source_title": {
         "zh-CN": "软件包来源",
@@ -172,6 +172,12 @@ _STRINGS: dict = {
         "en": "Software",
         "fr": "Logiciel",
         "es": "Software",
+    },
+    "sel_type": {
+        "zh-CN": "设备类型",
+        "en": "Type",
+        "fr": "Type",
+        "es": "Tipo",
     },
     "sel_release": {
         "zh-CN": "版本",

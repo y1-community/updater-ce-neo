@@ -33,16 +33,19 @@ logger = logging.getLogger(__name__)
 class ReleasesWorker(QThread):
     finished = Signal(list, str)
 
-    def __init__(self, client, package, model, show_nightly, parent=None):
+    def __init__(self, client, package, model, show_nightly, selected_type=None, parent=None):
         super().__init__(parent)
         self.client = client
         self.package = package
         self.model = model
         self.show_nightly = show_nightly
+        self.selected_type = selected_type
 
     def run(self):
         try:
-            releases = self.client.releases_for_package(self.package, self.model, self.show_nightly)
+            releases = self.client.releases_for_package(
+                self.package, self.model, self.show_nightly, self.selected_type
+            )
             self.finished.emit(releases, "")
         except Exception as e:
             logger.exception("Releases fetch failed")
@@ -67,6 +70,7 @@ class SelectPackagePage(QWidget):
         self._download_status_key = ""
         self._local_status_key = ""
         self._prep_worker = None
+        self._selected_type = None  # None = all types; 'A' or 'B' for filtered
         self._build_ui()
         self._on_model_changed()
 
@@ -114,6 +118,22 @@ class SelectPackagePage(QWidget):
             self._model_combo.addItem(m)
         self._model_combo.currentTextChanged.connect(self._on_model_changed)
         filters.addWidget(self._model_combo)
+
+        # Device Type filter: only shown for models with Type A/B variants (e.g. Y1).
+        self._type_label = QLabel("Type")
+        self._type_label.setStyleSheet(
+            f"font-size: 13px; font-weight: 600; color: {t.fg_dim};"
+            f" border: none; background: transparent;"
+        )
+        self._type_combo = QComboBox()
+        self._type_combo.addItem("All", None)
+        self._type_combo.addItem("Type A", "A")
+        self._type_combo.addItem("Type B", "B")
+        self._type_combo.currentIndexChanged.connect(self._on_type_changed)
+        self._type_label.setVisible(False)
+        self._type_combo.setVisible(False)
+        filters.addWidget(self._type_label)
+        filters.addWidget(self._type_combo)
 
         self._software_label = QLabel(tr("sel_software"))
         self._software_label.setStyleSheet(
@@ -257,6 +277,7 @@ class SelectPackagePage(QWidget):
         self._tabs.setTabText(0, tr("sel_online"))
         self._tabs.setTabText(1, tr("sel_local"))
         self._model_label.setText(tr("sel_model"))
+        self._type_label.setText(tr("sel_type"))
         self._software_label.setText(tr("sel_software"))
         self._refresh_btn.setText(tr("sel_refresh"))
         self._install_btn.setText(tr("sel_install"))
@@ -276,12 +297,25 @@ class SelectPackagePage(QWidget):
 
     def _on_model_changed(self):
         model = self.current_model()
+        # Show the type filter only for models that have Type A/B variants (Y1).
+        has_types = model.upper() == "Y1"
+        self._type_label.setVisible(has_types)
+        self._type_combo.setVisible(has_types)
+        if not has_types:
+            self._selected_type = None
+            self._type_combo.blockSignals(True)
+            self._type_combo.setCurrentIndex(0)  # "All"
+            self._type_combo.blockSignals(False)
         names = catalog.software_names_for_model(model)
         self._software_combo.blockSignals(True)
         self._software_combo.clear()
         self._software_combo.addItems(names)
         self._software_combo.blockSignals(False)
         self._on_software_changed()
+
+    def _on_type_changed(self, index):
+        self._selected_type = self._type_combo.currentData()
+        self._refresh_releases()
 
     def _on_software_changed(self):
         self._refresh_releases()
@@ -295,7 +329,8 @@ class SelectPackagePage(QWidget):
             return
         self._set_online_banner("sel_loading")
         self._releases_worker = ReleasesWorker(
-            self.client, package, self.current_model(), show_nightly=False
+            self.client, package, self.current_model(),
+            show_nightly=False, selected_type=self._selected_type,
         )
         self._releases_worker.finished.connect(self._on_releases_loaded)
         self._releases_worker.start()

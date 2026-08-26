@@ -119,10 +119,10 @@ def test_i18n_languages():
     # Language switching actually changes strings.
     translator().set_language("fr")
     assert tr("nav_log") == "Diagnostics"
-    assert tr("sel_title") == "Choisir un paquet"
+    assert tr("sel_title") == "Choisir un logiciel"
     translator().set_language("es")
     assert tr("nav_log") == "Diagnóstico"
-    assert tr("sel_title") == "Seleccionar paquete"
+    assert tr("sel_title") == "Seleccionar software"
     translator().set_language("en")
     assert tr("nav_log") == "Diagnostics"
 
