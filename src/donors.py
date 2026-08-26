@@ -31,6 +31,8 @@ def parse_donors_csv_text(csv_text):
             name = row[0].strip() or "Supporter"
             if name.lower().startswith("total"):
                 continue
+            if name.lower().strip() == "innioasis":
+                continue
             try:
                 amt = float(row[1].strip().replace("$", ""))
             except (ValueError, IndexError):
