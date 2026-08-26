@@ -36,7 +36,7 @@ from ..config import (
 )
 from ..manifest import ManifestWorker
 from ..updates import UpdateCheckWorker, UpdateInfo
-from ..donation_dialog import DonationDialog
+from ..donation_dialog import DonationDialog, DonationStatusBar
 from ..donors import load_donors_file, parse_donors_csv_text
 from ..flash_service import (
     STEP_DETECT,
@@ -141,6 +141,15 @@ class MainWindow(QMainWindow):
         outer.addWidget(self._stack, 1)
 
         self._apply_style()
+        self._donations = parse_donors_csv_text(load_donors_file([
+            paths.RESOURCES_DIR / "donors.csv",
+        ]) or "")
+        self.setStatusBar(DonationStatusBar(
+            parent=self,
+            donations=self._donations,
+            on_support=self._on_support_clicked,
+            on_donations_updated=self._on_donations_updated,
+        ))
         self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
 
     def _build_nav(self):
@@ -555,6 +564,8 @@ class MainWindow(QMainWindow):
         self._flash_page.retranslate()
         self._error_page.retranslate()
         self._retry_page.retranslate()
+        if self.statusBar() and hasattr(self.statusBar(), "retranslate"):
+            self.statusBar().retranslate()
 
     # ---------------------------------------------------------------- updates
     def _on_manifest_loaded(self, entries):
@@ -607,19 +618,24 @@ class MainWindow(QMainWindow):
             )
 
     # ---------------------------------------------------------------- donate
+    def _on_donations_updated(self, donations):
+        """Keep the modal's next opening on the same live donor snapshot as
+        the always-visible footer. Failed refreshes are ignored by the footer,
+        so the bundled data remains the fallback without any UI warning.
+        """
+        if donations:
+            self._donations = donations
+
     def _on_support_clicked(self):
         self._show_donation_dialog(context="general")
 
     def _show_donation_dialog(self, context="general"):
-        donations = parse_donors_csv_text(load_donors_file([
-            paths.RESOURCES_DIR / "donors.csv",
-        ]) or "")
         dialog = DonationDialog(
             parent=self,
             context=context,
             model=self._package_model,
             software_name=self._package_name,
-            donations=donations,
+            donations=self._donations,
             on_dont_ask_again=lambda: self.settings.setValue(
                 "donation_install_prompt_disabled", True
             ),

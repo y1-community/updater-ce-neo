@@ -10,7 +10,7 @@ import logging
 import random
 import webbrowser
 
-from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt, QTimer
+from PySide6.QtCore import QEasingCurve, QObject, QPropertyAnimation, Qt, QTimer, Signal
 from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import (
     QApplication,
@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QProgressBar,
     QPushButton,
+    QStatusBar,
     QVBoxLayout,
     QWidget,
 )
@@ -31,6 +32,169 @@ from .donors import fetch_remote_donors_async, get_monthly_goal_stats
 from .i18n import tr
 
 logger = logging.getLogger(__name__)
+
+
+class _DonationRefreshBridge(QObject):
+    """Marshal background donor refreshes onto the Qt/UI thread."""
+
+    updated = Signal(object)
+
+
+class DonationStatusBar(QStatusBar):
+    """Compact, always-visible version of the Support dialog's goal display."""
+
+    def __init__(self, parent=None, donations=None, on_support=None,
+                 on_donations_updated=None):
+        super().__init__(parent)
+        self.donations = donations or []
+        self._on_donations_updated = on_donations_updated
+        self._remote_refresh_interval_ms = 5 * 60 * 1000
+        self._showing_goal = True
+        self._is_dark = self._detect_dark()
+        self.setObjectName("donation_status_bar")
+        self.setSizeGripEnabled(False)
+        self.setFixedHeight(44)
+        self._build_ui(on_support)
+        self._refresh_goal()
+        self._donor_lines = self._build_donor_lines()
+        self._rotation_timer = QTimer(self)
+        self._rotation_timer.timeout.connect(self._rotate)
+        self._rotation_timer.start(6500)
+
+        self._refresh_bridge = _DonationRefreshBridge(self)
+        self._refresh_bridge.updated.connect(self._apply_fresh_donations)
+        self._remote_refresh_timer = QTimer(self)
+        self._remote_refresh_timer.setInterval(self._remote_refresh_interval_ms)
+        self._remote_refresh_timer.timeout.connect(self._refresh_remote_donors)
+        self._remote_refresh_timer.start()
+        # Fetch immediately, then keep retrying quietly. This preserves the
+        # bundled donors.csv while offline and picks up the live file when
+        # connectivity becomes available later in the session.
+        self._refresh_remote_donors()
+
+    def _detect_dark(self):
+        try:
+            return QApplication.palette().color(QPalette.ColorRole.Window).lightness() < 128
+        except Exception:
+            return False
+
+    def _c(self, light, dark):
+        return dark if self._is_dark else light
+
+    def _build_ui(self, on_support):
+        bg = self._c("#ffffff", "#1f2937")
+        border = self._c("#e5e7eb", "#374151")
+        fg = self._c("#111827", "#f9fafb")
+        self.setStyleSheet(
+            f"QStatusBar#donation_status_bar {{ background-color: {bg};"
+            f" border-top: 1px solid {border}; color: {fg}; }}"
+            f"QStatusBar#donation_status_bar QLabel {{ color: {fg}; background: transparent; border: none; }}"
+            f"QStatusBar#donation_status_bar QProgressBar {{ background-color: {self._c('#e5e7eb', '#374151')};"
+            f" border: 1px solid {self._c('#d1d5db', '#4b5563')}; border-radius: 4px; }}"
+            "QStatusBar#donation_status_bar QProgressBar::chunk { background-color: #10b981; border-radius: 3px; }"
+            f"QStatusBar#donation_status_bar QPushButton {{ background-color: #3b5bdb; color: white;"
+            f" border: none; border-radius: 6px; padding: 5px 10px; font-size: 11px; font-weight: bold; }}"
+            f"QStatusBar#donation_status_bar QPushButton:hover {{ background-color: #3451c7; }}"
+        )
+
+        content = QWidget(self)
+        row = QHBoxLayout(content)
+        row.setContentsMargins(10, 0, 6, 0)
+        row.setSpacing(8)
+
+        self._goal_label = QLabel()
+        self._goal_label.setMinimumWidth(260)
+        self._goal_label.setStyleSheet(f"font-size: 10px; color: {fg};")
+        row.addWidget(self._goal_label, 1)
+
+        self._donor_label = QLabel()
+        self._donor_label.setMinimumWidth(260)
+        self._donor_label.setTextFormat(Qt.RichText)
+        self._donor_label.setStyleSheet(f"font-size: 10px; color: {fg};")
+        self._donor_label.setVisible(False)
+        row.addWidget(self._donor_label, 1)
+
+        self._goal_bar = QProgressBar()
+        self._goal_bar.setRange(0, 1000)
+        self._goal_bar.setTextVisible(False)
+        self._goal_bar.setFixedSize(150, 8)
+        row.addWidget(self._goal_bar, 0, Qt.AlignVCenter)
+
+        self._support_btn = QPushButton(tr("nav_donate"))
+        self._support_btn.setCursor(Qt.PointingHandCursor)
+        self._support_btn.setToolTip(tr("donate_title"))
+        if on_support:
+            self._support_btn.clicked.connect(on_support)
+        row.addWidget(self._support_btn)
+        self.addWidget(content, 1)
+
+    def _build_donor_lines(self):
+        lines = []
+        for donation in self.donations:
+            if donation.get("amount", 0) <= 0:
+                continue
+            name = donation.get("name", tr("donate_supporter"))
+            amount = float(donation.get("amount", 0))
+            amount_text = str(int(amount)) if amount.is_integer() else f"{amount:.2f}"
+            method = donation.get("method", tr("donate_method_generic"))
+            url = donation.get("url", "")
+            anchor = (
+                f'<a href="{url}" style="color:{self._c("#111827", "#f9fafb")}; font-weight:bold;">{name}</a>'
+                if url else name
+            )
+            lines.append(tr("donate_ticker_fmt").format(
+                anchor=anchor, amount=amount_text, method=method
+            ))
+        return lines or [tr("donate_thanks")]
+
+    def _refresh_goal(self):
+        raised, _remaining, percent, target = get_monthly_goal_stats(self.donations)
+        raised = float(raised)
+        self._goal_reached = raised >= float(target)
+        raised_text = str(int(raised)) if raised.is_integer() else f"{raised:.2f}"
+        self._goal_label.setText(
+            tr("donate_goal_fmt").format(raised=raised_text, target=target)
+        )
+        self._goal_bar.setValue(int(round(percent * 10)))
+        if self._goal_reached:
+            # Monthly goal met — retire the goal panel from the rotation.
+            self._showing_goal = False
+            self._goal_label.setVisible(False)
+            self._goal_bar.setVisible(False)
+            self._donor_label.setVisible(True)
+
+    def _rotate(self):
+        if getattr(self, "_goal_reached", False):
+            # Goal met: keep rotating donor shout-outs only.
+            self._donor_label.setText(self._donor_lines[0])
+            self._donor_lines = self._donor_lines[1:] + self._donor_lines[:1]
+            return
+        self._showing_goal = not self._showing_goal
+        self._goal_label.setVisible(self._showing_goal)
+        self._goal_bar.setVisible(self._showing_goal)
+        self._donor_label.setVisible(not self._showing_goal)
+        if not self._showing_goal:
+            self._donor_label.setText(self._donor_lines[0])
+            self._donor_lines = self._donor_lines[1:] + self._donor_lines[:1]
+
+    def _refresh_remote_donors(self):
+        fetch_remote_donors_async(self._refresh_bridge.updated.emit)
+
+    def _apply_fresh_donations(self, fresh):
+        if fresh:
+            self.donations = fresh
+            self._donor_lines = self._build_donor_lines()
+            self._refresh_goal()
+            if self._on_donations_updated:
+                self._on_donations_updated(fresh)
+
+    def retranslate(self):
+        self._support_btn.setText(tr("nav_donate"))
+        self._support_btn.setToolTip(tr("donate_title"))
+        self._donor_lines = self._build_donor_lines()
+        self._refresh_goal()
+        if not self._showing_goal:
+            self._donor_label.setText(self._donor_lines[0])
 
 
 class DonationDialog(QDialog):
@@ -279,6 +443,7 @@ class DonationDialog(QDialog):
         r_s = f"{int(raised)}" if raised.is_integer() else f"{raised:.2f}"
         self._goal_label.setText(tr("donate_goal_fmt").format(raised=r_s, target=target))
         self._goal_target = int(round(pct * 10))
+        self._goal_reached = raised >= float(target)
 
     def _trigger_goal_anim(self):
         self._goal_bar.setValue(0)
@@ -292,6 +457,12 @@ class DonationDialog(QDialog):
         self._ticker_idx = 0
         self._showing_goal = True
         self._since_goal = 0
+        if getattr(self, "_goal_reached", False):
+            # Monthly goal met — start straight on the donor ticker and never
+            # rotate back to the goal line.
+            self._showing_goal = False
+            self._goal_view.setVisible(False)
+            self._donor_view.setVisible(True)
 
         self._opacity = QGraphicsOpacityEffect(self._alt_container)
         self._alt_container.setGraphicsEffect(self._opacity)
@@ -323,6 +494,12 @@ class DonationDialog(QDialog):
             self._donor_view.setVisible(True)
         elif self._since_goal < 3:
             self._since_goal += 1
+            self._donor_label.setText(self._ticker_lines[self._ticker_idx % len(self._ticker_lines)])
+            self._ticker_idx += 1
+        elif getattr(self, "_goal_reached", False):
+            # Goal met: cycle donors indefinitely instead of returning to the
+            # goal line.
+            self._since_goal = 0
             self._donor_label.setText(self._ticker_lines[self._ticker_idx % len(self._ticker_lines)])
             self._ticker_idx += 1
         else:

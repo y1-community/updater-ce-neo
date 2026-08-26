@@ -484,8 +484,115 @@ def test_ui_construction():
     assert page.current_package() is not None
     # Select Package is the start page (no separate Home tab).
     assert w._stack.currentIndex() == 0
+    assert w.statusBar().objectName() == "donation_status_bar"
+    assert w.statusBar()._goal_bar.value() >= 0
     w.close()
     app.processEvents()
+
+
+def test_donation_status_bar():
+    """The main window's bottom status area is the compact Support goal
+    display, and it retranslates in place with the rest of the window."""
+    from PySide6.QtWidgets import QApplication
+    from src.donation_dialog import DonationStatusBar
+    from src.i18n import translator
+
+    _reset_app_settings()
+    app = QApplication.instance() or QApplication(sys.argv)
+    donations = [{
+        "name": "Alice", "amount": 25, "method": "Ko-Fi", "url": "",
+        "dt": __import__("datetime").datetime.now(),
+    }]
+    opened = []
+    refreshed = []
+    bar = DonationStatusBar(
+        donations=donations,
+        on_support=lambda: opened.append(True),
+        on_donations_updated=lambda value: refreshed.append(value),
+    )
+    assert bar.objectName() == "donation_status_bar"
+    assert bar._remote_refresh_timer.isActive()
+    assert bar._remote_refresh_timer.interval() == 5 * 60 * 1000
+    assert bar._goal_bar.value() == 125
+    assert "$25" in bar._goal_label.text()
+    bar._support_btn.click()
+    assert opened == [True]
+
+    live = [{
+        "name": "Bob", "amount": 40, "method": "PayPal", "url": "",
+        "dt": __import__("datetime").datetime.now(),
+    }]
+    bar._apply_fresh_donations(live)
+    assert bar.donations is live
+    assert refreshed == [live]
+    assert "$40" in bar._goal_label.text()
+
+    translator().set_language("fr")
+    bar.retranslate()
+    assert "couvrir" in bar._goal_label.text()
+    assert bar._support_btn.text() == "Nous soutenir"
+
+    bar.deleteLater()
+    app.processEvents()
+    _reset_app_settings()
+
+
+def test_goal_reached_hides_goal_line():
+    """Once the monthly $200 goal is met, the ticker shows donor shout-outs
+    only — no goal line — in both the footer bar and the Support modal."""
+    import datetime
+
+    from PySide6.QtWidgets import QApplication
+    from src.donation_dialog import DonationDialog, DonationStatusBar
+    from src.i18n import translator
+    from src.ui.main_window import MainWindow
+
+    _reset_app_settings()
+    app = QApplication.instance() or QApplication(sys.argv)
+    now = datetime.datetime.now()
+    full = [
+        {"name": "Alice", "amount": 120, "method": "PayPal", "url": "", "dt": now},
+        {"name": "Bob", "amount": 80, "method": "Ko-Fi", "url": "", "dt": now},
+    ]
+
+    # Stub the live donor fetch so the real innioasis.app data cannot land
+    # mid-test and flip these synthetic fixtures back below the goal.
+    import src.donation_dialog as dd
+    orig_fetch = dd.fetch_remote_donors_async
+    dd.fetch_remote_donors_async = lambda callback: None
+    try:
+        bar = DonationStatusBar(donations=full)
+        assert getattr(bar, "_goal_reached", False) is True
+        assert bar._showing_goal is False
+        assert bar._goal_label.isHidden()
+        assert not bar._donor_label.isHidden()
+        # Rotation keeps cycling donors instead of flipping back to the goal.
+        bar._rotate()
+        assert bar._showing_goal is False
+        assert bar._goal_label.isHidden()
+        assert not bar._donor_label.isHidden()
+        bar.deleteLater()
+
+        w = MainWindow()
+        dlg = DonationDialog(parent=w, context="general", model="Y1",
+                             software_name="Test", donations=full)
+        assert getattr(dlg, "_goal_reached", False) is True
+        assert dlg._showing_goal is False
+        assert dlg._goal_view.isHidden()
+        assert not dlg._donor_view.isHidden()
+        dlg._next_ticker_step()
+        dlg._next_ticker_step()
+        dlg._next_ticker_step()
+        dlg._next_ticker_step()
+        # After a full cycle it must still be on donors, never on the goal.
+        assert dlg._showing_goal is False
+        assert not dlg._donor_view.isHidden()
+        dlg.close()
+        w.close()
+        app.processEvents()
+    finally:
+        dd.fetch_remote_donors_async = orig_fetch
+    _reset_app_settings()
 
 
 def test_diagnostics_live_update():
@@ -1106,6 +1213,8 @@ def main():
     check("releases client (cached)", test_releases_client_cached)
     check("releases client (network)", test_releases_client_network)
     check("UI construction", test_ui_construction)
+    check("donation status bar", test_donation_status_bar)
+    check("goal reached hides goal line", test_goal_reached_hides_goal_line)
     check("diagnostics live update", test_diagnostics_live_update)
     check("flash flow launch", test_flash_flow_launch)
     check("flash method switch", test_flash_method_switch)
