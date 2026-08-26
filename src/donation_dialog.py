@@ -1,17 +1,10 @@
-"""Donations modal — port of Updater CE's ``show_donation_dialog``.
-
-Features carried over: monthly-goal progress bar alternating with a rotating
-donor ticker, developer header, Ko-fi / PayPal / Revolut / Patreon buttons,
-a free Honeygain option, crypto addresses with copy-to-clipboard, and an
-optional "don't ask again" checkbox after a successful install.
-"""
+"""Donations modal — port of Updater CE's ``show_donation_dialog``."""
 
 import logging
 import random
 import webbrowser
 
 from PySide6.QtCore import QEasingCurve, QObject, QPropertyAnimation, Qt, QTimer, Signal
-from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -30,13 +23,12 @@ from PySide6.QtWidgets import (
 from .config import DONATION_CRYPTO, DONATION_LINKS, device_label_for_model
 from .donors import fetch_remote_donors_async, get_monthly_goal_stats, relative_date
 from .i18n import tr
+from .ui.dark import T, is_dark
 
 logger = logging.getLogger(__name__)
 
 
 class _DonationRefreshBridge(QObject):
-    """Marshal background donor refreshes onto the Qt/UI thread."""
-
     updated = Signal(object)
 
 
@@ -50,7 +42,6 @@ class DonationStatusBar(QStatusBar):
         self._on_donations_updated = on_donations_updated
         self._remote_refresh_interval_ms = 5 * 60 * 1000
         self._showing_goal = True
-        self._is_dark = self._detect_dark()
         self.setObjectName("donation_status_bar")
         self.setSizeGripEnabled(False)
         self.setFixedHeight(44)
@@ -67,34 +58,21 @@ class DonationStatusBar(QStatusBar):
         self._remote_refresh_timer.setInterval(self._remote_refresh_interval_ms)
         self._remote_refresh_timer.timeout.connect(self._refresh_remote_donors)
         self._remote_refresh_timer.start()
-        # Fetch immediately, then keep retrying quietly. This preserves the
-        # bundled donors.csv while offline and picks up the live file when
-        # connectivity becomes available later in the session.
         self._refresh_remote_donors()
 
-    def _detect_dark(self):
-        try:
-            return QApplication.palette().color(QPalette.ColorRole.Window).lightness() < 128
-        except Exception:
-            return False
-
-    def _c(self, light, dark):
-        return dark if self._is_dark else light
-
     def _build_ui(self, on_support):
-        bg = self._c("#ffffff", "#1f2937")
-        border = self._c("#e5e7eb", "#374151")
-        fg = self._c("#111827", "#f9fafb")
+        t = T()
         self.setStyleSheet(
-            f"QStatusBar#donation_status_bar {{ background-color: {bg};"
-            f" border-top: 1px solid {border}; color: {fg}; }}"
-            f"QStatusBar#donation_status_bar QLabel {{ color: {fg}; background: transparent; border: none; }}"
-            f"QStatusBar#donation_status_bar QProgressBar {{ background-color: {self._c('#e5e7eb', '#374151')};"
-            f" border: 1px solid {self._c('#d1d5db', '#4b5563')}; border-radius: 4px; }}"
+            f"QStatusBar#donation_status_bar {{ background-color: {t.bg_card};"
+            f" border-top: 1px solid {t.border}; color: {t.fg}; }}"
+            f"QStatusBar#donation_status_bar QLabel {{ color: {t.fg};"
+            f" background: transparent; border: none; }}"
+            f"QStatusBar#donation_status_bar QProgressBar {{ background-color: {t.progress_track};"
+            f" border-radius: 4px; }}"
             "QStatusBar#donation_status_bar QProgressBar::chunk { background-color: #10b981; border-radius: 3px; }"
-            f"QStatusBar#donation_status_bar QPushButton {{ background-color: #3b5bdb; color: white;"
+            f"QStatusBar#donation_status_bar QPushButton {{ background-color: {t.accent}; color: white;"
             f" border: none; border-radius: 6px; padding: 5px 10px; font-size: 11px; font-weight: bold; }}"
-            f"QStatusBar#donation_status_bar QPushButton:hover {{ background-color: #3451c7; }}"
+            f"QStatusBar#donation_status_bar QPushButton:hover {{ background-color: {t.accent_hover}; }}"
         )
 
         content = QWidget(self)
@@ -104,13 +82,13 @@ class DonationStatusBar(QStatusBar):
 
         self._goal_label = QLabel()
         self._goal_label.setMinimumWidth(260)
-        self._goal_label.setStyleSheet(f"font-size: 10px; color: {fg};")
+        self._goal_label.setStyleSheet(f"font-size: 10px; color: {t.fg}; border: none; background: transparent;")
         row.addWidget(self._goal_label, 1)
 
         self._donor_label = QLabel()
         self._donor_label.setMinimumWidth(260)
         self._donor_label.setTextFormat(Qt.RichText)
-        self._donor_label.setStyleSheet(f"font-size: 10px; color: {fg};")
+        self._donor_label.setStyleSheet(f"font-size: 10px; color: {t.fg}; border: none; background: transparent;")
         self._donor_label.setVisible(False)
         row.addWidget(self._donor_label, 1)
 
@@ -139,8 +117,9 @@ class DonationStatusBar(QStatusBar):
             method = donation.get("method", tr("donate_method_generic"))
             url = donation.get("url", "")
             when = relative_date(donation.get("dt"))
+            t = T()
             anchor = (
-                f'<a href="{url}" style="color:{self._c("#111827", "#f9fafb")}; font-weight:bold;">{name}</a>'
+                f'<a href="{url}" style="color:{t.fg}; font-weight:bold;">{name}</a>'
                 if url else name
             )
             lines.append(tr("donate_ticker_fmt").format(
@@ -158,7 +137,6 @@ class DonationStatusBar(QStatusBar):
         )
         self._goal_bar.setValue(int(round(percent * 10)))
         if self._goal_reached:
-            # Monthly goal met — retire the goal panel from the rotation.
             self._showing_goal = False
             self._goal_label.setVisible(False)
             self._goal_bar.setVisible(False)
@@ -166,7 +144,6 @@ class DonationStatusBar(QStatusBar):
 
     def _rotate(self):
         if getattr(self, "_goal_reached", False):
-            # Goal met: keep rotating donor shout-outs only.
             self._donor_label.setText(self._donor_lines[0])
             self._donor_lines = self._donor_lines[1:] + self._donor_lines[:1]
             return
@@ -199,9 +176,6 @@ class DonationStatusBar(QStatusBar):
 
 
 class DonationDialog(QDialog):
-    """The support modal. ``context`` is ``"install_success"`` (opt-out shown)
-    or ``"general"`` (plain support call to action)."""
-
     def __init__(self, parent=None, context="general", model="Y1", software_name="",
                  donations=None, on_dont_ask_again=None):
         super().__init__(parent)
@@ -216,85 +190,58 @@ class DonationDialog(QDialog):
         self.setMinimumWidth(540)
         self.resize(560, 520)
 
-        self._is_dark = self._detect_dark()
-        self._apply_theme()
         self._build_ui()
         self._start_ticker()
-        # Live refresh of donors while the dialog is open.
         fetch_remote_donors_async(self._apply_fresh_donations)
 
-    # -- helpers ------------------------------------------------------------
-    def _detect_dark(self):
-        try:
-            palette = QApplication.palette()
-            bg = palette.color(QPalette.ColorRole.Window)
-            return bg.lightness() < 128
-        except Exception:
-            return False
-
-    def _c(self, light, dark):
-        return dark if self._is_dark else light
-
-    def _apply_theme(self):
-        bg = self._c("#ffffff", "#1f2937")
-        fg = self._c("#111827", "#f9fafb")
-        self.setStyleSheet(
-            f"QDialog, QWidget {{ background-color: {bg}; color: {fg}; }}"
-            f"QLabel, QCheckBox {{ color: {fg}; }}"
-            f"QLineEdit {{ background-color: {self._c('#ffffff', '#111827')}; color: {fg}; border: 1px solid {self._c('#d1d5db', '#4b5563')}; }}"
-        )
-
-    # -- UI -----------------------------------------------------------------
     def _build_ui(self):
+        t = T()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(8)
 
-        title_color = self._c("#111827", "#f9fafb")
-        intro_color = self._c("#374151", "#d1d5db")
+        title_color = t.fg
+        intro_color = t.fg_dim
 
-        # 1. Goal bar / donor ticker card -----------------------------------
+        # 1. Goal bar / donor ticker card
         self._alt_container = QWidget()
         self._alt_container.setFixedHeight(50)
         self._alt_container.setStyleSheet(
-            f"QWidget {{ background-color: {self._c('#f9fafb', '#111827')};"
-            f" border: 1px solid {self._c('#e5e7eb', '#374151')}; border-radius: 8px; }}"
+            f"QWidget {{ background-color: {t.bg_elev};"
+            f" border: 1px solid {t.border}; border-radius: 10px; }}"
         )
         alt_box = QVBoxLayout(self._alt_container)
         alt_box.setContentsMargins(12, 6, 12, 6)
         alt_box.setAlignment(Qt.AlignCenter)
 
-        # Goal bar view
         self._goal_view = QWidget()
         goal_layout = QVBoxLayout(self._goal_view)
         goal_layout.setContentsMargins(0, 0, 0, 0)
         goal_layout.setSpacing(4)
         self._goal_label = QLabel()
         self._goal_label.setAlignment(Qt.AlignCenter)
-        self._goal_label.setStyleSheet(f"font-size: 11px; color: {title_color}; background: transparent; border: none;")
+        self._goal_label.setStyleSheet(
+            f"font-size: 11px; color: {title_color}; background: transparent; border: none;"
+        )
         goal_layout.addWidget(self._goal_label)
         self._goal_bar = QProgressBar()
         self._goal_bar.setRange(0, 1000)
         self._goal_bar.setTextVisible(False)
         self._goal_bar.setFixedHeight(8)
-        self._goal_bar.setStyleSheet(
-            f"QProgressBar {{ background-color: {self._c('#e5e7eb', '#374151')};"
-            f" border: 1px solid {self._c('#d1d5db', '#4b5563')}; border-radius: 4px; }}"
-            "QProgressBar::chunk {{ background-color: #10b981; border-radius: 3px; }}"
-        )
         goal_layout.addWidget(self._goal_bar)
         self._goal_anim = QPropertyAnimation(self._goal_bar, b"value")
         self._goal_anim.setDuration(750)
         self._goal_anim.setEasingCurve(QEasingCurve.OutCubic)
 
-        # Donor ticker view
         self._donor_view = QWidget()
         donor_layout = QVBoxLayout(self._donor_view)
         donor_layout.setContentsMargins(0, 0, 0, 0)
         self._donor_label = QLabel()
         self._donor_label.setAlignment(Qt.AlignCenter)
         self._donor_label.setWordWrap(True)
-        self._donor_label.setStyleSheet(f"font-size: 11px; color: {title_color}; background: transparent; border: none;")
+        self._donor_label.setStyleSheet(
+            f"font-size: 11px; color: {title_color}; background: transparent; border: none;"
+        )
         donor_layout.addWidget(self._donor_label)
 
         alt_box.addWidget(self._goal_view)
@@ -302,13 +249,17 @@ class DonationDialog(QDialog):
         self._donor_view.setVisible(False)
         layout.addWidget(self._alt_container)
 
-        # 2. Developer header -------------------------------------------------
+        # 2. Developer header
         header_row = QHBoxLayout()
-        title = QLabel(f"<h2 style='margin:0; font-size:20px; font-weight:800; color:{title_color};'>"
-                       + tr("donate_headline") + "</h2>")
+        title = QLabel(
+            f"<h2 style='margin:0; font-size:20px; font-weight:800; color:{title_color};'>"
+            + tr("donate_headline") + "</h2>"
+        )
         title.setTextFormat(Qt.RichText)
-        subtitle = QLabel(f"<p style='margin:0; font-size:11px; font-weight:600; color:{intro_color};'>"
-                          + tr("donate_subtitle") + "</p>")
+        subtitle = QLabel(
+            f"<p style='margin:0; font-size:11px; font-weight:600; color:{intro_color};'>"
+            + tr("donate_subtitle") + "</p>"
+        )
         subtitle.setTextFormat(Qt.RichText)
         title_box = QVBoxLayout()
         title_box.setSpacing(1)
@@ -318,7 +269,7 @@ class DonationDialog(QDialog):
         header_row.addStretch()
         layout.addLayout(header_row)
 
-        # 3. Intro copy (Ryan's message — translated) -------------------------
+        # 3. Intro copy
         formatted = self.software_name or tr("donate_this_firmware")
         if self.context == "install_success":
             intro_text = tr("donate_intro_success").format(
@@ -329,15 +280,17 @@ class DonationDialog(QDialog):
         self._intro_label = QLabel(intro_text)
         self._intro_label.setTextFormat(Qt.RichText)
         self._intro_label.setWordWrap(True)
-        self._intro_label.setStyleSheet(f"font-size: 12px; color: {intro_color}; line-height: 1.35;")
+        self._intro_label.setStyleSheet(
+            f"font-size: 12px; color: {intro_color}; line-height: 1.35;"
+        )
         layout.addWidget(self._intro_label)
 
-        # 4. Opt-out (install success only) ------------------------------------
+        # 4. Opt-out
         if self.context == "install_success":
             self._dont_ask = QCheckBox(tr("donate_dont_ask"))
             layout.addWidget(self._dont_ask)
 
-        # 5. Payment grid -------------------------------------------------------
+        # 5. Payment grid
         grid = QGridLayout()
         grid.setSpacing(8)
         self._add_pay_button(grid, 0, 0, tr("donate_kofi"), "#ff5e5b", "#e04b48", DONATION_LINKS["kofi"])
@@ -350,16 +303,13 @@ class DonationDialog(QDialog):
                              DONATION_LINKS["honeygain"], full_width=tr("donate_honeygain"))
         layout.addWidget(self._last_button)  # type: ignore[attr-defined]
 
-        # 6. Crypto --------------------------------------------------------------
-        crypto_bg = self._c("#f3f4f6", "#374151")
-        crypto_fg = self._c("#374151", "#f9fafb")
-        crypto_border = self._c("#d1d5db", "#4b5563")
+        # 6. Crypto
         self._crypto_toggle = QPushButton(tr("donate_crypto_toggle"))
         self._crypto_toggle.setCursor(Qt.PointingHandCursor)
         self._crypto_toggle.setStyleSheet(
-            f"QPushButton {{ background-color: {crypto_bg}; color: {crypto_fg}; font-weight:600;"
-            f" font-size:12px; padding:7px; border-radius:8px; border:1px solid {crypto_border}; }}"
-            f"QPushButton:hover {{ background-color: {self._c('#e5e7eb', '#4b5563')}; }}"
+            f"QPushButton {{ background-color: {t.bg_elev}; color: {t.fg}; font-weight:600;"
+            f" font-size:12px; padding:7px; border-radius:8px; border:1px solid {t.border_strong}; }}"
+            f"QPushButton:hover {{ background-color: {t.bg_hover}; }}"
         )
         self._crypto_toggle.clicked.connect(self._toggle_crypto)
         layout.addWidget(self._crypto_toggle)
@@ -390,16 +340,10 @@ class DonationDialog(QDialog):
         self._crypto_box.setVisible(False)
         layout.addWidget(self._crypto_box)
 
-        # 7. Close (custom button so the label follows our translator; Qt's
-        # built-in Close button ignores it) ------------------------------------
-        close_bg = self._c("#e5e7eb", "#374151")
-        close_fg = self._c("#1f2937", "#f9fafb")
+        # 7. Close
         self._close_btn = QPushButton(tr("close"))
+        self._close_btn.setProperty("cssClass", "ghost")
         self._close_btn.setCursor(Qt.PointingHandCursor)
-        self._close_btn.setStyleSheet(
-            f"QPushButton {{ background-color: {close_bg}; color: {close_fg}; border-radius:6px;"
-            f" padding:6px 16px; border:none; font-weight:bold; }}"
-        )
         self._close_btn.clicked.connect(self._on_close)
         layout.addWidget(self._close_btn, 0, Qt.AlignRight)
 
@@ -420,7 +364,6 @@ class DonationDialog(QDialog):
         else:
             self._last_button = btn
 
-    # -- ticker + goal -------------------------------------------------------
     def _donor_lines(self):
         lines = []
         for d in self.donations:
@@ -432,7 +375,8 @@ class DonationDialog(QDialog):
             method = d.get("method", tr("donate_method_generic"))
             url = d.get("url", "")
             when = relative_date(d.get("dt"))
-            anchor = f'<a href="{url}" style="color:{self._c("#111827", "#f9fafb")}; font-weight:bold;">{name}</a>' if url else name
+            t = T()
+            anchor = f'<a href="{url}" style="color:{t.fg}; font-weight:bold;">{name}</a>' if url else name
             lines.append(tr("donate_ticker_fmt").format(anchor=anchor, amount=amt_s, method=method, when=when))
         if not lines:
             lines.append(tr("donate_thanks"))
@@ -460,8 +404,6 @@ class DonationDialog(QDialog):
         self._showing_goal = True
         self._since_goal = 0
         if getattr(self, "_goal_reached", False):
-            # Monthly goal met — start straight on the donor ticker and never
-            # rotate back to the goal line.
             self._showing_goal = False
             self._goal_view.setVisible(False)
             self._donor_view.setVisible(True)
@@ -499,8 +441,6 @@ class DonationDialog(QDialog):
             self._donor_label.setText(self._ticker_lines[self._ticker_idx % len(self._ticker_lines)])
             self._ticker_idx += 1
         elif getattr(self, "_goal_reached", False):
-            # Goal met: cycle donors indefinitely instead of returning to the
-            # goal line.
             self._since_goal = 0
             self._donor_label.setText(self._ticker_lines[self._ticker_idx % len(self._ticker_lines)])
             self._ticker_idx += 1
@@ -518,7 +458,6 @@ class DonationDialog(QDialog):
             self._refresh_goal()
             self._ticker_lines = self._donor_lines()
 
-    # -- interactions ---------------------------------------------------------
     def _toggle_crypto(self):
         visible = not self._crypto_box.isVisible()
         self._crypto_box.setVisible(visible)

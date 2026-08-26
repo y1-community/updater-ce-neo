@@ -1,8 +1,8 @@
 """Reusable widgets — port of InniUpdaterChin's ``app.ui.widgets``
-(StatusTag, StepIndicator, InfoRow, Card, Banner).
 
-All colour choices now flow through the ``dark`` module so the app
-adapts to dark / light OS palettes automatically.
+Widgets use CSS class properties for static styling (handled by the global
+QSS) and ``dark.T()`` colour tokens only for dynamically computed styles
+(status tag colours, banner variants, etc.).
 """
 
 from PySide6.QtCore import Qt
@@ -16,47 +16,29 @@ from PySide6.QtWidgets import (
 )
 
 from ..i18n import tr
-from .dark import (
-    STATUS_COLORS,
-    BG_ELEV,
-    BG_ELEV_D,
-    BORDER,
-    BORDER_D,
-    FG,
-    FG_D,
-    FG_MID,
-    FG_MID_D,
-    FG_SEC,
-    FG_SEC_D,
-    FG_DIM,
-    FG_DIM_D,
-    INFO_BG,
-    INFO_BG_D,
-    INFO_FG,
-    INFO_FG_D,
-    SUCCESS_BG,
-    SUCCESS_BG_D,
-    SUCCESS_FG,
-    SUCCESS_FG_D,
-    WARNING_BG,
-    WARNING_BG_D,
-    WARNING_FG,
-    WARNING_FG_D,
-    DANGER_BG,
-    DANGER_BG_D,
-    DANGER_FG,
-    DANGER_FG_D,
-    dc,
-)
+from .dark import T
 
 
 class StatusTag(QLabel):
+    """Coloured pill indicating the current flash-phase status."""
+
+    _COLORS = {
+        "idle":         "status_idle",
+        "selected":     "status_selected",
+        "connected":    "status_connected",
+        "disconnected": "status_disconnected",
+        "flashing":     "status_flashing",
+        "complete":     "status_complete",
+        "failed":       "status_failed",
+        "retrying":     "status_retrying",
+    }
+
     def __init__(self, status="idle", parent=None):
         super().__init__(parent)
         self._status = status
         self.setAlignment(Qt.AlignCenter)
-        self.setFixedHeight(24)
-        self.setMinimumWidth(72)
+        self.setFixedHeight(26)
+        self.setMinimumWidth(80)
         self._apply()
 
     def set_status(self, status):
@@ -67,18 +49,24 @@ class StatusTag(QLabel):
         self._apply()
 
     def _apply(self):
-        fg, bg = STATUS_COLORS.get(self._status, STATUS_COLORS["idle"])
+        t = T()
+        key = self._COLORS.get(self._status, "status_idle")
+        fg, bg = getattr(t, key)
         self.setText(tr(f"status_{self._status}"))
         self.setStyleSheet(
-            f"QLabel {{ background-color: {bg}; color: {fg}; border-radius: 12px;"
-            f" font-size: 11px; font-weight: 600; padding: 2px 10px; }}"
+            f"background-color: {bg}; color: {fg};"
+            f" border-radius: 13px; font-size: 11px; font-weight: 700;"
+            f" padding: 3px 12px; letter-spacing: 0.02em;"
         )
 
 
 class StepIndicator(QWidget):
     """Horizontal step dots/labels for the S1-S6 flow."""
 
-    _STEP_KEYS = ["home_step_1", "home_step_2", "home_step_3", "home_step_4", "home_step_5", "home_step_6"]
+    _STEP_KEYS = [
+        "home_step_1", "home_step_2", "home_step_3",
+        "home_step_4", "home_step_5", "home_step_6",
+    ]
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -89,34 +77,37 @@ class StepIndicator(QWidget):
     def _build_ui(self):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
-        for i in range(6):
+        layout.setSpacing(6)
+        for _ in range(6):
             lbl = QLabel()
             lbl.setAlignment(Qt.AlignCenter)
-            lbl.setMinimumWidth(64)
+            lbl.setMinimumWidth(68)
             layout.addWidget(lbl, 1)
             self._labels.append(lbl)
-        self.setFixedHeight(32)
+        self.setFixedHeight(34)
 
     def set_active_step(self, index):
         self._active = index
+        t = T()
         for i, lbl in enumerate(self._labels):
             text = self._STEP_KEYS[i] if i < len(self._STEP_KEYS) else ""
             if i < index:
-                lbl.setText(f"\u2713 {tr(text)}")
-                lbl.setStyleSheet(f"color: {dc('#059669', '#34d399')}; font-size: 11px; font-weight: 600;")
+                lbl.setText(f"&#10003; {tr(text)}")
+                lbl.setStyleSheet(f"color: {t.ok_fg}; font-size: 11px; font-weight: 600;")
             elif i == index:
-                lbl.setText(f"\u25cf {tr(text)}")
-                lbl.setStyleSheet(f"color: {dc('#2563eb', '#60a5fa')}; font-size: 11px; font-weight: 700;")
+                lbl.setText(f"&#9679; {tr(text)}")
+                lbl.setStyleSheet(f"color: {t.fg_primary}; font-size: 11px; font-weight: 700;")
             else:
-                lbl.setText(f"\u25cb {tr(text)}")
-                lbl.setStyleSheet(f"color: {dc('#9ca3af', '#6b7280')}; font-size: 11px;")
+                lbl.setText(f"&#9675; {tr(text)}")
+                lbl.setStyleSheet(f"color: {t.fg_muted}; font-size: 11px;")
 
     def retranslate(self):
         self.set_active_step(getattr(self, "_active", 0))
 
 
 class InfoRow(QWidget):
+    """Key-value row: label on the left, value on the right."""
+
     def __init__(self, label_key="", parent=None):
         super().__init__(parent)
         self._label_key = ""
@@ -125,11 +116,12 @@ class InfoRow(QWidget):
         self._value.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self._value.setTextInteractionFlags(Qt.TextSelectableByMouse)
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 2, 0, 2)
+        layout.setContentsMargins(0, 4, 0, 4)
         layout.addWidget(self._label)
         layout.addWidget(self._value, 1)
-        self._label.setStyleSheet(f"color: {dc(FG_SEC, FG_SEC_D)}; font-size: 12px;")
-        self._value.setStyleSheet(f"color: {dc(FG, FG_D)}; font-size: 12px; font-weight: 600;")
+        t = T()
+        self._label.setStyleSheet(f"color: {t.fg_dim}; font-size: 12px; font-weight: 500;")
+        self._value.setStyleSheet(f"color: {t.fg}; font-size: 12px; font-weight: 600;")
         if label_key:
             self.set_label(label_key)
 
@@ -149,20 +141,22 @@ class InfoRow(QWidget):
 
 
 class Card(QFrame):
-    """Rounded panel with an optional title."""
+    """Rounded panel with an optional title, styled via QSS."""
 
     def __init__(self, title_key="", parent=None):
         super().__init__(parent)
-        self.setObjectName("card")
+        self.setProperty("cssClass", "card")
         self._title_key = title_key
         self._title = None
         self._outer = QVBoxLayout(self)
-        self._outer.setContentsMargins(16, 14, 16, 14)
+        self._outer.setContentsMargins(18, 14, 18, 14)
         self._outer.setSpacing(8)
         if title_key:
             self._title = QLabel(tr(title_key))
+            t = T()
             self._title.setStyleSheet(
-                f"font-size: 13px; font-weight: 700; color: {dc(FG, FG_D)};"
+                f"font-size: 14px; font-weight: 700; color: {t.fg};"
+                f" letter-spacing: -0.01em; border: none; background: transparent;"
             )
             self._outer.addWidget(self._title)
 
@@ -176,41 +170,23 @@ class Card(QFrame):
     def add_widget(self, widget):
         self._outer.addWidget(widget)
 
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-        path = QPainterPath()
-        path.addRoundedRect(self.rect().adjusted(1, 1, -1, -1), 10, 10)
-        painter.fillPath(path, QColor(dc(BG_ELEV, BG_ELEV_D)))
-        painter.setPen(QColor(dc(BORDER, BORDER_D)))
-        painter.drawPath(path)
-
 
 class Banner(QLabel):
     """Status banner (info / success / warning / danger).
 
-    ``set_key`` marks the text as translatable; ``retranslate`` re-applies it
-    so language switches don't lose or stale the message.
+    Uses CSS class for base styling; colours computed from tokens.
     """
-
-    _STYLES = {
-        "info":    (dc(INFO_BG,    INFO_BG_D),    dc(INFO_FG,    INFO_FG_D)),
-        "success": (dc(SUCCESS_BG, SUCCESS_BG_D), dc(SUCCESS_FG, SUCCESS_FG_D)),
-        "warning": (dc(WARNING_BG,WARNING_BG_D),  dc(WARNING_FG, WARNING_FG_D)),
-        "danger":  (dc(DANGER_BG,  DANGER_BG_D),  dc(DANGER_FG,  DANGER_FG_D)),
-    }
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWordWrap(True)
         self.setAlignment(Qt.AlignCenter)
-        self.setMinimumHeight(40)
+        self.setMinimumHeight(42)
         self._key = ""
         self._fmt = {}
         self.set_type("info")
 
     def set_key(self, key, **fmt):
-        """Set text from an i18n key (optionally formatted), remembering it."""
         self._key = key
         self._fmt = fmt
         self.setText(tr(key).format(**fmt) if fmt else tr(key))
@@ -220,8 +196,15 @@ class Banner(QLabel):
             self.setText(tr(self._key).format(**self._fmt) if self._fmt else tr(self._key))
 
     def set_type(self, banner_type):
-        bg, fg = self._STYLES.get(banner_type, self._STYLES["info"])
+        t = T()
+        colors = {
+            "info":    (t.info_bg, t.info_fg),
+            "success": (t.ok_bg, t.ok_fg),
+            "warning": (t.warn_bg, t.warn_fg),
+            "danger":  (t.danger_bg, t.danger_fg),
+        }
+        bg, fg = colors.get(banner_type, colors["info"])
         self.setStyleSheet(
-            f"QLabel {{ background-color: {bg}; color: {fg}; border-radius: 8px;"
-            f" font-size: 12px; padding: 10px 14px; }}"
+            f"background-color: {bg}; color: {fg}; border-radius: 10px;"
+            f" font-size: 13px; padding: 10px 16px; font-weight: 500;"
         )

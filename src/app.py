@@ -42,6 +42,10 @@ def main():
         app.setWindowIcon(QIcon(str(icon)))
 
     from .i18n import translator
+    from .ui.dark import apply_theme
+
+    # Apply Innioasis Lumen theme (detects OS dark/light mode automatically).
+    apply_theme(app)
 
     # Default language: follow the system, fall back to English.
     import locale

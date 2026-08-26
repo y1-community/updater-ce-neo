@@ -1,7 +1,7 @@
 """Main window — left navigation + right content area.
 
-Select Package is the application's start page (no separate Home tab). After a
-package is chosen, the flash backend launches immediately — SP Flash Tool
+Select Software is the application's start page (no separate Home tab). After
+a package is chosen, the flash backend launches immediately — SP Flash Tool
 (Windows / staged Linux) or mtkclient (all platforms) — and the UI guides the
 user to power off and connect their device while the backend searches USB.
 
@@ -15,6 +15,7 @@ import webbrowser
 
 from PySide6.QtCore import QSettings, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
+    QApplication,
     QComboBox,
     QHBoxLayout,
     QLabel,
@@ -52,17 +53,11 @@ from ..flash_service import (
 from ..i18n import tr, translator
 from ..state import FlashState, StateMachine
 from .dialogs import DiagnosticsDialog, FlashCompleteDialog, UpdateAvailableDialog
+from .dark import T, apply_theme
 from .error_page import ErrorPage
 from .flash_page import FlashPage
 from .retry_page import RetryPage
 from .select_page import SelectPackagePage
-from .dark import (
-    BG, BG_DARK, BG_ELEV, BG_ELEV_D,
-    BORDER, BORDER_D, BORDER_S, BORDER_S_D,
-    FG, FG_D, FG_SEC, FG_SEC_D, FG_DIM, FG_DIM_D,
-    PRIMARY, PRIMARY_HV, PRIMARY_D, PRIMARY_DH,
-    dc,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -83,57 +78,8 @@ _STEP_KEY = {
 
 _WRITE_STEPS = (STEP_DOWNLOAD_DA, STEP_DOWNLOAD_BL, STEP_WRITE)
 
-# ── Reusable QComboBox stylesheet (dark-mode aware) ─────────────────
-_COMBO_SHEET = (
-    "QComboBox {{"
-    "  background-color: {bg}; color: {fg};"
-    "  border: 1px solid {brd}; border-radius: 6px;"
-    "  padding: 6px 12px; font-size: 13px;"
-    "}}"
-    "QComboBox:hover {{ border: 1px solid {brd_h}; }}"
-    "QComboBox::drop-down {{ border: none; width: 20px; }}"
-    "QComboBox QAbstractItemView {{"
-    "  background-color: {bg}; color: {fg};"
-    "  border: 1px solid {brd}; border-radius: 6px;"
-    "  selection-background-color: {sel_bg}; selection-color: {sel_fg};"
-    "  font-size: 13px; outline: 0;"
-    "}}"
-)
-
-
-def _combo_sheet(is_dark=False):
-    return _COMBO_SHEET.format(
-        bg=BG_DARK if is_dark else BG,
-        fg=FG_D if is_dark else FG,
-        brd=BORDER_D if is_dark else BORDER,
-        brd_h=FG_SEC_D if is_dark else FG_SEC,
-        sel_bg=PRIMARY_D if is_dark else PRIMARY,
-        sel_fg="#ffffff" if is_dark else "#ffffff",
-    )
-
-
-def _nav_combo_sheet():
-    """Combo on the dark nav sidebar: always light background, dark text."""
-    return (
-        "QComboBox {"
-        "  background-color: #FFFFFF; color: #1A1A2E;"
-        "  border: 1px solid #D0D7E2; border-radius: 6px;"
-        "  padding: 6px 12px; font-size: 13px;"
-        "}"
-        "QComboBox:hover { border: 1px solid #9CA3AF; }"
-        "QComboBox::drop-down { border: none; width: 20px; }"
-        "QComboBox QAbstractItemView {"
-        "  background-color: #FFFFFF; color: #1A1A2E;"
-        "  border: 1px solid #D0D7E2; border-radius: 6px;"
-        "  selection-background-color: #EBF0FF; selection-color: #3B5BDB;"
-        "  font-size: 13px; outline: 0;"
-        "}"
-    )
-
 
 class MainWindow(QMainWindow):
-    # Fired for every line appended to the session log so the (modal)
-    # diagnostics dialog can stream new lines while it is open.
     log_line_added = Signal(str)
 
     def __init__(self):
@@ -150,7 +96,6 @@ class MainWindow(QMainWindow):
         self._package_name = ""
         self._package_model = ""
         self._log_lines = []
-        # Persisted flash backend choice: "auto" | "sp" | "mtk".
         self._flash_method = str(
             self.settings.value("flash_method", "auto")
         ).lower()
@@ -168,14 +113,11 @@ class MainWindow(QMainWindow):
         self._connect_signals()
         self._nav_to_page(_PAGE_SELECT)
 
-        # Refresh the live firmware catalogue in the background, then silently
-        # check for app updates shortly after launch.
         self._manifest_worker = ManifestWorker(self)
         self._manifest_worker.finished.connect(self._on_manifest_loaded)
         self._manifest_worker.start()
         QTimer.singleShot(UPDATE_CHECK_STARTUP_DELAY_MS, self._start_auto_update_check)
 
-    # ------------------------------------------------------------------ UI
     def _build_ui(self):
         central = QWidget()
         self.setCentralWidget(central)
@@ -194,7 +136,6 @@ class MainWindow(QMainWindow):
             self._stack.addWidget(w)
         outer.addWidget(self._stack, 1)
 
-        self._apply_style()
         self._donations = parse_donors_csv_text(load_donors_file([
             paths.RESOURCES_DIR / "donors.csv",
         ]) or "")
@@ -207,30 +148,33 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
 
     def _build_nav(self):
-        is_dark = dc(True, False)
-
+        t = T()
         nav = QWidget()
+        nav.setObjectName("navPanel")
         nav.setFixedWidth(190)
-        # Nav is always dark-themed regardless of OS dark mode
+        # Nav sidebar is always dark — use inline style for this single widget
+        # to guarantee it stays dark even if the system palette is light.
         nav.setStyleSheet(
-            "QWidget { background-color: #111827; }"
-            "QLabel { color: #f9fafb; }"
+            f"QWidget#navPanel {{ background-color: #0b1120; border-right: 1px solid #1a2538;"
+            f" border-radius: 12px 0 0 12px; }}"
         )
         layout = QVBoxLayout(nav)
-        layout.setContentsMargins(12, 18, 12, 12)
-        layout.setSpacing(6)
+        layout.setContentsMargins(12, 20, 12, 14)
+        layout.setSpacing(4)
 
         self._brand_label = QLabel(tr("app_name"))
         self._brand_label.setWordWrap(True)
-        self._brand_label.setStyleSheet("font-size: 15px; font-weight: 800; color: #f9fafb;")
+        self._brand_label.setStyleSheet(
+            "font-size: 16px; font-weight: 800; color: #f1f5f9; letter-spacing: -0.02em;"
+            " background: transparent; border: none;"
+        )
         layout.addWidget(self._brand_label)
 
         version = QLabel(f"v{APP_VERSION}")
-        version.setStyleSheet("font-size: 11px; color: #6b7280;")
+        version.setStyleSheet("font-size: 11px; color: #64748b; background: transparent; border: none;")
         layout.addWidget(version)
-        layout.addSpacing(14)
+        layout.addSpacing(16)
 
-        # Select Package is the start page ("Home").
         self._nav_buttons = {}
         btn = QPushButton(tr("nav_select_package"))
         btn.setCheckable(True)
@@ -262,56 +206,47 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._check_updates_btn)
 
         self._lang_label = QLabel(tr("nav_language"))
-        self._lang_label.setStyleSheet("font-size: 11px; color: #9ca3af; margin-top: 8px;")
+        self._lang_label.setStyleSheet(
+            "font-size: 11px; color: #64748b; margin-top: 8px; background: transparent; border: none;"
+        )
         layout.addWidget(self._lang_label)
         self._lang_combo = QComboBox()
-        self._lang_combo.setObjectName("lang_combo")
-        self._lang_combo.setStyleSheet(_nav_combo_sheet())
-        self._lang_combo.addItem("中文", "zh-CN")
+        self._lang_combo.setObjectName("langCombo")
+        self._lang_combo.addItem("\u4e2d\u6587", "zh-CN")
         self._lang_combo.addItem("English", "en")
-        self._lang_combo.addItem("Français", "fr")
-        self._lang_combo.addItem("Español", "es")
+        self._lang_combo.addItem("Fran\u00e7ais", "fr")
+        self._lang_combo.addItem("Espa\u00f1ol", "es")
         idx = self._lang_combo.findData(translator().lang)
-        self._lang_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        self._lang_combo.setCurrentIndex(idx if idx >= 0 else 1)
         self._lang_combo.currentIndexChanged.connect(self._on_language_changed)
         layout.addWidget(self._lang_combo)
 
-        nav_btn_style = (
-            "QPushButton { background: transparent; color: #d1d5db; text-align: left;"
-            " padding: 9px 12px; border-radius: 8px; border: none; font-size: 13px; }"
-            "QPushButton:hover { background-color: #1f2937; color: #f9fafb; }"
-            "QPushButton:checked { background-color: #2563eb; color: white; font-weight: 600; }"
-        )
+        # Nav button styling — always dark
         for btn, _ in self._nav_buttons.values():
-            btn.setStyleSheet(nav_btn_style)
+            btn.setStyleSheet(
+                "QPushButton { background: transparent; color: #94a3b8; text-align: left;"
+                " padding: 10px 14px; border-radius: 8px; border: none; font-size: 13px; }"
+                "QPushButton:hover { background-color: #1e293b; color: #f1f5f9; }"
+                "QPushButton:checked { background-color: #2563eb; color: white; font-weight: 600; }"
+            )
         for btn in (self._support_btn, self._log_btn, self._contact_btn, self._check_updates_btn):
             btn.setStyleSheet(
-                "QPushButton { background: transparent; color: #9ca3af; text-align: left;"
-                " padding: 8px 12px; border-radius: 8px; border: none; font-size: 12px; }"
-                "QPushButton:hover { background-color: #1f2937; color: #f9fafb; }"
+                "QPushButton { background: transparent; color: #64748b; text-align: left;"
+                " padding: 8px 14px; border-radius: 8px; border: none; font-size: 12px; }"
+                "QPushButton:hover { background-color: #1e293b; color: #e2e8f0; }"
             )
         return nav
 
-    def _apply_style(self):
-        qss = paths.RESOURCES_DIR / "style.qss"
-        if qss.exists():
-            self.setStyleSheet(qss.read_text(encoding="utf-8"))
-
-    # --------------------------------------------------------------- signals
     def _connect_signals(self):
         self._select_page.package_selected.connect(self._on_package_selected)
         self._flash_page.method_changed.connect(self._on_method_changed)
-
         self._flash_page.on_cancel(self._on_cancel_flash)
         self._flash_page.on_cancel_wait(self._on_cancel_wait)
-
         self._error_page.on_retry(self._on_retry_flash)
         self._error_page.on_reconnect(self._on_reconnect)
         self._error_page.on_reselect(lambda: self._nav_to_page(_PAGE_SELECT))
         self._error_page.on_view_log(self._show_diagnostics)
-
         self._retry_page.on_cancel(self._on_cancel_flash)
-
         self.service.step_changed.connect(self._on_step_changed)
         self.service.progress.connect(self._on_progress)
         self.service.log_message.connect(self._on_log_message)
@@ -320,22 +255,17 @@ class MainWindow(QMainWindow):
         self.service.device_lost.connect(self._on_device_lost)
         self.service.monitor_error.connect(self._on_monitor_error)
 
-    # --- keyboard shortcuts ---------------------------------------------------
     def keyPressEvent(self, event):
-        # Press M on the flash page to reveal the backend method picker
-        # (hidden by default on Windows/Linux; no-op on macOS).
-        if event.key() == 0x004D and not int(event.modifiers()):  # Qt.Key_M
+        if event.key() == 0x004D and not int(event.modifiers()):
             if self._stack.currentIndex() == _PAGE_FLASH:
                 self._flash_page.reveal_method_selector()
         super().keyPressEvent(event)
 
-    # --- navigation -----------------------------------------------------------
     def _nav_to_page(self, page_idx):
         self._stack.setCurrentIndex(page_idx)
         for key, (btn, idx) in self._nav_buttons.items():
             btn.setChecked(idx == page_idx)
 
-    # ------------------------------------------------------------- flash flow
     def _on_package_selected(self, path, name, model):
         self._package_path = path
         self._package_name = name
@@ -343,8 +273,6 @@ class MainWindow(QMainWindow):
         self._begin_flash_flow()
 
     def _begin_flash_flow(self):
-        """Launch the flash backend immediately; the connect prompt appears
-        while the backend searches USB (the 'power off & connect' paradigm)."""
         if not self._package_path:
             return
         try:
@@ -352,7 +280,6 @@ class MainWindow(QMainWindow):
         except ValueError:
             self.sm.reset_full()
             self.sm.transition_to(FlashState.S2_WAIT_CONNECTION)
-
         self._flash_page.set_package_name(self._package_name)
         self._flash_page.set_model(self._package_model)
         self._flash_page.set_method(self._flash_method, available=_METHODS_AVAILABLE)
@@ -362,11 +289,6 @@ class MainWindow(QMainWindow):
             f"Starting flash for {self._package_name} "
             f"(method: {_method_label(self._flash_method)})"
         )
-
-        # The backend now owns detection: SP Flash Tool searches USB until the
-        # powered-off device is connected; mtkclient waits for it internally.
-        # If the package was already extracted (e.g. a retry or a previous
-        # backend run), reuse that extraction instead of re-extracting.
         pre_extracted = completed_extract_dir(self._package_path)
         self.service.start_flash(
             self._package_path, pre_extracted_dir=pre_extracted, method=self._flash_method
@@ -379,16 +301,13 @@ class MainWindow(QMainWindow):
         self._flash_page.update_step(key)
         self._retry_page.update_step(key)
         self._on_progress(self._last_progress)
-
         if step == STEP_EXTRACTING:
             self._flash_page.show_preparing()
         elif step == STEP_WAITING:
-            # Backend is searching USB — show the connect guidance.
             self._flash_page.show_waiting()
             self._flash_page.set_waiting_device()
             self._set_state(FlashState.S2_WAIT_CONNECTION)
         elif step == STEP_DETECT:
-            # Device detected in BROM.
             self._flash_page.set_detected()
             self._set_state(FlashState.S3_DEVICE_DETECTED)
         elif step in _WRITE_STEPS:
@@ -396,7 +315,6 @@ class MainWindow(QMainWindow):
             self._flash_page.set_device_flashing()
             self._enter_flashing_state()
         elif step == STEP_DONE:
-            # installed.png — completed before the donation/complete dialog.
             self._flash_page.set_device_done()
 
     def _set_state(self, state):
@@ -434,7 +352,6 @@ class MainWindow(QMainWindow):
             self._log_lines = self._log_lines[-2000:]
         self.log_line_added.emit(msg)
 
-    # -- device monitor (secondary; disconnect safety only) ------------------
     def _on_device_found(self, port):
         self._append_log(f"Device detected: {port}")
         self._flash_page.set_detected()
@@ -475,13 +392,9 @@ class MainWindow(QMainWindow):
             "donation_install_prompt_disabled", False, type=bool
         )
         if donation_disabled:
-            # Donation modal opted out — the completion dialog carries the
-            # install confirmation on its own.
             dialog = FlashCompleteDialog(self, self._package_name, self._elapsed_text())
             dialog.exec()
         else:
-            # The install-success donation modal already announces the
-            # completed install, so no separate completion screen first.
             self._show_donation_dialog(context="install_success")
         self._reset_after_run()
 
@@ -511,15 +424,12 @@ class MainWindow(QMainWindow):
         self._nav_to_page(_PAGE_FLASH)
 
     def _on_cancel_wait(self):
-        """Back out of the flow before flashing begins."""
         self.service.cancel_flash()
         self.service.stop_device_monitor()
         self.sm.reset_full()
         self._nav_to_page(_PAGE_SELECT)
 
     def _on_method_changed(self, method):
-        """Restart the search with the newly chosen backend (only while the
-        backend is still waiting for a device, before flashing begins)."""
         if self.sm.state not in (FlashState.S2_WAIT_CONNECTION, FlashState.S3_DEVICE_DETECTED):
             return
         if method == self._flash_method:
@@ -553,7 +463,6 @@ class MainWindow(QMainWindow):
         self.service.stop_device_monitor()
         self._nav_to_page(_PAGE_SELECT)
 
-    # ------------------------------------------------------------------ misc
     def _tick_elapsed(self):
         self._flash_page.update_time(self._elapsed_text(), self._eta_text())
 
@@ -570,9 +479,6 @@ class MainWindow(QMainWindow):
 
     def _show_diagnostics(self):
         dlg = DiagnosticsDialog(self, self._log_lines)
-        # Stream new log lines into the dialog while it is open; the modal
-        # event loop keeps delivering queued worker signals, so this updates
-        # live instead of requiring a close/reopen.
         self.log_line_added.connect(dlg.append_line)
         try:
             dlg.exec()
@@ -586,8 +492,6 @@ class MainWindow(QMainWindow):
         lang = self._lang_combo.itemData(index)
         translator().set_language(lang)
         self.settings.setValue("language", lang)
-        # Retranslate in place — never rebuild the UI or navigate away, so an
-        # in-progress activity (e.g. flashing) keeps its screen and state.
         self._retranslate_all()
 
     def _retranslate_all(self):
@@ -606,9 +510,7 @@ class MainWindow(QMainWindow):
         if self.statusBar() and hasattr(self.statusBar(), "retranslate"):
             self.statusBar().retranslate()
 
-    # ---------------------------------------------------------------- updates
     def _on_manifest_loaded(self, entries):
-        """Live catalog refreshed — repopulate the model/software lists."""
         if entries:
             self._select_page._on_model_changed()
 
@@ -656,12 +558,7 @@ class MainWindow(QMainWindow):
                 else tr("update_up_to_date").format(version=APP_VERSION),
             )
 
-    # ---------------------------------------------------------------- donate
     def _on_donations_updated(self, donations):
-        """Keep the modal's next opening on the same live donor snapshot as
-        the always-visible footer. Failed refreshes are ignored by the footer,
-        so the bundled data remains the fallback without any UI warning.
-        """
         if donations:
             self._donations = donations
 
@@ -681,7 +578,6 @@ class MainWindow(QMainWindow):
         )
         dialog.exec()
 
-    # ----------------------------------------------------------------- close
     def closeEvent(self, event):
         self.service.cleanup()
         for w in (getattr(self, "_manifest_worker", None), getattr(self, "_update_worker", None)):
@@ -695,8 +591,6 @@ def _is_mac():
     return sys.platform == "darwin"
 
 
-# Backends selectable in the flash page. macOS has no SP Flash Tool build, so
-# MTKClient is the only option there ("auto" resolves to it).
 _METHODS_AVAILABLE = ("auto", "sp", "mtk") if not _is_mac() else ("auto", "mtk")
 
 _METHOD_LABELS = {

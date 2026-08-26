@@ -1,13 +1,4 @@
-"""Flash page — preparing / waiting-for-device / flashing views.
-
-- ``preparing``: firmware package is being readied; keep the device unplugged.
-- ``waiting``: the backend is searching USB — CE-style image guidance tells the
-  user to power off their {model} and connect the cable.
-- ``flashing``: InniUpdaterChin-style progress display (bar, steps, elapsed/ETA).
-
-The page supports in-place ``retranslate()`` so a language switch mid-activity
-updates the visible strings without rebuilding or navigating away.
-"""
+"""Flash page — preparing / waiting-for-device / flashing views."""
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPixmap
@@ -34,13 +25,7 @@ from ..flash_service import (
 )
 from ..i18n import tr
 from .widgets import Banner, Card, InfoRow, StatusTag
-from .dark import (
-    FG, FG_D, FG_MID, FG_MID_D, FG_SEC, FG_SEC_D,
-    BORDER, BORDER_D,
-    PROGRESS_TRACK, PROGRESS_TRACK_D, PROGRESS_CHUNK, PROGRESS_CHUNK_D,
-    PRIMARY, PRIMARY_D, FG_DIM, FG_DIM_D,
-    dc,
-)
+from .dark import T
 
 _STEP_KEY = {
     STEP_EXTRACTING: "step_extract",
@@ -53,34 +38,8 @@ _STEP_KEY = {
 }
 
 
-def _combo_sheet(is_dark=False):
-    return (
-        "QComboBox {{"
-        "  background-color: {bg}; color: {fg};"
-        "  border: 1px solid {brd}; border-radius: 6px;"
-        "  padding: 6px 12px; font-size: 13px;"
-        "}}"
-        "QComboBox:hover {{ border: 1px solid {brd_h}; }}"
-        "QComboBox::drop-down {{ border: none; width: 20px; }}"
-        "QComboBox QAbstractItemView {{"
-        "  background-color: {bg}; color: {fg};"
-        "  border: 1px solid {brd}; border-radius: 6px;"
-        "  selection-background-color: {sel_bg}; selection-color: #ffffff;"
-        "  font-size: 13px; outline: 0;"
-        "}}"
-    ).format(
-        bg=dc("#ffffff", "#111827"),
-        fg=dc("#1A1A2E", "#f9fafb"),
-        brd=dc("#d1d5db", "#4b5563"),
-        brd_h=dc("#9ca3af", "#6b7280"),
-        sel_bg=dc("#3b5bdb", "#818cf8"),
-    )
-
-
 class FlashPage(QWidget):
-    """Emitted when the user switches the flash backend while waiting."""
-
-    method_changed = Signal(str)  # "auto" | "sp" | "mtk"
+    method_changed = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -95,7 +54,6 @@ class FlashPage(QWidget):
         self._method_available = ("auto", "sp", "mtk")
         self._build_ui()
 
-    # ------------------------------------------------------------------ UI
     def _build_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 20, 24, 20)
@@ -109,8 +67,8 @@ class FlashPage(QWidget):
             self._stack.addWidget(w)
         layout.addWidget(self._stack, 1)
 
-    # -- preparing view ------------------------------------------------------
     def _build_preparing_view(self):
+        t = T()
         view = QWidget()
         layout = QVBoxLayout(view)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -131,24 +89,20 @@ class FlashPage(QWidget):
         self._prep_progress = QProgressBar()
         self._prep_progress.setRange(0, 100)
         self._prep_progress.setFixedHeight(16)
-        self._prep_progress.setStyleSheet(
-            "QProgressBar {"
-            f"  border: 1px solid {dc('#e5e7eb', '#374151')}; border-radius: 8px;"
-            f"  background-color: {dc('#f3f4f6', '#1f2937')}; text-align: center;"
-            "}"
-            f"QProgressBar::chunk {{ background-color: {PRIMARY}; border-radius: 8px; }}"
-        )
         self._prep_card.add_widget(self._prep_progress)
         self._prep_step = QLabel("")
         self._prep_step.setAlignment(Qt.AlignCenter)
-        self._prep_step.setStyleSheet(f"font-size: 13px; font-weight: 600; color: {dc(FG_MID, FG_MID_D)};")
+        self._prep_step.setStyleSheet(
+            f"font-size: 13px; font-weight: 600; color: {t.fg_dim};"
+            f" border: none; background: transparent;"
+        )
         self._prep_card.add_widget(self._prep_step)
         layout.addWidget(self._prep_card)
         layout.addStretch()
         return view
 
-    # -- waiting view (CE-style guidance) ------------------------------------
     def _build_waiting_view(self):
+        t = T()
         view = QWidget()
         layout = QVBoxLayout(view)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -161,28 +115,27 @@ class FlashPage(QWidget):
         row = QHBoxLayout()
         row.setSpacing(20)
 
-        # Status image — changes with the flash phase:
-        #   waiting  -> sleeping.png  (power off your device)
-        #   detected -> ready.png     (device found)
-        #   flashing -> installing.png (writing firmware)
         self._status_img = QLabel()
         self._status_img.setFixedSize(460, 222)
         self._status_img.setScaledContents(True)
         self._status_img.setAlignment(Qt.AlignCenter)
-        # Default guide; the method-aware variant is applied by
-        # set_waiting_device()/set_searching() once the combo exists.
         self._load_image(self._status_img, "initsteps.png")
         row.addWidget(self._status_img, 0, Qt.AlignTop)
 
         guide_box = QVBoxLayout()
         self._guide_title = QLabel(tr("flash_guide_title"))
-        self._guide_title.setStyleSheet(f"font-size: 15px; font-weight: 700; color: {dc(FG, FG_D)};")
+        self._guide_title.setStyleSheet(
+            f"font-size: 16px; font-weight: 700; color: {t.fg};"
+            f" border: none; background: transparent;"
+        )
         guide_box.addWidget(self._guide_title)
 
         self._guide_texts = []
         for key in ("flash_guide_1", "flash_guide_2", "flash_guide_3", "flash_guide_4"):
             text = QLabel(tr(key))
-            text.setStyleSheet(f"font-size: 13px; color: {dc(FG_MID, FG_MID_D)};")
+            text.setStyleSheet(
+                f"font-size: 13px; color: {t.fg_dim}; border: none; background: transparent;"
+            )
             self._guide_texts.append((key, text))
             guide_box.addWidget(text)
         row.addLayout(guide_box, 1)
@@ -191,22 +144,20 @@ class FlashPage(QWidget):
         self._warning = QLabel(tr("flash_warning"))
         self._warning.setWordWrap(True)
         self._warning.setStyleSheet(
-            "font-size: 12px;"
-            f" color: {dc('#92400e', '#fde68a')};"
-            f" background-color: {dc('#fef3c7', '#451a03')};"
-            " border-radius: 8px; padding: 10px 14px;"
+            f"font-size: 12px; color: {t.warn_fg};"
+            f" background-color: {t.warn_bg};"
+            f" border-radius: 10px; padding: 10px 14px;"
         )
         layout.addWidget(self._warning)
 
-        # Flash backend method selector (Auto / SP Flash Tool / MTKClient).
-        # Changing it while the backend is still searching restarts the
-        # search with the same package.
         method_row = QHBoxLayout()
         self._method_label = QLabel(tr("flash_method"))
-        self._method_label.setStyleSheet(f"font-size: 13px; font-weight: 600; color: {dc(FG_MID, FG_MID_D)};")
+        self._method_label.setStyleSheet(
+            f"font-size: 13px; font-weight: 600; color: {t.fg_dim};"
+            f" border: none; background: transparent;"
+        )
         method_row.addWidget(self._method_label)
         self._method_combo = QComboBox()
-        self._method_combo.setStyleSheet(_combo_sheet())
         self._method_combo.setCursor(Qt.PointingHandCursor)
         self._method_combo.currentIndexChanged.connect(self._on_method_changed)
         method_row.addWidget(self._method_combo)
@@ -215,12 +166,11 @@ class FlashPage(QWidget):
 
         self._method_note = QLabel("")
         self._method_note.setWordWrap(True)
-        self._method_note.setStyleSheet(f"font-size: 11px; color: {dc(FG_SEC, FG_SEC_D)};")
+        self._method_note.setStyleSheet(
+            f"font-size: 11px; color: {t.fg_dim}; border: none; background: transparent;"
+        )
         layout.addWidget(self._method_note)
 
-        # Hide the method picker by default on Windows/Linux; it only
-        # appears after the user presses M. On macOS there is only one
-        # backend (MTKClient) so the combo stays hidden permanently.
         self._method_revealed = False
         self._method_label.setVisible(False)
         self._method_combo.setVisible(False)
@@ -231,20 +181,15 @@ class FlashPage(QWidget):
         layout.addWidget(self._wait_status)
 
         self._wait_cancel_btn = QPushButton(tr("flash_btn_cancel_wait"))
+        self._wait_cancel_btn.setProperty("cssClass", "ghost")
         self._wait_cancel_btn.setCursor(Qt.PointingHandCursor)
-        self._wait_cancel_btn.setStyleSheet(
-            "QPushButton {"
-            f"  background-color: {dc('#6b7280', '#4b5563')}; color: white; font-weight: 600;"
-            "  font-size: 13px; border-radius: 8px; border: none; padding: 8px 18px; }"
-            f"QPushButton:hover {{ background-color: {dc('#4b5563', '#374045')}; }}"
-        )
         self._wait_cancel_btn.clicked.connect(self._on_cancel_wait)
         layout.addWidget(self._wait_cancel_btn, 0, Qt.AlignLeft)
         layout.addStretch()
         return view
 
-    # -- flashing view (Chin-style progress) ---------------------------------
     def _build_flashing_view(self):
+        t = T()
         view = QWidget()
         layout = QVBoxLayout(view)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -266,23 +211,21 @@ class FlashPage(QWidget):
         self._progress_bar.setRange(0, 100)
         self._progress_bar.setValue(0)
         self._progress_bar.setFixedHeight(16)
-        self._progress_bar.setStyleSheet(
-            "QProgressBar {"
-            f"  border: 1px solid {dc('#e5e7eb', '#374151')}; border-radius: 8px;"
-            f"  background-color: {dc('#f3f4f6', '#1f2937')}; text-align: center;"
-            "}"
-            f"QProgressBar::chunk {{ background-color: {PRIMARY}; border-radius: 8px; }}"
-        )
         self._progress_card.add_widget(self._progress_bar)
 
         self._step_label = QLabel("")
         self._step_label.setAlignment(Qt.AlignCenter)
-        self._step_label.setStyleSheet(f"font-size: 13px; font-weight: 600; color: {dc(FG_MID, FG_MID_D)};")
+        self._step_label.setStyleSheet(
+            f"font-size: 13px; font-weight: 600; color: {t.fg_dim};"
+            f" border: none; background: transparent;"
+        )
         self._progress_card.add_widget(self._step_label)
 
         self._action_label = QLabel("")
         self._action_label.setWordWrap(True)
-        self._action_label.setStyleSheet(f"font-size: 12px; color: {dc(FG_SEC, FG_SEC_D)};")
+        self._action_label.setStyleSheet(
+            f"font-size: 12px; color: {t.fg_dim}; border: none; background: transparent;"
+        )
         self._progress_card.add_widget(self._action_label)
         layout.addWidget(self._progress_card)
 
@@ -298,13 +241,8 @@ class FlashPage(QWidget):
 
         btn_row = QHBoxLayout()
         self._cancel_btn = QPushButton(tr("flash_btn_cancel"))
+        self._cancel_btn.setProperty("cssClass", "ghost")
         self._cancel_btn.setCursor(Qt.PointingHandCursor)
-        self._cancel_btn.setStyleSheet(
-            "QPushButton {"
-            f"  background-color: {dc('#6b7280', '#4b5563')}; color: white; font-weight: 600;"
-            "  font-size: 13px; border-radius: 8px; border: none; padding: 8px 18px; }"
-            f"QPushButton:hover {{ background-color: {dc('#4b5563', '#374045')}; }}"
-        )
         self._cancel_btn.clicked.connect(self._on_cancel)
         btn_row.addWidget(self._cancel_btn)
         btn_row.addStretch()
@@ -321,14 +259,11 @@ class FlashPage(QWidget):
                     label.setPixmap(pm)
                     return
 
-    # -- view switching -------------------------------------------------------
     def show_preparing(self):
         self._stack.setCurrentWidget(self._preparing_view)
         self._prep_banner.set_key("flash_preparing")
         self._prep_step_key = "step_extract"
         self._prep_step.setText(tr("step_extract"))
-        # firmware_downloader.py paradigm: presteps guides "unplug the device"
-        # before the backend starts searching.
         self._load_image(self._prep_img, "presteps.png")
 
     def show_waiting(self):
@@ -340,11 +275,7 @@ class FlashPage(QWidget):
         self._method_combo.setEnabled(False)
         self._load_image(self._flash_img, "installing.png")
 
-    # -- flash method ---------------------------------------------------------
     def set_method(self, method, available=("auto", "sp", "mtk")):
-        """Populate the backend selector; ``available`` limits the options
-        (e.g. macOS has no SP Flash Tool). Selects ``method`` without
-        re-triggering ``method_changed``."""
         self._method_available = tuple(available)
         self._method_combo.blockSignals(True)
         self._method_combo.clear()
@@ -367,25 +298,17 @@ class FlashPage(QWidget):
         self._update_method_note()
 
     def _initsteps_image(self):
-        """initsteps variant for the active backend/platform.
-
-        Mirrors firmware_downloader.py: SP Flash Tool gets the SP-specific
-        guide; MTKClient gets the Windows or generic guide depending on OS.
-        """
         method = self.current_method()
         if method == "sp":
             return "initsteps_sp.png"
         if method == "mtk":
             return "initsteps_win.png" if paths.IS_WINDOWS else "initsteps.png"
-        # "auto": SP Flash Tool on Windows/Linux, MTKClient on macOS.
         if paths.IS_MAC:
             return "initsteps.png"
         return "initsteps_sp.png"
 
     def _on_method_changed(self):
         self._update_method_note()
-        # Refresh the guidance image for the newly selected backend while the
-        # page is still waiting for a device.
         if self._stack.currentWidget() is self._waiting_view:
             self._load_image(self._status_img, self._initsteps_image())
         self.method_changed.emit(self.current_method())
@@ -402,11 +325,9 @@ class FlashPage(QWidget):
         else:
             self._method_note.setText(tr("flash_method_note_auto"))
 
-    # -- method picker reveal (hidden by default on Win/Linux) ----------------
     def reveal_method_selector(self):
-        """Show the backend method picker (normally hidden; user presses M)."""
         if paths.IS_MAC:
-            return  # only one option — nothing to choose
+            return
         if self._method_revealed:
             return
         self._method_revealed = True
@@ -415,12 +336,11 @@ class FlashPage(QWidget):
         self._method_note.setVisible(True)
         self._update_method_note()
 
-    # -- data -----------------------------------------------------------------
     def set_model(self, model):
         self._model = (model or "").strip() or ""
 
     def set_package_name(self, name):
-        self._pkg_row.set_value(name or "—")
+        self._pkg_row.set_value(name or "\u2014")
 
     def _connect_model_text(self):
         return self._model if self._model else tr("flash_model_generic")
@@ -432,8 +352,6 @@ class FlashPage(QWidget):
         self._wait_banner.set_key("flash_connect_prompt", model=self._connect_model_text())
         self._conn_value_key = "flash_conn_waiting"
         self._conn_row.set_value(tr("flash_conn_waiting"))
-        # initsteps: "power off your device and connect USB" guidance image,
-        # picked for the active backend/platform like firmware_downloader.py.
         self._load_image(self._status_img, self._initsteps_image())
 
     def set_searching(self):
@@ -447,8 +365,6 @@ class FlashPage(QWidget):
         self._wait_banner.set_type("success")
         self._wait_banner_key = "ready"
         self._wait_banner.set_key("flash_banner_ready")
-        # please_wait: device detected, DA handshake in progress
-        # (firmware_downloader.py shows please_wait on "device detected").
         self._load_image(self._status_img, "please_wait.png")
 
     def set_device_flashing(self):
@@ -459,11 +375,9 @@ class FlashPage(QWidget):
         self._dev_value_key = "status_connected"
         self._conn_row.set_value(tr("flash_conn_connected"))
         self._dev_row.set_value(tr("status_connected"))
-        # Show installing.png — firmware is being written.
         self._load_image(self._status_img, "installing.png")
 
     def set_device_done(self):
-        # installed.png — flash completed, ready to disconnect/reboot.
         self._load_image(self._status_img, "installed.png")
         self._load_image(self._flash_img, "installed.png")
 
@@ -484,11 +398,9 @@ class FlashPage(QWidget):
         self._elapsed_row.set_value(elapsed)
         self._eta_row.set_value(eta)
 
-    # -- retranslation (in place; keeps the current view + activity state) ----
     def retranslate(self):
         self._prep_banner.retranslate()
         if self._wait_banner_key == "connect":
-            # Re-derive the model text (the generic fallback is translated).
             self._wait_banner.set_key("flash_connect_prompt", model=self._connect_model_text())
         else:
             self._wait_banner.retranslate()
@@ -518,7 +430,6 @@ class FlashPage(QWidget):
         self._pkg_row.retranslate()
         self._elapsed_row.retranslate()
         self._eta_row.retranslate()
-        # Rebuild the method combo items (labels are translatable).
         current = self.current_method()
         self._method_combo.blockSignals(True)
         self._method_combo.clear()
@@ -543,7 +454,6 @@ class FlashPage(QWidget):
             return tr("flash_method_note_mtk")
         return tr("flash_method_note_auto")
 
-    # -- callbacks ------------------------------------------------------------
     def on_cancel(self, callback):
         self._cancel_callback = callback
 

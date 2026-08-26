@@ -1,4 +1,4 @@
-"""Retry page (port of the Chin ``app.ui.page_retry``)."""
+"""Retry page."""
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
 
 from ..i18n import tr
 from .widgets import Card, InfoRow
-from .dark import FG, FG_SEC, FG_SEC_D, PROGRESS_TRACK, dc
+from .dark import T
 
 
 class RetryPage(QWidget):
@@ -24,12 +24,16 @@ class RetryPage(QWidget):
         self._build_ui()
 
     def _build_ui(self):
+        t = T()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 20, 24, 20)
         layout.setSpacing(14)
 
         self._title = QLabel(tr("retry_title"))
-        self._title.setStyleSheet(f"font-size: 18px; font-weight: 800; color: {dc(FG, '#f9fafb')};")
+        self._title.setStyleSheet(
+            f"font-size: 20px; font-weight: 800; color: {t.fg};"
+            f" letter-spacing: -0.02em; border: none; background: transparent;"
+        )
         layout.addWidget(self._title)
 
         self._card = Card("retry_info_title")
@@ -44,32 +48,28 @@ class RetryPage(QWidget):
         self._progress = QProgressBar()
         self._progress.setRange(0, 100)
         self._progress.setFixedHeight(14)
-        self._progress.setStyleSheet(
-            "QProgressBar {"
-            f"  border: 1px solid {dc(PROGRESS_TRACK, '#374151')}; border-radius: 7px;"
-            f"  background-color: {dc(PROGRESS_TRACK, '#1f2937')}; text-align: center;"
-            "}"
-            f"QProgressBar::chunk {{ background-color: #2563eb; border-radius: 7px; }}"
-        )
         layout.addWidget(self._progress)
 
         self._step_label = QLabel("")
         self._step_label.setAlignment(Qt.AlignCenter)
-        self._step_label.setStyleSheet(f"font-size: 13px; color: {dc(FG_SEC, FG_SEC_D)};")
+        self._step_label.setStyleSheet(
+            f"font-size: 13px; color: {t.fg_dim}; border: none; background: transparent;"
+        )
         layout.addWidget(self._step_label)
 
         self._cancel_btn = QPushButton(tr("retry_btn_cancel"))
+        self._cancel_btn.setProperty("cssClass", "ghost")
         self._cancel_btn.setCursor(Qt.PointingHandCursor)
         self._cancel_btn.clicked.connect(lambda: self._cancel_cb and self._cancel_cb())
         layout.addWidget(self._cancel_btn)
         layout.addStretch()
 
     def update_info(self, package_name, retry_count, conn_status_key):
-        self._pkg_row.set_value(package_name or "—")
+        self._pkg_row.set_value(package_name or "\u2014")
         self._retry_count = retry_count
         self._conn_key = conn_status_key
         self._count_row.set_value(tr("retry_count_fmt").format(n=retry_count))
-        self._conn_row.set_value(tr(conn_status_key) if conn_status_key else "—")
+        self._conn_row.set_value(tr(conn_status_key) if conn_status_key else "\u2014")
 
     def update_progress(self, percent):
         self._progress.setValue(percent)

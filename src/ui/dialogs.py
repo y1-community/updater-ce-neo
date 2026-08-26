@@ -1,6 +1,4 @@
-"""Modal dialogs — flash complete / failed / diagnostics / update available
-(port of the Chin ``app.ui.dialogs``).
-"""
+"""Modal dialogs — flash complete / failed / diagnostics / update available."""
 
 import sys
 import webbrowser
@@ -18,39 +16,25 @@ from PySide6.QtWidgets import (
 
 from ..i18n import tr
 from ..updates import asset_hint, pick_platform_asset
-from .dark import (
-    FG, FG_D, FG_SEC, FG_SEC_D,
-    BORDER, BORDER_D, BORDER_S, BORDER_S_D,
-    dc,
-)
-
-
-def _dialog_sheet():
-    bg = dc("#ffffff", "#1f2937")
-    fg = dc("#111827", "#f9fafb")
-    return (
-        f"QDialog {{ background-color: {bg}; color: {fg}; }}"
-        f"QLabel {{ color: {fg}; }}"
-        f"QTextEdit {{ background-color: {dc('#ffffff', '#111827')}; color: {fg};"
-        f" border: 1px solid {dc(BORDER, BORDER_D)}; border-radius: 6px; padding: 8px; }}"
-    )
+from .dark import T
 
 
 class FlashCompleteDialog(QDialog):
     def __init__(self, parent=None, package_name="", elapsed="00:00"):
         super().__init__(parent)
+        t = T()
         self.setWindowTitle(tr("flash_complete"))
         self.setMinimumWidth(420)
-        self.setStyleSheet(_dialog_sheet())
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
 
-        title = QLabel(f"<h2 style='color:{dc('#059669', '#34d399')};'>{tr('flash_complete')} ✅</h2>")
+        title = QLabel(f"<h2 style='color:{t.ok_fg};'>{tr('flash_complete')} &#x2705;</h2>")
         title.setTextFormat(Qt.RichText)
         layout.addWidget(title)
 
+        ndash = '\u2014'
         body = QLabel(
-            f"{tr('flash_current_pkg')}: <b>{package_name or '—'}</b><br>"
+            f"{tr('flash_current_pkg')}: <b>{package_name or ndash}</b><br>"
             f"{tr('flash_elapsed')}: {elapsed}"
         )
         body.setTextFormat(Qt.RichText)
@@ -69,20 +53,21 @@ class FlashFailedDialog(QDialog):
         self.setMinimumWidth(440)
         self._want_retry = False
         self._want_log = False
-        self.setStyleSheet(_dialog_sheet())
+        t = T()
 
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
         title = QLabel(
-            f"<h2 style='color:{dc('#dc2626', '#f87171')};'>{tr('flash_failed')} ✕</h2>"
+            f"<h2 style='color:{t.danger_fg};'>{tr('flash_failed')} &#x2715;</h2>"
         )
         title.setTextFormat(Qt.RichText)
         layout.addWidget(title)
 
+        ndash = '\u2014'
         body = QLabel(
-            f"{tr('err_error_code')}: <b>{error_code or '—'}</b><br>"
-            f"{tr('err_failed_at')}: {step or '—'}<br>"
-            f"{tr('flash_current_pkg')}: {package_name or '—'}<br>"
+            f"{tr('err_error_code')}: <b>{error_code or ndash}</b><br>"
+            f"{tr('err_failed_at')}: {step or ndash}<br>"
+            f"{tr('flash_current_pkg')}: {package_name or ndash}<br>"
             f"{tr('err_retry_count')}: {retry_count}"
         )
         body.setTextFormat(Qt.RichText)
@@ -91,8 +76,10 @@ class FlashFailedDialog(QDialog):
 
         row = QHBoxLayout()
         retry_btn = QPushButton(tr("err_btn_retry"))
+        retry_btn.setProperty("cssClass", "primary")
         retry_btn.clicked.connect(self._on_retry)
         log_btn = QPushButton(tr("err_view_log"))
+        log_btn.setProperty("cssClass", "ghost")
         log_btn.clicked.connect(self._on_log)
         close_btn = QPushButton(tr("close"))
         close_btn.clicked.connect(self.reject)
@@ -118,15 +105,13 @@ class FlashFailedDialog(QDialog):
 
 
 class DiagnosticsDialog(QDialog):
-    """Diagnostics (formerly Log Center) — plain-text view of the session log."""
-
     def __init__(self, parent=None, lines=None):
         super().__init__(parent)
         self.setWindowTitle(tr("log_center"))
         self.resize(640, 420)
-        self.setStyleSheet(_dialog_sheet())
         layout = QVBoxLayout(self)
         self._view = QTextEdit()
+        self._view.setObjectName("logView")
         self._view.setReadOnly(True)
         layout.addWidget(self._view)
         self._empty = True
@@ -141,7 +126,6 @@ class DiagnosticsDialog(QDialog):
             self._empty = True
 
     def append_line(self, line):
-        """Append a live log line (replaces the empty-state placeholder)."""
         if self._empty:
             self._view.setPlainText(str(line))
             self._empty = False
@@ -150,22 +134,19 @@ class DiagnosticsDialog(QDialog):
 
 
 class UpdateAvailableDialog(QDialog):
-    """Tells the user a newer app version exists and walks them through
-    downloading + installing it for their OS."""
-
     def __init__(self, parent=None, info=None, current_version="", on_skip=None):
         super().__init__(parent)
         self._info = info
         self._on_skip = on_skip
+        t = T()
         self.setWindowTitle(tr("update_available"))
         self.setMinimumWidth(520)
         self.resize(560, 460)
-        self.setStyleSheet(_dialog_sheet())
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
 
         title = QLabel(
-            f"<h2 style='color:{dc('#2563eb', '#60a5fa')};'>{tr('update_available')} 🎉</h2>"
+            f"<h2 style='color:{t.fg_primary};'>{tr('update_available')} &#127881;</h2>"
         )
         title.setTextFormat(Qt.RichText)
         layout.addWidget(title)
@@ -196,34 +177,26 @@ class UpdateAvailableDialog(QDialog):
         guide = QLabel(tr(guide_key).format(hint=hint))
         guide.setWordWrap(True)
         guide.setStyleSheet(
-            "font-size: 12px;"
-            f" color: {dc('#374151', '#d1d5db')};"
-            f" background-color: {dc('#eff6ff', '#1e3a5f')};"
-            " border-radius: 8px; padding: 10px 14px;"
+            f"font-size: 12px; color: {t.fg_dim};"
+            f" background-color: {t.info_bg};"
+            f" border-radius: 8px; padding: 10px 14px;"
         )
         layout.addWidget(guide)
 
         self._asset = asset
         btn_row = QHBoxLayout()
         self._download_btn = QPushButton(tr("update_btn_download"))
+        self._download_btn.setProperty("cssClass", "primary")
         self._download_btn.setCursor(Qt.PointingHandCursor)
         self._download_btn.clicked.connect(self._on_download)
         self._later_btn = QPushButton(tr("update_btn_later"))
+        self._later_btn.setProperty("cssClass", "ghost")
         self._later_btn.setCursor(Qt.PointingHandCursor)
         self._later_btn.clicked.connect(self.reject)
         self._skip_btn = QPushButton(tr("update_btn_skip"))
+        self._skip_btn.setProperty("cssClass", "ghost")
         self._skip_btn.setCursor(Qt.PointingHandCursor)
         self._skip_btn.clicked.connect(self._on_skip_version)
-        for b in (self._download_btn, self._later_btn, self._skip_btn):
-            b.setStyleSheet(
-                "QPushButton { border-radius: 8px; padding: 8px 16px; font-weight: 600; }"
-            )
-        self._download_btn.setStyleSheet(
-            "QPushButton {"
-            f"  background-color: {dc('#2563eb', '#3b5bdb')}; color: white;"
-            "  border-radius: 8px; padding: 8px 16px; font-weight: 600; border: none; }"
-            f"QPushButton:hover {{ background-color: {dc('#1d4ed8', '#3451c7')}; }}"
-        )
         btn_row.addWidget(self._download_btn)
         btn_row.addWidget(self._later_btn)
         btn_row.addWidget(self._skip_btn)

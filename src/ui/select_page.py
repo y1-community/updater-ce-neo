@@ -1,10 +1,4 @@
-"""Select package page — online firmware listing (new) + local file picker
-(port of the Chin ``SelectPackagePage``).
-
-Online source: Device Model -> Software -> Release list (from GitHub via the
-``ReleasesClient``) -> Download -> the package becomes ``package_path`` and the
-existing flash flow takes over. Local source: file dialog as in the original.
-"""
+"""Select package page — online firmware listing + local file picker."""
 
 import logging
 from pathlib import Path
@@ -31,41 +25,13 @@ from ..flash_service import ExtractWorker
 from ..config import DEVICE_MODELS
 from ..i18n import tr
 from .widgets import Banner, Card
-from .dark import (
-    FG, FG_D, FG_SEC, FG_SEC_D, FG_MID, FG_MID_D,
-    dc,
-)
+from .dark import T
 
 logger = logging.getLogger(__name__)
 
-# Reusable combo sheet
-_COMBO_SHEET = (
-    "QComboBox {{"
-    "  background-color: {bg}; color: {fg};"
-    "  border: 1px solid {brd}; border-radius: 6px;"
-    "  padding: 6px 12px; font-size: 13px;"
-    "}}"
-    "QComboBox:hover {{ border: 1px solid {brd_h}; }}"
-    "QComboBox::drop-down {{ border: none; width: 20px; }}"
-    "QComboBox QAbstractItemView {{"
-    "  background-color: {bg}; color: {fg};"
-    "  border: 1px solid {brd}; border-radius: 6px;"
-    "  selection-background-color: {sel_bg}; selection-color: #ffffff;"
-    "  font-size: 13px; outline: 0;"
-    "}}"
-).format(
-    bg=dc("#ffffff", "#111827"),
-    fg=dc("#1A1A2E", "#f9fafb"),
-    brd=dc("#d1d5db", "#4b5563"),
-    brd_h=dc("#9ca3af", "#6b7280"),
-    sel_bg=dc("#3b5bdb", "#818cf8"),
-)
-
 
 class ReleasesWorker(QThread):
-    """Fetch releases for a catalogue package off the UI thread."""
-
-    finished = Signal(list, str)  # releases, error
+    finished = Signal(list, str)
 
     def __init__(self, client, package, model, show_nightly, parent=None):
         super().__init__(parent)
@@ -84,10 +50,7 @@ class ReleasesWorker(QThread):
 
 
 class SelectPackagePage(QWidget):
-    """Package source page. Emits ``package_selected(path, name)`` when the
-    user has a package ready to flash (downloaded release or local file)."""
-
-    package_selected = Signal(str, str, str)  # path, name, model
+    package_selected = Signal(str, str, str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -107,14 +70,14 @@ class SelectPackagePage(QWidget):
         self._build_ui()
         self._on_model_changed()
 
-    # ------------------------------------------------------------------ UI
     def _build_ui(self):
+        t = T()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 20, 24, 20)
         layout.setSpacing(12)
 
         self._title = QLabel(tr("sel_title"))
-        self._title.setStyleSheet(f"font-size: 20px; font-weight: 800; color: {dc(FG, FG_D)};")
+        self._title.setProperty("cssClass", "pageTitle")
         layout.addWidget(self._title)
 
         self._tabs = QTabWidget()
@@ -124,43 +87,46 @@ class SelectPackagePage(QWidget):
         self._tabs.addTab(self._local_tab, tr("sel_local"))
         layout.addWidget(self._tabs, 1)
 
-        # status card (shared)
         self._status_card = Card("sel_status_title")
         self._status_tag_label = QLabel()
-        self._status_tag_label.setStyleSheet(f"font-size: 12px; color: {dc(FG_SEC, FG_SEC_D)};")
+        self._status_tag_label.setStyleSheet(
+            f"font-size: 12px; color: {t.fg_dim}; border: none; background: transparent;"
+        )
         self._status_card.add_widget(self._status_tag_label)
         layout.addWidget(self._status_card)
 
     def _build_online_tab(self):
+        t = T()
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(10)
 
         filters = QHBoxLayout()
-        self._model_label = self._mk_field_label(tr("sel_model"))
+        self._model_label = QLabel(tr("sel_model"))
+        self._model_label.setStyleSheet(
+            f"font-size: 13px; font-weight: 600; color: {t.fg_dim};"
+            f" border: none; background: transparent;"
+        )
         filters.addWidget(self._model_label)
         self._model_combo = QComboBox()
-        self._model_combo.setStyleSheet(_COMBO_SHEET)
         for m in DEVICE_MODELS:
             self._model_combo.addItem(m)
         self._model_combo.currentTextChanged.connect(self._on_model_changed)
         filters.addWidget(self._model_combo)
 
-        self._software_label = self._mk_field_label(tr("sel_software"))
+        self._software_label = QLabel(tr("sel_software"))
+        self._software_label.setStyleSheet(
+            f"font-size: 13px; font-weight: 600; color: {t.fg_dim};"
+            f" border: none; background: transparent;"
+        )
         filters.addWidget(self._software_label)
         self._software_combo = QComboBox()
-        self._software_combo.setStyleSheet(_COMBO_SHEET)
         self._software_combo.currentTextChanged.connect(self._on_software_changed)
         filters.addWidget(self._software_combo)
 
         self._refresh_btn = QPushButton(tr("sel_refresh"))
-        self._refresh_btn.setStyleSheet(
-            "QPushButton {"
-            f"  background-color: {dc('#6b7280', '#4b5563')}; color: white;"
-            "  border: none; border-radius: 6px; padding: 6px 14px; font-size: 12px; }"
-            f"QPushButton:hover {{ background-color: {dc('#4b5563', '#374045')}; }}"
-        )
+        self._refresh_btn.setProperty("cssClass", "ghost")
         self._refresh_btn.setCursor(Qt.PointingHandCursor)
         self._refresh_btn.clicked.connect(self._refresh_releases)
         filters.addWidget(self._refresh_btn)
@@ -172,43 +138,27 @@ class SelectPackagePage(QWidget):
 
         split = QHBoxLayout()
         self._release_list = QListWidget()
-        self._release_list.setStyleSheet(
-            "QListWidget {"
-            f"  background-color: {dc('#ffffff', '#111827')};"
-            f"  color: {dc('#111827', '#f9fafb')};"
-            f"  border: 1px solid {dc('#e5e7eb', '#374151')}; border-radius: 8px;"
-            "  padding: 4px; font-size: 13px; }"
-            "QListWidget::item { padding: 6px 8px; border-radius: 4px; }"
-            f"QListWidget::item:selected {{ background-color: {dc('#dbeafe', '#1e3a5f')};"
-            f" color: {dc('#1d4ed8', '#93c5fd')}; }}"
-            f"QListWidget::item:hover {{ background-color: {dc('#f3f4f6', '#1f2937')}; }}"
-        )
-        self._release_list.currentItemChanged.connect(self._on_release_selected)
         split.addWidget(self._release_list, 3)
         self._notes = QTextEdit()
-        self._notes.setObjectName("release_notes")
+        self._notes.setObjectName("releaseNotes")
         self._notes.setReadOnly(True)
         self._notes.setPlaceholderText(tr("sel_notes_hint"))
         split.addWidget(self._notes, 2)
         layout.addLayout(split, 1)
 
         self._download_bar = QProgressBar()
-        self._download_bar.setStyleSheet(
-            "QProgressBar {"
-            f"  border: 1px solid {dc('#e5e7eb', '#374151')}; border-radius: 6px;"
-            f"  background-color: {dc('#f3f4f6', '#1f2937')}; text-align: center;"
-            "}"
-            f"QProgressBar::chunk {{ background-color: #2563eb; border-radius: 6px; }}"
-        )
         self._download_bar.setVisible(False)
         layout.addWidget(self._download_bar)
 
         self._download_status = QLabel("")
-        self._download_status.setStyleSheet(f"font-size: 12px; color: {dc(FG_SEC, FG_SEC_D)};")
+        self._download_status.setStyleSheet(
+            f"font-size: 12px; color: {t.fg_dim}; border: none; background: transparent;"
+        )
         layout.addWidget(self._download_status)
 
         install_row = QHBoxLayout()
         self._install_btn = QPushButton(tr("sel_install"))
+        self._install_btn.setProperty("cssClass", "primary")
         self._install_btn.setCursor(Qt.PointingHandCursor)
         self._install_btn.setEnabled(False)
         self._install_btn.clicked.connect(self._on_install)
@@ -218,6 +168,7 @@ class SelectPackagePage(QWidget):
         return page
 
     def _build_local_tab(self):
+        t = T()
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(8, 8, 8, 8)
@@ -225,12 +176,11 @@ class SelectPackagePage(QWidget):
 
         self._hint = QLabel(tr("sel_only_local"))
         self._hint.setWordWrap(True)
-        self._hint.setStyleSheet(f"font-size: 13px; color: {dc(FG_SEC, FG_SEC_D)};")
+        self._hint.setStyleSheet(
+            f"font-size: 13px; color: {t.fg_dim}; border: none; background: transparent;"
+        )
         layout.addWidget(self._hint)
 
-        # Offline capability note: the flash engine works with any firmware
-        # package for every Innioasis / Timmkoo player (the architectural
-        # advantage InniUpdaterChin has over the online-only Updater CE).
         self._offline_banner = Banner()
         self._offline_banner.set_type("info")
         self._offline_banner.set_key("sel_offline_install")
@@ -240,20 +190,8 @@ class SelectPackagePage(QWidget):
         self._path_edit = QLineEdit()
         self._path_edit.setReadOnly(True)
         self._path_edit.setPlaceholderText(tr("sel_placeholder"))
-        self._path_edit.setStyleSheet(
-            "QLineEdit {"
-            f"  background-color: {dc('#ffffff', '#1f2937')};"
-            f"  color: {dc('#111827', '#f9fafb')};"
-            f"  border: 1px solid {dc('#d1d5db', '#4b5563')}; border-radius: 6px;"
-            "  padding: 6px 10px; font-size: 13px; }"
-        )
         self._browse_btn = QPushButton(tr("sel_browse"))
-        self._browse_btn.setStyleSheet(
-            "QPushButton {"
-            f"  background-color: {dc('#6b7280', '#4b5563')}; color: white;"
-            "  border: none; border-radius: 6px; padding: 6px 14px; font-size: 12px; }"
-            f"QPushButton:hover {{ background-color: {dc('#4b5563', '#374045')}; }}"
-        )
+        self._browse_btn.setProperty("cssClass", "ghost")
         self._browse_btn.setCursor(Qt.PointingHandCursor)
         self._browse_btn.clicked.connect(self._on_choose_file)
         row.addWidget(self._path_edit, 1)
@@ -264,21 +202,17 @@ class SelectPackagePage(QWidget):
         layout.addWidget(self._local_banner)
 
         self._local_bar = QProgressBar()
-        self._local_bar.setStyleSheet(
-            "QProgressBar {"
-            f"  border: 1px solid {dc('#e5e7eb', '#374151')}; border-radius: 6px;"
-            f"  background-color: {dc('#f3f4f6', '#1f2937')}; text-align: center;"
-            "}"
-            f"QProgressBar::chunk {{ background-color: #2563eb; border-radius: 6px; }}"
-        )
         self._local_bar.setVisible(False)
         layout.addWidget(self._local_bar)
 
         self._local_status = QLabel("")
-        self._local_status.setStyleSheet(f"font-size: 12px; color: {dc(FG_SEC, FG_SEC_D)};")
+        self._local_status.setStyleSheet(
+            f"font-size: 12px; color: {t.fg_dim}; border: none; background: transparent;"
+        )
         layout.addWidget(self._local_status)
 
         self._start_btn = QPushButton(tr("sel_btn_start"))
+        self._start_btn.setProperty("cssClass", "primary")
         self._start_btn.setCursor(Qt.PointingHandCursor)
         self._start_btn.setEnabled(False)
         self._start_btn.clicked.connect(self._on_start_flash)
@@ -286,12 +220,6 @@ class SelectPackagePage(QWidget):
         layout.addStretch()
         return page
 
-    def _mk_field_label(self, text):
-        lbl = QLabel(text)
-        lbl.setStyleSheet(f"font-size: 13px; font-weight: 600; color: {dc(FG_MID, FG_MID_D)};")
-        return lbl
-
-    # ----------------------------------------------------------- online logic
     def _set_online_banner(self, key, count=0):
         self._online_banner_key = key
         self._online_banner_count = count
@@ -302,7 +230,7 @@ class SelectPackagePage(QWidget):
         if key == "releases":
             self._online_banner.set_type("info")
             self._online_banner.setText(
-                f"{self._online_banner_count} release(s) — {tr('sel_install')}"
+                f"{self._online_banner_count} release(s) \u2014 {tr('sel_install')}"
             )
         elif key:
             self._online_banner.set_type("warning" if key in ("sel_offline", "sel_no_release") else "info")
@@ -426,7 +354,7 @@ class SelectPackagePage(QWidget):
         lines = [f"## {name}"]
         if meta:
             lines.append("")
-            lines.append(" · ".join(meta))
+            lines.append(" \u00b7 ".join(meta))
         lines.append("")
         lines.append("---")
         lines.append("")
@@ -459,22 +387,15 @@ class SelectPackagePage(QWidget):
     def _on_download_done(self, ok, result):
         self._download_bar.setVisible(False)
         if not ok:
-            self._download_status.setText(f"{tr('sel_download_start')} — {result}")
+            self._download_status.setText(f"{tr('sel_download_start')} \u2014 {result}")
             self._install_btn.setEnabled(True)
             return
         self._current_package_path = result
         self._current_package_name = f"{self.current_software()} ({self.current_model()})"
-        # Remember the model the release belongs to.
         self._current_package_model = self.current_model()
-        # Download is done — now prepare (extract) the package before the
-        # flash flow starts, so the install itself never extracts mid-flash.
         self._prepare_package(result, self._on_online_prep_done)
 
-    # ------------------------------------------------------------- preparation
     def _prepare_package(self, path, done_cb):
-        """Extract the firmware package now — package preparation. The flash
-        pipeline then reuses this extraction (never shows an EXTRACTING step):
-        the firmware is already on disk before any install method starts."""
         if self._prep_worker is not None:
             self._prep_worker.cancel()
         self._download_status_key = "sel_preparing"
@@ -501,7 +422,7 @@ class SelectPackagePage(QWidget):
         self._download_bar.setVisible(False)
         if not ok:
             self._download_status_key = ""
-            self._download_status.setText(f"{tr('sel_prepare_failed')} — {err}")
+            self._download_status.setText(f"{tr('sel_prepare_failed')} \u2014 {err}")
             self._install_btn.setEnabled(True)
             return
         self._download_status_key = "sel_prepare_done"
@@ -512,13 +433,12 @@ class SelectPackagePage(QWidget):
         self._local_bar.setVisible(False)
         if not ok:
             self._local_status_key = ""
-            self._local_status.setText(f"{tr('sel_prepare_failed')} — {err}")
+            self._local_status.setText(f"{tr('sel_prepare_failed')} \u2014 {err}")
             return
         self._local_status_key = "sel_prepare_done"
         self._local_status.setText(tr("sel_prepare_done"))
         self._start_btn.setEnabled(True)
 
-    # ------------------------------------------------------------- local logic
     def _on_choose_file(self):
         filter_str = tr("sel_dialog_filter")
         path, _ = QFileDialog.getOpenFileName(self, tr("sel_dialog_title"), "", filter_str)
@@ -527,10 +447,8 @@ class SelectPackagePage(QWidget):
         self._path_edit.setText(path)
         self._current_package_path = path
         self._current_package_name = Path(path).name
-        self._current_package_model = ""  # unknown for local packages
+        self._current_package_model = ""
         self._set_local_banner("sel_current_pkg", Path(path).name)
-        # Local packages are prepared (extracted) before the install can
-        # start, so the flash pipeline never shows an EXTRACTING step.
         self._start_btn.setEnabled(False)
         self._prepare_package(path, self._on_local_prep_done)
 
@@ -545,7 +463,6 @@ class SelectPackagePage(QWidget):
             getattr(self, "_current_package_model", "") or self.current_model(),
         )
 
-    # ---------------------------------------------------------------- helpers
     def current_model(self):
         return self._model_combo.currentText()
 
