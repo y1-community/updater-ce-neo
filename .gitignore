@@ -10,3 +10,7 @@ build/
 # SP Flash Tool v5.2016 and UnRAR are located at runtime by INSTALL_DIR paths.
 /SP_Flash_Tool/
 /tools/
+
+# macOS build artifacts
+*.dmg
+*.icns
