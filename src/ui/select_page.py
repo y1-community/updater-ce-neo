@@ -1,8 +1,8 @@
 """Select package page — online firmware listing (new) + local file picker
 (port of the Chin ``SelectPackagePage``).
 
-Online source: Device Model → Software → Release list (from GitHub via the
-``ReleasesClient``) → Download → the package becomes ``package_path`` and the
+Online source: Device Model -> Software -> Release list (from GitHub via the
+``ReleasesClient``) -> Download -> the package becomes ``package_path`` and the
 existing flash flow takes over. Local source: file dialog as in the original.
 """
 
@@ -31,8 +31,35 @@ from ..flash_service import ExtractWorker
 from ..config import DEVICE_MODELS
 from ..i18n import tr
 from .widgets import Banner, Card
+from .dark import (
+    FG, FG_D, FG_SEC, FG_SEC_D, FG_MID, FG_MID_D,
+    dc,
+)
 
 logger = logging.getLogger(__name__)
+
+# Reusable combo sheet
+_COMBO_SHEET = (
+    "QComboBox {{"
+    "  background-color: {bg}; color: {fg};"
+    "  border: 1px solid {brd}; border-radius: 6px;"
+    "  padding: 6px 12px; font-size: 13px;"
+    "}}"
+    "QComboBox:hover {{ border: 1px solid {brd_h}; }}"
+    "QComboBox::drop-down {{ border: none; width: 20px; }}"
+    "QComboBox QAbstractItemView {{"
+    "  background-color: {bg}; color: {fg};"
+    "  border: 1px solid {brd}; border-radius: 6px;"
+    "  selection-background-color: {sel_bg}; selection-color: #ffffff;"
+    "  font-size: 13px; outline: 0;"
+    "}}"
+).format(
+    bg=dc("#ffffff", "#111827"),
+    fg=dc("#1A1A2E", "#f9fafb"),
+    brd=dc("#d1d5db", "#4b5563"),
+    brd_h=dc("#9ca3af", "#6b7280"),
+    sel_bg=dc("#3b5bdb", "#818cf8"),
+)
 
 
 class ReleasesWorker(QThread):
@@ -87,7 +114,7 @@ class SelectPackagePage(QWidget):
         layout.setSpacing(12)
 
         self._title = QLabel(tr("sel_title"))
-        self._title.setStyleSheet("font-size: 20px; font-weight: 800; color: #111827;")
+        self._title.setStyleSheet(f"font-size: 20px; font-weight: 800; color: {dc(FG, FG_D)};")
         layout.addWidget(self._title)
 
         self._tabs = QTabWidget()
@@ -100,7 +127,7 @@ class SelectPackagePage(QWidget):
         # status card (shared)
         self._status_card = Card("sel_status_title")
         self._status_tag_label = QLabel()
-        self._status_tag_label.setStyleSheet("font-size: 12px; color: #6b7280;")
+        self._status_tag_label.setStyleSheet(f"font-size: 12px; color: {dc(FG_SEC, FG_SEC_D)};")
         self._status_card.add_widget(self._status_tag_label)
         layout.addWidget(self._status_card)
 
@@ -114,6 +141,7 @@ class SelectPackagePage(QWidget):
         self._model_label = self._mk_field_label(tr("sel_model"))
         filters.addWidget(self._model_label)
         self._model_combo = QComboBox()
+        self._model_combo.setStyleSheet(_COMBO_SHEET)
         for m in DEVICE_MODELS:
             self._model_combo.addItem(m)
         self._model_combo.currentTextChanged.connect(self._on_model_changed)
@@ -122,10 +150,17 @@ class SelectPackagePage(QWidget):
         self._software_label = self._mk_field_label(tr("sel_software"))
         filters.addWidget(self._software_label)
         self._software_combo = QComboBox()
+        self._software_combo.setStyleSheet(_COMBO_SHEET)
         self._software_combo.currentTextChanged.connect(self._on_software_changed)
         filters.addWidget(self._software_combo)
 
         self._refresh_btn = QPushButton(tr("sel_refresh"))
+        self._refresh_btn.setStyleSheet(
+            "QPushButton {"
+            f"  background-color: {dc('#6b7280', '#4b5563')}; color: white;"
+            "  border: none; border-radius: 6px; padding: 6px 14px; font-size: 12px; }"
+            f"QPushButton:hover {{ background-color: {dc('#4b5563', '#374045')}; }}"
+        )
         self._refresh_btn.setCursor(Qt.PointingHandCursor)
         self._refresh_btn.clicked.connect(self._refresh_releases)
         filters.addWidget(self._refresh_btn)
@@ -137,6 +172,17 @@ class SelectPackagePage(QWidget):
 
         split = QHBoxLayout()
         self._release_list = QListWidget()
+        self._release_list.setStyleSheet(
+            "QListWidget {"
+            f"  background-color: {dc('#ffffff', '#111827')};"
+            f"  color: {dc('#111827', '#f9fafb')};"
+            f"  border: 1px solid {dc('#e5e7eb', '#374151')}; border-radius: 8px;"
+            "  padding: 4px; font-size: 13px; }"
+            "QListWidget::item { padding: 6px 8px; border-radius: 4px; }"
+            f"QListWidget::item:selected {{ background-color: {dc('#dbeafe', '#1e3a5f')};"
+            f" color: {dc('#1d4ed8', '#93c5fd')}; }}"
+            f"QListWidget::item:hover {{ background-color: {dc('#f3f4f6', '#1f2937')}; }}"
+        )
         self._release_list.currentItemChanged.connect(self._on_release_selected)
         split.addWidget(self._release_list, 3)
         self._notes = QTextEdit()
@@ -147,11 +193,18 @@ class SelectPackagePage(QWidget):
         layout.addLayout(split, 1)
 
         self._download_bar = QProgressBar()
+        self._download_bar.setStyleSheet(
+            "QProgressBar {"
+            f"  border: 1px solid {dc('#e5e7eb', '#374151')}; border-radius: 6px;"
+            f"  background-color: {dc('#f3f4f6', '#1f2937')}; text-align: center;"
+            "}"
+            f"QProgressBar::chunk {{ background-color: #2563eb; border-radius: 6px; }}"
+        )
         self._download_bar.setVisible(False)
         layout.addWidget(self._download_bar)
 
         self._download_status = QLabel("")
-        self._download_status.setStyleSheet("font-size: 12px; color: #6b7280;")
+        self._download_status.setStyleSheet(f"font-size: 12px; color: {dc(FG_SEC, FG_SEC_D)};")
         layout.addWidget(self._download_status)
 
         install_row = QHBoxLayout()
@@ -172,7 +225,7 @@ class SelectPackagePage(QWidget):
 
         self._hint = QLabel(tr("sel_only_local"))
         self._hint.setWordWrap(True)
-        self._hint.setStyleSheet("font-size: 13px; color: #6b7280;")
+        self._hint.setStyleSheet(f"font-size: 13px; color: {dc(FG_SEC, FG_SEC_D)};")
         layout.addWidget(self._hint)
 
         # Offline capability note: the flash engine works with any firmware
@@ -187,7 +240,20 @@ class SelectPackagePage(QWidget):
         self._path_edit = QLineEdit()
         self._path_edit.setReadOnly(True)
         self._path_edit.setPlaceholderText(tr("sel_placeholder"))
+        self._path_edit.setStyleSheet(
+            "QLineEdit {"
+            f"  background-color: {dc('#ffffff', '#1f2937')};"
+            f"  color: {dc('#111827', '#f9fafb')};"
+            f"  border: 1px solid {dc('#d1d5db', '#4b5563')}; border-radius: 6px;"
+            "  padding: 6px 10px; font-size: 13px; }"
+        )
         self._browse_btn = QPushButton(tr("sel_browse"))
+        self._browse_btn.setStyleSheet(
+            "QPushButton {"
+            f"  background-color: {dc('#6b7280', '#4b5563')}; color: white;"
+            "  border: none; border-radius: 6px; padding: 6px 14px; font-size: 12px; }"
+            f"QPushButton:hover {{ background-color: {dc('#4b5563', '#374045')}; }}"
+        )
         self._browse_btn.setCursor(Qt.PointingHandCursor)
         self._browse_btn.clicked.connect(self._on_choose_file)
         row.addWidget(self._path_edit, 1)
@@ -198,11 +264,18 @@ class SelectPackagePage(QWidget):
         layout.addWidget(self._local_banner)
 
         self._local_bar = QProgressBar()
+        self._local_bar.setStyleSheet(
+            "QProgressBar {"
+            f"  border: 1px solid {dc('#e5e7eb', '#374151')}; border-radius: 6px;"
+            f"  background-color: {dc('#f3f4f6', '#1f2937')}; text-align: center;"
+            "}"
+            f"QProgressBar::chunk {{ background-color: #2563eb; border-radius: 6px; }}"
+        )
         self._local_bar.setVisible(False)
         layout.addWidget(self._local_bar)
 
         self._local_status = QLabel("")
-        self._local_status.setStyleSheet("font-size: 12px; color: #6b7280;")
+        self._local_status.setStyleSheet(f"font-size: 12px; color: {dc(FG_SEC, FG_SEC_D)};")
         layout.addWidget(self._local_status)
 
         self._start_btn = QPushButton(tr("sel_btn_start"))
@@ -215,7 +288,7 @@ class SelectPackagePage(QWidget):
 
     def _mk_field_label(self, text):
         lbl = QLabel(text)
-        lbl.setStyleSheet("font-size: 13px; font-weight: 600; color: #374151;")
+        lbl.setStyleSheet(f"font-size: 13px; font-weight: 600; color: {dc(FG_MID, FG_MID_D)};")
         return lbl
 
     # ----------------------------------------------------------- online logic

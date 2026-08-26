@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 
 from ..i18n import tr
 from .widgets import Card, InfoRow
+from .dark import FG, FG_SEC, FG_SEC_D, PROGRESS_TRACK, dc
 
 
 class RetryPage(QWidget):
@@ -28,7 +29,7 @@ class RetryPage(QWidget):
         layout.setSpacing(14)
 
         self._title = QLabel(tr("retry_title"))
-        self._title.setStyleSheet("font-size: 18px; font-weight: 800; color: #111827;")
+        self._title.setStyleSheet(f"font-size: 18px; font-weight: 800; color: {dc(FG, '#f9fafb')};")
         layout.addWidget(self._title)
 
         self._card = Card("retry_info_title")
@@ -43,11 +44,18 @@ class RetryPage(QWidget):
         self._progress = QProgressBar()
         self._progress.setRange(0, 100)
         self._progress.setFixedHeight(14)
+        self._progress.setStyleSheet(
+            "QProgressBar {"
+            f"  border: 1px solid {dc(PROGRESS_TRACK, '#374151')}; border-radius: 7px;"
+            f"  background-color: {dc(PROGRESS_TRACK, '#1f2937')}; text-align: center;"
+            "}"
+            f"QProgressBar::chunk {{ background-color: #2563eb; border-radius: 7px; }}"
+        )
         layout.addWidget(self._progress)
 
         self._step_label = QLabel("")
         self._step_label.setAlignment(Qt.AlignCenter)
-        self._step_label.setStyleSheet("font-size: 13px; color: #6b7280;")
+        self._step_label.setStyleSheet(f"font-size: 13px; color: {dc(FG_SEC, FG_SEC_D)};")
         layout.addWidget(self._step_label)
 
         self._cancel_btn = QPushButton(tr("retry_btn_cancel"))

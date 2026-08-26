@@ -34,6 +34,13 @@ from ..flash_service import (
 )
 from ..i18n import tr
 from .widgets import Banner, Card, InfoRow, StatusTag
+from .dark import (
+    FG, FG_D, FG_MID, FG_MID_D, FG_SEC, FG_SEC_D,
+    BORDER, BORDER_D,
+    PROGRESS_TRACK, PROGRESS_TRACK_D, PROGRESS_CHUNK, PROGRESS_CHUNK_D,
+    PRIMARY, PRIMARY_D, FG_DIM, FG_DIM_D,
+    dc,
+)
 
 _STEP_KEY = {
     STEP_EXTRACTING: "step_extract",
@@ -44,6 +51,30 @@ _STEP_KEY = {
     STEP_WRITE: "step_write",
     STEP_DONE: "step_done",
 }
+
+
+def _combo_sheet(is_dark=False):
+    return (
+        "QComboBox {{"
+        "  background-color: {bg}; color: {fg};"
+        "  border: 1px solid {brd}; border-radius: 6px;"
+        "  padding: 6px 12px; font-size: 13px;"
+        "}}"
+        "QComboBox:hover {{ border: 1px solid {brd_h}; }}"
+        "QComboBox::drop-down {{ border: none; width: 20px; }}"
+        "QComboBox QAbstractItemView {{"
+        "  background-color: {bg}; color: {fg};"
+        "  border: 1px solid {brd}; border-radius: 6px;"
+        "  selection-background-color: {sel_bg}; selection-color: #ffffff;"
+        "  font-size: 13px; outline: 0;"
+        "}}"
+    ).format(
+        bg=dc("#ffffff", "#111827"),
+        fg=dc("#1A1A2E", "#f9fafb"),
+        brd=dc("#d1d5db", "#4b5563"),
+        brd_h=dc("#9ca3af", "#6b7280"),
+        sel_bg=dc("#3b5bdb", "#818cf8"),
+    )
 
 
 class FlashPage(QWidget):
@@ -101,14 +132,16 @@ class FlashPage(QWidget):
         self._prep_progress.setRange(0, 100)
         self._prep_progress.setFixedHeight(16)
         self._prep_progress.setStyleSheet(
-            "QProgressBar { border: 1px solid #e5e7eb; border-radius: 8px;"
-            " background-color: #f3f4f6; text-align: center; }"
-            "QProgressBar::chunk { background-color: #2563eb; border-radius: 8px; }"
+            "QProgressBar {"
+            f"  border: 1px solid {dc('#e5e7eb', '#374151')}; border-radius: 8px;"
+            f"  background-color: {dc('#f3f4f6', '#1f2937')}; text-align: center;"
+            "}"
+            f"QProgressBar::chunk {{ background-color: {PRIMARY}; border-radius: 8px; }}"
         )
         self._prep_card.add_widget(self._prep_progress)
         self._prep_step = QLabel("")
         self._prep_step.setAlignment(Qt.AlignCenter)
-        self._prep_step.setStyleSheet("font-size: 13px; font-weight: 600; color: #374151;")
+        self._prep_step.setStyleSheet(f"font-size: 13px; font-weight: 600; color: {dc(FG_MID, FG_MID_D)};")
         self._prep_card.add_widget(self._prep_step)
         layout.addWidget(self._prep_card)
         layout.addStretch()
@@ -129,9 +162,9 @@ class FlashPage(QWidget):
         row.setSpacing(20)
 
         # Status image — changes with the flash phase:
-        #   waiting  → sleeping.png  (power off your device)
-        #   detected → ready.png     (device found)
-        #   flashing → installing.png (writing firmware)
+        #   waiting  -> sleeping.png  (power off your device)
+        #   detected -> ready.png     (device found)
+        #   flashing -> installing.png (writing firmware)
         self._status_img = QLabel()
         self._status_img.setFixedSize(460, 222)
         self._status_img.setScaledContents(True)
@@ -143,13 +176,13 @@ class FlashPage(QWidget):
 
         guide_box = QVBoxLayout()
         self._guide_title = QLabel(tr("flash_guide_title"))
-        self._guide_title.setStyleSheet("font-size: 15px; font-weight: 700; color: #111827;")
+        self._guide_title.setStyleSheet(f"font-size: 15px; font-weight: 700; color: {dc(FG, FG_D)};")
         guide_box.addWidget(self._guide_title)
 
         self._guide_texts = []
         for key in ("flash_guide_1", "flash_guide_2", "flash_guide_3", "flash_guide_4"):
             text = QLabel(tr(key))
-            text.setStyleSheet("font-size: 13px; color: #374151;")
+            text.setStyleSheet(f"font-size: 13px; color: {dc(FG_MID, FG_MID_D)};")
             self._guide_texts.append((key, text))
             guide_box.addWidget(text)
         row.addLayout(guide_box, 1)
@@ -158,7 +191,9 @@ class FlashPage(QWidget):
         self._warning = QLabel(tr("flash_warning"))
         self._warning.setWordWrap(True)
         self._warning.setStyleSheet(
-            "font-size: 12px; color: #92400e; background-color: #fef3c7;"
+            "font-size: 12px;"
+            f" color: {dc('#92400e', '#fde68a')};"
+            f" background-color: {dc('#fef3c7', '#451a03')};"
             " border-radius: 8px; padding: 10px 14px;"
         )
         layout.addWidget(self._warning)
@@ -168,9 +203,10 @@ class FlashPage(QWidget):
         # search with the same package.
         method_row = QHBoxLayout()
         self._method_label = QLabel(tr("flash_method"))
-        self._method_label.setStyleSheet("font-size: 13px; font-weight: 600; color: #374151;")
+        self._method_label.setStyleSheet(f"font-size: 13px; font-weight: 600; color: {dc(FG_MID, FG_MID_D)};")
         method_row.addWidget(self._method_label)
         self._method_combo = QComboBox()
+        self._method_combo.setStyleSheet(_combo_sheet())
         self._method_combo.setCursor(Qt.PointingHandCursor)
         self._method_combo.currentIndexChanged.connect(self._on_method_changed)
         method_row.addWidget(self._method_combo)
@@ -179,7 +215,7 @@ class FlashPage(QWidget):
 
         self._method_note = QLabel("")
         self._method_note.setWordWrap(True)
-        self._method_note.setStyleSheet("font-size: 11px; color: #9ca3af;")
+        self._method_note.setStyleSheet(f"font-size: 11px; color: {dc(FG_SEC, FG_SEC_D)};")
         layout.addWidget(self._method_note)
 
         # Hide the method picker by default on Windows/Linux; it only
@@ -197,9 +233,10 @@ class FlashPage(QWidget):
         self._wait_cancel_btn = QPushButton(tr("flash_btn_cancel_wait"))
         self._wait_cancel_btn.setCursor(Qt.PointingHandCursor)
         self._wait_cancel_btn.setStyleSheet(
-            "QPushButton { background-color: #6b7280; color: white; font-weight: 600;"
-            " font-size: 13px; border-radius: 8px; border: none; padding: 8px 18px; }"
-            "QPushButton:hover { background-color: #4b5563; }"
+            "QPushButton {"
+            f"  background-color: {dc('#6b7280', '#4b5563')}; color: white; font-weight: 600;"
+            "  font-size: 13px; border-radius: 8px; border: none; padding: 8px 18px; }"
+            f"QPushButton:hover {{ background-color: {dc('#4b5563', '#374045')}; }}"
         )
         self._wait_cancel_btn.clicked.connect(self._on_cancel_wait)
         layout.addWidget(self._wait_cancel_btn, 0, Qt.AlignLeft)
@@ -230,20 +267,22 @@ class FlashPage(QWidget):
         self._progress_bar.setValue(0)
         self._progress_bar.setFixedHeight(16)
         self._progress_bar.setStyleSheet(
-            "QProgressBar { border: 1px solid #e5e7eb; border-radius: 8px;"
-            " background-color: #f3f4f6; text-align: center; }"
-            "QProgressBar::chunk { background-color: #2563eb; border-radius: 8px; }"
+            "QProgressBar {"
+            f"  border: 1px solid {dc('#e5e7eb', '#374151')}; border-radius: 8px;"
+            f"  background-color: {dc('#f3f4f6', '#1f2937')}; text-align: center;"
+            "}"
+            f"QProgressBar::chunk {{ background-color: {PRIMARY}; border-radius: 8px; }}"
         )
         self._progress_card.add_widget(self._progress_bar)
 
         self._step_label = QLabel("")
         self._step_label.setAlignment(Qt.AlignCenter)
-        self._step_label.setStyleSheet("font-size: 13px; font-weight: 600; color: #374151;")
+        self._step_label.setStyleSheet(f"font-size: 13px; font-weight: 600; color: {dc(FG_MID, FG_MID_D)};")
         self._progress_card.add_widget(self._step_label)
 
         self._action_label = QLabel("")
         self._action_label.setWordWrap(True)
-        self._action_label.setStyleSheet("font-size: 12px; color: #6b7280;")
+        self._action_label.setStyleSheet(f"font-size: 12px; color: {dc(FG_SEC, FG_SEC_D)};")
         self._progress_card.add_widget(self._action_label)
         layout.addWidget(self._progress_card)
 
@@ -261,9 +300,10 @@ class FlashPage(QWidget):
         self._cancel_btn = QPushButton(tr("flash_btn_cancel"))
         self._cancel_btn.setCursor(Qt.PointingHandCursor)
         self._cancel_btn.setStyleSheet(
-            "QPushButton { background-color: #6b7280; color: white; font-weight: 600;"
-            " font-size: 13px; border-radius: 8px; border: none; padding: 8px 18px; }"
-            "QPushButton:hover { background-color: #4b5563; }"
+            "QPushButton {"
+            f"  background-color: {dc('#6b7280', '#4b5563')}; color: white; font-weight: 600;"
+            "  font-size: 13px; border-radius: 8px; border: none; padding: 8px 18px; }"
+            f"QPushButton:hover {{ background-color: {dc('#4b5563', '#374045')}; }}"
         )
         self._cancel_btn.clicked.connect(self._on_cancel)
         btn_row.addWidget(self._cancel_btn)

@@ -1,5 +1,6 @@
 """Modal dialogs — flash complete / failed / diagnostics / update available
-(port of the Chin ``app.ui.dialogs``)."""
+(port of the Chin ``app.ui.dialogs``).
+"""
 
 import sys
 import webbrowser
@@ -17,6 +18,22 @@ from PySide6.QtWidgets import (
 
 from ..i18n import tr
 from ..updates import asset_hint, pick_platform_asset
+from .dark import (
+    FG, FG_D, FG_SEC, FG_SEC_D,
+    BORDER, BORDER_D, BORDER_S, BORDER_S_D,
+    dc,
+)
+
+
+def _dialog_sheet():
+    bg = dc("#ffffff", "#1f2937")
+    fg = dc("#111827", "#f9fafb")
+    return (
+        f"QDialog {{ background-color: {bg}; color: {fg}; }}"
+        f"QLabel {{ color: {fg}; }}"
+        f"QTextEdit {{ background-color: {dc('#ffffff', '#111827')}; color: {fg};"
+        f" border: 1px solid {dc(BORDER, BORDER_D)}; border-radius: 6px; padding: 8px; }}"
+    )
 
 
 class FlashCompleteDialog(QDialog):
@@ -24,10 +41,11 @@ class FlashCompleteDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle(tr("flash_complete"))
         self.setMinimumWidth(420)
+        self.setStyleSheet(_dialog_sheet())
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
 
-        title = QLabel(f"<h2 style='color:#059669;'>{tr('flash_complete')} ✅</h2>")
+        title = QLabel(f"<h2 style='color:{dc('#059669', '#34d399')};'>{tr('flash_complete')} ✅</h2>")
         title.setTextFormat(Qt.RichText)
         layout.addWidget(title)
 
@@ -51,10 +69,13 @@ class FlashFailedDialog(QDialog):
         self.setMinimumWidth(440)
         self._want_retry = False
         self._want_log = False
+        self.setStyleSheet(_dialog_sheet())
 
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
-        title = QLabel(f"<h2 style='color:#dc2626;'>{tr('flash_failed')} ✕</h2>")
+        title = QLabel(
+            f"<h2 style='color:{dc('#dc2626', '#f87171')};'>{tr('flash_failed')} ✕</h2>"
+        )
         title.setTextFormat(Qt.RichText)
         layout.addWidget(title)
 
@@ -103,6 +124,7 @@ class DiagnosticsDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle(tr("log_center"))
         self.resize(640, 420)
+        self.setStyleSheet(_dialog_sheet())
         layout = QVBoxLayout(self)
         self._view = QTextEdit()
         self._view.setReadOnly(True)
@@ -138,11 +160,12 @@ class UpdateAvailableDialog(QDialog):
         self.setWindowTitle(tr("update_available"))
         self.setMinimumWidth(520)
         self.resize(560, 460)
+        self.setStyleSheet(_dialog_sheet())
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
 
         title = QLabel(
-            f"<h2 style='color:#2563eb;'>{tr('update_available')} 🎉</h2>"
+            f"<h2 style='color:{dc('#2563eb', '#60a5fa')};'>{tr('update_available')} 🎉</h2>"
         )
         title.setTextFormat(Qt.RichText)
         layout.addWidget(title)
@@ -173,7 +196,9 @@ class UpdateAvailableDialog(QDialog):
         guide = QLabel(tr(guide_key).format(hint=hint))
         guide.setWordWrap(True)
         guide.setStyleSheet(
-            "font-size: 12px; color: #374151; background-color: #eff6ff;"
+            "font-size: 12px;"
+            f" color: {dc('#374151', '#d1d5db')};"
+            f" background-color: {dc('#eff6ff', '#1e3a5f')};"
             " border-radius: 8px; padding: 10px 14px;"
         )
         layout.addWidget(guide)
@@ -194,9 +219,10 @@ class UpdateAvailableDialog(QDialog):
                 "QPushButton { border-radius: 8px; padding: 8px 16px; font-weight: 600; }"
             )
         self._download_btn.setStyleSheet(
-            "QPushButton { background-color: #2563eb; color: white; border-radius: 8px;"
-            " padding: 8px 16px; font-weight: 600; border: none; }"
-            "QPushButton:hover { background-color: #1d4ed8; }"
+            "QPushButton {"
+            f"  background-color: {dc('#2563eb', '#3b5bdb')}; color: white;"
+            "  border-radius: 8px; padding: 8px 16px; font-weight: 600; border: none; }"
+            f"QPushButton:hover {{ background-color: {dc('#1d4ed8', '#3451c7')}; }}"
         )
         btn_row.addWidget(self._download_btn)
         btn_row.addWidget(self._later_btn)

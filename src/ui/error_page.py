@@ -1,5 +1,6 @@
 """Error page — device connection, USB mid-flash disconnect, flash failure
-(port of the Chin ``app.ui.page_error``)."""
+(port of the Chin ``app.ui.page_error``).
+"""
 
 from PySide6.QtWidgets import (
     QHBoxLayout,
@@ -11,6 +12,7 @@ from PySide6.QtWidgets import (
 
 from ..i18n import tr
 from .widgets import Banner, Card, InfoRow
+from .dark import FG, FG_D, FG_SEC, FG_SEC_D, dc
 
 
 class ErrorPage(QWidget):
@@ -34,7 +36,7 @@ class ErrorPage(QWidget):
 
         self._detail_card = Card("")
         self._title = QLabel("")
-        self._title.setStyleSheet("font-size: 16px; font-weight: 700; color: #111827;")
+        self._title.setStyleSheet(f"font-size: 16px; font-weight: 700; color: {dc(FG, FG_D)};")
         self._detail_card.add_widget(self._title)
         self._error_row = InfoRow("err_error_code")
         self._step_row = InfoRow("err_failed_at")
@@ -46,7 +48,7 @@ class ErrorPage(QWidget):
 
         self._hint = QLabel("")
         self._hint.setWordWrap(True)
-        self._hint.setStyleSheet("font-size: 13px; color: #6b7280;")
+        self._hint.setStyleSheet(f"font-size: 13px; color: {dc(FG_SEC, FG_SEC_D)};")
         layout.addWidget(self._hint)
 
         btn_row = QHBoxLayout()

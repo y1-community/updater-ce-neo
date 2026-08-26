@@ -56,6 +56,13 @@ from .error_page import ErrorPage
 from .flash_page import FlashPage
 from .retry_page import RetryPage
 from .select_page import SelectPackagePage
+from .dark import (
+    BG, BG_DARK, BG_ELEV, BG_ELEV_D,
+    BORDER, BORDER_D, BORDER_S, BORDER_S_D,
+    FG, FG_D, FG_SEC, FG_SEC_D, FG_DIM, FG_DIM_D,
+    PRIMARY, PRIMARY_HV, PRIMARY_D, PRIMARY_DH,
+    dc,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +82,53 @@ _STEP_KEY = {
 }
 
 _WRITE_STEPS = (STEP_DOWNLOAD_DA, STEP_DOWNLOAD_BL, STEP_WRITE)
+
+# ── Reusable QComboBox stylesheet (dark-mode aware) ─────────────────
+_COMBO_SHEET = (
+    "QComboBox {{"
+    "  background-color: {bg}; color: {fg};"
+    "  border: 1px solid {brd}; border-radius: 6px;"
+    "  padding: 6px 12px; font-size: 13px;"
+    "}}"
+    "QComboBox:hover {{ border: 1px solid {brd_h}; }}"
+    "QComboBox::drop-down {{ border: none; width: 20px; }}"
+    "QComboBox QAbstractItemView {{"
+    "  background-color: {bg}; color: {fg};"
+    "  border: 1px solid {brd}; border-radius: 6px;"
+    "  selection-background-color: {sel_bg}; selection-color: {sel_fg};"
+    "  font-size: 13px; outline: 0;"
+    "}}"
+)
+
+
+def _combo_sheet(is_dark=False):
+    return _COMBO_SHEET.format(
+        bg=BG_DARK if is_dark else BG,
+        fg=FG_D if is_dark else FG,
+        brd=BORDER_D if is_dark else BORDER,
+        brd_h=FG_SEC_D if is_dark else FG_SEC,
+        sel_bg=PRIMARY_D if is_dark else PRIMARY,
+        sel_fg="#ffffff" if is_dark else "#ffffff",
+    )
+
+
+def _nav_combo_sheet():
+    """Combo on the dark nav sidebar: always light background, dark text."""
+    return (
+        "QComboBox {"
+        "  background-color: #FFFFFF; color: #1A1A2E;"
+        "  border: 1px solid #D0D7E2; border-radius: 6px;"
+        "  padding: 6px 12px; font-size: 13px;"
+        "}"
+        "QComboBox:hover { border: 1px solid #9CA3AF; }"
+        "QComboBox::drop-down { border: none; width: 20px; }"
+        "QComboBox QAbstractItemView {"
+        "  background-color: #FFFFFF; color: #1A1A2E;"
+        "  border: 1px solid #D0D7E2; border-radius: 6px;"
+        "  selection-background-color: #EBF0FF; selection-color: #3B5BDB;"
+        "  font-size: 13px; outline: 0;"
+        "}"
+    )
 
 
 class MainWindow(QMainWindow):
@@ -153,8 +207,11 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
 
     def _build_nav(self):
+        is_dark = dc(True, False)
+
         nav = QWidget()
         nav.setFixedWidth(190)
+        # Nav is always dark-themed regardless of OS dark mode
         nav.setStyleSheet(
             "QWidget { background-color: #111827; }"
             "QLabel { color: #f9fafb; }"
@@ -208,26 +265,8 @@ class MainWindow(QMainWindow):
         self._lang_label.setStyleSheet("font-size: 11px; color: #9ca3af; margin-top: 8px;")
         layout.addWidget(self._lang_label)
         self._lang_combo = QComboBox()
-        # Inline style (mirrors the QComboBox#lang_combo rule in style.qss):
-        # the nav panel's own inline stylesheet shadows the app-level rule,
-        # so without this the combo renders unstyled and its text is
-        # invisible on the dark (#111827) nav panel.
         self._lang_combo.setObjectName("lang_combo")
-        # QAbstractItemView styles the open popup list: it is a descendant of
-        # the nav widget, so without explicit colors the nav's dark
-        # background rule paints the dropdown dark too. Fully specifying
-        # light colors here also keeps the popup identical under OS
-        # dark/light palette variations.
-        self._lang_combo.setStyleSheet(
-            "QComboBox { background-color: #FFFFFF; color: #1A1A2E;"
-            " border: 1px solid #D0D7E2; border-radius: 6px; padding: 6px 12px;"
-            " font-size: 13px; }"
-            "QComboBox::drop-down { border: none; width: 20px; }"
-            "QComboBox QAbstractItemView { background-color: #FFFFFF;"
-            " color: #1A1A2E; border: 1px solid #D0D7E2; border-radius: 6px;"
-            " selection-background-color: #EBF0FF; selection-color: #3B5BDB;"
-            " font-size: 13px; outline: 0; }"
-        )
+        self._lang_combo.setStyleSheet(_nav_combo_sheet())
         self._lang_combo.addItem("中文", "zh-CN")
         self._lang_combo.addItem("English", "en")
         self._lang_combo.addItem("Français", "fr")
@@ -653,7 +692,6 @@ class MainWindow(QMainWindow):
 
 def _is_mac():
     import sys
-
     return sys.platform == "darwin"
 
 
