@@ -49,11 +49,11 @@ _STRINGS: dict = {
         "fr": "Langue",
         "es": "Idioma",
     },
-    "nav_contact": {
-        "zh-CN": "联系我们",
-        "en": "Contact Us",
-        "fr": "Nous contacter",
-        "es": "Contáctanos",
+    "nav_credits": {
+        "zh-CN": "致谢",
+        "en": "Credits / Thanks",
+        "fr": "Crédits / Remerciements",
+        "es": "Créditos / Agradecimientos",
     },
     "nav_donate": {
         "zh-CN": "支持我们",

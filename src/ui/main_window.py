@@ -31,7 +31,6 @@ from .. import paths
 from ..config import (
     APP_NAME,
     APP_VERSION,
-    CONTACT_EMAIL,
     UPDATE_CHECK_STARTUP_DELAY_MS,
     UPDATE_REPO,
 )
@@ -195,10 +194,10 @@ class MainWindow(QMainWindow):
         self._log_btn.clicked.connect(self._show_diagnostics)
         layout.addWidget(self._log_btn)
 
-        self._contact_btn = QPushButton(tr("nav_contact"))
-        self._contact_btn.setCursor(Qt.PointingHandCursor)
-        self._contact_btn.clicked.connect(self._open_contact_mail)
-        layout.addWidget(self._contact_btn)
+        self._credits_btn = QPushButton(tr("nav_credits"))
+        self._credits_btn.setCursor(Qt.PointingHandCursor)
+        self._credits_btn.clicked.connect(self._open_credits)
+        layout.addWidget(self._credits_btn)
 
         self._check_updates_btn = QPushButton(tr("nav_check_updates"))
         self._check_updates_btn.setCursor(Qt.PointingHandCursor)
@@ -229,7 +228,7 @@ class MainWindow(QMainWindow):
                 "QPushButton:hover { background-color: #1e293b; color: #f1f5f9; }"
                 "QPushButton:checked { background-color: #2563eb; color: white; font-weight: 600; }"
             )
-        for btn in (self._support_btn, self._log_btn, self._contact_btn, self._check_updates_btn):
+        for btn in (self._support_btn, self._log_btn, self._credits_btn, self._check_updates_btn):
             btn.setStyleSheet(
                 "QPushButton { background: transparent; color: #64748b; text-align: left;"
                 " padding: 8px 14px; border-radius: 8px; border: none; font-size: 12px; }"
@@ -485,8 +484,8 @@ class MainWindow(QMainWindow):
         finally:
             self.log_line_added.disconnect(dlg.append_line)
 
-    def _open_contact_mail(self):
-        webbrowser.open(f"mailto:{CONTACT_EMAIL}")
+    def _open_credits(self):
+        webbrowser.open("https://innioasis.app/credits.html?thank-you=1")
 
     def _on_language_changed(self, index):
         lang = self._lang_combo.itemData(index)
@@ -500,7 +499,7 @@ class MainWindow(QMainWindow):
             btn.setText(tr(key))
         self._support_btn.setText(tr("nav_donate"))
         self._log_btn.setText(tr("nav_log"))
-        self._contact_btn.setText(tr("nav_contact"))
+        self._credits_btn.setText(tr("nav_credits"))
         self._check_updates_btn.setText(tr("nav_check_updates"))
         self._lang_label.setText(tr("nav_language"))
         self._select_page.retranslate()
