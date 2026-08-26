@@ -149,6 +149,47 @@ def test_donors():
     assert parse_donors_csv_text("") == []
 
 
+def test_relative_date():
+    """Donation dates are shown as friendly relative timestamps (Today, Yesterday,
+    On Monday, 3 days ago, etc.) in all supported languages."""
+    from datetime import datetime, timedelta
+    from src.donors import relative_date
+    from src.i18n import translator
+
+    now = datetime(2026, 8, 20, 12, 0, 0)
+    today = relative_date(now, now)
+    yesterday = relative_date(now - timedelta(days=1), now)
+    three_days = relative_date(now - timedelta(days=3), now)
+    week_ago = relative_date(now - timedelta(days=7), now)
+    two_weeks = relative_date(now - timedelta(days=14), now)
+    month_ago = relative_date(now - timedelta(days=35), now)
+    five_months = relative_date(now - timedelta(days=150), now)
+    year_ago = relative_date(now - timedelta(days=400), now)
+    no_date = relative_date(None, now)
+
+    translator().set_language("en")
+    assert today == "Today"
+    assert yesterday == "Yesterday"
+    assert "on " in three_days.lower()
+    assert three_days.lower() != today.lower()
+    assert week_ago == "a week ago"
+    assert two_weeks == "2 weeks ago"
+    assert month_ago == "a month ago"
+    assert five_months == "5 months ago"
+    assert year_ago == "over a year ago"
+    assert no_date == ""
+
+    translator().set_language("fr")
+    assert relative_date(now, now) == "Aujourd\u2019hui"
+    assert relative_date(now - timedelta(days=1), now) == "Hier"
+
+    translator().set_language("es")
+    assert relative_date(now, now) == "Hoy"
+    assert relative_date(now - timedelta(days=1), now) == "Ayer"
+
+    translator().set_language("en")
+
+
 def test_donation_dialog_translated():
     """The donation modal's intro (Ryan's message), donor ticker lines,
     goal text, and close button follow the selected language."""
@@ -1202,6 +1243,7 @@ def main():
     check("i18n languages", test_i18n_languages)
     check("rom variant parsing", test_rom_variant_parsing)
     check("donors", test_donors)
+    check("relative date", test_relative_date)
     check("donation dialog translated", test_donation_dialog_translated)
     check("scatter parsing", test_scatter_parsing)
     check("manifest parse + merge", test_manifest_parse_and_merge)

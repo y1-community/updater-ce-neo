@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
 )
 
 from .config import DONATION_CRYPTO, DONATION_LINKS, device_label_for_model
-from .donors import fetch_remote_donors_async, get_monthly_goal_stats
+from .donors import fetch_remote_donors_async, get_monthly_goal_stats, relative_date
 from .i18n import tr
 
 logger = logging.getLogger(__name__)
@@ -138,12 +138,13 @@ class DonationStatusBar(QStatusBar):
             amount_text = str(int(amount)) if amount.is_integer() else f"{amount:.2f}"
             method = donation.get("method", tr("donate_method_generic"))
             url = donation.get("url", "")
+            when = relative_date(donation.get("dt"))
             anchor = (
                 f'<a href="{url}" style="color:{self._c("#111827", "#f9fafb")}; font-weight:bold;">{name}</a>'
                 if url else name
             )
             lines.append(tr("donate_ticker_fmt").format(
-                anchor=anchor, amount=amount_text, method=method
+                anchor=anchor, amount=amount_text, method=method, when=when
             ))
         return lines or [tr("donate_thanks")]
 
@@ -430,8 +431,9 @@ class DonationDialog(QDialog):
             amt_s = f"{int(amt)}" if amt.is_integer() else f"{amt:.2f}"
             method = d.get("method", tr("donate_method_generic"))
             url = d.get("url", "")
+            when = relative_date(d.get("dt"))
             anchor = f'<a href="{url}" style="color:{self._c("#111827", "#f9fafb")}; font-weight:bold;">{name}</a>' if url else name
-            lines.append(tr("donate_ticker_fmt").format(anchor=anchor, amount=amt_s, method=method))
+            lines.append(tr("donate_ticker_fmt").format(anchor=anchor, amount=amt_s, method=method, when=when))
         if not lines:
             lines.append(tr("donate_thanks"))
         random.shuffle(lines)

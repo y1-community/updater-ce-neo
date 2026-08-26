@@ -8,7 +8,7 @@ import csv
 import logging
 import threading
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from .config import DONORS_CSV_URL, MONTHLY_GOAL_USD
@@ -57,6 +57,42 @@ def parse_donors_csv_text(csv_text):
     except Exception as e:
         logger.warning("Error parsing donors CSV: %s", e)
     return donations
+
+
+def relative_date(dt, now=None):
+    """Return a short relative-time string for a donation date.
+
+    Returns a translated string such as 'Today', 'Yesterday', 'On Monday',
+    '3 days ago', '2 weeks ago', 'a month ago', etc.
+    """
+    from .i18n import tr
+
+    if not dt:
+        return ""
+    now = now or datetime.now()
+    today = now.date()
+    dt_date = dt.date() if hasattr(dt, 'date') else dt
+    delta = today - dt_date
+    days = delta.days
+
+    if days == 0:
+        return tr('donate_when_today')
+    elif days == 1:
+        return tr('donate_when_yesterday')
+    elif days <= 6:
+        return tr('donate_when_day').format(day=dt.strftime('%A'))
+    elif days < 14:
+        return tr('donate_when_week')
+    elif days < 30:
+        weeks = days // 7
+        return tr('donate_when_weeks').format(count=weeks)
+    elif days < 60:
+        return tr('donate_when_month')
+    elif days < 365:
+        months = days // 30
+        return tr('donate_when_months').format(count=months)
+    else:
+        return tr('donate_when_year')
 
 
 def load_donors_file(paths):
