@@ -1063,6 +1063,8 @@ class FlashService(QObject):
     def stop_device_monitor(self):
         if self._device_monitor is not None:
             self._device_monitor.stop()
+            if self._device_monitor.isRunning():
+                self._device_monitor.wait(2000)
 
     def cleanup(self):
         self.cancel_flash()

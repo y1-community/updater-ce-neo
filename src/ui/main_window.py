@@ -610,6 +610,14 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         self.service.cleanup()
+        select_page = getattr(self, "select_page", None)
+        if select_page is not None:
+            rw = getattr(select_page, "_releases_worker", None)
+            if rw is not None and rw.isRunning():
+                rw.wait(1500)
+            dw = getattr(select_page, "_download_worker", None)
+            if dw is not None and dw.isRunning():
+                dw.wait(1500)
         for w in (getattr(self, "_manifest_worker", None), getattr(self, "_update_worker", None)):
             if w is not None and w.isRunning():
                 w.wait(1500)
