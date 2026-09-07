@@ -56,6 +56,7 @@ datas = [
     (str(ASSETS / "initsteps_sp.png"), "assets"),
     (str(ASSETS / "please_wait.png"), "assets"),
     (str(ASSETS / "reconnect.png"), "assets"),
+    (str(ASSETS / "compat"), "assets/compat"),
 ]
 if VENDOR_MTK.exists():
     datas.append((str(VENDOR_MTK), "mtkclient"))

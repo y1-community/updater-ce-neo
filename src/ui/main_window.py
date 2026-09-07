@@ -10,6 +10,7 @@ waiting for a device (except on macOS, where only MTKClient is available).
 """
 
 import logging
+import platform
 import time
 import webbrowser
 
@@ -117,6 +118,9 @@ class MainWindow(QMainWindow):
         self._manifest_worker.start()
         QTimer.singleShot(UPDATE_CHECK_STARTUP_DELAY_MS, self._start_auto_update_check)
 
+        if platform.system() == "Linux":
+            QTimer.singleShot(600, self._check_linux_first_run)
+
     def _build_ui(self):
         central = QWidget()
         self.setCentralWidget(central)
@@ -204,6 +208,12 @@ class MainWindow(QMainWindow):
         self._check_updates_btn.clicked.connect(self._on_check_updates_clicked)
         layout.addWidget(self._check_updates_btn)
 
+        if platform.system() == "Linux":
+            self._linux_setup_btn = QPushButton(tr("nav_linux_setup"))
+            self._linux_setup_btn.setCursor(Qt.PointingHandCursor)
+            self._linux_setup_btn.clicked.connect(self._show_linux_setup)
+            layout.addWidget(self._linux_setup_btn)
+
         self._lang_label = QLabel(tr("nav_language"))
         self._lang_label.setStyleSheet(
             "font-size: 11px; color: #64748b; margin-top: 8px; background: transparent; border: none;"
@@ -228,7 +238,10 @@ class MainWindow(QMainWindow):
                 "QPushButton:hover { background-color: #1e293b; color: #f1f5f9; }"
                 "QPushButton:checked { background-color: #2563eb; color: white; font-weight: 600; }"
             )
-        for btn in (self._support_btn, self._log_btn, self._credits_btn, self._check_updates_btn):
+        aux_btns = [self._support_btn, self._log_btn, self._credits_btn, self._check_updates_btn]
+        if hasattr(self, "_linux_setup_btn"):
+            aux_btns.append(self._linux_setup_btn)
+        for btn in aux_btns:
             btn.setStyleSheet(
                 "QPushButton { background: transparent; color: #64748b; text-align: left;"
                 " padding: 8px 14px; border-radius: 8px; border: none; font-size: 12px; }"
@@ -483,6 +496,24 @@ class MainWindow(QMainWindow):
             dlg.exec()
         finally:
             self.log_line_added.disconnect(dlg.append_line)
+
+    def _show_linux_setup(self):
+        from .dialogs import LinuxSetupDialog
+        dlg = LinuxSetupDialog(self, auto_start=False)
+        dlg.exec()
+
+    def _check_linux_first_run(self):
+        from .. import linux_sp_flash
+        from .dialogs import LinuxSetupDialog
+
+        stage = linux_sp_flash.stage_dir()
+        first_run_done = self.settings.value("linux_first_run_completed", False, type=bool)
+        files_ready = linux_sp_flash.files_ready(stage)
+
+        if not files_ready or not first_run_done:
+            self.settings.setValue("linux_first_run_completed", True)
+            dlg = LinuxSetupDialog(self, auto_start=True)
+            dlg.exec()
 
     def _open_credits(self):
         webbrowser.open("https://innioasis.app/credits.html?thank-you=1")

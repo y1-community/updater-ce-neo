@@ -480,10 +480,23 @@ class FlashWorker(QThread):
                 self._flash_via_sp_flash_tool(scatter_file)
             else:
                 self._log("Checking for SP Flash Tool (Linux)...")
+                distro = linux_sp_flash.detect_linux_distro()
+                self._log(
+                    f"Detected Linux OS: {distro.get('pretty_name', 'Linux')} "
+                    f"({distro.get('family', 'generic')} family)"
+                )
                 ok, msg = linux_sp_flash.ensure_linux_sp_flash_tool(
                     progress_cb=self._linux_stage_progress
                 )
                 if ok:
+                    readiness = linux_sp_flash.verify_linux_flashing_readiness()
+                    if not readiness.get("udev_ok"):
+                        self._log(
+                            f"Warning: {readiness.get('udev_msg')}. "
+                            f"If device is not detected, run: sudo bash {readiness.get('setup_script_path')}"
+                        )
+                    for conf in readiness.get("service_conflicts", []):
+                        self._log(f"Notice: {conf.get('message')}")
                     if method == "sp":
                         self._log("Using SP Flash Tool method (user selected).")
                     self._log(f"Linux SP Flash Tool ready: {msg}")

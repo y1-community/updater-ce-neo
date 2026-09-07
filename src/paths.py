@@ -44,6 +44,7 @@ if not (BUNDLE_DIR / "mtkclient").exists() and (REPO_ROOT / "vendor" / "mtkclien
     MTKCLIENT_DIR = REPO_ROOT / "vendor" / "mtkclient"
 if not (BUNDLE_DIR / "assets").exists() and (REPO_ROOT / "assets").exists():
     RESOURCES_DIR = REPO_ROOT / "assets"
+COMPAT_DIR = RESOURCES_DIR / "compat"
 
 
 def ensure_mtkclient_importable():

@@ -1143,6 +1143,82 @@ def test_linux_sp_flash_validation():
                 zf.writestr(rel, b"x" * (700 * 1024))
         assert lsf.zip_has_required_members(zp)
 
+
+def test_linux_sp_flash_distro_detection():
+    """Verify Linux distribution detection and multi-distro family mapping."""
+    from unittest.mock import patch
+    from src import linux_sp_flash as lsf
+
+    host_info = lsf.detect_linux_distro()
+    assert host_info["id"] != "", "Host distro ID should not be empty"
+    assert host_info["family"] in (
+        "arch", "debian", "fedora", "suse", "gentoo", "void", "alpine", "nixos", "generic"
+    )
+
+    distros = [
+        ("ubuntu", ["debian"], "Ubuntu 24.04", "debian", "dialout", "apt"),
+        ("debian", [], "Debian GNU/Linux 12", "debian", "dialout", "apt"),
+        ("fedora", [], "Fedora Linux 41", "fedora", "dialout", "dnf"),
+        ("arch", [], "Arch Linux", "arch", "uucp", "pacman"),
+        ("cachyos", ["arch"], "CachyOS", "arch", "uucp", "pacman"),
+        ("omarchy", ["arch"], "Omarchy Linux", "arch", "uucp", "pacman"),
+        ("opensuse-tumbleweed", ["suse"], "openSUSE Tumbleweed", "suse", "dialout", "zypper"),
+        ("gentoo", [], "Gentoo Linux", "gentoo", "uucp", "emerge"),
+        ("alpine", [], "Alpine Linux", "alpine", "dialout", "apk"),
+        ("void", [], "Void Linux", "void", "dialout", "xbps"),
+        ("nixos", [], "NixOS", "nixos", "dialout", "nix"),
+    ]
+
+    for did, id_like, name, expected_family, expected_grp, expected_pm in distros:
+        fake_content = f'ID={did}\nID_LIKE="{" ".join(id_like)}"\nNAME="{name}"\nPRETTY_NAME="{name}"\n'
+        with patch.object(Path, "is_file", return_value=True):
+            with patch.object(Path, "read_text", return_value=fake_content):
+                info = lsf.detect_linux_distro()
+                assert info["family"] == expected_family, f"Expected {expected_family} for {did}, got {info['family']}"
+                assert info["serial_group"] == expected_grp, f"Expected {expected_grp} for {did}, got {info['serial_group']}"
+                assert info["package_manager"] == expected_pm, f"Expected {expected_pm} for {did}, got {info['package_manager']}"
+
+
+def test_linux_sp_flash_rules_and_readiness():
+    """Verify udev rule generation, setup script writing, and readiness report."""
+    from src import linux_sp_flash as lsf
+
+    rules = lsf.generate_udev_rule_content()
+    assert "0e8d" in rules
+    assert "0003" in rules
+    assert "0666" in rules
+    assert "uaccess" in rules
+    assert "ID_MM_DEVICE_IGNORE" in rules
+    assert "BRLTTY_DEVICE_IGNORE" in rules
+
+    with tempfile.TemporaryDirectory() as td:
+        script = lsf.write_setup_script(cache_dir=Path(td))
+        assert script.is_file()
+        assert os.access(script, os.X_OK)
+        content = script.read_text(encoding="utf-8")
+        assert "UDEV_RULE_FILENAME" not in content
+        assert "99-innioasis-mediatek.rules" in content
+
+    readiness = lsf.verify_linux_flashing_readiness()
+    assert "overall_ready" in readiness
+    assert "sp_exec_ok" in readiness
+    assert readiness["arch_ok"] is True
+    assert readiness["libpng12_staged"] is True
+    assert readiness["sp_exec_ok"] is True
+
+
+def test_linux_setup_dialog():
+    """Verify LinuxSetupDialog instantiates and populates status without crashing."""
+    from PySide6.QtWidgets import QApplication
+    from src.ui.dialogs import LinuxSetupDialog
+
+    _reset_app_settings()
+    app = QApplication.instance() or QApplication(sys.argv)
+    dlg = LinuxSetupDialog()
+    assert dlg.windowTitle() != ""
+    assert "SP Flash Tool Verification Report" in dlg._status_view.toPlainText()
+
+
 def test_package_prep_gates_flash_start():
     """Extraction is package preparation: download/local-file flows extract
     BEFORE the flash flow starts (package_selected only fires after prep), and
@@ -1273,6 +1349,9 @@ def main():
     check("mtk connect system exit guarded", test_mtk_connect_system_exit_guarded)
     check("mtk write system exit guarded", test_mtk_write_system_exit_guarded)
     check("linux sp flash validation", test_linux_sp_flash_validation)
+    check("linux sp flash distro detection", test_linux_sp_flash_distro_detection)
+    check("linux sp flash rules and readiness", test_linux_sp_flash_rules_and_readiness)
+    check("linux setup dialog", test_linux_setup_dialog)
     check("package prep gates flash start", test_package_prep_gates_flash_start)
     check("auto falls back when SP missing", test_auto_falls_back_when_sp_missing)
     if failures:
