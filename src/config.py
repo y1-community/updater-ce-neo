@@ -5,7 +5,7 @@ the online catalogue / donation endpoints used by Updater CE and innioasis.app.
 """
 
 APP_VERSION = "1.1.2"
-APP_NAME = "Innioasis Updater"
+APP_NAME = "Innioasis Updater CE"
 CONTACT_EMAIL = "updater-feedback@innioasis.com"
 
 # --- Online firmware catalogue ---------------------------------------------

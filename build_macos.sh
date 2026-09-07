@@ -15,7 +15,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-APP_NAME="Innoasis Updater"
+APP_NAME="Innioasis Updater CE"
 APP_ID="com.innioasis.updater"
 VERSION=$(grep -oP 'APP_VERSION\s*=\s*"\K[^"]+' src/config.py 2>/dev/null || echo "1.1.2")
 DIST_DIR="dist"

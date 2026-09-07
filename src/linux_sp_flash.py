@@ -433,7 +433,7 @@ def generate_udev_rule_content() -> str:
     interrupting BROM handshakes.
     """
     return (
-        "# Innioasis Updater Neo - MediaTek Flashing Rules\n"
+        "# Innioasis Updater CE - MediaTek Flashing Rules\n"
         "# Ensures full permissions for Boot ROM (BROM) and Preloader serial interfaces.\n"
         "\n"
         "# MediaTek Boot ROM (BROM) - USB devices\n"
@@ -568,7 +568,7 @@ def write_setup_script(cache_dir: Path = None) -> Path:
     rules_content = generate_udev_rule_content()
 
     script_content = f"""#!/bin/bash
-# Innioasis Updater Neo - Linux System Preparation Script
+# Innioasis Updater CE - Linux System Preparation Script
 # Configures udev rules, permissions, and dependencies for MediaTek SP Flash Tool.
 
 set -e
@@ -579,7 +579,7 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-echo "=== Innioasis Updater Neo: Staging Linux System ==="
+echo "=== Innioasis Updater CE: Staging Linux System ==="
 echo "Target Distribution: {distro.get('pretty_name', 'Linux')}"
 
 # 1. Install udev rules

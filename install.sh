@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Innioasis Updater Neo — Linux Installation & Setup Script
+# Innioasis Updater CE — Linux Installation & Setup Script
 # Repository: https://github.com/y1-community/updater-ce-neo
 #
 # Supports: Ubuntu, Debian, Fedora, Arch Linux, CachyOS, Omarchy, openSUSE,
@@ -44,10 +44,10 @@ for arg in "$@"; do
         --uninstall) UNINSTALL=1 ;;
         --skip-udev) SKIP_UDEV=1 ;;
         -h|--help)
-            echo "Innioasis Updater Neo Installer"
+            echo "Innioasis Updater CE Installer"
             echo "Usage: $0 [OPTIONS]"
             echo "Options:"
-            echo "  --uninstall    Remove Innioasis Updater Neo and its desktop integration"
+            echo "  --uninstall    Remove Innioasis Updater CE and its desktop integration"
             echo "  --skip-udev    Skip installing MediaTek udev rules (requires root)"
             echo "  -h, --help     Show this help message"
             exit 0
@@ -63,7 +63,7 @@ banner() {
    | || '_ \| '_ \| |/ _ \ / _` / __| / __||  \| |/ _ \/ _ \ 
    | || | | | | | | | (_) | (_| \__ \ \__ \| |\  |  __/ (_) |
   |___|_| |_|_| |_|_|\___/ \__,_|___/_|___/|_| \_|\___|\___/ 
-                  Innioasis Updater Neo for Linux
+                  Innioasis Updater CE for Linux
 EOF
     echo -e "${NC}"
 }
@@ -77,14 +77,14 @@ log_step() { echo -e "\n${BOLD}${CYAN}==>${NC} ${BOLD}$1${NC}"; }
 # --- Uninstallation -----------------------------------------------------------
 if [ "$UNINSTALL" -eq 1 ]; then
     banner
-    log_step "Uninstalling Innioasis Updater Neo"
+    log_step "Uninstalling Innioasis Updater CE"
 
     if [ -d "$INSTALL_DIR" ]; then
         rm -rf "$INSTALL_DIR"
         log_success "Removed application directory: $INSTALL_DIR"
     fi
 
-    for b in "$BIN_DIR/updater-ce-neo" "$BIN_DIR/innioasis-updater"; do
+    for b in "$BIN_DIR/updater-ce" "$BIN_DIR/innioasis-updater" "$BIN_DIR/updater-ce-neo"; do
         if [ -f "$b" ] || [ -L "$b" ]; then
             rm -f "$b"
             log_success "Removed launcher: $b"
@@ -111,7 +111,7 @@ fi
 
 # --- Installation -------------------------------------------------------------
 banner
-log_info "Initializing Linux installation for Innioasis Updater Neo..."
+log_info "Initializing Linux installation for Innioasis Updater CE..."
 
 # 1. Detect Linux distribution
 DISTRO_ID="unknown"
@@ -268,7 +268,7 @@ log_success "Python virtual environment configured."
 log_step "Installing Command-Line Launchers"
 
 mkdir -p "$BIN_DIR"
-WRAPPER_SCRIPT="$BIN_DIR/updater-ce-neo"
+WRAPPER_SCRIPT="$BIN_DIR/updater-ce"
 
 cat << EOF > "$WRAPPER_SCRIPT"
 #!/bin/sh
@@ -277,7 +277,8 @@ EOF
 
 chmod +x "$WRAPPER_SCRIPT"
 ln -sf "$WRAPPER_SCRIPT" "$BIN_DIR/innioasis-updater"
-log_success "Installed CLI launcher: $WRAPPER_SCRIPT"
+ln -sf "$WRAPPER_SCRIPT" "$BIN_DIR/updater-ce-neo"
+log_success "Installed CLI launcher: $WRAPPER_SCRIPT (aliases: innioasis-updater, updater-ce-neo)"
 
 # 6. Install Desktop Entry & Icon
 log_step "Creating Desktop Application Entry"
@@ -302,7 +303,7 @@ DESKTOP_FILE="$DESKTOP_DIR/innioasis-updater.desktop"
 cat << EOF > "$DESKTOP_FILE"
 [Desktop Entry]
 Version=1.0
-Name=Innioasis Updater Neo
+Name=Innioasis Updater CE
 GenericName=Firmware Flasher
 Comment=Flash, update, and restore Innioasis Y1 & Y2 digital audio players
 Exec=$WRAPPER_SCRIPT
@@ -341,7 +342,7 @@ else
 
         if [ -n "$SUDO_CMD" ] || [ "$EUID" -eq 0 ]; then
             $SUDO_CMD bash -c "cat << 'EOF' > '$UDEV_RULE_FILE'
-# Innioasis Updater Neo - MediaTek Flashing Rules
+# Innioasis Updater CE - MediaTek Flashing Rules
 SUBSYSTEM==\"usb\", ATTRS{idVendor}==\"0e8d\", MODE=\"0666\", TAG+=\"uaccess\", ENV{ID_MM_DEVICE_IGNORE}=\"1\", ENV{ID_MM_PORT_IGNORE}=\"1\", ENV{MTP_NO_PROBE}=\"1\", ENV{BRLTTY_DEVICE_IGNORE}=\"1\"
 SUBSYSTEM==\"usb\", ATTRS{idVendor}==\"0e8d\", ATTRS{idProduct}==\"0003\", MODE=\"0666\", TAG+=\"uaccess\", ENV{ID_MM_DEVICE_IGNORE}=\"1\", ENV{ID_MM_PORT_IGNORE}=\"1\", ENV{MTP_NO_PROBE}=\"1\", ENV{BRLTTY_DEVICE_IGNORE}=\"1\"
 SUBSYSTEM==\"usb\", ATTRS{idVendor}==\"0e8d\", ATTRS{idProduct}==\"2000\", MODE=\"0666\", TAG+=\"uaccess\", ENV{ID_MM_DEVICE_IGNORE}=\"1\", ENV{ID_MM_PORT_IGNORE}=\"1\"
@@ -375,8 +376,8 @@ esac
 
 # 9. Completion summary
 echo -e "\n${GREEN}${BOLD}══════════════════════════════════════════════════════════════════════${NC}"
-echo -e "${GREEN}${BOLD}   Innioasis Updater Neo is successfully installed and ready!        ${NC}"
+echo -e "${GREEN}${BOLD}   Innioasis Updater CE is successfully installed and ready!         ${NC}"
 echo -e "${GREEN}${BOLD}══════════════════════════════════════════════════════════════════════${NC}"
 echo -e "You can launch the app:"
-echo -e "  ${BOLD}1. From your Application Menu:${NC} Search for ${CYAN}${BOLD}Innioasis Updater Neo${NC}"
-echo -e "  ${BOLD}2. From your Terminal:${NC}         Run ${CYAN}${BOLD}updater-ce-neo${NC}\n"
+echo -e "  ${BOLD}1. From your Application Menu:${NC} Search for ${CYAN}${BOLD}Innioasis Updater CE${NC}"
+echo -e "  ${BOLD}2. From your Terminal:${NC}         Run ${CYAN}${BOLD}updater-ce${NC} or ${CYAN}${BOLD}innioasis-updater${NC}\n"

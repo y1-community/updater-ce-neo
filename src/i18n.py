@@ -11,10 +11,10 @@ _SUPPORTED = ("zh-CN", "en", "fr", "es")
 
 _STRINGS: dict = {
     "app_name": {
-        "zh-CN": "因尼奥斯升级工具",
-        "en": "Innioasis Updater",
-        "fr": "Innioasis Updater",
-        "es": "Innioasis Updater",
+        "zh-CN": "因尼奥斯升级工具 CE",
+        "en": "Innioasis Updater CE",
+        "fr": "Innioasis Updater CE",
+        "es": "Innioasis Updater CE",
     },
     "app_title": {
         "zh-CN": "刷机升级",
@@ -932,10 +932,10 @@ _STRINGS: dict = {
 
     # Donation dialog
     "donate_title": {
-        "zh-CN": "支持因尼奥斯升级工具",
-        "en": "Support Innioasis Updater",
-        "fr": "Soutenir Innioasis Updater",
-        "es": "Apoya a Innioasis Updater",
+        "zh-CN": "支持因尼奥斯升级工具 CE",
+        "en": "Support Innioasis Updater CE",
+        "fr": "Soutenir Innioasis Updater CE",
+        "es": "Apoya a Innioasis Updater CE",
     },
     "donate_goal_fmt": {
         "zh-CN": "<b>您已帮助我们支付本月 ${raised} 中的 ${target:.0f} 美元费用。感谢所有捐赠。</b>",
@@ -962,16 +962,16 @@ _STRINGS: dict = {
         "es": "este firmware",
     },
     "donate_intro_success": {
-        "zh-CN": "我们已将 <b>{software}</b> 安装到您的 <b>{model}</b>。<br><br>你好！我是 Ryan，Innioasis Updater、社区固件档案和主题画廊的开发者。我自掏腰包承担每月约 200 美元的服务器和存储费用，以保持一切免费和开放。如果这个工具帮助了您，请考虑捐赠——这能让这些资源持续为大家服务。",
-        "en": "We've installed <b>{software}</b> on your <b>{model}</b>.<br><br>Hey! I'm Ryan, the developer behind Innioasis Updater, the Community Firmware Archive, and the Themes Gallery. I cover our ~$200 monthly server and storage costs out of pocket to keep everything free and open. If this tool helped you, please consider donating — it keeps these resources alive for everyone.",
-        "fr": "Nous avons installé <b>{software}</b> sur votre <b>{model}</b>.<br><br>Salut ! Je suis Ryan, le développeur derrière Innioasis Updater, l'Archive Communautaire de Firmwares et la Galerie de Thèmes. Je couvre nos ~200 $ mensuels de serveur et de stockage de ma poche pour que tout reste gratuit et ouvert. Si cet outil vous a aidé, pensez à faire un don — cela maintient ces ressources en vie pour tout le monde.",
-        "es": "Hemos instalado <b>{software}</b> en tu <b>{model}</b>.<br><br>¡Hola! Soy Ryan, el desarrollador detrás de Innioasis Updater, el Archivo Comunitario de Firmwares y la Galería de Temas. Cubro nuestros ~200 $ mensuales de servidor y almacenamiento de mi propio bolsillo para mantener todo gratis y abierto. Si esta herramienta te ha ayudado, considera hacer una donación: mantiene estos recursos vivos para todos.",
+        "zh-CN": "我们已将 <b>{software}</b> 安装到您的 <b>{model}</b>。<br><br>你好！我是 Ryan，Innioasis Updater CE、社区固件档案和主题画廊的开发者。我自掏腰包承担每月约 200 美元的服务器和存储费用，以保持一切免费和开放。如果这个工具帮助了您，请考虑捐赠——这能让这些资源持续为大家服务。",
+        "en": "We've installed <b>{software}</b> on your <b>{model}</b>.<br><br>Hey! I'm Ryan, the developer behind Innioasis Updater CE, the Community Firmware Archive, and the Themes Gallery. I cover our ~$200 monthly server and storage costs out of pocket to keep everything free and open. If this tool helped you, please consider donating — it keeps these resources alive for everyone.",
+        "fr": "Nous avons installé <b>{software}</b> sur votre <b>{model}</b>.<br><br>Salut ! Je suis Ryan, le développeur derrière Innioasis Updater CE, l'Archive Communautaire de Firmwares et la Galerie de Thèmes. Je couvre nos ~200 $ mensuels de serveur et de stockage de ma poche pour que tout reste gratuit et ouvert. Si cet outil vous a aidé, pensez à faire un don — cela maintient ces ressources en vie pour tout le monde.",
+        "es": "Hemos instalado <b>{software}</b> en tu <b>{model}</b>.<br><br>¡Hola! Soy Ryan, el desarrollador detrás de Innioasis Updater CE, el Archivo Comunitario de Firmwares y la Galería de Temas. Cubro nuestros ~200 $ mensuales de servidor y almacenamiento de mi propio bolsillo para mantener todo gratis y abierto. Si esta herramienta te ha ayudado, considera hacer una donación: mantiene estos recursos vivos para todos.",
     },
     "donate_intro_general": {
-        "zh-CN": "你好！我是 Ryan，Innioasis Updater、社区固件档案和主题画廊的开发者。我自掏腰包支付服务器托管、固件档案存储和域名续费，以保持一切免费。每月维护费用约 200 美元——您的任何支持都能帮助这些工具继续为下一位用户服务。",
-        "en": "Hey! I'm Ryan, the developer behind Innioasis Updater, the Community Firmware Archive, and the Themes Gallery. I pay for server hosting, firmware archive storage, and domain renewals out of my own pocket to keep everything free. Monthly upkeep comes to around $200 — any support you give helps keep these tools alive for the next owner.",
-        "fr": "Salut ! Je suis Ryan, le développeur derrière Innioasis Updater, l'Archive Communautaire de Firmwares et la Galerie de Thèmes. Je paie l'hébergement du serveur, le stockage des firmwares et les renouvellements de domaine de ma poche pour que tout reste gratuit. L'entretien mensuel s'élève à environ 200 $ — toute aide que vous apportez contribue à garder ces outils en vie pour le prochain utilisateur.",
-        "es": "¡Hola! Soy Ryan, el desarrollador detrás de Innioasis Updater, el Archivo Comunitario de Firmwares y la Galería de Temas. Pago el alojamiento del servidor, el almacenamiento del archivo de firmwares y las renovaciones de dominio de mi bolsillo para mantener todo gratis. El mantenimiento mensual ronda los 200 $; cualquier apoyo que des ayuda a mantener estas herramientas vivas para el próximo usuario.",
+        "zh-CN": "你好！我是 Ryan，Innioasis Updater CE、社区固件档案和主题画廊的开发者。我自掏腰包支付服务器托管、固件档案存储和域名续费，以保持一切免费。每月维护费用约 200 美元——您的任何支持都能帮助这些工具继续为下一位用户服务。",
+        "en": "Hey! I'm Ryan, the developer behind Innioasis Updater CE, the Community Firmware Archive, and the Themes Gallery. I pay for server hosting, firmware archive storage, and domain renewals out of my own pocket to keep everything free. Monthly upkeep comes to around $200 — any support you give helps keep these tools alive for the next owner.",
+        "fr": "Salut ! Je suis Ryan, le développeur derrière Innioasis Updater CE, l'Archive Communautaire de Firmwares et la Galerie de Thèmes. Je paie l'hébergement du serveur, le stockage des firmwares et les renouvellements de domaine de ma poche pour que tout reste gratuit. L'entretien mensuel s'élève à environ 200 $ — toute aide que vous apportez contribue à garder ces outils en vie pour le prochain utilisateur.",
+        "es": "¡Hola! Soy Ryan, el desarrollador detrás de Innioasis Updater CE, el Archivo Comunitario de Firmwares y la Galería de Temas. Pago el alojamiento del servidor, el almacenamiento del archivo de firmwares y las renovaciones de dominio de mi bolsillo para mantener todo gratis. El mantenimiento mensual ronda los 200 $; cualquier apoyo que des ayuda a mantener estas herramientas vivas para el próximo usuario.",
     },
     "donate_supporter": {
         "zh-CN": "支持者",

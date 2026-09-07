@@ -36,7 +36,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='Innioasis Updater',
+    name='Innioasis Updater CE',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
