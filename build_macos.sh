@@ -17,7 +17,7 @@ cd "$(dirname "$0")"
 
 APP_NAME="Innioasis Updater CE"
 APP_ID="com.innioasis.updater"
-VERSION=$(grep -oP 'APP_VERSION\s*=\s*"\K[^"]+' src/config.py 2>/dev/null || echo "1.1.2")
+VERSION=$(grep -oP 'APP_VERSION\s*=\s*"\K[^"]+' src/config.py 2>/dev/null || echo "3.0")
 DIST_DIR="dist"
 BUILD_DIR="build"
 SPEC_FILE="macos.spec"

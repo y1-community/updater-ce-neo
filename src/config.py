@@ -4,7 +4,7 @@ Values mirror the InniUpdaterChin app (APP_VERSION 1.1.2, contact email) and
 the online catalogue / donation endpoints used by Updater CE and innioasis.app.
 """
 
-APP_VERSION = "1.1.2"
+APP_VERSION = "3.0"
 APP_NAME = "Innioasis Updater CE"
 CONTACT_EMAIL = "updater-feedback@innioasis.com"
 
