@@ -1313,6 +1313,45 @@ def test_auto_falls_back_when_sp_missing():
         fs.paths.find_sp_flash_tool = real_find
 
 
+def test_download_worker():
+    """Verify DownloadWorker streaming, resume with Range headers, and cancellation."""
+    from unittest.mock import patch, MagicMock
+    from src.downloads import DownloadWorker
+
+    with tempfile.TemporaryDirectory() as td:
+        dest = Path(td) / "test.zip"
+        worker = DownloadWorker("https://fake.url/test.zip", str(dest))
+
+        mock_response = MagicMock()
+        mock_response.status_code = 206
+        mock_response.headers = {
+            "content-range": "bytes 100-199/200",
+            "content-length": "100",
+        }
+        mock_response.iter_content.return_value = [b"x" * 100]
+
+        with patch("requests.Session.get", return_value=mock_response):
+            part_file = Path(f"{dest}.part")
+            part_file.write_bytes(b"x" * 100)
+
+            results = []
+            worker.finished.connect(lambda ok, path: results.append((ok, path)))
+            worker.run()
+
+            assert results == [(True, str(dest))], f"Expected successful download, got {results}"
+            assert dest.is_file()
+            assert dest.stat().st_size == 200
+
+        # Test cancellation
+        dest2 = Path(td) / "cancel.zip"
+        worker2 = DownloadWorker("https://fake.url/cancel.zip", str(dest2))
+        worker2.cancel()
+        results2 = []
+        worker2.finished.connect(lambda ok, path: results2.append((ok, path)))
+        worker2.run()
+        assert results2 == [(False, "USER_CANCELLED")]
+
+
 def main():
     print("== Neo updater smoke test ==")
     check("catalog", test_catalog)
@@ -1354,6 +1393,7 @@ def main():
     check("linux setup dialog", test_linux_setup_dialog)
     check("package prep gates flash start", test_package_prep_gates_flash_start)
     check("auto falls back when SP missing", test_auto_falls_back_when_sp_missing)
+    check("download worker resume and cancel", test_download_worker)
     if failures:
         print(f"\n{len(failures)} FAILURES:")
         for name, err in failures:

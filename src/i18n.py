@@ -413,6 +413,12 @@ _STRINGS: dict = {
         "fr": "Téléchargement terminé",
         "es": "Descarga completada",
     },
+    "sel_download_failed": {
+        "zh-CN": "下载失败",
+        "en": "Download failed",
+        "fr": "Échec du téléchargement",
+        "es": "Error en la descarga",
+    },
     "sel_preparing": {
         "zh-CN": "正在准备软件包…",
         "en": "Preparing package…",

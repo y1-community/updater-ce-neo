@@ -415,13 +415,19 @@ class SelectPackagePage(QWidget):
         self._install_btn.setEnabled(False)
         self._download_worker = downloads.DownloadWorker(rel["download_url"], str(dest))
         self._download_worker.progress.connect(self._download_bar.setValue)
+        self._download_worker.status.connect(self._on_download_status)
         self._download_worker.finished.connect(self._on_download_done)
         self._download_worker.start()
+
+    def _on_download_status(self, text: str):
+        self._download_status_key = ""
+        self._download_status.setText(text)
 
     def _on_download_done(self, ok, result):
         self._download_bar.setVisible(False)
         if not ok:
-            self._download_status.setText(f"{tr('sel_download_start')} \u2014 {result}")
+            self._download_status_key = ""
+            self._download_status.setText(f"{tr('sel_download_failed')} \u2014 {result}")
             self._install_btn.setEnabled(True)
             return
         self._current_package_path = result
