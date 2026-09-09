@@ -352,7 +352,7 @@ class LinuxSetupDialog(QDialog):
         self._usb_badge = QLabel(tr("linux_card_granted_badge"))
         self._usb_badge.setStyleSheet(
             f"font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 10px; "
-            f"background-color: #064e3b; color: #34d399; border: none;"
+            f"background-color: {t.ok_bg}; color: {t.ok_fg}; border: none;"
         )
         uc_layout.addWidget(self._usb_badge)
         cards_layout.addWidget(self._usb_card)
@@ -383,7 +383,7 @@ class LinuxSetupDialog(QDialog):
         self._sys_badge = QLabel(tr("linux_card_ready_badge"))
         self._sys_badge.setStyleSheet(
             f"font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 10px; "
-            f"background-color: #064e3b; color: #34d399; border: none;"
+            f"background-color: {t.ok_bg}; color: {t.ok_fg}; border: none;"
         )
         sc_layout.addWidget(self._sys_badge)
         cards_layout.addWidget(self._sys_card)
@@ -492,22 +492,22 @@ class LinuxSetupDialog(QDialog):
         self._sys_desc.setText(f"{distro.get('pretty_name', 'Linux')} ({distro.get('family', 'generic')}) • x86_64")
         if report.get("arch_ok"):
             self._sys_badge.setText(tr("linux_card_ready_badge"))
-            self._sys_badge.setStyleSheet("font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 10px; background-color: #064e3b; color: #34d399; border: none;")
+            self._sys_badge.setStyleSheet(f"font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 10px; background-color: {t.ok_bg}; color: {t.ok_fg}; border: none;")
         else:
             self._sys_badge.setText("Unsupported")
-            self._sys_badge.setStyleSheet("font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 10px; background-color: #7f1d1d; color: #f87171; border: none;")
+            self._sys_badge.setStyleSheet(f"font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 10px; background-color: {t.danger_bg}; color: {t.danger_fg}; border: none;")
 
         # Engine card
         if report.get("sp_exec_ok"):
             self._engine_badge.setText(tr("linux_card_ready_badge"))
-            self._engine_badge.setStyleSheet("font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 10px; background-color: #064e3b; color: #34d399; border: none;")
+            self._engine_badge.setStyleSheet(f"font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 10px; background-color: {t.ok_bg}; color: {t.ok_fg}; border: none;")
             self._ec_desc.setText("MediaTek SP Flash Tool staged with libpng12 compatibility.")
         elif self._worker and self._worker.isRunning():
             self._engine_badge.setText(tr("linux_card_downloading_badge"))
             self._engine_badge.setStyleSheet(f"font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 10px; background-color: {t.accent_bg}; color: {t.accent_text}; border: none;")
         else:
             self._engine_badge.setText(tr("linux_card_action_badge"))
-            self._engine_badge.setStyleSheet("font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 10px; background-color: #78350f; color: #fbbf24; border: none;")
+            self._engine_badge.setStyleSheet(f"font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 10px; background-color: {t.warn_bg}; color: {t.warn_fg}; border: none;")
             self._ec_desc.setText("Click Re-check or restart setup to download package.")
 
         # USB permissions card
@@ -515,7 +515,7 @@ class LinuxSetupDialog(QDialog):
             self._usb_badge.setVisible(True)
             self._grant_btn.setVisible(False)
             self._usb_badge.setText(tr("linux_card_granted_badge"))
-            self._usb_badge.setStyleSheet("font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 10px; background-color: #064e3b; color: #34d399; border: none;")
+            self._usb_badge.setStyleSheet(f"font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 10px; background-color: {t.ok_bg}; color: {t.ok_fg}; border: none;")
             self._uc_desc.setText("MediaTek rules active (/etc/udev/rules.d/). Desktop access enabled.")
         else:
             self._usb_badge.setVisible(False)

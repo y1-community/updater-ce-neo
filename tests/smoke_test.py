@@ -1352,6 +1352,114 @@ def test_download_worker():
         assert results2 == [(False, "USER_CANCELLED")]
 
 
+def test_glass_module():
+    """Verify macOS Liquid Glass bridge, Ventura to Golden Gate compatibility, and safe no-ops."""
+    import platform
+    from src.ui import glass
+    from PySide6.QtWidgets import QWidget
+
+    w = QWidget()
+    if not glass.IS_MACOS:
+        assert not glass.is_glass_supported()
+        assert glass.prepare_window_for_glass(w) is False
+        assert glass.apply_glass(w) is False
+        assert glass.configure_traffic_lights(w) is False
+
+    assert glass.VENTURA_VERSION == (13, 0, 0)
+    assert glass.GOLDEN_GATE_VERSION == (26, 0, 0)
+    assert glass.ARCH in ("x86_64", "arm64", "aarch64", "amd64", platform.machine().lower())
+    w.close()
+
+
+def _relative_luminance(hex_color: str) -> float:
+    """Calculate relative luminance for WCAG contrast ratio."""
+    hex_color = hex_color.lstrip("#")
+    if len(hex_color) == 8:  # ignore alpha if present
+        hex_color = hex_color[:6]
+    r, g, b = [int(hex_color[i:i+2], 16) / 255.0 for i in (0, 2, 4)]
+    r = r / 12.92 if r <= 0.04045 else ((r + 0.055) / 1.055) ** 2.4
+    g = g / 12.92 if g <= 0.04045 else ((g + 0.055) / 1.055) ** 2.4
+    b = b / 12.92 if b <= 0.04045 else ((b + 0.055) / 1.055) ** 2.4
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def _contrast_ratio(c1: str, c2: str) -> float:
+    """Compute WCAG 2.1 contrast ratio between two hex colors."""
+    l1 = _relative_luminance(c1)
+    l2 = _relative_luminance(c2)
+    lighter = max(l1, l2)
+    darker = min(l1, l2)
+    return (lighter + 0.05) / (darker + 0.05)
+
+
+def test_native_theming():
+    """Verify native QStyle detection, typography stack, dual-theme contrast, and semantic classes."""
+    from PySide6.QtWidgets import QApplication
+    from src.ui import dark
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    style_name = dark.setup_native_app_style(app)
+    assert style_name is not None
+    assert len(style_name) > 0
+
+    # Test Dark Mode Tokens
+    dark_tokens = dark._Tokens(dark=True)
+    assert _contrast_ratio(dark_tokens.fg, dark_tokens.bg) >= 7.0, "Dark mode text must meet AAA"
+    assert _contrast_ratio(dark_tokens.fg_dim, dark_tokens.bg_card) >= 4.5, "Dark mode dimmed text must meet AA"
+    assert _contrast_ratio(dark_tokens.accent_text, dark_tokens.accent_bg) >= 4.5, "Dark mode accent text must meet AA"
+
+    for badge_name in ("status_idle", "status_connected", "status_disconn", "status_flashing", "status_complete"):
+        fg, bg = getattr(dark_tokens, badge_name)
+        ratio = _contrast_ratio(fg, bg)
+        assert ratio >= 4.5, f"Dark badge {badge_name} contrast {ratio:.2f} < 4.5"
+
+    dark.apply_theme(app, force_dark=True)
+    qss_dark = dark._build_qss()
+    assert "font-family:" in qss_dark
+    assert "#navPanel" in qss_dark
+    assert "cssClass=\"cardTitle\"" in qss_dark
+    assert "cssClass=\"field-label\"" in qss_dark
+    assert "min-height: 36px" in qss_dark, "Primary buttons must meet 36px touch point target"
+    assert "min-height: 34px" in qss_dark, "Form controls/nav buttons must meet 34px touch target"
+
+    # Test Light Mode Tokens
+    light_tokens = dark._Tokens(dark=False)
+    assert _contrast_ratio(light_tokens.fg, light_tokens.bg) >= 7.0, "Light mode text must meet AAA"
+    assert _contrast_ratio(light_tokens.fg_dim, light_tokens.bg_card) >= 4.5, "Light mode dimmed text must meet AA"
+    assert _contrast_ratio(light_tokens.accent_text, light_tokens.accent_bg) >= 4.5, "Light mode accent text must meet AA"
+
+    for badge_name in ("status_idle", "status_connected", "status_disconn", "status_flashing", "status_complete"):
+        fg, bg = getattr(light_tokens, badge_name)
+        ratio = _contrast_ratio(fg, bg)
+        assert ratio >= 4.5, f"Light badge {badge_name} contrast {ratio:.2f} < 4.5"
+
+    # Test Banner Colors (info, ok, warn, danger) in both modes
+    for t_set, mode in ((dark_tokens, "dark"), (light_tokens, "light")):
+        assert _contrast_ratio(t_set.ok_fg, t_set.ok_bg) >= 4.5, f"{mode} ok banner contrast < 4.5"
+        assert _contrast_ratio(t_set.warn_fg, t_set.warn_bg) >= 4.5, f"{mode} warn banner contrast < 4.5"
+        assert _contrast_ratio(t_set.danger_fg, t_set.danger_bg) >= 4.5, f"{mode} danger banner contrast < 4.5"
+        assert _contrast_ratio(t_set.info_fg, t_set.info_bg) >= 4.5, f"{mode} info banner contrast < 4.5"
+
+    # Test Nav rail contrast (dark background)
+    nav_bg = "#0b1120"
+    assert _contrast_ratio("#f1f5f9", nav_bg) >= 7.0, "Nav brand text must meet AAA (> 7:1)"
+    assert _contrast_ratio("#cbd5e1", nav_bg) >= 7.0, "Nav button text must meet AAA (> 7:1)"
+    assert _contrast_ratio("#94a3b8", nav_bg) >= 7.0, "Nav secondary label text must meet AAA (> 7:1)"
+
+    dark.apply_theme(app, force_dark=False)
+    qss_light = dark._build_qss()
+    assert "font-family:" in qss_light
+    assert "#navPanel" in qss_light
+
+    if dark.IS_MACOS:
+        assert "SF Pro Text" in qss_light
+    elif dark.IS_WINDOWS:
+        assert "Segoe UI" in qss_light
+
+    # Reset back to default detection
+    dark.apply_theme(app)
+
+
 def main():
     print("== Neo updater smoke test ==")
     check("catalog", test_catalog)
@@ -1394,6 +1502,8 @@ def main():
     check("package prep gates flash start", test_package_prep_gates_flash_start)
     check("auto falls back when SP missing", test_auto_falls_back_when_sp_missing)
     check("download worker resume and cancel", test_download_worker)
+    check("glass module and Ventura-GoldenGate compatibility", test_glass_module)
+    check("native OS theming and widgets", test_native_theming)
     if failures:
         print(f"\n{len(failures)} FAILURES:")
         for name, err in failures:

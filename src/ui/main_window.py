@@ -11,6 +11,7 @@ waiting for a device (except on macOS, where only MTKClient is available).
 
 import logging
 import platform
+import sys
 import time
 import webbrowser
 
@@ -155,14 +156,23 @@ class MainWindow(QMainWindow):
         nav = QWidget()
         nav.setObjectName("navPanel")
         nav.setFixedWidth(190)
-        # Nav sidebar is always dark — use inline style for this single widget
-        # to guarantee it stays dark even if the system palette is light.
-        nav.setStyleSheet(
-            f"QWidget#navPanel {{ background-color: #0b1120; border-right: 1px solid #1a2538;"
-            f" border-radius: 12px 0 0 12px; }}"
-        )
+        # Nav sidebar is always dark; use translucent dark styling on macOS glass
+        if sys.platform == "darwin":
+            nav.setStyleSheet(
+                "QWidget#navPanel { background-color: rgba(11, 17, 32, 0.75);"
+                " border-right: 1px solid rgba(255, 255, 255, 0.12);"
+                " border-radius: 12px 0 0 12px; }"
+            )
+            top_margin = 38
+        else:
+            nav.setStyleSheet(
+                "QWidget#navPanel { background-color: #0b1120; border-right: 1px solid #1a2538;"
+                " border-radius: 12px 0 0 12px; }"
+            )
+            top_margin = 20
+
         layout = QVBoxLayout(nav)
-        layout.setContentsMargins(12, 20, 12, 14)
+        layout.setContentsMargins(12, top_margin, 12, 14)
         layout.setSpacing(4)
 
         self._brand_label = QLabel(tr("app_name"))
@@ -174,7 +184,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._brand_label)
 
         version = QLabel(f"v{APP_VERSION}")
-        version.setStyleSheet("font-size: 11px; color: #64748b; background: transparent; border: none;")
+        version.setStyleSheet("font-size: 11px; color: #94a3b8; background: transparent; border: none;")
         layout.addWidget(version)
         layout.addSpacing(16)
 
@@ -216,7 +226,7 @@ class MainWindow(QMainWindow):
 
         self._lang_label = QLabel(tr("nav_language"))
         self._lang_label.setStyleSheet(
-            "font-size: 11px; color: #64748b; margin-top: 8px; background: transparent; border: none;"
+            "font-size: 11px; color: #94a3b8; margin-top: 8px; background: transparent; border: none;"
         )
         layout.addWidget(self._lang_label)
         self._lang_combo = QComboBox()
@@ -230,22 +240,22 @@ class MainWindow(QMainWindow):
         self._lang_combo.currentIndexChanged.connect(self._on_language_changed)
         layout.addWidget(self._lang_combo)
 
-        # Nav button styling — always dark
+        # Nav button styling — high-contrast slate palette with 34px/32px touch targets
         for btn, _ in self._nav_buttons.values():
             btn.setStyleSheet(
-                "QPushButton { background: transparent; color: #94a3b8; text-align: left;"
-                " padding: 10px 14px; border-radius: 8px; border: none; font-size: 13px; }"
-                "QPushButton:hover { background-color: #1e293b; color: #f1f5f9; }"
-                "QPushButton:checked { background-color: #2563eb; color: white; font-weight: 600; }"
+                "QPushButton { background: transparent; color: #cbd5e1; text-align: left;"
+                " padding: 10px 14px; border-radius: 8px; border: none; font-size: 13px; min-height: 34px; }"
+                "QPushButton:hover { background-color: #1e293b; color: #f8fafc; }"
+                "QPushButton:checked { background-color: #2563eb; color: #ffffff; font-weight: 600; }"
             )
         aux_btns = [self._support_btn, self._log_btn, self._credits_btn, self._check_updates_btn]
         if hasattr(self, "_linux_setup_btn"):
             aux_btns.append(self._linux_setup_btn)
         for btn in aux_btns:
             btn.setStyleSheet(
-                "QPushButton { background: transparent; color: #64748b; text-align: left;"
-                " padding: 8px 14px; border-radius: 8px; border: none; font-size: 12px; }"
-                "QPushButton:hover { background-color: #1e293b; color: #e2e8f0; }"
+                "QPushButton { background: transparent; color: #cbd5e1; text-align: left;"
+                " padding: 8px 14px; border-radius: 8px; border: none; font-size: 12px; min-height: 32px; }"
+                "QPushButton:hover { background-color: #1e293b; color: #f8fafc; }"
             )
         return nav
 
@@ -608,19 +618,30 @@ class MainWindow(QMainWindow):
         )
         dialog.exec()
 
-    def closeEvent(self, event):
+    def cleanup_workers(self):
+        """Cleanly terminate and wait for any background workers."""
         self.service.cleanup()
-        select_page = getattr(self, "select_page", None)
+        select_page = getattr(self, "_select_page", None)
         if select_page is not None:
             rw = getattr(select_page, "_releases_worker", None)
             if rw is not None and rw.isRunning():
+                rw.requestInterruption()
                 rw.wait(1500)
             dw = getattr(select_page, "_download_worker", None)
             if dw is not None and dw.isRunning():
+                dw.cancel()
                 dw.wait(1500)
         for w in (getattr(self, "_manifest_worker", None), getattr(self, "_update_worker", None)):
             if w is not None and w.isRunning():
+                w.requestInterruption()
                 w.wait(1500)
+
+    def close(self):
+        self.cleanup_workers()
+        return super().close()
+
+    def closeEvent(self, event):
+        self.cleanup_workers()
         super().closeEvent(event)
 
 

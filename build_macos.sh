@@ -4,13 +4,14 @@
 #
 # Usage:
 #   chmod +x build_macos.sh
-#   ./build_macos.sh          # builds .app only
-#   ./build_macos.sh --dmg    # builds .app and creates a .dmg installer
+#   ./build_macos.sh                         # builds .app using macos.spec
+#   ./build_macos.sh --arch universal2       # builds Universal 2 (Intel + Apple Silicon)
+#   ./build_macos.sh --arch arm64 --dmg      # builds Apple Silicon .app and .dmg
 #
 # Requirements:
 #   - Python 3.11+ in a virtualenv (.venv)
-#   - pip install pyinstaller pyside6 requests
-#   - macOS 12+ (Monterey or later recommended)
+#   - pip install pyinstaller pyside6 requests pyqt-liquidglass pyobjc-framework-cocoa pyobjc-framework-quartz
+#   - macOS 13+ (Ventura through Golden Gate compatible, Intel & Apple Silicon)
 #
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -22,14 +23,38 @@ DIST_DIR="dist"
 BUILD_DIR="build"
 SPEC_FILE="macos.spec"
 BUNDLE_ICON="assets/icon.icns"
+CREATE_DMG=0
+TARGET_ARCH="${TARGET_ARCH:-}"
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --dmg)
+            CREATE_DMG=1
+            shift
+            ;;
+        --arch)
+            TARGET_ARCH="$2"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+
+export TARGET_ARCH
 
 PYTHON="${PYTHON:-.venv/bin/python3}"
 
 # --- Preflight -----------------------------------------------------------
 if [ ! -f "$PYTHON" ]; then
-    echo "ERROR: Python not found at $PYTHON"
-    echo "       Set PYTHON env var or create a .venv first."
-    exit 1
+    if command -v python3 >/dev/null 2>&1; then
+        PYTHON="$(command -v python3)"
+    else
+        echo "ERROR: Python not found at $PYTHON"
+        echo "       Set PYTHON env var or create a .venv first."
+        exit 1
+    fi
 fi
 
 if ! "$PYTHON" -c "import PyInstaller" 2>/dev/null; then
@@ -63,44 +88,33 @@ if [ ! -f "$BUNDLE_ICON" ]; then
     fi
 fi
 
-ICON_ARG=""
-if [ -f "$BUNDLE_ICON" ]; then
-    ICON_ARG="--icon=$BUNDLE_ICON"
-fi
-
-echo "=== Building Innoasis Updater for macOS (version $VERSION) ==="
+echo "=== Building Innioasis Updater CE for macOS (v$VERSION) ==="
+echo "Target: macOS 13 (Ventura) through macOS 26 (Golden Gate)"
+[ -n "$TARGET_ARCH" ] && echo "Architecture: $TARGET_ARCH" || echo "Architecture: Host default (Intel/Apple Silicon)"
 
 # --- Clean ----------------------------------------------------------------
-rm -rf "$BUILD_DIR/InnoasisUpdater" "$DIST_DIR/InnoasisUpdater.app" "$DIST_DIR"/*.dmg
+rm -rf "$BUILD_DIR" "$DIST_DIR"/*.app "$DIST_DIR"/*.dmg
 
-# --- PyInstaller ----------------------------------------------------------
+# --- PyInstaller build using macos.spec ------------------------------------
 "$PYTHON" -m PyInstaller \
     --noconfirm \
     --clean \
-    --name "$APP_NAME" \
-    --windowed \
-    --onedir \
-    "$ICON_ARG" \
-    --osx-bundle-identifier "$APP_ID" \
-    --add-data "assets:assets" \
-    --hidden-import PySide6.QtSvg \
-    --hidden-import PySide6.QtNetwork \
-    launcher.py
+    "$SPEC_FILE"
 
 echo "=== Build complete: $DIST_DIR/$APP_NAME.app ==="
 
 # --- Optional DMG creation -----------------------------------------------
-if [[ "${1:-}" == "--dmg" ]]; then
-    DMG_NAME="InnoasisUpdater-${VERSION}-macOS.dmg"
+if [ "$CREATE_DMG" -eq 1 ]; then
+    ARCH_SUFFIX="${TARGET_ARCH:+-$TARGET_ARCH}"
+    DMG_NAME="InnioasisUpdater-${VERSION}${ARCH_SUFFIX}-macOS.dmg"
     echo ">>> Creating DMG: $DIST_DIR/$DMG_NAME"
 
-    # Create a temporary directory for the DMG contents
     DMG_TEMP=$(mktemp -d)
     cp -R "$DIST_DIR/$APP_NAME.app" "$DMG_TEMP/"
     ln -s /Applications "$DMG_TEMP/Applications"
 
     hdiutil create \
-        -volname "Innoasis Updater" \
+        -volname "Innioasis Updater" \
         -srcfolder "$DMG_TEMP" \
         -ov -format UDZO \
         "$DIST_DIR/$DMG_NAME"

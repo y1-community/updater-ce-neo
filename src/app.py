@@ -63,10 +63,14 @@ def main():
     except Exception:
         translator().set_language("en")
 
+    from .ui.glass import apply_glass, configure_traffic_lights, prepare_window_for_glass
     from .ui.main_window import MainWindow
 
     window = MainWindow()
+    prepare_window_for_glass(window)
     window.show()
+    apply_glass(window)
+    configure_traffic_lights(window)
     sys.exit(app.exec())
 
 

@@ -18,6 +18,9 @@ dependencies = [
     "pyserial>=3.5",
     "colorama>=0.4",
     "capstone>=5.0",
+    "pyqt-liquidglass>=0.1.0; sys_platform == 'darwin'",
+    "pyobjc-framework-cocoa>=10.0; sys_platform == 'darwin'",
+    "pyobjc-framework-quartz>=10.0; sys_platform == 'darwin'",
 ]
 
 [tool.hatch.build.targets.wheel]

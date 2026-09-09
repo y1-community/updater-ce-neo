@@ -93,9 +93,7 @@ class SelectPackagePage(QWidget):
 
         self._status_card = Card("sel_status_title")
         self._status_tag_label = QLabel()
-        self._status_tag_label.setStyleSheet(
-            f"font-size: 12px; color: {t.fg_dim}; border: none; background: transparent;"
-        )
+        self._status_tag_label.setProperty("cssClass", "dimmed")
         self._status_card.add_widget(self._status_tag_label)
         layout.addWidget(self._status_card)
 
@@ -108,10 +106,7 @@ class SelectPackagePage(QWidget):
 
         filters = QHBoxLayout()
         self._model_label = QLabel(tr("sel_model"))
-        self._model_label.setStyleSheet(
-            f"font-size: 13px; font-weight: 600; color: {t.fg_dim};"
-            f" border: none; background: transparent;"
-        )
+        self._model_label.setProperty("cssClass", "field-label")
         filters.addWidget(self._model_label)
         self._model_combo = QComboBox()
         for m in DEVICE_MODELS:
@@ -121,10 +116,7 @@ class SelectPackagePage(QWidget):
 
         # Device Type filter: only shown for models with Type A/B variants (e.g. Y1).
         self._type_label = QLabel("Type")
-        self._type_label.setStyleSheet(
-            f"font-size: 13px; font-weight: 600; color: {t.fg_dim};"
-            f" border: none; background: transparent;"
-        )
+        self._type_label.setProperty("cssClass", "field-label")
         self._type_combo = QComboBox()
         self._type_combo.addItem("Type A", "A")
         self._type_combo.addItem("Type B", "B")
@@ -135,10 +127,7 @@ class SelectPackagePage(QWidget):
         filters.addWidget(self._type_combo)
 
         self._software_label = QLabel(tr("sel_software"))
-        self._software_label.setStyleSheet(
-            f"font-size: 13px; font-weight: 600; color: {t.fg_dim};"
-            f" border: none; background: transparent;"
-        )
+        self._software_label.setProperty("cssClass", "field-label")
         filters.addWidget(self._software_label)
         self._software_combo = QComboBox()
         self._software_combo.currentTextChanged.connect(self._on_software_changed)
@@ -171,9 +160,7 @@ class SelectPackagePage(QWidget):
         layout.addWidget(self._download_bar)
 
         self._download_status = QLabel("")
-        self._download_status.setStyleSheet(
-            f"font-size: 12px; color: {t.fg_dim}; border: none; background: transparent;"
-        )
+        self._download_status.setProperty("cssClass", "dimmed")
         layout.addWidget(self._download_status)
 
         install_row = QHBoxLayout()
@@ -196,9 +183,7 @@ class SelectPackagePage(QWidget):
 
         self._hint = QLabel(tr("sel_only_local"))
         self._hint.setWordWrap(True)
-        self._hint.setStyleSheet(
-            f"font-size: 13px; color: {t.fg_dim}; border: none; background: transparent;"
-        )
+        self._hint.setProperty("cssClass", "hint")
         layout.addWidget(self._hint)
 
         self._offline_banner = Banner()

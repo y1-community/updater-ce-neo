@@ -30,10 +30,7 @@ class RetryPage(QWidget):
         layout.setSpacing(14)
 
         self._title = QLabel(tr("retry_title"))
-        self._title.setStyleSheet(
-            f"font-size: 20px; font-weight: 800; color: {t.fg};"
-            f" letter-spacing: -0.02em; border: none; background: transparent;"
-        )
+        self._title.setProperty("cssClass", "pageTitle")
         layout.addWidget(self._title)
 
         self._card = Card("retry_info_title")
@@ -52,9 +49,7 @@ class RetryPage(QWidget):
 
         self._step_label = QLabel("")
         self._step_label.setAlignment(Qt.AlignCenter)
-        self._step_label.setStyleSheet(
-            f"font-size: 13px; color: {t.fg_dim}; border: none; background: transparent;"
-        )
+        self._step_label.setProperty("cssClass", "field-label")
         layout.addWidget(self._step_label)
 
         self._cancel_btn = QPushButton(tr("retry_btn_cancel"))

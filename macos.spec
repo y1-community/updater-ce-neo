@@ -18,6 +18,12 @@ a = Analysis(
     hiddenimports=[
         'PySide6.QtSvg',
         'PySide6.QtNetwork',
+        'pyqt_liquidglass',
+        'objc',
+        'AppKit',
+        'Foundation',
+        'Quartz',
+        'src.ui.glass',
     ],
     hookspath=[],
     hooksconfig={},
@@ -30,6 +36,8 @@ a = Analysis(
 )
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+
+target_arch = os.environ.get('TARGET_ARCH', None)
 
 exe = EXE(
     pyz,
@@ -44,7 +52,7 @@ exe = EXE(
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
-    target_arch=None,
+    target_arch=target_arch,
     codesign_identity=None,
     entitlements_file=None,
     icon='assets/icon.icns',
@@ -67,10 +75,10 @@ app = BUNDLE(
     icon='assets/icon.icns',
     bundle_identifier='com.innioasis.updater',
     info_plist={
-        'CFBundleDisplayName': 'Innioasis Updater',
-        'CFBundleShortVersionString': '1.1.2',
-        'CFBundleVersion': '1.1.2',
-        'LSMinimumSystemVersion': '12.0',
+        'CFBundleDisplayName': 'Innioasis Updater CE',
+        'CFBundleShortVersionString': '3.0.0',
+        'CFBundleVersion': '3.0.0',
+        'LSMinimumSystemVersion': '13.0',
         'NSHighResolutionCapable': True,
         'NSRequiresAquaSystemAppearance': False,
         'CFBundleDocumentTypes': [

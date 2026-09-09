@@ -35,10 +35,7 @@ class ErrorPage(QWidget):
 
         self._detail_card = Card("")
         self._title = QLabel("")
-        self._title.setStyleSheet(
-            f"font-size: 16px; font-weight: 700; color: {t.fg};"
-            f" border: none; background: transparent;"
-        )
+        self._title.setProperty("cssClass", "sectionTitle")
         self._detail_card.add_widget(self._title)
         self._error_row = InfoRow("err_error_code")
         self._step_row = InfoRow("err_failed_at")
@@ -50,9 +47,7 @@ class ErrorPage(QWidget):
 
         self._hint = QLabel("")
         self._hint.setWordWrap(True)
-        self._hint.setStyleSheet(
-            f"font-size: 13px; color: {t.fg_dim}; border: none; background: transparent;"
-        )
+        self._hint.setProperty("cssClass", "hint")
         layout.addWidget(self._hint)
 
         btn_row = QHBoxLayout()

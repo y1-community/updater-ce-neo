@@ -70,32 +70,32 @@ class DonationStatusBar(QStatusBar):
             f"QStatusBar#donation_status_bar QProgressBar {{ background-color: {t.progress_track};"
             f" border-radius: 4px; }}"
             "QStatusBar#donation_status_bar QProgressBar::chunk { background-color: #10b981; border-radius: 3px; }"
-            f"QStatusBar#donation_status_bar QPushButton {{ background-color: {t.accent}; color: white;"
-            f" border: none; border-radius: 6px; padding: 5px 10px; font-size: 11px; font-weight: bold; }}"
+            f"QStatusBar#donation_status_bar QPushButton {{ background-color: {t.accent}; color: #ffffff;"
+            f" border: none; border-radius: 6px; padding: 6px 14px; font-size: 12px; font-weight: 700; min-height: 28px; }}"
             f"QStatusBar#donation_status_bar QPushButton:hover {{ background-color: {t.accent_hover}; }}"
         )
 
         content = QWidget(self)
         row = QHBoxLayout(content)
-        row.setContentsMargins(10, 0, 6, 0)
-        row.setSpacing(8)
+        row.setContentsMargins(12, 0, 8, 0)
+        row.setSpacing(10)
 
         self._goal_label = QLabel()
         self._goal_label.setMinimumWidth(260)
-        self._goal_label.setStyleSheet(f"font-size: 10px; color: {t.fg}; border: none; background: transparent;")
+        self._goal_label.setStyleSheet(f"font-size: 12px; font-weight: 600; color: {t.fg}; border: none; background: transparent;")
         row.addWidget(self._goal_label, 1)
 
         self._donor_label = QLabel()
         self._donor_label.setMinimumWidth(260)
         self._donor_label.setTextFormat(Qt.RichText)
-        self._donor_label.setStyleSheet(f"font-size: 10px; color: {t.fg}; border: none; background: transparent;")
+        self._donor_label.setStyleSheet(f"font-size: 12px; font-weight: 500; color: {t.fg}; border: none; background: transparent;")
         self._donor_label.setVisible(False)
         row.addWidget(self._donor_label, 1)
 
         self._goal_bar = QProgressBar()
         self._goal_bar.setRange(0, 1000)
         self._goal_bar.setTextVisible(False)
-        self._goal_bar.setFixedSize(150, 8)
+        self._goal_bar.setFixedSize(160, 10)
         row.addWidget(self._goal_bar, 0, Qt.AlignVCenter)
 
         self._support_btn = QPushButton(tr("nav_donate"))
@@ -221,7 +221,7 @@ class DonationDialog(QDialog):
         self._goal_label = QLabel()
         self._goal_label.setAlignment(Qt.AlignCenter)
         self._goal_label.setStyleSheet(
-            f"font-size: 11px; color: {title_color}; background: transparent; border: none;"
+            f"font-size: 12px; font-weight: 600; color: {title_color}; background: transparent; border: none;"
         )
         goal_layout.addWidget(self._goal_label)
         self._goal_bar = QProgressBar()
@@ -240,7 +240,7 @@ class DonationDialog(QDialog):
         self._donor_label.setAlignment(Qt.AlignCenter)
         self._donor_label.setWordWrap(True)
         self._donor_label.setStyleSheet(
-            f"font-size: 11px; color: {title_color}; background: transparent; border: none;"
+            f"font-size: 12px; font-weight: 500; color: {title_color}; background: transparent; border: none;"
         )
         donor_layout.addWidget(self._donor_label)
 
@@ -308,7 +308,7 @@ class DonationDialog(QDialog):
         self._crypto_toggle.setCursor(Qt.PointingHandCursor)
         self._crypto_toggle.setStyleSheet(
             f"QPushButton {{ background-color: {t.bg_elev}; color: {t.fg}; font-weight:600;"
-            f" font-size:12px; padding:7px; border-radius:8px; border:1px solid {t.border_strong}; }}"
+            f" font-size:13px; min-height:34px; padding:8px 14px; border-radius:8px; border:1px solid {t.border_strong}; }}"
             f"QPushButton:hover {{ background-color: {t.bg_hover}; }}"
         )
         self._crypto_toggle.clicked.connect(self._toggle_crypto)
@@ -321,14 +321,14 @@ class DonationDialog(QDialog):
         crypto_grid.setSpacing(6)
         row = 0
         col = 0
-        colors = {"Bitcoin": "#f7931a", "Ethereum": "#627eea", "SHIBA": "#e04130"}
+        colors = {"Bitcoin": "#d97706", "Ethereum": "#4f46e5", "SHIBA": "#dc2626"}
         for label, address in DONATION_CRYPTO.items():
-            color = next((c for k, c in colors.items() if k.lower() in label.lower()), "#6b7280")
+            color = next((c for k, c in colors.items() if k.lower() in label.lower()), "#475569")
             btn = QPushButton(label)
             btn.setCursor(Qt.PointingHandCursor)
             btn.setStyleSheet(
-                f"QPushButton {{ background-color: {color}; color: white; font-weight: bold;"
-                f" font-size: 12px; padding: 8px; border-radius: 6px; border: none; }}"
+                f"QPushButton {{ background-color: {color}; color: #ffffff; font-weight: 700;"
+                f" font-size: 13px; min-height: 36px; padding: 8px 14px; border-radius: 6px; border: none; }}"
             )
             btn.clicked.connect(lambda _=False, l=label, a=address: self._copy_donation_value(l, a))
             crypto_grid.addWidget(btn, row, col)
@@ -354,8 +354,8 @@ class DonationDialog(QDialog):
         btn = QPushButton(text)
         btn.setCursor(Qt.PointingHandCursor)
         btn.setStyleSheet(
-            f"QPushButton {{ background-color: {color}; color: white; font-weight: bold;"
-            f" font-size: {'13px' if full_width else '14px'}; padding: 10px; border-radius: 8px; border: none; }}"
+            f"QPushButton {{ background-color: {color}; color: #ffffff; font-weight: 700;"
+            f" font-size: {'13px' if full_width else '14px'}; min-height: 38px; padding: 9px 16px; border-radius: 8px; border: none; }}"
             f"QPushButton:hover {{ background-color: {hover}; }}"
         )
         btn.clicked.connect(lambda _=False, u=url: webbrowser.open(u))

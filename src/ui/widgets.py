@@ -37,8 +37,8 @@ class StatusTag(QLabel):
         super().__init__(parent)
         self._status = status
         self.setAlignment(Qt.AlignCenter)
-        self.setFixedHeight(26)
-        self.setMinimumWidth(80)
+        self.setFixedHeight(28)
+        self.setMinimumWidth(84)
         self._apply()
 
     def set_status(self, status):
@@ -55,8 +55,8 @@ class StatusTag(QLabel):
         self.setText(tr(f"status_{self._status}"))
         self.setStyleSheet(
             f"background-color: {bg}; color: {fg};"
-            f" border-radius: 13px; font-size: 11px; font-weight: 700;"
-            f" padding: 3px 12px; letter-spacing: 0.02em;"
+            f" border-radius: 14px; font-size: 11px; font-weight: 700;"
+            f" padding: 4px 14px; letter-spacing: 0.02em;"
         )
 
 
@@ -93,13 +93,13 @@ class StepIndicator(QWidget):
             text = self._STEP_KEYS[i] if i < len(self._STEP_KEYS) else ""
             if i < index:
                 lbl.setText(f"&#10003; {tr(text)}")
-                lbl.setStyleSheet(f"color: {t.ok_fg}; font-size: 11px; font-weight: 600;")
+                lbl.setStyleSheet(f"color: {t.ok_fg}; font-size: 11px; font-weight: 700;")
             elif i == index:
                 lbl.setText(f"&#9679; {tr(text)}")
                 lbl.setStyleSheet(f"color: {t.fg_primary}; font-size: 11px; font-weight: 700;")
             else:
                 lbl.setText(f"&#9675; {tr(text)}")
-                lbl.setStyleSheet(f"color: {t.fg_muted}; font-size: 11px;")
+                lbl.setStyleSheet(f"color: {t.fg_dim}; font-size: 11px; font-weight: 500;")
 
     def retranslate(self):
         self.set_active_step(getattr(self, "_active", 0))
@@ -112,16 +112,15 @@ class InfoRow(QWidget):
         super().__init__(parent)
         self._label_key = ""
         self._label = QLabel()
+        self._label.setProperty("cssClass", "dimmed")
         self._value = QLabel()
+        self._value.setProperty("cssClass", "infoValue")
         self._value.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self._value.setTextInteractionFlags(Qt.TextSelectableByMouse)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 4, 0, 4)
         layout.addWidget(self._label)
         layout.addWidget(self._value, 1)
-        t = T()
-        self._label.setStyleSheet(f"color: {t.fg_dim}; font-size: 12px; font-weight: 500;")
-        self._value.setStyleSheet(f"color: {t.fg}; font-size: 12px; font-weight: 600;")
         if label_key:
             self.set_label(label_key)
 
@@ -153,11 +152,7 @@ class Card(QFrame):
         self._outer.setSpacing(8)
         if title_key:
             self._title = QLabel(tr(title_key))
-            t = T()
-            self._title.setStyleSheet(
-                f"font-size: 14px; font-weight: 700; color: {t.fg};"
-                f" letter-spacing: -0.01em; border: none; background: transparent;"
-            )
+            self._title.setProperty("cssClass", "cardTitle")
             self._outer.addWidget(self._title)
 
     def retranslate(self):

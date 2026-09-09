@@ -92,10 +92,7 @@ class FlashPage(QWidget):
         self._prep_card.add_widget(self._prep_progress)
         self._prep_step = QLabel("")
         self._prep_step.setAlignment(Qt.AlignCenter)
-        self._prep_step.setStyleSheet(
-            f"font-size: 13px; font-weight: 600; color: {t.fg_dim};"
-            f" border: none; background: transparent;"
-        )
+        self._prep_step.setProperty("cssClass", "field-label")
         self._prep_card.add_widget(self._prep_step)
         layout.addWidget(self._prep_card)
         layout.addStretch()
@@ -124,18 +121,13 @@ class FlashPage(QWidget):
 
         guide_box = QVBoxLayout()
         self._guide_title = QLabel(tr("flash_guide_title"))
-        self._guide_title.setStyleSheet(
-            f"font-size: 16px; font-weight: 700; color: {t.fg};"
-            f" border: none; background: transparent;"
-        )
+        self._guide_title.setProperty("cssClass", "sectionTitle")
         guide_box.addWidget(self._guide_title)
 
         self._guide_texts = []
         for key in ("flash_guide_1", "flash_guide_2", "flash_guide_3", "flash_guide_4"):
             text = QLabel(tr(key))
-            text.setStyleSheet(
-                f"font-size: 13px; color: {t.fg_dim}; border: none; background: transparent;"
-            )
+            text.setProperty("cssClass", "subtitle")
             self._guide_texts.append((key, text))
             guide_box.addWidget(text)
         row.addLayout(guide_box, 1)
@@ -143,19 +135,12 @@ class FlashPage(QWidget):
 
         self._warning = QLabel(tr("flash_warning"))
         self._warning.setWordWrap(True)
-        self._warning.setStyleSheet(
-            f"font-size: 12px; color: {t.warn_fg};"
-            f" background-color: {t.warn_bg};"
-            f" border-radius: 10px; padding: 10px 14px;"
-        )
+        self._warning.setProperty("cssClass", "warning-banner")
         layout.addWidget(self._warning)
 
         method_row = QHBoxLayout()
         self._method_label = QLabel(tr("flash_method"))
-        self._method_label.setStyleSheet(
-            f"font-size: 13px; font-weight: 600; color: {t.fg_dim};"
-            f" border: none; background: transparent;"
-        )
+        self._method_label.setProperty("cssClass", "field-label")
         method_row.addWidget(self._method_label)
         self._method_combo = QComboBox()
         self._method_combo.setCursor(Qt.PointingHandCursor)
@@ -166,9 +151,7 @@ class FlashPage(QWidget):
 
         self._method_note = QLabel("")
         self._method_note.setWordWrap(True)
-        self._method_note.setStyleSheet(
-            f"font-size: 11px; color: {t.fg_dim}; border: none; background: transparent;"
-        )
+        self._method_note.setProperty("cssClass", "dimmed")
         layout.addWidget(self._method_note)
 
         self._method_revealed = False
@@ -215,17 +198,12 @@ class FlashPage(QWidget):
 
         self._step_label = QLabel("")
         self._step_label.setAlignment(Qt.AlignCenter)
-        self._step_label.setStyleSheet(
-            f"font-size: 13px; font-weight: 600; color: {t.fg_dim};"
-            f" border: none; background: transparent;"
-        )
+        self._step_label.setProperty("cssClass", "field-label")
         self._progress_card.add_widget(self._step_label)
 
         self._action_label = QLabel("")
         self._action_label.setWordWrap(True)
-        self._action_label.setStyleSheet(
-            f"font-size: 12px; color: {t.fg_dim}; border: none; background: transparent;"
-        )
+        self._action_label.setProperty("cssClass", "dimmed")
         self._progress_card.add_widget(self._action_label)
         layout.addWidget(self._progress_card)
 
