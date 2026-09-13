@@ -367,7 +367,17 @@ class SelectPackagePage(QWidget):
             self._set_online_banner("sel_no_release")
         else:
             self._set_online_banner("releases", len(releases))
-            self._release_list.setCurrentRow(0)
+            target_tag = getattr(self, "_target_tag_to_select", None)
+            selected_row = 0
+            if target_tag:
+                self._target_tag_to_select = None
+                for row in range(self._release_list.count()):
+                    it = self._release_list.item(row)
+                    r = it.data(Qt.UserRole)
+                    if r and r.get("tag_name") == target_tag:
+                        selected_row = row
+                        break
+            self._release_list.setCurrentRow(selected_row)
 
     def _asset_line(self, rel):
         assets = ", ".join(
@@ -417,6 +427,13 @@ class SelectPackagePage(QWidget):
         package = self.current_package()
         if package is None:
             return
+        self._pending_install_release_info = {
+            "model": self.current_model(),
+            "software_name": package.name,
+            "package_slug": package.slug,
+            "tag_name": rel.get("tag_name", ""),
+            "release_label": catalog.format_release_display_label(rel),
+        }
         dest_dir = downloads.downloads_dir()
         fname = Path(rel.get("asset_name") or "rom.zip").name
         dest = dest_dir / f"{package.slug}_{rel.get('tag_name', 'latest')}_{fname}"
@@ -445,6 +462,7 @@ class SelectPackagePage(QWidget):
         self._current_package_path = result
         self._current_package_name = f"{self.current_software()} ({self.current_model()})"
         self._current_package_model = self.current_model()
+        self._current_installed_release_info = getattr(self, "_pending_install_release_info", None)
         self._prepare_package(result, self._on_online_prep_done)
 
     def _prepare_package(self, path, done_cb):
@@ -500,6 +518,7 @@ class SelectPackagePage(QWidget):
         self._current_package_path = path
         self._current_package_name = Path(path).name
         self._current_package_model = ""
+        self._current_installed_release_info = None
         self._set_local_banner("sel_current_pkg", Path(path).name)
         self._start_btn.setEnabled(False)
         self._prepare_package(path, self._on_local_prep_done)
@@ -534,3 +553,27 @@ class SelectPackagePage(QWidget):
         self._current_package_path = path
         if path:
             self._current_package_name = Path(path).name
+
+    def current_installed_release_info(self):
+        """Return release details dict if an online release was prepared for installation."""
+        return getattr(self, "_current_installed_release_info", None)
+
+    def navigate_to_package(self, model: str, software_name: str, tag_name=None):
+        """Switch to Online tab, select specified model/software, and highlight tag_name."""
+        self._tabs.setCurrentWidget(self._online_tab)
+        m_idx = self._model_combo.findText(model)
+        if m_idx >= 0 and m_idx != self._model_combo.currentIndex():
+            self._model_combo.setCurrentIndex(m_idx)
+        sw_idx = self._software_combo.findText(software_name)
+        if sw_idx >= 0 and sw_idx != self._software_combo.currentIndex():
+            self._software_combo.setCurrentIndex(sw_idx)
+        if tag_name:
+            self._target_tag_to_select = tag_name
+            # If releases already loaded, select right now
+            for row in range(self._release_list.count()):
+                it = self._release_list.item(row)
+                r = it.data(Qt.UserRole)
+                if r and r.get("tag_name") == tag_name:
+                    self._release_list.setCurrentRow(row)
+                    self._target_tag_to_select = None
+                    break

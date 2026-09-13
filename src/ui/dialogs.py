@@ -4,8 +4,10 @@ import sys
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
+    QCheckBox,
     QDialog,
     QDialogButtonBox,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -15,7 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..config import install_power_on_steps
+from ..config import install_power_on_steps, device_label_for_model
 from ..i18n import tr
 from ..updates import asset_hint, pick_platform_asset
 from .dark import T
@@ -580,3 +582,141 @@ class LinuxSetupDialog(QDialog):
         if self._worker and self._worker.isRunning():
             self._worker.wait(1000)
         super().accept()
+
+
+class ReleaseReminderDialog(QDialog):
+    """Dialog alerting the user that a newer firmware release is available for their device."""
+
+    def __init__(
+        self,
+        parent=None,
+        update_info=None,
+        on_view_release=None,
+        on_disable_reminders=None,
+    ):
+        super().__init__(parent)
+        self.update_info = update_info or {}
+        self.on_view_release = on_view_release
+        self.on_disable_reminders = on_disable_reminders
+
+        model = self.update_info.get("model", "Y1")
+        device_label = device_label_for_model(model)
+        sw_name = self.update_info.get("software_name", "Firmware")
+        installed_lbl = (
+            self.update_info.get("installed_label")
+            or self.update_info.get("installed_tag")
+            or ""
+        )
+        latest_lbl = (
+            self.update_info.get("latest_label")
+            or self.update_info.get("latest_tag")
+            or ""
+        )
+
+        self.setWindowTitle(tr("reminder_new_release_title"))
+        self.setMinimumWidth(460)
+        t = T()
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(14)
+
+        # Header with title and device badge
+        hdr_row = QHBoxLayout()
+        title_lbl = QLabel(
+            f"<h3 style='margin:0; color:{t.fg_primary};'>{tr('reminder_new_release_title')}</h3>"
+        )
+        title_lbl.setTextFormat(Qt.RichText)
+        hdr_row.addWidget(title_lbl, 1)
+
+        badge = QLabel(device_label)
+        badge.setStyleSheet(
+            f"background-color: {t.accent}; color: #ffffff;"
+            f" border-radius: 10px; font-size: 11px; font-weight: 700; padding: 3px 10px;"
+        )
+        hdr_row.addWidget(badge)
+        layout.addLayout(hdr_row)
+
+        # Message
+        msg = QLabel(
+            tr("reminder_new_release_msg").format(
+                device=device_label, software=sw_name
+            )
+        )
+        msg.setTextFormat(Qt.RichText)
+        msg.setWordWrap(True)
+        msg.setStyleSheet("font-size: 13px; color: #cbd5e1; line-height: 1.4;")
+        layout.addWidget(msg)
+
+        # Comparison Card
+        card = QFrame()
+        card.setStyleSheet(
+            "QFrame { background-color: rgba(255, 255, 255, 0.04);"
+            " border: 1px solid rgba(255, 255, 255, 0.1);"
+            " border-radius: 10px; padding: 12px; }"
+        )
+        card_layout = QVBoxLayout(card)
+        card_layout.setSpacing(8)
+
+        inst_row = QHBoxLayout()
+        inst_title = QLabel(tr("reminder_installed_version"))
+        inst_title.setStyleSheet("color: #64748b; font-size: 12px;")
+        inst_val = QLabel(installed_lbl)
+        inst_val.setStyleSheet("color: #94a3b8; font-size: 12px; font-weight: 600;")
+        inst_row.addWidget(inst_title)
+        inst_row.addStretch()
+        inst_row.addWidget(inst_val)
+        card_layout.addLayout(inst_row)
+
+        latest_row = QHBoxLayout()
+        latest_title = QLabel(tr("reminder_latest_version"))
+        latest_title.setStyleSheet("color: #38bdf8; font-size: 12px; font-weight: 600;")
+        latest_val = QLabel(latest_lbl)
+        latest_val.setStyleSheet(f"color: {t.ok_fg}; font-size: 12px; font-weight: 700;")
+        latest_row.addWidget(latest_title)
+        latest_row.addStretch()
+        latest_row.addWidget(latest_val)
+        card_layout.addLayout(latest_row)
+
+        layout.addWidget(card)
+
+        # Don't remind checkbox
+        self.cb_dont_remind = QCheckBox(tr("reminder_dont_remind_device"))
+        self.cb_dont_remind.setCursor(Qt.PointingHandCursor)
+        self.cb_dont_remind.setStyleSheet("font-size: 12px; color: #94a3b8;")
+        layout.addWidget(self.cb_dont_remind)
+
+        # Action Buttons
+        btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(10)
+        btn_layout.addStretch()
+
+        btn_dismiss = QPushButton(tr("reminder_dismiss"))
+        btn_dismiss.setProperty("cssClass", "ghost")
+        btn_dismiss.setCursor(Qt.PointingHandCursor)
+        btn_dismiss.clicked.connect(self._on_dismiss)
+        btn_layout.addWidget(btn_dismiss)
+
+        btn_view = QPushButton(tr("reminder_view_release"))
+        btn_view.setProperty("cssClass", "primary")
+        btn_view.setCursor(Qt.PointingHandCursor)
+        btn_view.clicked.connect(self._on_view)
+        btn_layout.addWidget(btn_view)
+
+        layout.addLayout(btn_layout)
+
+    def _check_disable_opt_out(self):
+        if self.cb_dont_remind.isChecked():
+            model = self.update_info.get("model", "")
+            if callable(self.on_disable_reminders) and model:
+                self.on_disable_reminders(model)
+
+    def _on_dismiss(self):
+        self._check_disable_opt_out()
+        self.reject()
+
+    def _on_view(self):
+        self._check_disable_opt_out()
+        self.accept()
+        if callable(self.on_view_release):
+            self.on_view_release(self.update_info)

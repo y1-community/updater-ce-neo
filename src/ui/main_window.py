@@ -14,7 +14,7 @@ import platform
 import sys
 import time
 
-from PySide6.QtCore import QSettings, Qt, QTimer, Signal
+from PySide6.QtCore import QSettings, Qt, QThread, QTimer, Signal
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .. import device_tracking
 from .. import paths
 from ..config import (
     APP_NAME,
@@ -53,12 +54,18 @@ from ..flash_service import (
 )
 from ..i18n import tr, translator
 from ..state import FlashState, StateMachine
-from .dialogs import DiagnosticsDialog, FlashCompleteDialog, UpdateAvailableDialog
+from .dialogs import (
+    DiagnosticsDialog,
+    FlashCompleteDialog,
+    ReleaseReminderDialog,
+    UpdateAvailableDialog,
+)
 from .dark import T, apply_theme
 from .error_page import ErrorPage
 from .flash_page import FlashPage
 from .retry_page import RetryPage
 from .select_page import SelectPackagePage
+from .settings_page import SettingsPage
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +73,27 @@ _PAGE_SELECT = 0
 _PAGE_FLASH = 1
 _PAGE_ERROR = 2
 _PAGE_RETRY = 3
+_PAGE_SETTINGS = 4
+
+
+class DeviceUpdateCheckWorker(QThread):
+    finished = Signal(list)
+
+    def __init__(self, settings=None, ignore_last_notified=False, parent=None):
+        super().__init__(parent)
+        self.settings = settings
+        self.ignore_last_notified = ignore_last_notified
+
+    def run(self):
+        try:
+            updates = device_tracking.check_device_updates(
+                settings=self.settings,
+                ignore_last_notified=self.ignore_last_notified,
+            )
+            self.finished.emit(updates or [])
+        except Exception as e:
+            logger.debug("Device update check failed: %s", e)
+            self.finished.emit([])
 
 _STEP_KEY = {
     STEP_EXTRACTING: "step_extract",
@@ -118,6 +146,10 @@ class MainWindow(QMainWindow):
         self._manifest_worker.finished.connect(self._on_manifest_loaded)
         self._manifest_worker.start()
         QTimer.singleShot(UPDATE_CHECK_STARTUP_DELAY_MS, self._start_auto_update_check)
+        QTimer.singleShot(
+            UPDATE_CHECK_STARTUP_DELAY_MS + 1000,
+            lambda: self._check_device_firmware_updates(manual=False),
+        )
 
         if platform.system() == "Linux":
             QTimer.singleShot(600, self._check_linux_first_run)
@@ -136,9 +168,23 @@ class MainWindow(QMainWindow):
         self._flash_page = FlashPage()
         self._error_page = ErrorPage()
         self._retry_page = RetryPage()
-        for w in (self._select_page, self._flash_page, self._error_page, self._retry_page):
+        self._settings_page = SettingsPage()
+        for w in (
+            self._select_page,
+            self._flash_page,
+            self._error_page,
+            self._retry_page,
+            self._settings_page,
+        ):
             self._stack.addWidget(w)
         outer.addWidget(self._stack, 1)
+
+        self._settings_page.donation_visibility_changed.connect(
+            self._apply_donation_visibility
+        )
+        self._settings_page.check_updates_requested.connect(
+            lambda: self._check_device_firmware_updates(manual=True)
+        )
 
         self._donations = parse_donors_csv_text(load_donors_file([
             paths.RESOURCES_DIR / "donors.csv",
@@ -149,6 +195,7 @@ class MainWindow(QMainWindow):
             on_support=self._on_support_clicked,
             on_donations_updated=self._on_donations_updated,
         ))
+        self._apply_donation_visibility()
         self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
 
     def _build_nav(self):
@@ -195,6 +242,13 @@ class MainWindow(QMainWindow):
         btn.clicked.connect(lambda: self._nav_to_page(_PAGE_SELECT))
         layout.addWidget(btn)
         self._nav_buttons["nav_select_package"] = (btn, _PAGE_SELECT)
+
+        self._settings_btn = QPushButton(tr("nav_settings"))
+        self._settings_btn.setCheckable(True)
+        self._settings_btn.setCursor(Qt.PointingHandCursor)
+        self._settings_btn.clicked.connect(lambda: self._nav_to_page(_PAGE_SETTINGS))
+        layout.addWidget(self._settings_btn)
+        self._nav_buttons["nav_settings"] = (self._settings_btn, _PAGE_SETTINGS)
 
         layout.addStretch()
 
@@ -427,11 +481,32 @@ class MainWindow(QMainWindow):
         ) or "Y1"
         software = self._package_name or "Firmware"
         steps = install_power_on_steps(model)
-        self.statusBar().showMessage(f"{software} installed successfully. {steps}")
+        if self.statusBar() is not None:
+            self.statusBar().showMessage(f"{software} installed successfully. {steps}")
 
-        donation_disabled = self.settings.value(
-            "donation_install_prompt_disabled", False, type=bool
-        )
+        # Record install for device tracking & future release reminders
+        rel_info = getattr(self._select_page, "current_installed_release_info", lambda: None)()
+        if rel_info:
+            device_tracking.record_device_install(
+                model=rel_info.get("model") or model,
+                software_name=rel_info.get("software_name") or software,
+                tag_name=rel_info.get("tag_name") or "",
+                release_label=rel_info.get("release_label") or "",
+                package_slug=rel_info.get("package_slug") or "",
+                settings=self.settings,
+            )
+        elif self._package_name:
+            device_tracking.record_device_install(
+                model=model,
+                software_name=software,
+                tag_name="local",
+                release_label=software,
+                settings=self.settings,
+            )
+        if hasattr(self, "_settings_page"):
+            self._settings_page.refresh_settings()
+
+        donation_disabled = device_tracking.is_donation_install_prompt_disabled(self.settings)
         if donation_disabled:
             dialog = FlashCompleteDialog(self, software, self._elapsed_text(), model=model)
             dialog.exec()
@@ -618,6 +693,8 @@ class MainWindow(QMainWindow):
         self._flash_page.retranslate()
         self._error_page.retranslate()
         self._retry_page.retranslate()
+        if hasattr(self, "_settings_page"):
+            self._settings_page.retranslate()
         if self.statusBar() and hasattr(self.statusBar(), "retranslate"):
             self.statusBar().retranslate()
 
@@ -669,6 +746,59 @@ class MainWindow(QMainWindow):
                 else tr("update_up_to_date").format(version=APP_VERSION),
             )
 
+    def _check_device_firmware_updates(self, manual=False):
+        worker = DeviceUpdateCheckWorker(self.settings, ignore_last_notified=manual, parent=self)
+        worker.finished.connect(lambda updates: self._on_device_updates_checked(updates, manual))
+        self._device_update_worker = worker
+        worker.start()
+
+    def _on_device_updates_checked(self, updates, manual=False):
+        if updates:
+            upd = updates[0]
+            def on_view(info):
+                self._nav_to_page(_PAGE_SELECT)
+                self._select_page.navigate_to_package(
+                    info.get("model", "Y1"),
+                    info.get("software_name", ""),
+                    tag_name=info.get("latest_tag"),
+                )
+
+            def on_disable(model):
+                device_tracking.set_device_reminder_enabled(model, False, settings=self.settings)
+                if hasattr(self, "_settings_page"):
+                    self._settings_page.refresh_settings()
+
+            dlg = ReleaseReminderDialog(
+                parent=self,
+                update_info=upd,
+                on_view_release=on_view,
+                on_disable_reminders=on_disable,
+            )
+            dlg.exec()
+            device_tracking.set_last_notified_tag(upd.get("model"), upd.get("latest_tag"), settings=self.settings)
+        elif manual:
+            tracked = device_tracking.get_all_device_installs(self.settings)
+            if tracked:
+                QMessageBox.information(
+                    self,
+                    tr("reminder_new_release_title"),
+                    tr("settings_firmware_up_to_date"),
+                )
+            else:
+                QMessageBox.information(
+                    self,
+                    tr("reminder_new_release_title"),
+                    tr("settings_no_devices_tracked"),
+                )
+
+    def _apply_donation_visibility(self, is_disabled=None):
+        if is_disabled is None:
+            is_disabled = device_tracking.is_donation_ui_disabled(self.settings)
+        if self.statusBar() is not None:
+            self.statusBar().setVisible(not is_disabled)
+        if hasattr(self, "_support_btn") and self._support_btn is not None:
+            self._support_btn.setVisible(not is_disabled)
+
     def _on_donations_updated(self, donations):
         if donations:
             self._donations = donations
@@ -706,7 +836,11 @@ class MainWindow(QMainWindow):
             if dw is not None and dw.isRunning():
                 dw.cancel()
                 dw.wait(1500)
-        for w in (getattr(self, "_manifest_worker", None), getattr(self, "_update_worker", None)):
+        for w in (
+            getattr(self, "_manifest_worker", None),
+            getattr(self, "_update_worker", None),
+            getattr(self, "_device_update_worker", None),
+        ):
             if w is not None and w.isRunning():
                 w.requestInterruption()
                 w.wait(1500)

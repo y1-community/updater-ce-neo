@@ -44,6 +44,13 @@ def _reset_app_settings():
     s.setValue("language", "en")
     s.setValue("flash_method", "auto")
     s.setValue("update_skipped_version", "")
+    s.setValue("donation_ui_disabled", False)
+    s.setValue("donation_install_prompt_disabled", False)
+    s.setValue("preferences/donation_ui_disabled", False)
+    s.setValue("preferences/donation_install_prompt_disabled", False)
+    s.remove("preferences")
+    s.remove("device_installs")
+    s.remove("device_tracking")
     translator().set_language("en")
 
 
@@ -1864,6 +1871,157 @@ def test_open_browser_focused_new_window():
         w.close()
 
 
+def test_device_tracking():
+    """Verify recording and querying installs, reminders, and donation preferences."""
+    from PySide6.QtCore import QSettings
+    from src import device_tracking
+
+    with tempfile.TemporaryDirectory() as td:
+        settings = QSettings(f"{td}/test_settings.ini", QSettings.IniFormat)
+
+        # 1. Recording installs
+        device_tracking.record_device_install(
+            "Y1", "Original Software", "3.1.2",
+            release_label="System 3.1.2", package_slug="original-y1",
+            settings=settings,
+        )
+        device_tracking.record_device_install(
+            "Y2", "Original Software", "3.1.7",
+            release_label="Original System Software 3.1.7 for Innioasis Y2", package_slug="original-y2",
+            settings=settings,
+        )
+
+        y1_rec = device_tracking.get_device_install("Y1", settings=settings)
+        assert y1_rec is not None
+        assert y1_rec["tag_name"] == "3.1.2"
+        assert y1_rec["package_slug"] == "original-y1"
+
+        y2_rec = device_tracking.get_device_install("Y2", settings=settings)
+        assert y2_rec is not None
+        assert y2_rec["tag_name"] == "3.1.7"
+        assert y2_rec["release_label"] == "Original System Software 3.1.7 for Innioasis Y2"
+
+        all_installs = device_tracking.get_all_device_installs(settings=settings)
+        assert "Y1" in all_installs and "Y2" in all_installs
+
+        # 2. Clearing installs
+        device_tracking.clear_device_install("Y1", settings=settings)
+        assert device_tracking.get_device_install("Y1", settings=settings) is None
+        assert device_tracking.get_device_install("Y2", settings=settings) is not None
+
+        # 3. Reminder preferences
+        assert device_tracking.is_device_reminder_enabled("Y1", settings=settings) is True
+        device_tracking.set_device_reminder_enabled("Y1", False, settings=settings)
+        assert device_tracking.is_device_reminder_enabled("Y1", settings=settings) is False
+        device_tracking.set_device_reminder_enabled("Y1", True, settings=settings)
+        assert device_tracking.is_device_reminder_enabled("Y1", settings=settings) is True
+
+        # 4. Donation preferences
+        assert device_tracking.is_donation_ui_disabled(settings=settings) is False
+        device_tracking.set_donation_ui_disabled(True, settings=settings)
+        assert device_tracking.is_donation_ui_disabled(settings=settings) is True
+        assert device_tracking.is_donation_install_prompt_disabled(settings=settings) is True
+
+        device_tracking.set_donation_ui_disabled(False, settings=settings)
+        assert device_tracking.is_donation_ui_disabled(settings=settings) is False
+        device_tracking.set_donation_install_prompt_disabled(True, settings=settings)
+        assert device_tracking.is_donation_install_prompt_disabled(settings=settings) is True
+
+
+def test_check_device_updates():
+    """Verify release updates detection for tracked devices."""
+    from PySide6.QtCore import QSettings
+    from src import device_tracking, catalog
+
+    with tempfile.TemporaryDirectory() as td:
+        settings = QSettings(f"{td}/test_settings.ini", QSettings.IniFormat)
+        device_tracking.record_device_install("Y2", "Original Software", "3.1.7", settings=settings)
+
+        # Mock releases client returning 3.2.1 and 3.1.7
+        mock_client = catalog.ReleasesClient(cache_root=td)
+        mock_releases = [
+            {"tag_name": "3.2.1", "name": "System Software 3.2.1 for Innioasis Y2", "rom_variants": [{"asset": {"browser_download_url": "u", "name": "rom_y2.zip"}}]},
+            {"tag_name": "3.1.7", "name": "Original System Software 3.1.7 for Innioasis Y2", "rom_variants": [{"asset": {"browser_download_url": "u", "name": "rom_y2.zip"}}]},
+        ]
+        mock_client.releases_for_package = lambda pkg, model, show_nightly=False: mock_releases
+
+        # Check updates: 3.2.1 > 3.1.7
+        updates = device_tracking.check_device_updates(releases_client=mock_client, settings=settings)
+        assert len(updates) == 1
+        assert updates[0]["model"] == "Y2"
+        assert updates[0]["latest_tag"] == "3.2.1"
+        assert updates[0]["installed_tag"] == "3.1.7"
+
+        # After saving last_notified_tag, should suppress duplicate alert
+        device_tracking.set_last_notified_tag("Y2", "3.2.1", settings=settings)
+        assert len(device_tracking.check_device_updates(releases_client=mock_client, settings=settings)) == 0
+
+        # Manual check ignores last_notified_tag
+        assert len(device_tracking.check_device_updates(releases_client=mock_client, settings=settings, ignore_last_notified=True)) == 1
+
+        # Opting out of Y2 reminders disables check
+        device_tracking.set_device_reminder_enabled("Y2", False, settings=settings)
+        assert len(device_tracking.check_device_updates(releases_client=mock_client, settings=settings, ignore_last_notified=True)) == 0
+
+
+def test_settings_page_and_dialogs():
+    """Verify SettingsPage and ReleaseReminderDialog interaction."""
+    from PySide6.QtCore import QSettings
+    from PySide6.QtWidgets import QApplication
+    from src.ui.settings_page import SettingsPage
+    from src.ui.dialogs import ReleaseReminderDialog
+    from src.ui.main_window import MainWindow, _PAGE_SETTINGS
+    from src import device_tracking
+
+    _reset_app_settings()
+    app = QApplication.instance() or QApplication(sys.argv)
+
+    with tempfile.TemporaryDirectory() as td:
+        settings = QSettings(f"{td}/test_settings.ini", QSettings.IniFormat)
+        device_tracking.record_device_install("Y1", "Original Software", "3.1.2", settings=settings)
+
+        sp = SettingsPage()
+        sp.refresh_settings()
+
+        # Test donation visibility toggle
+        emitted_vis = []
+        sp.donation_visibility_changed.connect(lambda v: emitted_vis.append(v))
+        sp._cb_hide_donations.setChecked(True)
+        assert emitted_vis == [True]
+        assert device_tracking.is_donation_ui_disabled() is True
+
+        # Test ReleaseReminderDialog with opt-out
+        disabled_models = []
+        viewed_releases = []
+        upd = {
+            "model": "Y2",
+            "software_name": "Original Software",
+            "installed_tag": "3.1.7",
+            "latest_tag": "3.2.1",
+        }
+        dlg = ReleaseReminderDialog(
+            update_info=upd,
+            on_view_release=lambda u: viewed_releases.append(u),
+            on_disable_reminders=lambda m: disabled_models.append(m),
+        )
+        dlg.cb_dont_remind.setChecked(True)
+        dlg._on_view()
+        assert disabled_models == ["Y2"]
+        assert len(viewed_releases) == 1
+
+        # Test MainWindow settings navigation and donation visibility
+        mw = MainWindow()
+        mw._nav_to_page(_PAGE_SETTINGS)
+        assert mw._stack.currentIndex() == _PAGE_SETTINGS
+        mw._apply_donation_visibility(is_disabled=True)
+        assert mw.statusBar().isHidden() is True
+        assert mw._support_btn.isHidden() is True
+        mw._apply_donation_visibility(is_disabled=False)
+        assert mw.statusBar().isHidden() is False
+        assert mw._support_btn.isHidden() is False
+        mw.close()
+
+
 def main():
     print("== Neo updater smoke test ==")
     check("catalog", test_catalog)
@@ -1917,6 +2075,9 @@ def main():
     check("native OS theming and widgets", test_native_theming)
     check("preloader raw wrapping and routing", test_preloader_raw_wrapping_and_routing)
     check("cross platform mtk payloads and backend dispatch", test_cross_platform_mtk_payloads_and_backend_dispatch)
+    check("device tracking", test_device_tracking)
+    check("check device updates", test_check_device_updates)
+    check("settings page and dialogs", test_settings_page_and_dialogs)
     if failures:
         print(f"\n{len(failures)} FAILURES:")
         for name, err in failures:

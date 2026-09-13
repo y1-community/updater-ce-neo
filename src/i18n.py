@@ -79,6 +79,12 @@ _STRINGS: dict = {
         "fr": "SP Flash Tool GUI",
         "es": "SP Flash Tool GUI",
     },
+    "nav_settings": {
+        "zh-CN": "设置",
+        "en": "Settings",
+        "fr": "Paramètres",
+        "es": "Configuración",
+    },
     "linux_setup_title": {
         "zh-CN": "Linux 刷机环境与 SP Flash Tool 配置",
         "en": "Linux Flashing & SP Flash Tool Setup",
@@ -1238,6 +1244,148 @@ _STRINGS: dict = {
         "en": "Couldn't check for updates right now. Check your connection and try again.",
         "fr": "Impossible de vérifier les mises à jour pour le moment. Vérifiez votre connexion et réessayez.",
         "es": "No se pudo comprobar si hay actualizaciones ahora. Revisa tu conexión e inténtalo de nuevo.",
+    },
+
+    # Settings & Release Reminders
+    "settings_title": {
+        "zh-CN": "设置与偏好",
+        "en": "Settings & Preferences",
+        "fr": "Paramètres et préférences",
+        "es": "Ajustes y preferencias",
+    },
+    "settings_reminders_group": {
+        "zh-CN": "设备固件更新提醒",
+        "en": "Device Firmware Release Reminders",
+        "fr": "Rappels de mises à jour du firmware",
+        "es": "Recordatorios de actualización de firmware",
+    },
+    "settings_reminders_desc": {
+        "zh-CN": "Updater Neo 可记住各机型上次安装的固件版本，并在发布新版本时提醒您更新。",
+        "en": "Updater Neo remembers what firmware version was installed on your Y1 and Y2 players, alerting you when newer releases become available.",
+        "fr": "Updater Neo mémorise la version installée sur votre Y1 ou Y2 et vous avertit lorsque de nouvelles versions sont disponibles.",
+        "es": "Updater Neo recuerda qué versión de firmware se instaló en sus reproductores Y1 y Y2, avisándole cuando haya nuevas versiones disponibles.",
+    },
+    "settings_enable_y1": {
+        "zh-CN": "启用 Innioasis Y1 固件更新提醒",
+        "en": "Enable release reminders for Innioasis Y1",
+        "fr": "Activer les rappels pour Innioasis Y1",
+        "es": "Activar recordatorios para Innioasis Y1",
+    },
+    "settings_enable_y2": {
+        "zh-CN": "启用 Innioasis Y2 固件更新提醒",
+        "en": "Enable release reminders for Innioasis Y2",
+        "fr": "Activer les rappels pour Innioasis Y2",
+        "es": "Activar recordatorios para Innioasis Y2",
+    },
+    "settings_installed_status": {
+        "zh-CN": "上次安装: <b>{software}</b> ({version}) · {date}",
+        "en": "Last installed: <b>{software}</b> ({version}) · {date}",
+        "fr": "Dernière installation : <b>{software}</b> ({version}) · {date}",
+        "es": "Última instalación: <b>{software}</b> ({version}) · {date}",
+    },
+    "settings_not_installed": {
+        "zh-CN": "尚未记录安装历史（完成一次刷机后将自动记录）",
+        "en": "No installation recorded yet (automatically saved after flashing)",
+        "fr": "Aucune installation enregistrée (enregistrée automatiquement après le flash)",
+        "es": "Ninguna instalación registrada todavía (se guarda automáticamente tras flashear)",
+    },
+    "settings_clear_install": {
+        "zh-CN": "清除记录",
+        "en": "Clear Record",
+        "fr": "Effacer l'enregistrement",
+        "es": "Borrar registro",
+    },
+    "settings_check_firmware_updates": {
+        "zh-CN": "立即检查设备固件更新",
+        "en": "Check for Device Updates Now",
+        "fr": "Vérifier les mises à jour des appareils",
+        "es": "Buscar actualizaciones de dispositivos ahora",
+    },
+    "settings_firmware_up_to_date": {
+        "zh-CN": "已记录的播放器均已运行最新固件版本！",
+        "en": "All tracked devices are running the latest firmware releases!",
+        "fr": "Tous les appareils suivis utilisent les dernières versions de firmware !",
+        "es": "¡Todos los dispositivos registrados están ejecutando las últimas versiones de firmware!",
+    },
+    "settings_no_devices_tracked": {
+        "zh-CN": "尚未记录任何设备的安装历史。请先完成一次固件安装。",
+        "en": "No device installations have been recorded yet. Flash a device to enable version tracking.",
+        "fr": "Aucune installation d'appareil n'a encore été enregistrée. Flashez un appareil pour activer le suivi.",
+        "es": "Aún no se ha registrado ninguna instalación de dispositivo. Flashee un dispositivo para habilitar el seguimiento.",
+    },
+    "settings_donations_group": {
+        "zh-CN": "社区鸣谢与捐赠选项",
+        "en": "Community Acknowledgements & Donations",
+        "fr": "Remerciements communautaires et dons",
+        "es": "Agradecimientos a la comunidad y donaciones",
+    },
+    "settings_hide_donations": {
+        "zh-CN": "隐藏捐赠者姓名、致谢页面和捐赠提示",
+        "en": "Hide donor names, Thank You screens, and donation prompts",
+        "fr": "Masquer les noms des donateurs, les écrans de remerciement et les invites de dons",
+        "es": "Ocultar nombres de donantes, pantallas de agradecimiento y avisos de donación",
+    },
+    "settings_hide_donations_tip": {
+        "zh-CN": "移除状态栏捐赠滚动条及侧边栏捐赠按钮，提供更纯净的界面。",
+        "en": "Remove donor recognition and donation UI from the app for a cleaner interface.",
+        "fr": "Supprime la reconnaissance des donateurs et l'interface de dons pour une interface épurée.",
+        "es": "Elimina el reconocimiento a donantes y la interfaz de donación para una apariencia más limpia.",
+    },
+    "settings_skip_install_donations": {
+        "zh-CN": "刷机成功后跳过捐赠提示",
+        "en": "Skip post-installation donation prompts",
+        "fr": "Ignorer les invites de dons après l'installation",
+        "es": "Omitir los avisos de donación tras la instalación",
+    },
+    "settings_skip_install_donations_tip": {
+        "zh-CN": "刷机完成后直接显示标准完成说明，不弹出求助捐赠窗口。",
+        "en": "Show simple completion details without requesting donations after flashing.",
+        "fr": "Affiche les détails d'achèvement sans demander de dons après le flash.",
+        "es": "Muestra detalles simples de finalización sin solicitar donaciones tras el flasheo.",
+    },
+
+    # Reminder Dialog
+    "reminder_new_release_title": {
+        "zh-CN": "发现新固件版本",
+        "en": "New Firmware Release Available",
+        "fr": "Nouvelle version de firmware disponible",
+        "es": "Nueva versión de firmware disponible",
+    },
+    "reminder_new_release_msg": {
+        "zh-CN": "检测到您的 <b>{device}</b> 有新的 <b>{software}</b> 固件可供更新！",
+        "en": "A newer release of <b>{software}</b> is available for your <b>{device}</b>!",
+        "fr": "Une version plus récente de <b>{software}</b> est disponible pour votre <b>{device}</b> !",
+        "es": "¡Hay una versión más reciente de <b>{software}</b> disponible para su <b>{device}</b>!",
+    },
+    "reminder_installed_version": {
+        "zh-CN": "当前安装版本",
+        "en": "Currently installed:",
+        "fr": "Actuellement installé :",
+        "es": "Actualmente instalado:",
+    },
+    "reminder_latest_version": {
+        "zh-CN": "最新可用版本",
+        "en": "New release available:",
+        "fr": "Nouvelle version disponible :",
+        "es": "Nueva versión disponible:",
+    },
+    "reminder_view_release": {
+        "zh-CN": "前往查看 / 刷机",
+        "en": "View Release / Update",
+        "fr": "Voir la version / Mettre à jour",
+        "es": "Ver versión / Actualizar",
+    },
+    "reminder_dismiss": {
+        "zh-CN": "稍后再说",
+        "en": "Later",
+        "fr": "Plus tard",
+        "es": "Más tarde",
+    },
+    "reminder_dont_remind_device": {
+        "zh-CN": "不再提醒此设备的新固件",
+        "en": "Don't remind me about new releases for this device",
+        "fr": "Ne plus me rappeler les nouvelles versions pour cet appareil",
+        "es": "No volver a recordarme nuevas versiones para este dispositivo",
     },
 }
 
