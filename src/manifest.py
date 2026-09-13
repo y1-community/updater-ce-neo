@@ -172,31 +172,39 @@ def load_cached_manifest():
         return None
 
 
-def refresh_catalog():
-    """Best-effort live manifest refresh: cache-first, then network.
+def refresh_catalog(force_refresh=False):
+    """Best-effort live manifest refresh: cache-first, then network (network-first when force_refresh=True).
 
     Installs entries into ``catalog.LIVE_CATALOG`` (static table remains the
     fallback when this yields nothing). Returns the entry list (possibly []).
     """
     from . import catalog
 
-    entries = load_cached_manifest()
+    entries = None
+    if not force_refresh:
+        entries = load_cached_manifest()
     if not entries:
         entries = fetch_manifest()
         if entries:
             cache_manifest(entries)
+    if not entries and force_refresh:
+        entries = load_cached_manifest()
     catalog.set_live_catalog(entries or [])
     return entries or []
 
 
 class ManifestWorker(QThread):
-    """Fetches the live catalog off the UI thread (cache-first)."""
+    """Fetches the live catalog off the UI thread (cache-first by default)."""
 
     finished = Signal(list)  # entries
 
+    def __init__(self, parent=None, force_refresh=False):
+        super().__init__(parent)
+        self.force_refresh = force_refresh
+
     def run(self):
         try:
-            self.finished.emit(refresh_catalog())
+            self.finished.emit(refresh_catalog(force_refresh=self.force_refresh))
         except Exception as e:
             logger.exception("Manifest refresh failed")
             self.finished.emit([])

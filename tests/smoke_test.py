@@ -485,6 +485,31 @@ def test_releases_client_cached():
         assert client.get_cached_releases("a/b") == fake
 
 
+def test_releases_client_force_refresh():
+    """Verify force_refresh=True bypasses cache and calls network."""
+    with tempfile.TemporaryDirectory() as td:
+        client = ReleasesClient(cache_root=td)
+        old_fake = [{"tag_name": "3.1.7", "download_url": "u1", "rom_variants": [{"asset": {"browser_download_url": "u1", "name": "rom_y2.zip", "size": 100}, "model": "Y2", "type": "A", "resolution": "native"}]}]
+        client.cache_releases("test/repo", old_fake)
+        # Without force_refresh: returns cached
+        assert client.get_all_releases("test/repo", force_refresh=False) == old_fake
+
+        # Mock _get_json to return fresh GitHub release data
+        new_data = [
+            {"tag_name": "3.2.1", "name": "System Software 3.2.1", "published_at": "2026-09-13T12:00:00Z", "assets": [{"name": "rom_y2.zip", "browser_download_url": "u2", "size": 200}]},
+            {"tag_name": "3.1.7", "name": "Original System Software 3.1.7", "published_at": "2025-01-01T10:00:00Z", "assets": [{"name": "rom_y2.zip", "browser_download_url": "u1", "size": 100}]},
+        ]
+        client._get_json = lambda url: new_data
+        refreshed = client.get_all_releases("test/repo", force_refresh=True)
+        assert len(refreshed) == 2
+        assert refreshed[0]["tag_name"] == "3.2.1"
+        assert refreshed[1]["tag_name"] == "3.1.7"
+        # Cache should now be updated on disk
+        cached_now = client.get_cached_releases("test/repo")
+        assert len(cached_now) == 2
+        assert cached_now[0]["tag_name"] == "3.2.1"
+
+
 def test_releases_client_network():
     """Best-effort live GitHub check (cache-first; may be skipped offline)."""
     client = ReleasesClient()
@@ -1599,6 +1624,18 @@ def test_release_version_parsing_and_sorting():
     v4 = catalog.parse_version_designations("type-b-1.7.6-13057e75dc29a1a7!")
     assert v4["clean_version"] == "1.7.6"
 
+    v5 = catalog.parse_version_designations("3.2.0-fm")
+    assert v5["clean_version"] == "3.2.0"
+    assert "FM" in v5["designations"]
+
+    # Test label formatting suppressing redundant designation
+    r_fm = {
+        "tag_name": "3.2.0-fm",
+        "name": "System Software 3.2.0 for Innioasis Y2 with FM Radio",
+        "published_at": "2026-09-13T11:00:00Z",
+    }
+    assert catalog.format_release_display_label(r_fm) == "System Software 3.2.0 for Innioasis Y2 with FM Radio"
+
     # 4. Datestamp formatting
     m = re.search(r'(\d{8})-(\d{4})\b', "20260819-0956")
     now_same_day = datetime(2026, 8, 19, 12, 0)
@@ -1613,6 +1650,9 @@ def test_release_version_parsing_and_sorting():
         {"tag_name": "y2-base", "published_at": "2026-07-26T17:43:35Z"},
         {"tag_name": "3.0.7", "published_at": "2026-04-23T09:52:31Z"},
         {"tag_name": "20260819-0956", "published_at": "2026-08-19T10:06:38Z"},
+        {"tag_name": "3.2.1", "published_at": "2026-09-13T12:00:00Z"},
+        {"tag_name": "3.2.0-fm", "published_at": "2026-09-13T11:00:00Z"},
+        {"tag_name": "3.1.7", "published_at": "2026-08-01T10:00:00Z"},
         {"tag_name": "Latest-3.1.2", "published_at": "2026-07-16T02:03:48Z"},
         {"tag_name": "type-b-1.7.6", "published_at": "2025-10-08T00:22:11Z"},
         {"tag_name": "ADB-2.1.9", "published_at": "2025-07-18T23:09:12Z"},
@@ -1621,6 +1661,9 @@ def test_release_version_parsing_and_sorting():
     tags = [r["tag_name"] for r in sorted_rels]
     assert tags == [
         "20260819-0956",
+        "3.2.1",
+        "3.2.0-fm",
+        "3.1.7",
         "Latest-3.1.2",
         "3.0.7",
         "3.0.2",
@@ -1837,6 +1880,7 @@ def main():
     check("flash_service import", test_flash_service_import)
     check("backend method dispatch", test_backend_method_dispatch)
     check("releases client (cached)", test_releases_client_cached)
+    check("releases client (force refresh)", test_releases_client_force_refresh)
     check("releases client (network)", test_releases_client_network)
     check("release version parsing and sorting", test_release_version_parsing_and_sorting)
     check("install power on steps", test_install_power_on_steps)

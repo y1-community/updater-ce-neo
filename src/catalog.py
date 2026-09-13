@@ -350,11 +350,18 @@ def parse_version_designations(version_name: str) -> dict:
             extracted_version = version_pattern.group(1)
 
     if not extracted_version and '-' in clean_version:
-        last_part = clean_version.split('-')[-1]
-        if last_part.lower().startswith('v'):
-            last_part = last_part[1:]
-        if re.match(r'^[\d.]+$', last_part):
-            extracted_version = last_part
+        # Check if any dash-delimited segment looks like a dotted version (e.g. "3.2.0-fm", "type-b-1.7.6")
+        for part in clean_version.split('-'):
+            part_clean = part.lstrip('vV')
+            if re.match(r'^\d+(?:\.\d+)+$', part_clean):
+                extracted_version = part_clean
+                break
+        if not extracted_version:
+            last_part = clean_version.split('-')[-1]
+            if last_part.lower().startswith('v'):
+                last_part = last_part[1:]
+            if re.match(r'^[\d.]+$', last_part):
+                extracted_version = last_part
 
     if extracted_version:
         clean_version = extracted_version
@@ -376,7 +383,7 @@ def parse_version_designations(version_name: str) -> dict:
             designations.append('Wi-Fi')
         elif part == 'rockbox':
             designations.append('with Rockbox')
-        elif part.lower() in ('adb', 'usb', 'ethernet', 'hdmi', 'audio', 'video', 'camera', 'gps', 'nfc', 'lte', '5g'):
+        elif part.lower() in ('adb', 'usb', 'ethernet', 'hdmi', 'audio', 'video', 'camera', 'gps', 'nfc', 'lte', '5g', 'fm'):
             designations.append(part.upper() if len(part) <= 4 else part.title())
         elif part == 'ipod' and i + 1 < len(parts) and parts[i + 1] == 'theme':
             if i + 2 < len(parts) and parts[i + 2] in adjectives:
@@ -510,6 +517,8 @@ def format_release_display_label(rel):
     display_version = get_display_version(version_info, published_date, is_prerelease)
 
     designations = version_info.get("designations") or []
+    if name and name != tag_name:
+        designations = [d for d in designations if d.lower() not in name.lower()]
     designation_suffix = f" ({' | '.join(designations)})" if designations else ""
 
     if name and name != tag_name:
@@ -549,10 +558,10 @@ class ReleasesClient:
     def _cache_path(self, repo):
         return self.cache_dir / f"{repo.replace('/', '_')}.json"
 
-    def get_cached_releases(self, repo):
+    def get_cached_releases(self, repo, ignore_ttl=False):
         path = self._cache_path(repo)
         try:
-            if path.exists() and (time.time() - path.stat().st_mtime) < RELEASE_CACHE_TTL_SECONDS:
+            if path.exists() and (ignore_ttl or (time.time() - path.stat().st_mtime) < RELEASE_CACHE_TTL_SECONDS):
                 data = json.loads(path.read_text(encoding="utf-8"))
                 if isinstance(data, list):
                     return data
@@ -601,8 +610,12 @@ class ReleasesClient:
         return None
 
     # -- fetching -----------------------------------------------------------
-    def get_latest_release(self, repo):
+    def get_latest_release(self, repo, force_refresh=False):
         repo = resolve_firmware_repo(repo)
+        if not force_refresh:
+            cached = self.get_cached_releases(repo)
+            if cached:
+                return cached[0]
         url = f"{GITHUB_API}/repos/{repo}/releases/latest"
         if self.token:
             data = self._get_json(url)
@@ -612,24 +625,25 @@ class ReleasesClient:
                     self.cache_releases(repo, [result])
                 return result
         if not self._can_unauth():
-            cached = self.get_cached_releases(repo)
+            cached = self.get_cached_releases(repo, ignore_ttl=True)
             return cached[0] if cached else None
         self._record_unauth()
         data = self._get_json(url)
         if not data:
-            cached = self.get_cached_releases(repo)
+            cached = self.get_cached_releases(repo, ignore_ttl=True)
             return cached[0] if cached else None
         result = self._normalize_release(data, repo)
         if result:
             self.cache_releases(repo, [result])
         return result
 
-    def get_all_releases(self, repo):
+    def get_all_releases(self, repo, force_refresh=False):
         repo = resolve_firmware_repo(repo)
-        cached = self.get_cached_releases(repo)
-        if cached:
-            logger.info("Using %d cached releases for %s", len(cached), repo)
-            return sorted(cached, key=release_sort_key, reverse=True)[:100]
+        if not force_refresh:
+            cached = self.get_cached_releases(repo)
+            if cached:
+                logger.info("Using %d cached releases for %s", len(cached), repo)
+                return sorted(cached, key=release_sort_key, reverse=True)[:100]
 
         url = f"{GITHUB_API}/repos/{repo}/releases?per_page={GITHUB_RELEASES_PER_PAGE}"
         if self.token:
@@ -642,12 +656,13 @@ class ReleasesClient:
                 return releases
 
         if not self._can_unauth():
-            cached = self.get_cached_releases(repo)
+            logger.warning("GitHub unauthenticated rate limit reached for %s; using cache if available", repo)
+            cached = self.get_cached_releases(repo, ignore_ttl=True)
             return sorted(cached, key=release_sort_key, reverse=True) if cached else []
         self._record_unauth()
         data = self._get_json(url)
         if data is None:
-            cached = self.get_cached_releases(repo)
+            cached = self.get_cached_releases(repo, ignore_ttl=True)
             return sorted(cached, key=release_sort_key, reverse=True) if cached else []
         releases = self._build_releases(data, repo)
         if releases:
@@ -765,7 +780,7 @@ class ReleasesClient:
             })
         return releases
 
-    def releases_for_package(self, package: FirmwarePackage, model: str, show_nightly=False, selected_type=None):
+    def releases_for_package(self, package: FirmwarePackage, model: str, show_nightly=False, selected_type=None, force_refresh=False):
         """Fetch releases for a catalogue package, filtered for the device model.
 
         Only releases that carry a ``rom*.zip`` asset compatible with ``model``
@@ -773,7 +788,7 @@ class ReleasesClient:
         given (e.g. 'A' or 'B'), only releases with a matching hardware type
         variant are included.
         """
-        releases = self.get_all_releases(package.repo)
+        releases = self.get_all_releases(package.repo, force_refresh=force_refresh)
         out = []
         for rel in releases:
             if not _release_matches_model(model, rel, package, selected_type):

@@ -33,18 +33,20 @@ logger = logging.getLogger(__name__)
 class ReleasesWorker(QThread):
     finished = Signal(list, str)
 
-    def __init__(self, client, package, model, show_nightly, selected_type=None, parent=None):
+    def __init__(self, client, package, model, show_nightly, selected_type=None, force_refresh=False, parent=None):
         super().__init__(parent)
         self.client = client
         self.package = package
         self.model = model
         self.show_nightly = show_nightly
         self.selected_type = selected_type
+        self.force_refresh = force_refresh
 
     def run(self):
         try:
             releases = self.client.releases_for_package(
-                self.package, self.model, self.show_nightly, self.selected_type
+                self.package, self.model, self.show_nightly, self.selected_type,
+                force_refresh=self.force_refresh,
             )
             self.finished.emit(releases, "")
         except Exception as e:
@@ -136,7 +138,7 @@ class SelectPackagePage(QWidget):
         self._refresh_btn = QPushButton(tr("sel_refresh"))
         self._refresh_btn.setProperty("cssClass", "ghost")
         self._refresh_btn.setCursor(Qt.PointingHandCursor)
-        self._refresh_btn.clicked.connect(self._refresh_releases)
+        self._refresh_btn.clicked.connect(lambda: self._refresh_releases(force_refresh=True))
         filters.addWidget(self._refresh_btn)
         filters.addStretch()
         layout.addLayout(filters)
@@ -304,7 +306,7 @@ class SelectPackagePage(QWidget):
     def _on_software_changed(self):
         self._refresh_releases()
 
-    def _refresh_releases(self):
+    def _refresh_releases(self, force_refresh=False):
         package = self.current_package()
         self._release_list.clear()
         self._install_btn.setEnabled(False)
@@ -315,9 +317,35 @@ class SelectPackagePage(QWidget):
         self._releases_worker = ReleasesWorker(
             self.client, package, self.current_model(),
             show_nightly=False, selected_type=self._selected_type,
+            force_refresh=force_refresh,
         )
         self._releases_worker.finished.connect(self._on_releases_loaded)
         self._releases_worker.start()
+        if force_refresh:
+            self._refresh_manifest()
+
+    def _refresh_manifest(self):
+        try:
+            from ..manifest import ManifestWorker
+            self._manifest_worker = ManifestWorker(self, force_refresh=True)
+            self._manifest_worker.finished.connect(self._on_manifest_refreshed)
+            self._manifest_worker.start()
+        except Exception as e:
+            logger.debug("Background manifest refresh failed: %s", e)
+
+    def _on_manifest_refreshed(self, entries):
+        if entries:
+            current_sw = self._software_combo.currentText()
+            names = catalog.software_names_for_model(self.current_model())
+            existing = [self._software_combo.itemText(i) for i in range(self._software_combo.count())]
+            if names != existing:
+                self._software_combo.blockSignals(True)
+                self._software_combo.clear()
+                self._software_combo.addItems(names)
+                idx = self._software_combo.findText(current_sw)
+                if idx >= 0:
+                    self._software_combo.setCurrentIndex(idx)
+                self._software_combo.blockSignals(False)
 
     def _on_releases_loaded(self, releases, error):
         if error:
