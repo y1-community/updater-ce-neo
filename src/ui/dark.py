@@ -336,6 +336,14 @@ QLabel[cssClass="infoValue"] {{
     background: transparent;
     border: none;
 }}
+QLabel[cssClass="warning-banner"] {{
+    font-size: 12px;
+    font-weight: 500;
+    color: {t.warn_fg};
+    background-color: {t.warn_bg};
+    border-radius: 8px;
+    padding: 6px 12px;
+}}
 
 /* ── Cards ────────────────────────────────────────────── */
 QFrame[cssClass="card"] {{

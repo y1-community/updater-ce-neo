@@ -133,11 +133,6 @@ class FlashPage(QWidget):
         row.addLayout(guide_box, 1)
         layout.addLayout(row)
 
-        self._warning = QLabel(tr("flash_warning"))
-        self._warning.setWordWrap(True)
-        self._warning.setProperty("cssClass", "warning-banner")
-        layout.addWidget(self._warning)
-
         method_row = QHBoxLayout()
         self._method_label = QLabel(tr("flash_method"))
         self._method_label.setProperty("cssClass", "field-label")
@@ -205,6 +200,12 @@ class FlashPage(QWidget):
         self._action_label.setWordWrap(True)
         self._action_label.setProperty("cssClass", "dimmed")
         self._progress_card.add_widget(self._action_label)
+
+        self._warning = QLabel(tr("flash_warning"))
+        self._warning.setWordWrap(True)
+        self._warning.setAlignment(Qt.AlignCenter)
+        self._warning.setProperty("cssClass", "warning-banner")
+        self._progress_card.add_widget(self._warning)
         layout.addWidget(self._progress_card)
 
         self._status_card = Card("flash_status_panel")
@@ -252,6 +253,7 @@ class FlashPage(QWidget):
         self._stack.setCurrentWidget(self._flashing_view)
         self._method_combo.setEnabled(False)
         self._load_image(self._flash_img, "installing.png")
+        self._warning.setVisible(True)
 
     def set_method(self, method, available=("auto", "sp", "mtk")):
         self._method_available = tuple(available)
@@ -354,10 +356,12 @@ class FlashPage(QWidget):
         self._conn_row.set_value(tr("flash_conn_connected"))
         self._dev_row.set_value(tr("status_connected"))
         self._load_image(self._status_img, "installing.png")
+        self._warning.setVisible(True)
 
     def set_device_done(self):
         self._load_image(self._status_img, "installed.png")
         self._load_image(self._flash_img, "installed.png")
+        self._warning.setVisible(False)
 
     def update_prep_progress(self, percent):
         self._prep_progress.setValue(percent)

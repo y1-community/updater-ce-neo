@@ -673,7 +673,7 @@ def test_flash_flow_launch():
 
     _reset_app_settings()
     from src.state import FlashState
-    from src.flash_service import STEP_WAITING, STEP_WRITE, STEP_DETECT
+    from src.flash_service import STEP_WAITING, STEP_WRITE, STEP_DETECT, STEP_DONE
 
     app = QApplication.instance() or QApplication(sys.argv)
     w = MainWindow()
@@ -692,9 +692,12 @@ def test_flash_flow_launch():
     assert w.sm.state is FlashState.S2_WAIT_CONNECTION
     banner = w._flash_page._wait_banner.text()
     assert "connect your Y1" in banner, banner
+    # Warning must NOT be visible while waiting / searching USB before handshake
+    assert not w._flash_page._warning.isVisible()
 
     # Device detected -> write step -> flashing view + S4.
     w.service.step_changed.emit(STEP_DETECT)
+    assert not w._flash_page._warning.isVisible()
     w.service.step_changed.emit(STEP_WRITE)
     assert w.sm.state is FlashState.S4_FLASHING, w.sm.state
     assert w._flash_page._stack.currentWidget() is w._flash_page._flashing_view
@@ -703,6 +706,13 @@ def test_flash_flow_launch():
     # In-progress copy: banner and status tag both read "Install in Progress".
     assert w._flash_page._flash_banner.text() == "Install in Progress"
     assert w._flash_page._wait_status.text() == "Install in Progress"
+    # Warning must be visible only during active write / flash installation
+    assert w._flash_page._warning.isVisible()
+    assert "Do not unplug" in w._flash_page._warning.text()
+
+    # When done, warning is hidden
+    w.service.step_changed.emit(STEP_DONE)
+    assert not w._flash_page._warning.isVisible()
     w.close()
     app.processEvents()
 
