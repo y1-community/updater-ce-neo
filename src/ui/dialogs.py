@@ -431,6 +431,11 @@ class LinuxSetupDialog(QDialog):
         self._copy_btn.setCursor(Qt.PointingHandCursor)
         self._copy_btn.clicked.connect(self._on_copy_command)
 
+        self._sp_gui_btn = QPushButton(tr("system_checker_launch_gui_btn"))
+        self._sp_gui_btn.setProperty("cssClass", "ghost")
+        self._sp_gui_btn.setCursor(Qt.PointingHandCursor)
+        self._sp_gui_btn.clicked.connect(self._on_launch_sp_gui)
+
         self._continue_btn = QPushButton(tr("linux_setup_done_btn"))
         self._continue_btn.setProperty("cssClass", "primary")
         self._continue_btn.setCursor(Qt.PointingHandCursor)
@@ -438,6 +443,7 @@ class LinuxSetupDialog(QDialog):
 
         btn_row.addWidget(self._recheck_btn)
         btn_row.addWidget(self._copy_btn)
+        btn_row.addWidget(self._sp_gui_btn)
         btn_row.addStretch()
         btn_row.addWidget(self._continue_btn)
         main_layout.addLayout(btn_row)
@@ -490,7 +496,7 @@ class LinuxSetupDialog(QDialog):
 
     def refresh_status(self):
         t = T()
-        report = self._linux.verify_linux_flashing_readiness()
+        report = self._linux.run_system_checker()
         distro = report.get("distro", {})
 
         # System card
@@ -534,24 +540,31 @@ class LinuxSetupDialog(QDialog):
         else:
             self._continue_btn.setEnabled(True)
 
-        # Technical logs content
+        # Technical logs & full system checker checklist
         lines = []
-        lines.append("=== Linux SP Flash Tool Verification Report ===")
-        lines.append(f"Target OS: {distro.get('pretty_name')} ({distro.get('family')})")
+        lines.append("=== SP Flash Tool Verification Report ===")
+        lines.append(f"Target Distribution: {distro.get('pretty_name')} ({distro.get('family')})")
+        lines.append(f"Overall Flashing Status: {'READY TO FLASH' if report.get('overall_ready') else 'ACTION NEEDED'}")
+        lines.append("")
+        lines.append("Diagnostic Checklist:")
+        for item in report.get("items", []):
+            mark = "[PASS]" if item["status"] == "ok" else ("[WARN]" if item["status"] in ("warn", "info") else "[FAIL]")
+            lines.append(f"  {mark:<7} {item['title']}: {item['badge']}")
+            lines.append(f"          Detail: {item['detail']}")
+        lines.append("")
         lines.append(f"Stage Directory: {report.get('stage_dir')}")
-        lines.append(f"Package Files: {'OK' if report.get('package_files_ok') else 'Missing: ' + str(report.get('missing_files'))}")
-        lines.append(f"libpng12 Staged: {report.get('libpng12_staged')}")
-        lines.append(f"Execution Self-Test: {report.get('sp_exec_msg')}")
-        lines.append(f"Udev Rules: {report.get('udev_msg')}")
         lines.append(f"Setup Script: {report.get('setup_script_path')}")
         self._status_view.setPlainText("\n".join(lines))
         self._report = report
 
     def _on_auto_configure(self):
         from PySide6.QtWidgets import QMessageBox
-        ok, msg = self._linux.install_udev_rules()
+        ok, msg = self._linux.auto_fix_permissions()
         if ok:
-            QMessageBox.information(self, "Permissions Configured", "USB permissions installed and udev reloaded successfully.")
+            QMessageBox.information(
+                self, "Permissions Configured",
+                "USB permissions & udev rules installed successfully. Services configured."
+            )
         else:
             QMessageBox.warning(self, "Permission Setup", msg)
         self.refresh_status()
@@ -567,6 +580,13 @@ class LinuxSetupDialog(QDialog):
                 self, "Copied",
                 f"Setup command copied to clipboard:\n\n{cmd}\n\nRun this in a terminal to install rules and reload udev."
             )
+
+    def _on_launch_sp_gui(self):
+        from .. import sp_flash_gui
+        from PySide6.QtWidgets import QMessageBox
+        ok, msg = sp_flash_gui.open_sp_flash_tool_gui()
+        if not ok:
+            QMessageBox.warning(self, "SP Flash Tool GUI", msg)
 
     def closeEvent(self, event):
         if self._worker and self._worker.isRunning():
@@ -720,3 +740,8 @@ class ReleaseReminderDialog(QDialog):
         self.accept()
         if callable(self.on_view_release):
             self.on_view_release(self.update_info)
+
+
+# Alias for cross-platform and explicit system checking invocations
+SystemCheckerDialog = LinuxSetupDialog
+

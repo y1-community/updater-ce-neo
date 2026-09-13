@@ -199,6 +199,48 @@ _STRINGS: dict = {
         "fr": "Masquer les détails techniques",
         "es": "Ocultar detalles técnicos",
     },
+    "system_checker_title": {
+        "zh-CN": "SP Flash Tool 系统检查与诊断",
+        "en": "SP Flash Tool System Checker & Diagnostics",
+        "fr": "Vérificateur de système SP Flash Tool & Diagnostics",
+        "es": "Comprobador de sistema SP Flash Tool y Diagnóstico",
+    },
+    "system_checker_desc": {
+        "zh-CN": "全面验证 Linux 发行版的驱动、内核模块、用户权限与依赖项，确保 SP Flash Tool 稳定运行。",
+        "en": "Comprehensive verification of drivers, kernel modules, permissions, and runtime libraries to ensure reliable flashing.",
+        "fr": "Vérification complète des pilotes, modules de noyau, permissions et bibliothèques pour un flash fiable.",
+        "es": "Verificación completa de controladores, módulos del kernel, permisos y bibliotecas para un flasheo confiable.",
+    },
+    "system_checker_run_btn": {
+        "zh-CN": "运行系统检查器",
+        "en": "Run System Checker",
+        "fr": "Lancer le vérificateur de système",
+        "es": "Ejecutar comprobador de sistema",
+    },
+    "settings_checker_group": {
+        "zh-CN": "SP Flash Tool 诊断与硬件检查",
+        "en": "SP Flash Tool Diagnostics & Hardware",
+        "fr": "Diagnostics SP Flash Tool & Matériel",
+        "es": "Diagnósticos de SP Flash Tool y Hardware",
+    },
+    "settings_checker_desc": {
+        "zh-CN": "检查 USB 访问权限 (udev)、用户组、内核 serial 模块与 MediaTek 设备驱动状态。",
+        "en": "Inspect USB udev rules, user group memberships, kernel serial modules, and MediaTek driver readiness.",
+        "fr": "Inspecter les règles udev, appartenance aux groupes, modules de noyau et pilotes MediaTek.",
+        "es": "Inspeccionar reglas udev, grupos de usuario, módulos del kernel y estado del controlador MediaTek.",
+    },
+    "system_checker_autofix_btn": {
+        "zh-CN": "一键修复权限与系统配置",
+        "en": "Auto-Fix Permissions & Setup System",
+        "fr": "Corriger automatiquement les autorisations",
+        "es": "Reparar permisos automáticamente",
+    },
+    "system_checker_launch_gui_btn": {
+        "zh-CN": "启动 SP Flash Tool GUI",
+        "en": "Launch SP Flash Tool GUI",
+        "fr": "Lancer SP Flash Tool GUI",
+        "es": "Iniciar SP Flash Tool GUI",
+    },
 
     # Home
     "home_desc": {

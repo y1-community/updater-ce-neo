@@ -343,18 +343,32 @@ else
         if [ -n "$SUDO_CMD" ] || [ "$EUID" -eq 0 ]; then
             $SUDO_CMD bash -c "cat << 'EOF' > '$UDEV_RULE_FILE'
 # Innioasis Updater CE - MediaTek Flashing Rules
-SUBSYSTEM==\"usb\", ATTRS{idVendor}==\"0e8d\", MODE=\"0666\", TAG+=\"uaccess\", ENV{ID_MM_DEVICE_IGNORE}=\"1\", ENV{ID_MM_PORT_IGNORE}=\"1\", ENV{MTP_NO_PROBE}=\"1\", ENV{BRLTTY_DEVICE_IGNORE}=\"1\"
-SUBSYSTEM==\"usb\", ATTRS{idVendor}==\"0e8d\", ATTRS{idProduct}==\"0003\", MODE=\"0666\", TAG+=\"uaccess\", ENV{ID_MM_DEVICE_IGNORE}=\"1\", ENV{ID_MM_PORT_IGNORE}=\"1\", ENV{MTP_NO_PROBE}=\"1\", ENV{BRLTTY_DEVICE_IGNORE}=\"1\"
+SUBSYSTEM==\"usb\", ATTRS{idVendor}==\"0e8d\", MODE=\"0666\", TAG+=\"uaccess\", ENV{ID_MM_DEVICE_IGNORE}=\"1\", ENV{ID_MM_PORT_IGNORE}=\"1\", ENV{MTP_NO_PROBE}=\"1\", ENV{BRLTTY_DEVICE_IGNORE}=\"1\", TEST==\"power/control\", ATTR{power/control}=\"on\"
+SUBSYSTEM==\"usb\", ATTRS{idVendor}==\"0e8d\", ATTRS{idProduct}==\"0003\", MODE=\"0666\", TAG+=\"uaccess\", ENV{ID_MM_DEVICE_IGNORE}=\"1\", ENV{ID_MM_PORT_IGNORE}=\"1\", ENV{MTP_NO_PROBE}=\"1\", ENV{BRLTTY_DEVICE_IGNORE}=\"1\", TEST==\"power/control\", ATTR{power/control}=\"on\"
 SUBSYSTEM==\"usb\", ATTRS{idVendor}==\"0e8d\", ATTRS{idProduct}==\"2000\", MODE=\"0666\", TAG+=\"uaccess\", ENV{ID_MM_DEVICE_IGNORE}=\"1\", ENV{ID_MM_PORT_IGNORE}=\"1\"
-SUBSYSTEM==\"tty\", ATTRS{idVendor}==\"0e8d\", MODE=\"0666\", TAG+=\"uaccess\", ENV{ID_MM_DEVICE_IGNORE}=\"1\", ENV{ID_MM_PORT_IGNORE}=\"1\"
-KERNEL==\"ttyACM[0-9]*\", ATTRS{idVendor}==\"0e8d\", MODE=\"0666\", TAG+=\"uaccess\", ENV{ID_MM_DEVICE_IGNORE}=\"1\", ENV{ID_MM_PORT_IGNORE}=\"1\"
+SUBSYSTEM==\"tty\", ATTRS{idVendor}==\"0e8d\", MODE=\"0666\", TAG+=\"uaccess\", ENV{ID_MM_DEVICE_IGNORE}=\"1\", ENV{ID_MM_PORT_IGNORE}=\"1\", RUN+=\"/bin/chmod 0666 /dev/%k\"
+KERNEL==\"ttyACM[0-9]*\", ATTRS{idVendor}==\"0e8d\", MODE=\"0666\", TAG+=\"uaccess\", ENV{ID_MM_DEVICE_IGNORE}=\"1\", ENV{ID_MM_PORT_IGNORE}=\"1\", RUN+=\"/bin/chmod 0666 /dev/%k\"
+KERNEL==\"ttyUSB[0-9]*\", ATTRS{idVendor}==\"0e8d\", MODE=\"0666\", TAG+=\"uaccess\", ENV{ID_MM_DEVICE_IGNORE}=\"1\", ENV{ID_MM_PORT_IGNORE}=\"1\", RUN+=\"/bin/chmod 0666 /dev/%k\"
 EOF
 chmod 644 '$UDEV_RULE_FILE'
+cat << 'EOF' > '/etc/udev/rules.d/99-ttyacms.rules'
+# Innioasis Updater CE - Unprivileged Serial Port Access
+ACTION==\"add|change\", SUBSYSTEM==\"tty\", KERNEL==\"ttyACM[0-9]*\", MODE=\"0666\", TAG+=\"uaccess\", RUN+=\"/bin/chmod 0666 /dev/%k\"
+ACTION==\"add|change\", SUBSYSTEM==\"tty\", KERNEL==\"ttyUSB[0-9]*\", MODE=\"0666\", TAG+=\"uaccess\", RUN+=\"/bin/chmod 0666 /dev/%k\"
+EOF
+chmod 644 '/etc/udev/rules.d/99-ttyacms.rules'
 if command -v udevadm >/dev/null 2>&1; then
     udevadm control --reload-rules && udevadm trigger
 fi
-if getent group '$SERIAL_GROUP' >/dev/null 2>&1; then
-    usermod -aG '$SERIAL_GROUP' '${SUDO_USER:-$USER}' || true
+for grp in '$SERIAL_GROUP' plugdev dialout uucp lock; do
+    if getent group \"\$grp\" >/dev/null 2>&1; then
+        usermod -aG \"\$grp\" '${SUDO_USER:-$USER}' 2>/dev/null || true
+    fi
+done
+modprobe cdc_acm 2>/dev/null || true
+if systemctl is-active --quiet brltty 2>/dev/null; then
+    systemctl stop brltty 2>/dev/null || true
+    systemctl mask brltty 2>/dev/null || true
 fi
 " || log_warn "Could not install udev rules automatically. You can install them later in the app."
             log_success "MediaTek udev rules installed and reloaded."

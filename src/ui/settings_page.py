@@ -162,6 +162,34 @@ class SettingsPage(QWidget):
         self._donations_card.set_layout(don_layout)
         layout.addWidget(self._donations_card)
 
+        # --- Card 3: SP Flash Tool Diagnostics & Hardware ---
+        self._checker_card = Card("settings_checker_group")
+        chk_layout = QVBoxLayout()
+        chk_layout.setSpacing(12)
+
+        self._checker_desc = QLabel(tr("settings_checker_desc"))
+        self._checker_desc.setWordWrap(True)
+        self._checker_desc.setStyleSheet("color: #94a3b8; font-size: 13px; line-height: 1.4;")
+        chk_layout.addWidget(self._checker_desc)
+
+        chk_btn_row = QHBoxLayout()
+        self._btn_run_checker = QPushButton(tr("system_checker_run_btn"))
+        self._btn_run_checker.setProperty("cssClass", "primary")
+        self._btn_run_checker.setCursor(Qt.PointingHandCursor)
+        self._btn_run_checker.clicked.connect(self._on_run_checker)
+        chk_btn_row.addWidget(self._btn_run_checker)
+
+        self._btn_launch_sp = QPushButton(tr("system_checker_launch_gui_btn"))
+        self._btn_launch_sp.setProperty("cssClass", "ghost")
+        self._btn_launch_sp.setCursor(Qt.PointingHandCursor)
+        self._btn_launch_sp.clicked.connect(self._on_launch_sp)
+        chk_btn_row.addWidget(self._btn_launch_sp)
+        chk_btn_row.addStretch()
+        chk_layout.addLayout(chk_btn_row)
+
+        self._checker_card.set_layout(chk_layout)
+        layout.addWidget(self._checker_card)
+
         layout.addStretch()
         scroll.setWidget(container)
         root_layout.addWidget(scroll, 1)
@@ -240,6 +268,17 @@ class SettingsPage(QWidget):
     def _on_skip_install_donations_toggled(self, checked: bool):
         device_tracking.set_donation_install_prompt_disabled(checked)
 
+    def _on_run_checker(self):
+        from .dialogs import LinuxSetupDialog
+        dlg = LinuxSetupDialog(self, auto_start=False)
+        dlg.exec()
+
+    def _on_launch_sp(self):
+        from .. import sp_flash_gui
+        ok, msg = sp_flash_gui.open_sp_flash_tool_gui()
+        if not ok:
+            QMessageBox.warning(self, "SP Flash Tool GUI", msg)
+
     def retranslate(self):
         """Retranslate UI elements upon language switch."""
         self._header.setText(tr("settings_title"))
@@ -253,4 +292,9 @@ class SettingsPage(QWidget):
         self._donations_card.retranslate()
         self._cb_hide_donations.setText(tr("settings_hide_donations"))
         self._cb_skip_install_donations.setText(tr("settings_skip_install_donations"))
+        self._checker_card.retranslate()
+        self._checker_desc.setText(tr("settings_checker_desc"))
+        self._btn_run_checker.setText(tr("system_checker_run_btn"))
+        self._btn_launch_sp.setText(tr("system_checker_launch_gui_btn"))
         self.refresh_settings()
+

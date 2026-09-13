@@ -29,8 +29,10 @@
 - Maintain universal Linux compatibility across Arch, Debian/Ubuntu, Fedora, openSUSE, and derived distros:
   - Automatic staging of `flash_tool_linux.zip` to `~/.cache/innioasis-updater/linux_flash_tool/`.
   - Bundled `libpng12.so.0` in `assets/compat/` copied to the runtime library directory.
-  - MediaTek udev rules (`99-innioasis-mediatek.rules`) configuring `0e8d:0003` and `0e8d:2000` with `TAG+="uaccess"`.
-  - Distro-aware serial group assignment (`uucp` on Arch-based systems, `dialout` on Debian/Fedora/SUSE).
+  - MediaTek udev rules (`99-innioasis-mediatek.rules` and `99-ttyacms.rules`) configuring `0e8d:0003` and `0e8d:2000` with `TAG+="uaccess"`, `MODE="0666"`, `RUN+="/bin/chmod 0666 /dev/%k"`, and `ATTR{power/control}="on"`.
+  - Distro-aware serial group assignment (`uucp` on Arch-based systems, `dialout` on Debian/Fedora/SUSE, plus `plugdev` and `lock`).
+  - Active userspace permission guardian (`TtyAccessGuardian`) during flashing to bypass udev race conditions.
+  - Neutralization of conflicting services (`brltty` and `ModemManager`).
 
 ## 5. macOS MTKClient & Universal MediaTek Invariants
 To maintain reliable flashing across all models and SoCs (legacy MT6572/MT6582 and modern 64-bit MT67xx/MT68xx/MT81xx) on macOS via MTKClient:
@@ -55,4 +57,20 @@ To maintain reliable flashing across all models and SoCs (legacy MT6572/MT6582 a
 - **Address Bias Calibration**: For legacy MBR/EBR scatters, calibrate linear scatter addresses against physical device MBR partition offsets before flashing to prevent writing at incorrect offsets.
 - **GPT Validation & Sync**: For modern devices, validate GPT table geometry against scatter partitions prior to writing image files.
 - **Process & Handle Isolation**: On macOS/Linux, ensure in-process MTKClient execution handles all `BaseException` instances and detaches USB handles cleanly on cancellation to protect the Qt GUI event loop.
+
+## 6. SP Flash Tool Invariants & Universal Troubleshooting (Linux & Windows)
+To ensure MediaTek SP Flash Tool executes reliably across all Linux distributions and Windows hosts:
+
+### A. Linux Execution & Permission Invariants
+- **Direct Binary Invocation**: Never execute `flash_tool.sh` (which overwrites `LD_LIBRARY_PATH` and causes glibc segmentation faults). Always execute the binary `flash_tool` directly with `linux_sp_flash.process_env(stage)` preserving system library paths.
+- **Immediate Node Permissions**: `udev` alone suffers from a 50–100 ms race condition between kernel node creation and `uaccess` ACL assignment. Udev rules must include `RUN+="/bin/chmod 0666 /dev/%k"`, supplemented by `TtyAccessGuardian` during active flash runs.
+- **Kernel Module Verification**: MediaTek Preloader requires the `cdc_acm` kernel driver to expose `/dev/ttyACM*`. If absent, load with `modprobe cdc_acm`.
+- **Option.ini Normalization**: Normalize `LogPath` in `option.ini` to a valid absolute Linux path (`~/.cache/innioasis-updater/linux_flash_tool/SP_FT_Logs`) to avoid Windows path errors.
+- **History.ini Prepopulation**: Always prepopulate `history.ini` in all discovered SP Flash Tool directories with `scatterHistory` pointing to the active scatter file and `lastDir` pointing to the active ROM image directory.
+
+### B. Windows Invariants & Driver Conflicts
+- **VCOM Driver Requirement**: SP Flash Tool strictly requires the serial **MediaTek PreLoader USB VCOM Port** driver. It will fail if Zadig/WinUSB/libusb-win32 or UsbDk was installed over the Preloader interface.
+- **Space-Free Paths**: SP Flash Tool v5 crashes or fails on file paths containing spaces or non-ASCII characters; package downloads and extractions must be located in clean paths.
+- **2–3 Second Enumeration Rule**: Turned-off MediaTek devices remain in Preloader handshake mode for only 2–3 seconds before exiting. Flashing software must be listening before connecting the device.
+
 

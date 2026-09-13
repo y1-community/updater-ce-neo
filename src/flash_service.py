@@ -686,6 +686,7 @@ class FlashWorker(QThread):
         else:
             # Linux staged package (ensure_linux_sp_flash_tool already ran).
             sp_dir = linux_sp_flash.stage_dir()
+            linux_sp_flash.fix_option_ini(sp_dir)
             flash_tool_exe = sp_dir / linux_sp_flash.FLASH_TOOL_LINUX_BIN
             da_file = sp_dir / "MTK_AllInOne_DA.bin"
             log_root = sp_dir / linux_sp_flash.LOG_DIR_NAME
@@ -718,6 +719,15 @@ class FlashWorker(QThread):
         self.action_changed.emit("Searching for device (keep unplugged)...")
         self._log("Launching SP Flash Tool (console mode, searching USB)...")
         self._log("Keep the device unplugged until the connect prompt appears.")
+
+        guardian = None
+        if os.name != "nt" and sys.platform.startswith("linux"):
+            try:
+                guardian = linux_sp_flash.TtyAccessGuardian()
+                guardian.start()
+            except Exception:
+                guardian = None
+
         self._process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -748,6 +758,8 @@ class FlashWorker(QThread):
                     except Exception:
                         pass
                     stop_monitor.set()
+                    if guardian:
+                        guardian.stop()
                     self.finished.emit(False, "USER_CANCELLED")
                     return
                 self._classify_sp_stdout(line)
@@ -760,6 +772,8 @@ class FlashWorker(QThread):
                     break
         finally:
             stop_monitor.set()
+            if guardian:
+                guardian.stop()
 
         self._process.wait()
         exit_code = self._process.returncode

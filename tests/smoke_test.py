@@ -2117,6 +2117,73 @@ def test_prune_extracted_cache_and_reusing_download():
             downloads.downloads_dir = orig_downloads_dir
 
 
+def test_sp_flash_system_checker_and_diagnostics():
+    """Verify run_system_checker, option.ini normalization, TtyAccessGuardian, and Settings checker card."""
+    from src import linux_sp_flash as lsf
+    from src.ui.dialogs import SystemCheckerDialog, LinuxSetupDialog
+    from src.ui.settings_page import SettingsPage
+    from PySide6.QtWidgets import QApplication
+
+    _reset_app_settings()
+    app = QApplication.instance() or QApplication(sys.argv)
+
+    # 1. System checker returns structured report
+    report = lsf.run_system_checker()
+    assert "items" in report
+    assert len(report["items"]) >= 10
+    keys = {item["key"] for item in report["items"]}
+    assert "os_arch" in keys
+    assert "engine_files" in keys
+    assert "libpng12" in keys
+    assert "udev_rules" in keys
+    assert "user_groups" in keys
+    assert "service_conflicts" in keys
+    assert "kernel_driver" in keys
+    assert "mount_permissions" in keys
+    assert "option_ini" in keys
+    assert "connected_device" in keys
+    assert "cdc_acm_ok" in report
+    assert "mount_ok" in report
+
+    # 2. Companion ttyACMs rule content
+    tty_rules = lsf.generate_ttyacms_rule_content()
+    assert "ttyACM" in tty_rules
+    assert "0666" in tty_rules
+    assert "RUN+=" in tty_rules
+
+    # 3. Option.ini fixing
+    with tempfile.TemporaryDirectory() as td:
+        tdp = Path(td)
+        opt = tdp / "option.ini"
+        opt.write_text("[Trace]\nLogPath=C:\\ProgramData\\SP_FT_Logs\nEnable=1\n")
+        fixed = lsf.fix_option_ini(stage=tdp)
+        assert fixed is True
+        content = opt.read_text()
+        assert "C:\\ProgramData" not in content
+        assert str(tdp / lsf.LOG_DIR_NAME) in content
+
+    # 4. TtyAccessGuardian
+    guardian = lsf.TtyAccessGuardian(interval=0.01)
+    guardian.start()
+    assert guardian.is_alive()
+    guardian.stop()
+    guardian.join(timeout=1.0)
+    assert not guardian.is_alive()
+
+    # 5. SystemCheckerDialog alias and controls
+    assert SystemCheckerDialog is LinuxSetupDialog
+    dlg = SystemCheckerDialog()
+    assert dlg._sp_gui_btn is not None
+    assert dlg._sp_gui_btn.text() != ""
+
+    # 6. SettingsPage card and buttons
+    settings_page = SettingsPage()
+    assert hasattr(settings_page, "_btn_run_checker")
+    assert hasattr(settings_page, "_btn_launch_sp")
+    assert settings_page._btn_run_checker.text() != ""
+    assert settings_page._btn_launch_sp.text() != ""
+
+
 def main():
     print("== Neo updater smoke test ==")
     check("catalog", test_catalog)
@@ -2175,6 +2242,7 @@ def main():
     check("settings page and dialogs", test_settings_page_and_dialogs)
     check("latest package tracking and history ini", test_latest_package_tracking_and_history_ini)
     check("prune extracted cache and reusing download", test_prune_extracted_cache_and_reusing_download)
+    check("sp flash system checker and diagnostics", test_sp_flash_system_checker_and_diagnostics)
     if failures:
         print(f"\n{len(failures)} FAILURES:")
         for name, err in failures:

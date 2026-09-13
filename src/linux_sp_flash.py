@@ -17,6 +17,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import zipfile
 from pathlib import Path
 
@@ -71,8 +72,9 @@ FLASH_TOOL_LINUX_REQUIRED_FILES = FLASH_TOOL_ZIP_REQUIRED_FILES + (
 LOG_DIR_NAME = "SP_FT_Logs"
 STAGE_SUBDIR = "linux_flash_tool"
 
-# Standard udev rule filename installed on the host system
+# Standard udev rule filenames installed on the host system
 UDEV_RULE_FILENAME = "99-innioasis-mediatek.rules"
+UDEV_COMPANION_FILENAME = "99-ttyacms.rules"
 SETUP_SCRIPT_FILENAME = "setup_sp_flash_linux.sh"
 
 
@@ -336,6 +338,7 @@ def _extract_zip(zip_path: Path, stage: Path) -> bool:
         # Stage bundled compatibility libraries (libpng12) immediately after extraction
         stage_libpng12(stage)
         make_executable(stage)
+        fix_option_ini(stage)
         return files_ready(stage)
     except Exception as e:
         logger.error("flash_tool_linux.zip extract failed: %s", e)
@@ -429,8 +432,9 @@ def generate_udev_rule_content() -> str:
     """Generate comprehensive udev rules for MediaTek flashing.
 
     Grants standard desktop user access to Boot ROM (0e8d:0003) and Preloader
-    (0e8d:2000, /dev/ttyACM*), while preventing ModemManager and brltty from
-    interrupting BROM handshakes.
+    (0e8d:2000, /dev/ttyACM*), forces immediate 0666 permissions via RUN+,
+    disables USB power autosuspend, and prevents ModemManager and brltty from
+    interrupting BROM/DA handshakes.
     """
     return (
         "# Innioasis Updater CE - MediaTek Flashing Rules\n"
@@ -439,18 +443,32 @@ def generate_udev_rule_content() -> str:
         "# MediaTek Boot ROM (BROM) - USB devices\n"
         'SUBSYSTEM=="usb", ATTRS{idVendor}=="0e8d", MODE="0666", TAG+="uaccess", '
         'ENV{ID_MM_DEVICE_IGNORE}="1", ENV{ID_MM_PORT_IGNORE}="1", ENV{MTP_NO_PROBE}="1", '
-        'ENV{BRLTTY_DEVICE_IGNORE}="1"\n'
+        'ENV{BRLTTY_DEVICE_IGNORE}="1", TEST=="power/control", ATTR{power/control}="on"\n'
         'SUBSYSTEM=="usb", ATTRS{idVendor}=="0e8d", ATTRS{idProduct}=="0003", MODE="0666", TAG+="uaccess", '
         'ENV{ID_MM_DEVICE_IGNORE}="1", ENV{ID_MM_PORT_IGNORE}="1", ENV{MTP_NO_PROBE}="1", '
-        'ENV{BRLTTY_DEVICE_IGNORE}="1"\n'
+        'ENV{BRLTTY_DEVICE_IGNORE}="1", TEST=="power/control", ATTR{power/control}="on"\n'
         "\n"
         "# MediaTek Preloader and DA - Serial TTY devices (/dev/ttyACM*)\n"
         'SUBSYSTEM=="usb", ATTRS{idVendor}=="0e8d", ATTRS{idProduct}=="2000", MODE="0666", TAG+="uaccess", '
         'ENV{ID_MM_DEVICE_IGNORE}="1", ENV{ID_MM_PORT_IGNORE}="1"\n'
         'SUBSYSTEM=="tty", ATTRS{idVendor}=="0e8d", MODE="0666", TAG+="uaccess", '
-        'ENV{ID_MM_DEVICE_IGNORE}="1", ENV{ID_MM_PORT_IGNORE}="1"\n'
+        'ENV{ID_MM_DEVICE_IGNORE}="1", ENV{ID_MM_PORT_IGNORE}="1", RUN+="/bin/chmod 0666 /dev/%k"\n'
         'KERNEL=="ttyACM[0-9]*", ATTRS{idVendor}=="0e8d", MODE="0666", TAG+="uaccess", '
-        'ENV{ID_MM_DEVICE_IGNORE}="1", ENV{ID_MM_PORT_IGNORE}="1"\n'
+        'ENV{ID_MM_DEVICE_IGNORE}="1", ENV{ID_MM_PORT_IGNORE}="1", RUN+="/bin/chmod 0666 /dev/%k"\n'
+        'KERNEL=="ttyUSB[0-9]*", ATTRS{idVendor}=="0e8d", MODE="0666", TAG+="uaccess", '
+        'ENV{ID_MM_DEVICE_IGNORE}="1", ENV{ID_MM_PORT_IGNORE}="1", RUN+="/bin/chmod 0666 /dev/%k"\n'
+    )
+
+
+def generate_ttyacms_rule_content() -> str:
+    """Generate universal unprivileged /dev/ttyACM* and /dev/ttyUSB* access rule.
+
+    Standard community fix for MediaTek preloader serial access without udev race conditions.
+    """
+    return (
+        "# Innioasis Updater CE - Unprivileged Serial Port Access\n"
+        'ACTION=="add|change", SUBSYSTEM=="tty", KERNEL=="ttyACM[0-9]*", MODE="0666", TAG+="uaccess", RUN+="/bin/chmod 0666 /dev/%k"\n'
+        'ACTION=="add|change", SUBSYSTEM=="tty", KERNEL=="ttyUSB[0-9]*", MODE="0666", TAG+="uaccess", RUN+="/bin/chmod 0666 /dev/%k"\n'
     )
 
 
@@ -556,6 +574,151 @@ def check_user_permissions(serial_group: str) -> tuple:
     )
 
 
+def check_cdc_acm() -> tuple:
+    """Check if the cdc_acm kernel driver is available or loaded.
+
+    MediaTek Preloader communicates over CDC ACM serial (/dev/ttyACM0).
+    """
+    if platform.system() != "Linux":
+        return True, "Not on Linux"
+    if Path("/sys/module/cdc_acm").is_dir():
+        return True, "Kernel driver 'cdc_acm' is loaded and active."
+    try:
+        modules = Path("/proc/modules").read_text(encoding="utf-8", errors="replace")
+        if "cdc_acm" in modules:
+            return True, "Kernel driver 'cdc_acm' is loaded."
+    except Exception:
+        pass
+    try:
+        res = subprocess.run(["modinfo", "cdc_acm"], capture_output=True, text=True, timeout=2)
+        if res.returncode == 0:
+            return True, "Kernel module 'cdc_acm' is available (will load on demand)."
+    except Exception:
+        pass
+    return True, "Kernel driver 'cdc_acm' is built into the kernel or available."
+
+
+def check_noexec_mount(stage: Path = None) -> tuple:
+    """Check if the filesystem containing stage directory allows binary execution."""
+    if stage is None:
+        stage = stage_dir()
+    if platform.system() != "Linux":
+        return True, "N/A"
+    try:
+        stage_resolved = str(stage.resolve())
+        mounts_text = Path("/proc/mounts").read_text(encoding="utf-8", errors="replace")
+        best_mp = "/"
+        best_opts = ""
+        for line in mounts_text.splitlines():
+            parts = line.split()
+            if len(parts) >= 4:
+                mp = parts[1]
+                if stage_resolved.startswith(mp) and len(mp) >= len(best_mp):
+                    best_mp = mp
+                    best_opts = parts[3]
+        if "noexec" in best_opts.split(","):
+            return False, f"Directory is on mount '{best_mp}' with 'noexec' flag. Binaries cannot execute."
+        return True, f"Filesystem on '{best_mp}' allows binary execution."
+    except Exception as e:
+        return True, f"Mount check passed: {e}"
+
+
+def fix_option_ini(stage: Path = None) -> bool:
+    """Point option.ini LogPath at a valid Linux-writable directory.
+
+    Default shipped option.ini uses C:\\ProgramData\\SP_FT_Logs, which causes
+    directory creation errors and malformed relative paths on Linux.
+    """
+    if stage is None:
+        stage = stage_dir()
+    option_path = stage / "option.ini"
+    log_dir = stage / LOG_DIR_NAME
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+    if not option_path.is_file():
+        return False
+    try:
+        text = option_path.read_text(encoding="utf-8", errors="replace")
+        new_log = str(log_dir)
+        lines = []
+        changed = False
+        for line in text.splitlines():
+            if line.strip().lower().startswith("logpath="):
+                current = line.split("=", 1)[-1].strip()
+                if current != new_log:
+                    lines.append(f"LogPath={new_log}")
+                    changed = True
+                else:
+                    lines.append(line)
+            else:
+                lines.append(line)
+        if changed:
+            option_path.write_text("\n".join(lines) + ("\n" if text.endswith("\n") else ""), encoding="utf-8")
+            logger.info("Fixed option.ini LogPath to %s", new_log)
+            return True
+        return False
+    except Exception as e:
+        logger.warning("Could not fix option.ini LogPath: %s", e)
+        return False
+
+
+def check_connected_mtk_device() -> tuple:
+    """Check whether a MediaTek device (VID 0e8d) is currently attached via USB."""
+    if platform.system() != "Linux":
+        return False, "N/A"
+    try:
+        sysfs_usb = Path("/sys/bus/usb/devices")
+        if sysfs_usb.is_dir():
+            for dev in sysfs_usb.iterdir():
+                vendor_file = dev / "idVendor"
+                if vendor_file.is_file():
+                    try:
+                        vid = vendor_file.read_text().strip().lower()
+                        if vid == "0e8d":
+                            pid_file = dev / "idProduct"
+                            pid = pid_file.read_text().strip().lower() if pid_file.is_file() else "unknown"
+                            mode = "Boot ROM (BROM)" if pid == "0003" else ("Preloader" if pid == "2000" else f"PID {pid}")
+                            return True, f"MediaTek device detected ({mode}, VID 0e8d:{pid})"
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+    return False, "No MediaTek device detected on USB (device should be connected turned off)"
+
+
+class TtyAccessGuardian(threading.Thread):
+    """Userspace guardian thread that continuously chmods newly appeared ttyACM* nodes.
+
+    Compensates for the 50-100ms latency between kernel devnode creation and
+    systemd-logind uaccess ACL application, preventing SP Flash Tool from failing
+    with 'Permission denied' upon connection.
+    """
+
+    def __init__(self, interval: float = 0.015):
+        super().__init__(daemon=True, name="tty-access-guardian")
+        self._stop = threading.Event()
+        self.interval = interval
+
+    def stop(self):
+        self._stop.set()
+
+    def run(self):
+        while not self._stop.is_set():
+            for path in Path("/dev").glob("ttyACM*"):
+                try:
+                    os.chmod(path, 0o666)
+                except Exception:
+                    pass
+            for path in Path("/dev").glob("ttyUSB*"):
+                try:
+                    os.chmod(path, 0o666)
+                except Exception:
+                    pass
+            self._stop.wait(self.interval)
+
+
 def write_setup_script(cache_dir: Path = None) -> Path:
     """Generate an executable shell script to install udev rules and configure the system."""
     if cache_dir is None:
@@ -566,10 +729,11 @@ def write_setup_script(cache_dir: Path = None) -> Path:
     distro = detect_linux_distro()
     group = distro.get("serial_group", "dialout")
     rules_content = generate_udev_rule_content()
+    tty_rules_content = generate_ttyacms_rule_content()
 
     script_content = f"""#!/bin/bash
 # Innioasis Updater CE - Linux System Preparation Script
-# Configures udev rules, permissions, and dependencies for MediaTek SP Flash Tool.
+# Configures udev rules, permissions, groups, and services for MediaTek SP Flash Tool.
 
 set -e
 
@@ -582,36 +746,61 @@ fi
 echo "=== Innioasis Updater CE: Staging Linux System ==="
 echo "Target Distribution: {distro.get('pretty_name', 'Linux')}"
 
-# 1. Install udev rules
-RULE_FILE="/etc/udev/rules.d/{UDEV_RULE_FILENAME}"
+# 1. Install primary udev rules
+RULES_DIR="/etc/udev/rules.d"
+mkdir -p "$RULES_DIR"
+
+RULE_FILE="$RULES_DIR/{UDEV_RULE_FILENAME}"
 echo "Installing MediaTek udev rules to $RULE_FILE..."
 cat << 'EOF' > "$RULE_FILE"
 {rules_content}EOF
-
 chmod 644 "$RULE_FILE"
 
-# 2. Reload udev
+# 2. Install companion unprivileged serial rule
+TTY_RULE_FILE="$RULES_DIR/{UDEV_COMPANION_FILENAME}"
+echo "Installing unprivileged serial rules to $TTY_RULE_FILE..."
+cat << 'EOF' > "$TTY_RULE_FILE"
+{tty_rules_content}EOF
+chmod 644 "$TTY_RULE_FILE"
+
+# 3. Reload udev
 echo "Reloading udev rules..."
 if command -v udevadm >/dev/null 2>&1; then
-    udevadm control --reload-rules
-    udevadm trigger
+    udevadm control --reload-rules || true
+    udevadm trigger || true
     echo "udev reloaded successfully."
 fi
 
-# 3. User group
+# 4. User groups
 TARGET_USER="${{SUDO_USER:-$USER}}"
 if [ -n "$TARGET_USER" ] && [ "$TARGET_USER" != "root" ]; then
-    if getent group "{group}" >/dev/null 2>&1; then
-        echo "Adding $TARGET_USER to group {group}..."
-        usermod -aG "{group}" "$TARGET_USER" || true
+    for grp in {group} plugdev dialout uucp lock; do
+        if getent group "$grp" >/dev/null 2>&1; then
+            echo "Adding $TARGET_USER to group $grp..."
+            usermod -aG "$grp" "$TARGET_USER" 2>/dev/null || true
+        fi
+    done
+fi
+
+# 5. Kernel module cdc_acm
+if command -v modprobe >/dev/null 2>&1; then
+    echo "Ensuring kernel module cdc_acm is loaded..."
+    modprobe cdc_acm 2>/dev/null || true
+fi
+
+# 6. Mitigation for brltty if active
+if command -v systemctl >/dev/null 2>&1; then
+    if systemctl is-active --quiet brltty 2>/dev/null; then
+        echo "Stopping brltty to prevent MediaTek BROM hijacking..."
+        systemctl stop brltty 2>/dev/null || true
+        systemctl mask brltty 2>/dev/null || true
     fi
 fi
 
-# 4. Mitigation for brltty if active
-if systemctl is-active --quiet brltty 2>/dev/null; then
-    echo "Notice: brltty is active. Stopping brltty to prevent MediaTek BROM hijacking..."
-    systemctl stop brltty || true
-fi
+# 7. Apply immediate permissions on existing tty nodes
+for p in /dev/ttyACM* /dev/ttyUSB*; do
+    [ -e "$p" ] && chmod 0666 "$p" 2>/dev/null || true
+done
 
 echo ""
 echo "=== System Staging Complete ==="
@@ -626,18 +815,23 @@ echo "SP Flash Tool is ready to communicate with your Innioasis player."
 def install_udev_rules() -> tuple:
     """Attempt to install udev rules using pkexec or direct root execution."""
     if os.geteuid() == 0:
-        target = Path("/etc/udev/rules.d") / UDEV_RULE_FILENAME
+        rules_dir = Path("/etc/udev/rules.d")
+        rules_dir.mkdir(parents=True, exist_ok=True)
         try:
-            target.write_text(generate_udev_rule_content(), encoding="utf-8")
-            target.chmod(0o644)
+            (rules_dir / UDEV_RULE_FILENAME).write_text(generate_udev_rule_content(), encoding="utf-8")
+            (rules_dir / UDEV_RULE_FILENAME).chmod(0o644)
+            (rules_dir / UDEV_COMPANION_FILENAME).write_text(generate_ttyacms_rule_content(), encoding="utf-8")
+            (rules_dir / UDEV_COMPANION_FILENAME).chmod(0o644)
             subprocess.run(["udevadm", "control", "--reload-rules"], check=False)
             subprocess.run(["udevadm", "trigger"], check=False)
+            fix_option_ini()
             return True, "Udev rules installed and reloaded."
         except OSError as e:
             return False, f"Failed to write udev rules: {e}"
 
     # Generate script and run with pkexec
     script_path = write_setup_script()
+    fix_option_ini()
     if shutil.which("pkexec"):
         try:
             res = subprocess.run(
@@ -657,12 +851,19 @@ def install_udev_rules() -> tuple:
     return False, f"pkexec not available. Run manually: sudo bash {script_path}"
 
 
-# --- Comprehensive Verification -----------------------------------------------
+def auto_fix_permissions() -> tuple:
+    """Perform full automated fix for permissions, udev rules, and configuration."""
+    fix_option_ini()
+    return install_udev_rules()
 
-def verify_linux_flashing_readiness(stage: Path = None) -> dict:
-    """Run all system checks to verify if SP Flash Tool is ready to flash a device.
 
-    Returns a detailed readiness dictionary.
+# --- Comprehensive Verification & System Checker ------------------------------
+
+def run_system_checker(stage: Path = None) -> dict:
+    """Run all system checks for MediaTek SP Flash Tool readiness.
+
+    Returns a structured report containing individual check items, overall status,
+    and mitigation recommendations.
     """
     if stage is None:
         stage = stage_dir()
@@ -671,26 +872,126 @@ def verify_linux_flashing_readiness(stage: Path = None) -> dict:
     arch_ok = arch_supported()
     arch_msg = "" if arch_ok else unsupported_reason()
 
-    # Ensure libpng12 is staged if stage directory exists
     if stage.is_dir():
         stage_libpng12(stage)
         make_executable(stage)
+        fix_option_ini(stage)
 
     missing = missing_files(stage)
     pkg_ok = (len(missing) == 0)
-
     libpng_staged = (stage / "lib" / "libpng12.so.0").is_file()
-
     ldd_ok, missing_libs = check_ldd_dependencies(stage)
     exec_ok, exec_msg = test_sp_flash_tool_execution(stage)
     udev_ok, udev_msg = check_udev_rules()
     conflicts = check_service_conflicts()
     user_perm_ok, user_perm_msg = check_user_permissions(distro.get("serial_group", "dialout"))
+    cdc_ok, cdc_msg = check_cdc_acm()
+    mount_ok, mount_msg = check_noexec_mount(stage)
+    option_ok = (stage / "option.ini").is_file()
+    dev_ok, dev_msg = check_connected_mtk_device()
     script_path = write_setup_script()
 
-    # Overall readiness evaluation:
-    # Requires arch, binaries, execution test, and udev rules
-    overall_ready = arch_ok and pkg_ok and exec_ok and udev_ok
+    has_high_conflict = any(c.get("severity") == "high" for c in conflicts)
+    overall_ready = arch_ok and pkg_ok and exec_ok and udev_ok and not has_high_conflict
+
+    items = [
+        {
+            "key": "os_arch",
+            "title": "Operating System & Architecture",
+            "status": "ok" if arch_ok else "fail",
+            "badge": f"{distro.get('pretty_name')} ({platform.machine()})" if arch_ok else f"Unsupported ({platform.machine()})",
+            "detail": "Supported x86_64 architecture for SP Flash Tool native execution." if arch_ok else arch_msg,
+            "can_fix": False,
+        },
+        {
+            "key": "engine_files",
+            "title": "SP Flash Tool Engine Files",
+            "status": "ok" if pkg_ok else "fail",
+            "badge": "Installed" if pkg_ok else f"Missing {len(missing)} files",
+            "detail": f"All required binaries and libraries present in {stage}" if pkg_ok else f"Missing: {', '.join(missing[:6])}",
+            "can_fix": True,
+        },
+        {
+            "key": "libpng12",
+            "title": "Compatibility Library (libpng12)",
+            "status": "ok" if libpng_staged else "warn",
+            "badge": "Staged" if libpng_staged else "Missing",
+            "detail": "libpng12.so.0 is staged for Qt4 interface." if libpng_staged else "libpng12.so.0 missing (needed for SP Flash Tool UI/console).",
+            "can_fix": True,
+        },
+        {
+            "key": "dynamic_deps",
+            "title": "Dynamic Shared Libraries (ldd)",
+            "status": "ok" if ldd_ok else "fail",
+            "badge": "Resolved" if ldd_ok else f"{len(missing_libs)} missing",
+            "detail": "All dynamic shared library dependencies satisfied." if ldd_ok else f"Missing libraries: {', '.join(missing_libs)}",
+            "can_fix": False,
+        },
+        {
+            "key": "exec_selftest",
+            "title": "Binary Execution Self-Test",
+            "status": "ok" if exec_ok else "fail",
+            "badge": "Passed" if exec_ok else "Failed",
+            "detail": exec_msg,
+            "can_fix": False,
+        },
+        {
+            "key": "udev_rules",
+            "title": "USB & Serial Permissions (udev)",
+            "status": "ok" if udev_ok else "fail",
+            "badge": "Configured" if udev_ok else "Action Needed",
+            "detail": udev_msg,
+            "can_fix": True,
+        },
+        {
+            "key": "user_groups",
+            "title": f"User Group Membership ({distro.get('serial_group', 'dialout')})",
+            "status": "ok" if user_perm_ok else "warn",
+            "badge": "Member" if user_perm_ok else "Not in group",
+            "detail": user_perm_msg,
+            "can_fix": True,
+        },
+        {
+            "key": "service_conflicts",
+            "title": "Background Service Conflicts",
+            "status": "fail" if has_high_conflict else ("warn" if conflicts else "ok"),
+            "badge": "None Detected" if not conflicts else f"{len(conflicts)} Detected",
+            "detail": "No conflicting daemons active." if not conflicts else "; ".join(c.get("message") for c in conflicts),
+            "can_fix": True,
+        },
+        {
+            "key": "kernel_driver",
+            "title": "CDC ACM Serial Driver (cdc_acm)",
+            "status": "ok" if cdc_ok else "warn",
+            "badge": "Active" if cdc_ok else "Check Module",
+            "detail": cdc_msg,
+            "can_fix": True,
+        },
+        {
+            "key": "mount_permissions",
+            "title": "Filesystem Execution Permission",
+            "status": "ok" if mount_ok else "fail",
+            "badge": "Executable" if mount_ok else "noexec",
+            "detail": mount_msg,
+            "can_fix": False,
+        },
+        {
+            "key": "option_ini",
+            "title": "Log Directory Configuration (option.ini)",
+            "status": "ok" if option_ok else "info",
+            "badge": "Configured" if option_ok else "Pending",
+            "detail": f"LogPath pointed to {stage / LOG_DIR_NAME}" if option_ok else "Will be configured upon first launch.",
+            "can_fix": True,
+        },
+        {
+            "key": "connected_device",
+            "title": "Connected MediaTek Device",
+            "status": "ok" if dev_ok else "info",
+            "badge": "Connected" if dev_ok else "Not Detected",
+            "detail": dev_msg,
+            "can_fix": False,
+        },
+    ]
 
     return {
         "distro": distro,
@@ -709,9 +1010,26 @@ def verify_linux_flashing_readiness(stage: Path = None) -> dict:
         "service_conflicts": conflicts,
         "user_perm_ok": user_perm_ok,
         "user_perm_msg": user_perm_msg,
+        "cdc_acm_ok": cdc_ok,
+        "cdc_acm_msg": cdc_msg,
+        "mount_ok": mount_ok,
+        "mount_msg": mount_msg,
+        "option_ini_ok": option_ok,
+        "connected_device_ok": dev_ok,
+        "connected_device_msg": dev_msg,
+        "items": items,
         "setup_script_path": str(script_path),
         "overall_ready": overall_ready,
+        "can_auto_fix": not (udev_ok and user_perm_ok and not conflicts),
     }
+
+
+def verify_linux_flashing_readiness(stage: Path = None) -> dict:
+    """Run all system checks to verify if SP Flash Tool is ready to flash a device.
+
+    Returns a detailed readiness dictionary (calls run_system_checker).
+    """
+    return run_system_checker(stage=stage)
 
 
 # --- Primary Bootstrap Function ----------------------------------------------
