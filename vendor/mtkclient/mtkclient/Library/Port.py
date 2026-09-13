@@ -86,6 +86,7 @@ class Port(metaclass=LogBase):
 
     def serial_handshake(self, maxtries=None, loop=0):
         counter = 0
+        hint_shown = False
         if not self.cdc.connected:
             self.cdc.connected = self.cdc.connect()
         while 1:  # Workaround for serial port
@@ -100,7 +101,8 @@ class Port(metaclass=LogBase):
                     self.info("Handshake successful.")
                     return True
                 else:
-                    if loop == 5:
+                    if loop == 5 and not hint_shown:
+                        hint_shown = True
                         sys.stdout.write('\n')
                         self.info("Hint:\n\nPower off the phone before connecting.\n" +
                                   "For brom mode, press and hold vol up, vol dwn, or all hw buttons and " +
@@ -134,39 +136,45 @@ class Port(metaclass=LogBase):
         self.cdc.setcontrollinestate(rts=True)
 
         startcmd = b"\xa0\x0a\x50\x05"
-        expected_echo = bytes(~b & 0xFF for b in startcmd)  # Precompute: b'\x5f\xf5\xaf\xfa'
+        expected_echo = bytes(~b & 0xFF for b in startcmd)  # b'\x5f\xf5\xaf\xfa'
 
         brom_pids = [0x3, 0xF200, 0xD1E9, 0xD1E2, 0xD1EC, 0xD1DD]
         if self.cdc.pid not in brom_pids:
-            ep_out(b"\xa0")  # Send first byte separately if needed
+            # 非 BROM PID（如 0x2000）需要先发唤醒字节
+            ep_out(b"\xa0")
+            # macOS: 读取并丢弃唤醒响应（设备可能回复 "READY" 等）
+            try:
+                ep_in(maxinsize, timeout=100)
+            except Exception:
+                pass
 
         for attempt in range(retries):
             received = b""
             try:
                 for byte in startcmd:
-                    written = ep_out(bytes([byte]), timeout=500)  # Explicit timeout
+                    written = ep_out(bytes([byte]), timeout=500)
                     if written != 1:
                         raise ValueError("Write failed")
 
-                    # Read exactly 1 echo byte (fastest)
-                    echo = ep_in(1, timeout=500)
-                    if len(echo) != 1 or echo[0] != (~byte & 0xFF):
+                    # macOS libusb 要求用 maxinsize 读取，避免 Overflow
+                    echo = ep_in(maxinsize, timeout=500)
+                    if len(echo) < 1 or echo[0] != (~byte & 0xFF):
                         raise ValueError(f"Echo mismatch: got {echo!r}, expected {~byte & 0xFF:02x}")
 
-                    received += echo
+                    received += bytes([echo[0]])
 
                 if received == expected_echo:
                     self.info("Device detected :)")
                     return True
 
-            except Exception as e:  # Includes USBError, timeout, pipe error
+            except Exception as e:
                 self.debug(f"Handshake attempt {attempt + 1} failed: {e}")
-                time.sleep(0.01)  # Short backoff
+                time.sleep(0.01)
 
-            # Optional: flush input buffer before retry
+            # 清空输入缓冲再重试
             try:
-                ep_in(maxinsize, timeout=50)  # Discard any stale data
-            except:
+                ep_in(maxinsize, timeout=50)
+            except Exception:
                 pass
 
         self.info("Handshake failed after retries")
@@ -174,31 +182,35 @@ class Port(metaclass=LogBase):
 
     def handshake(self, maxtries=None, loop=0):
         counter = 0
+        hint_shown = False
 
         while not self.cdc.connected:
             try:
                 if maxtries is not None and counter == maxtries:
                     break
                 counter += 1
-                if self.cdc.connect() and self.run_handshake():
-                    return True
-                else:
-                    if loop == 5:
-                        sys.stdout.write('\n')
-                        self.info("Hint:\n\nPower off the phone before connecting.\n" +
-                                  "For brom mode, press and hold vol up, vol dwn, or all hw buttons and " +
-                                  "connect usb.\n" +
-                                  "For preloader mode, don't press any hw button and connect usb.\n"
-                                  "If it is already connected and on, hold power for 10 seconds to reset.\n")
-                        sys.stdout.write('\n')
-                    if loop >= 10:
-                        sys.stdout.write('.')
-                    if loop >= 20:
-                        sys.stdout.write('\n')
-                        loop = 0
-                    loop += 1
-                    time.sleep(0.3)
-                    sys.stdout.flush()
+                if self.cdc.connect():
+                    if self.run_handshake():
+                        return True
+                    self.cdc.close(reset=False)
+
+                if loop == 10 and not hint_shown:
+                    hint_shown = True
+                    sys.stdout.write('\n')
+                    self.info("Hint:\n\nPower off the phone before connecting.\n" +
+                              "For brom mode, press and hold vol up, vol dwn, or all hw buttons and " +
+                              "connect usb.\n" +
+                              "For preloader mode, don't press any hw button and connect usb.\n"
+                              "If it is already connected and on, hold power for 10 seconds to reset.\n")
+                    sys.stdout.write('\n')
+                if loop >= 20:
+                    sys.stdout.write('.')
+                if loop >= 40:
+                    sys.stdout.write('\n')
+                    loop = 0
+                loop += 1
+                time.sleep(0.1)
+                sys.stdout.flush()
 
             except Exception as serr:
                 if "access denied" in str(serr):

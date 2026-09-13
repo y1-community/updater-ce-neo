@@ -142,6 +142,10 @@ class Legacy_Storage(metaclass=LogBase):
             elif parttype == "boot2":
                 length = min(length, self.daconfig.legacy_storage.emmc.m_emmc_boot2_size)
                 parttype = EmmcPartitionType.MTK_DA_EMMC_PART_BOOT2
+            elif parttype == "boot1_boot2" or parttype == 10:
+                length = min(length, self.daconfig.legacy_storage.emmc.m_emmc_boot1_size + 
+                             self.daconfig.legacy_storage.emmc.m_emmc_boot2_size)
+                parttype = EmmcPartitionType.MTK_DA_EMMC_BOOT1_BOOT2
             elif parttype == "gp1":
                 length = min(length, self.daconfig.legacy_storage.emmc.m_emmc_gp_size[0])
                 parttype = EmmcPartitionType.MTK_DA_EMMC_PART_GP1
@@ -253,6 +257,12 @@ class Storage(metaclass=LogBase):
                     else:
                         parttype = EmmcPartitionType.MTK_DA_EMMC_PART_BOOT2
                     length = min(length, self.emmc.boot2_size)
+                elif parttype == "boot1_boot2" or parttype == 10:
+                    if xml:
+                        parttype = "EMMC-BOOT1-BOOT2"
+                    else:
+                        parttype = EmmcPartitionType.MTK_DA_EMMC_BOOT1_BOOT2
+                    length = min(length, self.emmc.boot1_size + self.emmc.boot2_size)
                 elif parttype == "gp1":
                     if xml:
                         parttype = "EMMC-GP1"
@@ -285,7 +295,7 @@ class Storage(metaclass=LogBase):
                     length = min(length, self.emmc.rpmb_size)
             else:
                 self.error(
-                    "Unknown parttype. Known parttypes are \"boot1\",\"boot2\",\"gp1\",\"gp2\",\"gp3\",\"gp4\",\"rpmb\"")
+                    "Unknown parttype. Known parttypes are \"boot1\",\"boot2\",\"boot1_boot2\",\"gp1\",\"gp2\",\"gp3\",\"gp4\",\"rpmb\"")
                 return []
         elif storage == DaStorage.MTK_DA_STORAGE_UFS:
             if parttype == "user" or parttype is None:

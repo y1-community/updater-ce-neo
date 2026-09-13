@@ -157,7 +157,7 @@ class Preloader(metaclass=LogBase):
         res = False
         maxtries = 100
         tries = 0
-        while not res and tries < 1000:
+        while not res and tries < 1200:
             if self.mtk.serialportname:
                 res = self.mtk.port.serial_handshake(maxtries=maxtries)
             else:
@@ -168,7 +168,7 @@ class Preloader(metaclass=LogBase):
                     self.config.set_gui_status(self.config.tr("Status: Handshake failed, retrying..."))
                 self.mtk.port.close()
                 tries += 1
-        if tries == 1000:
+        if tries >= 1200:
             return False
 
         if not self.echo(self.Cmd.GET_HW_CODE.value):  # 0xFD

@@ -53,6 +53,94 @@ EXTRACT_COMPLETE_MARKER = ".extract_complete"
 
 _SP_LOG_ROOT = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "SP_FT_Logs"
 
+# --- MediaTek preloader boot header constants (from vendor macOS build) -------
+_BOOT_HEADER_SIZE = 2048
+_BRLYT_OFFSET = 512
+_PRELOADER_DATA_OFFSET = 2048
+_PRELOADER_MAGIC = b"MMM\x01"
+_BRLYT_MAGIC = 0x42524C59  # 'BRLY'
+_BRLYT_TYPE_EMMC = 0x00010005
+_BRLYT_TYPE_SDMMC = 0x00010008
+
+
+def _fill_boot_magic(header: bytearray, storage_type: str = "emmc"):
+    storage = storage_type.lower()
+    version_tail = b"\x01\x00\x00\x00"
+    if storage == "ufs":
+        header[0:8] = b"UFS_BOOT"
+        header[8:12] = b"\x00\x00\x00\x00"
+        header[12:16] = version_tail
+    elif storage == "sdmmc":
+        header[0:10] = b"SDMMC_BOOT"
+        header[10:12] = b"\x00\x00"
+        header[12:16] = version_tail
+    else:
+        header[0:9] = b"EMMC_BOOT"
+        header[9:12] = b"\x00\x00\x00"
+        header[12:16] = version_tail
+
+
+def _fill_brlyt_header(header: bytearray, raw_size: int):
+    from struct import pack
+
+    image_size = _PRELOADER_DATA_OFFSET + raw_size
+    header[_BRLYT_OFFSET : _BRLYT_OFFSET + 8] = b"BRLYT\x00\x00\x00"
+    header[_BRLYT_OFFSET + 8 : _BRLYT_OFFSET + 12] = pack("<I", 1)
+    header[_BRLYT_OFFSET + 12 : _BRLYT_OFFSET + 16] = pack("<I", _PRELOADER_DATA_OFFSET)
+    header[_BRLYT_OFFSET + 16 : _BRLYT_OFFSET + 20] = pack("<I", image_size)
+    header[_BRLYT_OFFSET + 20 : _BRLYT_OFFSET + 24] = pack("<I", _BRLYT_MAGIC)
+    header[_BRLYT_OFFSET + 24 : _BRLYT_OFFSET + 28] = pack("<I", _BRLYT_TYPE_EMMC)
+    header[_BRLYT_OFFSET + 28 : _BRLYT_OFFSET + 32] = pack("<I", _PRELOADER_DATA_OFFSET)
+    header[_BRLYT_OFFSET + 32 : _BRLYT_OFFSET + 36] = pack("<I", image_size)
+    header[_BRLYT_OFFSET + 36 : _BRLYT_OFFSET + 40] = pack("<I", 1)
+
+
+def _wrap_preloader_for_raw_boot(
+    file_path: Path, storage_type: str = "emmc", log_cb=None
+) -> Path:
+    """If preloader is in raw MMM\\x01 format, prepend EMMC_BOOT / BRLYT header and return temp file.
+
+    If it already has a boot header or cannot identify magic, return the original file.
+    """
+    try:
+        with open(file_path, "rb") as f:
+            data = f.read()
+
+        if (
+            data[:9] == b"EMMC_BOOT"
+            or data[:8] == b"UFS_BOOT"
+            or data[:10] == b"SDMMC_BOOT"
+            or data[:5] == b"BRLYT"
+            or data[_BRLYT_OFFSET : _BRLYT_OFFSET + 5] == b"BRLYT"
+        ):
+            return file_path
+
+        magic_pos = data.find(_PRELOADER_MAGIC)
+        if magic_pos < 0:
+            return file_path
+
+        raw_data = data[magic_pos:]
+        raw_size = len(raw_data)
+
+        header = bytearray(_BOOT_HEADER_SIZE)
+        _fill_boot_magic(header, storage_type)
+        _fill_brlyt_header(header, raw_size)
+
+        combined = bytes(header) + raw_data
+
+        import tempfile
+
+        fd, tmp_name = tempfile.mkstemp(prefix="preloader_wrapped_", suffix=".bin")
+        with os.fdopen(fd, "wb") as out_f:
+            out_f.write(combined)
+        if log_cb:
+            log_cb("Generated complete BRLYT boot header for raw preloader")
+        return Path(tmp_name)
+    except Exception as e:
+        if log_cb:
+            log_cb(f"Preloader wrap check note: {e}")
+        return file_path
+
 
 # ---------------------------------------------------------------------------
 # Module-level helpers
@@ -828,32 +916,109 @@ class FlashWorker(QThread):
         self._log("Device connected, starting write...")
 
         total = len(image_files)
-        for i, (part_name, file_path) in enumerate(image_files):
+
+        # Pre-order: ensure preloader is flashed first if present, system last
+        def _partition_sort_key(item):
+            name = item[0].lower()
+            if name == "preloader":
+                return 0
+            if name == "system":
+                return 100
+            if name in ("userdata", "cache"):
+                return 90
+            return 50
+
+        ordered_images = sorted(image_files, key=_partition_sort_key)
+
+        for i, (part_name, file_path) in enumerate(ordered_images):
             if self._cancelled:
                 self.finished.emit(False, "USER_CANCELLED")
                 return
             self._log(f"Writing {part_name} ({i + 1}/{total}): {file_path.name}")
             pct = 25 + int(i / max(total, 1) * 70)
             self.progress.emit(pct)
-            try:
-                da_handler.handle_da_cmds(
-                    mtk,
-                    "w",
-                    partitions=part_name,
-                    filenames=str(file_path),
-                    parttype="user",
+
+            is_preloader = part_name.lower() == "preloader"
+            active_file = file_path
+            temp_wrapped = None
+
+            if is_preloader:
+                temp_wrapped = _wrap_preloader_for_raw_boot(
+                    file_path, storage_type="emmc", log_cb=self._log
                 )
+                if temp_wrapped != file_path:
+                    active_file = temp_wrapped
+                target_parts = self._resolve_preloader_target_parts(mtk)
+            else:
+                target_parts = ("user",)
+
+            try:
+                for target_part in target_parts:
+                    self._write_mtk_partition(
+                        da_handler, mtk, part_name, str(active_file), target_part
+                    )
             except BaseException as e:
                 # BaseException: mtkclient may sys.exit() on DA errors; keep it
                 # a clean per-partition failure, never an app crash.
                 self._log(f"Writing {part_name} failed: {e}\n{traceback.format_exc()}")
                 self.finished.emit(False, "WRITE_FAILED")
                 return
+            finally:
+                if temp_wrapped and temp_wrapped != file_path and temp_wrapped.exists():
+                    try:
+                        temp_wrapped.unlink(missing_ok=True)
+                    except Exception:
+                        pass
 
         self.step_changed.emit(STEP_DONE)
         self.progress.emit(100)
         self._log("Flash complete! Disconnect USB and reboot the device.")
         self.finished.emit(True, "")
+
+    def _is_legacy_mode(self, mtk):
+        mode = getattr(getattr(mtk, "daloader", None), "flashmode", None)
+        return mode == 3 or mode == "LEGACY"
+
+    def _resolve_preloader_target_parts(self, mtk, normalized_region: str = ""):
+        norm = normalized_region.upper() if normalized_region else ""
+        if norm == "EMMC_BOOT_1":
+            return ("boot1",)
+        elif norm == "EMMC_BOOT_2":
+            return ("boot2",)
+        elif norm == "EMMC_BOOT1_BOOT2":
+            if self._is_legacy_mode(mtk):
+                return ("boot1",)
+            return ("boot1", "boot2")
+        else:
+            if self._is_legacy_mode(mtk):
+                return ("boot1",)
+            return ("boot1", "boot2")
+
+    def _write_mtk_partition(self, da_handler, mtk, part_name, file_path_str, part_type):
+        """Invoke da_handler to write a partition, supporting both mock test handlers and real DaHandler."""
+        if hasattr(da_handler, "handle_da_cmds"):
+            try:
+                da_handler.handle_da_cmds(
+                    mtk,
+                    "w",
+                    partitions=part_name,
+                    filenames=file_path_str,
+                    parttype=part_type,
+                )
+            except TypeError:
+                class _Args:
+                    partitionname = part_name
+                    filename = file_path_str
+                    parttype = part_type
+                da_handler.handle_da_cmds(mtk, "w", _Args())
+        elif hasattr(da_handler, "da_write"):
+            da_handler.da_write(
+                parttype=part_type,
+                filenames=[file_path_str],
+                partitions=[part_name],
+            )
+        else:
+            raise RuntimeError("DaHandler has no write method")
 
 
 # ---------------------------------------------------------------------------

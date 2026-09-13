@@ -15,7 +15,7 @@ from mtkclient.Library.DA.legacy.dalegacy_iot_flash_param import (NorInfoIoT, Na
 
 from mtkclient.Library.DA.legacy.dalegacy_param import PortValues, Rsp, Cmd
 from mtkclient.Library.DA.legacy.extension.legacy import LegacyExt
-from mtkclient.Library.DA.storage import DaStorage
+from mtkclient.Library.DA.storage import DaStorage, EmmcPartitionType, StorageType
 from mtkclient.Library.gui_utils import LogBase, logsetup, structhelper_io, progress
 from mtkclient.Library.error import ErrorHandler
 from mtkclient.Library.partition import Partition
@@ -339,7 +339,7 @@ class DALegacy(metaclass=LogBase):
                     ret = self.usbread(1)
                     if ret == self.Rsp.NACK:
                         self.error("EMI Config not accepted :( Make sure to provide a valid preloader.")
-                        sys.exit()
+                        return False
                     if ret == self.Rsp.ACK:
                         self.info(f"Sending dram info ... EMI-Version {hex(self.daconfig.emiver)}")
                         if self.daconfig.emiver in [0xF, 0x10, 0x11, 0x14, 0x15]:
@@ -997,25 +997,50 @@ class DALegacy(metaclass=LogBase):
         if filename != '':
             fh = open(filename, "rb")
             fsize = os.stat(filename).st_size
-            length = min(fsize, length)
+            available = max(0, fsize - offset)
+            length = min(available, length)
             if length % 512 != 0:
                 fill = 512 - (length % 512)
                 length += fill
             fh.seek(offset)
+        chunk_size = getattr(self.mtk.config, "write_chunk_size", None) or 0x100000
+        chunk_size = max(0x200, int(chunk_size))
+        self.mtk.config.last_error = None
         pg = progress(total=length, prefix="Write:", guiprogress=self.mtk.config.guiprogress)
+        self.info(f"sdmmc_write_data: addr=0x{addr:X} length={length} "
+                 f"fsize={os.stat(filename).st_size if filename else 'N/A'} fill={fill} "
+                 f"chunk=0x{chunk_size:X} parttype={parttype}")
+        # 目标分区由 SDMMC_WRITE_DATA_CMD 的 parttype 参数指定。
+        # MT6582 等老 DA 在写入前额外 switch_part 会拒绝后续写命令。
         self.usbwrite(self.Cmd.SDMMC_WRITE_DATA_CMD)
         self.usbwrite(pack(">B", storage))
         self.usbwrite(pack(">B", parttype))
         self.usbwrite(pack(">Q", addr))
         self.usbwrite(pack(">Q", length))
-        self.usbwrite(pack(">I", 0x100000))
-        if self.usbread(1) != self.Rsp.ACK:
-            self.error("Couldn't send sdmmc_write_data header")
+        self.usbwrite(pack(">I", chunk_size))
+        header_ack = self.usbread(1)
+        if header_ack != self.Rsp.ACK:
+            status_msg = ""
+            if header_ack == b"\xA5":
+                status_raw = self.usbread(4)
+                if status_raw and len(status_raw) == 4:
+                    status = unpack("<I", status_raw)[0]
+                    status_msg = f" status={self.eh.status(status)}"
+                else:
+                    status_msg = " status=empty"
+            self.mtk.config.last_error = (
+                "sdmmc_write_data header ack failed: "
+                f"expected=0x5A got={header_ack.hex() if header_ack else 'empty'}{status_msg}"
+            )
+            self.error(f"Couldn't send sdmmc_write_data header, "
+                       f"expected=0x5A got={header_ack.hex() if header_ack else 'empty'}{status_msg}")
             return False
         offset = 0
+        chunk_idx = 0
+        total_chunks = (length + chunk_size - 1) // chunk_size
         while offset < length:
             self.usbwrite(self.Rsp.ACK)
-            count = min(0x100000, length - offset)
+            count = min(chunk_size, length - offset)
             if fh:
                 data = bytearray(fh.read(count))
             else:
@@ -1028,65 +1053,323 @@ class DALegacy(metaclass=LogBase):
             self.usbwrite(data)
             chksum = sum(data) & 0xFFFF
             self.usbwrite(pack(">H", chksum))
-            if self.usbread(1) != self.Rsp.CONT_CHAR:
-                self.error("Data ack failed for sdmmc_write_data")
+            ack = self.usbread(1)
+            if ack != self.Rsp.CONT_CHAR:
+                if ack == b"\xA5":
+                    status_hex = "unknown"
+                    status_desc = ""
+                    try:
+                        status_raw = self.usbread(4)
+                        if status_raw and len(status_raw) == 4:
+                            status_le = unpack('<I', status_raw)[0]
+                            status_be = unpack('>I', status_raw)[0]
+                            # Legacy DA status may come in either endian order depending on path.
+                            if status_le in self.eh.ec or status_le in self.eh.xec or status_le in self.eh.lec:
+                                status_hex = f"0x{status_le:08X}"
+                                status_desc = self.eh.status(status_le)
+                            elif status_be in self.eh.ec or status_be in self.eh.xec or status_be in self.eh.lec:
+                                status_hex = f"0x{status_be:08X}"
+                                status_desc = self.eh.status(status_be)
+                            else:
+                                status_hex = f"0x{status_le:08X}"
+                        else:
+                            status_hex = status_raw.hex() if status_raw else "empty"
+                    except Exception:
+                        pass
+                    status_msg = f"{status_hex} {status_desc}".strip()
+                    self.mtk.config.last_error = (
+                        f"device returned NACK(0xA5) at chunk {chunk_idx + 1}/{total_chunks} "
+                        f"offset=0x{offset:X}/{length} status={status_msg}"
+                    )
+                    self.error(
+                        f"Device NACK at chunk {chunk_idx + 1}/{total_chunks}, "
+                        f"offset=0x{offset:X}/{length}, status={status_msg}"
+                    )
+                    if fh:
+                        fh.close()
+                    return False
+                self.mtk.config.last_error = (
+                    f"data ack failed at chunk {chunk_idx + 1}/{total_chunks} "
+                    f"offset=0x{offset:X}/{length} datalen={len(data)} "
+                    f"expected=0x69 got={ack.hex() if ack else 'empty'}"
+                )
+                self.error(f"Data ack failed at chunk {chunk_idx}/{total_chunks} "
+                           f"offset=0x{offset:X}/{length} datalen={len(data)} "
+                           f"expected=0x69 got={ack.hex() if ack else 'empty'}")
+                if fh:
+                    fh.close()
                 return False
             if display:
                 pg.update(len(data))
             offset += count
+            chunk_idx += 1
         if fh:
             fh.close()
         if display:
             pg.done()
+        self.info(f"sdmmc_write_data: 完成 {chunk_idx} chunks")
         return True
 
-    def sdmmc_write_image(self, addr, length, filename, display=True):
-        if filename != "":
-            pg = progress(total=length, prefix="Write:", guiprogress=self.mtk.config.guiprogress)
-            with open(filename, "rb") as rf:
-                if self.daconfig.storage.flashtype == "emmc":
-                    self.usbwrite(self.Cmd.SDMMC_WRITE_IMAGE_CMD)  # 61
-                    self.usbwrite(b"\x00")  # checksum level 0
-                    self.usbwrite(b"\x08")  # EMMC_PART_USER
-                    self.usbwrite(pack(">Q", addr))
-                    self.usbwrite(pack(">Q", length))
-                    self.usbwrite(b"\x08")  # index 8
-                    self.usbwrite(b"\x03")
-                    packetsize = unpack(">I", self.usbread(4))[0]
-                    ack = unpack(">B", self.usbread(1))[0]
-                    if ack == self.Rsp.ACK[0]:
-                        self.usbwrite(self.Rsp.ACK)
-                checksum = 0
-                bytestowrite = length
-                while bytestowrite > 0:
-                    size = min(bytestowrite, packetsize)
-                    for i in range(0, size, 0x400):
-                        data = bytearray(rf.read(size))
-                        if self.usbwrite(data):
-                            bytestowrite -= size
-                            if bytestowrite == 0:
-                                checksum = 0
-                                for val in data:
-                                    checksum += val
-                                checksum = checksum & 0xFFFF
-                                self.usbwrite(pack(">H", checksum))
-                            if self.usbread(1) == b"\x69":
-                                if bytestowrite == 0:
-                                    self.usbwrite(pack(">H", checksum))
-                                if self.usbread(1) == self.Rsp.ACK:
-                                    if display:
-                                        pg.done()
-                                    return True
-                                else:
-                                    self.usbwrite(self.Rsp.ACK)
-                        if display:
-                            pg.update(len(data))
+    def sdmmc_write_image(self, addr, length, filename, display=True, parttype=8, offset=0):
+        if filename == "":
+            return True
+        if self.daconfig.storage.flashtype != "emmc":
+            self.mtk.config.last_error = "WRITE_IMAGE only supports emmc flashtype"
+            return False
+
+        self.mtk.config.last_error = None
+        fsize = os.stat(filename).st_size
+        available = max(0, fsize - offset)
+        length = min(length, available)
+        if length <= 0:
+            return True
+
+        pg = progress(total=length, prefix="Write:", guiprogress=self.mtk.config.guiprogress)
+        with open(filename, "rb") as rf:
+            rf.seek(offset)
+            self.usbwrite(self.Cmd.SDMMC_WRITE_IMAGE_CMD)  # 61
+            self.usbwrite(b"\x00")  # checksum level 0
+            self.usbwrite(pack(">B", parttype))
+            self.usbwrite(pack(">Q", addr))
+            self.usbwrite(pack(">Q", length))
+            self.usbwrite(pack(">B", parttype))
+            self.usbwrite(b"\x03")
+
+            packet_raw = self.usbread(4)
+            if not packet_raw or len(packet_raw) != 4:
+                self.mtk.config.last_error = "WRITE_IMAGE header failed: packet size empty"
+                return False
+            packetsize = unpack(">I", packet_raw)[0]
+            if packetsize <= 0:
+                self.mtk.config.last_error = f"WRITE_IMAGE invalid packetsize={packetsize}"
+                return False
+            self.info(
+                f"sdmmc_write_image: addr=0x{addr:X} length={length} "
+                f"packet=0x{packetsize:X}"
+            )
+
+            ack = self.usbread(1)
+            if ack != self.Rsp.ACK:
+                self.mtk.config.last_error = (
+                    f"WRITE_IMAGE header ack failed: expected=0x5A got={ack.hex() if ack else 'empty'}"
+                )
+                return False
+            self.usbwrite(self.Rsp.ACK)
+
+            max_usb_write = getattr(self.mtk.config, "write_chunk_size", None) or 0x40000
+            max_usb_write = max(0x200, int(max_usb_write))
+            bytestowrite = length
+            while bytestowrite > 0:
+                size = min(bytestowrite, packetsize)
+                data = bytearray(rf.read(size))
+                if len(data) != size:
+                    self.mtk.config.last_error = (
+                        f"WRITE_IMAGE short read: expect={size} got={len(data)}"
+                    )
+                    return False
+
+                sent = 0
+                while sent < size:
+                    transfer_size = min(max_usb_write, size - sent)
+                    if not self.usbwrite(data[sent:sent + transfer_size]):
+                        self.mtk.config.last_error = (
+                            f"WRITE_IMAGE usbwrite returned False "
+                            f"packet={size} offset={sent} transfer={transfer_size}"
+                        )
+                        return False
+                    sent += transfer_size
+
+                self.usbwrite(pack(">H", sum(data) & 0xFFFF))
+                bytestowrite -= size
+                if display:
+                    pg.update(size)
+
+                step_ack = self.usbread(1)
+                if step_ack != self.Rsp.CONT_CHAR:
+                    if step_ack == b"\xA5":
+                        status_raw = self.usbread(4)
+                        if status_raw and len(status_raw) == 4:
+                            status = unpack("<I", status_raw)[0]
+                            self.mtk.config.last_error = (
+                                f"WRITE_IMAGE NACK status={self.eh.status(status)}"
+                            )
+                        else:
+                            self.mtk.config.last_error = "WRITE_IMAGE NACK status=empty"
+                    else:
+                        self.mtk.config.last_error = (
+                            f"WRITE_IMAGE data ack failed: expected=0x69 "
+                            f"got={step_ack.hex() if step_ack else 'empty'}"
+                        )
+                    return False
+
+            end_ack = self.usbread(1)
+            if not end_ack:
+                self.mtk.config.last_error = "WRITE_IMAGE final ack timeout after data accepted"
                 if display:
                     pg.done()
                 return True
+            if end_ack == self.Rsp.ACK:
+                if display:
+                    pg.done()
+                return True
+            if end_ack != self.Rsp.CONT_CHAR:
+                self.mtk.config.last_error = (
+                    f"WRITE_IMAGE end ack failed: expected=0x69/0x5A got={end_ack.hex()}"
+                )
+                return False
+            final_ack = self.usbread(1)
+            if final_ack != self.Rsp.ACK:
+                self.mtk.config.last_error = (
+                    f"WRITE_IMAGE final ack failed: expected=0x5A got={final_ack.hex() if final_ack else 'empty'}"
+                )
+                return False
+            if display:
+                pg.done()
+            return True
+
+    @staticmethod
+    def _ack_to_text(ack: bytes) -> str:
+        return ack.hex() if ack else "empty"
+
+    def _read_da_status_text(self) -> str:
+        status_raw = self.usbread(4)
+        if not status_raw or len(status_raw) != 4:
+            return "empty"
+        status_le = unpack("<I", status_raw)[0]
+        status_be = unpack(">I", status_raw)[0]
+        for status in (status_le, status_be):
+            text = self.eh.status(status)
+            if not text.startswith("Unknown:"):
+                return text
+        return f"0x{status_le:08X}"
+
+    def _send_write_cmd_header(self, addr: int, length: int, parttype: int, packet_size: int) -> bool:
+        self.check_usb_cmd()
+        # 旧 MT6582 DA 在 USER 写入前发送 switch_part(8) 可能会拒绝后续写命令。
+        # Stage2 默认就在 USER 区，WRITE_CMD 的 USER 路径直接按默认区写。
+        if parttype != EmmcPartitionType.MTK_DA_EMMC_PART_USER and not self.sdmmc_switch_part(parttype):
+            self.mtk.config.last_error = f"WRITE_CMD switch_part failed for parttype={parttype}"
+            return False
+
+        self.usbwrite(self.Cmd.WRITE_CMD)  # D5
+        self.usbwrite(b"\x0C")  # Host:Linux, 0x0B=Windows
+        self.usbwrite(pack(">B", StorageType.MTK_DA_HW_STORAGE_EMMC))
+        self.usbwrite(pack(">Q", addr))
+        self.usbwrite(pack(">Q", length))
+        self.usbwrite(pack(">I", packet_size))
+
+        ack = self.usbread(1)
+        if ack == self.Rsp.ACK:
+            return True
+        status_msg = ""
+        if ack == self.Rsp.NACK:
+            status_msg = f" status={self._read_da_status_text()}"
+        self.mtk.config.last_error = (
+            f"WRITE_CMD header failed: expected=0x5A got={self._ack_to_text(ack)}{status_msg}"
+        )
+        return False
+
+    def write_flash_cmd(self, addr: int, length: int, filename: str = "", offset=0,
+                        parttype=None, wdata=None, display=True) -> bool:
+        length, parttype = self.daconfig.legacy_storage.partitiontype_and_size(parttype=parttype, length=length)
+        if self.daconfig.storage.flashtype != "emmc":
+            self.mtk.config.last_error = "WRITE_CMD only supports emmc flashtype"
+            return False
+
+        fh = None
+        fill = 0
+        if filename != "":
+            if not os.path.exists(filename):
+                self.mtk.config.last_error = f"Filename doesn't exist: {filename}"
+                return False
+            fsize = os.stat(filename).st_size
+            length = min(length, max(0, fsize - offset))
+            fh = open(filename, "rb")
+            fh.seek(offset)
+        elif wdata is not None:
+            length = min(length, max(0, len(wdata) - offset))
+        else:
+            return True
+
+        if length <= 0:
+            if fh:
+                fh.close()
+            return True
+        if length % 512 != 0:
+            fill = 512 - (length % 512)
+        write_length = length + fill
+        packet_size = getattr(self.mtk.config, "write_chunk_size", None) or 0x100000
+        packet_size = max(0x200, min(0x100000, int(packet_size)))
+        pg = progress(total=write_length, prefix="Write:", guiprogress=self.mtk.config.guiprogress)
+        self.mtk.config.last_error = None
+        self.info(
+            f"write_flash_cmd: addr=0x{addr:X} length={write_length} "
+            f"data={length} fill={fill} packet=0x{packet_size:X} parttype={parttype}"
+        )
+
+        try:
+            if not self._send_write_cmd_header(addr, write_length, parttype, packet_size):
+                return False
+            return self._write_flash_cmd_payload(fh, wdata, offset, length, write_length, packet_size, pg, display)
+        finally:
+            if fh:
+                fh.close()
+
+    def _write_flash_cmd_payload(self, fh, wdata, data_offset: int, data_length: int,
+                                 write_length: int, packet_size: int, pg, display=True) -> bool:
+        pos = 0
+        total_packets = (write_length + packet_size - 1) // packet_size
+        while pos < write_length:
+            size = min(packet_size, write_length - pos)
+            readable = min(size, max(0, data_length - pos))
+            if fh:
+                data = bytearray(fh.read(readable))
+            else:
+                start = data_offset + pos
+                data = bytearray(wdata[start:start + readable])
+            if len(data) < size:
+                data.extend(b"\x00" * (size - len(data)))
+
+            if not self.usbwrite(data):
+                self.mtk.config.last_error = f"WRITE_CMD usbwrite failed at offset=0x{pos:X}"
+                return False
+            self.usbwrite(pack(">H", sum(data) & 0xFFFF))
+            ack = self.usbread(1)
+            if ack not in (self.Rsp.ACK, self.Rsp.CONT_CHAR):
+                status_msg = ""
+                if ack == self.Rsp.NACK:
+                    status_msg = f" status={self._read_da_status_text()}"
+                self.mtk.config.last_error = (
+                    f"WRITE_CMD data ack failed packet={pos // packet_size + 1}/{total_packets} "
+                    f"offset=0x{pos:X} expected=0x5A/0x69 got={self._ack_to_text(ack)}{status_msg}"
+                )
+                return False
+            if display:
+                pg.update(size)
+            pos += size
+        if display:
+            pg.done()
         return True
 
     def writeflash(self, addr: int, length: int, filename: str = "", offset=0, parttype=None, wdata=None, display=True):
+        resolved_length, resolved_parttype = self.daconfig.legacy_storage.partitiontype_and_size(
+            parttype=parttype,
+            length=length,
+        )
+        if (
+            getattr(self.mtk.config, "legacy_user_write_cmd", False)
+            and self.daconfig.storage.flashtype == "emmc"
+            and resolved_parttype == EmmcPartitionType.MTK_DA_EMMC_PART_USER
+        ):
+            return self.write_flash_cmd(
+                addr=addr,
+                length=resolved_length,
+                filename=filename,
+                offset=offset,
+                parttype=resolved_parttype,
+                wdata=wdata,
+                display=display,
+            )
         return self.sdmmc_write_data(addr=addr, length=length, filename=filename, offset=offset, parttype=parttype,
                                      wdata=wdata, display=display)
 

@@ -129,7 +129,9 @@ class UsbClass(DeviceClass):
         self.EP_OUT = None
         self.is_serial = False
         self.queue = Queue()
-        if sys.platform.startswith('freebsd') or sys.platform.startswith('linux') or sys.platform.startswith('darwin'):
+        if sys.platform.startswith('darwin'):
+            self.backend = usb.backend.libusb1.get_backend(find_library=lambda x: "libusb-1.0.dylib")
+        elif sys.platform.startswith('freebsd') or sys.platform.startswith('linux'):
             self.backend = usb.backend.libusb1.get_backend(find_library=lambda x: "libusb-1.0.so")
         elif sys.platform.startswith('win32'):
             if calcsize("P") * 8 == 64:
@@ -144,6 +146,12 @@ class UsbClass(DeviceClass):
                 self.backend = None
 
     def set_fast_mode(self, enabled):
+        # macOS 上 fast 路径 buffer = min(resplen, wMaxPacketSize)
+        # 当 resplen < wMaxPacketSize（如读 1 字节）时 buffer 太小，libusb 报 Overflow
+        # 强制走 slow 路径（read_sz = max(sz, wMaxPacketSize)），彻底规避
+        if sys.platform.startswith('darwin'):
+            self.fast = False
+            return
         self.fast = bool(enabled)
 
     def verify_data(self, data, pre="RX:"):
@@ -302,7 +310,8 @@ class UsbClass(DeviceClass):
         self.device = None
         self.EP_OUT = None
         self.EP_IN = None
-        devices = usb.core.find(find_all=True, bDeviceClass=devclass, backend=self.backend)
+        # 不按 bDeviceClass 过滤，直接按 VID 匹配（部分 MTK 设备 bDeviceClass=0，不是标准 CDC 类）
+        devices = list(usb.core.find(find_all=True, backend=self.backend))
         for dev in list(filter(lambda x: x.idVendor in [0x0E8D, 0x1004, 0x22d9, 0x0FCE], devices)):
             if dev.idVendor in self.portconfig and dev.idProduct in self.portconfig[dev.idVendor]:
                 self.device = dev
@@ -389,6 +398,7 @@ class UsbClass(DeviceClass):
 
     def close(self, reset=False):
         if self.connected:
+            self.connected = False
             try:
                 if reset:
                     self.device.reset()
@@ -408,11 +418,11 @@ class UsbClass(DeviceClass):
                 except Exception:
                     pass
             pass
-            usb.util.dispose_resources(self.device)
-            del self.device
+            if hasattr(self, 'device'):
+                usb.util.dispose_resources(self.device)
+                del self.device
             if reset:
                 time.sleep(2)
-            self.connected = False
 
     def write(self, command, pktsize=None):
         if pktsize is None:
@@ -482,7 +492,15 @@ class UsbClass(DeviceClass):
         while bytestoread > 0:
             bytestoread = resplen - len(res) if len(res) < resplen else 0
             if not q.empty():
-                extend(q.get(bytestoread))
+                chunk = q.get(True)  # 取出一个 item（bytes）
+                if len(chunk) > bytestoread:
+                    # chunk 超出所需，余量放回 queue
+                    q.put(chunk[bytestoread:])
+                    extend(chunk[:bytestoread])
+                else:
+                    extend(chunk)
+                # queue 消费后重新计算，避免多做一次不必要的 USB 读取
+                bytestoread = resplen - len(res) if len(res) < resplen else 0
             if bytestoread <= 0:
                 break
             sz = min(buflen, bytestoread)
@@ -501,9 +519,17 @@ class UsbClass(DeviceClass):
                     if rlen < sz and maxtimeout == -1:
                         break
                 else:
-                    dt = epr(sz)
+                    # macOS libusb: 用 max packet size 读取避免 Overflow（小 buffer 会触发 USB Overflow 错误）
+                    read_sz = max(sz, w_max_packet_size)
+                    dt = bytes(epr(read_sz))
                     rlen = len(dt)
-                    extend(dt)
+                    if rlen > sz:
+                        # 多余字节放入 queue，供后续 usbread 消费
+                        q.put(dt[sz:])
+                        extend(dt[:sz])
+                        rlen = sz
+                    else:
+                        extend(dt)
                     if rlen < sz and maxtimeout == -1:
                         break
             except usb.core.USBError as e:
@@ -515,12 +541,41 @@ class UsbClass(DeviceClass):
                     timeout += 1
                     pass
                 elif "Overflow" in error:
-                    self.error("USB Overflow")
-                    return b""
+                    # Overflow：buffer 仍然不够大，尝试更大的 buffer（4KB）
+                    # 注意：fast=True 时 read_sz 未赋值，统一用 sz 记录当前请求大小
+                    import sys as _sys
+                    print(f"[usbread] Overflow with sz={sz}, retrying with 4096",
+                          file=_sys.stderr, flush=True)
+                    try:
+                        dt = bytes(epr(4096))
+                        rlen = len(dt)
+                        print(f"[usbread] Overflow retry got {rlen} bytes", file=_sys.stderr, flush=True)
+                        if rlen > sz:
+                            q.put(dt[sz:])
+                            extend(dt[:sz])
+                        else:
+                            extend(dt)
+                    except Exception as oe:
+                        print(f"[usbread] Overflow retry also failed: {oe}", file=_sys.stderr, flush=True)
+                        return b""
                 elif "No such device" in error:
                     self.error("Device disconnected")
                     sys.exit(1)
+                elif "Pipe" in error or "pipe" in error:
+                    # 端点 Stall — 尝试 clear_halt 恢复
+                    import sys as _sys
+                    print("[usbread] Pipe error, trying clear_halt...", file=_sys.stderr, flush=True)
+                    try:
+                        self.device.clear_halt(self.EP_IN)
+                    except Exception:
+                        pass
+                    return b""
                 else:
+                    # 未知 USB 错误，打印详情帮助诊断
+                    import sys as _sys
+                    print(f"[usbread] USBError: strerror={e.strerror!r} errno={e.errno} "
+                          f"backend_error_code={e.backend_error_code} resplen={resplen} sz={sz}",
+                          file=_sys.stderr, flush=True)
                     self.info(repr(e))
                     return b""
 

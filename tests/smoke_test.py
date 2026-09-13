@@ -1460,6 +1460,103 @@ def test_native_theming():
     dark.apply_theme(app)
 
 
+def test_preloader_raw_wrapping_and_routing():
+    """Verify raw MMM\\x01 preloader binaries receive valid BRLYT/EMMC_BOOT headers."""
+    import src.flash_service as fs
+
+    # 1. Create a synthetic raw preloader binary
+    with tempfile.NamedTemporaryFile(suffix=".bin", delete=False) as tf:
+        raw_preloader_path = Path(tf.name)
+        # Magic MMM\x01 preceded by some bytes and followed by payload
+        tf.write(b"XYZ" + fs._PRELOADER_MAGIC + b"\x00" * 1024)
+
+    try:
+        wrapped = fs._wrap_preloader_for_raw_boot(raw_preloader_path, storage_type="emmc")
+        assert wrapped != raw_preloader_path
+        assert wrapped.exists()
+        with open(wrapped, "rb") as f:
+            data = f.read()
+        # Verify headers
+        assert data[:9] == b"EMMC_BOOT"
+        assert data[fs._BRLYT_OFFSET : fs._BRLYT_OFFSET + 5] == b"BRLYT"
+        assert len(data) == fs._BOOT_HEADER_SIZE + len(b"\x00" * 1024) + len(fs._PRELOADER_MAGIC)
+
+        # An already-wrapped preloader should not be rewrapped
+        rewrapped = fs._wrap_preloader_for_raw_boot(wrapped, storage_type="emmc")
+        assert rewrapped == wrapped
+
+        # Clean up wrapped file
+        wrapped.unlink(missing_ok=True)
+    finally:
+        raw_preloader_path.unlink(missing_ok=True)
+
+    # 2. Test preloader routing targets for legacy vs modern
+    w = fs.FlashWorker("dummy.zip", method="mtk")
+
+    class FakeMtkLegacy:
+        class daloader:
+            flashmode = "LEGACY"
+
+    class FakeMtkModern:
+        class daloader:
+            flashmode = "XFLASH"
+
+    assert w._resolve_preloader_target_parts(FakeMtkLegacy()) == ("boot1",)
+    assert w._resolve_preloader_target_parts(FakeMtkModern()) == ("boot1", "boot2")
+    assert w._resolve_preloader_target_parts(FakeMtkLegacy(), "EMMC_BOOT_1") == ("boot1",)
+    assert w._resolve_preloader_target_parts(FakeMtkModern(), "EMMC_BOOT_2") == ("boot2",)
+
+
+def test_cross_platform_mtk_payloads_and_backend_dispatch():
+    """Verify vendor DA payloads are present for modern SoCs and backend routing is correct."""
+    from src import paths
+
+    # Verify payloads in vendor directory
+    vendor_payloads = paths.BASE_DIR / "vendor" / "mtkclient" / "mtkclient" / "payloads"
+    assert (vendor_payloads / "da_x.bin").is_file()
+    assert (vendor_payloads / "da_xml_64.bin").is_file()
+    assert (vendor_payloads / "da_xml.bin").is_file()
+    assert (vendor_payloads / "da_x.bin").stat().st_size > 10000
+
+    exploit_dir = paths.BASE_DIR / "vendor" / "mtkclient" / "mtkclient" / "Library" / "Exploit" / "test"
+    assert (exploit_dir / "DA_BR.bin").is_file()
+
+    import src.flash_service as fs
+
+    # Verify backend dispatch logic
+    # On macOS, sp should redirect to mtk
+    orig_mac = fs.IS_MAC
+    orig_win = fs.IS_WINDOWS
+    try:
+        # Simulate macOS
+        fs.IS_MAC = True
+        w_mac = fs.FlashWorker("test.zip", method="sp")
+        called = []
+        w_mac._flash_via_mtkclient = lambda *a: called.append("mtk")
+        w_mac._flash_via_sp_flash_tool = lambda *a: called.append("sp")
+        w_mac._dispatch_backend(Path("/tmp"), Path("/tmp/scatter.txt"))
+        assert called == ["mtk"]
+
+        # Simulate Windows with auto mode
+        fs.IS_MAC = False
+        fs.IS_WINDOWS = True
+        w_win = fs.FlashWorker("test.zip", method="auto")
+        called = []
+        w_win._flash_via_mtkclient = lambda *a: called.append("mtk")
+        w_win._flash_via_sp_flash_tool = lambda *a: called.append("sp")
+        # When SP Flash Tool is present:
+        orig_find = paths.find_sp_flash_tool
+        paths.find_sp_flash_tool = lambda: Path("/fake/flash_tool.exe")
+        try:
+            w_win._dispatch_backend(Path("/tmp"), Path("/tmp/scatter.txt"))
+            assert called == ["sp"]
+        finally:
+            paths.find_sp_flash_tool = orig_find
+    finally:
+        fs.IS_MAC = orig_mac
+        fs.IS_WINDOWS = orig_win
+
+
 def main():
     print("== Neo updater smoke test ==")
     check("catalog", test_catalog)
@@ -1504,6 +1601,8 @@ def main():
     check("download worker resume and cancel", test_download_worker)
     check("glass module and Ventura-GoldenGate compatibility", test_glass_module)
     check("native OS theming and widgets", test_native_theming)
+    check("preloader raw wrapping and routing", test_preloader_raw_wrapping_and_routing)
+    check("cross platform mtk payloads and backend dispatch", test_cross_platform_mtk_payloads_and_backend_dispatch)
     if failures:
         print(f"\n{len(failures)} FAILURES:")
         for name, err in failures:
