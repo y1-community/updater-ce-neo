@@ -17,8 +17,10 @@ Design notes kept from the original:
 import json
 import logging
 import os
+import re
 import time
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from fnmatch import fnmatch
 from pathlib import Path
 
@@ -298,6 +300,231 @@ def _release_matches_model(model, release, package=None, selected_type=None):
 
 
 # ---------------------------------------------------------------------------
+# Version Parsing, Display Formatting & Chronological Sorting
+# (Ported from firmware_downloader.py)
+# ---------------------------------------------------------------------------
+def _extract_tag_timestamp(tag_name: str) -> int:
+    """Extract a YYYYMMDD-HHMM timestamp from a tag name and return it as a sortable int.
+
+    Returns 0 when no such timestamp is found.
+    """
+    m = re.search(r'(\d{8})-(\d{4})\b', tag_name or "")
+    if m:
+        try:
+            return int(m.group(1)) * 10000 + int(m.group(2))
+        except ValueError:
+            pass
+    return 0
+
+
+def _parse_semver(version: str):
+    """Convert a dotted numeric version string into a tuple of ints. Return None if invalid."""
+    if version is None:
+        return None
+    version_str = str(version).strip()
+    if not version_str or not re.fullmatch(r'\d+(?:\.\d+)*', version_str):
+        return None
+    try:
+        return tuple(int(part) for part in version_str.split('.'))
+    except ValueError:
+        return None
+
+
+def parse_version_designations(version_name: str) -> dict:
+    """Parse version names and extract designations with flexible adjective handling."""
+    designations = []
+    adjectives = ['compatible', 'aware', 'supported', 'enabled', 'disabled', 'ready', 'optimized', 'enhanced']
+    excluded_parts = ['type', 'b', 'base', 'stable']
+
+    clean_version = re.sub(r'-[a-f0-9]{16,}!?$', '', version_name or '')
+    clean_version = clean_version.rstrip('-!')
+    extracted_version = None
+
+    timestamp_match = re.search(r'(\d{8})-(\d{4})\b', clean_version)
+    if timestamp_match:
+        extracted_version = f"{timestamp_match.group(1)}-{timestamp_match.group(2)}"
+
+    if not extracted_version:
+        version_pattern = re.search(r'\bv([\d.]+)\b', clean_version, re.IGNORECASE)
+        if version_pattern:
+            extracted_version = version_pattern.group(1)
+
+    if not extracted_version and '-' in clean_version:
+        last_part = clean_version.split('-')[-1]
+        if last_part.lower().startswith('v'):
+            last_part = last_part[1:]
+        if re.match(r'^[\d.]+$', last_part):
+            extracted_version = last_part
+
+    if extracted_version:
+        clean_version = extracted_version
+
+    parts = (version_name or '').split('-')
+    for i, part in enumerate(parts):
+        part_to_check = part[1:] if part.lower().startswith('v') and len(part) > 1 else part
+        if re.match(r'^[\d.]+$', part_to_check):
+            continue
+        if re.match(r'^[a-f0-9]{16,}!?$', part):
+            continue
+        if part.lower() in excluded_parts:
+            continue
+        if part == 'nightly':
+            continue
+        elif part == '360p':
+            designations.append('360p / Y1 Theme Compatible')
+        elif part in ('wifi', 'wi-fi'):
+            designations.append('Wi-Fi')
+        elif part == 'rockbox':
+            designations.append('with Rockbox')
+        elif part.lower() in ('adb', 'usb', 'ethernet', 'hdmi', 'audio', 'video', 'camera', 'gps', 'nfc', 'lte', '5g'):
+            designations.append(part.upper() if len(part) <= 4 else part.title())
+        elif part == 'ipod' and i + 1 < len(parts) and parts[i + 1] == 'theme':
+            if i + 2 < len(parts) and parts[i + 2] in adjectives:
+                adjective = parts[i + 2]
+                designations.append(f'iPod Classic/Video Rockbox Theme {adjective.title()}')
+            else:
+                designations.append('iPod Classic/Video (240p) Rockbox Themes')
+        elif part == 'theme' and i > 0 and parts[i - 1] == 'ipod':
+            continue
+        else:
+            if i + 1 < len(parts) and parts[i + 1] in adjectives:
+                adjective = parts[i + 1]
+                main_part = part.replace('-', ' ').title()
+                designations.append(f'{main_part} {adjective.title()}')
+            else:
+                if part not in adjectives:
+                    designations.append(part.replace('-', ' ').title())
+
+    return {
+        'clean_version': clean_version.strip(),
+        'designations': designations,
+    }
+
+
+def format_datestamp_version(match_or_str, now_dt=None):
+    """Format a YYYYMMDD-HHMM datestamp as a human-readable date with time."""
+    val = match_or_str.group(0) if hasattr(match_or_str, "group") else str(match_or_str)
+    m = re.search(r'(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})', val)
+    if not m:
+        return val
+
+    year, month, day = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    hour, minute = int(m.group(4)), int(m.group(5))
+    try:
+        release_dt = datetime(year, month, day, hour, minute)
+    except ValueError:
+        return val
+
+    time_str = f"{hour:02d}:{minute:02d}"
+    now = now_dt or datetime.now()
+    today = now.date()
+    yesterday = today - timedelta(days=1)
+    release_date = release_dt.date()
+
+    if release_date == today:
+        return f"Today at {time_str}"
+    elif release_date == yesterday:
+        return f"Yesterday at {time_str}"
+    elif 0 < (today - release_date).days <= 7:
+        day_name = release_dt.strftime('%A')
+        return f"{day_name} at {time_str}"
+    elif release_date.year == today.year:
+        return release_dt.strftime(f'%b %d at {time_str}')
+    else:
+        return release_dt.strftime(f'%b %d, %Y at {time_str}')
+
+
+def format_fancy_date(date_obj, now_dt=None):
+    """Format date in a simplified way without time."""
+    now = now_dt or (datetime.now(date_obj.tzinfo) if date_obj.tzinfo else datetime.now())
+    today = now.date()
+    yesterday = today - timedelta(days=1)
+    date_only = date_obj.date()
+
+    if date_only == today:
+        return "Today"
+    elif date_only == yesterday:
+        return "Yesterday"
+    elif (today - date_only).days <= 7:
+        return date_obj.strftime('%A')
+    elif (today - date_only).days <= 30:
+        return date_obj.strftime('%b %d')
+    else:
+        return date_obj.strftime('%b %Y')
+
+
+def get_display_version(version_info, published_date="", is_prerelease=False, now_dt=None):
+    """Get the display version - either version number or published date based on length or prerelease status."""
+    version_text = (version_info or {}).get('clean_version', '')
+    is_nightly = 'nightly' in version_text.lower()
+
+    datestamp_match = re.match(r'^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})$', version_text)
+    if datestamp_match:
+        return format_datestamp_version(datestamp_match, now_dt=now_dt)
+
+    if len(version_text) > 8 or is_prerelease or is_nightly:
+        if published_date:
+            try:
+                date_obj = datetime.fromisoformat(published_date.replace('Z', '+00:00'))
+                return f"Released: {format_fancy_date(date_obj, now_dt=now_dt)}"
+            except Exception:
+                return f"Released: {published_date}"
+        return "Unknown Date"
+
+    return version_text
+
+
+def release_sort_key(release):
+    """Build a sortable 5-tier key so newer releases appear first in reverse sort."""
+    tag_name = (release or {}).get("tag_name", "")
+    version_info = parse_version_designations(tag_name)
+    clean_version = str(version_info.get("clean_version", "")).lstrip("vV")
+
+    tag_timestamp = _extract_tag_timestamp(tag_name)
+    numeric_version = None
+    if not tag_timestamp:
+        numeric_version = _parse_semver(clean_version)
+
+    published_at = (release or {}).get("published_at", "")
+    try:
+        published_timestamp = datetime.fromisoformat(published_at.replace("Z", "+00:00")).timestamp()
+    except Exception:
+        published_timestamp = 0.0
+
+    return (
+        1 if (tag_timestamp or numeric_version is not None) else 0,
+        tag_timestamp,
+        numeric_version or tuple(),
+        published_timestamp,
+        str(tag_name).lower(),
+    )
+
+
+def format_release_display_label(rel):
+    """Format release display label adhering to legacy firmware_downloader.py rules."""
+    tag_name = (rel.get("tag_name") or "").strip()
+    name = (rel.get("name") or "").strip()
+    version_info = parse_version_designations(tag_name)
+    published_date = rel.get("published_at", "")
+    is_prerelease = bool(rel.get("prerelease"))
+    display_version = get_display_version(version_info, published_date, is_prerelease)
+
+    designations = version_info.get("designations") or []
+    designation_suffix = f" ({' | '.join(designations)})" if designations else ""
+
+    if name and name != tag_name:
+        label = f"{name}{designation_suffix}"
+    elif display_version and display_version != tag_name and not tag_name.startswith("v"):
+        label = f"{display_version}{designation_suffix}"
+    else:
+        label = f"{tag_name}{designation_suffix}"
+
+    if is_prerelease and "[preview]" not in label.lower():
+        label += "  [preview]"
+    return label
+
+
+# ---------------------------------------------------------------------------
 # Releases client
 # ---------------------------------------------------------------------------
 class ReleasesClient:
@@ -402,7 +629,7 @@ class ReleasesClient:
         cached = self.get_cached_releases(repo)
         if cached:
             logger.info("Using %d cached releases for %s", len(cached), repo)
-            return cached[:100]
+            return sorted(cached, key=release_sort_key, reverse=True)[:100]
 
         url = f"{GITHUB_API}/repos/{repo}/releases?per_page={GITHUB_RELEASES_PER_PAGE}"
         if self.token:
@@ -410,19 +637,21 @@ class ReleasesClient:
             if data is not None:
                 releases = self._build_releases(data, repo)
                 if releases:
+                    releases = sorted(releases, key=release_sort_key, reverse=True)
                     self.cache_releases(repo, releases)
                 return releases
 
         if not self._can_unauth():
             cached = self.get_cached_releases(repo)
-            return cached or []
+            return sorted(cached, key=release_sort_key, reverse=True) if cached else []
         self._record_unauth()
         data = self._get_json(url)
         if data is None:
             cached = self.get_cached_releases(repo)
-            return cached or []
+            return sorted(cached, key=release_sort_key, reverse=True) if cached else []
         releases = self._build_releases(data, repo)
         if releases:
+            releases = sorted(releases, key=release_sort_key, reverse=True)
             self.cache_releases(repo, releases)
         return releases
 
@@ -568,7 +797,7 @@ class ReleasesClient:
                 rel["asset_name"] = preferred["asset"]["name"]
                 rel["asset_size"] = preferred["asset"].get("size", 0)
             out.append(rel)
-        return out
+        return sorted(out, key=release_sort_key, reverse=True)
 
 
 def _app_cache_dir():

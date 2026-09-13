@@ -1567,6 +1567,69 @@ def test_cross_platform_mtk_payloads_and_backend_dispatch():
         fs.IS_WINDOWS = orig_win
 
 
+def test_release_version_parsing_and_sorting():
+    """Verify that version tags are parsed according to legacy conventions and
+    releases are sorted chronologically from newest to oldest."""
+    from src import catalog
+    from datetime import datetime
+    import re
+
+    # 1. Tag timestamp extraction
+    assert catalog._extract_tag_timestamp("Solar 20260630-0550") == 202606300550
+    assert catalog._extract_tag_timestamp("20260819-0956") == 202608190956
+    assert catalog._extract_tag_timestamp("Latest-3.1.2") == 0
+
+    # 2. Semver parsing
+    assert catalog._parse_semver("3.1.2") == (3, 1, 2)
+    assert catalog._parse_semver("0.9.0") == (0, 9, 0)
+    assert catalog._parse_semver("invalid") is None
+
+    # 3. Version designations
+    v1 = catalog.parse_version_designations("Latest-3.1.2")
+    assert v1["clean_version"] == "3.1.2"
+
+    v2 = catalog.parse_version_designations("Stable-v0.3-ipod-theme-compatible")
+    assert v2["clean_version"] == "0.3"
+    assert "iPod Classic/Video Rockbox Theme Compatible" in v2["designations"]
+
+    v3 = catalog.parse_version_designations("ADB-2.1.9")
+    assert v3["clean_version"] == "2.1.9"
+    assert "ADB" in v3["designations"]
+
+    v4 = catalog.parse_version_designations("type-b-1.7.6-13057e75dc29a1a7!")
+    assert v4["clean_version"] == "1.7.6"
+
+    # 4. Datestamp formatting
+    m = re.search(r'(\d{8})-(\d{4})\b', "20260819-0956")
+    now_same_day = datetime(2026, 8, 19, 12, 0)
+    assert catalog.format_datestamp_version(m, now_dt=now_same_day) == "Today at 09:56"
+
+    now_next_day = datetime(2026, 8, 20, 12, 0)
+    assert catalog.format_datestamp_version(m, now_dt=now_next_day) == "Yesterday at 09:56"
+
+    # 5. Full sorting: newest releases must appear first
+    releases = [
+        {"tag_name": "3.0.2", "published_at": "2025-12-12T15:15:38Z"},
+        {"tag_name": "y2-base", "published_at": "2026-07-26T17:43:35Z"},
+        {"tag_name": "3.0.7", "published_at": "2026-04-23T09:52:31Z"},
+        {"tag_name": "20260819-0956", "published_at": "2026-08-19T10:06:38Z"},
+        {"tag_name": "Latest-3.1.2", "published_at": "2026-07-16T02:03:48Z"},
+        {"tag_name": "type-b-1.7.6", "published_at": "2025-10-08T00:22:11Z"},
+        {"tag_name": "ADB-2.1.9", "published_at": "2025-07-18T23:09:12Z"},
+    ]
+    sorted_rels = sorted(releases, key=catalog.release_sort_key, reverse=True)
+    tags = [r["tag_name"] for r in sorted_rels]
+    assert tags == [
+        "20260819-0956",
+        "Latest-3.1.2",
+        "3.0.7",
+        "3.0.2",
+        "ADB-2.1.9",
+        "type-b-1.7.6",
+        "y2-base",
+    ], f"Incorrect release sort order: {tags}"
+
+
 def main():
     print("== Neo updater smoke test ==")
     check("catalog", test_catalog)
@@ -1584,6 +1647,7 @@ def main():
     check("backend method dispatch", test_backend_method_dispatch)
     check("releases client (cached)", test_releases_client_cached)
     check("releases client (network)", test_releases_client_network)
+    check("release version parsing and sorting", test_release_version_parsing_and_sorting)
     check("UI construction", test_ui_construction)
     check("donation status bar", test_donation_status_bar)
     check("goal reached hides goal line", test_goal_reached_hides_goal_line)

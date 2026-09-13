@@ -324,10 +324,9 @@ class SelectPackagePage(QWidget):
             self._set_online_banner("sel_offline")
             return
         self._release_list.clear()
+        releases = sorted(releases or [], key=catalog.release_sort_key, reverse=True)
         for rel in releases:
-            label = rel.get("name") or rel.get("tag_name", "")
-            if rel.get("prerelease"):
-                label += "  [preview]"
+            label = catalog.format_release_display_label(rel)
             item = QListWidgetItem(label)
             item.setData(Qt.UserRole, rel)
             tooltip = self._asset_line(rel)
