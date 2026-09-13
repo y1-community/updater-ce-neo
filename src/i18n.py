@@ -1076,10 +1076,10 @@ _STRINGS: dict = {
         "es": "Donar con Patreon",
     },
     "donate_honeygain": {
-        "zh-CN": "免费支持：加入 Honeygain",
-        "en": "Contribute for free by joining Honeygain",
-        "fr": "Contribuez gratuitement en rejoignant Honeygain",
-        "es": "Contribuye gratis uniéndote a Honeygain",
+        "zh-CN": "免费支持：在 Honeygain 上共享 100MB",
+        "en": "Contribute for free by sharing 100MB on Honeygain",
+        "fr": "Contribuez gratuitement en partageant 100 Mo sur Honeygain",
+        "es": "Contribuye gratis compartiendo 100 MB en Honeygain",
     },
     "donate_crypto_toggle": {
         "zh-CN": "显示加密货币选项 (BTC, ETH, SHIB)",
