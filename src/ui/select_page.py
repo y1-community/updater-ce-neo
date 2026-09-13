@@ -20,8 +20,15 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .. import catalog, downloads
-from ..flash_service import ExtractWorker
+from .. import catalog, downloads, device_tracking
+from ..flash_service import (
+    ExtractWorker,
+    compute_extract_dir,
+    _is_extract_complete,
+    _find_scatter,
+    prune_extracted_cache,
+)
+from ..sp_flash_gui import update_sp_history_ini
 from ..config import DEVICE_MODELS
 from ..i18n import tr
 from .widgets import Banner, Card
@@ -437,6 +444,31 @@ class SelectPackagePage(QWidget):
         dest_dir = downloads.downloads_dir()
         fname = Path(rel.get("asset_name") or "rom.zip").name
         dest = dest_dir / f"{package.slug}_{rel.get('tag_name', 'latest')}_{fname}"
+        extract_dir = compute_extract_dir(dest)
+
+        # 1. Check if package is already downloaded and fully extracted:
+        if dest.is_file() and dest.stat().st_size > 0 and _is_extract_complete(extract_dir):
+            logger.info("Package %s already cached and extracted at %s, reusing immediately", dest.name, extract_dir)
+            self._current_package_path = str(dest)
+            self._current_package_name = f"{self.current_software()} ({self.current_model()})"
+            self._current_package_model = self.current_model()
+            self._current_installed_release_info = self._pending_install_release_info
+            self._download_status_key = "sel_prepare_done"
+            self._download_status.setText(tr("sel_prepare_done"))
+            self._on_online_prep_done(True, str(extract_dir), "")
+            return
+
+        # 2. Check if package is already downloaded but needs extraction:
+        if dest.is_file() and dest.stat().st_size > 0:
+            logger.info("Package %s already downloaded, extracting directly", dest.name)
+            self._current_package_path = str(dest)
+            self._current_package_name = f"{self.current_software()} ({self.current_model()})"
+            self._current_package_model = self.current_model()
+            self._current_installed_release_info = self._pending_install_release_info
+            self._prepare_package(str(dest), self._on_online_prep_done)
+            return
+
+        # 3. Otherwise, start download worker
         self._download_status_key = "sel_download_start"
         self._download_status.setText(tr("sel_download_start"))
         self._download_bar.setValue(0)
@@ -497,6 +529,27 @@ class SelectPackagePage(QWidget):
             return
         self._download_status_key = "sel_prepare_done"
         self._download_status.setText(tr("sel_prepare_done"))
+
+        # Retain only the most recently downloaded software package!
+        prune_extracted_cache(keep_package_path=self._current_package_path)
+
+        # Track latest package in device_tracking and prepopulate SP history.ini
+        scatter_file = _find_scatter(Path(extract_dir))
+        info = getattr(self, "_current_installed_release_info", {}) or {}
+        device_tracking.record_latest_package(
+            model=info.get("model") or self.current_model(),
+            software_name=info.get("software_name") or self.current_software(),
+            tag_name=info.get("tag_name", ""),
+            package_path=str(self._current_package_path),
+            extract_dir=str(extract_dir),
+            scatter_path=str(scatter_file) if scatter_file else "",
+        )
+        update_sp_history_ini(
+            scatter_path=scatter_file,
+            extract_dir=Path(extract_dir) if extract_dir else None,
+            model=info.get("model") or self.current_model(),
+        )
+
         self._emit_ready()
 
     def _on_local_prep_done(self, ok, extract_dir, err):
@@ -507,6 +560,25 @@ class SelectPackagePage(QWidget):
             return
         self._local_status_key = "sel_prepare_done"
         self._local_status.setText(tr("sel_prepare_done"))
+
+        # Retain only this package's extracted files
+        prune_extracted_cache(keep_package_path=self._current_package_path)
+
+        scatter_file = _find_scatter(Path(extract_dir))
+        device_tracking.record_latest_package(
+            model=self.current_model(),
+            software_name=self._current_package_name,
+            tag_name="",
+            package_path=str(self._current_package_path),
+            extract_dir=str(extract_dir),
+            scatter_path=str(scatter_file) if scatter_file else "",
+        )
+        update_sp_history_ini(
+            scatter_path=scatter_file,
+            extract_dir=Path(extract_dir) if extract_dir else None,
+            model=self.current_model(),
+        )
+
         self._start_btn.setEnabled(True)
 
     def _on_choose_file(self):

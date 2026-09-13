@@ -20,6 +20,7 @@ class ErrorPage(QWidget):
         self._reconnect_cb = None
         self._reselect_cb = None
         self._log_cb = None
+        self._sp_gui_cb = None
         self._mode = ""
         self._mode_args = {}
         self._build_ui()
@@ -69,6 +70,15 @@ class ErrorPage(QWidget):
         btn_row.addWidget(self._reconnect_btn)
         btn_row.addWidget(self._reselect_btn)
         btn_row.addWidget(self._log_btn)
+
+        from ..sp_flash_gui import is_sp_flash_gui_supported
+        if is_sp_flash_gui_supported():
+            self._sp_gui_btn = QPushButton(tr("flash_btn_open_sp_gui"))
+            self._sp_gui_btn.setProperty("cssClass", "ghost")
+            self._sp_gui_btn.setCursor(self._sp_gui_btn.cursor())
+            self._sp_gui_btn.clicked.connect(lambda: self._sp_gui_cb and self._sp_gui_cb())
+            btn_row.addWidget(self._sp_gui_btn)
+
         btn_row.addStretch()
         layout.addLayout(btn_row)
         layout.addStretch()
@@ -84,6 +94,9 @@ class ErrorPage(QWidget):
 
     def on_view_log(self, cb):
         self._log_cb = cb
+
+    def on_open_sp_gui(self, cb):
+        self._sp_gui_cb = cb
 
     def _render(self):
         mode = self._mode
@@ -127,6 +140,8 @@ class ErrorPage(QWidget):
         self._reconnect_btn.setText(tr("err_btn_reconnect"))
         self._reselect_btn.setText(tr("err_btn_reselect"))
         self._log_btn.setText(tr("err_view_log"))
+        if hasattr(self, "_sp_gui_btn"):
+            self._sp_gui_btn.setText(tr("flash_btn_open_sp_gui"))
         self._error_row.retranslate()
         self._step_row.retranslate()
         self._retry_row.retranslate()

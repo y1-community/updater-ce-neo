@@ -72,6 +72,15 @@ def find_sp_flash_tool():
     candidates = [
         Path(os.environ["SP_FLASH_TOOL_DIR"]) if os.environ.get("SP_FLASH_TOOL_DIR") else None,
         SP_FLASH_TOOL_DIR,
+        INSTALL_DIR,
+        Path(os.environ["LOCALAPPDATA"]) / "Innioasis Updater" / "SP_Flash_Tool" if os.environ.get("LOCALAPPDATA") else None,
+        Path(os.environ["LOCALAPPDATA"]) / "Innioasis Updater" if os.environ.get("LOCALAPPDATA") else None,
+        Path.home() / "AppData" / "Local" / "Innioasis Updater" / "SP_Flash_Tool",
+        Path.home() / "AppData" / "Local" / "Innioasis Updater",
+        REPO_ROOT / "SP_Flash_Tool",
+        REPO_ROOT,
+        Path.cwd() / "SP_Flash_Tool",
+        Path.cwd(),
         Path(r"D:\work\data\tools\SP_Flash_Tool_v5.2016_Windows"),  # dev fallback
     ]
     for p in candidates:

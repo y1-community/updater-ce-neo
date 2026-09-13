@@ -51,6 +51,7 @@ def _reset_app_settings():
     s.remove("preferences")
     s.remove("device_installs")
     s.remove("device_tracking")
+    s.remove("latest_package")
     translator().set_language("en")
 
 
@@ -2022,6 +2023,100 @@ def test_settings_page_and_dialogs():
         mw.close()
 
 
+def test_latest_package_tracking_and_history_ini():
+    """Verify recording latest package and generating prepopulated history.ini."""
+    from PySide6.QtCore import QSettings
+    from src import device_tracking, sp_flash_gui
+
+    with tempfile.TemporaryDirectory() as td:
+        tdp = Path(td)
+        settings = QSettings(f"{td}/test_settings.ini", QSettings.IniFormat)
+
+        # 1. Create simulated extracted firmware folder with scatter and images
+        extract_dir = tdp / "firmware_extracted"
+        extract_dir.mkdir()
+        scatter = extract_dir / "MT6582_Android_scatter.txt"
+        scatter.write_text("platform: MT6582\npartition_name: boot\nfile_name: boot.img\n")
+        boot_img = extract_dir / "boot.img"
+        boot_img.write_bytes(b"dummy boot")
+
+        # 2. Record latest package
+        device_tracking.record_latest_package(
+            model="Y2",
+            software_name="Original Software",
+            tag_name="3.2.0-fm",
+            package_path=str(tdp / "firmware.zip"),
+            extract_dir=str(extract_dir),
+            scatter_path=str(scatter),
+            settings=settings,
+        )
+
+        rec = device_tracking.get_latest_package(settings=settings)
+        assert rec is not None
+        assert rec["model"] == "Y2"
+        assert rec["software_name"] == "Original Software"
+        assert rec["tag_name"] == "3.2.0-fm"
+        assert rec["scatter_path"] == str(scatter)
+        assert rec["extract_dir"] == str(extract_dir)
+
+        # 3. Test SP Flash Tool history.ini creation
+        sp_bin_dir = tdp / "sp_flash_tool"
+        sp_bin_dir.mkdir()
+        ok = sp_flash_gui.update_sp_history_ini(
+            sp_dir=sp_bin_dir,
+            scatter_path=scatter,
+            extract_dir=extract_dir,
+            model="Y2",
+        )
+        assert ok is True
+        hist_ini = sp_bin_dir / "history.ini"
+        assert hist_ini.is_file()
+        text = hist_ini.read_text(encoding="utf-8")
+        assert f"scatterHistory={scatter.resolve()}" in text
+        assert f"lastDir={extract_dir.resolve()}" in text
+        # Verify scatter file was copied to sp_bin_dir
+        assert (sp_bin_dir / "MT6582_Android_scatter.txt").is_file()
+
+        # 4. Clear latest package
+        device_tracking.clear_latest_package(settings=settings)
+        assert device_tracking.get_latest_package(settings=settings) is None
+
+
+def test_prune_extracted_cache_and_reusing_download():
+    """Verify only the most recently downloaded package remains extracted in cache,
+    and selecting the same release reuses the cached extraction without redownload."""
+    from src.flash_service import prune_extracted_cache, EXTRACT_COMPLETE_MARKER
+    from src import downloads
+
+    with tempfile.TemporaryDirectory() as td:
+        orig_downloads_dir = downloads.downloads_dir
+        tdp = Path(td)
+        downloads.downloads_dir = lambda: tdp
+
+        try:
+            # Create two extracted folders
+            old_pkg = tdp / "pkg1.zip"
+            old_pkg.write_bytes(b"1")
+            old_extract = tdp / ".pkg1_extracted"
+            old_extract.mkdir()
+            (old_extract / EXTRACT_COMPLETE_MARKER).write_text("ok")
+
+            new_pkg = tdp / "pkg2.zip"
+            new_pkg.write_bytes(b"2")
+            new_extract = tdp / ".pkg2_extracted"
+            new_extract.mkdir()
+            (new_extract / EXTRACT_COMPLETE_MARKER).write_text("ok")
+
+            # Prune cache keeping new_pkg
+            removed = prune_extracted_cache(keep_package_path=str(new_pkg))
+            assert str(old_extract) in removed
+            assert not old_extract.exists()
+            assert new_extract.exists()
+            assert (new_extract / EXTRACT_COMPLETE_MARKER).is_file()
+        finally:
+            downloads.downloads_dir = orig_downloads_dir
+
+
 def main():
     print("== Neo updater smoke test ==")
     check("catalog", test_catalog)
@@ -2078,6 +2173,8 @@ def main():
     check("device tracking", test_device_tracking)
     check("check device updates", test_check_device_updates)
     check("settings page and dialogs", test_settings_page_and_dialogs)
+    check("latest package tracking and history ini", test_latest_package_tracking_and_history_ini)
+    check("prune extracted cache and reusing download", test_prune_extracted_cache_and_reusing_download)
     if failures:
         print(f"\n{len(failures)} FAILURES:")
         for name, err in failures:

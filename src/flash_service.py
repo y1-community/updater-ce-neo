@@ -197,6 +197,35 @@ def _mark_extract_complete(extract_dir):
         pass
 
 
+def prune_extracted_cache(keep_package_path: Optional[str] = None) -> list:
+    """Retain only the most recently downloaded software package extracted directory,
+    removing older extracted directories in downloads_dir() to save disk space.
+
+    Returns a list of directory paths that were removed.
+    """
+    removed = []
+    try:
+        from .downloads import downloads_dir
+        dd = downloads_dir()
+        if not dd.is_dir():
+            return removed
+        keep_stem = Path(keep_package_path).stem if keep_package_path else ""
+        keep_dir_name = f".{keep_stem}_extracted" if keep_stem else ""
+
+        for item in list(dd.iterdir()):
+            if item.is_dir() and item.name.startswith(".") and item.name.endswith("_extracted"):
+                if item.name != keep_dir_name:
+                    logger.info("Pruning old cached firmware extraction: %s", item.name)
+                    try:
+                        shutil.rmtree(item, ignore_errors=True)
+                        removed.append(str(item))
+                    except Exception as e:
+                        logger.warning("Could not remove old extract dir %s: %s", item, e)
+    except Exception as e:
+        logger.warning("Error pruning extracted cache: %s", e)
+    return removed
+
+
 def _parse_sp_size(text):
     """Parse '12.5 MB' style sizes into bytes."""
     m = re.search(r"([0-9.]+)\s*([KMGT]?)", text)

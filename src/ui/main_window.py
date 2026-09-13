@@ -332,6 +332,7 @@ class MainWindow(QMainWindow):
         self._error_page.on_reconnect(self._on_reconnect)
         self._error_page.on_reselect(lambda: self._nav_to_page(_PAGE_SELECT))
         self._error_page.on_view_log(self._show_diagnostics)
+        self._error_page.on_open_sp_gui(self._open_sp_flash_tool_gui)
         self._retry_page.on_cancel(self._on_cancel_flash)
         self.service.step_changed.connect(self._on_step_changed)
         self.service.progress.connect(self._on_progress)
@@ -621,6 +622,33 @@ class MainWindow(QMainWindow):
         model = self._package_model or (
             getattr(self._select_page, "current_model", lambda: "Y1")() if hasattr(self, "_select_page") else "Y1"
         ) or "Y1"
+
+        from .. import device_tracking
+        from ..flash_service import completed_extract_dir, compute_extract_dir, _find_scatter
+        from pathlib import Path
+
+        scatter_path = None
+        extract_dir = None
+        pkg_path = getattr(self, "_package_path", None)
+        if not pkg_path and hasattr(self, "_select_page"):
+            pkg_path = getattr(self._select_page, "_current_package_path", None)
+        if pkg_path:
+            ed = completed_extract_dir(pkg_path) or compute_extract_dir(pkg_path)
+            if Path(ed).is_dir():
+                extract_dir = Path(ed)
+                sc = _find_scatter(extract_dir)
+                if sc:
+                    scatter_path = sc
+        if not scatter_path:
+            latest = device_tracking.get_latest_package(self.settings)
+            if latest:
+                if latest.get("scatter_path") and Path(latest["scatter_path"]).is_file():
+                    scatter_path = Path(latest["scatter_path"])
+                if latest.get("extract_dir") and Path(latest["extract_dir"]).is_dir():
+                    extract_dir = Path(latest["extract_dir"])
+                if not self._package_model and latest.get("model"):
+                    model = latest["model"]
+
         label = device_label_for_model(model)
 
         prompt_msg = (
@@ -643,7 +671,7 @@ class MainWindow(QMainWindow):
         if hasattr(self, "service") and self.service:
             self.service.cancel_flash()
 
-        ok, msg = launch_sp_flash_tool_gui(model=model)
+        ok, msg = launch_sp_flash_tool_gui(model=model, scatter_path=scatter_path, extract_dir=extract_dir)
         if not ok:
             QMessageBox.warning(
                 self,

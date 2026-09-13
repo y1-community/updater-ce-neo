@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 # Setting keys
 _GROUP_INSTALLS = "device_installs"
 _GROUP_PREFS = "preferences"
+_GROUP_LATEST_PACKAGE = "latest_package"
 _KEY_REMINDER_PREFIX = "reminders_enabled_"
 _KEY_LAST_NOTIFIED_PREFIX = "last_notified_tag_"
 _KEY_DONATION_UI_DISABLED = "donation_ui_disabled"
@@ -164,6 +165,53 @@ def set_donation_install_prompt_disabled(disabled: bool, settings: Optional[QSet
     s = _get_settings(settings)
     s.setValue(_KEY_DONATION_INSTALL_PROMPT_DISABLED, bool(disabled))
     s.setValue(f"{_GROUP_PREFS}/{_KEY_DONATION_INSTALL_PROMPT_DISABLED}", bool(disabled))
+
+
+# ---------------------------------------------------------------------------
+# Latest Downloaded / Attempted Package Tracking
+# ---------------------------------------------------------------------------
+
+def record_latest_package(
+    model: str,
+    software_name: str,
+    tag_name: str,
+    package_path: str,
+    extract_dir: str = "",
+    scatter_path: str = "",
+    settings: Optional[QSettings] = None,
+) -> None:
+    """Record the most recently attempted or downloaded firmware package details."""
+    s = _get_settings(settings)
+    s.setValue(f"{_GROUP_LATEST_PACKAGE}/model", model or "")
+    s.setValue(f"{_GROUP_LATEST_PACKAGE}/software_name", software_name or "")
+    s.setValue(f"{_GROUP_LATEST_PACKAGE}/tag_name", tag_name or "")
+    s.setValue(f"{_GROUP_LATEST_PACKAGE}/package_path", package_path or "")
+    s.setValue(f"{_GROUP_LATEST_PACKAGE}/extract_dir", extract_dir or "")
+    s.setValue(f"{_GROUP_LATEST_PACKAGE}/scatter_path", scatter_path or "")
+    s.setValue(f"{_GROUP_LATEST_PACKAGE}/timestamp", datetime.now().isoformat())
+
+
+def get_latest_package(settings: Optional[QSettings] = None) -> Optional[dict]:
+    """Retrieve the most recently attempted or downloaded firmware package details."""
+    s = _get_settings(settings)
+    pkg_path = s.value(f"{_GROUP_LATEST_PACKAGE}/package_path", "", type=str)
+    if not pkg_path:
+        return None
+    return {
+        "model": s.value(f"{_GROUP_LATEST_PACKAGE}/model", "", type=str),
+        "software_name": s.value(f"{_GROUP_LATEST_PACKAGE}/software_name", "", type=str),
+        "tag_name": s.value(f"{_GROUP_LATEST_PACKAGE}/tag_name", "", type=str),
+        "package_path": pkg_path,
+        "extract_dir": s.value(f"{_GROUP_LATEST_PACKAGE}/extract_dir", "", type=str),
+        "scatter_path": s.value(f"{_GROUP_LATEST_PACKAGE}/scatter_path", "", type=str),
+        "timestamp": s.value(f"{_GROUP_LATEST_PACKAGE}/timestamp", "", type=str),
+    }
+
+
+def clear_latest_package(settings: Optional[QSettings] = None) -> None:
+    """Clear recorded latest package details."""
+    s = _get_settings(settings)
+    s.remove(_GROUP_LATEST_PACKAGE)
 
 
 # ---------------------------------------------------------------------------
