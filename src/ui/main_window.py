@@ -534,7 +534,6 @@ class MainWindow(QMainWindow):
     def _open_sp_flash_tool_gui(self):
         from ..config import device_label_for_model
         from ..sp_flash_gui import is_sp_flash_gui_supported, launch_sp_flash_tool_gui
-        from .dialogs import QMessageBox
 
         if not is_sp_flash_gui_supported():
             QMessageBox.information(
