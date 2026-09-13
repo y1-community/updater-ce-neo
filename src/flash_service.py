@@ -407,6 +407,7 @@ class FlashWorker(QThread):
 
     step_changed = Signal(str)
     progress = Signal(int)
+    action_changed = Signal(str)
     log_message = Signal(str)
     finished = Signal(bool, str)  # ok, error_code
 
@@ -421,6 +422,10 @@ class FlashWorker(QThread):
         self._cancelled = False
         self._process = None
         self._sp_progress_hwm = 0
+        self._sp_total_bytes = 0
+        self._sp_completed_bytes = 0
+        self._sp_last_part_total = 0
+        self._sp_last_sent = 0
         self._sp_mismatch = False
         self._sp_err_code = None
         self._start_time = time.time()
@@ -661,6 +666,16 @@ class FlashWorker(QThread):
             scatter_arg = str(scatter_file)
             da_arg = str(da_file)
 
+        try:
+            scatter_images = _parse_scatter(scatter_file)
+            self._sp_total_bytes = sum(fp.stat().st_size for _, fp in scatter_images if fp.exists())
+        except Exception:
+            self._sp_total_bytes = 0
+        self._sp_completed_bytes = 0
+        self._sp_last_part_total = 0
+        self._sp_last_sent = 0
+        self._sp_progress_hwm = 0
+
         cmd = [
             str(flash_tool_exe),
             "-c", "format-download",
@@ -670,7 +685,8 @@ class FlashWorker(QThread):
             "-r",
         ]
         self.step_changed.emit(STEP_WAITING)
-        self.progress.emit(8)
+        self.progress.emit(10)
+        self.action_changed.emit("Searching for device (keep unplugged)...")
         self._log("Launching SP Flash Tool (console mode, searching USB)...")
         self._log("Keep the device unplugged until the connect prompt appears.")
         self._process = subprocess.Popen(
@@ -751,23 +767,29 @@ class FlashWorker(QThread):
         elif "scanning usb" in low or "search usb" in low:
             self.step_changed.emit(STEP_WAITING)
             self.progress.emit(10)
+            self.action_changed.emit("Searching for device (keep unplugged)...")
         elif "brom connected" in low:
             self.step_changed.emit(STEP_DETECT)
             self.progress.emit(12)
+            self.action_changed.emit("Device detected in BROM mode...")
         elif "of da has been sent" in low:
             self.step_changed.emit(STEP_DOWNLOAD_DA)
             self.progress.emit(15)
+            self.action_changed.emit("Downloading DA to device...")
         elif "of bootloader has been sent" in low:
             self.step_changed.emit(STEP_DOWNLOAD_BL)
             self.progress.emit(18)
+            self.action_changed.emit("Downloading Bootloader...")
         elif "format succeeded" in low:
             self.progress.emit(20)
+            self.action_changed.emit("Flash format succeeded...")
         elif "of image data has been sent" in low:
             self.step_changed.emit(STEP_WRITE)
             self._update_sp_image_progress(line)
         elif "download ok" in low:
             self.step_changed.emit(STEP_DONE)
             self.progress.emit(100)
+            self.action_changed.emit("Flash complete! Disconnect USB and reboot.")
         elif "download failed" in low or "s_ft_" in low:
             m = re.search(r"(S_\w+)\s*\((\d+)\)", line)
             self._log(f"Error: {m.group(1)} (code {m.group(2)})" if m else f"SP Flash Tool error: {line}")
@@ -782,15 +804,36 @@ class FlashWorker(QThread):
     def _update_sp_image_progress(self, line):
         m = re.search(r"(\d+)%\s+of image data has been sent\s+\(([^)]+)\s+of\s+([^)]+)\)", line)
         if not m:
+            m_simple = re.search(r"(\d+)%\s+of image data", line)
+            if m_simple:
+                pct = int(m_simple.group(1))
+                mapped = 20 + int(pct * 0.75)
+                if mapped > self._sp_progress_hwm:
+                    self._sp_progress_hwm = mapped
+                    self.progress.emit(min(95, mapped))
+                self.action_changed.emit(f"Writing firmware image... ({pct}%)")
             return
         pct = int(m.group(1))
+        sent = _parse_sp_size(m.group(2))
         total = _parse_sp_size(m.group(3))
-        if total < 104857600:  # ignore small/partial update lines
-            return
-        mapped = 20 + int(pct * 0.7)
+
+        if total != self._sp_last_part_total or sent < self._sp_last_sent:
+            if self._sp_last_part_total > 0:
+                self._sp_completed_bytes += self._sp_last_part_total
+            self._sp_last_part_total = total
+        self._sp_last_sent = sent
+
+        if self._sp_total_bytes > 0:
+            current_done = self._sp_completed_bytes + sent
+            ratio = min(1.0, max(0.0, current_done / self._sp_total_bytes))
+            mapped = 20 + int(ratio * 75)
+        else:
+            mapped = 20 + int(pct * 0.75)
+
         if mapped > self._sp_progress_hwm:
             self._sp_progress_hwm = mapped
-            self.progress.emit(mapped)
+            self.progress.emit(min(95, mapped))
+        self.action_changed.emit(f"Writing firmware image... ({pct}%)")
 
     def _monitor_sp_log_file(self, stop_event, log_root=None):
         log_root = Path(log_root or _SP_LOG_ROOT)
@@ -871,7 +914,8 @@ class FlashWorker(QThread):
     # -- macOS/Linux backend: mtkclient -------------------------------------
     def _flash_via_mtkclient(self, extract_dir, scatter_file):
         self.step_changed.emit(STEP_WAITING)
-        self.progress.emit(8)
+        self.progress.emit(10)
+        self.action_changed.emit("Initializing mtkclient...")
         self._log("Initializing mtkclient...")
         try:
             from . import mtk_api
@@ -898,8 +942,12 @@ class FlashWorker(QThread):
             self._log(f"mtkclient init failed: {type(e).__name__}: {e}")
             self.finished.emit(False, "MTK_INIT_FAILED")
             return
+        self.action_changed.emit("Waiting for MTK device... Power off device and connect USB.")
         self._log("Waiting for MTK device... Power off the device and connect USB.")
         try:
+            self.step_changed.emit(STEP_DETECT)
+            self.progress.emit(12)
+            self.action_changed.emit("Device detected, connecting...")
             mtk, da_handler = mtk_api.connect(mtk, directory=str(extract_dir))
         except BaseException as e:
             # BaseException: mtkclient raises SystemExit on DA upload failure.
@@ -911,8 +959,13 @@ class FlashWorker(QThread):
             self.finished.emit(False, "CONNECTION_FAILED")
             return
 
+        self.step_changed.emit(STEP_DOWNLOAD_BL)
+        self.progress.emit(18)
+        self.action_changed.emit("Configuring Bootloader / Flash mode...")
+
         self.step_changed.emit(STEP_WRITE)
         self.progress.emit(20)
+        self.action_changed.emit("Device connected, starting write...")
         self._log("Device connected, starting write...")
 
         total = len(image_files)
@@ -929,14 +982,28 @@ class FlashWorker(QThread):
             return 50
 
         ordered_images = sorted(image_files, key=_partition_sort_key)
+        total_bytes = sum(file_path.stat().st_size for _, file_path in ordered_images if file_path.exists())
+        completed_bytes = 0
+
+        # Wire mtk.config.guiprogress so chunk writes update progress in real time
+        def on_mtk_write_progress(pos):
+            if self._cancelled:
+                return
+            current_done = completed_bytes + pos
+            if total_bytes > 0:
+                ratio = min(1.0, max(0.0, current_done / total_bytes))
+                mapped = 20 + int(ratio * 75)
+                self.progress.emit(min(95, max(20, mapped)))
+
+        if hasattr(mtk, "config"):
+            mtk.config.guiprogress = on_mtk_write_progress
 
         for i, (part_name, file_path) in enumerate(ordered_images):
             if self._cancelled:
                 self.finished.emit(False, "USER_CANCELLED")
                 return
             self._log(f"Writing {part_name} ({i + 1}/{total}): {file_path.name}")
-            pct = 25 + int(i / max(total, 1) * 70)
-            self.progress.emit(pct)
+            self.action_changed.emit(f"Writing {part_name} ({i + 1}/{total}): {file_path.name}")
 
             is_preloader = part_name.lower() == "preloader"
             active_file = file_path
@@ -969,9 +1036,15 @@ class FlashWorker(QThread):
                         temp_wrapped.unlink(missing_ok=True)
                     except Exception:
                         pass
+                if file_path.exists():
+                    completed_bytes += file_path.stat().st_size
+                if total_bytes > 0:
+                    mapped = 20 + int(min(1.0, completed_bytes / total_bytes) * 75)
+                    self.progress.emit(min(95, max(20, mapped)))
 
         self.step_changed.emit(STEP_DONE)
         self.progress.emit(100)
+        self.action_changed.emit("Flash complete! Disconnect USB and reboot.")
         self._log("Flash complete! Disconnect USB and reboot the device.")
         self.finished.emit(True, "")
 
@@ -1142,6 +1215,7 @@ class FlashService(QObject):
     # forwarded worker signals
     step_changed = Signal(str)
     progress = Signal(int)
+    action_changed = Signal(str)
     log_message = Signal(str)
     flash_finished = Signal(bool, str)
     extract_finished = Signal(bool, str, str)  # ok, extract_dir, err
@@ -1182,6 +1256,7 @@ class FlashService(QObject):
         self._flash_worker = worker
         worker.step_changed.connect(self.step_changed)
         worker.progress.connect(self.progress)
+        worker.action_changed.connect(self.action_changed)
         worker.log_message.connect(self.log_message)
         worker.finished.connect(self.flash_finished)
         worker.finished.connect(lambda ok, err, w=worker: self._on_flash_done(w, ok, err))
@@ -1202,8 +1277,8 @@ class FlashService(QObject):
 
     @staticmethod
     def _detach_worker(worker):
-        for sig in (worker.step_changed, worker.progress, worker.log_message,
-                    worker.finished):
+        for sig in (worker.step_changed, worker.progress, worker.action_changed,
+                    worker.log_message, worker.finished):
             try:
                 sig.disconnect()
             except Exception:

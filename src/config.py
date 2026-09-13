@@ -89,3 +89,11 @@ def device_label_for_model(model: str) -> str:
 def power_on_button_for_model(model: str) -> str:
     """Hardware button used to power the player on after an install."""
     return "power/lock button" if is_y2_model(model) else "centre button"
+
+
+def install_power_on_steps(model: str) -> str:
+    """Short post-install power-on steps for the active model."""
+    label = device_label_for_model(model)
+    button = power_on_button_for_model(model)
+    return f"Unplug your {label}, then hold the {button} until it turns on."
+

@@ -1630,6 +1630,101 @@ def test_release_version_parsing_and_sorting():
     ], f"Incorrect release sort order: {tags}"
 
 
+def test_install_power_on_steps():
+    """Verify device-specific post-install power-on instructions."""
+    from src.config import install_power_on_steps
+
+    y1_steps = install_power_on_steps("Y1")
+    assert "Unplug your Y1" in y1_steps
+    assert "centre button" in y1_steps
+
+    y2_steps = install_power_on_steps("Y2")
+    assert "Unplug your Y2" in y2_steps
+    assert "power/lock button" in y2_steps
+
+    generic_steps = install_power_on_steps("")
+    assert "Unplug your Y1" in generic_steps
+    assert "centre button" in generic_steps
+
+    custom_steps = install_power_on_steps("CustomPlayer")
+    assert "Unplug your CustomPlayer" in custom_steps
+    assert "centre button" in custom_steps
+
+
+def test_donation_dialog_install_completion():
+    """Verify DonationDialog renders installation success banner and post-install steps
+    when opened with context='install_success'."""
+    from PySide6.QtWidgets import QApplication
+    from src.donation_dialog import DonationDialog
+    import src.donation_dialog as dd
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    orig_fetch = dd.fetch_remote_donors_async
+    dd.fetch_remote_donors_async = lambda cb: None
+    try:
+        dlg = DonationDialog(
+            context="install_success",
+            model="Y1",
+            software_name="Rockbox (Y1)",
+            donations=[],
+        )
+        text_content = []
+        for child in dlg.findChildren(object):
+            if hasattr(child, "text") and callable(child.text):
+                text_content.append(child.text())
+        joined = " ".join(text_content)
+        assert "We've installed" in joined
+        assert "Rockbox (Y1)" in joined
+        assert "Unplug your Y1" in joined
+        assert "centre button" in joined
+        dlg.close()
+
+        dlg_gen = DonationDialog(
+            context="general",
+            model="Y1",
+            software_name="Rockbox (Y1)",
+            donations=[],
+        )
+        text_gen = []
+        for child in dlg_gen.findChildren(object):
+            if hasattr(child, "text") and callable(child.text):
+                text_gen.append(child.text())
+        joined_gen = " ".join(text_gen)
+        assert "We've installed" not in joined_gen
+        dlg_gen.close()
+    finally:
+        dd.fetch_remote_donors_async = orig_fetch
+    app.processEvents()
+
+
+def test_flash_service_action_changed():
+    """Verify FlashService forwards action_changed and FlashPage updates action label."""
+    from PySide6.QtWidgets import QApplication
+    from src.flash_service import FlashService, FlashWorker
+    from src.ui.flash_page import FlashPage
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    service = FlashService()
+    assert hasattr(service, "action_changed")
+
+    page = FlashPage()
+    service.action_changed.connect(page.update_action)
+
+    worker = FlashWorker("dummy.zip", method="mtk")
+    assert hasattr(worker, "action_changed")
+    worker.action_changed.connect(service.action_changed)
+
+    worker.action_changed.emit("Writing system (1/5): system.img")
+    assert page._action_label.text() == "Writing system (1/5): system.img"
+
+    worker.action_changed.emit("Flash complete! Disconnect USB and reboot.")
+    assert page._action_label.text() == "Flash complete! Disconnect USB and reboot."
+
+    worker.action_changed.disconnect(service.action_changed)
+    page.deleteLater()
+    app.processEvents()
+
+
 def main():
     print("== Neo updater smoke test ==")
     check("catalog", test_catalog)
@@ -1648,6 +1743,9 @@ def main():
     check("releases client (cached)", test_releases_client_cached)
     check("releases client (network)", test_releases_client_network)
     check("release version parsing and sorting", test_release_version_parsing_and_sorting)
+    check("install power on steps", test_install_power_on_steps)
+    check("donation dialog install completion", test_donation_dialog_install_completion)
+    check("flash service action changed", test_flash_service_action_changed)
     check("UI construction", test_ui_construction)
     check("donation status bar", test_donation_status_bar)
     check("goal reached hides goal line", test_goal_reached_hides_goal_line)

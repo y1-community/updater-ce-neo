@@ -16,13 +16,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..config import install_power_on_steps
 from ..i18n import tr
 from ..updates import asset_hint, pick_platform_asset
 from .dark import T
 
 
 class FlashCompleteDialog(QDialog):
-    def __init__(self, parent=None, package_name="", elapsed="00:00"):
+    def __init__(self, parent=None, package_name="", elapsed="00:00", model="Y1"):
         super().__init__(parent)
         t = T()
         self.setWindowTitle(tr("flash_complete"))
@@ -35,9 +36,11 @@ class FlashCompleteDialog(QDialog):
         layout.addWidget(title)
 
         ndash = '\u2014'
+        steps = install_power_on_steps(model)
         body = QLabel(
             f"{tr('flash_current_pkg')}: <b>{package_name or ndash}</b><br>"
-            f"{tr('flash_elapsed')}: {elapsed}"
+            f"{tr('flash_elapsed')}: {elapsed}<br><br>"
+            f"<b>{steps}</b>"
         )
         body.setTextFormat(Qt.RichText)
         body.setWordWrap(True)

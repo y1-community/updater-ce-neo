@@ -35,6 +35,7 @@ from ..config import (
     APP_VERSION,
     UPDATE_CHECK_STARTUP_DELAY_MS,
     UPDATE_REPO,
+    install_power_on_steps,
 )
 from ..manifest import ManifestWorker
 from ..updates import UpdateCheckWorker, UpdateInfo
@@ -271,6 +272,7 @@ class MainWindow(QMainWindow):
         self._retry_page.on_cancel(self._on_cancel_flash)
         self.service.step_changed.connect(self._on_step_changed)
         self.service.progress.connect(self._on_progress)
+        self.service.action_changed.connect(self._flash_page.update_action)
         self.service.log_message.connect(self._on_log_message)
         self.service.flash_finished.connect(self._on_flash_finished)
         self.service.device_found.connect(self._on_device_found)
@@ -410,11 +412,19 @@ class MainWindow(QMainWindow):
             self.sm.transition_to(FlashState.S5_COMPLETE)
         except ValueError:
             self.sm.force_state(FlashState.S5_COMPLETE)
+
+        model = self._package_model or (
+            getattr(self._select_page, "current_model", lambda: "Y1")() if hasattr(self, "_select_page") else "Y1"
+        ) or "Y1"
+        software = self._package_name or "Firmware"
+        steps = install_power_on_steps(model)
+        self.statusBar().showMessage(f"{software} installed successfully. {steps}")
+
         donation_disabled = self.settings.value(
             "donation_install_prompt_disabled", False, type=bool
         )
         if donation_disabled:
-            dialog = FlashCompleteDialog(self, self._package_name, self._elapsed_text())
+            dialog = FlashCompleteDialog(self, software, self._elapsed_text(), model=model)
             dialog.exec()
         else:
             self._show_donation_dialog(context="install_success")
@@ -606,11 +616,15 @@ class MainWindow(QMainWindow):
         self._show_donation_dialog(context="general")
 
     def _show_donation_dialog(self, context="general"):
+        eff_model = self._package_model or (
+            getattr(self._select_page, "current_model", lambda: "Y1")() if hasattr(self, "_select_page") else "Y1"
+        ) or "Y1"
+        eff_name = self._package_name or ""
         dialog = DonationDialog(
             parent=self,
             context=context,
-            model=self._package_model,
-            software_name=self._package_name,
+            model=eff_model,
+            software_name=eff_name,
             donations=self._donations,
             on_dont_ask_again=lambda: self.settings.setValue(
                 "donation_install_prompt_disabled", True
