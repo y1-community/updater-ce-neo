@@ -225,6 +225,13 @@ class MainWindow(QMainWindow):
             self._linux_setup_btn.clicked.connect(self._show_linux_setup)
             layout.addWidget(self._linux_setup_btn)
 
+        from ..sp_flash_gui import is_sp_flash_gui_supported
+        if is_sp_flash_gui_supported():
+            self._sp_flash_tool_btn = QPushButton(tr("nav_sp_flash_tool_gui"))
+            self._sp_flash_tool_btn.setCursor(Qt.PointingHandCursor)
+            self._sp_flash_tool_btn.clicked.connect(self._open_sp_flash_tool_gui)
+            layout.addWidget(self._sp_flash_tool_btn)
+
         self._lang_label = QLabel(tr("nav_language"))
         self._lang_label.setStyleSheet(
             "font-size: 11px; color: #94a3b8; margin-top: 8px; background: transparent; border: none;"
@@ -252,6 +259,8 @@ class MainWindow(QMainWindow):
         aux_btns = [self._support_btn, self._log_btn, self._credits_btn, self._check_updates_btn]
         if hasattr(self, "_linux_setup_btn"):
             aux_btns.append(self._linux_setup_btn)
+        if hasattr(self, "_sp_flash_tool_btn"):
+            aux_btns.append(self._sp_flash_tool_btn)
         for btn in aux_btns:
             btn.setStyleSheet(
                 "QPushButton { background: transparent; color: #cbd5e1; text-align: left;"
@@ -265,6 +274,7 @@ class MainWindow(QMainWindow):
         self._flash_page.method_changed.connect(self._on_method_changed)
         self._flash_page.on_cancel(self._on_cancel_flash)
         self._flash_page.on_cancel_wait(self._on_cancel_wait)
+        self._flash_page.on_open_sp_gui(self._open_sp_flash_tool_gui)
         self._error_page.on_retry(self._on_retry_flash)
         self._error_page.on_reconnect(self._on_reconnect)
         self._error_page.on_reselect(lambda: self._nav_to_page(_PAGE_SELECT))
@@ -522,6 +532,54 @@ class MainWindow(QMainWindow):
         dlg = LinuxSetupDialog(self, auto_start=False)
         dlg.exec()
 
+    def _open_sp_flash_tool_gui(self):
+        from ..config import device_label_for_model
+        from ..sp_flash_gui import is_sp_flash_gui_supported, launch_sp_flash_tool_gui
+        from .dialogs import QMessageBox
+
+        if not is_sp_flash_gui_supported():
+            QMessageBox.information(
+                self,
+                tr("sp_gui_title"),
+                tr("sp_gui_not_supported"),
+            )
+            return
+
+        model = self._package_model or (
+            getattr(self._select_page, "current_model", lambda: "Y1")() if hasattr(self, "_select_page") else "Y1"
+        ) or "Y1"
+        label = device_label_for_model(model)
+
+        prompt_msg = (
+            f"{tr('sp_gui_launch_intro')}\n\n"
+            f"• If it isn't already off, power off your {label}.\n"
+            f"• If it is connected to USB, disconnect it first.\n"
+            f"• In SP Flash Tool, click Download (or Format All + Download as needed).\n\n"
+            f"Then connect the USB cable to begin flashing."
+        )
+        reply = QMessageBox.question(
+            self,
+            tr("sp_gui_title"),
+            prompt_msg,
+            QMessageBox.Ok | QMessageBox.Cancel,
+            QMessageBox.Ok,
+        )
+        if reply != QMessageBox.Ok:
+            return
+
+        if hasattr(self, "service") and self.service:
+            self.service.cancel_flash()
+
+        ok, msg = launch_sp_flash_tool_gui(model=model)
+        if not ok:
+            QMessageBox.warning(
+                self,
+                tr("sp_gui_error_title"),
+                f"{tr('sp_gui_error_desc')}\n\n{msg}",
+            )
+        else:
+            self.statusBar().showMessage(tr("sp_gui_launched_status"))
+
     def _check_linux_first_run(self):
         from .. import linux_sp_flash
         from .dialogs import LinuxSetupDialog
@@ -552,6 +610,10 @@ class MainWindow(QMainWindow):
         self._log_btn.setText(tr("nav_log"))
         self._credits_btn.setText(tr("nav_credits"))
         self._check_updates_btn.setText(tr("nav_check_updates"))
+        if hasattr(self, "_linux_setup_btn"):
+            self._linux_setup_btn.setText(tr("nav_linux_setup"))
+        if hasattr(self, "_sp_flash_tool_btn"):
+            self._sp_flash_tool_btn.setText(tr("nav_sp_flash_tool_gui"))
         self._lang_label.setText(tr("nav_language"))
         self._select_page.retranslate()
         self._flash_page.retranslate()

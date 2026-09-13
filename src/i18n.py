@@ -73,6 +73,12 @@ _STRINGS: dict = {
         "fr": "Configuration Linux",
         "es": "Configuración de Linux",
     },
+    "nav_sp_flash_tool_gui": {
+        "zh-CN": "SP Flash Tool 界面",
+        "en": "SP Flash Tool GUI",
+        "fr": "SP Flash Tool GUI",
+        "es": "SP Flash Tool GUI",
+    },
     "linux_setup_title": {
         "zh-CN": "Linux 刷机环境与 SP Flash Tool 配置",
         "en": "Linux Flashing & SP Flash Tool Setup",
@@ -648,6 +654,48 @@ _STRINGS: dict = {
         "en": "MTKClient — the open-source MediaTek flasher. Available on all platforms; the only option on macOS. Requires the MediaTek USB driver on Windows.",
         "fr": "MTKClient — le flasheur MediaTek open source. Disponible sur toutes les plateformes ; seul choix sous macOS. Nécessite le pilote USB MediaTek sous Windows.",
         "es": "MTKClient, el flasheador MediaTek de código abierto. Disponible en todas las plataformas; la única opción en macOS. Requiere el controlador USB de MediaTek en Windows.",
+    },
+    "flash_btn_open_sp_gui": {
+        "zh-CN": "打开 SP Flash Tool 界面",
+        "en": "Open SP Flash Tool GUI",
+        "fr": "Ouvrir SP Flash Tool GUI",
+        "es": "Abrir SP Flash Tool GUI",
+    },
+    "sp_gui_title": {
+        "zh-CN": "SP Flash Tool 界面",
+        "en": "SP Flash Tool GUI",
+        "fr": "SP Flash Tool GUI",
+        "es": "SP Flash Tool GUI",
+    },
+    "sp_gui_launch_intro": {
+        "zh-CN": "SP Flash Tool 图形界面即将启动。\n\n• 如果设备尚未关机，请将其关机。\n• 如果已连接 USB 线，请先断开连接。\n• 在 SP Flash Tool 中根据需要点击 Download（或 Format All + Download）。\n\n准备就绪后连接 USB 线即可开始刷机。",
+        "en": "SP Flash Tool GUI will now launch.\n\n• If it isn't already off, power off your device.\n• If it is connected to USB, disconnect it first.\n• In SP Flash Tool, click Download (or Format All + Download as needed).\n\nThen connect the USB cable to begin flashing.",
+        "fr": "L'interface graphique de SP Flash Tool va maintenant démarrer.\n\n• Si votre appareil n'est pas déjà éteint, éteignez-le.\n• S'il est connecté en USB, débranchez-le d'abord.\n• Dans SP Flash Tool, cliquez sur Download (ou Format All + Download).\n\nConnectez ensuite le câble USB pour commencer.",
+        "es": "La interfaz gráfica de SP Flash Tool se iniciará ahora.\n\n• Si aún no está apagado, apaga tu dispositivo.\n• Si está conectado por USB, desconéctalo primero.\n• En SP Flash Tool, haz clic en Download (o Format All + Download según sea necesario).\n\nLuego conecta el cable USB para comenzar a flashear.",
+    },
+    "sp_gui_launched_status": {
+        "zh-CN": "SP Flash Tool 界面已启动",
+        "en": "SP Flash Tool GUI launched",
+        "fr": "SP Flash Tool GUI lancé",
+        "es": "SP Flash Tool GUI iniciado",
+    },
+    "sp_gui_not_supported": {
+        "zh-CN": "SP Flash Tool 图形界面仅在 Windows 和支持的 Linux (x86/x86_64) 系统上可用。",
+        "en": "SP Flash Tool GUI is only available on Windows and supported Linux (x86/x86_64) systems.",
+        "fr": "L'interface graphique SP Flash Tool est uniquement disponible sous Windows et Linux (x86/x86_64).",
+        "es": "La interfaz gráfica de SP Flash Tool solo está disponible en Windows y sistemas Linux (x86/x86_64) compatibles.",
+    },
+    "sp_gui_error_title": {
+        "zh-CN": "无法启动 SP Flash Tool",
+        "en": "Could Not Launch SP Flash Tool",
+        "fr": "Impossible de lancer SP Flash Tool",
+        "es": "No se pudo iniciar SP Flash Tool",
+    },
+    "sp_gui_error_desc": {
+        "zh-CN": "启动 SP Flash Tool 时出错：",
+        "en": "Failed to launch SP Flash Tool GUI:",
+        "fr": "Échec du lancement de l'interface graphique SP Flash Tool :",
+        "es": "No se pudo iniciar la interfaz gráfica de SP Flash Tool:",
     },
     "flash_banner_wait": {
         "zh-CN": "等待设备接入",

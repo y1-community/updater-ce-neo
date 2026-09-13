@@ -45,6 +45,7 @@ class FlashPage(QWidget):
         super().__init__(parent)
         self._cancel_callback = None
         self._cancel_wait_callback = None
+        self._open_sp_gui_callback = None
         self._model = ""
         self._wait_banner_key = ""
         self._step_key = ""
@@ -141,6 +142,16 @@ class FlashPage(QWidget):
         self._method_combo.setCursor(Qt.PointingHandCursor)
         self._method_combo.currentIndexChanged.connect(self._on_method_changed)
         method_row.addWidget(self._method_combo)
+
+        from ..sp_flash_gui import is_sp_flash_gui_supported
+        if is_sp_flash_gui_supported():
+            self._open_sp_gui_btn = QPushButton(tr("flash_btn_open_sp_gui"))
+            self._open_sp_gui_btn.setCursor(Qt.PointingHandCursor)
+            self._open_sp_gui_btn.setProperty("cssClass", "ghost")
+            self._open_sp_gui_btn.setToolTip("Open MediaTek SP Flash Tool GUI")
+            self._open_sp_gui_btn.clicked.connect(self._on_open_sp_gui_clicked)
+            method_row.addWidget(self._open_sp_gui_btn)
+
         method_row.addStretch()
         layout.addLayout(method_row)
 
@@ -412,6 +423,8 @@ class FlashPage(QWidget):
         self._pkg_row.retranslate()
         self._elapsed_row.retranslate()
         self._eta_row.retranslate()
+        if hasattr(self, "_open_sp_gui_btn"):
+            self._open_sp_gui_btn.setText(tr("flash_btn_open_sp_gui"))
         current = self.current_method()
         self._method_combo.blockSignals(True)
         self._method_combo.clear()
@@ -442,6 +455,9 @@ class FlashPage(QWidget):
     def on_cancel_wait(self, callback):
         self._cancel_wait_callback = callback
 
+    def on_open_sp_gui(self, callback):
+        self._open_sp_gui_callback = callback
+
     def _on_cancel(self):
         if self._cancel_callback:
             self._cancel_callback()
@@ -449,3 +465,7 @@ class FlashPage(QWidget):
     def _on_cancel_wait(self):
         if self._cancel_wait_callback:
             self._cancel_wait_callback()
+
+    def _on_open_sp_gui_clicked(self):
+        if self._open_sp_gui_callback:
+            self._open_sp_gui_callback()

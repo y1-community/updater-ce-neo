@@ -1725,6 +1725,58 @@ def test_flash_service_action_changed():
     app.processEvents()
 
 
+def test_sp_flash_tool_gui():
+    """Verify SP Flash Tool GUI support detection, history.ini scatter pinning,
+    and UI button presence on supported platforms."""
+    from PySide6.QtWidgets import QApplication
+    from src import sp_flash_gui
+    from src import paths
+    from src.ui.main_window import MainWindow
+    from src.ui.flash_page import FlashPage
+
+    # 1. Platform support detection
+    orig_mac = paths.IS_MAC
+    orig_win = paths.IS_WINDOWS
+    try:
+        paths.IS_MAC = True
+        assert sp_flash_gui.is_sp_flash_gui_supported() is False
+        ok, msg = sp_flash_gui.launch_sp_flash_tool_gui()
+        assert ok is False
+        assert "not available on macOS" in msg
+
+        paths.IS_MAC = False
+        paths.IS_WINDOWS = True
+        assert sp_flash_gui.is_sp_flash_gui_supported() is True
+    finally:
+        paths.IS_MAC = orig_mac
+        paths.IS_WINDOWS = orig_win
+
+    # 2. History.ini generation and update
+    with tempfile.TemporaryDirectory() as td:
+        sp_dir = Path(td)
+        assert sp_flash_gui.update_sp_history_ini(sp_dir, model="Y1") is True
+        ini_file = sp_dir / "history.ini"
+        assert ini_file.is_file()
+        content = ini_file.read_text(encoding="utf-8")
+        assert "scatterHistory=MT6572_Android_scatter.txt" in content
+
+        # Update for Y2
+        assert sp_flash_gui.update_sp_history_ini(sp_dir, model="Y2") is True
+        content2 = ini_file.read_text(encoding="utf-8")
+        assert "scatterHistory=MT6582_Android_scatter.txt" in content2
+
+    # 3. UI presence
+    app = QApplication.instance() or QApplication(sys.argv)
+    w = MainWindow()
+    if sp_flash_gui.is_sp_flash_gui_supported():
+        assert hasattr(w, "_sp_flash_tool_btn")
+        assert hasattr(w._flash_page, "_open_sp_gui_btn")
+        assert w._sp_flash_tool_btn.text() != ""
+        assert w._flash_page._open_sp_gui_btn.text() != ""
+    w.close()
+    app.processEvents()
+
+
 def main():
     print("== Neo updater smoke test ==")
     check("catalog", test_catalog)
@@ -1746,6 +1798,7 @@ def main():
     check("install power on steps", test_install_power_on_steps)
     check("donation dialog install completion", test_donation_dialog_install_completion)
     check("flash service action changed", test_flash_service_action_changed)
+    check("sp flash tool gui", test_sp_flash_tool_gui)
     check("UI construction", test_ui_construction)
     check("donation status bar", test_donation_status_bar)
     check("goal reached hides goal line", test_goal_reached_hides_goal_line)
