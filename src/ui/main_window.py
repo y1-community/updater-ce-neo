@@ -13,7 +13,6 @@ import logging
 import platform
 import sys
 import time
-import webbrowser
 
 from PySide6.QtCore import QSettings, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
@@ -594,7 +593,8 @@ class MainWindow(QMainWindow):
             dlg.exec()
 
     def _open_credits(self):
-        webbrowser.open("https://innioasis.app/credits.html?thank-you=1")
+        from ..browser import open_browser
+        open_browser("https://innioasis.app/credits.html?thank-you=1")
 
     def _on_language_changed(self, index):
         lang = self._lang_combo.itemData(index)

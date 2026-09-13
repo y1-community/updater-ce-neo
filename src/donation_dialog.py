@@ -2,7 +2,8 @@
 
 import logging
 import random
-import webbrowser
+
+from .browser import open_browser
 
 from PySide6.QtCore import QEasingCurve, QObject, QPropertyAnimation, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
@@ -386,7 +387,7 @@ class DonationDialog(QDialog):
             f" font-size: {'13px' if full_width else '14px'}; min-height: 38px; padding: 9px 16px; border-radius: 8px; border: none; }}"
             f"QPushButton:hover {{ background-color: {hover}; }}"
         )
-        btn.clicked.connect(lambda _=False, u=url: webbrowser.open(u))
+        btn.clicked.connect(lambda _=False, u=url: open_browser(u))
         if grid is not None:
             grid.addWidget(btn, r, c)
         else:
@@ -496,7 +497,7 @@ class DonationDialog(QDialog):
             QApplication.clipboard().setText(value)
             self._donor_label.setText(tr("donate_copied").format(label=label))
         except Exception:
-            webbrowser.open(f"https://blockchair.com/search?q={value}")
+            open_browser(f"https://blockchair.com/search?q={value}")
 
     def _on_close(self):
         if getattr(self, "_dont_ask", None) and self._dont_ask.isChecked() and self.on_dont_ask_again:

@@ -1777,6 +1777,50 @@ def test_sp_flash_tool_gui():
     app.processEvents()
 
 
+def test_open_browser_focused_new_window():
+    """Verify open_browser opens URLs in a new focused window and handles all platforms."""
+    from unittest.mock import patch, MagicMock
+    from src import browser
+    from src.ui.main_window import MainWindow
+
+    # Empty URL rejection
+    assert browser.open_browser("") is False
+    assert browser.open_browser(None) is False
+
+    # Linux direct browser invocation with --new-window
+    calls = []
+    def fake_popen(cmd, *a, **kw):
+        calls.append(cmd)
+        mock = MagicMock()
+        return mock
+
+    with patch("subprocess.Popen", side_effect=fake_popen):
+        with patch.object(browser, "_find_linux_browser", return_value="/usr/bin/firefox"):
+            with patch("platform.system", return_value="Linux"):
+                ok = browser.open_browser("https://innioasis.app/credits.html?thank-you=1")
+                assert ok is True
+                assert len(calls) == 1
+                assert calls[0] == ["/usr/bin/firefox", "--new-window", "https://innioasis.app/credits.html?thank-you=1"]
+
+    # Fallback to QDesktopServices
+    calls.clear()
+    with patch("subprocess.Popen", side_effect=fake_popen):
+        with patch.object(browser, "_find_linux_browser", return_value=None):
+            with patch("platform.system", return_value="Linux"):
+                with patch("PySide6.QtGui.QDesktopServices.openUrl", return_value=True) as mock_qds:
+                    ok = browser.open_browser("https://innioasis.app/credits.html?thank-you=1")
+                    assert ok is True
+                    assert mock_qds.called
+
+    # MainWindow._open_credits calls open_browser
+    credits_urls = []
+    with patch("src.browser.open_browser", side_effect=lambda u, **k: credits_urls.append(u)):
+        w = MainWindow()
+        w._open_credits()
+        assert credits_urls == ["https://innioasis.app/credits.html?thank-you=1"]
+        w.close()
+
+
 def main():
     print("== Neo updater smoke test ==")
     check("catalog", test_catalog)
@@ -1799,6 +1843,7 @@ def main():
     check("donation dialog install completion", test_donation_dialog_install_completion)
     check("flash service action changed", test_flash_service_action_changed)
     check("sp flash tool gui", test_sp_flash_tool_gui)
+    check("open browser focused new window", test_open_browser_focused_new_window)
     check("UI construction", test_ui_construction)
     check("donation status bar", test_donation_status_bar)
     check("goal reached hides goal line", test_goal_reached_hides_goal_line)

@@ -1,7 +1,6 @@
 """Modal dialogs — flash complete / failed / diagnostics / update available."""
 
 import sys
-import webbrowser
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
@@ -215,7 +214,8 @@ class UpdateAvailableDialog(QDialog):
         elif self._info.html_url:
             url = self._info.html_url
         if url:
-            webbrowser.open(url)
+            from ..browser import open_browser
+            open_browser(url)
         self.accept()
 
     def _on_skip_version(self):
