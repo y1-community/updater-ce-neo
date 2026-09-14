@@ -451,11 +451,28 @@ class LinuxSetupDialog(QDialog):
         # Initial refresh or auto-start
         self.refresh_status()
         stage = self._linux.stage_dir()
-        needs_staging = not self._linux.files_ready(stage) or auto_start
-        if needs_staging:
+        if auto_start and not self._linux.files_ready(stage):
             self._start_staging(force_download=False)
         else:
-            self._progress_box.setVisible(False)
+            self._progress_box.setVisible(not self._linux.files_ready(stage))
+
+    def closeEvent(self, event):
+        if self._worker and self._worker.isRunning():
+            try:
+                self._worker.terminate()
+                self._worker.wait(500)
+            except Exception:
+                pass
+        super().closeEvent(event)
+
+    def reject(self):
+        if self._worker and self._worker.isRunning():
+            try:
+                self._worker.terminate()
+                self._worker.wait(500)
+            except Exception:
+                pass
+        super().reject()
 
     def _start_staging(self, force_download: bool = False):
         t = T()

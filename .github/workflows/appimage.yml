@@ -43,7 +43,8 @@ permissions:
 jobs:
   build-appimage:
     name: Build x86_64 AppImage
-    runs-on: ubuntu-22.04
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       - name: Checkout Repository
@@ -75,6 +76,24 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt pyinstaller
+
+      - name: Cache SP Flash Tool Linux Payload
+        uses: actions/cache@v4
+        id: cache-flash-tool
+        with:
+          path: ~/.cache/innioasis-updater
+          key: sp-flash-tool-linux-payload-v1
+
+      - name: Pre-stage SP Flash Tool Linux
+        if: steps.cache-flash-tool.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/.cache/innioasis-updater
+          curl -fsSL -o ~/.cache/innioasis-updater/flash_tool_linux.zip \
+            https://github.com/y1-community/updater-ce-neo/releases/download/flash_tool/flash_tool_linux.zip || true
+
+      - name: Extract SP Flash Tool Linux
+        run: |
+          python -c "from src import linux_sp_flash; linux_sp_flash.ensure_linux_sp_flash_tool()" || true
 
       - name: Run Smoke Tests (Headless)
         run: |
