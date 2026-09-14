@@ -2338,8 +2338,11 @@ def main():
         print(f"\n{len(failures)} FAILURES:")
         for name, err in failures:
             print(f"  - {name}: {err!r}")
-        sys.exit(1)
+        sys.stdout.flush()
+        os._exit(1)
     print("\nAll smoke tests passed.")
+    sys.stdout.flush()
+    os._exit(0)
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ on:
       - 'v*'
     paths:
       - 'src/**'
+      - 'tests/**'
       - 'assets/**'
       - 'vendor/**'
       - 'launcher.py'
@@ -21,6 +22,7 @@ on:
       - main
     paths:
       - 'src/**'
+      - 'tests/**'
       - 'assets/**'
       - 'vendor/**'
       - 'launcher.py'
