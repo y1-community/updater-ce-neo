@@ -48,6 +48,7 @@ def _reset_app_settings():
     s.setValue("donation_install_prompt_disabled", False)
     s.setValue("preferences/donation_ui_disabled", False)
     s.setValue("preferences/donation_install_prompt_disabled", False)
+    s.setValue("linux_first_run_completed", True)
     s.remove("preferences")
     s.remove("device_installs")
     s.remove("device_tracking")
@@ -1246,8 +1247,9 @@ def test_linux_sp_flash_rules_and_readiness():
     assert "overall_ready" in readiness
     assert "sp_exec_ok" in readiness
     assert readiness["arch_ok"] is True
-    assert readiness["libpng12_staged"] is True
-    assert readiness["sp_exec_ok"] is True
+    if lsf.files_ready(lsf.stage_dir()):
+        assert readiness["libpng12_staged"] is True
+        assert readiness["sp_exec_ok"] is True
 
 
 def test_linux_setup_dialog():

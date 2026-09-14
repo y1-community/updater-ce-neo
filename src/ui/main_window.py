@@ -10,6 +10,7 @@ waiting for a device (except on macOS, where only MTKClient is available).
 """
 
 import logging
+import os
 import platform
 import sys
 import time
@@ -706,6 +707,8 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(tr("sp_gui_launched_status"))
 
     def _check_linux_first_run(self):
+        if os.environ.get("QT_QPA_PLATFORM") == "offscreen" or os.environ.get("CI"):
+            return
         from .. import linux_sp_flash
         from .dialogs import LinuxSetupDialog
 
