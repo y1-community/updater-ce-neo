@@ -193,7 +193,9 @@ class DonationDialog(QDialog):
 
         self._build_ui()
         self._start_ticker()
-        fetch_remote_donors_async(self._apply_fresh_donations)
+        self._refresh_bridge = _DonationRefreshBridge(self)
+        self._refresh_bridge.updated.connect(self._apply_fresh_donations)
+        fetch_remote_donors_async(self._refresh_bridge.updated.emit)
 
     def _build_ui(self):
         t = T()
@@ -418,6 +420,7 @@ class DonationDialog(QDialog):
         r_s = f"{int(raised)}" if raised.is_integer() else f"{raised:.2f}"
         self._goal_label.setText(tr("donate_goal_fmt").format(raised=r_s, target=target))
         self._goal_target = int(round(pct * 10))
+        self._goal_bar.setValue(self._goal_target)
         self._goal_reached = raised >= float(target)
 
     def _trigger_goal_anim(self):

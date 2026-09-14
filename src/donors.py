@@ -7,9 +7,11 @@ Ported from CE's ``load_donors_data`` / ``parse_donors_csv_text`` /
 import csv
 import logging
 import threading
-import urllib.request
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
+
+import requests
 
 from .config import DONORS_CSV_URL, MONTHLY_GOAL_USD
 
@@ -123,6 +125,14 @@ def get_monthly_goal_stats(donations, now=None):
     return raised, remaining, percent, target
 
 
+def cached_donors_path() -> Path:
+    """Path to the locally cached donors.csv file."""
+    from .catalog import _app_cache_dir
+    d = _app_cache_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    return d / "donors.csv"
+
+
 def fetch_remote_donors_async(on_result):
     """Fetch the latest donors.csv from innioasis.app in a background thread.
 
@@ -132,24 +142,29 @@ def fetch_remote_donors_async(on_result):
 
     def _worker():
         try:
-            url = f"{DONORS_CSV_URL}?_t={int(__import__('time').time())}"
-            req = urllib.request.Request(
+            url = f"{DONORS_CSV_URL}?_t={int(time.time())}"
+            resp = requests.get(
                 url,
                 headers={
                     "User-Agent": "InnioasisUpdater/1.0",
                     "Cache-Control": "no-cache, no-store, must-revalidate",
                     "Pragma": "no-cache",
                 },
+                timeout=10.0,
             )
-            with urllib.request.urlopen(req, timeout=5.0) as resp:
-                if resp.status == 200:
-                    text = resp.read().decode("utf-8", errors="ignore")
-                    parsed = parse_donors_csv_text(text)
-                    if parsed:
-                        on_result(parsed)
-                        return
+            if resp.status_code == 200 and resp.text.strip():
+                text = resp.text
+                parsed = parse_donors_csv_text(text)
+                if parsed:
+                    try:
+                        cached_donors_path().write_text(text, encoding="utf-8")
+                    except Exception as ce:
+                        logger.debug("Could not cache donors.csv to disk: %s", ce)
+                    logger.info("Fetched %d remote donation records from %s", len(parsed), DONORS_CSV_URL)
+                    on_result(parsed)
+                    return
         except Exception as e:
-            logger.debug("Remote donors.csv fetch failed (%s)", e)
+            logger.warning("Remote donors.csv fetch failed (%s)", e)
         on_result(None)
 
     threading.Thread(target=_worker, daemon=True).start()

@@ -41,7 +41,7 @@ from ..config import (
 from ..manifest import ManifestWorker
 from ..updates import UpdateCheckWorker, UpdateInfo
 from ..donation_dialog import DonationDialog, DonationStatusBar
-from ..donors import load_donors_file, parse_donors_csv_text
+from ..donors import cached_donors_path, load_donors_file, parse_donors_csv_text
 from ..flash_service import (
     STEP_DETECT,
     STEP_DONE,
@@ -188,6 +188,7 @@ class MainWindow(QMainWindow):
         )
 
         self._donations = parse_donors_csv_text(load_donors_file([
+            cached_donors_path(),
             paths.RESOURCES_DIR / "donors.csv",
         ]) or "")
         self.setStatusBar(DonationStatusBar(
