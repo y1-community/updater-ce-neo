@@ -3,6 +3,7 @@ __pycache__
 *.pyc
 .idea
 DA_*.bin
+!DA_BR.bin
 
 # Setuptools distribution folder.
 /dist/
