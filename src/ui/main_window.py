@@ -378,6 +378,19 @@ class MainWindow(QMainWindow):
             f"(method: {_method_label(self._flash_method)})"
         )
         pre_extracted = completed_extract_dir(self._package_path)
+        try:
+            from ..flash_service import compute_extract_dir, _find_scatter
+            from ..sp_flash_gui import update_sp_history_ini
+
+            ed = pre_extracted or compute_extract_dir(self._package_path)
+            sc = _find_scatter(Path(ed)) if Path(ed).is_dir() else None
+            update_sp_history_ini(
+                scatter_path=sc,
+                extract_dir=Path(ed) if Path(ed).is_dir() else None,
+                model=self._package_model,
+            )
+        except Exception as e:
+            logger.debug("Could not pre-update SP history.ini in _begin_flash_flow: %s", e)
         self.service.start_flash(
             self._package_path, pre_extracted_dir=pre_extracted, method=self._flash_method
         )
@@ -528,6 +541,11 @@ class MainWindow(QMainWindow):
 
     def _on_retry_flash(self):
         self.sm.reset_for_retry()
+        try:
+            from ..sp_flash_gui import update_sp_history_ini
+            update_sp_history_ini(model=self._package_model)
+        except Exception as e:
+            logger.debug("Could not update SP history.ini on retry: %s", e)
         self._retry_page.update_info(
             self._package_name, self.sm.context.retry_count, "status_retrying"
         )
@@ -553,6 +571,12 @@ class MainWindow(QMainWindow):
             return
         self._flash_method = method
         self.settings.setValue("flash_method", method)
+        if method in ("sp", "auto"):
+            try:
+                from ..sp_flash_gui import update_sp_history_ini
+                update_sp_history_ini(model=self._package_model)
+            except Exception as e:
+                logger.debug("Could not update SP history.ini on method change: %s", e)
         self._append_log(f"Flash method changed to {_method_label(method)}; restarting search...")
         self.service.cancel_flash()
         self.service.stop_device_monitor()

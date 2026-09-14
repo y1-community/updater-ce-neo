@@ -535,18 +535,20 @@ class SelectPackagePage(QWidget):
 
         # Track latest package in device_tracking and prepopulate SP history.ini
         scatter_file = _find_scatter(Path(extract_dir))
+        scatter_abs = scatter_file.resolve() if scatter_file else None
+        extract_abs = Path(extract_dir).resolve() if extract_dir else None
         info = getattr(self, "_current_installed_release_info", {}) or {}
         device_tracking.record_latest_package(
             model=info.get("model") or self.current_model(),
             software_name=info.get("software_name") or self.current_software(),
             tag_name=info.get("tag_name", ""),
             package_path=str(self._current_package_path),
-            extract_dir=str(extract_dir),
-            scatter_path=str(scatter_file) if scatter_file else "",
+            extract_dir=str(extract_abs) if extract_abs else "",
+            scatter_path=str(scatter_abs) if scatter_abs else "",
         )
         update_sp_history_ini(
-            scatter_path=scatter_file,
-            extract_dir=Path(extract_dir) if extract_dir else None,
+            scatter_path=scatter_abs,
+            extract_dir=extract_abs,
             model=info.get("model") or self.current_model(),
         )
 
@@ -565,17 +567,19 @@ class SelectPackagePage(QWidget):
         prune_extracted_cache(keep_package_path=self._current_package_path)
 
         scatter_file = _find_scatter(Path(extract_dir))
+        scatter_abs = scatter_file.resolve() if scatter_file else None
+        extract_abs = Path(extract_dir).resolve() if extract_dir else None
         device_tracking.record_latest_package(
             model=self.current_model(),
             software_name=self._current_package_name,
             tag_name="",
             package_path=str(self._current_package_path),
-            extract_dir=str(extract_dir),
-            scatter_path=str(scatter_file) if scatter_file else "",
+            extract_dir=str(extract_abs) if extract_abs else "",
+            scatter_path=str(scatter_abs) if scatter_abs else "",
         )
         update_sp_history_ini(
-            scatter_path=scatter_file,
-            extract_dir=Path(extract_dir) if extract_dir else None,
+            scatter_path=scatter_abs,
+            extract_dir=extract_abs,
             model=self.current_model(),
         )
 

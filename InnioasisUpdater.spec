@@ -33,31 +33,9 @@ mtk_hidden = []
 # bundled as a data directory (invisible to PyInstaller's static analysis).
 crypto_hidden = collect_submodules("Cryptodome")
 
-datas = [
-    (str(ASSETS / "style.qss"), "assets"),
-    (str(ASSETS / "donors.csv"), "assets"),
-    (str(ASSETS / "icon.ico"), "assets"),
-    # CE-style guidance / device illustrations used by the flash page.
-    (str(ASSETS / "guide_img1.png"), "assets"),
-    (str(ASSETS / "guide_img2.png"), "assets"),
-    (str(ASSETS / "guide_img3.png"), "assets"),
-    (str(ASSETS / "guide_img4.png"), "assets"),
-    (str(ASSETS / "y1_illustration.png"), "assets"),
-    (str(ASSETS / "start_here.png"), "assets"),
-    (str(ASSETS / "ready.png"), "assets"),
-    (str(ASSETS / "sleeping.png"), "assets"),
-    (str(ASSETS / "installing.png"), "assets"),
-    (str(ASSETS / "installed.png"), "assets"),
-    # firmware_downloader.py-style guided install images (presteps →
-    # initsteps → please_wait → installing) with platform variants.
-    (str(ASSETS / "presteps.png"), "assets"),
-    (str(ASSETS / "initsteps.png"), "assets"),
-    (str(ASSETS / "initsteps_win.png"), "assets"),
-    (str(ASSETS / "initsteps_sp.png"), "assets"),
-    (str(ASSETS / "please_wait.png"), "assets"),
-    (str(ASSETS / "reconnect.png"), "assets"),
-    (str(ASSETS / "compat"), "assets/compat"),
-]
+datas = []
+if ASSETS.exists():
+    datas.append((str(ASSETS), "assets"))
 if VENDOR_MTK.exists():
     datas.append((str(VENDOR_MTK), "mtkclient"))
 

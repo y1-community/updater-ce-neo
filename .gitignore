@@ -14,3 +14,6 @@ build/
 # macOS build artifacts
 *.dmg
 *.icns
+
+# Scratch directories
+scratch/

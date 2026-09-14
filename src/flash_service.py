@@ -25,6 +25,7 @@ import time
 import traceback
 import zipfile
 from pathlib import Path
+from typing import Optional
 
 from PySide6.QtCore import QObject, QThread, Signal
 
@@ -563,6 +564,29 @@ class FlashWorker(QThread):
         if platform:
             self._log(f"Package platform: {platform}")
 
+        try:
+            from . import device_tracking
+            from .sp_flash_gui import update_sp_history_ini
+
+            detected_model = (
+                "Y2" if "6582" in (platform or "") else ("Y1" if "6572" in (platform or "") else "")
+            )
+            device_tracking.record_latest_package(
+                model=detected_model,
+                software_name=Path(self.package_path).stem if self.package_path else "",
+                tag_name="",
+                package_path=str(self.package_path),
+                extract_dir=str(Path(extract_dir).resolve()),
+                scatter_path=str(Path(scatter_file).resolve()),
+            )
+            update_sp_history_ini(
+                scatter_path=Path(scatter_file).resolve(),
+                extract_dir=Path(extract_dir).resolve(),
+                model=detected_model,
+            )
+        except Exception as e:
+            logger.debug("Could not update SP history.ini during flash: %s", e)
+
         self._dispatch_backend(extract_dir, scatter_file)
 
     def _dispatch_backend(self, extract_dir, scatter_file):
@@ -704,7 +728,15 @@ class FlashWorker(QThread):
         self._sp_completed_bytes = 0
         self._sp_last_part_total = 0
         self._sp_last_sent = 0
-        self._sp_progress_hwm = 0
+        try:
+            from .sp_flash_gui import update_sp_history_ini
+            update_sp_history_ini(
+                sp_dir=sp_dir,
+                scatter_path=scatter_file,
+                extract_dir=scatter_file.parent,
+            )
+        except Exception as e:
+            logger.debug("Could not update SP history.ini before flash_tool: %s", e)
 
         cmd = [
             str(flash_tool_exe),

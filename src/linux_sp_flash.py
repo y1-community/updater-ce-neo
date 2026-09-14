@@ -698,14 +698,14 @@ class TtyAccessGuardian(threading.Thread):
 
     def __init__(self, interval: float = 0.015):
         super().__init__(daemon=True, name="tty-access-guardian")
-        self._stop = threading.Event()
+        self._stop_event = threading.Event()
         self.interval = interval
 
     def stop(self):
-        self._stop.set()
+        self._stop_event.set()
 
     def run(self):
-        while not self._stop.is_set():
+        while not self._stop_event.is_set():
             for path in Path("/dev").glob("ttyACM*"):
                 try:
                     os.chmod(path, 0o666)
@@ -716,7 +716,7 @@ class TtyAccessGuardian(threading.Thread):
                     os.chmod(path, 0o666)
                 except Exception:
                     pass
-            self._stop.wait(self.interval)
+            self._stop_event.wait(self.interval)
 
 
 def write_setup_script(cache_dir: Path = None) -> Path:

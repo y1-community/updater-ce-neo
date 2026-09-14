@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Innioasis Updater CE
+GenericName=Firmware Flasher
+Comment=Flash, update, and restore Innioasis Y1 & Y2 digital audio players
+Exec=InnioasisUpdater %U
+Icon=innioasis-updater
+Terminal=false
+Categories=Utility;AudioVideo;
+Keywords=innioasis;y1;y2;mtk;flash;firmware;rockbox;solar;
+StartupWMClass=Innioasis Updater
+MimeType=application/zip;application/x-zip-compressed;application/vnd.rar;

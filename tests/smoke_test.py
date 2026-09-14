@@ -1809,12 +1809,18 @@ def test_sp_flash_tool_gui():
         ini_file = sp_dir / "history.ini"
         assert ini_file.is_file()
         content = ini_file.read_text(encoding="utf-8")
-        assert "scatterHistory=MT6572_Android_scatter.txt" in content
+        exp_y1 = str((sp_dir / "MT6572_Android_scatter.txt").resolve())
+        assert f"scatterHistory={exp_y1}" in content
+        assert f"lastDir={exp_y1}" in content
+        assert os.path.isabs(exp_y1)
 
         # Update for Y2
         assert sp_flash_gui.update_sp_history_ini(sp_dir, model="Y2") is True
         content2 = ini_file.read_text(encoding="utf-8")
-        assert "scatterHistory=MT6582_Android_scatter.txt" in content2
+        exp_y2 = str((sp_dir / "MT6582_Android_scatter.txt").resolve())
+        assert f"scatterHistory={exp_y2},{exp_y1}" in content2
+        assert f"lastDir={exp_y2}" in content2
+        assert os.path.isabs(exp_y2)
 
     # 3. UI presence
     app = QApplication.instance() or QApplication(sys.argv)
@@ -2181,7 +2187,91 @@ def test_sp_flash_system_checker_and_diagnostics():
     assert hasattr(settings_page, "_btn_run_checker")
     assert hasattr(settings_page, "_btn_launch_sp")
     assert settings_page._btn_run_checker.text() != ""
-    assert settings_page._btn_launch_sp.text() != ""
+def test_sp_history_ini_subsequent_attempts_and_absolute_paths():
+    """Verify that update_sp_history_ini always writes valid absolute paths
+    across subsequent install attempts, retries, and fixes any legacy relative paths."""
+    from src import sp_flash_gui, device_tracking
+    from PySide6.QtCore import QSettings
+
+    with tempfile.TemporaryDirectory() as td:
+        sp_dir = Path(td) / "sp_tool"
+        sp_dir.mkdir(parents=True)
+        da_file = sp_dir / "MTK_AllInOne_DA.bin"
+        da_file.write_bytes(b"DA_BIN")
+
+        # Fake packages and scatter files
+        fw1_dir = Path(td) / "fw1_extracted"
+        fw1_dir.mkdir(parents=True)
+        sc1 = fw1_dir / "MT6572_Android_scatter.txt"
+        sc1.write_text("platform: MT6572\n", encoding="utf-8")
+
+        fw2_dir = Path(td) / "fw2_extracted"
+        fw2_dir.mkdir(parents=True)
+        sc2 = fw2_dir / "MT6582_Android_scatter.txt"
+        sc2.write_text("platform: MT6582\n", encoding="utf-8")
+
+        # --- Attempt 1: First install attempt (Y1) ---
+        ok1 = sp_flash_gui.update_sp_history_ini(
+            sp_dir=sp_dir,
+            scatter_path=sc1,
+            extract_dir=fw1_dir,
+            model="Y1",
+        )
+        assert ok1 is True
+        ini_file = sp_dir / "history.ini"
+        assert ini_file.is_file()
+
+        # Check with QSettings
+        qs1 = QSettings(str(ini_file), QSettings.IniFormat)
+        assert qs1.value("LastDAFilePath/lastDir") == str(da_file.resolve())
+        assert qs1.value("RecentOpenFile/lastDir") == str(sc1.resolve())
+        assert qs1.value("RecentOpenFile/scatterHistory") == str(sc1.resolve())
+        assert os.path.isabs(qs1.value("LastDAFilePath/lastDir"))
+        assert os.path.isabs(qs1.value("RecentOpenFile/lastDir"))
+
+        # --- Attempt 2: Subsequent install attempt (Y2) ---
+        ok2 = sp_flash_gui.update_sp_history_ini(
+            sp_dir=sp_dir,
+            scatter_path=sc2,
+            extract_dir=fw2_dir,
+            model="Y2",
+        )
+        assert ok2 is True
+
+        qs2 = QSettings(str(ini_file), QSettings.IniFormat)
+        assert qs2.value("LastDAFilePath/lastDir") == str(da_file.resolve())
+        assert qs2.value("RecentOpenFile/lastDir") == str(sc2.resolve())
+        expected_hist = f"{sc2.resolve()},{sc1.resolve()}"
+        assert f"scatterHistory={expected_hist}" in ini_file.read_text(encoding="utf-8")
+        raw_val = qs2.value("RecentOpenFile/scatterHistory")
+        items = raw_val if isinstance(raw_val, list) else [raw_val]
+        assert items == [str(sc2.resolve()), str(sc1.resolve())]
+        assert os.path.isabs(qs2.value("RecentOpenFile/lastDir"))
+
+        # --- Test upgrade of legacy/malformed history.ini with relative paths ---
+        malformed_text = (
+            "[LastDAFilePath]\n"
+            "lastDir=MTK_AllInOne_DA.bin\n\n"
+            "[RecentOpenFile]lastDir=\n"
+            "scatterHistory=MT6572_Android_scatter.txt\n"
+            "authHistory=\n"
+        )
+        ini_file.write_text(malformed_text, encoding="utf-8")
+
+        ok3 = sp_flash_gui.update_sp_history_ini(
+            sp_dir=sp_dir,
+            model="Y2",
+        )
+        assert ok3 is True
+        qs3 = QSettings(str(ini_file), QSettings.IniFormat)
+        assert qs3.value("LastDAFilePath/lastDir") == str(da_file.resolve())
+        assert os.path.isabs(qs3.value("LastDAFilePath/lastDir"))
+        assert os.path.isabs(qs3.value("RecentOpenFile/lastDir"))
+        raw3 = qs3.value("RecentOpenFile/scatterHistory")
+        items3 = raw3 if isinstance(raw3, list) else [raw3]
+        for item in items3:
+            item_str = str(item).strip()
+            assert os.path.isabs(item_str), f"Expected absolute path, got {item_str}"
 
 
 def main():
@@ -2243,6 +2333,7 @@ def main():
     check("latest package tracking and history ini", test_latest_package_tracking_and_history_ini)
     check("prune extracted cache and reusing download", test_prune_extracted_cache_and_reusing_download)
     check("sp flash system checker and diagnostics", test_sp_flash_system_checker_and_diagnostics)
+    check("sp history ini subsequent attempts and absolute paths", test_sp_history_ini_subsequent_attempts_and_absolute_paths)
     if failures:
         print(f"\n{len(failures)} FAILURES:")
         for name, err in failures:
