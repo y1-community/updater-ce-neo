@@ -133,21 +133,16 @@ class DonationStatusBar(QStatusBar):
         raised = float(raised)
         self._goal_reached = raised >= float(target)
         raised_text = str(int(raised)) if raised.is_integer() else f"{raised:.2f}"
-        self._goal_label.setText(
-            tr("donate_goal_fmt").format(raised=raised_text, target=target)
-        )
-        self._goal_bar.setValue(int(round(percent * 10)))
         if self._goal_reached:
-            self._showing_goal = False
-            self._goal_label.setVisible(False)
-            self._goal_bar.setVisible(False)
-            self._donor_label.setVisible(True)
+            self._goal_label.setText("We rely on your donations to keep running. Donate now")
+            self._goal_bar.setValue(1000)
+        else:
+            self._goal_label.setText(
+                tr("donate_goal_fmt").format(raised=raised_text, target=target)
+            )
+            self._goal_bar.setValue(int(round(percent * 10)))
 
     def _rotate(self):
-        if getattr(self, "_goal_reached", False):
-            self._donor_label.setText(self._donor_lines[0])
-            self._donor_lines = self._donor_lines[1:] + self._donor_lines[:1]
-            return
         self._showing_goal = not self._showing_goal
         self._goal_label.setVisible(self._showing_goal)
         self._goal_bar.setVisible(self._showing_goal)
@@ -418,10 +413,14 @@ class DonationDialog(QDialog):
         raised, _, pct, target = get_monthly_goal_stats(self.donations)
         raised = float(raised)
         r_s = f"{int(raised)}" if raised.is_integer() else f"{raised:.2f}"
-        self._goal_label.setText(tr("donate_goal_fmt").format(raised=r_s, target=target))
-        self._goal_target = int(round(pct * 10))
-        self._goal_bar.setValue(self._goal_target)
         self._goal_reached = raised >= float(target)
+        if self._goal_reached:
+            self._goal_label.setText("We rely on your donations to keep running. Donate now")
+            self._goal_target = 1000
+        else:
+            self._goal_label.setText(tr("donate_goal_fmt").format(raised=r_s, target=target))
+            self._goal_target = int(round(pct * 10))
+        self._goal_bar.setValue(self._goal_target)
 
     def _trigger_goal_anim(self):
         self._goal_bar.setValue(0)
@@ -435,10 +434,6 @@ class DonationDialog(QDialog):
         self._ticker_idx = 0
         self._showing_goal = True
         self._since_goal = 0
-        if getattr(self, "_goal_reached", False):
-            self._showing_goal = False
-            self._goal_view.setVisible(False)
-            self._donor_view.setVisible(True)
 
         self._opacity = QGraphicsOpacityEffect(self._alt_container)
         self._alt_container.setGraphicsEffect(self._opacity)
@@ -470,10 +465,6 @@ class DonationDialog(QDialog):
             self._donor_view.setVisible(True)
         elif self._since_goal < 3:
             self._since_goal += 1
-            self._donor_label.setText(self._ticker_lines[self._ticker_idx % len(self._ticker_lines)])
-            self._ticker_idx += 1
-        elif getattr(self, "_goal_reached", False):
-            self._since_goal = 0
             self._donor_label.setText(self._ticker_lines[self._ticker_idx % len(self._ticker_lines)])
             self._ticker_idx += 1
         else:
