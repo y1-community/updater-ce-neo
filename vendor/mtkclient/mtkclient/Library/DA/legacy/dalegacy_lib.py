@@ -77,7 +77,12 @@ class DALegacy(metaclass=LogBase):
         if self.usbwrite(self.Cmd.GET_FAT_INFO_CMD):  # 0xF0
             self.usbwrite(pack(">I", addr))
             self.usbwrite(pack(">I", dwords))
-            res = [unpack(">I", self.usbread(4))[0] for _ in range(dwords)]
+            res = []
+            for _ in range(dwords):
+                buf = self.usbread(4)
+                if len(buf) < 4:
+                    return None
+                res.append(unpack(">I", buf)[0])
             ack = self.usbread(1)
             if ack == self.Rsp.ACK:
                 return res
@@ -85,7 +90,10 @@ class DALegacy(metaclass=LogBase):
     def read_reg32(self, addr: int):
         if self.usbwrite(self.Cmd.READ_REG32_CMD):  # 0x7A
             self.usbwrite(pack(">I", addr))
-            value = unpack(">I", self.usbread(4))[0]
+            v_buf = self.usbread(4)
+            if len(v_buf) < 4:
+                return None
+            value = unpack(">I", v_buf)[0]
             ack = self.usbread(1)
             if ack == self.Rsp.ACK:
                 return value
@@ -128,9 +136,15 @@ class DALegacy(metaclass=LogBase):
             name = ""
 
         if self.usbwrite(self.Cmd.SDMMC_READ_PMT_CMD):
-            ack = unpack(">B", self.usbread(1))[0]
+            ack_buf = self.usbread(1)
+            if not ack_buf:
+                return gpt.partentries
+            ack = unpack(">B", ack_buf)[0]
             if ack == 0x5a:
-                datalength = unpack(">I", self.usbread(4))[0]
+                dl_buf = self.usbread(4)
+                if len(dl_buf) < 4:
+                    return gpt.partentries
+                datalength = unpack(">I", dl_buf)[0]
                 if self.usbwrite(self.Rsp.ACK):
                     partdata = self.usbread(datalength)
                     if self.usbwrite(self.Rsp.ACK):
@@ -295,20 +309,29 @@ class DALegacy(metaclass=LogBase):
             self.error(self.eh.status(errorcode))
             return False
         if toread == 4 and errorcode == 0xBC3:
-            buffer += self.usbread(4)
+            b4 = self.usbread(4)
+            if len(b4) < 4:
+                self.error("Didn't receive DRAM info header")
+                return False
+            buffer += b4
             pdram = [b"", b""]
             draminfo = self.usbread(16)
+            if len(draminfo) < 16:
+                self.error("Didn't receive 16-byte DRAM info")
+                return False
             pdram[0] = draminfo[:9]
             draminfo = draminfo[:4][::-1] + draminfo[4:8][::-1] + draminfo[8:12][::-1] + draminfo[12:16][::-1]
             pdram[1] = draminfo[:9]
             self.info(f"DRAM config needed for : {hexlify(draminfo).decode('utf-8')}")
+            if self.daconfig.emi is None and self.config.preloader is not None:
+                self.daconfig.extract_emi(self.config.preloader)
             if self.daconfig.emi is None:
                 found = False
                 for root, dirs, files in os.walk(os.path.join(self.pathconfig.get_loader_path(), 'Preloader')):
                     for file in files:
                         with open(os.path.join(root, file), "rb") as rf:
                             data = rf.read()
-                            if pdram[0] in data or pdram[1] in data:
+                            if (pdram[0] and pdram[0] in data) or (pdram[1] and pdram[1] in data):
                                 preloader = os.path.join(root, file)
                                 print(f"Detected preloader: {preloader}")
                                 self.daconfig.extract_emi(preloader)
@@ -325,11 +348,18 @@ class DALegacy(metaclass=LogBase):
                 self.error(self.eh.status(errorval))
                 return False
             else:
-                nand_id_count = unpack(">H", self.usbread(2))[0]
+                id_count_buf = self.usbread(2)
+                if len(id_count_buf) < 2:
+                    self.error("Failed to read NAND ID count from DA")
+                    return False
+                nand_id_count = unpack(">H", id_count_buf)[0]
                 self.info("Reading dram nand info ...")
                 nand_ids = []
                 for i in range(0, nand_id_count):
-                    nand_ids.append(unpack(">H", self.usbread(2))[0])
+                    id_buf = self.usbread(2)
+                    if len(id_buf) < 2:
+                        break
+                    nand_ids.append(unpack(">H", id_buf)[0])
                 if self.daconfig.emi is not None:  # toDo
                     self.usbwrite(self.Cmd.ENABLE_DRAM)  # E8
                     if self.daconfig.emiver == 0:
@@ -337,13 +367,20 @@ class DALegacy(metaclass=LogBase):
                     else:
                         self.usbwrite(pack(">I", self.daconfig.emiver))
                     ret = self.usbread(1)
+                    if not ret:
+                        self.error("No response on ENABLE_DRAM command")
+                        return False
                     if ret == self.Rsp.NACK:
                         self.error("EMI Config not accepted :( Make sure to provide a valid preloader.")
                         return False
                     if ret == self.Rsp.ACK:
                         self.info(f"Sending dram info ... EMI-Version {hex(self.daconfig.emiver)}")
                         if self.daconfig.emiver in [0xF, 0x10, 0x11, 0x14, 0x15]:
-                            dramlength = unpack(">I", self.usbread(0x4))[0]  # 0x000000BC
+                            dl_buf = self.usbread(0x4)
+                            if len(dl_buf) < 4:
+                                self.error("Failed to read RAM-Length from DA")
+                                return False
+                            dramlength = unpack(">I", dl_buf)[0]  # 0x000000BC
                             self.info(f"RAM-Length: {hex(dramlength)}")
                             self.usbwrite(self.Rsp.ACK)
                             lendram = len(self.daconfig.emi)
@@ -352,39 +389,84 @@ class DALegacy(metaclass=LogBase):
                         elif self.daconfig.emiver in [0x0A, 0x0B]:
                             info = self.usbread(0x10)  # 0x000000BC
                             self.info(f"RAM-Info: {hexlify(info).decode('utf-8')}")
-                            dramlength = unpack(">I", self.usbread(0x4))[0]
+                            dl_buf = self.usbread(0x4)
+                            if len(dl_buf) < 4:
+                                self.error("Failed to read RAM-Length from DA")
+                                return False
+                            dramlength = unpack(">I", dl_buf)[0]
                             self.usbwrite(self.Rsp.ACK)
                         elif self.daconfig.emiver in [0x0C, 0x0D]:
-                            dramlength = unpack(">I", self.usbread(0x4))[0]
+                            dl_buf = self.usbread(0x4)
+                            if len(dl_buf) < 4:
+                                self.error("Failed to read RAM-Length from DA")
+                                return False
+                            dramlength = unpack(">I", dl_buf)[0]
                             self.info(f"RAM-Length: {hex(dramlength)}")
                             self.usbwrite(self.Rsp.ACK)
                             self.daconfig.emi = self.daconfig.emi[:dramlength]
+                            if len(self.daconfig.emi) < dramlength:
+                                self.daconfig.emi = self.daconfig.emi.ljust(dramlength, b"\x00")
                             self.daconfig.emi = pack(">I", 0x100) + self.daconfig.emi[0x4:dramlength]
                         elif self.daconfig.emiver in [0x00]:
-                            dramlength = unpack(">I", self.usbread(0x4))[0]  # 0x000000B0
+                            dl_buf = self.usbread(0x4)
+                            if len(dl_buf) < 4:
+                                self.error("Failed to read RAM-Length from DA")
+                                return False
+                            dramlength = unpack(">I", dl_buf)[0]  # 0x000000B0
                             self.info(f"RAM-Length: {hex(dramlength)}")
                             self.usbwrite(self.Rsp.ACK)
                             lendram = len(self.daconfig.emi)
                             self.daconfig.emi = self.daconfig.emi[:dramlength]
+                            if len(self.daconfig.emi) < dramlength:
+                                self.daconfig.emi = self.daconfig.emi.ljust(dramlength, b"\x00")
                             self.usbwrite(pack(">I", dramlength))
                         else:
                             self.warning("Unknown emi version: %d" % self.daconfig.emiver)
                         self.usbwrite(self.daconfig.emi)
-                        checksum = unpack(">H", self.usbread(2))[0]  # 0x440C
+                        cs_buf = self.usbread(2)
+                        if len(cs_buf) < 2:
+                            self.error("Failed to read EMI checksum from DA")
+                            return False
+                        checksum = unpack(">H", cs_buf)[0]  # 0x440C
                         self.info("Checksum: %04X" % checksum)
                         self.usbwrite(self.Rsp.ACK)
                         self.usbwrite(pack(">I", 0x80000001))  # Send DRAM config
-                        m_ext_ram_ret = unpack(">I", self.usbread(4))[0]  # 0x00000000 S_DONE
+                        time.sleep(0.1)
+                        ret_buf = self.usbread(4)
+                        if len(ret_buf) < 4:
+                            for _ in range(15):
+                                time.sleep(0.2)
+                                chunk = self.usbread(4 - len(ret_buf))
+                                if chunk:
+                                    ret_buf += chunk
+                                    if len(ret_buf) == 4:
+                                        break
+                        if len(ret_buf) < 4:
+                            self.error("Didn't receive DRAM config status (timeout or endpoint stalled)")
+                            return False
+                        m_ext_ram_ret = unpack(">I", ret_buf)[0]  # 0x00000000 S_DONE
                         self.info(f"M_EXT_RAM_RET : {m_ext_ram_ret}")
                         if m_ext_ram_ret != 0:
                             self.error("Preloader error: 0x%X => %s" % (m_ext_ram_ret, self.eh.status(m_ext_ram_ret)))
                             self.mtk.port.close(reset=False)
                             return False
-                        m_ext_ram_type = self.usbread(1)[0]  # 0x02 HW_RAM_DRAM
+                        t_buf = self.usbread(1)
+                        if not t_buf:
+                            self.error("Failed to read M_EXT_RAM_TYPE")
+                            return False
+                        m_ext_ram_type = t_buf[0]  # 0x02 HW_RAM_DRAM
                         self.info(f"M_EXT_RAM_TYPE : {hex(m_ext_ram_type)}")
-                        m_ext_ram_chip_select = self.usbread(1)[0]  # 0x00 CS_0
+                        cs_buf = self.usbread(1)
+                        if not cs_buf:
+                            self.error("Failed to read M_EXT_RAM_CHIP_SELECT")
+                            return False
+                        m_ext_ram_chip_select = cs_buf[0]  # 0x00 CS_0
                         self.info(f"M_EXT_RAM_CHIP_SELECT : {hex(m_ext_ram_chip_select)}")
-                        m_ext_ram_size = unpack(">Q", self.usbread(8))[0]  # 0x80000000
+                        sz_buf = self.usbread(8)
+                        if len(sz_buf) < 8:
+                            self.error("Failed to read M_EXT_RAM_SIZE")
+                            return False
+                        m_ext_ram_size = unpack(">Q", sz_buf)[0]  # 0x80000000
                         self.info(f"M_EXT_RAM_SIZE : {hex(m_ext_ram_size)}")
                         if self.daconfig.emiver in [0x0D]:
                             self.usbread(4)  # 00000003
@@ -531,10 +613,14 @@ class DALegacy(metaclass=LogBase):
         if nandcount == 0:
             self.daconfig.legacy_storage.nand = Legacy_NandInfo32(data)
             nandcount = self.daconfig.legacy_storage.nand.m_nand_flash_id_count
-            nc = data[-4:] + self.usbread(nandcount * 2 - 4)
-        else:
+        if nandcount > 0:
             nc = self.usbread(nandcount * 2)
-        m_nand_dev_code = unpack(">" + str(nandcount) + "H", nc)
+            if len(nc) >= nandcount * 2:
+                m_nand_dev_code = unpack(">" + str(nandcount) + "H", nc[:nandcount * 2])
+            else:
+                m_nand_dev_code = ()
+        else:
+            m_nand_dev_code = ()
         self.daconfig.legacy_storage.nand.m_nand_flash_dev_code = m_nand_dev_code
         self.daconfig.legacy_storage.nand.info2 = Legacy_NandInfo2(self.usbread(9))
         self.daconfig.legacy_storage.emmc = Legacy_EmmcInfo(self.config, self.usbread(0x5C))
@@ -605,19 +691,37 @@ class DALegacy(metaclass=LogBase):
                     return False
 
             self.info("Reading nand info")
-            nandinfo = unpack(">I", self.usbread(4))[0]  # 0xBC4
+            nand_buf = self.usbread(4)
+            if len(nand_buf) < 4:
+                self.error("Failed to read NAND info from DA")
+                return False
+            nandinfo = unpack(">I", nand_buf)[0]  # 0xBC4
             self.debug(f"NAND_INFO: {hex(nandinfo)}")
-            ids = unpack(">H", self.usbread(2))[0]
+            ids_buf = self.usbread(2)
+            if len(ids_buf) < 2:
+                self.error("Failed to read NAND IDs count")
+                return False
+            ids = unpack(">H", ids_buf)[0]
             nandids = []
             for i in range(0, ids):
-                tmp = unpack(">H", self.usbread(2))[0]
+                tmp_buf = self.usbread(2)
+                if len(tmp_buf) < 2:
+                    break
+                tmp = unpack(">H", tmp_buf)[0]
                 nandids.append(tmp)
             self.info("Reading emmc info")
-            emmcinfolegacy = unpack(">I", self.usbread(4))[0]
+            emmc_buf = self.usbread(4)
+            if len(emmc_buf) < 4:
+                self.error("Failed to read eMMC info")
+                return False
+            emmcinfolegacy = unpack(">I", emmc_buf)[0]
             self.debug(f"EMMC_INFO: {hex(emmcinfolegacy)}")
             emmcids = []
             for i in range(0, 4):
-                tmp = unpack(">I", self.usbread(4))[0]
+                tmp_buf = self.usbread(4)
+                if len(tmp_buf) < 4:
+                    break
+                tmp = unpack(">I", tmp_buf)[0]
                 emmcids.append(tmp)
 
             if len(nandids) > 0 and nandids[0] != 0:
@@ -971,11 +1075,11 @@ class DALegacy(metaclass=LogBase):
 
     def finish(self, value):
         self.usbwrite(self.Cmd.FINISH_CMD)  # D9
-        ack = self.usbread(1)[0]
-        if ack is self.Rsp.ACK:
+        ack = self.usbread(1)
+        if ack == self.Rsp.ACK:
             self.usbwrite(pack(">I", value))
-            ack = self.usbread(1)[0]
-            if ack is self.Rsp.ACK:
+            ack = self.usbread(1)
+            if ack == self.Rsp.ACK:
                 return True
         return False
 
@@ -1387,27 +1491,32 @@ class DALegacy(metaclass=LogBase):
             self.usbwrite(pack(">Q", length))
             progress = 0
             while progress != 100:
-                ack = self.usbread(1)[0]
-                if ack is not self.Rsp.ACK[0]:
-                    self.error(f"Error on sending emmc format command, response: {hex(ack)}")
-                    exit(1)
-                ack = self.usbread(1)[0]
-                if ack is not self.Rsp.ACK[0]:
-                    self.error(f"Error on sending emmc format command, response: {hex(ack)}")
-                    exit(1)
+                ack = self.usbread(1)
+                if not ack or ack != self.Rsp.ACK:
+                    self.error(f"Error on sending emmc format command, response: {hex(ack[0]) if ack else 'empty'}")
+                    return False
+                ack = self.usbread(1)
+                if not ack or ack != self.Rsp.ACK:
+                    self.error(f"Error on sending emmc format command, response: {hex(ack[0]) if ack else 'empty'}")
+                    return False
                 # data
-                self.usbread(4)[0]  # PROGRESS_INIT
-                progress = self.usbread(1)[0]
+                init_hdr = self.usbread(4)
+                if not init_hdr:
+                    return False
+                progress_raw = self.usbread(1)
+                if not progress_raw:
+                    return False
+                progress = progress_raw[0]
                 self.usbwrite(b"\x5A")  # Send ACK
                 if progress == 0x64:
-                    ack = self.usbread(1)[0]
-                    if ack is not self.Rsp.ACK[0]:
-                        self.error(f"Error on sending emmc format command, response: {hex(ack)}")
-                        exit(1)
-                    ack = self.usbread(1)[0]
-                    if ack is not self.Rsp.ACK[0]:
-                        self.error(f"Error on sending emmc format command, response: {hex(ack)}")
-                        exit(1)
+                    ack = self.usbread(1)
+                    if not ack or ack != self.Rsp.ACK:
+                        self.error(f"Error on sending emmc format command, response: {hex(ack[0]) if ack else 'empty'}")
+                        return False
+                    ack = self.usbread(1)
+                    if not ack or ack != self.Rsp.ACK:
+                        self.error(f"Error on sending emmc format command, response: {hex(ack[0]) if ack else 'empty'}")
+                        return False
                     return True
             return False
 
@@ -1419,7 +1528,11 @@ class DALegacy(metaclass=LogBase):
             self.check_usb_cmd()
         packetsize = 0x0
         if self.daconfig.storage.flashtype == "emmc":
-            self.sdmmc_switch_part(parttype)
+            # Stage2 DA is already in USER partition on legacy chips (MT6582/MT6572).
+            # Calling sdmmc_switch_part(8) on USER partition causes DA to reject subsequent commands.
+            if parttype != EmmcPartitionType.MTK_DA_EMMC_PART_USER and not self.sdmmc_switch_part(parttype):
+                self.mtk.config.last_error = f"readflash switch_part failed for parttype={parttype}"
+                return False if filename != "" else b""
             packetsize = 0x100000
             self.usbwrite(self.Cmd.READ_CMD)  # D6
             self.usbwrite(b"\x0C")  # Host:Linux, 0x0B=Windows
@@ -1427,12 +1540,17 @@ class DALegacy(metaclass=LogBase):
             self.usbwrite(pack(">Q", addr))
             self.usbwrite(pack(">Q", length))
             self.usbwrite(pack(">I", packetsize))
-            ack = self.usbread(1)[0]
-            if ack is not self.Rsp.ACK[0]:
-                self.usbwrite(b"\xA5")
-                res = unpack("<I", self.usbread(4))[0]
-                self.error(f"Error on sending emmc read flash command, response: {hex(ack)}, status: {hex(res)}")
-                exit(1)
+            ack = self.usbread(1)
+            if not ack or ack != self.Rsp.ACK:
+                status_msg = ""
+                if ack == b"\xA5":
+                    res_raw = self.usbread(4)
+                    if len(res_raw) == 4:
+                        res = unpack("<I", res_raw)[0]
+                        status_msg = f", status: {hex(res)}"
+                ack_hex = hex(ack[0]) if ack else "empty"
+                self.error(f"Error on sending emmc read flash command, response: {ack_hex}{status_msg}")
+                return False if filename != "" else b""
             self.daconfig.readsize = self.daconfig.storage.flashsize
         elif self.daconfig.storage.flashtype == "nand":
             self.usbwrite(self.Cmd.NAND_READPAGE_CMD)  # DF
@@ -1442,10 +1560,10 @@ class DALegacy(metaclass=LogBase):
             self.usbwrite(pack(">I", addr))
             self.usbwrite(pack(">I", length))
             self.usbwrite(pack(">I", 0))
-            ack = self.usbread(1)[0]
-            if ack is not self.Rsp.ACK:
-                self.error(f"Error on sending nand read command, response: {hex(ack)}")
-                exit(1)
+            ack = self.usbread(1)
+            if not ack or ack != self.Rsp.ACK:
+                self.error(f"Error on sending nand read command, response: {hex(ack[0]) if ack else 'empty'}")
+                return False if filename != "" else b""
             self.daconfig.pagesize = unpack(">I", self.usbread(4))[0]
             self.daconfig.sparesize = unpack(">I", self.usbread(4))[0]
             packetsize = unpack(">I", self.usbread(4))[0]
@@ -1469,12 +1587,17 @@ class DALegacy(metaclass=LogBase):
                 self.usbwrite(pack(">Q", addr))
                 self.usbwrite(pack(">Q", length))
                 self.usbwrite(pack(">I", packetsize))
-            ack = self.usbread(1)[0]
-            if ack is not self.Rsp.ACK[0]:
-                self.usbwrite(b"\xA5")
-                res = unpack("<I", self.usbread(4))[0]
-                self.error(f"Error on sending nor readflash command, response: {hex(ack)}, status: {hex(res)}")
-                exit(1)
+            ack = self.usbread(1)
+            if not ack or ack != self.Rsp.ACK:
+                status_msg = ""
+                if ack == b"\xA5":
+                    res_raw = self.usbread(4)
+                    if len(res_raw) == 4:
+                        res = unpack("<I", res_raw)[0]
+                        status_msg = f", status: {hex(res)}"
+                ack_hex = hex(ack[0]) if ack else "empty"
+                self.error(f"Error on sending nor readflash command, response: {ack_hex}{status_msg}")
+                return False if filename != "" else b""
             self.daconfig.readsize = self.daconfig.storage.flashsize
         if filename != "":
             worker = Thread(target=writedata, args=(filename, rq), daemon=True)

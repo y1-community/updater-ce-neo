@@ -135,8 +135,6 @@ def detect_linux_distro() -> dict:
         "pkg_install_cmd": "",
         "recommended_pkgs": [],
     }
-    if platform.system() != "Linux":
-        return info
 
     os_release_paths = [Path("/etc/os-release"), Path("/usr/lib/os-release")]
     raw_data = {}
@@ -153,7 +151,7 @@ def detect_linux_distro() -> dict:
             except OSError:
                 pass
 
-    distro_id = raw_data.get("ID", "").lower()
+    distro_id = (raw_data.get("ID") or "generic").lower()
     id_like = [x.lower() for x in raw_data.get("ID_LIKE", "").split() if x.strip()]
     name = raw_data.get("NAME", "Linux")
     pretty_name = raw_data.get("PRETTY_NAME", name)

@@ -51,10 +51,81 @@ def ensure_mtkclient_importable():
     """Make the bundled mtkclient importable (idempotent).
 
     Called by every module that imports mtkclient so the import works both in
-    a dev checkout (vendor/) and in a PyInstaller bundle (BUNDLE_DIR/mtkclient).
+    a dev checkout (vendor/) and in a PyInstaller bundle (BUNDLE_DIR/mtkclient,
+    Contents/Resources/mtkclient, etc.).
     """
+    candidates = [
+        MTKCLIENT_DIR,
+        BUNDLE_DIR / "mtkclient",
+        BUNDLE_DIR.parent / "Resources" / "mtkclient" if getattr(sys, "frozen", False) else None,
+        REPO_ROOT / "vendor" / "mtkclient",
+    ]
+    for cand in candidates:
+        if not cand or not cand.exists():
+            continue
+        if (cand / "mtkclient" / "__init__.py").exists():
+            p = str(cand)
+            if p not in sys.path:
+                sys.path.insert(0, p)
+            return
+        if (cand / "__init__.py").exists():
+            p = str(cand.parent)
+            if p not in sys.path:
+                sys.path.insert(0, p)
+            return
+
     if str(MTKCLIENT_DIR) not in sys.path:
         sys.path.insert(0, str(MTKCLIENT_DIR))
+
+
+def find_libusb_dylib() -> str | None:
+    """Find the path to the libusb-1.0 dynamic library on macOS.
+
+    Checks:
+    1. Vendored universal dylib in mtkclient/Darwin/libusb-1.0.dylib
+    2. PyInstaller bundle locations (sys._MEIPASS, Frameworks, Resources)
+    3. python package `libusb_package`
+    4. Standard Homebrew / MacPorts locations
+    5. Returns None if not found on disk (falling back to standard dlopen name)
+    """
+    candidates = [
+        MTKCLIENT_DIR / "mtkclient" / "Darwin" / "libusb-1.0.dylib",
+        MTKCLIENT_DIR / "Darwin" / "libusb-1.0.dylib",
+        BUNDLE_DIR / "libusb-1.0.dylib",
+        BUNDLE_DIR / "Frameworks" / "libusb-1.0.dylib",
+        BUNDLE_DIR / "mtkclient" / "mtkclient" / "Darwin" / "libusb-1.0.dylib",
+        BUNDLE_DIR / "mtkclient" / "Darwin" / "libusb-1.0.dylib",
+    ]
+    if getattr(sys, "frozen", False):
+        res_dir = BUNDLE_DIR.parent / "Resources"
+        candidates.extend([
+            res_dir / "libusb-1.0.dylib",
+            res_dir / "Frameworks" / "libusb-1.0.dylib",
+            res_dir / "mtkclient" / "mtkclient" / "Darwin" / "libusb-1.0.dylib",
+            res_dir / "mtkclient" / "Darwin" / "libusb-1.0.dylib",
+        ])
+
+    for c in candidates:
+        if c and c.is_file():
+            return str(c)
+
+    try:
+        import libusb_package
+        lp = libusb_package.get_library_path()
+        if lp and os.path.isfile(lp):
+            return lp
+    except Exception:
+        pass
+
+    for sys_path in [
+        "/opt/homebrew/lib/libusb-1.0.dylib",
+        "/usr/local/lib/libusb-1.0.dylib",
+        "/opt/local/lib/libusb-1.0.dylib",
+    ]:
+        if os.path.isfile(sys_path):
+            return sys_path
+
+    return None
 
 # --- Backend discovery (ported from flash_service) --------------------------
 

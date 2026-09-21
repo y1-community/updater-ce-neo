@@ -682,24 +682,24 @@ class ReleaseReminderDialog(QDialog):
         )
         msg.setTextFormat(Qt.RichText)
         msg.setWordWrap(True)
-        msg.setStyleSheet("font-size: 13px; color: #cbd5e1; line-height: 1.4;")
+        msg.setStyleSheet(f"font-size: 13px; color: {t.fg_dim}; line-height: 1.4;")
         layout.addWidget(msg)
 
         # Comparison Card
         card = QFrame()
         card.setStyleSheet(
-            "QFrame { background-color: rgba(255, 255, 255, 0.04);"
-            " border: 1px solid rgba(255, 255, 255, 0.1);"
-            " border-radius: 10px; padding: 12px; }"
+            f"QFrame {{ background-color: {t.bg_card};"
+            f" border: 1px solid {t.border};"
+            f" border-radius: 10px; padding: 12px; }}"
         )
         card_layout = QVBoxLayout(card)
         card_layout.setSpacing(8)
 
         inst_row = QHBoxLayout()
         inst_title = QLabel(tr("reminder_installed_version"))
-        inst_title.setStyleSheet("color: #64748b; font-size: 12px;")
+        inst_title.setStyleSheet(f"color: {t.fg_dim}; font-size: 12px;")
         inst_val = QLabel(installed_lbl)
-        inst_val.setStyleSheet("color: #94a3b8; font-size: 12px; font-weight: 600;")
+        inst_val.setStyleSheet(f"color: {t.fg}; font-size: 12px; font-weight: 600;")
         inst_row.addWidget(inst_title)
         inst_row.addStretch()
         inst_row.addWidget(inst_val)
@@ -707,7 +707,7 @@ class ReleaseReminderDialog(QDialog):
 
         latest_row = QHBoxLayout()
         latest_title = QLabel(tr("reminder_latest_version"))
-        latest_title.setStyleSheet("color: #38bdf8; font-size: 12px; font-weight: 600;")
+        latest_title.setStyleSheet(f"color: {t.fg_primary}; font-size: 12px; font-weight: 600;")
         latest_val = QLabel(latest_lbl)
         latest_val.setStyleSheet(f"color: {t.ok_fg}; font-size: 12px; font-weight: 700;")
         latest_row.addWidget(latest_title)
@@ -720,7 +720,6 @@ class ReleaseReminderDialog(QDialog):
         # Don't remind checkbox
         self.cb_dont_remind = QCheckBox(tr("reminder_dont_remind_device"))
         self.cb_dont_remind.setCursor(Qt.PointingHandCursor)
-        self.cb_dont_remind.setStyleSheet("font-size: 12px; color: #94a3b8;")
         layout.addWidget(self.cb_dont_remind)
 
         # Action Buttons

@@ -69,13 +69,18 @@ def init(loader=None, preloader=None, serialport=None, loglevel=logging.INFO):
     return mtk
 
 
-def connect(mtk, directory="."):
+def connect(mtk, directory=".", on_connected=None):
     _ensure_imports()
 
     da_handler = _DaHandler(mtk, logging.INFO)
     mtk = da_handler.connect(mtk, directory)
     if mtk is None:
         return (None, None)
+    if on_connected:
+        try:
+            on_connected()
+        except Exception as e:
+            logging.getLogger(__name__).debug("on_connected callback failed: %s", e)
     mtk = da_handler.configure_da(mtk)
     return (mtk, da_handler)
 

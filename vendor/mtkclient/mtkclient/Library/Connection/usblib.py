@@ -111,6 +111,45 @@ class UsbClass(DeviceClass):
                 pass
             del windows_dir
 
+    @staticmethod
+    def get_darwin_dylib():
+        if sys.platform.startswith('darwin'):
+            darwin_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "Darwin"))
+            dylib_candidates = [
+                os.path.join(darwin_dir, "libusb-1.0.dylib"),
+            ]
+            if getattr(sys, "frozen", False):
+                meipass = getattr(sys, "_MEIPASS", "")
+                dylib_candidates.extend([
+                    os.path.join(meipass, "libusb-1.0.dylib"),
+                    os.path.join(meipass, "Frameworks", "libusb-1.0.dylib"),
+                    os.path.join(meipass, "mtkclient", "mtkclient", "Darwin", "libusb-1.0.dylib"),
+                    os.path.join(meipass, "mtkclient", "Darwin", "libusb-1.0.dylib"),
+                ])
+                parent_dir = os.path.dirname(meipass)
+                dylib_candidates.extend([
+                    os.path.join(parent_dir, "Resources", "libusb-1.0.dylib"),
+                    os.path.join(parent_dir, "Resources", "mtkclient", "mtkclient", "Darwin", "libusb-1.0.dylib"),
+                    os.path.join(parent_dir, "Resources", "mtkclient", "Darwin", "libusb-1.0.dylib"),
+                    os.path.join(parent_dir, "Frameworks", "libusb-1.0.dylib"),
+                ])
+            try:
+                import libusb_package
+                lp = libusb_package.get_library_path()
+                if lp and os.path.isfile(lp):
+                    dylib_candidates.append(lp)
+            except Exception:
+                pass
+            dylib_candidates.extend([
+                "/opt/homebrew/lib/libusb-1.0.dylib",
+                "/usr/local/lib/libusb-1.0.dylib",
+                "/opt/local/lib/libusb-1.0.dylib",
+            ])
+            for cand in dylib_candidates:
+                if cand and os.path.isfile(cand):
+                    return cand
+        return None
+
     def __init__(self, loglevel=logging.INFO, portconfig=None, devclass=-1):
         super().__init__(loglevel, portconfig, devclass)
         self.load_windows_dll()
@@ -130,7 +169,11 @@ class UsbClass(DeviceClass):
         self.is_serial = False
         self.queue = Queue()
         if sys.platform.startswith('darwin'):
-            self.backend = usb.backend.libusb1.get_backend(find_library=lambda x: "libusb-1.0.dylib")
+            darwin_lib = self.get_darwin_dylib()
+            if darwin_lib:
+                self.backend = usb.backend.libusb1.get_backend(find_library=lambda x: darwin_lib)
+            else:
+                self.backend = usb.backend.libusb1.get_backend(find_library=lambda x: "libusb-1.0.dylib")
         elif sys.platform.startswith('freebsd') or sys.platform.startswith('linux'):
             self.backend = usb.backend.libusb1.get_backend(find_library=lambda x: "libusb-1.0.so")
         elif sys.platform.startswith('win32'):
@@ -533,10 +576,11 @@ class UsbClass(DeviceClass):
                     if rlen < sz and maxtimeout == -1:
                         break
             except usb.core.USBError as e:
-                error = str(e.strerror)
-                if "timed out" in error:
+                error = str(e.strerror or str(e))
+                is_timeout = "timed out" in error.lower() or (hasattr(e, "backend_error_code") and e.backend_error_code == -7)
+                if is_timeout:
                     self.debug("Timed out")
-                    if timeout == maxtimeout:
+                    if timeout >= maxtimeout:
                         return b""
                     timeout += 1
                     pass
@@ -560,7 +604,7 @@ class UsbClass(DeviceClass):
                         return b""
                 elif "No such device" in error:
                     self.error("Device disconnected")
-                    sys.exit(1)
+                    return b""
                 elif "Pipe" in error or "pipe" in error:
                     # 端点 Stall — 尝试 clear_halt 恢复
                     import sys as _sys

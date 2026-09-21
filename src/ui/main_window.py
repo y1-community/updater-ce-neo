@@ -61,7 +61,7 @@ from .dialogs import (
     ReleaseReminderDialog,
     UpdateAvailableDialog,
 )
-from .dark import T, apply_theme
+from .dark import T, apply_theme, is_dark
 from .error_page import ErrorPage
 from .flash_page import FlashPage
 from .retry_page import RetryPage
@@ -205,20 +205,20 @@ class MainWindow(QMainWindow):
         nav = QWidget()
         nav.setObjectName("navPanel")
         nav.setFixedWidth(190)
-        # Nav sidebar is always dark; use translucent dark styling on macOS glass
+        # Adapt nav sidebar to host system theme and glass transparency
         if sys.platform == "darwin":
-            nav.setStyleSheet(
-                "QWidget#navPanel { background-color: rgba(11, 17, 32, 0.75);"
-                " border-right: 1px solid rgba(255, 255, 255, 0.12);"
-                " border-radius: 12px 0 0 12px; }"
-            )
+            nav_bg = "rgba(11, 17, 32, 0.75)" if is_dark() else "rgba(240, 243, 246, 0.85)"
+            nav_border = "1px solid rgba(255, 255, 255, 0.12)" if is_dark() else "1px solid rgba(0, 0, 0, 0.1)"
             top_margin = 38
         else:
-            nav.setStyleSheet(
-                "QWidget#navPanel { background-color: #0b1120; border-right: 1px solid #1a2538;"
-                " border-radius: 12px 0 0 12px; }"
-            )
+            nav_bg = t.bg_nav
+            nav_border = f"1px solid {t.border}"
             top_margin = 20
+
+        nav.setStyleSheet(
+            f"QWidget#navPanel {{ background-color: {nav_bg}; border-right: {nav_border};"
+            f" border-radius: 12px 0 0 12px; }}"
+        )
 
         layout = QVBoxLayout(nav)
         layout.setContentsMargins(12, top_margin, 12, 14)
@@ -227,13 +227,13 @@ class MainWindow(QMainWindow):
         self._brand_label = QLabel(tr("app_name"))
         self._brand_label.setWordWrap(True)
         self._brand_label.setStyleSheet(
-            "font-size: 16px; font-weight: 800; color: #f1f5f9; letter-spacing: -0.02em;"
-            " background: transparent; border: none;"
+            f"font-size: 16px; font-weight: 800; color: {t.fg}; letter-spacing: -0.02em;"
+            f" background: transparent; border: none;"
         )
         layout.addWidget(self._brand_label)
 
         version = QLabel(f"v{APP_VERSION}")
-        version.setStyleSheet("font-size: 11px; color: #94a3b8; background: transparent; border: none;")
+        version.setStyleSheet(f"font-size: 11px; color: {t.fg_dim}; background: transparent; border: none;")
         layout.addWidget(version)
         layout.addSpacing(16)
 
@@ -289,7 +289,7 @@ class MainWindow(QMainWindow):
 
         self._lang_label = QLabel(tr("nav_language"))
         self._lang_label.setStyleSheet(
-            "font-size: 11px; color: #94a3b8; margin-top: 8px; background: transparent; border: none;"
+            f"font-size: 11px; color: {t.fg_dim}; margin-top: 8px; background: transparent; border: none;"
         )
         layout.addWidget(self._lang_label)
         self._lang_combo = QComboBox()
@@ -303,13 +303,13 @@ class MainWindow(QMainWindow):
         self._lang_combo.currentIndexChanged.connect(self._on_language_changed)
         layout.addWidget(self._lang_combo)
 
-        # Nav button styling — high-contrast slate palette with 34px/32px touch targets
+        # Nav button styling — follows system theme with comfortable 34px/32px touch targets
         for btn, _ in self._nav_buttons.values():
             btn.setStyleSheet(
-                "QPushButton { background: transparent; color: #cbd5e1; text-align: left;"
-                " padding: 10px 14px; border-radius: 8px; border: none; font-size: 13px; min-height: 34px; }"
-                "QPushButton:hover { background-color: #1e293b; color: #f8fafc; }"
-                "QPushButton:checked { background-color: #2563eb; color: #ffffff; font-weight: 600; }"
+                f"QPushButton {{ background: transparent; color: {t.fg_dim}; text-align: left;"
+                f" padding: 10px 14px; border-radius: 8px; border: none; font-size: 13px; min-height: 34px; }}"
+                f"QPushButton:hover {{ background-color: {t.bg_hover}; color: {t.fg}; }}"
+                f"QPushButton:checked {{ background-color: {t.nav_active}; color: #ffffff; font-weight: 600; }}"
             )
         aux_btns = [self._support_btn, self._log_btn, self._credits_btn, self._check_updates_btn]
         if hasattr(self, "_linux_setup_btn"):
@@ -318,9 +318,9 @@ class MainWindow(QMainWindow):
             aux_btns.append(self._sp_flash_tool_btn)
         for btn in aux_btns:
             btn.setStyleSheet(
-                "QPushButton { background: transparent; color: #cbd5e1; text-align: left;"
-                " padding: 8px 14px; border-radius: 8px; border: none; font-size: 12px; min-height: 32px; }"
-                "QPushButton:hover { background-color: #1e293b; color: #f8fafc; }"
+                f"QPushButton {{ background: transparent; color: {t.fg_dim}; text-align: left;"
+                f" padding: 8px 14px; border-radius: 8px; border: none; font-size: 12px; min-height: 32px; }}"
+                f"QPushButton:hover {{ background-color: {t.bg_hover}; color: {t.fg}; }}"
             )
         return nav
 

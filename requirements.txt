@@ -9,3 +9,4 @@ capstone>=5.0
 pyqt-liquidglass>=0.1.0; sys_platform == "darwin"
 pyobjc-framework-cocoa>=10.0; sys_platform == "darwin"
 pyobjc-framework-quartz>=10.0; sys_platform == "darwin"
+libusb-package>=1.0.30.0; sys_platform == "darwin"

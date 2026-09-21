@@ -46,9 +46,16 @@ def main():
         app.setWindowIcon(QIcon(str(icon)))
 
     from .i18n import translator
-    from .ui.dark import apply_theme
+    from .ui.dark import apply_theme, is_dark, refresh_theme
+    from .ui.glass import (
+        apply_glass,
+        apply_windows_dark_titlebar,
+        configure_traffic_lights,
+        prepare_window_for_glass,
+    )
+    from .ui.main_window import MainWindow
 
-    # Apply Innioasis Lumen theme (detects OS dark/light mode automatically).
+    # Apply native theme (detects OS dark/light mode automatically).
     apply_theme(app)
 
     # Default language: follow the system, fall back to English.
@@ -63,14 +70,25 @@ def main():
     except Exception:
         translator().set_language("en")
 
-    from .ui.glass import apply_glass, configure_traffic_lights, prepare_window_for_glass
-    from .ui.main_window import MainWindow
-
     window = MainWindow()
     prepare_window_for_glass(window)
     window.show()
     apply_glass(window)
     configure_traffic_lights(window)
+    apply_windows_dark_titlebar(window, is_dark())
+
+    # Dynamically match OS theme changes
+    def _on_os_theme_changed(_=None):
+        refresh_theme(app)
+        apply_windows_dark_titlebar(window, is_dark())
+
+    try:
+        hints = app.styleHints()
+        if hasattr(hints, "colorSchemeChanged"):
+            hints.colorSchemeChanged.connect(_on_os_theme_changed)
+    except Exception:
+        pass
+
     sys.exit(app.exec())
 
 

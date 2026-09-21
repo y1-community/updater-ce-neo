@@ -57,16 +57,34 @@ if [ ! -f "$PYTHON" ]; then
     fi
 fi
 
-if ! "$PYTHON" -c "import PyInstaller" 2>/dev/null; then
-    echo "ERROR: PyInstaller not installed in this Python."
-    echo "       Run: pip install pyinstaller"
-    exit 1
-fi
+for mod in PyInstaller PySide6 usb serial Cryptodome colorama; do
+    if ! "$PYTHON" -c "import $mod" 2>/dev/null; then
+        echo "ERROR: Required module '$mod' not installed."
+        echo "       Run: pip install -r requirements.txt"
+        exit 1
+    fi
+done
 
-if ! "$PYTHON" -c "import PySide6" 2>/dev/null; then
-    echo "ERROR: PySide6 not installed."
-    echo "       Run: pip install pyside6"
-    exit 1
+DARWIN_LIBUSB="vendor/mtkclient/mtkclient/Darwin/libusb-1.0.dylib"
+if [ ! -f "$DARWIN_LIBUSB" ]; then
+    echo ">>> Ensuring universal libusb-1.0.dylib for macOS..."
+    mkdir -p "vendor/mtkclient/mtkclient/Darwin"
+    "$PYTHON" -c "
+import urllib.request, zipfile, io, os, subprocess
+url = 'https://files.pythonhosted.org/packages/52/6f/26de4e9f858ab50e87931f0be268f3c1bbfce33e8584add60da857632142/libusb_package-1.0.30.0-py3-none-macosx_11_0_arm64.whl'
+try:
+    data = urllib.request.urlopen(url, timeout=10).read()
+    zf = zipfile.ZipFile(io.BytesIO(data))
+    arm64_dylib = zf.read('libusb_package/libusb-1.0.dylib')
+    with open('/tmp/libusb-arm64.dylib', 'wb') as f:
+        f.write(arm64_dylib)
+    import libusb_package
+    x86_path = libusb_package.get_library_path()
+    subprocess.run(['lipo', '-create', '-output', '$DARWIN_LIBUSB', '/tmp/libusb-arm64.dylib', x86_path], check=True)
+    subprocess.run(['codesign', '-s', '-', '--force', '$DARWIN_LIBUSB'], check=True)
+except Exception as e:
+    print('Notice: Failed auto-downloading universal dylib:', e)
+" 2>/dev/null || true
 fi
 
 # Convert .ico to .icns if needed (macOS uses .icns, not .ico)
@@ -100,6 +118,10 @@ rm -rf "$BUILD_DIR" "$DIST_DIR"/*.app "$DIST_DIR"/*.dmg
     --noconfirm \
     --clean \
     "$SPEC_FILE"
+
+# --- Ad-hoc code sign bundle ----------------------------------------------
+echo ">>> Signing bundle..."
+codesign --force --deep -s - "$DIST_DIR/$APP_NAME.app"
 
 echo "=== Build complete: $DIST_DIR/$APP_NAME.app ==="
 

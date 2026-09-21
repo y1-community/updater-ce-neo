@@ -52,31 +52,43 @@ def setup_native_app_style(app: QApplication) -> str:
 class _Tokens:
     """Flat namespace of colour strings for a single theme (light or dark).
 
-    Strictly adheres to WCAG AA/AAA contrast ratios in both light and dark modes.
+    Strictly adheres to WCAG AA/AAA contrast ratios in both light and dark modes,
+    including pure black / OLED high-contrast modes.
     """
 
-    def __init__(self, dark: bool):
+    def __init__(self, dark: bool, pure_black: bool = False):
         d = dark
+        b = dark and pure_black
 
         # Surfaces
-        self.bg        = "#0f172a" if d else "#f8fafc"
-        self.bg_card   = "#1e293b" if d else "#ffffff"
-        self.bg_elev   = "#1e293b" if d else "#f1f5f9"
-        self.bg_input  = "#0f172a" if d else "#ffffff"
-        self.bg_hover  = "#334155" if d else "#f1f5f9"
-        self.bg_nav    = "#0b1120"
-        self.bg_status = "#1e293b" if d else "#ffffff"
-        self.bg_tooltip= "#1e293b" if d else "#ffffff"
+        if b:
+            self.bg        = "#000000"
+            self.bg_card   = "#0b0f19"
+            self.bg_elev   = "#111827"
+            self.bg_input  = "#000000"
+            self.bg_hover  = "#1e293b"
+            self.bg_nav    = "#000000"
+            self.bg_status = "#0b0f19"
+            self.bg_tooltip= "#111827"
+        else:
+            self.bg        = "#0f172a" if d else "#f8fafc"
+            self.bg_card   = "#1e293b" if d else "#ffffff"
+            self.bg_elev   = "#1e293b" if d else "#f1f5f9"
+            self.bg_input  = "#0f172a" if d else "#ffffff"
+            self.bg_hover  = "#334155" if d else "#f1f5f9"
+            self.bg_nav    = "#0b1120"
+            self.bg_status = "#1e293b" if d else "#ffffff"
+            self.bg_tooltip= "#1e293b" if d else "#ffffff"
 
         # Text — WCAG AA (>= 4.5:1) & AAA (>= 7:1) compliant
-        self.fg         = "#f8fafc" if d else "#0f172a"  # > 17:1 AAA
-        self.fg_dim     = "#cbd5e1" if d else "#334155"  # 11.2:1 (dark) / 9.6:1 (light) AAA
+        self.fg         = "#ffffff" if b else ("#f8fafc" if d else "#0f172a")  # > 17:1 AAA
+        self.fg_dim     = "#e2e8f0" if b else ("#cbd5e1" if d else "#334155")  # 11.2:1 (dark) / 9.6:1 (light) AAA
         self.fg_muted   = "#94a3b8" if d else "#64748b"  # 5.8:1 (dark) / 4.8:1 (light) AA
         self.fg_primary = "#818cf8" if d else "#2563eb"
 
         # Borders
-        self.border        = "#334155" if d else "#e2e8f0"
-        self.border_strong = "#475569" if d else "#cbd5e1"
+        self.border        = "#374151" if b else ("#334155" if d else "#cbd5e1")
+        self.border_strong = "#4b5563" if b else ("#475569" if d else "#94a3b8")
         self.border_focus  = "#818cf8" if d else "#2563eb"
 
         # Accent
@@ -86,7 +98,7 @@ class _Tokens:
         self.accent_text = "#c7d2fe" if d else "#1e40af"
 
         # Status Badges (foreground, background) — high contrast in both modes
-        self.status_idle       = ("#e2e8f0", "#334155") if d else ("#334155", "#e2e8f0")
+        self.status_idle       = ("#e2e8f0", "#334155") if d else ("#1e293b", "#e2e8f0")
         self.status_idle_fg    = self.status_idle
         self.status_selected   = ("#bfdbfe", "#1e3a5f") if d else ("#1e40af", "#dbeafe")
         self.status_sel_fg     = self.status_selected
@@ -120,11 +132,11 @@ class _Tokens:
         self.progress_err   = "#ef4444" if d else "#dc2626"
 
         # Misc
-        self.log_bg = "#030712"
+        self.log_bg = "#000000" if b else "#030712"
         self.log_fg = "#a3e635"
         self.nav_active = "#2563eb"
         self.disabled = "#334155" if d else "#e2e8f0"
-        self.disabled_fg = "#64748b" if d else "#94a3b8"
+        self.disabled_fg = "#94a3b8" if d else "#64748b"  # High contrast in both modes (>= 4.5:1 AA)
 
 
 class _ThemeState:
@@ -132,24 +144,32 @@ class _ThemeState:
 
     def __init__(self):
         self._dark: bool | None = None
+        self._pure_black: bool = False
         self.tokens: _Tokens = _Tokens(False)
 
     def detect(self) -> bool:
         try:
             c = QApplication.palette().color(QPalette.ColorRole.Window)
             self._dark = c.lightness() < 128
+            self._pure_black = c.lightness() < 24 or c.name().lower() == "#000000"
         except Exception:
             self._dark = False
-        self.tokens = _Tokens(self._dark)
+            self._pure_black = False
+        self.tokens = _Tokens(self._dark, pure_black=self._pure_black)
         return self._dark
 
-    def set_dark(self, value: bool) -> None:
+    def set_dark(self, value: bool, pure_black: bool = False) -> None:
         self._dark = value
-        self.tokens = _Tokens(value)
+        self._pure_black = pure_black
+        self.tokens = _Tokens(value, pure_black=pure_black)
 
     @property
     def is_dark(self) -> bool:
         return self._dark or False
+
+    @property
+    def is_pure_black(self) -> bool:
+        return self._pure_black
 
 
 _state = _ThemeState()
@@ -158,6 +178,11 @@ _state = _ThemeState()
 def is_dark() -> bool:
     """True when the current theme is dark."""
     return _state.is_dark
+
+
+def is_pure_black() -> bool:
+    """True when running in pure black / OLED high contrast mode."""
+    return _state.is_pure_black
 
 
 def T() -> _Tokens:
@@ -169,9 +194,9 @@ def T() -> _Tokens:
 # QPalette builder
 # ---------------------------------------------------------------------------
 
-def _make_palette(dark: bool) -> QPalette:
+def _make_palette(dark: bool, pure_black: bool = False) -> QPalette:
     p = QPalette()
-    t = _Tokens(dark)
+    t = _Tokens(dark, pure_black=pure_black)
     if dark:
         p.setColor(QPalette.Window, QColor(t.bg))
         p.setColor(QPalette.WindowText, QColor(t.fg))
@@ -211,16 +236,53 @@ def _make_palette(dark: bool) -> QPalette:
 # QSS generation
 # ---------------------------------------------------------------------------
 
+_CHECK_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
+_CHECK_DIS_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
+_RADIO_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 10 10"><circle cx="5" cy="5" r="3.5" fill="#ffffff"/></svg>'
+_RADIO_DIS_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 10 10"><circle cx="5" cy="5" r="3.5" fill="#94a3b8"/></svg>'
+
+
+def _get_indicator_svg(filename: str, fallback_svg: str) -> str:
+    """Return an absolute path to an indicator SVG, ensuring it exists on disk."""
+    try:
+        from .. import paths
+        p = paths.RESOURCES_DIR / filename
+        if p.is_file():
+            return p.as_posix()
+        try:
+            paths.RESOURCES_DIR.mkdir(parents=True, exist_ok=True)
+            p.write_text(fallback_svg, encoding="utf-8")
+            return p.as_posix()
+        except Exception:
+            pass
+    except Exception:
+        pass
+    import tempfile
+    from pathlib import Path
+    tmp = Path(tempfile.gettempdir()) / f"innioasis_{filename}"
+    if not tmp.is_file():
+        try:
+            tmp.write_text(fallback_svg, encoding="utf-8")
+        except Exception:
+            pass
+    return tmp.as_posix()
+
+
 def _build_qss() -> str:
     t = _state.tokens
 
+    check_icon = _get_indicator_svg("check.svg", _CHECK_SVG)
+    check_dis_icon = _get_indicator_svg("check_disabled.svg", _CHECK_DIS_SVG)
+    radio_icon = _get_indicator_svg("radio_dot.svg", _RADIO_SVG)
+    radio_dis_icon = _get_indicator_svg("radio_disabled.svg", _RADIO_DIS_SVG)
+
     # Select native font stack per platform
     if IS_MACOS:
-        font_stack = '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif'
+        font_stack = 'system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", sans-serif'
     elif IS_WINDOWS:
-        font_stack = '"Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei", sans-serif'
+        font_stack = '"Segoe UI Variable Text", "Segoe UI Variable Display", "Segoe UI", -apple-system, "Microsoft YaHei UI", "Microsoft YaHei", sans-serif'
     else:
-        font_stack = 'system-ui, "Inter", "Cantarell", "Ubuntu", "Noto Sans", sans-serif'
+        font_stack = 'system-ui, -apple-system, "Cantarell", "Ubuntu", "Inter", "Noto Sans", "Liberation Sans", sans-serif'
 
     # Window background & sidebar transparency for Liquid Glass on macOS
     use_glass = False
@@ -345,12 +407,18 @@ QLabel[cssClass="warning-banner"] {{
     padding: 6px 12px;
 }}
 
-/* ── Cards ────────────────────────────────────────────── */
+/* ── Cards & Separators ───────────────────────────────── */
 QFrame[cssClass="card"] {{
     background-color: {t.bg_card};
     border: 1px solid {t.border};
     border-radius: 12px;
     padding: 6px;
+}}
+QLabel[cssClass="separator"], QFrame[cssClass="separator"] {{
+    background-color: {t.border};
+    min-height: 1px;
+    max-height: 1px;
+    border: none;
 }}
 
 /* ── Buttons (Comfortable Touch Points & High Contrast) ── */
@@ -432,6 +500,46 @@ QPushButton[cssClass="accent-pill"]:hover {{
     background-color: {t.accent_hover};
 }}
 
+/* ── Sidebar Language Selector ────────────────────────── */
+#navPanel QComboBox, QComboBox#langCombo {{
+    background-color: {t.bg_input};
+    color: {t.fg};
+    border: 1px solid {t.border};
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 12px;
+    font-weight: 500;
+    min-height: 28px;
+}}
+#navPanel QComboBox:hover, QComboBox#langCombo:hover {{
+    background-color: {t.bg_hover};
+    border-color: {t.border_strong};
+}}
+#navPanel QComboBox::drop-down, QComboBox#langCombo::drop-down {{
+    subcontrol-origin: padding;
+    subcontrol-position: center right;
+    border: none;
+    width: 20px;
+}}
+#navPanel QComboBox::down-arrow, QComboBox#langCombo::down-arrow {{
+    image: none;
+    border-left: 3px solid transparent;
+    border-right: 3px solid transparent;
+    border-top: 4px solid {t.fg_dim};
+    margin-right: 6px;
+}}
+#navPanel QComboBox QAbstractItemView, QComboBox#langCombo QAbstractItemView {{
+    background-color: {t.bg_card};
+    color: {t.fg};
+    border: 1px solid {t.border};
+    border-radius: 6px;
+    padding: 4px;
+    selection-background-color: {t.accent_bg};
+    selection-color: {t.accent_text};
+    font-size: 12px;
+    outline: none;
+}}
+
 /* ── Combo boxes (Native Touch Target >= 34px) ────────── */
 """ + (f"""
 QComboBox {{
@@ -448,6 +556,11 @@ QComboBox:hover {{
 }}
 QComboBox:focus {{
     border-color: {t.border_focus};
+}}
+QComboBox:disabled {{
+    background-color: {t.disabled};
+    color: {t.disabled_fg};
+    border-color: {t.border};
 }}
 QComboBox::drop-down {{
     subcontrol-origin: padding;
@@ -485,8 +598,12 @@ QComboBox QAbstractItemView::item:hover {{
 """ if not IS_MACOS else f"""
 /* Native Cocoa QComboBox on macOS */
 QComboBox {{
+    color: {t.fg};
     font-size: 13px;
     min-height: 34px;
+}}
+QComboBox:disabled {{
+    color: {t.disabled_fg};
 }}
 QComboBox QAbstractItemView {{
     background-color: {t.bg_card};
@@ -495,6 +612,76 @@ QComboBox QAbstractItemView {{
     selection-color: {t.accent_text};
 }}
 """) + f"""
+
+/* ── Checkboxes & Radio Buttons (High Contrast & Legible) ── */
+QCheckBox, QRadioButton {{
+    color: {t.fg};
+    font-size: 13px;
+    spacing: 8px;
+    min-height: 22px;
+    background: transparent;
+}}
+QCheckBox:disabled, QRadioButton:disabled {{
+    color: {t.disabled_fg};
+}}
+QCheckBox::indicator {{
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    border: 1.5px solid {t.border_strong};
+    background-color: {t.bg_input};
+}}
+QCheckBox::indicator:hover {{
+    border-color: {t.accent};
+    background-color: {t.bg_hover};
+}}
+QCheckBox::indicator:checked {{
+    background-color: {t.accent};
+    border-color: {t.accent};
+    image: url("{check_icon}");
+}}
+QCheckBox::indicator:checked:hover {{
+    background-color: {t.accent_hover};
+    border-color: {t.accent_hover};
+}}
+QCheckBox::indicator:disabled {{
+    border-color: {t.border};
+    background-color: {t.disabled};
+}}
+QCheckBox::indicator:checked:disabled {{
+    background-color: {t.disabled};
+    border-color: {t.border};
+    image: url("{check_dis_icon}");
+}}
+QRadioButton::indicator {{
+    width: 18px;
+    height: 18px;
+    border-radius: 9px;
+    border: 1.5px solid {t.border_strong};
+    background-color: {t.bg_input};
+}}
+QRadioButton::indicator:hover {{
+    border-color: {t.accent};
+    background-color: {t.bg_hover};
+}}
+QRadioButton::indicator:checked {{
+    background-color: {t.accent};
+    border-color: {t.accent};
+    image: url("{radio_icon}");
+}}
+QRadioButton::indicator:checked:hover {{
+    background-color: {t.accent_hover};
+    border-color: {t.accent_hover};
+}}
+QRadioButton::indicator:disabled {{
+    border-color: {t.border};
+    background-color: {t.disabled};
+}}
+QRadioButton::indicator:checked:disabled {{
+    background-color: {t.disabled};
+    border-color: {t.border};
+    image: url("{radio_dis_icon}");
+}}
 
 /* ── Tabs (Comfortable Touch Targets >= 36px) ─────────── */
 QTabWidget::pane {{
@@ -697,8 +884,12 @@ QGroupBox::title {{
 """
 
 
-def apply_theme(app: QApplication, force_dark: bool | None = None) -> None:
-    """Apply the Innioasis Lumen theme to *app*.
+def apply_theme(
+    app: QApplication,
+    force_dark: bool | None = None,
+    pure_black: bool | None = None,
+) -> None:
+    """Apply the native platform theme to *app*.
 
     Ensures native platform QStyle is initialized.
     If *force_dark* is ``None`` the system palette is inspected.
@@ -706,15 +897,15 @@ def apply_theme(app: QApplication, force_dark: bool | None = None) -> None:
     """
     setup_native_app_style(app)
     if force_dark is not None:
-        _state.set_dark(force_dark)
+        _state.set_dark(force_dark, pure_black=bool(pure_black))
     else:
         _state.detect()
-    app.setPalette(_make_palette(_state.is_dark))
+    app.setPalette(_make_palette(_state.is_dark, pure_black=_state.is_pure_black))
     app.setStyleSheet(_build_qss())
 
 
 def refresh_theme(app: QApplication) -> None:
     """Re-read the palette and regenerate the QSS (e.g. after a system theme change)."""
     _state.detect()
-    app.setPalette(_make_palette(_state.is_dark))
+    app.setPalette(_make_palette(_state.is_dark, pure_black=_state.is_pure_black))
     app.setStyleSheet(_build_qss())

@@ -38,7 +38,7 @@ class SettingsPage(QWidget):
 
         # Header
         self._header = QLabel(tr("settings_title"))
-        self._header.setStyleSheet("font-size: 20px; font-weight: 800; color: #f8fafc;")
+        self._header.setProperty("cssClass", "pageTitle")
         root_layout.addWidget(self._header)
 
         # Scroll area for clean overflow handling
@@ -60,7 +60,7 @@ class SettingsPage(QWidget):
 
         self._reminders_desc = QLabel(tr("settings_reminders_desc"))
         self._reminders_desc.setWordWrap(True)
-        self._reminders_desc.setStyleSheet("color: #94a3b8; font-size: 13px; line-height: 1.4;")
+        self._reminders_desc.setProperty("cssClass", "subtitle")
         rem_layout.addWidget(self._reminders_desc)
 
         # Y1 Row
@@ -75,7 +75,7 @@ class SettingsPage(QWidget):
         y1_status_row.setContentsMargins(24, 0, 0, 0)
         self._lbl_y1_status = QLabel()
         self._lbl_y1_status.setWordWrap(True)
-        self._lbl_y1_status.setStyleSheet("color: #64748b; font-size: 12px;")
+        self._lbl_y1_status.setProperty("cssClass", "dimmed")
         y1_status_row.addWidget(self._lbl_y1_status, 1)
 
         self._btn_clear_y1 = QPushButton(tr("settings_clear_install"))
@@ -90,7 +90,7 @@ class SettingsPage(QWidget):
         # Separator line
         sep = QLabel()
         sep.setFixedHeight(1)
-        sep.setStyleSheet("background-color: rgba(255, 255, 255, 0.08);")
+        sep.setProperty("cssClass", "separator")
         rem_layout.addWidget(sep)
 
         # Y2 Row
@@ -105,7 +105,7 @@ class SettingsPage(QWidget):
         y2_status_row.setContentsMargins(24, 0, 0, 0)
         self._lbl_y2_status = QLabel()
         self._lbl_y2_status.setWordWrap(True)
-        self._lbl_y2_status.setStyleSheet("color: #64748b; font-size: 12px;")
+        self._lbl_y2_status.setProperty("cssClass", "dimmed")
         y2_status_row.addWidget(self._lbl_y2_status, 1)
 
         self._btn_clear_y2 = QPushButton(tr("settings_clear_install"))
@@ -144,7 +144,8 @@ class SettingsPage(QWidget):
 
         lbl_hide_tip = QLabel(tr("settings_hide_donations_tip"))
         lbl_hide_tip.setWordWrap(True)
-        lbl_hide_tip.setStyleSheet("color: #64748b; font-size: 12px; margin-left: 24px;")
+        lbl_hide_tip.setProperty("cssClass", "dimmed")
+        lbl_hide_tip.setContentsMargins(24, 0, 0, 0)
         don_layout.addWidget(lbl_hide_tip)
 
         # Skip install donation prompt checkbox
@@ -156,7 +157,8 @@ class SettingsPage(QWidget):
 
         lbl_skip_tip = QLabel(tr("settings_skip_install_donations_tip"))
         lbl_skip_tip.setWordWrap(True)
-        lbl_skip_tip.setStyleSheet("color: #64748b; font-size: 12px; margin-left: 24px;")
+        lbl_skip_tip.setProperty("cssClass", "dimmed")
+        lbl_skip_tip.setContentsMargins(24, 0, 0, 0)
         don_layout.addWidget(lbl_skip_tip)
 
         self._donations_card.set_layout(don_layout)
@@ -169,7 +171,7 @@ class SettingsPage(QWidget):
 
         self._checker_desc = QLabel(tr("settings_checker_desc"))
         self._checker_desc.setWordWrap(True)
-        self._checker_desc.setStyleSheet("color: #94a3b8; font-size: 13px; line-height: 1.4;")
+        self._checker_desc.setProperty("cssClass", "subtitle")
         chk_layout.addWidget(self._checker_desc)
 
         chk_btn_row = QHBoxLayout()

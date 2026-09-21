@@ -106,7 +106,7 @@ def open_browser(url: str, new_window: bool = True) -> bool:
                 logger.debug("Direct Linux browser launch (%s) failed: %s", browser_bin, e)
 
     # 2. macOS: /usr/bin/open brings the application to the foreground
-    if paths.IS_MAC:
+    if platform.system() == "Darwin":
         try:
             subprocess.Popen(
                 ["open", url],

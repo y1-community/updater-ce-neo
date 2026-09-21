@@ -154,8 +154,9 @@ class DAconfig(metaclass=LogBase):
                 with open(preloader, "rb") as rf:
                     data = rf.read()
             else:
-                self.error(f"Preloader : {preloader} doesn't exist. Aborting.")
-                exit(1)
+                self.error(f"Preloader : {preloader} doesn't exist.")
+                self.emi = None
+                return bytearray()
         try:
             self.emiver, self.emi = self.m_extract_emi(data)
         except Exception:

@@ -430,6 +430,92 @@ def _missing_images(scatter_path):
     return [name for (name, path) in _list_expected_images(scatter_path) if not path.exists()]
 
 
+def _to_int_safe(val, default=0):
+    try:
+        return int(str(val).strip(), 0)
+    except Exception:
+        return default
+
+
+def _parse_scatter_entries(scatter_path):
+    """Parse all partition entries from a scatter file, returning a list of dicts with:
+    - name: partition name (str)
+    - file_name: scatter file_name field (str)
+    - is_download: bool
+    - region: storage region (str, e.g. EMMC_BOOT_1, EMMC_USER)
+    - linear_start_addr: int
+    - physical_start_addr: int
+    - partition_size: int
+    - offset: calculated byte offset within the target partition (int)
+    """
+    try:
+        content = Path(scatter_path).read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        return []
+
+    raw_parts = []
+    current = {}
+    for raw in content.split("\n"):
+        line = raw.strip()
+        if line.startswith("- partition_index:"):
+            if current:
+                raw_parts.append(current)
+            current = {}
+            continue
+        if ":" in line and not line.startswith("#"):
+            key, _, value = line.partition(":")
+            current[key.strip().lstrip("- ")] = value.strip()
+    if current:
+        raw_parts.append(current)
+
+    # Determine base linear address for EMMC_USER (typically the linear address
+    # of the first EMMC_USER partition, usually 0x1400000 on MT6572/MT6582)
+    user_base = None
+    has_non_zero_phys = False
+    for p in raw_parts:
+        region = p.get("region", "").upper()
+        if region == "EMMC_USER":
+            lin = _to_int_safe(p.get("linear_start_addr", 0))
+            phys = _to_int_safe(p.get("physical_start_addr", 0))
+            if user_base is None:
+                user_base = lin
+            if phys > 0:
+                has_non_zero_phys = True
+    if user_base is None:
+        user_base = 0x1400000
+
+    entries = []
+    for p in raw_parts:
+        pname = p.get("partition_name", "")
+        if not pname:
+            continue
+        fname = p.get("file_name", "NONE")
+        region = p.get("region", "EMMC_USER").upper()
+        lin = _to_int_safe(p.get("linear_start_addr", 0))
+        phys = _to_int_safe(p.get("physical_start_addr", 0))
+        size = _to_int_safe(p.get("partition_size", 0))
+        is_dl = p.get("is_download", "").lower() == "true"
+
+        if region in ("EMMC_BOOT_1", "EMMC_BOOT_2"):
+            offset = phys
+        elif has_non_zero_phys:
+            offset = phys
+        else:
+            offset = max(0, lin - user_base)
+
+        entries.append({
+            "name": pname,
+            "file_name": fname,
+            "is_download": is_dl,
+            "region": region,
+            "linear_start_addr": lin,
+            "physical_start_addr": phys,
+            "partition_size": size,
+            "offset": offset,
+        })
+    return entries
+
+
 # ---------------------------------------------------------------------------
 # Flash worker
 # ---------------------------------------------------------------------------
@@ -1012,19 +1098,51 @@ class FlashWorker(QThread):
             return
         self._log(f"Found {len(image_files)} partition image(s)")
 
+        # Locate preloader if present in package
+        preloader_path = None
+        for pname, fpath in image_files:
+            if pname.upper() == "PRELOADER":
+                p = Path(fpath)
+                if p.exists():
+                    preloader_path = str(p)
+                break
+
+        if not preloader_path and os.path.isdir(str(extract_dir)):
+            for f in Path(extract_dir).glob("preloader*.bin"):
+                if f.is_file():
+                    preloader_path = str(f)
+                    break
+
+        if preloader_path:
+            self._log(f"Preloader image: {os.path.basename(preloader_path)}")
+        else:
+            self._log("No preloader image found; using built-in EMI")
+
         try:
-            mtk = mtk_api.init(None, None)
+            mtk = mtk_api.init(loader=None, preloader=preloader_path)
         except BaseException as e:
             self._log(f"mtkclient init failed: {type(e).__name__}: {e}")
             self.finished.emit(False, "MTK_INIT_FAILED")
             return
+        self.step_changed.emit(STEP_WAITING)
+        self.progress.emit(10)
         self.action_changed.emit("Waiting for MTK device... Power off device and connect USB.")
         self._log("Waiting for MTK device... Power off the device and connect USB.")
-        try:
+
+        def _on_connected():
             self.step_changed.emit(STEP_DETECT)
             self.progress.emit(12)
-            self.action_changed.emit("Device detected, connecting...")
-            mtk, da_handler = mtk_api.connect(mtk, directory=str(extract_dir))
+            self.action_changed.emit("Device detected in BROM mode, configuring DA...")
+            self._log("Device detected in BROM mode, configuring DA...")
+
+        try:
+            try:
+                mtk, da_handler = mtk_api.connect(
+                    mtk, directory=str(extract_dir), on_connected=_on_connected
+                )
+            except TypeError:
+                mtk, da_handler = mtk_api.connect(mtk, directory=str(extract_dir))
+                _on_connected()
         except BaseException as e:
             # BaseException: mtkclient raises SystemExit on DA upload failure.
             self._log(f"Device connection failed: {e}\n{traceback.format_exc()}")
@@ -1046,6 +1164,10 @@ class FlashWorker(QThread):
 
         total = len(image_files)
 
+        scatter_entries_map = {
+            e["name"].lower(): e for e in _parse_scatter_entries(scatter_file)
+        }
+
         # Pre-order: ensure preloader is flashed first if present, system last
         def _partition_sort_key(item):
             name = item[0].lower()
@@ -1062,6 +1184,16 @@ class FlashWorker(QThread):
         completed_bytes = 0
 
         # Wire mtk.config.guiprogress so chunk writes update progress in real time
+        class _ProgressEmitter:
+            def __init__(self, callback):
+                self._cb = callback
+
+            def emit(self, pos):
+                self._cb(pos)
+
+            def __call__(self, pos):
+                self._cb(pos)
+
         def on_mtk_write_progress(pos):
             if self._cancelled:
                 return
@@ -1072,57 +1204,79 @@ class FlashWorker(QThread):
                 self.progress.emit(min(95, max(20, mapped)))
 
         if hasattr(mtk, "config"):
-            mtk.config.guiprogress = on_mtk_write_progress
+            mtk.config.guiprogress = _ProgressEmitter(on_mtk_write_progress)
 
-        for i, (part_name, file_path) in enumerate(ordered_images):
-            if self._cancelled:
-                self.finished.emit(False, "USER_CANCELLED")
-                return
-            self._log(f"Writing {part_name} ({i + 1}/{total}): {file_path.name}")
-            self.action_changed.emit(f"Writing {part_name} ({i + 1}/{total}): {file_path.name}")
+        try:
+            for i, (part_name, file_path) in enumerate(ordered_images):
+                if self._cancelled:
+                    self.finished.emit(False, "USER_CANCELLED")
+                    return
+                self._log(f"Writing {part_name} ({i + 1}/{total}): {file_path.name}")
+                self.action_changed.emit(f"Writing {part_name} ({i + 1}/{total}): {file_path.name}")
 
-            is_preloader = part_name.lower() == "preloader"
-            active_file = file_path
-            temp_wrapped = None
+                entry = scatter_entries_map.get(part_name.lower())
+                region = entry.get("region", "EMMC_USER") if entry else "EMMC_USER"
+                offset = entry.get("offset") if entry else None
 
-            if is_preloader:
-                temp_wrapped = _wrap_preloader_for_raw_boot(
-                    file_path, storage_type="emmc", log_cb=self._log
-                )
-                if temp_wrapped != file_path:
-                    active_file = temp_wrapped
-                target_parts = self._resolve_preloader_target_parts(mtk)
-            else:
-                target_parts = ("user",)
+                is_preloader = part_name.lower() == "preloader"
+                active_file = file_path
+                temp_wrapped = None
 
-            try:
-                for target_part in target_parts:
-                    self._write_mtk_partition(
-                        da_handler, mtk, part_name, str(active_file), target_part
+                if is_preloader:
+                    temp_wrapped = _wrap_preloader_for_raw_boot(
+                        file_path, storage_type="emmc", log_cb=self._log
                     )
-            except BaseException as e:
-                # BaseException: mtkclient may sys.exit() on DA errors; keep it
-                # a clean per-partition failure, never an app crash.
-                self._log(f"Writing {part_name} failed: {e}\n{traceback.format_exc()}")
-                self.finished.emit(False, "WRITE_FAILED")
-                return
-            finally:
-                if temp_wrapped and temp_wrapped != file_path and temp_wrapped.exists():
-                    try:
-                        temp_wrapped.unlink(missing_ok=True)
-                    except Exception:
-                        pass
-                if file_path.exists():
-                    completed_bytes += file_path.stat().st_size
-                if total_bytes > 0:
-                    mapped = 20 + int(min(1.0, completed_bytes / total_bytes) * 75)
-                    self.progress.emit(min(95, max(20, mapped)))
+                    if temp_wrapped != file_path:
+                        active_file = temp_wrapped
+                    target_parts = self._resolve_preloader_target_parts(mtk, normalized_region=region)
+                else:
+                    if region == "EMMC_BOOT_1":
+                        target_parts = ("boot1",)
+                    elif region == "EMMC_BOOT_2":
+                        target_parts = ("boot2",)
+                    else:
+                        target_parts = ("user",)
 
-        self.step_changed.emit(STEP_DONE)
-        self.progress.emit(100)
-        self.action_changed.emit("Flash complete! Disconnect USB and reboot.")
-        self._log("Flash complete! Disconnect USB and reboot the device.")
-        self.finished.emit(True, "")
+                try:
+                    for target_part in target_parts:
+                        self._write_mtk_partition(
+                            da_handler,
+                            mtk,
+                            part_name,
+                            str(active_file),
+                            target_part,
+                            offset=offset,
+                        )
+                except BaseException as e:
+                    # BaseException: mtkclient may sys.exit() on DA errors; keep it
+                    # a clean per-partition failure, never an app crash.
+                    self._log(f"Writing {part_name} failed: {e}\n{traceback.format_exc()}")
+                    self.finished.emit(False, "WRITE_FAILED")
+                    return
+                finally:
+                    if temp_wrapped and temp_wrapped != file_path and temp_wrapped.exists():
+                        try:
+                            temp_wrapped.unlink(missing_ok=True)
+                        except Exception:
+                            pass
+                    if file_path.exists():
+                        completed_bytes += file_path.stat().st_size
+                    if total_bytes > 0:
+                        mapped = 20 + int(min(1.0, completed_bytes / total_bytes) * 75)
+                        self.progress.emit(min(95, max(20, mapped)))
+
+            self.step_changed.emit(STEP_DONE)
+            self.progress.emit(100)
+            self.action_changed.emit("Flash complete! Disconnect USB and reboot.")
+            self._log("Flash complete! Disconnect USB and reboot the device.")
+            self.finished.emit(True, "")
+        finally:
+            # Clean up USB port / DA connection so libusb interface is released
+            try:
+                if mtk is not None and hasattr(mtk, "port") and mtk.port is not None:
+                    mtk.port.close()
+            except Exception as e:
+                logger.debug("Failed to close mtk port cleanly: %s", e)
 
     def _is_legacy_mode(self, mtk):
         mode = getattr(getattr(mtk, "daloader", None), "flashmode", None)
@@ -1143,10 +1297,61 @@ class FlashWorker(QThread):
                 return ("boot1",)
             return ("boot1", "boot2")
 
-    def _write_mtk_partition(self, da_handler, mtk, part_name, file_path_str, part_type):
-        """Invoke da_handler to write a partition, supporting both mock test handlers and real DaHandler."""
+    def _write_mtk_partition(
+        self,
+        da_handler,
+        mtk,
+        part_name,
+        file_path_str,
+        part_type,
+        offset=None,
+    ):
+        """Invoke da_handler to write a partition, supporting direct offset write, real DaHandler, and test mocks."""
+        file_size = Path(file_path_str).stat().st_size if Path(file_path_str).exists() else 0
+
+        # Fast path: if offset is known and da_handler / mtk supports direct offset write,
+        # write directly by offset. This bypasses detect_partition and on-device GPT probing,
+        # ensuring reliable writes on MBR/EBR devices (e.g. MT6572, MT6582) and unformatted flash.
+        if offset is not None:
+            if hasattr(da_handler, "da_wo"):
+                ok = da_handler.da_wo(
+                    start=offset,
+                    length=file_size,
+                    filename=file_path_str,
+                    parttype=part_type,
+                )
+                if not ok:
+                    err = getattr(getattr(mtk, "config", None), "last_error", None) or "write failed"
+                    raise RuntimeError(f"Writing {part_name} at offset {hex(offset)} failed: {err}")
+                return
+            daloader = getattr(mtk, "daloader", None)
+            if daloader is not None and hasattr(daloader, "writeflash"):
+                ok = daloader.writeflash(
+                    addr=offset,
+                    length=file_size,
+                    filename=file_path_str,
+                    parttype=part_type,
+                )
+                if not ok:
+                    err = getattr(getattr(mtk, "config", None), "last_error", None) or "write failed"
+                    raise RuntimeError(f"Writing {part_name} at offset {hex(offset)} failed: {err}")
+                return
+
+        # Fallback path: handle_da_cmds / da_write (used by test mocks or when offset is unknown)
+        offset_hex = hex(offset) if offset is not None else "0x0"
+        length_hex = hex(file_size)
+
+        class _Args:
+            partitionname = part_name
+            filename = file_path_str
+            parttype = part_type
+            offset = offset_hex
+            length = length_hex
+
         if hasattr(da_handler, "handle_da_cmds"):
             try:
+                da_handler.handle_da_cmds(mtk, "w", _Args())
+            except TypeError:
                 da_handler.handle_da_cmds(
                     mtk,
                     "w",
@@ -1154,12 +1359,6 @@ class FlashWorker(QThread):
                     filenames=file_path_str,
                     parttype=part_type,
                 )
-            except TypeError:
-                class _Args:
-                    partitionname = part_name
-                    filename = file_path_str
-                    parttype = part_type
-                da_handler.handle_da_cmds(mtk, "w", _Args())
         elif hasattr(da_handler, "da_write"):
             da_handler.da_write(
                 parttype=part_type,
@@ -1176,6 +1375,15 @@ class FlashWorker(QThread):
 # Supported MTK-family USB vendors (same set mtkclient's usblib matches):
 # MediaTek, LG, OPPO/realme/oneplus, Sony.
 _MTK_VENDOR_IDS = (0x0E8D, 0x1004, 0x22D9, 0x0FCE)
+
+# Flash-mode VID/PID pairs supported by mtkclient (BROM / Preloader / DA modes).
+# Used by DeviceMonitor to avoid falsely triggering on normal Android (MTP/ADB) mode.
+_MTK_FLASH_IDS = {
+    0x0E8D: {0x0003, 0x2000, 0x2001, 0x20FF, 0x3000, 0x6000},
+    0x1004: {0x6000},
+    0x22D9: {0x0006},
+    0x0FCE: {0xF200, 0xD1E9, 0xD1E2, 0xD1EC, 0xD1DD},
+}
 
 
 def _load_libusb_backend():
@@ -1206,6 +1414,16 @@ def _load_libusb_backend():
         backend = usb.backend.libusb1.get_backend(
             find_library=lambda name: "libusb-1.0.dll"
         )
+    elif IS_MAC:
+        dylib_path = paths.find_libusb_dylib()
+        if dylib_path:
+            backend = usb.backend.libusb1.get_backend(
+                find_library=lambda name: dylib_path
+            )
+        else:
+            backend = usb.backend.libusb1.get_backend(
+                find_library=lambda name: "libusb-1.0.dylib"
+            )
     else:
         backend = usb.backend.libusb1.get_backend(
             find_library=lambda name: "libusb-1.0.so"
@@ -1247,6 +1465,7 @@ class DeviceMonitor(QThread):
                 "Device detection is disabled; use the flash backend directly."
             )
             return
+        android_mode_warned = False
         while not self._stop.is_set():
             try:
                 present = False
@@ -1254,10 +1473,19 @@ class DeviceMonitor(QThread):
                 devices = usb_core.find(find_all=True, backend=backend)
                 for dev in devices:
                     try:
-                        if dev.idVendor in _MTK_VENDOR_IDS:
-                            present = True
-                            port_label = f"USB {dev.idVendor:04X}:{dev.idProduct:04X}"
-                            break
+                        vid = dev.idVendor
+                        pid = dev.idProduct
+                        if vid in _MTK_FLASH_IDS:
+                            if pid in _MTK_FLASH_IDS[vid]:
+                                present = True
+                                port_label = f"USB {vid:04X}:{pid:04X}"
+                                break
+                            elif vid == 0x0E8D and not android_mode_warned:
+                                android_mode_warned = True
+                                self.error.emit(
+                                    f"Device detected (USB {vid:04X}:{pid:04X}) in normal Android mode. "
+                                    "Please power off the device completely and reconnect it to enter flash mode."
+                                )
                     except Exception:
                         continue
                 if present and not self._present:

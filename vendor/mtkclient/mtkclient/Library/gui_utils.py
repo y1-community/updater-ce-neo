@@ -30,7 +30,7 @@ class progress:
         self.oldtime = time.time()
         self.offset = offset
         if guiprogress is not None:
-            self.guiprogress = guiprogress.emit
+            self.guiprogress = getattr(guiprogress, "emit", guiprogress)
         else:
             self.guiprogress = None
 

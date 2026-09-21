@@ -61,7 +61,16 @@ def is_golden_gate_or_newer() -> bool:
 
 def is_glass_supported() -> bool:
     """Return True if running on supported macOS (Ventura through Golden Gate+)."""
-    return is_ventura_or_newer()
+    if not is_ventura_or_newer():
+        return False
+    try:
+        from PySide6.QtGui import QGuiApplication
+        app = QGuiApplication.instance()
+        if app is not None and app.platformName() != "cocoa":
+            return False
+    except Exception:
+        pass
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -125,11 +134,16 @@ def apply_glass(
 
     if _has_pyqt_liquidglass and hasattr(_liquidglass_module, "apply_glass_to_window"):
         try:
-            _liquidglass_module.apply_glass_to_window(
-                window,
-                corner_radius=corner_radius,
-                padding=padding,
-            )
+            if hasattr(_liquidglass_module, "GlassOptions"):
+                pad = (padding, padding, padding, padding) if isinstance(padding, (int, float)) else padding
+                opts = _liquidglass_module.GlassOptions(corner_radius=corner_radius, padding=pad)
+                _liquidglass_module.apply_glass_to_window(window, opts)
+            else:
+                _liquidglass_module.apply_glass_to_window(
+                    window,
+                    corner_radius=corner_radius,
+                    padding=padding,
+                )
             return True
         except Exception as e:
             logger.warning("pyqt_liquidglass.apply_glass_to_window failed: %s", e)
@@ -298,3 +312,29 @@ def _pyobjc_configure_traffic_lights(
     except Exception as e:
         logger.debug("Could not reposition traffic lights via PyObjC: %s", e)
         return False
+
+
+def apply_windows_dark_titlebar(window: QMainWindow | QWidget, dark: bool) -> bool:
+    """Enable immersive dark mode for native Windows titlebar.
+
+    Uses DwmSetWindowAttribute with DWMWA_USE_IMMERSIVE_DARK_MODE (attribute 20
+    on Windows 11 / Windows 10 20H1+ and attribute 19 fallback on Windows 10 1809-1909).
+    Safe no-op on macOS and Linux.
+    """
+    if sys.platform != "win32" and platform.system() != "Windows":
+        return False
+    try:
+        import ctypes
+        from ctypes import byref, c_int, sizeof
+
+        hwnd = int(window.winId())
+        dwm = ctypes.windll.dwmapi
+        val = c_int(1 if dark else 0)
+        for attr in (20, 19):
+            hr = dwm.DwmSetWindowAttribute(hwnd, attr, byref(val), sizeof(val))
+            if hr == 0:
+                logger.info("Applied Windows dark mode titlebar (attribute %d=%d)", attr, val.value)
+                return True
+    except Exception as e:
+        logger.debug("Could not set Windows dark mode titlebar: %s", e)
+    return False
