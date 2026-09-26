@@ -105,15 +105,21 @@ coll = COLLECT(
 # ---------------------------------------------------------------------------
 import shutil  # noqa: E402
 
-SP_FLASH_SRC = PROJECT_ROOT / "SP_Flash_Tool"
+sp_candidates = [
+    PROJECT_ROOT / "SP_Flash_Tool",
+    PROJECT_ROOT / "tools" / "SP_Flash_Tool",
+    PROJECT_ROOT / "tools" / "windows" / "SP_Flash_Tool_v5.1904_Win" if sys.platform.startswith("win") else None,
+    PROJECT_ROOT / "tools" / "linux" / "SP_Flash_Tool_v5.1904_Linux" if sys.platform.startswith("linux") else None,
+]
+SP_FLASH_SRC = next((p for p in sp_candidates if p and p.exists()), None)
 try:
     _dist_root = Path(DISTPATH)  # noqa: F821  (injected by PyInstaller)
     _app_dir = _dist_root / "InnioasisUpdater"
     _sp_target = _app_dir / "SP_Flash_Tool"
-    if SP_FLASH_SRC.exists():
+    if SP_FLASH_SRC and SP_FLASH_SRC.exists():
         if _sp_target.exists():
             shutil.rmtree(_sp_target, ignore_errors=True)
         shutil.copytree(SP_FLASH_SRC, _sp_target)
-        print(f"[spec] copied SP_Flash_Tool payload -> {_sp_target}")
+        print(f"[spec] copied SP_Flash_Tool payload from {SP_FLASH_SRC} -> {_sp_target}")
 except Exception as exc:  # noqa: BLE001  (never fail a build over payload)
     print(f"[spec] WARNING: could not place SP_Flash_Tool payload: {exc}")

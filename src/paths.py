@@ -153,29 +153,44 @@ IS_MAC = sys.platform == "darwin" or SIMULATE_MACOS
 
 
 def find_sp_flash_tool():
-    """Locate the SP Flash Tool directory (Windows backend).
+    """Locate the SP Flash Tool directory (Windows & Linux).
 
-    Search order: ``$SP_FLASH_TOOL_DIR`` → Inno-installed ``SP_Flash_Tool``
-    folder → a hard-coded developer fallback. The tool counts as found only
-    when ``flash_tool.exe`` exists inside.
+    Search order:
+    1. ``$SP_FLASH_TOOL_DIR`` env var
+    2. Staged or self-healed user tools directory
+    3. Inno-installed / AppImage bundled ``SP_Flash_Tool`` folder
+    4. Local development / repository fallback.
     """
     candidates = [
         Path(os.environ["SP_FLASH_TOOL_DIR"]) if os.environ.get("SP_FLASH_TOOL_DIR") else None,
         SP_FLASH_TOOL_DIR,
+        INSTALL_DIR / "SP_Flash_Tool",
         INSTALL_DIR,
-        Path(os.environ["LOCALAPPDATA"]) / "Innioasis Updater" / "SP_Flash_Tool" if os.environ.get("LOCALAPPDATA") else None,
-        Path(os.environ["LOCALAPPDATA"]) / "Innioasis Updater" if os.environ.get("LOCALAPPDATA") else None,
-        Path.home() / "AppData" / "Local" / "Innioasis Updater" / "SP_Flash_Tool",
-        Path.home() / "AppData" / "Local" / "Innioasis Updater",
         REPO_ROOT / "SP_Flash_Tool",
-        REPO_ROOT,
+        REPO_ROOT / "tools" / "SP_Flash_Tool",
         Path.cwd() / "SP_Flash_Tool",
         Path.cwd(),
-        Path(r"D:\work\data\tools\SP_Flash_Tool_v5.2016_Windows"),  # dev fallback
     ]
+    if IS_WINDOWS:
+        if os.environ.get("LOCALAPPDATA"):
+            candidates.append(Path(os.environ["LOCALAPPDATA"]) / "Innioasis Updater" / "tools" / "sp_flash_tool_win")
+            candidates.append(Path(os.environ["LOCALAPPDATA"]) / "Innioasis Updater" / "SP_Flash_Tool")
+        candidates.append(Path.home() / "AppData" / "Local" / "Innioasis Updater" / "tools" / "sp_flash_tool_win")
+        candidates.append(Path.home() / "AppData" / "Local" / "Innioasis Updater" / "SP_Flash_Tool")
+        candidates.append(Path(r"D:\work\data\tools\SP_Flash_Tool_v5.2016_Windows"))
+    else:
+        xdg_data = os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")
+        candidates.append(Path(xdg_data) / "innioasis-updater" / "tools" / "sp_flash_tool_linux")
+        xdg_cache = os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")
+        candidates.append(Path(xdg_cache) / "innioasis-updater" / "linux_flash_tool")
+
+    bin_names = ["flash_tool.exe"] if IS_WINDOWS else ["flash_tool", "flash_tool.sh"]
     for p in candidates:
-        if p and p.exists() and (p / "flash_tool.exe").exists():
-            return p
+        if not p or not p.exists():
+            continue
+        for b in bin_names:
+            if (p / b).is_file():
+                return p
     return None
 
 
@@ -183,11 +198,12 @@ def find_unrar():
     """Locate an UnRAR executable, in the same order as InniUpdaterChin."""
     candidates = [
         TOOLS_DIR / "UnRAR.exe",
+        Path.home() / "AppData" / "Local" / "Innioasis Updater" / "tools" / "unrar_win" / "UnRAR.exe",
         Path(r"C:\Program Files\WinRAR\UnRAR.exe"),
         Path(r"C:\Program Files (x86)\WinRAR\UnRAR.exe"),
     ]
     for p in candidates:
-        if p.exists():
+        if p and p.exists():
             return str(p)
     on_path = _which("unrar") or _which("unar")
     if on_path:

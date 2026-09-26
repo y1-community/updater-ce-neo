@@ -2824,6 +2824,90 @@ def test_macos_universal_app_bundle():
     assert info.get("CFBundleExecutable") == "Innioasis Updater CE"
 
 
+def test_tools_manager_and_self_healing():
+    from src import tools_manager
+
+    # 1. Manifest definitions
+    assert "sp_flash_tool_win" in tools_manager.TOOLS_MANIFEST
+    assert "sp_flash_tool_linux" in tools_manager.TOOLS_MANIFEST
+    assert "libusb_darwin" in tools_manager.TOOLS_MANIFEST
+    assert "unrar_win" in tools_manager.TOOLS_MANIFEST
+
+    user_tools = tools_manager.get_user_tools_dir()
+    assert isinstance(user_tools, Path)
+
+    # 2. Check integrity returns boolean and status string
+    ok, msg = tools_manager.verify_component_integrity("sp_flash_tool_win")
+    assert isinstance(ok, bool)
+    assert isinstance(msg, str)
+
+    # 3. Test self-healing extraction with synthetic zip
+    import tempfile
+    import zipfile
+    import io
+    import urllib.request
+
+    with tempfile.TemporaryDirectory() as td:
+        tdp = Path(td)
+        orig_user_tools = tools_manager.get_user_tools_dir
+        tools_manager.get_user_tools_dir = lambda: tdp / "tools"
+
+        try:
+            zip_buf = io.BytesIO()
+            with zipfile.ZipFile(zip_buf, "w") as zf:
+                zf.writestr("flash_tool", b"fake-elf-binary")
+                zf.writestr("libflashtool.so", b"fake-so")
+                zf.writestr("MTK_AllInOne_DA.bin", b"fake-da")
+
+            zip_bytes = zip_buf.getvalue()
+
+            class MockResponse:
+                def __init__(self, data):
+                    self.data = data
+                    self.fp = io.BytesIO(data)
+
+                def read(self, amt=65536):
+                    return self.fp.read(amt)
+
+                def getheader(self, name):
+                    if name.lower() == "content-length":
+                        return str(len(self.data))
+                    return None
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *args):
+                    pass
+
+            orig_urlopen = urllib.request.urlopen
+            urllib.request.urlopen = lambda req, timeout=30: MockResponse(zip_bytes)
+
+            try:
+                progress_events = []
+
+                def on_progress(cur, total, msg):
+                    progress_events.append((cur, total, msg))
+
+                ok, msg, comp_dir = tools_manager.self_heal_component(
+                    "sp_flash_tool_linux", progress_cb=on_progress, force=True
+                )
+                assert ok is True, f"self_heal_component failed: {msg}"
+                assert comp_dir is not None
+                assert (comp_dir / "flash_tool").exists()
+                assert len(progress_events) > 0
+
+                ok_int, msg_int = tools_manager.verify_component_integrity("sp_flash_tool_linux")
+                assert ok_int is True, f"Integrity check failed: {msg_int}"
+
+                found = tools_manager.find_component("sp_flash_tool_linux")
+                assert found == comp_dir
+            finally:
+                urllib.request.urlopen = orig_urlopen
+        finally:
+            tools_manager.get_user_tools_dir = orig_user_tools
+
+
 def main():
     print("== Neo updater smoke test ==")
     check("catalog", test_catalog)
@@ -2895,6 +2979,7 @@ def main():
     check("legacy mbr user addr bias", test_legacy_mbr_user_addr_bias)
     check("macos universal libusb fat binary", test_macos_universal_libusb)
     check("macos universal app bundle", test_macos_universal_app_bundle)
+    check("tools manager and self healing", test_tools_manager_and_self_healing)
     if failures:
         print(f"\n{len(failures)} FAILURES:")
         for name, err in failures:

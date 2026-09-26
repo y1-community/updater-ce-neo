@@ -58,6 +58,13 @@ def find_sp_flash_tool_dirs() -> List[Path]:
     if os.environ.get("SP_FLASH_TOOL_DIR"):
         add(Path(os.environ["SP_FLASH_TOOL_DIR"]))
 
+    try:
+        from . import tools_manager
+        comp_id = "sp_flash_tool_win" if paths.IS_WINDOWS else "sp_flash_tool_linux"
+        add(tools_manager.find_component(comp_id))
+    except Exception:
+        pass
+
     if platform.system() == "Linux":
         from . import linux_sp_flash
         add(linux_sp_flash.stage_dir())
