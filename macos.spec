@@ -151,3 +151,56 @@ app = BUNDLE(
         ],
     },
 )
+
+# Ensure Innioasis Updater CE.app is created even when running in non-Darwin environments
+try:
+    import shutil
+    import plistlib
+    dist_dir = PROJECT_ROOT / "dist"
+    app_dir = dist_dir / "Innioasis Updater CE.app"
+    coll_dir = dist_dir / "Innioasis Updater"
+    if not app_dir.exists() and coll_dir.exists():
+        contents_dir = app_dir / "Contents"
+        macos_dir = contents_dir / "MacOS"
+        resources_dir = contents_dir / "Resources"
+        frameworks_dir = contents_dir / "Frameworks"
+        macos_dir.mkdir(parents=True, exist_ok=True)
+        resources_dir.mkdir(parents=True, exist_ok=True)
+        frameworks_dir.mkdir(parents=True, exist_ok=True)
+
+        if (coll_dir / "Innioasis Updater CE").exists():
+            shutil.copy2(coll_dir / "Innioasis Updater CE", macos_dir / "Innioasis Updater CE")
+            os.chmod(macos_dir / "Innioasis Updater CE", 0o755)
+        if (coll_dir / "_internal").exists():
+            shutil.copytree(coll_dir / "_internal", macos_dir / "_internal", dirs_exist_ok=True)
+
+        if LIBUSB_DYLIB.exists():
+            shutil.copy2(LIBUSB_DYLIB, frameworks_dir / "libusb-1.0.dylib")
+            shutil.copy2(LIBUSB_DYLIB, macos_dir / "libusb-1.0.dylib")
+
+        if (ASSETS / "icon.icns").exists():
+            shutil.copy2(ASSETS / "icon.icns", resources_dir / "icon.icns")
+
+        (contents_dir / "PkgInfo").write_bytes(b"APPL????")
+
+        plist_data = {
+            "CFBundleDisplayName": "Innioasis Updater CE",
+            "CFBundleExecutable": "Innioasis Updater CE",
+            "CFBundleIconFile": "icon.icns",
+            "CFBundleIdentifier": "com.innioasis.updater",
+            "CFBundleInfoDictionaryVersion": "6.0",
+            "CFBundleName": "Innioasis Updater CE",
+            "CFBundlePackageType": "APPL",
+            "CFBundleShortVersionString": "3.0.0",
+            "CFBundleVersion": "3.0.0",
+            "LSApplicationCategoryType": "public.app-category.utilities",
+            "LSMinimumSystemVersion": "13.0",
+            "NSHighResolutionCapable": True,
+            "NSRequiresAquaSystemAppearance": False,
+            "NSPrincipalClass": "NSApplication",
+            "NSHumanReadableCopyright": "Copyright © 2024-2026 Innioasis Community. All rights reserved.",
+        }
+        with open(contents_dir / "Info.plist", "wb") as f:
+            plistlib.dump(plist_data, f)
+except Exception:
+    pass
