@@ -43,6 +43,7 @@ To maintain reliable flashing across all models and SoCs (legacy MT6572/MT6582 a
 - **Non-BROM Preloader PIDs**: Devices in preloader mode (PID `0x2000`) require a wake byte (`0xa0`) and response flush before handshake.
 - **VID-Only Device Discovery**: Devices must be discovered by MediaTek VIDs (`0x0E8D`, etc.) without filtering on `bDeviceClass=devclass` (many MTK devices enumerate with class `0`).
 - **Endpoint Stall Recovery**: Pipe errors must attempt endpoint recovery via `clear_halt(EP_IN)`.
+- **Bounded Endpoint Reads**: Every bulk read (`usbread`, `usbxmlread`) must pass a real timeout (`self.timeout`, milliseconds) to `epr(...)`. libusb treats `timeout=0` as **unlimited**, which turns a silent download agent into an uninterruptible hang: mtkclient's `maxtimeout` retry logic can never fire, the worker thread keeps holding the USB device, and Cancel / Retry / backend-switch cannot recover. With a bounded read the same failure surfaces as a clean `CONNECTION_FAILED` and the device handle is released.
 
 ### B. Download Agent (DA) Payloads
 - The bundled `vendor/mtkclient/mtkclient/payloads/` directory MUST retain all vendor DA binaries:

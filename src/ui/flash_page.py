@@ -139,14 +139,12 @@ class FlashPage(QWidget):
         self._method_label.setProperty("cssClass", "field-label")
         method_row.addWidget(self._method_label)
         self._method_combo = QComboBox()
-        self._method_combo.setCursor(Qt.PointingHandCursor)
         self._method_combo.currentIndexChanged.connect(self._on_method_changed)
         method_row.addWidget(self._method_combo)
 
         from ..sp_flash_gui import is_sp_flash_gui_supported
         if is_sp_flash_gui_supported():
             self._open_sp_gui_btn = QPushButton(tr("flash_btn_open_sp_gui"))
-            self._open_sp_gui_btn.setCursor(Qt.PointingHandCursor)
             self._open_sp_gui_btn.setProperty("cssClass", "ghost")
             self._open_sp_gui_btn.setToolTip("Open MediaTek SP Flash Tool GUI")
             self._open_sp_gui_btn.clicked.connect(self._on_open_sp_gui_clicked)
@@ -171,7 +169,6 @@ class FlashPage(QWidget):
 
         self._wait_cancel_btn = QPushButton(tr("flash_btn_cancel_wait"))
         self._wait_cancel_btn.setProperty("cssClass", "ghost")
-        self._wait_cancel_btn.setCursor(Qt.PointingHandCursor)
         self._wait_cancel_btn.clicked.connect(self._on_cancel_wait)
         layout.addWidget(self._wait_cancel_btn, 0, Qt.AlignLeft)
         layout.addStretch()
@@ -232,7 +229,6 @@ class FlashPage(QWidget):
         btn_row = QHBoxLayout()
         self._cancel_btn = QPushButton(tr("flash_btn_cancel"))
         self._cancel_btn.setProperty("cssClass", "ghost")
-        self._cancel_btn.setCursor(Qt.PointingHandCursor)
         self._cancel_btn.clicked.connect(self._on_cancel)
         btn_row.addWidget(self._cancel_btn)
         btn_row.addStretch()
@@ -334,7 +330,8 @@ class FlashPage(QWidget):
         self._pkg_row.set_value(name or "\u2014")
 
     def _connect_model_text(self):
-        return self._model if self._model else tr("flash_model_generic")
+        from ..config import device_label_for_model
+        return device_label_for_model(self._model) if self._model else tr("flash_model_generic")
 
     def set_waiting_device(self):
         self._wait_status.set_status("idle")

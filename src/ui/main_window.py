@@ -152,7 +152,8 @@ class MainWindow(QMainWindow):
             lambda: self._check_device_firmware_updates(manual=False),
         )
 
-        if platform.system() == "Linux":
+        if platform.system() == "Linux" and not paths.SIMULATE_MACOS:
+            # Simulated macOS mode behaves like a Mac: no Linux setup wizard.
             QTimer.singleShot(600, self._check_linux_first_run)
 
     def _build_ui(self):
@@ -240,14 +241,12 @@ class MainWindow(QMainWindow):
         self._nav_buttons = {}
         btn = QPushButton(tr("nav_select_package"))
         btn.setCheckable(True)
-        btn.setCursor(Qt.PointingHandCursor)
         btn.clicked.connect(lambda: self._nav_to_page(_PAGE_SELECT))
         layout.addWidget(btn)
         self._nav_buttons["nav_select_package"] = (btn, _PAGE_SELECT)
 
         self._settings_btn = QPushButton(tr("nav_settings"))
         self._settings_btn.setCheckable(True)
-        self._settings_btn.setCursor(Qt.PointingHandCursor)
         self._settings_btn.clicked.connect(lambda: self._nav_to_page(_PAGE_SETTINGS))
         layout.addWidget(self._settings_btn)
         self._nav_buttons["nav_settings"] = (self._settings_btn, _PAGE_SETTINGS)
@@ -255,35 +254,29 @@ class MainWindow(QMainWindow):
         layout.addStretch()
 
         self._support_btn = QPushButton(tr("nav_donate"))
-        self._support_btn.setCursor(Qt.PointingHandCursor)
         self._support_btn.clicked.connect(self._on_support_clicked)
         layout.addWidget(self._support_btn)
 
         self._log_btn = QPushButton(tr("nav_log"))
-        self._log_btn.setCursor(Qt.PointingHandCursor)
         self._log_btn.clicked.connect(self._show_diagnostics)
         layout.addWidget(self._log_btn)
 
         self._credits_btn = QPushButton(tr("nav_credits"))
-        self._credits_btn.setCursor(Qt.PointingHandCursor)
         self._credits_btn.clicked.connect(self._open_credits)
         layout.addWidget(self._credits_btn)
 
         self._check_updates_btn = QPushButton(tr("nav_check_updates"))
-        self._check_updates_btn.setCursor(Qt.PointingHandCursor)
         self._check_updates_btn.clicked.connect(self._on_check_updates_clicked)
         layout.addWidget(self._check_updates_btn)
 
-        if platform.system() == "Linux":
+        if platform.system() == "Linux" and not paths.SIMULATE_MACOS:
             self._linux_setup_btn = QPushButton(tr("nav_linux_setup"))
-            self._linux_setup_btn.setCursor(Qt.PointingHandCursor)
             self._linux_setup_btn.clicked.connect(self._show_linux_setup)
             layout.addWidget(self._linux_setup_btn)
 
         from ..sp_flash_gui import is_sp_flash_gui_supported
         if is_sp_flash_gui_supported():
             self._sp_flash_tool_btn = QPushButton(tr("nav_sp_flash_tool_gui"))
-            self._sp_flash_tool_btn.setCursor(Qt.PointingHandCursor)
             self._sp_flash_tool_btn.clicked.connect(self._open_sp_flash_tool_gui)
             layout.addWidget(self._sp_flash_tool_btn)
 
@@ -394,7 +387,10 @@ class MainWindow(QMainWindow):
         except Exception as e:
             logger.debug("Could not pre-update SP history.ini in _begin_flash_flow: %s", e)
         self.service.start_flash(
-            self._package_path, pre_extracted_dir=pre_extracted, method=self._flash_method
+            self._package_path,
+            pre_extracted_dir=pre_extracted,
+            method=self._flash_method,
+            model=self._package_model,
         )
         self.service.start_device_monitor()
 
@@ -911,8 +907,8 @@ class MainWindow(QMainWindow):
 
 
 def _is_mac():
-    import sys
-    return sys.platform == "darwin"
+    # Honours simulated macOS mode so the method matrix matches a real Mac.
+    return paths.IS_MAC
 
 
 _METHODS_AVAILABLE = ("auto", "sp", "mtk") if not _is_mac() else ("auto", "mtk")

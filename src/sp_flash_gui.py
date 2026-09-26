@@ -22,7 +22,11 @@ def is_sp_flash_gui_supported() -> bool:
 
     SP Flash Tool is supported on Windows and Linux (x86/x86_64).
     It is not available on macOS (which uses MTKClient exclusively) or ARM Linux.
+    Simulated macOS mode (--simulate-macos) reports False as well so the host
+    behaves exactly like a Mac.
     """
+    if paths.SIMULATE_MACOS:
+        return False
     if paths.IS_MAC:
         return False
     if paths.IS_WINDOWS:
@@ -303,6 +307,12 @@ def launch_sp_flash_tool_gui(
         (success: bool, message: str)
     """
     if paths.IS_MAC:
+        if paths.SIMULATE_MACOS:
+            return (
+                False,
+                "Simulated macOS mode (--simulate-macos): MTKClient is the only "
+                "flash backend, matching a real macOS build.",
+            )
         return False, "SP Flash Tool is not available on macOS. macOS uses MTKClient only."
 
     from . import device_tracking

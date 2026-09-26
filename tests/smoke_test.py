@@ -21,6 +21,12 @@ from src.flash_service import (  # noqa: E402
     _missing_images,
     _parse_scatter,
     _parse_scatter_platform,
+    _is_android_sparse,
+    _convert_sparse_to_raw,
+    _signed_image_payload_range,
+    _detect_legacy_user_addr_bias,
+    LEGACY_MBR_USER_ADDR_BIAS,
+    LEGACY_SEGMENTED_WRITE_BYTES,
 )
 from src.catalog import (  # noqa: E402
     ReleasesClient,
@@ -61,6 +67,8 @@ def check(name, fn):
         fn()
         print(f"  PASS  {name}")
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         failures.append((name, e))
         print(f"  FAIL  {name}: {e!r}")
 
@@ -486,6 +494,113 @@ def test_backend_method_dispatch():
         lsf.ensure_linux_sp_flash_tool = real_ensure
 
 
+def test_simulate_macos_flag_parsing():
+    """launcher.py --simulate-macos flips INNIOASIS_SIMULATE_MACOS before any
+    src import, so paths.SIMULATE_MACOS / paths.IS_MAC are effective at import
+    time (exactly how a frozen build consumes the flag)."""
+    import subprocess
+
+    env = {k: v for k, v in os.environ.items() if k != "INNIOASIS_SIMULATE_MACOS"}
+    env.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    probe = (
+        "import os, sys;"
+        "extra_argv = sys.argv[1:];"
+        "sys.argv = ['launcher.py'] + extra_argv;"
+        "import runpy;"
+        "runpy.run_path('launcher.py', run_name='sim_probe');"
+        "from src import paths;"
+        "print('SIM=' + str(paths.SIMULATE_MACOS));"
+        "print('ISMAC=' + str(paths.IS_MAC));"
+        "print('ENV=' + os.environ.get('INNIOASIS_SIMULATE_MACOS', ''))"
+    )
+
+    # Without the flag: no simulation.
+    r = subprocess.run(
+        [sys.executable, "-c", probe, ""],
+        capture_output=True, text=True, env=env, cwd=str(ROOT), timeout=120,
+    )
+    assert r.returncode == 0, f"probe failed: {r.stderr[-500:]}"
+    assert "SIM=False" in r.stdout, r.stdout
+    assert "ENV=" in r.stdout, r.stdout
+
+    # With --simulate-macos: simulation active at import time.
+    r = subprocess.run(
+        [sys.executable, "-c", probe, "--simulate-macos"],
+        capture_output=True, text=True, env=env, cwd=str(ROOT), timeout=120,
+    )
+    assert r.returncode == 0, f"probe failed: {r.stderr[-500:]}"
+    assert "SIM=True" in r.stdout, r.stdout
+    assert "ISMAC=True" in r.stdout, r.stdout
+    assert "ENV=1" in r.stdout, r.stdout
+
+
+def test_simulate_macos_backend_parity():
+    """With --simulate-macos active on a Linux host, the backend matrix must
+    be identical to a real macOS build: SP Flash Tool is unreachable and every
+    dispatch path (auto/sp/mtk) lands on MTKClient."""
+    import src.flash_service as fs
+    from src import paths as _paths
+    from src.sp_flash_gui import is_sp_flash_gui_supported, launch_sp_flash_tool_gui
+
+    if sys.platform == "darwin":
+        return  # already a real Mac; nothing to simulate
+
+    # Save/restore every platform flag the sim mode touches.
+    saved = {
+        "paths.SIMULATE_MACOS": _paths.SIMULATE_MACOS,
+        "paths.IS_MAC": _paths.IS_MAC,
+        "fs.SIMULATE_MACOS": getattr(fs, "SIMULATE_MACOS", None),
+        "fs.IS_MAC": fs.IS_MAC,
+    }
+
+    def set_sim(on):
+        _paths.SIMULATE_MACOS = on
+        _paths.IS_MAC = on or sys.platform == "darwin"
+        fs.SIMULATE_MACOS = on
+        fs.IS_MAC = _paths.IS_MAC
+
+    try:
+        set_sim(True)
+
+        def dispatch(method):
+            calls = []
+            w = fs.FlashWorker("pkg.zip", method=method)
+            w._log = lambda *a, **k: None
+            w._flash_via_sp_flash_tool = lambda s: calls.append("sp")
+            w._flash_via_mtkclient = lambda e, s: calls.append("mtk")
+            w._dispatch_backend(Path("x"), Path("s"))
+            return calls
+
+        # macOS parity contract (mirrors test_backend_method_dispatch's macOS
+        # branch, exercised here on a simulated Mac):
+        assert dispatch("mtk") == ["mtk"]
+        assert dispatch("sp") == ["mtk"], "sp must be unreachable in macOS mode"
+        assert dispatch("auto") == ["mtk"], "auto must be MTKClient in macOS mode"
+
+        # SP Flash Tool GUI surfaces behave like on a real Mac.
+        assert is_sp_flash_gui_supported() is False
+        ok, msg = launch_sp_flash_tool_gui()
+        assert ok is False and msg, "simulated macOS must refuse SP Flash Tool GUI"
+
+        # Method selector matrix: macOS only exposes auto/mtk (no sp entry).
+        from src.ui import main_window as mw
+        assert mw._is_mac() is True
+        matrix = tuple(
+            m for m in ("auto", "sp", "mtk") if m != "sp" or not mw._is_mac()
+        )
+        assert matrix == ("auto", "mtk"), matrix
+    finally:
+        _paths.SIMULATE_MACOS = saved["paths.SIMULATE_MACOS"]
+        _paths.IS_MAC = saved["paths.IS_MAC"]
+        fs.IS_MAC = saved["fs.IS_MAC"]
+        if saved["fs.SIMULATE_MACOS"] is None:
+            if hasattr(fs, "SIMULATE_MACOS"):
+                del fs.SIMULATE_MACOS
+        else:
+            fs.SIMULATE_MACOS = saved["fs.SIMULATE_MACOS"]
+
+
 def test_releases_client_cached():
     with tempfile.TemporaryDirectory() as td:
         client = ReleasesClient(cache_root=td)
@@ -796,6 +911,7 @@ def test_language_switch_keeps_screen():
     w.show()
     calls = []
     w.service.start_flash = lambda pkg, pre="", method="auto", **kw: calls.append(pkg)
+    w.service.start_device_monitor = lambda: None
     w._on_package_selected("C:/fake/rom.zip", "Rockbox (Y1)", "Y1")
     w.service.step_changed.emit(STEP_WAITING)
     app.processEvents()
@@ -1160,6 +1276,149 @@ def test_mtk_write_system_exit_guarded():
         mtk_api.connect = real_connect
         fs._parse_scatter = real_scatter
     assert results == [(False, "WRITE_FAILED")], results
+
+
+def test_usblib_reads_are_bounded():
+    """libusb treats a timeout of 0 as *wait forever*, so every bulk read in
+    mtkclient's usblib must carry a real timeout. Otherwise a target that stops
+    answering after the stage-2 DA upload parks the worker thread forever and
+    the app can never fail, cancel or retry (the reported mac/linux hang)."""
+    import inspect
+    import re as _re
+    from mtkclient.Library.Connection import usblib
+
+    for name in ("usbread", "usbxmlread"):
+        src = inspect.getsource(getattr(usblib.UsbClass, name))
+        # \b keeps "repr(e)" from being mistaken for a read call.
+        calls = _re.findall(r"\bepr\(([^)]*)\)", src)
+        assert calls, f"{name}: no endpoint reads found"
+        for args in calls:
+            assert "," in args, f"{name}: unbounded read epr({args}) — timeout=0 waits forever"
+            assert "self.timeout" in args, f"{name}: read without self.timeout: epr({args})"
+
+
+def test_mtk_stall_watcher():
+    """A silent device is reported once, and the warning re-arms once the
+    backend hears from the device again."""
+    import time as _time
+
+    from src.flash_service import _StallWatcher, _MtkMessageBridge
+
+    stalled = []
+    w = _StallWatcher(lambda idle: stalled.append(round(idle, 1)), timeout=0.2, interval=0.02)
+    w.start()
+    deadline = _time.time() + 5
+    while not stalled and _time.time() < deadline:
+        _time.sleep(0.02)
+    assert len(stalled) == 1, stalled
+
+    # Still silent: no repeated spam from the watcher.
+    _time.sleep(0.3)
+    assert len(stalled) == 1, stalled
+
+    # Device answers again -> a later silence warns again.
+    w.activity()
+    deadline = _time.time() + 5
+    while len(stalled) < 2 and _time.time() < deadline:
+        _time.sleep(0.02)
+    assert len(stalled) == 2, stalled
+    w.stop()
+    assert w.daemon is True
+
+    forwarded = []
+    _MtkMessageBridge(forwarded.append).emit("Successfully uploaded stage 2")
+    assert forwarded == ["Successfully uploaded stage 2"]
+
+
+def test_mtkclient_da_progress_surface():
+    """The MTKClient path must (a) relay mtkclient's own phase messages,
+    (b) report the mode mtkclient really detected (preloader, not BROM), and
+    (c) mark the install as started from the first image write — the reference
+    updater derives install progress from the writes, not the handshake."""
+    from src import flash_service as fs
+    import src.mtk_api
+
+    with tempfile.TemporaryDirectory() as td:
+        d = Path(td)
+        (d / "preloader_g368_nyx.bin").write_bytes(b"p" * 64)
+        (d / "boot.img").write_bytes(b"b" * 64)
+        scatter = d / "MT6572_Android_scatter.txt"
+        scatter.write_text(
+            "- general: MTK_PLATFORM_CFG\n"
+            "  info:\n"
+            "    - platform: MT6572\n"
+            "- partition_index: SYS0\n"
+            "  partition_name: preloader\n"
+            "  file_name: preloader_g368_nyx.bin\n"
+            "  is_download: true\n"
+            "- partition_index: SYS1\n"
+            "  partition_name: boot\n"
+            "  file_name: boot.img\n"
+            "  is_download: true\n",
+            encoding="utf-8",
+        )
+
+        class FakeConfig:
+            def __init__(self):
+                # PID 0x2000 + a preloader BL version: preloader mode, NOT BROM.
+                self.is_brom = False
+                self.gui = None
+                self.guiprogress = None
+
+        class FakeMtk:
+            def __init__(self):
+                self.config = FakeConfig()
+
+        class FakeDaloader:
+            flashmode = None
+
+        mtk = FakeMtk()
+        mtk.daloader = FakeDaloader()
+
+        real_init, real_connect = src.mtk_api.init, src.mtk_api.connect
+        src.mtk_api.init = lambda loader=None, preloader=None, **kw: mtk
+
+        def fake_connect(handle, directory=".", on_connected=None):
+            if on_connected:
+                on_connected()
+            # mtkclient routes its phase chatter here once config.gui is set.
+            handle.config.gui.emit("DaHandler - Device is in Preloader-Mode.")
+            handle.config.gui.emit("Successfully uploaded stage 2")
+            return handle, object()
+
+        src.mtk_api.connect = fake_connect
+
+        w = fs.FlashWorker(str(d / "rom.zip"), method="mtk")
+        steps, logs, actions, results = [], [], [], []
+        w.step_changed.connect(steps.append)
+        w.log_message.connect(logs.append)
+        w.action_changed.connect(actions.append)
+        w.finished.connect(lambda ok, err: results.append((ok, err)))
+        writes = []
+        w._write_mtk_partition = lambda *a, **k: writes.append(k.get("part_type", a[4] if len(a) > 4 else ""))
+
+        try:
+            w._flash_via_mtkclient(str(d), str(scatter))
+        finally:
+            src.mtk_api.init, src.mtk_api.connect = real_init, real_connect
+
+        assert results == [(True, "")], results
+        # mtkclient's phase messages reached the diagnostics log.
+        assert "Successfully uploaded stage 2" in logs, logs
+        assert "DaHandler - Device is in Preloader-Mode." in logs, logs
+        # Mode is reported truthfully instead of claiming BROM.
+        mode_msg = [m for m in actions if "detected" in m]
+        assert mode_msg and "preloader mode" in mode_msg[0], mode_msg
+        assert not any("BROM" in m for m in actions), actions
+        # Install-started comes from the first image write, not the handshake.
+        assert steps.index(fs.STEP_WRITE) > steps.index(fs.STEP_DETECT), steps
+        first_write_log = next(i for i, m in enumerate(logs) if m.startswith("Writing "))
+        write_step_log = next(i for i, m in enumerate(logs) if m.startswith("Install in Progress"))
+        assert write_step_log < first_write_log, logs
+        assert steps.count(fs.STEP_WRITE) == 1, steps
+        assert writes, "partitions must actually be written"
+        # The gui hook is released after the session.
+        assert mtk.config.gui is None
 
 
 def test_linux_sp_flash_validation():
@@ -2276,6 +2535,223 @@ def test_sp_history_ini_subsequent_attempts_and_absolute_paths():
             assert os.path.isabs(item_str), f"Expected absolute path, got {item_str}"
 
 
+def test_model_detection_and_install_guidance():
+    from src.config import (
+        detect_model_and_type_from_name,
+        device_label_for_model,
+        install_disconnect_guidance,
+        install_power_on_steps,
+        DEVICE_MODELS,
+    )
+    from src import catalog, manifest
+    from src.ui.settings_page import SettingsPage
+    from src.ui.select_page import SelectPackagePage
+
+    # 1. Device models list
+    assert "A5" in DEVICE_MODELS
+    assert "Y1" in DEVICE_MODELS
+    assert "Y2" in DEVICE_MODELS
+
+    # 2. Model & type detection from filenames & URLs
+    m1, t1 = detect_model_and_type_from_name("rom_a5.zip")
+    assert m1 == "A5" and t1 is None
+
+    m2, t2 = detect_model_and_type_from_name("https://github.com/y1-community/stock/releases/download/v1.0/rom_a5.zip")
+    assert m2 == "A5" and t2 is None
+
+    m3, t3 = detect_model_and_type_from_name("rom_y2.zip")
+    assert m3 == "Y2" and t3 is None
+
+    m4, t4 = detect_model_and_type_from_name("https://github.com/y1-community/rockbox/releases/download/v1.0/rom_y2.zip")
+    assert m4 == "Y2" and t4 is None
+
+    m5, t5 = detect_model_and_type_from_name("rom_type_b.zip")
+    assert m5 == "Y1" and t5 == "B"
+
+    m6, t6 = detect_model_and_type_from_name("rom_type_a.zip")
+    assert m6 == "Y1" and t6 == "A"
+
+    m7, t7 = detect_model_and_type_from_name("rom.zip")
+    assert m7 == "Y1" and t7 == "A"
+
+    # 3. Device label formatting
+    assert "A5" in device_label_for_model("A5")
+    assert "Y2" in device_label_for_model("Y2")
+    assert "Type B" in device_label_for_model("Y1", "B")
+    assert "Type A" in device_label_for_model("Y1", "A")
+
+    # 4. Disconnect & paperclip guidance
+    guide_y1 = install_disconnect_guidance("Y1", "B")
+    assert "paperclip" in guide_y1.lower() or "pin" in guide_y1.lower()
+    assert "Type B" in guide_y1
+
+    guide_a5 = install_disconnect_guidance("A5")
+    assert "A5" in guide_a5
+    assert "paperclip" in guide_a5.lower() or "pin" in guide_a5.lower()
+
+    guide_y2 = install_disconnect_guidance("Y2")
+    assert "Y2" in guide_y2
+    assert "paperclip" in guide_y2.lower() or "pin" in guide_y2.lower()
+
+    # 5. Catalog A5 packages
+    a5_pkgs = catalog.packages_for_model("A5")
+    assert len(a5_pkgs) > 0, "Expected A5 packages in catalog"
+
+    # 6. Manifest parsing A5
+    sample_xml = '''<slidia_manifest>
+        <package name="Test A5 Firmware" repo="y1-community/a5-test" device="A5" type="img" handler="Custom Firmware" />
+    </slidia_manifest>'''
+    parsed = manifest.parse_manifest_xml(sample_xml)
+    assert len(parsed) == 1
+    assert parsed[0].model == "A5"
+    assert parsed[0].package_name == "rom_a5.zip"
+
+    # 7. UI components have A5 support
+    from PySide6.QtWidgets import QApplication
+    app = QApplication.instance() or QApplication(sys.argv)
+    settings_page = SettingsPage()
+    assert hasattr(settings_page, "_cb_a5")
+    assert hasattr(settings_page, "_cb_y1")
+    assert hasattr(settings_page, "_cb_y2")
+
+    select_page = SelectPackagePage()
+    assert select_page._prompt_pre_install("A5") is True  # Non-blocking offscreen
+
+
+def test_android_sparse_handling():
+    import struct
+    with tempfile.TemporaryDirectory() as td:
+        tdp = Path(td)
+        raw_dummy = tdp / "raw.img"
+        raw_dummy.write_bytes(b"HELLO_RAW_DATA_1234567890")
+        assert not _is_android_sparse(raw_dummy)
+
+        sparse_file = tdp / "test_sparse.img"
+        hdr = struct.pack("<I4H4I", 0xED26FF3A, 1, 0, 28, 12, 4096, 4, 3, 0)
+        chunk1_hdr = struct.pack("<2H2I", 0xCAC1, 0, 1, 12 + 4096)
+        chunk1_data = b"A" * 4096
+        chunk2_hdr = struct.pack("<2H2I", 0xCAC2, 0, 2, 12 + 4)
+        chunk2_fill = b"\xEF\xBE\xAD\xDE"
+        chunk3_hdr = struct.pack("<2H2I", 0xCAC3, 0, 1, 12)
+
+        sparse_file.write_bytes(hdr + chunk1_hdr + chunk1_data + chunk2_hdr + chunk2_fill + chunk3_hdr)
+        assert _is_android_sparse(sparse_file)
+
+        out_raw, regions = _convert_sparse_to_raw(sparse_file, tdp)
+        assert out_raw.exists()
+        raw_bytes = out_raw.read_bytes()
+        assert len(raw_bytes) == 4 * 4096
+
+        assert raw_bytes[:4096] == b"A" * 4096
+        expected_fill = b"\xEF\xBE\xAD\xDE" * (2 * 4096 // 4)
+        assert raw_bytes[4096:3 * 4096] == expected_fill
+        assert raw_bytes[3 * 4096:] == b"\x00" * 4096
+
+
+def test_signed_image_stripping():
+    with tempfile.TemporaryDirectory() as td:
+        tdp = Path(td)
+        plain = tdp / "plain.bin"
+        plain.write_bytes(b"PLAIN_CONTENT_NO_SIGNING" * 10)
+        assert _signed_image_payload_range(plain, plain.stat().st_size) is None
+
+        signed = tdp / "signed.bin"
+        header = b"SSSS" + b"\x00" * 60
+        payload = b"ACTUAL_BOOT_OR_RECOVERY_IMAGE_PAYLOAD_DATA" * 5
+        footer = b"\x00" * 232 + b"EEEE"
+        signed.write_bytes(header + payload + footer)
+        total_sz = len(header) + len(payload) + len(footer)
+        res = _signed_image_payload_range(signed, total_sz)
+        assert res == (64, len(payload))
+
+        hdr_only = tdp / "header_only.bin"
+        hdr_only.write_bytes(header + payload)
+        assert _signed_image_payload_range(hdr_only, len(header) + len(payload)) is None
+
+
+def test_legacy_mbr_user_addr_bias():
+    with tempfile.TemporaryDirectory() as td:
+        tdp = Path(td)
+        scatter_mt6582 = tdp / "MT6582_scatter.txt"
+        scatter_mt6582.write_text("""- platform: MT6582
+  project: y2
+  storage: EMMC
+- partition_index: SYS0
+  partition_name: PRELOADER
+  file_name: preloader_y2.bin
+  is_download: true
+  type: SV5_BL_BIN
+  linear_start_addr: 0x0
+  physical_start_addr: 0x0
+  partition_size: 0x40000
+  region: EMMC_BOOT_1
+- partition_index: SYS1
+  partition_name: MBR
+  file_name: MBR
+  is_download: true
+  type: NORMAL_ROM
+  linear_start_addr: 0x1400000
+  physical_start_addr: 0x0
+  partition_size: 0x80000
+  region: EMMC_USER
+- partition_index: SYS2
+  partition_name: EBR1
+  file_name: EBR1
+  is_download: true
+  type: NORMAL_ROM
+  linear_start_addr: 0x1480000
+  physical_start_addr: 0x80000
+  partition_size: 0x80000
+  region: EMMC_USER
+""")
+        bias = _detect_legacy_user_addr_bias(scatter_mt6582)
+        assert bias == LEGACY_MBR_USER_ADDR_BIAS
+        assert LEGACY_MBR_USER_ADDR_BIAS == 0x800000
+        assert LEGACY_SEGMENTED_WRITE_BYTES == 50 * 1024 * 1024
+
+        scatter_mt6765 = tdp / "MT6765_scatter.txt"
+        scatter_mt6765.write_text("""- platform: MT6765
+  project: modern
+  storage: EMMC
+- partition_index: SYS0
+  partition_name: boot
+  file_name: boot.img
+  is_download: true
+  type: NORMAL_ROM
+  linear_start_addr: 0x2000000
+  physical_start_addr: 0x2000000
+  partition_size: 0x2000000
+  region: EMMC_USER
+""")
+        assert _detect_legacy_user_addr_bias(scatter_mt6765) == 0
+
+
+def test_macos_universal_libusb():
+    dylib_path = ROOT / "vendor" / "mtkclient" / "mtkclient" / "Darwin" / "libusb-1.0.dylib"
+    assert dylib_path.exists(), f"libusb dylib missing at {dylib_path}"
+
+    with open(dylib_path, "rb") as f:
+        header = f.read(8)
+    import struct
+    magic = struct.unpack(">I", header[:4])[0]
+    assert magic in (0xCAFEBABE, 0xBEBAFECA), f"Not a universal Mach-O binary: magic={hex(magic)}"
+    nfat_arch = struct.unpack(">I", header[4:8])[0]
+    assert nfat_arch >= 2, f"Expected at least 2 architectures, found {nfat_arch}"
+
+    with open(dylib_path, "rb") as f:
+        f.seek(8)
+        cputypes = []
+        for _ in range(nfat_arch):
+            arch_data = f.read(20)
+            cputype = struct.unpack(">i", arch_data[:4])[0]
+            cputypes.append(cputype)
+
+    CPU_TYPE_X86_64 = 0x01000007
+    CPU_TYPE_ARM64 = 0x0100000C
+    assert CPU_TYPE_X86_64 in cputypes, f"x86_64 slice missing in {dylib_path}: {cputypes}"
+    assert CPU_TYPE_ARM64 in cputypes, f"arm64 slice missing in {dylib_path}: {cputypes}"
+
+
 def main():
     print("== Neo updater smoke test ==")
     check("catalog", test_catalog)
@@ -2291,6 +2767,8 @@ def main():
     check("update dialog + wiring", test_update_dialog_and_wiring)
     check("flash_service import", test_flash_service_import)
     check("backend method dispatch", test_backend_method_dispatch)
+    check("simulate-macos flag parsing", test_simulate_macos_flag_parsing)
+    check("simulate-macos backend parity", test_simulate_macos_backend_parity)
     check("releases client (cached)", test_releases_client_cached)
     check("releases client (force refresh)", test_releases_client_force_refresh)
     check("releases client (network)", test_releases_client_network)
@@ -2318,6 +2796,9 @@ def main():
     check("mtk system exit guarded", test_mtk_system_exit_guarded)
     check("mtk connect system exit guarded", test_mtk_connect_system_exit_guarded)
     check("mtk write system exit guarded", test_mtk_write_system_exit_guarded)
+    check("usblib reads bounded (no infinite DA hang)", test_usblib_reads_are_bounded)
+    check("mtk stall watcher", test_mtk_stall_watcher)
+    check("mtkclient DA progress surface", test_mtkclient_da_progress_surface)
     check("linux sp flash validation", test_linux_sp_flash_validation)
     check("linux sp flash distro detection", test_linux_sp_flash_distro_detection)
     check("linux sp flash rules and readiness", test_linux_sp_flash_rules_and_readiness)
@@ -2336,6 +2817,11 @@ def main():
     check("prune extracted cache and reusing download", test_prune_extracted_cache_and_reusing_download)
     check("sp flash system checker and diagnostics", test_sp_flash_system_checker_and_diagnostics)
     check("sp history ini subsequent attempts and absolute paths", test_sp_history_ini_subsequent_attempts_and_absolute_paths)
+    check("model detection and install guidance", test_model_detection_and_install_guidance)
+    check("android sparse handling", test_android_sparse_handling)
+    check("signed image stripping", test_signed_image_stripping)
+    check("legacy mbr user addr bias", test_legacy_mbr_user_addr_bias)
+    check("macos universal libusb fat binary", test_macos_universal_libusb)
     if failures:
         print(f"\n{len(failures)} FAILURES:")
         for name, err in failures:

@@ -6,6 +6,7 @@ through this tiny script that puts ``src`` on ``sys.path`` and calls
 ``src.app.main()``. Kept outside ``src/`` so PyInstaller freezes it cleanly.
 """
 
+import os
 import sys
 from pathlib import Path
 
@@ -13,10 +14,21 @@ SRC = Path(__file__).resolve().parent / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
+# Simulated macOS mode: put the Linux/Windows client into the exact code path
+# a real macOS build uses (MTKClient as the only flash backend, no SP Flash
+# Tool GUI), so mtkclient functionality can be tested for macOS/Linux parity
+# without macOS hardware. Must be applied before any src.* import.
+if "--simulate-macos" in sys.argv:
+    os.environ["INNIOASIS_SIMULATE_MACOS"] = "1"
+    sys.argv.remove("--simulate-macos")
+
 if "--check-environment" in sys.argv or "--diagnostics" in sys.argv:
     from src import paths, flash_service, mtk_api
     print("=== Innioasis Updater Environment Diagnostics ===")
     print(f"Platform: {sys.platform}")
+    if paths.SIMULATE_MACOS:
+        print("Simulated macOS: YES (--simulate-macos; flash backend = MTKClient only)")
+    print(f"IS_MAC (effective): {paths.IS_MAC}")
     print(f"Frozen: {getattr(sys, 'frozen', False)}")
     print(f"Bundle dir: {paths.BUNDLE_DIR}")
     print(f"MTKClient dir: {paths.MTKCLIENT_DIR}")

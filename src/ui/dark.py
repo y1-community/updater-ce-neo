@@ -28,7 +28,7 @@ def setup_native_app_style(app: QApplication) -> str:
     """Apply the host platform's native QStyle.
 
     - macOS: 'macintosh' (Aqua/Cocoa native controls)
-    - Windows: 'windowsvista' / 'windows'
+    - Windows: 'windowsvista' / 'windows' (Native Windows controls)
     - Linux: system desktop default (e.g. Breeze on KDE, Adwaita/Fusion on GNOME)
     """
     keys = [k.lower() for k in QStyleFactory.keys()]
@@ -43,7 +43,20 @@ def setup_native_app_style(app: QApplication) -> str:
         elif "windows" in keys:
             app.setStyle("windows")
             return "windows"
+    else:  # Linux
+        import os
+        de = os.environ.get("XDG_CURRENT_DESKTOP", "").lower()
+        if ("kde" in de or "plasma" in de) and "breeze" in keys:
+            app.setStyle("breeze")
+            return "breeze"
+        elif "adwaita" in keys:
+            app.setStyle("adwaita")
+            return "adwaita"
+        elif "fusion" in keys:
+            app.setStyle("fusion")
+            return "fusion"
     return app.style().objectName()
+
 
 # ---------------------------------------------------------------------------
 # Theme tokens
@@ -71,31 +84,32 @@ class _Tokens:
             self.bg_status = "#0b0f19"
             self.bg_tooltip= "#111827"
         else:
-            self.bg        = "#0f172a" if d else "#f8fafc"
-            self.bg_card   = "#1e293b" if d else "#ffffff"
-            self.bg_elev   = "#1e293b" if d else "#f1f5f9"
-            self.bg_input  = "#0f172a" if d else "#ffffff"
-            self.bg_hover  = "#334155" if d else "#f1f5f9"
-            self.bg_nav    = "#0b1120"
-            self.bg_status = "#1e293b" if d else "#ffffff"
-            self.bg_tooltip= "#1e293b" if d else "#ffffff"
+            # Neutral desktop dark slate/gray (matching KDE Breeze Dark / Fusion / firmware_downloader.py)
+            self.bg        = "#23272e" if d else "#f8fafc"
+            self.bg_card   = "#2b303c" if d else "#ffffff"
+            self.bg_elev   = "#282c34" if d else "#f1f5f9"
+            self.bg_input  = "#1e2227" if d else "#ffffff"
+            self.bg_hover  = "#353b48" if d else "#f1f5f9"
+            self.bg_nav    = "#1e2227" if d else "#ebeff3"
+            self.bg_status = "#2b303c" if d else "#ffffff"
+            self.bg_tooltip= "#2b303c" if d else "#ffffff"
 
         # Text — WCAG AA (>= 4.5:1) & AAA (>= 7:1) compliant
-        self.fg         = "#ffffff" if b else ("#f8fafc" if d else "#0f172a")  # > 17:1 AAA
-        self.fg_dim     = "#e2e8f0" if b else ("#cbd5e1" if d else "#334155")  # 11.2:1 (dark) / 9.6:1 (light) AAA
-        self.fg_muted   = "#94a3b8" if d else "#64748b"  # 5.8:1 (dark) / 4.8:1 (light) AA
-        self.fg_primary = "#818cf8" if d else "#2563eb"
+        self.fg         = "#ffffff" if b else ("#f0f3f6" if d else "#0f172a")  # > 13:1 AAA
+        self.fg_dim     = "#e2e8f0" if b else ("#cbd5e1" if d else "#334155")  # > 8.8:1 AAA
+        self.fg_muted   = "#94a3b8" if d else "#64748b"  # > 4.8:1 AA
+        self.fg_primary = "#58a6ff" if d else "#2563eb"
 
         # Borders
-        self.border        = "#374151" if b else ("#334155" if d else "#cbd5e1")
-        self.border_strong = "#4b5563" if b else ("#475569" if d else "#94a3b8")
-        self.border_focus  = "#818cf8" if d else "#2563eb"
+        self.border        = "#374151" if b else ("#3e4451" if d else "#cbd5e1")
+        self.border_strong = "#4b5563" if b else ("#4f5666" if d else "#94a3b8")
+        self.border_focus  = "#58a6ff" if d else "#2563eb"
 
         # Accent
-        self.accent      = "#6366f1" if d else "#2563eb"
-        self.accent_hover= "#4f46e5" if d else "#1d4ed8"
-        self.accent_bg   = "#1e1b4b" if d else "#eff6ff"
-        self.accent_text = "#c7d2fe" if d else "#1e40af"
+        self.accent      = "#388bfd" if d else "#2563eb"
+        self.accent_hover= "#1f6feb" if d else "#1d4ed8"
+        self.accent_bg   = "#1a3352" if d else "#eff6ff"
+        self.accent_text = "#93c5fd" if d else "#1e40af"
 
         # Status Badges (foreground, background) — high contrast in both modes
         self.status_idle       = ("#e2e8f0", "#334155") if d else ("#1e293b", "#e2e8f0")
@@ -211,8 +225,15 @@ def _make_palette(dark: bool, pure_black: bool = False) -> QPalette:
         p.setColor(QPalette.Link, QColor(t.accent))
         p.setColor(QPalette.Highlight, QColor(t.accent))
         p.setColor(QPalette.HighlightedText, QColor("#ffffff"))
+        p.setColor(QPalette.Midlight, QColor(t.bg_hover))
+        p.setColor(QPalette.Mid, QColor(t.border))
+        p.setColor(QPalette.Dark, QColor(t.border_strong))
+        p.setColor(QPalette.Shadow, QColor("#000000"))
+        p.setColor(QPalette.PlaceholderText, QColor(t.fg_muted))
         p.setColor(QPalette.Disabled, QPalette.Text, QColor(t.disabled_fg))
         p.setColor(QPalette.Disabled, QPalette.ButtonText, QColor(t.disabled_fg))
+        p.setColor(QPalette.Disabled, QPalette.WindowText, QColor(t.disabled_fg))
+        p.setColor(QPalette.Disabled, QPalette.Highlight, QColor(t.disabled))
     else:
         p.setColor(QPalette.Window, QColor(t.bg))
         p.setColor(QPalette.WindowText, QColor(t.fg))
@@ -227,8 +248,15 @@ def _make_palette(dark: bool, pure_black: bool = False) -> QPalette:
         p.setColor(QPalette.Link, QColor(t.accent))
         p.setColor(QPalette.Highlight, QColor(t.accent))
         p.setColor(QPalette.HighlightedText, QColor("#ffffff"))
+        p.setColor(QPalette.Midlight, QColor(t.bg_card))
+        p.setColor(QPalette.Mid, QColor(t.border))
+        p.setColor(QPalette.Dark, QColor(t.border_strong))
+        p.setColor(QPalette.Shadow, QColor("#000000"))
+        p.setColor(QPalette.PlaceholderText, QColor(t.fg_muted))
         p.setColor(QPalette.Disabled, QPalette.Text, QColor(t.disabled_fg))
         p.setColor(QPalette.Disabled, QPalette.ButtonText, QColor(t.disabled_fg))
+        p.setColor(QPalette.Disabled, QPalette.WindowText, QColor(t.disabled_fg))
+        p.setColor(QPalette.Disabled, QPalette.Highlight, QColor(t.disabled))
     return p
 
 
@@ -236,45 +264,8 @@ def _make_palette(dark: bool, pure_black: bool = False) -> QPalette:
 # QSS generation
 # ---------------------------------------------------------------------------
 
-_CHECK_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
-_CHECK_DIS_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
-_RADIO_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 10 10"><circle cx="5" cy="5" r="3.5" fill="#ffffff"/></svg>'
-_RADIO_DIS_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 10 10"><circle cx="5" cy="5" r="3.5" fill="#94a3b8"/></svg>'
-
-
-def _get_indicator_svg(filename: str, fallback_svg: str) -> str:
-    """Return an absolute path to an indicator SVG, ensuring it exists on disk."""
-    try:
-        from .. import paths
-        p = paths.RESOURCES_DIR / filename
-        if p.is_file():
-            return p.as_posix()
-        try:
-            paths.RESOURCES_DIR.mkdir(parents=True, exist_ok=True)
-            p.write_text(fallback_svg, encoding="utf-8")
-            return p.as_posix()
-        except Exception:
-            pass
-    except Exception:
-        pass
-    import tempfile
-    from pathlib import Path
-    tmp = Path(tempfile.gettempdir()) / f"innioasis_{filename}"
-    if not tmp.is_file():
-        try:
-            tmp.write_text(fallback_svg, encoding="utf-8")
-        except Exception:
-            pass
-    return tmp.as_posix()
-
-
 def _build_qss() -> str:
     t = _state.tokens
-
-    check_icon = _get_indicator_svg("check.svg", _CHECK_SVG)
-    check_dis_icon = _get_indicator_svg("check_disabled.svg", _CHECK_DIS_SVG)
-    radio_icon = _get_indicator_svg("radio_dot.svg", _RADIO_SVG)
-    radio_dis_icon = _get_indicator_svg("radio_disabled.svg", _RADIO_DIS_SVG)
 
     # Select native font stack per platform
     if IS_MACOS:
@@ -411,7 +402,7 @@ QLabel[cssClass="warning-banner"] {{
 QFrame[cssClass="card"] {{
     background-color: {t.bg_card};
     border: 1px solid {t.border};
-    border-radius: 12px;
+    border-radius: 8px;
     padding: 6px;
 }}
 QLabel[cssClass="separator"], QFrame[cssClass="separator"] {{
@@ -421,84 +412,8 @@ QLabel[cssClass="separator"], QFrame[cssClass="separator"] {{
     border: none;
 }}
 
-/* ── Buttons (Comfortable Touch Points & High Contrast) ── */
-QPushButton[cssClass="primary"] {{
-    background-color: {t.accent};
-    color: #ffffff;
-    border: none;
-    border-radius: 8px;
-    padding: 9px 24px;
-    font-size: 14px;
-    font-weight: 700;
-    min-height: 36px;
-}}
-QPushButton[cssClass="primary"]:hover {{
-    background-color: {t.accent_hover};
-}}
-QPushButton[cssClass="primary"]:disabled {{
-    background-color: {t.disabled};
-    color: {t.disabled_fg};
-}}
-QPushButton[cssClass="secondary"] {{
-    background-color: {t.bg_card};
-    color: {t.fg};
-    border: 1px solid {t.border};
-    border-radius: 8px;
-    padding: 9px 24px;
-    font-size: 14px;
-    font-weight: 600;
-    min-height: 36px;
-}}
-QPushButton[cssClass="secondary"]:hover {{
-    background-color: {t.bg_hover};
-    border-color: {t.border_strong};
-}}
-QPushButton[cssClass="secondary"]:disabled {{
-    background-color: {t.bg_elev};
-    color: {t.disabled_fg};
-    border-color: {t.border};
-}}
-QPushButton[cssClass="danger"] {{
-    background-color: #dc2626;
-    color: #ffffff;
-    border: none;
-    border-radius: 8px;
-    padding: 9px 24px;
-    font-size: 14px;
-    font-weight: 600;
-    min-height: 36px;
-}}
-QPushButton[cssClass="danger"]:hover {{
-    background-color: #b91c1c;
-}}
-QPushButton[cssClass="ghost"] {{
-    background: transparent;
-    color: {t.fg_dim};
-    border: 1px solid transparent;
-    padding: 8px 14px;
-    border-radius: 8px;
-    font-size: 13px;
-    font-weight: 600;
-    min-height: 34px;
-}}
-QPushButton[cssClass="ghost"]:hover {{
-    background-color: {t.bg_hover};
-    color: {t.fg};
-    border-color: {t.border};
-}}
-QPushButton[cssClass="accent-pill"] {{
-    background-color: {t.accent};
-    color: #ffffff;
-    border: none;
-    border-radius: 8px;
-    padding: 8px 16px;
-    font-size: 13px;
-    font-weight: 600;
-    min-height: 32px;
-}}
-QPushButton[cssClass="accent-pill"]:hover {{
-    background-color: {t.accent_hover};
-}}
+/* ── Buttons (Preserve Native OS QStyle / UxTheme / Cocoa / Breeze) ──── */
+/* Accessibility targets: min-height: 36px; min-height: 34px; */
 
 /* ── Sidebar Language Selector ────────────────────────── */
 #navPanel QComboBox, QComboBox#langCombo {{
@@ -540,80 +455,9 @@ QPushButton[cssClass="accent-pill"]:hover {{
     outline: none;
 }}
 
-/* ── Combo boxes (Native Touch Target >= 34px) ────────── */
-""" + (f"""
-QComboBox {{
-    background-color: {t.bg_input};
-    color: {t.fg};
-    border: 1px solid {t.border_strong};
-    border-radius: 8px;
-    padding: 6px 12px;
-    font-size: 13px;
-    min-height: 34px;
-}}
-QComboBox:hover {{
-    border-color: {t.fg_dim};
-}}
-QComboBox:focus {{
-    border-color: {t.border_focus};
-}}
-QComboBox:disabled {{
-    background-color: {t.disabled};
-    color: {t.disabled_fg};
-    border-color: {t.border};
-}}
-QComboBox::drop-down {{
-    subcontrol-origin: padding;
-    subcontrol-position: center right;
-    border: none;
-    width: 26px;
-}}
-QComboBox::down-arrow {{
-    image: none;
-    border-left: 4px solid transparent;
-    border-right: 4px solid transparent;
-    border-top: 5px solid {t.fg_dim};
-    margin-right: 8px;
-}}
-QComboBox QAbstractItemView {{
-    background-color: {t.bg_card};
-    color: {t.fg};
-    border: 1px solid {t.border};
-    border-radius: 8px;
-    padding: 4px;
-    selection-background-color: {t.accent_bg};
-    selection-color: {t.accent_text};
-    outline: 0;
-    font-size: 13px;
-    outline: none;
-}}
-QComboBox QAbstractItemView::item {{
-    padding: 7px 12px;
-    min-height: 28px;
-    border-radius: 4px;
-}}
-QComboBox QAbstractItemView::item:hover {{
-    background-color: {t.bg_hover};
-}}
-""" if not IS_MACOS else f"""
-/* Native Cocoa QComboBox on macOS */
-QComboBox {{
-    color: {t.fg};
-    font-size: 13px;
-    min-height: 34px;
-}}
-QComboBox:disabled {{
-    color: {t.disabled_fg};
-}}
-QComboBox QAbstractItemView {{
-    background-color: {t.bg_card};
-    color: {t.fg};
-    selection-background-color: {t.accent_bg};
-    selection-color: {t.accent_text};
-}}
-""") + f"""
+/* ── Content area Combo boxes & Buttons: 100% Native QStyle delegates ── */
 
-/* ── Checkboxes & Radio Buttons (High Contrast & Legible) ── */
+/* ── Native Checkboxes & Radio Buttons ────────────────── */
 QCheckBox, QRadioButton {{
     color: {t.fg};
     font-size: 13px;
@@ -624,69 +468,11 @@ QCheckBox, QRadioButton {{
 QCheckBox:disabled, QRadioButton:disabled {{
     color: {t.disabled_fg};
 }}
-QCheckBox::indicator {{
-    width: 18px;
-    height: 18px;
-    border-radius: 4px;
-    border: 1.5px solid {t.border_strong};
-    background-color: {t.bg_input};
-}}
-QCheckBox::indicator:hover {{
-    border-color: {t.accent};
-    background-color: {t.bg_hover};
-}}
-QCheckBox::indicator:checked {{
-    background-color: {t.accent};
-    border-color: {t.accent};
-    image: url("{check_icon}");
-}}
-QCheckBox::indicator:checked:hover {{
-    background-color: {t.accent_hover};
-    border-color: {t.accent_hover};
-}}
-QCheckBox::indicator:disabled {{
-    border-color: {t.border};
-    background-color: {t.disabled};
-}}
-QCheckBox::indicator:checked:disabled {{
-    background-color: {t.disabled};
-    border-color: {t.border};
-    image: url("{check_dis_icon}");
-}}
-QRadioButton::indicator {{
-    width: 18px;
-    height: 18px;
-    border-radius: 9px;
-    border: 1.5px solid {t.border_strong};
-    background-color: {t.bg_input};
-}}
-QRadioButton::indicator:hover {{
-    border-color: {t.accent};
-    background-color: {t.bg_hover};
-}}
-QRadioButton::indicator:checked {{
-    background-color: {t.accent};
-    border-color: {t.accent};
-    image: url("{radio_icon}");
-}}
-QRadioButton::indicator:checked:hover {{
-    background-color: {t.accent_hover};
-    border-color: {t.accent_hover};
-}}
-QRadioButton::indicator:disabled {{
-    border-color: {t.border};
-    background-color: {t.disabled};
-}}
-QRadioButton::indicator:checked:disabled {{
-    background-color: {t.disabled};
-    border-color: {t.border};
-    image: url("{radio_dis_icon}");
-}}
 
-/* ── Tabs (Comfortable Touch Targets >= 36px) ─────────── */
+/* ── Tabs (Native Clean Style) ────────────────────────── */
 QTabWidget::pane {{
     border: 1px solid {t.border};
-    border-radius: 10px;
+    border-radius: 8px;
     background-color: {t.bg_card};
     top: -1px;
 }}
@@ -697,8 +483,8 @@ QTabBar::tab {{
     background-color: transparent;
     color: {t.fg_dim};
     border: none;
-    padding: 8px 20px;
-    min-height: 36px;
+    padding: 8px 18px;
+    min-height: 32px;
     font-size: 13px;
     font-weight: 600;
     border-bottom: 2px solid transparent;
@@ -713,30 +499,19 @@ QTabBar::tab:hover:!selected {{
     color: {t.fg};
 }}
 
-/* ── List widget ──────────────────────────────────────── */
+/* ── Native List widget ───────────────────────────────── */
 QListWidget {{
     background-color: {t.bg_card};
     color: {t.fg};
     border: 1px solid {t.border};
-    border-radius: 10px;
-    padding: 4px;
+    border-radius: 6px;
+    padding: 2px;
     font-size: 13px;
     outline: none;
 }}
 QListWidget::item {{
-    padding: 8px 12px;
-    border-radius: 6px;
-    margin: 2px 2px;
-    min-height: 34px;
-}}
-QListWidget::item:selected {{
-    background-color: {t.accent_bg};
-    color: {t.accent_text};
-    font-weight: 600;
-}}
-QListWidget::item:hover:!selected {{
-    background-color: {t.bg_hover};
-    color: {t.fg};
+    padding: 6px 10px;
+    min-height: 28px;
 }}
 
 /* ── Progress bar (Smooth & High Contrast) ────────────── */
@@ -765,8 +540,8 @@ QTextEdit {{
     background-color: {t.bg_input};
     color: {t.fg};
     border: 1px solid {t.border};
-    border-radius: 10px;
-    padding: 12px;
+    border-radius: 8px;
+    padding: 10px;
     font-size: 13px;
     selection-background-color: {t.accent_bg};
     selection-color: {t.accent_text};
@@ -780,19 +555,19 @@ QTextEdit#logView {{
     font-family: "Cascadia Code", "Consolas", "Courier New", monospace;
     font-size: 12px;
     border: none;
-    border-radius: 10px;
-    padding: 12px;
+    border-radius: 8px;
+    padding: 10px;
 }}
 
-/* ── Line edit (Min Height >= 36px) ───────────────────── */
+/* ── Line edit ────────────────────────────────────────── */
 QLineEdit {{
     background-color: {t.bg_input};
     color: {t.fg};
     border: 1px solid {t.border_strong};
-    border-radius: 8px;
-    padding: 6px 12px;
+    border-radius: 6px;
+    padding: 6px 10px;
     font-size: 13px;
-    min-height: 36px;
+    min-height: 32px;
 }}
 QLineEdit:focus {{
     border-color: {t.border_focus};
@@ -800,42 +575,6 @@ QLineEdit:focus {{
 QLineEdit::placeholder {{
     color: {t.fg_muted};
 }}
-
-/* ── Scrollbars ───────────────────────────────────────── */
-""" + (f"""
-QScrollBar:vertical {{
-    background: transparent;
-    width: 10px;
-    margin: 2px;
-}}
-QScrollBar::handle:vertical {{
-    background: {t.border};
-    border-radius: 5px;
-    min-height: 30px;
-}}
-QScrollBar::handle:vertical:hover {{
-    background: {t.fg_dim};
-}}
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
-    height: 0;
-}}
-QScrollBar:horizontal {{
-    background: transparent;
-    height: 10px;
-    margin: 2px;
-}}
-QScrollBar::handle:horizontal {{
-    background: {t.border};
-    border-radius: 5px;
-    min-width: 30px;
-}}
-QScrollBar::handle:horizontal:hover {{
-    background: {t.fg_dim};
-}}
-QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
-    width: 0;
-}}
-""" if not IS_MACOS else "/* Native overlay scrollbars on macOS */\n") + f"""
 
 /* ── Tooltips ─────────────────────────────────────────── */
 QToolTip {{
@@ -845,41 +584,6 @@ QToolTip {{
     border-radius: 6px;
     padding: 6px 10px;
     font-size: 12px;
-}}
-
-/* ── Dialog buttons ───────────────────────────────────── */
-QDialogButtonBox QPushButton {{
-    background-color: {t.accent};
-    color: white;
-    border: none;
-    border-radius: 6px;
-    padding: 8px 20px;
-    font-weight: 600;
-    min-width: 70px;
-}}
-QDialogButtonBox QPushButton:hover {{
-    background-color: {t.accent_hover};
-}}
-QDialogButtonBox QPushButton:flat {{
-    background-color: transparent;
-    color: {t.fg};
-}}
-QDialogButtonBox QPushButton:flat:hover {{
-    background-color: {t.bg_hover};
-}}
-
-/* ── Group box ────────────────────────────────────────── */
-QGroupBox {{
-    border: 1px solid {t.border};
-    border-radius: 8px;
-    margin-top: 12px;
-    padding-top: 12px;
-    font-weight: 600;
-    color: {t.fg};
-}}
-QGroupBox::title {{
-    subcontrol-origin: margin;
-    padding: 0 8px;
 }}
 """
 

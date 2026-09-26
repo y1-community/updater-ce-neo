@@ -121,7 +121,13 @@ rm -rf "$BUILD_DIR" "$DIST_DIR"/*.app "$DIST_DIR"/*.dmg
 
 # --- Ad-hoc code sign bundle ----------------------------------------------
 echo ">>> Signing bundle..."
-codesign --force --deep -s - "$DIST_DIR/$APP_NAME.app"
+ENTITLEMENTS_FILE="assets/entitlements.plist"
+if [ -f "$ENTITLEMENTS_FILE" ]; then
+    find "$DIST_DIR/$APP_NAME.app" -type f \( -name "*.dylib" -o -name "*.so" \) -exec codesign --force -s - {} + 2>/dev/null || true
+    codesign --force --deep --entitlements "$ENTITLEMENTS_FILE" -s - "$DIST_DIR/$APP_NAME.app"
+else
+    codesign --force --deep -s - "$DIST_DIR/$APP_NAME.app"
+fi
 
 echo "=== Build complete: $DIST_DIR/$APP_NAME.app ==="
 

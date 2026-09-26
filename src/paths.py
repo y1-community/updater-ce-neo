@@ -98,11 +98,14 @@ def find_libusb_dylib() -> str | None:
     ]
     if getattr(sys, "frozen", False):
         res_dir = BUNDLE_DIR.parent / "Resources"
+        frameworks_dir = BUNDLE_DIR.parent / "Frameworks"
         candidates.extend([
             res_dir / "libusb-1.0.dylib",
             res_dir / "Frameworks" / "libusb-1.0.dylib",
             res_dir / "mtkclient" / "mtkclient" / "Darwin" / "libusb-1.0.dylib",
             res_dir / "mtkclient" / "Darwin" / "libusb-1.0.dylib",
+            frameworks_dir / "libusb-1.0.dylib",
+            BUNDLE_DIR.parent / "MacOS" / "libusb-1.0.dylib",
         ])
 
     for c in candidates:
@@ -129,8 +132,16 @@ def find_libusb_dylib() -> str | None:
 
 # --- Backend discovery (ported from flash_service) --------------------------
 
+# Simulated macOS mode: run the macOS code path (MTKClient-only flash
+# backend, no SP Flash Tool GUI) on Linux/Windows for parity testing.
+# Set via the ``--simulate-macos`` launch flag (see launcher.py) or the
+# INNIOASIS_SIMULATE_MACOS=1 environment variable.
+SIMULATE_MACOS = os.environ.get("INNIOASIS_SIMULATE_MACOS", "") in ("1", "true", "yes", "on")
+
 IS_WINDOWS = os.name == "nt" or sys.platform.startswith("win")
-IS_MAC = sys.platform == "darwin"
+# Every macOS conditional in the app must read IS_MAC (not raw sys.platform)
+# so the simulated mode is indistinguishable from the real thing.
+IS_MAC = sys.platform == "darwin" or SIMULATE_MACOS
 
 
 def find_sp_flash_tool():

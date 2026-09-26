@@ -88,7 +88,7 @@ def parse_manifest_xml(xml_text: str):
             ptype = (node.get("type") or "").strip()
         except Exception:
             continue
-        if not name or not repo or device not in ("Y1", "Y2"):
+        if not name or not repo or device not in ("Y1", "Y2", "A5"):
             continue
         if repo.lower() == SKIPPED_UPDATE_REPO.lower():
             continue  # CE's in-app "please update" placeholder
@@ -102,7 +102,7 @@ def parse_manifest_xml(xml_text: str):
                 name=name,
                 model=device,
                 repo=resolve_firmware_repo(repo),
-                package_name="rom_y2.zip" if device == "Y2" else "rom.zip",
+                package_name="rom_a5.zip" if device == "A5" else ("rom_y2.zip" if device == "Y2" else "rom.zip"),
                 description="",
             )
         )

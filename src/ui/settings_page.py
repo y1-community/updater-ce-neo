@@ -67,7 +67,6 @@ class SettingsPage(QWidget):
         y1_box = QVBoxLayout()
         y1_box.setSpacing(4)
         self._cb_y1 = QCheckBox(tr("settings_enable_y1"))
-        self._cb_y1.setCursor(Qt.PointingHandCursor)
         self._cb_y1.toggled.connect(self._on_y1_toggled)
         y1_box.addWidget(self._cb_y1)
 
@@ -80,7 +79,6 @@ class SettingsPage(QWidget):
 
         self._btn_clear_y1 = QPushButton(tr("settings_clear_install"))
         self._btn_clear_y1.setProperty("cssClass", "ghost")
-        self._btn_clear_y1.setCursor(Qt.PointingHandCursor)
         self._btn_clear_y1.setFixedHeight(26)
         self._btn_clear_y1.clicked.connect(self._on_clear_y1)
         y1_status_row.addWidget(self._btn_clear_y1)
@@ -97,7 +95,6 @@ class SettingsPage(QWidget):
         y2_box = QVBoxLayout()
         y2_box.setSpacing(4)
         self._cb_y2 = QCheckBox(tr("settings_enable_y2"))
-        self._cb_y2.setCursor(Qt.PointingHandCursor)
         self._cb_y2.toggled.connect(self._on_y2_toggled)
         y2_box.addWidget(self._cb_y2)
 
@@ -110,18 +107,45 @@ class SettingsPage(QWidget):
 
         self._btn_clear_y2 = QPushButton(tr("settings_clear_install"))
         self._btn_clear_y2.setProperty("cssClass", "ghost")
-        self._btn_clear_y2.setCursor(Qt.PointingHandCursor)
         self._btn_clear_y2.setFixedHeight(26)
         self._btn_clear_y2.clicked.connect(self._on_clear_y2)
         y2_status_row.addWidget(self._btn_clear_y2)
         y2_box.addLayout(y2_status_row)
         rem_layout.addLayout(y2_box)
 
+        # Separator line
+        sep2 = QLabel()
+        sep2.setFixedHeight(1)
+        sep2.setProperty("cssClass", "separator")
+        rem_layout.addWidget(sep2)
+
+        # A5 Row
+        a5_box = QVBoxLayout()
+        a5_box.setSpacing(4)
+        self._cb_a5 = QCheckBox(tr("settings_enable_a5"))
+        self._cb_a5.toggled.connect(self._on_a5_toggled)
+        a5_box.addWidget(self._cb_a5)
+
+        a5_status_row = QHBoxLayout()
+        a5_status_row.setContentsMargins(24, 0, 0, 0)
+        self._lbl_a5_status = QLabel()
+        self._lbl_a5_status.setWordWrap(True)
+        self._lbl_a5_status.setProperty("cssClass", "dimmed")
+        a5_status_row.addWidget(self._lbl_a5_status, 1)
+
+        self._btn_clear_a5 = QPushButton(tr("settings_clear_install"))
+        self._btn_clear_a5.setProperty("cssClass", "ghost")
+        self._btn_clear_a5.setFixedHeight(26)
+        self._btn_clear_a5.clicked.connect(self._on_clear_a5)
+        a5_status_row.addWidget(self._btn_clear_a5)
+        a5_box.addLayout(a5_status_row)
+        rem_layout.addLayout(a5_box)
+
         rem_layout.addSpacing(6)
         check_row = QHBoxLayout()
         self._btn_check_updates = QPushButton(tr("settings_check_firmware_updates"))
         self._btn_check_updates.setProperty("cssClass", "primary")
-        self._btn_check_updates.setCursor(Qt.PointingHandCursor)
+        self._btn_check_updates.setDefault(True)
         self._btn_check_updates.clicked.connect(self.check_updates_requested.emit)
         check_row.addWidget(self._btn_check_updates)
         check_row.addStretch()
@@ -137,7 +161,6 @@ class SettingsPage(QWidget):
 
         # Hide donations checkbox
         self._cb_hide_donations = QCheckBox(tr("settings_hide_donations"))
-        self._cb_hide_donations.setCursor(Qt.PointingHandCursor)
         self._cb_hide_donations.setToolTip(tr("settings_hide_donations_tip"))
         self._cb_hide_donations.toggled.connect(self._on_hide_donations_toggled)
         don_layout.addWidget(self._cb_hide_donations)
@@ -150,7 +173,6 @@ class SettingsPage(QWidget):
 
         # Skip install donation prompt checkbox
         self._cb_skip_install_donations = QCheckBox(tr("settings_skip_install_donations"))
-        self._cb_skip_install_donations.setCursor(Qt.PointingHandCursor)
         self._cb_skip_install_donations.setToolTip(tr("settings_skip_install_donations_tip"))
         self._cb_skip_install_donations.toggled.connect(self._on_skip_install_donations_toggled)
         don_layout.addWidget(self._cb_skip_install_donations)
@@ -177,13 +199,11 @@ class SettingsPage(QWidget):
         chk_btn_row = QHBoxLayout()
         self._btn_run_checker = QPushButton(tr("system_checker_run_btn"))
         self._btn_run_checker.setProperty("cssClass", "primary")
-        self._btn_run_checker.setCursor(Qt.PointingHandCursor)
         self._btn_run_checker.clicked.connect(self._on_run_checker)
         chk_btn_row.addWidget(self._btn_run_checker)
 
         self._btn_launch_sp = QPushButton(tr("system_checker_launch_gui_btn"))
         self._btn_launch_sp.setProperty("cssClass", "ghost")
-        self._btn_launch_sp.setCursor(Qt.PointingHandCursor)
         self._btn_launch_sp.clicked.connect(self._on_launch_sp)
         chk_btn_row.addWidget(self._btn_launch_sp)
         chk_btn_row.addStretch()
@@ -238,6 +258,26 @@ class SettingsPage(QWidget):
             self._lbl_y2_status.setText(tr("settings_not_installed"))
             self._btn_clear_y2.setVisible(False)
 
+        # A5 reminder toggle & install status
+        self._cb_a5.blockSignals(True)
+        self._cb_a5.setChecked(device_tracking.is_device_reminder_enabled("A5"))
+        self._cb_a5.blockSignals(False)
+
+        a5_rec = device_tracking.get_device_install("A5")
+        if a5_rec:
+            dt_str = a5_rec.get("installed_at", "")[:10]
+            self._lbl_a5_status.setText(
+                tr("settings_installed_status").format(
+                    software=a5_rec.get("software_name") or "Firmware",
+                    version=a5_rec.get("tag_name") or "Unknown",
+                    date=dt_str or "Recorded",
+                )
+            )
+            self._btn_clear_a5.setVisible(True)
+        else:
+            self._lbl_a5_status.setText(tr("settings_not_installed"))
+            self._btn_clear_a5.setVisible(False)
+
         # Donation checkboxes
         self._cb_hide_donations.blockSignals(True)
         self._cb_hide_donations.setChecked(device_tracking.is_donation_ui_disabled())
@@ -255,12 +295,19 @@ class SettingsPage(QWidget):
     def _on_y2_toggled(self, checked: bool):
         device_tracking.set_device_reminder_enabled("Y2", checked)
 
+    def _on_a5_toggled(self, checked: bool):
+        device_tracking.set_device_reminder_enabled("A5", checked)
+
     def _on_clear_y1(self):
         device_tracking.clear_device_install("Y1")
         self.refresh_settings()
 
     def _on_clear_y2(self):
         device_tracking.clear_device_install("Y2")
+        self.refresh_settings()
+
+    def _on_clear_a5(self):
+        device_tracking.clear_device_install("A5")
         self.refresh_settings()
 
     def _on_hide_donations_toggled(self, checked: bool):
@@ -288,8 +335,10 @@ class SettingsPage(QWidget):
         self._reminders_desc.setText(tr("settings_reminders_desc"))
         self._cb_y1.setText(tr("settings_enable_y1"))
         self._cb_y2.setText(tr("settings_enable_y2"))
+        self._cb_a5.setText(tr("settings_enable_a5"))
         self._btn_clear_y1.setText(tr("settings_clear_install"))
         self._btn_clear_y2.setText(tr("settings_clear_install"))
+        self._btn_clear_a5.setText(tr("settings_clear_install"))
         self._btn_check_updates.setText(tr("settings_check_firmware_updates"))
         self._donations_card.retranslate()
         self._cb_hide_donations.setText(tr("settings_hide_donations"))

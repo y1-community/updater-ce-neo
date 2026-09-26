@@ -193,15 +193,13 @@ class UpdateAvailableDialog(QDialog):
         btn_row = QHBoxLayout()
         self._download_btn = QPushButton(tr("update_btn_download"))
         self._download_btn.setProperty("cssClass", "primary")
-        self._download_btn.setCursor(Qt.PointingHandCursor)
+        self._download_btn.setDefault(True)
         self._download_btn.clicked.connect(self._on_download)
         self._later_btn = QPushButton(tr("update_btn_later"))
         self._later_btn.setProperty("cssClass", "ghost")
-        self._later_btn.setCursor(Qt.PointingHandCursor)
         self._later_btn.clicked.connect(self.reject)
         self._skip_btn = QPushButton(tr("update_btn_skip"))
         self._skip_btn.setProperty("cssClass", "ghost")
-        self._skip_btn.setCursor(Qt.PointingHandCursor)
         self._skip_btn.clicked.connect(self._on_skip_version)
         btn_row.addWidget(self._download_btn)
         btn_row.addWidget(self._later_btn)
@@ -350,7 +348,6 @@ class LinuxSetupDialog(QDialog):
 
         self._grant_btn = QPushButton(tr("linux_card_grant_btn"))
         self._grant_btn.setProperty("cssClass", "primary")
-        self._grant_btn.setCursor(Qt.PointingHandCursor)
         self._grant_btn.clicked.connect(self._on_auto_configure)
         uc_layout.addWidget(self._grant_btn)
 
@@ -398,7 +395,6 @@ class LinuxSetupDialog(QDialog):
         # Technical diagnostics toggle & view (hidden by default)
         diag_toggle_row = QHBoxLayout()
         self._diag_toggle_btn = QPushButton(f"▸ {tr('linux_setup_view_log')}")
-        self._diag_toggle_btn.setCursor(Qt.PointingHandCursor)
         self._diag_toggle_btn.setStyleSheet(
             f"color: {t.fg_dim}; border: none; background: transparent; font-size: 11px; text-align: left;"
         )
@@ -423,22 +419,19 @@ class LinuxSetupDialog(QDialog):
 
         self._recheck_btn = QPushButton(tr("linux_setup_recheck"))
         self._recheck_btn.setProperty("cssClass", "ghost")
-        self._recheck_btn.setCursor(Qt.PointingHandCursor)
         self._recheck_btn.clicked.connect(lambda: self._start_staging(force_download=False))
 
         self._copy_btn = QPushButton(tr("linux_setup_copy_cmd"))
         self._copy_btn.setProperty("cssClass", "ghost")
-        self._copy_btn.setCursor(Qt.PointingHandCursor)
         self._copy_btn.clicked.connect(self._on_copy_command)
 
         self._sp_gui_btn = QPushButton(tr("system_checker_launch_gui_btn"))
         self._sp_gui_btn.setProperty("cssClass", "ghost")
-        self._sp_gui_btn.setCursor(Qt.PointingHandCursor)
         self._sp_gui_btn.clicked.connect(self._on_launch_sp_gui)
 
         self._continue_btn = QPushButton(tr("linux_setup_done_btn"))
         self._continue_btn.setProperty("cssClass", "primary")
-        self._continue_btn.setCursor(Qt.PointingHandCursor)
+        self._continue_btn.setDefault(True)
         self._continue_btn.clicked.connect(self.accept)
 
         btn_row.addWidget(self._recheck_btn)
@@ -719,7 +712,6 @@ class ReleaseReminderDialog(QDialog):
 
         # Don't remind checkbox
         self.cb_dont_remind = QCheckBox(tr("reminder_dont_remind_device"))
-        self.cb_dont_remind.setCursor(Qt.PointingHandCursor)
         layout.addWidget(self.cb_dont_remind)
 
         # Action Buttons
@@ -729,13 +721,12 @@ class ReleaseReminderDialog(QDialog):
 
         btn_dismiss = QPushButton(tr("reminder_dismiss"))
         btn_dismiss.setProperty("cssClass", "ghost")
-        btn_dismiss.setCursor(Qt.PointingHandCursor)
         btn_dismiss.clicked.connect(self._on_dismiss)
         btn_layout.addWidget(btn_dismiss)
 
         btn_view = QPushButton(tr("reminder_view_release"))
         btn_view.setProperty("cssClass", "primary")
-        btn_view.setCursor(Qt.PointingHandCursor)
+        btn_view.setDefault(True)
         btn_view.clicked.connect(self._on_view)
         btn_layout.addWidget(btn_view)
 

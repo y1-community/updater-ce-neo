@@ -37,6 +37,7 @@ except Exception:
 binaries = []
 if LIBUSB_DYLIB.exists():
     binaries.append((str(LIBUSB_DYLIB), "."))
+    binaries.append((str(LIBUSB_DYLIB), "Frameworks"))
 
 hiddenimports = (
     crypto_hidden
@@ -107,7 +108,7 @@ exe = EXE(
     argv_emulation=False,
     target_arch=target_arch,
     codesign_identity=None,
-    entitlements_file=None,
+    entitlements_file=str(ASSETS / "entitlements.plist") if (ASSETS / "entitlements.plist").exists() else None,
     icon="assets/icon.icns",
 )
 
@@ -134,6 +135,8 @@ app = BUNDLE(
         "LSMinimumSystemVersion": "13.0",
         "NSHighResolutionCapable": True,
         "NSRequiresAquaSystemAppearance": False,
+        "LSApplicationCategoryType": "public.app-category.utilities",
+        "NSHumanReadableCopyright": "Copyright © 2024-2026 Innioasis Community. All rights reserved.",
         "CFBundleDocumentTypes": [
             {
                 "CFBundleTypeName": "Firmware Archive",

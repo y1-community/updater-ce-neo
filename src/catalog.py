@@ -65,9 +65,11 @@ def set_live_catalog(entries: list):
 
 
 def _catalog_packages():
-    if LIVE_CATALOG:
-        return list(LIVE_CATALOG)
-    return list(CATALOG)
+    if not LIVE_CATALOG:
+        return list(CATALOG)
+    covered = {(p.model, p.name) for p in LIVE_CATALOG}
+    fallback = [p for p in CATALOG if (p.model, p.name) not in covered]
+    return list(LIVE_CATALOG) + fallback
 
 
 CATALOG = [
@@ -87,6 +89,10 @@ CATALOG = [
                     "A launcher software for Y1."),
     FirmwarePackage("jj-launcher-y2", "JJ Launcher", "Y2", "ismileblue/y1_launcher", "rom_y2.zip",
                     "Listed for Y2 in the current Updater CE catalogue."),
+    FirmwarePackage("original-a5", "Original Software", "A5", "y1-community/y1-stock-rom", "rom_a5.zip",
+                    "The stock software for restoring an Innioasis A5."),
+    FirmwarePackage("rockbox-a5", "Rockbox", "A5", "y1-community/rockbox-y2-rom", "rom_a5.zip",
+                    "The A5 Rockbox build."),
     FirmwarePackage("inniclassic-y1", "Inniclassic", "Y1", "FabianZettl/inniclassic", "rom.zip",
                     "A classic-style Y1 software."),
     FirmwarePackage("y2player-y2", "Y2Player", "Y2", "schulzcode/Y2Player", "rom_y2.zip",
@@ -116,11 +122,18 @@ def packages_for_model_software(model: str, software: str):
 # rom*.zip asset variant parsing (ported from firmware_downloader.py)
 # ---------------------------------------------------------------------------
 def _classify_variant_model(name, tag_name="", repo=""):
-    """Classify a rom*.zip asset as Y1, Y2, or dual (eligible for both)."""
+    """Classify a rom*.zip asset as Y1, Y2, A5, or dual (eligible for multiple)."""
     lower = (name or "").lower()
     tag_lower = (tag_name or "").lower()
     repo_lower = (repo or "").lower()
     repo_name = repo_lower.split("/")[-1] if "/" in repo_lower else repo_lower
+
+    if "_a5" in lower or lower.startswith("rom_a5") or " a5" in lower or "-a5" in lower:
+        return "A5"
+    if "a5" in tag_lower and "y1" not in tag_lower and "y2" not in tag_lower:
+        return "A5"
+    if "a5" in repo_name and "y1" not in repo_name and "y2" not in repo_name:
+        return "A5"
 
     if "_y2" in lower or lower.startswith("rom_y2"):
         return "Y2"
@@ -225,13 +238,25 @@ def _model_ok_for_package(variant_model, package_model, repo, model):
     variant_model = (variant_model or "dual").upper()
     ed_model = str(model or "").upper()
     pd = str(package_model or "").upper()
+    selecting_a5 = "A5" in ed_model
     selecting_y2 = "Y2" in ed_model
     repo_name = (repo or "").lower().split("/")[-1]
+
+    if selecting_a5:
+        if variant_model == "A5":
+            return True
+        if pd in ("Y1", "Y2"):
+            return False
+        if variant_model == "DUAL":
+            if pd == "A5" and "a5" not in repo_name:
+                return False
+            return True
+        return False
 
     if selecting_y2:
         if variant_model == "Y2":
             return True
-        if pd == "Y1":
+        if pd in ("Y1", "A5"):
             return False
         if variant_model == "DUAL":
             # Legacy rom.zip on a Y1-named repo (no y2 marker) is not for a Y2 device.
@@ -241,9 +266,9 @@ def _model_ok_for_package(variant_model, package_model, repo, model):
         return False
 
     # Y1 / generic selection
-    if pd == "Y2":
+    if pd in ("Y2", "A5"):
         return False
-    if variant_model == "Y2":
+    if variant_model in ("Y2", "A5"):
         return False
     return variant_model in ("Y1", "DUAL")
 
@@ -252,8 +277,8 @@ def filter_rom_variants_for_model(variants, model, package_model=None, repo=""):
     """Return rom*.zip variants usable by ``model`` for a catalogue package.
 
     Matches the upstream ``filter_rom_variants_for_model`` behaviour: explicit
-    model variants (e.g. rom_y2.zip) always win out, and dual rom.zip assets
-    are gated on the package/repo context so Y2 never inherits Y1-only legacy
+    model variants (e.g. rom_y2.zip, rom_a5.zip) always win out, and dual rom.zip assets
+    are gated on the package/repo context so Y2/A5 never inherit Y1-only legacy
     releases.
     """
     if not variants:
@@ -261,7 +286,7 @@ def filter_rom_variants_for_model(variants, model, package_model=None, repo=""):
     enriched = []
     for v in variants:
         vm = (v.get("model") or "dual").upper()
-        if vm not in ("Y1", "Y2", "DUAL"):
+        if vm not in ("Y1", "Y2", "A5", "DUAL"):
             continue
         enriched.append(v)
     selecting_y2 = "Y2" in (model or "").upper()

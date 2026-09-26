@@ -542,10 +542,10 @@ _STRINGS: dict = {
         "es": "Guía de conexión",
     },
     "flash_guide_1": {
-        "zh-CN": "先关闭机器电源",
-        "en": "1. Power off the device",
-        "fr": "1. Éteignez l'appareil",
-        "es": "1. Apaga el dispositivo",
+        "zh-CN": "1. 先关闭机器电源（如有需要可使用卡针或回形针戳复位孔）",
+        "en": "1. Power off the device (use a pin or paperclip in reset hole if needed)",
+        "fr": "1. Éteignez l'appareil (utilisez un trombone/épingle dans le trou de réinitialisation si nécessaire)",
+        "es": "1. Apaga el dispositivo (usa un clip o alfiler en el orificio de reinicio si es necesario)",
     },
     "flash_guide_2": {
         "zh-CN": "使用 USB 线连接电脑与机器",
@@ -1303,9 +1303,9 @@ _STRINGS: dict = {
     },
     "settings_reminders_desc": {
         "zh-CN": "Updater Neo 可记住各机型上次安装的固件版本，并在发布新版本时提醒您更新。",
-        "en": "Updater Neo remembers what firmware version was installed on your Y1 and Y2 players, alerting you when newer releases become available.",
-        "fr": "Updater Neo mémorise la version installée sur votre Y1 ou Y2 et vous avertit lorsque de nouvelles versions sont disponibles.",
-        "es": "Updater Neo recuerda qué versión de firmware se instaló en sus reproductores Y1 y Y2, avisándole cuando haya nuevas versiones disponibles.",
+        "en": "Updater Neo remembers what firmware version was installed on your Innioasis players, alerting you when newer releases become available.",
+        "fr": "Updater Neo mémorise la version installée sur vos lecteurs Innioasis et vous avertit lorsque de nouvelles versions sont disponibles.",
+        "es": "Updater Neo recuerda qué versión de firmware se instaló en sus reproductores Innioasis, avisándole cuando haya nuevas versiones disponibles.",
     },
     "settings_enable_y1": {
         "zh-CN": "启用 Innioasis Y1 固件更新提醒",
@@ -1318,6 +1318,12 @@ _STRINGS: dict = {
         "en": "Enable release reminders for Innioasis Y2",
         "fr": "Activer les rappels pour Innioasis Y2",
         "es": "Activar recordatorios para Innioasis Y2",
+    },
+    "settings_enable_a5": {
+        "zh-CN": "启用 Innioasis A5 固件更新提醒",
+        "en": "Enable release reminders for Innioasis A5",
+        "fr": "Activer les rappels pour Innioasis A5",
+        "es": "Activar recordatorios para Innioasis A5",
     },
     "settings_installed_status": {
         "zh-CN": "上次安装: <b>{software}</b> ({version}) · {date}",

@@ -3,6 +3,10 @@
 Platform matrix (uniform across Windows, macOS, Linux):
 - Auto: SP Flash Tool on Windows/Linux, MTKClient on macOS.
 - SP Flash Tool: available on Windows and Linux only; not built for macOS.
+- MTKClient: available on all platforms; the only macOS backend.
+- macOS parity: the macOS code path can be simulated on Linux/Windows with
+  ``--simulate-macos`` (paths.SIMULATE_MACOS); the effective backend matrix
+  is then identical to a real macOS build.
 - MTKClient: available on all three platforms.  On Windows it requires the
   MediaTek USB driver to be installed.
 
@@ -26,6 +30,7 @@ import time
 import traceback
 import zipfile
 from pathlib import Path
+from struct import pack, unpack
 from typing import Optional
 
 from PySide6.QtCore import QObject, QThread, Signal
@@ -53,6 +58,12 @@ STEP_DONE = "DONE"
 
 EXTRACT_COMPLETE_MARKER = ".extract_complete"
 
+# Seconds of silence from the target before the MTKClient backend tells the
+# user the device stopped answering. DA configuration runs inside a blocking
+# in-process call that cannot be interrupted, so without this the UI would sit
+# on "configuring DA..." forever (see _StallWatcher).
+MTK_STALL_WARN_SECONDS = 30
+
 _SP_LOG_ROOT = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "SP_FT_Logs"
 
 # --- MediaTek preloader boot header constants (from vendor macOS build) -------
@@ -63,6 +74,159 @@ _PRELOADER_MAGIC = b"MMM\x01"
 _BRLYT_MAGIC = 0x42524C59  # 'BRLY'
 _BRLYT_TYPE_EMMC = 0x00010005
 _BRLYT_TYPE_SDMMC = 0x00010008
+
+# --- MediaTek flashing engine constants (Chinese release parity) ---------------
+_ANDROID_SPARSE_MAGIC = 0xED26FF3A
+_ANDROID_SPARSE_MAGIC_BYTES = b":\xff&\xed"
+_MTK_SIGN_HEAD_MAGIC = b"SSSS"
+_MTK_SIGN_TAIL_MAGIC = b"EEEE"
+SIGNED_IMAGE_HEADER_SIZE = 64
+SIGNED_IMAGE_FOOTER_SIZE = 236
+SIGNED_IMAGE_OVERHEAD_SIZE = 300
+_LEGACY_MBR_BIAS_PLATFORMS = frozenset({"MT8382", "MT6572", "MT6574", "MT6582", "MT6580"})
+LEGACY_MBR_USER_ADDR_BIAS = 8388608  # 8MB (0x800000)
+LEGACY_SEGMENTED_WRITE_BYTES = 52428800  # 50MB per USB transfer chunk
+
+
+def _is_android_sparse(file_path) -> bool:
+    """Check whether a file is an Android sparse image."""
+    try:
+        p = Path(file_path)
+        if not p.is_file() or p.stat().st_size < 28:
+            return False
+        with p.open("rb") as f:
+            magic = f.read(4)
+        return magic == _ANDROID_SPARSE_MAGIC_BYTES
+    except Exception:
+        return False
+
+
+def _convert_sparse_to_raw(sparse_path, out_dir):
+    """Convert an Android sparse image to raw image in out_dir in-process.
+
+    Returns (raw_path, regions) where regions is a list of [(offset, length), ...].
+    """
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    raw_path = out_dir / (Path(sparse_path).stem + ".raw.img")
+    regions = []
+    out_offset = 0
+
+    with open(sparse_path, "rb") as rf, open(raw_path, "wb") as wf:
+        hdr = rf.read(28)
+        if len(hdr) != 28:
+            raise RuntimeError(f"{Path(sparse_path).name} sparse header too short")
+        magic, major, _minor, file_hdr_sz, chunk_hdr_sz, blk_sz, _total_blks, total_chunks, _checksum = unpack("<I4H4I", hdr)
+        if magic != _ANDROID_SPARSE_MAGIC:
+            raise RuntimeError(f"{Path(sparse_path).name} is not a valid sparse image")
+        if major != 1:
+            raise RuntimeError(f"{Path(sparse_path).name} unsupported sparse major version {major}")
+        if file_hdr_sz > 28:
+            rf.seek(file_hdr_sz - 28, os.SEEK_CUR)
+
+        zero_buf = b"\x00" * 1048576
+
+        for _ in range(total_chunks):
+            chdr = rf.read(12)
+            if len(chdr) != 12:
+                raise RuntimeError(f"{Path(sparse_path).name} chunk header truncated")
+            chunk_type, _reserved, chunk_sz, total_sz = unpack("<2H2I", chdr)
+            if chunk_hdr_sz > 12:
+                rf.seek(chunk_hdr_sz - 12, os.SEEK_CUR)
+            data_sz = total_sz - chunk_hdr_sz
+            out_sz = chunk_sz * blk_sz
+
+            if chunk_type == 0xCAC1:  # RAW
+                if data_sz != out_sz:
+                    raise RuntimeError(f"{Path(sparse_path).name} RAW chunk size mismatch data={data_sz} out={out_sz}")
+                if regions and (regions[-1][0] + regions[-1][1] == out_offset):
+                    regions[-1] = (regions[-1][0], regions[-1][1] + out_sz)
+                else:
+                    regions.append((out_offset, out_sz))
+                remaining = data_sz
+                while remaining > 0:
+                    chunk = rf.read(min(1048576, remaining))
+                    if not chunk:
+                        raise RuntimeError(f"{Path(sparse_path).name} RAW chunk truncated")
+                    wf.write(chunk)
+                    remaining -= len(chunk)
+            elif chunk_type == 0xCAC2:  # FILL
+                if data_sz != 4:
+                    raise RuntimeError(f"{Path(sparse_path).name} FILL chunk invalid size={data_sz}")
+                fill = rf.read(4)
+                if len(fill) != 4:
+                    raise RuntimeError(f"{Path(sparse_path).name} FILL value missing")
+                if regions and (regions[-1][0] + regions[-1][1] == out_offset):
+                    regions[-1] = (regions[-1][0], regions[-1][1] + out_sz)
+                else:
+                    regions.append((out_offset, out_sz))
+                fill_buf = fill * 262144
+                remaining = out_sz
+                while remaining > 0:
+                    n = min(len(fill_buf), remaining)
+                    wf.write(fill_buf[:n])
+                    remaining -= n
+            elif chunk_type == 0xCAC3:  # DONT_CARE
+                remaining = out_sz
+                while remaining > 0:
+                    n = min(len(zero_buf), remaining)
+                    wf.write(zero_buf[:n])
+                    remaining -= n
+            elif chunk_type == 0xCAC4:  # CRC32
+                if data_sz != 4:
+                    raise RuntimeError(f"{Path(sparse_path).name} CRC32 chunk invalid size={data_sz}")
+                crc = rf.read(4)
+                if len(crc) != 4:
+                    raise RuntimeError(f"{Path(sparse_path).name} CRC32 data missing")
+            else:
+                raise RuntimeError(f"unknown sparse chunk type=0x{chunk_type:04X}")
+
+            out_offset += out_sz
+
+    return raw_path, regions
+
+
+def _signed_image_payload_range(file_path, file_size: int):
+    """Detect if an image has MediaTek signed wrapper (64B head, 236B tail).
+    Returns (offset, payload_length) or None.
+    """
+    if file_size <= SIGNED_IMAGE_OVERHEAD_SIZE:
+        return None
+    try:
+        with open(file_path, "rb") as f:
+            head = f.read(SIGNED_IMAGE_HEADER_SIZE)
+            f.seek(max(0, file_size - SIGNED_IMAGE_FOOTER_SIZE))
+            tail = f.read(SIGNED_IMAGE_FOOTER_SIZE)
+    except OSError:
+        return None
+    if not head.startswith(_MTK_SIGN_HEAD_MAGIC):
+        return None
+    if _MTK_SIGN_TAIL_MAGIC not in tail:
+        return None
+    return (SIGNED_IMAGE_HEADER_SIZE, file_size - SIGNED_IMAGE_OVERHEAD_SIZE)
+
+
+def _detect_legacy_user_addr_bias(scatter_path, parts=None):
+    """Detect whether a scatter file on a legacy platform requires MBR user address biasing."""
+    platform_name = _parse_scatter_platform(scatter_path)
+    if platform_name not in _LEGACY_MBR_BIAS_PLATFORMS:
+        return 0
+    if not parts or not isinstance(parts[0], dict):
+        parts = _parse_scatter_entries(scatter_path)
+    has_boot_preloader = any(
+        part.get("name", "").strip().lower() == "preloader"
+        and part.get("region", "").strip().upper().startswith("EMMC_BOOT")
+        for part in parts
+    )
+    user_names = {
+        part.get("name", "").strip().lower()
+        for part in parts
+        if part.get("region", "").strip().upper() == "EMMC_USER"
+    }
+    if has_boot_preloader and {"mbr", "ebr1"}.issubset(user_names):
+        return LEGACY_MBR_USER_ADDR_BIAS
+    return 0
+
 
 
 def _fill_boot_magic(header: bytearray, storage_type: str = "emmc"):
@@ -517,6 +681,64 @@ def _parse_scatter_entries(scatter_path):
 
 
 # ---------------------------------------------------------------------------
+# MTKClient session helpers
+# ---------------------------------------------------------------------------
+class _MtkMessageBridge:
+    """Adapter for mtkclient's ``config.gui`` hook.
+
+    mtkclient's ``logsetup`` routes every phase message to ``config.gui.emit``
+    when a gui object is set, and logs to stdout otherwise. Feeding those
+    messages into Diagnostics is what makes a slow/stalled DA stage visible
+    ("Uploading legacy stage 1...", "Successfully uploaded stage 2", ...)
+    instead of the app appearing frozen after its one handshake message.
+    """
+
+    def __init__(self, callback):
+        self._cb = callback
+
+    def emit(self, message):
+        self._cb(str(message))
+
+
+class _StallWatcher(threading.Thread):
+    """Reports when the MTKClient backend stops hearing from the device.
+
+    mtkclient's USB reads are blocking, so a target that goes silent mid-DA
+    (the usual cause: the device was not fully powered off before connecting)
+    leaves the worker parked with no way to cancel it. This watcher only
+    *reports* the stall; the bounded USB timeout is what eventually unblocks
+    and fails the run.
+    """
+
+    def __init__(self, on_stall, timeout=MTK_STALL_WARN_SECONDS, interval=2.0):
+        super().__init__(daemon=True, name="MtkStallWatcher")
+        self._on_stall = on_stall
+        self._timeout = timeout
+        self._interval = interval
+        self._stop = threading.Event()
+        self._last = time.time()
+        self._warned = False
+
+    def activity(self):
+        """Register backend chatter; clears a pending stall warning."""
+        self._last = time.time()
+        self._warned = False
+
+    def stop(self):
+        self._stop.set()
+
+    def run(self):
+        while not self._stop.wait(self._interval):
+            idle = time.time() - self._last
+            if idle >= self._timeout and not self._warned:
+                self._warned = True
+                try:
+                    self._on_stall(idle)
+                except Exception:
+                    logger.debug("MTK stall callback failed", exc_info=True)
+
+
+# ---------------------------------------------------------------------------
 # Flash worker
 # ---------------------------------------------------------------------------
 class FlashWorker(QThread):
@@ -528,10 +750,11 @@ class FlashWorker(QThread):
     log_message = Signal(str)
     finished = Signal(bool, str)  # ok, error_code
 
-    def __init__(self, package_path, pre_extracted_dir="", method="auto", parent=None):
+    def __init__(self, package_path, pre_extracted_dir="", method="auto", model="", parent=None):
         super().__init__(parent)
         self.package_path = package_path
         self.pre_extracted_dir = pre_extracted_dir
+        self.model = (model or "").strip()
         # Flash backend method: "auto" (platform default), "sp" (SP Flash
         # Tool), or "mtk" (MTKClient). The user can pick manually; on macOS
         # "sp" is unavailable and always falls back to MTKClient.
@@ -653,10 +876,14 @@ class FlashWorker(QThread):
 
         try:
             from . import device_tracking
+            from .config import detect_model_and_type_from_name
             from .sp_flash_gui import update_sp_history_ini
 
+            det_m, _ = detect_model_and_type_from_name(self.package_path)
             detected_model = (
-                "Y2" if "6582" in (platform or "") else ("Y1" if "6572" in (platform or "") else "")
+                self.model
+                or det_m
+                or ("A5" if "a5" in str(self.package_path).lower() else ("Y2" if "6582" in (platform or "") else ("Y1" if "6572" in (platform or "") else "")))
             )
             device_tracking.record_latest_package(
                 model=detected_model,
@@ -690,7 +917,12 @@ class FlashWorker(QThread):
             self._flash_via_mtkclient(extract_dir, scatter_file)
             return
         if method == "sp" and IS_MAC:
-            self._log("SP Flash Tool is not available on macOS; using MTKClient.")
+            reason = (
+                "SP Flash Tool is not available on macOS; using MTKClient."
+                if not paths.SIMULATE_MACOS
+                else "Simulated macOS mode (--simulate-macos): using MTKClient."
+            )
+            self._log(reason)
             self._flash_via_mtkclient(extract_dir, scatter_file)
             return
         if method == "sp" or (method == "auto" and not IS_MAC):
@@ -1129,12 +1361,52 @@ class FlashWorker(QThread):
         self.action_changed.emit("Waiting for MTK device... Power off device and connect USB.")
         self._log("Waiting for MTK device... Power off the device and connect USB.")
 
+        # Surface mtkclient's own phase messages and flag a device that stops
+        # answering mid-DA instead of letting the UI look frozen. Repeats are
+        # collapsed: a silent target makes mtkclient emit the same retry line
+        # once per USB timeout.
+        repeated = {"text": None, "count": 0}
+
+        def _on_mtk_message(message):
+            watcher.activity()
+            text = str(message).strip()
+            if not text:
+                return
+            if text == repeated["text"]:
+                repeated["count"] += 1
+                return
+            if repeated["count"] > 1:
+                self._log(f"  (repeated {repeated['count']}x)")
+            repeated["text"], repeated["count"] = text, 1
+            self._log(text)
+
+        def _on_mtk_stall(idle):
+            seconds = int(idle)
+            self._log(
+                f"No response from the device for {seconds}s while configuring the DA."
+            )
+            self.action_changed.emit(
+                "Device stopped responding while configuring the download agent. "
+                "Power it off completely, reconnect, and retry."
+            )
+
+        watcher = _StallWatcher(_on_mtk_stall)
+        if hasattr(mtk, "config"):
+            mtk.config.gui = _MtkMessageBridge(_on_mtk_message)
+
         def _on_connected():
             self.step_changed.emit(STEP_DETECT)
             self.progress.emit(12)
-            self.action_changed.emit("Device detected in BROM mode, configuring DA...")
-            self._log("Device detected in BROM mode, configuring DA...")
+            # Report the mode mtkclient actually found: PID 0x2000 (and the
+            # BL-version probe) is preloader mode, only 0x0003 is BROM, and
+            # the difference is what the user has to act on.
+            is_brom = bool(getattr(getattr(mtk, "config", None), "is_brom", False))
+            mode = "BROM mode" if is_brom else "preloader mode"
+            msg = f"Device detected ({mode}) - configuring download agent..."
+            self.action_changed.emit(msg)
+            self._log(msg)
 
+        watcher.start()
         try:
             try:
                 mtk, da_handler = mtk_api.connect(
@@ -1146,21 +1418,22 @@ class FlashWorker(QThread):
         except BaseException as e:
             # BaseException: mtkclient raises SystemExit on DA upload failure.
             self._log(f"Device connection failed: {e}\n{traceback.format_exc()}")
+            watcher.stop()
             self.finished.emit(False, "CONNECTION_FAILED")
             return
         if mtk is None or da_handler is None:
             self._log("Device connection returned None")
+            self._log(
+                "The download agent did not come up. Power the device off "
+                "completely (hold power ~10s), reconnect in flash mode, and retry."
+            )
+            watcher.stop()
             self.finished.emit(False, "CONNECTION_FAILED")
             return
 
         self.step_changed.emit(STEP_DOWNLOAD_BL)
         self.progress.emit(18)
-        self.action_changed.emit("Configuring Bootloader / Flash mode...")
-
-        self.step_changed.emit(STEP_WRITE)
-        self.progress.emit(20)
-        self.action_changed.emit("Device connected, starting write...")
-        self._log("Device connected, starting write...")
+        self.action_changed.emit("Device connected - preparing write commands...")
 
         total = len(image_files)
 
@@ -1211,6 +1484,14 @@ class FlashWorker(QThread):
                 if self._cancelled:
                     self.finished.emit(False, "USER_CANCELLED")
                     return
+                if i == 0:
+                    # The install is considered started once the DA actually
+                    # writes images (the reference updater derives install
+                    # progress from image writes, not from the handshake).
+                    self.step_changed.emit(STEP_WRITE)
+                    self.progress.emit(20)
+                    self.action_changed.emit("Install in Progress")
+                    self._log("Install in Progress - writing firmware images...")
                 self._log(f"Writing {part_name} ({i + 1}/{total}): {file_path.name}")
                 self.action_changed.emit(f"Writing {part_name} ({i + 1}/{total}): {file_path.name}")
 
@@ -1221,13 +1502,35 @@ class FlashWorker(QThread):
                 is_preloader = part_name.lower() == "preloader"
                 active_file = file_path
                 temp_wrapped = None
+                temp_unsparse = None
+
+                # 1. Unpack Android sparse images in-process
+                if _is_android_sparse(active_file):
+                    self._log(f"Detected Android sparse image for {part_name}, converting in-process...")
+                    self.action_changed.emit(f"Unpacking {part_name}...")
+                    unsparse_dir = Path(extract_dir) / ".unsparse_cache"
+                    temp_unsparse, _ = _convert_sparse_to_raw(active_file, unsparse_dir)
+                    active_file = temp_unsparse
+
+                # 2. Detect & strip signed image wrappers (head=64B, tail=236B)
+                cur_fsize = active_file.stat().st_size if active_file.exists() else 0
+                signed_range = _signed_image_payload_range(active_file, cur_fsize) if cur_fsize > 0 else None
+                file_off = 0
+                write_len = cur_fsize
+                if signed_range is not None:
+                    file_off, write_len = signed_range
+                    self._log(
+                        f"  Stripping signed wrapper: offset=0x{file_off:X}, payload_len=0x{write_len:X}"
+                    )
 
                 if is_preloader:
                     temp_wrapped = _wrap_preloader_for_raw_boot(
-                        file_path, storage_type="emmc", log_cb=self._log
+                        active_file, storage_type="emmc", log_cb=self._log
                     )
-                    if temp_wrapped != file_path:
+                    if temp_wrapped != active_file:
                         active_file = temp_wrapped
+                        file_off = 0
+                        write_len = active_file.stat().st_size if active_file.exists() else 0
                     target_parts = self._resolve_preloader_target_parts(mtk, normalized_region=region)
                 else:
                     if region == "EMMC_BOOT_1":
@@ -1246,6 +1549,8 @@ class FlashWorker(QThread):
                             str(active_file),
                             target_part,
                             offset=offset,
+                            file_offset=file_off,
+                            write_length=write_len,
                         )
                 except BaseException as e:
                     # BaseException: mtkclient may sys.exit() on DA errors; keep it
@@ -1254,6 +1559,11 @@ class FlashWorker(QThread):
                     self.finished.emit(False, "WRITE_FAILED")
                     return
                 finally:
+                    if temp_unsparse and temp_unsparse.exists():
+                        try:
+                            temp_unsparse.unlink(missing_ok=True)
+                        except Exception:
+                            pass
                     if temp_wrapped and temp_wrapped != file_path and temp_wrapped.exists():
                         try:
                             temp_wrapped.unlink(missing_ok=True)
@@ -1265,12 +1575,39 @@ class FlashWorker(QThread):
                         mapped = 20 + int(min(1.0, completed_bytes / total_bytes) * 75)
                         self.progress.emit(min(95, max(20, mapped)))
 
+            # 3. Format/wipe userdata and cache to ensure clean boot without encryption/stale data bootloops
+            self._log("Formatting userdata and cache...")
+            self.action_changed.emit("Formatting userdata and cache...")
+            try:
+                if hasattr(da_handler, "da_erase"):
+                    da_handler.da_erase(["userdata", "cache"], parttype="user")
+                elif hasattr(mtk, "daloader") and hasattr(mtk.daloader, "formatflash"):
+                    for clean_part in ("userdata", "cache"):
+                        p_entry = scatter_entries_map.get(clean_part)
+                        if p_entry and p_entry.get("offset") is not None and p_entry.get("partition_size"):
+                            mtk.daloader.formatflash(
+                                addr=p_entry["offset"],
+                                length=p_entry["partition_size"],
+                                partitionname=clean_part,
+                                parttype="user",
+                            )
+            except Exception as e:
+                self._log(f"Notice: userdata format non-fatal: {e}")
+
             self.step_changed.emit(STEP_DONE)
             self.progress.emit(100)
             self.action_changed.emit("Flash complete! Disconnect USB and reboot.")
             self._log("Flash complete! Disconnect USB and reboot the device.")
             self.finished.emit(True, "")
         finally:
+            watcher.stop()
+            # Hand mtkclient's messages back to its own logging so nothing is
+            # left holding the worker after the session ends.
+            try:
+                if hasattr(mtk, "config"):
+                    mtk.config.gui = None
+            except Exception as e:
+                logger.debug("Failed to reset mtk gui hook: %s", e)
             # Clean up USB port / DA connection so libusb interface is released
             try:
                 if mtk is not None and hasattr(mtk, "port") and mtk.port is not None:
@@ -1297,6 +1634,56 @@ class FlashWorker(QThread):
                 return ("boot1",)
             return ("boot1", "boot2")
 
+    def _write_partition_segmented(
+        self,
+        mtk,
+        addr: int,
+        file_path_str: str,
+        segment_bytes: int = LEGACY_SEGMENTED_WRITE_BYTES,
+        parttype: str = "user",
+        file_offset: int = 0,
+        write_length: Optional[int] = None,
+        bytes_progress_cb=None,
+    ):
+        """Write large partitions in chunks (50MB by default) to keep USB transfers responsive."""
+        file_path = Path(file_path_str)
+        file_size = file_path.stat().st_size if file_path.exists() else 0
+        fsize = write_length if write_length is not None else max(0, file_size - file_offset)
+        offset = 0
+        seg_idx = 0
+        total_segments = max(1, (fsize + segment_bytes - 1) // segment_bytes)
+
+        while offset < fsize:
+            seg_idx += 1
+            seg_len = min(segment_bytes, fsize - offset)
+            seg_addr = addr + offset
+            source_off = file_offset + offset
+
+            self._log(
+                f"  Segmented write {seg_idx}/{total_segments}: "
+                f"offset=0x{seg_addr:X} size={seg_len / 1048576:.1f}MB"
+            )
+            daloader = getattr(mtk, "daloader", None)
+            ok = False
+            if daloader is not None and hasattr(daloader, "writeflash"):
+                ok = daloader.writeflash(
+                    addr=seg_addr,
+                    length=seg_len,
+                    filename=file_path_str,
+                    offset=source_off,
+                    parttype=parttype,
+                )
+            if not ok:
+                err = getattr(getattr(mtk, "config", None), "last_error", None) or "writeflash returned failure"
+                raise RuntimeError(
+                    f"Segmented write failed segment={seg_idx}/{total_segments} "
+                    f"offset=0x{seg_addr:X} ({err})"
+                )
+
+            offset += seg_len
+            if bytes_progress_cb:
+                bytes_progress_cb(seg_len)
+
     def _write_mtk_partition(
         self,
         da_handler,
@@ -1305,18 +1692,37 @@ class FlashWorker(QThread):
         file_path_str,
         part_type,
         offset=None,
+        file_offset=0,
+        write_length=None,
+        bytes_progress_cb=None,
     ):
         """Invoke da_handler to write a partition, supporting direct offset write, real DaHandler, and test mocks."""
-        file_size = Path(file_path_str).stat().st_size if Path(file_path_str).exists() else 0
+        file_path = Path(file_path_str)
+        file_size = file_path.stat().st_size if file_path.exists() else 0
+        wlen = write_length if write_length is not None else max(0, file_size - file_offset)
 
         # Fast path: if offset is known and da_handler / mtk supports direct offset write,
         # write directly by offset. This bypasses detect_partition and on-device GPT probing,
         # ensuring reliable writes on MBR/EBR devices (e.g. MT6572, MT6582) and unformatted flash.
         if offset is not None:
+            daloader = getattr(mtk, "daloader", None)
+            if daloader is not None and hasattr(daloader, "writeflash") and (wlen > LEGACY_SEGMENTED_WRITE_BYTES or file_offset > 0):
+                self._write_partition_segmented(
+                    mtk,
+                    addr=offset,
+                    file_path_str=file_path_str,
+                    segment_bytes=LEGACY_SEGMENTED_WRITE_BYTES,
+                    parttype=part_type,
+                    file_offset=file_offset,
+                    write_length=wlen,
+                    bytes_progress_cb=bytes_progress_cb,
+                )
+                return
+
             if hasattr(da_handler, "da_wo"):
                 ok = da_handler.da_wo(
                     start=offset,
-                    length=file_size,
+                    length=wlen,
                     filename=file_path_str,
                     parttype=part_type,
                 )
@@ -1324,12 +1730,12 @@ class FlashWorker(QThread):
                     err = getattr(getattr(mtk, "config", None), "last_error", None) or "write failed"
                     raise RuntimeError(f"Writing {part_name} at offset {hex(offset)} failed: {err}")
                 return
-            daloader = getattr(mtk, "daloader", None)
             if daloader is not None and hasattr(daloader, "writeflash"):
                 ok = daloader.writeflash(
                     addr=offset,
-                    length=file_size,
+                    length=wlen,
                     filename=file_path_str,
+                    offset=file_offset,
                     parttype=part_type,
                 )
                 if not ok:
@@ -1339,7 +1745,7 @@ class FlashWorker(QThread):
 
         # Fallback path: handle_da_cmds / da_write (used by test mocks or when offset is unknown)
         offset_hex = hex(offset) if offset is not None else "0x0"
-        length_hex = hex(file_size)
+        length_hex = hex(wlen)
 
         class _Args:
             partitionname = part_name
@@ -1415,15 +1821,22 @@ def _load_libusb_backend():
             find_library=lambda name: "libusb-1.0.dll"
         )
     elif IS_MAC:
-        dylib_path = paths.find_libusb_dylib()
-        if dylib_path:
+        # Real macOS: the vendored universal dylib; simulated macOS (Linux
+        # host, paths.SIMULATE_MACOS): the host ELF .so — never the dylib.
+        if paths.SIMULATE_MACOS:
             backend = usb.backend.libusb1.get_backend(
-                find_library=lambda name: dylib_path
+                find_library=lambda name: "libusb-1.0.so"
             )
         else:
-            backend = usb.backend.libusb1.get_backend(
-                find_library=lambda name: "libusb-1.0.dylib"
-            )
+            dylib_path = paths.find_libusb_dylib()
+            if dylib_path:
+                backend = usb.backend.libusb1.get_backend(
+                    find_library=lambda name: dylib_path
+                )
+            else:
+                backend = usb.backend.libusb1.get_backend(
+                    find_library=lambda name: "libusb-1.0.dylib"
+                )
     else:
         backend = usb.backend.libusb1.get_backend(
             find_library=lambda name: "libusb-1.0.so"
@@ -1551,12 +1964,12 @@ class FlashService(QObject):
         self._extract_worker = None
 
     # -- flashing -----------------------------------------------------------
-    def start_flash(self, package_path, pre_extracted_dir="", method="auto"):
+    def start_flash(self, package_path, pre_extracted_dir="", method="auto", model=""):
         # Kill any backend still running (e.g. a searching flash_tool) first,
         # then start the new one. The cancelled worker's late terminal signals
         # are detached so they cannot reach the UI or clobber the new run.
         self.cancel_flash()
-        worker = FlashWorker(package_path, pre_extracted_dir, method)
+        worker = FlashWorker(package_path, pre_extracted_dir, method, model=model)
         self._flash_worker = worker
         worker.step_changed.connect(self.step_changed)
         worker.progress.connect(self.progress)

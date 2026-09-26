@@ -61,13 +61,20 @@ DONATION_CRYPTO = {
     "SHIBA INU (ERC-20)": "0x5E902083ee1B3A05dd39d824012B39cB10FB80D3",
 }
 
+import re
+from pathlib import Path
+
 # --- Device model helpers ---------------------------------------------------
-DEVICE_MODELS = ("Y1", "Y2")
+DEVICE_MODELS = ("Y1", "Y2", "A5")
 
 
 def resolve_firmware_repo(repo: str) -> str:
     """Map legacy/unpublished manifest repo names to a fetchable GitHub repo."""
     return FIRMWARE_REPO_FALLBACKS.get(repo, repo)
+
+
+def is_a5_model(model: str) -> bool:
+    return "A5" in (model or "").upper()
 
 
 def is_y2_model(model: str) -> bool:
@@ -78,17 +85,98 @@ def is_y1_model(model: str) -> bool:
     return "Y1" in (model or "").upper()
 
 
-def device_label_for_model(model: str) -> str:
-    if is_y2_model(model):
-        return "Y2"
-    if is_y1_model(model):
-        return "Y1"
-    return (model or "").strip() or "Y1"
+def detect_model_and_type_from_name(name_or_url: str) -> tuple[str, str | None]:
+    """Detect device model (Y1, Y2, A5, etc.) and type variant (A or B)
+    from the original file name, asset name, or download URL.
+    
+    Examples:
+      rom_y2.zip, *_y2*.zip -> ("Y2", None)
+      rom_a5.zip, *_a5*.zip -> ("A5", None)
+      rom_type_b.zip, *_type_b*.zip -> ("Y1", "B")
+      rom.zip, rom_type_a.zip -> ("Y1", "A")
+    """
+    if not name_or_url:
+        return "", None
+
+    clean = str(name_or_url).lower().replace("\\", "/")
+    base = Path(clean).name
+    stem = Path(base).stem.lower()
+    parts = re.split(r"[-_.\s]+", stem)
+
+    # 1. A5
+    if (
+        "a5" in parts
+        or "rom_a5" in base
+        or "rom-a5" in base
+        or base.startswith("a5")
+        or "/a5" in clean
+    ):
+        return "A5", None
+
+    # 2. Y2
+    if (
+        "y2" in parts
+        or "_y2" in base
+        or "-y2" in base
+        or "rom_y2" in base
+        or "rom-y2" in base
+        or "y2-stock" in base
+        or "y2_stock" in base
+        or base.startswith("y2")
+        or "/y2" in clean
+    ):
+        return "Y2", None
+
+    # 3. Type B (Y1 variant)
+    if "type_b" in base or "type-b" in base or "rom_type_b" in base or "rom-type-b" in base:
+        return "Y1", "B"
+
+    # 4. Type A (Y1 variant)
+    if "type_a" in base or "type-a" in base or "rom_type_a" in base or "rom-type-a" in base:
+        return "Y1", "A"
+
+    # 5. Y1 / generic rom.zip
+    if (
+        "y1" in parts
+        or "_y1" in base
+        or "-y1" in base
+        or "rom_y1" in base
+        or "rom-y1" in base
+        or "y1-stock" in base
+        or "y1_stock" in base
+        or base.startswith("y1")
+        or "y1-community" in base
+        or "/y1" in clean
+        or base == "rom.zip"
+    ):
+        return "Y1", "A"
+
+    return "", None
+
+
+def device_label_for_model(model: str, type_variant: str | None = None) -> str:
+    m = (model or "").strip()
+    if is_a5_model(m):
+        base = "A5"
+    elif is_y2_model(m):
+        base = "Y2"
+    elif is_y1_model(m):
+        base = "Y1"
+    else:
+        base = m or "Y1"
+
+    if base == "Y1" and type_variant:
+        return f"Y1 (Type {type_variant})"
+    return base
 
 
 def power_on_button_for_model(model: str) -> str:
     """Hardware button used to power the player on after an install."""
-    return "power/lock button" if is_y2_model(model) else "centre button"
+    if is_y2_model(model):
+        return "power/lock button"
+    if is_a5_model(model):
+        return "power button"
+    return "centre button"
 
 
 def install_power_on_steps(model: str) -> str:
@@ -96,4 +184,16 @@ def install_power_on_steps(model: str) -> str:
     label = device_label_for_model(model)
     button = power_on_button_for_model(model)
     return f"Unplug your {label}, then hold the {button} until it turns on."
+
+
+def install_disconnect_guidance(model: str = "Y1", type_variant: str | None = None) -> str:
+    """Guidance text for ensuring device is disconnected and powered off before install."""
+    label = device_label_for_model(model, type_variant)
+    return (
+        f"Before continuing, please:\n\n"
+        f"1. If it isn't already off, power off your {label}\n"
+        f"   (You can use a pin or paperclip to press the reset button if needed)\n\n"
+        f"2. If it is connected, disconnect the USB cable from your {label}\n\n"
+        f"Then click OK and follow the on-screen instructions."
+    )
 

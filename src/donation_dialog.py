@@ -102,7 +102,6 @@ class DonationStatusBar(QStatusBar):
         row.addWidget(self._goal_bar, 0, Qt.AlignVCenter)
 
         self._support_btn = QPushButton(tr("nav_donate"))
-        self._support_btn.setCursor(Qt.PointingHandCursor)
         self._support_btn.setToolTip(tr("donate_title"))
         if on_support:
             self._support_btn.clicked.connect(on_support)
@@ -348,7 +347,6 @@ class DonationDialog(QDialog):
 
         # 6. Crypto
         self._crypto_toggle = QPushButton(tr("donate_crypto_toggle"))
-        self._crypto_toggle.setCursor(Qt.PointingHandCursor)
         self._crypto_toggle.setStyleSheet(
             f"QPushButton {{ background-color: {t.bg_elev}; color: {t.fg}; font-weight:600;"
             f" font-size:13px; min-height:34px; padding:8px 14px; border-radius:8px; border:1px solid {t.border_strong}; }}"
@@ -386,7 +384,6 @@ class DonationDialog(QDialog):
         # 7. Close
         self._close_btn = QPushButton(tr("close"))
         self._close_btn.setProperty("cssClass", "ghost")
-        self._close_btn.setCursor(Qt.PointingHandCursor)
         self._close_btn.clicked.connect(self._on_close)
         layout.addWidget(self._close_btn, 0, Qt.AlignRight)
 

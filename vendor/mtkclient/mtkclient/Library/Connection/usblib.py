@@ -549,7 +549,10 @@ class UsbClass(DeviceClass):
             sz = min(buflen, bytestoread)
             try:
                 if fast:
-                    rlen = epr(buffer, timeout)
+                    # NOTE: libusb treats a timeout of 0 as *unlimited*. The
+                    # retry counter above must not be reused as the timeout
+                    # value or a silent target blocks this read forever.
+                    rlen = epr(buffer, self.timeout)
                     if rlen > sz:
                         self.warning("Buffer overflow")
                         q.put(buffer[rlen:])
@@ -563,8 +566,11 @@ class UsbClass(DeviceClass):
                         break
                 else:
                     # macOS libusb: 用 max packet size 读取避免 Overflow（小 buffer 会触发 USB Overflow 错误）
+                    # A real timeout is required here: without it libusb waits
+                    # forever and mtkclient's maxtimeout retry logic below can
+                    # never fire, so a dead DA hangs the whole app.
                     read_sz = max(sz, w_max_packet_size)
-                    dt = bytes(epr(read_sz))
+                    dt = bytes(epr(read_sz, self.timeout))
                     rlen = len(dt)
                     if rlen > sz:
                         # 多余字节放入 queue，供后续 usbread 消费
@@ -591,7 +597,7 @@ class UsbClass(DeviceClass):
                     print(f"[usbread] Overflow with sz={sz}, retrying with 4096",
                           file=_sys.stderr, flush=True)
                     try:
-                        dt = bytes(epr(4096))
+                        dt = bytes(epr(4096, self.timeout))
                         rlen = len(dt)
                         print(f"[usbread] Overflow retry got {rlen} bytes", file=_sys.stderr, flush=True)
                         if rlen > sz:
@@ -642,10 +648,12 @@ class UsbClass(DeviceClass):
         while len(res) < max_xml_data_length:
             try:
                 if self.fast:
-                    rlen = epr(buffer, timeout)
+                    rlen = epr(buffer, self.timeout)
                     extend(buffer[:rlen])
                 else:
-                    extend(epr(w_max_packet_size))
+                    # Bounded read (see usbread): 0 means "wait forever" in
+                    # libusb, so a silent target would hang this loop.
+                    extend(epr(w_max_packet_size, self.timeout))
             except usb.core.USBError as e:
                 error = str(e.strerror)
                 if "timed out" in error:
