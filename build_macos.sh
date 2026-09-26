@@ -44,20 +44,26 @@ done
 
 export TARGET_ARCH
 
-PYTHON="${PYTHON:-.venv/bin/python3}"
-
-# --- Preflight -----------------------------------------------------------
-if [ ! -f "$PYTHON" ]; then
-    if command -v python3 >/dev/null 2>&1; then
+if [ -z "${PYTHON:-}" ]; then
+    if [ -x ".venv-build/bin/python3" ]; then
+        PYTHON=".venv-build/bin/python3"
+    elif [ -x ".venv/bin/python3" ]; then
+        PYTHON=".venv/bin/python3"
+    elif command -v python3 >/dev/null 2>&1; then
         PYTHON="$(command -v python3)"
     else
-        echo "ERROR: Python not found at $PYTHON"
+        echo "ERROR: Python not found."
         echo "       Set PYTHON env var or create a .venv first."
         exit 1
     fi
 fi
 
-for mod in PyInstaller PySide6 usb serial Cryptodome colorama; do
+# --- Preflight -----------------------------------------------------------
+CHECK_MODS="usb serial Cryptodome colorama"
+if [ "$(uname -s)" = "Darwin" ]; then
+    CHECK_MODS="PyInstaller PySide6 $CHECK_MODS"
+fi
+for mod in $CHECK_MODS; do
     if ! "$PYTHON" -c "import $mod" 2>/dev/null; then
         echo "ERROR: Required module '$mod' not installed."
         echo "       Run: pip install -r requirements.txt"
@@ -113,20 +119,25 @@ echo "Target: macOS 13 (Ventura) through macOS 26 (Golden Gate)"
 # --- Clean ----------------------------------------------------------------
 rm -rf "$BUILD_DIR" "$DIST_DIR"/*.app "$DIST_DIR"/*.dmg
 
-# --- PyInstaller build using macos.spec ------------------------------------
-"$PYTHON" -m PyInstaller \
-    --noconfirm \
-    --clean \
-    "$SPEC_FILE"
+if [ "$(uname -s)" = "Darwin" ]; then
+    # --- Native macOS build with PyInstaller ------------------------------
+    "$PYTHON" -m PyInstaller \
+        --noconfirm \
+        --clean \
+        "$SPEC_FILE"
 
-# --- Ad-hoc code sign bundle ----------------------------------------------
-echo ">>> Signing bundle..."
-ENTITLEMENTS_FILE="assets/entitlements.plist"
-if [ -f "$ENTITLEMENTS_FILE" ]; then
-    find "$DIST_DIR/$APP_NAME.app" -type f \( -name "*.dylib" -o -name "*.so" \) -exec codesign --force -s - {} + 2>/dev/null || true
-    codesign --force --deep --entitlements "$ENTITLEMENTS_FILE" -s - "$DIST_DIR/$APP_NAME.app"
+    echo ">>> Signing bundle..."
+    ENTITLEMENTS_FILE="assets/entitlements.plist"
+    if [ -f "$ENTITLEMENTS_FILE" ]; then
+        find "$DIST_DIR/$APP_NAME.app" -type f \( -name "*.dylib" -o -name "*.so" \) -exec codesign --force -s - {} + 2>/dev/null || true
+        codesign --force --deep --entitlements "$ENTITLEMENTS_FILE" -s - "$DIST_DIR/$APP_NAME.app"
+    else
+        codesign --force --deep -s - "$DIST_DIR/$APP_NAME.app"
+    fi
 else
-    codesign --force --deep -s - "$DIST_DIR/$APP_NAME.app"
+    # --- Universal 2 (Intel + Apple Silicon) Mach-O build via LLVM/clang/rcodesign ---
+    echo ">>> Building Universal 2 Mach-O .app bundle..."
+    "$PYTHON" scripts/build_universal_app.py
 fi
 
 echo "=== Build complete: $DIST_DIR/$APP_NAME.app ==="

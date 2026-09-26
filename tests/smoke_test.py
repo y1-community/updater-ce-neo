@@ -2752,6 +2752,47 @@ def test_macos_universal_libusb():
     assert CPU_TYPE_ARM64 in cputypes, f"arm64 slice missing in {dylib_path}: {cputypes}"
 
 
+def test_macos_universal_app_bundle():
+    app_dir = ROOT / "dist" / "Innioasis Updater CE.app"
+    if not app_dir.exists():
+        return
+
+    exe_path = app_dir / "Contents" / "MacOS" / "Innioasis Updater CE"
+    assert exe_path.exists(), f"Executable missing at {exe_path}"
+
+    with open(exe_path, "rb") as f:
+        header = f.read(8)
+    import struct
+    magic = struct.unpack(">I", header[:4])[0]
+    assert magic in (0xCAFEBABE, 0xBEBAFECA), f"Executable is not universal Mach-O: magic={hex(magic)}"
+    nfat_arch = struct.unpack(">I", header[4:8])[0]
+    assert nfat_arch >= 2, f"Expected at least 2 architectures, found {nfat_arch}"
+
+    with open(exe_path, "rb") as f:
+        f.seek(8)
+        cputypes = []
+        for _ in range(nfat_arch):
+            arch_data = f.read(20)
+            cputype = struct.unpack(">i", arch_data[:4])[0]
+            cputypes.append(cputype)
+
+    CPU_TYPE_X86_64 = 0x01000007
+    CPU_TYPE_ARM64 = 0x0100000C
+    assert CPU_TYPE_X86_64 in cputypes, f"x86_64 slice missing in executable: {cputypes}"
+    assert CPU_TYPE_ARM64 in cputypes, f"arm64 slice missing in executable: {cputypes}"
+
+    info_plist_path = app_dir / "Contents" / "Info.plist"
+    assert info_plist_path.exists(), "Info.plist missing"
+    import plistlib
+    with open(info_plist_path, "rb") as f:
+        info = plistlib.load(f)
+    assert info.get("LSMinimumSystemVersion") == "13.0"
+    assert info.get("CFBundleExecutable") == "Innioasis Updater CE"
+
+    assert (app_dir / "Contents" / "Resources" / "icon.icns").exists(), "icon.icns missing"
+    assert (app_dir / "Contents" / "Frameworks" / "libusb-1.0.dylib").exists(), "libusb-1.0.dylib missing"
+
+
 def main():
     print("== Neo updater smoke test ==")
     check("catalog", test_catalog)
@@ -2822,6 +2863,7 @@ def main():
     check("signed image stripping", test_signed_image_stripping)
     check("legacy mbr user addr bias", test_legacy_mbr_user_addr_bias)
     check("macos universal libusb fat binary", test_macos_universal_libusb)
+    check("macos universal app bundle", test_macos_universal_app_bundle)
     if failures:
         print(f"\n{len(failures)} FAILURES:")
         for name, err in failures:
