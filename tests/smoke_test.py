@@ -2757,30 +2757,64 @@ def test_macos_universal_app_bundle():
     if not app_dir.exists():
         return
 
-    exe_path = app_dir / "Contents" / "MacOS" / "Innioasis Updater CE"
-    assert exe_path.exists(), f"Executable missing at {exe_path}"
-
-    with open(exe_path, "rb") as f:
-        header = f.read(8)
     import struct
-    magic = struct.unpack(">I", header[:4])[0]
-    assert magic in (0xCAFEBABE, 0xBEBAFECA), f"Executable is not universal Mach-O: magic={hex(magic)}"
-    nfat_arch = struct.unpack(">I", header[4:8])[0]
-    assert nfat_arch >= 2, f"Expected at least 2 architectures, found {nfat_arch}"
 
-    with open(exe_path, "rb") as f:
-        f.seek(8)
-        cputypes = []
-        for _ in range(nfat_arch):
-            arch_data = f.read(20)
-            cputype = struct.unpack(">i", arch_data[:4])[0]
-            cputypes.append(cputype)
+    def _check_universal_slices(path: Path):
+        assert path.exists(), f"Binary missing at {path}"
+        with open(path, "rb") as f:
+            header = f.read(8)
+        magic = struct.unpack(">I", header[:4])[0]
+        assert magic in (0xCAFEBABE, 0xBEBAFECA), f"{path.name} is not universal Mach-O: magic={hex(magic)}"
+        nfat_arch = struct.unpack(">I", header[4:8])[0]
+        assert nfat_arch >= 2, f"Expected at least 2 architectures in {path.name}, found {nfat_arch}"
 
-    CPU_TYPE_X86_64 = 0x01000007
-    CPU_TYPE_ARM64 = 0x0100000C
-    assert CPU_TYPE_X86_64 in cputypes, f"x86_64 slice missing in executable: {cputypes}"
-    assert CPU_TYPE_ARM64 in cputypes, f"arm64 slice missing in executable: {cputypes}"
+        with open(path, "rb") as f:
+            f.seek(8)
+            cputypes = []
+            for _ in range(nfat_arch):
+                arch_data = f.read(20)
+                cputype = struct.unpack(">i", arch_data[:4])[0]
+                cputypes.append(cputype)
 
+        CPU_TYPE_X86_64 = 0x01000007
+        CPU_TYPE_ARM64 = 0x0100000C
+        assert CPU_TYPE_X86_64 in cputypes, f"x86_64 slice missing in {path.name}: {cputypes}"
+        assert CPU_TYPE_ARM64 in cputypes, f"arm64 slice missing in {path.name}: {cputypes}"
+
+    # 1. Launcher executable
+    exe_path = app_dir / "Contents" / "MacOS" / "Innioasis Updater CE"
+    _check_universal_slices(exe_path)
+
+    # 2. Bundled libusb-1.0.dylib
+    libusb_path = app_dir / "Contents" / "Frameworks" / "libusb-1.0.dylib"
+    _check_universal_slices(libusb_path)
+
+    # 3. Bundled Python 3.11 runtime executable
+    python_bin = app_dir / "Contents" / "Resources" / "python" / "bin" / "python3.11"
+    _check_universal_slices(python_bin)
+
+    # 4. Bundled PySide6 Cocoa platform plugin and Qt bindings
+    site_packages = app_dir / "Contents" / "Resources" / "python" / "lib" / "python3.11" / "site-packages"
+    cocoa_plugin = site_packages / "PySide6" / "Qt" / "plugins" / "platforms" / "libqcocoa.dylib"
+    _check_universal_slices(cocoa_plugin)
+    qtwidgets = site_packages / "PySide6" / "QtWidgets.abi3.so"
+    _check_universal_slices(qtwidgets)
+
+    # 5. Application source and assets
+    app_code = app_dir / "Contents" / "Resources" / "app"
+    assert (app_code / "launcher.py").exists(), "app/launcher.py missing"
+    assert (app_code / "src" / "app.py").exists(), "app/src/app.py missing"
+    assert (app_dir / "Contents" / "Resources" / "icon.icns").exists(), "icon.icns missing"
+
+    # 6. No static libraries (which crash rcodesign)
+    static_libs = list(app_dir.rglob("*.a"))
+    assert len(static_libs) == 0, f"Found unexpected static libraries: {static_libs}"
+
+    # 7. Self-contained bundle size verification (>= 200MB)
+    total_size_mb = sum(f.stat().st_size for f in app_dir.rglob("*") if f.is_file()) / (1024 * 1024)
+    assert total_size_mb >= 200.0, f"Bundle size {total_size_mb:.1f}MB is too small; missing standalone runtime or PySide6"
+
+    # 8. Info.plist metadata
     info_plist_path = app_dir / "Contents" / "Info.plist"
     assert info_plist_path.exists(), "Info.plist missing"
     import plistlib
@@ -2788,9 +2822,6 @@ def test_macos_universal_app_bundle():
         info = plistlib.load(f)
     assert info.get("LSMinimumSystemVersion") == "13.0"
     assert info.get("CFBundleExecutable") == "Innioasis Updater CE"
-
-    assert (app_dir / "Contents" / "Resources" / "icon.icns").exists(), "icon.icns missing"
-    assert (app_dir / "Contents" / "Frameworks" / "libusb-1.0.dylib").exists(), "libusb-1.0.dylib missing"
 
 
 def main():

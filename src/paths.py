@@ -96,6 +96,14 @@ def find_libusb_dylib() -> str | None:
         BUNDLE_DIR / "mtkclient" / "mtkclient" / "Darwin" / "libusb-1.0.dylib",
         BUNDLE_DIR / "mtkclient" / "Darwin" / "libusb-1.0.dylib",
     ]
+    app_root = os.environ.get("INNIOASIS_APP_ROOT")
+    if app_root:
+        root_p = Path(app_root)
+        candidates.extend([
+            root_p / "Frameworks" / "libusb-1.0.dylib",
+            root_p / "MacOS" / "libusb-1.0.dylib",
+            root_p / "Resources" / "app" / "vendor" / "mtkclient" / "mtkclient" / "Darwin" / "libusb-1.0.dylib",
+        ])
     if getattr(sys, "frozen", False):
         res_dir = BUNDLE_DIR.parent / "Resources"
         frameworks_dir = BUNDLE_DIR.parent / "Frameworks"

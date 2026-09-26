@@ -66,7 +66,35 @@ if "--check-environment" in sys.argv or "--diagnostics" in sys.argv:
     print("=== All checks passed successfully ===")
     sys.exit(0)
 
-from src.app import main  # noqa: E402
+# macOS LaunchServices passes -psn_0_... when launching an .app bundle from Finder
+sys.argv = [arg for arg in sys.argv if not arg.startswith("-psn")]
 
 if __name__ == "__main__":
-    main()
+    try:
+        from src.app import main
+        main()
+    except Exception as exc:
+        import traceback
+        err_msg = traceback.format_exc()
+        sys.stderr.write(f"Innioasis Updater CE Fatal Error:\n{err_msg}\n")
+        try:
+            if sys.platform == "darwin":
+                log_dir = Path.home() / "Library" / "Logs" / "InnioasisUpdater"
+            else:
+                log_dir = Path.home() / ".innioasis"
+            log_dir.mkdir(parents=True, exist_ok=True)
+            (log_dir / "crash.log").write_text(err_msg, encoding="utf-8")
+        except Exception:
+            pass
+
+        if sys.platform == "darwin":
+            try:
+                import subprocess
+                clean_msg = str(exc).replace('"', '\\"')
+                subprocess.run([
+                    "osascript", "-e",
+                    f'display alert "Innioasis Updater Error" message "{clean_msg}"'
+                ], timeout=5)
+            except Exception:
+                pass
+        sys.exit(1)
