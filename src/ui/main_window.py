@@ -5,8 +5,9 @@ a package is chosen, the flash backend launches immediately — SP Flash Tool
 (Windows / staged Linux) or mtkclient (all platforms) — and the UI guides the
 user to power off and connect their device while the backend searches USB.
 
-The user can switch between SP Flash Tool and MTKClient at any time while
-waiting for a device (except on macOS, where only MTKClient is available).
+The install method is chosen in Settings (Windows/Linux default to SP Flash
+Tool's console-mode XML flow; macOS has MTKClient only) and can be switched
+while waiting for a device, which restarts the run with the new backend.
 """
 
 import logging
@@ -15,7 +16,15 @@ import platform
 import sys
 import time
 
-from PySide6.QtCore import QSettings, Qt, QThread, QTimer, Signal
+from PySide6.QtCore import (
+    QProcess,
+    QProcessEnvironment,
+    QSettings,
+    Qt,
+    QThread,
+    QTimer,
+    Signal,
+)
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -43,6 +52,9 @@ from ..updates import UpdateCheckWorker, UpdateInfo
 from ..donation_dialog import DonationDialog, DonationStatusBar
 from ..donors import cached_donors_path, load_donors_file, parse_donors_csv_text
 from ..flash_service import (
+    LINE_CONNECT_HINT,
+    LINE_RETRY,
+    METHOD_MTK_MAC,
     STEP_DETECT,
     STEP_DONE,
     STEP_DOWNLOAD_BL,
@@ -51,7 +63,9 @@ from ..flash_service import (
     STEP_WAITING,
     STEP_WRITE,
     FlashService,
+    classify_backend_line,
     completed_extract_dir,
+    normalise_method,
 )
 from ..i18n import tr, translator
 from ..state import FlashState, StateMachine
@@ -59,6 +73,7 @@ from .dialogs import (
     DiagnosticsDialog,
     FlashCompleteDialog,
     ReleaseReminderDialog,
+    RetryGuidanceDialog,
     UpdateAvailableDialog,
 )
 from .dark import T, apply_theme, is_dark
@@ -108,6 +123,10 @@ _STEP_KEY = {
 
 _WRITE_STEPS = (STEP_DOWNLOAD_DA, STEP_DOWNLOAD_BL, STEP_WRITE)
 
+# Failure codes whose only real fix is the hardware reset described by
+# RetryGuidanceDialog: the device stopped answering the handshake.
+_RETRY_GUIDANCE_CODES = ("CONNECTION_FAILED", "MTK_INIT_FAILED")
+
 
 class MainWindow(QMainWindow):
     log_line_added = Signal(str)
@@ -126,11 +145,9 @@ class MainWindow(QMainWindow):
         self._package_name = ""
         self._package_model = ""
         self._log_lines = []
-        self._flash_method = str(
-            self.settings.value("flash_method", "auto")
-        ).lower()
-        if self._flash_method not in ("auto", "sp", "mtk"):
-            self._flash_method = "auto"
+        # Legacy "auto" values resolve to the platform default so users are
+        # steered to SP Flash Tool's console-mode XML flow (MTKClient on macOS).
+        self._flash_method = normalise_method(self.settings.value("flash_method", ""))
         self._last_progress = 0
         self._flash_start_ts = 0.0
         self._elapsed_timer = QTimer(self)
@@ -138,6 +155,9 @@ class MainWindow(QMainWindow):
         self._step_now = ""
         self._update_offered_once = False
         self._update_manual_pending = False
+        # A stalled connection makes the backend repeat the same errno line
+        # many times over; this keeps the guidance dialog to once per attempt.
+        self._retry_guidance_shown = False
 
         self._build_ui()
         self._connect_signals()
@@ -152,8 +172,8 @@ class MainWindow(QMainWindow):
             lambda: self._check_device_firmware_updates(manual=False),
         )
 
-        if platform.system() == "Linux" and not paths.SIMULATE_MACOS:
-            # Simulated macOS mode behaves like a Mac: no Linux setup wizard.
+        if platform.system() == "Linux" and not paths.IS_MAC:
+            # macOS has no SP Flash Tool or Linux setup wizard.
             QTimer.singleShot(600, self._check_linux_first_run)
 
     def _build_ui(self):
@@ -198,6 +218,8 @@ class MainWindow(QMainWindow):
             on_support=self._on_support_clicked,
             on_donations_updated=self._on_donations_updated,
         ))
+        self.statusBar().messageChanged.connect(self._on_status_message_changed)
+        self._select_page.status_message.connect(self._show_status)
         self._apply_donation_visibility()
         self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
 
@@ -218,7 +240,7 @@ class MainWindow(QMainWindow):
 
         nav.setStyleSheet(
             f"QWidget#navPanel {{ background-color: {nav_bg}; border-right: {nav_border};"
-            f" border-radius: 12px 0 0 12px; }}"
+            f" border-radius: 0; }}"
         )
 
         layout = QVBoxLayout(nav)
@@ -269,7 +291,7 @@ class MainWindow(QMainWindow):
         self._check_updates_btn.clicked.connect(self._on_check_updates_clicked)
         layout.addWidget(self._check_updates_btn)
 
-        if platform.system() == "Linux" and not paths.SIMULATE_MACOS:
+        if platform.system() == "Linux" and not paths.IS_MAC:
             self._linux_setup_btn = QPushButton(tr("nav_linux_setup"))
             self._linux_setup_btn.clicked.connect(self._show_linux_setup)
             layout.addWidget(self._linux_setup_btn)
@@ -300,9 +322,9 @@ class MainWindow(QMainWindow):
         for btn, _ in self._nav_buttons.values():
             btn.setStyleSheet(
                 f"QPushButton {{ background: transparent; color: {t.fg_dim}; text-align: left;"
-                f" padding: 10px 14px; border-radius: 8px; border: none; font-size: 13px; min-height: 34px; }}"
+                f" padding: 8px 12px; border-radius: 5px; border: none; font-size: 13px; min-height: 34px; }}"
                 f"QPushButton:hover {{ background-color: {t.bg_hover}; color: {t.fg}; }}"
-                f"QPushButton:checked {{ background-color: {t.nav_active}; color: #ffffff; font-weight: 600; }}"
+                f"QPushButton:checked {{ background-color: {t.nav_active}; color: {t.nav_active_text}; font-weight: 600; }}"
             )
         aux_btns = [self._support_btn, self._log_btn, self._credits_btn, self._check_updates_btn]
         if hasattr(self, "_linux_setup_btn"):
@@ -312,14 +334,17 @@ class MainWindow(QMainWindow):
         for btn in aux_btns:
             btn.setStyleSheet(
                 f"QPushButton {{ background: transparent; color: {t.fg_dim}; text-align: left;"
-                f" padding: 8px 14px; border-radius: 8px; border: none; font-size: 12px; min-height: 32px; }}"
+                f" padding: 7px 12px; border-radius: 5px; border: none; font-size: 12px; min-height: 30px; }}"
                 f"QPushButton:hover {{ background-color: {t.bg_hover}; color: {t.fg}; }}"
             )
         return nav
 
     def _connect_signals(self):
         self._select_page.package_selected.connect(self._on_package_selected)
-        self._flash_page.method_changed.connect(self._on_method_changed)
+        self._settings_page.flash_method_changed.connect(self._on_method_changed)
+        self._settings_page.simulated_mac_requested.connect(
+            self._restart_in_simulated_macos
+        )
         self._flash_page.on_cancel(self._on_cancel_flash)
         self._flash_page.on_cancel_wait(self._on_cancel_wait)
         self._flash_page.on_open_sp_gui(self._open_sp_flash_tool_gui)
@@ -339,9 +364,15 @@ class MainWindow(QMainWindow):
         self.service.monitor_error.connect(self._on_monitor_error)
 
     def keyPressEvent(self, event):
-        if event.key() == 0x004D and not int(event.modifiers()):
-            if self._stack.currentIndex() == _PAGE_FLASH:
-                self._flash_page.reveal_method_selector()
+        # M or D reveal the hidden install-method entry. "MTKClient (Mac)" runs
+        # the macOS code path on Linux/Windows so the Mac flow (MTKClient as the
+        # only backend, mac-centric prompts) can be tested without a Mac.
+        # NB: PySide6 6.11 returns a Flag here, so int(modifiers()) raises.
+        if event.key() in (Qt.Key_M, Qt.Key_D) and event.modifiers() == Qt.NoModifier:
+            self._settings_page.reveal_advanced_methods()
+            if self._settings_page.advanced_methods_revealed():
+                self._nav_to_page(_PAGE_SETTINGS)
+                self._append_log("Advanced install methods revealed (M/D).")
         super().keyPressEvent(event)
 
     def _nav_to_page(self, page_idx):
@@ -358,6 +389,7 @@ class MainWindow(QMainWindow):
     def _begin_flash_flow(self):
         if not self._package_path:
             return
+        self._retry_guidance_shown = False
         try:
             self.sm.transition_to(FlashState.S2_WAIT_CONNECTION)
         except ValueError:
@@ -365,7 +397,7 @@ class MainWindow(QMainWindow):
             self.sm.transition_to(FlashState.S2_WAIT_CONNECTION)
         self._flash_page.set_package_name(self._package_name)
         self._flash_page.set_model(self._package_model)
-        self._flash_page.set_method(self._flash_method, available=_METHODS_AVAILABLE)
+        self._flash_page.set_method(self._flash_method)
         self._flash_page.show_preparing()
         self._nav_to_page(_PAGE_FLASH)
         self._append_log(
@@ -405,6 +437,9 @@ class MainWindow(QMainWindow):
         elif step == STEP_WAITING:
             self._flash_page.show_waiting()
             self._flash_page.set_waiting_device()
+            self._flash_page.highlight_guide_step(1)
+            # Still waiting for the device: the method may be switched.
+            self._settings_page.set_method_enabled(True)
             self._set_state(FlashState.S2_WAIT_CONNECTION)
         elif step == STEP_DETECT:
             self._flash_page.set_detected()
@@ -412,6 +447,7 @@ class MainWindow(QMainWindow):
         elif step in _WRITE_STEPS:
             self._flash_page.show_flashing()
             self._flash_page.set_device_flashing()
+            self._settings_page.set_method_enabled(False)
             self._enter_flashing_state()
         elif step == STEP_DONE:
             self._flash_page.set_device_done()
@@ -450,6 +486,58 @@ class MainWindow(QMainWindow):
         if len(self._log_lines) > 2000:
             self._log_lines = self._log_lines[-2000:]
         self.log_line_added.emit(msg)
+        self._handle_backend_line(msg)
+
+    def _handle_backend_line(self, line):
+        """React to raw backend output with the right amount of UI.
+
+        Only two kinds of line ever need a reaction (see
+        :func:`flash_service.classify_backend_line`):
+
+        * mtkclient's ``Hint:`` block is not an error — it restates step 1 of
+          the connection guide, so it just re-arms the waiting stage.
+        * errno 2 / 5 mean the player is wedged and must be reset by hand, so
+          they raise the retry-guidance dialog.
+
+        Everything else stays Diagnostics-only, which is where the raw output
+        belongs.
+        """
+        kind = classify_backend_line(line)
+        if not kind or not self._package_path:
+            return  # No run in progress — log only.
+        if kind == LINE_CONNECT_HINT:
+            self._show_connect_guide_stage_one()
+        elif kind == LINE_RETRY:
+            self._show_retry_guidance(
+                tr("retry_guidance_detail_errno").format(code=str(line).strip())
+            )
+
+    def _show_connect_guide_stage_one(self):
+        """Return the UI to "power off the device and connect USB".
+
+        Guarded to the waiting states: a hint that arrives once writing has
+        started must not yank the user back to step 1 mid-flash.
+        """
+        if self.sm.state not in (
+            FlashState.S2_WAIT_CONNECTION,
+            FlashState.S3_DEVICE_DETECTED,
+        ):
+            return
+        self._flash_page.set_waiting_device()
+        self._flash_page.highlight_guide_step(1)
+        self._set_state(FlashState.S2_WAIT_CONNECTION)
+        if self._stack.currentIndex() != _PAGE_FLASH:
+            self._nav_to_page(_PAGE_FLASH)
+
+    def _show_retry_guidance(self, detail=""):
+        """Explain the manual reset, at most once per flash attempt."""
+        if self._retry_guidance_shown:
+            return
+        self._retry_guidance_shown = True
+        dialog = RetryGuidanceDialog(self, detail=detail)
+        dialog.exec()
+        if dialog.want_retry():
+            self._on_retry_flash()
 
     def _on_device_found(self, port):
         self._append_log(f"Device detected: {port}")
@@ -493,8 +581,9 @@ class MainWindow(QMainWindow):
         ) or "Y1"
         software = self._package_name or "Firmware"
         steps = install_power_on_steps(model)
-        if self.statusBar() is not None:
-            self.statusBar().showMessage(f"{software} installed successfully. {steps}")
+        self._show_status(
+            tr("status_install_ok_fmt").format(software=software, steps=steps), 60000
+        )
 
         # Record install for device tracking & future release reminders
         rel_info = getattr(self._select_page, "current_installed_release_info", lambda: None)()
@@ -505,6 +594,7 @@ class MainWindow(QMainWindow):
                 tag_name=rel_info.get("tag_name") or "",
                 release_label=rel_info.get("release_label") or "",
                 package_slug=rel_info.get("package_slug") or "",
+                published_at=rel_info.get("published_at") or "",
                 settings=self.settings,
             )
         elif self._package_name:
@@ -536,6 +626,10 @@ class MainWindow(QMainWindow):
             self._package_name, self.sm.context.retry_count,
         )
         self._nav_to_page(_PAGE_ERROR)
+        if error_code in _RETRY_GUIDANCE_CODES:
+            self._show_retry_guidance(
+                tr("retry_guidance_detail_failed").format(code=error_code)
+            )
 
     def _on_retry_flash(self):
         self.sm.reset_for_retry()
@@ -563,12 +657,25 @@ class MainWindow(QMainWindow):
         self._nav_to_page(_PAGE_SELECT)
 
     def _on_method_changed(self, method):
-        if self.sm.state not in (FlashState.S2_WAIT_CONNECTION, FlashState.S3_DEVICE_DETECTED):
-            return
+        """Apply an install method chosen in Settings.
+
+        The choice is always persisted. A run that is waiting for the device is
+        restarted so the new backend takes over immediately; otherwise the new
+        method applies from the next run.
+        """
         if method == self._flash_method:
             return
         self._flash_method = method
         self.settings.setValue("flash_method", method)
+        if method == METHOD_MTK_MAC:
+            # Simulated macOS: most of that behaviour is decided at startup,
+            # so offer the restart that actually switches the app over.
+            self._append_log("Install method set to MTKClient (Mac) simulation.")
+            self._restart_in_simulated_macos()
+            return
+        if self.sm.state not in (FlashState.S2_WAIT_CONNECTION, FlashState.S3_DEVICE_DETECTED):
+            self._append_log(f"Install method set to {_method_label(method)}.")
+            return
         if method in ("sp", "auto"):
             try:
                 from ..sp_flash_gui import update_sp_history_ini
@@ -578,11 +685,48 @@ class MainWindow(QMainWindow):
         self._append_log(f"Flash method changed to {_method_label(method)}; restarting search...")
         self.service.cancel_flash()
         self.service.stop_device_monitor()
+        self._flash_page.set_method(method)
         pre_extracted = completed_extract_dir(self._package_path)
         self.service.start_flash(
             self._package_path, pre_extracted_dir=pre_extracted, method=method
         )
         self.service.start_device_monitor()
+
+    def _restart_in_simulated_macos(self):
+        """Relaunch in simulated macOS mode so the Mac flow genuinely applies.
+
+        paths.SIMULATE_MACOS is read at import time and drives the backend
+        matrix, the mac-centric prompts and the nav entries, so switching at
+        runtime would leave a half-Mac UI. Restarting is the honest way in.
+        """
+        box = QMessageBox(self)
+        box.setWindowTitle(tr("simulated_mac_title"))
+        box.setText(tr("simulated_mac_body"))
+        restart_btn = box.addButton(
+            tr("simulated_mac_restart_now"), QMessageBox.AcceptRole
+        )
+        box.addButton(tr("simulated_mac_later"), QMessageBox.RejectRole)
+        box.exec()
+        if box.clickedButton() is not restart_btn:
+            return
+
+        if getattr(sys, "frozen", False):
+            program, args = sys.executable, sys.argv[1:]
+        else:
+            program, args = sys.executable, [sys.argv[0], *sys.argv[1:]]
+        env = QProcessEnvironment.systemEnvironment()
+        env.insert("INNIOASIS_SIMULATE_MACOS", "1")
+        proc = QProcess(self)
+        proc.setProgram(program)
+        proc.setArguments(args)
+        proc.setWorkingDirectory(os.getcwd())
+        proc.setProcessEnvironment(env)
+        if not proc.startDetached():
+            self._append_log(
+                "Could not restart automatically; relaunch with --simulate-macos."
+            )
+            return
+        QApplication.quit()
 
     def _on_cancel_flash(self):
         answer = QMessageBox.question(
@@ -599,6 +743,7 @@ class MainWindow(QMainWindow):
         self._package_path = ""
         self._package_name = ""
         self._flash_start_ts = 0.0
+        self._settings_page.set_method_enabled(True)
         self.service.stop_device_monitor()
         self._nav_to_page(_PAGE_SELECT)
 
@@ -701,10 +846,10 @@ class MainWindow(QMainWindow):
                 f"{tr('sp_gui_error_desc')}\n\n{msg}",
             )
         else:
-            self.statusBar().showMessage(tr("sp_gui_launched_status"))
+            self._show_status(tr("sp_gui_launched_status"), 10000)
 
     def _check_linux_first_run(self):
-        if os.environ.get("QT_QPA_PLATFORM") == "offscreen" or os.environ.get("CI"):
+        if paths.IS_MAC or os.environ.get("QT_QPA_PLATFORM") == "offscreen" or os.environ.get("CI"):
             return
         from .. import linux_sp_flash
         from .dialogs import LinuxSetupDialog
@@ -752,7 +897,13 @@ class MainWindow(QMainWindow):
 
     def _on_manifest_loaded(self, entries):
         if entries:
+            # The live catalogue defines which models are offered; re-filter the
+            # drop-down before repopulating the software list for the current
+            # model.
+            self._select_page.refresh_models()
             self._select_page._on_model_changed()
+            # Check for device firmware updates when new releases/manifest is loaded
+            self._check_device_firmware_updates(manual=False)
 
     def _start_auto_update_check(self):
         if self._update_offered_once:
@@ -765,6 +916,12 @@ class MainWindow(QMainWindow):
         self._run_update_check()
 
     def _run_update_check(self):
+        # Stop any in-flight check before replacing the reference; overwriting a
+        # running QThread causes "Destroyed while thread is still running"/SIGABRT.
+        old = getattr(self, "_update_worker", None)
+        if old is not None and old.isRunning():
+            old.requestInterruption()
+            old.wait(800)
         worker = UpdateCheckWorker(UPDATE_REPO, APP_VERSION, self)
         worker.finished.connect(
             lambda info: self._on_update_check_done(info, self._update_manual_pending)
@@ -799,6 +956,10 @@ class MainWindow(QMainWindow):
             )
 
     def _check_device_firmware_updates(self, manual=False):
+        old = getattr(self, "_device_update_worker", None)
+        if old is not None and old.isRunning():
+            old.requestInterruption()
+            old.wait(800)
         worker = DeviceUpdateCheckWorker(self.settings, ignore_last_notified=manual, parent=self)
         worker.finished.connect(lambda updates: self._on_device_updates_checked(updates, manual))
         self._device_update_worker = worker
@@ -806,28 +967,42 @@ class MainWindow(QMainWindow):
 
     def _on_device_updates_checked(self, updates, manual=False):
         if updates:
-            upd = updates[0]
-            def on_view(info):
-                self._nav_to_page(_PAGE_SELECT)
-                self._select_page.navigate_to_package(
-                    info.get("model", "Y1"),
-                    info.get("software_name", ""),
-                    tag_name=info.get("latest_tag"),
+            for upd in updates:
+                def on_start(info):
+                    self._nav_to_page(_PAGE_SELECT)
+                    self._select_page.start_install_for_release(
+                        model=info.get("model", "Y1"),
+                        software_name=info.get("software_name", ""),
+                        tag_name=info.get("latest_tag"),
+                        release=info.get("latest_release"),
+                        package=info.get("package"),
+                    )
+
+                def on_view(info):
+                    self._nav_to_page(_PAGE_SELECT)
+                    self._select_page.navigate_to_package(
+                        info.get("model", "Y1"),
+                        info.get("software_name", ""),
+                        tag_name=info.get("latest_tag"),
+                    )
+
+                def on_disable(model):
+                    device_tracking.set_device_reminder_enabled(model, False, settings=self.settings)
+                    if hasattr(self, "_settings_page"):
+                        self._settings_page.refresh_settings()
+
+                dlg = ReleaseReminderDialog(
+                    parent=self,
+                    update_info=upd,
+                    on_view_release=on_view,
+                    on_disable_reminders=on_disable,
+                    on_start_install=on_start,
+                    flash_method=self._flash_method,
                 )
-
-            def on_disable(model):
-                device_tracking.set_device_reminder_enabled(model, False, settings=self.settings)
-                if hasattr(self, "_settings_page"):
-                    self._settings_page.refresh_settings()
-
-            dlg = ReleaseReminderDialog(
-                parent=self,
-                update_info=upd,
-                on_view_release=on_view,
-                on_disable_reminders=on_disable,
-            )
-            dlg.exec()
-            device_tracking.set_last_notified_tag(upd.get("model"), upd.get("latest_tag"), settings=self.settings)
+                dlg.exec()
+                device_tracking.set_last_notified_tag(upd.get("model"), upd.get("latest_tag"), settings=self.settings)
+                if getattr(dlg, "_install_started", False):
+                    break
         elif manual:
             tracked = device_tracking.get_all_device_installs(self.settings)
             if tracked:
@@ -842,6 +1017,20 @@ class MainWindow(QMainWindow):
                     tr("reminder_new_release_title"),
                     tr("settings_no_devices_tracked"),
                 )
+
+    def _show_status(self, text, timeout_ms=0):
+        """Show a transient message in the status bar; it reverts to the
+        donations/goal display once cleared or timed out."""
+        sb = self.statusBar()
+        if sb is None:
+            return
+        sb.showMessage(text, int(timeout_ms or 0))
+        if not sb.isVisible():
+            sb.setVisible(True)
+
+    def _on_status_message_changed(self, text):
+        if not text:
+            self._apply_donation_visibility()
 
     def _apply_donation_visibility(self, is_disabled=None):
         if is_disabled is None:
@@ -892,6 +1081,7 @@ class MainWindow(QMainWindow):
             getattr(self, "_manifest_worker", None),
             getattr(self, "_update_worker", None),
             getattr(self, "_device_update_worker", None),
+            getattr(select_page, "_manifest_worker", None) if select_page else None,
         ):
             if w is not None and w.isRunning():
                 w.requestInterruption()
@@ -906,19 +1096,15 @@ class MainWindow(QMainWindow):
         super().closeEvent(event)
 
 
-def _is_mac():
-    # Honours simulated macOS mode so the method matrix matches a real Mac.
-    return paths.IS_MAC
-
-
-_METHODS_AVAILABLE = ("auto", "sp", "mtk") if not _is_mac() else ("auto", "mtk")
-
 _METHOD_LABELS = {
     "auto": "Auto",
     "sp": "SP Flash Tool",
     "mtk": "MTKClient",
+    "mtk_mac": "MTKClient (Mac)",
 }
 
 
 def _method_label(method: str) -> str:
+    if paths.IS_MAC:
+        return "MTKClient"
     return _METHOD_LABELS.get(method, method)

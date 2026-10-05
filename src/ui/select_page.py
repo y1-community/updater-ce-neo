@@ -3,6 +3,7 @@
 import logging
 import os
 from pathlib import Path
+from typing import Optional
 
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (
@@ -38,7 +39,12 @@ from ..config import (
     device_label_for_model,
     install_disconnect_guidance,
 )
-from ..i18n import tr
+from ..i18n import tr, translator
+from ..browser import open_browser
+from ..translate import (
+    get_google_translate_release_url,
+    ReleaseTranslateWorker,
+)
 from .widgets import Banner, Card
 from .dark import T
 
@@ -71,6 +77,8 @@ class ReleasesWorker(QThread):
 
 class SelectPackagePage(QWidget):
     package_selected = Signal(str, str, str)
+    # (message, timeout_ms) -> shown in the main window's status bar.
+    status_message = Signal(str, int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -88,14 +96,19 @@ class SelectPackagePage(QWidget):
         self._local_status_key = ""
         self._prep_worker = None
         self._selected_type = None  # None = all types; 'A' or 'B' for filtered
+        self._current_selected_rel = None
+        self._is_translated = False
+        self._is_translating = False
+        self._translated_notes_cache = {}
+        self._translate_worker = None
         self._build_ui()
         self._on_model_changed()
 
     def _build_ui(self):
         t = T()
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 20, 24, 20)
-        layout.setSpacing(12)
+        layout.setContentsMargins(16, 12, 16, 8)
+        layout.setSpacing(8)
 
         self._title = QLabel(tr("sel_title"))
         self._title.setProperty("cssClass", "pageTitle")
@@ -108,11 +121,9 @@ class SelectPackagePage(QWidget):
         self._tabs.addTab(self._local_tab, tr("sel_local"))
         layout.addWidget(self._tabs, 1)
 
-        self._status_card = Card("sel_status_title")
-        self._status_tag_label = QLabel()
-        self._status_tag_label.setProperty("cssClass", "dimmed")
-        self._status_card.add_widget(self._status_tag_label)
-        layout.addWidget(self._status_card)
+    def _say(self, text: str, timeout_ms: int = 0):
+        """Show a status message in the main status bar (0 = until replaced)."""
+        self.status_message.emit(text, timeout_ms)
 
     def _build_online_tab(self):
         t = T()
@@ -121,67 +132,55 @@ class SelectPackagePage(QWidget):
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(6)
 
-        # ── Device & Software Filters Group ──────────────────────────────
+        # ── Device & Software Filters (Single Horizontal Line) ───────────
         self._filter_group = QGroupBox()
-        filter_layout = QVBoxLayout(self._filter_group)
-        filter_layout.setContentsMargins(8, 6, 8, 6)
-        filter_layout.setSpacing(4)
+        filter_layout = QHBoxLayout(self._filter_group)
+        filter_layout.setContentsMargins(10, 6, 10, 6)
+        filter_layout.setSpacing(10)
 
-        # Row 1: Device Type filter
-        device_type_layout = QHBoxLayout()
-        self._type_label = QLabel("Device Type:")
-        self._type_label.setProperty("cssClass", "field-label")
-        device_type_layout.addWidget(self._type_label)
-
-        self._type_combo = QComboBox()
-        self._type_combo.addItem("Type A", "A")
-        self._type_combo.addItem("Type B", "B")
-        self._type_combo.currentIndexChanged.connect(self._on_type_changed)
-        device_type_layout.addWidget(self._type_combo)
-
-        self._type_help_btn = QPushButton("Type?")
-        self._type_help_btn.setToolTip(
-            "Try Type A System Software first. If your scroll wheel doesn't respond after installation, "
-            "install one of the Type B options."
-        )
-        self._type_help_btn.clicked.connect(self._show_device_type_help)
-        device_type_layout.addWidget(self._type_help_btn)
-
-        self._refresh_btn = QPushButton(tr("sel_refresh"))
-        self._refresh_btn.setToolTip("Refresh available software catalogue")
-        self._refresh_btn.clicked.connect(lambda: self._refresh_releases(force_refresh=True))
-        device_type_layout.addWidget(self._refresh_btn)
-        device_type_layout.addStretch()
-
-        # Row 2: Device Model filter
-        device_model_layout = QHBoxLayout()
-        self._model_label = QLabel(tr("sel_model"))
+        # Device Model filter
+        self._model_label = QLabel(f"{tr('sel_model')}:")
         self._model_label.setProperty("cssClass", "field-label")
-        device_model_layout.addWidget(self._model_label)
+        filter_layout.addWidget(self._model_label)
 
         self._model_combo = QComboBox()
-        for m in DEVICE_MODELS:
-            self._model_combo.addItem(m)
+        self._model_combo.setMinimumWidth(80)
+        self.refresh_models()
         self._model_combo.currentTextChanged.connect(self._on_model_changed)
-        device_model_layout.addWidget(self._model_combo)
-        device_model_layout.addStretch()
+        filter_layout.addWidget(self._model_combo)
 
-        # Row 3: Software filter
-        software_layout = QHBoxLayout()
-        self._software_label = QLabel(tr("sel_software"))
-        software_label_key = "sel_software"
+        # Device Type filter (Type A/B for Y1)
+        self._type_label = QLabel(f"{tr('sel_type')}:")
+        self._type_label.setProperty("cssClass", "field-label")
+        filter_layout.addWidget(self._type_label)
+
+        self._type_combo = QComboBox()
+        self._type_combo.addItem(tr("sel_type_a"), "A")
+        self._type_combo.addItem(tr("sel_type_b"), "B")
+        self._type_combo.currentIndexChanged.connect(self._on_type_changed)
+        filter_layout.addWidget(self._type_combo)
+
+        self._type_help_btn = QPushButton(tr("sel_type_help_btn"))
+        self._type_help_btn.setToolTip(tr("sel_type_help_body").replace("\n\n", " "))
+        self._type_help_btn.clicked.connect(self._show_device_type_help)
+        filter_layout.addWidget(self._type_help_btn)
+
+        # Software filter
+        self._software_label = QLabel(f"{tr('sel_software')}:")
         self._software_label.setProperty("cssClass", "field-label")
-        software_layout.addWidget(self._software_label)
+        filter_layout.addWidget(self._software_label)
 
         self._software_combo = QComboBox()
-        self._software_combo.setMinimumWidth(260)
+        self._software_combo.setMinimumWidth(200)
         self._software_combo.currentTextChanged.connect(self._on_software_changed)
-        software_layout.addWidget(self._software_combo)
-        software_layout.addStretch()
+        filter_layout.addWidget(self._software_combo, 1)
 
-        filter_layout.addLayout(device_type_layout)
-        filter_layout.addLayout(device_model_layout)
-        filter_layout.addLayout(software_layout)
+        # Refresh button
+        self._refresh_btn = QPushButton(tr("sel_refresh"))
+        self._refresh_btn.setToolTip(tr("sel_refresh_tooltip"))
+        self._refresh_btn.clicked.connect(lambda: self._refresh_releases(force_refresh=True))
+        filter_layout.addWidget(self._refresh_btn)
+
         layout.addWidget(self._filter_group)
 
         self._online_banner = Banner()
@@ -193,7 +192,7 @@ class SelectPackagePage(QWidget):
         split.setSpacing(10)
 
         # Left panel: Available System Software
-        self._pkg_group = QGroupBox("Available System Software")
+        self._pkg_group = QGroupBox(tr("sel_available_software"))
         pkg_layout = QVBoxLayout(self._pkg_group)
         pkg_layout.setContentsMargins(8, 8, 8, 8)
         pkg_layout.setSpacing(6)
@@ -202,11 +201,19 @@ class SelectPackagePage(QWidget):
         self._release_list.currentItemChanged.connect(self._on_release_selected)
         pkg_layout.addWidget(self._release_list)
 
+        # Slim progress bar, only visible while downloading / preparing.
+        self._download_bar = QProgressBar()
+        self._download_bar.setTextVisible(False)
+        self._download_bar.setFixedHeight(8)
+        self._download_bar.setVisible(False)
+        pkg_layout.addWidget(self._download_bar)
+
         self._install_btn = QPushButton(tr("sel_install"))
         self._install_btn.setDefault(True)
         self._install_btn.setAutoDefault(True)
+        self._install_btn.setMinimumHeight(32)
         self._install_btn.setEnabled(False)
-        self._install_btn.setToolTip("Install or restore the selected system software to your device")
+        self._install_btn.setToolTip(tr("sel_install_tooltip_generic"))
         self._install_btn.clicked.connect(self._on_install)
         pkg_layout.addWidget(self._install_btn)
 
@@ -218,26 +225,7 @@ class SelectPackagePage(QWidget):
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(8)
 
-        self._status_group = QGroupBox(tr("Status"))
-        status_l = QVBoxLayout(self._status_group)
-        status_l.setContentsMargins(8, 6, 8, 6)
-        status_l.setSpacing(4)
-
-        self._status_label = QLabel(tr("Ready"))
-        self._status_label.setWordWrap(True)
-        status_l.addWidget(self._status_label)
-
-        self._download_bar = QProgressBar()
-        self._download_bar.setVisible(False)
-        status_l.addWidget(self._download_bar)
-
-        self._download_status = QLabel("")
-        self._download_status.setProperty("cssClass", "dimmed")
-        status_l.addWidget(self._download_status)
-
-        right_layout.addWidget(self._status_group)
-
-        self._notes_group = QGroupBox(tr("About this update:"))
+        self._notes_group = QGroupBox(tr("sel_about_update"))
         notes_l = QVBoxLayout(self._notes_group)
         notes_l.setContentsMargins(8, 6, 8, 6)
         notes_l.setSpacing(4)
@@ -248,17 +236,19 @@ class SelectPackagePage(QWidget):
         self._notes.setPlaceholderText(tr("sel_notes_hint"))
         notes_l.addWidget(self._notes)
 
-        self.smart_drop_hint_label = QLabel(
-            "Drop themes, albums, tracks, photos, videos, firmwares here to transfer. "
-            "<a href='smart-drop-info'>More Info</a>"
+        self._translate_label = QLabel()
+        self._translate_label.setObjectName("translateReleaseNotes")
+        self._translate_label.setWordWrap(True)
+        self._translate_label.setAlignment(Qt.AlignCenter)
+        t = T()
+        self._translate_label.setStyleSheet(
+            f"color: {t.fg_dim}; font-size: 11px; margin-top: 4px;"
         )
-        self.smart_drop_hint_label.setWordWrap(True)
-        self.smart_drop_hint_label.setAlignment(Qt.AlignCenter)
-        self.smart_drop_hint_label.setStyleSheet("color: #9ca3af; font-size: 11px; margin-top: 4px;")
-        self.smart_drop_hint_label.setTextFormat(Qt.RichText)
-        self.smart_drop_hint_label.setTextInteractionFlags(Qt.TextBrowserInteraction)
-        self.smart_drop_hint_label.linkActivated.connect(self._show_smart_drop_info)
-        notes_l.addWidget(self.smart_drop_hint_label)
+        self._translate_label.setTextFormat(Qt.RichText)
+        self._translate_label.setTextInteractionFlags(Qt.TextBrowserInteraction)
+        self._translate_label.linkActivated.connect(self._on_translate_link_clicked)
+        self._translate_label.setVisible(False)
+        notes_l.addWidget(self._translate_label)
 
         right_layout.addWidget(self._notes_group, 1)
 
@@ -283,7 +273,7 @@ class SelectPackagePage(QWidget):
         self._offline_banner.set_key("sel_offline_install")
         layout.addWidget(self._offline_banner)
 
-        local_group = QGroupBox("Choose Firmware Package")
+        self._local_group = local_group = QGroupBox(tr("sel_choose_firmware_pkg"))
         grp_l = QVBoxLayout(local_group)
         grp_l.setContentsMargins(10, 8, 10, 8)
         grp_l.setSpacing(6)
@@ -314,6 +304,7 @@ class SelectPackagePage(QWidget):
         self._start_btn = QPushButton(tr("sel_btn_start"))
         self._start_btn.setDefault(True)
         self._start_btn.setAutoDefault(True)
+        self._start_btn.setMinimumHeight(36)
         self._start_btn.setEnabled(False)
         self._start_btn.clicked.connect(self._on_start_flash)
         grp_l.addWidget(self._start_btn)
@@ -325,27 +316,35 @@ class SelectPackagePage(QWidget):
     def _show_device_type_help(self):
         QMessageBox.information(
             self,
-            "Device Type Help",
-            "Try Type A System Software first.\n\n"
-            "If your scroll wheel doesn't respond after installation, "
-            "install one of the Type B options.",
+            tr("sel_type_help_title"),
+            tr("sel_type_help_body"),
         )
 
-    def _show_smart_drop_info(self, _link=""):
-        QMessageBox.information(
-            self,
-            "Smart Drop Info",
-            "Smart Drop allows transferring themes, albums, tracks, photos, "
-            "videos, and firmware files directly to your device via USB.\n\n"
-            "Connect your powered-on Innioasis device via USB with ADB debugging enabled.",
-        )
+    def _should_prompt_pre_install(self) -> bool:
+        """On Linux with SP Flash Tool methods, step 1 (ensuring USB cable is removed
+        and device powered off) is naturally presented after silent system prep and privilege
+        escalation, when flash_tool fires the line beginning with 'search usb'.
+        On Windows or with MTKClient, prompt upfront before starting.
+        """
+        import sys
+        from PySide6.QtCore import QSettings
+        from ..paths import IS_MAC, IS_WINDOWS
+        if IS_WINDOWS or IS_MAC:
+            return True
+        if not sys.platform.startswith("linux"):
+            return True
+        settings = QSettings("Innioasis", "UpdaterCE")
+        method = settings.value("flash_method", "auto")
+        if method == "mtk":
+            return True
+        return False
 
     def _prompt_pre_install(self, model="Y1", type_variant=None):
         if os.environ.get("QT_QPA_PLATFORM") == "offscreen" or os.environ.get("INNIOASIS_HEADLESS"):
             return True
         reply = QMessageBox.question(
             self,
-            "Software Install Instructions",
+            tr("sel_pre_install_title"),
             install_disconnect_guidance(model, type_variant),
             QMessageBox.Ok | QMessageBox.Cancel,
             QMessageBox.Ok,
@@ -362,7 +361,9 @@ class SelectPackagePage(QWidget):
         if key == "releases":
             self._online_banner.set_type("info")
             self._online_banner.setText(
-                f"{self._online_banner_count} release(s) \u2014 {tr('sel_install')}"
+                tr("sel_n_releases_fmt").format(
+                    n=self._online_banner_count, action=tr("sel_install")
+                )
             )
         elif key:
             self._online_banner.set_type("warning" if key in ("sel_offline", "sel_no_release") else "info")
@@ -388,9 +389,9 @@ class SelectPackagePage(QWidget):
         self._title.setText(tr("sel_title"))
         self._tabs.setTabText(0, tr("sel_online"))
         self._tabs.setTabText(1, tr("sel_local"))
-        self._model_label.setText(tr("sel_model"))
-        self._type_label.setText(tr("sel_type"))
-        self._software_label.setText(tr("sel_software"))
+        self._model_label.setText(f"{tr('sel_model')}:")
+        self._type_label.setText(f"{tr('sel_type')}:")
+        self._software_label.setText(f"{tr('sel_software')}:")
         self._refresh_btn.setText(tr("sel_refresh"))
         self._install_btn.setText(tr("sel_install"))
         self._hint.setText(tr("sel_only_local"))
@@ -399,13 +400,69 @@ class SelectPackagePage(QWidget):
         self._browse_btn.setText(tr("sel_browse"))
         self._start_btn.setText(tr("sel_btn_start"))
         self._offline_banner.retranslate()
-        self._status_card.retranslate()
         self._apply_online_banner()
         self._apply_local_banner()
+        self._type_combo.setItemText(0, tr("sel_type_a"))
+        self._type_combo.setItemText(1, tr("sel_type_b"))
+        self._type_help_btn.setText(tr("sel_type_help_btn"))
+        self._type_help_btn.setToolTip(tr("sel_type_help_body").replace("\n\n", " "))
+        self._refresh_btn.setToolTip(tr("sel_refresh_tooltip"))
+        self._pkg_group.setTitle(tr("sel_available_software"))
+        self._local_group.setTitle(tr("sel_choose_firmware_pkg"))
+        self._update_device_status_copy()
         if self._download_status_key:
-            self._download_status.setText(tr(self._download_status_key))
+            self._say(tr(self._download_status_key))
         if self._local_status_key:
             self._local_status.setText(tr(self._local_status_key))
+        self._notes_group.setTitle(tr("sel_about_update"))
+        if self._current_selected_rel:
+            if self._is_translated:
+                self._translate_current_release_in_app()
+            else:
+                self._notes.setMarkdown(self._render_release_notes(self._current_selected_rel))
+        self._update_translate_link()
+
+    def refresh_models(self):
+        """Repopulate the device drop-down from what the catalogue offers.
+
+        Only models with a release in the live catalogue are listed — there is
+        no point offering a device with nothing to install. The wider lineup in
+        src/device_models.py exists so that firmware imported by hand still
+        gets guidance naming the right player; such a model is appended here
+        while it is selected, so the drop-down never contradicts the prompt.
+        """
+        from .. import device_models
+
+        model_ids = device_models.selectable_models(
+            available_ids=catalog.available_models(),
+            fallback=DEVICE_MODELS,
+        )
+        current = self._model_combo.currentText().strip()
+        if current and current not in model_ids:
+            # Keep a manually imported model visible/selected.
+            model_ids.append(current)
+
+        self._model_combo.blockSignals(True)
+        self._model_combo.clear()
+        self._model_combo.addItems(model_ids)
+        if current:
+            idx = self._model_combo.findText(current)
+            if idx >= 0:
+                self._model_combo.setCurrentIndex(idx)
+        self._model_combo.blockSignals(False)
+
+    def _select_model_for_manual(self, model: str):
+        """Select ``model`` for a hand-imported package, adding it if needed."""
+        if not model:
+            return
+        idx = self._model_combo.findText(model)
+        if idx < 0:
+            # Not catalogue-backed (e.g. a G5): add it so the connection
+            # prompts name the right player, and let refresh_models() drop it
+            # again once another model is chosen.
+            self._model_combo.addItem(model)
+            idx = self._model_combo.count() - 1
+        self._model_combo.setCurrentIndex(idx)
 
     def _on_model_changed(self):
         model = self.current_model()
@@ -431,10 +488,8 @@ class SelectPackagePage(QWidget):
         model = self.current_model()
         eff_type = self._selected_type if model.upper() == "Y1" else None
         lbl = device_label_for_model(model, eff_type)
-        if hasattr(self, "_status_label") and not self._download_status_key and not getattr(self, "_download_worker", None):
-            self._status_label.setText(f"Please follow the instructions below to install this software on your {lbl}")
         if hasattr(self, "_install_btn"):
-            self._install_btn.setToolTip(f"Install or restore the selected system software to your {lbl}")
+            self._install_btn.setToolTip(tr("sel_install_tooltip").format(lbl=lbl))
 
     def _on_type_changed(self, index):
         self._selected_type = self._type_combo.currentData()
@@ -450,6 +505,12 @@ class SelectPackagePage(QWidget):
         if package is None:
             self._set_online_banner("sel_no_release")
             return
+        # Stop any in-flight worker before replacing; overwriting a running
+        # QThread causes "Destroyed while thread is still running" / SIGABRT.
+        old = self._releases_worker
+        if old is not None and old.isRunning():
+            old.requestInterruption()
+            old.wait(800)
         self._set_online_banner("sel_loading")
         self._releases_worker = ReleasesWorker(
             self.client, package, self.current_model(),
@@ -464,6 +525,10 @@ class SelectPackagePage(QWidget):
     def _refresh_manifest(self):
         try:
             from ..manifest import ManifestWorker
+            old = getattr(self, "_manifest_worker", None)
+            if old is not None and old.isRunning():
+                old.requestInterruption()
+                old.wait(800)
             self._manifest_worker = ManifestWorker(self, force_refresh=True)
             self._manifest_worker.finished.connect(self._on_manifest_refreshed)
             self._manifest_worker.start()
@@ -515,6 +580,16 @@ class SelectPackagePage(QWidget):
                         selected_row = row
                         break
             self._release_list.setCurrentRow(selected_row)
+            if getattr(self, "_auto_install_tag", None):
+                target_auto = self._auto_install_tag
+                self._auto_install_tag = None
+                for row in range(self._release_list.count()):
+                    it = self._release_list.item(row)
+                    r = it.data(Qt.UserRole) if it else None
+                    if r and r.get("tag_name") == target_auto:
+                        self._release_list.setCurrentRow(row)
+                        self._trigger_release_install(r)
+                        break
 
     def _asset_line(self, rel):
         assets = ", ".join(
@@ -525,17 +600,25 @@ class SelectPackagePage(QWidget):
     def _on_release_selected(self, current, _prev):
         self._install_btn.setEnabled(current is not None)
         if current is None:
+            self._current_selected_rel = None
+            self._is_translated = False
+            self._is_translating = False
             self._notes.clear()
+            self._update_translate_link()
             return
         rel = current.data(Qt.UserRole)
         if rel:
+            self._current_selected_rel = rel
+            self._is_translated = False
+            self._is_translating = False
             self._notes.setMarkdown(self._render_release_notes(rel))
+            self._update_translate_link()
 
-    def _render_release_notes(self, rel):
+    def _render_release_notes(self, rel, translated_body=None, translated_name=None):
         tag = rel.get("tag_name", "")
-        name = rel.get("name", "") or tag
+        name = translated_name or rel.get("name", "") or tag
         date = (rel.get("published_at") or "")[:10]
-        body = (rel.get("body") or "").strip() or tr("update_no_notes")
+        body = translated_body or (rel.get("body") or "").strip() or tr("update_no_notes")
         assets = self._asset_line(rel)
         meta = []
         if tag:
@@ -544,6 +627,8 @@ class SelectPackagePage(QWidget):
             meta.append(date)
         if assets:
             meta.append(f"{tr('sel_release_assets')}: {assets}")
+        if translated_body:
+            meta.append(f"*{tr('translated_with_google')}*")
         lines = [f"## {name}"]
         if meta:
             lines.append("")
@@ -554,50 +639,142 @@ class SelectPackagePage(QWidget):
         lines.append(body[:4000])
         return "\n".join(lines)
 
-    def _on_install(self):
-        item = self._release_list.currentItem()
-        if item is None:
+    def _update_translate_link(self):
+        rel = self._current_selected_rel
+        lang = (translator().lang or "en").strip()
+        if not rel or lang == "en":
+            self._translate_label.setVisible(False)
+            self._translate_label.setText("")
             return
-        rel = item.data(Qt.UserRole)
+
+        t = T()
+        url = get_google_translate_release_url(rel, lang)
+        self._translate_label.setVisible(True)
+
+        if self._is_translating:
+            msg = tr("translating_notes")
+            open_txt = tr("open_in_google_translate")
+            self._translate_label.setText(
+                f'<span style="color:{t.fg_dim};">⏳ {msg} &nbsp;·&nbsp; '
+                f'<a href="{url}" style="color:{t.accent}; text-decoration:underline;">{open_txt} ↗</a></span>'
+            )
+        elif self._is_translated:
+            badge = tr("translated_with_google")
+            show_orig = tr("show_original")
+            open_txt = tr("open_in_google_translate")
+            self._translate_label.setText(
+                f'✓ <span style="color:{t.fg_dim};">{badge}</span> &nbsp;·&nbsp; '
+                f'<a href="action:show_original" style="color:{t.accent}; text-decoration:underline;">{show_orig}</a> &nbsp;·&nbsp; '
+                f'<a href="{url}" style="color:{t.fg_dim}; text-decoration:underline;">{open_txt} ↗</a>'
+            )
+        else:
+            trans_txt = tr("translate_notes")
+            open_txt = tr("open_in_google_translate")
+            self._translate_label.setText(
+                f'🌐 <a href="action:translate_in_app" style="color:{t.accent}; text-decoration:underline; font-weight:600;">{trans_txt}</a> &nbsp;·&nbsp; '
+                f'<a href="{url}" style="color:{t.fg_dim}; text-decoration:underline;">{open_txt} ↗</a>'
+            )
+
+    def _on_translate_link_clicked(self, link: str):
+        if link == "action:translate_in_app":
+            self._translate_current_release_in_app()
+        elif link == "action:show_original":
+            self._show_original_release_notes()
+        elif link.startswith(("http://", "https://")):
+            open_browser(link)
+
+    def _translate_current_release_in_app(self):
+        rel = self._current_selected_rel
+        if not rel:
+            return
+        lang = (translator().lang or "en").strip()
+        if lang == "en":
+            return
+        tag = rel.get("tag_name", "")
+        cached = self._translated_notes_cache.get((tag, lang))
+        if cached:
+            trans_name, trans_body = cached
+            self._is_translated = True
+            self._is_translating = False
+            self._notes.setMarkdown(
+                self._render_release_notes(rel, translated_body=trans_body, translated_name=trans_name)
+            )
+            self._update_translate_link()
+            return
+
+        self._is_translating = True
+        self._update_translate_link()
+        if self._translate_worker is not None and self._translate_worker.isRunning():
+            self._translate_worker.wait(500)
+        self._translate_worker = ReleaseTranslateWorker(rel, lang, self)
+        self._translate_worker.translation_ready.connect(self._on_translation_ready)
+        self._translate_worker.translation_failed.connect(self._on_translation_failed)
+        self._translate_worker.start()
+
+    def _on_translation_ready(self, rel, lang, trans_name, trans_body):
+        self._translated_notes_cache[(rel.get("tag_name", ""), lang)] = (trans_name, trans_body)
+        if self._current_selected_rel == rel:
+            self._is_translating = False
+            self._is_translated = True
+            self._notes.setMarkdown(
+                self._render_release_notes(rel, translated_body=trans_body, translated_name=trans_name)
+            )
+            self._update_translate_link()
+
+    def _on_translation_failed(self, rel, lang, error):
+        if self._current_selected_rel == rel:
+            self._is_translating = False
+            self._update_translate_link()
+
+    def _show_original_release_notes(self):
+        self._is_translated = False
+        self._is_translating = False
+        if self._current_selected_rel:
+            self._notes.setMarkdown(self._render_release_notes(self._current_selected_rel))
+        self._update_translate_link()
+
+    def _trigger_release_install(self, rel, package=None):
         if not rel or not rel.get("download_url"):
             return
-        package = self.current_package()
-        if package is None:
+        pkg = package or self.current_package()
+        if pkg is None:
             return
 
         # Determine model and variant from original asset name / download URL:
         orig_name = rel.get("asset_name") or rel.get("download_url") or ""
         det_m, det_t = detect_model_and_type_from_name(orig_name)
-        eff_model = det_m or getattr(package, "device", "") or self.current_model()
+        eff_model = det_m or getattr(pkg, "device", "") or self.current_model()
         eff_type = det_t or self._selected_type
 
-        # Pre-install disconnect / power-off confirmation popup:
-        if not self._prompt_pre_install(eff_model, eff_type):
-            return
+        # Pre-install disconnect / power-off confirmation popup (skipped for SP Flash Tool on Linux):
+        if self._should_prompt_pre_install():
+            if not self._prompt_pre_install(eff_model, eff_type):
+                return
 
         self._current_package_model = eff_model
         self._pending_install_release_info = {
             "model": eff_model,
-            "software_name": package.name,
-            "package_slug": package.slug,
+            "software_name": pkg.name,
+            "package_slug": pkg.slug,
             "tag_name": rel.get("tag_name", ""),
             "release_label": catalog.format_release_display_label(rel),
             "type_variant": eff_type,
+            "published_at": rel.get("published_at", ""),
         }
         dest_dir = downloads.downloads_dir()
         fname = Path(rel.get("asset_name") or "rom.zip").name
-        dest = dest_dir / f"{package.slug}_{rel.get('tag_name', 'latest')}_{fname}"
+        dest = dest_dir / f"{pkg.slug}_{rel.get('tag_name', 'latest')}_{fname}"
         extract_dir = compute_extract_dir(dest)
 
         # 1. Check if package is already downloaded and fully extracted:
         if dest.is_file() and dest.stat().st_size > 0 and _is_extract_complete(extract_dir):
             logger.info("Package %s already cached and extracted at %s, reusing immediately", dest.name, extract_dir)
             self._current_package_path = str(dest)
-            self._current_package_name = f"{self.current_software()} ({eff_model})"
+            self._current_package_name = f"{pkg.name} ({eff_model})"
             self._current_package_model = eff_model
             self._current_installed_release_info = self._pending_install_release_info
             self._download_status_key = "sel_prepare_done"
-            self._download_status.setText(tr("sel_prepare_done"))
+            self._say(tr("sel_prepare_done"), 8000)
             self._on_online_prep_done(True, str(extract_dir), "")
             return
 
@@ -605,7 +782,7 @@ class SelectPackagePage(QWidget):
         if dest.is_file() and dest.stat().st_size > 0:
             logger.info("Package %s already downloaded, extracting directly", dest.name)
             self._current_package_path = str(dest)
-            self._current_package_name = f"{self.current_software()} ({eff_model})"
+            self._current_package_name = f"{pkg.name} ({eff_model})"
             self._current_package_model = eff_model
             self._current_installed_release_info = self._pending_install_release_info
             self._prepare_package(str(dest), self._on_online_prep_done)
@@ -613,7 +790,7 @@ class SelectPackagePage(QWidget):
 
         # 3. Otherwise, start download worker
         self._download_status_key = "sel_download_start"
-        self._download_status.setText(tr("sel_download_start"))
+        self._say(tr("sel_download_start"))
         self._download_bar.setValue(0)
         self._download_bar.setVisible(True)
         self._install_btn.setEnabled(False)
@@ -623,15 +800,22 @@ class SelectPackagePage(QWidget):
         self._download_worker.finished.connect(self._on_download_done)
         self._download_worker.start()
 
+    def _on_install(self):
+        item = self._release_list.currentItem()
+        if item is None:
+            return
+        rel = item.data(Qt.UserRole)
+        self._trigger_release_install(rel)
+
     def _on_download_status(self, text: str):
         self._download_status_key = ""
-        self._download_status.setText(text)
+        self._say(text)
 
     def _on_download_done(self, ok, result):
         self._download_bar.setVisible(False)
         if not ok:
             self._download_status_key = ""
-            self._download_status.setText(f"{tr('sel_download_failed')} \u2014 {result}")
+            self._say(f"{tr('sel_download_failed')} \u2014 {result}", 15000)
             self._install_btn.setEnabled(True)
             return
         eff_model = getattr(self, "_current_package_model", "") or self.current_model()
@@ -645,7 +829,7 @@ class SelectPackagePage(QWidget):
         if self._prep_worker is not None:
             self._prep_worker.cancel()
         self._download_status_key = "sel_preparing"
-        self._download_status.setText(tr("sel_preparing"))
+        self._say(tr("sel_preparing"))
         self._local_status_key = "sel_preparing"
         self._local_status.setText(tr("sel_preparing"))
         bar = (
@@ -668,11 +852,11 @@ class SelectPackagePage(QWidget):
         self._download_bar.setVisible(False)
         if not ok:
             self._download_status_key = ""
-            self._download_status.setText(f"{tr('sel_prepare_failed')} \u2014 {err}")
+            self._say(f"{tr('sel_prepare_failed')} \u2014 {err}", 15000)
             self._install_btn.setEnabled(True)
             return
         self._download_status_key = "sel_prepare_done"
-        self._download_status.setText(tr("sel_prepare_done"))
+        self._say(tr("sel_prepare_done"), 8000)
 
         # Retain only the most recently downloaded software package!
         prune_extracted_cache(keep_package_path=self._current_package_path)
@@ -745,9 +929,7 @@ class SelectPackagePage(QWidget):
         det_m, det_t = detect_model_and_type_from_name(path)
         if det_m:
             self._current_package_model = det_m
-            idx = self._model_combo.findText(det_m)
-            if idx >= 0:
-                self._model_combo.setCurrentIndex(idx)
+            self._select_model_for_manual(det_m)
         else:
             self._current_package_model = self.current_model()
 
@@ -765,8 +947,9 @@ class SelectPackagePage(QWidget):
         if self._current_package_path:
             eff_model = getattr(self, "_current_package_model", "") or self.current_model()
             eff_type = getattr(self, "_selected_type", None)
-            if not self._prompt_pre_install(eff_model, eff_type):
-                return
+            if self._should_prompt_pre_install():
+                if not self._prompt_pre_install(eff_model, eff_type):
+                    return
             self._emit_ready()
 
     def _emit_ready(self):
@@ -819,3 +1002,24 @@ class SelectPackagePage(QWidget):
                     self._release_list.setCurrentRow(row)
                     self._target_tag_to_select = None
                     break
+
+    def start_install_for_release(
+        self,
+        model: str,
+        software_name: str,
+        tag_name: str = "",
+        release: Optional[dict] = None,
+        package: Optional[catalog.FirmwarePackage] = None,
+    ):
+        """Navigate to package/release and initiate installation with current method."""
+        self.navigate_to_package(model, software_name, tag_name=tag_name)
+        if release:
+            self._trigger_release_install(release, package=package)
+        else:
+            item = self._release_list.currentItem()
+            if item:
+                r = item.data(Qt.UserRole)
+                if r and (not tag_name or r.get("tag_name") == tag_name):
+                    self._trigger_release_install(r, package=package)
+                    return
+            self._auto_install_tag = tag_name

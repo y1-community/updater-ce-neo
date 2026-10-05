@@ -1,9 +1,8 @@
 """Flash page — preparing / waiting-for-device / flashing views."""
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
-    QComboBox,
     QHBoxLayout,
     QLabel,
     QProgressBar,
@@ -15,6 +14,9 @@ from PySide6.QtWidgets import (
 
 from .. import paths
 from ..flash_service import (
+    METHOD_MTK,
+    METHOD_MTK_MAC,
+    METHOD_SP,
     STEP_DETECT,
     STEP_DONE,
     STEP_DOWNLOAD_BL,
@@ -22,6 +24,8 @@ from ..flash_service import (
     STEP_EXTRACTING,
     STEP_WAITING,
     STEP_WRITE,
+    default_flash_method,
+    normalise_method,
 )
 from ..i18n import tr
 from .widgets import Banner, Card, InfoRow, StatusTag
@@ -39,8 +43,6 @@ _STEP_KEY = {
 
 
 class FlashPage(QWidget):
-    method_changed = Signal(str)
-
     def __init__(self, parent=None):
         super().__init__(parent)
         self._cancel_callback = None
@@ -52,7 +54,11 @@ class FlashPage(QWidget):
         self._prep_step_key = ""
         self._conn_value_key = ""
         self._dev_value_key = ""
-        self._method_available = ("auto", "sp", "mtk")
+        # Install method is chosen in Settings; this page only reports it.
+        self._method = default_flash_method()
+        # 0 = no step emphasised. Set by highlight_guide_step() when the
+        # backend tells us the device is not in flash mode yet.
+        self._guide_step = 0
         self._build_ui()
 
     def _build_ui(self):
@@ -134,35 +140,24 @@ class FlashPage(QWidget):
         row.addLayout(guide_box, 1)
         layout.addLayout(row)
 
-        method_row = QHBoxLayout()
-        self._method_label = QLabel(tr("flash_method"))
-        self._method_label.setProperty("cssClass", "field-label")
-        method_row.addWidget(self._method_label)
-        self._method_combo = QComboBox()
-        self._method_combo.currentIndexChanged.connect(self._on_method_changed)
-        method_row.addWidget(self._method_combo)
-
-        from ..sp_flash_gui import is_sp_flash_gui_supported
-        if is_sp_flash_gui_supported():
-            self._open_sp_gui_btn = QPushButton(tr("flash_btn_open_sp_gui"))
-            self._open_sp_gui_btn.setProperty("cssClass", "ghost")
-            self._open_sp_gui_btn.setToolTip("Open MediaTek SP Flash Tool GUI")
-            self._open_sp_gui_btn.clicked.connect(self._on_open_sp_gui_clicked)
-            method_row.addWidget(self._open_sp_gui_btn)
-
-        method_row.addStretch()
-        layout.addLayout(method_row)
-
+        # Install method is a Settings option (one selector, defaulting to SP
+        # Flash Tool's console-mode XML flow); the waiting view only states
+        # which method this run will use.
         self._method_note = QLabel("")
         self._method_note.setWordWrap(True)
         self._method_note.setProperty("cssClass", "dimmed")
         layout.addWidget(self._method_note)
 
-        self._method_revealed = False
-        self._method_label.setVisible(False)
-        self._method_combo.setVisible(False)
-        if not paths.IS_MAC:
-            self._method_note.setVisible(False)
+        from ..sp_flash_gui import is_sp_flash_gui_supported
+        if is_sp_flash_gui_supported():
+            gui_row = QHBoxLayout()
+            self._open_sp_gui_btn = QPushButton(tr("flash_btn_open_sp_gui"))
+            self._open_sp_gui_btn.setProperty("cssClass", "ghost")
+            self._open_sp_gui_btn.setToolTip(tr("flash_sp_gui_tooltip"))
+            self._open_sp_gui_btn.clicked.connect(self._on_open_sp_gui_clicked)
+            gui_row.addWidget(self._open_sp_gui_btn)
+            gui_row.addStretch()
+            layout.addLayout(gui_row)
 
         self._wait_status = StatusTag("idle")
         layout.addWidget(self._wait_status)
@@ -254,74 +249,58 @@ class FlashPage(QWidget):
 
     def show_waiting(self):
         self._stack.setCurrentWidget(self._waiting_view)
-        self._method_combo.setEnabled(True)
 
     def show_flashing(self):
         self._stack.setCurrentWidget(self._flashing_view)
-        self._method_combo.setEnabled(False)
         self._load_image(self._flash_img, "installing.png")
         self._warning.setVisible(True)
 
-    def set_method(self, method, available=("auto", "sp", "mtk")):
-        self._method_available = tuple(available)
-        self._method_combo.blockSignals(True)
-        self._method_combo.clear()
-        labels = {
-            "auto": tr("flash_method_auto"),
-            "sp": tr("flash_method_sp"),
-            "mtk": tr("flash_method_mtk"),
-        }
-        for m in self._method_available:
-            if m in labels:
-                self._method_combo.addItem(labels[m], m)
-        idx = self._method_combo.findData(method)
-        self._method_combo.setCurrentIndex(idx if idx >= 0 else 0)
-        self._method_combo.blockSignals(False)
-        if not self._method_revealed:
-            self._method_combo.setVisible(False)
-            self._method_label.setVisible(False)
-            if not paths.IS_MAC:
-                self._method_note.setVisible(False)
-        self._update_method_note()
-
-    def _initsteps_image(self):
-        method = self.current_method()
-        if method == "sp":
-            return "initsteps_sp.png"
-        if method == "mtk":
-            return "initsteps_win.png" if paths.IS_WINDOWS else "initsteps.png"
-        if paths.IS_MAC:
-            return "initsteps.png"
-        return "initsteps_sp.png"
-
-    def _on_method_changed(self):
+    def set_method(self, method):
+        """Record the install method chosen in Settings for this run."""
+        self._method = normalise_method(method)
         self._update_method_note()
         if self._stack.currentWidget() is self._waiting_view:
             self._load_image(self._status_img, self._initsteps_image())
-        self.method_changed.emit(self.current_method())
+
+    def _initsteps_image(self):
+        if paths.IS_MAC:
+            return "initsteps.png"
+        if self._method == METHOD_SP:
+            return "initsteps_sp.png"
+        if self._method == METHOD_MTK:
+            return "initsteps_win.png" if paths.IS_WINDOWS else "initsteps.png"
+        return "initsteps_sp.png"
 
     def current_method(self):
-        return self._method_combo.currentData() or "auto"
+        return self._method
 
     def _update_method_note(self):
-        method = self.current_method()
-        if method == "sp":
-            self._method_note.setText(tr("flash_method_note_sp"))
-        elif method == "mtk":
+        if paths.IS_MAC or self._method == METHOD_MTK:
             self._method_note.setText(tr("flash_method_note_mtk"))
+        elif self._method == METHOD_SP:
+            self._method_note.setText(tr("flash_method_note_sp"))
+        elif self._method == METHOD_MTK_MAC:
+            self._method_note.setText(tr("flash_method_note_mtk_mac"))
         else:
-            self._method_note.setText(tr("flash_method_note_auto"))
+            self._method_note.setText(tr("flash_method_note_mtk"))
 
-    def reveal_method_selector(self):
-        if paths.IS_MAC:
-            return
-        if self._method_revealed:
-            return
-        self._method_revealed = True
-        self._method_label.setVisible(True)
-        self._method_combo.setVisible(True)
-        self._method_note.setVisible(True)
-        self._update_method_note()
+    def highlight_guide_step(self, step):
+        """Emphasise one numbered step of the connection guide.
+
+        mtkclient's ``Hint:`` output means the player is not in flash mode yet
+        — precisely step 1 ("power off the device") — so the hint re-marks that
+        step instead of raising a dialog.
+        """
+        self._guide_step = int(step or 0)
+        self._apply_guide_highlight()
+
+    def _apply_guide_highlight(self):
+        t = T()
+        for idx, (_key, label) in enumerate(self._guide_texts, start=1):
+            if idx == self._guide_step:
+                label.setStyleSheet(f"color: {t.accent}; font-weight: 600;")
+            else:
+                label.setStyleSheet("")
 
     def set_model(self, model):
         self._model = (model or "").strip() or ""
@@ -399,8 +378,8 @@ class FlashPage(QWidget):
         for key, lbl in self._guide_texts:
             lbl.setText(tr(key))
         self._warning.setText(tr("flash_warning"))
-        self._method_label.setText(tr("flash_method"))
-        self._method_note.setText(self._method_note_text())
+        self._update_method_note()
+        self._apply_guide_highlight()
         if self._prep_step_key:
             self._prep_step.setText(tr(self._prep_step_key))
         if self._step_key:
@@ -422,29 +401,6 @@ class FlashPage(QWidget):
         self._eta_row.retranslate()
         if hasattr(self, "_open_sp_gui_btn"):
             self._open_sp_gui_btn.setText(tr("flash_btn_open_sp_gui"))
-        current = self.current_method()
-        self._method_combo.blockSignals(True)
-        self._method_combo.clear()
-        labels = {
-            "auto": tr("flash_method_auto"),
-            "sp": tr("flash_method_sp"),
-            "mtk": tr("flash_method_mtk"),
-        }
-        for m in self._method_available:
-            if m in labels:
-                self._method_combo.addItem(labels[m], m)
-        self._method_combo.setCurrentIndex(
-            self._method_combo.findData(current) if self._method_combo.findData(current) >= 0 else 0
-        )
-        self._method_combo.blockSignals(False)
-
-    def _method_note_text(self):
-        method = self.current_method()
-        if method == "sp":
-            return tr("flash_method_note_sp")
-        if method == "mtk":
-            return tr("flash_method_note_mtk")
-        return tr("flash_method_note_auto")
 
     def on_cancel(self, callback):
         self._cancel_callback = callback

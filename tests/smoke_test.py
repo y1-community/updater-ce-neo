@@ -68,9 +68,9 @@ def check(name, fn):
         print(f"  PASS  {name}")
     except Exception as e:
         import traceback
-        traceback.print_exc()
+        tb = traceback.format_exc()
         failures.append((name, e))
-        print(f"  FAIL  {name}: {e!r}")
+        print(f"  FAIL  {name}: {e!r}\n{tb}")
 
 
 def test_catalog():
@@ -583,13 +583,69 @@ def test_simulate_macos_backend_parity():
         ok, msg = launch_sp_flash_tool_gui()
         assert ok is False and msg, "simulated macOS must refuse SP Flash Tool GUI"
 
-        # Method selector matrix: macOS only exposes auto/mtk (no sp entry).
-        from src.ui import main_window as mw
-        assert mw._is_mac() is True
-        matrix = tuple(
-            m for m in ("auto", "sp", "mtk") if m != "sp" or not mw._is_mac()
+        # Method matrix: the Settings selector owns it now, and macOS offers no
+        # SP Flash Tool entry (MTKClient is the only backend there).
+        from PySide6.QtWidgets import QApplication
+        from src.ui.settings_page import METHOD_MTK, SettingsPage
+        from src.ui.dialogs import ReleaseReminderDialog
+        from src.ui.main_window import _method_label
+        from src.sp_flash_gui import find_sp_flash_tool_dirs, update_sp_history_ini
+
+        assert _paths.find_sp_flash_tool() is None
+        assert find_sp_flash_tool_dirs() == []
+        assert update_sp_history_ini("/dummy") is False
+        assert _method_label("sp") == "MTKClient"
+
+        app = QApplication.instance() or QApplication(sys.argv)
+        page = SettingsPage()
+        try:
+            assert page._available_methods() == (METHOD_MTK,), page._available_methods()
+            # On macOS, cards relating to SP Flash Tool / backend options must be hidden
+            assert page._checker_card.isHidden() is True
+            assert page._method_card.isHidden() is True
+            page.refresh_settings()
+            assert page._checker_card.isHidden() is True
+            assert page._method_card.isHidden() is True
+            page.retranslate()
+            assert page._checker_card.isHidden() is True
+            assert page._method_card.isHidden() is True
+            # "MTKClient (Mac)" is meaningless on a Mac, so the M/D reveal is a
+            # no-op there rather than adding a redundant duplicate.
+            page.reveal_advanced_methods()
+            assert page._available_methods() == (METHOD_MTK,), page._available_methods()
+        finally:
+            page.deleteLater()
+
+        from src.ui.flash_page import FlashPage
+        fp = FlashPage()
+        try:
+            assert hasattr(fp, "_open_sp_gui_btn") is False
+            assert fp._initsteps_image() == "initsteps.png"
+        finally:
+            fp.deleteLater()
+
+        from src.ui.error_page import ErrorPage
+        ep = ErrorPage()
+        try:
+            assert hasattr(ep, "_sp_gui_btn") is False
+        finally:
+            ep.deleteLater()
+
+        # Dialog prompt on macOS never refers to SP Flash Tool even if passed "sp"
+        dlg = ReleaseReminderDialog(
+            update_info={
+                "model": "y1",
+                "software_name": "Inniclassic",
+                "installed_tag": "0.4",
+                "latest_tag": "1.0",
+            },
+            flash_method="sp",
         )
-        assert matrix == ("auto", "mtk"), matrix
+        try:
+            assert "SP Flash" not in dlg._prompt_lbl.text()
+            assert "MTKClient" in dlg._prompt_lbl.text()
+        finally:
+            dlg.deleteLater()
     finally:
         _paths.SIMULATE_MACOS = saved["paths.SIMULATE_MACOS"]
         _paths.IS_MAC = saved["paths.IS_MAC"]
@@ -850,8 +906,8 @@ def test_flash_flow_launch():
     w.service.step_changed.emit(STEP_WRITE)
     assert w.sm.state is FlashState.S4_FLASHING, w.sm.state
     assert w._flash_page._stack.currentWidget() is w._flash_page._flashing_view
-    # The method selector is disabled once flashing starts.
-    assert not w._flash_page._method_combo.isEnabled()
+    # The install-method selector (on Settings) is locked once flashing starts.
+    assert not w._settings_page._method_combo.isEnabled()
     # In-progress copy: banner and status tag both read "Install in Progress".
     assert w._flash_page._flash_banner.text() == "Install in Progress"
     assert w._flash_page._wait_status.text() == "Install in Progress"
@@ -867,11 +923,11 @@ def test_flash_flow_launch():
 
 
 def test_flash_method_switch():
-    """Switching the backend while waiting restarts with the new method;
-    the selector is populated from the persisted choice."""
+    """Switching the install method in Settings while waiting restarts the run
+    with the new backend, and the choice is persisted. Legacy "auto" resolves
+    to the platform default (SP Flash Tool) rather than its own mode."""
     from PySide6.QtWidgets import QApplication
     from src.ui.main_window import MainWindow
-    from src.state import FlashState
 
     _reset_app_settings()
     app = QApplication.instance() or QApplication(sys.argv)
@@ -879,18 +935,19 @@ def test_flash_method_switch():
     w.show()
     calls = []
     w.service.start_flash = lambda pkg, pre="", method="auto", **kw: calls.append((pkg, method))
+    w.service.start_device_monitor = lambda: None
     w.settings.setValue("flash_method", "auto")
     w._flash_method = "auto"
 
     w._on_package_selected("C:/fake/rom.zip", "Rockbox (Y1)", "Y1")
-    assert w._flash_page.current_method() == "auto"
+    assert w._flash_page.current_method() == "sp", "legacy auto -> SP Flash Tool"
 
     # User switches to MTKClient while the backend searches.
-    w._flash_page._method_combo.setCurrentIndex(
-        w._flash_page._method_combo.findData("mtk")
-    )
-    assert w._flash_page.current_method() == "mtk"
+    combo = w._settings_page._method_combo
+    combo.setCurrentIndex(combo.findData("mtk"))
+    assert w._settings_page.current_method() == "mtk"
     assert calls[-1] == ("C:/fake/rom.zip", "mtk"), "backend restarted with new method"
+    assert w._flash_page.current_method() == "mtk", "flash page reflects the new method"
     assert w.settings.value("flash_method") == "mtk"
     w.settings.setValue("flash_method", "auto")  # leave machine state clean
     w.close()
@@ -937,7 +994,9 @@ def test_language_switch_keeps_screen():
         "flashing view must survive a language switch"
     assert w._flash_page._progress_bar.value() == 57, "progress must survive"
     assert w._flash_page._step_label.text() == "Escribiendo imagen"
-    assert w._flash_page._method_combo.itemText(0) == "Auto (recomendado)"
+    # New Settings strings translate in place too.
+    assert w._settings_page._cb_reminders.text() == "Envíame recordatorios de nuevas versiones"
+    assert w._settings_page._method_combo.itemText(0) == "SP Flash Tool"
 
     _reset_app_settings()
     w.close()
@@ -1181,16 +1240,21 @@ def test_guided_image_selection():
         assert page._initsteps_image() == "initsteps_sp.png"
         page.set_method("mtk")
         assert page._initsteps_image() == "initsteps_win.png"
+        # Legacy "auto" now resolves to the platform default (the SP Flash Tool
+        # console flow) instead of being a method of its own.
         page.set_method("auto")
+        assert page.current_method() == "sp"
         assert page._initsteps_image() == "initsteps_sp.png", "auto on Windows -> SP"
 
         paths.IS_WINDOWS, paths.IS_MAC = False, True
         page.set_method("auto")
+        assert page.current_method() == "mtk"
         assert page._initsteps_image() == "initsteps.png", "auto on macOS -> MTKClient"
         page.set_method("mtk")
         assert page._initsteps_image() == "initsteps.png"
         page.set_method("sp")
-        assert page._initsteps_image() == "initsteps_sp.png", "explicit sp keeps SP guide"
+        assert page.current_method() == "mtk", "macOS has no SP Flash Tool backend"
+        assert page._initsteps_image() == "initsteps.png"
     finally:
         paths.IS_WINDOWS, paths.IS_MAC = real_win, real_mac
         page.deleteLater()
@@ -1223,7 +1287,7 @@ def test_mtk_system_exit_guarded():
 
 
 def test_mtk_connect_system_exit_guarded():
-    """A mtkclient SystemExit during device connect becomes CONNECTION_FAILED."""
+    """A mtkclient SystemExit during the handshake becomes CONNECTION_FAILED."""
     import src.flash_service as fs
     import src.mtk_api as mtk_api
 
@@ -1233,17 +1297,19 @@ def test_mtk_connect_system_exit_guarded():
     w._log = lambda *a, **k: None
 
     real_scatter = fs._parse_scatter
-    real_connect = mtk_api.connect
+    real_init, real_handshake = mtk_api.init, mtk_api.handshake
     fs._parse_scatter = lambda scatter: [("system", Path("/tmp/system.img"))]
 
-    def boom(mtk, directory):
+    mtk_api.init = lambda loader=None, preloader=None, **kw: object()
+
+    def boom(session, directory="."):
         raise SystemExit(1)
 
-    mtk_api.connect = boom
+    mtk_api.handshake = boom
     try:
         w._flash_via_mtkclient("/tmp", "/tmp/scatter.txt")
     finally:
-        mtk_api.connect = real_connect
+        mtk_api.init, mtk_api.handshake = real_init, real_handshake
         fs._parse_scatter = real_scatter
     assert results == [(False, "CONNECTION_FAILED")], results
 
@@ -1259,21 +1325,34 @@ def test_mtk_write_system_exit_guarded():
     w._log = lambda *a, **k: None
 
     real_scatter = fs._parse_scatter
-    real_connect = mtk_api.connect
+    real_init, real_handshake, real_attach = (
+        mtk_api.init, mtk_api.handshake, mtk_api.attach
+    )
     fs._parse_scatter = lambda scatter: [("system", Path("/tmp/system.img"))]
 
-    def fake_connect(mtk, directory):
+    class FakeConfig:
+        is_brom = True
+        gui = None
+
+    class FakeSession:
+        config = FakeConfig()
+
+    def fake_attach(session, directory="."):
         class FakeHandler:
             def handle_da_cmds(self, *a, **k):
                 raise SystemExit(1)
 
-        return (object(), FakeHandler())
+        return (FakeSession(), FakeHandler())
 
-    mtk_api.connect = fake_connect
+    mtk_api.init = lambda loader=None, preloader=None, **kw: FakeSession()
+    mtk_api.handshake = lambda session, directory=".": (session, object())
+    mtk_api.attach = fake_attach
     try:
         w._flash_via_mtkclient("/tmp", "/tmp/scatter.txt")
     finally:
-        mtk_api.connect = real_connect
+        mtk_api.init, mtk_api.handshake, mtk_api.attach = (
+            real_init, real_handshake, real_attach
+        )
         fs._parse_scatter = real_scatter
     assert results == [(False, "WRITE_FAILED")], results
 
@@ -1332,9 +1411,10 @@ def test_mtk_stall_watcher():
 
 def test_mtkclient_da_progress_surface():
     """The MTKClient path must (a) relay mtkclient's own phase messages,
-    (b) report the mode mtkclient really detected (preloader, not BROM), and
-    (c) mark the install as started from the first image write — the reference
-    updater derives install progress from the writes, not the handshake."""
+    (b) restart a preloader-mode player into BROM before the DA is uploaded
+    (the stage-2 stall), reporting each mode truthfully, and (c) mark the
+    install as started from the first image write — the reference updater
+    derives install progress from the writes, not the handshake."""
     from src import flash_service as fs
     import src.mtk_api
 
@@ -1375,20 +1455,40 @@ def test_mtkclient_da_progress_surface():
         mtk = FakeMtk()
         mtk.daloader = FakeDaloader()
 
-        real_init, real_connect = src.mtk_api.init, src.mtk_api.connect
-        src.mtk_api.init = lambda loader=None, preloader=None, **kw: mtk
+        saved = {
+            name: getattr(src.mtk_api, name)
+            for name in ("init", "handshake", "attach", "arm_brom_boot",
+                        "trigger_reset", "close_port")
+        }
+        saved["_wait"] = fs._wait_for_mtk_mode
+        sessions = {"count": 0}
 
-        def fake_connect(handle, directory=".", on_connected=None):
-            if on_connected:
-                on_connected()
+        src.mtk_api.init = lambda loader=None, preloader=None, **kw: mtk
+        src.mtk_api.arm_brom_boot = lambda handle: True
+        src.mtk_api.trigger_reset = lambda handle: True
+        src.mtk_api.close_port = lambda handle: None
+        # No hardware on the test host: the restart is deemed to have landed.
+        fs._wait_for_mtk_mode = lambda pids, timeout: True
+
+        def fake_handshake(handle, directory="."):
+            sessions["count"] += 1
             # mtkclient routes its phase chatter here once config.gui is set.
             handle.config.gui.emit("DaHandler - Device is in Preloader-Mode.")
+            # Preloader mode on the first look; the restart lands us in BROM.
+            handle.config.is_brom = sessions["count"] > 1
+            return handle, object()
+
+        def fake_attach(handle, directory="."):
             handle.config.gui.emit("Successfully uploaded stage 2")
             return handle, object()
 
-        src.mtk_api.connect = fake_connect
+        src.mtk_api.handshake = fake_handshake
+        src.mtk_api.attach = fake_attach
 
-        w = fs.FlashWorker(str(d / "rom.zip"), method="mtk")
+        holds = []
+        w = fs.FlashWorker(
+            str(d / "rom.zip"), method="mtk", device_loss_hold=holds.append
+        )
         steps, logs, actions, results = [], [], [], []
         w.step_changed.connect(steps.append)
         w.log_message.connect(logs.append)
@@ -1400,16 +1500,25 @@ def test_mtkclient_da_progress_surface():
         try:
             w._flash_via_mtkclient(str(d), str(scatter))
         finally:
-            src.mtk_api.init, src.mtk_api.connect = real_init, real_connect
+            for name, fn in saved.items():
+                if name == "_wait":
+                    fs._wait_for_mtk_mode = fn
+                else:
+                    setattr(src.mtk_api, name, fn)
 
         assert results == [(True, "")], results
         # mtkclient's phase messages reached the diagnostics log.
         assert "Successfully uploaded stage 2" in logs, logs
         assert "DaHandler - Device is in Preloader-Mode." in logs, logs
-        # Mode is reported truthfully instead of claiming BROM.
-        mode_msg = [m for m in actions if "detected" in m]
-        assert mode_msg and "preloader mode" in mode_msg[0], mode_msg
-        assert not any("BROM" in m for m in actions), actions
+        # A preloader-mode player is restarted into BROM before the DA upload,
+        # and both modes are reported truthfully.
+        assert sessions["count"] == 2, sessions
+        mode_msgs = [m for m in actions if "detected" in m]
+        assert mode_msgs[0] == "Device detected (preloader mode) - configuring download agent...", mode_msgs
+        assert mode_msgs[-1] == "Device detected (BROM mode) - configuring download agent...", mode_msgs
+        assert any("Restarting the player into BROM mode" in m for m in actions), actions
+        # The deliberate restart must not reach the USB monitor as an unplug.
+        assert holds and holds[0] >= 30, holds
         # Install-started comes from the first image write, not the handshake.
         assert steps.index(fs.STEP_WRITE) > steps.index(fs.STEP_DETECT), steps
         first_write_log = next(i for i, m in enumerate(logs) if m.startswith("Writing "))
@@ -1419,6 +1528,152 @@ def test_mtkclient_da_progress_surface():
         assert writes, "partitions must actually be written"
         # The gui hook is released after the session.
         assert mtk.config.gui is None
+
+
+def _mtk_flash_fixture(td):
+    """Minimal MT6572 package used by the MTKClient session tests."""
+    d = Path(td)
+    (d / "preloader_g368_nyx.bin").write_bytes(b"p" * 64)
+    (d / "boot.img").write_bytes(b"b" * 64)
+    scatter = d / "MT6572_Android_scatter.txt"
+    scatter.write_text(
+        "- general: MTK_PLATFORM_CFG\n"
+        "  info:\n"
+        "    - platform: MT6572\n"
+        "- partition_index: SYS0\n"
+        "  partition_name: preloader\n"
+        "  file_name: preloader_g368_nyx.bin\n"
+        "  is_download: true\n"
+        "- partition_index: SYS1\n"
+        "  partition_name: boot\n"
+        "  file_name: boot.img\n"
+        "  is_download: true\n",
+        encoding="utf-8",
+    )
+    return d, scatter
+
+
+def test_mtk_da_failure_auto_recovers():
+    """A failed DA upload must not be the end of the run: the worker waits for
+    the player to come back and retries once before falling back to the retry
+    dialog. When the player never returns, the run fails cleanly with the
+    reconnect instructions."""
+    from src import flash_service as fs
+    import src.mtk_api
+
+    class FakeConfig:
+        def __init__(self):
+            self.is_brom = True
+            self.gui = None
+            self.guiprogress = None
+
+    class FakeMtk:
+        def __init__(self):
+            self.config = FakeConfig()
+
+    saved = {n: getattr(src.mtk_api, n) for n in ("init", "handshake", "attach")}
+    saved["_wait"] = fs._wait_for_mtk_mode
+    try:
+        for attempt_outcome in (["fail", "ok"], ["fail", "fail"]):
+            with tempfile.TemporaryDirectory() as td:
+                d, scatter = _mtk_flash_fixture(td)
+                mtk = FakeMtk()
+                calls = {"attach": 0}
+
+                src.mtk_api.init = lambda loader=None, preloader=None, **kw: mtk
+                src.mtk_api.handshake = lambda handle, directory=".": (handle, object())
+
+                def fake_attach(handle, directory=".", _outcome=attempt_outcome):
+                    calls["attach"] += 1
+                    if _outcome[min(calls["attach"], 2) - 1] == "fail":
+                        return None, None
+                    return handle, object()
+
+                src.mtk_api.attach = fake_attach
+                # Device is already in BROM: no restart involved here.
+                fs._wait_for_mtk_mode = lambda pids, timeout: True
+
+                w = fs.FlashWorker(str(d / "rom.zip"), method="mtk")
+                logs, actions, results = [], [], []
+                w.log_message.connect(logs.append)
+                w.action_changed.connect(actions.append)
+                w.finished.connect(lambda ok, err: results.append((ok, err)))
+                w._write_mtk_partition = lambda *a, **k: True
+                w._flash_via_mtkclient(str(d), str(scatter))
+
+                if attempt_outcome == ["fail", "ok"]:
+                    assert calls["attach"] == 2, calls
+                    assert results == [(True, "")], results
+                    assert any("Attempt 1 failed" in m for m in logs), logs
+                    assert any("retrying" in m for m in actions), actions
+                else:
+                    # Exactly one automatic retry, then the retry dialog's
+                    # CONNECTION_FAILED takes over.
+                    assert calls["attach"] == fs.MTK_DA_ATTEMPTS, calls
+                    assert results == [(False, "CONNECTION_FAILED")], results
+                    assert logs.count("The download agent did not come up.") == 1, logs
+                    assert any("Attempt 1 failed" in m for m in logs), logs
+    finally:
+        for name, fn in saved.items():
+            if name == "_wait":
+                fs._wait_for_mtk_mode = fn
+            else:
+                setattr(src.mtk_api, name, fn)
+
+
+def test_mtk_retry_gives_up_when_device_stays_away():
+    """The recovery wait must not loop forever: a player that never returns
+    ends the run instead of parking the worker."""
+    from src import flash_service as fs
+    import src.mtk_api
+
+    class FakeConfig:
+        def __init__(self):
+            self.is_brom = True
+            self.gui = None
+
+    class FakeMtk:
+        def __init__(self):
+            self.config = FakeConfig()
+
+    saved = {n: getattr(src.mtk_api, n) for n in ("init", "handshake", "attach")}
+    real_wait = fs._wait_for_mtk_mode
+    try:
+        mtk = FakeMtk()
+        src.mtk_api.init = lambda loader=None, preloader=None, **kw: mtk
+        src.mtk_api.handshake = lambda handle, directory=".": (handle, object())
+        src.mtk_api.attach = lambda handle, directory=".": (None, None)
+        fs._wait_for_mtk_mode = lambda pids, timeout: False
+        with tempfile.TemporaryDirectory() as td:
+            d, scatter = _mtk_flash_fixture(td)
+            w = fs.FlashWorker(str(d / "rom.zip"), method="mtk")
+            logs, results = [], []
+            w.log_message.connect(logs.append)
+            w.finished.connect(lambda ok, err: results.append((ok, err)))
+            w._flash_via_mtkclient(str(d), str(scatter))
+        assert results == [(False, "CONNECTION_FAILED")], results
+        assert logs.count("The download agent did not come up.") == 1, logs
+        assert any("start the flash again" in m for m in logs), logs
+    finally:
+        for name, fn in saved.items():
+            setattr(src.mtk_api, name, fn)
+        fs._wait_for_mtk_mode = real_wait
+
+
+def test_device_monitor_lost_hold():
+    """Restarting the player into BROM makes it re-enumerate; the monitor must
+    be able to stay quiet during that window or it aborts the flash."""
+    from src.flash_service import DeviceMonitor
+
+    m = DeviceMonitor()
+    assert m._lost_is_held() is False
+    m.hold_lost(60)
+    assert m._lost_is_held() is True
+    # A shorter later hold must not shorten the window already granted.
+    m.hold_lost(1)
+    assert m._lost_is_held() is True
+    m.release_lost_hold()
+    assert m._lost_is_held() is False
 
 
 def test_linux_sp_flash_validation():
@@ -1521,6 +1776,112 @@ def test_linux_setup_dialog():
     dlg = LinuxSetupDialog()
     assert dlg.windowTitle() != ""
     assert "SP Flash Tool Verification Report" in dlg._status_view.toPlainText()
+
+
+def test_linux_sp_flash_askpass_and_step1_deferral():
+    """Verify Linux askpass helper, runner wrapper, silent prep, and deferred Step 1."""
+    from unittest.mock import patch
+    import io
+    from PySide6.QtCore import QSettings
+    from PySide6.QtWidgets import QApplication
+    from src import linux_sp_flash as lsf
+    from src.flash_service import FlashWorker, STEP_WAITING
+    from src.ui.select_page import SelectPackagePage
+
+    _reset_app_settings()
+    app = QApplication.instance() or QApplication(sys.argv)
+
+    with tempfile.TemporaryDirectory() as td:
+        tdp = Path(td)
+        runner = lsf.create_flash_tool_runner(tdp)
+        assert runner.is_file()
+        assert os.access(runner, os.X_OK)
+        text = runner.read_text(encoding="utf-8")
+        assert "LD_LIBRARY_PATH" in text
+        assert "QT_PLUGIN_PATH" in text
+        assert "run_flash_tool.sh" in str(runner)
+
+        prep_ok = lsf.silent_system_prep(tdp)
+        assert prep_ok is True
+        assert (tdp / lsf.LOG_DIR_NAME).is_dir()
+
+    askpass = lsf.get_askpass_helper()
+    assert askpass is not None and askpass.is_file()
+    assert os.access(askpass, os.X_OK)
+    ap_text = askpass.read_text(encoding="utf-8")
+    assert "zenity" in ap_text or "kdialog" in ap_text or "SUDO_ASKPASS" in ap_text
+
+    # _PrependedStream preserves pre-read lines
+    stream = lsf._PrependedStream("header_line\n", io.StringIO("second_line\nthird_line\n"))
+    lines = list(stream)
+    assert lines == ["header_line\n", "second_line\n", "third_line\n"]
+
+    # SelectPackagePage: Step 1 modal is skipped on Linux for SP Flash Tool (deferred until "search usb")
+    settings = QSettings("Innioasis", "UpdaterCE")
+    settings.setValue("flash_method", "sp")
+    page = SelectPackagePage()
+    with patch("sys.platform", "linux"):
+        with patch("src.paths.IS_WINDOWS", False):
+            with patch("src.paths.IS_MAC", False):
+                assert page._should_prompt_pre_install() is False, "Linux SP flow must not prompt upfront"
+
+        with patch("src.paths.IS_WINDOWS", True):
+            assert page._should_prompt_pre_install() is True, "Windows must prompt upfront"
+
+    # Line classification: "search usb" triggers STEP_WAITING (step 1 displayed naturally)
+    worker = FlashWorker("dummy.zip", "sp", "scatter.txt")
+    emitted = []
+    worker.step_changed.connect(emitted.append)
+    worker._classify_sp_stdout("Search USB, timeout 3600000 ms...")
+    assert STEP_WAITING in emitted
+    page.deleteLater()
+
+    # Escalation tool discovery & doas support tests
+    with patch("shutil.which") as mock_which:
+        # Scenario A: Alpine/Void Linux where only doas is installed
+        mock_which.side_effect = lambda cmd: "/usr/bin/doas" if cmd == "doas" else None
+        tools = lsf.find_available_escalation_tools()
+        assert tools == ["doas"], f"Expected ['doas'], got {tools}"
+
+        # Scenario B: System where /etc/doas.conf exists alongside sudo and pkexec
+        def _which_all(cmd):
+            if cmd in ("doas", "sudo", "pkexec", "run0"):
+                return f"/usr/bin/{cmd}"
+            return None
+        mock_which.side_effect = _which_all
+        with patch.object(Path, "is_file", lambda self: str(self) == "/etc/doas.conf"):
+            tools = lsf.find_available_escalation_tools()
+            assert tools[0] == "doas", f"doas with /etc/doas.conf must be prioritized, got {tools}"
+            assert "pkexec" in tools
+            assert "sudo" in tools
+            assert "run0" in tools
+
+    # Test doas launcher with mock binary:
+    with tempfile.TemporaryDirectory() as td:
+        tdp = Path(td)
+        # Mock doas binary
+        mock_script = tdp / "mock_doas"
+        mock_script.write_text(
+            "#!/bin/bash\n"
+            'if [ "$1" = "-n" ]; then\n'
+            "    exit 0\n"
+            "fi\n"
+            'exec "$@"\n'
+        )
+        mock_script.chmod(0o755)
+
+        with patch("shutil.which", lambda cmd: str(mock_script) if cmd == "doas" else None):
+            runner_dummy = tdp / "dummy_runner.sh"
+            runner_dummy.write_text("#!/bin/bash\necho 'Search USB, timeout 3600000 ms...'\n")
+            runner_dummy.chmod(0o755)
+            proc, cancelled = lsf._launch_with_doas(runner_dummy, [], tdp, os.environ.copy())
+            assert cancelled is False
+            assert proc is not None
+            out_line = proc.stdout.readline()
+            assert "Search USB" in out_line
+            proc.wait()
+
+    app.processEvents()
 
 
 def test_package_prep_gates_flash_start():
@@ -2290,6 +2651,97 @@ def test_settings_page_and_dialogs():
         mw.close()
 
 
+def test_firmware_release_reminder_install_flow():
+    """Verify single software tracking per model and start-install prompt flow."""
+    from PySide6.QtCore import QSettings
+    from PySide6.QtWidgets import QApplication
+    from src import device_tracking, catalog
+    from src.ui.dialogs import ReleaseReminderDialog
+    from src.ui.select_page import SelectPackagePage
+
+    _reset_app_settings()
+    app = QApplication.instance() or QApplication(sys.argv)
+
+    with tempfile.TemporaryDirectory() as td:
+        settings = QSettings(f"{td}/test_settings.ini", QSettings.IniFormat)
+
+        # 1. User installed Inniclassic 0.4 on Y1
+        device_tracking.record_device_install(
+            "Y1",
+            "Inniclassic",
+            "0.4",
+            release_label="Inniclassic 0.4",
+            package_slug="inniclassic",
+            settings=settings,
+        )
+
+        # Verify only one software is tracked for Y1
+        rec = device_tracking.get_device_install("Y1", settings=settings)
+        assert rec is not None
+        assert rec["software_name"] == "Inniclassic"
+        assert rec["tag_name"] == "0.4"
+        # Y2 and A5 have no recorded install
+        assert device_tracking.get_device_install("Y2", settings=settings) is None
+        assert device_tracking.get_device_install("A5", settings=settings) is None
+
+        # 2. Inniclassic 1.0 is released
+        mock_client = catalog.ReleasesClient(cache_root=td)
+        mock_releases = [
+            {
+                "tag_name": "1.0",
+                "name": "Inniclassic 1.0 for Innioasis Y1",
+                "download_url": "https://example.com/inniclassic_1.0_rom.zip",
+                "asset_name": "rom.zip",
+                "rom_variants": [{"asset": {"browser_download_url": "https://example.com/inniclassic_1.0_rom.zip", "name": "rom.zip"}}],
+            },
+            {
+                "tag_name": "0.4",
+                "name": "Inniclassic 0.4 for Innioasis Y1",
+                "download_url": "https://example.com/inniclassic_0.4_rom.zip",
+                "asset_name": "rom.zip",
+                "rom_variants": [{"asset": {"browser_download_url": "https://example.com/inniclassic_0.4_rom.zip", "name": "rom.zip"}}],
+            },
+        ]
+        mock_client.releases_for_package = lambda pkg, model, show_nightly=False: mock_releases
+
+        # Check updates finds Inniclassic 1.0 > 0.4
+        updates = device_tracking.check_device_updates(releases_client=mock_client, settings=settings)
+        assert len(updates) == 1
+        upd = updates[0]
+        assert upd["model"] == "Y1"
+        assert upd["software_name"].lower() == "inniclassic"
+        assert upd["installed_tag"] == "0.4"
+        assert upd["latest_tag"] == "1.0"
+
+        # 3. Popup dialog asks user if they would like to start an install with selected method
+        started_installs = []
+        dlg = ReleaseReminderDialog(
+            update_info=upd,
+            on_start_install=lambda info: started_installs.append(info),
+            flash_method="sp",
+        )
+        # Check that button text is Start Install
+        assert dlg._btn_install.text() == "Start Install"
+        # Trigger start install
+        dlg._on_start_install()
+        assert len(started_installs) == 1
+        assert started_installs[0]["latest_tag"] == "1.0"
+
+        # 4. Verify SelectPackagePage handles start_install_for_release
+        sel = SelectPackagePage()
+        sel.start_install_for_release(
+            model=upd["model"],
+            software_name=upd["software_name"],
+            tag_name=upd["latest_tag"],
+            release=upd["latest_release"],
+        )
+        assert sel.current_model() == "Y1"
+        assert sel.current_software().lower() == "inniclassic"
+        if getattr(sel, "_download_worker", None) is not None:
+            sel._download_worker.cancel()
+            sel._download_worker.wait(500)
+
+
 def test_latest_package_tracking_and_history_ini():
     """Verify recording latest package and generating prepopulated history.ini."""
     from PySide6.QtCore import QSettings
@@ -2610,9 +3062,9 @@ def test_model_detection_and_install_guidance():
     from PySide6.QtWidgets import QApplication
     app = QApplication.instance() or QApplication(sys.argv)
     settings_page = SettingsPage()
-    assert hasattr(settings_page, "_cb_a5")
-    assert hasattr(settings_page, "_cb_y1")
-    assert hasattr(settings_page, "_cb_y2")
+    # One opt-in covers every tracked device, plus the install-method selector.
+    assert hasattr(settings_page, "_cb_reminders")
+    assert settings_page._method_combo.count() >= 1
 
     select_page = SelectPackagePage()
     assert select_page._prompt_pre_install("A5") is True  # Non-blocking offscreen
@@ -2908,6 +3360,243 @@ def test_tools_manager_and_self_healing():
             tools_manager.get_user_tools_dir = orig_user_tools
 
 
+def test_backend_line_classification():
+    """Raw backend output is triaged: errno 2/5 mean the player must be reset
+    by hand, mtkclient's Hint block just re-arms connection-guide step 1, and
+    everything else stays Diagnostics-only."""
+    from src.flash_service import (
+        LINE_CONNECT_HINT,
+        LINE_RETRY,
+        classify_backend_line,
+    )
+
+    # Exactly the lines seen in a stalled connection's Diagnostics output.
+    assert classify_backend_line("[Errno 5] Input/Output Error") == LINE_RETRY
+    assert classify_backend_line("[Errno 2] Entity not found") == LINE_RETRY
+    assert classify_backend_line("errno=5 I/O error") == LINE_RETRY
+    assert classify_backend_line("USBError: [Errno 2] No such file") == LINE_RETRY
+
+    hint = (
+        "Hint: Power off the phone before connecting. For brom mode, press and "
+        "hold vol up, vol dwn, or all hw buttons and connect usb."
+    )
+    assert classify_backend_line(hint) == LINE_CONNECT_HINT
+
+    # Unrelated noise must not trigger either reaction.
+    assert classify_backend_line("Device detected: USB 0E8D:2000") == ""
+    assert classify_backend_line("[Errno 13] Permission denied") == ""
+    assert classify_backend_line("") == ""
+
+
+def test_retry_guidance_and_connect_hint():
+    """A stalled target raises the retry-guidance dialog once per attempt (not
+    once per repeated line), while Hint lines return the UI to guide step 1
+    without any dialog."""
+    from unittest.mock import patch
+    from PySide6.QtWidgets import QApplication
+    from src.flash_service import STEP_WAITING
+    from src.state import FlashState
+    from src.ui.main_window import MainWindow
+
+    _reset_app_settings()
+    app = QApplication.instance() or QApplication(sys.argv)
+    w = MainWindow()
+    w.show()
+    w.service.start_flash = lambda *a, **k: None
+    w.service.start_device_monitor = lambda: None
+    w.service.cancel_flash = lambda: None
+    w.service.stop_device_monitor = lambda: None
+
+    shown = []
+
+    class _FakeDialog:
+        def __init__(self, parent=None, detail=""):
+            shown.append(detail)
+
+        def exec(self):
+            return 1
+
+        def want_retry(self):
+            return False
+
+    w._on_package_selected("C:/fake/rom.zip", "Rockbox (Y1)", "Y1")
+    w.service.step_changed.emit(STEP_WAITING)
+    assert w.sm.state is FlashState.S2_WAIT_CONNECTION
+
+    with patch("src.ui.main_window.RetryGuidanceDialog", _FakeDialog):
+        for _ in range(18):
+            w._append_log("[Errno 5] Input/Output Error")
+        assert len(shown) == 1, f"one dialog per attempt, got {len(shown)}"
+        assert "Errno 5" in shown[0], shown[0]
+
+        # Hint lines are not errors: no dialog, and the connection guide is
+        # re-armed at step 1 ("power off the device, then connect USB").
+        w._append_log(
+            "Hint: Power off the phone before connecting. For brom mode, press "
+            "and hold vol up, vol dwn, or all hw buttons and connect usb."
+        )
+        assert len(shown) == 1, "hint lines must never raise a dialog"
+
+    assert w._flash_page._guide_step == 1, "hint must highlight guide step 1"
+    assert w.sm.state is FlashState.S2_WAIT_CONNECTION
+    w.close()
+    app.processEvents()
+
+
+def test_device_model_registry():
+    """The registry knows the wider lineup (so hand-imported firmware gets
+    correct guidance) while only catalogue-backed models are selectable."""
+    from src import device_models
+    from src.config import detect_model_and_type_from_name, device_label_for_model
+
+    ids = device_models.model_ids()
+    assert ids, "assets/device_models.xml must parse"
+    for expected in ("Y1", "Y2", "A5", "G5", "Q5", "Q3E", "Q8"):
+        assert expected in ids, ids
+
+    # Detection from the user-facing examples.
+    assert device_models.model_from_filename("timmkoo_a5_stock.zip")[0] == "A5"
+    assert device_models.model_from_filename("innioasis_g5_v1.zip")[0] == "G5"
+    assert detect_model_and_type_from_name("innioasis_g5_v1.zip")[0] == "G5"
+
+    # Legacy detection/formatting is untouched by the registry.
+    assert detect_model_and_type_from_name("rom_a5.zip") == ("A5", None)
+    assert detect_model_and_type_from_name("rom_y2.zip") == ("Y2", None)
+    assert detect_model_and_type_from_name("rom.zip") == ("Y1", "A")
+    assert device_label_for_model("Y1", "B") == "Y1 (Type B)"
+    assert device_label_for_model("A5") == "A5"
+    # Non-legacy models are named in full so prompts read correctly.
+    assert device_label_for_model("G5") == "Innioasis G5"
+    assert device_models.guidance_name("Q5") == "Timmkoo Q5"
+
+    # Flashability distinguishes real targets from guidance-only models.
+    assert device_models.is_flashable("Y1") is True
+    assert device_models.is_flashable("A5") is True
+    assert device_models.is_flashable("G5") is False
+
+    # Selection order follows the registry, and an unknown catalogue model is
+    # appended rather than hidden.
+    assert device_models.selectable_models(["A5", "Y1"]) == ["Y1", "A5"]
+    assert device_models.selectable_models(["ZZ9"]) == ["ZZ9"]
+    assert device_models.selectable_models([], fallback=("Y1", "Y2")) == ["Y1", "Y2"]
+
+
+def test_model_dropdown_manifest_filtered():
+    """The device drop-down offers only models the manifest lists a release
+    for, but a hand-imported model stays selectable so guidance names it."""
+    from PySide6.QtWidgets import QApplication
+    from src import catalog
+    from src.ui.select_page import SelectPackagePage
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    saved = list(catalog.LIVE_CATALOG)
+    try:
+        y2_only = [p for p in catalog.CATALOG if p.model == "Y2"][:1]
+        assert y2_only, "static catalogue must carry a Y2 package"
+        catalog.set_live_catalog(y2_only)
+        assert catalog.available_models() == ["Y2"]
+
+        page = SelectPackagePage()
+        items = [page._model_combo.itemText(i) for i in range(page._model_combo.count())]
+        assert items == ["Y2"], f"only manifest models may be offered, got {items}"
+
+        # Firmware dropped in by hand for a model with no release yet must
+        # still be selectable so the prompts name the right player.
+        page._select_model_for_manual("G5")
+        assert page.current_model() == "G5"
+        page.refresh_models()
+        items = [page._model_combo.itemText(i) for i in range(page._model_combo.count())]
+        assert "G5" in items, items
+        assert page.current_model() == "G5"
+        page.deleteLater()
+    finally:
+        catalog.set_live_catalog(saved)
+def test_release_notes_translation():
+    """Verify release notes translation URL generation, in-app translation,
+    and UI toggle under the release notes."""
+    from unittest.mock import patch
+    from PySide6.QtWidgets import QApplication, QListWidgetItem
+    from PySide6.QtCore import Qt
+    from src import translate
+    from src.i18n import translator
+    from src.ui.select_page import SelectPackagePage
+
+    # 1. URL construction tests
+    rel_sample = {
+        "source_repo": "y1-community/y1-stock-rom",
+        "tag_name": "3.2.1",
+        "name": "3.2.1",
+        "body": "General performance and stability improvements",
+    }
+    fi_url = translate.get_google_translate_release_url(rel_sample, "fi")
+    assert fi_url == "https://github-com.translate.goog/y1-community/y1-stock-rom/releases/3.2.1?_x_tr_sl=auto&_x_tr_tl=fi&_x_tr_hl=fi&_x_tr_pto=wapp"
+
+    en_url = translate.get_google_translate_release_url(rel_sample, "en")
+    assert en_url == "https://github-com.translate.goog/y1-community/y1-stock-rom/releases/3.2.1?_x_tr_sl=auto&_x_tr_tl=en&_x_tr_hl=en&_x_tr_pto=wapp"
+
+    es_url = translate.get_google_translate_release_url(rel_sample, "es")
+    assert "tl=es" in es_url and "hl=es" in es_url and "github-com.translate.goog" in es_url
+
+    # 2. In-memory translation helper
+    cached_val = translate.fetch_google_translation("General performance and stability improvements", "es")
+    assert isinstance(cached_val, str)
+    assert len(cached_val) > 0
+    # Cache hit returns immediately
+    cached_again = translate.fetch_google_translation("General performance and stability improvements", "es")
+    assert cached_again == cached_val
+
+    # 3. UI behavior
+    app = QApplication.instance() or QApplication(sys.argv)
+    orig_lang = translator().lang
+    opened_urls = []
+
+    try:
+        page = SelectPackagePage()
+
+        # Verify 'Drop themes' text is not present anywhere in the page
+        all_texts = []
+        for child in page.findChildren(object):
+            if hasattr(child, "text") and callable(child.text):
+                all_texts.append(child.text())
+        joined = " ".join(all_texts)
+        assert "Drop themes" not in joined
+
+        # When language is English and release selected, translate label is hidden
+        translator().set_language("en")
+        item = QListWidgetItem("3.2.1")
+        item.setData(Qt.UserRole, rel_sample)
+        page._on_release_selected(item, None)
+        assert page._translate_label.isHidden()
+
+        # When language is Spanish, translate label is visible and contains URL
+        translator().set_language("es")
+        page._update_translate_link()
+        assert not page._translate_label.isHidden()
+        assert "https://github-com.translate.goog" in page._translate_label.text()
+        assert "3.2.1" in page._translate_label.text()
+
+        # Clicking translate link opens browser and loads translated notes
+        with patch("src.ui.select_page.open_browser", side_effect=lambda u: opened_urls.append(u)):
+            page._on_translate_link_clicked(es_url)
+            assert len(opened_urls) == 1
+            assert opened_urls[0] == es_url
+            app.processEvents()
+
+            # Now test in-app translation applied
+            page._on_translation_ready(rel_sample, "es", "3.2.1", "Mejoras generales de rendimiento")
+            assert "Mejoras generales" in page._notes.toPlainText()
+            assert "Google" in page._notes.toPlainText()
+
+            # Clicking Show original reverts to English notes
+            page._on_translate_link_clicked("action:show_original")
+            assert "General performance" in page._notes.toPlainText()
+
+        page.deleteLater()
+    finally:
+        translator().set_language(orig_lang)
+    app.processEvents()
+
+
 def main():
     print("== Neo updater smoke test ==")
     check("catalog", test_catalog)
@@ -2955,10 +3644,14 @@ def main():
     check("usblib reads bounded (no infinite DA hang)", test_usblib_reads_are_bounded)
     check("mtk stall watcher", test_mtk_stall_watcher)
     check("mtkclient DA progress surface", test_mtkclient_da_progress_surface)
+    check("mtk DA failure auto recovers", test_mtk_da_failure_auto_recovers)
+    check("mtk retry gives up when device stays away", test_mtk_retry_gives_up_when_device_stays_away)
+    check("device monitor lost hold", test_device_monitor_lost_hold)
     check("linux sp flash validation", test_linux_sp_flash_validation)
     check("linux sp flash distro detection", test_linux_sp_flash_distro_detection)
     check("linux sp flash rules and readiness", test_linux_sp_flash_rules_and_readiness)
     check("linux setup dialog", test_linux_setup_dialog)
+    check("linux sp flash askpass and step1 deferral", test_linux_sp_flash_askpass_and_step1_deferral)
     check("package prep gates flash start", test_package_prep_gates_flash_start)
     check("auto falls back when SP missing", test_auto_falls_back_when_sp_missing)
     check("download worker resume and cancel", test_download_worker)
@@ -2969,6 +3662,7 @@ def main():
     check("device tracking", test_device_tracking)
     check("check device updates", test_check_device_updates)
     check("settings page and dialogs", test_settings_page_and_dialogs)
+    check("firmware release reminder install flow", test_firmware_release_reminder_install_flow)
     check("latest package tracking and history ini", test_latest_package_tracking_and_history_ini)
     check("prune extracted cache and reusing download", test_prune_extracted_cache_and_reusing_download)
     check("sp flash system checker and diagnostics", test_sp_flash_system_checker_and_diagnostics)
@@ -2980,6 +3674,11 @@ def main():
     check("macos universal libusb fat binary", test_macos_universal_libusb)
     check("macos universal app bundle", test_macos_universal_app_bundle)
     check("tools manager and self healing", test_tools_manager_and_self_healing)
+    check("backend line classification", test_backend_line_classification)
+    check("retry guidance and connect hint", test_retry_guidance_and_connect_hint)
+    check("device model registry", test_device_model_registry)
+    check("model dropdown manifest filter", test_model_dropdown_manifest_filtered)
+    check("release notes translation", test_release_notes_translation)
     if failures:
         print(f"\n{len(failures)} FAILURES:")
         for name, err in failures:

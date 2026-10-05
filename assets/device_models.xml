@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Device model registry for Updater CE.
+
+  TWO SEPARATE QUESTIONS
+  Two things need to agree on what a "model" is:
+
+  1. What the user may pick. That list is driven by the live catalogue
+     (slidia_manifest.xml), so a model only appears in the Select Software
+     drop-down when a release actually exists for it.
+  2. What the app can recognise. Users also drop firmware in by hand, and the
+     guidance text ("Please connect your Innioasis G5") has to name the right
+     device even when that model has no catalogue entry yet.
+
+  This file answers (2): the full known lineup, with the filename tokens used
+  to detect a model from an imported package name.
+
+  FIELDS
+  id        Stable short id used in code and in settings keys.
+  brand     Innioasis | Timmkoo.
+  product   Marketing name shown to users.
+  flashable "true" when Updater CE can write firmware to it over MediaTek
+            BROM/preloader (needs a scatter file and a DA). "false" means the
+            model is recognised for guidance only: those players are Android
+            devices that are not flashed through this tool.
+  platform  SoC where documented; "unknown" when not confirmed.
+  tokens    Filename substrings (case insensitive) identifying this model
+            inside an imported .zip/.rar name, e.g. "rom_a5.zip" or
+            "timmkoo_q5_v1.zip".
+  variants  Hardware revisions sharing one model id (Y1 Type A / Type B).
+  aliases   Other names the same hardware has shipped under.
+
+  Ordering note: tokens are matched longest first, so a generic token can
+  never steal a match from a specific one.
+-->
+<device_models version="1" updated="2026-09-28">
+
+  <!-- INNIOASIS -->
+  <model id="Y1" brand="Innioasis" product="Innioasis Y1" flashable="true">
+    <platform>MT6572</platform>
+    <tokens>
+      <token>rom_y1</token>
+      <token>rom-y1</token>
+      <token>y1-stock</token>
+      <token>y1_stock</token>
+      <token>y1-community</token>
+      <token>_y1</token>
+      <token>-y1</token>
+    </tokens>
+    <aliases>
+      <alias>Y1</alias>
+    </aliases>
+    <variants>
+      <variant id="A" label="Type A" tokens="rom_type_a,rom-type-a,type_a"/>
+      <variant id="B" label="Type B" tokens="rom_type_b,rom-type-b,type_b"/>
+    </variants>
+    <notes>
+      The original Innioasis player and the reference device for this tool.
+      Two hardware revisions (Type A / Type B) exist and the scatter file has
+      to match, so the variant is tracked separately from the model. A bare
+      "rom.zip" with no other hint is treated as a Y1.
+    </notes>
+  </model>
+
+  <model id="Y2" brand="Innioasis" product="Innioasis Y2" flashable="true">
+    <platform>MT6582</platform>
+    <tokens>
+      <token>rom_y2</token>
+      <token>rom-y2</token>
+      <token>y2-stock</token>
+      <token>y2_stock</token>
+      <token>_y2</token>
+      <token>-y2</token>
+    </tokens>
+    <variants/>
+    <notes>Second generation Innioasis player sharing the Y series firmware flow.</notes>
+  </model>
+
+  <model id="A5" brand="Timmkoo" product="Timmkoo A5" flashable="true">
+    <platform>unknown</platform>
+    <tokens>
+      <token>rom_a5</token>
+      <token>rom-a5</token>
+      <token>a5-stock</token>
+      <token>_a5</token>
+      <token>-a5</token>
+    </tokens>
+    <aliases>
+      <alias>Innioasis A5</alias>
+    </aliases>
+    <notes>
+      Flashed through the same MediaTek flow as the Y series (see the
+      rom_a5.zip handling in src/catalog.py). Marketing has used both the
+      Timmkoo and Innioasis names for this hardware, so both are accepted.
+    </notes>
+  </model>
+
+  <model id="G1" brand="Innioasis" product="Innioasis G1" flashable="false">
+    <platform>unknown</platform>
+    <tokens>
+      <token>rom_g1</token>
+      <token>_g1</token>
+      <token>-g1</token>
+    </tokens>
+    <notes>Android based Innioasis player. Recognised for guidance only.</notes>
+  </model>
+
+  <model id="G3" brand="Innioasis" product="Innioasis G3" flashable="false">
+    <platform>unknown</platform>
+    <tokens>
+      <token>rom_g3</token>
+      <token>_g3</token>
+      <token>-g3</token>
+    </tokens>
+    <notes>Android based Innioasis player. Recognised for guidance only.</notes>
+  </model>
+
+  <model id="G5" brand="Innioasis" product="Innioasis G5" flashable="false">
+    <platform>unknown</platform>
+    <tokens>
+      <token>rom_g5</token>
+      <token>_g5</token>
+      <token>-g5</token>
+    </tokens>
+    <notes>
+      Flagship Android based Innioasis player. Recognised for guidance only:
+      an imported *_g5.zip must still be named correctly in the connection
+      prompts even though it is not flashed through this tool.
+    </notes>
+  </model>
+
+  <!-- TIMMKOO -->
+  <model id="Q3E" brand="Timmkoo" product="Timmkoo Q3E" flashable="false">
+    <platform>unknown</platform>
+    <tokens>
+      <token>rom_q3e</token>
+      <token>_q3e</token>
+      <token>-q3e</token>
+      <token>q3e</token>
+    </tokens>
+    <notes>Android 7.1 Timmkoo player. Recognised for guidance only.</notes>
+  </model>
+
+  <model id="Q5" brand="Timmkoo" product="Timmkoo Q5" flashable="false">
+    <platform>unknown</platform>
+    <tokens>
+      <token>rom_q5</token>
+      <token>_q5</token>
+      <token>-q5</token>
+      <token>q5</token>
+    </tokens>
+    <notes>Android 7.1 Timmkoo player with Wi-Fi and Bluetooth. Guidance only.</notes>
+  </model>
+
+  <model id="Q8" brand="Timmkoo" product="Timmkoo Q8" flashable="false">
+    <platform>unknown</platform>
+    <tokens>
+      <token>rom_q8</token>
+      <token>_q8</token>
+      <token>-q8</token>
+      <token>q8</token>
+    </tokens>
+    <notes>Android based Timmkoo player. Recognised for guidance only.</notes>
+  </model>
+
+</device_models>

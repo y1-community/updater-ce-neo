@@ -106,6 +106,26 @@ def packages_for_model(model: str):
     return [p for p in _catalog_packages() if p.model == model]
 
 
+def available_models():
+    """Model ids the user may pick in the device drop-down.
+
+    Driven by ``slidia_manifest.xml`` (``LIVE_CATALOG``): a model is offered
+    only when the manifest actually lists a release for it. When no manifest
+    has loaded — first run offline, or a failed fetch — the static table is
+    used instead so the app never presents an empty model list.
+
+    Note this is deliberately *not* :func:`_catalog_packages`: that helper
+    merges the static fallback in, which is right for looking up a package but
+    wrong for deciding what to offer.
+    """
+    packages = LIVE_CATALOG or list(CATALOG)
+    seen = []
+    for pkg in packages:
+        if pkg.model and pkg.model not in seen:
+            seen.append(pkg.model)
+    return seen
+
+
 def software_names_for_model(model: str):
     seen = []
     for p in packages_for_model(model):
@@ -802,6 +822,7 @@ class ReleasesClient:
                 "rom_variants": rom_variants,
                 "prerelease": is_prerelease,
                 "source_repo": repo,
+                "html_url": release.get("html_url", ""),
             })
         return releases
 

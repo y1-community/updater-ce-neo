@@ -1,7 +1,9 @@
 """Thin wrapper over the bundled mtkclient (port of InniUpdaterChin's ``mtk_api``).
 
-Only ``init`` and ``connect`` are used by the flash service; ``main`` is kept
-as a debug/demo helper mirroring the original.
+``handshake``/``attach`` split the session bring-up so the flash service can
+inspect the mode the target answered in before the download agent is
+uploaded; ``connect`` keeps the original one-shot behaviour for the debug
+demo and external callers.
 
 IMPORTANT: All mtkclient imports are deferred to function call time. This
 prevents the ``sys.stdout.detach()`` crash in frozen PyInstaller builds
@@ -69,11 +71,62 @@ def init(loader=None, preloader=None, serialport=None, loglevel=logging.INFO):
     return mtk
 
 
-def connect(mtk, directory=".", on_connected=None):
+def ensure_config_defaults(mtk):
+    """Fill in the config fields mtkclient's own CLI would have set.
+
+    ``gpt_settings`` is dereferenced while parsing partition tables; mtkclient
+    only creates it in its argparse path, so an embedded session must create
+    it or partition reads fail with ``NoneType`` errors.
+    """
+    if getattr(mtk.config, "gpt_settings", None) is None:
+        from mtkclient.Library.Partitions.gpt import GptSettings  # type: ignore
+
+        mtk.config.gpt_settings = GptSettings(0, 0, 0)
+    return mtk
+
+
+def handshake(mtk, directory="."):
+    """Open the port and complete the preloader/BROM handshake.
+
+    Split out of :func:`connect` because the mode the target answers in
+    decides how the session is brought up (a preloader-mode target has to be
+    restarted into BROM before the DA can run, see :func:`arm_brom_boot`), and
+    the handshake is single-shot: it must not be repeated once DA
+    configuration has started.
+
+    Returns ``(mtk, da_handler)`` with ``mtk`` set to ``None`` on failure.
+    """
     _ensure_imports()
+    ensure_config_defaults(mtk)
 
     da_handler = _DaHandler(mtk, logging.INFO)
     mtk = da_handler.connect(mtk, directory)
+    if mtk is None:
+        return (None, None)
+    if getattr(mtk.config, "target_config", None) is None:
+        return (None, None)
+    return (mtk, da_handler)
+
+
+def attach(mtk, directory="."):
+    """Upload the DA on a session whose handshake is already done.
+
+    ``DaHandler.connect()`` always calls ``preloader.init()`` again, and the
+    handshake is one-shot: a second one fails. Only the steps that come after
+    the handshake are performed here, which is what lets the worker handshake
+    once, decide on the target's mode, and then upload the DA.
+    """
+    _ensure_imports()
+    ensure_config_defaults(mtk)
+
+    da_handler = _DaHandler(mtk, logging.INFO)
+    mtk.config.hwparam_path = str(directory)
+    mtk = da_handler.configure_da(mtk)
+    return (mtk, da_handler)
+
+
+def connect(mtk, directory=".", on_connected=None):
+    mtk, da_handler = handshake(mtk, directory)
     if mtk is None:
         return (None, None)
     if on_connected:
@@ -81,8 +134,45 @@ def connect(mtk, directory=".", on_connected=None):
             on_connected()
         except Exception as e:
             logging.getLogger(__name__).debug("on_connected callback failed: %s", e)
-    mtk = da_handler.configure_da(mtk)
+    mtk, da_handler = attach(mtk, directory)
     return (mtk, da_handler)
+
+
+def is_brom(mtk) -> bool:
+    """True when the target answered in BROM mode (USB 0E8D:0003)."""
+    return bool(getattr(getattr(mtk, "config", None), "is_brom", False))
+
+
+def mode_label(mtk) -> str:
+    return "BROM" if is_brom(mtk) else "preloader"
+
+
+def close_port(mtk):
+    """Release the USB interface so the target can be polled/re-opened."""
+    try:
+        mtk.port.close(reset=True)
+    except BaseException:
+        try:
+            mtk.port.close()
+        except BaseException:
+            pass
+
+
+def arm_brom_boot(mtk):
+    """Make the target's *next* boot come up in BROM download mode.
+
+    Sets the USB-DL flag (download enabled, ``USBDL_BROM`` cleared so the
+    boot ROM serves the port, max timeout, MT6582 magic) and marks BOOT_MISC0
+    watchdog-resettable. Pair with :func:`trigger_reset`.
+    """
+    mtk.preloader.reset_to_brom(en=True)
+    return True
+
+
+def trigger_reset(mtk):
+    """Reset the target by enabling its watchdog (mtkclient's meta recipe)."""
+    wdg_addr, _value = mtk.config.get_watchdog_addr()
+    return bool(mtk.preloader.write32(wdg_addr + 0x14, 0x00001209))
 
 
 def main():

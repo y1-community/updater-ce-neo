@@ -9,6 +9,8 @@ from pathlib import Path
 import requests
 from PySide6.QtCore import QThread, Signal
 
+from .i18n import tr
+
 logger = logging.getLogger(__name__)
 
 CHUNK_SIZE = 128 * 1024  # 128 KB chunks
@@ -67,7 +69,7 @@ class DownloadWorker(QThread):
                     if expected_size > 0 and self.destination.stat().st_size == expected_size:
                         logger.info("Destination file %s already complete (%d bytes)", self.destination, expected_size)
                         self.progress.emit(100)
-                        self.status.emit("Download complete")
+                        self.status.emit(tr("dl_complete"))
                         self.finished.emit(True, str(self.destination))
                         return
                 except Exception:
@@ -103,9 +105,9 @@ class DownloadWorker(QThread):
                     if downloaded > 0:
                         headers["Range"] = f"bytes={downloaded}-"
                         logger.info("Resuming download from byte %d (attempt %d/%d)", downloaded, attempt, MAX_RETRIES)
-                        self.status.emit(f"Resuming download from {downloaded / (1024 * 1024):.1f} MB...")
+                        self.status.emit(tr("dl_resuming_fmt").format(mb=f"{downloaded / (1024 * 1024):.1f}"))
                     else:
-                        self.status.emit("Starting download…")
+                        self.status.emit(tr("dl_starting"))
 
                     response = session.get(
                         self.url,
@@ -179,9 +181,13 @@ class DownloadWorker(QThread):
                                 dl_mb = downloaded / (1024 * 1024)
                                 if total_size > 0:
                                     tot_mb = total_size / (1024 * 1024)
-                                    status_str = f"{dl_mb:.1f} MB / {tot_mb:.1f} MB ({percent}%) \u2014 {speed_mb:.1f} MB/s"
+                                    status_str = tr("dl_progress_fmt").format(
+                                        dl=f"{dl_mb:.1f}", tot=f"{tot_mb:.1f}", pct=percent, speed=f"{speed_mb:.1f}"
+                                    )
                                 else:
-                                    status_str = f"{dl_mb:.1f} MB \u2014 {speed_mb:.1f} MB/s"
+                                    status_str = tr("dl_progress_unknown_fmt").format(
+                                        dl=f"{dl_mb:.1f}", speed=f"{speed_mb:.1f}"
+                                    )
                                 self.status.emit(status_str)
 
                     if total_size > 0 and downloaded < total_size:
@@ -199,7 +205,7 @@ class DownloadWorker(QThread):
 
                     logger.warning("Download error on attempt %d/%d: %s", attempt, MAX_RETRIES, exc)
                     if attempt < MAX_RETRIES:
-                        self.status.emit(f"Connection interrupted. Retrying ({attempt}/{MAX_RETRIES})...")
+                        self.status.emit(tr("dl_retry_fmt").format(attempt=attempt, max=MAX_RETRIES))
                         time.sleep(RETRY_BACKOFF)
                         if part_file.is_file():
                             downloaded = part_file.stat().st_size
@@ -212,7 +218,7 @@ class DownloadWorker(QThread):
             part_file.replace(self.destination)
 
             self.progress.emit(100)
-            self.status.emit("Download complete")
+            self.status.emit(tr("dl_complete"))
             self.finished.emit(True, str(self.destination))
 
         except Exception as e:

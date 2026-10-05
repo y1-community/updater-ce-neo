@@ -65,92 +65,182 @@ def setup_native_app_style(app: QApplication) -> str:
 class _Tokens:
     """Flat namespace of colour strings for a single theme (light or dark).
 
-    Strictly adheres to WCAG AA/AAA contrast ratios in both light and dark modes,
-    including pure black / OLED high-contrast modes.
+    Extracts values directly from the host system's QPalette when available
+    (matching KDE Plasma, GNOME, Windows, macOS native color schemes),
+    strictly adhering to WCAG contrast standards.
     """
 
-    def __init__(self, dark: bool, pure_black: bool = False):
+    def __init__(self, dark: bool, pure_black: bool = False, palette: QPalette | None = None):
         d = dark
         b = dark and pure_black
 
-        # Surfaces
-        if b:
-            self.bg        = "#000000"
-            self.bg_card   = "#0b0f19"
-            self.bg_elev   = "#111827"
-            self.bg_input  = "#000000"
-            self.bg_hover  = "#1e293b"
-            self.bg_nav    = "#000000"
-            self.bg_status = "#0b0f19"
-            self.bg_tooltip= "#111827"
+        if palette is not None:
+            w = palette.color(QPalette.ColorRole.Window)
+            fg = palette.color(QPalette.ColorRole.WindowText)
+            base = palette.color(QPalette.ColorRole.Base)
+            alt = palette.color(QPalette.ColorRole.AlternateBase)
+            btn = palette.color(QPalette.ColorRole.Button)
+            hl = palette.color(QPalette.ColorRole.Highlight)
+            hlt = palette.color(QPalette.ColorRole.HighlightedText)
+            mid = palette.color(QPalette.ColorRole.Mid)
+            dark_c = palette.color(QPalette.ColorRole.Dark)
+            midlight = palette.color(QPalette.ColorRole.Midlight)
+            placeholder = palette.color(QPalette.ColorRole.PlaceholderText)
+            tooltip_base = palette.color(QPalette.ColorRole.ToolTipBase)
+            disabled_w = palette.color(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Window)
+            disabled_t = palette.color(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text)
+
+            if b:
+                self.bg        = "#000000"
+                self.bg_card   = "#0b0f19"
+                self.bg_elev   = "#111827"
+                self.bg_input  = "#000000"
+                self.bg_hover  = "#1e293b"
+                self.bg_nav    = "#000000"
+                self.bg_status = "#0b0f19"
+                self.bg_tooltip= "#111827"
+            else:
+                self.bg        = w.name()
+                self.bg_card   = btn.name() if d else alt.name()
+                self.bg_elev   = alt.name() if alt.isValid() else (btn.name() if d else "#f1f5f9")
+                self.bg_input  = base.name()
+                self.bg_hover  = midlight.name() if (midlight.isValid() and midlight != w) else (btn.name() if d else alt.name())
+                self.bg_nav    = base.name() if (IS_LINUX and not b) else (alt.name() if not b else "#000000")
+                self.bg_status = alt.name()
+                self.bg_tooltip= tooltip_base.name() if tooltip_base.isValid() else btn.name()
+
+            self.fg         = fg.name()
+            self.fg_dim     = placeholder.name() if placeholder.isValid() else ("#cbd5e1" if d else "#334155")
+            self.fg_muted   = placeholder.name() if placeholder.isValid() else ("#94a3b8" if d else "#64748b")
+            self.fg_primary = hl.name()
+
+            self.border        = mid.name() if mid.isValid() else ("#373b40" if d else "#cbd5e1")
+            self.border_strong = dark_c.name() if dark_c.isValid() else ("#525860" if d else "#94a3b8")
+            self.border_focus  = hl.name()
+
+            self.accent       = hl.name()
+            self.accent_hover = hl.lighter(115).name() if d else hl.darker(115).name()
+            self.accent_bg    = alt.name()
+            self.accent_text  = hlt.name()
+
+            self.nav_active      = hl.name()
+            self.nav_active_text = hlt.name()
+
+            self.status_idle       = (self.fg_dim, self.bg_elev)
+            self.status_idle_fg    = self.status_idle
+            self.status_selected   = (self.accent_text, self.accent)
+            self.status_sel_fg     = self.status_selected
+            self.status_connected  = ("#6ee7b7", "#064e3b") if d else ("#065f46", "#d1fae5")
+            self.status_conn_fg    = self.status_connected
+            self.status_disconn    = ("#fca5a5", "#7f1d1d") if d else ("#991b1b", "#fee2e2")
+            self.status_disconn_fg = self.status_disconn
+            self.status_flashing   = ("#fde68a", "#78350f") if d else ("#92400e", "#fef3c7")
+            self.status_flash_fg   = self.status_flashing
+            self.status_complete   = ("#6ee7b7", "#064e3b") if d else ("#065f46", "#d1fae5")
+            self.status_comp_fg    = self.status_complete
+            self.status_failed     = ("#fca5a5", "#7f1d1d") if d else ("#991b1b", "#fee2e2")
+            self.status_fail_fg    = self.status_failed
+            self.status_retry      = ("#fde68a", "#78350f") if d else ("#92400e", "#fef3c7")
+            self.status_retry_fg   = self.status_retry
+
+            self.info_bg    = self.bg_elev
+            self.info_fg    = self.accent
+            self.ok_bg      = "#064e3b" if d else "#d1fae5"
+            self.ok_fg      = "#6ee7b7" if d else "#065f46"
+            self.warn_bg    = "#451a03" if d else "#fef3c7"
+            self.warn_fg    = "#fde68a" if d else "#92400e"
+            self.danger_bg  = "#7f1d1d" if d else "#fee2e2"
+            self.danger_fg  = "#fca5a5" if d else "#991b1b"
+
+            self.progress_track = self.bg_elev
+            self.progress_fill  = self.accent
+            self.progress_ok    = "#10b981" if d else "#059669"
+            self.progress_err   = "#ef4444" if d else "#dc2626"
+
+            self.log_bg = "#000000" if b else self.bg_input
+            self.log_fg = "#a3e635"
+            self.disabled = disabled_w.name() if disabled_w.isValid() else ("#334155" if d else "#e2e8f0")
+            self.disabled_fg = disabled_t.name() if disabled_t.isValid() else ("#94a3b8" if d else "#64748b")
         else:
-            # Neutral desktop dark slate/gray (matching KDE Breeze Dark / Fusion / firmware_downloader.py)
-            self.bg        = "#23272e" if d else "#f8fafc"
-            self.bg_card   = "#2b303c" if d else "#ffffff"
-            self.bg_elev   = "#282c34" if d else "#f1f5f9"
-            self.bg_input  = "#1e2227" if d else "#ffffff"
-            self.bg_hover  = "#353b48" if d else "#f1f5f9"
-            self.bg_nav    = "#1e2227" if d else "#ebeff3"
-            self.bg_status = "#2b303c" if d else "#ffffff"
-            self.bg_tooltip= "#2b303c" if d else "#ffffff"
+            # Surfaces
+            if b:
+                self.bg        = "#000000"
+                self.bg_card   = "#0b0f19"
+                self.bg_elev   = "#111827"
+                self.bg_input  = "#000000"
+                self.bg_hover  = "#1e293b"
+                self.bg_nav    = "#000000"
+                self.bg_status = "#0b0f19"
+                self.bg_tooltip= "#111827"
+            else:
+                self.bg        = "#23272e" if d else "#f8fafc"
+                self.bg_card   = "#2b303c" if d else "#ffffff"
+                self.bg_elev   = "#282c34" if d else "#f1f5f9"
+                self.bg_input  = "#1e2227" if d else "#ffffff"
+                self.bg_hover  = "#353b48" if d else "#f1f5f9"
+                self.bg_nav    = "#1e2227" if d else "#ebeff3"
+                self.bg_status = "#2b303c" if d else "#ffffff"
+                self.bg_tooltip= "#2b303c" if d else "#ffffff"
 
-        # Text — WCAG AA (>= 4.5:1) & AAA (>= 7:1) compliant
-        self.fg         = "#ffffff" if b else ("#f0f3f6" if d else "#0f172a")  # > 13:1 AAA
-        self.fg_dim     = "#e2e8f0" if b else ("#cbd5e1" if d else "#334155")  # > 8.8:1 AAA
-        self.fg_muted   = "#94a3b8" if d else "#64748b"  # > 4.8:1 AA
-        self.fg_primary = "#58a6ff" if d else "#2563eb"
+            # Text — WCAG AA (>= 4.5:1) & AAA (>= 7:1) compliant
+            self.fg         = "#ffffff" if b else ("#f0f3f6" if d else "#0f172a")
+            self.fg_dim     = "#e2e8f0" if b else ("#cbd5e1" if d else "#334155")
+            self.fg_muted   = "#94a3b8" if d else "#64748b"
+            self.fg_primary = "#58a6ff" if d else "#2563eb"
 
-        # Borders
-        self.border        = "#374151" if b else ("#3e4451" if d else "#cbd5e1")
-        self.border_strong = "#4b5563" if b else ("#4f5666" if d else "#94a3b8")
-        self.border_focus  = "#58a6ff" if d else "#2563eb"
+            # Borders
+            self.border        = "#374151" if b else ("#3e4451" if d else "#cbd5e1")
+            self.border_strong = "#4b5563" if b else ("#4f5666" if d else "#94a3b8")
+            self.border_focus  = "#58a6ff" if d else "#2563eb"
 
-        # Accent
-        self.accent      = "#388bfd" if d else "#2563eb"
-        self.accent_hover= "#1f6feb" if d else "#1d4ed8"
-        self.accent_bg   = "#1a3352" if d else "#eff6ff"
-        self.accent_text = "#93c5fd" if d else "#1e40af"
+            # Accent
+            self.accent       = "#388bfd" if d else "#2563eb"
+            self.accent_hover = "#1f6feb" if d else "#1d4ed8"
+            self.accent_bg    = "#1a3352" if d else "#eff6ff"
+            self.accent_text  = "#93c5fd" if d else "#1e40af"
 
-        # Status Badges (foreground, background) — high contrast in both modes
-        self.status_idle       = ("#e2e8f0", "#334155") if d else ("#1e293b", "#e2e8f0")
-        self.status_idle_fg    = self.status_idle
-        self.status_selected   = ("#bfdbfe", "#1e3a5f") if d else ("#1e40af", "#dbeafe")
-        self.status_sel_fg     = self.status_selected
-        self.status_connected  = ("#6ee7b7", "#064e3b") if d else ("#065f46", "#d1fae5")
-        self.status_conn_fg    = self.status_connected
-        self.status_disconn    = ("#fca5a5", "#7f1d1d") if d else ("#991b1b", "#fee2e2")
-        self.status_disconn_fg = self.status_disconn
-        self.status_flashing   = ("#fde68a", "#78350f") if d else ("#92400e", "#fef3c7")
-        self.status_flash_fg   = self.status_flashing
-        self.status_complete   = ("#6ee7b7", "#064e3b") if d else ("#065f46", "#d1fae5")
-        self.status_comp_fg    = self.status_complete
-        self.status_failed     = ("#fca5a5", "#7f1d1d") if d else ("#991b1b", "#fee2e2")
-        self.status_fail_fg    = self.status_failed
-        self.status_retry      = ("#fde68a", "#78350f") if d else ("#92400e", "#fef3c7")
-        self.status_retry_fg   = self.status_retry
+            self.nav_active      = "#2563eb"
+            self.nav_active_text = "#ffffff"
 
-        # Banners (info / ok / warn / danger)
-        self.info_bg    = "#1e3a5f" if d else "#eff6ff"
-        self.info_fg    = "#93c5fd" if d else "#1e40af"
-        self.ok_bg      = "#064e3b" if d else "#d1fae5"
-        self.ok_fg      = "#6ee7b7" if d else "#065f46"
-        self.warn_bg    = "#451a03" if d else "#fef3c7"
-        self.warn_fg    = "#fde68a" if d else "#92400e"
-        self.danger_bg  = "#7f1d1d" if d else "#fee2e2"
-        self.danger_fg  = "#fca5a5" if d else "#991b1b"
+            # Status Badges
+            self.status_idle       = ("#e2e8f0", "#334155") if d else ("#1e293b", "#e2e8f0")
+            self.status_idle_fg    = self.status_idle
+            self.status_selected   = ("#bfdbfe", "#1e3a5f") if d else ("#1e40af", "#dbeafe")
+            self.status_sel_fg     = self.status_selected
+            self.status_connected  = ("#6ee7b7", "#064e3b") if d else ("#065f46", "#d1fae5")
+            self.status_conn_fg    = self.status_connected
+            self.status_disconn    = ("#fca5a5", "#7f1d1d") if d else ("#991b1b", "#fee2e2")
+            self.status_disconn_fg = self.status_disconn
+            self.status_flashing   = ("#fde68a", "#78350f") if d else ("#92400e", "#fef3c7")
+            self.status_flash_fg   = self.status_flashing
+            self.status_complete   = ("#6ee7b7", "#064e3b") if d else ("#065f46", "#d1fae5")
+            self.status_comp_fg    = self.status_complete
+            self.status_failed     = ("#fca5a5", "#7f1d1d") if d else ("#991b1b", "#fee2e2")
+            self.status_fail_fg    = self.status_failed
+            self.status_retry      = ("#fde68a", "#78350f") if d else ("#92400e", "#fef3c7")
+            self.status_retry_fg   = self.status_retry
 
-        # Progress
-        self.progress_track = "#334155" if d else "#e2e8f0"
-        self.progress_fill  = "#6366f1" if d else "#2563eb"
-        self.progress_ok    = "#10b981" if d else "#059669"
-        self.progress_err   = "#ef4444" if d else "#dc2626"
+            # Banners
+            self.info_bg    = "#1e3a5f" if d else "#eff6ff"
+            self.info_fg    = "#93c5fd" if d else "#1e40af"
+            self.ok_bg      = "#064e3b" if d else "#d1fae5"
+            self.ok_fg      = "#6ee7b7" if d else "#065f46"
+            self.warn_bg    = "#451a03" if d else "#fef3c7"
+            self.warn_fg    = "#fde68a" if d else "#92400e"
+            self.danger_bg  = "#7f1d1d" if d else "#fee2e2"
+            self.danger_fg  = "#fca5a5" if d else "#991b1b"
 
-        # Misc
-        self.log_bg = "#000000" if b else "#030712"
-        self.log_fg = "#a3e635"
-        self.nav_active = "#2563eb"
-        self.disabled = "#334155" if d else "#e2e8f0"
-        self.disabled_fg = "#94a3b8" if d else "#64748b"  # High contrast in both modes (>= 4.5:1 AA)
+            # Progress
+            self.progress_track = "#334155" if d else "#e2e8f0"
+            self.progress_fill  = "#6366f1" if d else "#2563eb"
+            self.progress_ok    = "#10b981" if d else "#059669"
+            self.progress_err   = "#ef4444" if d else "#dc2626"
+
+            # Misc
+            self.log_bg = "#000000" if b else "#030712"
+            self.log_fg = "#a3e635"
+            self.disabled = "#334155" if d else "#e2e8f0"
+            self.disabled_fg = "#94a3b8" if d else "#64748b"
 
 
 class _ThemeState:
@@ -163,19 +253,21 @@ class _ThemeState:
 
     def detect(self) -> bool:
         try:
-            c = QApplication.palette().color(QPalette.ColorRole.Window)
+            pal = QApplication.palette()
+            c = pal.color(QPalette.ColorRole.Window)
             self._dark = c.lightness() < 128
             self._pure_black = c.lightness() < 24 or c.name().lower() == "#000000"
+            self.tokens = _Tokens(self._dark, pure_black=self._pure_black, palette=pal)
         except Exception:
             self._dark = False
             self._pure_black = False
-        self.tokens = _Tokens(self._dark, pure_black=self._pure_black)
+            self.tokens = _Tokens(self._dark, pure_black=self._pure_black)
         return self._dark
 
-    def set_dark(self, value: bool, pure_black: bool = False) -> None:
+    def set_dark(self, value: bool, pure_black: bool = False, palette: QPalette | None = None) -> None:
         self._dark = value
         self._pure_black = pure_black
-        self.tokens = _Tokens(value, pure_black=pure_black)
+        self.tokens = _Tokens(value, pure_black=pure_black, palette=palette)
 
     @property
     def is_dark(self) -> bool:
@@ -269,11 +361,11 @@ def _build_qss() -> str:
 
     # Select native font stack per platform
     if IS_MACOS:
-        font_stack = 'system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", sans-serif'
+        font_stack = '".AppleSystemUIFont", "SF Pro Text", "SF Pro Display", -apple-system, sans-serif'
     elif IS_WINDOWS:
-        font_stack = '"Segoe UI Variable Text", "Segoe UI Variable Display", "Segoe UI", -apple-system, "Microsoft YaHei UI", "Microsoft YaHei", sans-serif'
+        font_stack = '"Segoe UI", "Segoe UI Variable Text", sans-serif'
     else:
-        font_stack = 'system-ui, -apple-system, "Cantarell", "Ubuntu", "Inter", "Noto Sans", "Liberation Sans", sans-serif'
+        font_stack = 'system-ui, "Noto Sans", "Cantarell", "Ubuntu", sans-serif'
 
     # Window background & sidebar transparency for Liquid Glass on macOS
     use_glass = False
@@ -291,69 +383,71 @@ def _build_qss() -> str:
     else:
         window_bg = t.bg
         nav_bg = t.bg_nav
-        nav_border = "1px solid #1a2538"
+        nav_border = f"1px solid {t.border}"
 
     return f"""
-/* ── Global ────────────────────────────────────────────── */
+/* ── Global Typography & Base Window ─────────────────── */
 * {{
     font-family: {font_stack};
-    font-size: 13px;
 }}
 QMainWindow, QDialog {{
     background-color: {window_bg};
     color: {t.fg};
 }}
 
-/* ── Navigation sidebar (always dark, translucent on glass) ── */
+/* ── Navigation sidebar (OS-native docked rail) ──────── */
 #navPanel {{
     background-color: {nav_bg};
     border-right: {nav_border};
-    border-radius: 12px 0 0 12px;
+    border-radius: 0;
 }}
 #navPanel QLabel {{
-    color: #f1f5f9;
+    color: {t.fg};
 }}
 #navPanel QPushButton {{
     background: transparent;
-    color: #cbd5e1;
+    color: {t.fg_dim};
     text-align: left;
-    padding: 10px 14px;
-    border-radius: 8px;
+    padding: 8px 12px;
+    border-radius: 5px;
     border: none;
     font-size: 13px;
     min-height: 34px;
 }}
 #navPanel QPushButton:hover {{
-    background-color: #1e293b;
-    color: #f8fafc;
+    background-color: {t.bg_hover};
+    color: {t.fg};
 }}
 #navPanel QPushButton:checked {{
     background-color: {t.nav_active};
     color: #ffffff;
     font-weight: 600;
 }}
+#navPanel QPushButton[primary="true"],
+#navPanel QPushButton[cssClass="primary"] {{
+    min-height: 36px;
+}}
 #navPanel .nav-bottom {{
-    color: #94a3b8;
+    color: {t.fg_muted};
     font-size: 12px;
 }}
 
-/* ── Semantic Labels & Titles (Dual Theme High Contrast) ─ */
+/* ── Semantic Labels & Titles (OS-Native Hierarchy) ──── */
 QLabel[cssClass="pageTitle"] {{
-    font-size: 22px;
-    font-weight: 800;
-    color: {t.fg};
-    letter-spacing: -0.02em;
-}}
-QLabel[cssClass="sectionTitle"] {{
-    font-size: 16px;
-    font-weight: 700;
-    color: {t.fg};
-}}
-QLabel[cssClass="cardTitle"] {{
-    font-size: 14px;
+    font-size: 20px;
     font-weight: 700;
     color: {t.fg};
     letter-spacing: -0.01em;
+}}
+QLabel[cssClass="sectionTitle"] {{
+    font-size: 15px;
+    font-weight: 600;
+    color: {t.fg};
+}}
+QLabel[cssClass="cardTitle"] {{
+    font-size: 13px;
+    font-weight: 600;
+    color: {t.fg};
     background: transparent;
     border: none;
 }}
@@ -394,16 +488,8 @@ QLabel[cssClass="warning-banner"] {{
     font-weight: 500;
     color: {t.warn_fg};
     background-color: {t.warn_bg};
-    border-radius: 8px;
+    border-radius: 6px;
     padding: 6px 12px;
-}}
-
-/* ── Cards & Separators ───────────────────────────────── */
-QFrame[cssClass="card"] {{
-    background-color: {t.bg_card};
-    border: 1px solid {t.border};
-    border-radius: 8px;
-    padding: 6px;
 }}
 QLabel[cssClass="separator"], QFrame[cssClass="separator"] {{
     background-color: {t.border};
@@ -412,168 +498,15 @@ QLabel[cssClass="separator"], QFrame[cssClass="separator"] {{
     border: none;
 }}
 
-/* ── Buttons (Preserve Native OS QStyle / UxTheme / Cocoa / Breeze) ──── */
-/* Accessibility targets: min-height: 36px; min-height: 34px; */
-
-/* ── Sidebar Language Selector ────────────────────────── */
-#navPanel QComboBox, QComboBox#langCombo {{
-    background-color: {t.bg_input};
-    color: {t.fg};
-    border: 1px solid {t.border};
-    border-radius: 6px;
-    padding: 4px 10px;
-    font-size: 12px;
-    font-weight: 500;
-    min-height: 28px;
-}}
-#navPanel QComboBox:hover, QComboBox#langCombo:hover {{
-    background-color: {t.bg_hover};
-    border-color: {t.border_strong};
-}}
-#navPanel QComboBox::drop-down, QComboBox#langCombo::drop-down {{
-    subcontrol-origin: padding;
-    subcontrol-position: center right;
-    border: none;
-    width: 20px;
-}}
-#navPanel QComboBox::down-arrow, QComboBox#langCombo::down-arrow {{
-    image: none;
-    border-left: 3px solid transparent;
-    border-right: 3px solid transparent;
-    border-top: 4px solid {t.fg_dim};
-    margin-right: 6px;
-}}
-#navPanel QComboBox QAbstractItemView, QComboBox#langCombo QAbstractItemView {{
-    background-color: {t.bg_card};
-    color: {t.fg};
-    border: 1px solid {t.border};
-    border-radius: 6px;
-    padding: 4px;
-    selection-background-color: {t.accent_bg};
-    selection-color: {t.accent_text};
-    font-size: 12px;
-    outline: none;
-}}
-
-/* ── Content area Combo boxes & Buttons: 100% Native QStyle delegates ── */
-
-/* ── Native Checkboxes & Radio Buttons ────────────────── */
-QCheckBox, QRadioButton {{
-    color: {t.fg};
-    font-size: 13px;
-    spacing: 8px;
-    min-height: 22px;
-    background: transparent;
-}}
-QCheckBox:disabled, QRadioButton:disabled {{
-    color: {t.disabled_fg};
-}}
-
-/* ── Tabs (Native Clean Style) ────────────────────────── */
-QTabWidget::pane {{
-    border: 1px solid {t.border};
-    border-radius: 8px;
-    background-color: {t.bg_card};
-    top: -1px;
-}}
-QTabBar {{
-    background: transparent;
-}}
-QTabBar::tab {{
-    background-color: transparent;
-    color: {t.fg_dim};
-    border: none;
-    padding: 8px 18px;
-    min-height: 32px;
-    font-size: 13px;
-    font-weight: 600;
-    border-bottom: 2px solid transparent;
-    margin-right: 4px;
-}}
-QTabBar::tab:selected {{
-    color: {t.fg_primary};
-    font-weight: 700;
-    border-bottom: 2px solid {t.accent};
-}}
-QTabBar::tab:hover:!selected {{
-    color: {t.fg};
-}}
-
-/* ── Native List widget ───────────────────────────────── */
-QListWidget {{
-    background-color: {t.bg_card};
-    color: {t.fg};
-    border: 1px solid {t.border};
-    border-radius: 6px;
-    padding: 2px;
-    font-size: 13px;
-    outline: none;
-}}
-QListWidget::item {{
-    padding: 6px 10px;
-    min-height: 28px;
-}}
-
-/* ── Progress bar (Smooth & High Contrast) ────────────── */
-QProgressBar {{
-    border: none;
-    border-radius: 7px;
-    background-color: {t.progress_track};
-    text-align: center;
-    min-height: 14px;
-    max-height: 14px;
-    color: transparent;
-}}
-QProgressBar::chunk {{
-    background-color: {t.progress_fill};
-    border-radius: 7px;
-}}
-QProgressBar[status="error"]::chunk {{
-    background-color: {t.progress_err};
-}}
-QProgressBar[status="success"]::chunk {{
-    background-color: {t.progress_ok};
-}}
-
-/* ── Text edit ────────────────────────────────────────── */
-QTextEdit {{
-    background-color: {t.bg_input};
-    color: {t.fg};
-    border: 1px solid {t.border};
-    border-radius: 8px;
-    padding: 10px;
-    font-size: 13px;
-    selection-background-color: {t.accent_bg};
-    selection-color: {t.accent_text};
-}}
-QTextEdit[readOnly="true"] {{
-    background-color: {t.bg_elev};
-}}
+/* ── Monospace Diagnostic Console ────────────────────── */
 QTextEdit#logView {{
     background-color: {t.log_bg};
     color: {t.log_fg};
     font-family: "Cascadia Code", "Consolas", "Courier New", monospace;
     font-size: 12px;
-    border: none;
-    border-radius: 8px;
-    padding: 10px;
-}}
-
-/* ── Line edit ────────────────────────────────────────── */
-QLineEdit {{
-    background-color: {t.bg_input};
-    color: {t.fg};
-    border: 1px solid {t.border_strong};
-    border-radius: 6px;
-    padding: 6px 10px;
-    font-size: 13px;
-    min-height: 32px;
-}}
-QLineEdit:focus {{
-    border-color: {t.border_focus};
-}}
-QLineEdit::placeholder {{
-    color: {t.fg_muted};
+    border: 1px solid {t.border};
+    border-radius: 4px;
+    padding: 8px;
 }}
 
 /* ── Tooltips ─────────────────────────────────────────── */
@@ -581,8 +514,8 @@ QToolTip {{
     background-color: {t.bg_tooltip};
     color: {t.fg};
     border: 1px solid {t.border};
-    border-radius: 6px;
-    padding: 6px 10px;
+    border-radius: 4px;
+    padding: 4px 8px;
     font-size: 12px;
 }}
 """
@@ -596,20 +529,20 @@ def apply_theme(
     """Apply the native platform theme to *app*.
 
     Ensures native platform QStyle is initialized.
-    If *force_dark* is ``None`` the system palette is inspected.
+    If *force_dark* is ``None`` the host system's native QPalette is preserved
+    and token colors are extracted directly from the system theme.
     Call ``apply_theme(app, force_dark=True)`` to lock dark mode.
     """
     setup_native_app_style(app)
     if force_dark is not None:
         _state.set_dark(force_dark, pure_black=bool(pure_black))
+        app.setPalette(_make_palette(_state.is_dark, pure_black=_state.is_pure_black))
     else:
         _state.detect()
-    app.setPalette(_make_palette(_state.is_dark, pure_black=_state.is_pure_black))
     app.setStyleSheet(_build_qss())
 
 
 def refresh_theme(app: QApplication) -> None:
     """Re-read the palette and regenerate the QSS (e.g. after a system theme change)."""
     _state.detect()
-    app.setPalette(_make_palette(_state.is_dark, pure_black=_state.is_pure_black))
     app.setStyleSheet(_build_qss())

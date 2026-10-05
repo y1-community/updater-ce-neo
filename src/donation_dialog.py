@@ -70,12 +70,6 @@ class DonationStatusBar(QStatusBar):
             f" border-top: 1px solid {t.border}; color: {t.fg}; }}"
             f"QStatusBar#donation_status_bar QLabel {{ color: {t.fg};"
             f" background: transparent; border: none; }}"
-            f"QStatusBar#donation_status_bar QProgressBar {{ background-color: {t.progress_track};"
-            f" border-radius: 4px; }}"
-            "QStatusBar#donation_status_bar QProgressBar::chunk { background-color: #10b981; border-radius: 3px; }"
-            f"QStatusBar#donation_status_bar QPushButton {{ background-color: {t.accent}; color: #ffffff;"
-            f" border: none; border-radius: 6px; padding: 6px 14px; font-size: 12px; font-weight: 700; min-height: 28px; }}"
-            f"QStatusBar#donation_status_bar QPushButton:hover {{ background-color: {t.accent_hover}; }}"
         )
 
         content = QWidget(self)
@@ -199,10 +193,10 @@ class DonationDialog(QDialog):
 
         self.setWindowTitle(tr("donate_title"))
         self.setModal(True)
-        self.setMinimumWidth(540)
-        self.resize(560, 520)
+        self.setMinimumWidth(580)
 
         self._build_ui()
+        self.adjustSize()
         self._start_ticker()
         self._refresh_bridge = _DonationRefreshBridge(self)
         self._refresh_bridge.updated.connect(self._apply_fresh_donations)
@@ -211,24 +205,21 @@ class DonationDialog(QDialog):
     def _build_ui(self):
         t = T()
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 14, 20, 14)
-        layout.setSpacing(8)
+        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setSpacing(10)
 
         title_color = t.fg
         intro_color = t.fg_dim
 
         # 1. Goal bar / donor ticker card
-        self._alt_container = QWidget()
-        self._alt_container.setFixedHeight(50)
-        self._alt_container.setStyleSheet(
-            f"QWidget {{ background-color: {t.bg_elev};"
-            f" border: 1px solid {t.border}; border-radius: 10px; }}"
-        )
+        # Kept initialized as a hidden child widget for API / test compatibility,
+        # but omitted from the visible dialog layout per user specification.
+        self._alt_container = QWidget(self)
+        self._alt_container.hide()
         alt_box = QVBoxLayout(self._alt_container)
-        alt_box.setContentsMargins(12, 6, 12, 6)
-        alt_box.setAlignment(Qt.AlignCenter)
+        alt_box.setContentsMargins(0, 0, 0, 0)
 
-        self._goal_view = QWidget()
+        self._goal_view = QWidget(self._alt_container)
         goal_layout = QVBoxLayout(self._goal_view)
         goal_layout.setContentsMargins(0, 0, 0, 0)
         goal_layout.setSpacing(4)
@@ -247,7 +238,7 @@ class DonationDialog(QDialog):
         self._goal_anim.setDuration(750)
         self._goal_anim.setEasingCurve(QEasingCurve.OutCubic)
 
-        self._donor_view = QWidget()
+        self._donor_view = QWidget(self._alt_container)
         donor_layout = QVBoxLayout(self._donor_view)
         donor_layout.setContentsMargins(0, 0, 0, 0)
         self._donor_label = QLabel()
@@ -261,9 +252,8 @@ class DonationDialog(QDialog):
         alt_box.addWidget(self._goal_view)
         alt_box.addWidget(self._donor_view)
         self._donor_view.setVisible(False)
-        layout.addWidget(self._alt_container)
 
-        # Installation Complete banner (prominently shown after firmware install)
+        # Installation Complete banner (prominently shown first after firmware install)
         if self.context == "install_success":
             steps = install_power_on_steps(self.model)
             formatted = self.software_name or tr("donate_this_firmware")
@@ -294,7 +284,7 @@ class DonationDialog(QDialog):
         # 2. Developer header
         header_row = QHBoxLayout()
         title = QLabel(
-            f"<h2 style='margin:0; font-size:20px; font-weight:800; color:{title_color};'>"
+            f"<h2 style='margin:0; font-size:18px; font-weight:800; color:{title_color};'>"
             + tr("donate_headline") + "</h2>"
         )
         title.setTextFormat(Qt.RichText)
@@ -332,7 +322,7 @@ class DonationDialog(QDialog):
             self._dont_ask = QCheckBox(tr("donate_dont_ask"))
             layout.addWidget(self._dont_ask)
 
-        # 5. Payment grid
+        # 5. Payment grid (2x2)
         grid = QGridLayout()
         grid.setSpacing(8)
         self._add_pay_button(grid, 0, 0, tr("donate_kofi"), "#ff5e5b", "#e04b48", DONATION_LINKS["kofi"])
@@ -341,51 +331,98 @@ class DonationDialog(QDialog):
         self._add_pay_button(grid, 1, 1, tr("donate_patreon"), "#e0533c", "#c9442e", DONATION_LINKS["patreon"])
         layout.addLayout(grid)
 
-        self._add_pay_button(None, None, None, "", "#10b981", "#059669",
-                             DONATION_LINKS["honeygain"], full_width=tr("donate_honeygain"))
-        layout.addWidget(self._last_button)  # type: ignore[attr-defined]
+        # Space-saving text links row for Honeygain and Crypto
+        links_box = QWidget()
+        links_row = QHBoxLayout(links_box)
+        links_row.setContentsMargins(0, 4, 0, 2)
+        links_row.setSpacing(10)
+        links_row.setAlignment(Qt.AlignCenter)
 
-        # 6. Crypto
-        self._crypto_toggle = QPushButton(tr("donate_crypto_toggle"))
+        honeygain_url = DONATION_LINKS.get("honeygain", "https://r.honeygain.me/RYANB0FEF2")
+        self._last_button = QPushButton(f"⚡ {tr('donate_honeygain')}")
+        self._last_button.setCursor(Qt.PointingHandCursor)
+        self._last_button.setToolTip(honeygain_url)
+        self._last_button.setStyleSheet(
+            f"QPushButton {{ background: transparent; border: none; color: {t.ok_fg};"
+            f" font-size: 12px; font-weight: 600; text-decoration: underline; padding: 4px 6px; }}"
+            f"QPushButton:hover {{ color: #059669; }}"
+        )
+        self._last_button.clicked.connect(lambda _=False, u=honeygain_url: open_browser(u))
+        links_row.addWidget(self._last_button)
+
+        dot = QLabel("·")
+        dot.setStyleSheet(f"color: {t.border_strong}; font-size: 14px; font-weight: bold; background: transparent;")
+        links_row.addWidget(dot)
+
+        self._crypto_toggle = QPushButton(f"🪙 {tr('donate_crypto_toggle')}")
+        self._crypto_toggle.setCursor(Qt.PointingHandCursor)
         self._crypto_toggle.setStyleSheet(
-            f"QPushButton {{ background-color: {t.bg_elev}; color: {t.fg}; font-weight:600;"
-            f" font-size:13px; min-height:34px; padding:8px 14px; border-radius:8px; border:1px solid {t.border_strong}; }}"
-            f"QPushButton:hover {{ background-color: {t.bg_hover}; }}"
+            f"QPushButton {{ background: transparent; border: none; color: {t.accent};"
+            f" font-size: 12px; font-weight: 600; text-decoration: underline; padding: 4px 6px; }}"
+            f"QPushButton:hover {{ color: {t.accent_hover}; }}"
         )
         self._crypto_toggle.clicked.connect(self._toggle_crypto)
-        layout.addWidget(self._crypto_toggle)
+        links_row.addWidget(self._crypto_toggle)
+        layout.addWidget(links_box)
 
+        # 6. Crypto options box (compact, space-saving)
         self._crypto_box = QWidget()
         crypto_layout = QVBoxLayout(self._crypto_box)
-        crypto_layout.setContentsMargins(0, 2, 0, 2)
-        crypto_grid = QGridLayout()
-        crypto_grid.setSpacing(6)
-        row = 0
-        col = 0
+        crypto_layout.setContentsMargins(8, 6, 8, 6)
+        crypto_layout.setSpacing(4)
+        self._crypto_box.setStyleSheet(
+            f"QWidget {{ background-color: {t.bg_elev}; border: 1px solid {t.border};"
+            f" border-radius: 8px; }}"
+        )
+
         colors = {"Bitcoin": "#d97706", "Ethereum": "#4f46e5", "SHIBA": "#dc2626"}
         for label, address in DONATION_CRYPTO.items():
-            color = next((c for k, c in colors.items() if k.lower() in label.lower()), "#475569")
-            btn = QPushButton(label)
-            btn.setCursor(Qt.PointingHandCursor)
-            btn.setStyleSheet(
-                f"QPushButton {{ background-color: {color}; color: #ffffff; font-weight: 700;"
-                f" font-size: 13px; min-height: 36px; padding: 8px 14px; border-radius: 6px; border: none; }}"
+            color = next((c for k, c in colors.items() if k.lower() in label.lower()), t.accent)
+            row_w = QWidget()
+            row_w.setStyleSheet("background: transparent; border: none;")
+            r_lay = QHBoxLayout(row_w)
+            r_lay.setContentsMargins(2, 2, 2, 2)
+            r_lay.setSpacing(8)
+
+            coin_badge = QLabel(f"<span style='color:{color}; font-weight:bold;'>{label}</span>")
+            coin_badge.setTextFormat(Qt.RichText)
+            coin_badge.setMinimumWidth(140)
+            r_lay.addWidget(coin_badge)
+
+            addr_label = QLabel(address)
+            addr_label.setStyleSheet(f"color: {t.fg_dim}; font-size: 11px; font-family: monospace;")
+            addr_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            r_lay.addWidget(addr_label, 1)
+
+            copy_btn = QPushButton(tr("copy_btn"))
+            copy_btn.setCursor(Qt.PointingHandCursor)
+            copy_btn.setStyleSheet(
+                f"QPushButton {{ background-color: {t.bg_card}; color: {t.fg}; font-size: 11px;"
+                f" font-weight: 600; padding: 2px 10px; border-radius: 4px; border: 1px solid {t.border}; }}"
+                f"QPushButton:hover {{ background-color: {t.bg_hover}; color: {t.fg}; }}"
             )
-            btn.clicked.connect(lambda _=False, l=label, a=address: self._copy_donation_value(l, a))
-            crypto_grid.addWidget(btn, row, col)
-            col += 1
-            if col > 1:
-                col = 0
-                row += 1
-        crypto_layout.addLayout(crypto_grid)
+            copy_btn.clicked.connect(lambda _=False, l=label, a=address: self._copy_donation_value(l, a))
+            r_lay.addWidget(copy_btn)
+
+            crypto_layout.addWidget(row_w)
+
         self._crypto_box.setVisible(False)
         layout.addWidget(self._crypto_box)
 
-        # 7. Close
+        # 7. Bottom row with status message & Close button
+        bottom_row = QHBoxLayout()
+        bottom_row.setContentsMargins(0, 4, 0, 0)
+        self._status_label = QLabel()
+        self._status_label.setStyleSheet(f"color: {t.ok_fg}; font-size: 12px; font-weight: 600; background: transparent; border: none;")
+        self._status_label.hide()
+        bottom_row.addWidget(self._status_label, 1)
+
         self._close_btn = QPushButton(tr("close"))
         self._close_btn.setProperty("cssClass", "ghost")
+        self._close_btn.setMinimumWidth(80)
         self._close_btn.clicked.connect(self._on_close)
-        layout.addWidget(self._close_btn, 0, Qt.AlignRight)
+        bottom_row.addWidget(self._close_btn, 0, Qt.AlignRight)
+        layout.addLayout(bottom_row)
 
         self._refresh_goal()
 
@@ -429,7 +466,7 @@ class DonationDialog(QDialog):
         r_s = f"{int(raised)}" if raised.is_integer() else f"{raised:.2f}"
         self._goal_reached = raised >= float(target)
         if self._goal_reached:
-            self._goal_label.setText("We rely on your donations to keep running. Donate now")
+            self._goal_label.setText(tr("donate_rely_on_you"))
             self._goal_target = 1000
         else:
             self._goal_label.setText(tr("donate_goal_fmt").format(raised=r_s, target=target))
@@ -520,12 +557,18 @@ class DonationDialog(QDialog):
     def _toggle_crypto(self):
         visible = not self._crypto_box.isVisible()
         self._crypto_box.setVisible(visible)
-        self._crypto_toggle.setText(tr("donate_crypto_hide") if visible else tr("donate_crypto_toggle"))
+        toggle_text = tr("donate_crypto_hide") if visible else tr("donate_crypto_toggle")
+        self._crypto_toggle.setText(f"🪙 {toggle_text}")
+        self.adjustSize()
 
     def _copy_donation_value(self, label, value):
+        msg = tr("donate_copied").format(label=label)
+        self._donor_label.setText(msg)
+        if hasattr(self, "_status_label"):
+            self._status_label.setText(f"✓ {msg}")
+            self._status_label.show()
         try:
             QApplication.clipboard().setText(value)
-            self._donor_label.setText(tr("donate_copied").format(label=label))
         except Exception:
             open_browser(f"https://blockchair.com/search?q={value}")
 

@@ -161,6 +161,8 @@ def find_sp_flash_tool():
     3. Inno-installed / AppImage bundled ``SP_Flash_Tool`` folder
     4. Local development / repository fallback.
     """
+    if IS_MAC:
+        return None
     candidates = [
         Path(os.environ["SP_FLASH_TOOL_DIR"]) if os.environ.get("SP_FLASH_TOOL_DIR") else None,
         SP_FLASH_TOOL_DIR,

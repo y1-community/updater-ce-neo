@@ -58,11 +58,140 @@ STEP_DONE = "DONE"
 
 EXTRACT_COMPLETE_MARKER = ".extract_complete"
 
+# --- backend log classification ----------------------------------------------
+# mtkclient and the USB layer under it report target-side faults as bare errno
+# strings. Two of them always mean the same physical thing — the player is
+# wedged mid-handshake and will answer every further attempt with the same
+# error — so they drive the retry-guidance dialog instead of piling up unseen
+# in Diagnostics (a single stalled connection produced 18 identical lines).
+RETRY_ERRNOS = (2, 5)
+_ERRNO_RE = re.compile(r"errno[\s:=\[]*(\d+)", re.IGNORECASE)
+
+# mtkclient's Port.py prints this Hint block once per failed handshake loop.
+# It is not an error: it restates step 1 of the connection guide ("power the
+# device off and reconnect"), so it re-arms the waiting stage silently.
+_HINT_MARKERS = (
+    "power off the phone before connecting",
+    "power off the device before connecting",
+)
+
+LINE_RETRY = "retry"
+LINE_CONNECT_HINT = "connect_hint"
+
+# --- install methods ----------------------------------------------------------
+# METHOD_MTK_MAC is the simulated-macOS flow: it runs the Mac code path
+# (MTKClient as the only backend, mac-centric prompts) on Linux/Windows so the
+# Mac experience can be exercised without Mac hardware. It maps to the same
+# backend as METHOD_MTK; the difference is the platform behaviour the rest of
+# the app shows for paths.SIMULATE_MACOS.
+METHOD_SP = "sp"
+METHOD_MTK = "mtk"
+METHOD_MTK_MAC = "mtk_mac"
+
+
+def default_flash_method():
+    """Method used until the user picks one.
+
+    Windows/Linux users are steered to SP Flash Tool's console-mode XML flow,
+    the most reliable path on those platforms. macOS has no SP Flash Tool
+    build, so MTKClient is the only option there.
+
+    ``paths.IS_MAC`` is read live rather than the module-level ``IS_MAC``
+    snapshot so simulated macOS mode (and the tests that toggle it) is
+    honoured.
+    """
+    return METHOD_MTK if paths.IS_MAC else METHOD_SP
+
+
+def normalise_method(method):
+    """Coerce a persisted (possibly legacy) setting into a usable method id.
+
+    Legacy ``"auto"`` resolves to the platform default so users land on SP
+    Flash Tool rather than an ambiguous automatic choice; on macOS every
+    value collapses to MTKClient, the only backend that exists there.
+    """
+    value = str(method or "").strip().lower()
+    if value not in (METHOD_SP, METHOD_MTK, METHOD_MTK_MAC, "auto"):
+        return default_flash_method()
+    if paths.IS_MAC:
+        return METHOD_MTK
+    return default_flash_method() if value == "auto" else value
+
+
+def backend_method(method):
+    """Map an install method onto the backend id FlashWorker dispatches on."""
+    return METHOD_MTK if normalise_method(method) == METHOD_MTK_MAC else normalise_method(method)
+
+
+def classify_backend_line(line):
+    """Classify a backend log line for user guidance.
+
+    Returns ``LINE_RETRY`` when the line carries an errno from
+    :data:`RETRY_ERRNOS` (the target must be reset by hand),
+    ``LINE_CONNECT_HINT`` when it is mtkclient's "power off and reconnect"
+    hint, or ``""`` when the line needs no special handling.
+    """
+    text = str(line or "")
+    if not text:
+        return ""
+    low = text.lower()
+    match = _ERRNO_RE.search(text)
+    if match and int(match.group(1)) in RETRY_ERRNOS:
+        return LINE_RETRY
+    if "hint:" in low or any(marker in low for marker in _HINT_MARKERS):
+        return LINE_CONNECT_HINT
+    return ""
+
 # Seconds of silence from the target before the MTKClient backend tells the
 # user the device stopped answering. DA configuration runs inside a blocking
 # in-process call that cannot be interrupted, so without this the UI would sit
 # on "configuring DA..." forever (see _StallWatcher).
 MTK_STALL_WARN_SECONDS = 30
+
+# --- MTKClient session bring-up ---------------------------------------------
+# A player that enumerates in preloader mode accepts the stage-2 DA upload and
+# then never answers the download agent, so nothing is ever written. BROM mode
+# is the mode the official tooling flashes in, so preloader-mode targets are
+# restarted into BROM before the DA is uploaded.
+MTK_DEVICE_VID = 0x0E8D
+MTK_BROM_PID = 0x0003
+MTK_PRELOADER_PID = 0x2000
+MTK_RESTART_IN_BROM = True
+MTK_BROM_WAIT_SECONDS = 30.0
+MTK_RECOVERY_WAIT_SECONDS = 60.0
+# One automatic retry after a DA failure (the target usually needs a power
+# cycle to come back), then the retry dialog takes over.
+MTK_DA_ATTEMPTS = 2
+# The target re-enumerates while being restarted into BROM; the USB monitor
+# must not read that as the player being unplugged mid-flash.
+MTK_DEVICE_LOSS_GRACE_SECONDS = 90.0
+
+
+def _wait_for_mtk_mode(pids, timeout):
+    """Poll the USB bus until an MTK target with one of ``pids`` shows up.
+
+    An int is accepted as a single PID. Returns True as soon as the device is
+    seen, False on timeout. Uses the same libusb backend as the bundled
+    mtkclient so it works on Windows without a system libusb install.
+    """
+    wanted = (pids,) if isinstance(pids, int) else tuple(pids)
+    usb_core, backend = _load_libusb_backend()
+    if usb_core is None:
+        return False
+    deadline = time.time() + float(timeout)
+    while True:
+        try:
+            for dev in usb_core.find(find_all=True, backend=backend):
+                try:
+                    if dev.idVendor == MTK_DEVICE_VID and dev.idProduct in wanted:
+                        return True
+                except Exception:
+                    continue
+        except Exception as e:
+            logger.debug("MTK USB poll failed: %s", e)
+        if time.time() >= deadline:
+            return False
+        time.sleep(0.5)
 
 _SP_LOG_ROOT = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "SP_FT_Logs"
 
@@ -750,7 +879,8 @@ class FlashWorker(QThread):
     log_message = Signal(str)
     finished = Signal(bool, str)  # ok, error_code
 
-    def __init__(self, package_path, pre_extracted_dir="", method="auto", model="", parent=None):
+    def __init__(self, package_path, pre_extracted_dir="", method="auto", model="",
+                 parent=None, device_loss_hold=None):
         super().__init__(parent)
         self.package_path = package_path
         self.pre_extracted_dir = pre_extracted_dir
@@ -759,6 +889,9 @@ class FlashWorker(QThread):
         # Tool), or "mtk" (MTKClient). The user can pick manually; on macOS
         # "sp" is unavailable and always falls back to MTKClient.
         self.method = (method or "auto").lower()
+        # Suppresses the USB monitor's "player unplugged" handling while this
+        # worker deliberately restarts the target (preloader -> BROM).
+        self._device_loss_hold = device_loss_hold
         self._cancelled = False
         self._process = None
         self._sp_progress_hwm = 0
@@ -911,7 +1044,9 @@ class FlashWorker(QThread):
         InniUpdaterChin default) with MTKClient as the fallback; macOS has no
         SP Flash Tool build, so MTKClient is the only backend there.
         """
-        method = self.method
+        # "mtk_mac" (simulated macOS) is the same backend as "mtk"; only the
+        # platform-level behaviour shown to the user differs.
+        method = backend_method(self.method)
         if method == "mtk":
             self._log("Using MTKClient method (user selected).")
             self._flash_via_mtkclient(extract_dir, scatter_file)
@@ -1057,38 +1192,55 @@ class FlashWorker(QThread):
         except Exception as e:
             logger.debug("Could not update SP history.ini before flash_tool: %s", e)
 
-        cmd = [
-            str(flash_tool_exe),
-            "-c", "format-download",
-            "-s", scatter_arg,
-            "-d", da_arg,
-            "-t", "without",
-            "-r",
-        ]
-        self.step_changed.emit(STEP_WAITING)
-        self.progress.emit(10)
-        self.action_changed.emit("Searching for device (keep unplugged)...")
-        self._log("Launching SP Flash Tool (console mode, searching USB)...")
-        self._log("Keep the device unplugged until the connect prompt appears.")
+        if IS_WINDOWS:
+            cmd = [
+                str(flash_tool_exe),
+                "-c", "format-download",
+                "-s", scatter_arg,
+                "-d", da_arg,
+                "-t", "without",
+                "-r",
+            ]
+            self.step_changed.emit(STEP_WAITING)
+            self.progress.emit(10)
+            self.action_changed.emit("Searching for device (keep unplugged)...")
+            self._log("Launching SP Flash Tool (console mode, searching USB)...")
+            self._log("Keep the device unplugged until the connect prompt appears.")
+            guardian = None
+            self._process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                cwd=str(sp_dir),
+                env=env,
+                creationflags=creationflags,
+            )
+        else:
+            cmd_args = [
+                "-c", "format-download",
+                "-s", scatter_arg,
+                "-d", da_arg,
+                "-t", "without",
+                "-r",
+            ]
+            self._log("Preparing SP Flash Tool environment (Linux)...")
+            guardian = None
+            if os.name != "nt" and sys.platform.startswith("linux"):
+                try:
+                    guardian = linux_sp_flash.TtyAccessGuardian()
+                    guardian.start()
+                except Exception:
+                    guardian = None
 
-        guardian = None
-        if os.name != "nt" and sys.platform.startswith("linux"):
-            try:
-                guardian = linux_sp_flash.TtyAccessGuardian()
-                guardian.start()
-            except Exception:
-                guardian = None
-
-        self._process = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-            cwd=str(sp_dir),
-            env=env,
-            creationflags=creationflags,
-        )
+            self._process = linux_sp_flash.launch_linux_flash_tool(
+                stage=sp_dir,
+                cmd_args=cmd_args,
+                cwd=sp_dir,
+                env=env,
+                log_cb=self._log,
+            )
 
         # Background thread tailing the SP Flash Tool log file.
         launch_time = time.time()
@@ -1125,6 +1277,11 @@ class FlashWorker(QThread):
             stop_monitor.set()
             if guardian:
                 guardian.stop()
+            if hasattr(self._process, "_pty_master_fd"):
+                try:
+                    os.close(self._process._pty_master_fd)
+                except Exception:
+                    pass
 
         self._process.wait()
         exit_code = self._process.returncode
@@ -1305,6 +1462,90 @@ class FlashWorker(QThread):
             logger.debug("read_sp_log_result failed: %s", e)
         return (False, "")
 
+    # -- MTKClient session helpers ------------------------------------------
+    def _restart_in_brom(self, mtk, preloader_path, directory, on_message, timeout=None):
+        """Restart a preloader-mode target into BROM and re-handshake it.
+
+        In preloader mode ``da_handler.configure_da()`` sets
+        ``daloader.patch = False``, so the stage-2 DA is uploaded unpatched and
+        never answers ``read_flash_info()``: the log stops at "Successfully
+        uploaded stage 2" and no partition is written. Arming the USB-DL flag
+        and resetting the target brings it up as BROM (0x0003), where the DA
+        runs normally. Returns the new session, or ``None`` when the restart
+        did not land — the caller then falls back to a plain preloader-mode
+        session, never worse than the behaviour before the restart existed.
+        """
+        from . import mtk_api  # local: mtkclient is imported lazily (frozen builds)
+
+        self._log(
+            "Device answered in preloader mode; restarting it into BROM mode "
+            "so the download agent can run..."
+        )
+        self.action_changed.emit("Restarting the player into BROM mode...")
+        if self._device_loss_hold is not None:
+            # The target has to re-enumerate (a few seconds); the monitor must
+            # not report that as the player being unplugged mid-flash.
+            try:
+                self._device_loss_hold(MTK_DEVICE_LOSS_GRACE_SECONDS)
+            except Exception:
+                pass
+        try:
+            mtk_api.arm_brom_boot(mtk)
+            mtk_api.trigger_reset(mtk)
+        except BaseException as e:
+            self._log(f"Could not restart the device into BROM mode: {type(e).__name__}: {e}")
+            return None
+        mtk_api.close_port(mtk)
+
+        if not _wait_for_mtk_mode(MTK_BROM_PID, timeout or MTK_BROM_WAIT_SECONDS):
+            self._log(
+                f"The device did not come back in BROM mode (USB "
+                f"{MTK_DEVICE_VID:04X}:{MTK_BROM_PID:04X}) within "
+                f"{int(timeout or MTK_BROM_WAIT_SECONDS)}s; continuing in preloader mode."
+            )
+            return None
+        self._log("Device is in BROM mode - reconnecting...")
+
+        try:
+            session = mtk_api.init(loader=None, preloader=preloader_path)
+        except BaseException as e:
+            self._log(f"mtkclient init failed: {type(e).__name__}: {e}")
+            return None
+        if hasattr(session, "config"):
+            session.config.gui = _MtkMessageBridge(on_message)
+        session, _da = mtk_api.handshake(session, directory=str(directory))
+        if session is None:
+            self._log("Handshake failed after the BROM restart; continuing in preloader mode.")
+            return None
+        return session
+
+    def _wait_for_retry(self, attempt):
+        """Auto-recovery: wait for the target, then let the caller retry.
+
+        The DA stage-2 failure leaves the target wedged until it is reset by
+        hand, so this waits for it to re-appear in flash mode first (the
+        player may reboot itself). Returns True when another attempt should
+        run; the caller falls back to the retry dialog when it returns False.
+        """
+        if self._cancelled:
+            return False
+        self.action_changed.emit(
+            "Power-cycle the player (hold power ~10s), then reconnect it - retrying..."
+        )
+        self._log(
+            f"Attempt {attempt} failed. Recovering: power-cycle the player "
+            "(hold power ~10s) and reconnect it in flash mode."
+        )
+        if _wait_for_mtk_mode(
+            (MTK_PRELOADER_PID, MTK_BROM_PID), MTK_RECOVERY_WAIT_SECONDS
+        ):
+            return True
+        self._log(
+            "The player has not come back yet. Reconnect it in flash mode "
+            "and start the flash again."
+        )
+        return False
+
     # -- macOS/Linux backend: mtkclient -------------------------------------
     def _flash_via_mtkclient(self, extract_dir, scatter_file):
         self.step_changed.emit(STEP_WAITING)
@@ -1350,12 +1591,6 @@ class FlashWorker(QThread):
         else:
             self._log("No preloader image found; using built-in EMI")
 
-        try:
-            mtk = mtk_api.init(loader=None, preloader=preloader_path)
-        except BaseException as e:
-            self._log(f"mtkclient init failed: {type(e).__name__}: {e}")
-            self.finished.emit(False, "MTK_INIT_FAILED")
-            return
         self.step_changed.emit(STEP_WAITING)
         self.progress.emit(10)
         self.action_changed.emit("Waiting for MTK device... Power off device and connect USB.")
@@ -1391,32 +1626,90 @@ class FlashWorker(QThread):
             )
 
         watcher = _StallWatcher(_on_mtk_stall)
-        if hasattr(mtk, "config"):
-            mtk.config.gui = _MtkMessageBridge(_on_mtk_message)
 
-        def _on_connected():
+        def _on_connected(mtk):
             self.step_changed.emit(STEP_DETECT)
             self.progress.emit(12)
             # Report the mode mtkclient actually found: PID 0x2000 (and the
             # BL-version probe) is preloader mode, only 0x0003 is BROM, and
             # the difference is what the user has to act on.
-            is_brom = bool(getattr(getattr(mtk, "config", None), "is_brom", False))
-            mode = "BROM mode" if is_brom else "preloader mode"
+            mode = "BROM mode" if mtk_api.is_brom(mtk) else "preloader mode"
             msg = f"Device detected ({mode}) - configuring download agent..."
             self.action_changed.emit(msg)
             self._log(msg)
 
-        watcher.start()
-        try:
+        def _open_session():
+            """One session bring-up: init, handshake, and BROM mode if needed.
+
+            A target that answers in preloader mode will accept the stage-2 DA
+            upload and then never answer it, so nothing is ever written (see
+            ``_restart_in_brom``). Restarting it into BROM first is what makes
+            the download agent actually run. Returns the session or ``None``.
+            """
             try:
-                mtk, da_handler = mtk_api.connect(
-                    mtk, directory=str(extract_dir), on_connected=_on_connected
+                session = mtk_api.init(loader=None, preloader=preloader_path)
+            except BaseException as e:
+                self._log(f"mtkclient init failed: {type(e).__name__}: {e}")
+                return None
+            if hasattr(session, "config"):
+                session.config.gui = _MtkMessageBridge(_on_mtk_message)
+            session, _da = mtk_api.handshake(session, directory=str(extract_dir))
+            if session is None:
+                return None
+            _on_connected(session)
+            if MTK_RESTART_IN_BROM and not mtk_api.is_brom(session):
+                restarted = self._restart_in_brom(
+                    session, preloader_path, extract_dir, _on_mtk_message
                 )
-            except TypeError:
-                mtk, da_handler = mtk_api.connect(mtk, directory=str(extract_dir))
-                _on_connected()
+                if restarted is not None:
+                    session = restarted
+                    _on_connected(session)
+                else:
+                    # The restart released the port, so the session above is
+                    # unusable: open a plain preloader-mode one and let the DA
+                    # upload run exactly as it did before the restart existed.
+                    self._log("Falling back to a preloader-mode session...")
+                    try:
+                        session = mtk_api.init(loader=None, preloader=preloader_path)
+                    except BaseException as e:
+                        self._log(f"mtkclient init failed: {type(e).__name__}: {e}")
+                        return None
+                    if hasattr(session, "config"):
+                        session.config.gui = _MtkMessageBridge(_on_mtk_message)
+                    session, _da = mtk_api.handshake(
+                        session, directory=str(extract_dir)
+                    )
+                    if session is None:
+                        return None
+            return session
+
+        watcher.start()
+        attempt = 0
+        try:
+            while True:
+                attempt += 1
+                mtk = _open_session()
+                da_handler = None
+                if mtk is not None:
+                    try:
+                        mtk, da_handler = mtk_api.attach(mtk, directory=str(extract_dir))
+                    except BaseException as e:
+                        # BaseException: mtkclient raises SystemExit on DA
+                        # upload failure.
+                        self._log(f"Device connection failed: {e}\n{traceback.format_exc()}")
+                        mtk, da_handler = None, None
+                if mtk is not None and da_handler is not None:
+                    break
+                if attempt >= MTK_DA_ATTEMPTS:
+                    break
+                self._log("The download agent did not come up.")
+                self.action_changed.emit(
+                    "The player stopped responding while starting the download "
+                    "agent. Waiting for it to come back..."
+                )
+                if not self._wait_for_retry(attempt):
+                    break
         except BaseException as e:
-            # BaseException: mtkclient raises SystemExit on DA upload failure.
             self._log(f"Device connection failed: {e}\n{traceback.format_exc()}")
             watcher.stop()
             self.finished.emit(False, "CONNECTION_FAILED")
@@ -1865,9 +2158,31 @@ class DeviceMonitor(QThread):
         self._present = False
         self._misses = 0
         self._failed = False
+        self._lost_grace_until = 0.0
+        self._grace_lock = threading.Lock()
 
     def stop(self):
         self._stop.set()
+
+    def hold_lost(self, seconds):
+        """Ignore device-lost reports for ``seconds``.
+
+        A backend that deliberately resets the target (the MTKClient session
+        restart into BROM) makes it re-enumerate; without this the monitor
+        would debounce that into "USB disconnected" and abort the flash.
+        """
+        with self._grace_lock:
+            self._lost_grace_until = max(
+                self._lost_grace_until, time.time() + float(seconds)
+            )
+
+    def release_lost_hold(self):
+        with self._grace_lock:
+            self._lost_grace_until = 0.0
+
+    def _lost_is_held(self):
+        with self._grace_lock:
+            return time.time() < self._lost_grace_until
 
     def run(self):
         usb_core, backend = _load_libusb_backend()
@@ -1913,7 +2228,10 @@ class DeviceMonitor(QThread):
                     if self._misses >= 3:
                         self._present = False
                         self._misses = 0
-                        self.device_lost.emit()
+                        if not self._lost_is_held():
+                            self.device_lost.emit()
+                        # else: the flash worker is restarting the target on
+                        # purpose (preloader -> BROM), so stay silent.
                 else:
                     self._misses = 0
             except Exception as e:
@@ -1969,7 +2287,13 @@ class FlashService(QObject):
         # then start the new one. The cancelled worker's late terminal signals
         # are detached so they cannot reach the UI or clobber the new run.
         self.cancel_flash()
-        worker = FlashWorker(package_path, pre_extracted_dir, method, model=model)
+        worker = FlashWorker(
+            package_path,
+            pre_extracted_dir,
+            method,
+            model=model,
+            device_loss_hold=self.hold_device_lost,
+        )
         self._flash_worker = worker
         worker.step_changed.connect(self.step_changed)
         worker.progress.connect(self.progress)
@@ -1978,6 +2302,12 @@ class FlashService(QObject):
         worker.finished.connect(self.flash_finished)
         worker.finished.connect(lambda ok, err, w=worker: self._on_flash_done(w, ok, err))
         worker.start()
+
+    def hold_device_lost(self, seconds):
+        """See :meth:`DeviceMonitor.hold_lost` (passed to the flash worker)."""
+        monitor = self._device_monitor
+        if monitor is not None:
+            monitor.hold_lost(seconds)
 
     def cancel_flash(self):
         worker = self._flash_worker

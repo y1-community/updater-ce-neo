@@ -41,6 +41,7 @@ def record_device_install(
     tag_name: str,
     release_label: str = "",
     package_slug: str = "",
+    published_at: str = "",
     settings: Optional[QSettings] = None,
 ) -> None:
     """Record that ``software_name`` with ``tag_name`` was installed on ``model``."""
@@ -54,9 +55,12 @@ def record_device_install(
         s.setValue("tag_name", tag_name or "")
         s.setValue("release_label", release_label or tag_name or "")
         s.setValue("package_slug", package_slug or "")
+        s.setValue("published_at", published_at or "")
         s.setValue("installed_at", now_iso)
     finally:
         s.endGroup()
+    # Reset last_notified_tag so future releases of this software will be notified
+    set_last_notified_tag(model, "", settings=s)
     logger.info("Recorded install for %s: %s (%s)", model, software_name, tag_name)
 
 
@@ -76,6 +80,7 @@ def get_device_install(model: str, settings: Optional[QSettings] = None) -> Opti
             "tag_name": tag_name,
             "release_label": s.value("release_label", "", type=str) or tag_name,
             "package_slug": s.value("package_slug", "", type=str),
+            "published_at": s.value("published_at", "", type=str),
             "installed_at": s.value("installed_at", "", type=str),
         }
     finally:
@@ -290,12 +295,22 @@ def check_device_updates(
             continue
 
         # Compare chronological sorting: newer release has a higher release_sort_key
-        installed_pseudo_rel = {
-            "tag_name": installed_tag,
-            "published_at": install.get("installed_at", ""),
-        }
+        installed_rel = None
+        for r in releases:
+            if r.get("tag_name") == installed_tag:
+                installed_rel = r
+                break
+
+        if installed_rel is not None:
+            installed_key = catalog.release_sort_key(installed_rel)
+        else:
+            installed_pseudo_rel = {
+                "tag_name": installed_tag,
+                "published_at": install.get("published_at", ""),
+            }
+            installed_key = catalog.release_sort_key(installed_pseudo_rel)
+
         latest_key = catalog.release_sort_key(latest_rel)
-        installed_key = catalog.release_sort_key(installed_pseudo_rel)
 
         if latest_key > installed_key:
             updates.append({

@@ -22,6 +22,23 @@ if "--simulate-macos" in sys.argv:
     os.environ["INNIOASIS_SIMULATE_MACOS"] = "1"
     sys.argv.remove("--simulate-macos")
 
+# Persisted simulated-macOS choice (Settings ▸ Install method ▸ "MTKClient
+# (Mac)"). Re-applied here, before any ``src.*`` import, because
+# paths.SIMULATE_MACOS is read at import time — long before the Settings UI
+# exists. Read with the stdlib (configparser) so nothing heavier than the
+# interpreter loads first; QSettings on Linux writes plain INI to this path.
+if not os.environ.get("INNIOASIS_SIMULATE_MACOS") and sys.platform.startswith("linux"):
+    try:
+        import configparser
+
+        config_dir = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+        parser = configparser.ConfigParser()
+        parser.read(config_dir / "innioasis" / "updater.conf")
+        if parser.get("General", "flash_method", fallback="").strip().lower() == "mtk_mac":
+            os.environ["INNIOASIS_SIMULATE_MACOS"] = "1"
+    except Exception:
+        pass
+
 if "--check-environment" in sys.argv or "--diagnostics" in sys.argv:
     from src import paths, flash_service, mtk_api
     print("=== Innioasis Updater Environment Diagnostics ===")

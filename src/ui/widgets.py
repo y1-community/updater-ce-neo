@@ -56,8 +56,8 @@ class StatusTag(QLabel):
         self.setText(tr(f"status_{self._status}"))
         self.setStyleSheet(
             f"background-color: {bg}; color: {fg};"
-            f" border-radius: 14px; font-size: 11px; font-weight: 700;"
-            f" padding: 4px 14px; letter-spacing: 0.02em;"
+            f" border-radius: 4px; font-size: 11px; font-weight: 700;"
+            f" padding: 3px 10px; letter-spacing: 0.01em;"
         )
 
 
@@ -197,6 +197,6 @@ class Banner(QLabel):
         }
         bg, fg = colors.get(banner_type, colors["info"])
         self.setStyleSheet(
-            f"background-color: {bg}; color: {fg}; border-radius: 10px;"
-            f" font-size: 13px; padding: 10px 16px; font-weight: 500;"
+            f"background-color: {bg}; color: {fg}; border-radius: 6px;"
+            f" font-size: 13px; padding: 8px 14px; font-weight: 500;"
         )

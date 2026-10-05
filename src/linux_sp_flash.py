@@ -827,31 +827,543 @@ def install_udev_rules() -> tuple:
         except OSError as e:
             return False, f"Failed to write udev rules: {e}"
 
-    # Generate script and run with pkexec
+    # Generate script and run with available escalation tool
     script_path = write_setup_script()
     fix_option_ini()
-    if shutil.which("pkexec"):
+
+    candidates = find_available_escalation_tools()
+    for tool in candidates:
         try:
-            res = subprocess.run(
-                ["pkexec", "bash", str(script_path)],
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
+            if tool == "doas":
+                # Check nopass first
+                chk = subprocess.run(["doas", "-n", "true"], capture_output=True, timeout=1)
+                if chk.returncode == 0:
+                    res = subprocess.run(["doas", "bash", str(script_path)], capture_output=True, text=True, timeout=30)
+                else:
+                    askpass = get_askpass_helper()
+                    if not askpass:
+                        continue
+                    pw_res = subprocess.run([str(askpass)], stdout=subprocess.PIPE, text=True, timeout=60)
+                    pw = pw_res.stdout.rstrip("\r\n")
+                    if pw_res.returncode != 0 or not pw:
+                        return False, "Authentication cancelled by user."
+                    import pty
+                    m_fd, s_fd = pty.openpty()
+                    proc = subprocess.Popen(
+                        ["doas", "bash", str(script_path)],
+                        stdin=s_fd,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                    )
+                    os.close(s_fd)
+                    os.write(m_fd, f"{pw}\n".encode())
+                    out, err = proc.communicate(timeout=30)
+                    os.close(m_fd)
+                    if proc.returncode == 0:
+                        return True, "System rules configured successfully via doas."
+                    return False, f"Setup script exited with code {proc.returncode}: {err.strip() or out.strip()}"
+            elif tool == "pkexec":
+                res = subprocess.run(
+                    ["pkexec", "bash", str(script_path)],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+            elif tool == "sudo":
+                askpass = get_askpass_helper()
+                s_env = os.environ.copy()
+                if askpass:
+                    s_env["SUDO_ASKPASS"] = str(askpass)
+                res = subprocess.run(
+                    ["sudo", "-A" if askpass else "-n", "bash", str(script_path)],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    env=s_env,
+                )
+            elif tool == "run0":
+                res = subprocess.run(
+                    ["run0", "--pipe", "bash", str(script_path)],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+            elif tool == "lxqt-sudo":
+                res = subprocess.run(
+                    ["lxqt-sudo", "bash", str(script_path)],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+            elif tool in ("kdesu", "kdesudo"):
+                res = subprocess.run(
+                    [tool, "-c", f"bash {script_path}"],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+            else:
+                continue
+
             if res.returncode == 0:
-                return True, "System rules configured successfully via pkexec."
+                return True, f"System rules configured successfully via {tool}."
             return False, f"Setup script exited with code {res.returncode}: {res.stderr.strip() or res.stdout.strip()}"
         except subprocess.TimeoutExpired:
-            return False, "Authentication prompt timed out."
-        except Exception as e:
-            return False, f"pkexec failed: {e}"
+            return False, f"Authentication prompt ({tool}) timed out."
+        except Exception:
+            continue
 
-    return False, f"pkexec not available. Run manually: sudo bash {script_path}"
+    return False, f"Elevation tool not available. Run manually: sudo bash {script_path} (or: doas bash {script_path})"
+
+
+class _PrependedStream:
+    """Stream wrapper that yields a pre-read line before delegating to the underlying stream."""
+
+    def __init__(self, first_line: str, stream):
+        self._first_line = first_line
+        self._stream = stream
+        self._first_read = False
+
+    def readline(self) -> str:
+        if not self._first_read:
+            self._first_read = True
+            return self._first_line
+        return self._stream.readline() if hasattr(self._stream, "readline") else ""
+
+    def __iter__(self):
+        if not self._first_read:
+            self._first_read = True
+            if self._first_line:
+                yield self._first_line
+        if self._stream:
+            yield from self._stream
+
+    def __getattr__(self, name):
+        return getattr(self._stream, name)
+
+
+def create_flash_tool_runner(stage: Path = None) -> Path:
+    """Create an executable bash wrapper ensuring LD_LIBRARY_PATH and plugins are set."""
+    if stage is None:
+        stage = stage_dir()
+    runner = stage / "run_flash_tool.sh"
+    stage_abs = stage.resolve()
+    script = (
+        "#!/bin/bash\n"
+        f'STAGE_DIR="{stage_abs}"\n'
+        'export LD_LIBRARY_PATH="$STAGE_DIR:$STAGE_DIR/lib:${LD_LIBRARY_PATH:-}"\n'
+        'export QT_PLUGIN_PATH="$STAGE_DIR/plugins"\n'
+        'export QT_QPA_PLATFORM="xcb"\n'
+        'cd "$STAGE_DIR"\n'
+        f'exec "$STAGE_DIR/{FLASH_TOOL_LINUX_BIN}" "$@"\n'
+    )
+    runner.write_text(script, encoding="utf-8")
+    try:
+        runner.chmod(runner.stat().st_mode | 0o755)
+    except Exception:
+        pass
+    return runner
+
+
+def get_askpass_helper() -> Path | None:
+    """Find or generate a graphical/terminal askpass helper for sudo -A, doas, and other tools."""
+    env_askpass = os.environ.get("SUDO_ASKPASS") or os.environ.get("SSH_ASKPASS")
+    if env_askpass and os.path.isfile(env_askpass) and os.access(env_askpass, os.X_OK):
+        return Path(env_askpass)
+
+    cache = _app_cache_dir()
+    cache.mkdir(parents=True, exist_ok=True)
+    askpass = cache / "askpass.sh"
+    content = (
+        "#!/bin/bash\n"
+        'if [ -n "$SUDO_ASKPASS" ] && [ -x "$SUDO_ASKPASS" ]; then\n'
+        '    exec "$SUDO_ASKPASS" "$@"\n'
+        'elif [ -n "$SSH_ASKPASS" ] && [ -x "$SSH_ASKPASS" ]; then\n'
+        '    exec "$SSH_ASKPASS" "$@"\n'
+        'elif command -v zenity >/dev/null 2>&1; then\n'
+        '    exec zenity --password --title="Innioasis Updater CE - Superuser Privileges"\n'
+        'elif command -v kdialog >/dev/null 2>&1; then\n'
+        '    exec kdialog --password "Innioasis Updater CE - Superuser Privileges"\n'
+        'elif command -v rofi >/dev/null 2>&1; then\n'
+        '    exec rofi -dmenu -password -p "Superuser Privileges:"\n'
+        "elif command -v dmenu >/dev/null 2>&1 && dmenu -h 2>&1 | grep -q -- '-P'; then\n"
+        '    exec dmenu -P -p "Superuser Privileges:"\n'
+        'elif command -v ksshaskpass >/dev/null 2>&1; then\n'
+        '    exec ksshaskpass "$@"\n'
+        'elif command -v lxqt-openssh-askpass >/dev/null 2>&1; then\n'
+        '    exec lxqt-openssh-askpass "$@"\n'
+        'elif command -v openssh-askpass >/dev/null 2>&1; then\n'
+        '    exec openssh-askpass "$@"\n'
+        'elif command -v x11-ssh-askpass >/dev/null 2>&1; then\n'
+        '    exec x11-ssh-askpass "$@"\n'
+        'elif command -v gxmessage >/dev/null 2>&1; then\n'
+        '    exec gxmessage -entry -title "Superuser Privileges" "Enter password:"\n'
+        'elif python3 -c "import PySide6" >/dev/null 2>&1; then\n'
+        '    exec python3 -c "\n'
+        'import sys\n'
+        'from PySide6.QtWidgets import QApplication, QInputDialog, QLineEdit\n'
+        'app = QApplication(sys.argv)\n'
+        'text, ok = QInputDialog.getText(None, \'Superuser Privileges\', \'Enter password for root privileges:\', QLineEdit.Password)\n'
+        'if ok and text:\n'
+        '    print(text)\n'
+        '    sys.exit(0)\n'
+        'sys.exit(1)\n'
+        '"\n'
+        "else\n"
+        "    exit 1\n"
+        "fi\n"
+    )
+    askpass.write_text(content, encoding="utf-8")
+    try:
+        askpass.chmod(askpass.stat().st_mode | 0o755)
+    except Exception:
+        pass
+    return askpass
+
+
+def silent_system_prep(stage: Path = None) -> bool:
+    """Silently configure system dependencies, option.ini, and permissions for SP Flash Tool."""
+    if stage is None:
+        stage = stage_dir()
+    try:
+        stage_libpng12(stage)
+        fix_option_ini(stage)
+        make_executable(stage)
+        create_flash_tool_runner(stage)
+        check_cdc_acm()
+        log_dir = stage / LOG_DIR_NAME
+        log_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            log_dir.chmod(log_dir.stat().st_mode | 0o777)
+        except Exception:
+            pass
+        if os.geteuid() == 0:
+            rules_dir = Path("/etc/udev/rules.d")
+            rule_file = rules_dir / UDEV_RULE_FILENAME
+            if not rule_file.is_file():
+                try:
+                    rules_dir.mkdir(parents=True, exist_ok=True)
+                    rule_file.write_text(generate_udev_rule_content(), encoding="utf-8")
+                    rule_file.chmod(0o644)
+                    (rules_dir / UDEV_COMPANION_FILENAME).write_text(generate_ttyacms_rule_content(), encoding="utf-8")
+                    (rules_dir / UDEV_COMPANION_FILENAME).chmod(0o644)
+                    subprocess.run(["udevadm", "control", "--reload-rules"], check=False)
+                    subprocess.run(["udevadm", "trigger"], check=False)
+                except Exception:
+                    pass
+        return True
+    except Exception as e:
+        logger.debug("Silent system prep caught non-fatal exception: %s", e)
+        return False
+
+
+def find_available_escalation_tools() -> list[str]:
+    """Return an ordered list of available privilege escalation tools on this Linux system.
+
+    Supports:
+      - doas (OpenDoas / BSD doas)
+      - pkexec (Polkit standard)
+      - sudo (with SUDO_ASKPASS)
+      - run0 (systemd 256+ Polkit elevation)
+      - lxqt-sudo (LXQt native)
+      - kdesu / kdesudo (KDE Plasma native)
+      - gksu / gksudo (GTK legacy)
+      - beesu (Fedora / Red Hat)
+    """
+    tools = []
+
+    # Check explicit user or distro override
+    override = os.environ.get("ESCALATION_TOOL", "").strip().lower()
+    if override and shutil.which(override):
+        tools.append(override)
+
+    has_doas = bool(shutil.which("doas"))
+    has_sudo = bool(shutil.which("sudo"))
+    has_pkexec = bool(shutil.which("pkexec"))
+    has_doas_conf = (
+        Path("/etc/doas.conf").is_file()
+        or Path("/usr/local/etc/doas.conf").is_file()
+    )
+
+    # If doas is configured on system or sudo is absent, prioritize doas
+    if has_doas and (has_doas_conf or not has_sudo):
+        if "doas" not in tools:
+            tools.append("doas")
+
+    # Polkit pkexec (freedesktop.org standard on modern desktop environments)
+    if has_pkexec and "pkexec" not in tools:
+        tools.append("pkexec")
+
+    # Desktop-specific elevation utilities
+    desktop = (os.environ.get("XDG_CURRENT_DESKTOP") or "").upper()
+    if "LXQT" in desktop and shutil.which("lxqt-sudo") and "lxqt-sudo" not in tools:
+        tools.append("lxqt-sudo")
+    if "KDE" in desktop:
+        if shutil.which("kdesu") and "kdesu" not in tools:
+            tools.append("kdesu")
+        elif shutil.which("kdesudo") and "kdesudo" not in tools:
+            tools.append("kdesudo")
+
+    # sudo
+    if has_sudo and "sudo" not in tools:
+        tools.append("sudo")
+
+    # doas if installed but not already prioritized
+    if has_doas and "doas" not in tools:
+        tools.append("doas")
+
+    # modern systemd run0
+    if shutil.which("run0") and "run0" not in tools:
+        tools.append("run0")
+
+    # Other desktop wrappers
+    for alt in ("lxqt-sudo", "kdesu", "kdesudo", "gksu", "gksudo", "beesu"):
+        if shutil.which(alt) and alt not in tools:
+            tools.append(alt)
+
+    return tools
+
+
+def _launch_with_doas(
+    runner: Path,
+    cmd_args: list,
+    cwd: Path,
+    env: dict,
+    log_cb=None,
+) -> tuple[subprocess.Popen | None, bool]:
+    """Launch flash_tool runner via doas, handling nopass, persist, or askpass via PTY.
+
+    Returns (proc, user_cancelled).
+    """
+    doas_bin = shutil.which("doas")
+    if not doas_bin:
+        return None, False
+
+    full_cmd = [doas_bin, str(runner)] + cmd_args
+
+    # Check if doas can execute without password (nopass rule or active persist)
+    try:
+        check = subprocess.run([doas_bin, "-n", "true"], capture_output=True, timeout=1)
+        if check.returncode == 0:
+            if log_cb:
+                log_cb("doas running in non-interactive / passwordless mode...")
+            proc = subprocess.Popen(
+                full_cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                cwd=str(cwd),
+                env=env,
+            )
+            return proc, False
+    except Exception:
+        pass
+
+    # Password required: prompt with askpass helper
+    askpass = get_askpass_helper()
+    if not askpass:
+        return None, False
+
+    if log_cb:
+        log_cb("Requesting superuser privileges via doas...")
+
+    try:
+        res = subprocess.run([str(askpass)], stdout=subprocess.PIPE, text=True, timeout=60)
+        password = res.stdout.rstrip("\r\n")
+        if res.returncode != 0 or not password:
+            if log_cb:
+                log_cb("doas authentication cancelled by user.")
+            return None, True
+    except Exception as e:
+        if log_cb:
+            log_cb(f"doas askpass prompt error: {e}")
+        return None, False
+
+    # Launch doas with PTY slave as stdin so readpassphrase() receives password securely
+    try:
+        import pty
+        master_fd, slave_fd = pty.openpty()
+        proc = subprocess.Popen(
+            full_cmd,
+            stdin=slave_fd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            cwd=str(cwd),
+            env=env,
+        )
+        os.close(slave_fd)
+        os.write(master_fd, f"{password}\n".encode())
+        proc._pty_master_fd = master_fd
+        return proc, False
+    except Exception as e:
+        if log_cb:
+            log_cb(f"Failed to launch doas via PTY: {e}")
+        return None, False
+
+
+def _attempt_escalation(
+    tool: str,
+    runner: Path,
+    cmd_args: list,
+    cwd: Path,
+    env: dict,
+    log_cb=None,
+) -> tuple[subprocess.Popen | None, bool]:
+    """Attempt privilege escalation using the specified tool.
+
+    Returns (proc, user_cancelled).
+    """
+    if tool == "doas":
+        return _launch_with_doas(runner, cmd_args, cwd, env, log_cb)
+
+    escalation_cmd = None
+    escalation_env = os.environ.copy()
+
+    if tool == "pkexec":
+        escalation_cmd = ["pkexec", str(runner)] + cmd_args
+    elif tool == "sudo":
+        # Check if sudo can run passwordless first
+        try:
+            chk = subprocess.run(["sudo", "-n", "true"], capture_output=True, timeout=1)
+            if chk.returncode == 0:
+                escalation_cmd = ["sudo", "-n", str(runner)] + cmd_args
+        except Exception:
+            pass
+        if not escalation_cmd:
+            askpass = get_askpass_helper()
+            if askpass:
+                escalation_cmd = ["sudo", "-A", str(runner)] + cmd_args
+                escalation_env["SUDO_ASKPASS"] = str(askpass)
+            else:
+                return None, False
+    elif tool == "run0":
+        escalation_cmd = ["run0", "--pipe", str(runner)] + cmd_args
+    elif tool == "lxqt-sudo":
+        escalation_cmd = ["lxqt-sudo", str(runner)] + cmd_args
+    elif tool == "kdesu":
+        cmd_str = " ".join([f'"{runner}"'] + [f'"{a}"' for a in cmd_args])
+        escalation_cmd = ["kdesu", "-c", cmd_str]
+    elif tool == "kdesudo":
+        cmd_str = " ".join([f'"{runner}"'] + [f'"{a}"' for a in cmd_args])
+        escalation_cmd = ["kdesudo", "-c", cmd_str]
+    elif tool in ("gksu", "gksudo", "beesu"):
+        escalation_cmd = [tool, str(runner)] + cmd_args
+    else:
+        return None, False
+
+    if log_cb:
+        log_cb(f"Requesting superuser privileges for SP Flash Tool via {tool}...")
+
+    try:
+        proc = subprocess.Popen(
+            escalation_cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            cwd=str(cwd),
+            env=escalation_env,
+        )
+        return proc, False
+    except Exception as e:
+        if log_cb:
+            log_cb(f"Escalation via {tool} failed to start: {e}")
+        return None, False
+
+
+def launch_linux_flash_tool(
+    stage: Path,
+    cmd_args: list,
+    cwd: Path = None,
+    env: dict = None,
+    log_cb=None,
+) -> subprocess.Popen:
+    """Launch Linux flash_tool with privilege escalation (doas, pkexec, sudo, run0, etc.) and silent fallback.
+
+    If the user fails or cancels authentication to run as root, SP Flash Tool is
+    silently executed as the current user without root.
+    """
+    if cwd is None:
+        cwd = stage
+    runner = create_flash_tool_runner(stage)
+    silent_system_prep(stage)
+    base_env = env or process_env(stage)
+
+    # 1. If already root, launch directly
+    if os.geteuid() == 0:
+        if log_cb:
+            log_cb("Running SP Flash Tool as root...")
+        return subprocess.Popen(
+            [str(runner)] + cmd_args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            cwd=str(cwd),
+            env=base_env,
+        )
+
+    # 2. Check if privilege escalation is possible
+    is_headless = (
+        os.environ.get("QT_QPA_PLATFORM") == "offscreen"
+        or bool(os.environ.get("INNIOASIS_HEADLESS"))
+        or (not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"))
+    )
+
+    if not is_headless:
+        candidates = find_available_escalation_tools()
+        for tool in candidates:
+            proc, cancelled = _attempt_escalation(tool, runner, cmd_args, cwd, base_env, log_cb)
+            if cancelled:
+                if log_cb:
+                    log_cb("Superuser authentication cancelled by user; silently running SP Flash Tool without root...")
+                break
+            if proc is not None:
+                # Wait for either authentication failure or first line of tool output
+                first_line = proc.stdout.readline() if proc.stdout else ""
+                if proc.poll() is not None and proc.returncode != 0:
+                    if log_cb:
+                        log_cb(f"Superuser authentication via {tool} not granted; silently running SP Flash Tool without root...")
+                    try:
+                        if proc.stdout:
+                            proc.stdout.close()
+                    except Exception:
+                        pass
+                    if hasattr(proc, "_pty_master_fd"):
+                        try:
+                            os.close(proc._pty_master_fd)
+                        except Exception:
+                            pass
+                    # If user cancelled / failed authentication, don't spam with repeated prompts
+                    break
+                else:
+                    if log_cb:
+                        log_cb(f"SP Flash Tool running with root privileges (via {tool}).")
+                    if proc.stdout:
+                        proc.stdout = _PrependedStream(first_line, proc.stdout)
+                    return proc
+
+    # 3. Silent fallback: launch without root
+    if log_cb:
+        log_cb("Running SP Flash Tool without root privileges.")
+    return subprocess.Popen(
+        [str(runner)] + cmd_args,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+        cwd=str(cwd),
+        env=base_env,
+    )
 
 
 def auto_fix_permissions() -> tuple:
     """Perform full automated fix for permissions, udev rules, and configuration."""
-    fix_option_ini()
+    silent_system_prep()
     return install_udev_rules()
 
 

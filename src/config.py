@@ -61,8 +61,11 @@ DONATION_CRYPTO = {
     "SHIBA INU (ERC-20)": "0x5E902083ee1B3A05dd39d824012B39cB10FB80D3",
 }
 
+import logging
 import re
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 # --- Device model helpers ---------------------------------------------------
 DEVICE_MODELS = ("Y1", "Y2", "A5")
@@ -135,7 +138,21 @@ def detect_model_and_type_from_name(name_or_url: str) -> tuple[str, str | None]:
     if "type_a" in base or "type-a" in base or "rom_type_a" in base or "rom-type-a" in base:
         return "Y1", "A"
 
-    # 5. Y1 / generic rom.zip
+    # 5. Non-legacy registered models (G1/G3/G5, Q3E/Q5/Q8...). These have no
+    #    catalogue entry yet, but firmware for them can still be imported by
+    #    hand, and the connection prompts must name the right player.
+    try:
+        from . import device_models
+
+        registered, _variant = device_models.model_from_filename(
+            base, exclude=("Y1", "Y2", "A5")
+        )
+        if registered:
+            return registered, None
+    except Exception:
+        logger.debug("Device registry detection failed for %s", name_or_url, exc_info=True)
+
+    # 6. Y1 / generic rom.zip
     if (
         "y1" in parts
         or "_y1" in base
@@ -166,34 +183,50 @@ def device_label_for_model(model: str, type_variant: str | None = None) -> str:
         base = m or "Y1"
 
     if base == "Y1" and type_variant:
-        return f"Y1 (Type {type_variant})"
+        from .i18n import tr
+        return f"Y1 ({tr('sel_type_' + str(type_variant).lower())})"
+
+    # Anything outside the legacy Y1/Y2/A5 trio is resolved through the device
+    # registry, so a hand-imported package still produces guidance that names
+    # the real product ("Innioasis G5") instead of a bare id. Imported lazily:
+    # config is loaded very early, before the registry may be readable.
+    if base not in ("Y1", "Y2", "A5"):
+        try:
+            from . import device_models
+
+            registered = device_models.guidance_name(m)
+            if registered:
+                return registered
+        except Exception:
+            logger.debug("Device registry lookup failed for %s", m, exc_info=True)
+
     return base
 
 
 def power_on_button_for_model(model: str) -> str:
     """Hardware button used to power the player on after an install."""
+    from .i18n import tr
+
     if is_y2_model(model):
-        return "power/lock button"
+        return tr("btn_power_lock")
     if is_a5_model(model):
-        return "power button"
-    return "centre button"
+        return tr("btn_power")
+    return tr("btn_centre")
 
 
 def install_power_on_steps(model: str) -> str:
     """Short post-install power-on steps for the active model."""
+    from .i18n import tr
+
     label = device_label_for_model(model)
     button = power_on_button_for_model(model)
-    return f"Unplug your {label}, then hold the {button} until it turns on."
+    return tr("install_power_on_steps_fmt").format(label=label, button=button)
 
 
 def install_disconnect_guidance(model: str = "Y1", type_variant: str | None = None) -> str:
     """Guidance text for ensuring device is disconnected and powered off before install."""
+    from .i18n import tr
+
     label = device_label_for_model(model, type_variant)
-    return (
-        f"Before continuing, please:\n\n"
-        f"1. If it isn't already off, power off your {label}\n"
-        f"   (You can use a pin or paperclip to press the reset button if needed)\n\n"
-        f"2. If it is connected, disconnect the USB cable from your {label}\n\n"
-        f"Then click OK and follow the on-screen instructions."
-    )
+    return tr("install_disconnect_guidance_fmt").format(label=label)
 

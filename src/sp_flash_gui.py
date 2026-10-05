@@ -39,6 +39,8 @@ def is_sp_flash_gui_supported() -> bool:
 
 def find_sp_flash_tool_dirs() -> List[Path]:
     """Return all directories containing an SP Flash Tool binary on this system."""
+    if paths.IS_MAC:
+        return []
     found: List[Path] = []
     seen = set()
 
@@ -178,6 +180,9 @@ def update_sp_history_ini(
     If sp_dir is None, updates all detected SP Flash Tool binary directories.
     """
     from . import device_tracking
+
+    if paths.IS_MAC:
+        return False
 
     if sp_dir is None:
         dirs = find_sp_flash_tool_dirs()

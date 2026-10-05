@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .. import paths
 from ..config import install_power_on_steps, device_label_for_model
 from ..i18n import tr
 from ..updates import asset_hint, pick_platform_asset
@@ -108,6 +109,72 @@ class FlashFailedDialog(QDialog):
 
     def want_log(self):
         return self._want_log
+
+
+class RetryGuidanceDialog(QDialog):
+    """Hardware reset instructions shown when the target stops answering.
+
+    A player left in a half-initialised state answers the BROM handshake with
+    errno 5 / errno 2 rather than a handshake, and retrying in place cannot
+    recover it: the cable has to come out and the hidden reset button has to
+    be pressed first. This dialog is that instruction, and it doubles as the
+    retry entry point so the next attempt starts from a clean device state.
+    """
+
+    def __init__(self, parent=None, detail=""):
+        super().__init__(parent)
+        t = T()
+        self.setWindowTitle(tr("retry_guidance_title"))
+        self.setMinimumWidth(470)
+        self._want_retry = False
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+
+        title = QLabel(
+            f"<h2 style='color:{t.warn_fg};'>{tr('retry_guidance_title')}</h2>"
+        )
+        title.setTextFormat(Qt.RichText)
+        layout.addWidget(title)
+
+        intro = QLabel(tr("retry_guidance_intro"))
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+
+        steps = QLabel(
+            f"<b>{tr('retry_guidance_step_1')}</b><br>"
+            f"<b>{tr('retry_guidance_step_2')}</b><br>"
+            f"<b>{tr('retry_guidance_step_3')}</b>"
+        )
+        steps.setTextFormat(Qt.RichText)
+        steps.setWordWrap(True)
+        layout.addWidget(steps)
+
+        if detail:
+            detail_label = QLabel(detail)
+            detail_label.setWordWrap(True)
+            detail_label.setProperty("cssClass", "dimmed")
+            layout.addWidget(detail_label)
+
+        row = QHBoxLayout()
+        retry_btn = QPushButton(tr("retry_guidance_btn_retry"))
+        retry_btn.setProperty("cssClass", "primary")
+        retry_btn.setDefault(True)
+        retry_btn.clicked.connect(self._on_retry)
+        close_btn = QPushButton(tr("close"))
+        close_btn.setProperty("cssClass", "ghost")
+        close_btn.clicked.connect(self.reject)
+        row.addWidget(retry_btn)
+        row.addWidget(close_btn)
+        row.addStretch()
+        layout.addLayout(row)
+
+    def _on_retry(self):
+        self._want_retry = True
+        self.accept()
+
+    def want_retry(self):
+        return self._want_retry
 
 
 class DiagnosticsDialog(QDialog):
@@ -449,29 +516,21 @@ class LinuxSetupDialog(QDialog):
         else:
             self._progress_box.setVisible(not self._linux.files_ready(stage))
 
-    def closeEvent(self, event):
+    def _stop_worker(self):
         if self._worker and self._worker.isRunning():
             try:
-                self._worker.terminate()
-                self._worker.wait(500)
+                self._worker.requestInterruption()
+                if not self._worker.wait(800):
+                    self._worker.terminate()
+                    self._worker.wait(500)
             except Exception:
                 pass
-        super().closeEvent(event)
-
-    def reject(self):
-        if self._worker and self._worker.isRunning():
-            try:
-                self._worker.terminate()
-                self._worker.wait(500)
-            except Exception:
-                pass
-        super().reject()
 
     def _start_staging(self, force_download: bool = False):
         t = T()
         self._progress_box.setVisible(True)
         self._progress_bar.setValue(10)
-        self._progress_msg.setText("Connecting to GitHub...")
+        self._progress_msg.setText(tr("linux_connecting_github"))
         self._engine_badge.setText(tr("linux_card_downloading_badge"))
         self._engine_badge.setStyleSheet(
             f"font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 10px; "
@@ -491,10 +550,10 @@ class LinuxSetupDialog(QDialog):
     def _on_staging_finished(self, ok: bool, msg: str, report: dict):
         self._progress_bar.setValue(100)
         if ok:
-            self._progress_msg.setText("Flashing engine ready.")
+            self._progress_msg.setText(tr("linux_engine_ready_msg"))
             QTimer.singleShot(1200, lambda: self._progress_box.setVisible(False))
         else:
-            self._progress_msg.setText(f"Setup issue: {msg}")
+            self._progress_msg.setText(tr("linux_setup_issue_fmt").format(msg=msg))
         self.refresh_status()
 
     def _toggle_diagnostics(self):
@@ -515,21 +574,21 @@ class LinuxSetupDialog(QDialog):
             self._sys_badge.setText(tr("linux_card_ready_badge"))
             self._sys_badge.setStyleSheet(f"font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 10px; background-color: {t.ok_bg}; color: {t.ok_fg}; border: none;")
         else:
-            self._sys_badge.setText("Unsupported")
+            self._sys_badge.setText(tr("linux_unsupported_badge"))
             self._sys_badge.setStyleSheet(f"font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 10px; background-color: {t.danger_bg}; color: {t.danger_fg}; border: none;")
 
         # Engine card
         if report.get("sp_exec_ok"):
             self._engine_badge.setText(tr("linux_card_ready_badge"))
             self._engine_badge.setStyleSheet(f"font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 10px; background-color: {t.ok_bg}; color: {t.ok_fg}; border: none;")
-            self._ec_desc.setText("MediaTek SP Flash Tool staged with libpng12 compatibility.")
+            self._ec_desc.setText(tr("linux_engine_staged_desc"))
         elif self._worker and self._worker.isRunning():
             self._engine_badge.setText(tr("linux_card_downloading_badge"))
             self._engine_badge.setStyleSheet(f"font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 10px; background-color: {t.accent_bg}; color: {t.accent_text}; border: none;")
         else:
             self._engine_badge.setText(tr("linux_card_action_badge"))
             self._engine_badge.setStyleSheet(f"font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 10px; background-color: {t.warn_bg}; color: {t.warn_fg}; border: none;")
-            self._ec_desc.setText("Click Re-check or restart setup to download package.")
+            self._ec_desc.setText(tr("linux_engine_recheck_desc"))
 
         # USB permissions card
         if report.get("udev_ok"):
@@ -537,11 +596,11 @@ class LinuxSetupDialog(QDialog):
             self._grant_btn.setVisible(False)
             self._usb_badge.setText(tr("linux_card_granted_badge"))
             self._usb_badge.setStyleSheet(f"font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 10px; background-color: {t.ok_bg}; color: {t.ok_fg}; border: none;")
-            self._uc_desc.setText("MediaTek rules active (/etc/udev/rules.d/). Desktop access enabled.")
+            self._uc_desc.setText(tr("linux_usb_rules_active_desc"))
         else:
             self._usb_badge.setVisible(False)
             self._grant_btn.setVisible(True)
-            self._uc_desc.setText("Grant permissions once so the app can communicate with your device.")
+            self._uc_desc.setText(tr("linux_usb_grant_desc"))
 
         # Bottom Continue button
         if report.get("overall_ready"):
@@ -572,11 +631,10 @@ class LinuxSetupDialog(QDialog):
         ok, msg = self._linux.auto_fix_permissions()
         if ok:
             QMessageBox.information(
-                self, "Permissions Configured",
-                "USB permissions & udev rules installed successfully. Services configured."
+                self, tr("linux_perms_ok_title"), tr("linux_perms_ok_msg")
             )
         else:
-            QMessageBox.warning(self, "Permission Setup", msg)
+            QMessageBox.warning(self, tr("perm_setup_title"), msg)
         self.refresh_status()
 
     def _on_copy_command(self):
@@ -587,8 +645,8 @@ class LinuxSetupDialog(QDialog):
         if clipboard:
             clipboard.setText(cmd)
             QMessageBox.information(
-                self, "Copied",
-                f"Setup command copied to clipboard:\n\n{cmd}\n\nRun this in a terminal to install rules and reload udev."
+                self, tr("linux_copied_title"),
+                tr("linux_copied_msg_fmt").format(cmd=cmd)
             )
 
     def _on_launch_sp_gui(self):
@@ -596,21 +654,18 @@ class LinuxSetupDialog(QDialog):
         from PySide6.QtWidgets import QMessageBox
         ok, msg = sp_flash_gui.open_sp_flash_tool_gui()
         if not ok:
-            QMessageBox.warning(self, "SP Flash Tool GUI", msg)
+            QMessageBox.warning(self, tr("sp_gui_error_title"), msg)
 
     def closeEvent(self, event):
-        if self._worker and self._worker.isRunning():
-            self._worker.wait(1000)
+        self._stop_worker()
         super().closeEvent(event)
 
     def reject(self):
-        if self._worker and self._worker.isRunning():
-            self._worker.wait(1000)
+        self._stop_worker()
         super().reject()
 
     def accept(self):
-        if self._worker and self._worker.isRunning():
-            self._worker.wait(1000)
+        self._stop_worker()
         super().accept()
 
 
@@ -623,11 +678,16 @@ class ReleaseReminderDialog(QDialog):
         update_info=None,
         on_view_release=None,
         on_disable_reminders=None,
+        on_start_install=None,
+        flash_method="",
     ):
         super().__init__(parent)
         self.update_info = update_info or {}
         self.on_view_release = on_view_release
         self.on_disable_reminders = on_disable_reminders
+        self.on_start_install = on_start_install
+        self.flash_method = flash_method
+        self._install_started = False
 
         model = self.update_info.get("model", "Y1")
         device_label = device_label_for_model(model)
@@ -644,7 +704,7 @@ class ReleaseReminderDialog(QDialog):
         )
 
         self.setWindowTitle(tr("reminder_new_release_title"))
-        self.setMinimumWidth(460)
+        self.setMinimumWidth(480)
         t = T()
 
         layout = QVBoxLayout(self)
@@ -661,7 +721,7 @@ class ReleaseReminderDialog(QDialog):
 
         badge = QLabel(device_label)
         badge.setStyleSheet(
-            f"background-color: {t.accent}; color: #ffffff;"
+            f"background-color: {t.accent}; color: {t.accent_text};"
             f" border-radius: 10px; font-size: 11px; font-weight: 700; padding: 3px 10px;"
         )
         hdr_row.addWidget(badge)
@@ -710,6 +770,30 @@ class ReleaseReminderDialog(QDialog):
 
         layout.addWidget(card)
 
+        # Method explanation & install prompt
+        if paths.IS_MAC:
+            method_str = tr("flash_method_mtk")
+        else:
+            m_lower = (self.flash_method or "").lower()
+            if m_lower == "sp":
+                method_str = tr("flash_method_sp")
+            elif m_lower in ("mtk", "mtk_mac"):
+                method_str = tr("flash_method_mtk")
+            elif self.flash_method:
+                method_str = self.flash_method
+            else:
+                method_str = ""
+
+        if method_str:
+            prompt_text = tr("reminder_prompt_install").format(method=method_str)
+        else:
+            prompt_text = tr("reminder_prompt_install_generic")
+
+        self._prompt_lbl = QLabel(prompt_text)
+        self._prompt_lbl.setWordWrap(True)
+        self._prompt_lbl.setStyleSheet(f"font-size: 13px; color: {t.fg}; font-weight: 500; line-height: 1.4;")
+        layout.addWidget(self._prompt_lbl)
+
         # Don't remind checkbox
         self.cb_dont_remind = QCheckBox(tr("reminder_dont_remind_device"))
         layout.addWidget(self.cb_dont_remind)
@@ -724,11 +808,11 @@ class ReleaseReminderDialog(QDialog):
         btn_dismiss.clicked.connect(self._on_dismiss)
         btn_layout.addWidget(btn_dismiss)
 
-        btn_view = QPushButton(tr("reminder_view_release"))
-        btn_view.setProperty("cssClass", "primary")
-        btn_view.setDefault(True)
-        btn_view.clicked.connect(self._on_view)
-        btn_layout.addWidget(btn_view)
+        self._btn_install = QPushButton(tr("reminder_start_install"))
+        self._btn_install.setProperty("cssClass", "primary")
+        self._btn_install.setDefault(True)
+        self._btn_install.clicked.connect(self._on_start_install)
+        btn_layout.addWidget(self._btn_install)
 
         layout.addLayout(btn_layout)
 
@@ -742,11 +826,17 @@ class ReleaseReminderDialog(QDialog):
         self._check_disable_opt_out()
         self.reject()
 
-    def _on_view(self):
+    def _on_start_install(self):
+        self._install_started = True
         self._check_disable_opt_out()
         self.accept()
-        if callable(self.on_view_release):
+        if callable(self.on_start_install):
+            self.on_start_install(self.update_info)
+        elif callable(self.on_view_release):
             self.on_view_release(self.update_info)
+
+    def _on_view(self):
+        self._on_start_install()
 
 
 # Alias for cross-platform and explicit system checking invocations
