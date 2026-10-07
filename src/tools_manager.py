@@ -108,7 +108,7 @@ def get_user_tools_dir() -> Path:
     """Return user-writable base directory for self-healed components."""
     if paths.IS_WINDOWS:
         base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
-        d = base / "Innioasis Updater" / "tools"
+        d = base / "Updater CE" / "tools"
     elif platform.system() == "Darwin":
         d = Path.home() / "Library" / "Application Support" / "Innioasis" / "tools"
     else:
@@ -312,6 +312,6 @@ def self_heal_component(
         if progress_cb:
             progress_cb(100, 100, f"{tool.name} ready.")
         logger.info("Successfully self-healed %s at %s", tool.name, dest_dir)
-        return True, "Self-heal successful", dest_dir
+        return True, "Self-heal successful", dest_dir.resolve()
 
-    return False, f"Verification failed after extraction: {msg}", dest_dir
+    return False, f"Verification failed after extraction: {msg}", dest_dir.resolve()

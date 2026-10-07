@@ -499,7 +499,7 @@ def generate_udev_rule_content() -> str:
     interrupting BROM/DA handshakes.
     """
     return (
-        "# Innioasis Updater CE - MediaTek Flashing Rules\n"
+        "# Updater CE - MediaTek Flashing Rules\n"
         "# Ensures full permissions for Boot ROM (BROM) and Preloader serial interfaces.\n"
         "\n"
         "# MediaTek Boot ROM (BROM) - USB devices\n"
@@ -528,7 +528,7 @@ def generate_ttyacms_rule_content() -> str:
     Standard community fix for MediaTek preloader serial access without udev race conditions.
     """
     return (
-        "# Innioasis Updater CE - Unprivileged Serial Port Access\n"
+        "# Updater CE - Unprivileged Serial Port Access\n"
         'ACTION=="add|change", SUBSYSTEM=="tty", KERNEL=="ttyACM[0-9]*", MODE="0666", TAG+="uaccess", RUN+="/bin/chmod 0666 /dev/%k"\n'
         'ACTION=="add|change", SUBSYSTEM=="tty", KERNEL=="ttyUSB[0-9]*", MODE="0666", TAG+="uaccess", RUN+="/bin/chmod 0666 /dev/%k"\n'
     )
@@ -794,7 +794,7 @@ def write_setup_script(cache_dir: Path = None) -> Path:
     tty_rules_content = generate_ttyacms_rule_content()
 
     script_content = f"""#!/bin/bash
-# Innioasis Updater CE - Linux System Preparation Script
+# Updater CE - Linux System Preparation Script
 # Configures udev rules, permissions, groups, and services for MediaTek SP Flash Tool.
 
 set -e
@@ -805,7 +805,7 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-echo "=== Innioasis Updater CE: Staging Linux System ==="
+echo "=== Updater CE: Staging Linux System ==="
 echo "Target Distribution: {distro.get('pretty_name', 'Linux')}"
 
 # 1. Install primary udev rules
@@ -1046,9 +1046,9 @@ def get_askpass_helper() -> Path | None:
         'elif [ -n "$SSH_ASKPASS" ] && [ -x "$SSH_ASKPASS" ]; then\n'
         '    exec "$SSH_ASKPASS" "$@"\n'
         'elif command -v zenity >/dev/null 2>&1; then\n'
-        '    exec zenity --password --title="Innioasis Updater CE - Superuser Privileges"\n'
+        '    exec zenity --password --title="Updater CE - Superuser Privileges"\n'
         'elif command -v kdialog >/dev/null 2>&1; then\n'
-        '    exec kdialog --password "Innioasis Updater CE - Superuser Privileges"\n'
+        '    exec kdialog --password "Updater CE - Superuser Privileges"\n'
         'elif command -v rofi >/dev/null 2>&1; then\n'
         '    exec rofi -dmenu -password -p "Superuser Privileges:"\n'
         "elif command -v dmenu >/dev/null 2>&1 && dmenu -h 2>&1 | grep -q -- '-P'; then\n"

@@ -25,6 +25,7 @@ from ..flash_service import (
     normalise_method,
 )
 from ..i18n import tr
+from .dark import page_top_margin
 from .widgets import Card
 
 logger = logging.getLogger(__name__)
@@ -41,6 +42,7 @@ class SettingsPage(QWidget):
     check_updates_requested = Signal()
     flash_method_changed = Signal(str)
     simulated_mac_requested = Signal()
+    offline_mode_changed = Signal(bool)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -52,7 +54,7 @@ class SettingsPage(QWidget):
 
     def _build_ui(self):
         root_layout = QVBoxLayout(self)
-        root_layout.setContentsMargins(24, 20, 24, 20)
+        root_layout.setContentsMargins(24, page_top_margin(), 24, 20)
         root_layout.setSpacing(16)
 
         # Header
@@ -172,6 +174,25 @@ class SettingsPage(QWidget):
         self._checker_card.set_layout(chk_layout)
         layout.addWidget(self._checker_card)
 
+        # --- Card 5: Generic MediaTek Offline Mode ---
+        self._offline_mode_card = Card("settings_offline_mode_group")
+        off_layout = QVBoxLayout()
+        off_layout.setSpacing(8)
+
+        self._cb_offline_mode = QCheckBox(tr("settings_offline_mode"))
+        self._cb_offline_mode.setToolTip(tr("settings_offline_mode_desc"))
+        self._cb_offline_mode.toggled.connect(self._on_offline_mode_toggled)
+        off_layout.addWidget(self._cb_offline_mode)
+
+        self._offline_mode_desc = QLabel(tr("settings_offline_mode_desc"))
+        self._offline_mode_desc.setWordWrap(True)
+        self._offline_mode_desc.setProperty("cssClass", "dimmed")
+        self._offline_mode_desc.setContentsMargins(24, 0, 0, 0)
+        off_layout.addWidget(self._offline_mode_desc)
+
+        self._offline_mode_card.set_layout(off_layout)
+        layout.addWidget(self._offline_mode_card)
+
         # SP Flash Tool is not supported on macOS (MTKClient only).
         # Hide backend selection and diagnostics cards on macOS.
         self._method_card.setVisible(not paths.IS_MAC)
@@ -189,6 +210,11 @@ class SettingsPage(QWidget):
         if paths.IS_MAC:
             # No SP Flash Tool build exists for macOS.
             return (METHOD_MTK,)
+        if paths.IS_WINDOWS:
+            # On Windows, strictly default to SP Flash Tool unless unlocked via 'M' key
+            if self._advanced_revealed:
+                return (METHOD_SP, METHOD_MTK, METHOD_MTK_MAC)
+            return (METHOD_SP,)
         if self._advanced_revealed:
             return (METHOD_SP, METHOD_MTK, METHOD_MTK_MAC)
         return (METHOD_SP, METHOD_MTK)
@@ -320,9 +346,23 @@ class SettingsPage(QWidget):
         )
         self._cb_skip_install_donations.blockSignals(False)
 
+        # Offline / Generic mode toggle
+        self._cb_offline_mode.blockSignals(True)
+        from ..config import is_generic_mtk
+        self._cb_offline_mode.setChecked(is_generic_mtk())
+        self._cb_offline_mode.blockSignals(False)
+
     # ------------------------------------------------------------------
     # Misc actions
     # ------------------------------------------------------------------
+    def _on_offline_mode_toggled(self, checked: bool):
+        from PySide6.QtCore import QSettings
+        QSettings("Innioasis", "UpdaterCE").setValue("offline_mode", checked)
+        from .. import config
+        config.IS_OFFLINE_MODE = checked
+        config.IS_GENERIC_MTK_MODE = checked
+        self.offline_mode_changed.emit(checked)
+
     def _on_hide_donations_toggled(self, checked: bool):
         device_tracking.set_donation_ui_disabled(checked)
         self.donation_visibility_changed.emit(checked)
@@ -359,4 +399,7 @@ class SettingsPage(QWidget):
         self._checker_desc.setText(tr("settings_checker_desc"))
         self._btn_run_checker.setText(tr("system_checker_run_btn"))
         self._btn_launch_sp.setText(tr("system_checker_launch_gui_btn"))
+        self._offline_mode_card.retranslate()
+        self._cb_offline_mode.setText(tr("settings_offline_mode"))
+        self._offline_mode_desc.setText(tr("settings_offline_mode_desc"))
         self.refresh_settings()

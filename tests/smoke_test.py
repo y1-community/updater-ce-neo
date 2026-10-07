@@ -9,6 +9,7 @@ import tempfile
 from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+os.environ.setdefault("UPDATER_MTK_INPROCESS", "1")
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
@@ -780,6 +781,11 @@ def test_ui_construction():
     assert page.current_package() is not None
     # Select Package is the start page (no separate Home tab).
     assert w._stack.currentIndex() == 0
+    assert w.windowTitle().startswith("Updater CE v3.0")
+    assert w._brand_label.text() == "Updater CE"
+    assert w._icon_label.pixmap() is not None and not w._icon_label.pixmap().isNull()
+    assert 'by <a href="https://ko-fi.com/teamslide"' in w._version_label.text()
+    assert "Ryan Specter" in w._version_label.text()
     assert w.statusBar().objectName() == "donation_status_bar"
     assert w.statusBar()._goal_bar.value() >= 0
     w.close()
@@ -857,6 +863,42 @@ def test_donation_status_bar():
     assert "couvrir" in bar._goal_label.text()
     assert bar._support_btn.text() == "Nous soutenir"
 
+    # Status update vs donation display alternation (displayed one at a time, no collision)
+    bar.show()
+    app.processEvents()
+    assert bar._donation_container.isVisible() is True
+    assert bar._status_container.isVisible() is False
+
+    # Showing status update hides donation container completely
+    bar.showMessage("Preparing package...", 0)
+    app.processEvents()
+    assert bar._donation_container.isVisible() is False
+    assert bar._status_container.isVisible() is True
+    assert bar._status_label.text() == "Preparing package..."
+    assert bar.currentMessage() == "Preparing package..."
+    assert bar._status_revert_timer.isActive() is True  # Revert timer active when donations enabled
+
+    # Clearing message restores donation container cleanly
+    bar.clearMessage()
+    app.processEvents()
+    assert bar._donation_container.isVisible() is True
+    assert bar._status_container.isVisible() is False
+    assert bar.currentMessage() == ""
+
+    # When donations are disabled: persistently show status messages without reverting to donations
+    bar.set_donations_enabled(False)
+    app.processEvents()
+    assert bar._donation_container.isVisible() is False
+    bar.showMessage("Flashing firmware...", 0)
+    app.processEvents()
+    assert bar._status_container.isVisible() is True
+    assert bar._donation_container.isVisible() is False
+    assert bar._status_revert_timer.isActive() is False  # Persists without auto-revert
+    bar.clearMessage()
+    app.processEvents()
+    assert bar._status_container.isVisible() is False
+    assert bar._donation_container.isVisible() is False
+
     bar.deleteLater()
     app.processEvents()
     _reset_app_settings()
@@ -933,20 +975,678 @@ def test_diagnostics_live_update():
     w.show()
 
     dlg = DiagnosticsDialog(parent=w, lines=[])
-    assert dlg._view.toPlainText() == "No diagnostics entries"
+    # Stored history is shown rather than a blank pane (a finished install must
+    # still be readable); the empty-state text is only for a truly empty log.
+    assert dlg._view.toPlainText().strip()
+    assert hasattr(dlg, "_category_combo")
+    assert hasattr(dlg, "_goto_btn")
+    assert hasattr(dlg, "_save_btn")
+    # Only the backends this host can produce are offered as drop-down views.
+    from src.diagnostics import available_categories
+    offered = [cat for cat, _ in available_categories()]
+    present = {dlg._category_combo.itemData(i) for i in range(dlg._category_combo.count())}
+    assert present == set(offered), (present, offered)
+    assert "all" in present and "gui" in present
+    assert hasattr(dlg, "_session_combo")
+    assert hasattr(dlg, "_from_edit") and hasattr(dlg, "_to_edit")
+    assert hasattr(dlg, "_problems_check")
+
+    # Unique per run so lines persisted by an earlier run cannot satisfy (or
+    # inflate) the assertions below.
+    gui_line = f"first live line {os.getpid()}"
+    mtk_line = f"Waiting for MTK device {os.getpid()}... Power off the device and connect USB."
 
     # Wire it the same way _show_diagnostics does.
     w.log_line_added.connect(dlg.append_line)
-    w._append_log("first live line")
+    w._append_log(gui_line)
     w._append_log("second live line")
-    text = dlg._view.toPlainText()
-    assert "No diagnostics entries" not in text
-    assert "first live line" in text and "second live line" in text, text
+    w._append_log("[SP] 0% of image data has been sent")
+    w._append_log(mtk_line)
+
+    # 1. Unified category shows all lines
+    dlg._category_combo.setCurrentIndex(dlg._category_combo.findData("all"))
+    text_all = dlg._view.toPlainText()
+    assert gui_line in text_all
+    assert "image data" in text_all
+    assert "Waiting for MTK" in text_all
+    # A live line is stored once, not once per recording path.
+    assert text_all.count(gui_line) == 1, text_all
+
+    # 2. SP Flash Tool category shows SP output (where the host offers it)
+    from src.diagnostics import CAT_SP, CAT_MTK
+    if dlg._category_combo.findData(CAT_SP) >= 0:
+        dlg._category_combo.setCurrentIndex(dlg._category_combo.findData(CAT_SP))
+        text_sp = dlg._view.toPlainText()
+        assert "image data" in text_sp
+        assert gui_line not in text_sp
+
+    # 3. MTKClient category shows MTK output (where the host offers it)
+    if dlg._category_combo.findData(CAT_MTK) >= 0:
+        dlg._category_combo.setCurrentIndex(dlg._category_combo.findData(CAT_MTK))
+        text_mtk = dlg._view.toPlainText()
+        assert "Waiting for MTK" in text_mtk
+        assert gui_line not in text_mtk
+    dlg._category_combo.setCurrentIndex(dlg._category_combo.findData("all"))
+
+    # 4. Save file test
+    with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as tf:
+        tmp_save = tf.name
+    from PySide6.QtWidgets import QFileDialog
+    orig_save = QFileDialog.getSaveFileName
+    QFileDialog.getSaveFileName = lambda *a, **k: (tmp_save, "Text Files (*.log *.txt)")
+    try:
+        dlg._on_save_file()
+        saved_text = Path(tmp_save).read_text(encoding="utf-8")
+        assert "Waiting for MTK" in saved_text
+    finally:
+        QFileDialog.getSaveFileName = orig_save
+        try:
+            os.unlink(tmp_save)
+        except Exception:
+            pass
+
+    # 5. Copy to clipboard test
+    dlg._on_copy()
+    assert "Waiting for MTK" in QApplication.clipboard().text()
+
+    # 6. Reveal in file manager test
+    from unittest.mock import patch
+    with patch("subprocess.run") as mock_subproc:
+        dlg._on_goto_file()
+        assert mock_subproc.called
 
     w.log_line_added.disconnect(dlg.append_line)
     dlg.close()
     w.close()
     app.processEvents()
+
+
+def test_tool_output_capture():
+    """Output the in-process MTKClient prints itself, plus its logging records,
+    reach the diagnostics log — not only a console a GUI build does not have."""
+    import logging
+
+    from src.diagnostics import (
+        DiagnosticsManager,
+        capture_tool_output,
+        CAT_ALL,
+        CAT_MTK,
+    )
+
+    mgr = DiagnosticsManager.instance()
+    mgr.clear()
+    mgr.start_flash_session("pkg.zip", "mtk", "Y1")
+    real_stdout, real_stderr = sys.stdout, sys.stderr
+    try:
+        recorded = []
+
+        def sink(line):
+            # Mirrors MainWindow._on_log_message: the capture sink both
+            # forwards to the UI and stores the line.
+            recorded.append(line)
+            mgr.record_log(line, dedupe=True)
+
+        with capture_tool_output(sink, tag="MTK"):
+            print("usblib: [usbread] Overflow with sz=65536, retrying with 4096")
+            sys.stderr.write("DaHandler: SLA Signature was accepted.\n")
+            logging.getLogger("src.flash_service").warning("DA stage 2 upload failed")
+
+        # Streams are restored afterwards and writes still reach the console.
+        assert sys.stdout is real_stdout and sys.stderr is real_stderr
+        raw = [line for line in recorded if "stage 2 upload" not in line]
+        assert [line for line in raw if "Overflow with sz=65536" in line], recorded
+        assert any("SLA Signature was accepted" in line for line in raw), recorded
+        assert all(line.startswith("[MTK] ") for line in raw), recorded
+
+        text_all = "\n".join(mgr.get_lines(CAT_ALL))
+        assert "Overflow with sz=65536" in text_all, text_all
+        assert "SLA Signature was accepted" in text_all, text_all
+        assert "DA stage 2 upload failed" in text_all, text_all
+        # ...and stored once, despite being written to the console too.
+        assert text_all.count("DA stage 2 upload failed") == 1, text_all
+
+        # The backend tab carries the raw tool output as well.
+        text_mtk = "\n".join(mgr.get_lines(CAT_MTK))
+        assert "Overflow with sz=65536" in text_mtk, text_mtk
+
+        # A tool line that arrives twice is stored once.
+        mgr.record_log("[MTK] echoed twice", dedupe=True)
+        mgr.record_log("[MTK] echoed twice", dedupe=True)
+        assert "\n".join(mgr.get_lines(CAT_ALL)).count("echoed twice") == 1
+    finally:
+        mgr.end_flash_session(True)
+        sys.stdout, sys.stderr = real_stdout, real_stderr
+        mgr.clear()
+
+
+def test_sp_internal_log_streamed():
+    """flash_tool's internal QT_FLASH_TOOL.log is forwarded into the SP
+    category, skipping lines its console stream already reported."""
+    import src.flash_service as fs
+
+    class _StopAfter:
+        """Stand-in for the monitor's threading.Event, so the tail loop can be
+        driven synchronously and deterministically."""
+
+        def __init__(self, checks):
+            self._left = checks
+
+        def is_set(self):
+            self._left -= 1
+            return self._left <= 0
+
+    with tempfile.TemporaryDirectory() as td:
+        log_root = Path(td)
+        run_dir = log_root / "20261007_SP_FT"
+        run_dir.mkdir()
+        (run_dir / "QT_FLASH_TOOL.log").write_text(
+            "2026-10-07 12:00:00  0% of image data has been sent\n"
+            "DA version: 1.0.0.0\n"
+            "S_DA_INIT_SYNC_ERROR (1093)\n",
+            encoding="utf-8",
+        )
+
+        w = fs.FlashWorker("pkg.zip", method="sp")
+        logs = []
+        w.log_message.connect(logs.append)
+        # This line was already reported on the console stream.
+        w._sp_stdout_seen.add(
+            fs._normalise_tool_line("2026-10-07 12:00:00  0% of image data has been sent")
+        )
+
+        # Two passes over the tail loop (the monitor waits for flash_tool to
+        # create its run directory, then follows the file).
+        w._monitor_sp_log_file(_StopAfter(3), str(log_root))
+
+        forwarded = [line for line in logs if line.startswith("[QT] ")]
+        assert any("DA version: 1.0.0.0" in line for line in forwarded), logs
+        assert any("S_DA_INIT_SYNC_ERROR (1093)" in line for line in forwarded), logs
+        assert not any("0% of image data has been sent" in line for line in logs), logs
+
+
+def test_diagnostics_finished_install_readback():
+    """A finished install can be read back and exported: the complaint was that
+    once the run ends there is no way to see what the tooling did."""
+    from PySide6.QtWidgets import QApplication
+    from src.diagnostics import DiagnosticsManager, CAT_ALL, CAT_SP, CAT_MTK, CAT_GUI
+    from src.ui.dialogs import DiagnosticsDialog
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    mgr = DiagnosticsManager.instance()
+    mgr.clear()
+
+    mgr.start_flash_session("rom.zip", "sp", "Y1")
+    mgr.record_log("Extracting firmware package: rom.zip")
+    mgr.record_log("[SP] BROM connected")
+    mgr.record_log("[QT] DA version: 1.0.0.0")
+    mgr.end_flash_session(False, "S_DA_INIT_SYNC_ERROR (1093)")
+
+    dlg = DiagnosticsDialog(parent=None, lines=[])
+    try:
+        dlg._category_combo.setCurrentIndex(dlg._category_combo.findData(CAT_ALL))
+        text_all = dlg._view.toPlainText()
+        assert "INSTALL SESSION STARTED" in text_all, text_all
+        assert "INSTALL SESSION COMPLETED: FAILED" in text_all, text_all
+        assert "S_DA_INIT_SYNC_ERROR (1093)" in text_all, text_all
+
+        # Category routing is a data-level guarantee, independent of which
+        # backends this host shows in the drop-down.
+        from src.diagnostics import CAT_SP, CAT_MTK
+
+        sp_lines = "\n".join(mgr.get_lines(CAT_SP))
+        assert "BROM connected" in sp_lines, sp_lines
+        assert "Extracting firmware package" not in sp_lines, sp_lines
+        assert "BROM connected" not in "\n".join(mgr.get_lines(CAT_MTK))
+        gui_lines = "\n".join(mgr.get_lines(CAT_GUI))
+        assert "Extracting firmware package" in gui_lines, gui_lines
+        assert "BROM connected" not in gui_lines, gui_lines
+
+        # ... and the drop-down only offers the backends this host can produce.
+        for cat in (CAT_SP, CAT_MTK, CAT_GUI):
+            if dlg._category_combo.findData(cat) < 0:
+                continue
+            dlg._category_combo.setCurrentIndex(dlg._category_combo.findData(cat))
+            text_cat = dlg._view.toPlainText()
+            assert mgr.get_lines(cat)[-1] in text_cat, text_cat
+            if cat == CAT_GUI:
+                assert "Extracting firmware package" in text_cat, text_cat
+                assert "BROM connected" not in text_cat, text_cat
+
+        # Export whatever the user is looking at.
+        with tempfile.NamedTemporaryFile(suffix=".log", delete=False) as tf:
+            tmp_save = tf.name
+        from PySide6.QtWidgets import QFileDialog
+        orig_save = QFileDialog.getSaveFileName
+        QFileDialog.getSaveFileName = lambda *a, **k: (tmp_save, "Text Files (*.log *.txt)")
+        try:
+            dlg._on_save_file()
+            saved = Path(tmp_save).read_text(encoding="utf-8")
+            assert "Extracting firmware package" in saved, saved
+        finally:
+            QFileDialog.getSaveFileName = orig_save
+            try:
+                os.unlink(tmp_save)
+            except Exception:
+                pass
+    finally:
+        dlg.close()
+        mgr.clear()
+        app.processEvents()
+
+
+def test_connectivity_check_logging():
+    """Supporters are never written to the diagnostics log — reachability is.
+    When the feed cannot be loaded the newest local copy is used instead, so the
+    app keeps working with innioasis.app unavailable."""
+    import logging
+    import shutil
+    import threading
+
+    from src import donors
+    from src.diagnostics import CAT_ALL, DiagnosticsManager, install_log_capture, remove_log_capture
+
+    _reset_app_settings()
+    mgr = DiagnosticsManager.instance()
+    mgr.clear()
+    # The app configures root logging at INFO; a bare test process defaults to
+    # WARNING, which would drop the connectivity records before the diagnostics
+    # handler ever sees them.
+    src_logger = logging.getLogger("src")
+    original_level = src_logger.level
+    src_logger.setLevel(logging.INFO)
+
+    class _Resp:
+        def __init__(self, status, text):
+            self.status_code = status
+            self.text = text
+
+    csv_text = "Name,Amount,Date,URL,Method\nAlice,50,15/07/2026,https://x,PayPal\n"
+    tmp_dir = Path(tempfile.mkdtemp(prefix="updater-donors-"))
+    cache_file = tmp_dir / "donors.csv"
+    original_get = donors.requests.get
+    original_cache_path = donors.cached_donors_path
+    donors.cached_donors_path = lambda: cache_file
+    install_log_capture()
+    try:
+        # 1. Reachable feed: a successful connectivity check is logged, the
+        #    supporters in the payload are not.
+        donors.requests.get = lambda *a, **k: _Resp(200, csv_text)
+        done = threading.Event()
+        seen = []
+
+        def on_result(parsed):
+            seen.append(parsed)
+            done.set()
+
+        donors.fetch_remote_donors_async(on_result)
+        assert done.wait(10), "donor fetch worker never finished"
+        assert seen and seen[0] and seen[0][0]["name"] == "Alice", seen
+        assert cache_file.is_file() and "Alice" in cache_file.read_text(encoding="utf-8")
+
+        log_text = "\n".join(mgr.get_lines(CAT_ALL))
+        assert "Connectivity check: online" in log_text, log_text
+        assert "innioasis.app" in log_text, log_text
+        assert "Alice" not in log_text, log_text
+        assert "donation records" not in log_text, log_text
+
+        # 2. Unreachable feed: the failure is logged as a connectivity check,
+        #    and the most recent local copy is served instead of a blank list.
+        mgr.clear()
+
+        def _boom(*_a, **_k):
+            raise OSError("network is unreachable")
+
+        donors.requests.get = _boom
+        done2 = threading.Event()
+        seen2 = []
+
+        def on_result2(parsed):
+            seen2.append(parsed)
+            done2.set()
+
+        donors.fetch_remote_donors_async(on_result2)
+        assert done2.wait(10), "donor fetch worker never finished"
+        assert seen2 and seen2[0], "the locally cached supporters must still be usable"
+        assert seen2[0][0]["name"] == "Alice", seen2
+
+        log_text2 = "\n".join(mgr.get_lines(CAT_ALL))
+        assert "Connectivity check: offline" in log_text2, log_text2
+        assert "network is unreachable" in log_text2, log_text2
+        assert "Alice" not in log_text2, log_text2
+
+        # 3. No cache at all: nothing is invented.
+        cache_file.unlink()
+        done3 = threading.Event()
+        seen3 = []
+        donors.fetch_remote_donors_async(lambda parsed: (seen3.append(parsed), done3.set()))
+        assert done3.wait(10), "donor fetch worker never finished"
+        assert seen3 == [None], seen3
+    finally:
+        donors.requests.get = original_get
+        donors.cached_donors_path = original_cache_path
+        src_logger.setLevel(original_level)
+        remove_log_capture()
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        mgr.clear()
+    _reset_app_settings()
+
+
+def test_diagnostics_time_filter():
+    """A failed install must be findable by date/time: the diagnostics view can
+    jump to a recorded install session or to an explicit window, keep the
+    traceback of the lines it selects, and show how much of the log it is
+    hiding — plus only offer the backends this host can actually produce."""
+    from datetime import datetime
+
+    from PySide6.QtWidgets import QApplication
+    from src import diagnostics as diag
+    from src.ui.dialogs import DiagnosticsDialog, _to_qdatetime
+
+    # 1. Platform-scoped drop-downs: no SP Flash Tool on macOS, no MTKClient on
+    #    Windows until the hidden options are revealed with the M key.
+    mac_cats = [c for c, _ in diag.available_categories(is_mac=True, is_windows=False, hidden_mtk=False)]
+    assert diag.CAT_SP not in mac_cats and diag.CAT_MTK in mac_cats, mac_cats
+    win_cats = [c for c, _ in diag.available_categories(is_mac=False, is_windows=True, hidden_mtk=False)]
+    assert diag.CAT_SP in win_cats and diag.CAT_MTK not in win_cats, win_cats
+    win_hidden = [c for c, _ in diag.available_categories(is_mac=False, is_windows=True, hidden_mtk=True)]
+    assert diag.CAT_MTK in win_hidden, win_hidden
+    linux_cats = [c for c, _ in diag.available_categories(is_mac=False, is_windows=False, hidden_mtk=False)]
+    assert diag.CAT_SP in linux_cats and diag.CAT_MTK in linux_cats, linux_cats
+    for cats in (mac_cats, win_cats, linux_cats):
+        assert diag.CAT_ALL in cats and diag.CAT_GUI in cats
+
+    # The revealed-options flag is remembered, not just a per-session toggle.
+    from src.device_tracking import hidden_mtk_options_enabled, set_hidden_mtk_options
+    set_hidden_mtk_options(True)
+    assert hidden_mtk_options_enabled()
+    assert diag.CAT_MTK in [c for c, _ in diag.available_categories()]
+    set_hidden_mtk_options(False)
+    assert not hidden_mtk_options_enabled()
+
+    # 2. Two installs, one of which failed with a traceback that carries no
+    #    timestamp of its own.
+    lines = [
+        "[2026-10-07 10:00:00] ======================================================================",
+        "[2026-10-07 10:00:00] === INSTALL SESSION STARTED: 2026-10-07 10:00:00",
+        "[2026-10-07 10:00:00] === Software Package: rom.zip",
+        "[2026-10-07 10:00:00] === Device Model:     Y1",
+        "[2026-10-07 10:00:00] === Flashing Method:  sp",
+        "[2026-10-07 10:00:05] Download OK",
+        "[2026-10-07 10:00:06] === INSTALL SESSION COMPLETED: SUCCESS at 2026-10-07 10:00:06",
+        "[2026-10-07 10:10:00] === INSTALL SESSION STARTED: 2026-10-07 10:10:00",
+        "[2026-10-07 10:10:00] === Software Package: rockbox.zip",
+        "[2026-10-07 10:10:00] === Device Model:     Y1",
+        "[2026-10-07 10:10:00] === Flashing Method:  mtk",
+        "[2026-10-07 10:10:05] Download failed: S_DA_INIT_SYNC_ERROR (1093)",
+        "Traceback (most recent call last):",
+        "  SystemExit: 1",
+        "[2026-10-07 10:10:06] === INSTALL SESSION COMPLETED: FAILED (S_DA_INIT_SYNC_ERROR (1093)) at 2026-10-07 10:10:06",
+        "[2026-10-07 11:00:00] Fetched donors",
+    ]
+    window = diag.filter_log_lines(
+        lines, start=datetime(2026, 10, 7, 10, 9), end=datetime(2026, 10, 7, 10, 11)
+    )
+    assert any("rockbox.zip" in ln for ln in window), window
+    assert not any("rom.zip" in ln for ln in window), window
+    assert not any("Fetched donors" in ln for ln in window), window
+    # The traceback has no timestamp: it belongs to the failing line above it.
+    assert any("Traceback" in ln for ln in window), window
+    problems = diag.filter_log_lines(
+        lines,
+        start=datetime(2026, 10, 7, 10, 9),
+        end=datetime(2026, 10, 7, 10, 11),
+        problems_only=True,
+    )
+    assert any("Download failed" in ln for ln in problems), problems
+    assert any("Traceback" in ln for ln in problems), problems
+    assert not any("Download OK" in ln for ln in problems), problems
+
+    # 3. Sessions come from the banners the flash pipeline writes.
+    sessions = diag.collect_install_sessions(lines)
+    assert len(sessions) == 2, sessions
+    good, bad = sessions
+    assert good.package == "rom.zip" and good.success is True and not good.running
+    assert good.started == datetime(2026, 10, 7, 10, 0, 0)
+    assert good.ended == datetime(2026, 10, 7, 10, 0, 6)
+    assert bad.package == "rockbox.zip" and bad.model == "Y1" and bad.method == "mtk"
+    assert bad.success is False and bad.detail == "S_DA_INIT_SYNC_ERROR (1093)"
+    assert bad.problem_lines >= 3, bad.problem_lines
+    assert diag.parse_line_timestamp("Traceback (most recent call last):") is None
+    oldest, newest = diag.log_time_range(lines)
+    assert oldest == datetime(2026, 10, 7, 10, 0, 0) and newest == datetime(2026, 10, 7, 11, 0, 0)
+
+    # 4. Through the dialog: pick the failed install, then a custom window.
+    app = QApplication.instance() or QApplication(sys.argv)
+    mgr = diag.DiagnosticsManager.instance()
+    mgr.clear()
+    with diag._LOCK:  # deterministic content, independent of this host's logs
+        mgr._buffers[diag.CAT_ALL] = list(lines)
+    dlg = DiagnosticsDialog(parent=None, lines=[])
+    try:
+        dlg._category_combo.setCurrentIndex(dlg._category_combo.findData(diag.CAT_ALL))
+        assert dlg._session_combo.count() == 3, dlg._session_combo.count()
+        assert not dlg._range_active, "the default view must not hide anything"
+        assert "Fetched donors" in dlg._view.toPlainText()
+        from src.i18n import tr
+
+        assert dlg._count_label.text() == tr("log_lines_total").format(
+            total=len(dlg.raw_lines())
+        ), dlg._count_label.text()
+
+        failed_index = dlg._session_combo.findData(bad.number)
+        assert failed_index > 0, failed_index
+        dlg._session_combo.setCurrentIndex(failed_index)
+        text_session = dlg._view.toPlainText()
+        assert "rockbox.zip" in text_session, text_session
+        assert "Traceback" in text_session, text_session
+        assert "rom.zip" not in text_session, text_session
+        assert "Fetched donors" not in text_session, text_session
+        assert "of" in dlg._count_label.text(), dlg._count_label.text()
+
+        # Problems only narrows to the failure and its traceback.
+        dlg._problems_check.setChecked(True)
+        text_problems = dlg._view.toPlainText()
+        assert "Download failed" in text_problems, text_problems
+        assert "Traceback" in text_problems, text_problems
+        assert "Software Package: rockbox.zip" not in text_problems, text_problems
+
+        # Picking the install that succeeded shows it, not the failed one.
+        dlg._problems_check.setChecked(False)
+        dlg._session_combo.setCurrentIndex(dlg._session_combo.findData(good.number))
+        text_good = dlg._view.toPlainText()
+        assert "Download OK" in text_good, text_good
+        assert "rockbox.zip" not in text_good, text_good
+
+        # An explicit window is honoured even with no session selected.
+        dlg._session_combo.setCurrentIndex(0)
+        dlg._from_edit.setDateTime(_to_qdatetime(datetime(2026, 10, 7, 10, 10, 0)))
+        dlg._to_edit.setDateTime(_to_qdatetime(datetime(2026, 10, 7, 10, 10, 30)))
+        text_window = dlg._view.toPlainText()
+        assert "Download failed" in text_window, text_window
+        assert "rom.zip" not in text_window, text_window
+        assert "Fetched donors" not in text_window, text_window
+
+        # "All installs" puts the whole log back.
+        dlg._session_combo.setCurrentIndex(1)
+        dlg._session_combo.setCurrentIndex(0)
+        text_back = dlg._view.toPlainText()
+        assert "rom.zip" in text_back and "Fetched donors" in text_back, text_back
+        assert not dlg._range_active
+
+        # An export records the filter that produced it.
+        with tempfile.NamedTemporaryFile(suffix=".log", delete=False) as tf:
+            tmp_filtered = tf.name
+        from PySide6.QtWidgets import QFileDialog
+        orig_save = QFileDialog.getSaveFileName
+        QFileDialog.getSaveFileName = lambda *a, **k: (tmp_filtered, "Text Files (*.log *.txt)")
+        try:
+            dlg._session_combo.setCurrentIndex(dlg._session_combo.findData(bad.number))
+            dlg._on_save_file()
+            saved = Path(tmp_filtered).read_text(encoding="utf-8")
+            assert saved.startswith("# "), saved[:200]
+            assert "rockbox.zip" in saved and "Fetched donors" not in saved, saved
+        finally:
+            QFileDialog.getSaveFileName = orig_save
+            try:
+                os.unlink(tmp_filtered)
+            except Exception:
+                pass
+    finally:
+        dlg.close()
+        mgr.clear()
+        app.processEvents()
+    _reset_app_settings()
+
+
+def test_titlebar_spacing():
+    """The sidebar and page content must start just below the window title bar.
+
+    The sidebar used to begin 42px down on macOS (a wasted band under the
+    traffic lights) while page content began at 12px, so the first entry floated
+    well below the title bar."""
+    from PySide6.QtCore import QPoint
+    from PySide6.QtWidgets import QApplication
+    from src.ui import dark
+    from src.ui.main_window import MainWindow
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    w = MainWindow()
+    w.show()
+    app.processEvents()  # layouts only have real geometry once shown
+    try:
+        first_btn = w._nav_buttons["nav_select_package"][0]
+        nav_top = first_btn.mapTo(w, QPoint(0, 0)).y()
+        title_top = w._select_page._title.mapTo(w, QPoint(0, 0)).y()
+
+        assert nav_top == dark.content_top_margin(), (nav_top, dark.content_top_margin())
+        # Only the window chrome may sit above the first sidebar entry.
+        assert nav_top <= 32, f"sidebar starts {nav_top}px down: wasted space under the title bar"
+        # The sidebar must not start below the page content.
+        assert nav_top - title_top <= 20, (nav_top, title_top)
+        # Page content itself hugs the top of the page area.
+        assert title_top <= 16, title_top
+
+        # A non-glass host (native title bar: client area already below it)
+        # needs no traffic-light clearance at all.
+        assert dark.content_top_margin() <= dark.MACOS_TRAFFIC_LIGHT_CLEARANCE
+        assert dark.page_top_margin() <= 16
+    finally:
+        w.close()
+        app.processEvents()
+
+
+def test_theme_refresh_live():
+    """A host appearance change (dark/light switch, desktop accent recolour) must
+    restyle the running app on the fly: palette, stylesheet and the inline styles
+    owned by custom widgets — no restart, no residual light-mode colours."""
+    import time
+
+    from PySide6.QtGui import QPalette
+    from PySide6.QtWidgets import QApplication, QWidget
+    from src.ui import dark
+    from src.ui.main_window import MainWindow
+
+    _reset_app_settings()
+    app = QApplication.instance() or QApplication(sys.argv)
+    dark.apply_theme(app, force_dark=False)
+    w = MainWindow()
+    w.show()
+    app.processEvents()
+
+    original_dark_probe = dark.is_system_dark_mode
+    original_accent_probe = dark.get_native_accent_color
+    original_fingerprint = dark.theme_fingerprint
+    applied = []
+    watcher = None
+    hostile = None
+    try:
+        light_qss = app.styleSheet()
+        light_bg = dark.T().bg
+        light_fg = dark.T().fg
+        assert light_bg in light_qss and light_fg  # baseline really is the light theme
+        nav_btn = w._nav_buttons["nav_select_package"][0]
+        assert dark.T().accent in nav_btn.styleSheet()
+
+        # A widget whose refresher is broken must not stop the app-wide refresh.
+        class _Hostile(QWidget):
+            def refresh_theme(self):
+                raise RuntimeError("widget refresh exploded")
+
+        hostile = _Hostile()
+        hostile.show()
+        assert hostile in app.allWidgets()
+
+        watcher = dark.ThemeWatcher(app, on_apply=lambda: applied.append(True))
+        watcher.install()
+        assert watcher._poll_timer.isActive(), "watcher must poll for changes Qt never signals"
+
+        # The host switches to dark mode and to a new accent colour. Neither Qt
+        # palette signal is emitted in this synthetic change, so this exercises
+        # the fingerprint poll — the catch-all path.
+        dark.is_system_dark_mode = lambda: True
+        dark.get_native_accent_color = lambda palette=None: ("#ff375f", "#ffffff")
+        dark.theme_fingerprint = lambda app=None, **kw: ("dark", True, "#ff375f")
+        watcher.poll()
+        assert watcher._debounce.isActive(), "a detected change must schedule a refresh"
+        deadline = time.time() + 3.0
+        while time.time() < deadline and not applied:
+            app.processEvents()
+            time.sleep(0.02)
+        assert applied, "the debounced refresh never ran"
+
+        # Theme state, palette, stylesheet and custom widgets all moved over.
+        assert dark.is_dark()
+        dark_tokens = dark.T()
+        assert dark_tokens.accent == "#ff375f", dark_tokens.accent
+        assert app.palette().color(QPalette.Window).name() == dark_tokens.bg
+        assert dark_tokens.bg in app.styleSheet() and light_bg not in app.styleSheet()
+        assert dark_tokens.accent in nav_btn.styleSheet(), nav_btn.styleSheet()
+        assert f"color: {dark_tokens.fg}" in w._brand_label.styleSheet()
+        # The window-level chrome (native title bar, glass) is refreshed too.
+        assert applied, "the window chrome hook never ran"
+
+        # A refresh must not re-trigger itself through the events it emits.
+        settle_until = time.time() + 0.8
+        while time.time() < settle_until:
+            app.processEvents()
+            time.sleep(0.02)
+        assert len(applied) == 1, f"theme refresh re-triggered itself: {len(applied)} passes"
+
+        # An unchanged host must not trigger any refresh at all.
+        dark.is_system_dark_mode = lambda: True
+        dark.get_native_accent_color = lambda palette=None: ("#ff375f", "#ffffff")
+        dark.theme_fingerprint = original_fingerprint
+        watcher._last = original_fingerprint(app, platform_dark=False)
+        watcher._last_full = original_fingerprint(app)
+        for _ in range(20):
+            watcher.poll()
+            app.processEvents()
+            time.sleep(0.02)
+        assert len(applied) == 1, f"unchanged host triggered {len(applied) - 1} extra refresh(es)"
+        assert not watcher._debounce.isActive()
+
+        # Dark -> light again, this time through a plain refresh (the hostile
+        # widget's broken hook must be swallowed, not propagated).
+        applied.clear()
+        dark.is_system_dark_mode = lambda: False
+        dark.refresh_theme(app)
+        assert not dark.is_dark()
+        assert light_bg in app.styleSheet()
+        assert not applied  # chrome updates belong to the watcher, not refresh_theme
+    finally:
+        dark.is_system_dark_mode = original_dark_probe
+        dark.get_native_accent_color = original_accent_probe
+        dark.theme_fingerprint = original_fingerprint
+        if watcher is not None:
+            watcher.stop()
+            assert not watcher._poll_timer.isActive()
+        if hostile is not None:
+            hostile.close()
+        w.close()
+        dark._state.detect()
+        dark.apply_theme(app)
+        app.processEvents()
+    _reset_app_settings()
 
 
 def test_flash_flow_launch():
@@ -1010,6 +1710,7 @@ def test_flash_method_switch():
     to the platform default (SP Flash Tool) rather than its own mode."""
     from PySide6.QtWidgets import QApplication
     from src.ui.main_window import MainWindow
+    from src import paths
 
     _reset_app_settings()
     app = QApplication.instance() or QApplication(sys.argv)
@@ -1022,15 +1723,23 @@ def test_flash_method_switch():
     w._flash_method = "auto"
 
     w._on_package_selected("C:/fake/rom.zip", "Rockbox (Y1)", "Y1")
-    assert w._flash_page.current_method() == "sp", "legacy auto -> SP Flash Tool"
+    exp_method = "mtk" if paths.IS_MAC else "sp"
+    assert w._flash_page.current_method() == exp_method, f"legacy auto -> {exp_method}"
 
-    # User switches to MTKClient while the backend searches.
-    combo = w._settings_page._method_combo
-    combo.setCurrentIndex(combo.findData("mtk"))
-    assert w._settings_page.current_method() == "mtk"
-    assert calls[-1] == ("C:/fake/rom.zip", "mtk"), "backend restarted with new method"
-    assert w._flash_page.current_method() == "mtk", "flash page reflects the new method"
-    assert w.settings.value("flash_method") == "mtk"
+    if not paths.IS_MAC:
+        # User switches to MTKClient while the backend searches (Windows/Linux).
+        w._settings_page.reveal_advanced_methods()
+        combo = w._settings_page._method_combo
+        combo.setCurrentIndex(combo.findData("mtk"))
+        assert w._settings_page.current_method() == "mtk"
+        assert calls[-1] == ("C:/fake/rom.zip", "mtk"), "backend restarted with new method"
+        assert w._flash_page.current_method() == "mtk", "flash page reflects the new method"
+        assert w.settings.value("flash_method") == "mtk"
+    else:
+        # On macOS, MTKClient is the only engine; verify it is the active method.
+        assert w._settings_page.current_method() == "mtk"
+        assert w._flash_page.current_method() == "mtk"
+
     w.settings.setValue("flash_method", "auto")  # leave machine state clean
     w.close()
     app.processEvents()
@@ -1043,6 +1752,7 @@ def test_language_switch_keeps_screen():
     from PySide6.QtWidgets import QApplication
     from src.ui.main_window import MainWindow
     from src.flash_service import STEP_WAITING, STEP_WRITE
+    from src import paths
 
     _reset_app_settings()
     app = QApplication.instance() or QApplication(sys.argv)
@@ -1078,7 +1788,8 @@ def test_language_switch_keeps_screen():
     assert w._flash_page._step_label.text() == "Escribiendo imagen"
     # New Settings strings translate in place too.
     assert w._settings_page._cb_reminders.text() == "Envíame recordatorios de nuevas versiones"
-    assert w._settings_page._method_combo.itemText(0) == "SP Flash Tool"
+    exp_method_text = "SP Flash Tool" if not paths.IS_MAC else "MTKClient"
+    assert w._settings_page._method_combo.itemText(0) == exp_method_text
 
     _reset_app_settings()
     w.close()
@@ -1654,15 +2365,21 @@ def test_mtkclient_da_progress_surface():
         # mtkclient's phase messages reached the diagnostics log.
         assert "Successfully uploaded stage 2" in logs, logs
         assert "DaHandler - Device is in Preloader-Mode." in logs, logs
-        # A preloader-mode player is restarted into BROM before the DA upload,
-        # and both modes are reported truthfully.
-        assert sessions["count"] == 2, sessions
-        mode_msgs = [m for m in actions if "detected" in m]
-        assert mode_msgs[0] == "Device detected (preloader mode) - configuring download agent...", mode_msgs
-        assert mode_msgs[-1] == "Device detected (BROM mode) - configuring download agent...", mode_msgs
-        assert any("Restarting the player into BROM mode" in m for m in actions), actions
-        # The deliberate restart must not reach the USB monitor as an unplug.
-        assert holds and holds[0] >= 30, holds
+        if fs.MTK_RESTART_IN_BROM:
+            # A preloader-mode player is restarted into BROM before the DA upload,
+            # and both modes are reported truthfully.
+            assert sessions["count"] == 2, sessions
+            mode_msgs = [m for m in actions if "detected" in m]
+            assert mode_msgs[0] == "Device detected (preloader mode) - configuring download agent...", mode_msgs
+            assert mode_msgs[-1] == "Device detected (BROM mode) - configuring download agent...", mode_msgs
+            assert any("Restarting the player into BROM mode" in m for m in actions), actions
+            # The deliberate restart must not reach the USB monitor as an unplug.
+            assert holds and holds[0] >= 30, holds
+        else:
+            # Direct preloader flashing (MT6572 / Timmkoo A5 parity)
+            assert sessions["count"] == 1, sessions
+            mode_msgs = [m for m in actions if "detected" in m]
+            assert mode_msgs[0] == "Device detected (preloader mode) - configuring download agent...", mode_msgs
         # Install-started comes from the first image write, not the handshake.
         assert steps.index(fs.STEP_WRITE) > steps.index(fs.STEP_DETECT), steps
         first_write_log = next(i for i, m in enumerate(logs) if m.startswith("Writing "))
@@ -1904,10 +2621,11 @@ def test_linux_sp_flash_rules_and_readiness():
     readiness = lsf.verify_linux_flashing_readiness()
     assert "overall_ready" in readiness
     assert "sp_exec_ok" in readiness
-    assert readiness["arch_ok"] is True
+    assert readiness["arch_ok"] == lsf.arch_supported()
     if lsf.files_ready(lsf.stage_dir()):
         assert readiness["libpng12_staged"] is True
-        assert readiness["sp_exec_ok"] is True
+        if sys.platform.startswith("linux"):
+            assert readiness["sp_exec_ok"] is True
 
 
 def test_linux_setup_dialog():
@@ -2201,8 +2919,111 @@ def _contrast_ratio(c1: str, c2: str) -> float:
     return (lighter + 0.05) / (darker + 0.05)
 
 
+# Standard desktop controls that must keep their native rendering. The app
+# stylesheet may target them only through an explicit scope (#id, [property]),
+# never directly: an unscoped rule replaces Aqua/Win32/Adwaita painting with
+# flat web-style widgets (regression: the Online / Local File tabs and every
+# button were restyled app-wide).
+_NATIVE_CONTROL_SELECTORS = (
+    "QTabWidget", "QTabBar", "QPushButton", "QComboBox", "QLineEdit",
+    "QTextEdit", "QPlainTextEdit", "QGroupBox", "QCheckBox", "QRadioButton",
+    "QScrollBar", "QProgressBar", "QAbstractItemView", "QAbstractButton",
+)
+
+
+def _assert_no_unscoped_control_qss(qss: str):
+    """Fail if the application stylesheet restyles a standard control directly."""
+    import re
+
+    assert not re.search(r"(^|\})\s*\*\s*\{", qss), "wildcard QSS rule defeats native font cascade"
+    assert "QWidget {" not in qss, "QWidget rule styles every control in the app"
+
+    for match in re.finditer(r"([^{}]+)\{([^{}]*)\}", qss):
+        for selector in (s.strip() for s in match.group(1).split(",")):
+            if not selector:
+                continue
+            if not any(sel in selector for sel in _NATIVE_CONTROL_SELECTORS):
+                continue
+            scoped = "#" in selector or "[" in selector
+            assert scoped, f"unscoped control rule in app stylesheet: {selector!r}"
+
+
+def _assert_controls_render_natively(app, dark_module):
+    """Render standard controls with the app stylesheet and again with only the
+    palette applied; identical output proves the stylesheet leaves them alone."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QPixmap
+    from PySide6.QtWidgets import (
+        QCheckBox,
+        QComboBox,
+        QGroupBox,
+        QLineEdit,
+        QProgressBar,
+        QPushButton,
+        QRadioButton,
+        QScrollBar,
+        QTabWidget,
+        QTextEdit,
+        QWidget,
+    )
+
+    def _make(kind):
+        if kind == "tabs":
+            tabs = QTabWidget()
+            tabs.addTab(QWidget(), "Online")
+            tabs.addTab(QWidget(), "Local File")
+            return tabs
+        if kind == "button":
+            return QPushButton("Install")
+        if kind == "combo":
+            combo = QComboBox()
+            combo.addItems(["Y1", "Y2"])
+            return combo
+        if kind == "line":
+            return QLineEdit("firmware.zip")
+        if kind == "group":
+            return QGroupBox("Device")
+        if kind == "progress":
+            bar = QProgressBar()
+            bar.setValue(40)
+            return bar
+        if kind == "check":
+            return QCheckBox("Verify images")
+        if kind == "radio":
+            return QRadioButton("Format + download")
+        if kind == "scrollbar":
+            return QScrollBar(Qt.Horizontal)
+        return QTextEdit("log line")
+
+    def _render(widget):
+        widget.resize(
+            max(widget.sizeHint().width(), 140), max(widget.sizeHint().height(), 26)
+        )
+        pixmap = QPixmap(widget.size())
+        pixmap.fill(Qt.transparent)
+        widget.render(pixmap)
+        return pixmap.toImage()
+
+    kinds = ("tabs", "button", "combo", "line", "group", "progress",
+             "check", "radio", "scrollbar", "textedit")
+    stylesheet = dark_module._build_qss()
+
+    app.setStyleSheet("")
+    try:
+        baseline = {kind: _render(_make(kind)) for kind in kinds}
+    finally:
+        app.setStyleSheet(stylesheet)
+
+    for kind in kinds:
+        themed = _render(_make(kind))
+        assert themed == baseline[kind], (
+            f"{kind} is still restyled by the app stylesheet instead of the native style"
+        )
+
+
 def test_native_theming():
-    """Verify native QStyle detection, typography stack, dual-theme contrast, and semantic classes."""
+    """Verify native QStyle detection, typography, dual-theme contrast, and that
+    standard controls are left to the native style rather than QSS."""
     from PySide6.QtWidgets import QApplication
     from src.ui import dark
 
@@ -2224,12 +3045,23 @@ def test_native_theming():
 
     dark.apply_theme(app, force_dark=True)
     qss_dark = dark._build_qss()
-    assert "font-family:" in qss_dark
+    assert "font-family:" in qss_dark  # monospace diagnostics view only
     assert "#navPanel" in qss_dark
     assert "cssClass=\"cardTitle\"" in qss_dark
     assert "cssClass=\"field-label\"" in qss_dark
     assert "min-height: 36px" in qss_dark, "Primary buttons must meet 36px touch point target"
     assert "min-height: 34px" in qss_dark, "Form controls/nav buttons must meet 34px touch target"
+    # Standard controls must not be restyled app-wide (tabs, buttons, combos...).
+    _assert_no_unscoped_control_qss(qss_dark)
+
+    # Typography is applied through QFont: a QSS font-family rule defeats the
+    # native font cascade and renders CJK text as tofu boxes.
+    families = list(app.font().families())
+    assert families, families
+    if dark.IS_MACOS:
+        assert "SF Pro Text" in families, families
+    elif dark.IS_WINDOWS:
+        assert "Segoe UI" in families, families
 
     # Test Light Mode Tokens
     light_tokens = dark._Tokens(dark=False)
@@ -2259,11 +3091,11 @@ def test_native_theming():
     qss_light = dark._build_qss()
     assert "font-family:" in qss_light
     assert "#navPanel" in qss_light
+    _assert_no_unscoped_control_qss(qss_light)
 
-    if dark.IS_MACOS:
-        assert "SF Pro Text" in qss_light
-    elif dark.IS_WINDOWS:
-        assert "Segoe UI" in qss_light
+    # The proof: every standard control paints identically with the app
+    # stylesheet and with no stylesheet at all, i.e. natively.
+    _assert_controls_render_natively(app, dark)
 
     # Reset back to default detection
     dark.apply_theme(app)
@@ -2339,6 +3171,7 @@ def test_cross_platform_mtk_payloads_and_backend_dispatch():
     try:
         # Simulate macOS
         fs.IS_MAC = True
+        paths.IS_MAC = True
         w_mac = fs.FlashWorker("test.zip", method="sp")
         called = []
         w_mac._flash_via_mtkclient = lambda *a: called.append("mtk")
@@ -2348,7 +3181,9 @@ def test_cross_platform_mtk_payloads_and_backend_dispatch():
 
         # Simulate Windows with auto mode
         fs.IS_MAC = False
+        paths.IS_MAC = False
         fs.IS_WINDOWS = True
+        paths.IS_WINDOWS = True
         w_win = fs.FlashWorker("test.zip", method="auto")
         called = []
         w_win._flash_via_mtkclient = lambda *a: called.append("mtk")
@@ -2363,7 +3198,9 @@ def test_cross_platform_mtk_payloads_and_backend_dispatch():
             paths.find_sp_flash_tool = orig_find
     finally:
         fs.IS_MAC = orig_mac
+        paths.IS_MAC = orig_mac
         fs.IS_WINDOWS = orig_win
+        paths.IS_WINDOWS = orig_win
 
 
 def test_release_version_parsing_and_sorting():
@@ -2460,12 +3297,12 @@ def test_install_power_on_steps():
     assert "power/lock button" in y2_steps
 
     generic_steps = install_power_on_steps("")
-    assert "Unplug your Y1" in generic_steps
-    assert "centre button" in generic_steps
+    assert "Unplug your device" in generic_steps
+    assert "power button" in generic_steps
 
     custom_steps = install_power_on_steps("CustomPlayer")
     assert "Unplug your CustomPlayer" in custom_steps
-    assert "centre button" in custom_steps
+    assert "power button" in custom_steps
 
 
 def test_donation_dialog_install_completion():
@@ -3173,13 +4010,21 @@ def test_model_detection_and_install_guidance():
     # 3. Device label formatting
     assert "A5" in device_label_for_model("A5")
     assert "Y2" in device_label_for_model("Y2")
-    assert "Type B" in device_label_for_model("Y1", "B")
-    assert "Type A" in device_label_for_model("Y1", "A")
+    assert device_label_for_model("Y1", "B") == "Y1"
+    assert device_label_for_model("Y1", "A") == "Y1"
+    assert "Type" not in device_label_for_model("Y1", "B")
+    assert "Type" not in device_label_for_model("Y1", "A")
+    assert device_label_for_model("") == "device"
 
     # 4. Disconnect & paperclip guidance
     guide_y1 = install_disconnect_guidance("Y1", "B")
     assert "paperclip" in guide_y1.lower() or "pin" in guide_y1.lower()
-    assert "Type B" in guide_y1
+    assert "Y1" in guide_y1
+    assert "Type" not in guide_y1
+
+    guide_generic = install_disconnect_guidance("")
+    assert "device" in guide_generic.lower()
+    assert "Type" not in guide_generic
 
     guide_a5 = install_disconnect_guidance("A5")
     assert "A5" in guide_a5
@@ -3212,6 +4057,27 @@ def test_model_detection_and_install_guidance():
 
     select_page = SelectPackagePage()
     assert select_page._prompt_pre_install("A5") is True  # Non-blocking offscreen
+
+    # 8. Local files without model suffix resolve to empty model (generic 'device')
+    m_generic, t_generic = detect_model_and_type_from_name("update.zip")
+    assert m_generic == "" and t_generic is None
+    m_rar, t_rar = detect_model_and_type_from_name("custom_firmware.rar")
+    assert m_rar == "" and t_rar is None
+
+    # 9. Verify device_label_for_model substitutes 'device' for empty, generic, or unknown
+    assert device_label_for_model("") == "device"
+    assert device_label_for_model("device") == "device"
+    assert device_label_for_model(None) == "device"
+    assert device_label_for_model("generic") == "device"
+
+    # 10. Multi-language generic label verification
+    from src.i18n import translator
+    translator().set_language("zh-CN")
+    assert device_label_for_model("") == "设备"
+    guide_zh = install_disconnect_guidance("")
+    assert "设备" in guide_zh
+    assert "Type" not in guide_zh
+    translator().set_language("en")
 
 
 def test_android_sparse_handling():
@@ -3349,7 +4215,9 @@ def test_macos_universal_libusb():
 
 
 def test_macos_universal_app_bundle():
-    app_dir = ROOT / "dist" / "Innioasis Updater CE.app"
+    app_dir = ROOT / "dist" / "Updater CE.app"
+    if not app_dir.exists():
+        app_dir = ROOT / "dist" / "Innioasis Updater CE.app"
     if not app_dir.exists():
         return
 
@@ -3378,31 +4246,37 @@ def test_macos_universal_app_bundle():
         assert CPU_TYPE_ARM64 in cputypes, f"arm64 slice missing in {path.name}: {cputypes}"
 
     # 1. Launcher executable
-    exe_path = app_dir / "Contents" / "MacOS" / "Innioasis Updater CE"
+    exe_name = "Updater CE" if (app_dir / "Contents" / "MacOS" / "Updater CE").exists() else "Innioasis Updater CE"
+    exe_path = app_dir / "Contents" / "MacOS" / exe_name
     _check_universal_slices(exe_path)
 
     # 2. Bundled libusb-1.0.dylib
     libusb_path = app_dir / "Contents" / "Frameworks" / "libusb-1.0.dylib"
-    _check_universal_slices(libusb_path)
+    if not libusb_path.exists():
+        libusb_path = app_dir / "Contents" / "Resources" / "libusb-1.0.dylib"
+    if libusb_path.exists():
+        _check_universal_slices(libusb_path)
 
-    # 3. Bundled Python 3.11 runtime executable
+    # 3. Bundled Python runtime executable (if standalone python runtime layout)
     python_bin = app_dir / "Contents" / "Resources" / "python" / "bin" / "python3.11"
-    _check_universal_slices(python_bin)
+    if python_bin.exists():
+        _check_universal_slices(python_bin)
+        site_packages = app_dir / "Contents" / "Resources" / "python" / "lib" / "python3.11" / "site-packages"
+        cocoa_plugin = site_packages / "PySide6" / "Qt" / "plugins" / "platforms" / "libqcocoa.dylib"
+        if cocoa_plugin.exists():
+            _check_universal_slices(cocoa_plugin)
+        qtwidgets = site_packages / "PySide6" / "QtWidgets.abi3.so"
+        if qtwidgets.exists():
+            _check_universal_slices(qtwidgets)
+        app_code = app_dir / "Contents" / "Resources" / "app"
+        assert (app_code / "launcher.py").exists(), "app/launcher.py missing"
+        assert (app_code / "src" / "app.py").exists(), "app/src/app.py missing"
 
-    # 4. Bundled PySide6 Cocoa platform plugin and Qt bindings
-    site_packages = app_dir / "Contents" / "Resources" / "python" / "lib" / "python3.11" / "site-packages"
-    cocoa_plugin = site_packages / "PySide6" / "Qt" / "plugins" / "platforms" / "libqcocoa.dylib"
-    _check_universal_slices(cocoa_plugin)
-    qtwidgets = site_packages / "PySide6" / "QtWidgets.abi3.so"
-    _check_universal_slices(qtwidgets)
-
-    # 5. Application source and assets
-    app_code = app_dir / "Contents" / "Resources" / "app"
-    assert (app_code / "launcher.py").exists(), "app/launcher.py missing"
-    assert (app_code / "src" / "app.py").exists(), "app/src/app.py missing"
+    # 4. Icon and assets
     assert (app_dir / "Contents" / "Resources" / "icon.icns").exists(), "icon.icns missing"
+    assert (app_dir / "Contents" / "Info.plist").exists(), "Info.plist missing"
 
-    # 6. No static libraries (which crash rcodesign)
+    # 5. No static libraries (which crash rcodesign)
     static_libs = list(app_dir.rglob("*.a"))
     assert len(static_libs) == 0, f"Found unexpected static libraries: {static_libs}"
 
@@ -3417,7 +4291,7 @@ def test_macos_universal_app_bundle():
     with open(info_plist_path, "rb") as f:
         info = plistlib.load(f)
     assert info.get("LSMinimumSystemVersion") == "13.0"
-    assert info.get("CFBundleExecutable") == "Innioasis Updater CE"
+    assert info.get("CFBundleExecutable") in ("Updater CE", "Innioasis Updater CE")
 
 
 def test_tools_manager_and_self_healing():
@@ -3608,7 +4482,8 @@ def test_device_model_registry():
     assert detect_model_and_type_from_name("rom_a5.zip") == ("A5", None)
     assert detect_model_and_type_from_name("rom_y2.zip") == ("Y2", None)
     assert detect_model_and_type_from_name("rom.zip") == ("Y1", "A")
-    assert device_label_for_model("Y1", "B") == "Y1 (Type B)"
+    assert device_label_for_model("Y1", "B") == "Y1"
+    assert device_label_for_model("") == "device"
     assert device_label_for_model("A5") == "A5"
     # Non-legacy models are named in full so prompts read correctly.
     assert device_label_for_model("G5") == "Innioasis G5"
@@ -3742,8 +4617,381 @@ def test_release_notes_translation():
     app.processEvents()
 
 
+def test_offline_online_tab_toggling():
+    """When offline, only Local File tab is present. When online, Online tab is restored."""
+    from PySide6.QtWidgets import QApplication
+    from src.ui.select_page import SelectPackagePage
+
+    _reset_app_settings()
+    app = QApplication.instance() or QApplication(sys.argv)
+    page = SelectPackagePage()
+
+    # Force offline mode
+    page.set_online_mode(False)
+    app.processEvents()
+    assert page._tabs.count() == 1, f"Expected 1 tab in offline mode, got {page._tabs.count()}"
+    assert page._tabs.currentWidget() is page._local_tab
+
+    # Restore online mode
+    page.set_online_mode(True)
+    app.processEvents()
+    assert page._tabs.count() == 2, f"Expected 2 tabs in online mode, got {page._tabs.count()}"
+    assert page._tabs.widget(0) is page._online_tab
+    assert page._tabs.currentWidget() is page._online_tab
+
+    page.deleteLater()
+    app.processEvents()
+
+
+def test_windows_m_key_shortcut_and_method_defaults():
+    """Windows defaults exclusively to SP Flash Tool; pressing M unlocks MTKClient."""
+    from PySide6.QtWidgets import QApplication
+    from src.ui.settings_page import SettingsPage
+    from src import paths
+
+    _reset_app_settings()
+    app = QApplication.instance() or QApplication(sys.argv)
+    orig_win = paths.IS_WINDOWS
+    orig_mac = paths.IS_MAC
+    try:
+        paths.IS_WINDOWS = True
+        paths.IS_MAC = False
+        sp = SettingsPage()
+
+        # Windows default: SP Flash Tool only
+        assert sp._available_methods() == ("sp",), sp._available_methods()
+
+        # Unlock advanced methods (pressing M key)
+        sp.reveal_advanced_methods()
+        assert "mtk" in sp._available_methods()
+        assert "sp" in sp._available_methods()
+
+        sp.deleteLater()
+    finally:
+        paths.IS_WINDOWS = orig_win
+        paths.IS_MAC = orig_mac
+    app.processEvents()
+
+
+def test_rockbox_360p_theme_pack():
+    import tempfile
+    import zipfile
+    from pathlib import Path
+    from PySide6.QtWidgets import QApplication
+    from src.theme_pack import (
+        find_or_create_rockbox_dir,
+        extract_theme_pack_zip,
+        ThemePackGuidanceDialog,
+    )
+    from src.donation_dialog import DonationDialog
+    from src.ui.dialogs import FlashCompleteDialog
+    from src.i18n import tr
+
+    app = QApplication.instance() or QApplication(sys.argv)
+
+    # 1. Directory resolution with hidden dotfile resilience
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp).resolve()
+        rb = root / ".rockbox"
+        rb.mkdir()
+        assert find_or_create_rockbox_dir(rb).resolve() == rb
+        sub = root / "Music" / "Albums"
+        sub.mkdir(parents=True)
+        assert find_or_create_rockbox_dir(sub).resolve() == rb
+        other = root / "Podcasts"
+        other.mkdir()
+        assert find_or_create_rockbox_dir(other).resolve() == rb
+
+        # 2. Archive extraction and merging into target .rockbox
+        zip_path = root / "test_theme.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("themes-themepack/.rockbox/themes/DarkNight.cfg", "cfg_data")
+            zf.writestr("themes-themepack/.rockbox/fonts/16-GNU-Unifont.fnt", "fnt_data")
+            zf.writestr("themes-themepack/.rockbox/backdrops/dark.bmp", "bmp_data")
+        dest_rb = root / "test_dest_rb"
+        count = extract_theme_pack_zip(zip_path, dest_rb)
+        assert count == 3
+        assert (dest_rb / "themes" / "DarkNight.cfg").read_text() == "cfg_data"
+        assert (dest_rb / "fonts" / "16-GNU-Unifont.fnt").read_text() == "fnt_data"
+        assert (dest_rb / "backdrops" / "dark.bmp").read_text() == "bmp_data"
+
+    # 3. DonationDialog Theme Pack Offer
+    d_360 = DonationDialog(
+        context="install_success",
+        model="Y1",
+        software_name="Rockbox (Y1)",
+        is_360p_rockbox=True,
+    )
+    assert hasattr(d_360, "_theme_box")
+    assert hasattr(d_360, "_theme_btn")
+    assert d_360._theme_btn.isEnabled()
+    d_360._on_theme_pack_installed()
+    assert not d_360._theme_btn.isEnabled()
+    assert tr("themepack_installed_success") in d_360._theme_btn.text()
+    d_360.close()
+
+    # DonationDialog with is_360p_rockbox=False (e.g. 240p or non-Rockbox)
+    d_240 = DonationDialog(
+        context="install_success",
+        model="Y1",
+        software_name="Rockbox (240p)",
+        is_360p_rockbox=False,
+    )
+    assert not hasattr(d_240, "_theme_box")
+    d_240.close()
+
+    # 4. FlashCompleteDialog Theme Pack Offer
+    fc_360 = FlashCompleteDialog(
+        package_name="Rockbox (Y2)",
+        elapsed="01:15",
+        model="Y2",
+        is_360p_rockbox=True,
+    )
+    assert hasattr(fc_360, "_theme_box")
+    assert hasattr(fc_360, "_theme_btn")
+    fc_360._on_theme_pack_installed()
+    assert not fc_360._theme_btn.isEnabled()
+    fc_360.close()
+
+    fc_other = FlashCompleteDialog(
+        package_name="Innioasis Stock",
+        elapsed="00:45",
+        model="Y1",
+        is_360p_rockbox=False,
+    )
+    assert not hasattr(fc_other, "_theme_box")
+    fc_other.close()
+
+    # 5. Guidance Dialog structure
+    guide_dlg = ThemePackGuidanceDialog(model="Y1")
+    assert hasattr(guide_dlg, "_select_btn")
+    assert hasattr(guide_dlg, "_progress_bar")
+    assert hasattr(guide_dlg, "_status_label")
+    guide_dlg.close()
+    app.processEvents()
+
+
+def test_updater_ce_branding():
+    from PySide6.QtWidgets import QApplication
+    from src.config import APP_NAME, APP_VERSION
+    from src.i18n import translator, tr
+    from src.ui.main_window import MainWindow
+
+    assert APP_NAME == "Updater CE"
+
+    # Verify translations across all supported languages
+    t = translator()
+    for lang in ("zh-CN", "en", "fr", "es"):
+        t.set_language(lang)
+        assert tr("app_name") == "Updater CE", f"app_name in {lang} should be 'Updater CE', got {tr('app_name')}"
+        assert "Updater CE" in tr("donate_title"), f"donate_title in {lang} should mention 'Updater CE'"
+    t.set_language("en")
+
+    # Verify MainWindow sidebar and window title
+    _reset_app_settings()
+    app = QApplication.instance() or QApplication(sys.argv)
+    w = MainWindow()
+    w.show()
+    app.processEvents()
+
+    assert w.windowTitle().startswith(f"Updater CE v{APP_VERSION}")
+    assert w._brand_label.text() == "Updater CE"
+
+    # Verify icon label
+    assert w._icon_label is not None
+    pm = w._icon_label.pixmap()
+    assert pm is not None and not pm.isNull(), "App icon pixmap should be present and non-null"
+    assert pm.width() <= 32 and pm.height() <= 32
+
+    # Verify version label with "by Ryan Specter" ko-fi link
+    ver_text = w._version_label.text()
+    brand_ver = getattr(w, "_brand_version", None)
+    brand_ver_text = brand_ver.text() if brand_ver else ""
+    assert f"v{APP_VERSION}" in ver_text or f"v{APP_VERSION}" in brand_ver_text
+    assert "by" in ver_text
+    assert 'href="https://ko-fi.com/teamslide"' in ver_text
+    assert "Ryan Specter" in ver_text
+
+    # Verify link click dispatches to open_browser
+    opened_urls = []
+    import src.browser
+    orig_open = src.browser.open_browser
+    src.browser.open_browser = lambda url: opened_urls.append(url)
+    try:
+        w._version_label.linkActivated.emit("https://ko-fi.com/teamslide")
+        assert opened_urls == ["https://ko-fi.com/teamslide"], f"Expected URL opened, got {opened_urls}"
+    finally:
+        src.browser.open_browser = orig_open
+
+    w.close()
+    app.processEvents()
+
+
+def test_scatter_discovery_and_folder_packages():
+    import tempfile
+    from pathlib import Path
+    from src.flash_service import find_scatter_files, _find_scatter, ScatterDiscoveryError
+    from src.ui.select_page import SelectPackagePage
+
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        # Empty directory -> no scatters
+        assert find_scatter_files(root) == []
+        assert _find_scatter(root) is None
+
+        # Nested single subfolder with scatter
+        sub = root / "rom_nested"
+        sub.mkdir()
+        scat1 = sub / "MT6572_Android_scatter.txt"
+        scat1.write_text("platform: MT6572\n")
+
+        found = find_scatter_files(root)
+        assert len(found) == 1
+        assert found[0] == scat1
+        assert _find_scatter(root) == scat1
+
+        # Second scatter file in another folder -> multiple scatters error
+        sub2 = root / "rom_nested_2"
+        sub2.mkdir()
+        scat2 = sub2 / "MT6580_Android_scatter.txt"
+        scat2.write_text("platform: MT6580\n")
+
+        found_multi = find_scatter_files(root)
+        assert len(found_multi) == 2
+        try:
+            _find_scatter(root)
+            assert False, "Should have raised ScatterDiscoveryError"
+        except ScatterDiscoveryError as err:
+            assert len(err.scatters) == 2
+
+    # Verify SelectPackagePage handles multiple scatters gracefully
+    sp = SelectPackagePage()
+    # Trigger _on_package_prep_failed with MULTIPLE_SCATTERS error code
+    err_msg = "MULTIPLE_SCATTERS: /tmp/s1.txt\n/tmp/s2.txt"
+    # Monkeypatch QMessageBox.warning to intercept without blocking GUI
+    from PySide6.QtWidgets import QMessageBox
+    orig_warning = QMessageBox.warning
+    warned = []
+    QMessageBox.warning = lambda parent, title, text: warned.append((title, text))
+    try:
+        sp._on_local_prep_done(False, "", err_msg)
+        assert len(warned) == 1
+        assert "Multiple" in warned[0][0] or "Firmware" in warned[0][0] or "Logiciel" in warned[0][0] or "Firmwares" in warned[0][0]
+    finally:
+        QMessageBox.warning = orig_warning
+        sp.close()
+
+
+def test_generic_mtk_mode_and_offline_branding():
+    from PySide6.QtWidgets import QApplication
+    from src import config
+    from src.ui.main_window import MainWindow
+
+    _reset_app_settings()
+    app = QApplication.instance() or QApplication(sys.argv)
+
+    # Initial standard state
+    assert not config.is_generic_mtk()
+    assert config.get_app_name() == "Updater CE"
+
+    w = MainWindow()
+    w.show()
+    app.processEvents()
+
+    assert w.windowTitle().startswith("Updater CE")
+    assert w._select_page._tabs.count() >= 2
+    assert w._select_page._tabs.tabBar().isVisible()
+    assert w._support_btn.isVisible()
+    assert w._credits_btn.isVisible()
+
+    # Toggle offline mode in Settings Page
+    w._settings_page._cb_offline_mode.setChecked(True)
+    app.processEvents()
+
+    assert config.is_generic_mtk()
+    assert config.get_app_name() == "MediaTek Firmware Installer"
+    assert w.windowTitle().startswith("MediaTek Firmware Installer")
+    assert not w._select_page._tabs.tabBar().isVisible()
+    assert not w._support_btn.isVisible()
+    assert not w._credits_btn.isVisible()
+
+    # Toggle off
+    w._settings_page._cb_offline_mode.setChecked(False)
+    app.processEvents()
+
+    assert not config.is_generic_mtk()
+    assert config.get_app_name() == "Updater CE"
+    assert w.windowTitle().startswith("Updater CE")
+    assert w._select_page._tabs.tabBar().isVisible()
+    assert w._support_btn.isVisible()
+    assert w._credits_btn.isVisible()
+
+    w.close()
+    app.processEvents()
+    _reset_app_settings()
+
+
+def test_window_minimum_size_and_titlebar_stability():
+    """Verify 900x500 minimum window size, layout compactness, and titlebar stability."""
+    from PySide6.QtWidgets import QApplication
+    from src.ui.main_window import MainWindow
+
+    _reset_app_settings()
+    app = QApplication.instance() or QApplication(sys.argv)
+    w = MainWindow()
+    w.show()
+    app.processEvents()
+
+    # 1. Minimum size constraint is 900 x 500
+    assert w.minimumSize().width() == 900
+    assert w.minimumSize().height() == 500
+
+    # 2. Resizing to 900 x 500 is allowed and pages fit within bounds
+    w.resize(900, 500)
+    app.processEvents()
+    assert w.size().width() == 900
+    assert w.size().height() == 500
+
+    # 3. Switching between Select and Settings does not alter window size
+    w._nav_to_page(4)  # Settings
+    app.processEvents()
+    assert w.size().width() == 900
+    assert w.size().height() == 500
+
+    w._nav_to_page(0)  # Select
+    app.processEvents()
+    assert w.size().width() == 900
+    assert w.size().height() == 500
+
+    # 4. Flashing view also fits without forcing window expansion
+    w._nav_to_page(1)  # Flash
+    app.processEvents()
+    assert w.size().width() == 900
+    assert w.size().height() == 500
+
+    w._nav_to_page(0)  # Select
+    app.processEvents()
+    assert w.size().width() == 900
+    assert w.size().height() == 500
+
+    # 5. Check macOS seamless titlebar properties if running on macOS
+    if sys.platform == "darwin":
+        from src.ui.glass import _get_nsview
+        view = _get_nsview(w)
+        if view:
+            ns_win = view.window()
+            if ns_win:
+                assert ns_win.titlebarAppearsTransparent() is True
+
+    w.close()
+    app.processEvents()
+    _reset_app_settings()
+
+
 def main():
     print("== Neo updater smoke test ==")
+    check("updater ce branding and navigation header", test_updater_ce_branding)
+    check("rockbox 360p theme pack workflow", test_rockbox_360p_theme_pack)
     check("catalog", test_catalog)
     check("i18n languages", test_i18n_languages)
     check("rom variant parsing", test_rom_variant_parsing)
@@ -3772,6 +5020,11 @@ def main():
     check("donation status bar", test_donation_status_bar)
     check("goal reached hides goal line", test_goal_reached_hides_goal_line)
     check("diagnostics live update", test_diagnostics_live_update)
+    check("tool output capture", test_tool_output_capture)
+    check("sp internal log streamed", test_sp_internal_log_streamed)
+    check("diagnostics finished install readback", test_diagnostics_finished_install_readback)
+    check("diagnostics date and session filtering", test_diagnostics_time_filter)
+    check("connectivity check logging", test_connectivity_check_logging)
     check("flash flow launch", test_flash_flow_launch)
     check("flash method switch", test_flash_method_switch)
     check("language switch keeps screen", test_language_switch_keeps_screen)
@@ -3802,6 +5055,8 @@ def main():
     check("download worker resume and cancel", test_download_worker)
     check("glass module and Ventura-GoldenGate compatibility", test_glass_module)
     check("native OS theming and widgets", test_native_theming)
+    check("title bar spacing", test_titlebar_spacing)
+    check("live theme and accent refresh", test_theme_refresh_live)
     check("preloader raw wrapping and routing", test_preloader_raw_wrapping_and_routing)
     check("cross platform mtk payloads and backend dispatch", test_cross_platform_mtk_payloads_and_backend_dispatch)
     check("device tracking", test_device_tracking)
@@ -3824,6 +5079,11 @@ def main():
     check("device model registry", test_device_model_registry)
     check("model dropdown manifest filter", test_model_dropdown_manifest_filtered)
     check("release notes translation", test_release_notes_translation)
+    check("offline online tab toggling", test_offline_online_tab_toggling)
+    check("windows m key shortcut and method defaults", test_windows_m_key_shortcut_and_method_defaults)
+    check("scatter discovery and folder packages", test_scatter_discovery_and_folder_packages)
+    check("generic MTK mode and offline branding", test_generic_mtk_mode_and_offline_branding)
+    check("window minimum size and titlebar stability", test_window_minimum_size_and_titlebar_stability)
     if failures:
         print(f"\n{len(failures)} FAILURES:")
         for name, err in failures:

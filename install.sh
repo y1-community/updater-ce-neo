@@ -44,10 +44,10 @@ for arg in "$@"; do
         --uninstall) UNINSTALL=1 ;;
         --skip-udev) SKIP_UDEV=1 ;;
         -h|--help)
-            echo "Innioasis Updater CE Installer"
+            echo "Updater CE Installer"
             echo "Usage: $0 [OPTIONS]"
             echo "Options:"
-            echo "  --uninstall    Remove Innioasis Updater CE and its desktop integration"
+            echo "  --uninstall    Remove Updater CE and its desktop integration"
             echo "  --skip-udev    Skip installing MediaTek udev rules (requires root)"
             echo "  -h, --help     Show this help message"
             exit 0
@@ -63,7 +63,7 @@ banner() {
    | || '_ \| '_ \| |/ _ \ / _` / __| / __||  \| |/ _ \/ _ \ 
    | || | | | | | | | (_) | (_| \__ \ \__ \| |\  |  __/ (_) |
   |___|_| |_|_| |_|_|\___/ \__,_|___/_|___/|_| \_|\___|\___/ 
-                  Innioasis Updater CE for Linux
+                      Updater CE for Linux
 EOF
     echo -e "${NC}"
 }
@@ -77,7 +77,7 @@ log_step() { echo -e "\n${BOLD}${CYAN}==>${NC} ${BOLD}$1${NC}"; }
 # --- Uninstallation -----------------------------------------------------------
 if [ "$UNINSTALL" -eq 1 ]; then
     banner
-    log_step "Uninstalling Innioasis Updater CE"
+    log_step "Uninstalling Updater CE"
 
     if [ -d "$INSTALL_DIR" ]; then
         rm -rf "$INSTALL_DIR"
@@ -111,7 +111,7 @@ fi
 
 # --- Installation -------------------------------------------------------------
 banner
-log_info "Initializing Linux installation for Innioasis Updater CE..."
+log_info "Initializing Linux installation for Updater CE..."
 
 # 1. Detect Linux distribution
 DISTRO_ID="unknown"
@@ -303,16 +303,16 @@ DESKTOP_FILE="$DESKTOP_DIR/innioasis-updater.desktop"
 cat << EOF > "$DESKTOP_FILE"
 [Desktop Entry]
 Version=1.0
-Name=Innioasis Updater CE
+Name=Updater CE
 GenericName=Firmware Flasher
-Comment=Flash, update, and restore Innioasis Y1 & Y2 digital audio players
+Comment=Flash, update, and restore Innioasis and Timmkoo digital audio players
 Exec=$WRAPPER_SCRIPT
 Icon=innioasis-updater
 Terminal=false
 Type=Application
 Categories=AudioVideo;Utility;Development;
-Keywords=innioasis;y1;y2;mtk;flash;firmware;rockbox;solar;
-StartupWMClass=innioasis-updater
+Keywords=innioasis;timmkoo;y1;y2;a5;mtk;flash;firmware;rockbox;solar;
+StartupWMClass=Updater CE
 EOF
 
 chmod +x "$DESKTOP_FILE"
@@ -342,7 +342,7 @@ else
 
         if [ -n "$SUDO_CMD" ] || [ "$EUID" -eq 0 ]; then
             $SUDO_CMD bash -c "cat << 'EOF' > '$UDEV_RULE_FILE'
-# Innioasis Updater CE - MediaTek Flashing Rules
+# Updater CE - MediaTek Flashing Rules
 SUBSYSTEM==\"usb\", ATTRS{idVendor}==\"0e8d\", MODE=\"0666\", TAG+=\"uaccess\", ENV{ID_MM_DEVICE_IGNORE}=\"1\", ENV{ID_MM_PORT_IGNORE}=\"1\", ENV{MTP_NO_PROBE}=\"1\", ENV{BRLTTY_DEVICE_IGNORE}=\"1\", TEST==\"power/control\", ATTR{power/control}=\"on\"
 SUBSYSTEM==\"usb\", ATTRS{idVendor}==\"0e8d\", ATTRS{idProduct}==\"0003\", MODE=\"0666\", TAG+=\"uaccess\", ENV{ID_MM_DEVICE_IGNORE}=\"1\", ENV{ID_MM_PORT_IGNORE}=\"1\", ENV{MTP_NO_PROBE}=\"1\", ENV{BRLTTY_DEVICE_IGNORE}=\"1\", TEST==\"power/control\", ATTR{power/control}=\"on\"
 SUBSYSTEM==\"usb\", ATTRS{idVendor}==\"0e8d\", ATTRS{idProduct}==\"2000\", MODE=\"0666\", TAG+=\"uaccess\", ENV{ID_MM_DEVICE_IGNORE}=\"1\", ENV{ID_MM_PORT_IGNORE}=\"1\"
@@ -352,7 +352,7 @@ KERNEL==\"ttyUSB[0-9]*\", ATTRS{idVendor}==\"0e8d\", MODE=\"0666\", TAG+=\"uacce
 EOF
 chmod 644 '$UDEV_RULE_FILE'
 cat << 'EOF' > '/etc/udev/rules.d/99-ttyacms.rules'
-# Innioasis Updater CE - Unprivileged Serial Port Access
+# Updater CE - Unprivileged Serial Port Access
 ACTION==\"add|change\", SUBSYSTEM==\"tty\", KERNEL==\"ttyACM[0-9]*\", MODE=\"0666\", TAG+=\"uaccess\", RUN+=\"/bin/chmod 0666 /dev/%k\"
 ACTION==\"add|change\", SUBSYSTEM==\"tty\", KERNEL==\"ttyUSB[0-9]*\", MODE=\"0666\", TAG+=\"uaccess\", RUN+=\"/bin/chmod 0666 /dev/%k\"
 EOF
@@ -390,8 +390,8 @@ esac
 
 # 9. Completion summary
 echo -e "\n${GREEN}${BOLD}══════════════════════════════════════════════════════════════════════${NC}"
-echo -e "${GREEN}${BOLD}   Innioasis Updater CE is successfully installed and ready!         ${NC}"
+echo -e "${GREEN}${BOLD}   Updater CE is successfully installed and ready!                   ${NC}"
 echo -e "${GREEN}${BOLD}══════════════════════════════════════════════════════════════════════${NC}"
 echo -e "You can launch the app:"
-echo -e "  ${BOLD}1. From your Application Menu:${NC} Search for ${CYAN}${BOLD}Innioasis Updater CE${NC}"
+echo -e "  ${BOLD}1. From your Application Menu:${NC} Search for ${CYAN}${BOLD}Updater CE${NC}"
 echo -e "  ${BOLD}2. From your Terminal:${NC}         Run ${CYAN}${BOLD}updater-ce${NC} or ${CYAN}${BOLD}innioasis-updater${NC}\n"

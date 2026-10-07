@@ -1,6 +1,7 @@
 __pycache__/
 *.pyc
 .venv/
+.venv-build/
 dist/
 build/
 *.spec.bak
@@ -15,6 +16,8 @@ build/
 # macOS build artifacts
 *.dmg
 *.icns
+.DS_Store
 
 # Scratch directories
 scratch/
+tools/mtkclient-*-snapshot/

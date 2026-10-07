@@ -16,7 +16,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-APP_NAME="Innioasis Updater CE"
+APP_NAME="Updater CE"
 APP_ID="com.innioasis.updater"
 VERSION=$(grep -oP 'APP_VERSION\s*=\s*"\K[^"]+' src/config.py 2>/dev/null || echo "3.0")
 DIST_DIR="dist"
@@ -112,9 +112,9 @@ if [ ! -f "$BUNDLE_ICON" ]; then
     fi
 fi
 
-echo "=== Building Innioasis Updater CE for macOS (v$VERSION) ==="
+echo "=== Building Updater CE for macOS (v$VERSION) ==="
 echo "Target: macOS 13 (Ventura) through macOS 26 (Golden Gate)"
-[ -n "$TARGET_ARCH" ] && echo "Architecture: $TARGET_ARCH" || echo "Architecture: Host default (Intel/Apple Silicon)"
+[n -n "$TARGET_ARCH" ] && echo "Architecture: $TARGET_ARCH" || echo "Architecture: Host default (Intel/Apple Silicon)"
 
 # --- Clean ----------------------------------------------------------------
 rm -rf "$BUILD_DIR" "$DIST_DIR"/*.app "$DIST_DIR"/*.dmg
@@ -125,6 +125,9 @@ if [ "$(uname -s)" = "Darwin" ]; then
         --noconfirm \
         --clean \
         "$SPEC_FILE"
+
+    # Remove intermediate COLLECT directory so dist/ contains ONLY the self-contained .app
+    rm -rf "$DIST_DIR/Updater CE"
 
     echo ">>> Signing bundle..."
     ENTITLEMENTS_FILE="assets/entitlements.plist"
@@ -138,6 +141,7 @@ else
     # --- Universal 2 (Intel + Apple Silicon) Mach-O build via LLVM/clang/rcodesign ---
     echo ">>> Building Universal 2 Mach-O .app bundle..."
     "$PYTHON" scripts/build_universal_app.py
+    rm -rf "$DIST_DIR/Updater CE"
 fi
 
 echo "=== Build complete: $DIST_DIR/$APP_NAME.app ==="
@@ -145,7 +149,7 @@ echo "=== Build complete: $DIST_DIR/$APP_NAME.app ==="
 # --- Optional DMG creation -----------------------------------------------
 if [ "$CREATE_DMG" -eq 1 ]; then
     ARCH_SUFFIX="${TARGET_ARCH:+-$TARGET_ARCH}"
-    DMG_NAME="InnioasisUpdater-${VERSION}${ARCH_SUFFIX}-macOS.dmg"
+    DMG_NAME="UpdaterCE-${VERSION}${ARCH_SUFFIX}-macOS.dmg"
     echo ">>> Creating DMG: $DIST_DIR/$DMG_NAME"
 
     DMG_TEMP=$(mktemp -d)
@@ -153,7 +157,7 @@ if [ "$CREATE_DMG" -eq 1 ]; then
     ln -s /Applications "$DMG_TEMP/Applications"
 
     hdiutil create \
-        -volname "Innioasis Updater" \
+        -volname "Updater CE" \
         -srcfolder "$DMG_TEMP" \
         -ov -format UDZO \
         "$DIST_DIR/$DMG_NAME"

@@ -64,6 +64,7 @@ def init(loader=None, preloader=None, serialport=None, loglevel=logging.INFO):
 
     config = _MtkConfig(loglevel=loglevel, gui=None, guiprogress=None)
     config.loader = loader
+    config.reconnect = False
     if preloader and os.path.exists(preloader):
         config.preloader_filename = preloader
         config.preloader = open(config.preloader_filename, "rb").read()
@@ -77,11 +78,17 @@ def ensure_config_defaults(mtk):
     ``gpt_settings`` is dereferenced while parsing partition tables; mtkclient
     only creates it in its argparse path, so an embedded session must create
     it or partition reads fail with ``NoneType`` errors.
+
+    ``reconnect`` is explicitly disabled so ``dalegacy_lib.py`` does not
+    issue a USB bus reset (port.close(reset=True)) after Stage 2 DA upload,
+    matching reference Chinese build behavior and preventing macOS/Linux hangs.
     """
     if getattr(mtk.config, "gpt_settings", None) is None:
         from mtkclient.Library.Partitions.gpt import GptSettings  # type: ignore
 
         mtk.config.gpt_settings = GptSettings(0, 0, 0)
+    if hasattr(mtk.config, "reconnect"):
+        mtk.config.reconnect = False
     return mtk
 
 
@@ -105,10 +112,14 @@ def handshake(mtk, directory="."):
         return (None, None)
     if getattr(mtk.config, "target_config", None) is None:
         return (None, None)
+    try:
+        mtk._da_handler = da_handler
+    except Exception:
+        pass
     return (mtk, da_handler)
 
 
-def attach(mtk, directory="."):
+def attach(mtk, directory=".", da_handler=None):
     """Upload the DA on a session whose handshake is already done.
 
     ``DaHandler.connect()`` always calls ``preloader.init()`` again, and the
@@ -119,7 +130,10 @@ def attach(mtk, directory="."):
     _ensure_imports()
     ensure_config_defaults(mtk)
 
-    da_handler = _DaHandler(mtk, logging.INFO)
+    if da_handler is None:
+        da_handler = getattr(mtk, "_da_handler", None)
+    if da_handler is None:
+        da_handler = _DaHandler(mtk, logging.INFO)
     mtk.config.hwparam_path = str(directory)
     mtk = da_handler.configure_da(mtk)
     return (mtk, da_handler)

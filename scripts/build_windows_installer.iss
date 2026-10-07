@@ -1,9 +1,9 @@
 ; ==============================================================================
-; Innioasis Updater CE — Windows Installer (Inno Setup 6)
+; Updater CE — Windows Installer (Inno Setup 6)
 ; Repository: https://github.com/y1-community/updater-ce-neo
 ; ==============================================================================
 
-#define MyAppName "Innioasis Updater CE"
+#define MyAppName "Updater CE"
 #define MyAppVersion "3.0.0"
 #define MyAppPublisher "Innioasis Community"
 #define MyAppURL "https://github.com/y1-community/updater-ce-neo"
@@ -18,12 +18,12 @@ AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}/issues
 AppUpdatesURL={#MyAppURL}/releases
-DefaultDirName={autopf}\Innioasis Community\Innioasis Updater CE
+DefaultDirName={autopf}\Innioasis Community\Updater CE
 DefaultGroupName=Innioasis Community
 DisableProgramGroupPage=yes
 LicenseFile=..\LICENSE
 OutputDir=..\dist
-OutputBaseFilename=InnioasisUpdater-Setup-{#MyAppVersion}
+OutputBaseFilename=UpdaterCE-Setup-{#MyAppVersion}
 SetupIconFile=..\assets\icon.ico
 Compression=lzma2/ultra64
 SolidCompression=yes

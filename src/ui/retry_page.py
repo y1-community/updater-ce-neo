@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
 
 from ..i18n import tr
 from .widgets import Card, InfoRow
-from .dark import T
+from .dark import T, page_top_margin
 
 
 class RetryPage(QWidget):
@@ -26,7 +26,7 @@ class RetryPage(QWidget):
     def _build_ui(self):
         t = T()
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setContentsMargins(24, page_top_margin(), 24, 20)
         layout.setSpacing(14)
 
         self._title = QLabel(tr("retry_title"))

@@ -613,12 +613,11 @@ class DALegacy(metaclass=LogBase):
         if nandcount == 0:
             self.daconfig.legacy_storage.nand = Legacy_NandInfo32(data)
             nandcount = self.daconfig.legacy_storage.nand.m_nand_flash_id_count
-        if nandcount > 0:
+            nc = data[-4:] + self.usbread(nandcount * 2 - 4)
+        else:
             nc = self.usbread(nandcount * 2)
-            if len(nc) >= nandcount * 2:
-                m_nand_dev_code = unpack(">" + str(nandcount) + "H", nc[:nandcount * 2])
-            else:
-                m_nand_dev_code = ()
+        if len(nc) >= nandcount * 2:
+            m_nand_dev_code = unpack(">" + str(nandcount) + "H", nc[:nandcount * 2])
         else:
             m_nand_dev_code = ()
         self.daconfig.legacy_storage.nand.m_nand_flash_dev_code = m_nand_dev_code

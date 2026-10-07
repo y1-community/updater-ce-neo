@@ -69,6 +69,8 @@ class MtkConfig(metaclass=LogBase):
         self.dram = None
         self.otp = None
         self.stock = False
+        self.write_chunk_size = None
+        self.last_error = None
         if loglevel == logging.DEBUG:
             logfilename = os.path.join("logs", "log.txt")
             fh = logging.FileHandler(logfilename)

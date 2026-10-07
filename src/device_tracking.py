@@ -25,6 +25,7 @@ _KEY_REMINDER_PREFIX = "reminders_enabled_"
 _KEY_LAST_NOTIFIED_PREFIX = "last_notified_tag_"
 _KEY_DONATION_UI_DISABLED = "donation_ui_disabled"
 _KEY_DONATION_INSTALL_PROMPT_DISABLED = "donation_install_prompt_disabled"
+_KEY_HIDDEN_MTK_OPTIONS = "hidden_mtk_options"
 
 
 def _get_settings(settings: Optional[QSettings] = None) -> QSettings:
@@ -136,6 +137,26 @@ def set_last_notified_tag(model: str, tag: str, settings: Optional[QSettings] = 
     """Save the last release tag user was notified about for ``model``."""
     s = _get_settings(settings)
     s.setValue(f"{_GROUP_PREFS}/{_KEY_LAST_NOTIFIED_PREFIX}{model}", tag or "")
+
+
+def hidden_mtk_options_enabled(settings: Optional[QSettings] = None) -> bool:
+    """True once the hidden MTKClient options have been revealed (M key).
+
+    Windows normally drives the player through SP Flash Tool, so MTKClient
+    output stays out of the way until the user deliberately asks for it.
+    """
+    s = _get_settings(settings)
+    val = s.value(f"{_GROUP_PREFS}/{_KEY_HIDDEN_MTK_OPTIONS}", None)
+    if val is not None:
+        return s.value(f"{_GROUP_PREFS}/{_KEY_HIDDEN_MTK_OPTIONS}", False, type=bool)
+    return s.value(_KEY_HIDDEN_MTK_OPTIONS, False, type=bool)
+
+
+def set_hidden_mtk_options(enabled: bool, settings: Optional[QSettings] = None) -> None:
+    """Remember that the hidden MTKClient options were revealed/hidden."""
+    s = _get_settings(settings)
+    s.setValue(_KEY_HIDDEN_MTK_OPTIONS, bool(enabled))
+    s.setValue(f"{_GROUP_PREFS}/{_KEY_HIDDEN_MTK_OPTIONS}", bool(enabled))
 
 
 def is_donation_ui_disabled(settings: Optional[QSettings] = None) -> bool:

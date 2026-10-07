@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
 from ..i18n import tr
 from .flash_page import _STEP_KEY
 from .widgets import Banner, Card, InfoRow
-from .dark import T
+from .dark import T, page_top_margin
 
 # FlashWorker.finished error codes shown in the "Error Code" row. Known codes
 # get a translated label (the raw code stays visible in parentheses for
@@ -54,7 +54,7 @@ class ErrorPage(QWidget):
     def _build_ui(self):
         t = T()
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setContentsMargins(24, page_top_margin(), 24, 20)
         layout.setSpacing(14)
 
         self._banner = Banner()

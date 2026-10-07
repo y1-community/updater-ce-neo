@@ -118,3 +118,52 @@ When flashing MediaTek devices (Innioasis Y1/Y2, Timmkoo, MT6572, MT6582, MT6580
 - MTK DA bulk USB transfers will time out on transfers exceeding 50MB.
 - Set `LEGACY_SEGMENTED_WRITE_BYTES = 52428800` (50MB) and chunk packets to 256KB (or 512KB).
 - On Darwin (`macOS`), disable fast USB mode (`usblib.set_fast_mode: self.fast = False`) to prevent `LIBUSB_ERROR_OVERFLOW`.
+
+## 8. MTKClient Reference Parity & CLI Subprocess Verification
+
+### 1. Direct Preloader Handshake Workflow (Timmkoo A5 & Y1)
+When validating MT6572 / MT6582 devices:
+1. Connect device in standard powered-off mode (Preloader VCOM `0x2000`).
+2. Handshake directly via `DaHandler.connect()` -> `DaHandler.configure_da()`.
+3. Confirm DALegacy uploads stage 1 (`MTK_AllInOne_DA_mt6590.bin`), verifies NAND/eMMC, and uploads stage 2 without initiating a BROM reboot.
+4. Verify stage 2 connects with message: `Connected to stage2`.
+
+### 2. Standalone Subprocess CLI Invocation
+Test flashing headlessly using the `--flash-cli` entry point:
+```bash
+python3 src/app.py --flash-cli <extract_dir> <scatter_file> <platform> [package_path]
+```
+Ensure output streams clean IPC tokens:
+- `[PROGRESS] <0-100>`
+- `[STEP] <STEP_NAME>`
+- `[LOG] <message>`
+- `[RESULT] <1|0> <STATUS_CODE>`
+
+### 3. macOS Native Liquid Glass & Universal2 Invariants
+- `pyqt_liquidglass` provides the native macOS 15+ Liquid Glass effect (`NSGlassEffectView`).
+- On macOS 13–14 (Ventura / Sonoma), automatically fall back to `NSVisualEffectView` with `NSVisualEffectMaterialBehindWindow`.
+- Ensure Universal2 binaries retain arm64 and x86_64 slices for Python, PySide6, and libusb.
+
+## 9. Inline Translation & Network Verification Runbook
+
+### 1. Verification of Google Translate In-App Translation
+To verify that release notes translation functions correctly:
+```bash
+.venv-build/bin/python -c "from src.translate import fetch_google_translation; print(fetch_google_translation('Initial release with Rockbox support', 'zh-CN'))"
+```
+Expected output:
+```text
+具有 Rockbox 支持的初始版本
+```
+
+### 2. Multi-Paragraph & Long Markdown Changelog Verification
+Verify that large release notes with markdown formatting are translated via HTTP POST:
+```bash
+.venv-build/bin/python -c "
+from src.translate import fetch_google_translation
+text = '''## What's Changed\n* Fixed audio playback\n* Improved battery meter'''
+print(fetch_google_translation(text, 'zh-CN'))
+"
+```
+Expected output contains translated Markdown headers and bullet lists without HTTP 414 URI length errors.
+

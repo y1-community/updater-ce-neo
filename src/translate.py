@@ -4,8 +4,11 @@ Provides Google Translate URLs for GitHub release notes in the user's chosen lan
 in-app release notes translation via Google Translate, and caching.
 """
 
+from __future__ import annotations
+
 import json
 import logging
+import ssl
 import urllib.parse
 import urllib.request
 from typing import Optional, Tuple
@@ -16,6 +19,37 @@ logger = logging.getLogger(__name__)
 
 # Cache for in-memory translated text: (text_hash_or_key, target_lang) -> translated_text
 _TRANSLATION_CACHE: dict[Tuple[str, str], str] = {}
+
+
+def _get_ssl_context(verify: bool = True) -> ssl.SSLContext:
+    """Return an SSL context with certifi root CAs, falling back gracefully."""
+    if not verify:
+        return ssl._create_unverified_context()
+    try:
+        import certifi
+
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        pass
+    try:
+        return ssl.create_default_context()
+    except Exception:
+        return ssl._create_unverified_context()
+
+
+def _urlopen(req: urllib.request.Request, timeout: float = 6.0):
+    """Execute an HTTP request with automatic SSL certificate error recovery."""
+    try:
+        ctx = _get_ssl_context(verify=True)
+        return urllib.request.urlopen(req, context=ctx, timeout=timeout)
+    except Exception as e:
+        if "CERTIFICATE_VERIFY_FAILED" in str(e) or isinstance(
+            e, ssl.SSLCertVerificationError
+        ):
+            logger.debug("SSL verify failed; retrying with unverified context: %s", e)
+            ctx = _get_ssl_context(verify=False)
+            return urllib.request.urlopen(req, context=ctx, timeout=timeout)
+        raise
 
 
 def get_google_translate_release_url(
@@ -57,7 +91,8 @@ def get_google_translate_release_url(
 def fetch_google_translation(text: str, target_lang: str, timeout: float = 6.0) -> str:
     """Fetch translated text using Google Translate endpoints.
 
-    Tries clients5.google.com first, falling back to translate.googleapis.com.
+    Uses POST to avoid URI length overflow (HTTP 414), uses certifi SSL context
+    with unverified fallback, and parses both clients5 and translate.googleapis.com.
     Returns original text if offline or on network failure.
     """
     if not text or not text.strip() or target_lang in ("en", ""):
@@ -69,22 +104,21 @@ def fetch_google_translation(text: str, target_lang: str, timeout: float = 6.0) 
 
     headers = {
         "User-Agent": (
-            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        )
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+        ),
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
     }
 
-    # 1. Primary: clients5.google.com/translate_a/t
+    # 1. Primary: clients5.google.com/translate_a/t (dict-chrome-ex)
     try:
-        params = {
-            "client": "dict-chrome-ex",
-            "sl": "auto",
-            "tl": target_lang,
-            "q": text,
-        }
-        url = "https://clients5.google.com/translate_a/t?" + urllib.parse.urlencode(params)
-        req = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        url = (
+            "https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=auto&tl="
+            + urllib.parse.quote(target_lang)
+        )
+        post_data = urllib.parse.urlencode({"q": text}).encode("utf-8")
+        req = urllib.request.Request(url, data=post_data, headers=headers)
+        with _urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             if isinstance(data, list) and data:
                 if isinstance(data[0], list) and data[0]:
@@ -98,21 +132,23 @@ def fetch_google_translation(text: str, target_lang: str, timeout: float = 6.0) 
     except Exception as e:
         logger.debug("Primary Google translation failed (%s): %s", url, e)
 
-    # 2. Secondary fallback: translate.googleapis.com/translate_a/single
+    # 2. Secondary fallback: translate.googleapis.com/translate_a/single (gtx)
     try:
-        params = {
-            "client": "dict-chrome-ex",
-            "sl": "auto",
-            "tl": target_lang,
-            "dt": "t",
-            "q": text,
-        }
-        url = "https://translate.googleapis.com/translate_a/single?" + urllib.parse.urlencode(params)
-        req = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        url = (
+            "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl="
+            + urllib.parse.quote(target_lang)
+            + "&dt=t"
+        )
+        post_data = urllib.parse.urlencode({"q": text}).encode("utf-8")
+        req = urllib.request.Request(url, data=post_data, headers=headers)
+        with _urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             if isinstance(data, list) and data and isinstance(data[0], list):
-                parts = [p[0] for p in data[0] if isinstance(p, list) and p and p[0]]
+                parts = [
+                    str(p[0])
+                    for p in data[0]
+                    if isinstance(p, list) and p and isinstance(p[0], str)
+                ]
                 if parts:
                     result = "".join(parts)
                     _TRANSLATION_CACHE[cache_key] = result
@@ -137,7 +173,7 @@ class ReleaseTranslateWorker(QThread):
     """Asynchronous worker that fetches Google translation for a release."""
 
     translation_ready = Signal(dict, str, str, str)  # (rel, target_lang, name, body)
-    translation_failed = Signal(dict, str, str)       # (rel, target_lang, error)
+    translation_failed = Signal(dict, str, str)  # (rel, target_lang, error)
 
     def __init__(self, rel: dict, target_lang: str, parent=None):
         super().__init__(parent)

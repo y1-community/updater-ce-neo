@@ -81,8 +81,12 @@ def find_sp_flash_tool_dirs() -> List[Path]:
         add(paths.INSTALL_DIR)
         loc = os.environ.get("LOCALAPPDATA")
         if loc:
+            add(Path(loc) / "Updater CE" / "SP_Flash_Tool")
+            add(Path(loc) / "Updater CE")
             add(Path(loc) / "Innioasis Updater" / "SP_Flash_Tool")
             add(Path(loc) / "Innioasis Updater")
+        add(Path.home() / "AppData" / "Local" / "Updater CE" / "SP_Flash_Tool")
+        add(Path.home() / "AppData" / "Local" / "Updater CE")
         add(Path.home() / "AppData" / "Local" / "Innioasis Updater" / "SP_Flash_Tool")
         add(Path.home() / "AppData" / "Local" / "Innioasis Updater")
         add(Path.cwd() / "SP_Flash_Tool")
@@ -181,7 +185,7 @@ def update_sp_history_ini(
     """
     from . import device_tracking
 
-    if paths.IS_MAC:
+    if sp_dir is None and paths.IS_MAC:
         return False
 
     if sp_dir is None:

@@ -17,6 +17,9 @@ from .config import DONORS_CSV_URL, MONTHLY_GOAL_USD
 
 logger = logging.getLogger(__name__)
 
+# Host of the supporters feed, named in connectivity logs instead of the URL.
+_DONORS_HOST = "innioasis.app"
+
 
 def parse_donors_csv_text(csv_text):
     """Parse raw CSV text into structured donation records (see donors.csv)."""
@@ -133,14 +136,37 @@ def cached_donors_path() -> Path:
     return d / "donors.csv"
 
 
+def _log_connectivity(ok: bool, detail: str) -> None:
+    """Record the reachability of the feed as a connectivity check.
+
+    Supporter names and amounts never reach the diagnostics log: the feed is
+    only ever read to show recognition inside the app. What the log keeps is
+    whether the app could talk to its server, which is what a failure report
+    needs and what the offline/online decision is based on.
+    """
+    if ok:
+        logger.info("Connectivity check: online (%s)", detail)
+    else:
+        logger.warning("Connectivity check: offline (%s)", detail)
+
+
 def fetch_remote_donors_async(on_result):
     """Fetch the latest donors.csv from innioasis.app in a background thread.
 
     ``on_result(donations_or_None)`` is invoked on success (from the worker
-    thread; the caller is expected to marshal to the UI thread).
+    thread; the caller is expected to marshal to the UI thread). When the feed
+    cannot be reached the most recent local download is used instead, so the
+    app keeps working if innioasis.app is unavailable.
     """
 
+    def _cached():
+        text = load_donors_file([cached_donors_path()])
+        if not text:
+            return None
+        return parse_donors_csv_text(text) or None
+
     def _worker():
+        reason = ""
         try:
             url = f"{DONORS_CSV_URL}?_t={int(time.time())}"
             resp = requests.get(
@@ -160,11 +186,20 @@ def fetch_remote_donors_async(on_result):
                         cached_donors_path().write_text(text, encoding="utf-8")
                     except Exception as ce:
                         logger.debug("Could not cache donors.csv to disk: %s", ce)
-                    logger.info("Fetched %d remote donation records from %s", len(parsed), DONORS_CSV_URL)
+                    _log_connectivity(True, f"{_DONORS_HOST} responded ({len(text)} bytes)")
                     on_result(parsed)
                     return
+                reason = f"{_DONORS_HOST} returned an unusable feed (HTTP {resp.status_code})"
+            else:
+                reason = f"{_DONORS_HOST} returned HTTP {resp.status_code}"
         except Exception as e:
-            logger.warning("Remote donors.csv fetch failed (%s)", e)
-        on_result(None)
+            reason = f"{_DONORS_HOST} unreachable ({e})"
+
+        _log_connectivity(False, reason)
+        # Falling back to the newest local copy keeps the app usable offline.
+        cached = _cached()
+        if cached:
+            logger.info("Using the most recent locally cached feed instead")
+        on_result(cached)
 
     threading.Thread(target=_worker, daemon=True).start()

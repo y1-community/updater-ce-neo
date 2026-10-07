@@ -25,7 +25,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DIST = ROOT / "dist"
-APP_DIR = DIST / "Innioasis Updater CE.app"
+APP_DIR = DIST / "Updater CE.app"
 CONTENTS = APP_DIR / "Contents"
 MACOS = CONTENTS / "MacOS"
 RESOURCES = CONTENTS / "Resources"
@@ -162,7 +162,7 @@ int main(int argc, char **argv, char **envp) {
 
     // Use execv so the child Python process inherits all variables set via setenv
     execv(new_argv[0], new_argv);
-    puts("Error: Failed to launch Innioasis Updater CE.");
+    puts("Error: Failed to launch Updater CE.");
     exit(1);
     return 1;
 }
@@ -377,7 +377,7 @@ def build():
     APP_CODE.mkdir(parents=True, exist_ok=True)
 
     # 1. Compile Universal 2 Launcher Executable
-    exe_target = MACOS / "Innioasis Updater CE"
+    exe_target = MACOS / "Updater CE"
     compile_universal_launcher(exe_target)
 
     # 2. Build Universal 2 Python Runtime
@@ -408,12 +408,12 @@ def build():
 
     # 8. Info.plist
     info_plist = {
-        "CFBundleDisplayName": "Innioasis Updater CE",
-        "CFBundleExecutable": "Innioasis Updater CE",
+        "CFBundleDisplayName": "Updater CE",
+        "CFBundleExecutable": "Updater CE",
         "CFBundleIconFile": "icon.icns",
         "CFBundleIdentifier": "com.innioasis.updater",
         "CFBundleInfoDictionaryVersion": "6.0",
-        "CFBundleName": "Innioasis Updater CE",
+        "CFBundleName": "Updater CE",
         "CFBundlePackageType": "APPL",
         "CFBundleShortVersionString": "3.0.0",
         "CFBundleVersion": "3.0.0",

@@ -3,6 +3,13 @@ default_ids = {
              0x6000: 2,  # MTK Preloader
              0x2000: -1,  # MTK Preloader
              0x2001: -1,  # MTK Preloader
+             0x2002: -1,  # MTK Preloader
+             0x2004: -1,  # MTK Preloader
+             0x2005: -1,  # MTK Preloader
+             0x2006: -1,  # MTK Preloader
+             0x2007: -1,  # MTK Preloader
+             0x2008: -1,  # MTK Preloader (MT6735 etc.)
+             0x200A: -1,  # MTK Preloader
              0x20FF: -1,  # MTK Preloader
              0x3000: -1},  # MTK Preloader
     0x1004: {0x6000: 2},  # LG Preloader

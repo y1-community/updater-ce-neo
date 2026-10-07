@@ -2,13 +2,18 @@
 
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Optional
 
 from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtGui import QTextDocument
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QFileDialog,
+    QFrame,
+    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -19,12 +24,13 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QTabWidget,
-    QTextEdit,
+    QTextBrowser,
     QVBoxLayout,
     QWidget,
 )
 
 from .. import catalog, downloads, device_tracking
+from ..network import get_connectivity_monitor
 from ..flash_service import (
     ExtractWorker,
     compute_extract_dir,
@@ -38,6 +44,7 @@ from ..config import (
     detect_model_and_type_from_name,
     device_label_for_model,
     install_disconnect_guidance,
+    is_generic_mtk,
 )
 from ..i18n import tr, translator
 from ..browser import open_browser
@@ -46,7 +53,7 @@ from ..translate import (
     ReleaseTranslateWorker,
 )
 from .widgets import Banner, Card
-from .dark import T
+from .dark import T, page_top_margin
 
 logger = logging.getLogger(__name__)
 
@@ -54,19 +61,37 @@ logger = logging.getLogger(__name__)
 class ReleasesWorker(QThread):
     finished = Signal(list, str)
 
-    def __init__(self, client, package, model, show_nightly, selected_type=None, force_refresh=False, parent=None):
+    def __init__(
+        self,
+        client,
+        package,
+        model,
+        show_nightly=False,
+        selected_type=None,
+        show_old_rockbox=False,
+        prefer_240p=False,
+        force_refresh=False,
+        parent=None,
+    ):
         super().__init__(parent)
         self.client = client
         self.package = package
         self.model = model
         self.show_nightly = show_nightly
         self.selected_type = selected_type
+        self.show_old_rockbox = show_old_rockbox
+        self.prefer_240p = prefer_240p
         self.force_refresh = force_refresh
 
     def run(self):
         try:
             releases = self.client.releases_for_package(
-                self.package, self.model, self.show_nightly, self.selected_type,
+                self.package,
+                self.model,
+                show_nightly=self.show_nightly,
+                selected_type=self.selected_type,
+                show_old_rockbox=self.show_old_rockbox,
+                prefer_240p=self.prefer_240p,
                 force_refresh=self.force_refresh,
             )
             self.finished.emit(releases, "")
@@ -104,10 +129,53 @@ class SelectPackagePage(QWidget):
         self._build_ui()
         self._on_model_changed()
 
+        self._monitor = get_connectivity_monitor()
+        self._monitor.connectivity_changed.connect(self._on_connectivity_changed)
+        if os.environ.get("QT_QPA_PLATFORM") != "offscreen":
+            self._monitor.start_monitoring(interval_ms=5000)
+            if self._monitor.is_online is False:
+                self.set_online_mode(False)
+
+        if is_generic_mtk():
+            self.apply_generic_mode(True)
+
+    def apply_generic_mode(self, generic: bool):
+        if generic:
+            self.set_online_mode(False)
+            self._tabs.tabBar().setVisible(False)
+            self._hint.setText(tr("sel_only_local_generic"))
+            self._offline_banner.setText(tr("sel_offline_install_generic"))
+        else:
+            self._tabs.tabBar().setVisible(True)
+            if self._monitor.is_online is not False:
+                self.set_online_mode(True)
+            self._hint.setText(tr("sel_only_local"))
+            self._offline_banner.setText(tr("sel_offline_install"))
+
+    def _on_connectivity_changed(self, is_online: bool):
+        if is_generic_mtk():
+            return
+        self.set_online_mode(is_online)
+
+    def set_online_mode(self, is_online: bool):
+        if is_generic_mtk() and is_online:
+            return
+        online_idx = self._tabs.indexOf(self._online_tab)
+        if not is_online:
+            if online_idx >= 0:
+                self._tabs.removeTab(online_idx)
+                self._tabs.setCurrentWidget(self._local_tab)
+                self._say(tr("sel_offline"), timeout_ms=3000)
+        else:
+            if online_idx < 0:
+                self._tabs.insertTab(0, self._online_tab, tr("sel_online"))
+                self._tabs.setCurrentWidget(self._online_tab)
+                self._on_model_changed()
+
     def _build_ui(self):
         t = T()
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 12, 16, 8)
+        layout.setContentsMargins(24, page_top_margin(), 24, 20)
         layout.setSpacing(8)
 
         self._title = QLabel(tr("sel_title"))
@@ -115,11 +183,16 @@ class SelectPackagePage(QWidget):
         layout.addWidget(self._title)
 
         self._tabs = QTabWidget()
+        self._tabs.setDocumentMode(True)
         self._online_tab = self._build_online_tab()
         self._local_tab = self._build_local_tab()
         self._tabs.addTab(self._online_tab, tr("sel_online"))
         self._tabs.addTab(self._local_tab, tr("sel_local"))
+        self._tabs.currentChanged.connect(self._on_tab_changed)
         layout.addWidget(self._tabs, 1)
+
+    def _on_tab_changed(self, _idx: int):
+        pass
 
     def _say(self, text: str, timeout_ms: int = 0):
         """Show a status message in the main status bar (0 = until replaced)."""
@@ -132,56 +205,84 @@ class SelectPackagePage(QWidget):
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(6)
 
-        # ── Device & Software Filters (Single Horizontal Line) ───────────
+        # ── Device & Software Filters (Compact 2-Row Responsive Grid) ────
         self._filter_group = QGroupBox()
-        filter_layout = QHBoxLayout(self._filter_group)
+        filter_layout = QGridLayout(self._filter_group)
         filter_layout.setContentsMargins(10, 6, 10, 6)
-        filter_layout.setSpacing(10)
+        filter_layout.setHorizontalSpacing(8)
+        filter_layout.setVerticalSpacing(6)
 
-        # Device Model filter
+        # Row 0: Device Model & Device Type
         self._model_label = QLabel(f"{tr('sel_model')}:")
         self._model_label.setProperty("cssClass", "field-label")
-        filter_layout.addWidget(self._model_label)
+        filter_layout.addWidget(self._model_label, 0, 0)
 
         self._model_combo = QComboBox()
         self._model_combo.setMinimumWidth(80)
         self.refresh_models()
         self._model_combo.currentTextChanged.connect(self._on_model_changed)
-        filter_layout.addWidget(self._model_combo)
+        filter_layout.addWidget(self._model_combo, 0, 1)
 
-        # Device Type filter (Type A/B for Y1)
         self._type_label = QLabel(f"{tr('sel_type')}:")
         self._type_label.setProperty("cssClass", "field-label")
-        filter_layout.addWidget(self._type_label)
+        filter_layout.addWidget(self._type_label, 0, 2)
 
+        type_row = QHBoxLayout()
+        type_row.setContentsMargins(0, 0, 0, 0)
+        type_row.setSpacing(6)
         self._type_combo = QComboBox()
         self._type_combo.addItem(tr("sel_type_a"), "A")
         self._type_combo.addItem(tr("sel_type_b"), "B")
         self._type_combo.currentIndexChanged.connect(self._on_type_changed)
-        filter_layout.addWidget(self._type_combo)
+        type_row.addWidget(self._type_combo)
 
         self._type_help_btn = QPushButton(tr("sel_type_help_btn"))
         self._type_help_btn.setToolTip(tr("sel_type_help_body").replace("\n\n", " "))
         self._type_help_btn.clicked.connect(self._show_device_type_help)
-        filter_layout.addWidget(self._type_help_btn)
+        type_row.addWidget(self._type_help_btn)
+        filter_layout.addLayout(type_row, 0, 3)
 
-        # Software filter
+        # Row 1: Software & Refresh
         self._software_label = QLabel(f"{tr('sel_software')}:")
         self._software_label.setProperty("cssClass", "field-label")
-        filter_layout.addWidget(self._software_label)
+        filter_layout.addWidget(self._software_label, 1, 0)
 
         self._software_combo = QComboBox()
-        self._software_combo.setMinimumWidth(200)
+        self._software_combo.setMinimumWidth(120)
         self._software_combo.currentTextChanged.connect(self._on_software_changed)
-        filter_layout.addWidget(self._software_combo, 1)
+        filter_layout.addWidget(self._software_combo, 1, 1, 1, 2)
 
-        # Refresh button
         self._refresh_btn = QPushButton(tr("sel_refresh"))
         self._refresh_btn.setToolTip(tr("sel_refresh_tooltip"))
         self._refresh_btn.clicked.connect(lambda: self._refresh_releases(force_refresh=True))
-        filter_layout.addWidget(self._refresh_btn)
+        filter_layout.addWidget(self._refresh_btn, 1, 3)
+
+        filter_layout.setColumnStretch(1, 1)
+        filter_layout.setColumnStretch(3, 1)
 
         layout.addWidget(self._filter_group)
+
+        # ── Firmware Options / Filters Bar ───────────────────────────────
+        self._options_bar = QWidget()
+        opt_layout = QHBoxLayout(self._options_bar)
+        opt_layout.setContentsMargins(6, 0, 6, 0)
+        opt_layout.setSpacing(16)
+
+        self._show_old_rockbox_cb = QCheckBox(tr("sel_filter_old_rockbox"))
+        self._show_old_rockbox_cb.setToolTip(tr("sel_old_rockbox_warn_body"))
+        self._show_old_rockbox_cb.clicked.connect(self._on_old_rockbox_clicked)
+        opt_layout.addWidget(self._show_old_rockbox_cb)
+
+        self._show_nightly_cb = QCheckBox(tr("sel_filter_nightly"))
+        self._show_nightly_cb.toggled.connect(lambda _c: self._refresh_releases())
+        opt_layout.addWidget(self._show_nightly_cb)
+
+        self._show_240p_cb = QCheckBox(tr("sel_filter_240p"))
+        self._show_240p_cb.toggled.connect(lambda _c: self._refresh_releases())
+        opt_layout.addWidget(self._show_240p_cb)
+
+        opt_layout.addStretch(1)
+        layout.addWidget(self._options_bar)
 
         self._online_banner = Banner()
         self._online_banner.setVisible(False)
@@ -230,10 +331,21 @@ class SelectPackagePage(QWidget):
         notes_l.setContentsMargins(8, 6, 8, 6)
         notes_l.setSpacing(4)
 
-        self._notes = QTextEdit()
+        self._notes = QTextBrowser()
         self._notes.setObjectName("releaseNotes")
         self._notes.setReadOnly(True)
+        self._notes.setOpenLinks(False)
+        self._notes.setOpenExternalLinks(False)
+        self._notes.viewport().setAutoFillBackground(False)
+        self._notes.setFrameShape(QFrame.NoFrame)
+        self._notes.setLineWrapMode(QTextBrowser.WidgetWidth)
+        self._notes.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._notes.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self._notes.setPlaceholderText(tr("sel_notes_hint"))
+        self._notes.setStyleSheet(
+            "QTextBrowser#releaseNotes { background: transparent; border: none; padding: 0px; }"
+        )
+        self._notes.anchorClicked.connect(self._on_notes_link_clicked)
         notes_l.addWidget(self._notes)
 
         self._translate_label = QLabel()
@@ -284,8 +396,11 @@ class SelectPackagePage(QWidget):
         self._path_edit.setPlaceholderText(tr("sel_placeholder"))
         self._browse_btn = QPushButton(tr("sel_browse"))
         self._browse_btn.clicked.connect(self._on_choose_file)
+        self._browse_folder_btn = QPushButton(tr("sel_browse_folder"))
+        self._browse_folder_btn.clicked.connect(self._on_choose_folder)
         row.addWidget(self._path_edit, 1)
         row.addWidget(self._browse_btn)
+        row.addWidget(self._browse_folder_btn)
         grp_l.addLayout(row)
 
         self._local_banner = Banner()
@@ -339,7 +454,7 @@ class SelectPackagePage(QWidget):
             return True
         return False
 
-    def _prompt_pre_install(self, model="Y1", type_variant=None):
+    def _prompt_pre_install(self, model="", type_variant=None):
         if os.environ.get("QT_QPA_PLATFORM") == "offscreen" or os.environ.get("INNIOASIS_HEADLESS"):
             return True
         reply = QMessageBox.question(
@@ -387,19 +502,36 @@ class SelectPackagePage(QWidget):
 
     def retranslate(self):
         self._title.setText(tr("sel_title"))
-        self._tabs.setTabText(0, tr("sel_online"))
-        self._tabs.setTabText(1, tr("sel_local"))
+        online_idx = self._tabs.indexOf(self._online_tab)
+        if online_idx >= 0:
+            self._tabs.setTabText(online_idx, tr("sel_online"))
+        local_idx = self._tabs.indexOf(self._local_tab)
+        if local_idx >= 0:
+            self._tabs.setTabText(local_idx, tr("sel_local"))
         self._model_label.setText(f"{tr('sel_model')}:")
         self._type_label.setText(f"{tr('sel_type')}:")
         self._software_label.setText(f"{tr('sel_software')}:")
         self._refresh_btn.setText(tr("sel_refresh"))
+        if hasattr(self, "_show_old_rockbox_cb"):
+            self._show_old_rockbox_cb.setText(tr("sel_filter_old_rockbox"))
+            self._show_old_rockbox_cb.setToolTip(tr("sel_old_rockbox_warn_body"))
+        if hasattr(self, "_show_nightly_cb"):
+            self._show_nightly_cb.setText(tr("sel_filter_nightly"))
+        if hasattr(self, "_show_240p_cb"):
+            self._show_240p_cb.setText(tr("sel_filter_240p"))
         self._install_btn.setText(tr("sel_install"))
-        self._hint.setText(tr("sel_only_local"))
+        if is_generic_mtk():
+            self._hint.setText(tr("sel_only_local_generic"))
+            self._offline_banner.setText(tr("sel_offline_install_generic"))
+        else:
+            self._hint.setText(tr("sel_only_local"))
+            self._offline_banner.retranslate()
         self._path_edit.setPlaceholderText(tr("sel_placeholder"))
         self._notes.setPlaceholderText(tr("sel_notes_hint"))
         self._browse_btn.setText(tr("sel_browse"))
+        if hasattr(self, "_browse_folder_btn"):
+            self._browse_folder_btn.setText(tr("sel_browse_folder"))
         self._start_btn.setText(tr("sel_btn_start"))
-        self._offline_banner.retranslate()
         self._apply_online_banner()
         self._apply_local_banner()
         self._type_combo.setItemText(0, tr("sel_type_a"))
@@ -419,8 +551,15 @@ class SelectPackagePage(QWidget):
             if self._is_translated:
                 self._translate_current_release_in_app()
             else:
-                self._notes.setMarkdown(self._render_release_notes(self._current_selected_rel))
+                self._notes.setHtml(self._render_release_notes(self._current_selected_rel, as_html=True))
         self._update_translate_link()
+
+    def refresh_theme(self):
+        """Update components and release notes typography to match active theme tokens."""
+        if hasattr(self, "_notes") and self._current_selected_rel:
+            self._notes.setHtml(self._render_release_notes(self._current_selected_rel, as_html=True))
+        if hasattr(self, "_translate_label"):
+            self._update_translate_link()
 
     def refresh_models(self):
         """Repopulate the device drop-down from what the catalogue offers.
@@ -491,11 +630,40 @@ class SelectPackagePage(QWidget):
         if hasattr(self, "_install_btn"):
             self._install_btn.setToolTip(tr("sel_install_tooltip").format(lbl=lbl))
 
+    def _on_old_rockbox_clicked(self, checked: bool):
+        if checked:
+            reply = QMessageBox.warning(
+                self,
+                tr("sel_old_rockbox_warn_title"),
+                tr("sel_old_rockbox_warn_body"),
+                QMessageBox.Yes | QMessageBox.Cancel,
+                QMessageBox.Cancel,
+            )
+            if reply != QMessageBox.Yes:
+                self._show_old_rockbox_cb.setChecked(False)
+                return
+        self._refresh_releases()
+
+    def _update_filter_checkboxes_visibility(self):
+        if not hasattr(self, "_show_old_rockbox_cb"):
+            return
+        model = self.current_model().upper()
+        software = self._software_combo.currentText().lower()
+        is_rockbox = "rockbox" in software
+        is_y1 = model == "Y1"
+        self._show_old_rockbox_cb.setVisible(is_rockbox and is_y1)
+        self._show_240p_cb.setVisible(is_rockbox)
+        if not (is_rockbox and is_y1) and self._show_old_rockbox_cb.isChecked():
+            self._show_old_rockbox_cb.setChecked(False)
+        if not is_rockbox and self._show_240p_cb.isChecked():
+            self._show_240p_cb.setChecked(False)
+
     def _on_type_changed(self, index):
         self._selected_type = self._type_combo.currentData()
         self._refresh_releases()
 
     def _on_software_changed(self):
+        self._update_filter_checkboxes_visibility()
         self._refresh_releases()
 
     def _refresh_releases(self, force_refresh=False):
@@ -505,6 +673,7 @@ class SelectPackagePage(QWidget):
         if package is None:
             self._set_online_banner("sel_no_release")
             return
+        self._update_filter_checkboxes_visibility()
         # Stop any in-flight worker before replacing; overwriting a running
         # QThread causes "Destroyed while thread is still running" / SIGABRT.
         old = self._releases_worker
@@ -512,9 +681,25 @@ class SelectPackagePage(QWidget):
             old.requestInterruption()
             old.wait(800)
         self._set_online_banner("sel_loading")
+        show_old = (
+            self._show_old_rockbox_cb.isChecked()
+            if hasattr(self, "_show_old_rockbox_cb") and self._show_old_rockbox_cb.isVisible()
+            else False
+        )
+        show_nightly = self._show_nightly_cb.isChecked() if hasattr(self, "_show_nightly_cb") else False
+        prefer_240p = (
+            self._show_240p_cb.isChecked()
+            if hasattr(self, "_show_240p_cb") and self._show_240p_cb.isVisible()
+            else False
+        )
         self._releases_worker = ReleasesWorker(
-            self.client, package, self.current_model(),
-            show_nightly=False, selected_type=self._selected_type,
+            self.client,
+            package,
+            self.current_model(),
+            show_nightly=show_nightly,
+            selected_type=self._selected_type,
+            show_old_rockbox=show_old,
+            prefer_240p=prefer_240p,
             force_refresh=force_refresh,
         )
         self._releases_worker.finished.connect(self._on_releases_loaded)
@@ -555,8 +740,13 @@ class SelectPackagePage(QWidget):
             return
         self._release_list.clear()
         releases = sorted(releases or [], key=catalog.release_sort_key, reverse=True)
+        prefer_240p = (
+            hasattr(self, "_show_240p_cb")
+            and self._show_240p_cb.isVisible()
+            and self._show_240p_cb.isChecked()
+        )
         for rel in releases:
-            label = catalog.format_release_display_label(rel)
+            label = catalog.format_release_display_label(rel, prefer_240p=prefer_240p)
             item = QListWidgetItem(label)
             item.setData(Qt.UserRole, rel)
             tooltip = self._asset_line(rel)
@@ -611,10 +801,10 @@ class SelectPackagePage(QWidget):
             self._current_selected_rel = rel
             self._is_translated = False
             self._is_translating = False
-            self._notes.setMarkdown(self._render_release_notes(rel))
+            self._notes.setHtml(self._render_release_notes(rel, as_html=True))
             self._update_translate_link()
 
-    def _render_release_notes(self, rel, translated_body=None, translated_name=None):
+    def _render_release_notes(self, rel, translated_body=None, translated_name=None, as_html: bool = False) -> str:
         tag = rel.get("tag_name", "")
         name = translated_name or rel.get("name", "") or tag
         date = (rel.get("published_at") or "")[:10]
@@ -637,7 +827,105 @@ class SelectPackagePage(QWidget):
         lines.append("---")
         lines.append("")
         lines.append(body[:4000])
-        return "\n".join(lines)
+        raw_md = "\n".join(lines)
+
+        # 1. Parse markdown & remove images per user request:
+        # Strip all markdown images ![alt](url)
+        cleaned_md = re.sub(r"!\[.*?\]\(.*?\)", "", raw_md)
+        # Strip HTML images <img ...>
+        cleaned_md = re.sub(r"<img[^>]*>", "", cleaned_md, flags=re.IGNORECASE)
+        # Strip empty link anchors left over from image-only links: [ ](url)
+        cleaned_md = re.sub(r"\[\s*\]\(.*?\)", "", cleaned_md)
+
+        if not as_html:
+            return cleaned_md
+
+        doc = QTextDocument()
+        doc.setMarkdown(cleaned_md)
+        html = doc.toHtml()
+
+        t = T()
+        # 2. Re-style links: clickable, bold, same color as text (not blue #0000ff):
+        html = re.sub(
+            r'<span style="[^"]*color:#0000ff;[^"]*">',
+            f'<span style="color: {t.fg}; font-weight: bold; text-decoration: underline;">',
+            html,
+        )
+        html = re.sub(
+            r'<a\s+href="([^"]+)">',
+            f'<a href="\\1" style="color: {t.fg}; font-weight: bold; text-decoration: underline;">',
+            html,
+        )
+        html = re.sub(r"<img[^>]*>", "", html, flags=re.IGNORECASE)
+
+        # 3. Inject native rich typography CSS:
+        css = f"""
+        <style type="text/css">
+        body {{
+            color: {t.fg};
+            font-size: 13px;
+            line-height: 1.45;
+            background: transparent;
+            margin: 0;
+            padding: 0;
+        }}
+        h1, h2, h3, h4 {{
+            color: {t.fg};
+            font-weight: 700;
+            margin-top: 4px;
+            margin-bottom: 4px;
+        }}
+        h1 {{ font-size: 16px; }}
+        h2 {{ font-size: 15px; }}
+        h3 {{ font-size: 13px; }}
+        p {{
+            margin-top: 4px;
+            margin-bottom: 6px;
+            color: {t.fg};
+        }}
+        ul, ol {{
+            margin-top: 4px;
+            margin-bottom: 6px;
+            padding-left: 18px;
+        }}
+        li {{
+            margin-bottom: 2px;
+            color: {t.fg};
+        }}
+        hr {{
+            border: none;
+            border-top: 1px solid {t.border};
+            margin: 8px 0;
+        }}
+        code {{
+            font-family: Menlo, Monaco, Consolas, "Cascadia Code", "Courier New", monospace;
+            font-size: 12px;
+            background-color: {t.bg_hover};
+            color: {t.fg};
+            padding: 1px 4px;
+            border-radius: 3px;
+        }}
+        pre {{
+            font-family: Menlo, Monaco, Consolas, "Cascadia Code", "Courier New", monospace;
+            font-size: 12px;
+            background-color: {t.bg_hover};
+            color: {t.fg};
+            padding: 6px 8px;
+            border-radius: 4px;
+            margin: 4px 0;
+        }}
+        a {{
+            color: {t.fg};
+            font-weight: bold;
+            text-decoration: underline;
+        }}
+        </style>
+        """
+        if "<head>" in html:
+            html = html.replace("<head>", f"<head>{css}")
+        else:
+            html = f"<html><head>{css}</head><body>{html}</body></html>"
+        return html
 
     def _update_translate_link(self):
         rel = self._current_selected_rel
@@ -683,6 +971,17 @@ class SelectPackagePage(QWidget):
         elif link.startswith(("http://", "https://")):
             open_browser(link)
 
+    def _on_notes_link_clicked(self, qurl_or_str):
+        url_str = qurl_or_str.toString() if hasattr(qurl_or_str, "toString") else str(qurl_or_str)
+        if not url_str:
+            return
+        if url_str == "action:translate_in_app":
+            self._translate_current_release_in_app()
+        elif url_str == "action:show_original":
+            self._show_original_release_notes()
+        elif url_str.startswith(("http://", "https://", "mailto:")):
+            open_browser(url_str)
+
     def _translate_current_release_in_app(self):
         rel = self._current_selected_rel
         if not rel:
@@ -696,8 +995,8 @@ class SelectPackagePage(QWidget):
             trans_name, trans_body = cached
             self._is_translated = True
             self._is_translating = False
-            self._notes.setMarkdown(
-                self._render_release_notes(rel, translated_body=trans_body, translated_name=trans_name)
+            self._notes.setHtml(
+                self._render_release_notes(rel, translated_body=trans_body, translated_name=trans_name, as_html=True)
             )
             self._update_translate_link()
             return
@@ -716,8 +1015,8 @@ class SelectPackagePage(QWidget):
         if self._current_selected_rel == rel:
             self._is_translating = False
             self._is_translated = True
-            self._notes.setMarkdown(
-                self._render_release_notes(rel, translated_body=trans_body, translated_name=trans_name)
+            self._notes.setHtml(
+                self._render_release_notes(rel, translated_body=trans_body, translated_name=trans_name, as_html=True)
             )
             self._update_translate_link()
 
@@ -730,7 +1029,7 @@ class SelectPackagePage(QWidget):
         self._is_translated = False
         self._is_translating = False
         if self._current_selected_rel:
-            self._notes.setMarkdown(self._render_release_notes(self._current_selected_rel))
+            self._notes.setHtml(self._render_release_notes(self._current_selected_rel, as_html=True))
         self._update_translate_link()
 
     def _trigger_release_install(self, rel, package=None):
@@ -852,7 +1151,15 @@ class SelectPackagePage(QWidget):
         self._download_bar.setVisible(False)
         if not ok:
             self._download_status_key = ""
-            self._say(f"{tr('sel_prepare_failed')} \u2014 {err}", 15000)
+            if "MULTIPLE_SCATTERS" in str(err):
+                self._say(tr("sel_multiple_scatters_title"), 15000)
+                QMessageBox.warning(
+                    self,
+                    tr("sel_multiple_scatters_title"),
+                    tr("sel_multiple_scatters_error"),
+                )
+            else:
+                self._say(f"{tr('sel_prepare_failed')} \u2014 {err}", 15000)
             self._install_btn.setEnabled(True)
             return
         self._download_status_key = "sel_prepare_done"
@@ -887,7 +1194,15 @@ class SelectPackagePage(QWidget):
         self._local_bar.setVisible(False)
         if not ok:
             self._local_status_key = ""
-            self._local_status.setText(f"{tr('sel_prepare_failed')} \u2014 {err}")
+            if "MULTIPLE_SCATTERS" in str(err):
+                self._local_status.setText(tr("sel_multiple_scatters_title"))
+                QMessageBox.warning(
+                    self,
+                    tr("sel_multiple_scatters_title"),
+                    tr("sel_multiple_scatters_error"),
+                )
+            else:
+                self._local_status.setText(f"{tr('sel_prepare_failed')} \u2014 {err}")
             return
         self._local_status_key = "sel_prepare_done"
         self._local_status.setText(tr("sel_prepare_done"))
@@ -898,7 +1213,7 @@ class SelectPackagePage(QWidget):
         scatter_file = _find_scatter(Path(extract_dir))
         scatter_abs = scatter_file.resolve() if scatter_file else None
         extract_abs = Path(extract_dir).resolve() if extract_dir else None
-        eff_model = getattr(self, "_current_package_model", "") or self.current_model()
+        eff_model = getattr(self, "_current_package_model", "")
         device_tracking.record_latest_package(
             model=eff_model,
             software_name=self._current_package_name,
@@ -920,32 +1235,78 @@ class SelectPackagePage(QWidget):
         path, _ = QFileDialog.getOpenFileName(self, tr("sel_dialog_title"), "", filter_str)
         if not path:
             return
-        self._path_edit.setText(path)
-        self._current_package_path = path
-        self._current_package_name = Path(path).name
+        p = Path(path)
+        if p.is_file() and p.suffix.lower() == ".txt":
+            package_target = str(p.parent)
+            display_name = p.parent.name
+        else:
+            package_target = path
+            display_name = p.name
+
+        self._path_edit.setText(package_target)
+        self._current_package_path = package_target
+        self._current_package_name = display_name
         self._current_installed_release_info = None
 
         # Detect model and variant type from original browsed filename:
-        det_m, det_t = detect_model_and_type_from_name(path)
+        det_m, det_t = detect_model_and_type_from_name(display_name)
         if det_m:
             self._current_package_model = det_m
             self._select_model_for_manual(det_m)
         else:
-            self._current_package_model = self.current_model()
+            self._current_package_model = ""
 
         if det_t:
             self._selected_type = det_t
             idx_t = self._type_combo.findData(det_t)
             if idx_t >= 0:
                 self._type_combo.setCurrentIndex(idx_t)
+        else:
+            self._selected_type = None
 
-        self._set_local_banner("sel_current_pkg", Path(path).name)
+        self._set_local_banner("sel_current_pkg", display_name)
         self._start_btn.setEnabled(False)
-        self._prepare_package(path, self._on_local_prep_done)
+        self._prepare_package(package_target, self._on_local_prep_done)
+
+    def _on_choose_folder(self):
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            tr("sel_dialog_folder_title"),
+            "",
+            QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks,
+        )
+        if not folder:
+            return
+        p = Path(folder)
+        display_name = p.name
+
+        self._path_edit.setText(folder)
+        self._current_package_path = folder
+        self._current_package_name = display_name
+        self._current_installed_release_info = None
+
+        det_m, det_t = detect_model_and_type_from_name(display_name)
+        if det_m:
+            self._current_package_model = det_m
+            self._select_model_for_manual(det_m)
+        else:
+            self._current_package_model = ""
+
+        if det_t:
+            self._selected_type = det_t
+            idx_t = self._type_combo.findData(det_t)
+            if idx_t >= 0:
+                self._type_combo.setCurrentIndex(idx_t)
+        else:
+            self._selected_type = None
+
+        self._set_local_banner("sel_current_pkg", display_name)
+        self._start_btn.setEnabled(False)
+        self._prepare_package(folder, self._on_local_prep_done)
 
     def _on_start_flash(self):
         if self._current_package_path:
-            eff_model = getattr(self, "_current_package_model", "") or self.current_model()
+            eff_model = getattr(self, "_current_package_model", "")
             eff_type = getattr(self, "_selected_type", None)
             if self._should_prompt_pre_install():
                 if not self._prompt_pre_install(eff_model, eff_type):
@@ -956,7 +1317,7 @@ class SelectPackagePage(QWidget):
         self.package_selected.emit(
             self._current_package_path,
             self._current_package_name,
-            getattr(self, "_current_package_model", "") or self.current_model(),
+            getattr(self, "_current_package_model", ""),
         )
 
     def current_model(self):

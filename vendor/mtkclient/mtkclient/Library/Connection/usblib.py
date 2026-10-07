@@ -549,9 +549,6 @@ class UsbClass(DeviceClass):
             sz = min(buflen, bytestoread)
             try:
                 if fast:
-                    # NOTE: libusb treats a timeout of 0 as *unlimited*. The
-                    # retry counter above must not be reused as the timeout
-                    # value or a silent target blocks this read forever.
                     rlen = epr(buffer, self.timeout)
                     if rlen > sz:
                         self.warning("Buffer overflow")
@@ -566,9 +563,6 @@ class UsbClass(DeviceClass):
                         break
                 else:
                     # macOS libusb: 用 max packet size 读取避免 Overflow（小 buffer 会触发 USB Overflow 错误）
-                    # A real timeout is required here: without it libusb waits
-                    # forever and mtkclient's maxtimeout retry logic below can
-                    # never fire, so a dead DA hangs the whole app.
                     read_sz = max(sz, w_max_packet_size)
                     dt = bytes(epr(read_sz, self.timeout))
                     rlen = len(dt)
@@ -619,7 +613,10 @@ class UsbClass(DeviceClass):
                         self.device.clear_halt(self.EP_IN)
                     except Exception:
                         pass
-                    return b""
+                    if timeout >= maxtimeout:
+                        return b""
+                    timeout += 1
+                    pass
                 else:
                     # 未知 USB 错误，打印详情帮助诊断
                     import sys as _sys
@@ -651,14 +648,12 @@ class UsbClass(DeviceClass):
                     rlen = epr(buffer, self.timeout)
                     extend(buffer[:rlen])
                 else:
-                    # Bounded read (see usbread): 0 means "wait forever" in
-                    # libusb, so a silent target would hang this loop.
                     extend(epr(w_max_packet_size, self.timeout))
             except usb.core.USBError as e:
                 error = str(e.strerror)
                 if "timed out" in error:
                     self.debug("Timed out")
-                    if timeout == maxtimeout:
+                    if timeout >= maxtimeout:
                         return b""
                     timeout += 1
                     pass

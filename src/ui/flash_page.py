@@ -29,7 +29,7 @@ from ..flash_service import (
 )
 from ..i18n import tr
 from .widgets import Banner, Card, InfoRow, StatusTag
-from .dark import T
+from .dark import T, page_top_margin
 
 _STEP_KEY = {
     STEP_EXTRACTING: "step_extract",
@@ -63,7 +63,7 @@ class FlashPage(QWidget):
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setContentsMargins(24, page_top_margin(), 24, 20)
         layout.setSpacing(14)
 
         self._stack = QStackedWidget()
@@ -86,7 +86,7 @@ class FlashPage(QWidget):
         layout.addWidget(self._prep_banner)
 
         self._prep_img = QLabel()
-        self._prep_img.setFixedSize(460, 222)
+        self._prep_img.setFixedSize(320, 155)
         self._prep_img.setScaledContents(True)
         self._prep_img.setAlignment(Qt.AlignCenter)
         self._load_image(self._prep_img, "presteps.png")
@@ -110,17 +110,17 @@ class FlashPage(QWidget):
         view = QWidget()
         layout = QVBoxLayout(view)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(14)
+        layout.setSpacing(10)
 
         self._wait_banner = Banner()
         self._wait_banner.set_type("info")
         layout.addWidget(self._wait_banner)
 
         row = QHBoxLayout()
-        row.setSpacing(20)
+        row.setSpacing(16)
 
         self._status_img = QLabel()
-        self._status_img.setFixedSize(460, 222)
+        self._status_img.setFixedSize(320, 155)
         self._status_img.setScaledContents(True)
         self._status_img.setAlignment(Qt.AlignCenter)
         self._load_image(self._status_img, "initsteps.png")
@@ -134,6 +134,7 @@ class FlashPage(QWidget):
         self._guide_texts = []
         for key in ("flash_guide_1", "flash_guide_2", "flash_guide_3", "flash_guide_4"):
             text = QLabel(tr(key))
+            text.setWordWrap(True)
             text.setProperty("cssClass", "subtitle")
             self._guide_texts.append((key, text))
             guide_box.addWidget(text)
@@ -180,12 +181,19 @@ class FlashPage(QWidget):
         self._flash_banner.set_type("info")
         layout.addWidget(self._flash_banner)
 
+        cards_row = QHBoxLayout()
+        cards_row.setSpacing(12)
+
+        # Left column: illustration + progress card
+        left_col = QVBoxLayout()
+        left_col.setSpacing(8)
+
         self._flash_img = QLabel()
-        self._flash_img.setFixedSize(320, 155)
+        self._flash_img.setFixedSize(220, 106)
         self._flash_img.setScaledContents(True)
         self._flash_img.setAlignment(Qt.AlignCenter)
         self._load_image(self._flash_img, "installing.png")
-        layout.addWidget(self._flash_img, 0, Qt.AlignCenter)
+        left_col.addWidget(self._flash_img, 0, Qt.AlignCenter)
 
         self._progress_card = Card("flash_progress_title")
         self._progress_bar = QProgressBar()
@@ -209,8 +217,10 @@ class FlashPage(QWidget):
         self._warning.setAlignment(Qt.AlignCenter)
         self._warning.setProperty("cssClass", "warning-banner")
         self._progress_card.add_widget(self._warning)
-        layout.addWidget(self._progress_card)
+        left_col.addWidget(self._progress_card)
+        cards_row.addLayout(left_col, 1)
 
+        # Right column: status details
         self._status_card = Card("flash_status_panel")
         self._conn_row = InfoRow("flash_conn_status")
         self._dev_row = InfoRow("flash_device_status")
@@ -219,7 +229,8 @@ class FlashPage(QWidget):
         self._eta_row = InfoRow("flash_eta")
         for r in (self._conn_row, self._dev_row, self._pkg_row, self._elapsed_row, self._eta_row):
             self._status_card.add_widget(r)
-        layout.addWidget(self._status_card)
+        cards_row.addWidget(self._status_card, 1)
+        layout.addLayout(cards_row)
 
         btn_row = QHBoxLayout()
         self._cancel_btn = QPushButton(tr("flash_btn_cancel"))

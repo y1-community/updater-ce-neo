@@ -34,6 +34,49 @@ try:
 except Exception:
     pass
 
+
+def _mtkclient_runtime_imports():
+    """Return importable modules referenced by the vendored mtkclient sources.
+
+    mtkclient is shipped as plain source (``excludes=["mtkclient"]`` below) and
+    imported at runtime via ``paths.ensure_mtkclient_importable()``, so
+    PyInstaller never sees its imports. Without this scan, stdlib modules only
+    mtkclient uses (``unittest``, ``termios``, ``hmac``, ``socket`` ...) and
+    third-party submodules (``Cryptodome.Cipher.AES``, ``usb.util`` ...) would
+    be missing from the frozen interpreter.
+    """
+    import ast
+    import importlib.util
+
+    names = set()
+    pkg_root = VENDOR_MTK / "mtkclient"
+    for py in pkg_root.rglob("*.py"):
+        try:
+            tree = ast.parse(py.read_text(encoding="utf-8", errors="ignore"))
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                names.update(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+                names.add(node.module)
+                names.update(f"{node.module}.{alias.name}" for alias in node.names if alias.name != "*")
+
+    found = set()
+    for name in names:
+        if name.split(".")[0] in ("mtkclient", "__future__"):
+            continue
+        try:
+            if importlib.util.find_spec(name) is not None:
+                found.add(name)
+        except (ImportError, ValueError, AttributeError):
+            pass
+    return sorted(found)
+
+
+mtkclient_hidden = _mtkclient_runtime_imports()
+src_hidden = collect_submodules("src")
+
 binaries = []
 if LIBUSB_DYLIB.exists():
     binaries.append((str(LIBUSB_DYLIB), "."))
@@ -44,6 +87,8 @@ hiddenimports = (
     + usb_hidden
     + serial_hidden
     + libusb_package_hidden
+    + mtkclient_hidden
+    + src_hidden
     + [
         # macOS UI & glass
         "PySide6.QtSvg",
@@ -91,14 +136,14 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
-target_arch = os.environ.get("TARGET_ARCH") or None
+target_arch = os.environ.get("TARGET_ARCH") or "universal2"
 
 exe = EXE(
     pyz,
     a.scripts,
     [],
     exclude_binaries=True,
-    name="Innioasis Updater CE",
+    name="Updater CE",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -120,16 +165,16 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name="Innioasis Updater",
+    name="Updater CE",
 )
 
 app = BUNDLE(
     coll,
-    name="Innioasis Updater CE.app",
+    name="Updater CE.app",
     icon="assets/icon.icns",
     bundle_identifier="com.innioasis.updater",
     info_plist={
-        "CFBundleDisplayName": "Innioasis Updater CE",
+        "CFBundleDisplayName": "Updater CE",
         "CFBundleShortVersionString": "3.0.0",
         "CFBundleVersion": "3.0.0",
         "LSMinimumSystemVersion": "13.0",
@@ -152,13 +197,13 @@ app = BUNDLE(
     },
 )
 
-# Ensure Innioasis Updater CE.app is created even when running in non-Darwin environments
+# Ensure Updater CE.app is created even when running in non-Darwin environments
 try:
     import shutil
     import plistlib
     dist_dir = PROJECT_ROOT / "dist"
-    app_dir = dist_dir / "Innioasis Updater CE.app"
-    coll_dir = dist_dir / "Innioasis Updater"
+    app_dir = dist_dir / "Updater CE.app"
+    coll_dir = dist_dir / "Updater CE"
     if not app_dir.exists() and coll_dir.exists():
         contents_dir = app_dir / "Contents"
         macos_dir = contents_dir / "MacOS"
@@ -168,9 +213,9 @@ try:
         resources_dir.mkdir(parents=True, exist_ok=True)
         frameworks_dir.mkdir(parents=True, exist_ok=True)
 
-        if (coll_dir / "Innioasis Updater CE").exists():
-            shutil.copy2(coll_dir / "Innioasis Updater CE", macos_dir / "Innioasis Updater CE")
-            os.chmod(macos_dir / "Innioasis Updater CE", 0o755)
+        if (coll_dir / "Updater CE").exists():
+            shutil.copy2(coll_dir / "Updater CE", macos_dir / "Updater CE")
+            os.chmod(macos_dir / "Updater CE", 0o755)
         if (coll_dir / "_internal").exists():
             shutil.copytree(coll_dir / "_internal", macos_dir / "_internal", dirs_exist_ok=True)
 
@@ -184,12 +229,12 @@ try:
         (contents_dir / "PkgInfo").write_bytes(b"APPL????")
 
         plist_data = {
-            "CFBundleDisplayName": "Innioasis Updater CE",
-            "CFBundleExecutable": "Innioasis Updater CE",
+            "CFBundleDisplayName": "Updater CE",
+            "CFBundleExecutable": "Updater CE",
             "CFBundleIconFile": "icon.icns",
             "CFBundleIdentifier": "com.innioasis.updater",
             "CFBundleInfoDictionaryVersion": "6.0",
-            "CFBundleName": "Innioasis Updater CE",
+            "CFBundleName": "Updater CE",
             "CFBundlePackageType": "APPL",
             "CFBundleShortVersionString": "3.0.0",
             "CFBundleVersion": "3.0.0",

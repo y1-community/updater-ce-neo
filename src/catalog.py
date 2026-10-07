@@ -197,8 +197,20 @@ def _parse_rom_asset_variant(asset, tag_name="", repo=""):
         return None
 
 
-def _resolution_priority(resolution):
-    """Priority for choosing a default ROM: 360p (native Y1) > native > 240p."""
+def _resolution_priority(resolution, prefer_240p=False):
+    """Priority for choosing a default ROM.
+
+    When prefer_240p is True: 240p > 360p > native.
+    When prefer_240p is False: 360p (native Y1) > native > 240p.
+    """
+    if prefer_240p:
+        if resolution == "240p":
+            return 0
+        if resolution == "360p":
+            return 1
+        if resolution == "native":
+            return 2
+        return 3
     if resolution == "360p":
         return 0
     if resolution == "native":
@@ -217,7 +229,7 @@ def _model_priority(variant_model, model):
     return 2
 
 
-def select_preferred_rom_asset(variants, selected_type=None, model=None):
+def select_preferred_rom_asset(variants, selected_type=None, model=None, prefer_240p=False):
     """Pick the default rom*.zip asset, honoring type/model/resolution order.
 
     When ``model`` is given, only variants whose ``model`` field matches
@@ -237,11 +249,13 @@ def select_preferred_rom_asset(variants, selected_type=None, model=None):
         if model_matched:
             variants = model_matched
     if selected_type:
-        variants = [v for v in variants if v.get("type") == selected_type] or variants
-    # Sort: resolution first (lower is better), then model (exact > dual).
+        type_matched = [v for v in variants if v.get("type") == selected_type]
+        if type_matched:
+            variants = type_matched
+    # Sort: resolution first (honoring prefer_240p), then model (exact > dual).
     # Model is the *last* key so it acts as a tiebreaker — a rom_y2.zip
     # always beats a dual rom.zip even if the latter has a nicer resolution.
-    variants = sorted(variants, key=lambda v: _resolution_priority(v.get("resolution")))
+    variants = sorted(variants, key=lambda v: _resolution_priority(v.get("resolution"), prefer_240p=prefer_240p))
     if model:
         variants = sorted(variants, key=lambda v: _model_priority(v.get("model"), model))
     return variants[0]
@@ -421,7 +435,14 @@ def parse_version_designations(version_name: str) -> dict:
             continue
         if part.lower() in excluded_parts:
             continue
-        if part == 'nightly':
+        if part.lower() == 'nightly':
+            designations.append('Nightly')
+            continue
+        elif part.lower() in ('dev', 'devel', 'development'):
+            designations.append('Dev')
+            continue
+        elif part.lower() in ('beta', 'alpha', 'rc'):
+            designations.append(part.upper() if len(part) <= 3 else part.title())
             continue
         elif part == '360p':
             designations.append('360p / Y1 Theme Compatible')
@@ -461,34 +482,48 @@ def release_version_tuple(tag_name):
     return _parse_semver(clean.lstrip('vV'))
 
 
-def release_version_ok(repo, tag_name):
-    """Whether a release from ``repo`` may be listed in the Updater.
+def release_version_ok(repo, tag_name, model=None, show_old_rockbox=False, show_nightly=False):
+    """Whether a release from ``repo`` may be listed for ``model``.
 
-    ``REPO_MIN_RELEASE_VERSION`` pins a repo to a minimum version; older
-    releases are dropped from every listing — fresh fetches, cached reads and
-    the single-release path alike — so a user cannot install one by accident.
-    That matters for ``rockbox-y1/rockbox``, whose pre-0.5 builds are not
-    compatible with Y1 units sold after April 2026.
+    Rockbox builds before 0.5 are NOT compatible with Y1 units sold after
+    March 2026 (shipping with Innioasis OS 3.0.7 pre-installed). Therefore,
+    for model == "Y1", releases before 0.5 are hidden unless show_old_rockbox
+    is True.
 
-    A tag with no readable version counts as *not* OK: it cannot be shown to
-    be new enough, and an unrecognised build (``nightly-<sha>``, a branch
-    name) is exactly what someone might flash by mistake. Repos without a
-    pinned minimum are unrestricted.
+    For Y2, A5, and non-Y1 models, this gating is NEVER applied.
+
+    Tags that carry no semantic version (e.g. nightly-<sha>) are hidden unless
+    show_nightly is True. Repos without a pinned minimum are unrestricted.
     """
+    model_str = str(model or "").upper()
     slug = (repo or "").strip()
     if "github.com/" in slug:  # tolerate a full URL where a slug is expected
         slug = slug.split("github.com/", 1)[1]
     slug = slug.strip("/").removesuffix(".git")
-    minimum_str = REPO_MIN_RELEASE_VERSION.get(resolve_firmware_repo(slug))
-    if not minimum_str:
+    resolved_repo = resolve_firmware_repo(slug)
+
+    is_non_y1 = bool(model) and model_str != "Y1" and "Y1" not in model_str
+    if is_non_y1:
+        # Y2, A5, and non-Y1 models are completely exempt from the < 0.5 restriction
+        version = release_version_tuple(tag_name)
+        if version is None and not show_nightly:
+            return False
         return True
+
+    minimum_str = REPO_MIN_RELEASE_VERSION.get(resolved_repo)
+    if not minimum_str or show_old_rockbox:
+        version = release_version_tuple(tag_name)
+        if version is None and not show_nightly:
+            return False
+        return True
+
     minimum = _parse_semver(str(minimum_str).lstrip('vV'))
     if minimum is None:
         logger.warning("Invalid minimum version %r for %s; not gating", minimum_str, repo)
         return True
     version = release_version_tuple(tag_name)
     if version is None:
-        return False
+        return bool(show_nightly)
     # Pad so 0.5 and 0.5.0 compare equal, and (0, 4, 9) < (0, 5).
     width = max(len(version), len(minimum))
     version = version + (0,) * (width - len(version))
@@ -595,7 +630,7 @@ def release_sort_key(release):
     )
 
 
-def format_release_display_label(rel):
+def format_release_display_label(rel, prefer_240p=False):
     """Format release display label adhering to legacy firmware_downloader.py rules."""
     tag_name = (rel.get("tag_name") or "").strip()
     name = (rel.get("name") or "").strip()
@@ -604,13 +639,33 @@ def format_release_display_label(rel):
     is_prerelease = bool(rel.get("prerelease"))
     display_version = get_display_version(version_info, published_date, is_prerelease)
 
-    designations = version_info.get("designations") or []
-    if name and name != tag_name:
-        designations = [d for d in designations if d.lower() not in name.lower()]
-    designation_suffix = f" ({' | '.join(designations)})" if designations else ""
+    designations = list(version_info.get("designations") or [])
+    # Append (240p) if 240p is selected or preferred
+    is_240p = (
+        prefer_240p
+        or rel.get("selected_resolution") == "240p"
+        or rel.get("prefer_240p")
+        or "240p" in str(rel.get("asset_name", "")).lower()
+    )
+    if is_240p:
+        if not any("240p" in d.lower() for d in designations):
+            designations.append("240p")
 
+    # If name is present and not just the raw tag, clean designations already in name
+    if name and name != tag_name:
+        filtered_designations = [d for d in designations if d.lower() not in name.lower()]
+    else:
+        filtered_designations = designations
+
+    designation_suffix = f" ({' | '.join(filtered_designations)})" if filtered_designations else ""
+
+    clean_v = version_info.get("clean_version")
     if name and name != tag_name:
         label = f"{name}{designation_suffix}"
+    elif clean_v and any(d.lower() in tag_name.lower() for d in designations):
+        # Tag name has embedded verbs (e.g. v0.5.1-ADB); format with clean version and designations
+        v_prefix = "v" if tag_name.lower().startswith("v") else ""
+        label = f"{v_prefix}{clean_v}{designation_suffix}"
     elif display_version and display_version != tag_name and not tag_name.startswith("v"):
         label = f"{display_version}{designation_suffix}"
     else:
@@ -657,7 +712,7 @@ class ReleasesClient:
                 if isinstance(data, list):
                     return [
                         r for r in data
-                        if isinstance(r, dict) and release_version_ok(repo, r.get("tag_name", ""))
+                        if isinstance(r, dict)
                     ]
         except Exception as e:
             logger.debug("Cache read failed for %s: %s", repo, e)
@@ -826,8 +881,6 @@ class ReleasesClient:
     # -- normalization ------------------------------------------------------
     def _normalize_release(self, release, repo):
         tag_name = release.get("tag_name", "")
-        if not release_version_ok(repo, tag_name):
-            return None
         assets = release.get("assets", [])
         rom_variants = [_parse_rom_asset_variant(a, tag_name, repo) for a in assets]
         rom_variants = [v for v in rom_variants if v]
@@ -852,8 +905,6 @@ class ReleasesClient:
         releases = []
         for release in releases_data or []:
             tag_name = release.get("tag_name", "")
-            if not release_version_ok(repo, tag_name):
-                continue
             is_prerelease = bool(release.get("prerelease"))
             if "stable" in tag_name.lower():
                 is_prerelease = False
@@ -879,17 +930,35 @@ class ReleasesClient:
             })
         return releases
 
-    def releases_for_package(self, package: FirmwarePackage, model: str, show_nightly=False, selected_type=None, force_refresh=False):
+    def releases_for_package(
+        self,
+        package: FirmwarePackage,
+        model: str,
+        show_nightly=False,
+        selected_type=None,
+        show_old_rockbox=False,
+        prefer_240p=False,
+        force_refresh=False,
+    ):
         """Fetch releases for a catalogue package, filtered for the device model.
 
         Only releases that carry a ``rom*.zip`` asset compatible with ``model``
-        (exact match or ``dual``) are included.  When ``selected_type`` is
+        (exact match or ``dual``) are included. When ``selected_type`` is
         given (e.g. 'A' or 'B'), only releases with a matching hardware type
         variant are included.
         """
         releases = self.get_all_releases(package.repo, force_refresh=force_refresh)
         out = []
         for rel in releases:
+            tag_name = rel.get("tag_name", "")
+            if not release_version_ok(
+                package.repo,
+                tag_name,
+                model=model,
+                show_old_rockbox=show_old_rockbox,
+                show_nightly=show_nightly,
+            ):
+                continue
             if not _release_matches_model(model, rel, package, selected_type):
                 continue
             if rel.get("prerelease") and not show_nightly:
@@ -904,12 +973,19 @@ class ReleasesClient:
             )
             if selected_type:
                 rom_variants = [v for v in rom_variants if v.get("type") == selected_type] or rom_variants
-            preferred = select_preferred_rom_asset(rom_variants, selected_type=selected_type, model=model)
+            preferred = select_preferred_rom_asset(
+                rom_variants,
+                selected_type=selected_type,
+                model=model,
+                prefer_240p=prefer_240p,
+            )
             if preferred:
                 rel = dict(rel)  # shallow copy, don't mutate cache
                 rel["download_url"] = preferred["asset"]["browser_download_url"]
                 rel["asset_name"] = preferred["asset"]["name"]
                 rel["asset_size"] = preferred["asset"].get("size", 0)
+                rel["selected_resolution"] = preferred.get("resolution")
+                rel["prefer_240p"] = prefer_240p
             out.append(rel)
         return sorted(out, key=release_sort_key, reverse=True)
 

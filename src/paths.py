@@ -175,8 +175,12 @@ def find_sp_flash_tool():
     ]
     if IS_WINDOWS:
         if os.environ.get("LOCALAPPDATA"):
+            candidates.append(Path(os.environ["LOCALAPPDATA"]) / "Updater CE" / "tools" / "sp_flash_tool_win")
+            candidates.append(Path(os.environ["LOCALAPPDATA"]) / "Updater CE" / "SP_Flash_Tool")
             candidates.append(Path(os.environ["LOCALAPPDATA"]) / "Innioasis Updater" / "tools" / "sp_flash_tool_win")
             candidates.append(Path(os.environ["LOCALAPPDATA"]) / "Innioasis Updater" / "SP_Flash_Tool")
+        candidates.append(Path.home() / "AppData" / "Local" / "Updater CE" / "tools" / "sp_flash_tool_win")
+        candidates.append(Path.home() / "AppData" / "Local" / "Updater CE" / "SP_Flash_Tool")
         candidates.append(Path.home() / "AppData" / "Local" / "Innioasis Updater" / "tools" / "sp_flash_tool_win")
         candidates.append(Path.home() / "AppData" / "Local" / "Innioasis Updater" / "SP_Flash_Tool")
         candidates.append(Path(r"D:\work\data\tools\SP_Flash_Tool_v5.2016_Windows"))
@@ -200,6 +204,7 @@ def find_unrar():
     """Locate an UnRAR executable, in the same order as InniUpdaterChin."""
     candidates = [
         TOOLS_DIR / "UnRAR.exe",
+        Path.home() / "AppData" / "Local" / "Updater CE" / "tools" / "unrar_win" / "UnRAR.exe",
         Path.home() / "AppData" / "Local" / "Innioasis Updater" / "tools" / "unrar_win" / "UnRAR.exe",
         Path(r"C:\Program Files\WinRAR\UnRAR.exe"),
         Path(r"C:\Program Files (x86)\WinRAR\UnRAR.exe"),

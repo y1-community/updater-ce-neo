@@ -1,0 +1,102 @@
+# Building Updater CE
+
+This guide contains everything required for anyone to clone this repository and build the complete updater stack on **macOS**, **Windows**, or **Linux**.
+
+---
+
+## 1. Prerequisites by Platform
+
+### macOS (13.0 Ventura through 26.0+ Golden Gate / Tahoe)
+- **Python**: 3.11 or newer (Universal2 recommended)
+- **Xcode Command Line Tools**: `xcode-select --install`
+- **Architecture**: Supports Intel (`x86_64`), Apple Silicon (`arm64`), and Universal2 (`universal2`).
+
+### Windows (10 / 11, x64 / ARM64)
+- **Python**: 3.10 or newer (ensure "Add python.exe to PATH" is checked during setup)
+- **Inno Setup 6** (optional, for building the `.exe` setup wizard): [Inno Setup Downloads](https://jrsoftware.org/isdl.php)
+
+### Linux (Ubuntu, Debian, Fedora, Arch, etc.)
+- **Python**: 3.10 or newer
+- **Packages**: `curl`, `file`, `desktop-file-utils` (used by AppImage tooling)
+
+---
+
+## 2. Build Instructions
+
+### macOS (.app bundle and .dmg disk image)
+
+Clone the repository and run:
+```bash
+git clone https://github.com/y1-community/updater-ce-neo.git
+cd updater-ce-neo
+
+# Make executable and build standalone macOS .app
+chmod +x build_macos.sh
+./build_macos.sh
+
+# Or build Universal2 fat binary and create a drag-and-drop DMG:
+./build_macos.sh --arch universal2 --dmg
+```
+
+**Output**:
+- `dist/Updater CE.app` (100% self-contained application bundle)
+- `dist/UpdaterCE-3.0.0-macOS.dmg` (if `--dmg` is specified)
+
+---
+
+### Windows (.exe standalone and setup installer)
+
+In Command Prompt (`cmd.exe`):
+```cmd
+git clone https://github.com/y1-community/updater-ce-neo.git
+cd updater-ce-neo
+build_windows.bat
+```
+
+Or in PowerShell:
+```powershell
+git clone https://github.com/y1-community/updater-ce-neo.git
+cd updater-ce-neo
+.\build_windows.ps1
+```
+
+**Output**:
+- `dist\InnioasisUpdater\InnioasisUpdater.exe` (standalone portable directory with bundled SP Flash Tool)
+- `dist\InnioasisUpdater-Setup-3.0.0.exe` (full Windows installer wizard)
+
+> **Note**: On Windows, the app runs 100% SP Flash Tool by default. Press the `M` key on the keyboard to unlock the MTKClient advanced backend option.
+
+---
+
+### Linux (AppImage)
+
+Clone the repository and run:
+```bash
+git clone https://github.com/y1-community/updater-ce-neo.git
+cd updater-ce-neo
+
+chmod +x build_appimage.sh
+./build_appimage.sh
+```
+
+**Output**:
+- `dist/InnioasisUpdater-3.0.0-x86_64.AppImage` (standalone portable AppImage with bundled SP Flash Tool and udev setup tools)
+
+---
+
+## 3. Flash Engine Architecture
+
+| Platform | Default Backend | Alternate Backend | Bundled Payload |
+| :--- | :--- | :--- | :--- |
+| **macOS** | **MTKClient** | None (SP Flash Tool has no macOS build) | `vendor/mtkclient` + `libusb-1.0.dylib` + `MTK_AllInOne_DA_mt6590.bin` |
+| **Windows** | **SP Flash Tool** | **MTKClient** (unlocked via `M` key) | `tools/windows/SP_Flash_Tool_v5.1904_Win` |
+| **Linux** | **SP Flash Tool** | **MTKClient** | `tools/linux/SP_Flash_Tool_v5.1904_Linux` |
+
+---
+
+## 4. Running Offline
+
+Updater CE supports 100% offline usage:
+- When no internet connection is detected, the **Online** tab is automatically hidden, leaving only the **Local File** tab.
+- Users can choose any local `.zip`, `.rar`, scatter text file (`MT6572_Android_scatter.txt`), or firmware directory to flash completely offline.
+- When an active network is detected, the window dynamically refreshes and restores the **Online** firmware tab.

@@ -2,6 +2,7 @@
 
 import logging
 import random
+import sys
 
 from .browser import open_browser
 
@@ -74,6 +75,12 @@ class DonationStatusBar(QStatusBar):
         self._on_donations_updated = on_donations_updated
         self._remote_refresh_interval_ms = 5 * 60 * 1000
         self._showing_goal = True
+        self._donations_enabled = True
+        self._current_message = ""
+        self._status_revert_timer = QTimer(self)
+        self._status_revert_timer.setSingleShot(True)
+        self._status_revert_timer.timeout.connect(self.clearMessage)
+
         self.setObjectName("donation_status_bar")
         self.setSizeGripEnabled(False)
         self.setFixedHeight(44)
@@ -96,15 +103,19 @@ class DonationStatusBar(QStatusBar):
 
     def _build_ui(self, on_support):
         t = T()
+        is_mac = sys.platform == "darwin"
+        status_bg = "transparent" if is_mac else t.bg_card
+        status_border = "none" if is_mac else f"1px solid {t.border}"
         self.setStyleSheet(
-            f"QStatusBar#donation_status_bar {{ background-color: {t.bg_card};"
-            f" border-top: 1px solid {t.border}; color: {t.fg}; }}"
+            f"QStatusBar#donation_status_bar {{ background-color: {status_bg};"
+            f" border-top: {status_border}; color: {t.fg}; }}"
             f"QStatusBar#donation_status_bar QLabel {{ color: {t.fg};"
             f" background: transparent; border: none; }}"
         )
 
-        content = QWidget(self)
-        row = QHBoxLayout(content)
+        # Donation container: goal / donor ticker and Support button
+        self._donation_container = QWidget(self)
+        row = QHBoxLayout(self._donation_container)
         row.setContentsMargins(12, 0, 8, 0)
         row.setSpacing(10)
 
@@ -131,7 +142,18 @@ class DonationStatusBar(QStatusBar):
         if on_support:
             self._support_btn.clicked.connect(on_support)
         row.addWidget(self._support_btn)
-        self.addWidget(content, 1)
+        self.addWidget(self._donation_container, 1)
+
+        # Status container: clean status update message without donation collision
+        self._status_container = QWidget(self)
+        status_row = QHBoxLayout(self._status_container)
+        status_row.setContentsMargins(12, 0, 8, 0)
+        status_row.setSpacing(8)
+        self._status_label = QLabel()
+        self._status_label.setStyleSheet(f"font-size: 12px; font-weight: 500; color: {t.fg}; border: none; background: transparent;")
+        status_row.addWidget(self._status_label, 1)
+        self._status_container.setVisible(False)
+        self.addWidget(self._status_container, 1)
 
         # The goal and donor lines are clickable: any plain word opens the
         # donation dialog, while a donor name that carries a transaction URL
@@ -148,6 +170,31 @@ class DonationStatusBar(QStatusBar):
             return
         if self._on_support:
             self._on_support()
+
+    def refresh_theme(self):
+        """Update status bar styling and labels to match active OS theme."""
+        t = T()
+        is_mac = sys.platform == "darwin"
+        status_bg = "transparent" if is_mac else t.bg_card
+        status_border = "none" if is_mac else f"1px solid {t.border}"
+        self.setStyleSheet(
+            f"QStatusBar#donation_status_bar {{ background-color: {status_bg};"
+            f" border-top: {status_border}; color: {t.fg}; }}"
+            f"QStatusBar#donation_status_bar QLabel {{ color: {t.fg};"
+            f" background: transparent; border: none; }}"
+        )
+        if hasattr(self, "_goal_label"):
+            self._goal_label.setStyleSheet(
+                f"font-size: 12px; font-weight: 600; color: {t.fg}; border: none; background: transparent;"
+            )
+        if hasattr(self, "_donor_label"):
+            self._donor_label.setStyleSheet(
+                f"font-size: 12px; font-weight: 500; color: {t.fg}; border: none; background: transparent;"
+            )
+        if hasattr(self, "_status_label"):
+            self._status_label.setStyleSheet(
+                f"font-size: 12px; font-weight: 500; color: {t.fg}; border: none; background: transparent;"
+            )
 
     def _build_donor_lines(self):
         lines = []
@@ -191,6 +238,8 @@ class DonationStatusBar(QStatusBar):
             self._goal_bar.setValue(int(round(percent * 10)))
 
     def _rotate(self):
+        if not getattr(self, "_donations_enabled", True) or self._status_container.isVisible():
+            return
         if getattr(self, "_goal_reached", False):
             self._showing_goal = False
             self._goal_label.setVisible(False)
@@ -207,6 +256,59 @@ class DonationStatusBar(QStatusBar):
         if not self._showing_goal and self._donor_lines:
             self._donor_label.setText(self._donor_lines[0])
             self._donor_lines = self._donor_lines[1:] + self._donor_lines[:1]
+
+    def showMessage(self, message: str, timeout: int = 0):
+        text = str(message or "").strip()
+        if not text:
+            self.clearMessage()
+            return
+        self._status_revert_timer.stop()
+        self._current_message = text
+        self._status_label.setText(text)
+        self._donation_container.setVisible(False)
+        self._status_container.setVisible(True)
+        self.setVisible(True)
+        self.messageChanged.emit(text)
+
+        if self._donations_enabled:
+            # Briefly hide donations to show status updates, shortly replaced with donations again
+            revert_ms = int(timeout) if timeout and timeout > 0 else 4000
+            self._status_revert_timer.start(revert_ms)
+        else:
+            # Donations disabled: persist status message if timeout == 0, or timer if timeout > 0
+            if timeout and timeout > 0:
+                self._status_revert_timer.start(int(timeout))
+
+    def clearMessage(self):
+        self._status_revert_timer.stop()
+        self._current_message = ""
+        self._status_label.setText("")
+        self._status_container.setVisible(False)
+        if self._donations_enabled:
+            self._donation_container.setVisible(True)
+            self.setVisible(True)
+        else:
+            self._donation_container.setVisible(False)
+            self.setVisible(False)
+        self.messageChanged.emit("")
+
+    def currentMessage(self) -> str:
+        return self._current_message
+
+    def set_donations_enabled(self, enabled: bool):
+        self._donations_enabled = bool(enabled)
+        if self._current_message:
+            self._donation_container.setVisible(False)
+            self._status_container.setVisible(True)
+            self.setVisible(True)
+        else:
+            self._status_container.setVisible(False)
+            if self._donations_enabled:
+                self._donation_container.setVisible(True)
+                self.setVisible(True)
+            else:
+                self._donation_container.setVisible(False)
+                self.setVisible(False)
 
     def _refresh_remote_donors(self):
         fetch_remote_donors_async(self._refresh_bridge.updated.emit)
@@ -230,13 +332,15 @@ class DonationStatusBar(QStatusBar):
 
 class DonationDialog(QDialog):
     def __init__(self, parent=None, context="general", model="Y1", software_name="",
-                 donations=None, on_dont_ask_again=None):
+                 donations=None, on_dont_ask_again=None, is_360p_rockbox=False):
         super().__init__(parent)
         self.context = context
+        self.raw_model = model
         self.model = device_label_for_model(model)
         self.software_name = software_name
         self.donations = donations or []
         self.on_dont_ask_again = on_dont_ask_again
+        self.is_360p_rockbox = is_360p_rockbox
 
         self.setWindowTitle(tr("donate_title"))
         self.setModal(True)
@@ -327,6 +431,32 @@ class DonationDialog(QDialog):
             s_steps.setStyleSheet("border: none; background: transparent;")
             s_layout.addWidget(s_steps)
             layout.addWidget(success_box)
+
+            if getattr(self, "is_360p_rockbox", False):
+                self._theme_box = QWidget()
+                self._theme_box.setStyleSheet(
+                    f"QWidget {{ background-color: {t.bg_card}; border: 1px solid {t.border};"
+                    f" border-radius: 8px; }}"
+                )
+                tb_layout = QVBoxLayout(self._theme_box)
+                tb_layout.setContentsMargins(14, 10, 14, 10)
+                tb_layout.setSpacing(4)
+                self._theme_title = QLabel(f"<b>{tr('themepack_card_title')}</b>")
+                self._theme_title.setStyleSheet(f"font-size: 13px; color: {t.accent}; border: none; background: transparent;")
+                tb_layout.addWidget(self._theme_title)
+                self._theme_desc = QLabel(tr("themepack_card_desc"))
+                self._theme_desc.setWordWrap(True)
+                self._theme_desc.setStyleSheet(f"font-size: 11px; color: {intro_color}; border: none; background: transparent;")
+                tb_layout.addWidget(self._theme_desc)
+
+                tb_row = QHBoxLayout()
+                tb_row.setContentsMargins(0, 4, 0, 0)
+                self._theme_btn = QPushButton(tr("themepack_install_btn"))
+                self._theme_btn.clicked.connect(self._open_theme_pack_flow)
+                tb_row.addWidget(self._theme_btn)
+                tb_row.addStretch()
+                tb_layout.addLayout(tb_row)
+                layout.addWidget(self._theme_box)
 
         # 2. Developer header
         header_row = QHBoxLayout()
@@ -608,6 +738,25 @@ class DonationDialog(QDialog):
         self._crypto_toggle.setText(f"🪙 {toggle_text}")
         self.adjustSize()
 
+    def _open_theme_pack_flow(self):
+        from .theme_pack import ThemePackGuidanceDialog
+        raw_m = getattr(self, "raw_model", "Y1")
+        dlg = ThemePackGuidanceDialog(parent=self, model=raw_m)
+        dlg.installed_success.connect(self._on_theme_pack_installed)
+        dlg.exec()
+
+    def _on_theme_pack_installed(self):
+        t = T()
+        if hasattr(self, "_theme_title"):
+            self._theme_title.setText(f"<span style='color:{t.ok_fg}; font-weight:700;'>{tr('themepack_installed_success')}</span>")
+        if hasattr(self, "_theme_desc"):
+            self._theme_desc.setText(tr("themepack_complete"))
+        if hasattr(self, "_theme_btn"):
+            self._theme_btn.setText(tr("themepack_installed_success"))
+            self._theme_btn.setEnabled(False)
+        self.adjustSize()
+
+
     def _copy_donation_value(self, label, value):
         msg = tr("donate_copied").format(label=label)
         self._donor_label.setText(msg)
@@ -626,7 +775,7 @@ class DonationDialog(QDialog):
 
 
 def show_donation_dialog(parent, context="general", model="Y1", software_name="",
-                         donations=None, on_dont_ask_again=None):
+                         donations=None, on_dont_ask_again=None, is_360p_rockbox=False):
     dialog = DonationDialog(
         parent=parent,
         context=context,
@@ -634,5 +783,6 @@ def show_donation_dialog(parent, context="general", model="Y1", software_name=""
         software_name=software_name,
         donations=donations,
         on_dont_ask_again=on_dont_ask_again,
+        is_360p_rockbox=is_360p_rockbox,
     )
     dialog.exec()

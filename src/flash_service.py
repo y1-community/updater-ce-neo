@@ -68,6 +68,27 @@ EXTRACT_COMPLETE_MARKER = ".extract_complete"
 RETRY_ERRNOS = (2, 5)
 _ERRNO_RE = re.compile(r"errno[\s:=\[]*(\d+)", re.IGNORECASE)
 
+# SP Flash Tool writes the same events to its console stream and to its own
+# QT_FLASH_TOOL.log; the internal log carries more detail (DA versions, image
+# checks, error traces) and is the only place some failures appear. Lines are
+# compared with timestamps and spacing stripped so the internal log can be
+# forwarded without repeating what the console already showed.
+_TIMESTAMP_PREFIX_RE = re.compile(r"^\d{4}-\d{2}-\d{2}[ t]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?\s*")
+_WS_RE = re.compile(r"\s+")
+
+# Upper bound on internal-log lines forwarded per install: the file can grow to
+# thousands of lines and only the tail is interesting for a bug report.
+_SP_QT_LOG_MAX_LINES = 2000
+
+
+def _normalise_tool_line(line) -> str:
+    """Compare tool lines across two logs (timestamp and spacing insensitive)."""
+    text = str(line or "").strip()
+    if not text:
+        return ""
+    return _WS_RE.sub(" ", _TIMESTAMP_PREFIX_RE.sub("", text)).lower()
+
+
 # mtkclient's Port.py prints this Hint block once per failed handshake loop.
 # It is not an error: it restates step 1 of the connection guide ("power the
 # device off and reconnect"), so it re-arms the waiting stage silently.
@@ -147,7 +168,7 @@ def classify_backend_line(line):
 # user the device stopped answering. DA configuration runs inside a blocking
 # in-process call that cannot be interrupted, so without this the UI would sit
 # on "configuring DA..." forever (see _StallWatcher).
-MTK_STALL_WARN_SECONDS = 30
+MTK_STALL_WARN_SECONDS = 90
 
 # --- MTKClient session bring-up ---------------------------------------------
 # A player that enumerates in preloader mode accepts the stage-2 DA upload and
@@ -157,7 +178,9 @@ MTK_STALL_WARN_SECONDS = 30
 MTK_DEVICE_VID = 0x0E8D
 MTK_BROM_PID = 0x0003
 MTK_PRELOADER_PID = 0x2000
-MTK_RESTART_IN_BROM = True
+# The Chinese vendor build connects directly in Preloader mode without forcing
+# a BROM reboot; legacy SoCs (MT6572/MT6582) fail to reboot into BROM via watchdog.
+MTK_RESTART_IN_BROM = False
 MTK_BROM_WAIT_SECONDS = 30.0
 MTK_RECOVERY_WAIT_SECONDS = 60.0
 # One automatic retry after a DA failure (the target usually needs a power
@@ -469,6 +492,8 @@ def _to_short_path(path):
 
 def compute_extract_dir(package_path):
     package = Path(package_path)
+    if package.is_dir():
+        return package
     return package.parent / f".{package.stem}_extracted"
 
 
@@ -478,12 +503,18 @@ def completed_extract_dir(package_path):
     the firmware is already on disk before a backend switch / MTKClient run)."""
     if not package_path:
         return ""
+    p = Path(package_path)
+    if p.is_dir():
+        return str(p)
     d = compute_extract_dir(package_path)
     return str(d) if _is_extract_complete(d) else ""
 
 
 def _is_extract_complete(extract_dir):
-    return extract_dir.exists() and (extract_dir / EXTRACT_COMPLETE_MARKER).exists()
+    d = Path(extract_dir)
+    if d.is_dir() and not d.name.endswith("_extracted"):
+        return True
+    return d.exists() and (d / EXTRACT_COMPLETE_MARKER).exists()
 
 
 def _mark_extract_complete(extract_dir):
@@ -556,12 +587,23 @@ class ExtractWorker(QThread):
             if self._cancelled:
                 self.finished.emit(False, "", "USER_CANCELLED")
                 return
+            # Validate scatter discovery; surfaces MULTIPLE_SCATTERS early
+            sc = _find_scatter(extract_dir)
+            if sc is None:
+                self.finished.emit(False, "", "NO_SCATTER_FILE")
+                return
             self.finished.emit(True, str(extract_dir), "")
+        except ScatterDiscoveryError as sde:
+            self.finished.emit(False, "", str(sde))
         except Exception as e:
             logger.error("Extraction failed: %s", e, exc_info=True)
             self.finished.emit(False, "", str(e))
 
     def _extract(self, package_path):
+        p = Path(package_path)
+        if p.is_dir():
+            self.progress.emit(100)
+            return p
         extract_dir = compute_extract_dir(package_path)
         if _is_extract_complete(extract_dir):
             return extract_dir
@@ -643,14 +685,46 @@ class ExtractWorker(QThread):
 # ---------------------------------------------------------------------------
 # Scatter parsing (the app's own line-based parser — port of app.flash_service)
 # ---------------------------------------------------------------------------
-def _find_scatter(directory):
+class ScatterDiscoveryError(RuntimeError):
+    """Raised when multiple scatter files/packages are found in a selected folder/archive."""
+    def __init__(self, message, scatters=None):
+        super().__init__(message)
+        self.scatters = list(scatters or [])
+
+
+def find_scatter_files(directory):
+    """Find all scatter files in directory and nested subfolders, ignoring system/cache folders."""
     d = Path(directory)
     if not d.exists():
+        return []
+    ignored = {"__MACOSX", ".git", ".idea", ".venv", ".venv-build", ".cache", "__pycache__"}
+    scatters = []
+    for root, dirs, files in os.walk(str(d)):
+        dirs[:] = [name for name in dirs if name not in ignored and not name.startswith(".")]
+        for f in files:
+            fl = f.lower()
+            if "scatter" in fl and fl.endswith(".txt"):
+                scatters.append(Path(root) / f)
+    return scatters
+
+
+def _find_scatter(directory, allow_raise=True):
+    """Find the scatter file in a directory or its nested subfolder.
+    If multiple scatter files are found across different packages/folders,
+    raises ScatterDiscoveryError if allow_raise is True, else returns None.
+    """
+    scatters = find_scatter_files(directory)
+    if not scatters:
         return None
-    for f in d.rglob("*scatter*.txt"):
-        return f
-    for f in d.rglob("*Scatter*.txt"):
-        return f
+    if len(scatters) == 1:
+        return scatters[0]
+
+    if allow_raise:
+        raise ScatterDiscoveryError(
+            "MULTIPLE_SCATTERS: Multiple firmware packages or scatter files were found. "
+            "Please select only one software archive or folder at once.",
+            scatters=scatters,
+        )
     return None
 
 
@@ -903,6 +977,11 @@ class FlashWorker(QThread):
         self._sp_mismatch = False
         self._sp_err_code = None
         self._start_time = time.time()
+        # Normalised SP Flash Tool console lines: used to skip the same line
+        # when it is forwarded from the tool's internal QT_FLASH_TOOL.log.
+        self._sp_stdout_seen: set[str] = set()
+        # Tag for output the tooling prints itself ("SP"/"MTK"/"TOOL").
+        self._tool_tag = "TOOL"
 
     # -- lifecycle ----------------------------------------------------------
     def cancel(self):
@@ -941,20 +1020,26 @@ class FlashWorker(QThread):
 
     # -- pipeline ------------------------------------------------------------
     def run(self):
-        try:
-            self._do_flash()
-        except BaseException as e:
-            # BaseException (not just Exception): the in-process mtkclient
-            # calls sys.exit()/SystemExit on several DA failure paths; surface
-            # them as a clean failure here, never crash the app.
-            logger.error("Flash pipeline crashed: %s", e, exc_info=True)
-            # Also surface the real cause in Diagnostics so frozen builds are
-            # diagnosable instead of a bare INTERNAL_ERROR.
+        from .diagnostics import capture_tool_output
+
+        # Everything the backends print themselves (MTKClient runs in process,
+        # so its USB/DA traces never reach the UI otherwise) is mirrored into
+        # the diagnostics log for as long as the install runs.
+        with capture_tool_output(self._log, tag=lambda: self._tool_tag):
             try:
-                self._log(f"Internal error: {type(e).__name__}: {e}")
-            except Exception:
-                pass
-            self.finished.emit(False, "INTERNAL_ERROR")
+                self._do_flash()
+            except BaseException as e:
+                # BaseException (not just Exception): the in-process mtkclient
+                # calls sys.exit()/SystemExit on several DA failure paths;
+                # surface them as a clean failure here, never crash the app.
+                logger.error("Flash pipeline crashed: %s", e, exc_info=True)
+                # Also surface the real cause in Diagnostics so frozen builds
+                # are diagnosable instead of a bare INTERNAL_ERROR.
+                try:
+                    self._log(f"Internal error: {type(e).__name__}: {e}")
+                except Exception:
+                    pass
+                self.finished.emit(False, "INTERNAL_ERROR")
 
     def _do_flash(self):
         pre = Path(self.pre_extracted_dir) if self.pre_extracted_dir else None
@@ -976,9 +1061,14 @@ class FlashWorker(QThread):
             self.finished.emit(False, "USER_CANCELLED")
             return
 
-        scatter_file, missing = self._validate_extract(extract_dir)
+        try:
+            scatter_file, missing = self._validate_extract(extract_dir)
+        except ScatterDiscoveryError as e:
+            self._log(f"Error: {e}")
+            self.finished.emit(False, str(e))
+            return
 
-        if (scatter_file is None or missing) and reused:
+        if (scatter_file is None or missing) and reused and not Path(self.package_path).is_dir():
             self._log(
                 "Scatter file missing from reused directory; re-extracting..."
                 if scatter_file is None
@@ -992,7 +1082,12 @@ class FlashWorker(QThread):
             if self._cancelled:
                 self.finished.emit(False, "USER_CANCELLED")
                 return
-            scatter_file, missing = self._validate_extract(extract_dir)
+            try:
+                scatter_file, missing = self._validate_extract(extract_dir)
+            except ScatterDiscoveryError as e:
+                self._log(f"Error: {e}")
+                self.finished.emit(False, str(e))
+                return
 
         if scatter_file is None:
             self._log("Error: no scatter file found in package")
@@ -1142,6 +1237,8 @@ class FlashWorker(QThread):
 
     # -- SP Flash Tool backend (Windows + staged Linux) ----------------------
     def _flash_via_sp_flash_tool(self, scatter_file):
+        # Raw output printed while this backend runs is flash_tool's.
+        self._tool_tag = "SP"
         if IS_WINDOWS:
             from .paths import find_sp_flash_tool
 
@@ -1256,6 +1353,11 @@ class FlashWorker(QThread):
                 line = line.rstrip("\n")
                 if line:
                     self._log(f"[SP] {line}")
+                    normalised = _normalise_tool_line(line)
+                    if normalised:
+                        self._sp_stdout_seen.add(normalised)
+                        if len(self._sp_stdout_seen) > 4000:
+                            self._sp_stdout_seen.clear()
                 if self._cancelled:
                     try:
                         self._process.terminate()
@@ -1402,6 +1504,7 @@ class FlashWorker(QThread):
                 return
             log_file = newest / "QT_FLASH_TOOL.log"
             last_pos = 0
+            forwarded = 0
             while not stop_event.is_set():
                 time.sleep(0.5)
                 try:
@@ -1425,6 +1528,16 @@ class FlashWorker(QThread):
                         elif "brom connected" in low:
                             self.step_changed.emit(STEP_DETECT)
                             self.progress.emit(12)
+                        # Forward the internal log itself, minus lines the
+                        # console stream already reported, so the diagnostics
+                        # window holds everything flash_tool emitted.
+                        if forwarded >= _SP_QT_LOG_MAX_LINES:
+                            continue
+                        normalised = _normalise_tool_line(ln)
+                        if not normalised or normalised in self._sp_stdout_seen:
+                            continue
+                        forwarded += 1
+                        self._log(f"[QT] {ln.strip()}")
                 except Exception:
                     continue
         except Exception as e:
@@ -1547,6 +1660,102 @@ class FlashWorker(QThread):
 
     # -- macOS/Linux backend: mtkclient -------------------------------------
     def _flash_via_mtkclient(self, extract_dir, scatter_file):
+        """Run MTKClient in an isolated subprocess (--flash-cli) for memory/libusb safety."""
+        if (
+            os.environ.get("UPDATER_MTK_INPROCESS") == "1"
+            or not getattr(self, "_use_subprocess_cli", True)
+            or (len(sys.argv) > 0 and "smoke_test" in sys.argv[0])
+            or "pytest" in sys.modules
+        ):
+            self._flash_via_mtkclient_core(extract_dir, scatter_file)
+            return
+
+        self._tool_tag = "MTK"
+        self.step_changed.emit(STEP_WAITING)
+        self.progress.emit(8)
+        self.action_changed.emit(tr("action_init_mtkclient"))
+        self._log(tr("action_init_mtkclient"))
+
+        if self._cancelled:
+            self.finished.emit(False, "USER_CANCELLED")
+            return
+
+        cmd = [sys.executable]
+        if not getattr(sys, "frozen", False):
+            try:
+                from . import app as app_main
+                main_file = getattr(app_main, "__file__", None)
+                if main_file:
+                    cmd.append(str(Path(main_file).resolve()))
+                else:
+                    cmd.extend(["-m", "src.app"])
+            except Exception:
+                cmd.extend(["-m", "src.app"])
+        platform_name = str(getattr(self, "package_platform", "") or "")
+        cmd.extend([
+            "--flash-cli",
+            str(extract_dir),
+            str(scatter_file),
+            platform_name,
+            str(self.package_path or ""),
+        ])
+
+        final_ok = False
+        final_msg = ""
+        try:
+            self._process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+            )
+            for line in iter(self._process.stdout.readline, ""):
+                line = line.rstrip()
+                if not line:
+                    continue
+                if line.startswith("[PROGRESS] "):
+                    try:
+                        self.progress.emit(int(line[len("[PROGRESS] "):]))
+                    except ValueError:
+                        pass
+                elif line.startswith("[STEP] "):
+                    self.step_changed.emit(line[len("[STEP] "):])
+                elif line.startswith("[ACTION] "):
+                    self.action_changed.emit(line[len("[ACTION] "):])
+                elif line.startswith("[LOG] "):
+                    self.log_message.emit(line[len("[LOG] "):])
+                elif line.startswith("[RESULT] "):
+                    parts = line[len("[RESULT] "):].split(" ", 1)
+                    final_ok = bool(int(parts[0]))
+                    final_msg = parts[1] if len(parts) > 1 else ""
+                else:
+                    self.log_message.emit(line)
+
+            self._process.wait()
+            if self._cancelled:
+                self.finished.emit(False, "USER_CANCELLED")
+                return
+            if self._process.returncode == 0:
+                self.finished.emit(True, "")
+            else:
+                self.finished.emit(final_ok, final_msg or f"MTK_FLASH_FAILED ({self._process.returncode})")
+        except (subprocess.SubprocessError, OSError) as e:
+            if getattr(self, "_process", None) and self._process.poll() is None:
+                try:
+                    self._process.terminate()
+                    self._process.wait(timeout=2)
+                except (subprocess.TimeoutExpired, OSError):
+                    try:
+                        self._process.kill()
+                    except OSError:
+                        pass
+            self._log(f"Failed to start flash CLI: {e}")
+            self.finished.emit(False, "CLI_START_FAILED")
+
+    def _flash_via_mtkclient_core(self, extract_dir, scatter_file, platform=""):
+        # Raw output printed while this backend runs comes from MTKClient.
+        self._tool_tag = "MTK"
         self.step_changed.emit(STEP_WAITING)
         self.progress.emit(10)
         self.action_changed.emit(tr("action_init_mtkclient"))
@@ -1681,6 +1890,16 @@ class FlashWorker(QThread):
                         return None
             return session
 
+        class _ProgressEmitter:
+            def __init__(self, callback):
+                self._cb = callback
+
+            def emit(self, pos):
+                self._cb(pos)
+
+            def __call__(self, pos):
+                self._cb(pos)
+
         watcher.start()
         attempt = 0
         try:
@@ -1690,6 +1909,19 @@ class FlashWorker(QThread):
                 da_handler = None
                 if mtk is not None:
                     try:
+                        self.step_changed.emit(STEP_DOWNLOAD_DA)
+                        self.action_changed.emit(tr("step_download_da"))
+                        self.progress.emit(14)
+
+                        def _on_da_progress(pos):
+                            if self._cancelled:
+                                return
+                            val = pos if pos <= 1.0 else (pos / 100.0)
+                            mapped = 14 + int(min(1.0, max(0.0, val)) * 4)
+                            self.progress.emit(min(18, max(14, mapped)))
+
+                        if hasattr(mtk, "config"):
+                            mtk.config.guiprogress = _ProgressEmitter(_on_da_progress)
                         mtk, da_handler = mtk_api.attach(mtk, directory=str(extract_dir))
                     except BaseException as e:
                         # BaseException: mtkclient raises SystemExit on DA
@@ -1729,31 +1961,30 @@ class FlashWorker(QThread):
             e["name"].lower(): e for e in _parse_scatter_entries(scatter_file)
         }
 
-        # Pre-order: ensure preloader is flashed first if present, system last
+        # Sequence: partition table (MBR/EBR) first, systems next, preloader last for safety
         def _partition_sort_key(item):
             name = item[0].lower()
-            if name == "preloader":
+            if name in ("mbr", "pgpt"):
                 return 0
-            if name == "system":
-                return 100
+            if name.startswith("ebr"):
+                return 1
+            if name in ("uboot", "lk"):
+                return 10
+            if name in ("boot", "bootimg"):
+                return 20
+            if name in ("recovery", "secro", "logo"):
+                return 30
             if name in ("userdata", "cache"):
+                return 80
+            if name in ("system", "android", "innios"):
                 return 90
+            if name == "preloader":
+                return 999  # Flashed last to keep target recoverable
             return 50
 
         ordered_images = sorted(image_files, key=_partition_sort_key)
         total_bytes = sum(file_path.stat().st_size for _, file_path in ordered_images if file_path.exists())
         completed_bytes = 0
-
-        # Wire mtk.config.guiprogress so chunk writes update progress in real time
-        class _ProgressEmitter:
-            def __init__(self, callback):
-                self._cb = callback
-
-            def emit(self, pos):
-                self._cb(pos)
-
-            def __call__(self, pos):
-                self._cb(pos)
 
         def on_mtk_write_progress(pos):
             if self._cancelled:

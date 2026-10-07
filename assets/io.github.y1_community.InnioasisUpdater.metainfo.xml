@@ -3,12 +3,12 @@
   <id>io.github.y1_community.InnioasisUpdater</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
-  <name>Innioasis Updater CE</name>
-  <summary>Firmware flasher and updater for Innioasis Y1 and Y2 audio players</summary>
+  <name>Updater CE</name>
+  <summary>Firmware flasher and updater for Innioasis and Timmkoo audio players</summary>
   <description>
     <p>
-      Innioasis Updater CE (Community Edition) Neo is a cross-platform desktop application
-      designed to flash, update, and restore Innioasis Y1 and Y2 digital audio players.
+      Updater CE (Community Edition) Neo is a cross-platform desktop application
+      designed to flash, update, and restore Innioasis and Timmkoo digital audio players.
     </p>
     <p>
       Features include:

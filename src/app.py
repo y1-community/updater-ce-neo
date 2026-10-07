@@ -27,12 +27,63 @@ def _configure_logging():
         logging.getLogger().addHandler(fh)
     except Exception:
         pass
+    # Mirror logging records (backend traces, mtkclient's [LIB] lines, errors)
+    # into the diagnostics buffers so the in-app log viewer holds them too.
+    try:
+        from .diagnostics import install_log_capture
+
+        install_log_capture()
+    except Exception:
+        pass
 
 
 def main():
     _configure_logging()
+
+    if len(sys.argv) >= 4 and sys.argv[1] == "--flash-cli":
+        import os
+        import signal
+        import time
+        from pathlib import Path
+        from PySide6.QtCore import QCoreApplication
+        from .flash_service import FlashWorker
+
+        cli_app = QCoreApplication(sys.argv)
+        extract_dir = sys.argv[2]
+        scatter_file = sys.argv[3]
+        scatter_platform = sys.argv[4] if len(sys.argv) >= 5 else ""
+        package_path = sys.argv[5] if len(sys.argv) >= 6 else ""
+
+        worker = FlashWorker(
+            package_path=package_path or "dummy.zip",
+            method="mtk",
+            pre_extracted_dir=extract_dir,
+        )
+        worker.progress.connect(lambda x: print(f"[PROGRESS] {x}", flush=True))
+        worker.step_changed.connect(lambda x: print(f"[STEP] {x}", flush=True))
+        worker.log_message.connect(lambda x: print(f"[LOG] {x}", flush=True))
+        worker.action_changed.connect(lambda x: print(f"[ACTION] {x}", flush=True))
+
+        def on_finished(ok, msg):
+            print(f"[RESULT] {int(ok)} {msg}", flush=True)
+            sys.exit(0 if ok else 1)
+
+        worker.finished.connect(on_finished)
+
+        def handle_sigterm(signum=None, frame=None):
+            worker.cancel()
+            time.sleep(0.5)
+            os._exit(1)
+
+        if os.name != "nt":
+            signal.signal(signal.SIGTERM, handle_sigterm)
+            signal.signal(signal.SIGINT, handle_sigterm)
+
+        worker._flash_via_mtkclient_core(Path(extract_dir), Path(scatter_file), scatter_platform)
+        return
+
     app = QApplication(sys.argv)
-    app.setApplicationName("Innioasis Updater")
+    app.setApplicationName("Updater CE")
     app.setOrganizationName("innioasis")
 
     import sys as _sys
@@ -46,7 +97,7 @@ def main():
         app.setWindowIcon(QIcon(str(icon)))
 
     from .i18n import translator
-    from .ui.dark import apply_theme, is_dark, refresh_theme
+    from .ui.dark import ThemeWatcher, apply_theme, is_dark
     from .ui.glass import (
         apply_glass,
         apply_windows_dark_titlebar,
@@ -77,17 +128,18 @@ def main():
     configure_traffic_lights(window)
     apply_windows_dark_titlebar(window, is_dark())
 
-    # Dynamically match OS theme changes
-    def _on_os_theme_changed(_=None):
-        refresh_theme(app)
+    # Match host appearance live: light/dark switches, desktop accent colours,
+    # system font changes — the same way native apps follow the OS.
+    def _on_theme_applied():
         apply_windows_dark_titlebar(window, is_dark())
+        apply_glass(window)
+        configure_traffic_lights(window)
 
-    try:
-        hints = app.styleHints()
-        if hasattr(hints, "colorSchemeChanged"):
-            hints.colorSchemeChanged.connect(_on_os_theme_changed)
-    except Exception:
-        pass
+    theme_watcher = ThemeWatcher(app, on_apply=_on_theme_applied)
+    theme_watcher.install()
+    # Keep a reference for the lifetime of the app; the watcher owns timers and
+    # an event filter on the QApplication itself.
+    app._theme_watcher = theme_watcher
 
     sys.exit(app.exec())
 

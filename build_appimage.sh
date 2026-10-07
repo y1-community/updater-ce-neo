@@ -19,7 +19,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 APP_NAME="InnioasisUpdater"
-DISPLAY_NAME="Innioasis Updater CE"
+DISPLAY_NAME="Updater CE"
 APP_ID="io.github.y1_community.InnioasisUpdater"
 VERSION=$(grep -oP 'APP_VERSION\s*=\s*"\K[^"]+' src/config.py 2>/dev/null || echo "3.0.0")
 ARCH="${ARCH:-x86_64}"
@@ -178,15 +178,15 @@ else
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=Innioasis Updater CE
+Name=Updater CE
 GenericName=Firmware Flasher
-Comment=Flash, update, and restore Innioasis Y1 & Y2 digital audio players
+Comment=Flash, update, and restore Innioasis and Timmkoo digital audio players
 Exec=InnioasisUpdater %U
 Icon=innioasis-updater
 Terminal=false
 Categories=Utility;AudioVideo;
-Keywords=innioasis;y1;y2;mtk;flash;firmware;rockbox;solar;
-StartupWMClass=Innioasis Updater
+Keywords=innioasis;timmkoo;y1;y2;a5;mtk;flash;firmware;rockbox;solar;
+StartupWMClass=Updater CE
 EOF
     cp "$APPDIR/innioasis-updater.desktop" "$APPDIR/usr/share/applications/innioasis-updater.desktop"
 fi

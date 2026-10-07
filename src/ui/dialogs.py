@@ -1,12 +1,17 @@
 """Modal dialogs — flash complete / failed / diagnostics / update available."""
 
+from datetime import datetime, timedelta
 import sys
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QDate, QDateTime, QTime, Qt, QTimer
+from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
+    QDateTimeEdit,
     QDialog,
     QDialogButtonBox,
+    QFileDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -19,17 +24,32 @@ from PySide6.QtWidgets import (
 
 from .. import paths
 from ..config import install_power_on_steps, device_label_for_model
+from ..diagnostics import (
+    CAT_ALL,
+    CAT_SP,
+    CAT_MTK,
+    CAT_GUI,
+    DiagnosticsManager,
+    available_categories,
+    collect_install_sessions,
+    filter_log_lines,
+    get_log_file,
+    log_time_range,
+    reveal_in_file_manager,
+)
 from ..i18n import tr
 from ..updates import asset_hint, pick_platform_asset
 from .dark import T
 
 
 class FlashCompleteDialog(QDialog):
-    def __init__(self, parent=None, package_name="", elapsed="00:00", model="Y1"):
+    def __init__(self, parent=None, package_name="", elapsed="00:00", model="Y1", is_360p_rockbox=False):
         super().__init__(parent)
+        self.model = model
+        self.is_360p_rockbox = is_360p_rockbox
         t = T()
         self.setWindowTitle(tr("flash_complete"))
-        self.setMinimumWidth(420)
+        self.setMinimumWidth(440)
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
 
@@ -48,9 +68,52 @@ class FlashCompleteDialog(QDialog):
         body.setWordWrap(True)
         layout.addWidget(body)
 
+        if self.is_360p_rockbox:
+            self._theme_box = QWidget()
+            self._theme_box.setStyleSheet(
+                f"QWidget {{ background-color: {t.bg_card}; border: 1px solid {t.border};"
+                f" border-radius: 8px; }}"
+            )
+            tb_layout = QVBoxLayout(self._theme_box)
+            tb_layout.setContentsMargins(14, 10, 14, 10)
+            tb_layout.setSpacing(4)
+            self._theme_title = QLabel(f"<b>{tr('themepack_card_title')}</b>")
+            self._theme_title.setStyleSheet(f"font-size: 13px; color: {t.accent}; border: none; background: transparent;")
+            tb_layout.addWidget(self._theme_title)
+            self._theme_desc = QLabel(tr("themepack_card_desc"))
+            self._theme_desc.setWordWrap(True)
+            self._theme_desc.setStyleSheet(f"font-size: 11px; color: {t.fg_dim}; border: none; background: transparent;")
+            tb_layout.addWidget(self._theme_desc)
+
+            tb_row = QHBoxLayout()
+            tb_row.setContentsMargins(0, 4, 0, 0)
+            self._theme_btn = QPushButton(tr("themepack_install_btn"))
+            self._theme_btn.clicked.connect(self._open_theme_pack_flow)
+            tb_row.addWidget(self._theme_btn)
+            tb_row.addStretch()
+            tb_layout.addLayout(tb_row)
+            layout.addWidget(self._theme_box)
+
         buttons = QDialogButtonBox(QDialogButtonBox.Ok)
         buttons.accepted.connect(self.accept)
         layout.addWidget(buttons)
+
+    def _open_theme_pack_flow(self):
+        from ..theme_pack import ThemePackGuidanceDialog
+        dlg = ThemePackGuidanceDialog(parent=self, model=self.model)
+        dlg.installed_success.connect(self._on_theme_pack_installed)
+        dlg.exec()
+
+    def _on_theme_pack_installed(self):
+        t = T()
+        if hasattr(self, "_theme_title"):
+            self._theme_title.setText(f"<span style='color:{t.ok_fg}; font-weight:700;'>{tr('themepack_installed_success')}</span>")
+        if hasattr(self, "_theme_desc"):
+            self._theme_desc.setText(tr("themepack_complete"))
+        if hasattr(self, "_theme_btn"):
+            self._theme_btn.setText(tr("themepack_installed_success"))
+            self._theme_btn.setEnabled(False)
+        self.adjustSize()
 
 
 class FlashFailedDialog(QDialog):
@@ -177,33 +240,425 @@ class RetryGuidanceDialog(QDialog):
         return self._want_retry
 
 
+def _to_qdatetime(value: datetime) -> QDateTime:
+    """QDateTime for a Python datetime (log timestamps are local time)."""
+    return QDateTime(
+        QDate(value.year, value.month, value.day),
+        QTime(value.hour, value.minute, value.second),
+    )
+
+
+def _from_python(edit) -> datetime | None:
+    """Read a QDateTimeEdit back as a Python datetime, or None if unreadable."""
+    try:
+        value = edit.dateTime()
+    except Exception:
+        return None
+    try:
+        return value.toPython()
+    except Exception:
+        d, tm = value.date(), value.time()
+        return datetime(d.year(), d.month(), d.day(), tm.hour(), tm.minute(), tm.second())
+
+
 class DiagnosticsDialog(QDialog):
-    def __init__(self, parent=None, lines=None):
+    def __init__(self, parent=None, lines=None, initial_category=CAT_ALL):
         super().__init__(parent)
+        t = T()
         self.setWindowTitle(tr("log_center"))
-        self.resize(640, 420)
+        self.resize(740, 500)
+        self.setMinimumSize(540, 360)
+
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(10)
+
+        # ── Header Bar: Dropdown for log categories + path indicator ──
+        header_row = QHBoxLayout()
+        header_row.setSpacing(8)
+
+        lbl = QLabel(f"{tr('log_center')}:")
+        lbl.setStyleSheet(f"font-weight: 600; color: {t.fg};")
+        header_row.addWidget(lbl)
+
+        self._category_combo = QComboBox()
+        # Only the backends this host can actually produce (macOS has no SP
+        # Flash Tool; Windows hides MTKClient unless it was revealed with M).
+        for cat, label_key in available_categories():
+            self._category_combo.addItem(tr(label_key), cat)
+
+        idx = self._category_combo.findData(initial_category)
+        if idx < 0:
+            idx = self._category_combo.findData(CAT_ALL)
+        if idx >= 0:
+            self._category_combo.setCurrentIndex(idx)
+        self._category_combo.currentIndexChanged.connect(self._on_category_changed)
+        header_row.addWidget(self._category_combo, 1)
+
+        self._file_badge = QLabel()
+        self._file_badge.setStyleSheet(
+            f"font-size: 11px; color: {t.fg_dim}; background: {t.bg_card}; padding: 3px 8px;"
+            f" border-radius: 4px; border: 1px solid {t.border};"
+        )
+        header_row.addWidget(self._file_badge)
+        layout.addLayout(header_row)
+
+        # ── Time filter row: jump to an install attempt, or pick a window ──
+        self._updating_filters = False
+        # A range is only applied once the user asks for one, so the default
+        # view never hides lines behind a window the user did not choose.
+        self._range_active = False
+        self._open_end = False
+        self._sessions = []
+        filter_row = QHBoxLayout()
+        filter_row.setSpacing(8)
+
+        session_lbl = QLabel(tr("log_session_label"))
+        session_lbl.setStyleSheet(f"color: {t.fg};")
+        filter_row.addWidget(session_lbl)
+
+        self._session_combo = QComboBox()
+        self._session_combo.setToolTip(tr("log_session_tip"))
+        self._session_combo.currentIndexChanged.connect(self._on_session_changed)
+        filter_row.addWidget(self._session_combo, 1)
+
+        from_lbl = QLabel(tr("log_range_from"))
+        from_lbl.setStyleSheet(f"color: {t.fg};")
+        filter_row.addWidget(from_lbl)
+
+        self._from_edit = QDateTimeEdit()
+        self._from_edit.setCalendarPopup(True)
+        self._from_edit.setDisplayFormat("yyyy-MM-dd HH:mm:ss")
+        self._from_edit.setToolTip(tr("log_range_from_tip"))
+        self._from_edit.dateTimeChanged.connect(self._on_filter_changed)
+        filter_row.addWidget(self._from_edit)
+
+        to_lbl = QLabel(tr("log_range_to"))
+        to_lbl.setStyleSheet(f"color: {t.fg};")
+        filter_row.addWidget(to_lbl)
+
+        self._to_edit = QDateTimeEdit()
+        self._to_edit.setCalendarPopup(True)
+        self._to_edit.setDisplayFormat("yyyy-MM-dd HH:mm:ss")
+        self._to_edit.setToolTip(tr("log_range_to_tip"))
+        self._to_edit.dateTimeChanged.connect(self._on_filter_changed)
+        filter_row.addWidget(self._to_edit)
+
+        self._problems_check = QCheckBox(tr("log_problems_only"))
+        self._problems_check.setToolTip(tr("log_problems_tip"))
+        self._problems_check.toggled.connect(self._on_filter_changed)
+        filter_row.addWidget(self._problems_check)
+
+        layout.addLayout(filter_row)
+
+        # ── Log View Area ──
         self._view = QTextEdit()
         self._view.setObjectName("logView")
         self._view.setReadOnly(True)
-        layout.addWidget(self._view)
-        self._empty = True
-        self.set_lines(lines or [])
+        font_family = "SF Mono, Menlo, Consolas, 'Courier New', monospace"
+        self._view.setStyleSheet(
+            f"QTextEdit#logView {{ font-family: {font_family}; font-size: 12px; line-height: 1.4;"
+            f" background-color: {t.bg_input}; color: {t.fg}; border: 1px solid {t.border};"
+            f" border-radius: 6px; padding: 6px; }}"
+        )
+        layout.addWidget(self._view, 1)
 
-    def set_lines(self, lines):
-        if lines:
-            self._view.setPlainText("\n".join(lines))
+        # ── Action Buttons Bar: Go To File, Save File, Copy, Close ──
+        action_row = QHBoxLayout()
+        action_row.setSpacing(8)
+
+        self._goto_btn = QPushButton(tr("log_btn_goto_file"))
+        self._goto_btn.setToolTip("Reveal log file in Finder / Explorer")
+        self._goto_btn.clicked.connect(self._on_goto_file)
+        action_row.addWidget(self._goto_btn)
+
+        self._save_btn = QPushButton(tr("log_btn_save_file"))
+        self._save_btn.setToolTip("Export the displayed log file to disk")
+        self._save_btn.clicked.connect(self._on_save_file)
+        action_row.addWidget(self._save_btn)
+
+        self._copy_btn = QPushButton(tr("log_btn_copy"))
+        self._copy_btn.setToolTip("Copy displayed log to clipboard")
+        self._copy_btn.clicked.connect(self._on_copy)
+        action_row.addWidget(self._copy_btn)
+
+        self._status_label = QLabel("")
+        self._status_label.setStyleSheet(f"font-size: 11px; color: {t.ok_fg};")
+        action_row.addWidget(self._status_label)
+
+        # How much of the log the filter is showing — silent filtering is how a
+        # user concludes the tool "lost" an install.
+        self._count_label = QLabel("")
+        self._count_label.setStyleSheet(f"font-size: 11px; color: {t.fg_dim};")
+        action_row.addWidget(self._count_label)
+        action_row.addStretch()
+
+        self._close_btn = QPushButton(tr("close"))
+        self._close_btn.setDefault(True)
+        self._close_btn.clicked.connect(self.accept)
+        action_row.addWidget(self._close_btn)
+
+        layout.addLayout(action_row)
+
+        self._empty = True
+        self._custom_lines = list(lines) if lines is not None else None
+        self._rebuild_session_combo()
+        self._refresh_content()
+
+    def current_category(self) -> str:
+        return self._category_combo.currentData() or CAT_ALL
+
+    def _on_category_changed(self, _index: int = 0):
+        self._rebuild_session_combo()
+        self._refresh_content()
+
+    # -- date/time + install session filtering ------------------------------
+    def raw_lines(self, cat: str | None = None) -> list[str]:
+        """Unfiltered lines for a category, as the view would show them."""
+        cat = cat or self.current_category()
+        mgr = DiagnosticsManager.instance()
+        # The caller may pass the lines it already has in memory, but an empty
+        # list must not hide the persisted diagnostics: reopening the window
+        # after an install is exactly how a finished run gets inspected.
+        custom = list(self._custom_lines or [])
+        if custom and cat == CAT_ALL:
+            return custom
+        lines = mgr.get_display_lines(cat)
+        if not lines and custom:
+            lines = [ln for ln in custom if mgr.classify_line(ln) == cat]
+        return lines
+
+    def _selected_session(self):
+        data = self._session_combo.currentData()
+        sessions = self._sessions or []
+        for session in sessions:
+            if session.number == data:
+                return session
+        return None
+
+    def _rebuild_session_combo(self):
+        """List the install attempts found in the current category's log."""
+        self._sessions = collect_install_sessions(self.raw_lines())
+        previous = self._session_combo.currentData()
+        self._updating_filters = True
+        try:
+            self._session_combo.clear()
+            self._session_combo.addItem(tr("log_session_all"), None)
+            for session in reversed(self._sessions):  # newest first
+                self._session_combo.addItem(self._session_label(session), session.number)
+            idx = self._session_combo.findData(previous)
+            self._session_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        finally:
+            self._updating_filters = False
+        self._sync_range_edits()
+
+    def _session_label(self, session) -> str:
+        stamp = session.started.strftime("%Y-%m-%d %H:%M:%S") if session.started else "?"
+        status = {
+            "ok": tr("log_session_ok"),
+            "failed": tr("log_session_failed"),
+        }.get(session.status, tr("log_session_running"))
+        if session.success is False and session.detail:
+            status = f"{status}: {session.detail}"
+        target = session.package or tr("log_session_unknown_package")
+        return f"{stamp} · {target} · {status}"
+
+    def _sync_range_edits(self):
+        """Point the From/To pickers at the selected install, or the whole log.
+
+        An install still in progress (no completion banner yet) keeps an open
+        end, so lines written while the user watches stay visible instead of
+        being clipped the moment the picker's value goes stale.
+        """
+        log_start, log_end = log_time_range(self.raw_lines())
+        now = datetime.now()
+        session = self._selected_session()
+        if session is not None:
+            start = session.started or log_start or (now - timedelta(hours=1))
+            end = session.ended
+            self._open_end = session.running
+        else:
+            start = log_start or (now - timedelta(hours=1))
+            end = log_end or now
+            self._open_end = False
+        if end is None:
+            end = max(now, log_end or now)
+        to_value = max(end, start)
+
+        self._updating_filters = True
+        try:
+            self._from_edit.setDateTime(_to_qdatetime(start))
+            self._to_edit.setDateTime(_to_qdatetime(to_value))
+        finally:
+            self._updating_filters = False
+
+    def _on_session_changed(self, _index: int = 0):
+        if self._updating_filters:
+            return
+        self._sync_range_edits()
+        # "All installs" clears the window; a specific install narrows it.
+        self._range_active = self._selected_session() is not None
+        self._refresh_content(preserve_scroll=True)
+
+    def _on_filter_changed(self, *_args):
+        if self._updating_filters:
+            return
+        self._range_active = True
+        self._refresh_content(preserve_scroll=True)
+
+    def _filter_active(self) -> bool:
+        try:
+            return bool(self._problems_check.isChecked()) or self._range_active
+        except AttributeError:
+            return False
+
+    def _filter_description(self) -> str:
+        """Human-readable summary of the active filter, for exports."""
+        parts = []
+        session = self._selected_session()
+        if session is not None:
+            parts.append(self._session_label(session))
+        else:
+            parts.append(
+                f"{_from_python(self._from_edit).strftime('%Y-%m-%d %H:%M:%S')} → "
+                f"{_from_python(self._to_edit).strftime('%Y-%m-%d %H:%M:%S')}"
+            )
+        if self._problems_check.isChecked():
+            parts.append(tr("log_problems_only"))
+        return " · ".join(parts)
+
+    def _refresh_content(self, preserve_scroll: bool = False):
+        cat = self.current_category()
+        self._file_badge.setText(get_log_file(cat).name)
+
+        raw = self.raw_lines(cat)
+        lines = self._apply_filters(raw)
+        content = "\n".join(lines)
+
+        scroll = 0
+        if preserve_scroll:
+            scroll = self._view.verticalScrollBar().value()
+
+        if content.strip():
+            self._view.setPlainText(content)
             self._empty = False
+            if preserve_scroll:
+                self._view.verticalScrollBar().setValue(scroll)
+            else:
+                cursor = self._view.textCursor()
+                cursor.movePosition(QTextCursor.End)
+                self._view.setTextCursor(cursor)
         else:
             self._view.setPlainText(tr("log_no_entries"))
             self._empty = True
 
+        self._count_label.setText(
+            tr("log_lines_count").format(shown=len(lines), total=len(raw))
+            if self._filter_active()
+            else tr("log_lines_total").format(total=len(raw))
+        )
+
+    def _apply_filters(self, lines: list[str]) -> list[str]:
+        """Apply the date/time window and the problems-only switch."""
+        try:
+            problems = self._problems_check.isChecked()
+        except AttributeError:
+            return lines
+        if not problems and not self._range_active:
+            return lines
+        start = _from_python(self._from_edit) if self._range_active else None
+        end = None if self._open_end else (_from_python(self._to_edit) if self._range_active else None)
+        return filter_log_lines(lines, start=start, end=end, problems_only=problems)
+
+    def set_lines(self, lines):
+        self._custom_lines = list(lines) if lines is not None else None
+        self._rebuild_session_combo()
+        self._refresh_content()
+
     def append_line(self, line):
-        if self._empty:
-            self._view.setPlainText(str(line))
-            self._empty = False
-        else:
-            self._view.append(str(line))
+        mgr = DiagnosticsManager.instance()
+        line_str = str(line)
+        # The line is normally recorded by the caller that emitted it; dedupe
+        # keeps this display sink from storing the same event twice.
+        mgr.record_log(line_str, dedupe=True)
+        cat = self.current_category()
+        line_cat = mgr.classify_line(line_str)
+
+        if self._filter_active():
+            # A filtered view must stay consistent: a line the filter excludes
+            # cannot simply be appended, and the counts have to move.
+            self._refresh_content()
+            return
+
+        if cat == CAT_ALL or cat == line_cat:
+            if self._empty:
+                # First live line: show the stored history first so an install
+                # does not lose everything logged before the dialog opened.
+                self._refresh_content()
+                if not self._empty:
+                    self._view.append(line_str)
+                else:
+                    self._view.setPlainText(line_str)
+                    self._empty = False
+            else:
+                self._view.append(line_str)
+            cursor = self._view.textCursor()
+            cursor.movePosition(QTextCursor.End)
+            self._view.setTextCursor(cursor)
+
+    def _on_goto_file(self):
+        cat = self.current_category()
+        target_file = get_log_file(cat)
+        if not target_file.is_file():
+            try:
+                target_file.parent.mkdir(parents=True, exist_ok=True)
+                target_file.write_text(self._view.toPlainText(), encoding="utf-8")
+            except Exception:
+                pass
+        reveal_in_file_manager(target_file)
+        self._show_temp_status(f"Revealed in file manager: {target_file.name}")
+
+    def _on_save_file(self):
+        from pathlib import Path
+        cat = self.current_category()
+        default_name = f"updater_ce_{cat}_log.txt"
+        default_path = str(Path.home() / default_name)
+
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            tr("log_save_title"),
+            default_path,
+            "Text Files (*.log *.txt);;All Files (*)",
+        )
+        if not path:
+            return
+
+        try:
+            content = self._view.toPlainText()
+            if self._filter_active():
+                # Record what the view was filtered to: a developer reading the
+                # export must not mistake a time window for the whole log.
+                header = tr("log_export_filter").format(
+                    desc=self._filter_description(), category=tr("log_center")
+                )
+                content = f"# {header}\n{content}"
+            Path(path).write_text(content, encoding="utf-8")
+            self._show_temp_status(tr("log_save_success").format(path=Path(path).name))
+        except Exception as e:
+            self._show_temp_status(f"Error saving log: {e}")
+
+    def _on_copy(self):
+        from PySide6.QtWidgets import QApplication
+        text = self._view.toPlainText()
+        if text:
+            clipboard = QApplication.clipboard()
+            if clipboard:
+                clipboard.setText(text)
+            self._show_temp_status(tr("log_copied_hint"))
+
+    def _show_temp_status(self, msg: str, timeout_ms: int = 3500):
+        self._status_label.setText(msg)
+        QTimer.singleShot(timeout_ms, lambda: self._status_label.setText(""))
 
 
 class UpdateAvailableDialog(QDialog):
@@ -345,13 +800,9 @@ class LinuxSetupDialog(QDialog):
         self._progress_bar = QProgressBar()
         self._progress_bar.setRange(0, 100)
         self._progress_bar.setValue(0)
-        self._progress_bar.setFixedHeight(12)
         self._progress_bar.setTextVisible(False)
-        self._progress_bar.setStyleSheet(
-            f"QProgressBar {{ background-color: {t.bg_input}; border: 1px solid {t.border}; "
-            f"border-radius: 6px; }}"
-            f"QProgressBar::chunk {{ background-color: {t.accent}; border-radius: 5px; }}"
-        )
+        # Left to the native QStyle: styling a progress bar with QSS replaces
+        # the platform's own bar/track rendering.
         prog_layout.addWidget(self._progress_bar)
         main_layout.addWidget(self._progress_box)
 

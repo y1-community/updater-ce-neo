@@ -59,6 +59,18 @@ To maintain reliable flashing across all models and SoCs (legacy MT6572/MT6582 a
 - **GPT Validation & Sync**: For modern devices, validate GPT table geometry against scatter partitions prior to writing image files.
 - **Process & Handle Isolation**: On macOS/Linux, ensure in-process MTKClient execution handles all `BaseException` instances and detaches USB handles cleanly on cancellation to protect the Qt GUI event loop.
 
+### D. Preloader Connection & Process Isolation Architecture
+- **Direct Preloader Flashing (No Forced BROM)**: Legacy devices (MT6572 / MT6582 such as Timmkoo A5 and Innioasis Y1) MUST flash directly in Preloader mode (`0x2000`). Never attempt to force a watchdog reset or arm USB-DL to reboot into BROM (`0x0003`); legacy bootloaders fail to re-enumerate in BROM, causing port timeouts and hangs.
+- **Subprocess CLI Flashing (`--flash-cli`)**: All in-depth MTKClient flash operations must execute in a decoupled subprocess (`--flash-cli`) with IPC line streaming (`[PROGRESS]`, `[STEP]`, `[LOG]`, `[RESULT]`). This insulates the Qt GUI event loop from `sys.exit(1)` and libusb C-level thread locks.
+- **Preloader-Last Sequencing**: On legacy packages, re-order the write queue so `PRELOADER` is flashed as the final partition, safeguarding against mid-flash cable disconnections.
+- **Global QSS Font Discipline**: NEVER specify `* { font-family: ... }` in Qt Style Sheets (QSS). Wildcard font rules break native font cascading on macOS (CoreText) and Linux (fontconfig), resulting in `□□□□` (tofu) glyphs for international text. Use `QApplication.setFont()` instead.
+
+### E. HTTPS Network Requests & SSL Certificate Discipline
+- **Explicit SSL Context via Certifi**: Never make naked `urllib.request.urlopen()` calls without an SSL context. On macOS and frozen PyInstaller standalone bundles, Python's OpenSSL does not inherit macOS system root certificates, causing silent `[SSL: CERTIFICATE_VERIFY_FAILED]` crashes.
+- **SSL Fallback Invariant**: Always initialize HTTPS requests with `ssl.create_default_context(cafile=certifi.where())`. If certificate verification fails due to missing bundles or corporate proxies, gracefully fall back to `ssl._create_unverified_context()`.
+- **Large Payload Invariant (POST vs GET)**: When transmitting text exceeding 500 characters (e.g. changelogs, donor lists, release notes), use HTTP `POST` with `application/x-www-form-urlencoded` data rather than GET query parameters to prevent `HTTP 414 Request-URI Too Large`.
+- **Standard Browser Headers**: Always provide standard browser `User-Agent` headers (`Mozilla/5.0 ...`) on public web API requests; APIs block automated Python User-Agents with HTTP 429 / 403.
+
 ## 6. SP Flash Tool Invariants & Universal Troubleshooting (Linux & Windows)
 To ensure MediaTek SP Flash Tool executes reliably across all Linux distributions and Windows hosts:
 

@@ -5,8 +5,36 @@ the online catalogue / donation endpoints used by Updater CE and innioasis.app.
 """
 
 APP_VERSION = "3.0"
-APP_NAME = "Innioasis Updater CE"
+APP_NAME = "Updater CE"
 CONTACT_EMAIL = "updater-feedback@innioasis.com"
+
+# --- Generic MediaTek / Offline Mode Switches ------------------------------
+IS_GENERIC_MTK_MODE = False
+IS_OFFLINE_MODE = False
+
+
+def is_generic_mtk() -> bool:
+    """Return True if running as generic MediaTek Firmware Installer."""
+    global IS_GENERIC_MTK_MODE, IS_OFFLINE_MODE
+    if IS_GENERIC_MTK_MODE or IS_OFFLINE_MODE:
+        return True
+    import os
+    import sys
+    if "--generic-mtk" in sys.argv or "--offline" in sys.argv:
+        return True
+    if os.environ.get("BUILD_BRAND") == "generic_mtk" or os.environ.get("UPDATER_OFFLINE") == "1":
+        return True
+    try:
+        from PySide6.QtCore import QSettings
+        settings = QSettings("Innioasis", "UpdaterCE")
+        return bool(settings.value("offline_mode", False, type=bool))
+    except Exception:
+        return False
+
+
+def get_app_name() -> str:
+    from .i18n import tr
+    return tr("app_name_generic_mtk") if is_generic_mtk() else tr("app_name")
 
 # --- Online firmware catalogue ---------------------------------------------
 # The live manifest is fetched at runtime (like Updater CE does); the static
@@ -44,15 +72,13 @@ FIRMWARE_REPO_FALLBACKS = {
     "y1-community/y2-stock-rom": "y1-community/y1-stock-rom",
 }
 
-# Minimum visible release per repo: anything older is hidden from every
-# release listing in the Updater (and from the cache), so users cannot pick it
-# by accident.
-#
-# rockbox-y1/rockbox builds before 0.5 are not compatible with Y1 units sold
-# after April 2026, so only stable-v0.5 and newer may be offered. Tags that
-# carry no version at all (nightly-<sha>, branch names) are hidden too — see
-# catalog.release_version_ok() — because they cannot be proven to be new
-# enough. Repos absent from this map are unrestricted.
+# Minimum visible release per (model, repo): anything older is hidden by default.
+# Only Y1 has hardware revisions (units sold after March 2026 with Innioasis OS 3.0.7
+# pre-installed) incompatible with Rockbox-Y1 pre-0.5. Y2 and non-Y1 models are
+# unrestricted. Users can also tick "Show Old Rockbox Builds" to bypass this for Y1.
+MODEL_REPO_MIN_RELEASE_VERSION = {
+    ("Y1", "rockbox-y1/rockbox"): "0.5",
+}
 REPO_MIN_RELEASE_VERSION = {
     "rockbox-y1/rockbox": "0.5",
 }
@@ -184,39 +210,36 @@ def detect_model_and_type_from_name(name_or_url: str) -> tuple[str, str | None]:
     return "", None
 
 
-def device_label_for_model(model: str, type_variant: str | None = None) -> str:
+def device_label_for_model(model: str = "", type_variant: str | None = None) -> str:
     m = (model or "").strip()
-    if is_a5_model(m):
-        base = "A5"
-    elif is_y2_model(m):
-        base = "Y2"
-    elif is_y1_model(m):
-        base = "Y1"
-    else:
-        base = m or "Y1"
-
-    if base == "Y1" and type_variant:
+    if not m or m.lower() in ("device", "generic", "unknown"):
         from .i18n import tr
-        return f"Y1 ({tr('sel_type_' + str(type_variant).lower())})"
+        return tr("flash_model_generic")
+
+    if is_a5_model(m):
+        return "A5"
+    if is_y2_model(m):
+        return "Y2"
+    if is_y1_model(m):
+        return "Y1"
 
     # Anything outside the legacy Y1/Y2/A5 trio is resolved through the device
     # registry, so a hand-imported package still produces guidance that names
     # the real product ("Innioasis G5") instead of a bare id. Imported lazily:
     # config is loaded very early, before the registry may be readable.
-    if base not in ("Y1", "Y2", "A5"):
-        try:
-            from . import device_models
+    try:
+        from . import device_models
 
-            registered = device_models.guidance_name(m)
-            if registered:
-                return registered
-        except Exception:
-            logger.debug("Device registry lookup failed for %s", m, exc_info=True)
+        registered = device_models.guidance_name(m)
+        if registered:
+            return registered
+    except Exception:
+        logger.debug("Device registry lookup failed for %s", m, exc_info=True)
 
-    return base
+    return m
 
 
-def power_on_button_for_model(model: str) -> str:
+def power_on_button_for_model(model: str = "") -> str:
     """Hardware button used to power the player on after an install."""
     from .i18n import tr
 
@@ -224,10 +247,12 @@ def power_on_button_for_model(model: str) -> str:
         return tr("btn_power_lock")
     if is_a5_model(model):
         return tr("btn_power")
-    return tr("btn_centre")
+    if is_y1_model(model):
+        return tr("btn_centre")
+    return tr("btn_power")
 
 
-def install_power_on_steps(model: str) -> str:
+def install_power_on_steps(model: str = "") -> str:
     """Short post-install power-on steps for the active model."""
     from .i18n import tr
 
@@ -236,7 +261,7 @@ def install_power_on_steps(model: str) -> str:
     return tr("install_power_on_steps_fmt").format(label=label, button=button)
 
 
-def install_disconnect_guidance(model: str = "Y1", type_variant: str | None = None) -> str:
+def install_disconnect_guidance(model: str = "", type_variant: str | None = None) -> str:
     """Guidance text for ensuring device is disconnected and powered off before install."""
     from .i18n import tr
 

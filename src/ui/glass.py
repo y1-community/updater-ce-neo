@@ -93,9 +93,13 @@ if IS_MACOS:
 def prepare_window_for_glass(window: QMainWindow | QWidget) -> bool:
     """Prepare window flags and translucent attributes before window.show().
 
-    Must be called before the window is mapped/shown on macOS.
-    Safe no-op on non-macOS.
+    Must be called before the window is mapped/shown on macOS and Windows.
+    Safe no-op on Linux.
     """
+    if sys.platform == "win32" or platform.system() == "Windows":
+        window.setAttribute(Qt.WA_TranslucentBackground, True)
+        return True
+
     if not is_glass_supported():
         return False
 
@@ -105,6 +109,7 @@ def prepare_window_for_glass(window: QMainWindow | QWidget) -> bool:
     if _has_pyqt_liquidglass and hasattr(_liquidglass_module, "prepare_window_for_glass"):
         try:
             _liquidglass_module.prepare_window_for_glass(window)
+            _ensure_seamless_titlebar(window)
             return True
         except Exception as e:
             logger.warning("pyqt_liquidglass.prepare_window_for_glass failed: %s", e)
@@ -117,18 +122,65 @@ def prepare_window_for_glass(window: QMainWindow | QWidget) -> bool:
         return False
 
 
+def _ensure_seamless_titlebar(window: QMainWindow | QWidget) -> None:
+    """Ensure NSWindow titlebar has no separator line and matches window glass material."""
+    if not is_glass_supported():
+        return
+    view = _get_nsview(window)
+    if not view:
+        return
+    try:
+        ns_win = view.window()
+        if not ns_win:
+            return
+        from AppKit import NSColor, NSWindowTitleHidden
+        current_mask = ns_win.styleMask()
+        # NSWindowStyleMaskFullSizeContentView = 1 << 15 (0x8000)
+        # Qt's QTabBar or widget visibility changes reset styleMask to default flags;
+        # re-asserting 0x8000 preserves the full-window content extension under the titlebar.
+        if not (current_mask & 0x8000):
+            ns_win.setStyleMask_(current_mask | 0x8000)
+        ns_win.setTitlebarAppearsTransparent_(True)
+        ns_win.setTitleVisibility_(NSWindowTitleHidden)
+        ns_win.setOpaque_(False)
+        ns_win.setBackgroundColor_(NSColor.clearColor())
+        if hasattr(ns_win, "setTitlebarSeparatorStyle_"):
+            ns_win.setTitlebarSeparatorStyle_(1)  # NSTitlebarSeparatorStyleNone
+
+        # On macOS 14+, suppress _NSTitlebarDecorationView which draws a solid opaque
+        # titlebar background/line when windows are resized or views switch.
+        content_view = ns_win.contentView()
+        tf = content_view.superview() if content_view else None
+        if tf:
+            for sub in tf.subviews():
+                if "TitlebarContainerView" in str(type(sub)):
+                    for s in sub.subviews():
+                        if "DecorationView" in str(type(s)):
+                            s.setHidden_(True)
+                            if hasattr(s, "setAlphaValue_"):
+                                s.setAlphaValue_(0.0)
+    except Exception:
+        pass
+
+
 def apply_glass(
     window: QMainWindow | QWidget,
-    corner_radius: float = 12.0,
+    corner_radius: float = 16.0,
     padding: float = 0.0,
     sidebar_only: bool = False,
+    dark: bool | None = None,
 ) -> bool:
     """Apply the Liquid Glass effect to the window after window.show().
 
     On macOS 26+ (Golden Gate), utilizes NSGlassEffectView.
     On macOS 13–15 (Ventura through Sequoia), falls back to NSVisualEffectView.
-    Safe no-op on Linux and Windows.
+    On Windows 11/10/7, applies native Acrylic material / Aero glass.
+    Safe no-op on Linux.
     """
+    if sys.platform == "win32" or platform.system() == "Windows":
+        is_dark_mode = dark if dark is not None else True
+        return apply_windows_acrylic(window, dark=is_dark_mode)
+
     if not is_glass_supported():
         return False
 
@@ -144,13 +196,16 @@ def apply_glass(
                     corner_radius=corner_radius,
                     padding=padding,
                 )
+            _ensure_seamless_titlebar(window)
             return True
         except Exception as e:
             logger.warning("pyqt_liquidglass.apply_glass_to_window failed: %s", e)
 
     # Native PyObjC application fallback
     try:
-        return _pyobjc_apply_glass(window, corner_radius)
+        res = _pyobjc_apply_glass(window, corner_radius)
+        _ensure_seamless_titlebar(window)
+        return res
     except Exception as e:
         logger.warning("Native glass effect application failed: %s", e)
         return False
@@ -159,7 +214,7 @@ def apply_glass(
 def configure_traffic_lights(
     window: QMainWindow | QWidget,
     x_offset: int = 18,
-    y_offset: int = 18,
+    y_offset: int = 0,
 ) -> bool:
     """Inset native macOS window traffic lights (close, minimize, zoom).
 
@@ -192,6 +247,8 @@ def configure_traffic_lights(
 
 def _get_nsview(widget: QWidget) -> Any | None:
     """Get the Cocoa NSView for a Qt widget."""
+    if not is_glass_supported():
+        return None
     try:
         import objc
         ptr = widget.winId()
@@ -251,6 +308,14 @@ def _pyobjc_apply_glass(window: QMainWindow | QWidget, corner_radius: float) -> 
         content_view = ns_window.contentView()
         frame = content_view.bounds()
 
+        existing_glass = getattr(window, "_pyobjc_glass_view", None)
+        if existing_glass is not None:
+            try:
+                existing_glass.setFrame_(frame)
+                return True
+            except Exception:
+                pass
+
         glass_view = None
 
         # Try NSGlassEffectView on macOS 26+ (Golden Gate / Tahoe)
@@ -277,6 +342,7 @@ def _pyobjc_apply_glass(window: QMainWindow | QWidget, corner_radius: float) -> 
 
         # Insert at the back: NSWindowBelow (-1)
         content_view.addSubview_positioned_relativeTo_(glass_view, -1, None)
+        window._pyobjc_glass_view = glass_view
         return True
     except Exception as e:
         logger.warning("Failed to apply PyObjC glass view: %s", e)
@@ -337,4 +403,101 @@ def apply_windows_dark_titlebar(window: QMainWindow | QWidget, dark: bool) -> bo
                 return True
     except Exception as e:
         logger.debug("Could not set Windows dark mode titlebar: %s", e)
+    return False
+
+
+def apply_windows_acrylic(window: QMainWindow | QWidget, dark: bool = True) -> bool:
+    """Apply native Windows 11 Acrylic material (or Win10 / Win7 Aero fallback).
+
+    - Windows 11 22H2+ (Build 22621+): DwmSetWindowAttribute with
+      DWMWA_SYSTEMBACKDROP_TYPE = 3 (DWMSBT_TRANSIENTWINDOW = Acrylic material).
+    - Windows 10 / Win11 21H2: SetWindowCompositionAttribute with
+      ACCENT_ENABLE_ACRYLICBLURBEHIND (accent state 4).
+    - Windows 7 / 8: DwmExtendFrameIntoClientArea (-1, -1, -1, -1) for Aero glass.
+    Safe no-op on macOS and Linux.
+    """
+    if sys.platform != "win32" and platform.system() != "Windows":
+        return False
+
+    try:
+        import ctypes
+        from ctypes import byref, c_int, sizeof
+
+        hwnd = int(window.winId())
+        dwm = ctypes.windll.dwmapi
+
+        # 1. Synchronize immersive dark mode titlebar attribute
+        apply_windows_dark_titlebar(window, dark)
+
+        # 2. Windows 11 22H2+ SystemBackdropType: DWMSBT_TRANSIENTWINDOW = 3 (Acrylic)
+        # DWMWA_SYSTEMBACKDROP_TYPE = 38
+        backdrop_type = c_int(3)
+        hr = dwm.DwmSetWindowAttribute(hwnd, 38, byref(backdrop_type), sizeof(backdrop_type))
+        if hr == 0:
+            logger.info("Applied Windows 11 Acrylic backdrop (DWMWA_SYSTEMBACKDROP_TYPE=3)")
+            return True
+
+        # 3. Fallback: Windows 10 SetWindowCompositionAttribute
+        try:
+            class AccentPolicy(ctypes.Structure):
+                _fields_ = [
+                    ("AccentState", ctypes.c_int),
+                    ("AccentFlags", ctypes.c_int),
+                    ("GradientColor", ctypes.c_int),
+                    ("AnimationId", ctypes.c_int),
+                ]
+
+            class WindowCompositionAttributeData(ctypes.Structure):
+                _fields_ = [
+                    ("Attribute", ctypes.c_int),
+                    ("Data", ctypes.c_void_p),
+                    ("SizeOfData", ctypes.c_size_t),
+                ]
+
+            user32 = ctypes.windll.user32
+            SetWindowCompositionAttribute = user32.SetWindowCompositionAttribute
+            SetWindowCompositionAttribute.restype = ctypes.c_int
+            SetWindowCompositionAttribute.argtypes = [ctypes.c_void_p, ctypes.POINTER(WindowCompositionAttributeData)]
+
+            # AABBGGRR format: dark tint vs light tint
+            gradient_color = 0x99202020 if dark else 0x99F0F0F0
+            accent = AccentPolicy(
+                AccentState=4,  # ACCENT_ENABLE_ACRYLICBLURBEHIND
+                AccentFlags=2,
+                GradientColor=gradient_color,
+                AnimationId=0,
+            )
+            data = WindowCompositionAttributeData(
+                Attribute=19,  # WCA_ACCENT_POLICY
+                Data=ctypes.cast(ctypes.pointer(accent), ctypes.c_void_p),
+                SizeOfData=ctypes.sizeof(accent),
+            )
+            res = SetWindowCompositionAttribute(hwnd, ctypes.byref(data))
+            if res != 0:
+                logger.info("Applied Windows 10 Acrylic blur via SetWindowCompositionAttribute")
+                return True
+        except Exception as e:
+            logger.debug("Win10 SetWindowCompositionAttribute fallback failed: %s", e)
+
+        # 4. Fallback: Windows 7 Aero DwmExtendFrameIntoClientArea
+        try:
+            class MARGINS(ctypes.Structure):
+                _fields_ = [
+                    ("cxLeftWidth", ctypes.c_int),
+                    ("cxRightWidth", ctypes.c_int),
+                    ("cyTopHeight", ctypes.c_int),
+                    ("cyBottomHeight", ctypes.c_int),
+                ]
+
+            margins = MARGINS(-1, -1, -1, -1)
+            hr_aero = dwm.DwmExtendFrameIntoClientArea(hwnd, byref(margins))
+            if hr_aero == 0:
+                logger.info("Applied Windows 7 Aero glass via DwmExtendFrameIntoClientArea")
+                return True
+        except Exception as e:
+            logger.debug("Win7 Aero frame extension fallback failed: %s", e)
+
+    except Exception as e:
+        logger.debug("Could not apply Windows Acrylic backdrop: %s", e)
+
     return False

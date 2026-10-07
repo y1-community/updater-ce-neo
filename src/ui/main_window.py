@@ -17,6 +17,7 @@ import sys
 import time
 
 from PySide6.QtCore import (
+    QEvent,
     QProcess,
     QProcessEnvironment,
     QSettings,
@@ -25,6 +26,7 @@ from PySide6.QtCore import (
     QTimer,
     Signal,
 )
+from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -46,6 +48,8 @@ from ..config import (
     UPDATE_CHECK_STARTUP_DELAY_MS,
     UPDATE_REPO,
     install_power_on_steps,
+    is_generic_mtk,
+    get_app_name,
 )
 from ..manifest import ManifestWorker
 from ..updates import UpdateCheckWorker, UpdateInfo
@@ -76,7 +80,7 @@ from .dialogs import (
     RetryGuidanceDialog,
     UpdateAvailableDialog,
 )
-from .dark import T, apply_theme, is_dark
+from .dark import T, apply_theme, content_top_margin, is_dark
 from .error_page import ErrorPage
 from .flash_page import FlashPage
 from .retry_page import RetryPage
@@ -134,7 +138,8 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
-        self.resize(960, 660)
+        self.resize(900, 520)
+        self.setMinimumSize(900, 500)
 
         self.sm = StateMachine(self)
         self.service = FlashService(self)
@@ -178,6 +183,7 @@ class MainWindow(QMainWindow):
 
     def _build_ui(self):
         central = QWidget()
+        central.setAttribute(Qt.WA_TranslucentBackground, True)
         self.setCentralWidget(central)
         outer = QHBoxLayout(central)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -186,6 +192,7 @@ class MainWindow(QMainWindow):
         outer.addWidget(self._build_nav())
 
         self._stack = QStackedWidget()
+        self._stack.setAttribute(Qt.WA_TranslucentBackground, True)
         self._select_page = SelectPackagePage()
         self._flash_page = FlashPage()
         self._error_page = ErrorPage()
@@ -198,11 +205,15 @@ class MainWindow(QMainWindow):
             self._retry_page,
             self._settings_page,
         ):
+            w.setAttribute(Qt.WA_TranslucentBackground, True)
             self._stack.addWidget(w)
         outer.addWidget(self._stack, 1)
 
         self._settings_page.donation_visibility_changed.connect(
             self._apply_donation_visibility
+        )
+        self._settings_page.offline_mode_changed.connect(
+            self._on_offline_mode_changed
         )
         self._settings_page.check_updates_requested.connect(
             lambda: self._check_device_firmware_updates(manual=True)
@@ -221,22 +232,27 @@ class MainWindow(QMainWindow):
         self.statusBar().messageChanged.connect(self._on_status_message_changed)
         self._select_page.status_message.connect(self._show_status)
         self._apply_donation_visibility()
-        self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
+        self._apply_generic_mtk_branding()
 
     def _build_nav(self):
         t = T()
         nav = QWidget()
         nav.setObjectName("navPanel")
-        nav.setFixedWidth(190)
+        nav.setAttribute(Qt.WA_TranslucentBackground, True)
+        is_mac = sys.platform == "darwin"
+        nav_width = 185 if is_mac else 175
+        nav.setFixedWidth(nav_width)
+
         # Adapt nav sidebar to host system theme and glass transparency
-        if sys.platform == "darwin":
-            nav_bg = "rgba(11, 17, 32, 0.75)" if is_dark() else "rgba(240, 243, 246, 0.85)"
-            nav_border = "1px solid rgba(255, 255, 255, 0.12)" if is_dark() else "1px solid rgba(0, 0, 0, 0.1)"
-            top_margin = 38
+        if is_mac:
+            nav_bg = "transparent"
+            nav_border = "none"
         else:
             nav_bg = t.bg_nav
             nav_border = f"1px solid {t.border}"
-            top_margin = 20
+        # Just clear the window title bar (traffic lights on macOS); a larger
+        # inset only pushes the first sidebar entry down into empty space.
+        top_margin = content_top_margin()
 
         nav.setStyleSheet(
             f"QWidget#navPanel {{ background-color: {nav_bg}; border-right: {nav_border};"
@@ -246,19 +262,6 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(nav)
         layout.setContentsMargins(12, top_margin, 12, 14)
         layout.setSpacing(4)
-
-        self._brand_label = QLabel(tr("app_name"))
-        self._brand_label.setWordWrap(True)
-        self._brand_label.setStyleSheet(
-            f"font-size: 16px; font-weight: 800; color: {t.fg}; letter-spacing: -0.02em;"
-            f" background: transparent; border: none;"
-        )
-        layout.addWidget(self._brand_label)
-
-        version = QLabel(f"v{APP_VERSION}")
-        version.setStyleSheet(f"font-size: 11px; color: {t.fg_dim}; background: transparent; border: none;")
-        layout.addWidget(version)
-        layout.addSpacing(16)
 
         self._nav_buttons = {}
         btn = QPushButton(tr("nav_select_package"))
@@ -302,9 +305,57 @@ class MainWindow(QMainWindow):
             self._sp_flash_tool_btn.clicked.connect(self._open_sp_flash_tool_gui)
             layout.addWidget(self._sp_flash_tool_btn)
 
+        layout.addSpacing(10)
+
+        # Brand header container & version at bottom left, above language dropdown
+        brand_container = QWidget()
+        brand_row = QHBoxLayout(brand_container)
+        brand_row.setContentsMargins(0, 0, 0, 0)
+        brand_row.setSpacing(6)
+
+        self._icon_label = QLabel()
+        icon_path = paths.RESOURCES_DIR / "icon.png"
+        icon_size = 30  # 50% larger than 20px
+        if icon_path.exists():
+            pix = QPixmap(str(icon_path)).scaled(
+                icon_size, icon_size, Qt.KeepAspectRatio, Qt.SmoothTransformation
+            )
+            self._icon_label.setPixmap(pix)
+        self._icon_label.setStyleSheet("background: transparent; border: none;")
+        brand_row.addWidget(self._icon_label)
+
+        self._brand_label = QLabel(get_app_name())
+        brand_font_size = "14px"
+        self._brand_label.setStyleSheet(
+            f"font-size: {brand_font_size}; font-weight: 800; color: {t.fg}; letter-spacing: -0.02em;"
+            f" background: transparent; border: none;"
+        )
+        brand_row.addWidget(self._brand_label)
+
+        self._brand_version = QLabel(f"v{APP_VERSION}")
+        self._brand_version.setStyleSheet(
+            f"font-size: 11px; font-weight: 600; color: {t.fg_dim};"
+            f" background: transparent; border: none; margin-top: 2px;"
+        )
+        brand_row.addWidget(self._brand_version)
+        brand_row.addStretch()
+        layout.addWidget(brand_container)
+
+        from .. import browser
+        self._version_label = QLabel(
+            f'by <a href="https://ko-fi.com/teamslide" style="color: {t.accent}; text-decoration: underline;">Ryan Specter</a>'
+        )
+        self._version_label.setStyleSheet(
+            f"font-size: 11px; color: {t.fg_dim}; background: transparent; border: none; margin-left: 2px;"
+        )
+        self._version_label.setTextInteractionFlags(Qt.TextBrowserInteraction)
+        self._version_label.setOpenExternalLinks(False)
+        self._version_label.linkActivated.connect(lambda url: browser.open_browser(url))
+        layout.addWidget(self._version_label)
+
         self._lang_label = QLabel(tr("nav_language"))
         self._lang_label.setStyleSheet(
-            f"font-size: 11px; color: {t.fg_dim}; margin-top: 8px; background: transparent; border: none;"
+            f"font-size: 11px; color: {t.fg_dim}; margin-top: 6px; background: transparent; border: none;"
         )
         layout.addWidget(self._lang_label)
         self._lang_combo = QComboBox()
@@ -318,13 +369,15 @@ class MainWindow(QMainWindow):
         self._lang_combo.currentIndexChanged.connect(self._on_language_changed)
         layout.addWidget(self._lang_combo)
 
-        # Nav button styling — follows system theme with comfortable 34px/32px touch targets
+        # Nav button styling — follows native OS desktop environment accent color with focus states
         for btn, _ in self._nav_buttons.values():
             btn.setStyleSheet(
-                f"QPushButton {{ background: transparent; color: {t.fg_dim}; text-align: left;"
-                f" padding: 8px 12px; border-radius: 5px; border: none; font-size: 13px; min-height: 34px; }}"
+                f"QPushButton {{ background: transparent; color: {t.fg}; text-align: left;"
+                f" padding: 8px 12px; border-radius: 5px; border: 1px solid transparent; font-size: 13px; font-weight: 500; min-height: 34px; }}"
                 f"QPushButton:hover {{ background-color: {t.bg_hover}; color: {t.fg}; }}"
-                f"QPushButton:checked {{ background-color: {t.nav_active}; color: {t.nav_active_text}; font-weight: 600; }}"
+                f"QPushButton:focus {{ border: 1px solid {t.border_focus}; outline: none; }}"
+                f"QPushButton:checked {{ background-color: {t.nav_active}; color: {t.nav_active_text}; font-weight: 600; border: 1px solid transparent; }}"
+                f"QPushButton:checked:focus {{ background-color: {t.nav_active}; color: {t.nav_active_text}; font-weight: 600; border: 1px solid {t.border_strong}; outline: none; }}"
             )
         aux_btns = [self._support_btn, self._log_btn, self._credits_btn, self._check_updates_btn]
         if hasattr(self, "_linux_setup_btn"):
@@ -334,10 +387,81 @@ class MainWindow(QMainWindow):
         for btn in aux_btns:
             btn.setStyleSheet(
                 f"QPushButton {{ background: transparent; color: {t.fg_dim}; text-align: left;"
-                f" padding: 7px 12px; border-radius: 5px; border: none; font-size: 12px; min-height: 30px; }}"
+                f" padding: 7px 12px; border-radius: 5px; border: 1px solid transparent; font-size: 12px; font-weight: 500; min-height: 30px; }}"
                 f"QPushButton:hover {{ background-color: {t.bg_hover}; color: {t.fg}; }}"
+                f"QPushButton:focus {{ border: 1px solid {t.border_focus}; outline: none; }}"
             )
+        self._nav_panel = nav
+        self._aux_nav_buttons = aux_btns
         return nav
+
+    def refresh_theme(self):
+        """Update window components to match active OS theme tokens."""
+        t = T()
+        is_mac = sys.platform == "darwin"
+        use_glass = False
+        if is_mac:
+            try:
+                from .glass import is_glass_supported
+                use_glass = is_glass_supported()
+            except ImportError:
+                use_glass = False
+
+        nav_bg = "transparent" if (is_mac or use_glass) else t.bg_nav
+        nav_border = "none" if (is_mac or use_glass) else f"1px solid {t.border}"
+
+        if hasattr(self, "_nav_panel"):
+            self._nav_panel.setStyleSheet(
+                f"QWidget#navPanel {{ background-color: {nav_bg}; border-right: {nav_border}; border-radius: 0; }}"
+            )
+
+        if hasattr(self, "_brand_label"):
+            self._brand_label.setStyleSheet(
+                f"font-size: 14px; font-weight: 800; color: {t.fg}; letter-spacing: -0.02em; background: transparent; border: none;"
+            )
+
+        if hasattr(self, "_version_label"):
+            from ..config import APP_VERSION
+            self._version_label.setText(
+                f'v{APP_VERSION} by <a href="https://ko-fi.com/teamslide" style="color: {t.accent}; text-decoration: underline;">Ryan Specter</a>'
+            )
+            self._version_label.setStyleSheet(
+                f"font-size: 11px; color: {t.fg_dim}; background: transparent; border: none; margin-left: 2px;"
+            )
+
+        if hasattr(self, "_lang_label"):
+            self._lang_label.setStyleSheet(
+                f"font-size: 11px; color: {t.fg_dim}; margin-top: 6px; background: transparent; border: none;"
+            )
+
+        if hasattr(self, "_nav_buttons"):
+            for btn, _ in self._nav_buttons.values():
+                btn.setStyleSheet(
+                    f"QPushButton {{ background: transparent; color: {t.fg}; text-align: left;"
+                    f" padding: 8px 12px; border-radius: 5px; border: 1px solid transparent; font-size: 13px; font-weight: 500; min-height: 34px; }}"
+                    f"QPushButton:hover {{ background-color: {t.bg_hover}; color: {t.fg}; }}"
+                    f"QPushButton:focus {{ border: 1px solid {t.border_focus}; outline: none; }}"
+                    f"QPushButton:checked {{ background-color: {t.nav_active}; color: {t.nav_active_text}; font-weight: 600; border: 1px solid transparent; }}"
+                    f"QPushButton:checked:focus {{ background-color: {t.nav_active}; color: {t.nav_active_text}; font-weight: 600; border: 1px solid {t.border_strong}; outline: none; }}"
+                )
+
+        if hasattr(self, "_aux_nav_buttons"):
+            for btn in self._aux_nav_buttons:
+                btn.setStyleSheet(
+                    f"QPushButton {{ background: transparent; color: {t.fg_dim}; text-align: left;"
+                    f" padding: 7px 12px; border-radius: 5px; border: 1px solid transparent; font-size: 12px; font-weight: 500; min-height: 30px; }}"
+                    f"QPushButton:hover {{ background-color: {t.bg_hover}; color: {t.fg}; }}"
+                    f"QPushButton:focus {{ border: 1px solid {t.border_focus}; outline: none; }}"
+                )
+
+        sb = self.statusBar()
+        if sb and hasattr(sb, "refresh_theme"):
+            sb.refresh_theme()
+
+        for page in (self._select_page, self._flash_page, self._error_page, self._retry_page, self._settings_page):
+            if hasattr(page, "refresh_theme") and callable(page.refresh_theme):
+                page.refresh_theme()
+
 
     def _connect_signals(self):
         self._select_page.package_selected.connect(self._on_package_selected)
@@ -363,6 +487,38 @@ class MainWindow(QMainWindow):
         self.service.device_lost.connect(self._on_device_lost)
         self.service.monitor_error.connect(self._on_monitor_error)
 
+    def _reassert_mac_glass(self, *_args):
+        if sys.platform == "darwin":
+            if getattr(self, "_reasserting_mac_glass", False):
+                return
+            self._reasserting_mac_glass = True
+            try:
+                from .glass import _ensure_seamless_titlebar, apply_glass
+                _ensure_seamless_titlebar(self)
+                apply_glass(self)
+            finally:
+                self._reasserting_mac_glass = False
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if sys.platform == "darwin" and event.type() in (
+            QEvent.WindowStateChange,
+            QEvent.ActivationChange,
+        ):
+            self._reassert_mac_glass()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if sys.platform == "darwin":
+            from .glass import apply_glass, configure_traffic_lights
+            apply_glass(self)
+            configure_traffic_lights(self)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if sys.platform == "darwin":
+            self._reassert_mac_glass()
+
     def keyPressEvent(self, event):
         # M or D reveal the hidden install-method entry. "MTKClient (Mac)" runs
         # the macOS code path on Linux/Windows so the Mac flow (MTKClient as the
@@ -371,6 +527,15 @@ class MainWindow(QMainWindow):
         if event.key() in (Qt.Key_M, Qt.Key_D) and event.modifiers() == Qt.NoModifier:
             self._settings_page.reveal_advanced_methods()
             if self._settings_page.advanced_methods_revealed():
+                # Remember the reveal across launches: it also unlocks the
+                # MTKClient diagnostics view on Windows, which is otherwise
+                # hidden because SP Flash Tool is the supported backend there.
+                try:
+                    from ..device_tracking import set_hidden_mtk_options
+
+                    set_hidden_mtk_options(True)
+                except Exception:
+                    pass
                 self._nav_to_page(_PAGE_SETTINGS)
                 self._append_log("Advanced install methods revealed (M/D).")
         super().keyPressEvent(event)
@@ -389,6 +554,15 @@ class MainWindow(QMainWindow):
     def _begin_flash_flow(self):
         if not self._package_path:
             return
+        try:
+            from ..diagnostics import DiagnosticsManager
+            DiagnosticsManager.instance().start_flash_session(
+                package_name=self._package_name or Path(self._package_path).name,
+                method=self._flash_method,
+                model=self._package_model,
+            )
+        except Exception:
+            pass
         self._retry_guidance_shown = False
         try:
             self.sm.transition_to(FlashState.S2_WAIT_CONNECTION)
@@ -479,12 +653,19 @@ class MainWindow(QMainWindow):
         self._retry_page.update_progress(percent)
 
     def _on_log_message(self, msg):
-        self._append_log(msg)
+        # Backend/tool channel: a tool that prints a line and also reports it
+        # through its callback would otherwise store the same event twice.
+        self._append_log(msg, dedupe=True)
 
-    def _append_log(self, msg):
+    def _append_log(self, msg, dedupe=False):
         self._log_lines.append(msg)
         if len(self._log_lines) > 2000:
             self._log_lines = self._log_lines[-2000:]
+        try:
+            from ..diagnostics import DiagnosticsManager
+            DiagnosticsManager.instance().record_log(msg, dedupe=dedupe)
+        except Exception:
+            pass
         self.log_line_added.emit(msg)
         self._handle_backend_line(msg)
 
@@ -565,6 +746,11 @@ class MainWindow(QMainWindow):
 
     def _on_flash_finished(self, ok, error_code):
         self._elapsed_timer.stop()
+        try:
+            from ..diagnostics import DiagnosticsManager
+            DiagnosticsManager.instance().end_flash_session(ok, str(error_code or ""))
+        except Exception:
+            pass
         if ok:
             self._handle_flash_success()
         else:
@@ -576,9 +762,7 @@ class MainWindow(QMainWindow):
         except ValueError:
             self.sm.force_state(FlashState.S5_COMPLETE)
 
-        model = self._package_model or (
-            getattr(self._select_page, "current_model", lambda: "Y1")() if hasattr(self, "_select_page") else "Y1"
-        ) or "Y1"
+        model = self._package_model or ""
         software = self._package_name or "Firmware"
         steps = install_power_on_steps(model)
         self._show_status(
@@ -609,8 +793,20 @@ class MainWindow(QMainWindow):
             self._settings_page.refresh_settings()
 
         donation_disabled = device_tracking.is_donation_install_prompt_disabled(self.settings)
+        eff_model = (model or self._package_model or "").upper()
+        is_y_target = eff_model in ("Y1", "Y2")
+        pkg_low = (self._package_name or "").lower()
+        path_low = (self._package_path or "").lower()
+        is_rockbox = "rockbox" in pkg_low or "rockbox" in path_low
+        is_240p = "_240p" in path_low or "240p" in pkg_low
+        is_360p_rockbox = bool(is_y_target and is_rockbox and not is_240p)
+
+        self._is_360p_rockbox = is_360p_rockbox
+
         if donation_disabled:
-            dialog = FlashCompleteDialog(self, software, self._elapsed_text(), model=model)
+            dialog = FlashCompleteDialog(
+                self, software, self._elapsed_text(), model=model, is_360p_rockbox=is_360p_rockbox
+            )
             dialog.exec()
         else:
             self._show_donation_dialog(context="install_success")
@@ -786,9 +982,7 @@ class MainWindow(QMainWindow):
             )
             return
 
-        model = self._package_model or (
-            getattr(self._select_page, "current_model", lambda: "Y1")() if hasattr(self, "_select_page") else "Y1"
-        ) or "Y1"
+        model = self._package_model or ""
 
         from .. import device_tracking
         from ..flash_service import completed_extract_dir, compute_extract_dir, _find_scatter
@@ -874,7 +1068,9 @@ class MainWindow(QMainWindow):
         self._retranslate_all()
 
     def _retranslate_all(self):
-        self._brand_label.setText(tr("app_name"))
+        app_name = get_app_name()
+        self._brand_label.setText(app_name)
+        self.setWindowTitle(f"{app_name} v{APP_VERSION}")
         for key, (btn, _idx) in self._nav_buttons.items():
             btn.setText(tr(key))
         self._support_btn.setText(tr("nav_donate"))
@@ -894,6 +1090,7 @@ class MainWindow(QMainWindow):
             self._settings_page.retranslate()
         if self.statusBar() and hasattr(self.statusBar(), "retranslate"):
             self.statusBar().retranslate()
+        self._apply_generic_mtk_branding()
 
     def _on_manifest_loaded(self, entries):
         if entries:
@@ -1033,12 +1230,37 @@ class MainWindow(QMainWindow):
             self._apply_donation_visibility()
 
     def _apply_donation_visibility(self, is_disabled=None):
-        if is_disabled is None:
+        if is_generic_mtk():
+            is_disabled = True
+        elif is_disabled is None:
             is_disabled = device_tracking.is_donation_ui_disabled(self.settings)
-        if self.statusBar() is not None:
-            self.statusBar().setVisible(not is_disabled)
+        sb = self.statusBar()
+        if sb is not None:
+            if hasattr(sb, "set_donations_enabled"):
+                sb.set_donations_enabled(not is_disabled)
+            else:
+                sb.setVisible(not is_disabled)
         if hasattr(self, "_support_btn") and self._support_btn is not None:
-            self._support_btn.setVisible(not is_disabled)
+            self._support_btn.setVisible(not is_disabled and not is_generic_mtk())
+
+    def _apply_generic_mtk_branding(self):
+        generic = is_generic_mtk()
+        app_name = get_app_name()
+        self.setWindowTitle(f"{app_name} v{APP_VERSION}")
+        if hasattr(self, "_brand_label"):
+            self._brand_label.setText(app_name)
+        if hasattr(self, "_credits_btn"):
+            self._credits_btn.setVisible(not generic)
+        if hasattr(self, "_check_updates_btn"):
+            self._check_updates_btn.setVisible(not generic)
+        if hasattr(self, "_version_label"):
+            self._version_label.setVisible(not generic)
+        if hasattr(self, "_select_page"):
+            self._select_page.apply_generic_mode(generic)
+        self._apply_donation_visibility()
+
+    def _on_offline_mode_changed(self, enabled: bool):
+        self._apply_generic_mtk_branding()
 
     def _on_donations_updated(self, donations):
         if donations:
@@ -1047,11 +1269,19 @@ class MainWindow(QMainWindow):
     def _on_support_clicked(self):
         self._show_donation_dialog(context="general")
 
-    def _show_donation_dialog(self, context="general"):
-        eff_model = self._package_model or (
-            getattr(self._select_page, "current_model", lambda: "Y1")() if hasattr(self, "_select_page") else "Y1"
-        ) or "Y1"
+    def _show_donation_dialog(self, context="general", *args, **kwargs):
+        eff_model = self._package_model or ""
         eff_name = self._package_name or ""
+        is_360p_rockbox = kwargs.get("is_360p_rockbox")
+        if is_360p_rockbox is None:
+            is_360p_rockbox = getattr(self, "_is_360p_rockbox", None)
+        if is_360p_rockbox is None:
+            is_y = eff_model.upper() in ("Y1", "Y2")
+            pkg_low = eff_name.lower()
+            path_low = (self._package_path or "").lower()
+            is_rb = "rockbox" in pkg_low or "rockbox" in path_low
+            is_240 = "_240p" in path_low or "240p" in pkg_low
+            is_360p_rockbox = bool(is_y and is_rb and not is_240) if context == "install_success" else False
         dialog = DonationDialog(
             parent=self,
             context=context,
@@ -1059,6 +1289,7 @@ class MainWindow(QMainWindow):
             software_name=eff_name,
             donations=self._donations,
             on_dont_ask_again=self._on_donation_dont_ask_again,
+            is_360p_rockbox=is_360p_rockbox,
         )
         dialog.exec()
 
@@ -1086,6 +1317,9 @@ class MainWindow(QMainWindow):
             if dw is not None and dw.isRunning():
                 dw.cancel()
                 dw.wait(1500)
+            mon = getattr(select_page, "_monitor", None)
+            if mon is not None:
+                mon.stop_monitoring()
         for w in (
             getattr(self, "_manifest_worker", None),
             getattr(self, "_update_worker", None),
