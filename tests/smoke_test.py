@@ -690,6 +690,56 @@ def test_releases_client_force_refresh():
         assert cached_now[0]["tag_name"] == "3.2.1"
 
 
+def test_rockbox_min_release_gate():
+    """rockbox-y1/rockbox hides releases below 0.5: they are not compatible
+    with Y1 units sold after April 2026, so Updater must not offer them."""
+    from src.catalog import release_version_ok, release_version_tuple
+
+    # Tag shapes the repo actually uses, plus ordinary version tags.
+    for tag in ("stable-v0.5", "stable-v0.6", "stable-v1.0.2", "v1.0", "0.5.1"):
+        assert release_version_ok("rockbox-y1/rockbox", tag), tag
+    assert release_version_tuple("stable-v0.5") == (0, 5)
+
+    for tag in ("stable-v0.4", "stable-v0.3", "v0.4.9", "0.2", "0.4"):
+        assert not release_version_ok("rockbox-y1/rockbox", tag), tag
+
+    # No readable version (nightlies, branch names) can't be proven new enough.
+    for tag in ("nightly-35e926bd6ea663ab0aac2f138c7f71ae744971f",
+                "type-a-base", "stock-menu", ""):
+        assert not release_version_ok("rockbox-y1/rockbox", tag), tag
+
+    # Other repos are untouched, and a full GitHub URL still matches the gate.
+    assert release_version_ok("y1-community/y1-stock-rom", "v0.1")
+    assert not release_version_ok("https://github.com/rockbox-y1/rockbox", "stable-v0.4")
+
+
+def test_rockbox_min_release_gate_filters_listings():
+    """The gate applies to cached and freshly fetched listings alike, so a
+    cache written before the gate cannot resurface a hidden release."""
+    with tempfile.TemporaryDirectory() as td:
+        client = ReleasesClient(cache_root=td)
+        rom = {"asset": {"browser_download_url": "u", "name": "rom.zip", "size": 100},
+               "model": "dual", "type": "A", "resolution": "native"}
+        tags = ["stable-v0.5", "stable-v0.4", "stable-v0.3",
+                "nightly-35e926bd6ea663ab0aac2f138c7f71ae744971f"]
+        client.cache_releases("rockbox-y1/rockbox", [
+            {"tag_name": t, "download_url": "u", "prerelease": False,
+             "rom_variants": [rom]}
+            for t in tags
+        ])
+        assert [r["tag_name"] for r in client.get_cached_releases("rockbox-y1/rockbox")] == ["stable-v0.5"]
+        assert [r["tag_name"] for r in client.get_all_releases("rockbox-y1/rockbox")] == ["stable-v0.5"]
+
+        # Fresh fetch path: normalization drops the disallowed releases too.
+        raw = [{"tag_name": t, "name": t, "published_at": "2026-05-16T00:19:43Z",
+                "prerelease": False,
+                "assets": [{"name": "rom.zip", "browser_download_url": "u", "size": 100}]}
+               for t in ("stable-v0.4", "stable-v0.5")]
+        client._get_json = lambda url: raw
+        fetched = client.get_all_releases("rockbox-y1/rockbox", force_refresh=True)
+        assert [r["tag_name"] for r in fetched] == ["stable-v0.5"]
+
+
 def test_releases_client_network():
     """Best-effort live GitHub check (cache-first; may be skipped offline)."""
     client = ReleasesClient()
@@ -746,7 +796,8 @@ def test_donation_status_bar():
     _reset_app_settings()
     app = QApplication.instance() or QApplication(sys.argv)
     donations = [{
-        "name": "Alice", "amount": 25, "method": "Ko-Fi", "url": "",
+        "name": "Alice", "amount": 25, "method": "Ko-Fi",
+        "url": "https://ko-fi.com/alice",
         "dt": __import__("datetime").datetime.now(),
     }]
     opened = []
@@ -763,6 +814,34 @@ def test_donation_status_bar():
     assert "$25" in bar._goal_label.text()
     bar._support_btn.click()
     assert opened == [True]
+
+    # The goal and donor lines are clickable too: a click on plain text opens
+    # the donation dialog (exactly once per click)...
+    from PySide6.QtCore import QPoint, Qt
+    from PySide6.QtTest import QTest
+    import src.donation_dialog as dd
+
+    assert bar._goal_label.cursor().shape() == Qt.PointingHandCursor
+    opened.clear()
+    QTest.mouseClick(bar._goal_label, Qt.LeftButton, Qt.NoModifier, QPoint(6, 6))
+    assert opened == [True]
+    opened.clear()
+    QTest.mouseClick(bar._donor_label, Qt.LeftButton, Qt.NoModifier, QPoint(6, 6))
+    assert opened == [True]
+
+    # ...while a donor name linked to its transaction URL opens that URL and
+    # never the dialog.
+    opened.clear()
+    assert '<a href="https://ko-fi.com/alice"' in bar._donor_lines[0]
+    opened_urls = []
+    real_open = dd.open_browser
+    dd.open_browser = lambda url: opened_urls.append(url)
+    try:
+        bar._handle_label_click("https://ko-fi.com/alice")
+    finally:
+        dd.open_browser = real_open
+    assert opened_urls == ["https://ko-fi.com/alice"]
+    assert opened == [], "a linked donor name must not open the dialog"
 
     live = [{
         "name": "Bob", "amount": 40, "method": "PayPal", "url": "",
@@ -896,7 +975,7 @@ def test_flash_flow_launch():
     w.service.step_changed.emit(STEP_WAITING)
     assert w.sm.state is FlashState.S2_WAIT_CONNECTION
     banner = w._flash_page._wait_banner.text()
-    assert "connect your Y1" in banner, banner
+    assert "make sure your Y1 is powered off and disconnected" in banner, banner
     # Warning must NOT be visible while waiting / searching USB before handshake
     assert not w._flash_page._warning.isVisible()
 
@@ -915,9 +994,12 @@ def test_flash_flow_launch():
     assert w._flash_page._warning.isVisible()
     assert "Do not unplug" in w._flash_page._warning.text()
 
-    # When done, warning is hidden
+    # When done, warning is hidden and the top banner flips to completion
+    # (the completion dialog is shown over this page).
     w.service.step_changed.emit(STEP_DONE)
     assert not w._flash_page._warning.isVisible()
+    assert w._flash_page._flash_banner.text() == "Install complete"
+    assert w._flash_page._wait_status.text() == "Complete"
     w.close()
     app.processEvents()
 
@@ -981,7 +1063,7 @@ def test_language_switch_keeps_screen():
     app.processEvents()
     assert w._stack.currentIndex() == 1
     assert w._flash_page._stack.currentWidget() is w._flash_page._waiting_view
-    assert "connecter votre Y1" in w._flash_page._wait_banner.text()
+    assert "assurer que votre Y1 est éteint" in w._flash_page._wait_banner.text()
 
     # Advance to the flashing view with real progress, then switch to Spanish.
     w.service.step_changed.emit(STEP_WRITE)
@@ -1006,16 +1088,24 @@ def test_language_switch_keeps_screen():
 def test_success_dialog_flow():
     """After a successful install the donation modal is shown directly (no
     separate completion screen); the completion dialog only appears when the
-    user has opted out of the donation modal."""
+    user has opted out of the donation modal. The flash-page banner flips to
+    "Install complete" before either dialog opens."""
     from PySide6.QtWidgets import QApplication
     import src.ui.main_window as mw
+    from src.flash_service import STEP_WRITE, STEP_DONE
 
     _reset_app_settings()
     app = QApplication.instance() or QApplication(sys.argv)
     w = mw.MainWindow()
     w.show()
     shown = []
-    w._show_donation_dialog = lambda context="general": shown.append(("donation", context))
+    banner_during_dialog = []
+
+    def _donation_stub(context="general"):
+        banner_during_dialog.append(w._flash_page._flash_banner.text())
+        shown.append(("donation", context))
+
+    w._show_donation_dialog = _donation_stub
     real_complete = mw.FlashCompleteDialog
 
     class _StubDialog:
@@ -1024,10 +1114,18 @@ def test_success_dialog_flow():
             shown.append(("complete", name))
 
         def exec(self):
+            banner_during_dialog.append(w._flash_page._flash_banner.text())
             return 1
 
     mw.FlashCompleteDialog = _StubDialog
     try:
+        # Mirror the real flow: the flashing view is up with the in-progress
+        # banner, then the backend reports DONE before the dialog opens.
+        w.service.step_changed.emit(STEP_WRITE)
+        assert w._flash_page._flash_banner.text() == "Install in Progress"
+        w.service.step_changed.emit(STEP_DONE)
+        assert w._flash_page._flash_banner.text() == "Install complete"
+
         # Donation prompt enabled (default): donation modal only.
         w.settings.setValue("donation_install_prompt_disabled", False)
         w._package_name = "Rockbox (Y1)"
@@ -1040,10 +1138,56 @@ def test_success_dialog_flow():
         w._package_name = "Rockbox (Y1)"  # _reset_after_run cleared it above
         w._handle_flash_success()
         assert shown == [("complete", "Rockbox (Y1)")], shown
+
+        # The top banner must read "Install complete" *while* the completion
+        # dialog is over the page, not keep saying "Install in Progress".
+        assert banner_during_dialog == ["Install complete", "Install complete"], banner_during_dialog
     finally:
         mw.FlashCompleteDialog = real_complete
         w.close()
         app.processEvents()
+
+
+def test_dont_ask_again_disables_donation_ui():
+    """Checking \"Don't ask me again\" on the completion Support dialog also
+    turns off the donor / donation info: the bottom bar hides and the Settings
+    option reflects it (the user is not interested in the donations model)."""
+    from PySide6.QtWidgets import QApplication
+    from src import device_tracking
+    from src.donation_dialog import DonationDialog
+    from src.ui.main_window import MainWindow
+
+    _reset_app_settings()
+    app = QApplication.instance() or QApplication(sys.argv)
+    w = MainWindow()
+    w.show()
+    app.processEvents()
+    assert device_tracking.is_donation_ui_disabled(w.settings) is False
+    assert w.statusBar().isVisible()
+
+    # Drive the real dialog path: tick the opt-out checkbox, then close.
+    real_exec = DonationDialog.exec
+
+    def _exec(dlg):
+        dlg._dont_ask.setChecked(True)
+        dlg._on_close()
+        return 1
+
+    DonationDialog.exec = _exec
+    try:
+        w._show_donation_dialog(context="install_success")
+    finally:
+        DonationDialog.exec = real_exec
+
+    assert device_tracking.is_donation_install_prompt_disabled(settings=w.settings) is True
+    assert device_tracking.is_donation_ui_disabled(settings=w.settings) is True
+    assert not w.statusBar().isVisible(), "donor/goal bar must hide"
+    assert w._settings_page._cb_hide_donations.isChecked() is True
+    assert w._settings_page._cb_skip_install_donations.isChecked() is True
+
+    w.close()
+    app.processEvents()
+    _reset_app_settings()
 
 
 def test_offline_banner_and_generic_model():
@@ -1067,7 +1211,7 @@ def test_offline_banner_and_generic_model():
     w._on_package_selected("C:/fake/rom.rar", "rom.rar", "")  # local package: no model
     w.service.step_changed.emit(STEP_WAITING)
     banner = w._flash_page._wait_banner.text()
-    assert "connect your device" in banner, banner
+    assert "make sure your device is powered off and disconnected" in banner, banner
     w.close()
     app.processEvents()
 
@@ -3430,7 +3574,8 @@ def test_retry_guidance_and_connect_hint():
         assert "Errno 5" in shown[0], shown[0]
 
         # Hint lines are not errors: no dialog, and the connection guide is
-        # re-armed at step 1 ("power off the device, then connect USB").
+        # re-armed at step 1 ("Please make sure your {model} is powered off
+        # and disconnected").
         w._append_log(
             "Hint: Power off the phone before connecting. For brom mode, press "
             "and hold vol up, vol dwn, or all hw buttons and connect usb."

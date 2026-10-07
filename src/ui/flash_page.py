@@ -349,6 +349,11 @@ class FlashPage(QWidget):
         self._load_image(self._status_img, "installed.png")
         self._load_image(self._flash_img, "installed.png")
         self._warning.setVisible(False)
+        # The top banner must not keep reading "Install in Progress" while the
+        # completion dialog sits over the finished page.
+        self._flash_banner.set_type("success")
+        self._flash_banner.set_key("flash_banner_done")
+        self._wait_status.set_status("complete")
 
     def update_prep_progress(self, percent):
         self._prep_progress.setValue(percent)

@@ -30,8 +30,9 @@ logger = logging.getLogger(__name__)
 _DATA_FILENAME = "device_models.xml"
 
 # Models whose short id is already the user-facing name in every existing
-# prompt and translation ("Please connect your Y1..."). Newer models use their
-# registry product name, so guidance reads "Innioasis G5" rather than "G5".
+# prompt and translation ("Please make sure your Y1 is powered off..."). Newer
+# models use their registry product name, so guidance reads "Innioasis G5"
+# rather than "G5".
 _LEGACY_SHORT_IDS = ("Y1", "Y2", "A5")
 
 _cache: tuple | None = None

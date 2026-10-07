@@ -1058,11 +1058,20 @@ class MainWindow(QMainWindow):
             model=eff_model,
             software_name=eff_name,
             donations=self._donations,
-            on_dont_ask_again=lambda: self.settings.setValue(
-                "donation_install_prompt_disabled", True
-            ),
+            on_dont_ask_again=self._on_donation_dont_ask_again,
         )
         dialog.exec()
+
+    def _on_donation_dont_ask_again(self):
+        """"Don't ask me again" on the Support dialog: the user is not
+        interested in the donations model at all, so also turn off the
+        donor / donation info shown at the bottom of the window (the
+        Settings → hide-donations option) and reflect both immediately."""
+        device_tracking.set_donation_install_prompt_disabled(True, settings=self.settings)
+        device_tracking.set_donation_ui_disabled(True, settings=self.settings)
+        self._apply_donation_visibility(True)
+        if hasattr(self, "_settings_page"):
+            self._settings_page.refresh_settings()
 
     def cleanup_workers(self):
         """Cleanly terminate and wait for any background workers."""

@@ -560,10 +560,10 @@ _STRINGS: dict = {
         "es": "Apaga primero el dispositivo. Si está conectado pero no se detecta, prueba con otro cable o puerto USB.",
     },
     "flash_connect_prompt": {
-        "zh-CN": "请连接您的 {model}：先关闭设备电源，再通过 USB 线连接电脑。识别到设备后将自动开始刷机。",
-        "en": "Please connect your {model}: power off the device, then connect it via USB. Flashing starts automatically when the device is detected.",
-        "fr": "Veuillez connecter votre {model} : éteignez l'appareil, puis connectez-le en USB. Le flashing démarre automatiquement à la détection de l'appareil.",
-        "es": "Conecta tu {model}: apaga el dispositivo y conéctalo por USB. El flashing comenzará automáticamente cuando se detecte el dispositivo.",
+        "zh-CN": "请确认您的 {model} 已关机并断开连接",
+        "en": "Please make sure your {model} is powered off and disconnected",
+        "fr": "Veuillez vous assurer que votre {model} est éteint et déconnecté",
+        "es": "Asegúrate de que tu {model} esté apagado y desconectado",
     },
     "flash_preparing": {
         "zh-CN": "正在准备固件包… 请暂时保持设备未连接。",
@@ -804,6 +804,12 @@ _STRINGS: dict = {
         "en": "Install in Progress",
         "fr": "Installation en cours",
         "es": "Instalación en curso",
+    },
+    "flash_banner_done": {
+        "zh-CN": "安装完成",
+        "en": "Install complete",
+        "fr": "Installation terminée",
+        "es": "Instalación completada",
     },
     "flash_conn_waiting": {
         "zh-CN": "等待连接",

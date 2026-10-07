@@ -44,6 +44,19 @@ FIRMWARE_REPO_FALLBACKS = {
     "y1-community/y2-stock-rom": "y1-community/y1-stock-rom",
 }
 
+# Minimum visible release per repo: anything older is hidden from every
+# release listing in the Updater (and from the cache), so users cannot pick it
+# by accident.
+#
+# rockbox-y1/rockbox builds before 0.5 are not compatible with Y1 units sold
+# after April 2026, so only stable-v0.5 and newer may be offered. Tags that
+# carry no version at all (nightly-<sha>, branch names) are hidden too — see
+# catalog.release_version_ok() — because they cannot be proven to be new
+# enough. Repos absent from this map are unrestricted.
+REPO_MIN_RELEASE_VERSION = {
+    "rockbox-y1/rockbox": "0.5",
+}
+
 # --- Donations (public endpoints/addresses from innioasis.app / CE) ---------
 DONORS_CSV_URL = "https://innioasis.app/donors.csv"
 MONTHLY_GOAL_USD = 200.0

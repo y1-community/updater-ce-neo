@@ -33,6 +33,36 @@ class _DonationRefreshBridge(QObject):
     updated = Signal(object)
 
 
+class _LineLabel(QLabel):
+    """Clickable status-bar line (goal / donor ticker).
+
+    Emits the anchor href under the cursor, or ``""`` when plain text was
+    clicked, so the bar can open a donor's transaction URL for a linked name
+    and the donation dialog for every other word. The press is claimed so the
+    release is delivered here (QLabel ignores presses that are not on a link).
+
+    ``QLabel.anchorAt`` is not exposed by PySide6, so the link/plain split
+    leans on QLabel itself: ``linkActivated`` fires for anchors, and a
+    non-link release is left unaccepted by QLabel's own handler.
+    """
+
+    clicked = Signal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.linkActivated.connect(self.clicked.emit)
+
+    def mousePressEvent(self, ev):
+        super().mousePressEvent(ev)  # QLabel records the pressed link
+        ev.accept()  # claim the click so the release is delivered here
+
+    def mouseReleaseEvent(self, ev):
+        super().mouseReleaseEvent(ev)  # emits linkActivated when on a link
+        if not ev.isAccepted():  # QLabel ignores plain-text clicks
+            self.clicked.emit("")
+        ev.accept()
+
+
 class DonationStatusBar(QStatusBar):
     """Compact, always-visible version of the Support dialog's goal display."""
 
@@ -40,6 +70,7 @@ class DonationStatusBar(QStatusBar):
                  on_donations_updated=None):
         super().__init__(parent)
         self.donations = donations or []
+        self._on_support = on_support
         self._on_donations_updated = on_donations_updated
         self._remote_refresh_interval_ms = 5 * 60 * 1000
         self._showing_goal = True
@@ -77,12 +108,12 @@ class DonationStatusBar(QStatusBar):
         row.setContentsMargins(12, 0, 8, 0)
         row.setSpacing(10)
 
-        self._goal_label = QLabel()
+        self._goal_label = _LineLabel()
         self._goal_label.setMinimumWidth(260)
         self._goal_label.setStyleSheet(f"font-size: 12px; font-weight: 600; color: {t.fg}; border: none; background: transparent;")
         row.addWidget(self._goal_label, 1)
 
-        self._donor_label = QLabel()
+        self._donor_label = _LineLabel()
         self._donor_label.setMinimumWidth(260)
         self._donor_label.setTextFormat(Qt.RichText)
         self._donor_label.setStyleSheet(f"font-size: 12px; font-weight: 500; color: {t.fg}; border: none; background: transparent;")
@@ -101,6 +132,22 @@ class DonationStatusBar(QStatusBar):
             self._support_btn.clicked.connect(on_support)
         row.addWidget(self._support_btn)
         self.addWidget(content, 1)
+
+        # The goal and donor lines are clickable: any plain word opens the
+        # donation dialog, while a donor name that carries a transaction URL
+        # opens that URL instead.
+        for label in (self._goal_label, self._donor_label):
+            label.setCursor(Qt.PointingHandCursor)
+            label.clicked.connect(self._handle_label_click)
+
+    def _handle_label_click(self, href):
+        """Route a click on the goal/donor lines: a transaction URL wins,
+        anything else opens the donation dialog."""
+        if href:
+            open_browser(href)
+            return
+        if self._on_support:
+            self._on_support()
 
     def _build_donor_lines(self):
         lines = []

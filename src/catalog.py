@@ -30,6 +30,7 @@ from .config import (
     GITHUB_API,
     GITHUB_RELEASES_PER_PAGE,
     RELEASE_CACHE_TTL_SECONDS,
+    REPO_MIN_RELEASE_VERSION,
     UPDATE_CACHE_TTL_SECONDS,
     resolve_firmware_repo,
 )
@@ -453,6 +454,48 @@ def parse_version_designations(version_name: str) -> dict:
     }
 
 
+def release_version_tuple(tag_name):
+    """Dotted version a tag carries (``stable-v0.5`` → ``(0, 5)``), or ``None``
+    when the tag has no dotted version to read (nightlies, branch names)."""
+    clean = str(parse_version_designations(tag_name or '').get('clean_version') or '')
+    return _parse_semver(clean.lstrip('vV'))
+
+
+def release_version_ok(repo, tag_name):
+    """Whether a release from ``repo`` may be listed in the Updater.
+
+    ``REPO_MIN_RELEASE_VERSION`` pins a repo to a minimum version; older
+    releases are dropped from every listing — fresh fetches, cached reads and
+    the single-release path alike — so a user cannot install one by accident.
+    That matters for ``rockbox-y1/rockbox``, whose pre-0.5 builds are not
+    compatible with Y1 units sold after April 2026.
+
+    A tag with no readable version counts as *not* OK: it cannot be shown to
+    be new enough, and an unrecognised build (``nightly-<sha>``, a branch
+    name) is exactly what someone might flash by mistake. Repos without a
+    pinned minimum are unrestricted.
+    """
+    slug = (repo or "").strip()
+    if "github.com/" in slug:  # tolerate a full URL where a slug is expected
+        slug = slug.split("github.com/", 1)[1]
+    slug = slug.strip("/").removesuffix(".git")
+    minimum_str = REPO_MIN_RELEASE_VERSION.get(resolve_firmware_repo(slug))
+    if not minimum_str:
+        return True
+    minimum = _parse_semver(str(minimum_str).lstrip('vV'))
+    if minimum is None:
+        logger.warning("Invalid minimum version %r for %s; not gating", minimum_str, repo)
+        return True
+    version = release_version_tuple(tag_name)
+    if version is None:
+        return False
+    # Pad so 0.5 and 0.5.0 compare equal, and (0, 4, 9) < (0, 5).
+    width = max(len(version), len(minimum))
+    version = version + (0,) * (width - len(version))
+    minimum = minimum + (0,) * (width - len(minimum))
+    return version >= minimum
+
+
 def format_datestamp_version(match_or_str, now_dt=None):
     """Format a YYYYMMDD-HHMM datestamp as a human-readable date with time."""
     val = match_or_str.group(0) if hasattr(match_or_str, "group") else str(match_or_str)
@@ -604,12 +647,18 @@ class ReleasesClient:
         return self.cache_dir / f"{repo.replace('/', '_')}.json"
 
     def get_cached_releases(self, repo, ignore_ttl=False):
+        """Cached releases for ``repo``, with the repo's minimum-version gate
+        applied so a cache written before the gate existed cannot resurface a
+        release users are no longer allowed to install."""
         path = self._cache_path(repo)
         try:
             if path.exists() and (ignore_ttl or (time.time() - path.stat().st_mtime) < RELEASE_CACHE_TTL_SECONDS):
                 data = json.loads(path.read_text(encoding="utf-8"))
                 if isinstance(data, list):
-                    return data
+                    return [
+                        r for r in data
+                        if isinstance(r, dict) and release_version_ok(repo, r.get("tag_name", ""))
+                    ]
         except Exception as e:
             logger.debug("Cache read failed for %s: %s", repo, e)
         return None
@@ -777,6 +826,8 @@ class ReleasesClient:
     # -- normalization ------------------------------------------------------
     def _normalize_release(self, release, repo):
         tag_name = release.get("tag_name", "")
+        if not release_version_ok(repo, tag_name):
+            return None
         assets = release.get("assets", [])
         rom_variants = [_parse_rom_asset_variant(a, tag_name, repo) for a in assets]
         rom_variants = [v for v in rom_variants if v]
@@ -801,6 +852,8 @@ class ReleasesClient:
         releases = []
         for release in releases_data or []:
             tag_name = release.get("tag_name", "")
+            if not release_version_ok(repo, tag_name):
+                continue
             is_prerelease = bool(release.get("prerelease"))
             if "stable" in tag_name.lower():
                 is_prerelease = False
