@@ -1,0 +1,13 @@
+//////////////////////////////////////////////////////////////////////////////////////
+//                                                                                  //
+//    File downloaded from mtkflashtools.com.com                                    //
+//                                                                                  //
+//    ________________________________                                              //
+//                                                                                  //
+//    Check out our Download Hub:                                                   //
+//                                                                                  //
+//    1. How to Use: https://romshillzz.net/use-sp-flash-tool                       //
+//    2. Latest Version: https://mtkflashtools.com/category/sp-flash-tool-windows   //
+//    3. USB Driver: https://mtkflashtools.com/mediatek-usb-driver                  //
+//                                                                                  //
+//////////////////////////////////////////////////////////////////////////////////////

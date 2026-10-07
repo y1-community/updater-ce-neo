@@ -1,0 +1,4 @@
+# Byte-exact round-trips for the bundled SP Flash Tool payloads: never apply
+# EOL conversion or text heuristics to anything under tools/ (a CRLF-mangled
+# flash_tool binary or .so would silently corrupt the shipped app).
+tools/** -text

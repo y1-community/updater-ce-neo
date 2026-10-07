@@ -9,8 +9,34 @@ from PySide6.QtWidgets import (
 )
 
 from ..i18n import tr
+from .flash_page import _STEP_KEY
 from .widgets import Banner, Card, InfoRow
 from .dark import T
+
+# FlashWorker.finished error codes shown in the "Error Code" row. Known codes
+# get a translated label (the raw code stays visible in parentheses for
+# support); unknown codes / raw exception text are shown as-is.
+_ERROR_CODE_KEYS = {
+    "USER_CANCELLED": "err_code_user_cancelled",
+    "CONNECTION_FAILED": "err_code_connection_failed",
+    "MTK_INIT_FAILED": "err_code_mtk_init_failed",
+    "MTK_IMPORT_FAILED": "err_code_mtk_import_failed",
+    "SP_FLASH_TOOL_NOT_FOUND": "err_code_sp_not_found",
+    "NO_SCATTER_FILE": "err_code_no_scatter",
+    "MISSING_IMAGES": "err_code_missing_images",
+    "INTERNAL_ERROR": "err_code_internal",
+    "NO_DEVICE": "flash_no_device",
+    "USB_DISCONNECTED": "err_usb_title",
+}
+
+
+def _format_error_code(code) -> str:
+    """Human-readable error code for the error page (keeps the raw code)."""
+    code = str(code or "\u2014")
+    key = _ERROR_CODE_KEYS.get(code)
+    if key:
+        return f"{tr(key)} ({code})"
+    return code
 
 
 class ErrorPage(QWidget):
@@ -103,7 +129,7 @@ class ErrorPage(QWidget):
             self._banner.set_type("danger")
             self._banner.set_key("err_device_title")
             self._title.setText(tr("err_device_title"))
-            self._error_row.set_value("NO_DEVICE")
+            self._error_row.set_value(_format_error_code("NO_DEVICE"))
             self._step_row.set_value("\u2014")
             self._retry_row.set_value("0")
             self._hint.setText(tr("flash_wait_desc"))
@@ -111,7 +137,7 @@ class ErrorPage(QWidget):
             self._banner.set_type("danger")
             self._banner.set_key("err_usb_title")
             self._title.setText(tr("err_usb_title"))
-            self._error_row.set_value("USB_DISCONNECTED")
+            self._error_row.set_value(_format_error_code("USB_DISCONNECTED"))
             self._step_row.set_value(f"{self._mode_args.get('percent', 0)}%")
             self._retry_row.set_value("\u2014")
             self._hint.setText(tr("flash_warning"))
@@ -119,10 +145,11 @@ class ErrorPage(QWidget):
             self._banner.set_type("danger")
             self._banner.set_key("flash_failed")
             self._title.setText(tr("err_flash_title"))
-            self._error_row.set_value(self._mode_args.get("error_code") or "\u2014")
+            self._error_row.set_value(_format_error_code(self._mode_args.get("error_code")))
             step = self._mode_args.get("step") or "\u2014"
             percent = self._mode_args.get("percent", 0)
-            self._step_row.set_value(f"{step} @ {percent}%")
+            step_label = tr(_STEP_KEY[step]) if step in _STEP_KEY else str(step)
+            self._step_row.set_value(f"{step_label} @ {percent}%")
             self._retry_row.set_value(str(self._mode_args.get("retry_count", 0)))
             ndash = '\u2014'
             self._hint.setText(

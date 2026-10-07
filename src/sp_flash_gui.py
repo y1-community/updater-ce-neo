@@ -351,6 +351,12 @@ def launch_sp_flash_tool_gui(
             return False, f"Could not prepare SP Flash Tool: {msg}"
 
         dirs = find_sp_flash_tool_dirs()
+        # Bundled payload (shipped inside the AppImage / frozen bundle) wins
+        # over any previously downloaded copy.
+        bundled = linux_sp_flash.bundled_dir()
+        if bundled is not None and (bundled / linux_sp_flash.FLASH_TOOL_LINUX_BIN).is_file():
+            if bundled not in dirs:
+                dirs.insert(0, bundled)
         stage = linux_sp_flash.stage_dir()
         if stage not in dirs and (stage / linux_sp_flash.FLASH_TOOL_LINUX_BIN).is_file():
             dirs.insert(0, stage)

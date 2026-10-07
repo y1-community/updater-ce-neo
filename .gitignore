@@ -6,10 +6,11 @@ build/
 *.spec.bak
 .cache/
 
-# Third-party runtime payloads (MediaTek-proprietary, not redistributed as source)
-# SP Flash Tool v5.2016 and UnRAR are located at runtime by INSTALL_DIR paths.
+# Third-party runtime payloads (MediaTek-proprietary).
+# tools/ IS tracked (bundled SP Flash Tool v5.1904 payloads for Windows and
+# Linux ship with the app; see InnioasisUpdater.spec post-build step).
+# /SP_Flash_Tool/ at the repo root is a runtime staging location, not source.
 /SP_Flash_Tool/
-/tools/
 
 # macOS build artifacts
 *.dmg

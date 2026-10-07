@@ -36,6 +36,7 @@ from typing import Optional
 from PySide6.QtCore import QObject, QThread, Signal
 
 from . import linux_sp_flash, paths
+from .i18n import tr
 
 paths.ensure_mtkclient_importable()
 
@@ -1203,7 +1204,7 @@ class FlashWorker(QThread):
             ]
             self.step_changed.emit(STEP_WAITING)
             self.progress.emit(10)
-            self.action_changed.emit("Searching for device (keep unplugged)...")
+            self.action_changed.emit(tr("action_searching"))
             self._log("Launching SP Flash Tool (console mode, searching USB)...")
             self._log("Keep the device unplugged until the connect prompt appears.")
             guardian = None
@@ -1318,29 +1319,29 @@ class FlashWorker(QThread):
         elif "scanning usb" in low or "search usb" in low:
             self.step_changed.emit(STEP_WAITING)
             self.progress.emit(10)
-            self.action_changed.emit("Searching for device (keep unplugged)...")
+            self.action_changed.emit(tr("action_searching"))
         elif "brom connected" in low:
             self.step_changed.emit(STEP_DETECT)
             self.progress.emit(12)
-            self.action_changed.emit("Device detected in BROM mode...")
+            self.action_changed.emit(tr("action_brom_detected"))
         elif "of da has been sent" in low:
             self.step_changed.emit(STEP_DOWNLOAD_DA)
             self.progress.emit(15)
-            self.action_changed.emit("Downloading DA to device...")
+            self.action_changed.emit(tr("action_downloading_da"))
         elif "of bootloader has been sent" in low:
             self.step_changed.emit(STEP_DOWNLOAD_BL)
             self.progress.emit(18)
-            self.action_changed.emit("Downloading Bootloader...")
+            self.action_changed.emit(tr("action_downloading_bootloader"))
         elif "format succeeded" in low:
             self.progress.emit(20)
-            self.action_changed.emit("Flash format succeeded...")
+            self.action_changed.emit(tr("action_format_succeeded"))
         elif "of image data has been sent" in low:
             self.step_changed.emit(STEP_WRITE)
             self._update_sp_image_progress(line)
         elif "download ok" in low:
             self.step_changed.emit(STEP_DONE)
             self.progress.emit(100)
-            self.action_changed.emit("Flash complete! Disconnect USB and reboot.")
+            self.action_changed.emit(tr("action_flash_complete"))
         elif "download failed" in low or "s_ft_" in low:
             m = re.search(r"(S_\w+)\s*\((\d+)\)", line)
             self._log(f"Error: {m.group(1)} (code {m.group(2)})" if m else f"SP Flash Tool error: {line}")
@@ -1362,7 +1363,7 @@ class FlashWorker(QThread):
                 if mapped > self._sp_progress_hwm:
                     self._sp_progress_hwm = mapped
                     self.progress.emit(min(95, mapped))
-                self.action_changed.emit(f"Writing firmware image... ({pct}%)")
+                self.action_changed.emit(tr("action_writing_image_fmt").format(pct=pct))
             return
         pct = int(m.group(1))
         sent = _parse_sp_size(m.group(2))
@@ -1384,7 +1385,7 @@ class FlashWorker(QThread):
         if mapped > self._sp_progress_hwm:
             self._sp_progress_hwm = mapped
             self.progress.emit(min(95, mapped))
-        self.action_changed.emit(f"Writing firmware image... ({pct}%)")
+        self.action_changed.emit(tr("action_writing_image_fmt").format(pct=pct))
 
     def _monitor_sp_log_file(self, stop_event, log_root=None):
         log_root = Path(log_root or _SP_LOG_ROOT)
@@ -1481,7 +1482,7 @@ class FlashWorker(QThread):
             "Device answered in preloader mode; restarting it into BROM mode "
             "so the download agent can run..."
         )
-        self.action_changed.emit("Restarting the player into BROM mode...")
+        self.action_changed.emit(tr("action_restart_brom"))
         if self._device_loss_hold is not None:
             # The target has to re-enumerate (a few seconds); the monitor must
             # not report that as the player being unplugged mid-flash.
@@ -1529,9 +1530,7 @@ class FlashWorker(QThread):
         """
         if self._cancelled:
             return False
-        self.action_changed.emit(
-            "Power-cycle the player (hold power ~10s), then reconnect it - retrying..."
-        )
+        self.action_changed.emit(tr("action_recover_powercycle"))
         self._log(
             f"Attempt {attempt} failed. Recovering: power-cycle the player "
             "(hold power ~10s) and reconnect it in flash mode."
@@ -1550,8 +1549,8 @@ class FlashWorker(QThread):
     def _flash_via_mtkclient(self, extract_dir, scatter_file):
         self.step_changed.emit(STEP_WAITING)
         self.progress.emit(10)
-        self.action_changed.emit("Initializing mtkclient...")
-        self._log("Initializing mtkclient...")
+        self.action_changed.emit(tr("action_init_mtkclient"))
+        self._log(tr("action_init_mtkclient"))
         try:
             from . import mtk_api
         except BaseException as e:
@@ -1593,7 +1592,7 @@ class FlashWorker(QThread):
 
         self.step_changed.emit(STEP_WAITING)
         self.progress.emit(10)
-        self.action_changed.emit("Waiting for MTK device... Power off device and connect USB.")
+        self.action_changed.emit(tr("action_wait_mtk"))
         self._log("Waiting for MTK device... Power off the device and connect USB.")
 
         # Surface mtkclient's own phase messages and flag a device that stops
@@ -1620,10 +1619,7 @@ class FlashWorker(QThread):
             self._log(
                 f"No response from the device for {seconds}s while configuring the DA."
             )
-            self.action_changed.emit(
-                "Device stopped responding while configuring the download agent. "
-                "Power it off completely, reconnect, and retry."
-            )
+            self.action_changed.emit(tr("action_da_stall"))
 
         watcher = _StallWatcher(_on_mtk_stall)
 
@@ -1633,8 +1629,10 @@ class FlashWorker(QThread):
             # Report the mode mtkclient actually found: PID 0x2000 (and the
             # BL-version probe) is preloader mode, only 0x0003 is BROM, and
             # the difference is what the user has to act on.
-            mode = "BROM mode" if mtk_api.is_brom(mtk) else "preloader mode"
-            msg = f"Device detected ({mode}) - configuring download agent..."
+            if mtk_api.is_brom(mtk):
+                msg = tr("action_detected_brom")
+            else:
+                msg = tr("action_detected_preloader")
             self.action_changed.emit(msg)
             self._log(msg)
 
@@ -1703,10 +1701,7 @@ class FlashWorker(QThread):
                 if attempt >= MTK_DA_ATTEMPTS:
                     break
                 self._log("The download agent did not come up.")
-                self.action_changed.emit(
-                    "The player stopped responding while starting the download "
-                    "agent. Waiting for it to come back..."
-                )
+                self.action_changed.emit(tr("action_da_wait_back"))
                 if not self._wait_for_retry(attempt):
                     break
         except BaseException as e:
@@ -1726,7 +1721,7 @@ class FlashWorker(QThread):
 
         self.step_changed.emit(STEP_DOWNLOAD_BL)
         self.progress.emit(18)
-        self.action_changed.emit("Device connected - preparing write commands...")
+        self.action_changed.emit(tr("action_device_connected"))
 
         total = len(image_files)
 
@@ -1783,10 +1778,14 @@ class FlashWorker(QThread):
                     # progress from image writes, not from the handshake).
                     self.step_changed.emit(STEP_WRITE)
                     self.progress.emit(20)
-                    self.action_changed.emit("Install in Progress")
-                    self._log("Install in Progress - writing firmware images...")
-                self._log(f"Writing {part_name} ({i + 1}/{total}): {file_path.name}")
-                self.action_changed.emit(f"Writing {part_name} ({i + 1}/{total}): {file_path.name}")
+                    self.action_changed.emit(tr("action_install_in_progress"))
+                    self._log(tr("log_install_writing"))
+                self._log(tr("action_writing_part_fmt").format(
+                    part=part_name, i=i + 1, total=total, file=file_path.name,
+                ))
+                self.action_changed.emit(tr("action_writing_part_fmt").format(
+                    part=part_name, i=i + 1, total=total, file=file_path.name,
+                ))
 
                 entry = scatter_entries_map.get(part_name.lower())
                 region = entry.get("region", "EMMC_USER") if entry else "EMMC_USER"
@@ -1799,8 +1798,8 @@ class FlashWorker(QThread):
 
                 # 1. Unpack Android sparse images in-process
                 if _is_android_sparse(active_file):
-                    self._log(f"Detected Android sparse image for {part_name}, converting in-process...")
-                    self.action_changed.emit(f"Unpacking {part_name}...")
+                    self._log(tr("log_sparse_fmt").format(part=part_name))
+                    self.action_changed.emit(tr("action_unpacking_fmt").format(part=part_name))
                     unsparse_dir = Path(extract_dir) / ".unsparse_cache"
                     temp_unsparse, _ = _convert_sparse_to_raw(active_file, unsparse_dir)
                     active_file = temp_unsparse
@@ -1870,7 +1869,7 @@ class FlashWorker(QThread):
 
             # 3. Format/wipe userdata and cache to ensure clean boot without encryption/stale data bootloops
             self._log("Formatting userdata and cache...")
-            self.action_changed.emit("Formatting userdata and cache...")
+            self.action_changed.emit(tr("action_formatting"))
             try:
                 if hasattr(da_handler, "da_erase"):
                     da_handler.da_erase(["userdata", "cache"], parttype="user")
@@ -1889,7 +1888,7 @@ class FlashWorker(QThread):
 
             self.step_changed.emit(STEP_DONE)
             self.progress.emit(100)
-            self.action_changed.emit("Flash complete! Disconnect USB and reboot.")
+            self.action_changed.emit(tr("action_flash_complete"))
             self._log("Flash complete! Disconnect USB and reboot the device.")
             self.finished.emit(True, "")
         finally:

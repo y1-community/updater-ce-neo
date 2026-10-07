@@ -1975,6 +1975,197 @@ _STRINGS: dict = {
         "fr": "Avant de continuer :\n\n1. S'il n'est pas déjà éteint, éteignez votre {label}\n   (Vous pouvez utiliser une épingle ou un trombone pour appuyer sur le bouton de réinitialisation si nécessaire)\n\n2. S'il est connecté, débranchez le câble USB de votre {label}\n\nCliquez ensuite sur OK et suivez les instructions à l'écran.",
         "es": "Antes de continuar:\n\n1. Si aún no está apagado, apaga tu {label}\n   (Puedes usar un alfiler o un clip para pulsar el botón de reinicio si es necesario)\n\n2. Si está conectado, desconecta el cable USB de tu {label}\n\nLuego pulsa Aceptar y sigue las instrucciones en pantalla.",
     },
+
+    # -----------------------------------------------------------------------
+    # Flash progress / status actions. These are emitted by the flash
+    # backends (FlashWorker.action_changed / _log) and shown verbatim in the
+    # status panel and the Diagnostics log, so they must be translated at
+    # emit time (same pattern as the dl_* keys used by downloads.py).
+    # English values intentionally match the historical hardcoded strings.
+    # -----------------------------------------------------------------------
+    "action_searching": {
+        "zh-CN": "正在搜索设备（请保持未连接）…",
+        "en": "Searching for device (keep unplugged)...",
+        "fr": "Recherche de l'appareil (laissez-le débranché)…",
+        "es": "Buscando el dispositivo (mantenlo desconectado)...",
+    },
+    "action_brom_detected": {
+        "zh-CN": "已检测到 BROM 模式设备…",
+        "en": "Device detected in BROM mode...",
+        "fr": "Appareil détecté en mode BROM…",
+        "es": "Dispositivo detectado en modo BROM...",
+    },
+    "action_downloading_da": {
+        "zh-CN": "正在向设备下载 DA…",
+        "en": "Downloading DA to device...",
+        "fr": "Téléchargement du DA vers l'appareil…",
+        "es": "Descargando el DA al dispositivo...",
+    },
+    "action_downloading_bootloader": {
+        "zh-CN": "正在下载 Bootloader…",
+        "en": "Downloading Bootloader...",
+        "fr": "Téléchargement du bootloader…",
+        "es": "Descargando el bootloader...",
+    },
+    "action_format_succeeded": {
+        "zh-CN": "擦除格式化成功…",
+        "en": "Flash format succeeded...",
+        "fr": "Le formatage a réussi…",
+        "es": "El formateo se completó...",
+    },
+    "action_flash_complete": {
+        "zh-CN": "刷机完成！请断开 USB 并重启设备。",
+        "en": "Flash complete! Disconnect USB and reboot.",
+        "fr": "Flash terminé ! Débranchez l'USB et redémarrez.",
+        "es": "¡Flasheo completado! Desconecta el USB y reinicia.",
+    },
+    "action_writing_image_fmt": {
+        "zh-CN": "正在写入固件镜像…（{pct}%）",
+        "en": "Writing firmware image... ({pct}%)",
+        "fr": "Écriture de l'image firmware… ({pct} %)",
+        "es": "Escribiendo la imagen de firmware... ({pct} %)",
+    },
+    "action_writing_part_fmt": {
+        "zh-CN": "正在写入 {part}（{i}/{total}）：{file}",
+        "en": "Writing {part} ({i}/{total}): {file}",
+        "fr": "Écriture de {part} ({i}/{total}) : {file}",
+        "es": "Escribiendo {part} ({i}/{total}): {file}",
+    },
+    "action_unpacking_fmt": {
+        "zh-CN": "正在解包 {part}…",
+        "en": "Unpacking {part}...",
+        "fr": "Décompression de {part}…",
+        "es": "Desempaquetando {part}...",
+    },
+    "action_recover_powercycle": {
+        "zh-CN": "请将播放器断电重启（长按电源键约 10 秒），然后重新连接——正在重试…",
+        "en": "Power-cycle the player (hold power ~10s), then reconnect it - retrying...",
+        "fr": "Redémarrez le lecteur (maintenez le bouton marche ~10 s), puis reconnectez-le — nouvelle tentative…",
+        "es": "Apaga y enciende el reproductor (mantén el botón de encendido ~10 s) y reconéctalo: reintentando...",
+    },
+    "action_init_mtkclient": {
+        "zh-CN": "正在初始化 mtkclient…",
+        "en": "Initializing mtkclient...",
+        "fr": "Initialisation de mtkclient…",
+        "es": "Inicializando mtkclient...",
+    },
+    "action_wait_mtk": {
+        "zh-CN": "等待 MTK 设备…请先关闭设备电源，再连接 USB。",
+        "en": "Waiting for MTK device... Power off device and connect USB.",
+        "fr": "En attente de l'appareil MTK… Éteignez l'appareil puis connectez l'USB.",
+        "es": "Esperando el dispositivo MTK... Apaga el dispositivo y conecta el USB.",
+    },
+    "action_da_stall": {
+        "zh-CN": "配置下载代理时设备停止响应。请将设备完全关机，重新连接后重试。",
+        "en": "Device stopped responding while configuring the download agent. Power it off completely, reconnect, and retry.",
+        "fr": "L'appareil a cessé de répondre pendant la configuration de l'agent de téléchargement. Éteignez-le complètement, reconnectez-le et réessayez.",
+        "es": "El dispositivo dejó de responder mientras se configuraba el agente de descarga. Apágalo por completo, reconéctalo y reintenta.",
+    },
+    "action_detected_brom": {
+        "zh-CN": "已检测到设备（BROM 模式）——正在配置下载代理…",
+        "en": "Device detected (BROM mode) - configuring download agent...",
+        "fr": "Appareil détecté (mode BROM) — configuration de l'agent de téléchargement…",
+        "es": "Dispositivo detectado (modo BROM): configurando el agente de descarga...",
+    },
+    "action_detected_preloader": {
+        "zh-CN": "已检测到设备（preloader 模式）——正在配置下载代理…",
+        "en": "Device detected (preloader mode) - configuring download agent...",
+        "fr": "Appareil détecté (mode preloader) — configuration de l'agent de téléchargement…",
+        "es": "Dispositivo detectado (modo preloader): configurando el agente de descarga...",
+    },
+    "action_da_wait_back": {
+        "zh-CN": "启动下载代理时播放器停止响应。正在等待其恢复…",
+        "en": "The player stopped responding while starting the download agent. Waiting for it to come back...",
+        "fr": "Le lecteur a cessé de répondre au démarrage de l'agent de téléchargement. En attente de son retour…",
+        "es": "El reproductor dejó de responder al iniciar el agente de descarga. Esperando a que vuelva...",
+    },
+    "action_device_connected": {
+        "zh-CN": "设备已连接——正在准备写入命令…",
+        "en": "Device connected - preparing write commands...",
+        "fr": "Appareil connecté — préparation des commandes d'écriture…",
+        "es": "Dispositivo conectado: preparando los comandos de escritura...",
+    },
+    "action_install_in_progress": {
+        "zh-CN": "正在安装",
+        "en": "Install in Progress",
+        "fr": "Installation en cours",
+        "es": "Instalación en curso",
+    },
+    "action_formatting": {
+        "zh-CN": "正在格式化 userdata 和 cache 分区…",
+        "en": "Formatting userdata and cache...",
+        "fr": "Formatage des partitions userdata et cache…",
+        "es": "Formateando userdata y cache...",
+    },
+    "action_restart_brom": {
+        "zh-CN": "正在将播放器重启进入 BROM 模式…",
+        "en": "Restarting the player into BROM mode...",
+        "fr": "Redémarrage du lecteur en mode BROM…",
+        "es": "Reiniciando el reproductor en modo BROM...",
+    },
+    "log_install_writing": {
+        "zh-CN": "正在安装——正在写入固件镜像…",
+        "en": "Install in Progress - writing firmware images...",
+        "fr": "Installation en cours — écriture des images firmware…",
+        "es": "Instalación en curso: escribiendo las imágenes de firmware...",
+    },
+    "log_sparse_fmt": {
+        "zh-CN": "检测到 {part} 为 Android sparse 镜像，正在进程内转换…",
+        "en": "Detected Android sparse image for {part}, converting in-process...",
+        "fr": "Image Android sparse détectée pour {part}, conversion en cours…",
+        "es": "Imagen sparse de Android detectada para {part}, convirtiendo en el proceso...",
+    },
+
+    # Error-page codes (FlashWorker.finished error_code values shown in the
+    # Error Code row; the raw code stays visible in parentheses for support).
+    "err_code_user_cancelled": {
+        "zh-CN": "用户已取消",
+        "en": "Cancelled by user",
+        "fr": "Annulé par l'utilisateur",
+        "es": "Cancelado por el usuario",
+    },
+    "err_code_connection_failed": {
+        "zh-CN": "无法连接设备",
+        "en": "Could not connect to the device",
+        "fr": "Impossible de se connecter à l'appareil",
+        "es": "No se pudo conectar al dispositivo",
+    },
+    "err_code_mtk_init_failed": {
+        "zh-CN": "MTKClient 启动失败",
+        "en": "MTKClient failed to start",
+        "fr": "Échec du démarrage de MTKClient",
+        "es": "MTKClient no pudo iniciarse",
+    },
+    "err_code_mtk_import_failed": {
+        "zh-CN": "无法加载 MTKClient",
+        "en": "MTKClient could not be loaded",
+        "fr": "Impossible de charger MTKClient",
+        "es": "No se pudo cargar MTKClient",
+    },
+    "err_code_sp_not_found": {
+        "zh-CN": "未找到 SP Flash Tool",
+        "en": "SP Flash Tool not found",
+        "fr": "SP Flash Tool introuvable",
+        "es": "No se encontró SP Flash Tool",
+    },
+    "err_code_no_scatter": {
+        "zh-CN": "刷机包中缺少 scatter 文件",
+        "en": "No scatter file in the package",
+        "fr": "Aucun fichier scatter dans le paquet",
+        "es": "El paquete no contiene archivo scatter",
+    },
+    "err_code_missing_images": {
+        "zh-CN": "刷机包中缺少固件镜像",
+        "en": "Firmware images missing from the package",
+        "fr": "Images firmware manquantes dans le paquet",
+        "es": "Faltan imágenes de firmware en el paquete",
+    },
+    "err_code_internal": {
+        "zh-CN": "内部错误",
+        "en": "Internal error",
+        "fr": "Erreur interne",
+        "es": "Error interno",
+    },
 }
 
 

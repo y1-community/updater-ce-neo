@@ -98,6 +98,29 @@ jobs:
         run: |
           python -c "from src import linux_sp_flash; linux_sp_flash.ensure_linux_sp_flash_tool()" || true
 
+      - name: Ensure bundled SP Flash Tool v5.1904 Linux payload
+        run: |
+          # The payload is tracked in git under tools/linux/ and ships with the
+          # checkout. Fetch from release assets only if it is somehow missing
+          # (the app also falls back to downloading flash_tool_linux.zip at
+          # first run when no payload is bundled).
+          if [ -f tools/linux/SP_Flash_Tool_v5.1904_Linux/flash_tool ]; then
+            chmod 0755 tools/linux/SP_Flash_Tool_v5.1904_Linux/flash_tool \
+                       tools/linux/SP_Flash_Tool_v5.1904_Linux/flash_tool.sh || true
+            echo "SP Flash Tool v5.1904 payload present from checkout"
+            exit 0
+          fi
+          mkdir -p tools/linux
+          url="https://github.com/y1-community/updater-ce-neo/releases/download/v3.0.0-assets/SP_Flash_Tool_v5.1904_Linux.zip"
+          if curl -fsSL -o /tmp/sp_flash_tool_linux.zip "$url"; then
+            unzip -q -o /tmp/sp_flash_tool_linux.zip -d tools/linux
+            chmod 0755 tools/linux/SP_Flash_Tool_v5.1904_Linux/flash_tool \
+                       tools/linux/SP_Flash_Tool_v5.1904_Linux/flash_tool.sh || true
+            echo "SP Flash Tool v5.1904 payload fetched from release assets"
+          else
+            echo "::warning::SP_Flash_Tool_v5.1904_Linux.zip unavailable upstream; AppImage will rely on runtime download"
+          fi
+
       - name: Run Smoke Tests (Headless)
         run: |
           QT_QPA_PLATFORM=offscreen python tests/smoke_test.py
@@ -110,6 +133,11 @@ jobs:
       - name: Verify AppImage Execution (Headless)
         run: |
           QT_QPA_PLATFORM=offscreen timeout 5 ./dist/InnioasisUpdater-x86_64.AppImage --appimage-extract-and-run || [ $? -eq 124 ]
+          if ./dist/InnioasisUpdater-x86_64.AppImage --appimage-extract-and-run test -x usr/bin/SP_Flash_Tool/flash_tool; then
+            echo "AppImage bundles the SP Flash Tool payload (offline-ready)"
+          else
+            echo "::warning::AppImage does not bundle SP Flash Tool; runtime download fallback applies"
+          fi
 
       - name: Upload AppImage Artifacts
         uses: actions/upload-artifact@v4

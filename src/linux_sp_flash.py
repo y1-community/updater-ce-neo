@@ -9,7 +9,6 @@ etc.) — with mtkclient as the automatic fallback when staging is impossible
 (unsupported arch, offline, or execution failure).
 """
 
-import grp
 import logging
 import os
 import platform
@@ -25,9 +24,15 @@ import requests
 from PySide6.QtCore import QThread, Signal
 
 from .config import GITHUB_API
-from .paths import COMPAT_DIR
+from .paths import COMPAT_DIR, INSTALL_DIR, REPO_ROOT
 
 logger = logging.getLogger(__name__)
+
+# `grp` is a Unix-only stdlib module; this module is imported unconditionally
+# by flash_service on every platform, so only import it where it exists
+# (check_user_permissions is Linux-only and already handles its absence).
+if sys.platform != "win32":
+    import grp
 
 FLASH_TOOL_LINUX_URL = (
     "https://github.com/y1-community/updater-ce-neo/releases/download/flash_tool/flash_tool_linux.zip"
@@ -88,10 +93,61 @@ def _app_cache_dir() -> Path:
     return base / "innioasis-updater"
 
 
-def stage_dir() -> Path:
+def _user_stage_dir() -> Path:
+    """Per-user staging directory for the downloaded flash_tool_linux.zip payload."""
     d = _app_cache_dir() / STAGE_SUBDIR
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def bundled_dir() -> Path | None:
+    """Return the SP Flash Tool directory shipped with the application, if any.
+
+    Checked in order: ``INSTALL_DIR / SP_Flash_Tool`` (next to the frozen
+    executable — inside an AppImage this is ``AppDir/usr/bin/SP_Flash_Tool``),
+    then the dev-checkout locations under the repository. Returns the first
+    directory containing the ``flash_tool`` binary, or None when no payload
+    was bundled (runtime download is the fallback).
+    """
+    candidates = [
+        INSTALL_DIR / "SP_Flash_Tool",
+        REPO_ROOT / "SP_Flash_Tool",
+        REPO_ROOT / "tools" / "SP_Flash_Tool",
+        REPO_ROOT / "tools" / "linux" / "SP_Flash_Tool_v5.1904_Linux",
+    ]
+    for cand in candidates:
+        try:
+            if (cand / FLASH_TOOL_LINUX_BIN).is_file():
+                return cand
+        except OSError:
+            continue
+    return None
+
+
+def _bundled_complete(bundled: Path) -> bool:
+    """Completeness of a bundled payload, minus libpng12.
+
+    Same file set as ``files_ready()`` except ``lib/libpng12.so.0``: modern
+    distros lack libpng12 and the app stages it at runtime, which cannot happen
+    inside the read-only AppImage squashfs — there it is staged into the
+    per-user cache and picked up via ``process_env()``.
+    """
+    missing = [rel for rel in missing_files(bundled) if rel != "lib/libpng12.so.0"]
+    return not missing
+
+
+def stage_dir() -> Path:
+    """Active SP Flash Tool directory on Linux.
+
+    Prefers the copy bundled with the application (complete payload next to
+    the frozen executable) so shipped builds work offline; otherwise the
+    per-user staging directory populated by ``ensure_linux_sp_flash_tool``
+    from the ``flash_tool_linux.zip`` download.
+    """
+    bundled = bundled_dir()
+    if bundled is not None and _bundled_complete(bundled):
+        return bundled
+    return _user_stage_dir()
 
 
 def zip_cache_path() -> Path:
@@ -357,6 +413,14 @@ def process_env(stage: Path) -> dict:
     """Environment for launching the Linux flash_tool (bundled Qt4 + plugins)."""
     env = os.environ.copy()
     lib_dirs = [str(stage), str(stage / "lib")]
+    # Compat libs staged into the per-user cache (e.g. libpng12.so.0 when the
+    # bundled payload lives on the read-only AppImage squashfs).
+    try:
+        cache_dir = _app_cache_dir()
+        if cache_dir.is_dir():
+            lib_dirs.append(str(cache_dir))
+    except Exception:
+        pass
     existing = env.get("LD_LIBRARY_PATH", "").strip()
     if existing:
         lib_dirs.append(existing)
@@ -1547,6 +1611,12 @@ def verify_linux_flashing_readiness(stage: Path = None) -> dict:
 def ensure_linux_sp_flash_tool(progress_cb=None, force_download=False) -> tuple:
     """Ensure the Linux SP Flash Tool package is staged, configured, and verified.
 
+    A complete payload bundled with the application (AppImage / PyInstaller
+    ``INSTALL_DIR / SP_Flash_Tool``) is authoritative: it is used as-is and the
+    network is never touched — ``force_download`` only applies when nothing is
+    bundled. Otherwise the package is downloaded from the GitHub releases
+    (with the community fallback URL) into the per-user staging directory.
+
     Returns ``(ok, message)``.
     """
     if os.name == "nt" or platform.system() != "Linux":
@@ -1554,7 +1624,23 @@ def ensure_linux_sp_flash_tool(progress_cb=None, force_download=False) -> tuple:
     if not arch_supported():
         return False, unsupported_reason()
 
-    stage = stage_dir()
+    # Bundled payload takes precedence over the runtime download. libpng12 is
+    # the one file that cannot ship inside a read-only AppImage squashfs —
+    # stage it into a writable location (the bundle itself on writable
+    # installs, the per-user cache otherwise) for process_env() to pick up.
+    bundled = bundled_dir()
+    if bundled is not None and _bundled_complete(bundled):
+        try:
+            make_executable(bundled)
+            if not (bundled / "lib" / "libpng12.so.0").is_file():
+                stage_libpng12(bundled)
+                if not (bundled / "lib" / "libpng12.so.0").is_file():
+                    stage_libpng12(_app_cache_dir())
+        except Exception:
+            pass
+        return True, f"SP Flash Tool bundled at {bundled}"
+
+    stage = _user_stage_dir()
     zip_path = zip_cache_path()
     try:
         # Step 1: Check if package exists or needs download

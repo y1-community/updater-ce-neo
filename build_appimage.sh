@@ -128,6 +128,28 @@ if [ ! -d "$DIST_DIR/$APP_NAME" ] || [ ! -f "$DIST_DIR/$APP_NAME/$APP_NAME" ]; t
     exit 1
 fi
 
+# --- Step 1b: Stage the bundled SP Flash Tool Linux payload --------------------
+# The PyInstaller spec copies tools/linux/SP_Flash_Tool_v5.1904_Linux into
+# dist/ on Linux builds; this covers the --no-pyinstaller path and restores
+# the executable bits that zip extraction may have dropped. The payload is
+# git-ignored (MediaTek-proprietary): CI fetches it from the release assets
+# and local builds place it under tools/linux/ manually.
+SP_TOOL_SRC="tools/linux/SP_Flash_Tool_v5.1904_Linux"
+SP_TOOL_DIST="$DIST_DIR/$APP_NAME/SP_Flash_Tool"
+if [ ! -f "$SP_TOOL_DIST/flash_tool" ] && [ -f "$SP_TOOL_SRC/flash_tool" ]; then
+    echo ">>> Staging bundled SP Flash Tool payload: $SP_TOOL_SRC -> $SP_TOOL_DIST"
+    rm -rf "$SP_TOOL_DIST"
+    cp -r "$SP_TOOL_SRC" "$SP_TOOL_DIST"
+fi
+if [ -f "$SP_TOOL_DIST/flash_tool" ]; then
+    chmod 0755 "$SP_TOOL_DIST/flash_tool" "$SP_TOOL_DIST/flash_tool.sh" 2>/dev/null || true
+    find "$SP_TOOL_DIST" -name "*.so*" -exec chmod a+r {} + 2>/dev/null || true
+    echo ">>> SP Flash Tool payload bundled at $SP_TOOL_DIST"
+else
+    echo ">>> WARNING: no SP Flash Tool payload staged; the app will download"
+    echo "    flash_tool_linux.zip at first run (requires internet)."
+fi
+
 # --- Step 2: Prepare AppDir structure -----------------------------------------
 echo ">>> Assembling AppDir structure in $APPDIR..."
 rm -rf "$APPDIR"
@@ -138,6 +160,13 @@ mkdir -p "$APPDIR/usr/share/icons/hicolor/256x256/apps"
 
 # Copy binary payload & _internal
 cp -r "$DIST_DIR/$APP_NAME"/* "$APPDIR/usr/bin/"
+
+# Restore executable bits on the bundled SP Flash Tool payload (squashfs
+# preserves the modes set here; the AppImage must be able to exec flash_tool).
+if [ -d "$APPDIR/usr/bin/SP_Flash_Tool" ]; then
+    chmod 0755 "$APPDIR/usr/bin/SP_Flash_Tool/flash_tool" \
+               "$APPDIR/usr/bin/SP_Flash_Tool/flash_tool.sh" 2>/dev/null || true
+fi
 
 # Copy / generate desktop integration
 DESKTOP_SRC="assets/innioasis-updater.desktop"
