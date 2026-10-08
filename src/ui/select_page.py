@@ -262,28 +262,8 @@ class SelectPackagePage(QWidget):
 
         layout.addWidget(self._filter_group)
 
-        # ── Firmware Options / Filters Bar ───────────────────────────────
-        self._options_bar = QWidget()
-        opt_layout = QHBoxLayout(self._options_bar)
-        opt_layout.setContentsMargins(6, 0, 6, 0)
-        opt_layout.setSpacing(16)
-
-        self._show_old_rockbox_cb = QCheckBox(tr("sel_filter_old_rockbox"))
-        self._show_old_rockbox_cb.setToolTip(tr("sel_old_rockbox_warn_body"))
-        self._show_old_rockbox_cb.clicked.connect(self._on_old_rockbox_clicked)
-        opt_layout.addWidget(self._show_old_rockbox_cb)
-
-        self._show_nightly_cb = QCheckBox(tr("sel_filter_nightly"))
-        self._show_nightly_cb.toggled.connect(lambda _c: self._refresh_releases())
-        opt_layout.addWidget(self._show_nightly_cb)
-
-        self._show_240p_cb = QCheckBox(tr("sel_filter_240p"))
-        self._show_240p_cb.toggled.connect(lambda _c: self._refresh_releases())
-        opt_layout.addWidget(self._show_240p_cb)
-
-        opt_layout.addStretch(1)
-        layout.addWidget(self._options_bar)
-
+        # Rockbox listing filters (old builds / nightly / 240p) live on the
+        # Settings screen; they are applied here only for Y1 Rockbox browsing.
         self._online_banner = Banner()
         self._online_banner.setVisible(False)
         layout.addWidget(self._online_banner)
@@ -512,13 +492,6 @@ class SelectPackagePage(QWidget):
         self._type_label.setText(f"{tr('sel_type')}:")
         self._software_label.setText(f"{tr('sel_software')}:")
         self._refresh_btn.setText(tr("sel_refresh"))
-        if hasattr(self, "_show_old_rockbox_cb"):
-            self._show_old_rockbox_cb.setText(tr("sel_filter_old_rockbox"))
-            self._show_old_rockbox_cb.setToolTip(tr("sel_old_rockbox_warn_body"))
-        if hasattr(self, "_show_nightly_cb"):
-            self._show_nightly_cb.setText(tr("sel_filter_nightly"))
-        if hasattr(self, "_show_240p_cb"):
-            self._show_240p_cb.setText(tr("sel_filter_240p"))
         self._install_btn.setText(tr("sel_install"))
         if is_generic_mtk():
             self._hint.setText(tr("sel_only_local_generic"))
@@ -630,40 +603,34 @@ class SelectPackagePage(QWidget):
         if hasattr(self, "_install_btn"):
             self._install_btn.setToolTip(tr("sel_install_tooltip").format(lbl=lbl))
 
-    def _on_old_rockbox_clicked(self, checked: bool):
-        if checked:
-            reply = QMessageBox.warning(
-                self,
-                tr("sel_old_rockbox_warn_title"),
-                tr("sel_old_rockbox_warn_body"),
-                QMessageBox.Yes | QMessageBox.Cancel,
-                QMessageBox.Cancel,
-            )
-            if reply != QMessageBox.Yes:
-                self._show_old_rockbox_cb.setChecked(False)
-                return
-        self._refresh_releases()
+    def is_rockbox_y1_browsing(self) -> bool:
+        """True when the Rockbox package for Y1 is the one being browsed."""
+        software = (self.current_software() or self._software_combo.currentText()).lower()
+        return self.current_model().upper() == "Y1" and "rockbox" in software
 
-    def _update_filter_checkboxes_visibility(self):
-        if not hasattr(self, "_show_old_rockbox_cb"):
-            return
-        model = self.current_model().upper()
-        software = self._software_combo.currentText().lower()
-        is_rockbox = "rockbox" in software
-        is_y1 = model == "Y1"
-        self._show_old_rockbox_cb.setVisible(is_rockbox and is_y1)
-        self._show_240p_cb.setVisible(is_rockbox)
-        if not (is_rockbox and is_y1) and self._show_old_rockbox_cb.isChecked():
-            self._show_old_rockbox_cb.setChecked(False)
-        if not is_rockbox and self._show_240p_cb.isChecked():
-            self._show_240p_cb.setChecked(False)
+    def release_listing_filters(self) -> tuple:
+        """``(show_old, show_nightly, prefer_240p)`` for the current browse.
+
+        The Settings toggles only take effect for Rockbox releases on Y1.
+        """
+        if not self.is_rockbox_y1_browsing():
+            return (False, False, False)
+        filters = device_tracking.rockbox_release_filters()
+        return (
+            bool(filters.old_rockbox),
+            bool(filters.nightly),
+            bool(filters.rockbox_240p),
+        )
+
+    def refresh_release_filters(self):
+        """Re-list releases after the Settings filters changed."""
+        self._refresh_releases()
 
     def _on_type_changed(self, index):
         self._selected_type = self._type_combo.currentData()
         self._refresh_releases()
 
     def _on_software_changed(self):
-        self._update_filter_checkboxes_visibility()
         self._refresh_releases()
 
     def _refresh_releases(self, force_refresh=False):
@@ -673,7 +640,6 @@ class SelectPackagePage(QWidget):
         if package is None:
             self._set_online_banner("sel_no_release")
             return
-        self._update_filter_checkboxes_visibility()
         # Stop any in-flight worker before replacing; overwriting a running
         # QThread causes "Destroyed while thread is still running" / SIGABRT.
         old = self._releases_worker
@@ -681,17 +647,7 @@ class SelectPackagePage(QWidget):
             old.requestInterruption()
             old.wait(800)
         self._set_online_banner("sel_loading")
-        show_old = (
-            self._show_old_rockbox_cb.isChecked()
-            if hasattr(self, "_show_old_rockbox_cb") and self._show_old_rockbox_cb.isVisible()
-            else False
-        )
-        show_nightly = self._show_nightly_cb.isChecked() if hasattr(self, "_show_nightly_cb") else False
-        prefer_240p = (
-            self._show_240p_cb.isChecked()
-            if hasattr(self, "_show_240p_cb") and self._show_240p_cb.isVisible()
-            else False
-        )
+        show_old, show_nightly, prefer_240p = self.release_listing_filters()
         self._releases_worker = ReleasesWorker(
             self.client,
             package,
@@ -740,11 +696,7 @@ class SelectPackagePage(QWidget):
             return
         self._release_list.clear()
         releases = sorted(releases or [], key=catalog.release_sort_key, reverse=True)
-        prefer_240p = (
-            hasattr(self, "_show_240p_cb")
-            and self._show_240p_cb.isVisible()
-            and self._show_240p_cb.isChecked()
-        )
+        prefer_240p = self.release_listing_filters()[2]
         for rel in releases:
             label = catalog.format_release_display_label(rel, prefer_240p=prefer_240p)
             item = QListWidgetItem(label)

@@ -6,6 +6,7 @@ to check for newer releases relative to currently installed versions and
 manages preferences for device reminders and donation UI visibility.
 """
 
+from dataclasses import dataclass
 from datetime import datetime
 import logging
 from typing import Optional
@@ -26,6 +27,7 @@ _KEY_LAST_NOTIFIED_PREFIX = "last_notified_tag_"
 _KEY_DONATION_UI_DISABLED = "donation_ui_disabled"
 _KEY_DONATION_INSTALL_PROMPT_DISABLED = "donation_install_prompt_disabled"
 _KEY_HIDDEN_MTK_OPTIONS = "hidden_mtk_options"
+_KEY_TERMINAL_INSTALL = "terminal_install"
 
 
 def _get_settings(settings: Optional[QSettings] = None) -> QSettings:
@@ -157,6 +159,99 @@ def set_hidden_mtk_options(enabled: bool, settings: Optional[QSettings] = None) 
     s = _get_settings(settings)
     s.setValue(_KEY_HIDDEN_MTK_OPTIONS, bool(enabled))
     s.setValue(f"{_GROUP_PREFS}/{_KEY_HIDDEN_MTK_OPTIONS}", bool(enabled))
+
+
+# ---------------------------------------------------------------------------
+# Rockbox Release Listing Filters
+# ---------------------------------------------------------------------------
+# Set on the Settings screen; applied when browsing Rockbox releases for Y1.
+# 240p builds (rom*_240p.zip) are not compatible with Y1 units on Innioasis OS
+# 3.0.7 or older, so selecting them also selects the older-builds flag.
+
+_KEY_SHOW_OLD_ROCKBOX = "show_old_rockbox_builds"
+_KEY_SHOW_NIGHTLY = "show_nightly_dev_releases"
+_KEY_SHOW_240P_ROCKBOX = "show_240p_rockbox"
+
+FILTER_OLD_ROCKBOX = "old_rockbox"
+FILTER_NIGHTLY = "nightly"
+FILTER_240P = "rockbox_240p"
+FILTER_NAMES = (FILTER_OLD_ROCKBOX, FILTER_NIGHTLY, FILTER_240P)
+
+
+@dataclass
+class RockboxReleaseFilters:
+    """The three Rockbox release-listing filters."""
+
+    old_rockbox: bool = False
+    nightly: bool = False
+    rockbox_240p: bool = False
+
+    def as_dict(self) -> dict:
+        return {
+            FILTER_OLD_ROCKBOX: bool(self.old_rockbox),
+            FILTER_NIGHTLY: bool(self.nightly),
+            FILTER_240P: bool(self.rockbox_240p),
+        }
+
+
+def rockbox_release_filters(settings: Optional[QSettings] = None) -> RockboxReleaseFilters:
+    """Current Rockbox listing filters, with the 240p/older-builds invariant applied."""
+    s = _get_settings(settings)
+    show_240p = s.value(_KEY_SHOW_240P_ROCKBOX, False, type=bool)
+    old = s.value(_KEY_SHOW_OLD_ROCKBOX, False, type=bool)
+    # 240p builds need the older-builds gate; never report 240p on its own.
+    if show_240p:
+        old = True
+    return RockboxReleaseFilters(
+        old_rockbox=bool(old),
+        nightly=s.value(_KEY_SHOW_NIGHTLY, False, type=bool),
+        rockbox_240p=bool(show_240p),
+    )
+
+
+def set_rockbox_release_filter(
+    name: str, enabled: bool, settings: Optional[QSettings] = None
+) -> RockboxReleaseFilters:
+    """Persist one listing filter and return the resulting set.
+
+    Selecting 240p selects the older-builds flag with it, and clearing the
+    older-builds flag clears 240p, so the pair can never contradict.
+    """
+    if name not in FILTER_NAMES:
+        raise ValueError(f"Unknown Rockbox release filter: {name!r}")
+    s = _get_settings(settings)
+    if name == FILTER_OLD_ROCKBOX:
+        s.setValue(_KEY_SHOW_OLD_ROCKBOX, bool(enabled))
+        if not enabled:
+            s.setValue(_KEY_SHOW_240P_ROCKBOX, False)
+    elif name == FILTER_240P:
+        s.setValue(_KEY_SHOW_240P_ROCKBOX, bool(enabled))
+        if enabled:
+            s.setValue(_KEY_SHOW_OLD_ROCKBOX, True)
+    else:
+        s.setValue(_KEY_SHOW_NIGHTLY, bool(enabled))
+    return rockbox_release_filters(s)
+
+
+def terminal_install_enabled(settings: Optional[QSettings] = None) -> bool:
+    """True when installs are handed to the user's own terminal window.
+
+    The minimal alternative to the guided flow: the app stays on the Select
+    Software screen and the console command is run elsewhere, so SP Flash Tool
+    and MTKClient can be watched and diagnosed directly.
+    """
+    s = _get_settings(settings)
+    val = s.value(_KEY_TERMINAL_INSTALL, None)
+    if val is not None:
+        return s.value(_KEY_TERMINAL_INSTALL, False, type=bool)
+    return s.value(f"{_GROUP_PREFS}/{_KEY_TERMINAL_INSTALL}", False, type=bool)
+
+
+def set_terminal_install_enabled(enabled: bool, settings: Optional[QSettings] = None) -> None:
+    """Remember whether installs go to a terminal window instead of the wizard."""
+    s = _get_settings(settings)
+    s.setValue(_KEY_TERMINAL_INSTALL, bool(enabled))
+    s.setValue(f"{_GROUP_PREFS}/{_KEY_TERMINAL_INSTALL}", bool(enabled))
 
 
 def is_donation_ui_disabled(settings: Optional[QSettings] = None) -> bool:

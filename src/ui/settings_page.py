@@ -28,7 +28,16 @@ from ..i18n import tr
 from .dark import page_top_margin
 from .widgets import Card
 
+
+def terminal_install_desc() -> str:
+    """Terminal install description, worded for this platform's console app."""
+    key = "settings_terminal_desc_windows" if paths.IS_WINDOWS else "settings_terminal_desc"
+    return tr(key)
+
 logger = logging.getLogger(__name__)
+
+# Where Windows users get the MediaTek USB driver before their first flash.
+MEDIATEK_DRIVERS_URL = "https://innioasis.app/guide.html"
 
 # Install-method identifiers are owned by flash_service ("mtk_mac" is the
 # hidden simulated-macOS flow: MTKClient as the only backend with mac-centric
@@ -43,10 +52,14 @@ class SettingsPage(QWidget):
     flash_method_changed = Signal(str)
     simulated_mac_requested = Signal()
     offline_mode_changed = Signal(bool)
+    release_filters_changed = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._advanced_revealed = False
+        # Guards the filter checkboxes while they are synced from settings, so
+        # syncing never re-enters a handler or reopens a confirmation dialog.
+        self._filters_loading = False
         # model id -> install-status QLabel, filled in by _build_ui.
         self._install_status_labels = {}
         self._build_ui()
@@ -104,6 +117,25 @@ class SettingsPage(QWidget):
         self._method_card.set_layout(method_layout)
         layout.addWidget(self._method_card)
 
+        # --- Card 2: Installation mode (terminal installs) ---
+        self._terminal_card = Card("settings_terminal_group")
+        term_layout = QVBoxLayout()
+        term_layout.setSpacing(8)
+
+        self._cb_terminal_install = QCheckBox(tr("settings_terminal_install"))
+        self._cb_terminal_install.setToolTip(terminal_install_desc())
+        self._cb_terminal_install.toggled.connect(self._on_terminal_install_toggled)
+        term_layout.addWidget(self._cb_terminal_install)
+
+        self._terminal_desc = QLabel(terminal_install_desc())
+        self._terminal_desc.setWordWrap(True)
+        self._terminal_desc.setProperty("cssClass", "dimmed")
+        self._terminal_desc.setContentsMargins(24, 0, 0, 0)
+        term_layout.addWidget(self._terminal_desc)
+
+        self._terminal_card.set_layout(term_layout)
+        layout.addWidget(self._terminal_card)
+
         # --- Card 2: Firmware Release Reminders ---
         self._reminders_card = Card("settings_reminders_group")
         rem_layout = QVBoxLayout()
@@ -115,6 +147,35 @@ class SettingsPage(QWidget):
 
         self._reminders_card.set_layout(rem_layout)
         layout.addWidget(self._reminders_card)
+
+        # --- Card 3: Rockbox release filters (always visible) ---
+        # These are applied by the online browser only when Rockbox releases
+        # for Y1 are being listed.
+        self._rockbox_card = Card("settings_rockbox_group")
+        rock_layout = QVBoxLayout()
+        rock_layout.setSpacing(8)
+
+        self._rockbox_desc = QLabel(tr("settings_rockbox_desc"))
+        self._rockbox_desc.setWordWrap(True)
+        self._rockbox_desc.setProperty("cssClass", "subtitle")
+        rock_layout.addWidget(self._rockbox_desc)
+
+        self._cb_old_rockbox = QCheckBox(tr("settings_filter_old_rockbox"))
+        self._cb_old_rockbox.setToolTip(tr("settings_old_rockbox_warn_body"))
+        self._cb_old_rockbox.toggled.connect(self._on_old_rockbox_toggled)
+        rock_layout.addWidget(self._cb_old_rockbox)
+
+        self._cb_nightly = QCheckBox(tr("settings_filter_nightly"))
+        self._cb_nightly.toggled.connect(self._on_nightly_toggled)
+        rock_layout.addWidget(self._cb_nightly)
+
+        self._cb_240p = QCheckBox(tr("settings_filter_240p"))
+        self._cb_240p.setToolTip(tr("settings_240p_tip"))
+        self._cb_240p.toggled.connect(self._on_240p_toggled)
+        rock_layout.addWidget(self._cb_240p)
+
+        self._rockbox_card.set_layout(rock_layout)
+        layout.addWidget(self._rockbox_card)
 
         # --- Card 3: Community Acknowledgements & Donations ---
         self._donations_card = Card("settings_donations_group")
@@ -148,31 +209,15 @@ class SettingsPage(QWidget):
         self._donations_card.set_layout(don_layout)
         layout.addWidget(self._donations_card)
 
-        # --- Card 4: SP Flash Tool Diagnostics & Hardware ---
-        self._checker_card = Card("settings_checker_group")
-        chk_layout = QVBoxLayout()
-        chk_layout.setSpacing(12)
-
-        self._checker_desc = QLabel(tr("settings_checker_desc"))
-        self._checker_desc.setWordWrap(True)
-        self._checker_desc.setProperty("cssClass", "subtitle")
-        chk_layout.addWidget(self._checker_desc)
-
-        chk_btn_row = QHBoxLayout()
-        self._btn_run_checker = QPushButton(tr("system_checker_run_btn"))
-        self._btn_run_checker.setProperty("cssClass", "primary")
-        self._btn_run_checker.clicked.connect(self._on_run_checker)
-        chk_btn_row.addWidget(self._btn_run_checker)
-
-        self._btn_launch_sp = QPushButton(tr("system_checker_launch_gui_btn"))
-        self._btn_launch_sp.setProperty("cssClass", "ghost")
-        self._btn_launch_sp.clicked.connect(self._on_launch_sp)
-        chk_btn_row.addWidget(self._btn_launch_sp)
-        chk_btn_row.addStretch()
-        chk_layout.addLayout(chk_btn_row)
-
-        self._checker_card.set_layout(chk_layout)
-        layout.addWidget(self._checker_card)
+        # --- Card 4: Platform preparation ---
+        # Linux gets the SP Flash Tool system checker (udev rules, kernel
+        # modules); Windows instead needs the MediaTek USB driver installed
+        # before the first flash.
+        if paths.IS_WINDOWS:
+            self._prep_card = self._build_driver_card()
+        else:
+            self._prep_card = self._build_checker_card()
+        layout.addWidget(self._prep_card)
 
         # --- Card 5: Generic MediaTek Offline Mode ---
         self._offline_mode_card = Card("settings_offline_mode_group")
@@ -196,11 +241,136 @@ class SettingsPage(QWidget):
         # SP Flash Tool is not supported on macOS (MTKClient only).
         # Hide backend selection and diagnostics cards on macOS.
         self._method_card.setVisible(not paths.IS_MAC)
-        self._checker_card.setVisible(not paths.IS_MAC)
+        self._prep_card.setVisible(not paths.IS_MAC)
 
         layout.addStretch()
         scroll.setWidget(container)
         root_layout.addWidget(scroll, 1)
+
+    # ------------------------------------------------------------------
+    # Rockbox release filters
+    # ------------------------------------------------------------------
+    def _confirm_old_rockbox(self) -> bool:
+        """Ask before unlocking pre-0.5 Rockbox builds (they brick newer Y1s)."""
+        reply = QMessageBox.warning(
+            self,
+            tr("settings_old_rockbox_warn_title"),
+            tr("settings_old_rockbox_warn_body"),
+            QMessageBox.Yes | QMessageBox.Cancel,
+            QMessageBox.Cancel,
+        )
+        return reply == QMessageBox.Yes
+
+    def _apply_filter_flags(self, filters=None):
+        """Sync the checkboxes with the persisted Rockbox filters."""
+        if filters is None:
+            filters = device_tracking.rockbox_release_filters()
+        flags = filters.as_dict() if hasattr(filters, "as_dict") else dict(filters)
+        self._filters_loading = True
+        try:
+            self._cb_old_rockbox.setChecked(flags[device_tracking.FILTER_OLD_ROCKBOX])
+            self._cb_nightly.setChecked(flags[device_tracking.FILTER_NIGHTLY])
+            self._cb_240p.setChecked(flags[device_tracking.FILTER_240P])
+        finally:
+            self._filters_loading = False
+
+    def release_filters(self) -> dict:
+        """Current Rockbox release filters (read from settings)."""
+        return device_tracking.rockbox_release_filters().as_dict()
+
+    def _on_old_rockbox_toggled(self, checked: bool):
+        if self._filters_loading:
+            return
+        if checked and not self._confirm_old_rockbox():
+            self._apply_filter_flags()
+            return
+        filters = device_tracking.set_rockbox_release_filter(
+            device_tracking.FILTER_OLD_ROCKBOX, bool(checked)
+        )
+        self._apply_filter_flags(filters)
+        self.release_filters_changed.emit()
+
+    def _on_nightly_toggled(self, checked: bool):
+        if self._filters_loading:
+            return
+        filters = device_tracking.set_rockbox_release_filter(
+            device_tracking.FILTER_NIGHTLY, bool(checked)
+        )
+        self._apply_filter_flags(filters)
+        self.release_filters_changed.emit()
+
+    def _on_240p_toggled(self, checked: bool):
+        if self._filters_loading:
+            return
+        if checked and not self._cb_old_rockbox.isChecked():
+            # 240p builds cannot run on Y1 units older than OS 3.0.7, so the
+            # older-builds option comes with them — confirmation included.
+            self._cb_old_rockbox.setChecked(True)
+            if not self._cb_old_rockbox.isChecked():
+                self._apply_filter_flags()
+                return
+        filters = device_tracking.set_rockbox_release_filter(
+            device_tracking.FILTER_240P, bool(checked)
+        )
+        self._apply_filter_flags(filters)
+        self.release_filters_changed.emit()
+
+    # ------------------------------------------------------------------
+    # Platform preparation cards
+    # ------------------------------------------------------------------
+    def _build_checker_card(self) -> Card:
+        """Linux SP Flash Tool preparation: system checker and GUI launch."""
+        card = Card("settings_checker_group")
+        layout = QVBoxLayout()
+        layout.setSpacing(12)
+
+        self._checker_desc = QLabel(tr("settings_checker_desc"))
+        self._checker_desc.setWordWrap(True)
+        self._checker_desc.setProperty("cssClass", "subtitle")
+        layout.addWidget(self._checker_desc)
+
+        btn_row = QHBoxLayout()
+        self._btn_run_checker = QPushButton(tr("system_checker_run_btn"))
+        self._btn_run_checker.setProperty("cssClass", "primary")
+        self._btn_run_checker.clicked.connect(self._on_run_checker)
+        btn_row.addWidget(self._btn_run_checker)
+
+        self._btn_launch_sp = QPushButton(tr("system_checker_launch_gui_btn"))
+        self._btn_launch_sp.setProperty("cssClass", "ghost")
+        self._btn_launch_sp.clicked.connect(self._on_launch_sp)
+        btn_row.addWidget(self._btn_launch_sp)
+        btn_row.addStretch()
+        layout.addLayout(btn_row)
+
+        card.set_layout(layout)
+        return card
+
+    def _build_driver_card(self) -> Card:
+        """Windows preparation: install the MediaTek USB driver, then reboot."""
+        card = Card("settings_driver_group")
+        layout = QVBoxLayout()
+        layout.setSpacing(12)
+
+        self._driver_desc = QLabel(tr("settings_driver_desc"))
+        self._driver_desc.setWordWrap(True)
+        self._driver_desc.setProperty("cssClass", "subtitle")
+        layout.addWidget(self._driver_desc)
+
+        btn_row = QHBoxLayout()
+        self._btn_download_drivers = QPushButton(tr("settings_download_drivers_btn"))
+        self._btn_download_drivers.setProperty("cssClass", "primary")
+        self._btn_download_drivers.clicked.connect(self._on_download_drivers)
+        btn_row.addWidget(self._btn_download_drivers)
+        btn_row.addStretch()
+        layout.addLayout(btn_row)
+
+        card.set_layout(layout)
+        return card
+
+    def _on_download_drivers(self):
+        from ..browser import open_browser
+
+        open_browser(MEDIATEK_DRIVERS_URL)
 
     # ------------------------------------------------------------------
     # Install method
@@ -281,12 +451,15 @@ class SettingsPage(QWidget):
 
     def _update_method_note(self):
         method = self.current_method()
-        if method == METHOD_SP:
-            self._method_note.setText(tr("flash_method_note_sp"))
-        elif method == METHOD_MTK_MAC:
-            self._method_note.setText(tr("flash_method_note_mtk_mac"))
+        if method == METHOD_MTK_MAC:
+            note = tr("flash_method_note_mtk_mac")
+        elif method == METHOD_SP:
+            note = tr("flash_method_note_sp")
         else:
-            self._method_note.setText(tr("flash_method_note_mtk"))
+            # MTKClient needs no sales pitch; the prep card covers drivers.
+            note = ""
+        self._method_note.setText(note)
+        self._method_note.setVisible(bool(note))
 
     # ------------------------------------------------------------------
     # Release reminders
@@ -322,7 +495,7 @@ class SettingsPage(QWidget):
     def refresh_settings(self):
         """Reload and update all controls to reflect current settings."""
         self._method_card.setVisible(not paths.IS_MAC)
-        self._checker_card.setVisible(not paths.IS_MAC)
+        self._prep_card.setVisible(not paths.IS_MAC)
 
         # Install method selector
         self.set_method(self._persisted_method())
@@ -346,6 +519,16 @@ class SettingsPage(QWidget):
         )
         self._cb_skip_install_donations.blockSignals(False)
 
+        # Rockbox release filters
+        self._apply_filter_flags()
+
+        # Terminal install mode
+        self._cb_terminal_install.blockSignals(True)
+        self._cb_terminal_install.setChecked(
+            device_tracking.terminal_install_enabled()
+        )
+        self._cb_terminal_install.blockSignals(False)
+
         # Offline / Generic mode toggle
         self._cb_offline_mode.blockSignals(True)
         from ..config import is_generic_mtk
@@ -362,6 +545,9 @@ class SettingsPage(QWidget):
         config.IS_OFFLINE_MODE = checked
         config.IS_GENERIC_MTK_MODE = checked
         self.offline_mode_changed.emit(checked)
+
+    def _on_terminal_install_toggled(self, checked: bool):
+        device_tracking.set_terminal_install_enabled(bool(checked))
 
     def _on_hide_donations_toggled(self, checked: bool):
         device_tracking.set_donation_ui_disabled(checked)
@@ -390,15 +576,30 @@ class SettingsPage(QWidget):
         self._method_desc.setText(tr("settings_method_desc"))
         self._method_label.setText(tr("flash_method"))
         self._reload_method_options()
+        self._terminal_card.retranslate()
+        self._cb_terminal_install.setText(tr("settings_terminal_install"))
+        self._cb_terminal_install.setToolTip(terminal_install_desc())
+        self._terminal_desc.setText(terminal_install_desc())
         self._reminders_card.retranslate()
         self._cb_reminders.setText(tr("settings_reminders_enable"))
+        self._rockbox_card.retranslate()
+        self._rockbox_desc.setText(tr("settings_rockbox_desc"))
+        self._cb_old_rockbox.setText(tr("settings_filter_old_rockbox"))
+        self._cb_old_rockbox.setToolTip(tr("settings_old_rockbox_warn_body"))
+        self._cb_nightly.setText(tr("settings_filter_nightly"))
+        self._cb_240p.setText(tr("settings_filter_240p"))
+        self._cb_240p.setToolTip(tr("settings_240p_tip"))
         self._donations_card.retranslate()
         self._cb_hide_donations.setText(tr("settings_hide_donations"))
         self._cb_skip_install_donations.setText(tr("settings_skip_install_donations"))
-        self._checker_card.retranslate()
-        self._checker_desc.setText(tr("settings_checker_desc"))
-        self._btn_run_checker.setText(tr("system_checker_run_btn"))
-        self._btn_launch_sp.setText(tr("system_checker_launch_gui_btn"))
+        self._prep_card.retranslate()
+        if hasattr(self, "_checker_desc"):
+            self._checker_desc.setText(tr("settings_checker_desc"))
+            self._btn_run_checker.setText(tr("system_checker_run_btn"))
+            self._btn_launch_sp.setText(tr("system_checker_launch_gui_btn"))
+        if hasattr(self, "_driver_desc"):
+            self._driver_desc.setText(tr("settings_driver_desc"))
+            self._btn_download_drivers.setText(tr("settings_download_drivers_btn"))
         self._offline_mode_card.retranslate()
         self._cb_offline_mode.setText(tr("settings_offline_mode"))
         self._offline_mode_desc.setText(tr("settings_offline_mode_desc"))

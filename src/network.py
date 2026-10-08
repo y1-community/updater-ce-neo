@@ -118,6 +118,7 @@ class ConnectivityMonitor(QObject):
         self._interval_ms = interval_ms
         self._is_online: Optional[bool] = None
         self._worker: Optional[ConnectivityCheckWorker] = None
+        self._timeout = 2.0
         self._timer = QTimer(self)
         self._timer.timeout.connect(self.check_now)
 
@@ -140,12 +141,30 @@ class ConnectivityMonitor(QObject):
             self._worker.wait(3000)
 
     def check_now(self):
-        if self._worker and self._worker.isRunning():
+        """Start a probe unless one is already in flight.
+
+        The finished thread is released by ``_on_worker_finished`` before Qt
+        deletes it: letting ``finished`` drop straight into ``deleteLater`` left
+        ``self._worker`` pointing at a dead C++ object, so every later tick
+        raised ``RuntimeError: Internal C++ object ... already deleted`` (and the
+        monitor never probed again).
+        """
+        worker = self._worker
+        if worker is not None and worker.isRunning():
             return
-        self._worker = ConnectivityCheckWorker(timeout=2.0)
-        self._worker.result.connect(self._on_check_completed)
-        self._worker.finished.connect(self._worker.deleteLater)
-        self._worker.start()
+        worker = ConnectivityCheckWorker(timeout=self._timeout)
+        self._worker = worker
+        worker.result.connect(self._on_check_completed)
+        worker.finished.connect(self._on_worker_finished)
+        worker.start()
+
+    def _on_worker_finished(self):
+        """Forget the finished probe thread, then let Qt delete it."""
+        worker = self.sender()
+        if worker is self._worker:
+            self._worker = None
+        if worker is not None:
+            worker.deleteLater()
 
     def _on_check_completed(self, online: bool):
         prev = self._is_online

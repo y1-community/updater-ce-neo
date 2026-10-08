@@ -693,19 +693,26 @@ QToolTip {{
 # any extra inset is pure wasted space.
 MACOS_TRAFFIC_LIGHT_CLEARANCE = 12
 NATIVE_TITLEBAR_MARGIN = 6
+# A plain boundary under the traffic lights still reads as a gap: the first
+# sidebar entry is pulled back up into that band so it lines up with the window
+# chrome, leaving the button's own padding as the only breathing room.
+MACOS_SIDEBAR_TITLEBAR_TRIM = 12
 # Page content sits inside the client area regardless of platform.
 PAGE_TOP_MARGIN = 8
 
 
 def content_top_margin() -> int:
-    """Inset for the sidebar so its first row sits just below the title bar."""
+    """Inset for the sidebar so its first row lines up with the title bar."""
     if not IS_MACOS:
         return NATIVE_TITLEBAR_MARGIN
     try:
         from .glass import is_glass_supported
 
-        # Only an extended content view puts the traffic lights over the app.
-        return MACOS_TRAFFIC_LIGHT_CLEARANCE if is_glass_supported() else NATIVE_TITLEBAR_MARGIN
+        # Only an extended content view puts the traffic lights over the app;
+        # there the entry rises into the chrome band rather than sitting under it.
+        if is_glass_supported():
+            return max(0, MACOS_TRAFFIC_LIGHT_CLEARANCE - MACOS_SIDEBAR_TITLEBAR_TRIM)
+        return NATIVE_TITLEBAR_MARGIN
     except Exception:
         return NATIVE_TITLEBAR_MARGIN
 

@@ -286,14 +286,15 @@ class FlashPage(QWidget):
         return self._method
 
     def _update_method_note(self):
-        if paths.IS_MAC or self._method == METHOD_MTK:
-            self._method_note.setText(tr("flash_method_note_mtk"))
-        elif self._method == METHOD_SP:
-            self._method_note.setText(tr("flash_method_note_sp"))
+        if self._method == METHOD_SP:
+            note = tr("flash_method_note_sp")
         elif self._method == METHOD_MTK_MAC:
-            self._method_note.setText(tr("flash_method_note_mtk_mac"))
+            note = tr("flash_method_note_mtk_mac")
         else:
-            self._method_note.setText(tr("flash_method_note_mtk"))
+            # MTKClient — the only backend on macOS — needs no blurb here.
+            note = ""
+        self._method_note.setText(note)
+        self._method_note.setVisible(bool(note))
 
     def highlight_guide_step(self, step):
         """Emphasise one numbered step of the connection guide.

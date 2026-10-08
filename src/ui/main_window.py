@@ -15,6 +15,7 @@ import os
 import platform
 import sys
 import time
+from pathlib import Path
 
 from PySide6.QtCore import (
     QEvent,
@@ -95,6 +96,9 @@ _PAGE_ERROR = 2
 _PAGE_RETRY = 3
 _PAGE_SETTINGS = 4
 
+# The sidebar brand title and the version badge beside it share one size.
+_BRAND_FONT_SIZE = "14px"
+
 
 class DeviceUpdateCheckWorker(QThread):
     finished = Signal(list)
@@ -130,6 +134,15 @@ _WRITE_STEPS = (STEP_DOWNLOAD_DA, STEP_DOWNLOAD_BL, STEP_WRITE)
 # Failure codes whose only real fix is the hardware reset described by
 # RetryGuidanceDialog: the device stopped answering the handshake.
 _RETRY_GUIDANCE_CODES = ("CONNECTION_FAILED", "MTK_INIT_FAILED")
+
+# States in which a flash run is under way: the sidebar's first entry becomes
+# "Install Software" and holds the accent highlight until the run finishes.
+_INSTALL_RUN_STATES = (
+    FlashState.S2_WAIT_CONNECTION,
+    FlashState.S3_DEVICE_DETECTED,
+    FlashState.S4_FLASHING,
+    FlashState.S6_RETRYING,
+)
 
 
 class MainWindow(QMainWindow):
@@ -215,6 +228,9 @@ class MainWindow(QMainWindow):
         self._settings_page.offline_mode_changed.connect(
             self._on_offline_mode_changed
         )
+        self._settings_page.release_filters_changed.connect(
+            self._select_page.refresh_release_filters
+        )
         self._settings_page.check_updates_requested.connect(
             lambda: self._check_device_firmware_updates(manual=True)
         )
@@ -266,7 +282,7 @@ class MainWindow(QMainWindow):
         self._nav_buttons = {}
         btn = QPushButton(tr("nav_select_package"))
         btn.setCheckable(True)
-        btn.clicked.connect(lambda: self._nav_to_page(_PAGE_SELECT))
+        btn.clicked.connect(self._on_select_nav_clicked)
         layout.addWidget(btn)
         self._nav_buttons["nav_select_package"] = (btn, _PAGE_SELECT)
 
@@ -325,17 +341,17 @@ class MainWindow(QMainWindow):
         brand_row.addWidget(self._icon_label)
 
         self._brand_label = QLabel(get_app_name())
-        brand_font_size = "14px"
         self._brand_label.setStyleSheet(
-            f"font-size: {brand_font_size}; font-weight: 800; color: {t.fg}; letter-spacing: -0.02em;"
+            f"font-size: {_BRAND_FONT_SIZE}; font-weight: 800; color: {t.fg}; letter-spacing: -0.02em;"
             f" background: transparent; border: none;"
         )
         brand_row.addWidget(self._brand_label)
 
-        self._brand_version = QLabel(f"v{APP_VERSION}")
+        # Version badge sits beside the brand title at the same size, with no "v".
+        self._brand_version = QLabel(APP_VERSION)
         self._brand_version.setStyleSheet(
-            f"font-size: 11px; font-weight: 600; color: {t.fg_dim};"
-            f" background: transparent; border: none; margin-top: 2px;"
+            f"font-size: {_BRAND_FONT_SIZE}; font-weight: 600; color: {t.fg_dim};"
+            f" background: transparent; border: none;"
         )
         brand_row.addWidget(self._brand_version)
         brand_row.addStretch()
@@ -417,13 +433,19 @@ class MainWindow(QMainWindow):
 
         if hasattr(self, "_brand_label"):
             self._brand_label.setStyleSheet(
-                f"font-size: 14px; font-weight: 800; color: {t.fg}; letter-spacing: -0.02em; background: transparent; border: none;"
+                f"font-size: {_BRAND_FONT_SIZE}; font-weight: 800; color: {t.fg}; letter-spacing: -0.02em; background: transparent; border: none;"
+            )
+
+        if hasattr(self, "_brand_version"):
+            self._brand_version.setText(APP_VERSION)
+            self._brand_version.setStyleSheet(
+                f"font-size: {_BRAND_FONT_SIZE}; font-weight: 600; color: {t.fg_dim}; background: transparent; border: none;"
             )
 
         if hasattr(self, "_version_label"):
-            from ..config import APP_VERSION
+            # Attribution only — the version lives beside the brand title, not here.
             self._version_label.setText(
-                f'v{APP_VERSION} by <a href="https://ko-fi.com/teamslide" style="color: {t.accent}; text-decoration: underline;">Ryan Specter</a>'
+                f'by <a href="https://ko-fi.com/teamslide" style="color: {t.accent}; text-decoration: underline;">Ryan Specter</a>'
             )
             self._version_label.setStyleSheet(
                 f"font-size: 11px; color: {t.fg_dim}; background: transparent; border: none; margin-left: 2px;"
@@ -540,16 +562,122 @@ class MainWindow(QMainWindow):
                 self._append_log("Advanced install methods revealed (M/D).")
         super().keyPressEvent(event)
 
+    def _install_run_active(self) -> bool:
+        """True while a flash run is in progress (waiting, detected, writing)."""
+        return self.sm.state in _INSTALL_RUN_STATES
+
+    def _sync_install_nav_entry(self) -> bool:
+        """Rename the first sidebar entry while an install is running.
+
+        The entry stands for the run ("Install Software") instead of the
+        package browser, so the sidebar keeps showing what the app is doing.
+        """
+        entry = getattr(self, "_nav_buttons", {}).get("nav_select_package")
+        if not entry:
+            return False
+        btn, _idx = entry
+        active = self._install_run_active()
+        btn.setText(tr("nav_install_package" if active else "nav_select_package"))
+        return active
+
+    def _on_select_nav_clicked(self):
+        """First entry: the package browser, or the running install's view."""
+        self._nav_to_page(_PAGE_FLASH if self._install_run_active() else _PAGE_SELECT)
+
     def _nav_to_page(self, page_idx):
         self._stack.setCurrentIndex(page_idx)
+        install_active = self._sync_install_nav_entry()
         for key, (btn, idx) in self._nav_buttons.items():
-            btn.setChecked(idx == page_idx)
+            # While installing, the first entry keeps the accent highlight so
+            # the sidebar shows the run is live rather than going blank.
+            checked = idx == page_idx or (install_active and key == "nav_select_package")
+            btn.setChecked(checked)
 
     def _on_package_selected(self, path, name, model):
         self._package_path = path
         self._package_name = name
         self._package_model = model or ""
+        if device_tracking.terminal_install_enabled(self.settings):
+            # Terminal install: the user drives the console tools themselves.
+            self._begin_terminal_install()
+            return
         self._begin_flash_flow()
+
+    def _begin_terminal_install(self):
+        """Open the console install command in the user's terminal window.
+
+        Nothing is flashed by the app: it stays on the Select Software screen
+        while SP Flash Tool or MTKClient runs in a terminal the user owns, so
+        the tools' own output can be read and diagnosed.
+        """
+        from .. import terminal_install
+        from ..flash_service import _find_scatter, compute_extract_dir
+
+        extract_dir = completed_extract_dir(self._package_path) or compute_extract_dir(
+            self._package_path
+        )
+        scatter = None
+        if Path(extract_dir).is_dir():
+            try:
+                scatter = _find_scatter(Path(extract_dir))
+            except Exception as e:
+                logger.debug("Terminal install: scatter discovery failed: %s", e)
+        if not scatter:
+            self._nav_to_page(_PAGE_SELECT)
+            QMessageBox.warning(
+                self, tr("terminal_install_title"), tr("terminal_install_no_scatter")
+            )
+            return
+
+        platform_name = ""
+        try:
+            from ..flash_service import _parse_scatter_platform
+
+            platform_name = _parse_scatter_platform(Path(scatter)) or ""
+        except Exception as e:
+            logger.debug("Terminal install: platform detection failed: %s", e)
+
+        command = terminal_install.build_install_command(
+            self._flash_method,
+            extract_dir,
+            scatter,
+            package_path=self._package_path,
+            platform_name=platform_name,
+        )
+        if command is None:
+            self._nav_to_page(_PAGE_SELECT)
+            QMessageBox.warning(
+                self, tr("terminal_install_title"), tr("terminal_install_no_tool")
+            )
+            return
+
+        script = None
+        try:
+            # The script exports whatever the console tool needs that this
+            # machine's environment lacks (Linux SP Flash Tool libraries).
+            script = terminal_install.build_script(
+                command,
+                title=tr("terminal_install_title"),
+                cwd=extract_dir,
+                env=terminal_install.script_env(command),
+            )
+        except OSError as e:
+            logger.warning("Terminal install: could not write the launcher: %s", e)
+
+        opened = bool(script) and terminal_install.open_in_terminal(script)
+        # The app stays on the selection screen; the terminal owns the run.
+        self._nav_to_page(_PAGE_SELECT)
+        self._append_log(f"Terminal install command: {' '.join(command)}")
+        if opened:
+            self._show_status(
+                tr("status_terminal_install").format(path=str(script)), 20000
+            )
+        else:
+            QMessageBox.warning(
+                self,
+                tr("terminal_install_title"),
+                tr("terminal_install_failed").format(path=str(script or "")),
+            )
 
     def _begin_flash_flow(self):
         if not self._package_path:
@@ -1073,6 +1201,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"{app_name} v{APP_VERSION}")
         for key, (btn, _idx) in self._nav_buttons.items():
             btn.setText(tr(key))
+        self._sync_install_nav_entry()
         self._support_btn.setText(tr("nav_donate"))
         self._log_btn.setText(tr("nav_log"))
         self._credits_btn.setText(tr("nav_credits"))

@@ -973,6 +973,13 @@ class ReleasesClient:
             )
             if selected_type:
                 rom_variants = [v for v in rom_variants if v.get("type") == selected_type] or rom_variants
+            if not prefer_240p and rom_variants and all(
+                v.get("resolution") == "240p" for v in rom_variants
+            ):
+                # 240p builds (rom*_240p.zip) drive the 240p screen mod and are
+                # incompatible with Y1 units older than OS 3.0.7, so they stay
+                # out of the list until the Settings toggle asks for them.
+                continue
             preferred = select_preferred_rom_asset(
                 rom_variants,
                 selected_type=selected_type,

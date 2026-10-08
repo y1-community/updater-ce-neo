@@ -31,6 +31,12 @@ _STRINGS: dict = {
         "fr": "Choisir un logiciel",
         "es": "Seleccionar software",
     },
+    "nav_install_package": {
+        "zh-CN": "安装软件",
+        "en": "Install Software",
+        "fr": "Installer le logiciel",
+        "es": "Instalar software",
+    },
     "nav_flash": {
         "zh-CN": "开始刷机",
         "en": "Flash",
@@ -229,6 +235,24 @@ _STRINGS: dict = {
         "fr": "Inspecter les règles udev, appartenance aux groupes, modules de noyau et pilotes MediaTek.",
         "es": "Inspeccionar reglas udev, grupos de usuario, módulos del kernel y estado del controlador MediaTek.",
     },
+    "settings_driver_group": {
+        "zh-CN": "联发科 USB 驱动",
+        "en": "MediaTek USB Driver",
+        "fr": "Pilote USB MediaTek",
+        "es": "Controlador USB MediaTek",
+    },
+    "settings_driver_desc": {
+        "zh-CN": "首次使用本应用前，请先安装联发科 USB 驱动，然后重启电脑。",
+        "en": "Before using the app for the first time, you must install the MediaTek USB driver, then reboot your computer.",
+        "fr": "Avant la première utilisation de l'application, vous devez installer le pilote USB MediaTek, puis redémarrer votre ordinateur.",
+        "es": "Antes de usar la aplicación por primera vez, debe instalar el controlador USB de MediaTek y luego reiniciar el ordenador.",
+    },
+    "settings_download_drivers_btn": {
+        "zh-CN": "下载驱动",
+        "en": "Download Drivers",
+        "fr": "Télécharger les pilotes",
+        "es": "Descargar controladores",
+    },
     "system_checker_autofix_btn": {
         "zh-CN": "一键修复权限与系统配置",
         "en": "Auto-Fix Permissions & Setup System",
@@ -359,31 +383,103 @@ _STRINGS: dict = {
         "fr": "Version",
         "es": "Versión",
     },
-    "sel_filter_old_rockbox": {
+    "settings_terminal_group": {
+        "zh-CN": "安装方式",
+        "en": "Installation Mode",
+        "fr": "Mode d'installation",
+        "es": "Modo de instalación",
+    },
+    "settings_terminal_install": {
+        "zh-CN": "在终端窗口中安装",
+        "en": "Install from a terminal window",
+        "fr": "Installer depuis une fenêtre de terminal",
+        "es": "Instalar desde una ventana de terminal",
+    },
+    "settings_terminal_desc": {
+        "zh-CN": "在终端中运行软件安装，让您可以看到安装进度的技术信息。",
+        "en": "Runs your software installation in Terminal so you can see technical info on the progress.",
+        "fr": "Exécute l'installation de votre logiciel dans le Terminal pour vous montrer les informations techniques de la progression.",
+        "es": "Ejecuta la instalación de tu software en la Terminal para que veas la información técnica del progreso.",
+    },
+    "settings_terminal_desc_windows": {
+        "zh-CN": "在命令提示符中运行软件安装，让您可以看到安装进度的技术信息。",
+        "en": "Runs your software installation in Command Prompt so you can see technical info on the progress.",
+        "fr": "Exécute l'installation de votre logiciel dans l'Invite de commandes pour vous montrer les informations techniques de la progression.",
+        "es": "Ejecuta la instalación de tu software en el Símbolo del sistema para que veas la información técnica del progreso.",
+    },
+    "terminal_install_title": {
+        "zh-CN": "终端安装",
+        "en": "Terminal Install",
+        "fr": "Installation en terminal",
+        "es": "Instalación en terminal",
+    },
+    "terminal_install_no_scatter": {
+        "zh-CN": "该固件包中未找到 scatter 文件，无法生成命令行命令。",
+        "en": "No scatter file was found in this package, so no console command could be built.",
+        "fr": "Aucun fichier scatter trouvé dans ce paquet : impossible de construire la commande console.",
+        "es": "No se encontró ningún archivo scatter en este paquete, así que no se pudo crear el comando de consola.",
+    },
+    "terminal_install_no_tool": {
+        "zh-CN": "当前安装方式没有可用的 SP Flash Tool 或 MTKClient 入口。",
+        "en": "No SP Flash Tool build or MTKClient entry point is available for this method.",
+        "fr": "Aucune version de SP Flash Tool ni point d'entrée MTKClient n'est disponible pour cette méthode.",
+        "es": "No hay ninguna versión de SP Flash Tool ni punto de entrada de MTKClient para este método.",
+    },
+    "terminal_install_failed": {
+        "zh-CN": "无法打开终端窗口。安装命令已写入：{path}",
+        "en": "Could not open a terminal window. The install command was written to {path}.",
+        "fr": "Impossible d'ouvrir une fenêtre de terminal. La commande a été écrite dans {path}.",
+        "es": "No se pudo abrir una ventana de terminal. El comando se escribió en {path}.",
+    },
+    "status_terminal_install": {
+        "zh-CN": "安装命令已在终端窗口中打开（{path}）。",
+        "en": "Install command opened in your terminal window ({path}).",
+        "fr": "Commande d'installation ouverte dans votre terminal ({path}).",
+        "es": "Comando de instalación abierto en tu ventana de terminal ({path}).",
+    },
+    "settings_rockbox_group": {
+        "zh-CN": "Rockbox 固件筛选",
+        "en": "Rockbox Release Filters",
+        "fr": "Filtres de versions Rockbox",
+        "es": "Filtros de versiones Rockbox",
+    },
+    "settings_rockbox_desc": {
+        "zh-CN": "浏览 Y1 的 Rockbox 固件列表时生效。",
+        "en": "Applied when browsing Rockbox releases for Y1.",
+        "fr": "Appliqué lors de la navigation des versions Rockbox pour Y1.",
+        "es": "Se aplica al explorar versiones de Rockbox para Y1.",
+    },
+    "settings_filter_old_rockbox": {
         "zh-CN": "显示旧版 Rockbox 固件",
         "en": "Show Old Rockbox Builds",
         "fr": "Afficher les anciennes versions de Rockbox",
         "es": "Mostrar versiones antiguas de Rockbox",
     },
-    "sel_filter_nightly": {
+    "settings_filter_nightly": {
         "zh-CN": "显示每夜版与开发版",
-        "en": "Show Nightly & Dev Releases",
+        "en": "Show Nightly Dev Releases",
         "fr": "Afficher les versions Nightly et Dev",
         "es": "Mostrar versiones Nightly y de desarrollo",
     },
-    "sel_filter_240p": {
-        "zh-CN": "240p 分辨率 Rockbox 固件",
+    "settings_filter_240p": {
+        "zh-CN": "240p Rockbox 固件",
         "en": "240p Rockbox Releases",
         "fr": "Versions Rockbox 240p",
         "es": "Versiones de Rockbox 240p",
     },
-    "sel_old_rockbox_warn_title": {
+    "settings_240p_tip": {
+        "zh-CN": "显示 ROM 压缩包为 240p 变体（rom…_240p.zip）的固件。240p 固件不兼容 Innioasis OS 低于 3.0.7 的 Y1 设备，因此会同时启用“显示旧版 Rockbox 固件”。",
+        "en": "Shows builds whose ROM zip is a 240p variant (rom\u2026_240p.zip). 240p builds are not compatible with Y1 units on Innioasis OS below 3.0.7, so Show Old Rockbox Builds is enabled with it.",
+        "fr": "Affiche les versions dont le zip ROM est une variante 240p (rom\u2026_240p.zip). Les versions 240p ne sont pas compatibles avec les Y1 sous Innioasis OS antérieur à 3.0.7 : l'option des anciennes versions est donc activée en même temps.",
+        "es": "Muestra versiones cuyo zip ROM es una variante 240p (rom\u2026_240p.zip). Las versiones 240p no son compatibles con unidades Y1 con Innioasis OS anterior a 3.0.7, por lo que se activa junto con la opción de versiones antiguas.",
+    },
+    "settings_old_rockbox_warn_title": {
         "zh-CN": "Rockbox 兼容性警告",
         "en": "Rockbox Compatibility Warning",
         "fr": "Avertissement de compatibilité Rockbox",
         "es": "Advertencia de compatibilidad de Rockbox",
     },
-    "sel_old_rockbox_warn_body": {
+    "settings_old_rockbox_warn_body": {
         "zh-CN": "0.5 之前的 Rockbox-Y1 版本与 2026 年 3 月之后售出且预装 Innioasis OS 3.0.7 的 Y1 设备不兼容。\n\n在这些设备上刷入旧版本会导致无法开机。\n\n确定要显示旧版 Rockbox 固件吗？",
         "en": "Releases of Rockbox-Y1 before 0.5 are not compatible with Y1 units sold after March 2026 with Innioasis OS 3.0.7 pre-installed.\n\nFlashing an older build on these devices will prevent booting.\n\nAre you sure you want to show older Rockbox builds?",
         "fr": "Les versions de Rockbox-Y1 antérieures à 0.5 ne sont pas compatibles avec les appareils Y1 vendus après mars 2026 avec Innioasis OS 3.0.7 préinstallé.\n\nFlasher une ancienne version empêchera ces appareils de démarrer.\n\nÊtes-vous sûr de vouloir afficher les anciennes versions de Rockbox ?",
@@ -882,12 +978,6 @@ _STRINGS: dict = {
         "en": "SP Flash Tool — MediaTek's official flasher. On Linux the community build is downloaded and staged on first use.",
         "fr": "SP Flash Tool — l'outil officiel de MediaTek. Sous Linux, la version communautaire est téléchargée et installée lors de la première utilisation.",
         "es": "SP Flash Tool, la herramienta oficial de MediaTek. En Linux, la versión comunitaria se descarga e instala en el primer uso.",
-    },
-    "flash_method_note_mtk": {
-        "zh-CN": "MTKClient——开源联发科刷机工具。所有平台可用，macOS 上为唯一选项。Windows 上需安装联发科 USB 驱动。",
-        "en": "MTKClient — the open-source MediaTek flasher. Available on all platforms; the only option on macOS. Requires the MediaTek USB driver on Windows.",
-        "fr": "MTKClient — le flasheur MediaTek open source. Disponible sur toutes les plateformes ; seul choix sous macOS. Nécessite le pilote USB MediaTek sous Windows.",
-        "es": "MTKClient, el flasheador MediaTek de código abierto. Disponible en todas las plataformas; la única opción en macOS. Requiere el controlador USB de MediaTek en Windows.",
     },
     "flash_btn_open_sp_gui": {
         "zh-CN": "打开 SP Flash Tool 界面",

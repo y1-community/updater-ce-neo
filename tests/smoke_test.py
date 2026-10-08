@@ -58,6 +58,13 @@ def _reset_app_settings():
     s.setValue("linux_first_run_completed", True)
     s.remove("preferences")
     s.remove("device_installs")
+    # Rockbox listing filters are separate keys outside the preferences group.
+    from src import device_tracking
+    for name in device_tracking.FILTER_NAMES:
+        device_tracking.set_rockbox_release_filter(name, False, s)
+    # Terminal installs are opt-in; a previous test (or a manual launch) must
+    # not silently reroute the guided flow.
+    device_tracking.set_terminal_install_enabled(False, s)
     s.remove("device_tracking")
     s.remove("latest_package")
     translator().set_language("en")
@@ -763,6 +770,7 @@ def test_ui_construction():
     from src.ui.dialogs import DiagnosticsDialog
     from src.donors import load_donors_file, parse_donors_csv_text
     from src.ui.select_page import SelectPackagePage
+    from src.config import APP_VERSION
 
     w = MainWindow()
     w.show()
@@ -784,6 +792,11 @@ def test_ui_construction():
     assert w.windowTitle().startswith("Updater CE v3.0")
     assert w._brand_label.text() == "Updater CE"
     assert w._icon_label.pixmap() is not None and not w._icon_label.pixmap().isNull()
+    # Version badge sits beside the brand with no "v" prefix.
+    assert w._brand_version.text() == APP_VERSION, (
+        f"Expected bare version, got {w._brand_version.text()!r}"
+    )
+    assert not w._brand_version.text().lower().startswith("v")
     assert 'by <a href="https://ko-fi.com/teamslide"' in w._version_label.text()
     assert "Ryan Specter" in w._version_label.text()
     assert w.statusBar().objectName() == "donation_status_bar"
@@ -1530,6 +1543,21 @@ def test_titlebar_spacing():
         # needs no traffic-light clearance at all.
         assert dark.content_top_margin() <= dark.MACOS_TRAFFIC_LIGHT_CLEARANCE
         assert dark.page_top_margin() <= 16
+
+        # macOS with an extended content view: the first entry is pulled up into
+        # the title-bar band (-12px) so it lines up with the window chrome.
+        if dark.IS_MACOS:
+            from src.ui import glass
+
+            orig_glass = glass.is_glass_supported
+            glass.is_glass_supported = lambda: True
+            try:
+                assert dark.content_top_margin() == (
+                    dark.MACOS_TRAFFIC_LIGHT_CLEARANCE - dark.MACOS_SIDEBAR_TITLEBAR_TRIM
+                ), dark.content_top_margin()
+                assert dark.content_top_margin() >= 0
+            finally:
+                glass.is_glass_supported = orig_glass
     finally:
         w.close()
         app.processEvents()
@@ -1702,6 +1730,363 @@ def test_flash_flow_launch():
     assert w._flash_page._wait_status.text() == "Complete"
     w.close()
     app.processEvents()
+
+
+def test_install_nav_entry_during_run():
+    """While a flash run is live the sidebar's first entry becomes "Install
+    Software" and holds the accent highlight on every page, so the sidebar
+    keeps showing the run instead of going blank; clicking it reopens the
+    run's view. Ending the run restores the package browser entry."""
+    from PySide6.QtWidgets import QApplication
+    from src.i18n import translator, tr
+    from src.state import FlashState
+    from src.ui.main_window import (
+        MainWindow,
+        _PAGE_ERROR,
+        _PAGE_FLASH,
+        _PAGE_RETRY,
+        _PAGE_SELECT,
+        _PAGE_SETTINGS,
+    )
+
+    _reset_app_settings()
+    app = QApplication.instance() or QApplication(sys.argv)
+    w = MainWindow()
+    w.show()
+    w.service.start_flash = lambda pkg, pre="", method="auto", **kw: None
+    w.service.start_device_monitor = lambda: None
+    w.service.stop_device_monitor = lambda: None
+
+    btn, _idx = w._nav_buttons["nav_select_package"]
+    settings_btn, _sidx = w._nav_buttons["nav_settings"]
+    assert btn.text() == "Select Software", btn.text()
+    assert btn.isChecked() and not settings_btn.isChecked()
+    assert not w._install_run_active()
+
+    # Only the in-progress states count as a live install.
+    for state in (
+        FlashState.S2_WAIT_CONNECTION,
+        FlashState.S3_DEVICE_DETECTED,
+        FlashState.S4_FLASHING,
+        FlashState.S6_RETRYING,
+    ):
+        w.sm.force_state(state)
+        assert w._install_run_active(), state
+    for state in (
+        FlashState.S1_SELECT_FILE,
+        FlashState.S5_COMPLETE,
+        FlashState.S5_FAILED,
+        FlashState.S5_USB_DISCONNECTED,
+    ):
+        w.sm.force_state(state)
+        assert not w._install_run_active(), state
+    w.sm.reset_full()
+
+    w._on_package_selected("C:/fake/rom.zip", "Rockbox (Y1)", "Y1")
+    assert w.sm.state is FlashState.S2_WAIT_CONNECTION, w.sm.state
+    assert w._stack.currentIndex() == _PAGE_FLASH
+    assert btn.text() == "Install Software", btn.text()
+    assert btn.isChecked(), "the running install must hold the accent highlight"
+
+    # Moving the content area elsewhere keeps the run visible in the sidebar.
+    for page in (_PAGE_ERROR, _PAGE_SETTINGS, _PAGE_SELECT):
+        w._nav_to_page(page)
+        assert w._stack.currentIndex() == page
+        assert btn.text() == "Install Software", (page, btn.text())
+        assert btn.isChecked(), f"highlight lost on page index {page}"
+
+    # Clicking the first entry reopens the run instead of the browser.
+    btn.click()
+    app.processEvents()
+    assert w._stack.currentIndex() == _PAGE_FLASH, "first entry must reopen the run"
+
+    # A mid-run language switch keeps the running label, translated.
+    translator().set_language("zh-CN")
+    w._retranslate_all()
+    assert btn.text() == tr("nav_install_package"), btn.text()
+    translator().set_language("en")
+    w._retranslate_all()
+    assert btn.text() == "Install Software", btn.text()
+
+    # A retry attempt is still part of the run.
+    w.sm.force_state(FlashState.S6_RETRYING)
+    w._nav_to_page(_PAGE_RETRY)
+    assert btn.text() == "Install Software" and btn.isChecked()
+
+    # Ending the run restores the browser entry and its normal highlight.
+    w._reset_after_run()
+    assert w.sm.state is FlashState.S1_SELECT_FILE, w.sm.state
+    assert w._stack.currentIndex() == _PAGE_SELECT
+    assert btn.text() == "Select Software", btn.text()
+    assert btn.isChecked(), "on the Select page the browser entry is highlighted"
+    w._nav_to_page(_PAGE_SETTINGS)
+    assert not btn.isChecked(), "browser entry must not stay highlighted after the run"
+    assert settings_btn.isChecked()
+
+    w.close()
+    app.processEvents()
+    _reset_app_settings()
+
+
+def test_terminal_install_handoff():
+    """Terminal installs: the Settings toggle keeps the user on Select Software
+    and hands the console command (SP Flash Tool, else MTKClient) to a launcher
+    script opened in their own terminal, so the tools' output can be read. The
+    guided backend must not start, and failures must be reported."""
+    import tempfile
+    from pathlib import Path
+
+    from PySide6.QtWidgets import QApplication
+    from src import device_tracking, i18n, paths, terminal_install
+    from src.flash_service import METHOD_MTK, METHOD_SP
+    from src.i18n import tr
+    from src.state import FlashState
+    from src.ui import settings_page
+    from src.ui.main_window import MainWindow, _PAGE_SELECT
+
+    _reset_app_settings()
+
+    for key in (
+        "nav_install_package",
+        "settings_terminal_group",
+        "settings_terminal_install",
+        "settings_terminal_desc",
+        "settings_terminal_desc_windows",
+        "terminal_install_title",
+        "terminal_install_no_scatter",
+        "terminal_install_no_tool",
+        "terminal_install_failed",
+        "status_terminal_install",
+    ):
+        table = i18n._STRINGS.get(key)
+        assert table, f"{key} missing from i18n"
+        assert set(table) == {"zh-CN", "en", "fr", "es"}, (key, sorted(table))
+    # Wording names the console app the user will actually see.
+    desc_terminal = i18n._STRINGS["settings_terminal_desc"]
+    desc_windows = i18n._STRINGS["settings_terminal_desc_windows"]
+    assert "Terminal" in desc_terminal["en"], desc_terminal["en"]
+    assert "Command Prompt" in desc_windows["en"], desc_windows["en"]
+    for loc in ("zh-CN", "en", "fr", "es"):
+        assert desc_terminal[loc] != desc_windows[loc], loc
+        assert "Select Software screen" not in desc_terminal[loc], loc
+    lang = i18n.translator().lang
+    orig_windows = paths.IS_WINDOWS
+    try:
+        paths.IS_WINDOWS = False
+        assert settings_page.terminal_install_desc() == desc_terminal[lang]
+        paths.IS_WINDOWS = True
+        assert settings_page.terminal_install_desc() == desc_windows[lang]
+    finally:
+        paths.IS_WINDOWS = orig_windows
+
+    orig_win, orig_mac = paths.IS_WINDOWS, paths.IS_MAC
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        extract = root / "rom_a5"
+        extract.mkdir()
+        scatter = extract / "MT6572_Android_scatter.txt"
+        scatter.write_text("platform: MT6572\npartition_name: boot\nfile_name: boot.img\n")
+        pkg = str(root / "rom_a5.zip")
+
+        # SP Flash Tool reuses the guided flow's console arguments.
+        sp_dirs, sp_cmds = {}, {}
+        try:
+            for is_windows, exe_name in ((True, "flash_tool.exe"), (False, "flash_tool")):
+                paths.IS_WINDOWS, paths.IS_MAC = is_windows, False
+                sp_dir = root / f"sp_{exe_name}"
+                sp_dir.mkdir()
+                (sp_dir / exe_name).write_bytes(b"")
+                da = sp_dir / "MTK_AllInOne_DA.bin"
+                da.write_bytes(b"")
+                cmd = terminal_install.sp_flash_tool_command(scatter, sp_dir=sp_dir)
+                assert cmd is not None
+                assert cmd[0].endswith(exe_name), cmd
+                assert cmd[1:] == [
+                    "-c", "format-download", "-s", str(scatter),
+                    "-d", str(da), "-t", "without", "-r",
+                ], cmd
+                sp_dirs[is_windows], sp_cmds[is_windows] = sp_dir, cmd
+
+            # The guided flow's own build lookup drives the SP command, so the
+            # terminal gets exactly what the app would have executed.
+            from src import linux_sp_flash
+
+            orig_find = paths.find_sp_flash_tool
+            orig_stage = linux_sp_flash.stage_dir
+            try:
+                paths.IS_WINDOWS, paths.IS_MAC = True, False
+                paths.find_sp_flash_tool = lambda: sp_dirs[True]
+                assert terminal_install.build_install_command(
+                    METHOD_SP, extract, scatter
+                ) == sp_cmds[True]
+
+                paths.IS_WINDOWS, paths.IS_MAC = False, False
+                linux_sp_flash.stage_dir = lambda: sp_dirs[False]
+                assert terminal_install.build_install_command(
+                    METHOD_SP, extract, scatter
+                ) == sp_cmds[False]
+            finally:
+                paths.find_sp_flash_tool = orig_find
+                linux_sp_flash.stage_dir = orig_stage
+        finally:
+            paths.IS_WINDOWS, paths.IS_MAC = orig_win, orig_mac
+
+        # macOS has no SP build: the command falls back to MTKClient's CLI.
+        if paths.IS_MAC:
+            assert terminal_install.sp_flash_tool_command(scatter) is None
+        mtk = terminal_install.mtkclient_command(extract, scatter, "MT6572", pkg)
+        assert mtk[0] == sys.executable, mtk
+        assert mtk[-5:] == [
+            "--flash-cli", str(extract), str(scatter), "MT6572", pkg
+        ], mtk
+        if paths.IS_MAC:
+            # The SP method is requested but only MTKClient exists on macOS.
+            assert terminal_install.build_install_command(
+                METHOD_SP, extract, scatter, package_path=pkg, platform_name="MT6572"
+            ) == mtk, "no SP build -> MTKClient fallback"
+        assert terminal_install.build_install_command(
+            METHOD_MTK, extract, scatter, package_path=pkg, platform_name="MT6572"
+        ) == mtk
+
+        # The launcher script carries the exact command plus a closing pause.
+        script_root = root / "scripts"
+        script_root.mkdir()
+        orig_script_dir = terminal_install.script_dir
+        terminal_install.script_dir = lambda: script_root
+        try:
+            posix = terminal_install.build_script(mtk, title="Terminal Install", cwd=extract)
+            assert posix.name.startswith("install_from_terminal"), posix
+            ptext = posix.read_text(encoding="utf-8")
+            assert ptext.startswith("#!/bin/bash"), ptext
+            assert "--flash-cli" in ptext and str(scatter) in ptext, ptext
+            assert f"cd {extract}" in ptext, ptext
+            assert terminal_install.POSIX_DONE_MSG in ptext, ptext
+            assert os.access(posix, os.X_OK), "launcher must be executable"
+
+            win = terminal_install.build_script(
+                ["C:\\sp\\flash_tool.exe", "-c", "format-download"],
+                title="Terminal Install",
+                cwd=str(extract),
+                is_windows=True,
+            )
+            assert win.suffix == ".bat", win
+            wtext = win.read_text(encoding="utf-8")
+            assert wtext.startswith("@echo off"), wtext
+            assert "pause" in wtext and "flash_tool.exe" in wtext, wtext
+        finally:
+            terminal_install.script_dir = orig_script_dir
+
+        # Opening goes through the platform terminal, never through a shell.
+        assert terminal_install.terminal_argv("/tmp/x.command", platform="darwin") == [
+            "open", "-a", "Terminal", "/tmp/x.command"
+        ]
+        win_argv = terminal_install.terminal_argv(r"C:\x.bat", platform="win32")
+        assert win_argv[:4] == ["cmd", "/c", "start", "Terminal install"], win_argv
+        assert win_argv[-2:] == ["/k", r"C:\x.bat"], win_argv
+
+        # --- app integration: the toggle reroutes package selection ----------
+        app = QApplication.instance() or QApplication(sys.argv)
+        w = MainWindow()
+        w.show()
+        started = []
+        w.service.start_flash = lambda *a, **kw: started.append(a)
+        w.service.start_device_monitor = lambda: None
+        w.service.stop_device_monitor = lambda: None
+
+        cb = w._settings_page._cb_terminal_install
+        assert not cb.isChecked(), "terminal install must be opt-in by default"
+        assert cb.text() == tr("settings_terminal_install")
+        assert cb.toolTip() == settings_page.terminal_install_desc()
+        assert w._settings_page._terminal_desc.text() == settings_page.terminal_install_desc()
+
+        import src.flash_service as flash_service
+        import src.ui.main_window as mw
+
+        opened, warned = [], []
+        orig_completed = mw.completed_extract_dir
+        orig_compute = flash_service.compute_extract_dir
+        orig_open = terminal_install.open_in_terminal
+        orig_warning = mw.QMessageBox.warning
+        mw.completed_extract_dir = lambda p: str(extract)
+        flash_service.compute_extract_dir = lambda p: str(extract)
+        terminal_install.script_dir = lambda: script_root
+        terminal_install.open_in_terminal = lambda script, platform=None: (
+            opened.append(Path(script)) or True
+        )
+        mw.QMessageBox.warning = staticmethod(lambda *a, **kw: warned.append(a))
+        try:
+            cb.setChecked(True)
+            assert device_tracking.terminal_install_enabled(w.settings)
+
+            w._on_package_selected(pkg, "Rockbox (Y1)", "Y1")
+            app.processEvents()
+
+            assert not started, "terminal install must not launch the guided backend"
+            assert not w._install_run_active()
+            assert w._stack.currentIndex() == _PAGE_SELECT, "stays on Select Software"
+            assert w._nav_buttons["nav_select_package"][0].text() == "Select Software"
+            assert len(opened) == 1, opened
+            text = opened[0].read_text(encoding="utf-8")
+            assert "--flash-cli" in text and str(scatter) in text, text
+            assert w.statusBar().currentMessage() == tr(
+                "status_terminal_install"
+            ).format(path=str(opened[0]))
+            assert any(
+                line.startswith("Terminal install command:") for line in w._log_lines
+            ), w._log_lines[-3:]
+
+            # No scatter in the package -> warn, stay put, open nothing.
+            scatter.unlink()
+            warned.clear()
+            opened.clear()
+            w._on_package_selected(pkg, "Rockbox (Y1)", "Y1")
+            assert warned and warned[-1][2] == tr("terminal_install_no_scatter"), warned
+            assert not opened and w._stack.currentIndex() == _PAGE_SELECT
+
+            # No console entry point at all -> warn instead of a silent no-op.
+            scatter.write_text("platform: MT6572\n")
+            orig_build = terminal_install.build_install_command
+            terminal_install.build_install_command = lambda *a, **kw: None
+            warned.clear()
+            try:
+                w._on_package_selected(pkg, "Rockbox (Y1)", "Y1")
+            finally:
+                terminal_install.build_install_command = orig_build
+            assert warned and warned[-1][2] == tr("terminal_install_no_tool"), warned
+
+            # Terminal refuses to open -> the script path is still reported.
+            terminal_install.open_in_terminal = lambda script, platform=None: False
+            warned.clear()
+            w._on_package_selected(pkg, "Rockbox (Y1)", "Y1")
+            assert warned, "a failed terminal launch must be reported"
+            expected_script = script_root / (
+                "install_from_terminal.bat"
+                if os.name == "nt"
+                else "install_from_terminal" + (".command" if sys.platform == "darwin" else ".sh")
+            )
+            assert warned[-1][2] == tr("terminal_install_failed").format(
+                path=str(expected_script)
+            ), warned
+            assert expected_script.is_file(), "the command must be saved for manual runs"
+
+            # Unticking the box returns to the guided install flow.
+            terminal_install.open_in_terminal = orig_open
+            cb.setChecked(False)
+            assert not device_tracking.terminal_install_enabled(w.settings)
+            w._on_package_selected(pkg, "Rockbox (Y1)", "Y1")
+            assert started, "guided flow resumes when terminal install is off"
+            assert w.sm.state is FlashState.S2_WAIT_CONNECTION, w.sm.state
+        finally:
+            mw.completed_extract_dir = orig_completed
+            flash_service.compute_extract_dir = orig_compute
+            terminal_install.open_in_terminal = orig_open
+            terminal_install.script_dir = orig_script_dir
+            mw.QMessageBox.warning = orig_warning
+
+        w.close()
+        app.processEvents()
+
+    _reset_app_settings()
 
 
 def test_flash_method_switch():
@@ -2023,6 +2408,144 @@ def test_release_model_filtering():
 
 
 
+
+
+def test_rockbox_release_filters():
+    """The Rockbox listing filters (old builds / nightly dev / 240p) live on the
+    Settings screen and apply only when browsing Rockbox releases for Y1.
+
+    240p builds are identified by their ``rom*_240p.zip`` asset, are hidden
+    unless the toggle asks for them, and imply the older-builds flag because they
+    cannot run on Y1 units below Innioasis OS 3.0.7."""
+    from PySide6.QtWidgets import QApplication
+    from src import device_tracking
+    from src.catalog import FirmwarePackage, _parse_rom_asset_variant
+    from src.ui.select_page import SelectPackagePage
+    from src.ui.settings_page import SettingsPage
+
+    _reset_app_settings()
+    app = QApplication.instance() or QApplication(sys.argv)
+
+    # --- persisted flags and the 240p / older-builds invariant -------------
+    filters = device_tracking.rockbox_release_filters()
+    assert filters.as_dict() == {
+        device_tracking.FILTER_OLD_ROCKBOX: False,
+        device_tracking.FILTER_NIGHTLY: False,
+        device_tracking.FILTER_240P: False,
+    }, filters.as_dict()
+
+    filters = device_tracking.set_rockbox_release_filter(device_tracking.FILTER_240P, True)
+    assert filters.rockbox_240p is True
+    assert filters.old_rockbox is True, "240p builds must bring the older-builds flag"
+
+    filters = device_tracking.set_rockbox_release_filter(device_tracking.FILTER_OLD_ROCKBOX, False)
+    assert filters.old_rockbox is False and filters.rockbox_240p is False, filters.as_dict()
+
+    try:
+        device_tracking.set_rockbox_release_filter("not_a_filter", True)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Unknown filter names must be rejected")
+
+    # --- Settings screen owns the checkboxes -------------------------------
+    page = SettingsPage()
+    page.show()
+    app.processEvents()
+    assert page._rockbox_card.isVisible(), "filters stay on screen at all times"
+    for cb in (page._cb_old_rockbox, page._cb_nightly, page._cb_240p):
+        assert cb.text() != ""
+
+    emissions = []
+    page.release_filters_changed.connect(lambda: emissions.append(True))
+    page._confirm_old_rockbox = lambda: True
+
+    page._cb_240p.setChecked(True)
+    assert page._cb_old_rockbox.isChecked(), "240p selection enables older builds"
+    assert page.release_filters() == {
+        device_tracking.FILTER_OLD_ROCKBOX: True,
+        device_tracking.FILTER_NIGHTLY: False,
+        device_tracking.FILTER_240P: True,
+    }, page.release_filters()
+    assert emissions, "the browser must be told to re-list releases"
+
+    # Declining the compatibility warning leaves 240p off as well.
+    page._cb_240p.setChecked(False)
+    page._cb_old_rockbox.setChecked(False)
+    page._confirm_old_rockbox = lambda: False
+    page._cb_240p.setChecked(True)
+    assert not page._cb_240p.isChecked()
+    assert not page._cb_old_rockbox.isChecked()
+    assert page.release_filters()[device_tracking.FILTER_240P] is False
+
+    # Clearing the older-builds option clears 240p with it.
+    page._confirm_old_rockbox = lambda: True
+    page._cb_240p.setChecked(True)
+    page._cb_old_rockbox.setChecked(False)
+    assert not page._cb_240p.isChecked()
+    assert page.release_filters()[device_tracking.FILTER_240P] is False
+
+    # Nightly dev releases are independent, and persisted flags survive a reload.
+    page._cb_nightly.setChecked(True)
+    page._cb_nightly.setChecked(False)
+    device_tracking.set_rockbox_release_filter(device_tracking.FILTER_240P, True)
+    page.refresh_settings()
+    assert page._cb_240p.isChecked() and page._cb_old_rockbox.isChecked()
+    assert not page._cb_nightly.isChecked()
+
+    # --- the online browser no longer shows them --------------------------
+    select_page = SelectPackagePage()
+    for gone in ("_options_bar", "_show_old_rockbox_cb", "_show_nightly_cb", "_show_240p_cb"):
+        assert not hasattr(select_page, gone), f"{gone} should not be on the browser anymore"
+    assert not hasattr(select_page, "_update_filter_checkboxes_visibility")
+
+    select_page.current_software = lambda: "Original Software"
+    select_page.current_model = lambda: "Y1"
+    assert select_page.release_listing_filters() == (False, False, False)
+    select_page.current_software = lambda: "Rockbox"
+    assert select_page.release_listing_filters() == (True, False, True)
+    select_page.current_model = lambda: "Y2"
+    assert select_page.release_listing_filters() == (False, False, False), "Y1 only"
+
+    # --- 240p builds are only listed when the toggle asks for them --------
+    package = FirmwarePackage("rockbox-y1", "Rockbox", "Y1", "rockbox-y1/rockbox", "rom_360p.zip")
+
+    def _asset(name):
+        return {"name": name, "browser_download_url": f"https://example.test/{name}", "size": 10}
+
+    def _variant(name, tag):
+        return _parse_rom_asset_variant(_asset(name), tag, package.repo)
+
+    only_240p = {
+        "tag_name": "stable-v0.5",
+        "rom_variants": [_variant("rom_240p.zip", "stable-v0.5")],
+        "source_repo": package.repo,
+    }
+    mixed = {
+        "tag_name": "stable-v0.6",
+        "rom_variants": [
+            _variant("rom_360p.zip", "stable-v0.6"),
+            _variant("rom_240p.zip", "stable-v0.6"),
+        ],
+        "source_repo": package.repo,
+    }
+    client = catalog.ReleasesClient()
+    client.get_all_releases = lambda repo, force_refresh=False: [only_240p, mixed]
+
+    plain = client.releases_for_package(package, "Y1")
+    assert [r["tag_name"] for r in plain] == ["stable-v0.6"], [r["tag_name"] for r in plain]
+    assert plain[0]["asset_name"] == "rom_360p.zip", plain[0]["asset_name"]
+
+    with_240p = client.releases_for_package(package, "Y1", prefer_240p=True)
+    by_tag = {r["tag_name"]: r for r in with_240p}
+    assert set(by_tag) == {"stable-v0.5", "stable-v0.6"}, sorted(by_tag)
+    assert by_tag["stable-v0.5"]["asset_name"] == "rom_240p.zip"
+    assert by_tag["stable-v0.6"]["asset_name"] == "rom_240p.zip"
+
+    select_page.deleteLater()
+    page.deleteLater()
+    app.processEvents()
+    _reset_app_settings()
 
 
 def test_mtk_api_init():
@@ -3406,24 +3929,38 @@ def test_sp_flash_tool_gui():
         paths.IS_WINDOWS = orig_win
 
     # 2. History.ini generation and update
-    with tempfile.TemporaryDirectory() as td:
-        sp_dir = Path(td)
-        assert sp_flash_gui.update_sp_history_ini(sp_dir, model="Y1") is True
-        ini_file = sp_dir / "history.ini"
-        assert ini_file.is_file()
-        content = ini_file.read_text(encoding="utf-8")
-        exp_y1 = str((sp_dir / "MT6572_Android_scatter.txt").resolve())
-        assert f"scatterHistory={exp_y1}" in content
-        assert f"lastDir={exp_y1}" in content
-        assert os.path.isabs(exp_y1)
+    # The model fallback only runs when nothing ambient resolves first, so the
+    # latest-package record and the real downloads cache are isolated: a running
+    # app instance can otherwise plant an extracted ROM that wins the lookup.
+    from src import device_tracking, downloads
 
-        # Update for Y2
-        assert sp_flash_gui.update_sp_history_ini(sp_dir, model="Y2") is True
-        content2 = ini_file.read_text(encoding="utf-8")
-        exp_y2 = str((sp_dir / "MT6582_Android_scatter.txt").resolve())
-        assert f"scatterHistory={exp_y2},{exp_y1}" in content2
-        assert f"lastDir={exp_y2}" in content2
-        assert os.path.isabs(exp_y2)
+    orig_latest = device_tracking.get_latest_package
+    orig_downloads_dir = downloads.downloads_dir
+    device_tracking.get_latest_package = lambda *a, **k: None
+    empty_cache = tempfile.mkdtemp()
+    downloads.downloads_dir = lambda: Path(empty_cache)
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            sp_dir = Path(td)
+            assert sp_flash_gui.update_sp_history_ini(sp_dir, model="Y1") is True
+            ini_file = sp_dir / "history.ini"
+            assert ini_file.is_file()
+            content = ini_file.read_text(encoding="utf-8")
+            exp_y1 = str((sp_dir / "MT6572_Android_scatter.txt").resolve())
+            assert f"scatterHistory={exp_y1}" in content
+            assert f"lastDir={exp_y1}" in content
+            assert os.path.isabs(exp_y1)
+
+            # Update for Y2
+            assert sp_flash_gui.update_sp_history_ini(sp_dir, model="Y2") is True
+            content2 = ini_file.read_text(encoding="utf-8")
+            exp_y2 = str((sp_dir / "MT6582_Android_scatter.txt").resolve())
+            assert f"scatterHistory={exp_y2},{exp_y1}" in content2
+            assert f"lastDir={exp_y2}" in content2
+            assert os.path.isabs(exp_y2)
+    finally:
+        device_tracking.get_latest_package = orig_latest
+        downloads.downloads_dir = orig_downloads_dir
 
     # 3. UI presence
     app = QApplication.instance() or QApplication(sys.argv)
@@ -3876,11 +4413,170 @@ def test_sp_flash_system_checker_and_diagnostics():
     assert dlg._sp_gui_btn is not None
     assert dlg._sp_gui_btn.text() != ""
 
-    # 6. SettingsPage card and buttons
+    # 6. SettingsPage card and buttons (non-Windows: the Linux prep card)
     settings_page = SettingsPage()
     assert hasattr(settings_page, "_btn_run_checker")
     assert hasattr(settings_page, "_btn_launch_sp")
     assert settings_page._btn_run_checker.text() != ""
+
+
+def test_settings_platform_prep_cards():
+    """The settings prep card is platform-specific: Linux users get the SP
+    Flash Tool system checker, Windows users are told to install the MediaTek
+    USB driver (Download Drivers -> innioasis.app/guide.html) and reboot. The
+    MTKClient sales blurb is gone from the method notes."""
+    from PySide6.QtWidgets import QApplication
+    from src import browser, i18n, paths
+    from src.flash_service import METHOD_MTK, METHOD_MTK_MAC, METHOD_SP
+    from src.i18n import tr
+    from src.ui.flash_page import FlashPage
+    from src.ui.settings_page import MEDIATEK_DRIVERS_URL, SettingsPage
+
+    _reset_app_settings()
+    app = QApplication.instance() or QApplication(sys.argv)
+
+    # The "MTKClient — the open-source MediaTek flasher…" line is removed.
+    assert "flash_method_note_mtk" not in i18n._STRINGS
+    for key in ("settings_driver_group", "settings_driver_desc", "settings_download_drivers_btn"):
+        table = i18n._STRINGS.get(key)
+        assert table, f"{key} missing from i18n"
+        assert set(table) == {"zh-CN", "en", "fr", "es"}, (key, sorted(table))
+    assert "MediaTek USB driver" in tr("settings_driver_desc")
+    assert "reboot" in tr("settings_driver_desc")
+    assert MEDIATEK_DRIVERS_URL == "https://innioasis.app/guide.html"
+
+    # Windows: the driver card replaces the Linux SP Flash Tool prep card.
+    orig_windows = paths.IS_WINDOWS
+    paths.IS_WINDOWS = True
+    try:
+        page = SettingsPage()
+        assert hasattr(page, "_btn_download_drivers")
+        assert hasattr(page, "_driver_desc")
+        assert not hasattr(page, "_btn_run_checker")
+        assert not hasattr(page, "_btn_launch_sp")
+        assert page._btn_download_drivers.text() == tr("settings_download_drivers_btn")
+        assert tr("settings_driver_desc") in page._driver_desc.text()
+
+        opened = []
+        orig_open = browser.open_browser
+        browser.open_browser = lambda url: opened.append(url)
+        try:
+            page._btn_download_drivers.click()
+        finally:
+            browser.open_browser = orig_open
+        assert opened == [MEDIATEK_DRIVERS_URL], opened
+
+        # Language switching retranslates the Windows card without touching
+        # the Linux-only widgets that do not exist here.
+        page.retranslate()
+        assert page._btn_download_drivers.text() == tr("settings_download_drivers_btn")
+        assert page._driver_desc.text() == tr("settings_driver_desc")
+    finally:
+        paths.IS_WINDOWS = orig_windows
+
+    # MTKClient selections carry no explanatory note; SP Flash Tool still does.
+    # macOS collapses every method to MTKClient, so check the multi-method
+    # platforms explicitly.
+    orig_mac = paths.IS_MAC
+    paths.IS_MAC = False
+    try:
+        page = SettingsPage()
+        assert hasattr(page, "_btn_run_checker")  # Linux prep card on this host
+        page.set_method(METHOD_MTK)
+        assert page._method_note.text() == "", page._method_note.text()
+        assert page._method_note.isHidden()
+        page.set_method(METHOD_MTK_MAC)
+        assert page._method_note.text() == tr("flash_method_note_mtk_mac")
+        assert not page._method_note.isHidden()
+        page.set_method(METHOD_SP)
+        assert page._method_note.text() == tr("flash_method_note_sp")
+        assert not page._method_note.isHidden()
+
+        flash_page = FlashPage()
+        flash_page.set_method(METHOD_MTK)
+        assert flash_page._method_note.text() == ""
+        assert flash_page._method_note.isHidden()
+        flash_page.set_method(METHOD_SP)
+        assert flash_page._method_note.text() == tr("flash_method_note_sp")
+        assert not flash_page._method_note.isHidden()
+        flash_page.deleteLater()
+        app.processEvents()
+    finally:
+        paths.IS_MAC = orig_mac
+
+    # On macOS (MTKClient only) the blurb is gone: nothing to explain.
+    mac_page = SettingsPage()
+    mac_page.set_method(METHOD_MTK)
+    assert mac_page._method_note.text() == ""
+    assert mac_page._method_note.isHidden()
+    mac_flash_page = FlashPage()
+    mac_flash_page.set_method(METHOD_MTK)
+    assert mac_flash_page._method_note.text() == ""
+    assert mac_flash_page._method_note.isHidden()
+    mac_flash_page.deleteLater()
+    app.processEvents()
+
+
+def test_connectivity_monitor_reprobing():
+    """The connectivity monitor must keep probing after a finished check.
+
+    The probe thread used to be left referenced after Qt deleted it, so every
+    later tick raised "Internal C++ object (ConnectivityCheckWorker) already
+    deleted" — flooding the MTKClient install log — and monitoring stopped for
+    the rest of the session."""
+    import time
+
+    from PySide6.QtWidgets import QApplication
+    from src import network
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    orig_probe = network.is_network_available
+    probes = []
+
+    def fake_probe(timeout=2.0):
+        probes.append(timeout)
+        return True
+
+    network.is_network_available = fake_probe
+    monitor = network.ConnectivityMonitor(interval_ms=50, initial_check=False)
+    transitions = []
+    monitor.connectivity_changed.connect(transitions.append)
+
+    def _drain():
+        deadline = time.time() + 5.0
+        while monitor._worker is not None and time.time() < deadline:
+            app.processEvents()
+            time.sleep(0.01)
+        assert monitor._worker is None, "finished probe thread was not released"
+
+    try:
+        monitor.check_now()
+        _drain()
+        assert monitor.is_online is True, monitor.is_online
+        assert len(probes) == 1, probes
+        assert transitions == [True], transitions
+
+        # A later tick starts a fresh probe instead of poking a dead object.
+        monitor.check_now()
+        assert monitor._worker is not None
+        _drain()
+        assert len(probes) == 2, probes
+        assert transitions == [True], transitions  # unchanged state: no re-emit
+
+        # Timer-driven ticks stay healthy across several cycles.
+        monitor.start_monitoring(interval_ms=50)
+        deadline = time.time() + 5.0
+        while len(probes) < 5 and time.time() < deadline:
+            app.processEvents()
+            time.sleep(0.01)
+        assert len(probes) >= 5, probes
+        monitor.stop_monitoring()
+        assert not monitor._timer.isActive()
+    finally:
+        monitor.stop_monitoring()
+        network.is_network_available = orig_probe
+
+
 def test_sp_history_ini_subsequent_attempts_and_absolute_paths():
     """Verify that update_sp_history_ini always writes valid absolute paths
     across subsequent install attempts, retries, and fixes any legacy relative paths."""
@@ -4803,14 +5499,34 @@ def test_updater_ce_branding():
     assert pm is not None and not pm.isNull(), "App icon pixmap should be present and non-null"
     assert pm.width() <= 32 and pm.height() <= 32
 
-    # Verify version label with "by Ryan Specter" ko-fi link
+    # Verify version badge: beside the brand title, no "v", brand-sized, and the
+    # line underneath the title is attribution only.
+    import re
+
+    def _font_size_px(widget):
+        m = re.search(r"font-size:\s*(\d+)px", widget.styleSheet())
+        return int(m.group(1)) if m else None
+
     ver_text = w._version_label.text()
     brand_ver = getattr(w, "_brand_version", None)
-    brand_ver_text = brand_ver.text() if brand_ver else ""
-    assert f"v{APP_VERSION}" in ver_text or f"v{APP_VERSION}" in brand_ver_text
+    assert brand_ver is not None, "MainWindow should expose the sidebar version badge"
+    brand_ver_text = brand_ver.text()
+    assert brand_ver_text == APP_VERSION, f"Expected bare version, got {brand_ver_text!r}"
+    assert _font_size_px(brand_ver) == _font_size_px(w._brand_label), (
+        f"Version font size {_font_size_px(brand_ver)} should match brand "
+        f"{_font_size_px(w._brand_label)}"
+    )
+    assert APP_VERSION not in ver_text, f"Version should not sit under the title: {ver_text!r}"
     assert "by" in ver_text
     assert 'href="https://ko-fi.com/teamslide"' in ver_text
     assert "Ryan Specter" in ver_text
+
+    # No sidebar label may render the version with a "v" prefix.
+    from PySide6.QtWidgets import QLabel
+    for lbl in w._nav_panel.findChildren(QLabel):
+        assert f"v{APP_VERSION}" not in lbl.text(), (
+            f"Sidebar label still shows 'v{APP_VERSION}': {lbl.text()!r}"
+        )
 
     # Verify link click dispatches to open_browser
     opened_urls = []
@@ -5025,13 +5741,17 @@ def main():
     check("diagnostics finished install readback", test_diagnostics_finished_install_readback)
     check("diagnostics date and session filtering", test_diagnostics_time_filter)
     check("connectivity check logging", test_connectivity_check_logging)
+    check("connectivity monitor reprobing", test_connectivity_monitor_reprobing)
     check("flash flow launch", test_flash_flow_launch)
+    check("install nav entry during run", test_install_nav_entry_during_run)
+    check("terminal install handoff", test_terminal_install_handoff)
     check("flash method switch", test_flash_method_switch)
     check("language switch keeps screen", test_language_switch_keeps_screen)
     check("success dialog flow", test_success_dialog_flow)
     check("offline banner + generic model", test_offline_banner_and_generic_model)
     check("release list + notes", test_release_list_and_notes)
     check("release model filtering", test_release_model_filtering)
+    check("rockbox release filters", test_rockbox_release_filters)
     check("mtk api init", test_mtk_api_init)
     check("cancel kills SP process", test_cancel_kills_sp_process)
     check("worker switch guard", test_worker_switch_guard)
@@ -5066,6 +5786,7 @@ def main():
     check("latest package tracking and history ini", test_latest_package_tracking_and_history_ini)
     check("prune extracted cache and reusing download", test_prune_extracted_cache_and_reusing_download)
     check("sp flash system checker and diagnostics", test_sp_flash_system_checker_and_diagnostics)
+    check("settings platform prep cards", test_settings_platform_prep_cards)
     check("sp history ini subsequent attempts and absolute paths", test_sp_history_ini_subsequent_attempts_and_absolute_paths)
     check("model detection and install guidance", test_model_detection_and_install_guidance)
     check("android sparse handling", test_android_sparse_handling)
