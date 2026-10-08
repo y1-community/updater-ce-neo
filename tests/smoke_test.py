@@ -6224,6 +6224,57 @@ def test_window_minimum_size_and_titlebar_stability():
     _reset_app_settings()
 
 
+def test_lost_titlebar_seam_is_repaired_without_a_resize():
+    """A dropped title-bar seam must come back immediately, not only when the
+    user happens to resize the window.
+
+    Qt re-applies its own window flags whenever it reconfigures a window — the
+    reported trigger was switching sidebar entries — and that discards what was
+    set natively. Nothing signals it, so the state is checked and repaired; this
+    pins the check's two directions and the navigation hook.
+    """
+    from unittest.mock import patch
+    from PySide6.QtWidgets import QApplication
+    from src.ui import glass
+    from src.ui.main_window import MainWindow
+
+    _reset_app_settings()
+    app = QApplication.instance() or QApplication(sys.argv)
+    w = MainWindow()
+    w.show()
+    app.processEvents()
+    try:
+        assert getattr(w, "_chrome_watchdog", None) is not None, (
+            "a window that can lose its chrome needs the watchdog"
+        )
+        assert w._chrome_watchdog.isActive()
+
+        repaired = []
+        real_reassert = w._reassert_mac_glass
+        w._reassert_mac_glass = lambda *a, **k: repaired.append(True)
+        try:
+            with patch.object(glass, "native_chrome_intact", lambda *a, **k: False):
+                w._verify_native_chrome()
+                assert repaired, "a lost seam must be repaired on the spot"
+                repaired.clear()
+                # Switching sidebar entries is the reported trigger: the check
+                # is queued behind the new page's own reconfiguration.
+                w._nav_to_page(4)
+                app.processEvents()
+                assert repaired, "navigation must verify the chrome"
+
+            repaired.clear()
+            with patch.object(glass, "native_chrome_intact", lambda *a, **k: True):
+                w._verify_native_chrome()
+                assert not repaired, "an intact seam must not cost native work"
+        finally:
+            w._reassert_mac_glass = real_reassert
+    finally:
+        w.close()
+        app.processEvents()
+        _reset_app_settings()
+
+
 def test_one_theme_watcher_per_app():
     """The host appearance is watched once per application.
 
@@ -6642,6 +6693,7 @@ def main():
     check("donation ui pauses when unseen", test_donation_ui_pauses_when_unseen)
     check("sidebar survives short windows", test_sidebar_survives_short_windows)
     check("one theme watcher per app", test_one_theme_watcher_per_app)
+    check("lost titlebar seam repaired without a resize", test_lost_titlebar_seam_is_repaired_without_a_resize)
     check("flash flow launch", test_flash_flow_launch)
     check("install nav entry during run", test_install_nav_entry_during_run)
     check("terminal install handoff", test_terminal_install_handoff)
