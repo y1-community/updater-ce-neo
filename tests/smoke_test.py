@@ -6224,6 +6224,378 @@ def test_window_minimum_size_and_titlebar_stability():
     _reset_app_settings()
 
 
+def test_one_theme_watcher_per_app():
+    """The host appearance is watched once per application.
+
+    A second watcher would poll the same signals and, on every host change,
+    restyle and repaint the whole widget tree a second time — on a window that
+    sits over a blurred backdrop that is real compositor work for nothing."""
+    from PySide6.QtWidgets import QApplication
+    from src.ui.main_window import MainWindow
+
+    _reset_app_settings()
+    app = QApplication.instance() or QApplication(sys.argv)
+    app._theme_watcher = None
+    w1 = MainWindow()
+    w2 = MainWindow()
+    try:
+        assert getattr(app, "_theme_watcher", None) is not None, (
+            "the window must register its watcher on the application"
+        )
+        assert w1._theme_watcher is app._theme_watcher
+        assert w2._theme_watcher is app._theme_watcher, (
+            "a second window must reuse the app's watcher, not install another"
+        )
+        assert app._theme_watcher._installed, "the shared watcher must be watching"
+        assert app._theme_watcher._poll_timer.isActive()
+    finally:
+        w2.close()
+        w1.close()
+        app.processEvents()
+        app._theme_watcher = None
+        _reset_app_settings()
+
+
+def test_sidebar_survives_short_windows():
+    """The sidebar's bottom (brand block, language picker) must never be clipped,
+    and the status bar must stay inside the window, at any window height.
+
+    On macOS the native title bar takes its height out of the client area the app
+    lays out, so with the donation bar visible the bottom of the sidebar was cut
+    off and the bar itself could end up below the window's edge — which of them
+    moved depended on whether the donation options were ticked."""
+    from PySide6.QtCore import QPoint, Qt
+    from PySide6.QtWidgets import QApplication, QScrollArea
+    from src.ui.main_window import MainWindow
+    from src import device_tracking
+
+    _reset_app_settings()
+    app = QApplication.instance() or QApplication(sys.argv)
+
+    for donations in (True, False):
+        w = MainWindow()
+        device_tracking.set_donation_ui_disabled(not donations, w.settings)
+        w._apply_donation_visibility()
+        w.resize(900, 500)
+        w.show()
+        app.processEvents()
+        try:
+            bar = w.statusBar()
+            scroll = w.findChild(QScrollArea, "navScroll")
+            assert scroll is not None, "the sidebar needs its scroll area"
+            assert scroll.widgetResizable()
+            assert scroll.verticalScrollBarPolicy() == Qt.ScrollBarAsNeeded, (
+                "the OS decides when the sidebar bar shows"
+            )
+
+            # At the documented minimum size the sidebar fits without scrolling,
+            # and everything is inside the window.
+            assert scroll.verticalScrollBar().maximum() == 0, "sidebar should fit at 900x500"
+            combo = w._lang_combo
+            combo_bottom = combo.mapTo(w, QPoint(0, 0)).y() + combo.height()
+            assert combo_bottom <= w.height(), (combo_bottom, w.height())
+            if donations:
+                assert bar.isVisible()
+                bar_top = bar.mapTo(w, QPoint(0, 0)).y()
+                assert bar_top + bar.height() <= w.height() + 1, "status bar pushed out of the window"
+                assert combo_bottom <= bar_top + 1, (combo_bottom, bar_top)
+
+            # A window shorter than its content — exactly what the native title
+            # bar does to the client area on macOS — scrolls instead of clipping,
+            # so the language picker stays reachable.
+            w.setMinimumHeight(200)
+            w.resize(900, 300)
+            app.processEvents()
+            assert scroll.verticalScrollBar().maximum() > 0, "short window must scroll, not clip"
+            bar_top = bar.mapTo(w, QPoint(0, 0)).y()
+            if donations:
+                assert bar_top + bar.height() <= w.height() + 1
+            scroll.verticalScrollBar().setValue(scroll.verticalScrollBar().maximum())
+            app.processEvents()
+            pos = w._lang_combo.mapTo(w, QPoint(0, 0))
+            assert 0 <= pos.y() and pos.y() + w._lang_combo.height() <= w.height(), pos
+        finally:
+            w.setMinimumHeight(500)
+            w.close()
+            app.processEvents()
+    _reset_app_settings()
+
+
+def test_connectivity_monitor_adaptive_cadence():
+    """A connectivity probe is a real HTTPS request, so an idle app must not
+    make one every few seconds: a healthy network is confirmed rarely, a broken
+    one is retried soon, and the shared UI monitor uses that adaptive cadence."""
+    from PySide6.QtWidgets import QApplication
+    from src import network
+
+    _reset_app_settings()
+    app = QApplication.instance() or QApplication(sys.argv)
+
+    monitor = network.ConnectivityMonitor(initial_check=False)
+    assert monitor.ONLINE_INTERVAL_MS >= 30_000, monitor.ONLINE_INTERVAL_MS
+    assert monitor.OFFLINE_INTERVAL_MS < monitor.ONLINE_INTERVAL_MS
+    assert monitor._interval_ms == monitor.ONLINE_INTERVAL_MS
+
+    # While monitoring, the interval follows the state the last probe found.
+    monitor._timer.start(monitor.ONLINE_INTERVAL_MS)
+    monitor._on_check_completed(True)
+    assert monitor._timer.interval() == monitor.ONLINE_INTERVAL_MS
+    monitor._on_check_completed(False)
+    assert monitor._timer.interval() == monitor.OFFLINE_INTERVAL_MS, "offline retries soon"
+    monitor._on_check_completed(True)
+    assert monitor._timer.interval() == monitor.ONLINE_INTERVAL_MS, "back online: relax"
+    monitor.stop_monitoring()
+
+    # An explicit interval is a pinned cadence and must not be adapted away
+    # (the fast-monitor test below relies on exactly that).
+    pinned = network.ConnectivityMonitor(interval_ms=50, initial_check=False)
+    assert pinned._pinned_interval_ms == 50
+    pinned._is_online = False
+    pinned._timer.start(50)
+    pinned._reschedule()
+    assert pinned._timer.interval() == 50, "a pinned interval must not adapt"
+    pinned.stop_monitoring()
+
+    # The monitor the UI shares is adaptive, not pinned to a few seconds.
+    shared = network.get_connectivity_monitor()
+    assert shared._pinned_interval_ms is None, shared._pinned_interval_ms
+
+
+def test_select_page_skips_network_polling_without_a_catalogue():
+    """The connectivity probe only exists to choose between the online and the
+    local listing: with the catalogue switched off (offline mode, MediaTek
+    Installer build) the page must not poll the network at all."""
+    from PySide6.QtCore import QObject, Signal
+    from PySide6.QtWidgets import QApplication
+    import src.ui.select_page as sp
+
+    _reset_app_settings()
+    app = QApplication.instance() or QApplication(sys.argv)
+
+    class _FakeMonitor(QObject):
+        connectivity_changed = Signal(bool)
+        is_monitoring = False
+        # Mirrors the real monitor's interface: the page reads both.
+        is_online = None
+
+        def __init__(self):
+            super().__init__()
+            self.started = 0
+            self.stopped = 0
+
+        def start_monitoring(self, interval_ms=None):
+            self.started += 1
+            self.is_monitoring = True
+
+        def stop_monitoring(self):
+            self.stopped += 1
+            self.is_monitoring = False
+
+    fake = _FakeMonitor()
+    orig_get = sp.get_connectivity_monitor
+    orig_generic = sp.is_generic_mtk
+    orig_available = sp._network_polling_available
+    sp.get_connectivity_monitor = lambda: fake
+    sp._network_polling_available = lambda: True  # not an offscreen run
+    try:
+        # Offline mode / MediaTek Installer: no catalogue, so no probes.
+        sp.is_generic_mtk = lambda: True
+        page = sp.SelectPackagePage()
+        assert fake.started == 0, "an offline/generic build must not poll the network"
+
+        # Updater CE with the catalogue on: polling runs, and stops again the
+        # moment the catalogue is switched off from Settings.
+        sp.is_generic_mtk = orig_generic
+        page.apply_generic_mode(False)
+        assert fake.is_monitoring, "the online catalogue needs the connectivity check"
+        page.apply_generic_mode(True)
+        assert not fake.is_monitoring, "offline mode must stop the probes"
+        assert fake.stopped >= 1
+        worker = getattr(page, "_releases_worker", None)
+        if worker is not None and worker.isRunning():
+            worker.requestInterruption()
+            worker.wait(1500)
+        page.deleteLater()
+        app.processEvents()
+    finally:
+        sp.get_connectivity_monitor = orig_get
+        sp.is_generic_mtk = orig_generic
+        sp._network_polling_available = orig_available
+
+
+def test_device_monitor_only_during_install():
+    """USB polling belongs to a run in progress: every way a run can end —
+    failure, USB disconnect, cancel, retry — must stop it, so a failed attempt
+    leaves no polling thread behind for the rest of the session."""
+    from unittest.mock import patch
+    from PySide6.QtWidgets import QApplication
+    from src.flash_service import STEP_WAITING
+    from src.state import FlashState
+    from src.ui.main_window import MainWindow
+
+    _reset_app_settings()
+    app = QApplication.instance() or QApplication(sys.argv)
+    w = MainWindow()
+    w.show()
+    started, stopped = [], []
+    w.service.start_flash = lambda *a, **k: None
+    w.service.start_device_monitor = lambda: started.append(True)
+    w.service.stop_device_monitor = lambda: stopped.append(True)
+    w.service.cancel_flash = lambda: None
+
+    class _NoRetryDialog:
+        def __init__(self, parent=None, detail=""):
+            self.detail = detail
+
+        def exec(self):
+            return 0
+
+        def want_retry(self):
+            return False
+
+    # Starting a run arms the monitor (that is how the target is detected).
+    w._on_package_selected("C:/fake/rom.zip", "Rockbox (Y1)", "Y1")
+    w.service.step_changed.emit(STEP_WAITING)
+    assert started, "a run must start the device monitor"
+    assert w.sm.state is FlashState.S2_WAIT_CONNECTION
+
+    # ...and a failed run stops it: the common MTK outcome, after which the app
+    # used to keep enumerating USB for the rest of the session.
+    stopped.clear()
+    with patch("src.ui.main_window.RetryGuidanceDialog", _NoRetryDialog):
+        w._on_flash_finished(False, "CONNECTION_FAILED")
+    assert stopped, "a finished (failed) run must stop the device monitor"
+
+    # Unplugging the target mid-flash stops it too.
+    stopped.clear()
+    w.sm.force_state(FlashState.S4_FLASHING)
+    w._on_device_lost()
+    assert stopped, "a USB disconnect must stop the device monitor"
+
+    # Retrying arms a fresh monitor (the flow itself is queued).
+    started.clear()
+    with patch("src.ui.main_window.RetryGuidanceDialog", _NoRetryDialog):
+        w._on_retry_flash()
+        app.processEvents()
+    assert started, "a retry starts a fresh device monitor"
+
+    w.close()
+    app.processEvents()
+    _reset_app_settings()
+
+
+def test_theme_watcher_poll_cadence():
+    """The theme watcher is the catch-all for accent changes the host never
+    signals; its poll must be cheap, and the probe that forks a subprocess
+    (~29 ms on macOS) must be rare."""
+    from PySide6.QtWidgets import QApplication
+    import src.ui.dark as dark
+
+    _reset_app_settings()
+    app = QApplication.instance() or QApplication(sys.argv)
+    assert dark.ThemeWatcher.POLL_INTERVAL_MS >= 5000, dark.ThemeWatcher.POLL_INTERVAL_MS
+    assert (
+        dark.ThemeWatcher.POLL_INTERVAL_MS * dark.ThemeWatcher.FULL_PROBE_EVERY >= 120_000
+    ), "platform probes must stay around one per two minutes at most"
+
+    cheap, full = [], []
+
+    def _fake_fingerprint(app=None, *, platform_dark=True):
+        (full if platform_dark else cheap).append(True)
+        return ("stable",)
+
+    orig = dark.theme_fingerprint
+    dark.theme_fingerprint = _fake_fingerprint
+    watcher = dark.ThemeWatcher(app)
+    try:
+        watcher.install()
+        watcher._poll_timer.stop()  # drive poll() by hand, not on a wall clock
+        assert watcher._poll_timer.interval() == dark.ThemeWatcher.POLL_INTERVAL_MS
+        # Construction probes once; only the polls below are under test.
+        cheap_before, full_before = len(cheap), len(full)
+        for _ in range(dark.ThemeWatcher.FULL_PROBE_EVERY - 1):
+            watcher.poll()
+        assert len(cheap) - cheap_before == dark.ThemeWatcher.FULL_PROBE_EVERY - 1
+        assert len(full) == full_before, "ordinary polls must not fork a probe subprocess"
+        watcher.poll()
+        assert len(full) == full_before + 1, (
+            "exactly one platform probe per FULL_PROBE_EVERY polls"
+        )
+
+        # A stopped watcher is inert: Qt keeps the host signal connections for
+        # as long as the receiver lives, so late palette events must not be
+        # able to restyle the app behind a newer watcher's back.
+        watcher.stop()
+        cheap_after, full_after = len(cheap), len(full)
+        watcher.schedule()
+        watcher.poll()
+        assert not watcher._debounce.isActive(), "a stopped watcher must not schedule"
+        assert len(cheap) == cheap_after and len(full) == full_after
+    finally:
+        watcher.stop()
+        dark.theme_fingerprint = orig
+
+
+def test_donation_ui_pauses_when_unseen():
+    """The donation tickers are decoration: while the window is hidden,
+    minimised or the app is in the background they must skip their work instead
+    of repainting a blur-composited window (and fetching) for nobody."""
+    import datetime
+
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QApplication
+    import src.donation_dialog as dd
+
+    _reset_app_settings()
+    app = QApplication.instance() or QApplication(sys.argv)
+    now = datetime.datetime.now()
+    donations = [
+        {"name": "Alice", "amount": 25, "method": "Ko-Fi", "url": "", "dt": now},
+        {"name": "Bob", "amount": 30, "method": "PayPal", "url": "", "dt": now},
+    ]
+
+    # Keep the live donor feed out of this test: it would otherwise land in the
+    # bar (and in later tests' windows) from a worker thread.
+    orig_fetch = dd.fetch_remote_donors_async
+    dd.fetch_remote_donors_async = lambda callback: None
+    bar = dd.DonationStatusBar(donations=donations)
+    assert dd.decorative_updates_needed(bar) is False, "an unshown bar must not tick"
+    before = bar._donor_label.text()
+    bar._rotate()
+    assert bar._donor_label.text() == before, "a hidden bar must not shuffle its ticker"
+
+    # Visible in the active app: the ticker works as before.
+    real_state = app.applicationState
+    app.applicationState = lambda: Qt.ApplicationState.ApplicationActive
+    try:
+        bar.show()
+        app.processEvents()
+        assert dd.decorative_updates_needed(bar) is True
+        bar._rotate()
+        assert bar._donor_label.text() != before, "a visible bar rotates its donors"
+
+        # The app going to the background pauses it again (macOS keeps the
+        # window on screen, so Qt keeps repainting it unless we stop).
+        app.applicationState = lambda: Qt.ApplicationState.ApplicationInactive
+        assert dd.decorative_updates_needed(bar) is False
+        paused = bar._donor_label.text()
+        bar._rotate()
+        assert bar._donor_label.text() == paused, "background app must not repaint"
+
+        # Hiding the window counts as unseen again, even with the app active.
+        app.applicationState = lambda: Qt.ApplicationState.ApplicationActive
+        bar.hide()
+        app.processEvents()
+        assert dd.decorative_updates_needed(bar) is False
+    finally:
+        app.applicationState = real_state
+        dd.fetch_remote_donors_async = orig_fetch
+        bar.close()
+        bar.deleteLater()
+        app.processEvents()
+    _reset_app_settings()
+
+
 def main():
     print("== Neo updater smoke test ==")
     check("updater ce branding and navigation header", test_updater_ce_branding)
@@ -6263,6 +6635,13 @@ def main():
     check("diagnostics date and session filtering", test_diagnostics_time_filter)
     check("connectivity check logging", test_connectivity_check_logging)
     check("connectivity monitor reprobing", test_connectivity_monitor_reprobing)
+    check("connectivity monitor adaptive cadence", test_connectivity_monitor_adaptive_cadence)
+    check("no network polling without a catalogue", test_select_page_skips_network_polling_without_a_catalogue)
+    check("device monitor only during install", test_device_monitor_only_during_install)
+    check("theme watcher poll cadence", test_theme_watcher_poll_cadence)
+    check("donation ui pauses when unseen", test_donation_ui_pauses_when_unseen)
+    check("sidebar survives short windows", test_sidebar_survives_short_windows)
+    check("one theme watcher per app", test_one_theme_watcher_per_app)
     check("flash flow launch", test_flash_flow_launch)
     check("install nav entry during run", test_install_nav_entry_during_run)
     check("terminal install handoff", test_terminal_install_handoff)

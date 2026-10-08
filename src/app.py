@@ -144,17 +144,21 @@ def main():
     apply_windows_dark_titlebar(window, is_dark())
 
     # Match host appearance live: light/dark switches, desktop accent colours,
-    # system font changes — the same way native apps follow the OS.
-    def _on_theme_applied():
-        apply_windows_dark_titlebar(window, is_dark())
-        apply_glass(window)
-        configure_traffic_lights(window)
+    # system font changes — the same way native apps follow the OS. The window
+    # normally brings the watcher with it (and registers it on the app); one is
+    # installed here only when it did not, so the host is never watched twice.
+    theme_watcher = getattr(app, "_theme_watcher", None)
+    if theme_watcher is None:
+        def _on_theme_applied():
+            apply_windows_dark_titlebar(window, is_dark())
+            apply_glass(window)
+            configure_traffic_lights(window)
 
-    theme_watcher = ThemeWatcher(app, on_apply=_on_theme_applied)
-    theme_watcher.install()
-    # Keep a reference for the lifetime of the app; the watcher owns timers and
-    # an event filter on the QApplication itself.
-    app._theme_watcher = theme_watcher
+        theme_watcher = ThemeWatcher(app, on_apply=_on_theme_applied)
+        theme_watcher.install()
+        # Keep a reference for the lifetime of the app; the watcher owns timers
+        # and an event filter on the QApplication itself.
+        app._theme_watcher = theme_watcher
 
     sys.exit(app.exec())
 

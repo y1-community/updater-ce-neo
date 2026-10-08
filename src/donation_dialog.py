@@ -35,6 +35,27 @@ class _DonationRefreshBridge(QObject):
     updated = Signal(object)
 
 
+def decorative_updates_needed(widget) -> bool:
+    """True when a decorative ticker/animation is worth running at all.
+
+    The donation bar and the dialog's ticker are ambient decoration: they keep
+    rotating text to show supporters. Every rotation repaints, and on macOS the
+    window sits over a blurred glass backdrop, so a repaint is composite work
+    for the window server as well. While the app is in the background, its
+    window is minimised, or the widget is hidden, nobody sees the result — so
+    the timers stay armed but their work is skipped until it is visible again.
+    """
+    app = QApplication.instance()
+    if app is not None and app.applicationState() != Qt.ApplicationState.ApplicationActive:
+        return False
+    if not widget.isVisible():
+        return False
+    window = widget.window()
+    if window is None or not window.isVisible() or window.isMinimized():
+        return False
+    return True
+
+
 class _LineLabel(QLabel):
     """Clickable status-bar line (goal / donor ticker).
 
@@ -123,7 +144,9 @@ class DonationStatusBar(QStatusBar):
         self._remote_refresh_timer.setInterval(self._remote_refresh_interval_ms)
         self._remote_refresh_timer.timeout.connect(self._refresh_remote_donors)
         self._remote_refresh_timer.start()
-        self._refresh_remote_donors()
+        # Startup fetch is unconditional: the bar is built before the window is
+        # shown, so the visibility gate below would skip it.
+        self._refresh_remote_donors(force=True)
 
     def credits_link(self):
         """The bar's Credits / Thanks link; the window owns its visibility."""
@@ -351,6 +374,8 @@ class DonationStatusBar(QStatusBar):
     def _rotate(self):
         if not getattr(self, "_donations_enabled", True) or self._status_container.isVisible():
             return
+        if not decorative_updates_needed(self):
+            return
         if getattr(self, "_goal_reached", False):
             self._showing_goal = False
             self._goal_label.setVisible(False)
@@ -421,7 +446,12 @@ class DonationStatusBar(QStatusBar):
                 self._donation_container.setVisible(False)
                 self.setVisible(False)
 
-    def _refresh_remote_donors(self):
+    def _refresh_remote_donors(self, force: bool = False):
+        # A hidden or minimised bar shows nobody the result of a fetch, so the
+        # next visible tick does it instead. The first fetch asks for the feed
+        # while the window is still being built, hence ``force``.
+        if not force and not decorative_updates_needed(self):
+            return
         fetch_remote_donors_async(self._refresh_bridge.updated.emit)
 
     def _apply_fresh_donations(self, fresh):
@@ -807,11 +837,17 @@ class DonationDialog(QDialog):
         self._fade_out.finished.connect(self._next_ticker_step)
 
         self._ticker_timer = QTimer(self)
-        self._ticker_timer.timeout.connect(self._fade_out.start)
+        self._ticker_timer.timeout.connect(self._tick)
         self._ticker_timer.start(6500)
 
         if not getattr(self, "_goal_reached", False):
             QTimer.singleShot(150, self._trigger_goal_anim)
+
+    def _tick(self):
+        """Start one fade step, unless nobody can see it right now."""
+        if not decorative_updates_needed(self):
+            return
+        self._fade_out.start()
 
     def _next_ticker_step(self):
         if getattr(self, "_goal_reached", False):

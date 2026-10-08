@@ -173,6 +173,64 @@ def _ensure_seamless_titlebar(window: QMainWindow | QWidget) -> None:
         pass
 
 
+def native_chrome_intact(window: QMainWindow | QWidget, dark: bool = True) -> bool:
+    """True when the platform's seamless window chrome is still in place.
+
+    Qt re-applies its own window flags whenever it reconfigures a window (a page
+    switch that changes the window's size hint is enough), and that discards
+    what was set natively: on macOS the full-size content view, on Windows the
+    DWM attributes. Nothing in Qt signals it, so the state is read back here —
+    these are native property reads, not subprocesses.
+
+    ``True`` is also returned when the check cannot be made (unsupported
+    platform or API): a false negative would only cost a redundant re-apply,
+    which the caller avoids when this reports intact.
+    """
+    if sys.platform == "darwin":
+        if not is_glass_supported():
+            return True
+        try:
+            from AppKit import NSWindowTitleHidden  # noqa: F401 (API presence)
+
+            view = _get_nsview(window)
+            ns_win = view.window() if view else None
+            if not ns_win:
+                return True
+            # NSWindowStyleMaskFullSizeContentView = 1 << 15
+            if not (ns_win.styleMask() & 0x8000):
+                return False
+            return bool(ns_win.titlebarAppearsTransparent())
+        except Exception:
+            return True
+
+    if sys.platform == "win32" or platform.system() == "Windows":
+        try:
+            import ctypes
+            from ctypes import byref, c_int, sizeof
+
+            hwnd = int(window.winId())
+            dwm = ctypes.windll.dwmapi
+            # DWMWA_CAPTION_COLOR (35) is DWMWA_COLOR_NONE (0xFFFFFFFE) when the
+            # title bar is transparent; DWMWA_USE_IMMERSIVE_DARK_MODE (20, 19 on
+            # older builds) carries the theme. Newer attributes are not readable
+            # everywhere, so an unreadable one counts as intact.
+            caption = c_int(0)
+            if dwm.DwmGetWindowAttribute(hwnd, 35, byref(caption), sizeof(caption)) == 0:
+                if caption.value != 0xFFFFFFFE:
+                    return False
+            dark_flag = c_int(0)
+            for attr in (20, 19):
+                if dwm.DwmGetWindowAttribute(hwnd, attr, byref(dark_flag), sizeof(dark_flag)) == 0:
+                    if bool(dark_flag.value) != bool(dark):
+                        return False
+                    break
+            return True
+        except Exception:
+            return True
+
+    return True
+
+
 def apply_glass(
     window: QMainWindow | QWidget,
     corner_radius: float = 16.0,

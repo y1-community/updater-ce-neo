@@ -110,18 +110,35 @@ class ConnectivityCheckWorker(QThread):
 
 
 class ConnectivityMonitor(QObject):
-    """Periodic non-blocking network monitor for the UI."""
+    """Periodic non-blocking network monitor for the UI.
+
+    A probe is a real HTTPS request, so the cadence is deliberately unhurried:
+    each check costs a TLS handshake plus DNS on the calling thread, and a
+    monitor that reconnects every few seconds keeps a laptop's radio and CPU
+    out of idle for no benefit. While the network looks healthy the state only
+    has to be confirmed now and then (:data:`ONLINE_INTERVAL_MS`); once a check
+    fails, a shorter interval is used so a returning connection is noticed
+    promptly (:data:`OFFLINE_INTERVAL_MS`).
+
+    Passing an explicit ``interval_ms`` pins the cadence (tests do this) and
+    disables the adaptive behaviour.
+    """
 
     connectivity_changed = Signal(bool)
 
+    ONLINE_INTERVAL_MS = 60_000
+    OFFLINE_INTERVAL_MS = 15_000
+
     def __init__(
         self,
-        interval_ms: int = 6000,
+        interval_ms: Optional[int] = None,
         initial_check: bool = True,
         parent: Optional[QObject] = None,
     ):
         super().__init__(parent)
-        self._interval_ms = interval_ms
+        # An explicit interval means "keep this cadence", so adaptation is off.
+        self._pinned_interval_ms = int(interval_ms) if interval_ms else None
+        self._interval_ms = self._pinned_interval_ms or self.ONLINE_INTERVAL_MS
         self._is_online: Optional[bool] = None
         self._worker: Optional[ConnectivityCheckWorker] = None
         self._timeout = 2.0
@@ -135,9 +152,16 @@ class ConnectivityMonitor(QObject):
     def is_online(self) -> Optional[bool]:
         return self._is_online
 
+    @property
+    def is_monitoring(self) -> bool:
+        return self._timer.isActive()
+
     def start_monitoring(self, interval_ms: Optional[int] = None):
         if interval_ms:
-            self._interval_ms = interval_ms
+            self._pinned_interval_ms = int(interval_ms)
+            self._interval_ms = self._pinned_interval_ms
+        if self._is_online is False and self._pinned_interval_ms is None:
+            self._interval_ms = self.OFFLINE_INTERVAL_MS
         self.check_now()
         self._timer.start(self._interval_ms)
 
@@ -145,6 +169,19 @@ class ConnectivityMonitor(QObject):
         self._timer.stop()
         if self._worker and self._worker.isRunning():
             self._worker.wait(3000)
+
+    def _reschedule(self):
+        """Pick the next interval from the state the last probe found."""
+        if self._pinned_interval_ms is not None or not self._timer.isActive():
+            return
+        self._interval_ms = (
+            self.OFFLINE_INTERVAL_MS
+            if self._is_online is False
+            else self.ONLINE_INTERVAL_MS
+        )
+        # start() restarts the countdown from now, which is what we want: the
+        # interval that was just chosen applies from this probe onwards.
+        self._timer.start(self._interval_ms)
 
     def check_now(self):
         """Start a probe unless one is already in flight.
@@ -175,6 +212,7 @@ class ConnectivityMonitor(QObject):
     def _on_check_completed(self, online: bool):
         prev = self._is_online
         self._is_online = online
+        self._reschedule()
         if prev is None or prev != online:
             logger.info("Network connectivity transitioned: online=%s", online)
             self.connectivity_changed.emit(online)
@@ -186,5 +224,5 @@ _shared_monitor: Optional[ConnectivityMonitor] = None
 def get_connectivity_monitor() -> ConnectivityMonitor:
     global _shared_monitor
     if _shared_monitor is None:
-        _shared_monitor = ConnectivityMonitor(interval_ms=6000, initial_check=False)
+        _shared_monitor = ConnectivityMonitor(initial_check=False)
     return _shared_monitor

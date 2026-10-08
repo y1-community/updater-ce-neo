@@ -57,6 +57,16 @@ from .dark import T, page_top_margin
 logger = logging.getLogger(__name__)
 
 
+def _network_polling_available() -> bool:
+    """False in offscreen runs (the smoke suite, headless CI).
+
+    Those builds construct this page many times over and must never reach the
+    network; on a real desktop the connectivity check is what decides between
+    the online listing and the local-file tab.
+    """
+    return os.environ.get("QT_QPA_PLATFORM") != "offscreen"
+
+
 class ReleasesWorker(QThread):
     finished = Signal(list, str)
 
@@ -136,15 +146,34 @@ class SelectPackagePage(QWidget):
 
         self._monitor = get_connectivity_monitor()
         self._monitor.connectivity_changed.connect(self._on_connectivity_changed)
-        if os.environ.get("QT_QPA_PLATFORM") != "offscreen":
-            self._monitor.start_monitoring(interval_ms=5000)
+        if self._connectivity_monitor_applicable():
+            self._monitor.start_monitoring()
             if self._monitor.is_online is False:
                 self.set_online_mode(False)
 
         if is_generic_mtk():
             self.apply_generic_mode(True)
 
+    def _connectivity_monitor_applicable(self) -> bool:
+        """True only when an online catalogue is actually on offer.
+
+        The probe exists to decide between the online and local listings, so
+        with the catalogue switched off (offline mode, MediaTek Installer build)
+        there is nothing to decide and the periodic HTTPS check would be pure
+        cost.
+        """
+        if is_generic_mtk():
+            return False
+        return _network_polling_available()
+
     def apply_generic_mode(self, generic: bool):
+        # Network polling follows the catalogue: no catalogue, no probes.
+        if not generic and self._connectivity_monitor_applicable():
+            if not self._monitor.is_monitoring:
+                self._monitor.start_monitoring()
+        elif generic and self._monitor.is_monitoring:
+            self._monitor.stop_monitoring()
+
         if generic:
             self._tabs.tabBar().setVisible(False)
             self._tabs.setCurrentWidget(self._local_tab)

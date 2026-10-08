@@ -980,7 +980,11 @@ class ThemeWatcher(QObject):
     cheap fingerprint poll as the catch-all.
     """
 
-    POLL_INTERVAL_MS = 2000
+    # The poll is the catch-all for accent-colour changes that the host signals
+    # through nothing at all; the appearance switches themselves arrive as Qt
+    # events (see ``install``). A few seconds of latency on an accent change is
+    # invisible, so the poll stays inexpensive for long-running sessions.
+    POLL_INTERVAL_MS = 5000
     DEBOUNCE_MS = 150
     # Qt re-broadcasts a palette/theme change caused by *our own* setPalette, so
     # ignore platform events for a moment after each refresh or the app would
@@ -989,7 +993,9 @@ class ThemeWatcher(QObject):
     # Every Nth poll also runs the slower cross-platform probes (``defaults``
     # / ``gsettings`` subprocesses), so an accent change that Qt never reports
     # is still caught — without spawning a process every couple of seconds.
-    FULL_PROBE_EVERY = 10
+    # Those probes fork a process (~29 ms each on macOS), so they are kept to
+    # roughly one every two minutes.
+    FULL_PROBE_EVERY = 24
 
     def __init__(self, app: QApplication, parent=None, on_apply=None):
         super().__init__(parent or app)
@@ -999,6 +1005,9 @@ class ThemeWatcher(QObject):
         self._polls = 0
         self._last = theme_fingerprint(app, platform_dark=False)
         self._last_full = theme_fingerprint(app)
+        # A watcher that has been stopped stays inert even though Qt keeps the
+        # host signal connections until the receiver is destroyed (see stop()).
+        self._installed = False
         self._debounce = QTimer(self)
         self._debounce.setSingleShot(True)
         self._debounce.setInterval(self.DEBOUNCE_MS)
@@ -1012,6 +1021,9 @@ class ThemeWatcher(QObject):
 
     # -- wiring -------------------------------------------------------------
     def install(self) -> None:
+        """Start watching. Idempotent, and paired with :meth:`stop`."""
+        if self._installed:
+            return
         try:
             hints = self._app.styleHints()
             if hasattr(hints, "colorSchemeChanged"):
@@ -1027,9 +1039,18 @@ class ThemeWatcher(QObject):
             self._app.installEventFilter(self)
         except Exception:
             pass
+        self._installed = True
         self._poll_timer.start()
 
     def stop(self) -> None:
+        """Stop watching: timers off, event filter removed, watcher inert.
+
+        Qt keeps signal connections to a receiver that is still alive, and a
+        parented watcher outlives ``stop()``. ``_installed`` is what makes the
+        stopped watcher ignore them, so it can never restyle the app behind a
+        newer watcher's back.
+        """
+        self._installed = False
         self._poll_timer.stop()
         self._debounce.stop()
         self._cooldown.stop()
@@ -1039,13 +1060,18 @@ class ThemeWatcher(QObject):
             pass
 
     def eventFilter(self, obj, event):  # noqa: N802 (Qt naming)
-        if event.type() in (QEvent.Type.ApplicationPaletteChange, QEvent.Type.ThemeChange):
+        if self._installed and event.type() in (
+            QEvent.Type.ApplicationPaletteChange,
+            QEvent.Type.ThemeChange,
+        ):
             self.schedule()
         return False
 
     # -- change handling ----------------------------------------------------
     def schedule(self, *_args) -> None:
         """Coalesce the burst of events a single theme change produces."""
+        if not self._installed:
+            return
         self._request()
 
     def _request(self, *, force: bool = False) -> None:
@@ -1056,6 +1082,8 @@ class ThemeWatcher(QObject):
         self._debounce.start()
 
     def poll(self) -> None:
+        if not self._installed:
+            return
         self._polls += 1
         try:
             current = theme_fingerprint(self._app, platform_dark=False)
@@ -1075,7 +1103,7 @@ class ThemeWatcher(QObject):
                 self._request(force=True)
 
     def apply_now(self) -> None:
-        if self._applying:
+        if self._applying or not self._installed:
             return
         self._applying = True
         try:

@@ -31,11 +31,13 @@ from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
@@ -267,12 +269,16 @@ class MainWindow(QMainWindow):
         self._apply_donation_visibility()
         self._apply_generic_mtk_branding()
 
-        # Live theme watcher for OS light/dark and accent color changes
+        # Live theme watcher for OS light/dark and accent color changes. One per
+        # application: a watcher that is installed twice would refresh every
+        # widget twice for the same host change, which is pure repaint churn on
+        # a blur-composited window.
         app = QApplication.instance()
-        self._theme_watcher = getattr(app, "_theme_watcher", None)
-        if self._theme_watcher is None and app is not None and not os.environ.get("PYTEST_CURRENT_TEST"):
+        self._theme_watcher = getattr(app, "_theme_watcher", None) if app is not None else None
+        if self._theme_watcher is None and app is not None:
             self._theme_watcher = ThemeWatcher(app, parent=self, on_apply=self._on_theme_changed)
             self._theme_watcher.install()
+            app._theme_watcher = self._theme_watcher
 
     def _on_theme_changed(self):
         dark = is_dark()
@@ -281,6 +287,15 @@ class MainWindow(QMainWindow):
             apply_windows_dark_titlebar(self, dark=dark)
         elif sys.platform == "darwin":
             apply_glass(self, dark=dark)
+            # Traffic-light geometry follows the title bar, which the refresh
+            # above may have redrawn; the window is the only place that knows
+            # how to place them.
+            try:
+                from .glass import configure_traffic_lights
+
+                configure_traffic_lights(self)
+            except Exception:
+                pass
         sb = self.statusBar()
         if sb and hasattr(sb, "refresh_theme"):
             sb.refresh_theme()
@@ -316,7 +331,32 @@ class MainWindow(QMainWindow):
             f" border-radius: 0; }}"
         )
 
-        layout = QVBoxLayout(nav)
+        # The sidebar is the one column that must survive every window height: it
+        # carries the install entries at the top and the brand block and language
+        # picker at the bottom, and on macOS the native title bar eats into the
+        # height Qt lays out (with the donation bar on, the bottom of this column
+        # used to be clipped and the bar itself pushed out of the window). Giving
+        # it a scroll area keeps every control reachable at any size, keeps the
+        # central widget shrinkable so the status bar always stays inside the
+        # window, and uses the OS's own bars: Qt draws nothing here, so macOS and
+        # WinUI overlay scrollbars appear only while scrolling.
+        sidebar_scroll = QScrollArea(nav)
+        sidebar_scroll.setObjectName("navScroll")
+        sidebar_scroll.setWidgetResizable(True)
+        sidebar_scroll.setFrameShape(QFrame.NoFrame)
+        sidebar_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        sidebar_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        sidebar_scroll.setStyleSheet("QScrollArea#navScroll { background: transparent; border: none; }")
+        nav_outer = QVBoxLayout(nav)
+        nav_outer.setContentsMargins(0, 0, 0, 0)
+        nav_outer.setSpacing(0)
+        nav_outer.addWidget(sidebar_scroll)
+
+        nav_content = QWidget()
+        nav_content.setAttribute(Qt.WA_TranslucentBackground, True)
+        sidebar_scroll.setWidget(nav_content)
+
+        layout = QVBoxLayout(nav_content)
         layout.setContentsMargins(12, top_margin, 12, 14)
         layout.setSpacing(4)
 
@@ -546,25 +586,56 @@ class MainWindow(QMainWindow):
         self.service.device_lost.connect(self._on_device_lost)
         self.service.monitor_error.connect(self._on_monitor_error)
 
+    # How often the seamless window chrome is verified on platforms where Qt can
+    # silently wipe it (see _verify_native_chrome). The check is a native
+    # property read, so this is far cheaper than a repaint.
+    CHROME_WATCHDOG_MS = 1000
+
     def _reassert_mac_glass(self, *_args):
-        if sys.platform == "darwin":
-            if getattr(self, "_reasserting_mac_glass", False):
-                return
-            self._reasserting_mac_glass = True
-            try:
+        """Re-apply the native window chrome (macOS glass, Windows DWM)."""
+        if getattr(self, "_reasserting_chrome", False):
+            return
+        self._reasserting_chrome = True
+        try:
+            if sys.platform == "darwin":
                 from .glass import _ensure_seamless_titlebar, apply_glass
                 _ensure_seamless_titlebar(self)
                 apply_glass(self)
-            finally:
-                self._reasserting_mac_glass = False
+            elif sys.platform == "win32":
+                from .glass import apply_windows_acrylic, apply_windows_dark_titlebar
+
+                apply_windows_dark_titlebar(self, is_dark())
+                apply_windows_acrylic(self, dark=is_dark())
+        finally:
+            self._reasserting_chrome = False
+
+    def _verify_native_chrome(self, *_args):
+        """Re-apply the window chrome only when the platform actually lost it.
+
+        Qt's platform plugins re-apply their own window flags whenever a window
+        is reconfigured — switching sidebar entries is enough — and that drops
+        the seamless title bar (the full-size content view on macOS, the DWM
+        attributes on Windows). The native title bar then grows back, the
+        content view drops by its height and the sidebar's first entry looks
+        pushed down until the user resizes the window by hand. Nothing signals
+        this, so the state is verified instead; the read is a native property
+        access and the repair only runs when the check fails.
+        """
+        if not self.isVisible() or self.isMinimized():
+            return
+        try:
+            from .glass import native_chrome_intact
+
+            if native_chrome_intact(self, dark=is_dark()):
+                return
+        except Exception:
+            return
+        self._reassert_mac_glass()
 
     def changeEvent(self, event):
         super().changeEvent(event)
-        if sys.platform == "darwin" and event.type() in (
-            QEvent.WindowStateChange,
-            QEvent.ActivationChange,
-        ):
-            self._reassert_mac_glass()
+        if event.type() in (QEvent.WindowStateChange, QEvent.ActivationChange):
+            self._verify_native_chrome()
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -572,11 +643,17 @@ class MainWindow(QMainWindow):
             from .glass import apply_glass, configure_traffic_lights
             apply_glass(self)
             configure_traffic_lights(self)
+        if event.type() == QEvent.Type.Show and not getattr(self, "_chrome_watchdog", None):
+            # Started once: a reset can happen at any point in a session, and the
+            # check is a property read rather than a repaint.
+            self._chrome_watchdog = QTimer(self)
+            self._chrome_watchdog.setInterval(self.CHROME_WATCHDOG_MS)
+            self._chrome_watchdog.timeout.connect(self._verify_native_chrome)
+            self._chrome_watchdog.start()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        if sys.platform == "darwin":
-            self._reassert_mac_glass()
+        self._verify_native_chrome()
 
     def keyPressEvent(self, event):
         # M or D reveal the hidden install-method entry. "MTKClient (Mac)" runs
@@ -641,6 +718,10 @@ class MainWindow(QMainWindow):
             # the sidebar shows the run is live rather than going blank.
             checked = idx == page_idx or (install_active and key == "nav_select_package")
             btn.setChecked(checked)
+        # A page with a different size hint makes Qt reconfigure the window, and
+        # that re-applies Qt's own window flags — verify the chrome right after
+        # the new page has settled, so the title bar never visibly shifts.
+        QTimer.singleShot(0, self._verify_native_chrome)
 
     def _on_package_selected(self, path, name, model):
         self._package_path = path
@@ -909,6 +990,10 @@ class MainWindow(QMainWindow):
             except ValueError:
                 return
             self._elapsed_timer.stop()
+            # The run is over (the target is gone), so the USB monitor has
+            # nothing left to watch and must not keep polling in the
+            # background; a retry starts a fresh one.
+            self.service.stop_device_monitor()
             self.service.cancel_flash()
             self._error_page.show_usb_disconnected(self._last_progress or 0)
             self._nav_to_page(_PAGE_ERROR)
@@ -924,6 +1009,12 @@ class MainWindow(QMainWindow):
 
     def _on_flash_finished(self, ok, error_code):
         self._elapsed_timer.stop()
+        # Device monitoring belongs to a run in progress and stops with it, on
+        # success and failure alike: otherwise a failed attempt (the common
+        # case when the device is not powered off properly) left a USB polling
+        # thread behind for as long as the window stayed open. Pressing Retry
+        # or starting a new install starts a fresh monitor.
+        self.service.stop_device_monitor()
         try:
             from ..diagnostics import DiagnosticsManager
             DiagnosticsManager.instance().end_flash_session(ok, str(error_code or ""))
