@@ -14,7 +14,6 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
     QGridLayout,
-    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -85,6 +84,8 @@ class ReleasesWorker(QThread):
 
     def run(self):
         try:
+            if self.isInterruptionRequested():
+                return
             releases = self.client.releases_for_package(
                 self.package,
                 self.model,
@@ -94,10 +95,13 @@ class ReleasesWorker(QThread):
                 prefer_240p=self.prefer_240p,
                 force_refresh=self.force_refresh,
             )
+            if self.isInterruptionRequested():
+                return
             self.finished.emit(releases, "")
         except Exception as e:
-            logger.exception("Releases fetch failed")
-            self.finished.emit([], str(e))
+            if not self.isInterruptionRequested():
+                logger.exception("Releases fetch failed")
+                self.finished.emit([], str(e))
 
 
 class SelectPackagePage(QWidget):
@@ -108,6 +112,7 @@ class SelectPackagePage(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.client = catalog.ReleasesClient()
+        self._active_workers = set()
         self._releases_worker = None
         self._download_worker = None
         self._current_package_path = ""
@@ -141,14 +146,12 @@ class SelectPackagePage(QWidget):
 
     def apply_generic_mode(self, generic: bool):
         if generic:
-            self.set_online_mode(False)
             self._tabs.tabBar().setVisible(False)
+            self._tabs.setCurrentWidget(self._local_tab)
             self._hint.setText(tr("sel_only_local_generic"))
             self._offline_banner.setText(tr("sel_offline_install_generic"))
         else:
             self._tabs.tabBar().setVisible(True)
-            if self._monitor.is_online is not False:
-                self.set_online_mode(True)
             self._hint.setText(tr("sel_only_local"))
             self._offline_banner.setText(tr("sel_offline_install"))
 
@@ -206,9 +209,9 @@ class SelectPackagePage(QWidget):
         layout.setSpacing(6)
 
         # ── Device & Software Filters (Compact 2-Row Responsive Grid) ────
-        self._filter_group = QGroupBox()
-        filter_layout = QGridLayout(self._filter_group)
-        filter_layout.setContentsMargins(10, 6, 10, 6)
+        self._filter_group = Card()
+        filter_layout = QGridLayout()
+        filter_layout.setContentsMargins(4, 2, 4, 2)
         filter_layout.setHorizontalSpacing(8)
         filter_layout.setVerticalSpacing(6)
 
@@ -237,6 +240,7 @@ class SelectPackagePage(QWidget):
         type_row.addWidget(self._type_combo)
 
         self._type_help_btn = QPushButton(tr("sel_type_help_btn"))
+        self._type_help_btn.setProperty("cssClass", "ghost")
         self._type_help_btn.setToolTip(tr("sel_type_help_body").replace("\n\n", " "))
         self._type_help_btn.clicked.connect(self._show_device_type_help)
         type_row.addWidget(self._type_help_btn)
@@ -253,12 +257,14 @@ class SelectPackagePage(QWidget):
         filter_layout.addWidget(self._software_combo, 1, 1, 1, 2)
 
         self._refresh_btn = QPushButton(tr("sel_refresh"))
+        self._refresh_btn.setProperty("cssClass", "ghost")
         self._refresh_btn.setToolTip(tr("sel_refresh_tooltip"))
         self._refresh_btn.clicked.connect(lambda: self._refresh_releases(force_refresh=True))
         filter_layout.addWidget(self._refresh_btn, 1, 3)
 
         filter_layout.setColumnStretch(1, 1)
         filter_layout.setColumnStretch(3, 1)
+        self._filter_group.set_layout(filter_layout)
 
         layout.addWidget(self._filter_group)
 
@@ -273,9 +279,9 @@ class SelectPackagePage(QWidget):
         split.setSpacing(10)
 
         # Left panel: Available System Software
-        self._pkg_group = QGroupBox(tr("sel_available_software"))
-        pkg_layout = QVBoxLayout(self._pkg_group)
-        pkg_layout.setContentsMargins(8, 8, 8, 8)
+        self._pkg_group = Card("sel_available_software")
+        pkg_layout = QVBoxLayout()
+        pkg_layout.setContentsMargins(0, 0, 0, 0)
         pkg_layout.setSpacing(6)
 
         self._release_list = QListWidget()
@@ -290,14 +296,16 @@ class SelectPackagePage(QWidget):
         pkg_layout.addWidget(self._download_bar)
 
         self._install_btn = QPushButton(tr("sel_install"))
+        self._install_btn.setProperty("cssClass", "primary")
         self._install_btn.setDefault(True)
         self._install_btn.setAutoDefault(True)
-        self._install_btn.setMinimumHeight(32)
+        self._install_btn.setMinimumHeight(36)
         self._install_btn.setEnabled(False)
         self._install_btn.setToolTip(tr("sel_install_tooltip_generic"))
         self._install_btn.clicked.connect(self._on_install)
         pkg_layout.addWidget(self._install_btn)
 
+        self._pkg_group.set_layout(pkg_layout)
         split.addWidget(self._pkg_group, 5)
 
         # Right panel: Status and Notes
@@ -306,9 +314,9 @@ class SelectPackagePage(QWidget):
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(8)
 
-        self._notes_group = QGroupBox(tr("sel_about_update"))
-        notes_l = QVBoxLayout(self._notes_group)
-        notes_l.setContentsMargins(8, 6, 8, 6)
+        self._notes_group = Card("sel_about_update")
+        notes_l = QVBoxLayout()
+        notes_l.setContentsMargins(0, 0, 0, 0)
         notes_l.setSpacing(4)
 
         self._notes = QTextBrowser()
@@ -321,6 +329,8 @@ class SelectPackagePage(QWidget):
         self._notes.setLineWrapMode(QTextBrowser.WidgetWidth)
         self._notes.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._notes.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        from .dark import apply_native_scrollbar_policy
+        apply_native_scrollbar_policy(self._notes)
         self._notes.setPlaceholderText(tr("sel_notes_hint"))
         self._notes.setStyleSheet(
             "QTextBrowser#releaseNotes { background: transparent; border: none; padding: 0px; }"
@@ -342,6 +352,7 @@ class SelectPackagePage(QWidget):
         self._translate_label.setVisible(False)
         notes_l.addWidget(self._translate_label)
 
+        self._notes_group.set_layout(notes_l)
         right_layout.addWidget(self._notes_group, 1)
 
         split.addWidget(right_panel, 6)
@@ -365,9 +376,9 @@ class SelectPackagePage(QWidget):
         self._offline_banner.set_key("sel_offline_install")
         layout.addWidget(self._offline_banner)
 
-        self._local_group = local_group = QGroupBox(tr("sel_choose_firmware_pkg"))
-        grp_l = QVBoxLayout(local_group)
-        grp_l.setContentsMargins(10, 8, 10, 8)
+        self._local_group = local_group = Card("sel_choose_firmware_pkg")
+        grp_l = QVBoxLayout()
+        grp_l.setContentsMargins(0, 0, 0, 0)
         grp_l.setSpacing(6)
 
         row = QHBoxLayout()
@@ -375,8 +386,10 @@ class SelectPackagePage(QWidget):
         self._path_edit.setReadOnly(True)
         self._path_edit.setPlaceholderText(tr("sel_placeholder"))
         self._browse_btn = QPushButton(tr("sel_browse"))
+        self._browse_btn.setProperty("cssClass", "ghost")
         self._browse_btn.clicked.connect(self._on_choose_file)
         self._browse_folder_btn = QPushButton(tr("sel_browse_folder"))
+        self._browse_folder_btn.setProperty("cssClass", "ghost")
         self._browse_folder_btn.clicked.connect(self._on_choose_folder)
         row.addWidget(self._path_edit, 1)
         row.addWidget(self._browse_btn)
@@ -397,6 +410,7 @@ class SelectPackagePage(QWidget):
         grp_l.addWidget(self._local_status)
 
         self._start_btn = QPushButton(tr("sel_btn_start"))
+        self._start_btn.setProperty("cssClass", "primary")
         self._start_btn.setDefault(True)
         self._start_btn.setAutoDefault(True)
         self._start_btn.setMinimumHeight(36)
@@ -404,6 +418,7 @@ class SelectPackagePage(QWidget):
         self._start_btn.clicked.connect(self._on_start_flash)
         grp_l.addWidget(self._start_btn)
 
+        local_group.set_layout(grp_l)
         layout.addWidget(local_group)
         layout.addStretch()
         return page
@@ -640,15 +655,18 @@ class SelectPackagePage(QWidget):
         if package is None:
             self._set_online_banner("sel_no_release")
             return
-        # Stop any in-flight worker before replacing; overwriting a running
-        # QThread causes "Destroyed while thread is still running" / SIGABRT.
         old = self._releases_worker
         if old is not None and old.isRunning():
+            try:
+                old.finished.disconnect()
+            except Exception:
+                pass
             old.requestInterruption()
-            old.wait(800)
+            old.wait(100)
+
         self._set_online_banner("sel_loading")
         show_old, show_nightly, prefer_240p = self.release_listing_filters()
-        self._releases_worker = ReleasesWorker(
+        worker = ReleasesWorker(
             self.client,
             package,
             self.current_model(),
@@ -657,24 +675,43 @@ class SelectPackagePage(QWidget):
             show_old_rockbox=show_old,
             prefer_240p=prefer_240p,
             force_refresh=force_refresh,
+            parent=self,
         )
-        self._releases_worker.finished.connect(self._on_releases_loaded)
-        self._releases_worker.start()
+        self._releases_worker = worker
+        self._active_workers.add(worker)
+        worker.finished.connect(lambda rels, err: self._on_releases_worker_finished(worker, rels, err))
+        worker.start()
         if force_refresh:
             self._refresh_manifest()
+
+    def _on_releases_worker_finished(self, worker, releases, error):
+        self._active_workers.discard(worker)
+        if worker is self._releases_worker:
+            self._on_releases_loaded(releases, error)
 
     def _refresh_manifest(self):
         try:
             from ..manifest import ManifestWorker
             old = getattr(self, "_manifest_worker", None)
             if old is not None and old.isRunning():
+                try:
+                    old.finished.disconnect()
+                except Exception:
+                    pass
                 old.requestInterruption()
-                old.wait(800)
-            self._manifest_worker = ManifestWorker(self, force_refresh=True)
-            self._manifest_worker.finished.connect(self._on_manifest_refreshed)
-            self._manifest_worker.start()
+                old.wait(100)
+            worker = ManifestWorker(self, force_refresh=True)
+            self._manifest_worker = worker
+            self._active_workers.add(worker)
+            worker.finished.connect(lambda entries: self._on_manifest_worker_finished(worker, entries))
+            worker.start()
         except Exception as e:
             logger.debug("Background manifest refresh failed: %s", e)
+
+    def _on_manifest_worker_finished(self, worker, entries):
+        self._active_workers.discard(worker)
+        if worker is getattr(self, "_manifest_worker", None):
+            self._on_manifest_refreshed(entries)
 
     def _on_manifest_refreshed(self, entries):
         if entries:
@@ -697,14 +734,41 @@ class SelectPackagePage(QWidget):
         self._release_list.clear()
         releases = sorted(releases or [], key=catalog.release_sort_key, reverse=True)
         prefer_240p = self.release_listing_filters()[2]
+        install_rec = None
+        try:
+            from .. import device_tracking
+            curr_model = self.current_model() or "Y1"
+            curr_settings = getattr(self, "settings", None)
+            install_rec = device_tracking.get_device_install(curr_model, settings=curr_settings)
+        except Exception:
+            pass
+        installed_tag = (install_rec.get("tag_name") or "") if install_rec else ""
+        installed_sw = (install_rec.get("software_name") or "").lower() if install_rec else ""
+        curr_sw = (self.current_software() or "").lower()
+        is_same_sw = (not curr_sw) or (not installed_sw) or (installed_sw == curr_sw) or (installed_sw in curr_sw) or (curr_sw in installed_sw)
+
         for rel in releases:
             label = catalog.format_release_display_label(rel, prefer_240p=prefer_240p)
-            item = QListWidgetItem(label)
-            item.setData(Qt.UserRole, rel)
-            tooltip = self._asset_line(rel)
             tag = rel.get("tag_name", "")
+            is_installed = bool(installed_tag and is_same_sw and tag == installed_tag)
+
+            if is_installed:
+                display_label = f"● {label}  ({tr('installed_badge')})"
+            else:
+                display_label = label
+
+            item = QListWidgetItem(display_label)
+            item.setData(Qt.UserRole, rel)
+            if is_installed:
+                f = item.font()
+                f.setBold(True)
+                item.setFont(f)
+
+            tooltip = self._asset_line(rel)
             if tag:
                 tooltip = f"{tag}\n{tooltip}".strip()
+            if is_installed:
+                tooltip = f"[{tr('installed_badge')}] {tooltip}"
             item.setToolTip(tooltip)
             self._release_list.addItem(item)
         if not releases:

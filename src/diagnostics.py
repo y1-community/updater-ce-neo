@@ -272,16 +272,19 @@ class _ToolStreamTee(io.TextIOBase):
             raise OSError("underlying stream has no file descriptor")
         return self._original.fileno()
 
-    def detach(self):
-        """Hand the real stream over, as a plain stream replacement would.
+    @property
+    def buffer(self):
+        if self._original is not None and hasattr(self._original, "buffer"):
+            return self._original.buffer
+        return getattr(sys, "__stdout__", None) and getattr(sys.__stdout__, "buffer", None)
 
-        mtkclient re-wraps ``sys.stdout`` at import time; letting it detach the
-        real stream keeps that import working even if capture were installed
-        before it.
-        """
-        if self._original is None or not hasattr(self._original, "detach"):
-            raise io.UnsupportedOperation("detach")
-        return self._original.detach()
+    def detach(self):
+        """Hand the real stream buffer over without detaching and invalidating the original wrapper."""
+        if self._original is not None and hasattr(self._original, "buffer"):
+            return self._original.buffer
+        if hasattr(sys, "__stdout__") and hasattr(sys.__stdout__, "buffer"):
+            return sys.__stdout__.buffer
+        raise io.UnsupportedOperation("detach")
 
     def writable(self) -> bool:
         return True

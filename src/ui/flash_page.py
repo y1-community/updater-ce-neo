@@ -86,10 +86,9 @@ class FlashPage(QWidget):
         layout.addWidget(self._prep_banner)
 
         self._prep_img = QLabel()
-        self._prep_img.setFixedSize(320, 155)
-        self._prep_img.setScaledContents(True)
+        self._prep_img.setFixedHeight(155)
         self._prep_img.setAlignment(Qt.AlignCenter)
-        self._load_image(self._prep_img, "presteps.png")
+        self._load_image(self._prep_img, "presteps.png", 155)
         layout.addWidget(self._prep_img, 0, Qt.AlignCenter)
 
         self._prep_card = Card("flash_progress_title")
@@ -120,10 +119,9 @@ class FlashPage(QWidget):
         row.setSpacing(16)
 
         self._status_img = QLabel()
-        self._status_img.setFixedSize(320, 155)
-        self._status_img.setScaledContents(True)
+        self._status_img.setFixedHeight(155)
         self._status_img.setAlignment(Qt.AlignCenter)
-        self._load_image(self._status_img, "initsteps.png")
+        self._load_image(self._status_img, "initsteps.png", 155)
         row.addWidget(self._status_img, 0, Qt.AlignTop)
 
         guide_box = QVBoxLayout()
@@ -189,10 +187,9 @@ class FlashPage(QWidget):
         left_col.setSpacing(8)
 
         self._flash_img = QLabel()
-        self._flash_img.setFixedSize(220, 106)
-        self._flash_img.setScaledContents(True)
+        self._flash_img.setFixedHeight(106)
         self._flash_img.setAlignment(Qt.AlignCenter)
-        self._load_image(self._flash_img, "installing.png")
+        self._load_image(self._flash_img, "installing.png", 106)
         left_col.addWidget(self._flash_img, 0, Qt.AlignCenter)
 
         self._progress_card = Card("flash_progress_title")
@@ -242,13 +239,16 @@ class FlashPage(QWidget):
         layout.addStretch()
         return view
 
-    def _load_image(self, label, name):
+    def _load_image(self, label, name, target_height=None):
         for base in (paths.RESOURCES_DIR, paths.REPO_ROOT / "assets"):
             p = base / name
             if p.exists():
                 pm = QPixmap(str(p))
-                if not pm.isNull():
-                    label.setPixmap(pm)
+                if not pm.isNull() and pm.height() > 0:
+                    th = target_height or (label.height() if label.height() > 0 else 155)
+                    scaled_pm = pm.scaledToHeight(th, Qt.SmoothTransformation)
+                    label.setFixedSize(scaled_pm.size())
+                    label.setPixmap(scaled_pm)
                     return
 
     def show_preparing(self):
@@ -256,14 +256,14 @@ class FlashPage(QWidget):
         self._prep_banner.set_key("flash_preparing")
         self._prep_step_key = "step_extract"
         self._prep_step.setText(tr("step_extract"))
-        self._load_image(self._prep_img, "presteps.png")
+        self._load_image(self._prep_img, "presteps.png", 155)
 
     def show_waiting(self):
         self._stack.setCurrentWidget(self._waiting_view)
 
     def show_flashing(self):
         self._stack.setCurrentWidget(self._flashing_view)
-        self._load_image(self._flash_img, "installing.png")
+        self._load_image(self._flash_img, "installing.png", 106)
         self._warning.setVisible(True)
 
     def set_method(self, method):
@@ -358,8 +358,8 @@ class FlashPage(QWidget):
         self._warning.setVisible(True)
 
     def set_device_done(self):
-        self._load_image(self._status_img, "installed.png")
-        self._load_image(self._flash_img, "installed.png")
+        self._load_image(self._status_img, "installed.png", 155)
+        self._load_image(self._flash_img, "installed.png", 106)
         self._warning.setVisible(False)
         # The top banner must not keep reading "Install in Progress" while the
         # completion dialog sits over the finished page.

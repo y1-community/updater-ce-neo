@@ -97,18 +97,6 @@ if errorlevel 1 (
     exit /b 1
 )
 
-rem 4. Ensure SP Flash Tool payload is bundled next to the executable
-set "SP_WIN_SRC=tools\windows\SP_Flash_Tool_v5.1904_Win"
-set "SP_WIN_DST=dist\%APP_DIR%\SP_Flash_Tool"
-if exist "%SP_WIN_SRC%" (
-    if not exist "%SP_WIN_DST%" (
-        echo [INFO] Staging bundled SP Flash Tool Windows payload...
-        xcopy /E /I /Q /Y "%SP_WIN_SRC%" "%SP_WIN_DST%" >nul
-    )
-) else (
-    echo [WARNING] SP Flash Tool source not found at %SP_WIN_SRC%.
-)
-
 %PYTHON% scripts\set_build_brand.py --reset
 
 echo [SUCCESS] Application built at: dist\%APP_DIR%\%APP_EXE%
@@ -132,9 +120,8 @@ if defined ISCC (
         echo [SUCCESS] Windows Installer created in dist\
     )
 ) else (
-    echo [NOTE] Inno Setup 6 (ISCC.exe) not found.
-    echo        Install Inno Setup 6 to generate %INSTALLER_BASE%-3.0.0.exe.
-    echo        Stand-alone directory ready in dist\InnioasisUpdater\
+    echo [NOTE] Inno Setup 6 ISCC.exe not found.
+    echo        Stand-alone directory ready in dist\%APP_DIR%\
 )
 
 echo ======================================================================

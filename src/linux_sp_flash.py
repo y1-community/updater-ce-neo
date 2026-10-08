@@ -1102,7 +1102,7 @@ def silent_system_prep(stage: Path = None) -> bool:
             log_dir.chmod(log_dir.stat().st_mode | 0o777)
         except Exception:
             pass
-        if os.geteuid() == 0:
+        if hasattr(os, "geteuid") and os.geteuid() == 0:
             rules_dir = Path("/etc/udev/rules.d")
             rule_file = rules_dir / UDEV_RULE_FILENAME
             if not rule_file.is_file():

@@ -84,7 +84,8 @@ from .dialogs import (
     RetryGuidanceDialog,
     UpdateAvailableDialog,
 )
-from .dark import T, apply_theme, content_top_margin, is_dark
+from .dark import T, ThemeWatcher, apply_theme, content_top_margin, is_dark
+from .glass import apply_glass, apply_windows_acrylic, apply_windows_dark_titlebar
 from .error_page import ErrorPage
 from .flash_page import FlashPage
 from .retry_page import RetryPage
@@ -113,14 +114,19 @@ class DeviceUpdateCheckWorker(QThread):
 
     def run(self):
         try:
+            if self.isInterruptionRequested():
+                return
             updates = device_tracking.check_device_updates(
                 settings=self.settings,
                 ignore_last_notified=self.ignore_last_notified,
             )
+            if self.isInterruptionRequested():
+                return
             self.finished.emit(updates or [])
         except Exception as e:
             logger.debug("Device update check failed: %s", e)
-            self.finished.emit([])
+            if not self.isInterruptionRequested():
+                self.finished.emit([])
 
 _STEP_KEY = {
     STEP_EXTRACTING: "step_extract",
@@ -178,14 +184,16 @@ class MainWindow(QMainWindow):
         self._update_manual_pending = False
         # A stalled connection makes the backend repeat the same errno line
         # many times over; this keeps the guidance dialog to once per attempt.
-        self._retry_guidance_shown = False
-
+        self._active_workers = set()
         self._build_ui()
         self._connect_signals()
         self._nav_to_page(_PAGE_SELECT)
 
         self._manifest_worker = ManifestWorker(self)
-        self._manifest_worker.finished.connect(self._on_manifest_loaded)
+        self._active_workers.add(self._manifest_worker)
+        self._manifest_worker.finished.connect(
+            lambda entries: self._on_manifest_worker_finished(self._manifest_worker, entries)
+        )
         self._manifest_worker.start()
         QTimer.singleShot(UPDATE_CHECK_STARTUP_DELAY_MS, self._start_auto_update_check)
         QTimer.singleShot(
@@ -197,9 +205,13 @@ class MainWindow(QMainWindow):
             # macOS has no SP Flash Tool or Linux setup wizard.
             QTimer.singleShot(600, self._check_linux_first_run)
 
+    def _on_manifest_worker_finished(self, worker, entries):
+        self._active_workers.discard(worker)
+        if worker is getattr(self, "_manifest_worker", None):
+            self._on_manifest_loaded(entries)
+
     def _build_ui(self):
         central = QWidget()
-        central.setAttribute(Qt.WA_TranslucentBackground, True)
         self.setCentralWidget(central)
         outer = QHBoxLayout(central)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -208,7 +220,6 @@ class MainWindow(QMainWindow):
         outer.addWidget(self._build_nav())
 
         self._stack = QStackedWidget()
-        self._stack.setAttribute(Qt.WA_TranslucentBackground, True)
         self._select_page = SelectPackagePage()
         self._flash_page = FlashPage()
         self._error_page = ErrorPage()
@@ -221,7 +232,6 @@ class MainWindow(QMainWindow):
             self._retry_page,
             self._settings_page,
         ):
-            w.setAttribute(Qt.WA_TranslucentBackground, True)
             self._stack.addWidget(w)
         outer.addWidget(self._stack, 1)
 
@@ -257,6 +267,24 @@ class MainWindow(QMainWindow):
         self._apply_donation_visibility()
         self._apply_generic_mtk_branding()
 
+        # Live theme watcher for OS light/dark and accent color changes
+        app = QApplication.instance()
+        self._theme_watcher = getattr(app, "_theme_watcher", None)
+        if self._theme_watcher is None and app is not None and not os.environ.get("PYTEST_CURRENT_TEST"):
+            self._theme_watcher = ThemeWatcher(app, parent=self, on_apply=self._on_theme_changed)
+            self._theme_watcher.install()
+
+    def _on_theme_changed(self):
+        dark = is_dark()
+        if sys.platform == "win32" or platform.system() == "Windows":
+            apply_windows_acrylic(self, dark=dark)
+            apply_windows_dark_titlebar(self, dark=dark)
+        elif sys.platform == "darwin":
+            apply_glass(self, dark=dark)
+        sb = self.statusBar()
+        if sb and hasattr(sb, "refresh_theme"):
+            sb.refresh_theme()
+
     def _build_nav(self):
         t = T()
         nav = QWidget()
@@ -266,8 +294,14 @@ class MainWindow(QMainWindow):
         nav_width = 185 if is_mac else 175
         nav.setFixedWidth(nav_width)
 
-        # Adapt nav sidebar to host system theme and glass transparency
-        if is_mac:
+        use_glass = False
+        try:
+            from .glass import is_glass_supported
+            use_glass = is_glass_supported()
+        except ImportError:
+            use_glass = False
+
+        if use_glass:
             nav_bg = "transparent"
             nav_border = "none"
         else:
@@ -416,18 +450,18 @@ class MainWindow(QMainWindow):
 
     def refresh_theme(self):
         """Update window components to match active OS theme tokens."""
+        self._on_theme_changed()
         t = T()
         is_mac = sys.platform == "darwin"
         use_glass = False
-        if is_mac:
-            try:
-                from .glass import is_glass_supported
-                use_glass = is_glass_supported()
-            except ImportError:
-                use_glass = False
+        try:
+            from .glass import is_glass_supported
+            use_glass = is_glass_supported()
+        except ImportError:
+            use_glass = False
 
-        nav_bg = "transparent" if (is_mac or use_glass) else t.bg_nav
-        nav_border = "none" if (is_mac or use_glass) else f"1px solid {t.border}"
+        nav_bg = "transparent" if use_glass else t.bg_nav
+        nav_border = "none" if use_glass else f"1px solid {t.border}"
 
         if hasattr(self, "_nav_panel"):
             self._nav_panel.setStyleSheet(
@@ -584,8 +618,20 @@ class MainWindow(QMainWindow):
         return active
 
     def _on_select_nav_clicked(self):
-        """First entry: the package browser, or the running install's view."""
-        self._nav_to_page(_PAGE_FLASH if self._install_run_active() else _PAGE_SELECT)
+        """First entry: package select. If an install is running:
+        - If on another page, reopens the flash run view.
+        - If already on the flash page, clicking acts as cancelling the install.
+        """
+        if self._install_run_active():
+            if self._stack.currentIndex() != _PAGE_FLASH:
+                self._nav_to_page(_PAGE_FLASH)
+            else:
+                if self.sm.state in (FlashState.S4_FLASHING,) or getattr(self, "_step_now", "") in _WRITE_STEPS:
+                    self._on_cancel_flash()
+                else:
+                    self._on_cancel_wait()
+        else:
+            self._nav_to_page(_PAGE_SELECT)
 
     def _nav_to_page(self, page_idx):
         self._stack.setCurrentIndex(page_idx)
@@ -1244,18 +1290,26 @@ class MainWindow(QMainWindow):
         self._run_update_check()
 
     def _run_update_check(self):
-        # Stop any in-flight check before replacing the reference; overwriting a
-        # running QThread causes "Destroyed while thread is still running"/SIGABRT.
         old = getattr(self, "_update_worker", None)
         if old is not None and old.isRunning():
+            try:
+                old.finished.disconnect()
+            except Exception:
+                pass
             old.requestInterruption()
-            old.wait(800)
+            old.wait(100)
         worker = UpdateCheckWorker(UPDATE_REPO, APP_VERSION, self)
-        worker.finished.connect(
-            lambda info: self._on_update_check_done(info, self._update_manual_pending)
-        )
         self._update_worker = worker
+        self._active_workers.add(worker)
+        worker.finished.connect(
+            lambda info: self._on_update_worker_finished(worker, info, self._update_manual_pending)
+        )
         worker.start()
+
+    def _on_update_worker_finished(self, worker, info, manual):
+        self._active_workers.discard(worker)
+        if worker is getattr(self, "_update_worker", None):
+            self._on_update_check_done(info, manual)
 
     def _on_update_check_done(self, info, manual):
         if not isinstance(info, UpdateInfo):
@@ -1286,12 +1340,22 @@ class MainWindow(QMainWindow):
     def _check_device_firmware_updates(self, manual=False):
         old = getattr(self, "_device_update_worker", None)
         if old is not None and old.isRunning():
+            try:
+                old.finished.disconnect()
+            except Exception:
+                pass
             old.requestInterruption()
-            old.wait(800)
+            old.wait(100)
         worker = DeviceUpdateCheckWorker(self.settings, ignore_last_notified=manual, parent=self)
-        worker.finished.connect(lambda updates: self._on_device_updates_checked(updates, manual))
         self._device_update_worker = worker
+        self._active_workers.add(worker)
+        worker.finished.connect(lambda updates: self._on_device_worker_finished(worker, updates, manual))
         worker.start()
+
+    def _on_device_worker_finished(self, worker, updates, manual):
+        self._active_workers.discard(worker)
+        if worker is getattr(self, "_device_update_worker", None):
+            self._on_device_updates_checked(updates, manual)
 
     def _on_device_updates_checked(self, updates, manual=False):
         if updates:
@@ -1483,10 +1547,20 @@ class MainWindow(QMainWindow):
                 w.wait(1500)
 
     def close(self):
+        if hasattr(self, "_theme_watcher") and self._theme_watcher:
+            try:
+                self._theme_watcher.stop()
+            except Exception:
+                pass
         self.cleanup_workers()
         return super().close()
 
     def closeEvent(self, event):
+        if hasattr(self, "_theme_watcher") and self._theme_watcher:
+            try:
+                self._theme_watcher.stop()
+            except Exception:
+                pass
         self.cleanup_workers()
         super().closeEvent(event)
 

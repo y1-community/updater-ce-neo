@@ -139,7 +139,7 @@ def main():
     window = MainWindow()
     prepare_window_for_glass(window)
     window.show()
-    apply_glass(window)
+    apply_glass(window, dark=is_dark())
     configure_traffic_lights(window)
     apply_windows_dark_titlebar(window, is_dark())
 

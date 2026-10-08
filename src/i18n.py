@@ -551,6 +551,36 @@ _STRINGS: dict = {
         "fr": "Installer / Restaurer",
         "es": "Instalar / Restaurar",
     },
+    "sel_install_from_file": {
+        "zh-CN": "从本地文件安装…",
+        "en": "Install from a file…",
+        "fr": "Installer depuis un fichier…",
+        "es": "Instalar desde un archivo…",
+    },
+    "sel_back_to_online": {
+        "zh-CN": "← 返回在线固件",
+        "en": "← Back to Online System Software",
+        "fr": "← Retour aux logiciels en ligne",
+        "es": "← Volver al software en línea",
+    },
+    "sel_invalid_firmware_title": {
+        "zh-CN": "需要固件包或 Scatter 文件",
+        "en": "Firmware Package Required",
+        "fr": "Paquet de firmware requis",
+        "es": "Paquete de firmware requerido",
+    },
+    "sel_prompt_need_firmware": {
+        "zh-CN": "请选择 .zip、.rar 压缩包或固件文件夹中的 scatter 文件（*scatter*.txt），以便在您的 {target} 上安装所选固件。",
+        "en": "Please select a .zip, .rar archive, or a scatter file (*scatter*.txt) inside a firmware folder to install your chosen firmware on your {target}.",
+        "fr": "Veuillez sélectionner une archive .zip, .rar ou un fichier scatter (*scatter*.txt) dans un dossier de firmware pour installer le firmware choisi sur votre {target}.",
+        "es": "Seleccione un archivo .zip, .rar o un archivo scatter (*scatter*.txt) dentro de una carpeta de firmware para instalar el firmware elegido en su {target}.",
+    },
+    "player_generic": {
+        "zh-CN": "播放器",
+        "en": "player",
+        "fr": "lecteur",
+        "es": "reproductor",
+    },
     "sel_browse": {
         "zh-CN": "浏览本地文件…",
         "en": "Browse Files…",
@@ -810,10 +840,16 @@ _STRINGS: dict = {
         "es": "Instala firmware desde un archivo .zip/.rar o carpeta en dispositivos MediaTek genéricos.",
     },
     "sel_btn_start": {
-        "zh-CN": "开始刷机",
-        "en": "Start Flash",
-        "fr": "Démarrer le flashing",
-        "es": "Iniciar flashing",
+        "zh-CN": "安装 / 恢复",
+        "en": "Install / Restore",
+        "fr": "Installer / Restaurer",
+        "es": "Instalar / Restaurar",
+    },
+    "installed_badge": {
+        "zh-CN": "当前已安装",
+        "en": "Installed",
+        "fr": "Installé",
+        "es": "Instalado",
     },
     "sel_download_start": {
         "zh-CN": "开始下载…",
@@ -1980,6 +2016,12 @@ _STRINGS: dict = {
         "en": "Don't remind me about new releases for this device",
         "fr": "Ne plus me rappeler les nouvelles versions pour cet appareil",
         "es": "No volver a recordarme nuevas versiones para este dispositivo",
+    },
+    "reminder_dont_remind_release": {
+        "zh-CN": "不再提醒此版本",
+        "en": "Do not remind me about this release",
+        "fr": "Ne plus me rappeler pour cette version",
+        "es": "No recordarme sobre esta versión",
     },
     "reminder_prompt_install": {
         "zh-CN": "是否使用您当前选择的方式（{method}）立即开始安装？",

@@ -204,7 +204,13 @@ class ManifestWorker(QThread):
 
     def run(self):
         try:
-            self.finished.emit(refresh_catalog(force_refresh=self.force_refresh))
+            if self.isInterruptionRequested():
+                return
+            entries = refresh_catalog(force_refresh=self.force_refresh)
+            if self.isInterruptionRequested():
+                return
+            self.finished.emit(entries)
         except Exception as e:
-            logger.exception("Manifest refresh failed")
-            self.finished.emit([])
+            if not self.isInterruptionRequested():
+                logger.exception("Manifest refresh failed")
+                self.finished.emit([])

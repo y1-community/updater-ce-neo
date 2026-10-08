@@ -80,12 +80,13 @@ def sp_flash_tool_command(
         return None
     da = Path(da_file) if da_file else sp_dir / "MTK_AllInOne_DA.bin"
     if paths.IS_WINDOWS:
-        # flash_tool is an ANSI/Qt4 app: non-ASCII paths need 8.3 short names,
-        # exactly as the guided flow resolves them.
+        # flash_tool is an ANSI/Qt4 app: non-ASCII paths or spaces need 8.3 short names.
         from .flash_service import _to_short_path
 
-        scatter = _to_short_path(scatter)
-        da = _to_short_path(da)
+        if not str(scatter).isascii() or " " in str(scatter):
+            scatter = _to_short_path(scatter)
+        if not str(da).isascii() or " " in str(da):
+            da = _to_short_path(da)
     # Same argument construction as the guided flow, so a hand-run command and
     # the wizard stay in step — including the authentication file, which is only
     # reachable through SP Flash Tool's console configuration file.

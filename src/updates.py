@@ -148,8 +148,13 @@ class UpdateCheckWorker(QThread):
 
     def run(self):
         try:
+            if self.isInterruptionRequested():
+                return
             info = UpdateChecker(self.repo, current=self.current).check()
+            if self.isInterruptionRequested():
+                return
         except Exception:
             logger.exception("Update check worker failed")
             info = UpdateInfo()
-        self.finished.emit(info)
+        if not self.isInterruptionRequested():
+            self.finished.emit(info)

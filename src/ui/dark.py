@@ -31,7 +31,7 @@ def setup_native_app_style(app: QApplication) -> str:
     """Apply the host platform's native QStyle.
 
     - macOS: 'macintosh' (Aqua/Cocoa native controls)
-    - Windows: 'windowsvista' / 'windows' (Native Windows controls)
+    - Windows: 'windows11' on Win 11, 'windowsvista' / 'windows' on older Win
     - Linux: system desktop default (e.g. Breeze on KDE, Adwaita/Fusion on GNOME)
     """
     keys = [k.lower() for k in QStyleFactory.keys()]
@@ -40,7 +40,10 @@ def setup_native_app_style(app: QApplication) -> str:
             app.setStyle("macintosh")
             return "macintosh"
     elif IS_WINDOWS:
-        if "windowsvista" in keys:
+        if "windows11" in keys:
+            app.setStyle("windows11")
+            return "windows11"
+        elif "windowsvista" in keys:
             app.setStyle("windowsvista")
             return "windowsvista"
         elif "windows" in keys:
@@ -49,7 +52,13 @@ def setup_native_app_style(app: QApplication) -> str:
     else:  # Linux
         import os
         de = os.environ.get("XDG_CURRENT_DESKTOP", "").lower()
-        if ("kde" in de or "plasma" in de) and "breeze" in keys:
+        full_session = os.environ.get("KDE_FULL_SESSION", "").lower()
+        desktop_session = os.environ.get("DESKTOP_SESSION", "").lower()
+        is_kde = any("kde" in s or "plasma" in s for s in (de, full_session, desktop_session))
+        if is_kde and "breeze" in keys:
+            app.setStyle("breeze")
+            return "breeze"
+        elif "breeze" in keys:
             app.setStyle("breeze")
             return "breeze"
         elif "adwaita" in keys:
@@ -272,8 +281,21 @@ class _Tokens:
             # Accent
             self.accent       = os_accent
             self.accent_hover = QColor(os_accent).lighter(115).name()
-            self.accent_bg    = "#1a3352"
-            self.accent_text  = QColor(os_accent).lighter(170).name()
+            self.accent_bg    = QColor(os_accent).darker(300).name()
+            acc_txt = QColor(os_accent).lighter(200).name()
+            def _rl(c):
+                c = c.lstrip('#')
+                r, g, b = [int(c[i:i+2], 16) / 255.0 for i in (0, 2, 4)]
+                r = r / 12.92 if r <= 0.04045 else ((r + 0.055) / 1.055) ** 2.4
+                g = g / 12.92 if g <= 0.04045 else ((g + 0.055) / 1.055) ** 2.4
+                b = b / 12.92 if b <= 0.04045 else ((b + 0.055) / 1.055) ** 2.4
+                return 0.2126 * r + 0.7152 * g + 0.0722 * b
+            def _cr(c1, c2):
+                l1, l2 = _rl(c1), _rl(c2)
+                return (max(l1, l2) + 0.05) / (min(l1, l2) + 0.05)
+            if _cr(acc_txt, self.accent_bg) < 4.5:
+                acc_txt = "#ffffff"
+            self.accent_text  = acc_txt
 
             self.nav_active      = os_accent
             self.nav_active_text = os_accent_text
@@ -317,6 +339,9 @@ class _Tokens:
             self.log_fg = "#a3e635"
             self.disabled = "#334155"
             self.disabled_fg = "#94a3b8"
+            self.btn_primary_border = "rgba(255, 255, 255, 0.25)"
+            self.btn_primary_border_bottom = "rgba(0, 0, 0, 0.35)"
+            self.btn_disabled_border = "rgba(255, 255, 255, 0.15)"
 
         else:
             # Surfaces — Light mode
@@ -388,6 +413,9 @@ class _Tokens:
             self.log_fg = "#15803d"
             self.disabled = "#e2e8f0"
             self.disabled_fg = "#64748b"
+            self.btn_primary_border = "rgba(0, 0, 0, 0.15)"
+            self.btn_primary_border_bottom = "rgba(0, 0, 0, 0.30)"
+            self.btn_disabled_border = "rgba(0, 0, 0, 0.15)"
 
 
 class _ThemeState:
@@ -467,6 +495,8 @@ def _make_palette(dark: bool, pure_black: bool = False) -> QPalette:
         p.setColor(QPalette.Link, QColor(t.accent))
         p.setColor(QPalette.Highlight, QColor(t.accent))
         p.setColor(QPalette.HighlightedText, QColor("#ffffff"))
+        if hasattr(QPalette.ColorRole, "Accent"):
+            p.setColor(QPalette.ColorRole.Accent, QColor(t.accent))
         p.setColor(QPalette.Midlight, QColor(t.bg_hover))
         p.setColor(QPalette.Mid, QColor(t.border))
         p.setColor(QPalette.Dark, QColor(t.border_strong))
@@ -490,6 +520,8 @@ def _make_palette(dark: bool, pure_black: bool = False) -> QPalette:
         p.setColor(QPalette.Link, QColor(t.accent))
         p.setColor(QPalette.Highlight, QColor(t.accent))
         p.setColor(QPalette.HighlightedText, QColor("#ffffff"))
+        if hasattr(QPalette.ColorRole, "Accent"):
+            p.setColor(QPalette.ColorRole.Accent, QColor(t.accent))
         p.setColor(QPalette.Midlight, QColor(t.bg_card))
         p.setColor(QPalette.Mid, QColor(t.border))
         p.setColor(QPalette.Dark, QColor(t.border_strong))
@@ -509,23 +541,31 @@ def _make_palette(dark: bool, pure_black: bool = False) -> QPalette:
 def _build_qss() -> str:
     t = _state.tokens
 
-    # Window background & sidebar transparency for Liquid Glass on macOS
+    # Window background & sidebar transparency for Liquid Glass (macOS) and Acrylic/Mica (Windows)
     use_glass = False
-    if IS_MACOS:
-        try:
-            from .glass import is_glass_supported
-            use_glass = is_glass_supported()
-        except ImportError:
-            use_glass = False
+    try:
+        from .glass import is_glass_supported, is_windows_acrylic_supported
+        use_glass = is_glass_supported() or is_windows_acrylic_supported()
+    except ImportError:
+        use_glass = False
 
-    if IS_MACOS or use_glass:
-        window_bg = "transparent" if use_glass else t.bg
+    if use_glass:
+        window_bg = "transparent"
         nav_bg = "transparent"
         nav_border = "none"
     else:
         window_bg = t.bg
         nav_bg = t.bg_nav
         nav_border = f"1px solid {t.border}"
+
+    if use_glass:
+        card_bg = "rgba(255, 255, 255, 0.05)" if _state.is_dark else "rgba(255, 255, 255, 0.65)"
+        card_border = "rgba(255, 255, 255, 0.10)" if _state.is_dark else "rgba(0, 0, 0, 0.08)"
+    else:
+        card_bg = t.bg_card
+        card_border = t.border
+
+    tab_bar_bg = "rgba(255, 255, 255, 0.08)" if _state.is_dark else "rgba(0, 0, 0, 0.06)"
 
     return f"""
 /* ── Base Window ────────────────────────────────────────
@@ -534,9 +574,31 @@ def _build_qss() -> str:
    controls — tabs, buttons, combo boxes, text fields, group boxes —
    are deliberately left to the native QStyle so they paint and behave
    like every other app on the host desktop. */
-QMainWindow, QDialog {{
+/* Surface: {t.bg} */
+QMainWindow {{
     background-color: {window_bg};
     color: {t.fg};
+}}
+
+QDialog {{
+    background-color: {t.bg_card};
+    color: {t.fg};
+}}
+
+QMessageBox {{
+    background-color: {t.bg_card};
+    color: {t.fg};
+}}
+QMessageBox QLabel {{
+    color: {t.fg};
+    background: transparent;
+}}
+
+/* ── Native Cards & Section Panels ───────────────────── */
+QFrame[cssClass="card"] {{
+    background-color: {card_bg};
+    border: 1px solid {card_border};
+    border-radius: 8px;
 }}
 
 /* ── Navigation sidebar (OS-native docked rail) ──────── */
@@ -610,11 +672,13 @@ QLabel[cssClass="sectionTitle"] {{
     color: {t.fg};
 }}
 QLabel[cssClass="cardTitle"] {{
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 600;
     color: {t.fg};
     background: transparent;
     border: none;
+    padding: 0;
+    margin-bottom: 2px;
 }}
 QLabel[cssClass="subtitle"] {{
     font-size: 13px;
@@ -683,7 +747,72 @@ QToolTip {{
     padding: 4px 8px;
     font-size: 12px;
 }}
+
+/* ── Primary Action Buttons (Install / Restore, Start, Continue) ────── */
+QPushButton[cssClass="primary"] {{
+    background-color: {t.accent};
+    color: {t.nav_active_text};
+    border: 1px solid {t.btn_primary_border};
+    border-bottom: 2px solid {t.btn_primary_border_bottom};
+    border-radius: 6px;
+    padding: 6px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    min-height: 36px;
+}}
+QPushButton[cssClass="primary"]:hover {{
+    background-color: {t.accent_hover};
+    border: 1px solid {t.border_focus};
+    border-bottom: 2px solid {t.border_focus};
+}}
+QPushButton[cssClass="primary"]:focus {{
+    outline: none;
+    border: 2px solid {t.border_focus};
+}}
+QPushButton[cssClass="primary"]:pressed {{
+    background-color: {t.accent_hover};
+    border: 1px solid {t.border_strong};
+}}
+QPushButton[cssClass="primary"]:disabled {{
+    background-color: {t.disabled};
+    color: {t.disabled_fg};
+    border: 1px solid {t.btn_disabled_border};
+    border-bottom: 1px solid {t.btn_disabled_border};
+}}
+
+/* ── Ghost / Secondary Action Buttons ─────────────────── */
+QPushButton[cssClass="ghost"] {{
+    background-color: transparent;
+    color: {t.fg};
+    border: 1px solid {t.border};
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    min-height: 32px;
+}}
+QPushButton[cssClass="ghost"]:hover {{
+    background-color: {t.bg_hover};
+    border-color: {t.border_strong};
+    color: {t.fg};
+}}
+QPushButton[cssClass="ghost"]:pressed {{
+    background-color: {t.bg_hover};
+    border-color: {t.border_focus};
+}}
+QPushButton[cssClass="ghost"]:disabled {{
+    color: {t.disabled_fg};
+    border-color: {t.border};
+}}
 """
+
+
+def apply_native_scrollbar_policy(widget) -> None:
+    """Leave scroll areas to native OS widgets and QStyle defaults without registry polling."""
+    from PySide6.QtWidgets import QAbstractScrollArea
+    if isinstance(widget, QAbstractScrollArea):
+        widget.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+
 
 
 # Vertical space the window chrome occupies at the top of the client area.
@@ -828,6 +957,7 @@ def refresh_theme(app: QApplication | None = None) -> None:
     # Descend the whole tree, not just top-level windows: pages and custom
     # widgets keep their own token-derived styles.
     for widget in app.allWidgets():
+        apply_native_scrollbar_policy(widget)
         hook = getattr(widget, "refresh_theme", None)
         if callable(hook):
             try:

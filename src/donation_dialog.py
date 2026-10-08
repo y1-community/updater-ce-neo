@@ -26,6 +26,7 @@ from .config import DONATION_CRYPTO, DONATION_LINKS, device_label_for_model, ins
 from .donors import fetch_remote_donors_async, get_monthly_goal_stats, relative_date
 from .i18n import tr, tr_brand
 from .ui.dark import T, is_dark
+from .ui.glass import apply_dialog_theme
 
 logger = logging.getLogger(__name__)
 
@@ -141,9 +142,15 @@ class DonationStatusBar(QStatusBar):
 
     def _build_ui(self, on_support, on_credits=None):
         t = T()
-        is_mac = sys.platform == "darwin"
-        status_bg = "transparent" if is_mac else t.bg_card
-        status_border = "none" if is_mac else f"1px solid {t.border}"
+        use_glass = False
+        try:
+            from .ui.glass import is_glass_supported, is_windows_acrylic_supported
+            use_glass = is_glass_supported() or is_windows_acrylic_supported()
+        except ImportError:
+            use_glass = sys.platform == "darwin"
+
+        status_bg = "transparent" if use_glass else t.bg_card
+        status_border = "none" if use_glass else f"1px solid {t.border}"
         self.setStyleSheet(
             f"QStatusBar#donation_status_bar {{ background-color: {status_bg};"
             f" border-top: {status_border}; color: {t.fg}; }}"
@@ -264,9 +271,15 @@ class DonationStatusBar(QStatusBar):
     def refresh_theme(self):
         """Update status bar styling and labels to match active OS theme."""
         t = T()
-        is_mac = sys.platform == "darwin"
-        status_bg = "transparent" if is_mac else t.bg_card
-        status_border = "none" if is_mac else f"1px solid {t.border}"
+        use_glass = False
+        try:
+            from .ui.glass import is_glass_supported, is_windows_acrylic_supported
+            use_glass = is_glass_supported() or is_windows_acrylic_supported()
+        except ImportError:
+            use_glass = sys.platform == "darwin"
+
+        status_bg = "transparent" if use_glass else t.bg_card
+        status_border = "none" if use_glass else f"1px solid {t.border}"
         self.setStyleSheet(
             f"QStatusBar#donation_status_bar {{ background-color: {status_bg};"
             f" border-top: {status_border}; color: {t.fg}; }}"
@@ -290,6 +303,9 @@ class DonationStatusBar(QStatusBar):
             self._relayout_links()
         if hasattr(self, "_support_btn"):
             self._style_link(self._support_btn, t, "right")
+        self._donor_lines = self._build_donor_lines()
+        if hasattr(self, "_showing_goal") and not self._showing_goal and self._donor_lines:
+            self._donor_label.setText(self._donor_lines[0])
 
     def _build_donor_lines(self):
         lines = []
@@ -433,6 +449,7 @@ class DonationDialog(QDialog):
     def __init__(self, parent=None, context="general", model="Y1", software_name="",
                  donations=None, on_dont_ask_again=None, is_360p_rockbox=False):
         super().__init__(parent)
+        apply_dialog_theme(self)
         self.context = context
         self.raw_model = model
         self.model = device_label_for_model(model)
@@ -601,10 +618,10 @@ class DonationDialog(QDialog):
         # 5. Payment grid (2x2)
         grid = QGridLayout()
         grid.setSpacing(8)
-        self._add_pay_button(grid, 0, 0, tr("donate_kofi"), "#ff5e5b", "#e04b48", DONATION_LINKS["kofi"])
-        self._add_pay_button(grid, 0, 1, tr("donate_paypal"), "#0070ba", "#005ea6", DONATION_LINKS["paypal"])
-        self._add_pay_button(grid, 1, 0, tr("donate_revolut"), "#5850ec", "#4338ca", DONATION_LINKS["revolut"])
-        self._add_pay_button(grid, 1, 1, tr("donate_patreon"), "#e0533c", "#c9442e", DONATION_LINKS["patreon"])
+        self._add_pay_button(grid, 0, 0, tr("donate_kofi"), "#ff5e5b", "#e04b48", DONATION_LINKS["kofi"], symbol="☕")
+        self._add_pay_button(grid, 0, 1, tr("donate_paypal"), "#0070ba", "#005ea6", DONATION_LINKS["paypal"], symbol="💳")
+        self._add_pay_button(grid, 1, 0, tr("donate_revolut"), "#5850ec", "#4338ca", DONATION_LINKS["revolut"], symbol="⚡")
+        self._add_pay_button(grid, 1, 1, tr("donate_patreon"), "#e0533c", "#c9442e", DONATION_LINKS["patreon"], symbol="★")
         layout.addLayout(grid)
 
         # Space-saving text links row for Honeygain and Crypto
@@ -702,14 +719,16 @@ class DonationDialog(QDialog):
 
         self._refresh_goal()
 
-    def _add_pay_button(self, grid, r, c, label, color, hover, url, full_width=None):
-        text = full_width or label
+    def _add_pay_button(self, grid, r, c, label, color, hover, url, full_width=None, symbol=""):
+        t = T()
+        text = (f"{symbol}  {full_width or label}").strip()
         btn = QPushButton(text)
         btn.setCursor(Qt.PointingHandCursor)
         btn.setStyleSheet(
-            f"QPushButton {{ background-color: {color}; color: #ffffff; font-weight: 700;"
-            f" font-size: {'13px' if full_width else '14px'}; min-height: 38px; padding: 9px 16px; border-radius: 8px; border: none; }}"
-            f"QPushButton:hover {{ background-color: {hover}; }}"
+            f"QPushButton {{ background-color: {t.bg_card}; color: {t.fg}; font-weight: 600;"
+            f" font-size: {'13px' if full_width else '13px'}; min-height: 38px; padding: 8px 14px; border-radius: 6px; border: 1px solid {t.border}; }}"
+            f"QPushButton:hover {{ background-color: {t.bg_hover}; border-color: {t.border_strong}; color: {t.fg}; }}"
+            f"QPushButton:pressed {{ background-color: {t.bg_hover}; border-color: {t.border_focus}; }}"
         )
         btn.clicked.connect(lambda _=False, u=url: open_browser(u))
         if grid is not None:

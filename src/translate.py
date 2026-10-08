@@ -182,8 +182,12 @@ class ReleaseTranslateWorker(QThread):
 
     def run(self):
         try:
+            if self.isInterruptionRequested():
+                return
             name, body = translate_release_notes(self.rel, self.target_lang)
-            self.translation_ready.emit(self.rel, self.target_lang, name, body)
+            if not self.isInterruptionRequested():
+                self.translation_ready.emit(self.rel, self.target_lang, name, body)
         except Exception as e:
-            logger.warning("Release notes translation error: %s", e)
-            self.translation_failed.emit(self.rel, self.target_lang, str(e))
+            if not self.isInterruptionRequested():
+                logger.warning("Release notes translation error: %s", e)
+                self.translation_failed.emit(self.rel, self.target_lang, str(e))

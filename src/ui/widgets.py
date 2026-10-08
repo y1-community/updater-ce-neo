@@ -9,7 +9,6 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QPainter, QPainterPath
 from PySide6.QtWidgets import (
     QFrame,
-    QGroupBox,
     QHBoxLayout,
     QLabel,
     QVBoxLayout,
@@ -140,17 +139,32 @@ class InfoRow(QWidget):
         return self._value.text()
 
 
-class Card(QGroupBox):
-    """Native desktop group box panel matching firmware_downloader.py."""
+class Card(QFrame):
+    """Native desktop card panel matching human interface guidelines."""
 
     def __init__(self, title_key="", parent=None):
-        title = tr(title_key) if title_key else ""
-        super().__init__(title, parent)
+        super().__init__(parent)
+        self.setProperty("cssClass", "card")
         self._title_key = title_key
         self._title = None
         self._outer = QVBoxLayout(self)
-        self._outer.setContentsMargins(12, 10, 12, 10)
-        self._outer.setSpacing(8)
+        self._outer.setContentsMargins(14, 12, 14, 12)
+        self._outer.setSpacing(10)
+        if title_key:
+            self.setTitle(tr(title_key))
+
+    def setTitle(self, text: str) -> None:
+        """Set or update the card title header label."""
+        if self._title is None:
+            self._title = QLabel(text)
+            self._title.setProperty("cssClass", "cardTitle")
+            self._outer.insertWidget(0, self._title)
+        else:
+            self._title.setText(text)
+
+    def title(self) -> str:
+        """Return the current title text."""
+        return self._title.text() if self._title is not None else ""
 
     def retranslate(self):
         if self._title_key:

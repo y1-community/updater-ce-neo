@@ -1,10 +1,11 @@
 """Modal dialogs — flash complete / failed / diagnostics / update available."""
 
-from datetime import datetime, timedelta
+import re
 import sys
+from datetime import datetime, timedelta
 
 from PySide6.QtCore import QDate, QDateTime, QTime, Qt, QTimer
-from PySide6.QtGui import QTextCursor
+from PySide6.QtGui import QTextCursor, QTextDocument
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -17,6 +18,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QProgressBar,
+    QTextBrowser,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -40,11 +42,13 @@ from ..diagnostics import (
 from ..i18n import tr, tr_brand
 from ..updates import asset_hint, pick_platform_asset
 from .dark import T
+from .glass import apply_dialog_theme
 
 
 class FlashCompleteDialog(QDialog):
     def __init__(self, parent=None, package_name="", elapsed="00:00", model="Y1", is_360p_rockbox=False):
         super().__init__(parent)
+        apply_dialog_theme(self)
         self.model = model
         self.is_360p_rockbox = is_360p_rockbox
         t = T()
@@ -119,6 +123,7 @@ class FlashCompleteDialog(QDialog):
 class FlashFailedDialog(QDialog):
     def __init__(self, parent=None, error_code="", step="", package_name="", retry_count=0):
         super().__init__(parent)
+        apply_dialog_theme(self)
         self.setWindowTitle(tr("flash_failed"))
         self.setMinimumWidth(440)
         self._want_retry = False
@@ -186,6 +191,7 @@ class RetryGuidanceDialog(QDialog):
 
     def __init__(self, parent=None, detail=""):
         super().__init__(parent)
+        apply_dialog_theme(self)
         t = T()
         self.setWindowTitle(tr("retry_guidance_title"))
         self.setMinimumWidth(470)
@@ -264,6 +270,7 @@ def _from_python(edit) -> datetime | None:
 class DiagnosticsDialog(QDialog):
     def __init__(self, parent=None, lines=None, initial_category=CAT_ALL):
         super().__init__(parent)
+        apply_dialog_theme(self)
         t = T()
         self.setWindowTitle(tr("log_center"))
         self.resize(740, 500)
@@ -665,6 +672,7 @@ class DiagnosticsDialog(QDialog):
 class UpdateAvailableDialog(QDialog):
     def __init__(self, parent=None, info=None, current_version="", on_skip=None):
         super().__init__(parent)
+        apply_dialog_theme(self)
         self._info = info
         self._on_skip = on_skip
         t = T()
@@ -752,6 +760,7 @@ class LinuxSetupDialog(QDialog):
 
     def __init__(self, parent=None, auto_start: bool = False):
         super().__init__(parent)
+        apply_dialog_theme(self)
         from .. import linux_sp_flash
         self._linux = linux_sp_flash
         self._worker = None
@@ -1121,6 +1130,75 @@ class LinuxSetupDialog(QDialog):
         super().accept()
 
 
+def format_markdown_release_notes(body: str, name: str = "") -> str:
+    """Format release notes markdown into clean HTML with native fonts and typography."""
+    t = T()
+    lines = []
+    if name:
+        lines.append(f"### {name}")
+        lines.append("")
+    clean_body = (body or tr("update_no_notes")).strip()
+    lines.append(clean_body[:4000])
+    raw_md = "\n".join(lines)
+
+    # 1. Clean markdown & remove images per native design
+    cleaned_md = re.sub(r"!\[.*?\]\(.*?\)", "", raw_md)
+    cleaned_md = re.sub(r"<img[^>]*>", "", cleaned_md, flags=re.IGNORECASE)
+    cleaned_md = re.sub(r"\[\s*\]\(.*?\)", "", cleaned_md)
+
+    doc = QTextDocument()
+    doc.setMarkdown(cleaned_md)
+    html = doc.toHtml()
+
+    # 2. Re-style links with accent color & underline
+    html = re.sub(
+        r'<a\s+href="([^"]+)">',
+        f'<a href="\\1" style="color: {t.accent}; font-weight: bold; text-decoration: underline;">',
+        html,
+    )
+
+    # 3. Inject native rich typography CSS
+    css = f"""
+    <style type="text/css">
+    body {{
+        color: {t.fg};
+        font-size: 13px;
+        line-height: 1.45;
+        background: transparent;
+        margin: 0;
+        padding: 0;
+    }}
+    h1, h2, h3, h4 {{
+        color: {t.fg};
+        margin-top: 10px;
+        margin-bottom: 6px;
+        font-weight: 700;
+    }}
+    p {{
+        margin-top: 4px;
+        margin-bottom: 8px;
+        color: {t.fg};
+    }}
+    ul, ol {{
+        margin-left: 18px;
+        margin-top: 4px;
+        margin-bottom: 8px;
+    }}
+    li {{
+        margin-bottom: 3px;
+        color: {t.fg};
+    }}
+    code {{
+        background-color: {t.bg_input};
+        color: {t.fg};
+        padding: 2px 4px;
+        border-radius: 3px;
+    }}
+    </style>
+    """
+    return re.sub(r"<head>", f"<head>{css}", html, count=1)
+
+
 class ReleaseReminderDialog(QDialog):
     """Dialog alerting the user that a newer firmware release is available for their device."""
 
@@ -1134,6 +1212,7 @@ class ReleaseReminderDialog(QDialog):
         flash_method="",
     ):
         super().__init__(parent)
+        apply_dialog_theme(self)
         self.update_info = update_info or {}
         self.on_view_release = on_view_release
         self.on_disable_reminders = on_disable_reminders
@@ -1156,12 +1235,13 @@ class ReleaseReminderDialog(QDialog):
         )
 
         self.setWindowTitle(tr("reminder_new_release_title"))
-        self.setMinimumWidth(480)
+        self.setMinimumWidth(520)
+        self.resize(560, 480)
         t = T()
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 20, 24, 20)
-        layout.setSpacing(14)
+        layout.setSpacing(12)
 
         # Header with title and device badge
         hdr_row = QHBoxLayout()
@@ -1222,6 +1302,26 @@ class ReleaseReminderDialog(QDialog):
 
         layout.addWidget(card)
 
+        # Release Notes Markdown Display
+        latest_rel = self.update_info.get("latest_release") or {}
+        notes_body = latest_rel.get("body", "")
+        if notes_body:
+            notes_hdr = QLabel(f"<b>{tr('update_notes')}</b>")
+            notes_hdr.setStyleSheet(f"color: {t.fg}; font-size: 12px; margin-top: 2px;")
+            layout.addWidget(notes_hdr)
+
+            self._notes_view = QTextBrowser()
+            self._notes_view.setObjectName("releaseNotes")
+            self._notes_view.setOpenExternalLinks(True)
+            self._notes_view.setMinimumHeight(130)
+            self._notes_view.setStyleSheet(
+                f"background-color: {t.bg_input}; border: 1px solid {t.border};"
+                f" border-radius: 6px; padding: 6px; color: {t.fg};"
+            )
+            html = format_markdown_release_notes(notes_body, latest_rel.get("name", ""))
+            self._notes_view.setHtml(html)
+            layout.addWidget(self._notes_view, 1)
+
         # Method explanation & install prompt
         if paths.IS_MAC:
             method_str = tr("flash_method_mtk")
@@ -1246,8 +1346,8 @@ class ReleaseReminderDialog(QDialog):
         self._prompt_lbl.setStyleSheet(f"font-size: 13px; color: {t.fg}; font-weight: 500; line-height: 1.4;")
         layout.addWidget(self._prompt_lbl)
 
-        # Don't remind checkbox
-        self.cb_dont_remind = QCheckBox(tr("reminder_dont_remind_device"))
+        # Don't remind about this release checkbox
+        self.cb_dont_remind = QCheckBox(tr("reminder_dont_remind_release"))
         layout.addWidget(self.cb_dont_remind)
 
         # Action Buttons
@@ -1271,6 +1371,13 @@ class ReleaseReminderDialog(QDialog):
     def _check_disable_opt_out(self):
         if self.cb_dont_remind.isChecked():
             model = self.update_info.get("model", "")
+            tag = self.update_info.get("latest_tag", "")
+            try:
+                from .. import device_tracking
+                if model and tag:
+                    device_tracking.set_release_skipped(model, tag, True)
+            except Exception:
+                pass
             if callable(self.on_disable_reminders) and model:
                 self.on_disable_reminders(model)
 

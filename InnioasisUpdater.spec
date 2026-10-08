@@ -27,6 +27,14 @@ ASSETS = PROJECT_ROOT / "assets"
 # cross-platform MediaTek Installer (its own executable and dist folder);
 # anything else builds Updater CE, exactly as before.
 _BUILD_BRAND = (os.environ.get("BUILD_BRAND") or "").strip().lower().replace("-", "_")
+if not _BUILD_BRAND:
+    _brand_file = PROJECT_ROOT / "src" / "_build_brand.py"
+    if _brand_file.exists():
+        for _line in _brand_file.read_text(encoding="utf-8").splitlines():
+            if _line.startswith("BUILD_BRAND"):
+                _BUILD_BRAND = _line.split("=")[-1].strip().strip('"\'')
+                break
+IS_MEDIATEK_INSTALLER_BUILD = (_BUILD_BRAND == "mediatek_installer")
 # The dist folder / executable name stays a slug (like Updater CE's does): the
 # display name is the job of the installer and the desktop entry, and spaces in
 # an executable path are needless trouble for cmd, Inno Setup and AppRun.
@@ -69,6 +77,15 @@ hiddenimports = mtk_hidden + crypto_hidden + [
     "Cryptodome",  # pycryptodomex: mtkclient's mtk_crypto imports it directly
     "colorama",  # mtkclient.gui_utils imports it at module level
     "logging.config",  # stdlib module PyInstaller strips from base_library.zip
+    # UI fallback libraries
+    "pywinstyles",
+    "qtwin11",
+    "wx",
+    "win32gui",
+    "win32con",
+    "win32api",
+    "tkinter",
+    "ttk",
 ]
 
 a = Analysis(

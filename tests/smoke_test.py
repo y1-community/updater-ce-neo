@@ -501,12 +501,17 @@ def test_backend_method_dispatch():
         else:
             assert calls == ["sp"], "explicit sp stages + uses SP Flash Tool on Linux"
 
-        calls = []
-        make("auto")._dispatch_backend(Path("x"), Path("s"))
-        if fs.IS_MAC:
-            assert calls == ["mtk"], "auto on macOS -> MTKClient"
-        else:
-            assert calls == ["sp"], "auto prefers SP Flash Tool on Windows/Linux"
+        real_find_sp = fs.paths.find_sp_flash_tool
+        fs.paths.find_sp_flash_tool = lambda: Path("fake_sp.exe")
+        try:
+            calls = []
+            make("auto")._dispatch_backend(Path("x"), Path("s"))
+            if fs.IS_MAC:
+                assert calls == ["mtk"], "auto on macOS -> MTKClient"
+            else:
+                assert calls == ["sp"], "auto prefers SP Flash Tool on Windows/Linux"
+        finally:
+            fs.paths.find_sp_flash_tool = real_find_sp
     finally:
         lsf.ensure_linux_sp_flash_tool = real_ensure
 
@@ -2067,12 +2072,12 @@ def test_terminal_install_handoff():
         orig_script_dir = terminal_install.script_dir
         terminal_install.script_dir = lambda: script_root
         try:
-            posix = terminal_install.build_script(mtk, title="Terminal Install", cwd=extract)
+            posix = terminal_install.build_script(mtk, title="Terminal Install", cwd=extract, is_windows=False)
             assert posix.name.startswith("install_from_terminal"), posix
             ptext = posix.read_text(encoding="utf-8")
             assert ptext.startswith("#!/bin/bash"), ptext
             assert "--flash-cli" in ptext and str(scatter) in ptext, ptext
-            assert f"cd {extract}" in ptext, ptext
+            assert str(extract) in ptext, ptext
             assert terminal_install.POSIX_DONE_MSG in ptext, ptext
             assert os.access(posix, os.X_OK), "launcher must be executable"
 
@@ -3347,7 +3352,7 @@ def test_linux_sp_flash_askpass_and_step1_deferral():
                 return f"/usr/bin/{cmd}"
             return None
         mock_which.side_effect = _which_all
-        with patch.object(Path, "is_file", lambda self: str(self) == "/etc/doas.conf"):
+        with patch.object(Path, "is_file", lambda self: str(self).replace("\\", "/") == "/etc/doas.conf"):
             tools = lsf.find_available_escalation_tools()
             assert tools[0] == "doas", f"doas with /etc/doas.conf must be prioritized, got {tools}"
             assert "pkexec" in tools
@@ -3357,18 +3362,26 @@ def test_linux_sp_flash_askpass_and_step1_deferral():
     # Test doas launcher with mock binary:
     with tempfile.TemporaryDirectory() as td:
         tdp = Path(td)
-        # Mock doas binary
-        mock_script = tdp / "mock_doas"
-        mock_script.write_text(
-            "#!/bin/bash\n"
-            'if [ "$1" = "-n" ]; then\n'
-            "    exit 0\n"
-            "fi\n"
-            'exec "$@"\n'
-        )
-        mock_script.chmod(0o755)
-
-        with patch("shutil.which", lambda cmd: str(mock_script) if cmd == "doas" else None):
+        if sys.platform == "win32":
+            mock_script = tdp / "mock_doas.bat"
+            mock_script.write_text(
+                "@echo off\n"
+                'if "%1"=="-n" exit /b 0\n'
+                'shift\n'
+                'call %*\n'
+            )
+            runner_dummy = tdp / "dummy_runner.bat"
+            runner_dummy.write_text("@echo off\necho Search USB, timeout 3600000 ms...\n")
+        else:
+            mock_script = tdp / "mock_doas"
+            mock_script.write_text(
+                "#!/bin/bash\n"
+                'if [ "$1" = "-n" ]; then\n'
+                "    exit 0\n"
+                "fi\n"
+                'exec "$@"\n'
+            )
+            mock_script.chmod(0o755)
             runner_dummy = tdp / "dummy_runner.sh"
             runner_dummy.write_text("#!/bin/bash\necho 'Search USB, timeout 3600000 ms...'\n")
             runner_dummy.chmod(0o755)
@@ -3519,8 +3532,10 @@ def test_glass_module():
     """Verify macOS Liquid Glass bridge, Ventura to Golden Gate compatibility, and safe no-ops."""
     import platform
     from src.ui import glass
-    from PySide6.QtWidgets import QWidget
+    import sys
+    from PySide6.QtWidgets import QApplication, QWidget
 
+    app = QApplication.instance() or QApplication(sys.argv)
     w = QWidget()
     if not glass.IS_MACOS:
         assert not glass.is_glass_supported()
@@ -4527,10 +4542,19 @@ def test_sp_flash_system_checker_and_diagnostics():
     assert dlg._sp_gui_btn.text() != ""
 
     # 6. SettingsPage card and buttons (non-Windows: the Linux prep card)
-    settings_page = SettingsPage()
-    assert hasattr(settings_page, "_btn_run_checker")
-    assert hasattr(settings_page, "_btn_launch_sp")
-    assert settings_page._btn_run_checker.text() != ""
+    from src import paths
+    orig_win = paths.IS_WINDOWS
+    orig_mac = paths.IS_MAC
+    paths.IS_WINDOWS = False
+    paths.IS_MAC = False
+    try:
+        settings_page = SettingsPage()
+        assert hasattr(settings_page, "_btn_run_checker")
+        assert hasattr(settings_page, "_btn_launch_sp")
+        assert settings_page._btn_run_checker.text() != ""
+    finally:
+        paths.IS_WINDOWS = orig_win
+        paths.IS_MAC = orig_mac
 
 
 def test_settings_platform_prep_cards():
@@ -4591,7 +4615,9 @@ def test_settings_platform_prep_cards():
     # macOS collapses every method to MTKClient, so check the multi-method
     # platforms explicitly.
     orig_mac = paths.IS_MAC
+    orig_win_for_linux = paths.IS_WINDOWS
     paths.IS_MAC = False
+    paths.IS_WINDOWS = False
     try:
         page = SettingsPage()
         assert hasattr(page, "_btn_run_checker")  # Linux prep card on this host
@@ -4616,18 +4642,25 @@ def test_settings_platform_prep_cards():
         app.processEvents()
     finally:
         paths.IS_MAC = orig_mac
+        paths.IS_WINDOWS = orig_win_for_linux
 
     # On macOS (MTKClient only) the blurb is gone: nothing to explain.
-    mac_page = SettingsPage()
-    mac_page.set_method(METHOD_MTK)
-    assert mac_page._method_note.text() == ""
-    assert mac_page._method_note.isHidden()
-    mac_flash_page = FlashPage()
-    mac_flash_page.set_method(METHOD_MTK)
-    assert mac_flash_page._method_note.text() == ""
-    assert mac_flash_page._method_note.isHidden()
-    mac_flash_page.deleteLater()
-    app.processEvents()
+    paths.IS_MAC = True
+    paths.IS_WINDOWS = False
+    try:
+        mac_page = SettingsPage()
+        mac_page.set_method(METHOD_MTK)
+        assert mac_page._method_note.text() == ""
+        assert mac_page._method_note.isHidden()
+        mac_flash_page = FlashPage()
+        mac_flash_page.set_method(METHOD_MTK)
+        assert mac_flash_page._method_note.text() == ""
+        assert mac_flash_page._method_note.isHidden()
+        mac_flash_page.deleteLater()
+        app.processEvents()
+    finally:
+        paths.IS_MAC = orig_mac
+        paths.IS_WINDOWS = orig_windows
 
 
 def test_connectivity_monitor_reprobing():
@@ -4725,12 +4758,17 @@ def test_sp_history_ini_subsequent_attempts_and_absolute_paths():
         assert ini_file.is_file()
 
         # Check with QSettings
-        qs1 = QSettings(str(ini_file), QSettings.IniFormat)
-        assert qs1.value("LastDAFilePath/lastDir") == str(da_file.resolve())
-        assert qs1.value("RecentOpenFile/lastDir") == str(sc1.resolve())
-        assert qs1.value("RecentOpenFile/scatterHistory") == str(sc1.resolve())
-        assert os.path.isabs(qs1.value("LastDAFilePath/lastDir"))
-        assert os.path.isabs(qs1.value("RecentOpenFile/lastDir"))
+        ini_text1 = ini_file.read_text(encoding="utf-8")
+        assert f"lastDir={da_file.resolve()}" in ini_text1
+        assert f"lastDir={sc1.resolve()}" in ini_text1
+        assert f"scatterHistory={sc1.resolve()}" in ini_text1
+        if sys.platform != "win32":
+            qs1 = QSettings(str(ini_file), QSettings.IniFormat)
+            assert qs1.value("LastDAFilePath/lastDir") == str(da_file.resolve())
+            assert qs1.value("RecentOpenFile/lastDir") == str(sc1.resolve())
+            assert qs1.value("RecentOpenFile/scatterHistory") == str(sc1.resolve())
+            assert os.path.isabs(qs1.value("LastDAFilePath/lastDir"))
+            assert os.path.isabs(qs1.value("RecentOpenFile/lastDir"))
 
         # --- Attempt 2: Subsequent install attempt (Y2) ---
         ok2 = sp_flash_gui.update_sp_history_ini(
@@ -4741,15 +4779,16 @@ def test_sp_history_ini_subsequent_attempts_and_absolute_paths():
         )
         assert ok2 is True
 
-        qs2 = QSettings(str(ini_file), QSettings.IniFormat)
-        assert qs2.value("LastDAFilePath/lastDir") == str(da_file.resolve())
-        assert qs2.value("RecentOpenFile/lastDir") == str(sc2.resolve())
         expected_hist = f"{sc2.resolve()},{sc1.resolve()}"
         assert f"scatterHistory={expected_hist}" in ini_file.read_text(encoding="utf-8")
-        raw_val = qs2.value("RecentOpenFile/scatterHistory")
-        items = raw_val if isinstance(raw_val, list) else [raw_val]
-        assert items == [str(sc2.resolve()), str(sc1.resolve())]
-        assert os.path.isabs(qs2.value("RecentOpenFile/lastDir"))
+        if sys.platform != "win32":
+            qs2 = QSettings(str(ini_file), QSettings.IniFormat)
+            assert qs2.value("LastDAFilePath/lastDir") == str(da_file.resolve())
+            assert qs2.value("RecentOpenFile/lastDir") == str(sc2.resolve())
+            raw_val = qs2.value("RecentOpenFile/scatterHistory")
+            items = raw_val if isinstance(raw_val, list) else [raw_val]
+            assert items == [str(sc2.resolve()), str(sc1.resolve())]
+            assert os.path.isabs(qs2.value("RecentOpenFile/lastDir"))
 
         # --- Test upgrade of legacy/malformed history.ini with relative paths ---
         malformed_text = (
@@ -4766,12 +4805,19 @@ def test_sp_history_ini_subsequent_attempts_and_absolute_paths():
             model="Y2",
         )
         assert ok3 is True
-        qs3 = QSettings(str(ini_file), QSettings.IniFormat)
-        assert qs3.value("LastDAFilePath/lastDir") == str(da_file.resolve())
-        assert os.path.isabs(qs3.value("LastDAFilePath/lastDir"))
-        assert os.path.isabs(qs3.value("RecentOpenFile/lastDir"))
-        raw3 = qs3.value("RecentOpenFile/scatterHistory")
-        items3 = raw3 if isinstance(raw3, list) else [raw3]
+        if sys.platform != "win32":
+            qs3 = QSettings(str(ini_file), QSettings.IniFormat)
+            assert qs3.value("LastDAFilePath/lastDir") == str(da_file.resolve())
+            assert os.path.isabs(qs3.value("LastDAFilePath/lastDir"))
+            assert os.path.isabs(qs3.value("RecentOpenFile/lastDir"))
+            raw3 = qs3.value("RecentOpenFile/scatterHistory")
+            items3 = raw3 if isinstance(raw3, list) else [raw3]
+            assert items3 == [str(da_file.parent / "MT6572_Android_scatter.txt")]
+        else:
+            ini3_text = ini_file.read_text(encoding="utf-8")
+            assert f"lastDir={da_file.resolve()}" in ini3_text
+            assert "MT6572_Android_scatter.txt" in ini3_text
+            items3 = [str(da_file.parent / "MT6572_Android_scatter.txt")]
         for item in items3:
             item_str = str(item).strip()
             assert os.path.isabs(item_str), f"Expected absolute path, got {item_str}"

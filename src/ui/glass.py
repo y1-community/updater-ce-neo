@@ -12,12 +12,13 @@ import platform
 import sys
 from typing import Any
 
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QMainWindow, QWidget
+from PySide6.QtCore import QEvent, QObject, Qt
+from PySide6.QtWidgets import QDialog, QMainWindow, QWidget
 
 logger = logging.getLogger(__name__)
 
 IS_MACOS = sys.platform == "darwin"
+IS_WINDOWS = sys.platform == "win32" or platform.system() == "Windows"
 ARCH = platform.machine().lower()  # 'arm64' or 'x86_64'
 
 
@@ -59,8 +60,21 @@ def is_golden_gate_or_newer() -> bool:
     return IS_MACOS and MACOS_VERSION >= GOLDEN_GATE_VERSION
 
 
+def is_windows_acrylic_supported() -> bool:
+    """Return True if running on Windows 10 (1803+) or Windows 11 where Acrylic/Mica is supported."""
+    if sys.platform != "win32" and platform.system() != "Windows":
+        return False
+    try:
+        ver = sys.getwindowsversion()
+        return ver.major >= 10 and ver.build >= 17134
+    except Exception:
+        return False
+
+
 def is_glass_supported() -> bool:
     """Return True if running on supported macOS (Ventura through Golden Gate+)."""
+    if not IS_MACOS:
+        return False
     if not is_ventura_or_newer():
         return False
     try:
@@ -93,13 +107,9 @@ if IS_MACOS:
 def prepare_window_for_glass(window: QMainWindow | QWidget) -> bool:
     """Prepare window flags and translucent attributes before window.show().
 
-    Must be called before the window is mapped/shown on macOS and Windows.
-    Safe no-op on Linux.
+    Must be called before the window is mapped/shown on macOS.
+    Safe no-op on Linux and Windows.
     """
-    if sys.platform == "win32" or platform.system() == "Windows":
-        window.setAttribute(Qt.WA_TranslucentBackground, True)
-        return True
-
     if not is_glass_supported():
         return False
 
@@ -174,13 +184,8 @@ def apply_glass(
 
     On macOS 26+ (Golden Gate), utilizes NSGlassEffectView.
     On macOS 13–15 (Ventura through Sequoia), falls back to NSVisualEffectView.
-    On Windows 11/10/7, applies native Acrylic material / Aero glass.
-    Safe no-op on Linux.
+    Safe no-op on Linux and Windows.
     """
-    if sys.platform == "win32" or platform.system() == "Windows":
-        is_dark_mode = dark if dark is not None else True
-        return apply_windows_acrylic(window, dark=is_dark_mode)
-
     if not is_glass_supported():
         return False
 
@@ -381,10 +386,11 @@ def _pyobjc_configure_traffic_lights(
 
 
 def apply_windows_dark_titlebar(window: QMainWindow | QWidget, dark: bool) -> bool:
-    """Enable immersive dark mode for native Windows titlebar.
+    """Enable immersive dark mode and seamless transparent titlebar for Windows.
 
-    Uses DwmSetWindowAttribute with DWMWA_USE_IMMERSIVE_DARK_MODE (attribute 20
-    on Windows 11 / Windows 10 20H1+ and attribute 19 fallback on Windows 10 1809-1909).
+    Uses DwmSetWindowAttribute with DWMWA_USE_IMMERSIVE_DARK_MODE (attribute 20/19),
+    DWMWA_CAPTION_COLOR (35) = DWMWA_COLOR_NONE (0xFFFFFFFE) to suppress the OS accent
+    color and blend seamlessly with the Acrylic backdrop, and DWMWA_BORDER_COLOR (34).
     Safe no-op on macOS and Linux.
     """
     if sys.platform != "win32" and platform.system() != "Windows":
@@ -397,23 +403,40 @@ def apply_windows_dark_titlebar(window: QMainWindow | QWidget, dark: bool) -> bo
         dwm = ctypes.windll.dwmapi
         val = c_int(1 if dark else 0)
         for attr in (20, 19):
-            hr = dwm.DwmSetWindowAttribute(hwnd, attr, byref(val), sizeof(val))
-            if hr == 0:
-                logger.info("Applied Windows dark mode titlebar (attribute %d=%d)", attr, val.value)
-                return True
+            dwm.DwmSetWindowAttribute(hwnd, attr, byref(val), sizeof(val))
+
+        # Windows 11 (Build 22000+): Make title bar seamless and suppress accent color
+        # DWMWA_CAPTION_COLOR = 35, DWMWA_BORDER_COLOR = 34, DWMWA_COLOR_NONE = 0xFFFFFFFE
+        color_none = c_int(0xFFFFFFFE)
+        dwm.DwmSetWindowAttribute(hwnd, 35, byref(color_none), sizeof(color_none))
+        dwm.DwmSetWindowAttribute(hwnd, 34, byref(color_none), sizeof(color_none))
+
+        # Title text color (DWMWA_TEXT_COLOR = 36): white for dark mode (0x00FFFFFF), dark for light mode (0x00000000)
+        text_color = c_int(0x00FFFFFF if dark else 0x00000000)
+        dwm.DwmSetWindowAttribute(hwnd, 36, byref(text_color), sizeof(text_color))
+
+        # Also apply pywinstyles transparent titlebar if installed
+        try:
+            import pywinstyles
+            pywinstyles.change_header_color(window, "transparent")
+            pywinstyles.change_border_color(window, "transparent")
+        except Exception:
+            pass
+
+        return True
     except Exception as e:
-        logger.debug("Could not set Windows dark mode titlebar: %s", e)
+        logger.debug("Could not set Windows seamless titlebar: %s", e)
     return False
 
 
 def apply_windows_acrylic(window: QMainWindow | QWidget, dark: bool = True) -> bool:
     """Apply native Windows 11 Acrylic material (or Win10 / Win7 Aero fallback).
 
-    - Windows 11 22H2+ (Build 22621+): DwmSetWindowAttribute with
-      DWMWA_SYSTEMBACKDROP_TYPE = 3 (DWMSBT_TRANSIENTWINDOW = Acrylic material).
-    - Windows 10 / Win11 21H2: SetWindowCompositionAttribute with
-      ACCENT_ENABLE_ACRYLICBLURBEHIND (accent state 4).
-    - Windows 7 / 8: DwmExtendFrameIntoClientArea (-1, -1, -1, -1) for Aero glass.
+    - Windows 11 22H2+ (Build 22621+): DwmExtendFrameIntoClientArea (-1, -1, -1, -1)
+      and DwmSetWindowAttribute with DWMWA_SYSTEMBACKDROP_TYPE = 3 (DWMSBT_TRANSIENTWINDOW = Acrylic).
+    - Windows 11 21H2: DWMWA_MICA_EFFECT = 1029.
+    - Windows 10: SetWindowCompositionAttribute with ACCENT_ENABLE_ACRYLICBLURBEHIND (accent state 4).
+    - Fallback: pywinstyles / Aero glass DwmExtendFrameIntoClientArea (-1, -1, -1, -1).
     Safe no-op on macOS and Linux.
     """
     if sys.platform != "win32" and platform.system() != "Windows":
@@ -421,7 +444,8 @@ def apply_windows_acrylic(window: QMainWindow | QWidget, dark: bool = True) -> b
 
     try:
         import ctypes
-        from ctypes import byref, c_int, sizeof
+        from ctypes import byref, c_int, sizeof, Structure, pointer
+        from ctypes.wintypes import DWORD, ULONG
 
         hwnd = int(window.winId())
         dwm = ctypes.windll.dwmapi
@@ -429,75 +453,146 @@ def apply_windows_acrylic(window: QMainWindow | QWidget, dark: bool = True) -> b
         # 1. Synchronize immersive dark mode titlebar attribute
         apply_windows_dark_titlebar(window, dark)
 
-        # 2. Windows 11 22H2+ SystemBackdropType: DWMSBT_TRANSIENTWINDOW = 3 (Acrylic)
-        # DWMWA_SYSTEMBACKDROP_TYPE = 38
-        backdrop_type = c_int(3)
-        hr = dwm.DwmSetWindowAttribute(hwnd, 38, byref(backdrop_type), sizeof(backdrop_type))
-        if hr == 0:
-            logger.info("Applied Windows 11 Acrylic backdrop (DWMWA_SYSTEMBACKDROP_TYPE=3)")
-            return True
+        # 2. Always extend frame into client area so DWM backdrop covers full window
+        class MARGINS(Structure):
+            _fields_ = [
+                ("cxLeftWidth", c_int),
+                ("cxRightWidth", c_int),
+                ("cyTopHeight", c_int),
+                ("cyBottomHeight", c_int),
+            ]
 
-        # 3. Fallback: Windows 10 SetWindowCompositionAttribute
+        margins = MARGINS(-1, -1, -1, -1)
+        dwm.DwmExtendFrameIntoClientArea(hwnd, byref(margins))
+
+        class ACCENT_POLICY(Structure):
+            _fields_ = [
+                ("AccentState", DWORD),
+                ("AccentFlags", DWORD),
+                ("GradientColor", DWORD),
+                ("AnimationId", DWORD),
+            ]
+
+        class WINDOW_COMPOSITION_ATTRIBUTES(Structure):
+            _fields_ = [
+                ("Attribute", DWORD),
+                ("Data", ctypes.POINTER(ACCENT_POLICY)),
+                ("SizeOfData", ULONG),
+            ]
+
+        build = sys.getwindowsversion().build if hasattr(sys, "getwindowsversion") else 0
+
+        # Try pywinstyles if available
         try:
-            class AccentPolicy(ctypes.Structure):
-                _fields_ = [
-                    ("AccentState", ctypes.c_int),
-                    ("AccentFlags", ctypes.c_int),
-                    ("GradientColor", ctypes.c_int),
-                    ("AnimationId", ctypes.c_int),
-                ]
+            import pywinstyles
+            pywinstyles.apply_style(window, "acrylic")
+        except Exception:
+            pass
 
-            class WindowCompositionAttributeData(ctypes.Structure):
-                _fields_ = [
-                    ("Attribute", ctypes.c_int),
-                    ("Data", ctypes.c_void_p),
-                    ("SizeOfData", ctypes.c_size_t),
-                ]
+        # 3. Windows 11 22H2+ (Build 22621+): Official DWMWA_SYSTEMBACKDROP_TYPE
+        if build >= 22621:
+            try:
+                # DWMSBT_TRANSIENTWINDOW = 3 (Acrylic material)
+                backdrop_type = c_int(3)
+                hr = dwm.DwmSetWindowAttribute(hwnd, 38, byref(backdrop_type), sizeof(backdrop_type))
 
-            user32 = ctypes.windll.user32
-            SetWindowCompositionAttribute = user32.SetWindowCompositionAttribute
-            SetWindowCompositionAttribute.restype = ctypes.c_int
-            SetWindowCompositionAttribute.argtypes = [ctypes.c_void_p, ctypes.POINTER(WindowCompositionAttributeData)]
+                # Host backdrop accent policy
+                accent = ACCENT_POLICY(5, 0, 0, 0)
+                data = WINDOW_COMPOSITION_ATTRIBUTES(19, pointer(accent), sizeof(accent))
+                ctypes.windll.user32.SetWindowCompositionAttribute(hwnd, pointer(data))
+                if dark:
+                    data_dark = WINDOW_COMPOSITION_ATTRIBUTES(26, pointer(accent), sizeof(accent))
+                    ctypes.windll.user32.SetWindowCompositionAttribute(hwnd, pointer(data_dark))
 
-            # AABBGGRR format: dark tint vs light tint
+                if hr == 0:
+                    logger.info("Applied Windows 11 Acrylic backdrop (DWMWA_SYSTEMBACKDROP_TYPE=3)")
+                    return True
+            except Exception as e:
+                logger.debug("Win11 DWMWA_SYSTEMBACKDROP_TYPE failed: %s", e)
+
+        # 4. Windows 11 21H2 (Build 22000): DWMWA_MICA_EFFECT = 1029
+        elif build >= 22000:
+            try:
+                mica_val = c_int(1)
+                hr = dwm.DwmSetWindowAttribute(hwnd, 1029, byref(mica_val), sizeof(mica_val))
+                if hr == 0:
+                    logger.info("Applied Windows 11 21H2 Mica effect (DWMWA_MICA_EFFECT=1029)")
+                    return True
+            except Exception as e:
+                logger.debug("Win11 21H2 Mica effect failed: %s", e)
+
+        # 5. Fallback: Windows 10 SetWindowCompositionAttribute (Acrylic blur)
+        try:
             gradient_color = 0x99202020 if dark else 0x99F0F0F0
-            accent = AccentPolicy(
+            accent = ACCENT_POLICY(
                 AccentState=4,  # ACCENT_ENABLE_ACRYLICBLURBEHIND
                 AccentFlags=2,
                 GradientColor=gradient_color,
                 AnimationId=0,
             )
-            data = WindowCompositionAttributeData(
+            data = WINDOW_COMPOSITION_ATTRIBUTES(
                 Attribute=19,  # WCA_ACCENT_POLICY
-                Data=ctypes.cast(ctypes.pointer(accent), ctypes.c_void_p),
-                SizeOfData=ctypes.sizeof(accent),
+                Data=pointer(accent),
+                SizeOfData=sizeof(accent),
             )
-            res = SetWindowCompositionAttribute(hwnd, ctypes.byref(data))
+            res = ctypes.windll.user32.SetWindowCompositionAttribute(hwnd, pointer(data))
             if res != 0:
                 logger.info("Applied Windows 10 Acrylic blur via SetWindowCompositionAttribute")
                 return True
         except Exception as e:
             logger.debug("Win10 SetWindowCompositionAttribute fallback failed: %s", e)
 
-        # 4. Fallback: Windows 7 Aero DwmExtendFrameIntoClientArea
-        try:
-            class MARGINS(ctypes.Structure):
-                _fields_ = [
-                    ("cxLeftWidth", ctypes.c_int),
-                    ("cxRightWidth", ctypes.c_int),
-                    ("cyTopHeight", ctypes.c_int),
-                    ("cyBottomHeight", ctypes.c_int),
-                ]
-
-            margins = MARGINS(-1, -1, -1, -1)
-            hr_aero = dwm.DwmExtendFrameIntoClientArea(hwnd, byref(margins))
-            if hr_aero == 0:
-                logger.info("Applied Windows 7 Aero glass via DwmExtendFrameIntoClientArea")
-                return True
-        except Exception as e:
-            logger.debug("Win7 Aero frame extension fallback failed: %s", e)
+        return True
 
     except Exception as e:
         logger.debug("Could not apply Windows Acrylic backdrop: %s", e)
 
     return False
+
+
+class _DialogThemeWatcher(QObject):
+    """Event filter ensuring Windows DWM attributes persist when a dialog is shown."""
+
+    _instance = None
+
+    @classmethod
+    def instance(cls) -> _DialogThemeWatcher:
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        if event.type() == QEvent.Type.Show:
+            try:
+                from .dark import is_dark
+                apply_windows_dark_titlebar(watched, is_dark())
+            except Exception:
+                pass
+        return super().eventFilter(watched, event)
+
+
+def apply_dialog_theme(dialog: QDialog) -> None:
+    """Apply host OS native window decoration, titlebar styling, and backdrop to a dialog.
+
+    - Windows: applies immersive dark/light mode titlebar, suppresses default accent color
+      on caption bar, and installs event filter so styling persists on Show.
+    - macOS: configures Liquid Glass / vibrancy when supported.
+    """
+    try:
+        from .dark import is_dark
+        dark = is_dark()
+    except Exception:
+        dark = False
+
+    if IS_WINDOWS:
+        apply_windows_dark_titlebar(dialog, dark)
+        try:
+            dialog.installEventFilter(_DialogThemeWatcher.instance())
+        except Exception:
+            pass
+    elif IS_MACOS and is_glass_supported():
+        try:
+            prepare_window_for_glass(dialog)
+            apply_glass(dialog, corner_radius=12.0, dark=dark)
+        except Exception as e:
+            logger.debug("apply_dialog_theme glass skipped: %s", e)

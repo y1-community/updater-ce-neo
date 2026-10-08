@@ -1205,7 +1205,7 @@ class FlashWorker(QThread):
             elif IS_WINDOWS:
                 # Auto mode falls back to MTKClient when the bundled SP Flash
                 # Tool payload is missing, instead of failing the flash.
-                if method == "auto" and paths.find_sp_flash_tool() is None:
+                if (self.method == "auto" or method == "auto") and paths.find_sp_flash_tool() is None:
                     self._log(
                         "SP Flash Tool not found; using MTKClient method (auto fallback)."
                     )

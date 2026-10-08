@@ -22,8 +22,25 @@ try:
 except ImportError:
     pass
 
-sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding='utf-8')
-sys.stderr = io.TextIOWrapper(sys.stderr.detach(), encoding='utf-8')
+try:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding='utf-8')
+    elif hasattr(sys.stdout, "buffer"):
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    elif hasattr(sys.stdout, "detach"):
+        sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding='utf-8')
+except Exception:
+    pass
+
+try:
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding='utf-8')
+    elif hasattr(sys.stderr, "buffer"):
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+    elif hasattr(sys.stderr, "detach"):
+        sys.stderr = io.TextIOWrapper(sys.stderr.detach(), encoding='utf-8')
+except Exception:
+    pass
 
 
 class MTKTee:

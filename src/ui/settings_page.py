@@ -87,6 +87,8 @@ class SettingsPage(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.NoFrame)
+        from .dark import apply_native_scrollbar_policy
+        apply_native_scrollbar_policy(scroll)
         scroll.setStyleSheet("background: transparent;")
 
         container = QWidget()
@@ -258,11 +260,16 @@ class SettingsPage(QWidget):
         # Linux gets the SP Flash Tool system checker (udev rules, kernel
         # modules); Windows instead needs the MediaTek USB driver installed
         # before the first flash.
-        if paths.IS_WINDOWS:
-            self._prep_card = self._build_driver_card()
+        if paths.IS_WINDOWS and not paths.IS_MAC:
+            self._driver_card = self._build_driver_card()
+            self._prep_card = self._driver_card
+            self._checker_card = self._driver_card
+            layout.addWidget(self._driver_card)
         else:
-            self._prep_card = self._build_checker_card()
-        layout.addWidget(self._prep_card)
+            self._checker_card = self._build_checker_card()
+            self._driver_card = self._checker_card
+            self._prep_card = self._checker_card
+            layout.addWidget(self._checker_card)
 
         # --- Card 5: Offline Mode ---
         # The generic MediaTek Installer build is offline-only, so the toggle
@@ -477,7 +484,7 @@ class SettingsPage(QWidget):
     def set_method(self, method):
         """Reflect a method chosen elsewhere (or persisted) in the selector."""
         method = normalise_method(method)
-        if method == METHOD_MTK_MAC and not paths.IS_MAC:
+        if method in (METHOD_MTK, METHOD_MTK_MAC) and not paths.IS_MAC:
             # Restore the revealed entry for a choice made in a previous run.
             self._advanced_revealed = True
         self._reload_method_options()
@@ -702,7 +709,10 @@ class SettingsPage(QWidget):
         self._donations_card.retranslate()
         self._cb_hide_donations.setText(tr("settings_hide_donations"))
         self._cb_skip_install_donations.setText(tr("settings_skip_install_donations"))
-        self._prep_card.retranslate()
+        if hasattr(self, "_checker_card"):
+            self._checker_card.retranslate()
+        if hasattr(self, "_driver_card"):
+            self._driver_card.retranslate()
         if hasattr(self, "_checker_desc"):
             self._checker_desc.setText(tr("settings_checker_desc"))
             self._btn_run_checker.setText(tr("system_checker_run_btn"))

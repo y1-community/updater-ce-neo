@@ -712,7 +712,7 @@ class ReleasesClient:
                 if isinstance(data, list):
                     return [
                         r for r in data
-                        if isinstance(r, dict)
+                        if isinstance(r, dict) and release_version_ok(repo, r.get("tag_name", ""))
                     ]
         except Exception as e:
             logger.debug("Cache read failed for %s: %s", repo, e)
@@ -746,17 +746,94 @@ class ReleasesClient:
                 if resp.status_code == 200:
                     return resp.json()
                 if resp.status_code in (403, 429):
-                    logger.info("GitHub rate limited (%s); sleeping", resp.status_code)
-                    time.sleep(2 * (attempt + 1))
-                    continue
+                    logger.info("GitHub rate limited (%s); skipping API retry", resp.status_code)
+                    last_err = resp.status_code
+                    break
                 last_err = resp.status_code
                 break
             except requests.RequestException as e:
                 last_err = e
                 if attempt < 2:
-                    time.sleep(1.5 * (attempt + 1))
+                    time.sleep(1.0)
         logger.debug("GitHub request failed for %s: %s", url, last_err)
         return None
+
+    def _fetch_expanded_assets(self, repo, tag):
+        """Parse downloadable assets from https://github.com/{repo}/releases/expanded_assets/{tag}."""
+        url = f"https://github.com/{repo}/releases/expanded_assets/{tag}"
+        assets = []
+        try:
+            resp = self.session.get(url, timeout=REQUEST_TIMEOUT)
+            if resp.status_code == 200:
+                pattern = re.compile(r'href="([^"]+/releases/download/[^"]+/([^"]+))"')
+                seen = set()
+                for match in pattern.finditer(resp.text):
+                    path, name = match.group(1), match.group(2)
+                    if name in seen:
+                        continue
+                    seen.add(name)
+                    download_url = f"https://github.com{path}" if path.startswith("/") else path
+                    assets.append({
+                        "name": name,
+                        "browser_download_url": download_url,
+                        "size": 0,
+                    })
+        except Exception as e:
+            logger.debug("Expanded assets fetch failed for %s/%s: %s", repo, tag, e)
+        if not assets:
+            for name in ("rom.zip", "rom_y2.zip", "rom_a5.zip"):
+                assets.append({
+                    "name": name,
+                    "browser_download_url": f"https://github.com/{repo}/releases/download/{tag}/{name}",
+                    "size": 0,
+                })
+        return assets
+
+    def _fetch_releases_atom(self, repo):
+        """Fetch releases via public atom feed when GitHub API is rate-limited."""
+        url = f"https://github.com/{repo}/releases.atom"
+        try:
+            resp = self.session.get(url, timeout=REQUEST_TIMEOUT)
+            if resp.status_code != 200:
+                return []
+            import xml.etree.ElementTree as ET
+            root = ET.fromstring(resp.text)
+            ns = {"atom": "http://www.w3.org/2005/Atom"}
+            raw_releases = []
+            for entry in root.findall("atom:entry", ns):
+                title_el = entry.find("atom:title", ns)
+                title = title_el.text if title_el is not None else ""
+                content_el = entry.find("atom:content", ns)
+                body = content_el.text if content_el is not None else ""
+                updated_el = entry.find("atom:updated", ns)
+                pub_date = updated_el.text if updated_el is not None else ""
+                tag = ""
+                for link in entry.findall("atom:link", ns):
+                    href = link.attrib.get("href", "")
+                    if "/releases/tag/" in href:
+                        tag = href.split("/releases/tag/")[-1]
+                        break
+                if not tag:
+                    id_el = entry.find("atom:id", ns)
+                    if id_el is not None and "Release/" in id_el.text:
+                        tag = id_el.text.split("Release/")[-1]
+                if not tag:
+                    continue
+
+                assets = self._fetch_expanded_assets(repo, tag)
+                raw_releases.append({
+                    "tag_name": tag,
+                    "name": title,
+                    "body": body,
+                    "published_at": pub_date,
+                    "html_url": f"https://github.com/{repo}/releases/tag/{tag}",
+                    "prerelease": "nightly" in tag.lower() or "preview" in tag.lower(),
+                    "assets": assets,
+                })
+            return raw_releases
+        except Exception as e:
+            logger.debug("Atom release fallback failed for %s: %s", repo, e)
+            return []
 
     # -- fetching -----------------------------------------------------------
     def get_latest_release(self, repo, force_refresh=False):
@@ -766,25 +843,33 @@ class ReleasesClient:
             if cached:
                 return cached[0]
         url = f"{GITHUB_API}/repos/{repo}/releases/latest"
+        data = None
         if self.token:
             data = self._get_json(url)
-            if data:
-                result = self._normalize_release(data, repo)
-                if result:
-                    self.cache_releases(repo, [result])
+        elif self._can_unauth():
+            self._record_unauth()
+            data = self._get_json(url)
+
+        if data:
+            result = self._normalize_release(data, repo)
+            if result:
+                self.cache_releases(repo, [result])
                 return result
-        if not self._can_unauth():
-            cached = self.get_cached_releases(repo, ignore_ttl=True)
-            return cached[0] if cached else None
-        self._record_unauth()
-        data = self._get_json(url)
-        if not data:
-            cached = self.get_cached_releases(repo, ignore_ttl=True)
-            return cached[0] if cached else None
-        result = self._normalize_release(data, repo)
-        if result:
-            self.cache_releases(repo, [result])
-        return result
+
+        # Fallback to cache
+        cached = self.get_cached_releases(repo, ignore_ttl=True)
+        if cached:
+            return cached[0]
+
+        # Fallback to public atom feed
+        atom_raw = self._fetch_releases_atom(repo)
+        if atom_raw:
+            releases = self._build_releases(atom_raw, repo)
+            if releases:
+                releases = sorted(releases, key=release_sort_key, reverse=True)
+                self.cache_releases(repo, releases)
+                return releases[0]
+        return None
 
     def get_all_releases(self, repo, force_refresh=False):
         repo = resolve_firmware_repo(repo)
@@ -795,29 +880,37 @@ class ReleasesClient:
                 return sorted(cached, key=release_sort_key, reverse=True)[:100]
 
         url = f"{GITHUB_API}/repos/{repo}/releases?per_page={GITHUB_RELEASES_PER_PAGE}"
+        data = None
         if self.token:
             data = self._get_json(url)
-            if data is not None:
-                releases = self._build_releases(data, repo)
-                if releases:
-                    releases = sorted(releases, key=release_sort_key, reverse=True)
-                    self.cache_releases(repo, releases)
+        elif self._can_unauth():
+            self._record_unauth()
+            data = self._get_json(url)
+
+        if data is not None:
+            releases = self._build_releases(data, repo)
+            if releases:
+                releases = sorted(releases, key=release_sort_key, reverse=True)
+                self.cache_releases(repo, releases)
                 return releases
 
-        if not self._can_unauth():
-            logger.warning("GitHub unauthenticated rate limit reached for %s; using cache if available", repo)
-            cached = self.get_cached_releases(repo, ignore_ttl=True)
-            return sorted(cached, key=release_sort_key, reverse=True) if cached else []
-        self._record_unauth()
-        data = self._get_json(url)
-        if data is None:
-            cached = self.get_cached_releases(repo, ignore_ttl=True)
-            return sorted(cached, key=release_sort_key, reverse=True) if cached else []
-        releases = self._build_releases(data, repo)
-        if releases:
-            releases = sorted(releases, key=release_sort_key, reverse=True)
-            self.cache_releases(repo, releases)
-        return releases
+        # Fallback to cached releases if available
+        cached = self.get_cached_releases(repo, ignore_ttl=True)
+        if cached:
+            logger.info("Using %d cached releases for %s after API fallback", len(cached), repo)
+            return sorted(cached, key=release_sort_key, reverse=True)
+
+        # Fallback to public atom feed (never rate-limited)
+        atom_raw = self._fetch_releases_atom(repo)
+        if atom_raw:
+            logger.info("Fetched %d releases via Atom feed for %s", len(atom_raw), repo)
+            releases = self._build_releases(atom_raw, repo)
+            if releases:
+                releases = sorted(releases, key=release_sort_key, reverse=True)
+                self.cache_releases(repo, releases)
+                return releases
+
+        return []
 
     # -- app-update checking --------------------------------------------------
     def _updates_cache_path(self, repo):
@@ -854,6 +947,17 @@ class ReleasesClient:
             self._record_unauth()
             data = self._get_json(url)
         if not data:
+            atom_raw = self._fetch_releases_atom(repo)
+            if atom_raw:
+                latest = atom_raw[0]
+                return {
+                    "tag_name": latest.get("tag_name", ""),
+                    "name": latest.get("name", ""),
+                    "body": latest.get("body", ""),
+                    "published_at": latest.get("published_at", ""),
+                    "html_url": latest.get("html_url", ""),
+                    "assets": latest.get("assets", []),
+                }
             return cached
         result = {
             "tag_name": data.get("tag_name", ""),
@@ -881,6 +985,8 @@ class ReleasesClient:
     # -- normalization ------------------------------------------------------
     def _normalize_release(self, release, repo):
         tag_name = release.get("tag_name", "")
+        if not release_version_ok(repo, tag_name):
+            return None
         assets = release.get("assets", [])
         rom_variants = [_parse_rom_asset_variant(a, tag_name, repo) for a in assets]
         rom_variants = [v for v in rom_variants if v]
@@ -905,6 +1011,8 @@ class ReleasesClient:
         releases = []
         for release in releases_data or []:
             tag_name = release.get("tag_name", "")
+            if not release_version_ok(repo, tag_name):
+                continue
             is_prerelease = bool(release.get("prerelease"))
             if "stable" in tag_name.lower():
                 is_prerelease = False

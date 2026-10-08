@@ -99,8 +99,14 @@ class ConnectivityCheckWorker(QThread):
         self.timeout = timeout
 
     def run(self):
-        online = is_network_available(self.timeout)
-        self.result.emit(online)
+        try:
+            if self.isInterruptionRequested():
+                return
+            online = is_network_available(self.timeout)
+            if not self.isInterruptionRequested():
+                self.result.emit(online)
+        except (RuntimeError, Exception):
+            pass
 
 
 class ConnectivityMonitor(QObject):
