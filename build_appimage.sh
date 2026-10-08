@@ -109,20 +109,30 @@ done
 # just one for a quick local iteration. Each brand is built by a child run of
 # this script, so the single-brand path stays identical to what it always was.
 if [ -z "${INNOASIS_BRAND_LOCK:-}" ]; then
-    if [ "$CLEAN_BUILD" -eq 1 ]; then
-        rm -rf "$BUILD_DIR" "$DIST_DIR"/*.AppImage*
-    fi
     if [ -n "${BRAND_REQUESTED:-}" ]; then
         brands=("$BRAND_REQUESTED")
     else
         brands=(updater_ce mediatek_installer)
     fi
+
+    if [ "$CLEAN_BUILD" -eq 1 ]; then
+        rm -rf "$BUILD_DIR"
+        # Each AppImage is named after its brand: a clean build replaces the
+        # ones it is about to rebuild and leaves the other app in dist/.
+        for brand in "${brands[@]}"; do
+            case "$brand" in
+                updater_ce) rm -rf "$DIST_DIR"/UpdaterCE-*.AppImage* ;;
+                mediatek_installer) rm -rf "$DIST_DIR"/MediaTekInstaller-*.AppImage* ;;
+            esac
+        done
+    fi
+
     for brand in "${brands[@]}"; do
         INNOASIS_BRAND_LOCK=1 BUILD_BRAND="$brand" "$0" "$@" || exit $?
     done
     echo ""
-    echo "=== Built AppImages ==="
-    ls "$DIST_DIR"/*.AppImage 2>/dev/null || true
+    echo "=== dist/ ==="
+    ls "$DIST_DIR"/*.AppImage 2>/dev/null || echo "  (no AppImages yet)"
     exit 0
 fi
 

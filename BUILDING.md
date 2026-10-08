@@ -138,6 +138,10 @@ powershell -File build_windows.ps1 -Brand mediatek_installer
 BUILD_BRAND=mediatek_installer ./build_macos.sh # same, via the environment
 ```
 
+A single-brand build only replaces that app's own artifacts: whatever else is
+already in `dist/` (the other app, its installer/DMG) stays exactly as it was,
+so both front ends remain there to test.
+
 The dist folder / executable name stays a slug per brand
 (`InnioasisUpdater`, `MediaTekInstaller`); `MediaTek Installer` is the name the
 user sees in the installer, Start Menu, window title and dock.

@@ -69,20 +69,50 @@ done
 #
 # Each brand is built by a child run of this script: that keeps the per-brand
 # path identical to the single-brand flow above and below.
+#
+# Each app owns its own dist artifacts, so a build only removes the ones it is
+# about to replace. Building one front end therefore leaves the other one in
+# dist/ untouched, instead of deleting a good app that this run will not
+# rebuild (which is how dist/ ended up with a single app in the past).
+clean_brand_artifacts() {
+    case "$1" in
+        updater_ce)
+            rm -rf "$DIST_DIR/Updater CE.app" "$DIST_DIR"/UpdaterCE-*.dmg
+            ;;
+        mediatek_installer)
+            rm -rf "$DIST_DIR/MediaTek Installer.app" "$DIST_DIR"/MediaTekInstaller-*.dmg
+            ;;
+    esac
+}
+
+# What dist/ holds after a build, so a single-brand run never looks like it
+# lost the other app.
+list_built_apps() {
+    echo ""
+    echo "=== dist/ ==="
+    ls -d "$DIST_DIR"/*.app 2>/dev/null || echo "  (no .app bundles yet)"
+    ls "$DIST_DIR"/*.dmg 2>/dev/null || true
+}
+
 if [ "${INNOASIS_BRAND_LOCK:-}" = "1" ]; then
     : # child pass: build the brand handed over in BUILD_BRAND
 elif [ -n "${BRAND_REQUESTED:-}" ]; then
-    rm -rf "$BUILD_DIR" "$DIST_DIR"/*.app "$DIST_DIR"/*.dmg
+    rm -rf "$BUILD_DIR"
+    clean_brand_artifacts "$BRAND_REQUESTED"
     INNOASIS_BRAND_LOCK=1 BUILD_BRAND="$BRAND_REQUESTED" "$0" "$@" || exit $?
+    list_built_apps
     exit 0
 else
-    rm -rf "$BUILD_DIR" "$DIST_DIR"/*.app "$DIST_DIR"/*.dmg
+    rm -rf "$BUILD_DIR"
+    for brand in updater_ce mediatek_installer; do
+        clean_brand_artifacts "$brand"
+    done
     for brand in updater_ce mediatek_installer; do
         INNOASIS_BRAND_LOCK=1 BUILD_BRAND="$brand" "$0" "$@" || exit $?
     done
     echo ""
     echo "=== Built for macOS ==="
-    ls -d "$DIST_DIR"/*.app 2>/dev/null || true
+    list_built_apps
     exit 0
 fi
 

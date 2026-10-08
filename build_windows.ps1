@@ -62,7 +62,10 @@ if (-not $env:INNOASIS_BRAND_LOCK) {
     if ($Clean) {
         Write-Host "[INFO] Cleaning build and dist folders..." -ForegroundColor Yellow
         if (Test-Path "build") { Remove-Item -Recurse -Force "build" }
-        foreach ($dir in @("InnioasisUpdater", "MediaTekInstaller")) {
+        # Only the brands this run rebuilds: cleaning one app must not delete
+        # the other one already sitting in dist\\.
+        foreach ($b in $brands) {
+            $dir = if ($b -eq "mediatek_installer") { "MediaTekInstaller" } else { "InnioasisUpdater" }
             if (Test-Path "dist\$dir") { Remove-Item -Recurse -Force "dist\$dir" }
         }
     }
