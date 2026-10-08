@@ -984,6 +984,110 @@ def test_goal_reached_hides_goal_line():
     _reset_app_settings()
 
 
+def test_donation_bar_corner_links():
+    """The donation bar is one bar: Credits / Thanks in the left corner, the
+    goal or donor display centred between them, Support Us as a text link in
+    the right corner — and the whole lot goes with the "show donations"
+    setting."""
+    import datetime
+
+    from PySide6.QtWidgets import QApplication, QPushButton
+    from src import config
+    from src.donation_dialog import DonationStatusBar, _LinkButton
+    from src.i18n import tr
+    from src.ui.main_window import MainWindow
+
+    _reset_app_settings()
+    app = QApplication.instance() or QApplication(sys.argv)
+    now = datetime.datetime.now()
+    donations = [
+        {"name": "Alice", "amount": 25, "method": "Ko-Fi", "url": "", "dt": now},
+    ]
+
+    credits_clicks = []
+    support_clicks = []
+    bar = DonationStatusBar(
+        donations=donations,
+        on_support=lambda: support_clicks.append(True),
+        on_credits=lambda: credits_clicks.append(True),
+    )
+    bar.resize(1000, 44)
+    bar.show()
+    app.processEvents()
+
+    # Both corner actions are text links, not chrome buttons.
+    assert isinstance(bar._credits_link, _LinkButton)
+    assert isinstance(bar._support_btn, _LinkButton)
+    assert bar._credits_link.isFlat() and bar._support_btn.isFlat()
+    assert bar._credits_link.text() == "Credits / Thanks"
+    bar._credits_link.click()
+    bar._support_btn.click()
+    assert credits_clicks == [True]
+    assert support_clicks == [True]
+
+    # Credits / Thanks hugs one edge, Support Us the other, by equal margins.
+    assert bar._credits_link.x() < bar._goal_group.x()
+    assert bar._support_btn.x() + bar._support_btn.width() > bar._goal_group.x() + bar._goal_group.width()
+    left_margin = bar._credits_link.x()
+    right_margin = bar.width() - (bar._support_btn.x() + bar._support_btn.width())
+    assert abs(left_margin - right_margin) <= 2, (left_margin, right_margin)
+
+    def goal_centre():
+        return bar._goal_group.x() + bar._goal_group.width() // 2
+
+    # The goal display is on the bar's centre line, and the donor ticker takes
+    # its place in the same centred slot when it rotates in.
+    assert abs(goal_centre() - bar.width() // 2) <= 2, (goal_centre(), bar.width() // 2)
+    bar._rotate()
+    app.processEvents()
+    assert bar._donor_label.isVisible() and bar._goal_label.isHidden()
+    assert abs(goal_centre() - bar.width() // 2) <= 2, (goal_centre(), bar.width() // 2)
+    bar.deleteLater()
+    app.processEvents()
+
+    # In the window the link lives in the bar, not in the sidebar, so it goes
+    # when the bar goes.
+    w = MainWindow()
+    w.resize(1000, 700)
+    w.show()
+    app.processEvents()
+    sb = w.statusBar()
+    try:
+        assert w._credits_btn is sb._credits_link
+        assert tr("nav_credits") not in [b.text() for b in w._nav_panel.findChildren(QPushButton)]
+        assert sb._credits_link.isVisible()
+
+        w._settings_page._cb_hide_donations.setChecked(True)
+        app.processEvents()
+        assert not w._credits_btn.isVisible()
+        assert not sb._support_btn.isVisible()
+        assert not sb.isVisible()
+
+        w._settings_page._cb_hide_donations.setChecked(False)
+        # A status message takes the bar over while it shows — the donation
+        # display (and with it the credits link) comes back once it clears.
+        sb.clearMessage()
+        app.processEvents()
+        assert sb._credits_link.isVisible()
+
+        # The generic installer has no credits page, yet its bar still keeps
+        # the goal display centred.
+        config.IS_MEDIATEK_INSTALLER = True
+        w._apply_generic_mtk_branding()
+        w._apply_donation_visibility()
+        sb.clearMessage()  # brand changes post a status message too
+        app.processEvents()
+        assert sb.isVisible() and sb._support_btn.isVisible()
+        assert not sb._credits_link.isVisible()
+        centre = sb._goal_group.x() + sb._goal_group.width() // 2
+        assert abs(centre - sb.width() // 2) <= 2, (centre, sb.width() // 2)
+    finally:
+        config.IS_MEDIATEK_INSTALLER = False
+        w.close()
+        app.processEvents()
+        _reset_app_settings()
+
+
 def test_diagnostics_live_update():
     """The diagnostics dialog streams new log lines while open (no need to
     close and reopen it to see progress)."""
@@ -5650,6 +5754,11 @@ def test_generic_mtk_mode_and_offline_branding():
     assert w._brand_label.text() == "Updater CE"
     assert not w._select_page._tabs.tabBar().isVisible()
     assert not w._support_btn.isVisible()
+    # Offline mode has no online resources to credit, so the whole bar —
+    # credits link included — is gone rather than showing an empty corner.
+    w.statusBar().clearMessage()
+    app.processEvents()
+    assert not w.statusBar().isVisible()
     assert not w._credits_btn.isVisible()
     assert not w._settings_page._offline_mode_card.isHidden()
     assert tr("settings_offline_mode") == "Offline Mode"
@@ -5657,8 +5766,11 @@ def test_generic_mtk_mode_and_offline_branding():
         for loc, text in i18n._STRINGS[key].items():
             assert "MediaTek" not in text, (key, loc, text)
 
-    # Toggle off
+    # Toggle off (the status bar shows an 'online listings unavailable'
+    # message while offline, which takes the donation display — and its
+    # credits link — over until it clears).
     w._settings_page._cb_offline_mode.setChecked(False)
+    w.statusBar().clearMessage()
     app.processEvents()
 
     assert not config.is_generic_mtk()
@@ -6090,6 +6202,7 @@ def main():
     check("UI construction", test_ui_construction)
     check("donation status bar", test_donation_status_bar)
     check("goal reached hides goal line", test_goal_reached_hides_goal_line)
+    check("donation bar corner links", test_donation_bar_corner_links)
     check("diagnostics live update", test_diagnostics_live_update)
     check("tool output capture", test_tool_output_capture)
     check("sp internal log streamed", test_sp_internal_log_streamed)

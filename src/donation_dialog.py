@@ -64,14 +64,37 @@ class _LineLabel(QLabel):
         ev.accept()
 
 
+class _LinkButton(QPushButton):
+    """A button that reads as a text link rather than a control.
+
+    The donation bar is a line of text, so its corner actions (Credits /
+    Thanks, Support Us) carry no chrome: the label, a hover colour, a hand
+    cursor, and keyboard focus. The bar styles them, since they follow the
+    active theme.
+    """
+
+    def __init__(self, text="", parent=None):
+        super().__init__(text, parent)
+        self.setFlat(True)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setAutoDefault(False)
+
+
 class DonationStatusBar(QStatusBar):
-    """Compact, always-visible version of the Support dialog's goal display."""
+    """Compact, always-visible version of the Support dialog's goal display.
+
+    One bar, three parts: the Credits / Thanks link on the left, the goal or
+    donor display centred in the middle, and the Support Us link in the right
+    corner. All of it belongs to the donation UI, so it appears and disappears
+    together with the "show donations" setting.
+    """
 
     def __init__(self, parent=None, donations=None, on_support=None,
-                 on_donations_updated=None):
+                 on_donations_updated=None, on_credits=None):
         super().__init__(parent)
         self.donations = donations or []
         self._on_support = on_support
+        self._on_credits = on_credits
         self._on_donations_updated = on_donations_updated
         self._remote_refresh_interval_ms = 5 * 60 * 1000
         self._showing_goal = True
@@ -84,7 +107,7 @@ class DonationStatusBar(QStatusBar):
         self.setObjectName("donation_status_bar")
         self.setSizeGripEnabled(False)
         self.setFixedHeight(44)
-        self._build_ui(on_support)
+        self._build_ui(on_support, on_credits)
         self._donor_lines = self._build_donor_lines()
         self._refresh_goal()
         if self._goal_reached and self._donor_lines:
@@ -101,7 +124,22 @@ class DonationStatusBar(QStatusBar):
         self._remote_refresh_timer.start()
         self._refresh_remote_donors()
 
-    def _build_ui(self, on_support):
+    def credits_link(self):
+        """The bar's Credits / Thanks link; the window owns its visibility."""
+        return self._credits_link
+
+    def _style_link(self, btn, t, align="left"):
+        """Text-link styling for the bar's corner actions."""
+        side = "left" if align == "left" else "right"
+        btn.setStyleSheet(
+            f"QPushButton {{ background: transparent; color: {t.fg}; border: none;"
+            f" padding: 2px 4px; font-size: 12px; font-weight: 600; text-align: {side}; }}"
+            f"QPushButton:hover {{ color: {t.accent}; }}"
+            f"QPushButton:focus {{ color: {t.accent}; border: 1px solid {t.border_focus};"
+            f" border-radius: 5px; outline: none; }}"
+        )
+
+    def _build_ui(self, on_support, on_credits=None):
         t = T()
         is_mac = sys.platform == "darwin"
         status_bg = "transparent" if is_mac else t.bg_card
@@ -113,35 +151,64 @@ class DonationStatusBar(QStatusBar):
             f" background: transparent; border: none; }}"
         )
 
-        # Donation container: goal / donor ticker and Support button
+        # Donation container: Credits / Thanks, the centred goal display, and
+        # the Support Us link in the right corner.
         self._donation_container = QWidget(self)
         row = QHBoxLayout(self._donation_container)
-        row.setContentsMargins(12, 0, 8, 0)
-        row.setSpacing(10)
+        row.setContentsMargins(12, 0, 12, 0)
+        row.setSpacing(12)
+
+        self._credits_link = _LinkButton(tr("nav_credits"))
+        self._credits_link.setToolTip(tr("nav_credits"))
+        # Brands without an online credits page hide the link but keep its
+        # space, so the goal display stays on the bar's centre line.
+        _keep_space = self._credits_link.sizePolicy()
+        _keep_space.setRetainSizeWhenHidden(True)
+        self._credits_link.setSizePolicy(_keep_space)
+        self._style_link(self._credits_link, t, "left")
+        if on_credits:
+            self._credits_link.clicked.connect(on_credits)
+        row.addWidget(self._credits_link, 0, Qt.AlignVCenter)
+
+        # The goal line and the donor ticker take turns in one centred slot:
+        # exactly one of them is visible at a time, and the stretch either side
+        # keeps whichever it is in the middle of the bar.
+        self._goal_group = QWidget(self._donation_container)
+        goal_row = QHBoxLayout(self._goal_group)
+        goal_row.setContentsMargins(0, 0, 0, 0)
+        goal_row.setSpacing(10)
 
         self._goal_label = _LineLabel()
         self._goal_label.setMinimumWidth(260)
+        self._goal_label.setAlignment(Qt.AlignCenter)
         self._goal_label.setStyleSheet(f"font-size: 12px; font-weight: 600; color: {t.fg}; border: none; background: transparent;")
-        row.addWidget(self._goal_label, 1)
-
-        self._donor_label = _LineLabel()
-        self._donor_label.setMinimumWidth(260)
-        self._donor_label.setTextFormat(Qt.RichText)
-        self._donor_label.setStyleSheet(f"font-size: 12px; font-weight: 500; color: {t.fg}; border: none; background: transparent;")
-        self._donor_label.setVisible(False)
-        row.addWidget(self._donor_label, 1)
+        goal_row.addWidget(self._goal_label, 0, Qt.AlignVCenter)
 
         self._goal_bar = QProgressBar()
         self._goal_bar.setRange(0, 1000)
         self._goal_bar.setTextVisible(False)
         self._goal_bar.setFixedSize(160, 10)
-        row.addWidget(self._goal_bar, 0, Qt.AlignVCenter)
+        goal_row.addWidget(self._goal_bar, 0, Qt.AlignVCenter)
 
-        self._support_btn = QPushButton(tr("nav_donate"))
+        self._donor_label = _LineLabel()
+        self._donor_label.setMinimumWidth(260)
+        self._donor_label.setTextFormat(Qt.RichText)
+        self._donor_label.setAlignment(Qt.AlignCenter)
+        self._donor_label.setStyleSheet(f"font-size: 12px; font-weight: 500; color: {t.fg}; border: none; background: transparent;")
+        self._donor_label.setVisible(False)
+        goal_row.addWidget(self._donor_label, 0, Qt.AlignVCenter)
+
+        row.addStretch(1)
+        row.addWidget(self._goal_group, 0)
+        row.addStretch(1)
+
+        self._support_btn = _LinkButton(tr("nav_donate"))
         self._support_btn.setToolTip(tr_brand("donate_title"))
+        self._style_link(self._support_btn, t, "right")
         if on_support:
             self._support_btn.clicked.connect(on_support)
-        row.addWidget(self._support_btn)
+        row.addWidget(self._support_btn, 0, Qt.AlignVCenter)
+        self._balance_links()
         self.addWidget(self._donation_container, 1)
 
         # Status container: clean status update message without donation collision
@@ -161,6 +228,29 @@ class DonationStatusBar(QStatusBar):
         for label in (self._goal_label, self._donor_label):
             label.setCursor(Qt.PointingHandCursor)
             label.clicked.connect(self._handle_label_click)
+
+    def _balance_links(self):
+        """Give both corner links one width so the goal display is centred.
+
+        The display sits between the two corners, so equal corner widths put it
+        on the bar's own centre line whatever the labels say in the active
+        language.
+        """
+        if not (hasattr(self, "_credits_link") and hasattr(self, "_support_btn")):
+            return
+        width = max(
+            self._credits_link.sizeHint().width(),
+            self._support_btn.sizeHint().width(),
+        )
+        for link in (self._credits_link, self._support_btn):
+            link.setFixedWidth(width)
+
+    def _relayout_links(self):
+        """Re-measure the corner links (new wording, new font) and re-balance."""
+        for link in (self._credits_link, self._support_btn):
+            link.setMinimumWidth(0)
+            link.setMaximumWidth(16777215)  # QWIDGETSIZE_MAX
+        self._balance_links()
 
     def _handle_label_click(self, href):
         """Route a click on the goal/donor lines: a transaction URL wins,
@@ -195,6 +285,11 @@ class DonationStatusBar(QStatusBar):
             self._status_label.setStyleSheet(
                 f"font-size: 12px; font-weight: 500; color: {t.fg}; border: none; background: transparent;"
             )
+        if hasattr(self, "_credits_link"):
+            self._style_link(self._credits_link, t, "left")
+            self._relayout_links()
+        if hasattr(self, "_support_btn"):
+            self._style_link(self._support_btn, t, "right")
 
     def _build_donor_lines(self):
         lines = []
@@ -322,8 +417,12 @@ class DonationStatusBar(QStatusBar):
                 self._on_donations_updated(fresh)
 
     def retranslate(self):
+        self._credits_link.setText(tr("nav_credits"))
+        self._credits_link.setToolTip(tr("nav_credits"))
         self._support_btn.setText(tr("nav_donate"))
         self._support_btn.setToolTip(tr_brand("donate_title"))
+        # New wording means new widths: re-balance before the display shifts.
+        self._relayout_links()
         self._donor_lines = self._build_donor_lines()
         self._refresh_goal()
         if not self._showing_goal:

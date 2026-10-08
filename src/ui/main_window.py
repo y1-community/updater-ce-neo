@@ -246,8 +246,12 @@ class MainWindow(QMainWindow):
             parent=self,
             donations=self._donations,
             on_support=self._on_support_clicked,
+            on_credits=self._open_credits,
             on_donations_updated=self._on_donations_updated,
         ))
+        # Credits / Thanks lives at the left of the donation bar (it hides with
+        # the rest of the bar, and with the online resources it links to).
+        self._credits_btn = self.statusBar().credits_link()
         self.statusBar().messageChanged.connect(self._on_status_message_changed)
         self._select_page.status_message.connect(self._show_status)
         self._apply_donation_visibility()
@@ -304,10 +308,6 @@ class MainWindow(QMainWindow):
         self._log_btn = QPushButton(tr("nav_log"))
         self._log_btn.clicked.connect(self._show_diagnostics)
         layout.addWidget(self._log_btn)
-
-        self._credits_btn = QPushButton(tr("nav_credits"))
-        self._credits_btn.clicked.connect(self._open_credits)
-        layout.addWidget(self._credits_btn)
 
         self._check_updates_btn = QPushButton(tr("nav_check_updates"))
         self._check_updates_btn.clicked.connect(self._on_check_updates_clicked)
@@ -398,7 +398,7 @@ class MainWindow(QMainWindow):
                 f"QPushButton:checked {{ background-color: {t.nav_active}; color: {t.nav_active_text}; font-weight: 600; border: 1px solid transparent; }}"
                 f"QPushButton:checked:focus {{ background-color: {t.nav_active}; color: {t.nav_active_text}; font-weight: 600; border: 1px solid {t.border_strong}; outline: none; }}"
             )
-        aux_btns = [self._support_btn, self._log_btn, self._credits_btn, self._check_updates_btn]
+        aux_btns = [self._support_btn, self._log_btn, self._check_updates_btn]
         if hasattr(self, "_linux_setup_btn"):
             aux_btns.append(self._linux_setup_btn)
         if hasattr(self, "_sp_flash_tool_btn"):
@@ -1207,7 +1207,6 @@ class MainWindow(QMainWindow):
         self._sync_install_nav_entry()
         self._support_btn.setText(tr("nav_donate"))
         self._log_btn.setText(tr("nav_log"))
-        self._credits_btn.setText(tr("nav_credits"))
         self._check_updates_btn.setText(tr("nav_check_updates"))
         if hasattr(self, "_linux_setup_btn"):
             self._linux_setup_btn.setText(tr("nav_linux_setup"))
@@ -1395,6 +1394,8 @@ class MainWindow(QMainWindow):
             self._brand_label.setText(get_brand_name())
         # Credits, update checks and the CE version badge all point at online
         # Community resources, so neither offline nor generic mode offers them.
+        # (The credits link lives in the donation bar and keeps that bar's own
+        # show/hide behaviour.)
         if hasattr(self, "_credits_btn"):
             self._credits_btn.setVisible(not offline)
         if hasattr(self, "_check_updates_btn"):
