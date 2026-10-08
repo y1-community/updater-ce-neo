@@ -39,8 +39,13 @@ def sp_flash_tool_command(
     scatter,
     sp_dir: Optional[Path] = None,
     da_file: Optional[Path] = None,
+    auth_file: str = "",
 ) -> Optional[list]:
     """Console-mode SP Flash Tool command, matching the guided flow's arguments.
+
+    ``auth_file`` is optional: when set, the command points SP Flash Tool at a
+    generated console configuration file, because that is the only console-mode
+    way to hand it an authentication file.
 
     Returns ``None`` when no SP Flash Tool build is available for this machine.
     """
@@ -81,18 +86,12 @@ def sp_flash_tool_command(
 
         scatter = _to_short_path(scatter)
         da = _to_short_path(da)
-    return [
-        str(exe),
-        "-c",
-        "format-download",
-        "-s",
-        str(scatter),
-        "-d",
-        str(da),
-        "-t",
-        "without",
-        "-r",
-    ]
+    # Same argument construction as the guided flow, so a hand-run command and
+    # the wizard stay in step — including the authentication file, which is only
+    # reachable through SP Flash Tool's console configuration file.
+    from .flash_service import sp_flash_tool_console_args
+
+    return [str(exe), *sp_flash_tool_console_args(str(scatter), str(da), auth_file)]
 
 
 def script_env(command: Sequence[str]) -> dict:
@@ -153,6 +152,7 @@ def build_install_command(
     scatter,
     package_path: str = "",
     platform_name: str = "",
+    auth_file: str = "",
 ) -> Optional[list]:
     """Console command for ``method``.
 
@@ -160,7 +160,7 @@ def build_install_command(
     command falls back to MTKClient's CLI (the only backend on macOS).
     """
     if normalise_method(method) == METHOD_SP:
-        cmd = sp_flash_tool_command(scatter)
+        cmd = sp_flash_tool_command(scatter, auth_file=auth_file)
         if cmd:
             return cmd
     return mtkclient_command(extract_dir, scatter, platform_name, package_path)

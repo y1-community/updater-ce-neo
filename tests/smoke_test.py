@@ -65,6 +65,8 @@ def _reset_app_settings():
     # Terminal installs are opt-in; a previous test (or a manual launch) must
     # not silently reroute the guided flow.
     device_tracking.set_terminal_install_enabled(False, s)
+    # An SP Flash Tool auth file left behind would change every later flash.
+    device_tracking.set_sp_auth_file("", s)
     s.remove("device_tracking")
     s.remove("latest_package")
     # Offline mode lives in the app's own settings scope (settings_page writes
@@ -5761,6 +5763,245 @@ def test_mediatek_installer_mode():
         _reset_app_settings()
 
 
+def test_sp_flash_auth_file():
+    """The generic build can hand SP Flash Tool an optional .auth file.
+
+    Console mode has no --auth switch — the tool's own xsd and help page show
+    the file travels in the console configuration file (-i) — so that is what
+    the app writes when a user has chosen one, while the plain command line
+    stays the default for the (usual) unauthenticated flash.
+    """
+    import shutil
+    import subprocess
+    import xml.etree.ElementTree as ET
+
+    from PySide6.QtWidgets import QApplication
+    from src import config, device_tracking, paths, sp_console_config, terminal_install
+    from src.flash_service import METHOD_MTK, METHOD_SP, sp_flash_tool_console_args
+    from src.i18n import tr
+    from src.ui.main_window import MainWindow
+
+    _reset_app_settings()
+    app = QApplication.instance() or QApplication(sys.argv)
+
+    # --- the setting itself --------------------------------------------------
+    assert device_tracking.sp_auth_file() == "", "no auth file by default"
+    device_tracking.set_sp_auth_file("/tmp/custom.auth")
+    assert device_tracking.sp_auth_file() == "/tmp/custom.auth"
+    device_tracking.set_sp_auth_file("")
+    assert device_tracking.sp_auth_file() == ""
+
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        extract = root / "rom_a5"
+        extract.mkdir()
+        scatter = extract / "MT6572_Android_scatter.txt"
+        scatter.write_text(
+            "########################################################\n"
+            "- general: MTK_PLATFORM_CFG\n"
+            "  info: \n"
+            "    - config_version: V1.1.1\n"
+            "      platform: MT6572\n"
+            "      project: g368_nyx\n"
+            "      storage: EMMC\n"
+            "########################################################\n"
+            "- partition_index: SYS0\n"
+            "  partition_name: preloader\n"
+            "  file_name: preloader_g368_nyx.bin\n"
+            "  is_download: true\n",
+            encoding="utf-8",
+        )
+        auth = root / "custom.auth"
+        auth.write_bytes(b"\x00AUTH")
+        da = root / "MTK_AllInOne_DA.bin"
+        da.write_bytes(b"da")
+
+        assert sp_console_config.parse_scatter_general(scatter) == {
+            "platform": "MT6572",
+            "storage": "EMMC",
+        }
+        assert sp_console_config.auth_file_usable(auth)
+        assert not sp_console_config.auth_file_usable(root / "gone.auth")
+
+        # Chip and storage must come from the scatter: guessing either would be
+        # worse than flashing the way we always have.
+        no_storage = root / "no_storage.txt"
+        no_storage.write_text(
+            "- general: MTK_PLATFORM_CFG\n  info: \n      platform: MT6572\n",
+            encoding="utf-8",
+        )
+        no_platform = root / "no_platform.txt"
+        no_platform.write_text(
+            "- general: MTK_PLATFORM_CFG\n  info: \n      storage: EMMC\n",
+            encoding="utf-8",
+        )
+        for bad_scatter, reason in (
+            (no_storage, "missing_storage"),
+            (no_platform, "missing_platform"),
+        ):
+            try:
+                sp_console_config.build_console_config_xml(bad_scatter, da, auth)
+            except sp_console_config.SpConfigError as e:
+                assert e.reason == reason, (bad_scatter.name, e.reason)
+            else:
+                raise AssertionError(f"{bad_scatter.name} should not produce a config")
+        try:
+            sp_console_config.build_console_config_xml(scatter, da, "")
+        except sp_console_config.SpConfigError as e:
+            assert e.reason == "no_auth_file", e.reason
+        else:
+            raise AssertionError("a config without an auth file is pointless")
+
+        # --- the generated console configuration -----------------------------
+        config_path = sp_console_config.write_console_config(
+            scatter, da, auth, target_dir=root / "sp"
+        )
+        assert config_path.name == "console_config.xml"
+        root_el = ET.parse(config_path).getroot()
+        assert root_el.tag == "flashtool-config" and root_el.get("version") == "2.0"
+        general = root_el.find("general")
+        # Element order is part of the schema's sequence.
+        assert [child.tag for child in general] == [
+            "chip-name",
+            "storage-type",
+            "download-agent",
+            "scatter",
+            "authentication",
+            "connection",
+        ], [child.tag for child in general]
+        assert general.findtext("chip-name") == "MT6572"
+        assert general.findtext("storage-type") == "EMMC"
+        assert general.findtext("download-agent") == str(da)
+        assert general.findtext("scatter") == str(scatter)
+        assert general.findtext("authentication") == str(auth)
+        connection = general.find("connection")
+        assert connection.get("type") == "BromUSB"
+        # The documented equivalent of the CLI's -t without.
+        assert connection.get("without-battery") == "true"
+        assert [child.tag for child in root_el.find("commands")] == ["format-download"]
+
+        # SP Flash Tool's own schema is the real check on that file.
+        xsd = (
+            Path(__file__).resolve().parent.parent
+            / "tools"
+            / "linux"
+            / "SP_Flash_Tool_v5.1904_Linux"
+            / "console_mode.xsd"
+        )
+        assert xsd.is_file(), "the bundled console_mode.xsd is the contract here"
+        if shutil.which("xmllint"):
+            res = subprocess.run(
+                ["xmllint", "--noout", "--schema", str(xsd), str(config_path)],
+                capture_output=True,
+                text=True,
+            )
+            assert res.returncode == 0, res.stderr
+
+        # --- console arguments (guided flow and terminal install agree) -------
+        plain = sp_flash_tool_console_args(str(scatter), str(da))
+        assert plain == [
+            "-c", "format-download",
+            "-s", str(scatter),
+            "-d", str(da),
+            "-t", "without",
+            "-r",
+        ], plain
+
+        logged = []
+        with_auth = sp_flash_tool_console_args(str(scatter), str(da), str(auth), logged.append)
+        assert with_auth[:2] == ["-r", "-i"], with_auth
+        assert Path(with_auth[2]).is_file(), with_auth
+        assert any(str(auth) in line for line in logged), logged
+
+        # A file that vanished is reported, and the flash still goes ahead.
+        logged = []
+        gone = sp_flash_tool_console_args(str(scatter), str(da), str(root / "gone.auth"), logged.append)
+        assert gone == plain, gone
+        assert logged and str(root / "gone.auth") in logged[0], logged
+        assert logged[0] != "sp_auth_missing_file", "raw i18n keys never reach users"
+
+        # ... and an unusable scatter falls back with an explanation, not a guess.
+        logged = []
+        fallback = sp_flash_tool_console_args(str(no_platform), str(da), str(auth), logged.append)
+        assert fallback == sp_flash_tool_console_args(str(no_platform), str(da)), fallback
+        assert logged and "platform" in logged[0], logged
+        assert logged[0] != "sp_config_missing_platform", "raw i18n keys never reach users"
+
+        # The terminal install builds the very same command.
+        orig_windows, orig_mac = paths.IS_WINDOWS, paths.IS_MAC
+        import src.linux_sp_flash as linux_sp_flash
+
+        orig_stage = linux_sp_flash.stage_dir
+        try:
+            paths.IS_WINDOWS, paths.IS_MAC = False, False
+            stage = root / "sp_stage"
+            stage.mkdir()
+            (stage / linux_sp_flash.FLASH_TOOL_LINUX_BIN).write_text("#!/bin/sh\n")
+            linux_sp_flash.stage_dir = lambda: stage
+            cmd = terminal_install.sp_flash_tool_command(
+                scatter, sp_dir=stage, da_file=da, auth_file=str(auth)
+            )
+            assert cmd[:3] == [str(stage / linux_sp_flash.FLASH_TOOL_LINUX_BIN), "-r", "-i"], cmd
+            built = terminal_install.build_install_command(
+                METHOD_SP, str(extract), scatter, auth_file=str(auth)
+            )
+            assert built[:3] == cmd[:3], (built, cmd)
+            bare = terminal_install.sp_flash_tool_command(scatter, sp_dir=stage, da_file=da)
+            assert bare[1:] == plain, bare
+        finally:
+            linux_sp_flash.stage_dir = orig_stage
+            paths.IS_WINDOWS, paths.IS_MAC = orig_windows, orig_mac
+
+        # --- the Settings control --------------------------------------------
+        import src.ui.settings_page as settings_page
+
+        orig_mtk = config.IS_MEDIATEK_INSTALLER
+        orig_dialog = settings_page.QFileDialog.getOpenFileName
+        try:
+            config.IS_MEDIATEK_INSTALLER = True
+            # macOS has no SP Flash Tool, so the option only exists off it.
+            paths.IS_MAC = False
+            w = MainWindow()
+            w.show()
+            app.processEvents()
+            page = w._settings_page
+
+            page.set_method(METHOD_MTK)
+            app.processEvents()
+            assert page._sp_auth_box.isHidden(), "MTKClient backend has no auth file"
+            page.set_method(METHOD_SP)
+            app.processEvents()
+            assert not page._sp_auth_box.isHidden(), "SP Flash Tool offers one"
+            assert page._sp_auth_label.text() == tr("settings_sp_auth")
+            assert page._sp_auth_value.text() == "", "nothing chosen yet"
+            assert page._sp_auth_value.placeholderText() == tr("settings_sp_auth_none")
+
+            # Browsing stores the choice; clearing forgets it.
+            settings_page.QFileDialog.getOpenFileName = (
+                lambda *a, **kw: (str(auth), "")
+            )
+            page._on_sp_auth_browse()
+            assert device_tracking.sp_auth_file() == str(auth)
+            assert page._sp_auth_value.text() == str(auth)
+            page._on_sp_auth_clear()
+            assert device_tracking.sp_auth_file() == ""
+            assert page._sp_auth_value.text() == ""
+
+            # Not a CE feature: the checkbox-free generic build is where it lives.
+            config.IS_MEDIATEK_INSTALLER = False
+            w._apply_generic_mtk_branding()
+            app.processEvents()
+            assert page._sp_auth_box.isHidden(), "Updater CE hides it again"
+            w.close()
+            app.processEvents()
+        finally:
+            settings_page.QFileDialog.getOpenFileName = orig_dialog
+            config.IS_MEDIATEK_INSTALLER = orig_mtk
+            paths.IS_MAC = orig_mac
+
+    _reset_app_settings()
+
+
 def test_window_minimum_size_and_titlebar_stability():
     """Verify 900x500 minimum window size, layout compactness, and titlebar stability."""
     from PySide6.QtWidgets import QApplication
@@ -5859,6 +6100,7 @@ def main():
     check("flash flow launch", test_flash_flow_launch)
     check("install nav entry during run", test_install_nav_entry_during_run)
     check("terminal install handoff", test_terminal_install_handoff)
+    check("sp flash auth file", test_sp_flash_auth_file)
     check("flash method switch", test_flash_method_switch)
     check("language switch keeps screen", test_language_switch_keeps_screen)
     check("success dialog flow", test_success_dialog_flow)

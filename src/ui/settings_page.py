@@ -1,13 +1,16 @@
 """Settings page — install method, release reminders and donation preferences."""
 
 import logging
+from pathlib import Path
 
 from PySide6.QtCore import QSettings, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QFileDialog,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMessageBox,
     QPushButton,
     QScrollArea,
@@ -118,6 +121,42 @@ class SettingsPage(QWidget):
         self._method_note.setWordWrap(True)
         self._method_note.setProperty("cssClass", "dimmed")
         method_layout.addWidget(self._method_note)
+
+        # --- Authentication file (SP Flash Tool, generic MediaTek build) ---
+        # Console mode has no --auth switch, so a chosen file is handed over
+        # through a generated console configuration file. Optional: most
+        # targets are not secure-booted and flash without one.
+        self._sp_auth_box = QWidget()
+        auth_layout = QVBoxLayout(self._sp_auth_box)
+        auth_layout.setContentsMargins(0, 0, 0, 0)
+        auth_layout.setSpacing(6)
+
+        auth_row = QHBoxLayout()
+        self._sp_auth_label = QLabel(tr("settings_sp_auth"))
+        self._sp_auth_label.setProperty("cssClass", "field-label")
+        auth_row.addWidget(self._sp_auth_label)
+
+        self._sp_auth_value = QLineEdit()
+        self._sp_auth_value.setReadOnly(True)
+        self._sp_auth_value.setMinimumWidth(240)
+        self._sp_auth_value.setPlaceholderText(tr("settings_sp_auth_none"))
+        auth_row.addWidget(self._sp_auth_value, 1)
+
+        self._sp_auth_browse = QPushButton(tr("settings_sp_auth_browse"))
+        self._sp_auth_browse.clicked.connect(self._on_sp_auth_browse)
+        auth_row.addWidget(self._sp_auth_browse)
+
+        self._sp_auth_clear = QPushButton(tr("settings_sp_auth_clear"))
+        self._sp_auth_clear.clicked.connect(self._on_sp_auth_clear)
+        auth_row.addWidget(self._sp_auth_clear)
+        auth_layout.addLayout(auth_row)
+
+        self._sp_auth_desc = QLabel(tr("settings_sp_auth_desc"))
+        self._sp_auth_desc.setWordWrap(True)
+        self._sp_auth_desc.setProperty("cssClass", "dimmed")
+        auth_layout.addWidget(self._sp_auth_desc)
+
+        method_layout.addWidget(self._sp_auth_box)
 
         self._method_card.set_layout(method_layout)
         layout.addWidget(self._method_card)
@@ -447,6 +486,7 @@ class SettingsPage(QWidget):
             self._method_combo.setCurrentIndex(idx)
             self._method_combo.blockSignals(False)
         self._update_method_note()
+        self._update_sp_auth_visibility()
 
     def set_method_enabled(self, enabled: bool):
         """Lock the selector while a run is in progress."""
@@ -455,7 +495,48 @@ class SettingsPage(QWidget):
     def _on_method_changed(self):
         method = self.current_method()
         self._update_method_note()
+        self._update_sp_auth_visibility()
         self.flash_method_changed.emit(method)
+
+    # ------------------------------------------------------------------
+    # SP Flash Tool authentication file
+    # ------------------------------------------------------------------
+    def _update_sp_auth_visibility(self):
+        """Offer the auth file only where it can actually be used.
+
+        It is an SP Flash Tool input, so it belongs beside the method selector
+        and only for that backend, in the generic MediaTek Installer build that
+        offers the option at all (macOS has no SP Flash Tool).
+        """
+        visible = (
+            is_mediatek_installer()
+            and not paths.IS_MAC
+            and normalise_method(self.current_method()) == METHOD_SP
+        )
+        self._sp_auth_box.setVisible(visible)
+
+    def _refresh_sp_auth_value(self):
+        """Show the stored auth file, or the "not set" placeholder."""
+        path = device_tracking.sp_auth_file()
+        self._sp_auth_value.setText(path)
+        self._sp_auth_value.setToolTip(path or tr("settings_sp_auth_none"))
+
+    def _on_sp_auth_browse(self):
+        current = device_tracking.sp_auth_file()
+        start_dir = str(Path(current).parent) if current else str(Path.home())
+        chosen, _selected = QFileDialog.getOpenFileName(
+            self,
+            tr("settings_sp_auth_dialog"),
+            start_dir,
+            tr("settings_sp_auth_filter"),
+        )
+        if chosen:
+            device_tracking.set_sp_auth_file(chosen)
+            self._refresh_sp_auth_value()
+
+    def _on_sp_auth_clear(self):
+        device_tracking.set_sp_auth_file("")
+        self._refresh_sp_auth_value()
 
     def _update_method_note(self):
         method = self.current_method()
@@ -542,9 +623,14 @@ class SettingsPage(QWidget):
         self._cb_offline_mode.setChecked(is_offline_mode())
         self._cb_offline_mode.blockSignals(False)
 
+        # SP Flash Tool authentication file
+        self._refresh_sp_auth_value()
+        self._update_sp_auth_visibility()
+
     def apply_brand_mode(self, mediatek_installer: bool):
         """Show or hide the pieces that only make sense for one brand."""
         self._offline_mode_card.setVisible(not mediatek_installer)
+        self._update_sp_auth_visibility()
 
     # ------------------------------------------------------------------
     # Misc actions
@@ -615,4 +701,9 @@ class SettingsPage(QWidget):
         self._offline_mode_card.retranslate()
         self._cb_offline_mode.setText(tr("settings_offline_mode"))
         self._offline_mode_desc.setText(tr("settings_offline_mode_desc"))
+        self._sp_auth_label.setText(tr("settings_sp_auth"))
+        self._sp_auth_browse.setText(tr("settings_sp_auth_browse"))
+        self._sp_auth_clear.setText(tr("settings_sp_auth_clear"))
+        self._sp_auth_desc.setText(tr("settings_sp_auth_desc"))
+        self._sp_auth_value.setPlaceholderText(tr("settings_sp_auth_none"))
         self.refresh_settings()

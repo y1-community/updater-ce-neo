@@ -739,6 +739,46 @@ def _parse_scatter_platform(scatter_path):
     return ""
 
 
+def sp_flash_tool_console_args(scatter_arg, da_arg, auth_file="", log=None):
+    """Console arguments for flash_tool, carrying an auth file when one is set.
+
+    SP Flash Tool has no ``--auth`` switch, so an authentication file is only
+    reachable through the console configuration file (``-i``). Without one the
+    plain command line is used, exactly as before — auth files are optional and
+    most targets are not secure-booted.
+    """
+    auth = str(auth_file or "").strip()
+    if auth:
+        from . import sp_console_config
+
+        if not sp_console_config.auth_file_usable(auth):
+            if log:
+                log(tr("sp_auth_missing_file").format(path=auth))
+        else:
+            try:
+                config = sp_console_config.write_console_config(
+                    scatter_arg, da_arg, auth
+                )
+            except sp_console_config.SpConfigError as e:
+                if log:
+                    log(tr(f"sp_config_{e.reason}"))
+            except OSError as e:
+                logger.warning("Could not write the SP console configuration: %s", e)
+                if log:
+                    log(tr("sp_config_write_failed"))
+            else:
+                if log:
+                    log(tr("sp_auth_loaded").format(path=auth))
+                return ["-r", "-i", str(config)]
+    return [
+        "-c", "format-download",
+        "-s", scatter_arg,
+        "-d", da_arg,
+        "-t", "without",
+        "-r",
+    ]
+
+
 def _resolve_image_file(scatter_dir, fname):
     exact = scatter_dir / fname
     if exact.exists():
@@ -1290,14 +1330,16 @@ class FlashWorker(QThread):
         except Exception as e:
             logger.debug("Could not update SP history.ini before flash_tool: %s", e)
 
+        from . import device_tracking
+
+        auth_file = device_tracking.sp_auth_file()
+
         if IS_WINDOWS:
             cmd = [
                 str(flash_tool_exe),
-                "-c", "format-download",
-                "-s", scatter_arg,
-                "-d", da_arg,
-                "-t", "without",
-                "-r",
+                *sp_flash_tool_console_args(
+                    scatter_arg, da_arg, auth_file, self._log
+                ),
             ]
             self.step_changed.emit(STEP_WAITING)
             self.progress.emit(10)
@@ -1316,13 +1358,9 @@ class FlashWorker(QThread):
                 creationflags=creationflags,
             )
         else:
-            cmd_args = [
-                "-c", "format-download",
-                "-s", scatter_arg,
-                "-d", da_arg,
-                "-t", "without",
-                "-r",
-            ]
+            cmd_args = sp_flash_tool_console_args(
+                scatter_arg, da_arg, auth_file, self._log
+            )
             self._log("Preparing SP Flash Tool environment (Linux)...")
             guardian = None
             if os.name != "nt" and sys.platform.startswith("linux"):

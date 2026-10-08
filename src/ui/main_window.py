@@ -646,6 +646,7 @@ class MainWindow(QMainWindow):
             scatter,
             package_path=self._package_path,
             platform_name=platform_name,
+            auth_file=device_tracking.sp_auth_file(self.settings),
         )
         if command is None:
             self._nav_to_page(_PAGE_SELECT)

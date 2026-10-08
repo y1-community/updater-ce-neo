@@ -28,6 +28,7 @@ _KEY_DONATION_UI_DISABLED = "donation_ui_disabled"
 _KEY_DONATION_INSTALL_PROMPT_DISABLED = "donation_install_prompt_disabled"
 _KEY_HIDDEN_MTK_OPTIONS = "hidden_mtk_options"
 _KEY_TERMINAL_INSTALL = "terminal_install"
+_KEY_SP_AUTH_FILE = "sp_auth_file"
 
 
 def _get_settings(settings: Optional[QSettings] = None) -> QSettings:
@@ -252,6 +253,27 @@ def set_terminal_install_enabled(enabled: bool, settings: Optional[QSettings] = 
     s = _get_settings(settings)
     s.setValue(_KEY_TERMINAL_INSTALL, bool(enabled))
     s.setValue(f"{_GROUP_PREFS}/{_KEY_TERMINAL_INSTALL}", bool(enabled))
+
+
+def sp_auth_file(settings: Optional[QSettings] = None) -> str:
+    """Authentication (.auth) file chosen for SP Flash Tool, or "".
+
+    Optional by design: most MediaTek targets are not secure-booted and flash
+    without one, so an empty value means "use the plain console command".
+    """
+    s = _get_settings(settings)
+    val = s.value(_KEY_SP_AUTH_FILE, None)
+    if val is None:
+        val = s.value(f"{_GROUP_PREFS}/{_KEY_SP_AUTH_FILE}", "")
+    return str(val or "").strip()
+
+
+def set_sp_auth_file(path: str, settings: Optional[QSettings] = None) -> None:
+    """Remember the SP Flash Tool authentication file ("" clears it)."""
+    s = _get_settings(settings)
+    text = str(path or "").strip()
+    s.setValue(_KEY_SP_AUTH_FILE, text)
+    s.setValue(f"{_GROUP_PREFS}/{_KEY_SP_AUTH_FILE}", text)
 
 
 def is_donation_ui_disabled(settings: Optional[QSettings] = None) -> bool:
