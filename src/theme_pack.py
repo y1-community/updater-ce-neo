@@ -220,12 +220,12 @@ class ThemePackGuidanceDialog(QDialog):
         s1_layout.setSpacing(6)
 
         s1_title = QLabel(f"<b>{tr('themepack_step1_title')}</b>")
-        s1_title.setStyleSheet(f"font-size: 13px; color: {t.accent}; border: none; background: transparent;")
+        s1_title.setStyleSheet(f"font-size: 13px; color: {t.fg}; border: none; background: transparent;")
         s1_layout.addWidget(s1_title)
 
         s1_desc = QLabel(tr("themepack_step1_desc"))
         s1_desc.setWordWrap(True)
-        s1_desc.setStyleSheet(f"font-size: 12px; color: {t.fg_dim}; border: none; background: transparent; line-height: 1.4;")
+        s1_desc.setStyleSheet(f"font-size: 12px; color: {t.fg}; border: none; background: transparent; line-height: 1.4;")
         s1_layout.addWidget(s1_desc)
         layout.addWidget(self._step1_card)
 
@@ -240,12 +240,12 @@ class ThemePackGuidanceDialog(QDialog):
         s2_layout.setSpacing(8)
 
         s2_title = QLabel(f"<b>{tr('themepack_step2_title')}</b>")
-        s2_title.setStyleSheet(f"font-size: 13px; color: {t.accent}; border: none; background: transparent;")
+        s2_title.setStyleSheet(f"font-size: 13px; color: {t.fg}; border: none; background: transparent;")
         s2_layout.addWidget(s2_title)
 
         s2_desc = QLabel(tr("themepack_step2_desc"))
         s2_desc.setWordWrap(True)
-        s2_desc.setStyleSheet(f"font-size: 12px; color: {t.fg_dim}; border: none; background: transparent; line-height: 1.4;")
+        s2_desc.setStyleSheet(f"font-size: 12px; color: {t.fg}; border: none; background: transparent; line-height: 1.4;")
         s2_layout.addWidget(s2_desc)
 
         action_row = QHBoxLayout()
@@ -258,7 +258,7 @@ class ThemePackGuidanceDialog(QDialog):
         action_row.addWidget(self._select_btn)
 
         self._folder_label = QLabel()
-        self._folder_label.setStyleSheet(f"font-size: 11px; color: {t.fg_dim}; border: none; background: transparent;")
+        self._folder_label.setStyleSheet(f"font-size: 11px; color: {t.fg}; border: none; background: transparent;")
         self._folder_label.setWordWrap(True)
         action_row.addWidget(self._folder_label, 1)
         s2_layout.addLayout(action_row)

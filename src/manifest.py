@@ -109,6 +109,30 @@ def parse_manifest_xml(xml_text: str):
     return entries
 
 
+def catalogue_repos() -> list[str]:
+    """Firmware repositories the catalogue lists, for a reachability check.
+
+    ``slidia_manifest.xml`` is authoritative; the static table in ``catalog.py``
+    covers a first run that has never fetched it.
+    """
+    repos: list[str] = []
+    for entry in (load_cached_manifest() or []):
+        repo = (getattr(entry, "repo", "") or "").strip()
+        if repo and repo not in repos:
+            repos.append(repo)
+    if not repos:
+        try:
+            from .catalog import _catalog_packages
+
+            for entry in _catalog_packages():
+                repo = (getattr(entry, "repo", "") or "").strip()
+                if repo and repo not in repos:
+                    repos.append(repo)
+        except Exception:
+            pass
+    return repos
+
+
 def _fetch_xml(url: str) -> str:
     resp = requests.get(url, timeout=REQUEST_TIMEOUT)
     resp.raise_for_status()

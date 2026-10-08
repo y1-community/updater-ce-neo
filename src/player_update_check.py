@@ -250,6 +250,9 @@ def set_rockbox_release_filter(
     return rockbox_release_filters(s)
 
 
+_KEY_SP_GUI_INSTALL = "sp_gui_install"
+
+
 def terminal_install_enabled(settings: Optional[QSettings] = None) -> bool:
     """True when installs are handed to the user's own terminal window.
 
@@ -269,6 +272,22 @@ def set_terminal_install_enabled(enabled: bool, settings: Optional[QSettings] = 
     s = _get_settings(settings)
     s.setValue(_KEY_TERMINAL_INSTALL, bool(enabled))
     s.setValue(f"{_GROUP_PREFS}/{_KEY_TERMINAL_INSTALL}", bool(enabled))
+
+
+def sp_gui_install_enabled(settings: Optional[QSettings] = None) -> bool:
+    """True when installs should open SP Flash Tool GUI directly."""
+    s = _get_settings(settings)
+    val = s.value(_KEY_SP_GUI_INSTALL, None)
+    if val is not None:
+        return s.value(_KEY_SP_GUI_INSTALL, False, type=bool)
+    return s.value(f"{_GROUP_PREFS}/{_KEY_SP_GUI_INSTALL}", False, type=bool)
+
+
+def set_sp_gui_install_enabled(enabled: bool, settings: Optional[QSettings] = None) -> None:
+    """Remember whether installs go to SP Flash Tool GUI instead of the wizard."""
+    s = _get_settings(settings)
+    s.setValue(_KEY_SP_GUI_INSTALL, bool(enabled))
+    s.setValue(f"{_GROUP_PREFS}/{_KEY_SP_GUI_INSTALL}", bool(enabled))
 
 
 def sp_auth_file(settings: Optional[QSettings] = None) -> str:

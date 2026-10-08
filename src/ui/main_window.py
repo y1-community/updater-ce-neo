@@ -87,7 +87,14 @@ from .dialogs import (
     UpdateAvailableDialog,
 )
 from .dark import T, ThemeWatcher, apply_theme, content_top_margin, is_dark
-from .glass import apply_glass, apply_windows_acrylic, apply_windows_dark_titlebar
+from .scrollbars import configure_scroll_area, ensure_native_scrolling
+from .glass import (
+    apply_glass,
+    apply_windows_acrylic,
+    apply_windows_dark_titlebar,
+    disable_window_maximize,
+    set_window_close_button_enabled,
+)
 from .error_page import ErrorPage
 from .flash_page import FlashPage
 from .retry_page import RetryPage
@@ -162,6 +169,9 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
+        flags = (self.windowFlags() | Qt.CustomizeWindowHint | Qt.WindowCloseButtonHint | Qt.WindowMinimizeButtonHint) & ~Qt.WindowMaximizeButtonHint
+        self.setWindowFlags(flags)
+        disable_window_maximize(self)
         self.resize(900, 520)
         self.setMinimumSize(900, 500)
 
@@ -184,6 +194,8 @@ class MainWindow(QMainWindow):
         self._step_now = ""
         self._update_offered_once = False
         self._update_manual_pending = False
+        self._pre_install_guided = False
+        self._install_ui_active = False
         # A stalled connection makes the backend repeat the same errno line
         # many times over; this keeps the guidance dialog to once per attempt.
         self._active_workers = set()
@@ -206,6 +218,20 @@ class MainWindow(QMainWindow):
         if platform.system() == "Linux" and not paths.IS_MAC:
             # macOS has no SP Flash Tool or Linux setup wizard.
             QTimer.singleShot(600, self._check_linux_first_run)
+
+        if not paths.IS_MAC:
+            self._sp_history_timer = QTimer(self)
+            self._sp_history_timer.setInterval(30000)
+            self._sp_history_timer.timeout.connect(self._sync_sp_history)
+            self._sp_history_timer.start()
+
+    def _sync_sp_history(self):
+        try:
+            from .. import sp_flash_gui
+            if sp_flash_gui.is_sp_flash_gui_supported():
+                sp_flash_gui.update_sp_history_ini(model=getattr(self, "_package_model", ""))
+        except Exception:
+            pass
 
     def _on_manifest_worker_finished(self, worker, entries):
         self._active_workers.discard(worker)
@@ -296,9 +322,11 @@ class MainWindow(QMainWindow):
                 configure_traffic_lights(self)
             except Exception:
                 pass
-        sb = self.statusBar()
-        if sb and hasattr(sb, "refresh_theme"):
-            sb.refresh_theme()
+        self._refresh_components()
+
+    def refresh_theme(self):
+        """Update window components to match active OS theme tokens."""
+        self._on_theme_changed()
 
     def _build_nav(self):
         t = T()
@@ -343,10 +371,15 @@ class MainWindow(QMainWindow):
         sidebar_scroll = QScrollArea(nav)
         sidebar_scroll.setObjectName("navScroll")
         sidebar_scroll.setWidgetResizable(True)
-        sidebar_scroll.setFrameShape(QFrame.NoFrame)
-        sidebar_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        sidebar_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        sidebar_scroll.setStyleSheet("QScrollArea#navScroll { background: transparent; border: none; }")
+        # Palette-based transparency, never a stylesheet: a sheet set on a
+        # scroll area downgrades the host's floating overlay bars to classic
+        # ones (see src/ui/scrollbars.py).
+        configure_scroll_area(
+            sidebar_scroll,
+            horizontal=Qt.ScrollBarAlwaysOff,
+            vertical=Qt.ScrollBarAsNeeded,
+            transparent=True,
+        )
         nav_outer = QVBoxLayout(nav)
         nav_outer.setContentsMargins(0, 0, 0, 0)
         nav_outer.setSpacing(0)
@@ -359,6 +392,65 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(nav_content)
         layout.setContentsMargins(12, top_margin, 12, 14)
         layout.setSpacing(4)
+
+        # Brand header container at top left under the title bar on all platforms
+        self._brand_container = QWidget()
+        brand_row = QHBoxLayout(self._brand_container)
+        brand_row.setContentsMargins(0, 0, 0, 0)
+        brand_row.setSpacing(8)
+
+        self._icon_label = QLabel()
+        icon_path = paths.RESOURCES_DIR / "icon.png"
+        icon_size = 30
+        if icon_path.exists():
+            pix = QPixmap(str(icon_path)).scaled(
+                icon_size, icon_size, Qt.KeepAspectRatio, Qt.SmoothTransformation
+            )
+            self._icon_label.setPixmap(pix)
+        self._icon_label.setStyleSheet("background: transparent; border: none;")
+        brand_row.addWidget(self._icon_label, 0, Qt.AlignTop)
+
+        brand_text_col = QVBoxLayout()
+        brand_text_col.setContentsMargins(0, 0, 0, 0)
+        brand_text_col.setSpacing(1)
+
+        title_version_row = QHBoxLayout()
+        title_version_row.setContentsMargins(0, 0, 0, 0)
+        title_version_row.setSpacing(5)
+
+        self._brand_label = QLabel(get_app_name())
+        self._brand_label.setStyleSheet(
+            f"font-size: {_BRAND_FONT_SIZE}; font-weight: 800; color: {t.fg}; letter-spacing: -0.02em;"
+            f" background: transparent; border: none;"
+        )
+        title_version_row.addWidget(self._brand_label)
+
+        # Version number displayed in-line with Updater CE at the same typeface size and colour
+        self._brand_version = QLabel(APP_VERSION)
+        self._brand_version.setStyleSheet(
+            f"font-size: {_BRAND_FONT_SIZE}; font-weight: 800; color: {t.fg}; letter-spacing: -0.02em;"
+            f" background: transparent; border: none;"
+        )
+        title_version_row.addWidget(self._brand_version)
+        title_version_row.addStretch(1)
+
+        brand_text_col.addLayout(title_version_row)
+
+        from .. import browser
+        self._version_label = QLabel(
+            f'by <a href="https://ko-fi.com/teamslide" style="color: {t.fg}; font-weight: 700; text-decoration: none;">Ryan Specter</a>'
+        )
+        self._version_label.setStyleSheet(
+            f"font-size: 11px; color: {t.fg}; background: transparent; border: none; margin: 0; padding: 0;"
+        )
+        self._version_label.setTextInteractionFlags(Qt.TextBrowserInteraction)
+        self._version_label.setOpenExternalLinks(False)
+        self._version_label.linkActivated.connect(lambda url: browser.open_browser(url))
+        brand_text_col.addWidget(self._version_label)
+
+        brand_row.addLayout(brand_text_col, 1)
+        layout.addWidget(self._brand_container)
+        layout.addSpacing(10)
 
         self._nav_buttons = {}
         btn = QPushButton(tr("nav_select_package"))
@@ -398,57 +490,11 @@ class MainWindow(QMainWindow):
             self._sp_flash_tool_btn.clicked.connect(self._open_sp_flash_tool_gui)
             layout.addWidget(self._sp_flash_tool_btn)
 
-        layout.addSpacing(10)
-
-        # Brand header container & version at bottom left, above language dropdown
-        brand_container = QWidget()
-        brand_row = QHBoxLayout(brand_container)
-        brand_row.setContentsMargins(0, 0, 0, 0)
-        brand_row.setSpacing(6)
-
-        self._icon_label = QLabel()
-        icon_path = paths.RESOURCES_DIR / "icon.png"
-        icon_size = 30  # 50% larger than 20px
-        if icon_path.exists():
-            pix = QPixmap(str(icon_path)).scaled(
-                icon_size, icon_size, Qt.KeepAspectRatio, Qt.SmoothTransformation
-            )
-            self._icon_label.setPixmap(pix)
-        self._icon_label.setStyleSheet("background: transparent; border: none;")
-        brand_row.addWidget(self._icon_label)
-
-        self._brand_label = QLabel(get_app_name())
-        self._brand_label.setStyleSheet(
-            f"font-size: {_BRAND_FONT_SIZE}; font-weight: 800; color: {t.fg}; letter-spacing: -0.02em;"
-            f" background: transparent; border: none;"
-        )
-        brand_row.addWidget(self._brand_label)
-
-        # Version badge sits beside the brand title at the same size, with no "v".
-        self._brand_version = QLabel(APP_VERSION)
-        self._brand_version.setStyleSheet(
-            f"font-size: {_BRAND_FONT_SIZE}; font-weight: 600; color: {t.fg_dim};"
-            f" background: transparent; border: none;"
-        )
-        brand_row.addWidget(self._brand_version)
-        brand_row.addStretch()
-        layout.addWidget(brand_container)
-
-        from .. import browser
-        self._version_label = QLabel(
-            f'by <a href="https://ko-fi.com/teamslide" style="color: {t.accent}; text-decoration: underline;">Ryan Specter</a>'
-        )
-        self._version_label.setStyleSheet(
-            f"font-size: 11px; color: {t.fg_dim}; background: transparent; border: none; margin-left: 2px;"
-        )
-        self._version_label.setTextInteractionFlags(Qt.TextBrowserInteraction)
-        self._version_label.setOpenExternalLinks(False)
-        self._version_label.linkActivated.connect(lambda url: browser.open_browser(url))
-        layout.addWidget(self._version_label)
+        layout.addSpacing(8)
 
         self._lang_label = QLabel(tr("nav_language"))
         self._lang_label.setStyleSheet(
-            f"font-size: 11px; color: {t.fg_dim}; margin-top: 6px; background: transparent; border: none;"
+            f"font-size: 11px; color: {t.fg}; margin-top: 6px; background: transparent; border: none;"
         )
         layout.addWidget(self._lang_label)
         self._lang_combo = QComboBox()
@@ -479,7 +525,7 @@ class MainWindow(QMainWindow):
             aux_btns.append(self._sp_flash_tool_btn)
         for btn in aux_btns:
             btn.setStyleSheet(
-                f"QPushButton {{ background: transparent; color: {t.fg_dim}; text-align: left;"
+                f"QPushButton {{ background: transparent; color: {t.fg}; text-align: left;"
                 f" padding: 7px 12px; border-radius: 5px; border: 1px solid transparent; font-size: 12px; font-weight: 500; min-height: 30px; }}"
                 f"QPushButton:hover {{ background-color: {t.bg_hover}; color: {t.fg}; }}"
                 f"QPushButton:focus {{ border: 1px solid {t.border_focus}; outline: none; }}"
@@ -488,9 +534,8 @@ class MainWindow(QMainWindow):
         self._aux_nav_buttons = aux_btns
         return nav
 
-    def refresh_theme(self):
+    def _refresh_components(self):
         """Update window components to match active OS theme tokens."""
-        self._on_theme_changed()
         t = T()
         is_mac = sys.platform == "darwin"
         use_glass = False
@@ -516,21 +561,21 @@ class MainWindow(QMainWindow):
         if hasattr(self, "_brand_version"):
             self._brand_version.setText(APP_VERSION)
             self._brand_version.setStyleSheet(
-                f"font-size: {_BRAND_FONT_SIZE}; font-weight: 600; color: {t.fg_dim}; background: transparent; border: none;"
+                f"font-size: {_BRAND_FONT_SIZE}; font-weight: 800; color: {t.fg}; letter-spacing: -0.02em; background: transparent; border: none;"
             )
 
         if hasattr(self, "_version_label"):
             # Attribution only — the version lives beside the brand title, not here.
             self._version_label.setText(
-                f'by <a href="https://ko-fi.com/teamslide" style="color: {t.accent}; text-decoration: underline;">Ryan Specter</a>'
+                f'by <a href="https://ko-fi.com/teamslide" style="color: {t.fg}; font-weight: 700; text-decoration: none;">Ryan Specter</a>'
             )
             self._version_label.setStyleSheet(
-                f"font-size: 11px; color: {t.fg_dim}; background: transparent; border: none; margin-left: 2px;"
+                f"font-size: 11px; color: {t.fg}; background: transparent; border: none; margin: 0; padding: 0;"
             )
 
         if hasattr(self, "_lang_label"):
             self._lang_label.setStyleSheet(
-                f"font-size: 11px; color: {t.fg_dim}; margin-top: 6px; background: transparent; border: none;"
+                f"font-size: 11px; color: {t.fg}; margin-top: 6px; background: transparent; border: none;"
             )
 
         if hasattr(self, "_nav_buttons"):
@@ -547,7 +592,7 @@ class MainWindow(QMainWindow):
         if hasattr(self, "_aux_nav_buttons"):
             for btn in self._aux_nav_buttons:
                 btn.setStyleSheet(
-                    f"QPushButton {{ background: transparent; color: {t.fg_dim}; text-align: left;"
+                    f"QPushButton {{ background: transparent; color: {t.fg}; text-align: left;"
                     f" padding: 7px 12px; border-radius: 5px; border: 1px solid transparent; font-size: 12px; font-weight: 500; min-height: 30px; }}"
                     f"QPushButton:hover {{ background-color: {t.bg_hover}; color: {t.fg}; }}"
                     f"QPushButton:focus {{ border: 1px solid {t.border_focus}; outline: none; }}"
@@ -624,6 +669,12 @@ class MainWindow(QMainWindow):
         if not self.isVisible() or self.isMinimized():
             return
         try:
+            disable_window_maximize(self)
+            if self._install_run_active():
+                set_window_close_button_enabled(self, False)
+        except Exception:
+            pass
+        try:
             from .glass import native_chrome_intact
 
             if native_chrome_intact(self, dark=is_dark()):
@@ -680,6 +731,76 @@ class MainWindow(QMainWindow):
         """True while a flash run is in progress (waiting, detected, writing)."""
         return self.sm.state in _INSTALL_RUN_STATES
 
+    def _adjust_window_geometry(self):
+        """Adjust window size to fit the content of the active page without wasted space."""
+        if self.isMinimized():
+            return
+
+        is_install = self._install_run_active()
+        donations_disabled = device_tracking.is_donation_ui_disabled(self.settings)
+
+        if is_install:
+            target_w = 700
+            target_h = 220 if donations_disabled else 255
+            min_w = 600
+            min_h = 210 if donations_disabled else 240
+            self.setMinimumSize(min_w, min_h)
+            self.resize(target_w, target_h)
+        else:
+            min_w = 900
+            min_h = 500
+            self.setMinimumSize(min_w, min_h)
+            if self.width() < min_w or self.height() < min_h:
+                target_h = 500 if donations_disabled else 520
+                self.resize(900, target_h)
+
+    def _apply_install_ui_state(self, active: bool):
+        if getattr(self, "_install_ui_active", None) == active:
+            return
+        self._install_ui_active = active
+        try:
+            set_window_close_button_enabled(self, not active)
+        except Exception:
+            pass
+
+        if active:
+            if hasattr(self, "_settings_btn"):
+                self._settings_btn.setVisible(False)
+            if hasattr(self, "_support_btn"):
+                self._support_btn.setVisible(False)
+            if hasattr(self, "_log_btn"):
+                self._log_btn.setVisible(False)
+            if hasattr(self, "_check_updates_btn"):
+                self._check_updates_btn.setVisible(False)
+            if hasattr(self, "_linux_setup_btn"):
+                self._linux_setup_btn.setVisible(False)
+            if hasattr(self, "_sp_flash_tool_btn"):
+                self._sp_flash_tool_btn.setVisible(False)
+            if hasattr(self, "_lang_label"):
+                self._lang_label.setVisible(False)
+            if hasattr(self, "_lang_combo"):
+                self._lang_combo.setVisible(False)
+        else:
+            if hasattr(self, "_settings_btn"):
+                self._settings_btn.setVisible(True)
+            if hasattr(self, "_support_btn"):
+                self._support_btn.setVisible(True)
+            if hasattr(self, "_log_btn"):
+                self._log_btn.setVisible(True)
+            if hasattr(self, "_check_updates_btn"):
+                self._check_updates_btn.setVisible(True)
+            if hasattr(self, "_linux_setup_btn"):
+                self._linux_setup_btn.setVisible(True)
+            if hasattr(self, "_sp_flash_tool_btn"):
+                self._sp_flash_tool_btn.setVisible(True)
+            if hasattr(self, "_lang_label"):
+                self._lang_label.setVisible(True)
+            if hasattr(self, "_lang_combo"):
+                self._lang_combo.setVisible(True)
+            self._apply_donation_visibility()
+
+        self._adjust_window_geometry()
+
     def _sync_install_nav_entry(self) -> bool:
         """Rename the first sidebar entry while an install is running.
 
@@ -692,6 +813,7 @@ class MainWindow(QMainWindow):
         btn, _idx = entry
         active = self._install_run_active()
         btn.setText(tr("nav_install_package" if active else "nav_select_package"))
+        self._apply_install_ui_state(active)
         return active
 
     def _on_select_nav_clicked(self):
@@ -711,13 +833,16 @@ class MainWindow(QMainWindow):
             self._nav_to_page(_PAGE_SELECT)
 
     def _nav_to_page(self, page_idx):
+        if self._install_run_active() and page_idx != _PAGE_FLASH:
+            return
         self._stack.setCurrentIndex(page_idx)
         install_active = self._sync_install_nav_entry()
         for key, (btn, idx) in self._nav_buttons.items():
-            # While installing, the first entry keeps the accent highlight so
-            # the sidebar shows the run is live rather than going blank.
-            checked = idx == page_idx or (install_active and key == "nav_select_package")
-            btn.setChecked(checked)
+            if install_active:
+                btn.setChecked(key == "nav_select_package")
+            else:
+                btn.setChecked(idx == page_idx)
+        self._adjust_window_geometry()
         # A page with a different size hint makes Qt reconfigure the window, and
         # that re-applies Qt's own window flags — verify the chrome right after
         # the new page has settled, so the title bar never visibly shifts.
@@ -727,6 +852,13 @@ class MainWindow(QMainWindow):
         self._package_path = path
         self._package_name = name
         self._package_model = model or ""
+
+        self._sync_sp_history()
+
+        if device_tracking.sp_gui_install_enabled(self.settings):
+            self._begin_sp_gui_install()
+            return
+
         if device_tracking.terminal_install_enabled(self.settings):
             # Terminal install: the user drives the console tools themselves.
             self._begin_terminal_install()
@@ -736,12 +868,13 @@ class MainWindow(QMainWindow):
     def _begin_terminal_install(self):
         """Open the console install command in the user's terminal window.
 
-        Nothing is flashed by the app: it stays on the Select Software screen
-        while SP Flash Tool or MTKClient runs in a terminal the user owns, so
-        the tools' own output can be read and diagnosed.
+        Prompts the user with device connection instructions and connection hints
+        (e.g. paperclip pinhole reset or download mode), then opens the terminal
+        detached and exits Updater CE.
         """
         from .. import terminal_install
-        from ..flash_service import _find_scatter, compute_extract_dir
+        from ..flash_service import _find_scatter, compute_extract_dir, completed_extract_dir
+        from ..config import device_label_for_model, is_mediatek_installer
 
         extract_dir = completed_extract_dir(self._package_path) or compute_extract_dir(
             self._package_path
@@ -782,6 +915,34 @@ class MainWindow(QMainWindow):
             )
             return
 
+        term_name = "Command Prompt" if paths.IS_WINDOWS else "Terminal"
+        method_label = "SP Flash Tool" if "flash_tool" in str(command[0]).lower() else "MTKclient"
+        dev_label = device_label_for_model(self._package_model) or tr("device_unknown")
+
+        if is_mediatek_installer():
+            hint = tr("terminal_hint_generic")
+        else:
+            hint = tr("terminal_hint_innioasis")
+
+        dialog_title = tr("terminal_install_prompt_title").format(terminal_name=term_name)
+        dialog_body = tr("terminal_install_prompt_body").format(
+            terminal_name=term_name,
+            method=method_label,
+            device=dev_label,
+            hint=hint,
+        )
+
+        if os.environ.get("QT_QPA_PLATFORM") != "offscreen":
+            reply = QMessageBox.information(
+                self,
+                dialog_title,
+                dialog_body,
+                QMessageBox.Ok | QMessageBox.Cancel,
+                QMessageBox.Ok,
+            )
+            if reply != QMessageBox.Ok:
+                return
+
         script = None
         try:
             # The script exports whatever the console tool needs that this
@@ -803,6 +964,9 @@ class MainWindow(QMainWindow):
             self._show_status(
                 tr("status_terminal_install").format(path=str(script)), 20000
             )
+            if os.environ.get("QT_QPA_PLATFORM") != "offscreen":
+                from PySide6.QtWidgets import QApplication
+                QApplication.quit()
         else:
             QMessageBox.warning(
                 self,
@@ -810,9 +974,98 @@ class MainWindow(QMainWindow):
                 tr("terminal_install_failed").format(path=str(script or "")),
             )
 
+    def _begin_sp_gui_install(self):
+        """Install via SP Flash Tool GUI:
+        Validates cached firmware readiness, shows instructions, launches SP Flash Tool GUI detached,
+        and quits Updater CE.
+        """
+        from .. import sp_flash_gui
+        from ..config import device_label_for_model, is_mediatek_installer
+        from ..flash_service import completed_extract_dir, compute_extract_dir, _find_scatter
+
+        if not sp_flash_gui.is_sp_flash_gui_supported():
+            QMessageBox.warning(self, tr("sp_gui_title"), tr("sp_gui_not_supported"))
+            return
+
+        extract_dir = completed_extract_dir(self._package_path) or compute_extract_dir(
+            self._package_path
+        )
+        scatter_path = None
+        if Path(extract_dir).is_dir():
+            try:
+                scatter_path = _find_scatter(Path(extract_dir))
+            except Exception:
+                pass
+
+        ready, sc, ed, reason = sp_flash_gui.check_cached_firmware_readiness(
+            scatter_path=scatter_path,
+            extract_dir=extract_dir,
+            model=self._package_model,
+        )
+        if not ready:
+            QMessageBox.warning(
+                self,
+                tr("sp_gui_title"),
+                tr("sp_gui_no_cached_firmware") + f"\n\n({reason})",
+            )
+            return
+
+        dev_label = device_label_for_model(self._package_model) or tr("device_unknown")
+        if is_mediatek_installer():
+            hint = tr("terminal_hint_generic")
+        else:
+            hint = tr("terminal_hint_innioasis")
+
+        prompt_title = tr("sp_gui_install_prompt_title")
+        prompt_body = tr("sp_gui_install_prompt_body").format(
+            device=dev_label,
+            hint=hint,
+        )
+
+        if os.environ.get("QT_QPA_PLATFORM") != "offscreen":
+            reply = QMessageBox.information(
+                self,
+                prompt_title,
+                prompt_body,
+                QMessageBox.Ok | QMessageBox.Cancel,
+                QMessageBox.Ok,
+            )
+            if reply != QMessageBox.Ok:
+                return
+
+        sp_flash_gui.update_sp_history_ini(scatter_path=sc, extract_dir=ed, model=self._package_model)
+        ok, msg = sp_flash_gui.launch_sp_flash_tool_gui(
+            model=self._package_model,
+            scatter_path=sc,
+            extract_dir=ed,
+        )
+        if not ok:
+            QMessageBox.warning(
+                self,
+                tr("sp_gui_error_title"),
+                f"{tr('sp_gui_error_desc')}\n\n{msg}",
+            )
+            return
+
+        if os.environ.get("QT_QPA_PLATFORM") != "offscreen":
+            from PySide6.QtWidgets import QApplication
+            QApplication.quit()
+
     def _begin_flash_flow(self):
         if not self._package_path:
             return
+        if not getattr(self, "_pre_install_guided", False):
+            if not (os.environ.get("QT_QPA_PLATFORM") == "offscreen" or os.environ.get("INNIOASIS_HEADLESS")):
+                from .dialogs import PreInstallGuidanceDialog
+                from ..branding import is_generic_mtk_brand
+                dlg = PreInstallGuidanceDialog(
+                    self,
+                    model=self._package_model,
+                    is_mtk_generic=is_generic_mtk_brand(),
+                )
+                if dlg.exec() != QDialog.Accepted:
+                    return
+                self._pre_install_guided = True
         try:
             from ..diagnostics import DiagnosticsManager
             DiagnosticsManager.instance().start_flash_session(
@@ -895,6 +1148,7 @@ class MainWindow(QMainWindow):
                 self.sm.force_state(state)
             except Exception:
                 pass
+        self._sync_install_nav_entry()
 
     def _enter_flashing_state(self):
         if self.sm.state is not FlashState.S4_FLASHING:
@@ -1072,20 +1326,23 @@ class MainWindow(QMainWindow):
 
         self._is_360p_rockbox = is_360p_rockbox
 
+        elapsed = self._elapsed_text()
+        self._reset_after_run()
+
         if donation_disabled:
             dialog = FlashCompleteDialog(
-                self, software, self._elapsed_text(), model=model, is_360p_rockbox=is_360p_rockbox
+                self, software, elapsed, model=model, is_360p_rockbox=is_360p_rockbox
             )
             dialog.exec()
         else:
             self._show_donation_dialog(context="install_success")
-        self._reset_after_run()
 
     def _handle_flash_failure(self, error_code):
         try:
             self.sm.transition_to(FlashState.S5_FAILED)
         except ValueError:
             self.sm.force_state(FlashState.S5_FAILED)
+        self._sync_install_nav_entry()
         self._error_page.show_flash_failed(
             self._last_progress or 0, self._step_now, error_code,
             self._package_name, self.sm.context.retry_count,
@@ -1204,12 +1461,14 @@ class MainWindow(QMainWindow):
             self._reset_after_run()
 
     def _reset_after_run(self):
+        self._pre_install_guided = False
         self.sm.reset_full()
         self._package_path = ""
         self._package_name = ""
         self._flash_start_ts = 0.0
         self._settings_page.set_method_enabled(True)
         self.service.stop_device_monitor()
+        self._sync_install_nav_entry()
         self._nav_to_page(_PAGE_SELECT)
 
     def _tick_elapsed(self):
@@ -1276,27 +1535,50 @@ class MainWindow(QMainWindow):
                     scatter_path = Path(latest["scatter_path"])
                 if latest.get("extract_dir") and Path(latest["extract_dir"]).is_dir():
                     extract_dir = Path(latest["extract_dir"])
-                if not self._package_model and latest.get("model"):
-                    model = latest["model"]
+        # Check readiness of cached firmware package before opening SP Flash Tool GUI
+        from ..config import is_mediatek_installer
+        from ..sp_flash_gui import check_cached_firmware_readiness
+
+        ready, res_sc, res_ed, reason = check_cached_firmware_readiness(
+            scatter_path=scatter_path,
+            extract_dir=extract_dir,
+            model=model,
+        )
+        if not ready:
+            QMessageBox.warning(
+                self,
+                tr("sp_gui_title"),
+                tr("sp_gui_no_cached_firmware") + f"\n\n({reason})",
+            )
+            return
+
+        scatter_path = res_sc
+        extract_dir = res_ed
 
         label = device_label_for_model(model)
+        if is_mediatek_installer():
+            hint = tr("terminal_hint_generic")
+        else:
+            hint = tr("terminal_hint_innioasis")
 
         prompt_msg = (
             f"{tr('sp_gui_launch_intro')}\n\n"
             f"• If it isn't already off, power off your {label}.\n"
             f"• If it is connected to USB, disconnect it first.\n"
+            f"{hint}\n"
             f"• In SP Flash Tool, click Download (or Format All + Download as needed).\n\n"
             f"Then connect the USB cable to begin flashing."
         )
-        reply = QMessageBox.question(
-            self,
-            tr("sp_gui_title"),
-            prompt_msg,
-            QMessageBox.Ok | QMessageBox.Cancel,
-            QMessageBox.Ok,
-        )
-        if reply != QMessageBox.Ok:
-            return
+        if os.environ.get("QT_QPA_PLATFORM") != "offscreen":
+            reply = QMessageBox.question(
+                self,
+                tr("sp_gui_title"),
+                prompt_msg,
+                QMessageBox.Ok | QMessageBox.Cancel,
+                QMessageBox.Ok,
+            )
+            if reply != QMessageBox.Ok:
+                return
 
         if hasattr(self, "service") and self.service:
             self.service.cancel_flash()
@@ -1516,14 +1798,7 @@ class MainWindow(QMainWindow):
             self._apply_donation_visibility()
 
     def _apply_donation_visibility(self, is_disabled=None):
-        if is_mediatek_installer():
-            # The generic installer still asks for support: buttons, prompts,
-            # goals and donor info stay, and only the user's own opt-out hides
-            # them.
-            is_disabled = device_tracking.is_donation_ui_disabled(self.settings)
-        elif is_offline_mode():
-            is_disabled = True
-        elif is_disabled is None:
+        if is_disabled is None:
             is_disabled = device_tracking.is_donation_ui_disabled(self.settings)
         sb = self.statusBar()
         if sb is not None:
@@ -1533,6 +1808,11 @@ class MainWindow(QMainWindow):
                 sb.setVisible(not is_disabled)
         if hasattr(self, "_support_btn") and self._support_btn is not None:
             self._support_btn.setVisible(not is_disabled)
+        if hasattr(self, "_version_label") and self._version_label is not None:
+            self._version_label.setVisible(not is_disabled)
+        if hasattr(self, "_credits_btn") and self._credits_btn is not None:
+            self._credits_btn.setVisible(not is_mediatek_installer() and not is_disabled)
+        self._adjust_window_geometry()
 
     def _apply_generic_mtk_branding(self):
         """Apply the identity of whichever build is running.
@@ -1547,16 +1827,13 @@ class MainWindow(QMainWindow):
         if hasattr(self, "_brand_label"):
             # Reads as "Installer 3.0" beside the version badge.
             self._brand_label.setText(get_brand_name())
-        # Credits, update checks and the CE version badge all point at online
-        # Community resources, so neither offline nor generic mode offers them.
-        # (The credits link lives in the donation bar and keeps that bar's own
-        # show/hide behaviour.)
+        # Update checks require an internet connection, so offline/generic hides them.
+        # Credits and author attribution remain visible in offline mode for Updater CE,
+        # but hidden in generic MediaTek Installer builds.
         if hasattr(self, "_credits_btn"):
-            self._credits_btn.setVisible(not offline)
+            self._credits_btn.setVisible(not mediatek)
         if hasattr(self, "_check_updates_btn"):
-            self._check_updates_btn.setVisible(not offline)
-        if hasattr(self, "_version_label"):
-            self._version_label.setVisible(not offline)
+            self._check_updates_btn.setVisible(not offline and not is_offline_mode())
         if hasattr(self, "_settings_page"):
             self._settings_page.apply_brand_mode(mediatek)
         if hasattr(self, "_select_page"):
@@ -1638,15 +1915,34 @@ class MainWindow(QMainWindow):
                 w.wait(1500)
 
     def close(self):
-        if hasattr(self, "_theme_watcher") and self._theme_watcher:
-            try:
-                self._theme_watcher.stop()
-            except Exception:
-                pass
-        self.cleanup_workers()
         return super().close()
 
     def closeEvent(self, event):
+        if self._install_run_active():
+            is_headless = os.environ.get("QT_QPA_PLATFORM") == "offscreen" or bool(os.environ.get("INNIOASIS_HEADLESS"))
+            if not is_headless or getattr(self, "_test_close_prompt", False):
+                app_name = get_app_name()
+                prompt_pattern = tr("flash_close_confirm")
+                if "{app}" in prompt_pattern:
+                    prompt_text = prompt_pattern.format(app=app_name)
+                else:
+                    prompt_text = f"Are you sure you want to stop the install and close {app_name}?"
+                ans = QMessageBox.question(
+                    self,
+                    tr("flash_cancel_title") or f"Stop Install - {app_name}",
+                    prompt_text,
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No,
+                )
+                if ans != QMessageBox.Yes:
+                    event.ignore()
+                    return
+            if hasattr(self, "service") and self.service:
+                try:
+                    self.service.cancel_flash()
+                except Exception:
+                    pass
+
         if hasattr(self, "_theme_watcher") and self._theme_watcher:
             try:
                 self._theme_watcher.stop()

@@ -239,7 +239,15 @@ def open_in_terminal(script, platform: Optional[str] = None) -> bool:
         logger.warning("No terminal emulator found for a terminal install")
         return False
     try:
-        subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        kwargs = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
+        if sys.platform == "win32":
+            kwargs["creationflags"] = (
+                getattr(subprocess, "DETACHED_PROCESS", 0)
+                | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+            )
+        else:
+            kwargs["start_new_session"] = True
+        subprocess.Popen(argv, **kwargs)
     except OSError as e:
         logger.warning("Could not open a terminal window: %s", e)
         return False

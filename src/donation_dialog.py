@@ -6,7 +6,7 @@ import sys
 
 from .browser import open_browser
 
-from PySide6.QtCore import QEasingCurve, QObject, QPropertyAnimation, Qt, QTimer, Signal
+from PySide6.QtCore import QEasingCurve, QObject, QPropertyAnimation, QSize, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -157,9 +157,9 @@ class DonationStatusBar(QStatusBar):
         side = "left" if align == "left" else "right"
         btn.setStyleSheet(
             f"QPushButton {{ background: transparent; color: {t.fg}; border: none;"
-            f" padding: 2px 4px; font-size: 12px; font-weight: 600; text-align: {side}; }}"
-            f"QPushButton:hover {{ color: {t.accent}; }}"
-            f"QPushButton:focus {{ color: {t.accent}; border: 1px solid {t.border_focus};"
+            f" padding: 2px 4px; font-size: 12px; font-weight: 700; text-align: {side}; }}"
+            f"QPushButton:hover {{ color: {t.fg}; }}"
+            f"QPushButton:focus {{ color: {t.fg}; border: 1px solid {t.border_focus};"
             f" border-radius: 5px; outline: none; }}"
         )
 
@@ -209,19 +209,18 @@ class DonationStatusBar(QStatusBar):
         goal_row.setSpacing(10)
 
         self._goal_label = _LineLabel()
-        self._goal_label.setMinimumWidth(260)
         self._goal_label.setAlignment(Qt.AlignCenter)
         self._goal_label.setStyleSheet(f"font-size: 12px; font-weight: 600; color: {t.fg}; border: none; background: transparent;")
         goal_row.addWidget(self._goal_label, 0, Qt.AlignVCenter)
 
         self._goal_bar = QProgressBar()
+        self._goal_bar.setObjectName("softwareUpdateProgress")
         self._goal_bar.setRange(0, 1000)
         self._goal_bar.setTextVisible(False)
-        self._goal_bar.setFixedSize(160, 10)
+        self._goal_bar.setFixedSize(120, 8)
         goal_row.addWidget(self._goal_bar, 0, Qt.AlignVCenter)
 
         self._donor_label = _LineLabel()
-        self._donor_label.setMinimumWidth(260)
         self._donor_label.setTextFormat(Qt.RichText)
         self._donor_label.setAlignment(Qt.AlignCenter)
         self._donor_label.setStyleSheet(f"font-size: 12px; font-weight: 500; color: {t.fg}; border: none; background: transparent;")
@@ -244,9 +243,10 @@ class DonationStatusBar(QStatusBar):
         # Status container: clean status update message without donation collision
         self._status_container = QWidget(self)
         status_row = QHBoxLayout(self._status_container)
-        status_row.setContentsMargins(12, 0, 8, 0)
+        status_row.setContentsMargins(12, 0, 12, 0)
         status_row.setSpacing(8)
         self._status_label = QLabel()
+        self._status_label.setAlignment(Qt.AlignCenter)
         self._status_label.setStyleSheet(f"font-size: 12px; font-weight: 500; color: {t.fg}; border: none; background: transparent;")
         status_row.addWidget(self._status_label, 1)
         self._status_container.setVisible(False)
@@ -492,12 +492,16 @@ class DonationDialog(QDialog):
         self.setModal(True)
         self.setMinimumWidth(580)
 
+        self._pay_buttons = []
         self._build_ui()
-        self.adjustSize()
+        self.resize(710, 460)
         self._start_ticker()
         self._refresh_bridge = _DonationRefreshBridge(self)
         self._refresh_bridge.updated.connect(self._apply_fresh_donations)
         fetch_remote_donors_async(self._refresh_bridge.updated.emit)
+
+    def sizeHint(self) -> QSize:
+        return QSize(710, 460)
 
     def _build_ui(self):
         t = T()
@@ -588,7 +592,7 @@ class DonationDialog(QDialog):
                 tb_layout.setContentsMargins(14, 10, 14, 10)
                 tb_layout.setSpacing(4)
                 self._theme_title = QLabel(f"<b>{tr('themepack_card_title')}</b>")
-                self._theme_title.setStyleSheet(f"font-size: 13px; color: {t.accent}; border: none; background: transparent;")
+                self._theme_title.setStyleSheet(f"font-size: 13px; color: {t.fg}; border: none; background: transparent;")
                 tb_layout.addWidget(self._theme_title)
                 self._theme_desc = QLabel(tr("themepack_card_desc"))
                 self._theme_desc.setWordWrap(True)
@@ -666,9 +670,9 @@ class DonationDialog(QDialog):
         self._last_button.setCursor(Qt.PointingHandCursor)
         self._last_button.setToolTip(honeygain_url)
         self._last_button.setStyleSheet(
-            f"QPushButton {{ background: transparent; border: none; color: {t.ok_fg};"
-            f" font-size: 12px; font-weight: 600; text-decoration: underline; padding: 4px 6px; }}"
-            f"QPushButton:hover {{ color: #059669; }}"
+            f"QPushButton {{ background: transparent; border: none; color: {t.fg};"
+            f" font-size: 12px; font-weight: 700; text-decoration: none; padding: 4px 6px; }}"
+            f"QPushButton:hover {{ color: {t.fg}; }}"
         )
         self._last_button.clicked.connect(lambda _=False, u=honeygain_url: open_browser(u))
         links_row.addWidget(self._last_button)
@@ -680,9 +684,9 @@ class DonationDialog(QDialog):
         self._crypto_toggle = QPushButton(f"🪙 {tr('donate_crypto_toggle')}")
         self._crypto_toggle.setCursor(Qt.PointingHandCursor)
         self._crypto_toggle.setStyleSheet(
-            f"QPushButton {{ background: transparent; border: none; color: {t.accent};"
-            f" font-size: 12px; font-weight: 600; text-decoration: underline; padding: 4px 6px; }}"
-            f"QPushButton:hover {{ color: {t.accent_hover}; }}"
+            f"QPushButton {{ background: transparent; border: none; color: {t.fg};"
+            f" font-size: 12px; font-weight: 700; text-decoration: none; padding: 4px 6px; }}"
+            f"QPushButton:hover {{ color: {t.fg}; }}"
         )
         self._crypto_toggle.clicked.connect(self._toggle_crypto)
         links_row.addWidget(self._crypto_toggle)
@@ -713,7 +717,7 @@ class DonationDialog(QDialog):
             r_lay.addWidget(coin_badge)
 
             addr_label = QLabel(address)
-            addr_label.setStyleSheet(f"color: {t.fg_dim}; font-size: 11px; font-family: monospace;")
+            addr_label.setStyleSheet(f"color: {t.fg}; font-size: 11px; font-family: monospace;")
             addr_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
             r_lay.addWidget(addr_label, 1)
 
@@ -741,7 +745,6 @@ class DonationDialog(QDialog):
         bottom_row.addWidget(self._status_label, 1)
 
         self._close_btn = QPushButton(tr("close"))
-        self._close_btn.setProperty("cssClass", "ghost")
         self._close_btn.setMinimumWidth(80)
         self._close_btn.clicked.connect(self._on_close)
         bottom_row.addWidget(self._close_btn, 0, Qt.AlignRight)
@@ -750,17 +753,16 @@ class DonationDialog(QDialog):
         self._refresh_goal()
 
     def _add_pay_button(self, grid, r, c, label, color, hover, url, full_width=None, symbol=""):
-        t = T()
         text = (f"{symbol}  {full_width or label}").strip()
         btn = QPushButton(text)
         btn.setCursor(Qt.PointingHandCursor)
-        btn.setStyleSheet(
-            f"QPushButton {{ background-color: {t.bg_card}; color: {t.fg}; font-weight: 600;"
-            f" font-size: {'13px' if full_width else '13px'}; min-height: 38px; padding: 8px 14px; border-radius: 6px; border: 1px solid {t.border}; }}"
-            f"QPushButton:hover {{ background-color: {t.bg_hover}; border-color: {t.border_strong}; color: {t.fg}; }}"
-            f"QPushButton:pressed {{ background-color: {t.bg_hover}; border-color: {t.border_focus}; }}"
-        )
+        btn.setMinimumHeight(32)
+        # Native OS button widget — left to the host platform QStyle so
+        # the OS renders its authentic native controls (Aqua on macOS, Fluent/standard on Windows/Linux)
+        # without overriding custom QSS background or border styling.
         btn.clicked.connect(lambda _=False, u=url: open_browser(u))
+        if hasattr(self, "_pay_buttons"):
+            self._pay_buttons.append(btn)
         if grid is not None:
             grid.addWidget(btn, r, c)
         else:
@@ -891,6 +893,8 @@ class DonationDialog(QDialog):
         toggle_text = tr("donate_crypto_hide") if visible else tr("donate_crypto_toggle")
         self._crypto_toggle.setText(f"🪙 {toggle_text}")
         self.adjustSize()
+        if self.height() < 460:
+            self.resize(max(self.width(), 710), 460)
 
     def _open_theme_pack_flow(self):
         from .theme_pack import ThemePackGuidanceDialog

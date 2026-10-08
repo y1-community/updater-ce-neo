@@ -389,11 +389,13 @@ class DALegacy(metaclass=LogBase):
                         elif self.daconfig.emiver in [0x0A, 0x0B]:
                             info = self.usbread(0x10)  # 0x000000BC
                             self.info(f"RAM-Info: {hexlify(info).decode('utf-8')}")
-                            dl_buf = self.usbread(0x4)
-                            if len(dl_buf) < 4:
-                                self.error("Failed to read RAM-Length from DA")
-                                return False
-                            dramlength = unpack(">I", dl_buf)[0]
+                            cdc = getattr(self.mtk.port, "cdc", None)
+                            q = getattr(cdc, "queue", None)
+                            if q is not None and not q.empty():
+                                dl_buf = self.usbread(0x4, maxtimeout=0)
+                                if len(dl_buf) == 4:
+                                    dramlength = unpack(">I", dl_buf)[0]
+                                    self.debug(f"RAM-Length from buffer: {hex(dramlength)}")
                             self.usbwrite(self.Rsp.ACK)
                         elif self.daconfig.emiver in [0x0C, 0x0D]:
                             dl_buf = self.usbread(0x4)

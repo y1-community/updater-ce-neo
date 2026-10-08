@@ -281,6 +281,7 @@ class _Tokens:
             # Accent
             self.accent       = os_accent
             self.accent_hover = QColor(os_accent).lighter(115).name()
+            self.accent_active = QColor(os_accent).darker(115).name()
             self.accent_bg    = QColor(os_accent).darker(300).name()
             acc_txt = QColor(os_accent).lighter(200).name()
             def _rl(c):
@@ -368,6 +369,7 @@ class _Tokens:
             # Accent
             self.accent       = os_accent
             self.accent_hover = QColor(os_accent).darker(115).name()
+            self.accent_active = QColor(os_accent).darker(130).name()
             self.accent_bg    = "#eff6ff"
             self.accent_text  = QColor(os_accent).darker(170).name()
 
@@ -492,7 +494,8 @@ def _make_palette(dark: bool, pure_black: bool = False) -> QPalette:
         p.setColor(QPalette.Button, QColor(t.bg_card))
         p.setColor(QPalette.ButtonText, QColor(t.fg))
         p.setColor(QPalette.BrightText, QColor("#fca5a5"))
-        p.setColor(QPalette.Link, QColor(t.accent))
+        p.setColor(QPalette.Link, QColor(t.fg))
+        p.setColor(QPalette.LinkVisited, QColor(t.fg))
         p.setColor(QPalette.Highlight, QColor(t.accent))
         p.setColor(QPalette.HighlightedText, QColor("#ffffff"))
         if hasattr(QPalette.ColorRole, "Accent"):
@@ -517,7 +520,8 @@ def _make_palette(dark: bool, pure_black: bool = False) -> QPalette:
         p.setColor(QPalette.Button, QColor(t.bg_hover))
         p.setColor(QPalette.ButtonText, QColor(t.fg))
         p.setColor(QPalette.BrightText, QColor("#dc2626"))
-        p.setColor(QPalette.Link, QColor(t.accent))
+        p.setColor(QPalette.Link, QColor(t.fg))
+        p.setColor(QPalette.LinkVisited, QColor(t.fg))
         p.setColor(QPalette.Highlight, QColor(t.accent))
         p.setColor(QPalette.HighlightedText, QColor("#ffffff"))
         if hasattr(QPalette.ColorRole, "Accent"):
@@ -611,43 +615,18 @@ QFrame[cssClass="card"] {{
     color: {t.fg};
 }}
 #navPanel QPushButton {{
-    background: transparent;
-    color: {t.fg};
+    /* Layout only — the frame, fill, hover and checked states are the host
+       style's, so the sidebar matches the platform's own sidebars. */
     text-align: left;
     padding: 8px 12px;
-    border-radius: 5px;
-    border: 1px solid transparent;
-    font-size: 13px;
-    font-weight: 500;
     min-height: 34px;
-}}
-#navPanel QPushButton:hover {{
-    background-color: {t.bg_hover};
-    color: {t.fg};
-}}
-#navPanel QPushButton:focus {{
-    outline: none;
-    border: 1px solid {t.border_focus};
-}}
-#navPanel QPushButton:checked {{
-    background-color: {t.nav_active};
-    color: {t.nav_active_text};
-    font-weight: 600;
-    border: 1px solid transparent;
-}}
-#navPanel QPushButton:checked:focus {{
-    background-color: {t.nav_active};
-    color: {t.nav_active_text};
-    font-weight: 600;
-    outline: none;
-    border: 1px solid {t.border_strong};
 }}
 #navPanel QPushButton[primary="true"],
 #navPanel QPushButton[cssClass="primary"] {{
     min-height: 36px;
 }}
 #navPanel .nav-bottom {{
-    color: {t.fg_dim};
+    color: {t.fg};
     font-size: 12px;
 }}
 
@@ -656,6 +635,68 @@ QTextBrowser#releaseNotes, QTextEdit#releaseNotes {{
     background: transparent;
     background-color: transparent;
     border: none;
+    color: {t.fg};
+}}
+
+/* ── Available software releases list (clean translucent view matching release notes) ─ */
+QListWidget#releaseList,
+QListView#releaseList,
+QListWidget#releaseList::viewport,
+QListView#releaseList::viewport {{
+    background: transparent;
+    background-color: transparent;
+    border: none;
+    color: {t.fg};
+    outline: none;
+}}
+QListWidget#releaseList::item, QListView#releaseList::item {{
+    padding: 3px 6px;
+    border-radius: 4px;
+    color: {t.fg};
+}}
+QListWidget#releaseList::item:hover, QListView#releaseList::item:hover {{
+    background-color: {t.bg_hover};
+}}
+QListWidget#releaseList::item:selected, QListView#releaseList::item:selected {{
+    background-color: {t.accent};
+    color: {t.nav_active_text};
+}}
+QListWidget#releaseList::item:selected:hover, QListView#releaseList::item:selected:hover {{
+    background-color: {t.accent_hover};
+    color: {t.nav_active_text};
+}}
+
+
+/* ── Modern OS software update progress bar (macOS / Windows Fluent) ─ */
+QProgressBar#softwareUpdateProgress {{
+    background-color: {t.progress_track};
+    border: none;
+    border-radius: 3px;
+    max-height: 6px;
+    min-height: 6px;
+    text-align: center;
+}}
+QProgressBar#softwareUpdateProgress::chunk {{
+    background-color: {t.progress_fill};
+    border-radius: 3px;
+}}
+
+/* ── Cancel button on modern software update card (macOS Settings style) ─ */
+QPushButton#softwareUpdateCancelBtn {{
+    border: none;
+    border-radius: 12px;
+    min-width: 24px;
+    max-width: 24px;
+    min-height: 24px;
+    max-height: 24px;
+    background-color: {t.bg_hover};
+    color: {t.fg_muted};
+    font-size: 11px;
+    font-weight: bold;
+    padding: 0;
+}}
+QPushButton#softwareUpdateCancelBtn:hover {{
+    background-color: rgba(128, 128, 128, 0.35);
     color: {t.fg};
 }}
 
@@ -682,19 +723,19 @@ QLabel[cssClass="cardTitle"] {{
 }}
 QLabel[cssClass="subtitle"] {{
     font-size: 13px;
-    color: {t.fg_dim};
+    color: {t.fg};
     background: transparent;
     border: none;
 }}
 QLabel[cssClass="dimmed"] {{
     font-size: 12px;
-    color: {t.fg_dim};
+    color: {t.fg};
     background: transparent;
     border: none;
 }}
 QLabel[cssClass="hint"] {{
     font-size: 13px;
-    color: {t.fg_dim};
+    color: {t.fg};
     background: transparent;
     border: none;
 }}
@@ -727,7 +768,10 @@ QLabel[cssClass="separator"], QFrame[cssClass="separator"] {{
     border: none;
 }}
 
-/* ── Monospace Diagnostic Console ────────────────────── */
+/* ── Monospace Diagnostic Console ──────────────────────
+   Styled from here, never from the widget: a stylesheet set *on* a scroll
+   area makes Qt answer SH_ScrollBar_Transient with 0 and the host's floating
+   bars silently become classic ones (see src/ui/scrollbars.py). */
 QTextEdit#logView, QPlainTextEdit#logView {{
     background-color: {t.log_bg};
     color: {t.log_fg};
@@ -736,6 +780,22 @@ QTextEdit#logView, QPlainTextEdit#logView {{
     border: 1px solid {t.border};
     border-radius: 4px;
     padding: 8px;
+}}
+QTextEdit#statusView, QPlainTextEdit#statusView {{
+    background-color: {t.bg};
+    color: {t.fg};
+    border: 1px solid {t.border};
+    border-radius: 8px;
+    font-family: "SF Mono", "Cascadia Code", "Consolas", "Courier New", monospace;
+    font-size: 11px;
+    padding: 8px;
+}}
+QTextBrowser#updateNotes, QTextEdit#updateNotes {{
+    background-color: {t.bg_input};
+    color: {t.fg};
+    border: 1px solid {t.border};
+    border-radius: 6px;
+    padding: 6px;
 }}
 
 /* ── Tooltips ─────────────────────────────────────────── */
@@ -748,70 +808,37 @@ QToolTip {{
     font-size: 12px;
 }}
 
-/* ── Primary Action Buttons (Install / Restore, Start, Continue) ────── */
-QPushButton[cssClass="primary"] {{
-    background-color: {t.accent};
-    color: {t.nav_active_text};
-    border: 1px solid {t.btn_primary_border};
-    border-bottom: 2px solid {t.btn_primary_border_bottom};
-    border-radius: 6px;
-    padding: 6px 16px;
-    font-size: 13px;
-    font-weight: 600;
-    min-height: 36px;
-}}
-QPushButton[cssClass="primary"]:hover {{
-    background-color: {t.accent_hover};
-    border: 1px solid {t.border_focus};
-    border-bottom: 2px solid {t.border_focus};
-}}
-QPushButton[cssClass="primary"]:focus {{
-    outline: none;
-    border: 2px solid {t.border_focus};
-}}
-QPushButton[cssClass="primary"]:pressed {{
-    background-color: {t.accent_hover};
-    border: 1px solid {t.border_strong};
-}}
-QPushButton[cssClass="primary"]:disabled {{
-    background-color: {t.disabled};
-    color: {t.disabled_fg};
-    border: 1px solid {t.btn_disabled_border};
-    border-bottom: 1px solid {t.btn_disabled_border};
-}}
-
-/* ── Ghost / Secondary Action Buttons ─────────────────── */
-QPushButton[cssClass="ghost"] {{
-    background-color: transparent;
-    color: {t.fg};
-    border: 1px solid {t.border};
-    border-radius: 6px;
-    padding: 6px 14px;
-    font-size: 13px;
-    font-weight: 500;
-    min-height: 32px;
-}}
-QPushButton[cssClass="ghost"]:hover {{
-    background-color: {t.bg_hover};
-    border-color: {t.border_strong};
-    color: {t.fg};
-}}
-QPushButton[cssClass="ghost"]:pressed {{
-    background-color: {t.bg_hover};
-    border-color: {t.border_focus};
-}}
-QPushButton[cssClass="ghost"]:disabled {{
-    color: {t.disabled_fg};
-    border-color: {t.border};
-}}
+/* ── Buttons are the platform's, not ours ─────────────────
+   Every action button (primary, secondary, navigation) is drawn by the host
+   QStyle: Aqua / WinUI / Adwaita / Breeze own the fill, the bevel, the focus
+   ring, the disabled state and the keyboard cues, exactly as they do in the
+   platform's own apps. The cssClass properties remain as semantic labels for
+   wiring and tests; nothing here paints them, so a statically styled button
+   can never disagree with the desktop's accessibility settings (high
+   contrast, accent colour, "reduce motion" pressed states). */
 """
 
 
 def apply_native_scrollbar_policy(widget) -> None:
-    """Leave scroll areas to native OS widgets and QStyle defaults without registry polling."""
-    from PySide6.QtWidgets import QAbstractScrollArea
-    if isinstance(widget, QAbstractScrollArea):
-        widget.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+    """Leave scroll areas to the platform's own widgets (see ui.scrollbars)."""
+    from .scrollbars import ensure_native_scrolling
+
+    ensure_native_scrolling(widget)
+
+
+def link_html(text: str, *, bold: bool = True) -> str:
+    """Markup for an in-app link.
+
+    Links use the same colour as every other piece of text — the system's
+    foreground on the window surface, so they contrast with the background
+    whether the desktop is in light or dark mode — and are bold so they are
+    recognisable as links without relying on a colour the OS may not give us.
+    """
+    weight = " font-weight: 700;" if bold else ""
+    return (
+        f'<a href="#" style="color: {_state.tokens.fg}; text-decoration: none;'
+        f' border: none; background: transparent;{weight}">{text}</a>'
+    )
 
 
 
@@ -846,9 +873,21 @@ def content_top_margin() -> int:
         return NATIVE_TITLEBAR_MARGIN
 
 
+# One set of page margins for every page, so the content column is identical
+# from screen to screen regardless of which page is showing (and regardless of
+# whether a scrollbar is currently visible on the host).
+PAGE_SIDE_MARGIN = 24
+PAGE_BOTTOM_MARGIN = 20
+
+
 def page_top_margin() -> int:
     """Inset for page content: the top of the page area, never a title-bar gap."""
     return PAGE_TOP_MARGIN
+
+
+def page_margins() -> tuple[int, int, int, int]:
+    """``(left, top, right, bottom)`` for a page's root layout."""
+    return PAGE_SIDE_MARGIN, page_top_margin(), PAGE_SIDE_MARGIN, PAGE_BOTTOM_MARGIN
 
 
 def native_font_families() -> list[str]:

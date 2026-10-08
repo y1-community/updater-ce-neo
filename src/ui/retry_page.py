@@ -53,7 +53,6 @@ class RetryPage(QWidget):
         layout.addWidget(self._step_label)
 
         self._cancel_btn = QPushButton(tr("retry_btn_cancel"))
-        self._cancel_btn.setProperty("cssClass", "ghost")
         self._cancel_btn.clicked.connect(lambda: self._cancel_cb and self._cancel_cb())
         layout.addWidget(self._cancel_btn)
         layout.addStretch()

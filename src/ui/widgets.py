@@ -99,7 +99,7 @@ class StepIndicator(QWidget):
                 lbl.setStyleSheet(f"color: {t.fg_primary}; font-size: 11px; font-weight: 700;")
             else:
                 lbl.setText(f"&#9675; {tr(text)}")
-                lbl.setStyleSheet(f"color: {t.fg_dim}; font-size: 11px; font-weight: 500;")
+                lbl.setStyleSheet(f"color: {t.fg}; font-size: 11px; font-weight: 500;")
 
     def retranslate(self):
         self.set_active_step(getattr(self, "_active", 0))

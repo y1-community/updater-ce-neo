@@ -359,6 +359,18 @@ _STRINGS: dict = {
         "fr": "Fichier local",
         "es": "Archivo local",
     },
+    "sel_install_from_file": {
+        "zh-CN": "从本地文件安装…",
+        "en": "Install from a file…",
+        "fr": "Installer à partir d'un fichier…",
+        "es": "Instalar desde un archivo…",
+    },
+    "sel_install_online": {
+        "zh-CN": "从在线目录选择",
+        "en": "Choose from the catalogue",
+        "fr": "Choisir dans le catalogue",
+        "es": "Elegir del catálogo",
+    },
     "sel_model": {
         "zh-CN": "设备型号",
         "en": "Device Model",
@@ -394,6 +406,24 @@ _STRINGS: dict = {
         "en": "Install from a terminal window",
         "fr": "Installer depuis une fenêtre de terminal",
         "es": "Instalar desde una ventana de terminal",
+    },
+    "settings_terminal_install_windows": {
+        "zh-CN": "在命令提示符窗口中安装",
+        "en": "Install in Command Prompt",
+        "fr": "Installer dans l'Invite de commandes",
+        "es": "Instalar en el Símbolo del sistema",
+    },
+    "settings_sp_gui_install": {
+        "zh-CN": "在 SP Flash Tool 图形界面中安装",
+        "en": "Install in SP Flash Tool GUI",
+        "fr": "Installer dans l'interface graphique de SP Flash Tool",
+        "es": "Instalar en la interfaz gráfica de SP Flash Tool",
+    },
+    "settings_sp_gui_desc": {
+        "zh-CN": "关闭 Updater CE 并打开 SP Flash Tool 图形界面，自动加载所选固件的 scatter 文件和镜像。",
+        "en": "Closes Updater CE and opens SP Flash Tool GUI with the selected firmware scatter file and partition images preloaded.",
+        "fr": "Ferme Updater CE et ouvre l'interface SP Flash Tool avec le fichier scatter et les images préchargés.",
+        "es": "Cierra Updater CE y abre la GUI de SP Flash Tool con el archivo scatter y las imágenes precargadas.",
     },
     "settings_terminal_desc": {
         "zh-CN": "在终端中运行软件安装，让您可以看到安装进度的技术信息。",
@@ -478,6 +508,42 @@ _STRINGS: dict = {
         "en": "Install command opened in your terminal window ({path}).",
         "fr": "Commande d'installation ouverte dans votre terminal ({path}).",
         "es": "Comando de instalación abierto en tu ventana de terminal ({path}).",
+    },
+    "terminal_install_prompt_title": {
+        "zh-CN": "在{terminal_name}中安装",
+        "en": "Install via {terminal_name}",
+        "fr": "Installer via {terminal_name}",
+        "es": "Instalar mediante {terminal_name}",
+    },
+    "terminal_install_prompt_body": {
+        "zh-CN": "即将打开{terminal_name}运行 {method}。\n\n• 如果设备尚未关机，请关闭您的{device}。\n• 如果已连接 USB，请先断开连接。\n{hint}\n• {terminal_name}窗口打开后，将设备连接到电脑。\n\n点击“确定”将打开窗口并退出 Updater CE。",
+        "en": "{terminal_name} will now open running {method}.\n\n• If it isn't already off, power off your {device}.\n• If it is connected to USB, disconnect it first.\n{hint}\n• Connect your device to your computer when the {terminal_name} window has opened.\n\nClick OK to launch and exit Updater CE.",
+        "fr": "{terminal_name} va s'ouvrir pour exécuter {method}.\n\n• Si l'appareil n'est pas déjà éteint, éteignez votre {device}.\n• S'il est connecté en USB, débranchez-le d'abord.\n{hint}\n• Connectez votre appareil à l'ordinateur lorsque la fenêtre {terminal_name} s'ouvrira.\n\nCliquez sur OK pour lancer et quitter Updater CE.",
+        "es": "Se abrirá {terminal_name} ejecutando {method}.\n\n• Si no está apagado, apaga tu {device}.\n• Si está conectado al USB, desconéctalo primero.\n{hint}\n• Conecta tu dispositivo al ordenador cuando la ventana de {terminal_name} se haya abierto.\n\nHaz clic en Aceptar para iniciar y salir de Updater CE.",
+    },
+    "terminal_hint_innioasis": {
+        "zh-CN": "• 提示：如果设备无法自动连接，请在插入 USB 线的同时，用回形针轻按复位孔中的重置按钮。",
+        "en": "• Tip: If the device does not connect automatically, gently press the reset button in the pinhole with a paperclip while connecting the USB cable.",
+        "fr": "• Astuce : si l'appareil ne se connecte pas automatiquement, appuyez doucement sur le bouton de réinitialisation avec un trombone tout en branchant le câble USB.",
+        "es": "• Consejo: si el dispositivo no se conecta automáticamente, presiona suavemente el botón de reinicio con un clip mientras conectas el cable USB.",
+    },
+    "terminal_hint_generic": {
+        "zh-CN": "• 提示：请将设备置于固件下载模式（因机型而异：例如取下电池并在保持取出状态下连接 USB，或在电池装入状态下关机连接，或在连接 USB 时按住音量加/减键）。",
+        "en": "• Tip: Put your device in firmware download mode (varies by model: e.g. remove battery and keep it out with USB cable connected, or power off with battery in, or hold Volume Down/Up while connecting USB).",
+        "fr": "• Astuce : mettez votre appareil en mode téléchargement de micrologiciel (selon le modèle : par ex. retirez la batterie en laissant le câble USB branché, ou éteignez avec la batterie, ou maintenez Volume Bas/Haut lors du branchement).",
+        "es": "• Consejo: pon tu dispositivo en modo de descarga de firmware (varía según el modelo: p. ej. quita la batería y déjala fuera conectando el USB, o apaga con la batería puesta, o mantén pulsado Bajar/Subir Volumen al conectar el USB).",
+    },
+    "sp_gui_install_prompt_title": {
+        "zh-CN": "在 SP Flash Tool 图形界面中安装",
+        "en": "Install via SP Flash Tool GUI",
+        "fr": "Installer via l'interface SP Flash Tool",
+        "es": "Instalar mediante SP Flash Tool GUI",
+    },
+    "sp_gui_install_prompt_body": {
+        "zh-CN": "SP Flash Tool 图形界面即将打开，并已预载固件。\n\n• 在 SP Flash Tool 下拉菜单中选择“Format All + Download”。\n• 点击“Download”按钮。\n• 请确保您的{device}已关机并断开 USB 连接。\n{hint}\n• 点击 Download 后，将 USB 线连接到电脑开始刷机。\n\n点击“确定”将启动 SP Flash Tool 并退出 Updater CE。",
+        "en": "SP Flash Tool GUI will now open with your firmware preloaded.\n\n• In SP Flash Tool, select \"Format All + Download\" from the dropdown box.\n• Click the \"Download\" button.\n• Make sure your {device} is powered off and disconnected.\n{hint}\n• Connect the USB cable to your computer after clicking Download.\n\nClick OK to launch SP Flash Tool and exit Updater CE.",
+        "fr": "L'interface SP Flash Tool va s'ouvrir avec votre micrologiciel préchargé.\n\n• Dans SP Flash Tool, sélectionnez « Format All + Download » dans la liste déroulante.\n• Cliquez sur le bouton « Download ».\n• Assurez-vous que votre {device} est éteint et débranché.\n{hint}\n• Connectez le câble USB à l'ordinateur après avoir cliqué sur Download.\n\nCliquez sur OK pour lancer SP Flash Tool et quitter Updater CE.",
+        "es": "La interfaz de SP Flash Tool se abrirá con el firmware precargado.\n\n• En SP Flash Tool, selecciona \"Format All + Download\" en el menú desplegable.\n• Haz clic en el botón \"Download\".\n• Asegúrate de que tu {device} esté apagado y desconectado.\n{hint}\n• Conecta el cable USB al ordenador después de hacer clic en Download.\n\nHaz clic en Aceptar para iniciar SP Flash Tool y salir de Updater CE.",
     },
     "settings_rockbox_group": {
         "zh-CN": "Rockbox 固件筛选",
@@ -913,6 +979,54 @@ _STRINGS: dict = {
         "fr": "Éteignez d'abord l'appareil. S'il est connecté mais non détecté, essayez un autre câble ou port USB.",
         "es": "Apaga primero el dispositivo. Si está conectado pero no se detecta, prueba con otro cable o puerto USB.",
     },
+    "flash_install_in_progress": {
+        "zh-CN": "正在安装",
+        "en": "Install in Progress",
+        "fr": "Installation en cours",
+        "es": "Instalación en curso",
+    },
+    "dialog_pre_install_title": {
+        "zh-CN": "准备设备",
+        "en": "Device Preparation",
+        "fr": "Préparation de l'appareil",
+        "es": "Preparación del dispositivo",
+    },
+    "dialog_pre_install_header": {
+        "zh-CN": "请确保您的 {model} 已关机且未连接 USB 数据线",
+        "en": "Please make sure your {model} is powered off and not connected by USB",
+        "fr": "Veuillez vous assurer que votre {model} est éteint et non connecté par USB",
+        "es": "Asegúrate de que tu {model} esté apagado y no conectado por USB",
+    },
+    "dialog_pre_install_innioasis_tip": {
+        "zh-CN": "• 刷机前请确保设备已完全关机。\n• 若设备卡死或屏幕无响应，请使用卡针或回形针按压复位孔强制关机以进入刷机模式。\n• 暂时保持 USB 数据线未连接。\n• 点击“继续”，稍后根据软件提示连接 USB 数据线。",
+        "en": "• Completely power off your device before starting.\n• If the device is frozen or does not respond, use a pin or paperclip in the reset hole to force power off into download mode.\n• Keep the USB cable disconnected for now.\n• Click Continue, then connect your device via USB when prompted.",
+        "fr": "• Éteignez complètement votre appareil avant de commencer.\n• Si l'appareil est figé ou ne répond pas, utilisez un trombone dans le trou de réinitialisation pour forcer l'extinction en mode téléchargement.\n• Laissez le câble USB déconnecté pour l'instant.\n• Cliquez sur Continuer, puis connectez votre appareil en USB lorsque vous y êtes invité.",
+        "es": "• Apaga completamente tu dispositivo antes de comenzar.\n• Si el dispositivo está bloqueado o no responde, usa un clip o alfiler en el orificio de reinicio para apagarlo y entrar en modo de descarga.\n• Mantén el cable USB desconectado por ahora.\n• Haz clic en Continuar y conecta tu dispositivo por USB cuando se te indique.",
+    },
+    "dialog_pre_install_generic_tip": {
+        "zh-CN": "• 请将您的 MediaTek 设备完全关机。\n• 暂时保持 USB 数据线未连接。\n• 根据具体机型，可尝试装入或拔出电池后连接（或在连接时按住音量加/减键）。\n• 点击“继续”，稍后根据提示连接 USB 数据线。",
+        "en": "• Completely power off your MediaTek device.\n• Keep the USB cable disconnected for now.\n• Depending on the model, try connecting with or without battery inserted (or hold Volume Down / Up while connecting).\n• Click Continue, then connect the USB cable when prompted.",
+        "fr": "• Éteignez complètement votre appareil MediaTek.\n• Laissez le câble USB déconnecté pour l'instant.\n• Selon le modèle, essayez de connecter avec ou sans batterie (ou en maintenant Volume -/+).\n• Cliquez sur Continuer, puis connectez le câble USB lorsque vous y êtes invité.",
+        "es": "• Apaga completamente tu dispositivo MediaTek.\n• Mantén el cable USB desconectado por ahora.\n• Según el modelo, intenta conectar con o sin batería (o manteniendo presionado Volumen -/+).\n• Haz clic en Continuar y conecta el cable USB cuando se te indique.",
+    },
+    "dialog_pre_install_continue": {
+        "zh-CN": "继续",
+        "en": "Continue",
+        "fr": "Continuer",
+        "es": "Continuar",
+    },
+    "flash_connect_device_prompt": {
+        "zh-CN": "请连接您的 {model}",
+        "en": "Please connect your {model}",
+        "fr": "Veuillez connecter votre {model}",
+        "es": "Por favor conecta tu {model}",
+    },
+    "device_fallback_word": {
+        "zh-CN": "设备",
+        "en": "device",
+        "fr": "appareil",
+        "es": "dispositivo",
+    },
     "flash_connect_prompt": {
         "zh-CN": "请确认您的 {model} 已关机并断开连接",
         "en": "Please make sure your {model} is powered off and disconnected",
@@ -1033,6 +1147,36 @@ _STRINGS: dict = {
         "fr": "Estimation",
         "es": "Estimación",
     },
+    "flash_eta_second_one": {
+        "zh-CN": "剩余约 1 秒",
+        "en": "About 1 second remaining",
+        "fr": "Environ 1 seconde restante",
+        "es": "Aproximadamente 1 segundo restante",
+    },
+    "flash_eta_seconds_many": {
+        "zh-CN": "剩余约 {n} 秒",
+        "en": "About {n} seconds remaining",
+        "fr": "Environ {n} secondes restantes",
+        "es": "Aproximadamente {n} segundos restantes",
+    },
+    "flash_eta_minute_one": {
+        "zh-CN": "剩余约 1 分钟",
+        "en": "About 1 minute remaining",
+        "fr": "Environ 1 minute restante",
+        "es": "Aproximadamente 1 minuto restante",
+    },
+    "flash_eta_minutes_many": {
+        "zh-CN": "剩余约 {n} 分钟",
+        "en": "About {n} minutes remaining",
+        "fr": "Environ {n} minutes restantes",
+        "es": "Aproximadamente {n} minutos restantes",
+    },
+    "flash_eta_remaining_fallback": {
+        "zh-CN": "剩余约 {eta}",
+        "en": "About {eta} remaining",
+        "fr": "Environ {eta} restant",
+        "es": "Aproximadamente {eta} restante",
+    },
     "flash_current_pkg": {
         "zh-CN": "当前软件包",
         "en": "Current Package",
@@ -1140,6 +1284,12 @@ _STRINGS: dict = {
         "en": "Failed to launch SP Flash Tool GUI:",
         "fr": "Échec du lancement de l'interface graphique SP Flash Tool :",
         "es": "No se pudo iniciar la interfaz gráfica de SP Flash Tool:",
+    },
+    "sp_gui_no_cached_firmware": {
+        "zh-CN": "未找到上次安装尝试缓存的固件包，或缺少所需的分区镜像。请在打开 SP Flash Tool 之前，先选择或下载一个固件版本。",
+        "en": "No cached firmware package from a previous install attempt was found, or required partition images are missing. Please select or download a software release first before opening SP Flash Tool.",
+        "fr": "Aucun micrologiciel mis en cache lors d'une tentative précédente n'a été trouvé, ou des images de partition requises sont manquantes. Veuillez d'abord sélectionner ou télécharger une version avant d'ouvrir SP Flash Tool.",
+        "es": "No se encontró ningún paquete de firmware en caché de un intento anterior, o faltan imágenes de partición requeridas. Por favor, selecciona o descarga una versión de software primero antes de abrir SP Flash Tool.",
     },
     "flash_banner_wait": {
         "zh-CN": "等待设备接入",
@@ -1395,6 +1545,12 @@ _STRINGS: dict = {
         "fr": "Un processus de flashing est en cours. Voulez-vous l'annuler et recommencer ?",
         "es": "Se está ejecutando un proceso de flashing. ¿Quieres cancelarlo y empezar de nuevo?",
     },
+    "flash_close_confirm": {
+        "zh-CN": "您确定要停止安装并关闭 {app} 吗？",
+        "en": "Are you sure you want to stop the install and close {app}?",
+        "fr": "Êtes-vous sûr de vouloir arrêter l'installation et fermer {app} ?",
+        "es": "¿Seguro que desea detener la instalación y cerrar {app}?",
+    },
 
     # Diagnostics / dialogs
     "log_center": {
@@ -1610,10 +1766,10 @@ _STRINGS: dict = {
         "es": "Apoyar el Instalador MediaTek",
     },
     "donate_goal_fmt": {
-        "zh-CN": "<b>您已帮助我们支付本月 ${raised} 中的 ${target:.0f} 美元费用。感谢所有捐赠。</b>",
-        "en": "<b>You've helped us cover ${raised} of our ${target:.0f} costs for this month. All donations are appreciated.</b>",
-        "fr": "<b>Vous nous avez aidés à couvrir ${raised} de nos ${target:.0f} de frais pour ce mois-ci. Tous les dons sont appréciés.</b>",
-        "es": "<b>Nos has ayudado a cubrir ${raised} de nuestros ${target:.0f} de costes de este mes. Agradecemos todas las donaciones.</b>",
+        "zh-CN": "<b>您已帮助我们支付本月 ${target:.0f} 美元中的 ${raised} 美元费用。</b>",
+        "en": "<b>You've helped us cover ${raised} of our ${target:.0f} costs this month.</b>",
+        "fr": "<b>Vous nous avez aidés à couvrir ${raised} de nos ${target:.0f} de frais ce mois-ci.</b>",
+        "es": "<b>Nos has ayudado a cubrir ${raised} de nuestros ${target:.0f} de costes este mes.</b>",
     },
     "donate_headline": {
         "zh-CN": "它需要 <span style='color:#ff5252;'>你</span>。",
@@ -1730,10 +1886,10 @@ _STRINGS: dict = {
         "es": "<b>{anchor}</b> donó ${amount} mediante {method} — {when}",
     },
     "donate_kofi": {
-        "zh-CN": "Ko-fi",
-        "en": "Ko-fi",
-        "fr": "Ko-fi",
-        "es": "Ko-fi",
+        "zh-CN": "请我们喝咖啡 (Buy Us A Coffee)",
+        "en": "Buy Us A Coffee",
+        "fr": "Offrez-nous un café (Buy Us A Coffee)",
+        "es": "Cómpranos un café (Buy Us A Coffee)",
     },
     "donate_paypal": {
         "zh-CN": "通过 PayPal 捐赠",
@@ -1950,10 +2106,10 @@ _STRINGS: dict = {
         "es": "Agradecimientos a la comunidad y donaciones",
     },
     "settings_hide_donations": {
-        "zh-CN": "隐藏捐赠者姓名、致谢页面和捐赠提示",
-        "en": "Hide donor names, Thank You screens, and donation prompts",
-        "fr": "Masquer les noms des donateurs, les écrans de remerciement et les invites de dons",
-        "es": "Ocultar nombres de donantes, pantallas de agradecimiento y avisos de donación",
+        "zh-CN": "隐藏捐赠者姓名、制作人员致谢、致谢页面和捐赠提示",
+        "en": "Hide donor names, credits, Thank You screens, and donation prompts",
+        "fr": "Masquer les noms des donateurs, les crédits, les écrans de remerciement et les invites de dons",
+        "es": "Ocultar nombres de donantes, créditos, pantallas de agradecimiento y avisos de donación",
     },
     "settings_hide_donations_tip": {
         "zh-CN": "移除状态栏捐赠滚动条及侧边栏捐赠按钮，提供更纯净的界面。",

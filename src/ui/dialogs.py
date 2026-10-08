@@ -82,11 +82,11 @@ class FlashCompleteDialog(QDialog):
             tb_layout.setContentsMargins(14, 10, 14, 10)
             tb_layout.setSpacing(4)
             self._theme_title = QLabel(f"<b>{tr('themepack_card_title')}</b>")
-            self._theme_title.setStyleSheet(f"font-size: 13px; color: {t.accent}; border: none; background: transparent;")
+            self._theme_title.setStyleSheet(f"font-size: 13px; color: {t.fg}; border: none; background: transparent;")
             tb_layout.addWidget(self._theme_title)
             self._theme_desc = QLabel(tr("themepack_card_desc"))
             self._theme_desc.setWordWrap(True)
-            self._theme_desc.setStyleSheet(f"font-size: 11px; color: {t.fg_dim}; border: none; background: transparent;")
+            self._theme_desc.setStyleSheet(f"font-size: 11px; color: {t.fg}; border: none; background: transparent;")
             tb_layout.addWidget(self._theme_desc)
 
             tb_row = QHBoxLayout()
@@ -151,10 +151,9 @@ class FlashFailedDialog(QDialog):
 
         row = QHBoxLayout()
         retry_btn = QPushButton(tr("err_btn_retry"))
-        retry_btn.setProperty("cssClass", "primary")
+        retry_btn.setDefault(True)
         retry_btn.clicked.connect(self._on_retry)
         log_btn = QPushButton(tr("err_view_log"))
-        log_btn.setProperty("cssClass", "ghost")
         log_btn.clicked.connect(self._on_log)
         close_btn = QPushButton(tr("close"))
         close_btn.clicked.connect(self.reject)
@@ -179,6 +178,57 @@ class FlashFailedDialog(QDialog):
         return self._want_log
 
 
+class PreInstallGuidanceDialog(QDialog):
+    """Pre-install modal ensuring device is powered off and disconnected before waiting."""
+
+    def __init__(self, parent=None, model="", is_mtk_generic=False):
+        super().__init__(parent)
+        apply_dialog_theme(self)
+        t = T()
+        self.setWindowTitle(tr("dialog_pre_install_title"))
+        self.setMinimumSize(540, 260)
+        self.resize(560, 275)
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(14)
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        device_name = device_label_for_model(model) if model else tr("device_fallback_word")
+        header_text = tr("dialog_pre_install_header").format(model=device_name)
+        title = QLabel(f"<h3 style='color:{t.warn_fg}; margin:0; padding:0;'>{header_text}</h3>")
+        title.setTextFormat(Qt.RichText)
+        title.setWordWrap(True)
+        layout.addWidget(title)
+
+        tip_text = (
+            tr("dialog_pre_install_generic_tip")
+            if is_mtk_generic
+            else tr("dialog_pre_install_innioasis_tip")
+        )
+        body = QLabel(tip_text)
+        body.setWordWrap(True)
+        body.setTextFormat(Qt.PlainText)
+        body.setStyleSheet(f"font-size: 13px; line-height: 1.4; color: {t.fg};")
+        layout.addWidget(body)
+
+        layout.addStretch()
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(10)
+        btn_row.addStretch()
+
+        cancel_btn = QPushButton(tr("cancel"))
+        cancel_btn.clicked.connect(self.reject)
+        btn_row.addWidget(cancel_btn)
+
+        continue_btn = QPushButton(tr("dialog_pre_install_continue"))
+        continue_btn.setDefault(True)
+        continue_btn.clicked.connect(self.accept)
+        btn_row.addWidget(continue_btn)
+
+        layout.addLayout(btn_row)
+
+
 class RetryGuidanceDialog(QDialog):
     """Hardware reset instructions shown when the target stops answering.
 
@@ -194,7 +244,8 @@ class RetryGuidanceDialog(QDialog):
         apply_dialog_theme(self)
         t = T()
         self.setWindowTitle(tr("retry_guidance_title"))
-        self.setMinimumWidth(470)
+        self.setMinimumSize(610, 275)
+        self.resize(610, 275)
         self._want_retry = False
 
         layout = QVBoxLayout(self)
@@ -227,11 +278,9 @@ class RetryGuidanceDialog(QDialog):
 
         row = QHBoxLayout()
         retry_btn = QPushButton(tr("retry_guidance_btn_retry"))
-        retry_btn.setProperty("cssClass", "primary")
         retry_btn.setDefault(True)
         retry_btn.clicked.connect(self._on_retry)
         close_btn = QPushButton(tr("close"))
-        close_btn.setProperty("cssClass", "ghost")
         close_btn.clicked.connect(self.reject)
         row.addWidget(retry_btn)
         row.addWidget(close_btn)
@@ -305,7 +354,7 @@ class DiagnosticsDialog(QDialog):
 
         self._file_badge = QLabel()
         self._file_badge.setStyleSheet(
-            f"font-size: 11px; color: {t.fg_dim}; background: {t.bg_card}; padding: 3px 8px;"
+            f"font-size: 11px; color: {t.fg}; background: {t.bg_card}; padding: 3px 8px;"
             f" border-radius: 4px; border: 1px solid {t.border};"
         )
         header_row.addWidget(self._file_badge)
@@ -363,12 +412,9 @@ class DiagnosticsDialog(QDialog):
         self._view = QTextEdit()
         self._view.setObjectName("logView")
         self._view.setReadOnly(True)
-        font_family = "SF Mono, Menlo, Consolas, 'Courier New', monospace"
-        self._view.setStyleSheet(
-            f"QTextEdit#logView {{ font-family: {font_family}; font-size: 12px; line-height: 1.4;"
-            f" background-color: {t.bg_input}; color: {t.fg}; border: 1px solid {t.border};"
-            f" border-radius: 6px; padding: 6px; }}"
-        )
+        # The console look comes from the app-wide logView rule. Styling the view
+        # itself would make Qt drop the host's overlay scrollbars for classic
+        # ones (see src/ui/scrollbars.py).
         layout.addWidget(self._view, 1)
 
         # ── Action Buttons Bar: Go To File, Save File, Copy, Close ──
@@ -397,7 +443,7 @@ class DiagnosticsDialog(QDialog):
         # How much of the log the filter is showing — silent filtering is how a
         # user concludes the tool "lost" an install.
         self._count_label = QLabel("")
-        self._count_label.setStyleSheet(f"font-size: 11px; color: {t.fg_dim};")
+        self._count_label.setStyleSheet(f"font-size: 11px; color: {t.fg};")
         action_row.addWidget(self._count_label)
         action_row.addStretch()
 
@@ -714,7 +760,7 @@ class UpdateAvailableDialog(QDialog):
         guide = QLabel(tr(guide_key).format(hint=hint))
         guide.setWordWrap(True)
         guide.setStyleSheet(
-            f"font-size: 12px; color: {t.fg_dim};"
+            f"font-size: 12px; color: {t.fg};"
             f" background-color: {t.info_bg};"
             f" border-radius: 8px; padding: 10px 14px;"
         )
@@ -723,14 +769,11 @@ class UpdateAvailableDialog(QDialog):
         self._asset = asset
         btn_row = QHBoxLayout()
         self._download_btn = QPushButton(tr("update_btn_download"))
-        self._download_btn.setProperty("cssClass", "primary")
         self._download_btn.setDefault(True)
         self._download_btn.clicked.connect(self._on_download)
         self._later_btn = QPushButton(tr("update_btn_later"))
-        self._later_btn.setProperty("cssClass", "ghost")
         self._later_btn.clicked.connect(self.reject)
         self._skip_btn = QPushButton(tr("update_btn_skip"))
-        self._skip_btn.setProperty("cssClass", "ghost")
         self._skip_btn.clicked.connect(self._on_skip_version)
         btn_row.addWidget(self._download_btn)
         btn_row.addWidget(self._later_btn)
@@ -780,7 +823,7 @@ class LinuxSetupDialog(QDialog):
         header_row.setSpacing(14)
         icon_badge = QLabel("⚡")
         icon_badge.setStyleSheet(
-            f"font-size: 26px; background-color: {t.accent_bg}; color: {t.accent_text}; "
+            f"font-size: 26px; background-color: {t.accent_bg}; color: {t.fg}; "
             f"border-radius: 16px; padding: 6px 12px;"
         )
         header_row.addWidget(icon_badge)
@@ -791,7 +834,7 @@ class LinuxSetupDialog(QDialog):
         self._title_lbl.setStyleSheet(f"font-size: 18px; font-weight: 800; color: {t.fg};")
         self._desc_lbl = QLabel(tr("linux_setup_welcome_desc"))
         self._desc_lbl.setWordWrap(True)
-        self._desc_lbl.setStyleSheet(f"font-size: 12px; color: {t.fg_dim};")
+        self._desc_lbl.setStyleSheet(f"font-size: 12px; color: {t.fg};")
         header_text_layout.addWidget(self._title_lbl)
         header_text_layout.addWidget(self._desc_lbl)
         header_row.addLayout(header_text_layout)
@@ -804,7 +847,7 @@ class LinuxSetupDialog(QDialog):
         prog_layout.setSpacing(6)
 
         self._progress_msg = QLabel(tr("linux_card_downloading_badge"))
-        self._progress_msg.setStyleSheet(f"font-size: 12px; color: {t.fg_dim}; font-weight: 500;")
+        self._progress_msg.setStyleSheet(f"font-size: 12px; color: {t.fg}; font-weight: 500;")
         prog_layout.addWidget(self._progress_msg)
 
         self._progress_bar = QProgressBar()
@@ -837,7 +880,7 @@ class LinuxSetupDialog(QDialog):
         ec_title = QLabel(tr("linux_card_engine_title"))
         ec_title.setStyleSheet(f"font-size: 14px; font-weight: 700; color: {t.fg}; border: none; background: transparent;")
         self._ec_desc = QLabel(tr("linux_card_engine_desc"))
-        self._ec_desc.setStyleSheet(f"font-size: 12px; color: {t.fg_dim}; border: none; background: transparent;")
+        self._ec_desc.setStyleSheet(f"font-size: 12px; color: {t.fg}; border: none; background: transparent;")
         ec_text.addWidget(ec_title)
         ec_text.addWidget(self._ec_desc)
         ec_layout.addLayout(ec_text)
@@ -846,7 +889,7 @@ class LinuxSetupDialog(QDialog):
         self._engine_badge = QLabel(tr("linux_card_downloading_badge"))
         self._engine_badge.setStyleSheet(
             f"font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 10px; "
-            f"background-color: {t.accent_bg}; color: {t.accent_text}; border: none;"
+            f"background-color: {t.accent_bg}; color: {t.fg}; border: none;"
         )
         ec_layout.addWidget(self._engine_badge)
         cards_layout.addWidget(self._engine_card)
@@ -868,14 +911,13 @@ class LinuxSetupDialog(QDialog):
         uc_title = QLabel(tr("linux_card_usb_title"))
         uc_title.setStyleSheet(f"font-size: 14px; font-weight: 700; color: {t.fg}; border: none; background: transparent;")
         self._uc_desc = QLabel(tr("linux_card_usb_desc"))
-        self._uc_desc.setStyleSheet(f"font-size: 12px; color: {t.fg_dim}; border: none; background: transparent;")
+        self._uc_desc.setStyleSheet(f"font-size: 12px; color: {t.fg}; border: none; background: transparent;")
         uc_text.addWidget(uc_title)
         uc_text.addWidget(self._uc_desc)
         uc_layout.addLayout(uc_text)
         uc_layout.addStretch()
 
         self._grant_btn = QPushButton(tr("linux_card_grant_btn"))
-        self._grant_btn.setProperty("cssClass", "primary")
         self._grant_btn.clicked.connect(self._on_auto_configure)
         uc_layout.addWidget(self._grant_btn)
 
@@ -904,7 +946,7 @@ class LinuxSetupDialog(QDialog):
         sc_title = QLabel(tr("linux_card_system_title"))
         sc_title.setStyleSheet(f"font-size: 14px; font-weight: 700; color: {t.fg}; border: none; background: transparent;")
         self._sys_desc = QLabel("Linux x86_64")
-        self._sys_desc.setStyleSheet(f"font-size: 12px; color: {t.fg_dim}; border: none; background: transparent;")
+        self._sys_desc.setStyleSheet(f"font-size: 12px; color: {t.fg}; border: none; background: transparent;")
         sc_text.addWidget(sc_title)
         sc_text.addWidget(self._sys_desc)
         sc_layout.addLayout(sc_text)
@@ -924,7 +966,7 @@ class LinuxSetupDialog(QDialog):
         diag_toggle_row = QHBoxLayout()
         self._diag_toggle_btn = QPushButton(f"▸ {tr('linux_setup_view_log')}")
         self._diag_toggle_btn.setStyleSheet(
-            f"color: {t.fg_dim}; border: none; background: transparent; font-size: 11px; text-align: left;"
+            f"color: {t.fg}; border: none; background: transparent; font-size: 11px; text-align: left;"
         )
         self._diag_toggle_btn.clicked.connect(self._toggle_diagnostics)
         diag_toggle_row.addWidget(self._diag_toggle_btn)
@@ -932,13 +974,12 @@ class LinuxSetupDialog(QDialog):
         main_layout.addLayout(diag_toggle_row)
 
         self._status_view = QTextEdit()
+        self._status_view.setObjectName("statusView")
         self._status_view.setReadOnly(True)
         self._status_view.setVisible(False)
         self._status_view.setFixedHeight(120)
-        self._status_view.setStyleSheet(
-            f"background-color: {t.bg}; color: {t.fg}; border: 1px solid {t.border}; "
-            f"border-radius: 8px; font-family: monospace; font-size: 11px; padding: 8px;"
-        )
+        # Framed by the app-wide statusView rule so the view itself keeps the
+        # host's scroll behaviour (see src/ui/scrollbars.py).
         main_layout.addWidget(self._status_view)
 
         # Footer Actions
@@ -946,19 +987,15 @@ class LinuxSetupDialog(QDialog):
         btn_row.setSpacing(10)
 
         self._recheck_btn = QPushButton(tr("linux_setup_recheck"))
-        self._recheck_btn.setProperty("cssClass", "ghost")
         self._recheck_btn.clicked.connect(lambda: self._start_staging(force_download=False))
 
         self._copy_btn = QPushButton(tr("linux_setup_copy_cmd"))
-        self._copy_btn.setProperty("cssClass", "ghost")
         self._copy_btn.clicked.connect(self._on_copy_command)
 
         self._sp_gui_btn = QPushButton(tr("system_checker_launch_gui_btn"))
-        self._sp_gui_btn.setProperty("cssClass", "ghost")
         self._sp_gui_btn.clicked.connect(self._on_launch_sp_gui)
 
         self._continue_btn = QPushButton(tr("linux_setup_done_btn"))
-        self._continue_btn.setProperty("cssClass", "primary")
         self._continue_btn.setDefault(True)
         self._continue_btn.clicked.connect(self.accept)
 
@@ -995,7 +1032,7 @@ class LinuxSetupDialog(QDialog):
         self._engine_badge.setText(tr("linux_card_downloading_badge"))
         self._engine_badge.setStyleSheet(
             f"font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 10px; "
-            f"background-color: {t.accent_bg}; color: {t.accent_text}; border: none;"
+            f"background-color: {t.accent_bg}; color: {t.fg}; border: none;"
         )
 
         self._worker = self._linux.LinuxStagingWorker(self, force_download=force_download)
@@ -1045,7 +1082,7 @@ class LinuxSetupDialog(QDialog):
             self._ec_desc.setText(tr("linux_engine_staged_desc"))
         elif self._worker and self._worker.isRunning():
             self._engine_badge.setText(tr("linux_card_downloading_badge"))
-            self._engine_badge.setStyleSheet(f"font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 10px; background-color: {t.accent_bg}; color: {t.accent_text}; border: none;")
+            self._engine_badge.setStyleSheet(f"font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 10px; background-color: {t.accent_bg}; color: {t.fg}; border: none;")
         else:
             self._engine_badge.setText(tr("linux_card_action_badge"))
             self._engine_badge.setStyleSheet(f"font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 10px; background-color: {t.warn_bg}; color: {t.warn_fg}; border: none;")
@@ -1066,7 +1103,6 @@ class LinuxSetupDialog(QDialog):
         # Bottom Continue button
         if report.get("overall_ready"):
             self._continue_btn.setEnabled(True)
-            self._continue_btn.setProperty("cssClass", "primary")
         else:
             self._continue_btn.setEnabled(True)
 
@@ -1153,7 +1189,7 @@ def format_markdown_release_notes(body: str, name: str = "") -> str:
     # 2. Re-style links with accent color & underline
     html = re.sub(
         r'<a\s+href="([^"]+)">',
-        f'<a href="\\1" style="color: {t.accent}; font-weight: bold; text-decoration: underline;">',
+        f'<a href="\\1" style="color: {t.fg}; font-weight: 700; text-decoration: none;">',
         html,
     )
 
@@ -1253,7 +1289,7 @@ class ReleaseReminderDialog(QDialog):
 
         badge = QLabel(device_label)
         badge.setStyleSheet(
-            f"background-color: {t.accent}; color: {t.accent_text};"
+            f"background-color: {t.accent}; color: {t.fg};"
             f" border-radius: 10px; font-size: 11px; font-weight: 700; padding: 3px 10px;"
         )
         hdr_row.addWidget(badge)
@@ -1267,7 +1303,7 @@ class ReleaseReminderDialog(QDialog):
         )
         msg.setTextFormat(Qt.RichText)
         msg.setWordWrap(True)
-        msg.setStyleSheet(f"font-size: 13px; color: {t.fg_dim}; line-height: 1.4;")
+        msg.setStyleSheet(f"font-size: 13px; color: {t.fg}; line-height: 1.4;")
         layout.addWidget(msg)
 
         # Comparison Card
@@ -1282,7 +1318,7 @@ class ReleaseReminderDialog(QDialog):
 
         inst_row = QHBoxLayout()
         inst_title = QLabel(tr("reminder_installed_version"))
-        inst_title.setStyleSheet(f"color: {t.fg_dim}; font-size: 12px;")
+        inst_title.setStyleSheet(f"color: {t.fg}; font-size: 12px;")
         inst_val = QLabel(installed_lbl)
         inst_val.setStyleSheet(f"color: {t.fg}; font-size: 12px; font-weight: 600;")
         inst_row.addWidget(inst_title)
@@ -1311,13 +1347,14 @@ class ReleaseReminderDialog(QDialog):
             layout.addWidget(notes_hdr)
 
             self._notes_view = QTextBrowser()
-            self._notes_view.setObjectName("releaseNotes")
+            self._notes_view.setObjectName("updateNotes")
             self._notes_view.setOpenExternalLinks(True)
             self._notes_view.setMinimumHeight(130)
-            self._notes_view.setStyleSheet(
-                f"background-color: {t.bg_input}; border: 1px solid {t.border};"
-                f" border-radius: 6px; padding: 6px; color: {t.fg};"
+            self._notes_view.document().setDefaultStyleSheet(
+                f"a {{ color: {t.fg}; font-weight: 700; text-decoration: none; }}"
             )
+            # Framed by the app-wide updateNotes rule (no local stylesheet: see
+            # src/ui/scrollbars.py).
             html = format_markdown_release_notes(notes_body, latest_rel.get("name", ""))
             self._notes_view.setHtml(html)
             layout.addWidget(self._notes_view, 1)
@@ -1356,12 +1393,10 @@ class ReleaseReminderDialog(QDialog):
         btn_layout.addStretch()
 
         btn_dismiss = QPushButton(tr("reminder_dismiss"))
-        btn_dismiss.setProperty("cssClass", "ghost")
         btn_dismiss.clicked.connect(self._on_dismiss)
         btn_layout.addWidget(btn_dismiss)
 
         self._btn_install = QPushButton(tr("reminder_start_install"))
-        self._btn_install.setProperty("cssClass", "primary")
         self._btn_install.setDefault(True)
         self._btn_install.clicked.connect(self._on_start_install)
         btn_layout.addWidget(self._btn_install)

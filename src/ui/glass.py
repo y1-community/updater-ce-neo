@@ -169,6 +169,7 @@ def _ensure_seamless_titlebar(window: QMainWindow | QWidget) -> None:
                             s.setHidden_(True)
                             if hasattr(s, "setAlphaValue_"):
                                 s.setAlphaValue_(0.0)
+        _disable_macos_zoom_button(window)
     except Exception:
         pass
 
@@ -286,6 +287,7 @@ def configure_traffic_lights(
     if not is_glass_supported():
         return False
 
+    success = False
     if _has_pyqt_liquidglass and hasattr(_liquidglass_module, "setup_traffic_lights_inset"):
         try:
             _liquidglass_module.setup_traffic_lights_inset(
@@ -293,15 +295,95 @@ def configure_traffic_lights(
                 x_offset=x_offset,
                 y_offset=y_offset,
             )
-            return True
+            success = True
         except Exception as e:
             logger.debug("pyqt_liquidglass.setup_traffic_lights_inset failed: %s", e)
 
+    if not success:
+        try:
+            success = _pyobjc_configure_traffic_lights(window, x_offset, y_offset)
+        except Exception as e:
+            logger.debug("Traffic lights inset fallback skipped: %s", e)
+            success = False
+
+    _disable_macos_zoom_button(window)
+    return success
+
+
+def disable_window_maximize(window: QMainWindow | QWidget) -> bool:
+    """Disable window maximization across macOS and Windows/Linux."""
     try:
-        return _pyobjc_configure_traffic_lights(window, x_offset, y_offset)
+        from PySide6.QtCore import Qt
+        flags = window.windowFlags()
+        flags = (flags | Qt.CustomizeWindowHint | Qt.WindowCloseButtonHint | Qt.WindowMinimizeButtonHint) & ~Qt.WindowMaximizeButtonHint
+        window.setWindowFlags(flags)
+    except Exception:
+        pass
+
+    if IS_MACOS:
+        _disable_macos_zoom_button(window)
+    return True
+
+
+def _disable_macos_zoom_button(window: QMainWindow | QWidget) -> None:
+    """Disable and hide zoom/maximize button on macOS, and prevent fullscreen."""
+    if not IS_MACOS:
+        return
+    try:
+        view = _get_nsview(window)
+        if not view:
+            return
+        ns_win = view.window()
+        if not ns_win:
+            return
+        zoom_btn = ns_win.standardWindowButton_(2)
+        if zoom_btn:
+            zoom_btn.setEnabled_(False)
+            zoom_btn.setHidden_(True)
+        if hasattr(ns_win, "setCollectionBehavior_"):
+            behavior = ns_win.collectionBehavior()
+            # Disable NSWindowCollectionBehaviorFullScreenPrimary (1 << 7)
+            # Add NSWindowCollectionBehaviorFullScreenNone (1 << 9)
+            ns_win.setCollectionBehavior_((behavior & ~(1 << 7)) | (1 << 9))
     except Exception as e:
-        logger.debug("Traffic lights inset fallback skipped: %s", e)
-        return False
+        logger.debug("Disabling macOS zoom button skipped: %s", e)
+
+
+def set_window_close_button_enabled(window: QMainWindow | QWidget, enabled: bool) -> bool:
+    """Enable or disable the native window close button (e.g. during flashing)."""
+    if IS_MACOS:
+        try:
+            view = _get_nsview(window)
+            if not view:
+                return False
+            ns_win = view.window()
+            if not ns_win:
+                return False
+            close_btn = ns_win.standardWindowButton_(0)
+            if close_btn:
+                close_btn.setEnabled_(enabled)
+            return True
+        except Exception as e:
+            logger.debug("Could not toggle macOS close button: %s", e)
+            return False
+    elif sys.platform == "win32" or platform.system() == "Windows":
+        try:
+            import ctypes
+            hwnd = int(window.winId())
+            SC_CLOSE = 0xF060
+            MF_BYCOMMAND = 0x00000000
+            MF_GRAYED = 0x00000001
+            MF_DISABLED = 0x00000002
+            MF_ENABLED = 0x00000000
+            hmenu = ctypes.windll.user32.GetSystemMenu(hwnd, False)
+            if hmenu:
+                flags = (MF_GRAYED | MF_DISABLED) if not enabled else MF_ENABLED
+                ctypes.windll.user32.EnableMenuItem(hmenu, SC_CLOSE, MF_BYCOMMAND | flags)
+            return True
+        except Exception as e:
+            logger.debug("Could not toggle Windows close button: %s", e)
+            return False
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -432,11 +514,16 @@ def _pyobjc_configure_traffic_lights(
         for i, button_type in enumerate((0, 1, 2)):
             btn = ns_window.standardWindowButton_(button_type)
             if btn:
+                if button_type == 2:
+                    btn.setEnabled_(False)
+                    btn.setHidden_(True)
+                    continue
                 frame = btn.frame()
                 origin_x = x_offset + (i * spacing)
                 # In AppKit, (0,0) is bottom-left, so calculate from top
                 origin_y = ns_window.frame().size.height - y_offset - frame.size.height
                 btn.setFrameOrigin_((origin_x, origin_y))
+        _disable_macos_zoom_button(window)
         return True
     except Exception as e:
         logger.debug("Could not reposition traffic lights via PyObjC: %s", e)

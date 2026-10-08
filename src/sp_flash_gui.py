@@ -169,6 +169,155 @@ def format_sp_history_ini(
     return base
 
 
+def validate_scatter_images(
+    scatter_file: Union[Path, str],
+    extract_dir: Optional[Union[Path, str]] = None,
+) -> Tuple[bool, List[str], List[str]]:
+    """Validate that images referenced in a scatter file actually exist.
+
+    Returns:
+        (is_valid: bool, found_images: List[str], missing_images: List[str])
+    """
+    sc_path = Path(scatter_file).resolve()
+    if not sc_path.is_file():
+        return False, [], [str(sc_path)]
+
+    base_dir = sc_path.parent
+    ext_dir = Path(extract_dir).resolve() if extract_dir else base_dir
+
+    try:
+        content = sc_path.read_text(encoding="utf-8", errors="replace")
+    except Exception as e:
+        logger.warning("Could not read scatter file %s: %s", sc_path, e)
+        return False, [], [str(sc_path)]
+
+    found_images: List[str] = []
+    missing_images: List[str] = []
+
+    # Look for file_name: <filename> in MediaTek scatter files
+    pattern = re.compile(r"(?i)^\s*file_name:\s*(\S+)", re.MULTILINE)
+    matches = pattern.findall(content)
+
+    for item in matches:
+        item = item.strip()
+        if not item or item.upper() == "NONE":
+            continue
+        p1 = base_dir / item
+        p2 = ext_dir / item
+        if p1.is_file() or p2.is_file():
+            found_images.append(item)
+        else:
+            missing_images.append(item)
+
+    if missing_images:
+        return False, found_images, missing_images
+
+    # If no partition image references were found in scatter, check if any .img or .bin files exist
+    if not found_images:
+        images_in_dir = [
+            f.name
+            for f in base_dir.iterdir()
+            if f.is_file() and f.suffix.lower() in (".img", ".bin") and f.name != "MTK_AllInOne_DA.bin"
+        ]
+        if not images_in_dir and ext_dir != base_dir and ext_dir.is_dir():
+            images_in_dir = [
+                f.name
+                for f in ext_dir.iterdir()
+                if f.is_file() and f.suffix.lower() in (".img", ".bin") and f.name != "MTK_AllInOne_DA.bin"
+            ]
+        if not images_in_dir:
+            return False, [], ["(no partition images found)"]
+        return True, images_in_dir, []
+
+    return True, found_images, []
+
+
+def resolve_cached_firmware(
+    scatter_path: Optional[Union[Path, str]] = None,
+    extract_dir: Optional[Union[Path, str]] = None,
+    model: str = "",
+) -> Tuple[Optional[Path], Optional[Path], str]:
+    """Locate the scatter file and extract directory for a cached/downloaded firmware package."""
+    from . import device_tracking
+
+    resolved_scatter: Optional[Path] = None
+    resolved_extract: Optional[Path] = None
+
+    if scatter_path:
+        sc_p = Path(scatter_path)
+        if sc_p.is_file():
+            resolved_scatter = sc_p.resolve()
+        elif extract_dir and (Path(extract_dir) / sc_p).is_file():
+            resolved_scatter = (Path(extract_dir) / sc_p).resolve()
+
+    if extract_dir and Path(extract_dir).is_dir():
+        resolved_extract = Path(extract_dir).resolve()
+
+    if resolved_scatter is None:
+        latest = device_tracking.get_latest_package()
+        if latest:
+            if latest.get("scatter_path") and Path(latest["scatter_path"]).is_file():
+                resolved_scatter = Path(latest["scatter_path"]).resolve()
+            if not resolved_extract and latest.get("extract_dir") and Path(latest["extract_dir"]).is_dir():
+                resolved_extract = Path(latest["extract_dir"]).resolve()
+            if not model and latest.get("model"):
+                model = latest["model"]
+
+    if resolved_scatter is None and resolved_extract and resolved_extract.is_dir():
+        from .flash_service import _find_scatter
+        found_sc = _find_scatter(resolved_extract)
+        if found_sc and Path(found_sc).is_file():
+            resolved_scatter = Path(found_sc).resolve()
+
+    if resolved_scatter is None:
+        try:
+            from .downloads import downloads_dir
+            from .flash_service import _find_scatter
+            dd = downloads_dir()
+            if dd.is_dir():
+                for item in sorted(dd.iterdir(), key=lambda p: p.stat().st_mtime if p.exists() else 0, reverse=True):
+                    if item.is_dir() and item.name.startswith(".") and item.name.endswith("_extracted"):
+                        found_sc = _find_scatter(item)
+                        if found_sc and Path(found_sc).is_file():
+                            resolved_scatter = Path(found_sc).resolve()
+                            if not resolved_extract:
+                                resolved_extract = item.resolve()
+                            break
+        except Exception:
+            pass
+
+    if resolved_scatter and not resolved_extract:
+        resolved_extract = resolved_scatter.parent
+
+    return resolved_scatter, resolved_extract, model
+
+
+def check_cached_firmware_readiness(
+    scatter_path: Optional[Union[Path, str]] = None,
+    extract_dir: Optional[Union[Path, str]] = None,
+    model: str = "",
+) -> Tuple[bool, Optional[Path], Optional[Path], str]:
+    """Check whether a cached firmware package exists with a valid scatter file and all images.
+
+    Returns:
+        (ready: bool, scatter_file: Optional[Path], extract_dir: Optional[Path], reason: str)
+    """
+    sc_file, ext_dir, model = resolve_cached_firmware(
+        scatter_path=scatter_path,
+        extract_dir=extract_dir,
+        model=model,
+    )
+    if not sc_file or not sc_file.is_file():
+        return False, None, None, "No cached firmware package found from a previous firmware install attempt."
+
+    is_valid, found_imgs, missing_imgs = validate_scatter_images(sc_file, ext_dir)
+    if not is_valid:
+        missing_str = ", ".join(missing_imgs[:5])
+        return False, sc_file, ext_dir, f"Images referenced in scatter file were not found: {missing_str}"
+
+    return True, sc_file, ext_dir, "Firmware package is ready."
+
+
 def update_sp_history_ini(
     sp_dir: Optional[Union[Path, str]] = None,
     scatter_path: Optional[Union[Path, str]] = None,
@@ -208,58 +357,22 @@ def update_sp_history_ini(
         if not sp_dir.is_dir():
             return False
 
-        # 1. Resolve DA file path to absolute path
+        # 1. Resolve DA file path to absolute path conforming to OS conventions
         da_file = sp_dir / "MTK_AllInOne_DA.bin"
-        da_abs = str(da_file.resolve())
+        da_abs = os.path.abspath(str(da_file))
 
-        # 2. Resolve scatter_path if explicitly provided
-        scatter_file: Optional[Path] = None
-        if scatter_path:
-            sc_p = Path(scatter_path)
-            if sc_p.is_file():
-                scatter_file = sc_p.resolve()
-            elif not sc_p.is_absolute() and extract_dir and (Path(extract_dir) / sc_p).is_file():
-                scatter_file = (Path(extract_dir) / sc_p).resolve()
-            elif not sc_p.is_absolute() and (sp_dir / sc_p).is_file():
-                scatter_file = (sp_dir / sc_p).resolve()
+        # 2. Resolve cached firmware scatter & extract
+        scatter_file, resolved_ext, resolved_model = resolve_cached_firmware(
+            scatter_path=scatter_path,
+            extract_dir=extract_dir,
+            model=model,
+        )
+        if resolved_model and not model:
+            model = resolved_model
+        if resolved_ext and not extract_dir:
+            extract_dir = resolved_ext
 
-        # 3. If scatter_file not resolved, check latest package from device_tracking
-        if scatter_file is None:
-            latest = device_tracking.get_latest_package()
-            if latest:
-                if latest.get("scatter_path") and Path(latest["scatter_path"]).is_file():
-                    scatter_file = Path(latest["scatter_path"]).resolve()
-                if not extract_dir and latest.get("extract_dir") and Path(latest["extract_dir"]).is_dir():
-                    extract_dir = Path(latest["extract_dir"]).resolve()
-                if not model and latest.get("model"):
-                    model = latest["model"]
-
-        # 4. If scatter_file still not resolved, check extract_dir if provided
-        if scatter_file is None and extract_dir and Path(extract_dir).is_dir():
-            from .flash_service import _find_scatter
-            found_sc = _find_scatter(Path(extract_dir))
-            if found_sc and Path(found_sc).is_file():
-                scatter_file = Path(found_sc).resolve()
-
-        # 5. If scatter_file still not resolved, scan downloads_dir() for cached extractions
-        if scatter_file is None:
-            try:
-                from .downloads import downloads_dir
-                from .flash_service import _find_scatter
-                dd = downloads_dir()
-                if dd.is_dir():
-                    for item in sorted(dd.iterdir(), key=lambda p: p.stat().st_mtime if p.exists() else 0, reverse=True):
-                        if item.is_dir() and item.name.startswith(".") and item.name.endswith("_extracted"):
-                            found_sc = _find_scatter(item)
-                            if found_sc and Path(found_sc).is_file():
-                                scatter_file = Path(found_sc).resolve()
-                                if not extract_dir:
-                                    extract_dir = item.resolve()
-                                break
-            except Exception:
-                pass
-
-        # 6. Fallback to model-specific scatter file: MT6582 for Y2, MT6572 for Y1
+        # 3. Fallback to model-specific scatter file: MT6582 for Y2, MT6572 for Y1
         if scatter_file is None:
             default_scatter_name = (
                 "MT6582_Android_scatter.txt"
@@ -280,7 +393,7 @@ def update_sp_history_ini(
                 else:
                     scatter_file = cand_sp.resolve()
 
-        scatter_abs = str(scatter_file.resolve())
+        scatter_abs = os.path.abspath(str(scatter_file))
 
         # Copy scatter file to sp_dir so local relative lookups by SP Flash Tool also succeed
         if scatter_file.is_file() and sp_dir.resolve() != scatter_file.parent.resolve():
@@ -331,18 +444,16 @@ def launch_sp_flash_tool_gui(
             )
         return False, "SP Flash Tool is not available on macOS. macOS uses MTKClient only."
 
-    from . import device_tracking
+    ready, sc_file, ext_dir, reason = check_cached_firmware_readiness(
+        scatter_path=scatter_path,
+        extract_dir=extract_dir,
+        model=model,
+    )
+    if not ready:
+        return False, reason
 
-    # Resolve latest package if not passed explicitly
-    if not scatter_path or not Path(scatter_path).is_file():
-        latest = device_tracking.get_latest_package()
-        if latest:
-            if latest.get("scatter_path") and Path(latest["scatter_path"]).is_file():
-                scatter_path = Path(latest["scatter_path"])
-            if not extract_dir and latest.get("extract_dir") and Path(latest["extract_dir"]).is_dir():
-                extract_dir = Path(latest["extract_dir"])
-            if not model and latest.get("model"):
-                model = latest["model"]
+    scatter_path = sc_file
+    extract_dir = ext_dir
 
     if platform.system() == "Linux":
         from . import linux_sp_flash
@@ -449,3 +560,16 @@ def launch_sp_flash_tool_gui(
             return False, str(e)
 
     return False, f"SP Flash Tool is not supported on {platform.system()}."
+
+
+def open_sp_flash_tool_gui(
+    model: str = "",
+    scatter_path: Optional[Path] = None,
+    extract_dir: Optional[Path] = None,
+) -> Tuple[bool, str]:
+    """Open SP Flash Tool GUI with the current or cached firmware."""
+    return launch_sp_flash_tool_gui(
+        model=model,
+        scatter_path=scatter_path,
+        extract_dir=extract_dir,
+    )

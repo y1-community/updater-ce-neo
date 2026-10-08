@@ -11,6 +11,7 @@ from PySide6.QtGui import QTextDocument
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QDialog,
     QFileDialog,
     QFrame,
     QGridLayout,
@@ -22,7 +23,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
-    QTabWidget,
+    QStackedWidget,
     QTextBrowser,
     QVBoxLayout,
     QWidget,
@@ -44,6 +45,7 @@ from ..config import (
     device_label_for_model,
     install_disconnect_guidance,
     is_generic_mtk,
+    is_offline_mode,
 )
 from ..i18n import tr, translator
 from ..browser import open_browser
@@ -52,7 +54,8 @@ from ..translate import (
     ReleaseTranslateWorker,
 )
 from .widgets import Banner, Card
-from .dark import T, page_top_margin
+from .dark import T, link_html, page_margins
+from .scrollbars import configure_scroll_area, make_transparent
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +117,35 @@ class ReleasesWorker(QThread):
                 self.finished.emit([], str(e))
 
 
+class _TabsAdapter:
+    """Compatibility adapter presenting QStackedWidget as a QTabWidget interface for tests."""
+
+    def __init__(self, page):
+        self._page = page
+
+    def count(self) -> int:
+        if is_generic_mtk() or is_offline_mode() or not getattr(self._page, "_online_available", False):
+            return 1
+        return 2
+
+    def currentWidget(self):
+        return self._page._views.currentWidget()
+
+    def widget(self, idx: int):
+        if idx == 0 and not (is_generic_mtk() or is_offline_mode()):
+            return self._page._online_tab
+        return self._page._local_tab
+
+    def tabBar(self):
+        adapter = self
+
+        class _TabBar:
+            def isVisible(self):
+                return not (is_generic_mtk() or is_offline_mode() or not getattr(adapter._page, "_online_available", False))
+
+        return _TabBar()
+
+
 class SelectPackagePage(QWidget):
     package_selected = Signal(str, str, str)
     # (message, timeout_ms) -> shown in the main window's status bar.
@@ -141,7 +173,15 @@ class SelectPackagePage(QWidget):
         self._is_translating = False
         self._translated_notes_cache = {}
         self._translate_worker = None
+        # Whether the online catalogue is on offer. It starts hidden and is only
+        # offered once the catalogue's own firmware listings load: on a network
+        # that cannot reach GitHub (some regions, corporate filters) a generic
+        # connectivity probe would happily promise an online catalogue that can
+        # never list a build, and the local-file screen is the honest offer.
+        self._online_available = False
         self._build_ui()
+        self._tabs = _TabsAdapter(self)
+        self._update_view_links()
         self._on_model_changed()
 
         self._monitor = get_connectivity_monitor()
@@ -150,6 +190,14 @@ class SelectPackagePage(QWidget):
             self._monitor.start_monitoring()
             if self._monitor.is_online is False:
                 self.set_online_mode(False)
+            elif self._monitor.is_online is True:
+                self.set_online_mode(True)
+            # While the first check is in flight nothing is offered yet; the
+            # monitor's answer decides (see _on_connectivity_changed).
+        elif not is_generic_mtk():
+            # Nothing checks listings here (headless runs, and builds that carry
+            # no catalogue at all): the catalogue's own state decides instead.
+            self.set_online_mode(True)
 
         if is_generic_mtk():
             self.apply_generic_mode(True)
@@ -175,14 +223,14 @@ class SelectPackagePage(QWidget):
             self._monitor.stop_monitoring()
 
         if generic:
-            self._tabs.tabBar().setVisible(False)
-            self._tabs.setCurrentWidget(self._local_tab)
+            self._views.setCurrentWidget(self._local_tab)
             self._hint.setText(tr("sel_only_local_generic"))
             self._offline_banner.setText(tr("sel_offline_install_generic"))
         else:
-            self._tabs.tabBar().setVisible(True)
+            self._show_online_view()
             self._hint.setText(tr("sel_only_local"))
             self._offline_banner.setText(tr("sel_offline_install"))
+        self._update_view_links()
 
     def _on_connectivity_changed(self, is_online: bool):
         if is_generic_mtk():
@@ -192,39 +240,85 @@ class SelectPackagePage(QWidget):
     def set_online_mode(self, is_online: bool):
         if is_generic_mtk() and is_online:
             return
-        online_idx = self._tabs.indexOf(self._online_tab)
-        if not is_online:
-            if online_idx >= 0:
-                self._tabs.removeTab(online_idx)
-                self._tabs.setCurrentWidget(self._local_tab)
-                self._say(tr("sel_offline"), timeout_ms=3000)
+        was_available = self._online_available
+        self._online_available = bool(is_online)
+        self._update_view_links()
+        if is_online:
+            self._show_online_view(refresh=not was_available)
         else:
-            if online_idx < 0:
-                self._tabs.insertTab(0, self._online_tab, tr("sel_online"))
-                self._tabs.setCurrentWidget(self._online_tab)
-                self._on_model_changed()
+            # With no catalogue to browse, the local-file screen is the screen.
+            self._views.setCurrentWidget(self._local_tab)
+            if was_available:
+                self._say(tr("sel_offline"), timeout_ms=3000)
 
     def _build_ui(self):
         t = T()
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, page_top_margin(), 24, 20)
+        layout.setContentsMargins(*page_margins())
         layout.setSpacing(8)
 
         self._title = QLabel(tr("sel_title"))
         self._title.setProperty("cssClass", "pageTitle")
         layout.addWidget(self._title)
 
-        self._tabs = QTabWidget()
-        self._tabs.setDocumentMode(True)
+        # No tabs: the catalogue *is* the Select Software screen, and the
+        # local-file picker is reached from the "Install from File" link below
+        # the primary action (and left again from its own link). One screen at
+        # a time keeps the layout identical between them, leaves every control
+        # a native widget, and gives the file flow the full page instead of a
+        # tab-sized strip.
+        self._views = QStackedWidget()
         self._online_tab = self._build_online_tab()
         self._local_tab = self._build_local_tab()
-        self._tabs.addTab(self._online_tab, tr("sel_online"))
-        self._tabs.addTab(self._local_tab, tr("sel_local"))
-        self._tabs.currentChanged.connect(self._on_tab_changed)
-        layout.addWidget(self._tabs, 1)
+        self._views.addWidget(self._online_tab)
+        self._views.addWidget(self._local_tab)
+        layout.addWidget(self._views, 1)
 
-    def _on_tab_changed(self, _idx: int):
-        pass
+    def _link_html(self, key: str, *, bold: bool = True) -> str:
+        t = T()
+        weight = " font-weight: 700;" if bold else ""
+        return (
+            f'<a href="#" style="color: {t.fg}; text-decoration: none;'
+            f' border: none; background: transparent;{weight}">{tr(key)}</a>'
+        )
+
+    def _make_link(self, key: str, on_click, *, bold: bool = True) -> QLabel:
+        """A plain text link: hyperlinks carry the pointing cursor, buttons do not.
+
+        Same colour as the surrounding text either way; *bold* marks the link
+        that leads somewhere primary. Browsing for a local file is the
+        secondary path while the catalogue is on offer (and the MediaTek
+        Installer, which is offline-first, does not show it at all), so that
+        one stays at the text weight.
+        """
+        label = QLabel(self._link_html(key, bold=bold))
+        label.setAlignment(Qt.AlignCenter)
+        label.setTextFormat(Qt.RichText)
+        label.setTextInteractionFlags(Qt.LinksAccessibleByMouse)
+        label.setCursor(Qt.PointingHandCursor)
+        label.linkActivated.connect(lambda *_: on_click())
+        if not hasattr(self, "_registered_links"):
+            self._registered_links = []
+        self._registered_links.append((label, key, bold))
+        return label
+
+    def _show_local_view(self):
+        """Show the local-file screen ("Install from a file")."""
+        self._views.setCurrentWidget(self._local_tab)
+
+    def _show_online_view(self, refresh: bool = False):
+        """Show the catalogue ("Install from the catalogue")."""
+        if is_generic_mtk():
+            return
+        self._views.setCurrentWidget(self._online_tab)
+        if refresh or not self._release_list.count():
+            self._on_model_changed()
+
+    def _update_view_links(self):
+        """The file link exists wherever the catalogue does, and vice versa."""
+        available = bool(self._online_available) and not is_generic_mtk()
+        self._install_from_file_link.setVisible(available)
+        self._install_online_link.setVisible(available)
 
     def _say(self, text: str, timeout_ms: int = 0):
         """Show a status message in the main status bar (0 = until replaced)."""
@@ -269,7 +363,6 @@ class SelectPackagePage(QWidget):
         type_row.addWidget(self._type_combo)
 
         self._type_help_btn = QPushButton(tr("sel_type_help_btn"))
-        self._type_help_btn.setProperty("cssClass", "ghost")
         self._type_help_btn.setToolTip(tr("sel_type_help_body").replace("\n\n", " "))
         self._type_help_btn.clicked.connect(self._show_device_type_help)
         type_row.addWidget(self._type_help_btn)
@@ -286,7 +379,6 @@ class SelectPackagePage(QWidget):
         filter_layout.addWidget(self._software_combo, 1, 1, 1, 2)
 
         self._refresh_btn = QPushButton(tr("sel_refresh"))
-        self._refresh_btn.setProperty("cssClass", "ghost")
         self._refresh_btn.setToolTip(tr("sel_refresh_tooltip"))
         self._refresh_btn.clicked.connect(lambda: self._refresh_releases(force_refresh=True))
         filter_layout.addWidget(self._refresh_btn, 1, 3)
@@ -314,7 +406,18 @@ class SelectPackagePage(QWidget):
         pkg_layout.setSpacing(6)
 
         self._release_list = QListWidget()
+        self._release_list.setObjectName("releaseList")
+        self._release_list.setFrameShape(QFrame.NoFrame)
+        self._release_list.viewport().setAutoFillBackground(False)
+        configure_scroll_area(
+            self._release_list,
+            horizontal=Qt.ScrollBarAlwaysOff,
+            vertical=Qt.ScrollBarAsNeeded,
+            transparent=True,
+        )
         self._release_list.currentItemChanged.connect(self._on_release_selected)
+        self._release_list.itemActivated.connect(self._on_install)
+        self._release_list.itemDoubleClicked.connect(self._on_install)
         pkg_layout.addWidget(self._release_list)
 
         # Slim progress bar, only visible while downloading / preparing.
@@ -325,14 +428,21 @@ class SelectPackagePage(QWidget):
         pkg_layout.addWidget(self._download_bar)
 
         self._install_btn = QPushButton(tr("sel_install"))
-        self._install_btn.setProperty("cssClass", "primary")
         self._install_btn.setDefault(True)
         self._install_btn.setAutoDefault(True)
-        self._install_btn.setMinimumHeight(36)
+        self._install_btn.setMinimumHeight(32)
         self._install_btn.setEnabled(False)
         self._install_btn.setToolTip(tr("sel_install_tooltip_generic"))
         self._install_btn.clicked.connect(self._on_install)
         pkg_layout.addWidget(self._install_btn)
+
+        # The way into the local-file screen. A link, not a button: it is a
+        # navigation affordance, and the primary action above stays the only
+        # button competing for attention.
+        self._install_from_file_link = self._make_link(
+            "sel_install_from_file", self._show_local_view, bold=False
+        )
+        pkg_layout.addWidget(self._install_from_file_link)
 
         self._pkg_group.set_layout(pkg_layout)
         split.addWidget(self._pkg_group, 5)
@@ -356,13 +466,21 @@ class SelectPackagePage(QWidget):
         self._notes.viewport().setAutoFillBackground(False)
         self._notes.setFrameShape(QFrame.NoFrame)
         self._notes.setLineWrapMode(QTextBrowser.WidgetWidth)
-        self._notes.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self._notes.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        from .dark import apply_native_scrollbar_policy
-        apply_native_scrollbar_policy(self._notes)
         self._notes.setPlaceholderText(tr("sel_notes_hint"))
-        self._notes.setStyleSheet(
-            "QTextBrowser#releaseNotes { background: transparent; border: none; padding: 0px; }"
+        # Anchors inside the notes are the text colour and bold, never the
+        # document default blue-with-underline (document stylesheet, not a
+        # widget stylesheet: the platform keeps the scrollbars).
+        self._notes.document().setDefaultStyleSheet(
+            f"a {{ color: {T().fg}; font-weight: 700; text-decoration: none; }}"
+        )
+        # Host policies plus palette-based transparency; the look itself comes
+        # from the app-wide releaseNotes rule. A stylesheet set on the view
+        # would cost the host's overlay scrollbars (see src/ui/scrollbars.py).
+        configure_scroll_area(
+            self._notes,
+            horizontal=Qt.ScrollBarAlwaysOff,
+            vertical=Qt.ScrollBarAsNeeded,
+            transparent=True,
         )
         self._notes.anchorClicked.connect(self._on_notes_link_clicked)
         notes_l.addWidget(self._notes)
@@ -373,7 +491,7 @@ class SelectPackagePage(QWidget):
         self._translate_label.setAlignment(Qt.AlignCenter)
         t = T()
         self._translate_label.setStyleSheet(
-            f"color: {t.fg_dim}; font-size: 11px; margin-top: 4px;"
+            f"color: {t.fg}; font-size: 11px; margin-top: 4px;"
         )
         self._translate_label.setTextFormat(Qt.RichText)
         self._translate_label.setTextInteractionFlags(Qt.TextBrowserInteraction)
@@ -415,10 +533,8 @@ class SelectPackagePage(QWidget):
         self._path_edit.setReadOnly(True)
         self._path_edit.setPlaceholderText(tr("sel_placeholder"))
         self._browse_btn = QPushButton(tr("sel_browse"))
-        self._browse_btn.setProperty("cssClass", "ghost")
         self._browse_btn.clicked.connect(self._on_choose_file)
         self._browse_folder_btn = QPushButton(tr("sel_browse_folder"))
-        self._browse_folder_btn.setProperty("cssClass", "ghost")
         self._browse_folder_btn.clicked.connect(self._on_choose_folder)
         row.addWidget(self._path_edit, 1)
         row.addWidget(self._browse_btn)
@@ -434,18 +550,23 @@ class SelectPackagePage(QWidget):
 
         self._local_status = QLabel("")
         self._local_status.setStyleSheet(
-            f"font-size: 12px; color: {t.fg_dim}; border: none; background: transparent;"
+            f"font-size: 12px; color: {t.fg}; border: none; background: transparent;"
         )
         grp_l.addWidget(self._local_status)
 
         self._start_btn = QPushButton(tr("sel_btn_start"))
-        self._start_btn.setProperty("cssClass", "primary")
         self._start_btn.setDefault(True)
         self._start_btn.setAutoDefault(True)
-        self._start_btn.setMinimumHeight(36)
+        self._start_btn.setMinimumHeight(32)
         self._start_btn.setEnabled(False)
         self._start_btn.clicked.connect(self._on_start_flash)
         grp_l.addWidget(self._start_btn)
+
+        # ...and the way back to the catalogue.
+        self._install_online_link = self._make_link(
+            "sel_install_online", self._show_online_view
+        )
+        grp_l.addWidget(self._install_online_link)
 
         local_group.set_layout(grp_l)
         layout.addWidget(local_group)
@@ -481,14 +602,18 @@ class SelectPackagePage(QWidget):
     def _prompt_pre_install(self, model="", type_variant=None):
         if os.environ.get("QT_QPA_PLATFORM") == "offscreen" or os.environ.get("INNIOASIS_HEADLESS"):
             return True
-        reply = QMessageBox.question(
+        from .dialogs import PreInstallGuidanceDialog
+        from ..branding import is_generic_mtk_brand
+        dlg = PreInstallGuidanceDialog(
             self,
-            tr("sel_pre_install_title"),
-            install_disconnect_guidance(model, type_variant),
-            QMessageBox.Ok | QMessageBox.Cancel,
-            QMessageBox.Ok,
+            model=model,
+            is_mtk_generic=is_generic_mtk_brand(),
         )
-        return reply == QMessageBox.Ok
+        ok = dlg.exec() == QDialog.Accepted
+        win = self.window()
+        if ok and win is not None and hasattr(win, "_pre_install_guided"):
+            win._pre_install_guided = True
+        return ok
 
     def _set_online_banner(self, key, count=0):
         self._online_banner_key = key
@@ -526,17 +651,20 @@ class SelectPackagePage(QWidget):
 
     def retranslate(self):
         self._title.setText(tr("sel_title"))
-        online_idx = self._tabs.indexOf(self._online_tab)
-        if online_idx >= 0:
-            self._tabs.setTabText(online_idx, tr("sel_online"))
-        local_idx = self._tabs.indexOf(self._local_tab)
-        if local_idx >= 0:
-            self._tabs.setTabText(local_idx, tr("sel_local"))
+        self._install_from_file_link.setText(
+            self._link_html("sel_install_from_file", bold=False)
+        )
+        self._install_online_link.setText(self._link_html("sel_install_online"))
         self._model_label.setText(f"{tr('sel_model')}:")
         self._type_label.setText(f"{tr('sel_type')}:")
         self._software_label.setText(f"{tr('sel_software')}:")
         self._refresh_btn.setText(tr("sel_refresh"))
         self._install_btn.setText(tr("sel_install"))
+        if self._current_selected_rel:
+            lbl = self._current_selected_rel.get("name") or self._current_selected_rel.get("tag_name") or ""
+            self._install_btn.setToolTip(tr("sel_install_tooltip").format(lbl=lbl))
+        else:
+            self._install_btn.setToolTip(tr("sel_install_tooltip_generic"))
         if is_generic_mtk():
             self._hint.setText(tr("sel_only_local_generic"))
             self._offline_banner.setText(tr("sel_offline_install_generic"))
@@ -545,6 +673,12 @@ class SelectPackagePage(QWidget):
             self._offline_banner.retranslate()
         self._path_edit.setPlaceholderText(tr("sel_placeholder"))
         self._notes.setPlaceholderText(tr("sel_notes_hint"))
+        # Anchors inside the notes are the text colour and bold, never the
+        # document default blue-with-underline (document stylesheet, not a
+        # widget stylesheet: the platform keeps the scrollbars).
+        self._notes.document().setDefaultStyleSheet(
+            f"a {{ color: {T().fg}; font-weight: 700; text-decoration: none; }}"
+        )
         self._browse_btn.setText(tr("sel_browse"))
         if hasattr(self, "_browse_folder_btn"):
             self._browse_folder_btn.setText(tr("sel_browse_folder"))
@@ -570,6 +704,9 @@ class SelectPackagePage(QWidget):
             else:
                 self._notes.setHtml(self._render_release_notes(self._current_selected_rel, as_html=True))
         self._update_translate_link()
+        if hasattr(self, "_registered_links"):
+            for label, key, bold in self._registered_links:
+                label.setText(self._link_html(key, bold=bold))
 
     def refresh_theme(self):
         """Update components and release notes typography to match active theme tokens."""
@@ -577,6 +714,11 @@ class SelectPackagePage(QWidget):
             self._notes.setHtml(self._render_release_notes(self._current_selected_rel, as_html=True))
         if hasattr(self, "_translate_label"):
             self._update_translate_link()
+        if hasattr(self, "_release_list"):
+            make_transparent(self._release_list)
+        if hasattr(self, "_registered_links"):
+            for label, key, bold in self._registered_links:
+                label.setText(self._link_html(key, bold=bold))
 
     def refresh_models(self):
         """Repopulate the device drop-down from what the catalogue offers.
@@ -815,6 +957,9 @@ class SelectPackagePage(QWidget):
                         selected_row = row
                         break
             self._release_list.setCurrentRow(selected_row)
+            if self._install_btn.isEnabled():
+                self._install_btn.setDefault(True)
+                self._install_btn.setFocus()
             if getattr(self, "_auto_install_tag", None):
                 target_auto = self._auto_install_tag
                 self._auto_install_tag = None
@@ -834,6 +979,8 @@ class SelectPackagePage(QWidget):
 
     def _on_release_selected(self, current, _prev):
         self._install_btn.setEnabled(current is not None)
+        if current is not None:
+            self._install_btn.setDefault(True)
         if current is None:
             self._current_selected_rel = None
             self._is_translated = False
@@ -850,37 +997,22 @@ class SelectPackagePage(QWidget):
             self._update_translate_link()
 
     def _render_release_notes(self, rel, translated_body=None, translated_name=None, as_html: bool = False) -> str:
-        tag = rel.get("tag_name", "")
-        name = translated_name or rel.get("name", "") or tag
-        date = (rel.get("published_at") or "")[:10]
         body = translated_body or (rel.get("body") or "").strip() or tr("update_no_notes")
-        assets = self._asset_line(rel)
-        meta = []
-        if tag:
-            meta.append(f"`{tag}`")
-        if date:
-            meta.append(date)
-        if assets:
-            meta.append(f"{tr('sel_release_assets')}: {assets}")
         if translated_body:
-            meta.append(f"*{tr('translated_with_google')}*")
-        lines = [f"## {name}"]
-        if meta:
-            lines.append("")
-            lines.append(" \u00b7 ".join(meta))
-        lines.append("")
-        lines.append("---")
-        lines.append("")
-        lines.append(body[:4000])
-        raw_md = "\n".join(lines)
+            body = f"{body}\n\n*{tr('translated_with_google')}*"
 
-        # 1. Parse markdown & remove images per user request:
+        # 1. Normalise markdown: turn any markdown headings #{1,6} into bold text
+        # so all text is rendered at uniform body text size.
+        cleaned_md = re.sub(r"(?m)^#{1,6}\s*(.+)$", r"**\1**\n", body[:4000])
+
         # Strip all markdown images ![alt](url)
-        cleaned_md = re.sub(r"!\[.*?\]\(.*?\)", "", raw_md)
+        cleaned_md = re.sub(r"!\[.*?\]\(.*?\)", "", cleaned_md)
         # Strip HTML images <img ...>
         cleaned_md = re.sub(r"<img[^>]*>", "", cleaned_md, flags=re.IGNORECASE)
         # Strip empty link anchors left over from image-only links: [ ](url)
         cleaned_md = re.sub(r"\[\s*\]\(.*?\)", "", cleaned_md)
+        # Normalise HTML headings <h1>-<h6> to bold paragraphs
+        cleaned_md = re.sub(r"<h[1-6][^>]*>(.*?)</h[1-6]>", r"<p><b>\1</b></p>", cleaned_md, flags=re.IGNORECASE)
 
         if not as_html:
             return cleaned_md
@@ -893,40 +1025,42 @@ class SelectPackagePage(QWidget):
         # 2. Re-style links: clickable, bold, same color as text (not blue #0000ff):
         html = re.sub(
             r'<span style="[^"]*color:#0000ff;[^"]*">',
-            f'<span style="color: {t.fg}; font-weight: bold; text-decoration: underline;">',
+            f'<span style="color: {t.fg}; font-weight: bold; text-decoration: none;">',
             html,
         )
         html = re.sub(
             r'<a\s+href="([^"]+)">',
-            f'<a href="\\1" style="color: {t.fg}; font-weight: bold; text-decoration: underline;">',
+            f'<a href="\\1" style="color: {t.fg}; font-weight: bold; text-decoration: none;">',
             html,
         )
         html = re.sub(r"<img[^>]*>", "", html, flags=re.IGNORECASE)
+        # Normalise all inline font-size declarations so no differences in text size exist
+        html = re.sub(r"font-size:[^;\"'>]+;?", "font-size: 13px;", html)
 
-        # 3. Inject native rich typography CSS:
+        # 3. Inject CSS ensuring uniform 13px font size across all elements:
         css = f"""
         <style type="text/css">
-        body {{
+        body, p, span, div, li, b, strong, em, i, a, code, pre, h1, h2, h3, h4, h5, h6 {{
             color: {t.fg};
             font-size: 13px;
             line-height: 1.45;
             background: transparent;
+        }}
+        body {{
             margin: 0;
             padding: 0;
         }}
-        h1, h2, h3, h4 {{
-            color: {t.fg};
+        h1, h2, h3, h4, h5, h6 {{
             font-weight: 700;
             margin-top: 4px;
             margin-bottom: 4px;
+            font-size: 13px;
         }}
-        h1 {{ font-size: 16px; }}
-        h2 {{ font-size: 15px; }}
-        h3 {{ font-size: 13px; }}
         p {{
             margin-top: 4px;
             margin-bottom: 6px;
             color: {t.fg};
+            font-size: 13px;
         }}
         ul, ol {{
             margin-top: 4px;
@@ -936,33 +1070,21 @@ class SelectPackagePage(QWidget):
         li {{
             margin-bottom: 2px;
             color: {t.fg};
+            font-size: 13px;
         }}
-        hr {{
-            border: none;
-            border-top: 1px solid {t.border};
-            margin: 8px 0;
-        }}
-        code {{
+        code, pre {{
             font-family: Menlo, Monaco, Consolas, "Cascadia Code", "Courier New", monospace;
-            font-size: 12px;
+            font-size: 13px;
             background-color: {t.bg_hover};
             color: {t.fg};
-            padding: 1px 4px;
+            padding: 2px 4px;
             border-radius: 3px;
-        }}
-        pre {{
-            font-family: Menlo, Monaco, Consolas, "Cascadia Code", "Courier New", monospace;
-            font-size: 12px;
-            background-color: {t.bg_hover};
-            color: {t.fg};
-            padding: 6px 8px;
-            border-radius: 4px;
-            margin: 4px 0;
         }}
         a {{
             color: {t.fg};
             font-weight: bold;
-            text-decoration: underline;
+            text-decoration: none;
+            font-size: 13px;
         }}
         </style>
         """
@@ -988,24 +1110,24 @@ class SelectPackagePage(QWidget):
             msg = tr("translating_notes")
             open_txt = tr("open_in_google_translate")
             self._translate_label.setText(
-                f'<span style="color:{t.fg_dim};">⏳ {msg} &nbsp;·&nbsp; '
-                f'<a href="{url}" style="color:{t.accent}; text-decoration:underline;">{open_txt} ↗</a></span>'
+                f'<span style="color:{t.fg};">⏳ {msg} &nbsp;·&nbsp; '
+                f'<a href="{url}" style="color:{t.fg}; font-weight:700; text-decoration:none;">{open_txt} ↗</a></span>'
             )
         elif self._is_translated:
             badge = tr("translated_with_google")
             show_orig = tr("show_original")
             open_txt = tr("open_in_google_translate")
             self._translate_label.setText(
-                f'✓ <span style="color:{t.fg_dim};">{badge}</span> &nbsp;·&nbsp; '
-                f'<a href="action:show_original" style="color:{t.accent}; text-decoration:underline;">{show_orig}</a> &nbsp;·&nbsp; '
-                f'<a href="{url}" style="color:{t.fg_dim}; text-decoration:underline;">{open_txt} ↗</a>'
+                f'✓ <span style="color:{t.fg};">{badge}</span> &nbsp;·&nbsp; '
+                f'<a href="action:show_original" style="color:{t.fg}; font-weight:700; text-decoration:none;">{show_orig}</a> &nbsp;·&nbsp; '
+                f'<a href="{url}" style="color:{t.fg}; font-weight:700; text-decoration:none;">{open_txt} ↗</a>'
             )
         else:
             trans_txt = tr("translate_notes")
             open_txt = tr("open_in_google_translate")
             self._translate_label.setText(
-                f'🌐 <a href="action:translate_in_app" style="color:{t.accent}; text-decoration:underline; font-weight:600;">{trans_txt}</a> &nbsp;·&nbsp; '
-                f'<a href="{url}" style="color:{t.fg_dim}; text-decoration:underline;">{open_txt} ↗</a>'
+            f'🌐 <a href="action:translate_in_app" style="color:{t.fg}; text-decoration:none; font-weight:700;">{trans_txt}</a> &nbsp;·&nbsp; '
+            f'<a href="{url}" style="color:{t.fg}; text-decoration:none; font-weight:700;">{open_txt} ↗</a>'
             )
 
     def _on_translate_link_clicked(self, link: str):
@@ -1178,7 +1300,7 @@ class SelectPackagePage(QWidget):
         self._local_status.setText(tr("sel_preparing"))
         bar = (
             self._local_bar
-            if self._tabs.currentWidget() is self._local_tab
+            if self._views.currentWidget() is self._local_tab
             else self._download_bar
         )
         bar.setValue(0)
@@ -1390,8 +1512,8 @@ class SelectPackagePage(QWidget):
         return getattr(self, "_current_installed_release_info", None)
 
     def navigate_to_package(self, model: str, software_name: str, tag_name=None):
-        """Switch to Online tab, select specified model/software, and highlight tag_name."""
-        self._tabs.setCurrentWidget(self._online_tab)
+        """Switch to the catalogue, select specified model/software, highlight tag_name."""
+        self._show_online_view()
         m_idx = self._model_combo.findText(model)
         if m_idx >= 0 and m_idx != self._model_combo.currentIndex():
             self._model_combo.setCurrentIndex(m_idx)

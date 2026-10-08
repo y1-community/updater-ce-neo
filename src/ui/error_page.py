@@ -79,15 +79,11 @@ class ErrorPage(QWidget):
 
         btn_row = QHBoxLayout()
         self._retry_btn = QPushButton(tr("err_btn_retry"))
-        self._retry_btn.setProperty("cssClass", "primary")
         self._retry_btn.setDefault(True)
         self._reconnect_btn = QPushButton(tr("err_btn_reconnect"))
-        self._reconnect_btn.setProperty("cssClass", "primary")
         self._reconnect_btn.setDefault(True)
         self._reselect_btn = QPushButton(tr("err_btn_reselect"))
-        self._reselect_btn.setProperty("cssClass", "ghost")
         self._log_btn = QPushButton(tr("err_view_log"))
-        self._log_btn.setProperty("cssClass", "ghost")
         self._retry_btn.clicked.connect(lambda: self._retry_cb and self._retry_cb())
         self._reconnect_btn.clicked.connect(lambda: self._reconnect_cb and self._reconnect_cb())
         self._reselect_btn.clicked.connect(lambda: self._reselect_cb and self._reselect_cb())
@@ -100,7 +96,6 @@ class ErrorPage(QWidget):
         from ..sp_flash_gui import is_sp_flash_gui_supported
         if is_sp_flash_gui_supported():
             self._sp_gui_btn = QPushButton(tr("flash_btn_open_sp_gui"))
-            self._sp_gui_btn.setProperty("cssClass", "ghost")
             self._sp_gui_btn.clicked.connect(lambda: self._sp_gui_cb and self._sp_gui_cb())
             btn_row.addWidget(self._sp_gui_btn)
 
