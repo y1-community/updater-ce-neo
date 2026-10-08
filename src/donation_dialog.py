@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
 
 from .config import DONATION_CRYPTO, DONATION_LINKS, device_label_for_model, install_power_on_steps
 from .donors import fetch_remote_donors_async, get_monthly_goal_stats, relative_date
-from .i18n import tr
+from .i18n import tr, tr_brand
 from .ui.dark import T, is_dark
 
 logger = logging.getLogger(__name__)
@@ -138,7 +138,7 @@ class DonationStatusBar(QStatusBar):
         row.addWidget(self._goal_bar, 0, Qt.AlignVCenter)
 
         self._support_btn = QPushButton(tr("nav_donate"))
-        self._support_btn.setToolTip(tr("donate_title"))
+        self._support_btn.setToolTip(tr_brand("donate_title"))
         if on_support:
             self._support_btn.clicked.connect(on_support)
         row.addWidget(self._support_btn)
@@ -323,7 +323,7 @@ class DonationStatusBar(QStatusBar):
 
     def retranslate(self):
         self._support_btn.setText(tr("nav_donate"))
-        self._support_btn.setToolTip(tr("donate_title"))
+        self._support_btn.setToolTip(tr_brand("donate_title"))
         self._donor_lines = self._build_donor_lines()
         self._refresh_goal()
         if not self._showing_goal:
@@ -342,7 +342,7 @@ class DonationDialog(QDialog):
         self.on_dont_ask_again = on_dont_ask_again
         self.is_360p_rockbox = is_360p_rockbox
 
-        self.setWindowTitle(tr("donate_title"))
+        self.setWindowTitle(tr_brand("donate_title"))
         self.setModal(True)
         self.setMinimumWidth(580)
 
@@ -481,11 +481,11 @@ class DonationDialog(QDialog):
         # 3. Intro copy
         formatted = self.software_name or tr("donate_this_firmware")
         if self.context == "install_success":
-            intro_text = tr("donate_intro_success").format(
+            intro_text = tr_brand("donate_intro_success").format(
                 software=formatted, model=self.model
             )
         else:
-            intro_text = tr("donate_intro_general")
+            intro_text = tr_brand("donate_intro_general")
         self._intro_label = QLabel(intro_text)
         self._intro_label.setTextFormat(Qt.RichText)
         self._intro_label.setWordWrap(True)

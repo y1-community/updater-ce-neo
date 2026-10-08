@@ -67,6 +67,13 @@ def _reset_app_settings():
     device_tracking.set_terminal_install_enabled(False, s)
     s.remove("device_tracking")
     s.remove("latest_package")
+    # Offline mode lives in the app's own settings scope (settings_page writes
+    # it there, not in the scope above): a manually enabled offline mode would
+    # otherwise leak into the suite and hide the online catalogue everywhere.
+    QSettings("Innioasis", "UpdaterCE").setValue("offline_mode", False)
+    from src import config
+    config.IS_OFFLINE_MODE = False
+    config.IS_MEDIATEK_INSTALLER = False
     translator().set_language("en")
 
 
@@ -5600,36 +5607,53 @@ def test_scatter_discovery_and_folder_packages():
 
 def test_generic_mtk_mode_and_offline_branding():
     from PySide6.QtWidgets import QApplication
-    from src import config
+    from src import config, i18n
+    from src.i18n import tr
     from src.ui.main_window import MainWindow
 
     _reset_app_settings()
     app = QApplication.instance() or QApplication(sys.argv)
+    i18n.translator().set_language("en")
 
     # Initial standard state
     assert not config.is_generic_mtk()
+    assert not config.is_offline_mode()
+    assert not config.is_mediatek_installer()
     assert config.get_app_name() == "Updater CE"
+    assert config.get_brand_name() == "Updater CE"
 
     w = MainWindow()
     w.show()
     app.processEvents()
 
     assert w.windowTitle().startswith("Updater CE")
+    assert w._brand_label.text() == "Updater CE"
     assert w._select_page._tabs.count() >= 2
     assert w._select_page._tabs.tabBar().isVisible()
     assert w._support_btn.isVisible()
     assert w._credits_btn.isVisible()
+    assert not w._settings_page._offline_mode_card.isHidden()
 
-    # Toggle offline mode in Settings Page
+    # Toggle offline mode in Settings Page: this hides the online catalogue
+    # only. The Updater CE brand must survive it untouched — offline mode is
+    # not the MediaTek Installer.
     w._settings_page._cb_offline_mode.setChecked(True)
     app.processEvents()
 
     assert config.is_generic_mtk()
-    assert config.get_app_name() == "MediaTek Firmware Installer"
-    assert w.windowTitle().startswith("MediaTek Firmware Installer")
+    assert config.is_offline_mode()
+    assert not config.is_mediatek_installer()
+    assert config.get_app_name() == "Updater CE"
+    assert w.windowTitle().startswith("Updater CE")
+    assert w._brand_label.text() == "Updater CE"
     assert not w._select_page._tabs.tabBar().isVisible()
     assert not w._support_btn.isVisible()
     assert not w._credits_btn.isVisible()
+    assert not w._settings_page._offline_mode_card.isHidden()
+    assert tr("settings_offline_mode") == "Offline Mode"
+    for key in ("settings_offline_mode", "settings_offline_mode_group", "settings_offline_mode_desc"):
+        for loc, text in i18n._STRINGS[key].items():
+            assert "MediaTek" not in text, (key, loc, text)
 
     # Toggle off
     w._settings_page._cb_offline_mode.setChecked(False)
@@ -5645,6 +5669,96 @@ def test_generic_mtk_mode_and_offline_branding():
     w.close()
     app.processEvents()
     _reset_app_settings()
+
+
+def test_mediatek_installer_mode():
+    from PySide6.QtWidgets import QApplication
+    from src import config, i18n
+    from src.i18n import tr_brand
+    from src.ui.main_window import MainWindow
+
+    _reset_app_settings()
+    app = QApplication.instance() or QApplication(sys.argv)
+    i18n.translator().set_language("en")
+    assert not config.is_mediatek_installer()
+
+    # Names: the app is "MediaTek Installer", shown in app as "Installer 3.0" —
+    # never "MediaTek Firmware Installer" and never "Updater CE".
+    for key in ("app_name_mediatek_installer", "app_name_mediatek_installer_short"):
+        table = i18n._STRINGS[key]
+        assert set(table) == {"zh-CN", "en", "fr", "es"}, (key, sorted(table))
+    assert i18n._STRINGS["app_name_mediatek_installer"]["en"] == "MediaTek Installer"
+    assert i18n._STRINGS["app_name_mediatek_installer_short"]["en"] == "Installer"
+    assert "app_name_generic_mtk" not in i18n._STRINGS
+
+    # Donation copy names this tool, not the CE catalogue, archive or gallery.
+    for key in ("donate_title_mediatek", "donate_intro_general_mediatek", "donate_intro_success_mediatek"):
+        table = i18n._STRINGS[key]
+        assert set(table) == {"zh-CN", "en", "fr", "es"}, (key, sorted(table))
+        for loc, text in table.items():
+            assert "Updater CE" not in text, (key, loc)
+    for key in ("donate_intro_general_mediatek", "donate_intro_success_mediatek"):
+        for loc, text in i18n._STRINGS[key].items():
+            for brand in ("Themes Gallery", "Community Firmware", "Galerie de Thèmes", "Galería de Temas"):
+                assert brand not in text, (key, loc, brand)
+    # CE keeps its own wording.
+    assert "Updater CE" in i18n._STRINGS["app_name"]["en"]
+
+    try:
+        config.IS_MEDIATEK_INSTALLER = True
+        assert config.is_mediatek_installer()
+        assert config.is_offline_mode(), "the generic installer is offline-only"
+        assert config.get_app_name() == "MediaTek Installer"
+        assert config.get_brand_name() == "Installer"
+        assert tr_brand("donate_title") == "Support MediaTek Installer"
+        assert "MediaTek Installer" in tr_brand("donate_intro_general")
+
+        w = MainWindow()
+        w.show()
+        app.processEvents()
+
+        assert w.windowTitle() == f"MediaTek Installer v{config.APP_VERSION}", w.windowTitle()
+        assert w._brand_label.text() == "Installer"
+        assert w._brand_version.text() == config.APP_VERSION
+
+        # Offline tool: no checkbox to re-enable online firmware, and no
+        # CE-only affordances it cannot use.
+        assert w._settings_page._offline_mode_card.isHidden()
+        assert not w._credits_btn.isVisible()
+        assert not w._check_updates_btn.isVisible()
+        assert not w._select_page._tabs.tabBar().isVisible()
+
+        # Donations still shown, in this brand's wording.
+        assert w._support_btn.isVisible()
+        assert w.statusBar()._donations_enabled
+
+        # The user's own donation opt-out still wins.
+        w._settings_page._cb_hide_donations.setChecked(True)
+        app.processEvents()
+        assert not w._support_btn.isVisible()
+        assert not w.statusBar()._donations_enabled
+        w._settings_page._cb_hide_donations.setChecked(False)
+        app.processEvents()
+        assert w._support_btn.isVisible()
+
+        # Terminal install remains available.
+        assert not w._settings_page._terminal_card.isHidden()
+        assert not w._settings_page._cb_terminal_install.isHidden()
+
+        # Flipping the brand off switches the whole identity back.
+        config.IS_MEDIATEK_INSTALLER = False
+        w._apply_generic_mtk_branding()
+        app.processEvents()
+        assert w.windowTitle().startswith("Updater CE")
+        assert w._brand_label.text() == "Updater CE"
+        assert not w._settings_page._offline_mode_card.isHidden()
+        assert w._credits_btn.isVisible()
+
+        w.close()
+        app.processEvents()
+    finally:
+        config.IS_MEDIATEK_INSTALLER = False
+        _reset_app_settings()
 
 
 def test_window_minimum_size_and_titlebar_stability():
@@ -5804,6 +5918,7 @@ def main():
     check("windows m key shortcut and method defaults", test_windows_m_key_shortcut_and_method_defaults)
     check("scatter discovery and folder packages", test_scatter_discovery_and_folder_packages)
     check("generic MTK mode and offline branding", test_generic_mtk_mode_and_offline_branding)
+    check("mediatek installer mode", test_mediatek_installer_mode)
     check("window minimum size and titlebar stability", test_window_minimum_size_and_titlebar_stability)
     if failures:
         print(f"\n{len(failures)} FAILURES:")

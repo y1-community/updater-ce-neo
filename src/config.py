@@ -8,21 +8,56 @@ APP_VERSION = "3.0"
 APP_NAME = "Updater CE"
 CONTACT_EMAIL = "updater-feedback@innioasis.com"
 
-# --- Generic MediaTek / Offline Mode Switches ------------------------------
-IS_GENERIC_MTK_MODE = False
+# --- Offline mode / MediaTek Installer branding -----------------------------
+# Two independent switches, deliberately kept apart:
+#   * Offline mode — Updater CE with the online catalogue hidden. The CE brand
+#     and everything else stays as it is.
+#   * MediaTek Installer — the same engine built as a generic cross-platform
+#     MediaTek firmware installer: its own name ("Installer x.x" in-app), no
+#     online firmware at all, but donations and the terminal install remain.
 IS_OFFLINE_MODE = False
+IS_MEDIATEK_INSTALLER = False
+
+OFFLINE_FLAGS = ("--offline",)
+MEDIATEK_INSTALLER_FLAGS = ("--mediatek-installer", "--generic-mtk")
+MEDIATEK_INSTALLER_BRANDS = ("mediatek_installer", "mediatek-installer", "generic_mtk")
 
 
-def is_generic_mtk() -> bool:
-    """Return True if running as generic MediaTek Firmware Installer."""
-    global IS_GENERIC_MTK_MODE, IS_OFFLINE_MODE
-    if IS_GENERIC_MTK_MODE or IS_OFFLINE_MODE:
+def build_brand() -> str:
+    """Brand baked into a frozen build by ``scripts/set_build_brand.py``.
+
+    A built app is launched by double-click, so the choice cannot live in the
+    environment: the packaging step writes it into ``src/_build_brand.py``
+    before PyInstaller runs. Absent (dev runs, normal builds) = Updater CE.
+    """
+    try:
+        from ._build_brand import BUILD_BRAND
+    except Exception:
+        return ""
+    return str(BUILD_BRAND or "").strip().lower()
+
+
+def is_mediatek_installer() -> bool:
+    """True when running as the generic MediaTek Installer build."""
+    if IS_MEDIATEK_INSTALLER:
         return True
     import os
     import sys
-    if "--generic-mtk" in sys.argv or "--offline" in sys.argv:
+    if any(flag in sys.argv for flag in MEDIATEK_INSTALLER_FLAGS):
         return True
-    if os.environ.get("BUILD_BRAND") == "generic_mtk" or os.environ.get("UPDATER_OFFLINE") == "1":
+    brand = (os.environ.get("BUILD_BRAND") or "").strip().lower() or build_brand()
+    return brand in MEDIATEK_INSTALLER_BRANDS
+
+
+def is_offline_mode() -> bool:
+    """True when the online firmware catalogue is switched off."""
+    if is_mediatek_installer() or IS_OFFLINE_MODE:
+        return True
+    import os
+    import sys
+    if any(flag in sys.argv for flag in OFFLINE_FLAGS):
+        return True
+    if os.environ.get("UPDATER_OFFLINE") == "1":
         return True
     try:
         from PySide6.QtCore import QSettings
@@ -32,9 +67,25 @@ def is_generic_mtk() -> bool:
         return False
 
 
+def is_generic_mtk() -> bool:
+    """True when no online catalogue is available (offline, or generic build)."""
+    return is_offline_mode()
+
+
 def get_app_name() -> str:
+    """Full application name for window titles and About text."""
     from .i18n import tr
-    return tr("app_name_generic_mtk") if is_generic_mtk() else tr("app_name")
+    if is_mediatek_installer():
+        return tr("app_name_mediatek_installer")
+    return tr("app_name")
+
+
+def get_brand_name() -> str:
+    """Short brand shown beside the version badge ("Installer 3.0")."""
+    from .i18n import tr
+    if is_mediatek_installer():
+        return tr("app_name_mediatek_installer_short")
+    return tr("app_name")
 
 # --- Online firmware catalogue ---------------------------------------------
 # The live manifest is fetched at runtime (like Updater CE does); the static

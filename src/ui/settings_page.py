@@ -16,7 +16,12 @@ from PySide6.QtWidgets import (
 )
 
 from .. import catalog, device_tracking, paths
-from ..config import DEVICE_MODELS, device_label_for_model
+from ..config import (
+    DEVICE_MODELS,
+    device_label_for_model,
+    is_mediatek_installer,
+    is_offline_mode,
+)
 from ..flash_service import (
     METHOD_MTK,
     METHOD_MTK_MAC,
@@ -219,7 +224,9 @@ class SettingsPage(QWidget):
             self._prep_card = self._build_checker_card()
         layout.addWidget(self._prep_card)
 
-        # --- Card 5: Generic MediaTek Offline Mode ---
+        # --- Card 5: Offline Mode ---
+        # The generic MediaTek Installer build is offline-only, so the toggle
+        # that would re-enable online firmware is not shown there at all.
         self._offline_mode_card = Card("settings_offline_mode_group")
         off_layout = QVBoxLayout()
         off_layout.setSpacing(8)
@@ -236,6 +243,7 @@ class SettingsPage(QWidget):
         off_layout.addWidget(self._offline_mode_desc)
 
         self._offline_mode_card.set_layout(off_layout)
+        self._offline_mode_card.setVisible(not is_mediatek_installer())
         layout.addWidget(self._offline_mode_card)
 
         # SP Flash Tool is not supported on macOS (MTKClient only).
@@ -529,11 +537,14 @@ class SettingsPage(QWidget):
         )
         self._cb_terminal_install.blockSignals(False)
 
-        # Offline / Generic mode toggle
+        # Offline mode toggle
         self._cb_offline_mode.blockSignals(True)
-        from ..config import is_generic_mtk
-        self._cb_offline_mode.setChecked(is_generic_mtk())
+        self._cb_offline_mode.setChecked(is_offline_mode())
         self._cb_offline_mode.blockSignals(False)
+
+    def apply_brand_mode(self, mediatek_installer: bool):
+        """Show or hide the pieces that only make sense for one brand."""
+        self._offline_mode_card.setVisible(not mediatek_installer)
 
     # ------------------------------------------------------------------
     # Misc actions
@@ -542,8 +553,9 @@ class SettingsPage(QWidget):
         from PySide6.QtCore import QSettings
         QSettings("Innioasis", "UpdaterCE").setValue("offline_mode", checked)
         from .. import config
+        # Only the offline switch moves here: the MediaTek Installer identity is
+        # fixed at build time and never toggled by a settings checkbox.
         config.IS_OFFLINE_MODE = checked
-        config.IS_GENERIC_MTK_MODE = checked
         self.offline_mode_changed.emit(checked)
 
     def _on_terminal_install_toggled(self, checked: bool):

@@ -37,7 +37,7 @@ from ..diagnostics import (
     log_time_range,
     reveal_in_file_manager,
 )
-from ..i18n import tr
+from ..i18n import tr, tr_brand
 from ..updates import asset_hint, pick_platform_asset
 from .dark import T
 
@@ -285,7 +285,8 @@ class DiagnosticsDialog(QDialog):
         # Only the backends this host can actually produce (macOS has no SP
         # Flash Tool; Windows hides MTKClient unless it was revealed with M).
         for cat, label_key in available_categories():
-            self._category_combo.addItem(tr(label_key), cat)
+            # The app-log entry names the app, so it follows the active brand.
+            self._category_combo.addItem(tr_brand(label_key), cat)
 
         idx = self._category_combo.findData(initial_category)
         if idx < 0:

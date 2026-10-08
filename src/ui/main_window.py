@@ -50,7 +50,10 @@ from ..config import (
     UPDATE_REPO,
     install_power_on_steps,
     is_generic_mtk,
+    is_mediatek_installer,
+    is_offline_mode,
     get_app_name,
+    get_brand_name,
 )
 from ..manifest import ManifestWorker
 from ..updates import UpdateCheckWorker, UpdateInfo
@@ -72,7 +75,7 @@ from ..flash_service import (
     completed_extract_dir,
     normalise_method,
 )
-from ..i18n import tr, translator
+from ..i18n import tr, tr_brand, translator
 from ..state import FlashState, StateMachine
 from .dialogs import (
     DiagnosticsDialog,
@@ -1025,7 +1028,7 @@ class MainWindow(QMainWindow):
         """
         box = QMessageBox(self)
         box.setWindowTitle(tr("simulated_mac_title"))
-        box.setText(tr("simulated_mac_body"))
+        box.setText(tr_brand("simulated_mac_body"))
         restart_btn = box.addButton(
             tr("simulated_mac_restart_now"), QMessageBox.AcceptRole
         )
@@ -1196,9 +1199,8 @@ class MainWindow(QMainWindow):
         self._retranslate_all()
 
     def _retranslate_all(self):
-        app_name = get_app_name()
-        self._brand_label.setText(app_name)
-        self.setWindowTitle(f"{app_name} v{APP_VERSION}")
+        self._brand_label.setText(get_brand_name())
+        self.setWindowTitle(f"{get_app_name()} v{APP_VERSION}")
         for key, (btn, _idx) in self._nav_buttons.items():
             btn.setText(tr(key))
         self._sync_install_nav_entry()
@@ -1359,7 +1361,12 @@ class MainWindow(QMainWindow):
             self._apply_donation_visibility()
 
     def _apply_donation_visibility(self, is_disabled=None):
-        if is_generic_mtk():
+        if is_mediatek_installer():
+            # The generic installer still asks for support: buttons, prompts,
+            # goals and donor info stay, and only the user's own opt-out hides
+            # them.
+            is_disabled = device_tracking.is_donation_ui_disabled(self.settings)
+        elif is_offline_mode():
             is_disabled = True
         elif is_disabled is None:
             is_disabled = device_tracking.is_donation_ui_disabled(self.settings)
@@ -1370,25 +1377,39 @@ class MainWindow(QMainWindow):
             else:
                 sb.setVisible(not is_disabled)
         if hasattr(self, "_support_btn") and self._support_btn is not None:
-            self._support_btn.setVisible(not is_disabled and not is_generic_mtk())
+            self._support_btn.setVisible(not is_disabled)
 
     def _apply_generic_mtk_branding(self):
-        generic = is_generic_mtk()
-        app_name = get_app_name()
-        self.setWindowTitle(f"{app_name} v{APP_VERSION}")
+        """Apply the identity of whichever build is running.
+
+        Offline mode keeps Updater CE's name; only the generic MediaTek
+        Installer build renames the app, and it is the only one that loses the
+        online-catalogue affordances it cannot use.
+        """
+        offline = is_generic_mtk()
+        mediatek = is_mediatek_installer()
+        self.setWindowTitle(f"{get_app_name()} v{APP_VERSION}")
         if hasattr(self, "_brand_label"):
-            self._brand_label.setText(app_name)
+            # Reads as "Installer 3.0" beside the version badge.
+            self._brand_label.setText(get_brand_name())
+        # Credits, update checks and the CE version badge all point at online
+        # Community resources, so neither offline nor generic mode offers them.
         if hasattr(self, "_credits_btn"):
-            self._credits_btn.setVisible(not generic)
+            self._credits_btn.setVisible(not offline)
         if hasattr(self, "_check_updates_btn"):
-            self._check_updates_btn.setVisible(not generic)
+            self._check_updates_btn.setVisible(not offline)
         if hasattr(self, "_version_label"):
-            self._version_label.setVisible(not generic)
+            self._version_label.setVisible(not offline)
+        if hasattr(self, "_settings_page"):
+            self._settings_page.apply_brand_mode(mediatek)
         if hasattr(self, "_select_page"):
-            self._select_page.apply_generic_mode(generic)
+            self._select_page.apply_generic_mode(offline)
         self._apply_donation_visibility()
 
     def _on_offline_mode_changed(self, enabled: bool):
+        # Offline mode hides the online catalogue and its affordances, but it
+        # never renames anything: the brand is fixed by the build, not by this
+        # checkbox.
         self._apply_generic_mtk_branding()
 
     def _on_donations_updated(self, donations):

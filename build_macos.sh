@@ -18,6 +18,10 @@ cd "$(dirname "$0")"
 
 APP_NAME="Updater CE"
 APP_ID="com.innioasis.updater"
+# BUILD_BRAND=mediatek_installer (or --brand mediatek_installer) packages the
+# generic cross-platform MediaTek Installer instead: its own name and bundle
+# id, and an app that knows it is offline-only.
+BRAND="$(printf '%s' "${BUILD_BRAND:-updater_ce}" | tr '[:upper:]-' '[:lower:]_')"
 VERSION=$(grep -oP 'APP_VERSION\s*=\s*"\K[^"]+' src/config.py 2>/dev/null || echo "3.0")
 DIST_DIR="dist"
 BUILD_DIR="build"
@@ -36,13 +40,30 @@ while [[ $# -gt 0 ]]; do
             TARGET_ARCH="$2"
             shift 2
             ;;
+        --brand)
+            BRAND="$(printf '%s' "$2" | tr '[:upper:]-' '[:lower:]_')"
+            shift 2
+            ;;
         *)
             shift
             ;;
     esac
 done
 
+case "$BRAND" in
+    updater_ce) ;;
+    mediatek_installer)
+        APP_NAME="MediaTek Installer"
+        APP_ID="com.innioasis.mediatekinstaller"
+        ;;
+    *)
+        echo "ERROR: unknown --brand '$BRAND' (expected updater_ce or mediatek_installer)"
+        exit 1
+        ;;
+esac
+
 export TARGET_ARCH
+export BUILD_BRAND="$BRAND"
 
 if [ -z "${PYTHON:-}" ]; then
     if [ -x ".venv-build/bin/python3" ]; then
@@ -112,12 +133,19 @@ if [ ! -f "$BUNDLE_ICON" ]; then
     fi
 fi
 
-echo "=== Building Updater CE for macOS (v$VERSION) ==="
+echo "=== Building $APP_NAME for macOS (v$VERSION) [$BRAND] ==="
 echo "Target: macOS 13 (Ventura) through macOS 26 (Golden Gate)"
 [n -n "$TARGET_ARCH" ] && echo "Architecture: $TARGET_ARCH" || echo "Architecture: Host default (Intel/Apple Silicon)"
 
 # --- Clean ----------------------------------------------------------------
 rm -rf "$BUILD_DIR" "$DIST_DIR"/*.app "$DIST_DIR"/*.dmg
+
+# --- Bake the packaging brand -----------------------------------------
+# The frozen app must know its own brand without an environment: this writes
+# src/_build_brand.py (gitignored) for PyInstaller to freeze, and removes it
+# again however the build ends.
+"$PYTHON" scripts/set_build_brand.py "$BRAND"
+trap 'rm -f src/_build_brand.py' EXIT
 
 if [ "$(uname -s)" = "Darwin" ]; then
     # --- Native macOS build with PyInstaller ------------------------------
@@ -127,7 +155,7 @@ if [ "$(uname -s)" = "Darwin" ]; then
         "$SPEC_FILE"
 
     # Remove intermediate COLLECT directory so dist/ contains ONLY the self-contained .app
-    rm -rf "$DIST_DIR/Updater CE"
+    rm -rf "$DIST_DIR/$APP_NAME"
 
     echo ">>> Signing bundle..."
     ENTITLEMENTS_FILE="assets/entitlements.plist"
@@ -141,7 +169,7 @@ else
     # --- Universal 2 (Intel + Apple Silicon) Mach-O build via LLVM/clang/rcodesign ---
     echo ">>> Building Universal 2 Mach-O .app bundle..."
     "$PYTHON" scripts/build_universal_app.py
-    rm -rf "$DIST_DIR/Updater CE"
+    rm -rf "$DIST_DIR/$APP_NAME"
 fi
 
 echo "=== Build complete: $DIST_DIR/$APP_NAME.app ==="
@@ -149,7 +177,12 @@ echo "=== Build complete: $DIST_DIR/$APP_NAME.app ==="
 # --- Optional DMG creation -----------------------------------------------
 if [ "$CREATE_DMG" -eq 1 ]; then
     ARCH_SUFFIX="${TARGET_ARCH:+-$TARGET_ARCH}"
-    DMG_NAME="UpdaterCE-${VERSION}${ARCH_SUFFIX}-macOS.dmg"
+    if [ "$BRAND" = "mediatek_installer" ]; then
+        BRAND_SLUG="MediaTekInstaller"
+    else
+        BRAND_SLUG="UpdaterCE"
+    fi
+    DMG_NAME="${BRAND_SLUG}-${VERSION}${ARCH_SUFFIX}-macOS.dmg"
     echo ">>> Creating DMG: $DIST_DIR/$DMG_NAME"
 
     DMG_TEMP=$(mktemp -d)
@@ -157,7 +190,7 @@ if [ "$CREATE_DMG" -eq 1 ]; then
     ln -s /Applications "$DMG_TEMP/Applications"
 
     hdiutil create \
-        -volname "Updater CE" \
+        -volname "$APP_NAME" \
         -srcfolder "$DMG_TEMP" \
         -ov -format UDZO \
         "$DIST_DIR/$DMG_NAME"

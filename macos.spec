@@ -12,6 +12,17 @@ VENDOR_MTK = PROJECT_ROOT / "vendor" / "mtkclient"
 ASSETS = PROJECT_ROOT / "assets"
 LIBUSB_DYLIB = VENDOR_MTK / "mtkclient" / "Darwin" / "libusb-1.0.dylib"
 
+# --- Packaging brand --------------------------------------------------------
+# BUILD_BRAND=mediatek_installer builds the same engine as the generic
+# cross-platform MediaTek Installer: its own bundle name and identifier.
+# Anything else (default) builds Updater CE.
+_BUILD_BRAND = (os.environ.get("BUILD_BRAND") or "").strip().lower().replace("-", "_")
+IS_MEDIATEK_INSTALLER_BUILD = _BUILD_BRAND in ("mediatek_installer", "generic_mtk")
+APP_DISPLAY_NAME = "MediaTek Installer" if IS_MEDIATEK_INSTALLER_BUILD else "Updater CE"
+BUNDLE_ID = (
+    "com.innioasis.mediatekinstaller" if IS_MEDIATEK_INSTALLER_BUILD else "com.innioasis.updater"
+)
+
 if str(VENDOR_MTK) not in sys.path:
     sys.path.insert(0, str(VENDOR_MTK))
 
@@ -143,7 +154,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="Updater CE",
+    name=APP_DISPLAY_NAME,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -165,16 +176,16 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name="Updater CE",
+    name=APP_DISPLAY_NAME,
 )
 
 app = BUNDLE(
     coll,
-    name="Updater CE.app",
+    name=f"{APP_DISPLAY_NAME}.app",
     icon="assets/icon.icns",
-    bundle_identifier="com.innioasis.updater",
+    bundle_identifier=BUNDLE_ID,
     info_plist={
-        "CFBundleDisplayName": "Updater CE",
+        "CFBundleDisplayName": APP_DISPLAY_NAME,
         "CFBundleShortVersionString": "3.0.0",
         "CFBundleVersion": "3.0.0",
         "LSMinimumSystemVersion": "13.0",
@@ -197,13 +208,13 @@ app = BUNDLE(
     },
 )
 
-# Ensure Updater CE.app is created even when running in non-Darwin environments
+# Ensure the .app is created even when running in non-Darwin environments
 try:
     import shutil
     import plistlib
     dist_dir = PROJECT_ROOT / "dist"
-    app_dir = dist_dir / "Updater CE.app"
-    coll_dir = dist_dir / "Updater CE"
+    app_dir = dist_dir / f"{APP_DISPLAY_NAME}.app"
+    coll_dir = dist_dir / APP_DISPLAY_NAME
     if not app_dir.exists() and coll_dir.exists():
         contents_dir = app_dir / "Contents"
         macos_dir = contents_dir / "MacOS"
@@ -213,9 +224,9 @@ try:
         resources_dir.mkdir(parents=True, exist_ok=True)
         frameworks_dir.mkdir(parents=True, exist_ok=True)
 
-        if (coll_dir / "Updater CE").exists():
-            shutil.copy2(coll_dir / "Updater CE", macos_dir / "Updater CE")
-            os.chmod(macos_dir / "Updater CE", 0o755)
+        if (coll_dir / APP_DISPLAY_NAME).exists():
+            shutil.copy2(coll_dir / APP_DISPLAY_NAME, macos_dir / APP_DISPLAY_NAME)
+            os.chmod(macos_dir / APP_DISPLAY_NAME, 0o755)
         if (coll_dir / "_internal").exists():
             shutil.copytree(coll_dir / "_internal", macos_dir / "_internal", dirs_exist_ok=True)
 
@@ -229,12 +240,12 @@ try:
         (contents_dir / "PkgInfo").write_bytes(b"APPL????")
 
         plist_data = {
-            "CFBundleDisplayName": "Updater CE",
-            "CFBundleExecutable": "Updater CE",
+            "CFBundleDisplayName": APP_DISPLAY_NAME,
+            "CFBundleExecutable": APP_DISPLAY_NAME,
             "CFBundleIconFile": "icon.icns",
-            "CFBundleIdentifier": "com.innioasis.updater",
+            "CFBundleIdentifier": BUNDLE_ID,
             "CFBundleInfoDictionaryVersion": "6.0",
-            "CFBundleName": "Updater CE",
+            "CFBundleName": APP_DISPLAY_NAME,
             "CFBundlePackageType": "APPL",
             "CFBundleShortVersionString": "3.0.0",
             "CFBundleVersion": "3.0.0",

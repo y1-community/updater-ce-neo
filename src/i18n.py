@@ -629,29 +629,35 @@ _STRINGS: dict = {
         "fr": "Plusieurs paquets de firmware ou fichiers scatter ont été trouvés. Veuillez sélectionner un dossier ou une archive ne contenant qu'un seul firmware à la fois.",
         "es": "Se encontraron varios paquetes de firmware o archivos scatter. Por favor selecciona una carpeta o archivo que contenga solo un paquete de firmware a la vez.",
     },
-    "app_name_generic_mtk": {
-        "zh-CN": "MediaTek 固件刷机工具",
-        "en": "MediaTek Firmware Installer",
-        "fr": "Installateur de firmware MediaTek",
-        "es": "Instalador de firmware MediaTek",
+    "app_name_mediatek_installer": {
+        "zh-CN": "MediaTek 安装工具",
+        "en": "MediaTek Installer",
+        "fr": "Installateur MediaTek",
+        "es": "Instalador MediaTek",
+    },
+    "app_name_mediatek_installer_short": {
+        "zh-CN": "安装工具",
+        "en": "Installer",
+        "fr": "Installateur",
+        "es": "Instalador",
     },
     "settings_offline_mode_group": {
-        "zh-CN": "通用 MediaTek 模式",
-        "en": "Generic MediaTek Mode",
-        "fr": "Mode MediaTek générique",
-        "es": "Modo MediaTek genérico",
+        "zh-CN": "离线模式",
+        "en": "Offline Mode",
+        "fr": "Mode hors ligne",
+        "es": "Modo sin conexión",
     },
     "settings_offline_mode": {
-        "zh-CN": "通用 MediaTek 离线模式",
-        "en": "Generic MediaTek Offline Mode",
-        "fr": "Mode hors ligne MediaTek générique",
-        "es": "Modo sin conexión MediaTek genérico",
+        "zh-CN": "离线模式",
+        "en": "Offline Mode",
+        "fr": "Mode hors ligne",
+        "es": "Modo sin conexión",
     },
     "settings_offline_mode_desc": {
-        "zh-CN": "隐藏在线社区固件目录，作为通用联发科 (MediaTek) 刷机工具运行。",
-        "en": "Hide online community catalog and run as a generic MediaTek firmware installer.",
-        "fr": "Masquer le catalogue en ligne et exécuter en tant qu'installateur MediaTek générique.",
-        "es": "Ocultar el catálogo en línea y ejecutar como instalador genérico de MediaTek.",
+        "zh-CN": "隐藏在线社区固件目录，仅使用本地固件文件进行安装。",
+        "en": "Hide the online community catalog and install firmware from local files only.",
+        "fr": "Masque le catalogue communautaire en ligne et n'installe qu'à partir de fichiers locaux.",
+        "es": "Oculta el catálogo comunitario en línea e instala solo desde archivos locales.",
     },
     "sel_themepack_prompt_title": {
         "zh-CN": "安装 Rockbox 360p 主题包？",
@@ -1307,6 +1313,12 @@ _STRINGS: dict = {
         "fr": "Sortie MTKClient",
         "es": "Salida de MTKClient",
     },
+    "log_filter_gui_mediatek": {
+        "zh-CN": "MediaTek 安装工具（应用日志）",
+        "en": "MediaTek Installer (App)",
+        "fr": "Installateur MediaTek (Application)",
+        "es": "Instalador MediaTek (Aplicación)",
+    },
     "log_filter_gui": {
         "zh-CN": "Updater CE (应用日志)",
         "en": "Updater CE (App)",
@@ -1477,6 +1489,12 @@ _STRINGS: dict = {
         "fr": "Soutenir Updater CE",
         "es": "Apoya a Updater CE",
     },
+    "donate_title_mediatek": {
+        "zh-CN": "支持 MediaTek 安装工具",
+        "en": "Support MediaTek Installer",
+        "fr": "Soutenir l'Installateur MediaTek",
+        "es": "Apoyar el Instalador MediaTek",
+    },
     "donate_goal_fmt": {
         "zh-CN": "<b>您已帮助我们支付本月 ${raised} 中的 ${target:.0f} 美元费用。感谢所有捐赠。</b>",
         "en": "<b>You've helped us cover ${raised} of our ${target:.0f} costs for this month. All donations are appreciated.</b>",
@@ -1500,6 +1518,18 @@ _STRINGS: dict = {
         "en": "this firmware",
         "fr": "ce firmware",
         "es": "este firmware",
+    },
+    "donate_intro_success_mediatek": {
+        "zh-CN": "我们已将 <b>{software}</b> 安装到您的 <b>{model}</b>。<br><br>你好！我是 Ryan，MediaTek 安装工具的开发者。我自掏腰包承担托管和存储费用，以保持这个安装工具免费开放。如果它帮到了您，请考虑捐赠——这让项目能持续为大家服务。",
+        "en": "We've installed <b>{software}</b> on your <b>{model}</b>.<br><br>Hey! I'm Ryan, the developer behind MediaTek Installer. I cover hosting and storage costs out of pocket to keep this installer free and open. If it helped you, please consider donating — it keeps the project alive for everyone.",
+        "fr": "Nous avons installé <b>{software}</b> sur votre <b>{model}</b>.<br><br>Salut ! Je suis Ryan, le développeur derrière l'Installateur MediaTek. Je couvre les frais d'hébergement et de stockage de ma poche pour que cet installateur reste gratuit et ouvert. S'il vous a aidé, pensez à faire un don — cela maintient le projet en vie pour tout le monde.",
+        "es": "Hemos instalado <b>{software}</b> en tu <b>{model}</b>.<br><br>¡Hola! Soy Ryan, el desarrollador detrás del Instalador MediaTek. Cubro los gastos de alojamiento y almacenamiento de mi bolsillo para mantener este instalador gratis y abierto. Si te ha ayudado, considera hacer una donación: mantiene el proyecto vivo para todos.",
+    },
+    "donate_intro_general_mediatek": {
+        "zh-CN": "你好！我是 Ryan，MediaTek 安装工具的开发者。我自掏腰包支付托管、工具和存储费用，以保持这个安装工具免费。每月维护费用约 200 美元——您的任何支持都能帮助它继续服务下一位用户。",
+        "en": "Hey! I'm Ryan, the developer behind MediaTek Installer. I pay for hosting, tooling and storage out of my own pocket to keep this installer free. Monthly upkeep comes to around $200 — any support you give helps keep it alive for the next user.",
+        "fr": "Salut ! Je suis Ryan, le développeur derrière l'Installateur MediaTek. Je paie l'hébergement, les outils et le stockage de ma poche pour que cet installateur reste gratuit. L'entretien mensuel s'élève à environ 200 $ — toute aide contribue à le garder en vie pour le prochain utilisateur.",
+        "es": "¡Hola! Soy Ryan, el desarrollador detrás del Instalador MediaTek. Pago el alojamiento, las herramientas y el almacenamiento de mi bolsillo para mantener este instalador gratis. El mantenimiento mensual ronda los 200 $; cualquier apoyo ayuda a mantenerlo vivo para el próximo usuario.",
     },
     "donate_intro_success": {
         "zh-CN": "我们已将 <b>{software}</b> 安装到您的 <b>{model}</b>。<br><br>你好！我是 Ryan，Updater CE、社区固件档案和主题画廊的开发者。我自掏腰包承担每月约 200 美元的服务器和存储费用，以保持一切免费和开放。如果这个工具帮助了您，请考虑捐赠——这能让这些资源持续为大家服务。",
@@ -1986,6 +2016,12 @@ _STRINGS: dict = {
         "en": "Switch to Simulated macOS Mode",
         "fr": "Passer en mode macOS simulé",
         "es": "Cambiar a modo macOS simulado",
+    },
+    "simulated_mac_body_mediatek": {
+        "zh-CN": "MTKClient 将成为唯一的安装方式，并显示 macOS 专属提示。MediaTek 安装工具需要重启才能应用。",
+        "en": "MTKClient becomes the only install method and macOS-specific prompts are shown. MediaTek Installer needs to restart to apply this.",
+        "fr": "MTKClient devient la seule méthode d'installation et les invites macOS sont affichées. L'Installateur MediaTek doit redémarrer pour appliquer ce réglage.",
+        "es": "MTKClient pasa a ser el único método de instalación y se muestran los avisos de macOS. El Instalador MediaTek debe reiniciarse para aplicarlo.",
     },
     "simulated_mac_body": {
         "zh-CN": "MTKClient 将成为唯一的安装方式，并显示 macOS 专属提示。Updater CE 需要重启才能应用。",
@@ -2672,3 +2708,16 @@ def translator() -> _Translator:
 
 def tr(key: str) -> str:
     return _global_translator.t(key)
+
+
+def tr_brand(key: str) -> str:
+    """Translate ``key``, preferring its ``_mediatek`` variant in that build.
+
+    The MediaTek Installer must not name Updater CE, the Community Firmware
+    Archive or the Themes Gallery, so branded copy is looked up by variant.
+    """
+    from .config import is_mediatek_installer
+
+    if is_mediatek_installer() and f"{key}_mediatek" in _STRINGS:
+        return tr(f"{key}_mediatek")
+    return tr(key)

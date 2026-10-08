@@ -100,3 +100,42 @@ Updater CE supports 100% offline usage:
 - When no internet connection is detected, the **Online** tab is automatically hidden, leaving only the **Local File** tab.
 - Users can choose any local `.zip`, `.rar`, scatter text file (`MT6572_Android_scatter.txt`), or firmware directory to flash completely offline.
 - When an active network is detected, the window dynamically refreshes and restores the **Online** firmware tab.
+- Settings also offers a manual **Offline Mode** switch for the same effect. Offline mode keeps the Updater CE name and branding; it only hides the online catalogue. (To build the tool as a generic MediaTek installer instead, see section 5.)
+
+---
+
+## 5. MediaTek Installer builds (generic cross-platform tool)
+
+The same engine can be packaged as **MediaTek Installer** — a generic MediaTek
+firmware installer with no Updater CE identity and no online firmware at all:
+
+- the app is named `MediaTek Installer` and shown in-app as `Installer 3.0`
+- the offline switch is not shown: this build is offline-only by definition
+- donations remain (buttons, goal, donor info), worded for MediaTek Installer
+  rather than Updater CE, the Community Firmware Archive and the Themes Gallery
+- "install from a terminal window" remains available, so the console tools can
+  still be watched and diagnosed
+
+Build it by selecting the packaging brand:
+
+```bash
+./build_macos.sh --brand mediatek_installer        # dist/MediaTek Installer.app
+BUILD_BRAND=mediatek_installer ./build_macos.sh    # same, via the environment
+```
+
+The brand is frozen into the bundle (`src/_build_brand.py`, generated and
+gitignored), so it survives being launched from Finder. Other platforms can
+bake it with the same helper before their packaging step:
+
+```bash
+BUILD_BRAND=mediatek_installer python scripts/set_build_brand.py mediatek_installer
+# ... run that platform's build/packaging ...
+python scripts/set_build_brand.py --reset          # back to Updater CE
+```
+
+For development no rebuild is needed — the mode can be chosen at launch:
+
+```bash
+python -m src.app --mediatek-installer   # generic MediaTek Installer
+python -m src.app --offline              # Updater CE, online catalogue hidden
+```

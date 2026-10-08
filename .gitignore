@@ -18,6 +18,9 @@ build/
 *.icns
 .DS_Store
 
+# Build brand baked in by scripts/set_build_brand.py (packaging only)
+src/_build_brand.py
+
 # Scratch directories
 scratch/
 tools/mtkclient-*-snapshot/
