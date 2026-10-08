@@ -2565,7 +2565,7 @@ def test_rockbox_release_filters():
     page = SettingsPage()
     page.show()
     app.processEvents()
-    assert page._rockbox_card.isVisible(), "filters stay on screen at all times"
+    assert page._rockbox_card.isVisible(), "the filters apply to online Updater CE releases"
     for cb in (page._cb_old_rockbox, page._cb_nightly, page._cb_240p):
         assert cb.text() != ""
 
@@ -5739,6 +5739,7 @@ def test_generic_mtk_mode_and_offline_branding():
     assert w._support_btn.isVisible()
     assert w._credits_btn.isVisible()
     assert not w._settings_page._offline_mode_card.isHidden()
+    assert not w._settings_page._rockbox_card.isHidden()
 
     # Toggle offline mode in Settings Page: this hides the online catalogue
     # only. The Updater CE brand must survive it untouched — offline mode is
@@ -5761,6 +5762,8 @@ def test_generic_mtk_mode_and_offline_branding():
     assert not w.statusBar().isVisible()
     assert not w._credits_btn.isVisible()
     assert not w._settings_page._offline_mode_card.isHidden()
+    # ...and nothing to filter, so the Rockbox release filters go too.
+    assert w._settings_page._rockbox_card.isHidden()
     assert tr("settings_offline_mode") == "Offline Mode"
     for key in ("settings_offline_mode", "settings_offline_mode_group", "settings_offline_mode_desc"):
         for loc, text in i18n._STRINGS[key].items():
@@ -5779,6 +5782,7 @@ def test_generic_mtk_mode_and_offline_branding():
     assert w._select_page._tabs.tabBar().isVisible()
     assert w._support_btn.isVisible()
     assert w._credits_btn.isVisible()
+    assert not w._settings_page._rockbox_card.isHidden()
 
     w.close()
     app.processEvents()
@@ -5838,6 +5842,8 @@ def test_mediatek_installer_mode():
         # Offline tool: no checkbox to re-enable online firmware, and no
         # CE-only affordances it cannot use.
         assert w._settings_page._offline_mode_card.isHidden()
+        # An offline-only tool has no online releases to filter either.
+        assert w._settings_page._rockbox_card.isHidden()
         assert not w._credits_btn.isVisible()
         assert not w._check_updates_btn.isVisible()
         assert not w._select_page._tabs.tabBar().isVisible()
@@ -5866,6 +5872,7 @@ def test_mediatek_installer_mode():
         assert w.windowTitle().startswith("Updater CE")
         assert w._brand_label.text() == "Updater CE"
         assert not w._settings_page._offline_mode_card.isHidden()
+        assert not w._settings_page._rockbox_card.isHidden()
         assert w._credits_btn.isVisible()
 
         w.close()

@@ -192,9 +192,9 @@ class SettingsPage(QWidget):
         self._reminders_card.set_layout(rem_layout)
         layout.addWidget(self._reminders_card)
 
-        # --- Card 3: Rockbox release filters (always visible) ---
-        # These are applied by the online browser only when Rockbox releases
-        # for Y1 are being listed.
+        # --- Card 3: Rockbox release filters ---
+        # These choose between the online Y1/Y2 Rockbox release builds, so they
+        # are offered only when there is a catalogue to filter.
         self._rockbox_card = Card("settings_rockbox_group")
         rock_layout = QVBoxLayout()
         rock_layout.setSpacing(8)
@@ -220,6 +220,7 @@ class SettingsPage(QWidget):
 
         self._rockbox_card.set_layout(rock_layout)
         layout.addWidget(self._rockbox_card)
+        self._update_rockbox_visibility()
 
         # --- Card 3: Community Acknowledgements & Donations ---
         self._donations_card = Card("settings_donations_group")
@@ -501,6 +502,15 @@ class SettingsPage(QWidget):
     # ------------------------------------------------------------------
     # SP Flash Tool authentication file
     # ------------------------------------------------------------------
+    def _update_rockbox_visibility(self):
+        """Offer the Rockbox release filters only with a catalogue to filter.
+
+        They filter the online Y1/Y2 Rockbox release list, so with no online
+        catalogue — offline mode, or a build of the generic MediaTek Installer,
+        which is offline by definition — there is nothing for them to act on.
+        """
+        self._rockbox_card.setVisible(not is_offline_mode())
+
     def _update_sp_auth_visibility(self):
         """Offer the auth file only where it can actually be used.
 
@@ -585,6 +595,7 @@ class SettingsPage(QWidget):
         """Reload and update all controls to reflect current settings."""
         self._method_card.setVisible(not paths.IS_MAC)
         self._prep_card.setVisible(not paths.IS_MAC)
+        self._update_rockbox_visibility()
 
         # Install method selector
         self.set_method(self._persisted_method())
@@ -630,6 +641,7 @@ class SettingsPage(QWidget):
     def apply_brand_mode(self, mediatek_installer: bool):
         """Show or hide the pieces that only make sense for one brand."""
         self._offline_mode_card.setVisible(not mediatek_installer)
+        self._update_rockbox_visibility()
         self._update_sp_auth_visibility()
 
     # ------------------------------------------------------------------
