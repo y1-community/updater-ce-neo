@@ -18,9 +18,30 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# BUILD_BRAND=mediatek_installer packages the generic cross-platform MediaTek
+# Installer instead of Updater CE: same engine, its own name (and an app that
+# knows it is offline-only). Default is unchanged.
+BRAND="$(printf '%s' "${BUILD_BRAND:-updater_ce}" | tr '[:upper:]-' '[:lower:]_')"
 APP_NAME="InnioasisUpdater"
 DISPLAY_NAME="Updater CE"
 APP_ID="io.github.y1_community.InnioasisUpdater"
+BRAND_SLUG="InnioasisUpdater"
+case "$BRAND" in
+    updater_ce) ;;
+    mediatek_installer)
+        # The dist folder / executable stay slugs (as Updater CE's does): the
+        # display name is the job of the desktop entry.
+        APP_NAME="MediaTekInstaller"
+        DISPLAY_NAME="MediaTek Installer"
+        APP_ID="io.github.y1_community.MediaTekInstaller"
+        BRAND_SLUG="MediaTekInstaller"
+        ;;
+    *)
+        echo "ERROR: unknown BUILD_BRAND '$BRAND' (expected updater_ce or mediatek_installer)"
+        exit 1
+        ;;
+esac
+export BUILD_BRAND="$BRAND"
 VERSION=$(grep -oP 'APP_VERSION\s*=\s*"\K[^"]+' src/config.py 2>/dev/null || echo "3.0.0")
 ARCH="${ARCH:-x86_64}"
 
@@ -52,8 +73,14 @@ while [[ $# -gt 0 ]]; do
             echo "  --clean           Remove previous build and dist artifacts before building"
             echo "  --no-pyinstaller  Skip PyInstaller build and package existing dist/InnioasisUpdater"
             echo "  --arch <arch>     Target architecture (default: x86_64)"
+            echo "  --brand <name>    Build only this brand (updater_ce or mediatek_installer);"
+            echo "                    by default BOTH apps are built"
             echo "  -h, --help        Show this help message"
             exit 0
+            ;;
+        --brand)
+            BRAND_REQUESTED="$(printf '%s' "$2" | tr '[:upper:]-' '[:lower:]_')"
+            shift 2
             ;;
         *)
             echo "Unknown option: $1"
@@ -63,6 +90,41 @@ while [[ $# -gt 0 ]]; do
 done
 
 export ARCH
+
+# Reject a bad brand before anything is deleted: a typo must not wipe good
+# AppImages sitting in dist/.
+for _candidate in "${BRAND_REQUESTED:-}" "$BRAND"; do
+    case "$_candidate" in
+        ""|updater_ce|mediatek_installer) ;;
+        *)
+            echo "ERROR: unknown brand '$_candidate' (expected updater_ce or mediatek_installer)"
+            exit 1
+            ;;
+    esac
+done
+
+# --- Brand plan ---------------------------------------------------------------
+# A build produces BOTH front ends: Updater CE and the generic MediaTek
+# Installer (same internals, different identity and front end). --brand picks
+# just one for a quick local iteration. Each brand is built by a child run of
+# this script, so the single-brand path stays identical to what it always was.
+if [ -z "${INNOASIS_BRAND_LOCK:-}" ]; then
+    if [ "$CLEAN_BUILD" -eq 1 ]; then
+        rm -rf "$BUILD_DIR" "$DIST_DIR"/*.AppImage*
+    fi
+    if [ -n "${BRAND_REQUESTED:-}" ]; then
+        brands=("$BRAND_REQUESTED")
+    else
+        brands=(updater_ce mediatek_installer)
+    fi
+    for brand in "${brands[@]}"; do
+        INNOASIS_BRAND_LOCK=1 BUILD_BRAND="$brand" "$0" "$@" || exit $?
+    done
+    echo ""
+    echo "=== Built AppImages ==="
+    ls "$DIST_DIR"/*.AppImage 2>/dev/null || true
+    exit 0
+fi
 
 echo "======================================================================"
 echo " Building $DISPLAY_NAME AppImage (v$VERSION - $ARCH)"
@@ -107,13 +169,19 @@ if [ "$SKIP_PYINSTALLER" -eq 0 ]; then
 fi
 
 # --- Clean if requested -------------------------------------------------------
+# The other brand's AppImage and this one were already cleared by the brand plan.
 if [ "$CLEAN_BUILD" -eq 1 ]; then
     echo ">>> Cleaning build artifacts..."
-    rm -rf "$BUILD_DIR" "$DIST_DIR/$APP_NAME" "$DIST_DIR"/*.AppImage*
+    rm -rf "$BUILD_DIR" "$DIST_DIR/$APP_NAME"
 fi
 
 # --- Step 1: PyInstaller build ------------------------------------------------
 mkdir -p "$DIST_DIR" "$BUILD_DIR"
+
+# Bake the brand into the frozen app (the spec also names dist/ after it), and
+# remove it again however this build ends.
+"$PYTHON" scripts/set_build_brand.py "$BRAND"
+trap 'rm -f src/_build_brand.py' EXIT
 
 if [ "$SKIP_PYINSTALLER" -eq 0 ]; then
     echo ">>> Running PyInstaller with $SPEC_FILE..."
@@ -191,6 +259,19 @@ EOF
     cp "$APPDIR/innioasis-updater.desktop" "$APPDIR/usr/share/applications/innioasis-updater.desktop"
 fi
 
+# The MediaTek Installer is the same build with a different identity: give it
+# the name the user sees and the slugged executable it actually launches.
+if [ "$BRAND" = "mediatek_installer" ]; then
+    for entry in "$APPDIR/innioasis-updater.desktop" \
+                 "$APPDIR/usr/share/applications/innioasis-updater.desktop"; do
+        sed -i \
+            -e "s/^Name=Updater CE/Name=$DISPLAY_NAME/" \
+            -e "s/^Exec=InnioasisUpdater/Exec=$APP_NAME/" \
+            -e "s/^StartupWMClass=Updater CE/StartupWMClass=$DISPLAY_NAME/" \
+            "$entry"
+    done
+fi
+
 # Copy AppStream metadata
 APPDATA_SRC="assets/io.github.y1_community.InnioasisUpdater.metainfo.xml"
 if [ -f "$APPDATA_SRC" ]; then
@@ -222,10 +303,15 @@ export PATH="${HERE}/usr/bin:${PATH}"
 export LD_LIBRARY_PATH="${HERE}/usr/bin/_internal:${HERE}/usr/lib:${LD_LIBRARY_PATH}"
 export XDG_DATA_DIRS="${HERE}/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
 
-# Hand off execution to InnioasisUpdater binary
+# Hand off execution to the brand's binary (InnioasisUpdater or
+# MediaTekInstaller — both come from the same spec).
 exec "${HERE}/usr/bin/InnioasisUpdater" "$@"
 EOF
 chmod +x "$APPDIR/AppRun"
+# ...and point it at this brand's executable.
+if [ "$APP_NAME" != "InnioasisUpdater" ]; then
+    sed -i "s|/usr/bin/InnioasisUpdater|/usr/bin/$APP_NAME|" "$APPDIR/AppRun"
+fi
 
 # --- Step 3: Obtain appimagetool ----------------------------------------------
 APPIMAGETOOL_BIN=""
@@ -274,8 +360,8 @@ if [ -z "$APPIMAGETOOL_BIN" ]; then
 fi
 
 # --- Step 4: Build AppImage ---------------------------------------------------
-OUTPUT_VERSIONED="$DIST_DIR/${APP_NAME}-${VERSION}-${ARCH}.AppImage"
-OUTPUT_LATEST="$DIST_DIR/${APP_NAME}-${ARCH}.AppImage"
+OUTPUT_VERSIONED="$DIST_DIR/${BRAND_SLUG}-${VERSION}-${ARCH}.AppImage"
+OUTPUT_LATEST="$DIST_DIR/${BRAND_SLUG}-${ARCH}.AppImage"
 
 echo ">>> Generating AppImage: $OUTPUT_VERSIONED..."
 if ! ARCH="$ARCH" "$APPIMAGETOOL_BIN" "$APPDIR" "$OUTPUT_VERSIONED"; then

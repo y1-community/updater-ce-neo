@@ -38,9 +38,9 @@ chmod +x build_macos.sh
 ./build_macos.sh --arch universal2 --dmg
 ```
 
-**Output**:
-- `dist/Updater CE.app` (100% self-contained application bundle)
-- `dist/UpdaterCE-3.0.0-macOS.dmg` (if `--dmg` is specified)
+**Output** (both front ends — see section 5):
+- `dist/Updater CE.app` and `dist/MediaTek Installer.app` (100% self-contained application bundles)
+- `dist/UpdaterCE-3.0-universal2-macOS.dmg` and `dist/MediaTekInstaller-3.0-universal2-macOS.dmg` (if `--dmg` is specified)
 
 ---
 
@@ -60,9 +60,9 @@ cd updater-ce-neo
 .\build_windows.ps1
 ```
 
-**Output**:
-- `dist\InnioasisUpdater\InnioasisUpdater.exe` (standalone portable directory with bundled SP Flash Tool)
-- `dist\InnioasisUpdater-Setup-3.0.0.exe` (full Windows installer wizard)
+**Output** (both front ends — see section 5):
+- `dist\InnioasisUpdater\InnioasisUpdater.exe` and `dist\MediaTekInstaller\MediaTekInstaller.exe` (standalone portable directories with bundled SP Flash Tool)
+- `dist\UpdaterCE-Setup-3.0.0.exe` and `dist\MediaTekInstaller-Setup-3.0.0.exe` (full Windows installer wizards, each with its own identity so both can be installed side by side)
 
 > **Note**: On Windows, the app runs 100% SP Flash Tool by default. Press the `M` key on the keyboard to unlock the MTKClient advanced backend option.
 
@@ -79,8 +79,8 @@ chmod +x build_appimage.sh
 ./build_appimage.sh
 ```
 
-**Output**:
-- `dist/InnioasisUpdater-3.0.0-x86_64.AppImage` (standalone portable AppImage with bundled SP Flash Tool and udev setup tools)
+**Output** (both front ends — see section 5):
+- `dist/UpdaterCE-3.0-x86_64.AppImage` and `dist/MediaTekInstaller-3.0-x86_64.AppImage` (standalone portable AppImages with bundled SP Flash Tool and udev setup tools)
 
 ---
 
@@ -116,12 +116,31 @@ firmware installer with no Updater CE identity and no online firmware at all:
 - "install from a terminal window" remains available, so the console tools can
   still be watched and diagnosed
 
-Build it by selecting the packaging brand:
+### Every build ships both apps
+
+A normal build of any platform produces **both** front ends side by side — the
+Updater CE app and the MediaTek Installer app — because they are the same
+engine with different identities:
 
 ```bash
-./build_macos.sh --brand mediatek_installer        # dist/MediaTek Installer.app
-BUILD_BRAND=mediatek_installer ./build_macos.sh    # same, via the environment
+./build_macos.sh            # dist/Updater CE.app + dist/MediaTek Installer.app
+./build_appimage.sh         # dist/UpdaterCE-*.AppImage + dist/MediaTekInstaller-*.AppImage
+build_windows.bat           # dist\InnioasisUpdater\ + dist\MediaTekInstaller\ (+ both installers)
 ```
+
+To build just one (the quick path while iterating on a single front end):
+
+```bash
+./build_macos.sh --brand mediatek_installer     # dist/MediaTek Installer.app only
+./build_appimage.sh --brand updater_ce          # Updater CE AppImage only
+build_windows.bat mediatek_installer            # MediaTek Installer only
+powershell -File build_windows.ps1 -Brand mediatek_installer
+BUILD_BRAND=mediatek_installer ./build_macos.sh # same, via the environment
+```
+
+The dist folder / executable name stays a slug per brand
+(`InnioasisUpdater`, `MediaTekInstaller`); `MediaTek Installer` is the name the
+user sees in the installer, Start Menu, window title and dock.
 
 The brand is frozen into the bundle (`src/_build_brand.py`, generated and
 gitignored), so it survives being launched from Finder. Other platforms can

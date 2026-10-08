@@ -13,6 +13,7 @@ The spec bundles:
     so the macOS/Linux flash backend keeps all DA loaders and payloads.
 """
 
+import os
 import sys
 from pathlib import Path
 
@@ -20,6 +21,18 @@ from pathlib import Path
 PROJECT_ROOT = Path(SPECPATH)  # noqa: F821  (SPECPATH injected by PyInstaller)
 VENDOR_MTK = PROJECT_ROOT / "vendor" / "mtkclient"
 ASSETS = PROJECT_ROOT / "assets"
+
+# --- Packaging brand --------------------------------------------------------
+# BUILD_BRAND=mediatek_installer packages the same engine as the generic
+# cross-platform MediaTek Installer (its own executable and dist folder);
+# anything else builds Updater CE, exactly as before.
+_BUILD_BRAND = (os.environ.get("BUILD_BRAND") or "").strip().lower().replace("-", "_")
+# The dist folder / executable name stays a slug (like Updater CE's does): the
+# display name is the job of the installer and the desktop entry, and spaces in
+# an executable path are needless trouble for cmd, Inno Setup and AppRun.
+APP_DISPLAY_NAME = "MediaTek Installer" if IS_MEDIATEK_INSTALLER_BUILD else "Updater CE"
+APP_SLUG = "MediaTekInstaller" if IS_MEDIATEK_INSTALLER_BUILD else "InnioasisUpdater"
+print(f"[spec] packaging brand: {APP_DISPLAY_NAME} -> dist/{APP_SLUG}")
 
 # Make mtkclient importable at build time so collect_submodules can see it.
 if str(VENDOR_MTK) not in sys.path:
@@ -78,7 +91,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="InnioasisUpdater",
+    name=APP_SLUG,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -93,7 +106,7 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=False,
-    name="InnioasisUpdater",
+    name=APP_SLUG,
 )
 
 # ---------------------------------------------------------------------------
@@ -114,7 +127,7 @@ sp_candidates = [
 SP_FLASH_SRC = next((p for p in sp_candidates if p and p.exists()), None)
 try:
     _dist_root = Path(DISTPATH)  # noqa: F821  (injected by PyInstaller)
-    _app_dir = _dist_root / "InnioasisUpdater"
+    _app_dir = _dist_root / APP_SLUG
     _sp_target = _app_dir / "SP_Flash_Tool"
     if SP_FLASH_SRC and SP_FLASH_SRC.exists():
         if _sp_target.exists():

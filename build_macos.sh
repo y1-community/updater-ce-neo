@@ -41,7 +41,7 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --brand)
-            BRAND="$(printf '%s' "$2" | tr '[:upper:]-' '[:lower:]_')"
+            BRAND_REQUESTED="$(printf '%s' "$2" | tr '[:upper:]-' '[:lower:]_')"
             shift 2
             ;;
         *)
@@ -49,6 +49,42 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# Reject a bad brand before anything is deleted: a typo must not wipe a good
+# build sitting in dist/.
+for _candidate in "${BRAND_REQUESTED:-}" "$BRAND"; do
+    case "$_candidate" in
+        ""|updater_ce|mediatek_installer) ;;
+        *)
+            echo "ERROR: unknown brand '$_candidate' (expected updater_ce or mediatek_installer)"
+            exit 1
+            ;;
+    esac
+done
+
+# --- Brand plan -----------------------------------------------------------
+# A build produces BOTH front ends: the Updater CE app and the generic
+# MediaTek Installer app (same internals, different identity). Pass --brand to
+# build just one, which is what a quick local iteration wants.
+#
+# Each brand is built by a child run of this script: that keeps the per-brand
+# path identical to the single-brand flow above and below.
+if [ "${INNOASIS_BRAND_LOCK:-}" = "1" ]; then
+    : # child pass: build the brand handed over in BUILD_BRAND
+elif [ -n "${BRAND_REQUESTED:-}" ]; then
+    rm -rf "$BUILD_DIR" "$DIST_DIR"/*.app "$DIST_DIR"/*.dmg
+    INNOASIS_BRAND_LOCK=1 BUILD_BRAND="$BRAND_REQUESTED" "$0" "$@" || exit $?
+    exit 0
+else
+    rm -rf "$BUILD_DIR" "$DIST_DIR"/*.app "$DIST_DIR"/*.dmg
+    for brand in updater_ce mediatek_installer; do
+        INNOASIS_BRAND_LOCK=1 BUILD_BRAND="$brand" "$0" "$@" || exit $?
+    done
+    echo ""
+    echo "=== Built for macOS ==="
+    ls -d "$DIST_DIR"/*.app 2>/dev/null || true
+    exit 0
+fi
 
 case "$BRAND" in
     updater_ce) ;;
@@ -135,10 +171,10 @@ fi
 
 echo "=== Building $APP_NAME for macOS (v$VERSION) [$BRAND] ==="
 echo "Target: macOS 13 (Ventura) through macOS 26 (Golden Gate)"
-[n -n "$TARGET_ARCH" ] && echo "Architecture: $TARGET_ARCH" || echo "Architecture: Host default (Intel/Apple Silicon)"
+[ -n "$TARGET_ARCH" ] && echo "Architecture: $TARGET_ARCH" || echo "Architecture: Host default (Intel/Apple Silicon)"
 
-# --- Clean ----------------------------------------------------------------
-rm -rf "$BUILD_DIR" "$DIST_DIR"/*.app "$DIST_DIR"/*.dmg
+# dist/ was cleaned once by the brand plan above, before any child build, so
+# the two apps can sit side by side.
 
 # --- Bake the packaging brand -----------------------------------------
 # The frozen app must know its own brand without an environment: this writes

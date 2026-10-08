@@ -3,27 +3,71 @@
 ; Repository: https://github.com/y1-community/updater-ce-neo
 ; ==============================================================================
 
-#define MyAppName "Updater CE"
-#define MyAppVersion "3.0.0"
-#define MyAppPublisher "Innioasis Community"
-#define MyAppURL "https://github.com/y1-community/updater-ce-neo"
-#define MyAppExeName "InnioasisUpdater.exe"
-#define MyDistDir "..\dist\InnioasisUpdater"
+; Every name below can be overridden from the command line, which is how the
+; generic MediaTek Installer build (BUILD_BRAND=mediatek_installer) installs
+; under its own name and from its own dist folder:
+;   ISCC.exe /DMyIsMediaTek /DMyAppName="MediaTek Installer" /DMyDistDir="..\dist\MediaTekInstaller" ...
+; /DMyIsMediaTek also gives the two apps separate [Setup] identities, so both
+; can be installed side by side instead of replacing each other.
+#ifndef MyAppId
+  #ifdef MyIsMediaTek
+    #define MyAppId "{{5B1D7E4C-9A2F-4C57-8F16-2E7B6A4D9C31}"
+  #else
+    #define MyAppId "{{C78F982D-7B5F-48A1-8E23-DF3A0210A2B9}"
+  #endif
+#endif
+#ifndef MyAppName
+  #define MyAppName "Updater CE"
+#endif
+; Where the app lives / which Start Menu folder it lands in. The generic
+; MediaTek Installer is not an Innioasis product, so it stands alone.
+#ifndef MyAppDirParent
+  #ifdef MyIsMediaTek
+    #define MyAppDirParent ""
+  #else
+    #define MyAppDirParent "Innioasis Community"
+  #endif
+#endif
+#ifndef MyAppGroup
+  #ifdef MyIsMediaTek
+    #define MyAppGroup MyAppName
+  #else
+    #define MyAppGroup "Innioasis Community"
+  #endif
+#endif
+#ifndef MyAppVersion
+  #define MyAppVersion "3.0.0"
+#endif
+#ifndef MyAppPublisher
+  #define MyAppPublisher "Innioasis Community"
+#endif
+#ifndef MyAppURL
+  #define MyAppURL "https://github.com/y1-community/updater-ce-neo"
+#endif
+#ifndef MyAppExeName
+  #define MyAppExeName "InnioasisUpdater.exe"
+#endif
+#ifndef MyDistDir
+  #define MyDistDir "..\dist\InnioasisUpdater"
+#endif
+#ifndef MyOutputBase
+  #define MyOutputBase "UpdaterCE-Setup"
+#endif
 
 [Setup]
-AppId={{C78F982D-7B5F-48A1-8E23-DF3A0210A2B9}
+AppId={#MyAppId}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}/issues
 AppUpdatesURL={#MyAppURL}/releases
-DefaultDirName={autopf}\Innioasis Community\Updater CE
-DefaultGroupName=Innioasis Community
+DefaultDirName={autopf}\{#MyAppDirParent}\{#MyAppName}
+DefaultGroupName={#MyAppGroup}
 DisableProgramGroupPage=yes
 LicenseFile=..\LICENSE
 OutputDir=..\dist
-OutputBaseFilename=UpdaterCE-Setup-{#MyAppVersion}
+OutputBaseFilename={#MyOutputBase}-{#MyAppVersion}
 SetupIconFile=..\assets\icon.ico
 Compression=lzma2/ultra64
 SolidCompression=yes

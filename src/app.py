@@ -40,6 +40,18 @@ def _configure_logging():
 def main():
     _configure_logging()
 
+    # Say which front end this is, once: a frozen build carries its brand
+    # inside, so this is the one line that tells support which app a log came
+    # from (and confirms the packaging baked the right one).
+    from . import config
+
+    logging.getLogger("innioasis.startup").info(
+        "Starting %s v%s (brand: %s)",
+        config.get_app_name(),
+        config.APP_VERSION,
+        config.build_brand() or "updater_ce",
+    )
+
     if len(sys.argv) >= 4 and sys.argv[1] == "--flash-cli":
         import os
         import signal
@@ -83,7 +95,10 @@ def main():
         return
 
     app = QApplication(sys.argv)
-    app.setApplicationName("Updater CE")
+    # Names the app to the desktop (menu entry matching, WM_CLASS, macOS Dock):
+    # the packaged front end tells the environment which one it is. Read before
+    # the language is restored, so the name is the stable English one.
+    app.setApplicationName(config.get_app_name())
     app.setOrganizationName("innioasis")
 
     import sys as _sys
