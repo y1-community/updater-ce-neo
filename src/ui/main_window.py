@@ -19,6 +19,7 @@ from pathlib import Path
 
 from PySide6.QtCore import (
     QEvent,
+    QEventLoop,
     QProcess,
     QProcessEnvironment,
     QSettings,
@@ -28,19 +29,17 @@ from PySide6.QtCore import (
     QTimer,
     Signal,
 )
-from PySide6.QtGui import QIcon, QPainter, QPixmap
+from PySide6.QtGui import QColor, QIcon, QPalette, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
     QComboBox,
     QDialog,
-    QFrame,
     QHBoxLayout,
     QLabel,
     QMainWindow,
     QMessageBox,
     QPushButton,
-    QScrollArea,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
@@ -83,15 +82,15 @@ from ..flash_service import (
 from ..i18n import tr, tr_brand, translator
 from ..state import FlashState, StateMachine
 from .dialogs import (
-    DiagnosticsDialog,
+    DiagnosticsView,
     FlashCompleteDialog,
     ReleaseReminderDialog,
     RetryGuidanceDialog,
     UpdateAvailableDialog,
 )
-from .dark import T, ThemeWatcher, apply_theme, content_top_margin, is_dark
-from .scrollbars import configure_scroll_area, ensure_native_scrolling
+from .dark import T, ThemeWatcher, is_dark
 from .glass import (
+    HEADER_CONTENT_HEIGHT,
     apply_glass,
     apply_windows_acrylic,
     apply_windows_dark_titlebar,
@@ -105,6 +104,9 @@ from .retry_page import RetryPage
 from .select_page import SelectPackagePage
 from .settings_page import SettingsPage
 from .icons import get_symbol_icon
+from .widgets import CurrentPageStack
+from .sidebar import SidebarButton, sidebar_row_min_height, sidebar_row_spacing
+from .widgets import CurrentPageStack
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +115,23 @@ _PAGE_FLASH = 1
 _PAGE_ERROR = 2
 _PAGE_RETRY = 3
 _PAGE_SETTINGS = 4
+_PAGE_DIAGNOSTICS = 5
+_PAGE_NOTICE = 6
+
+# Choose Software, and the app's ordinary size. Measured from the running
+# window on this desktop: 680×480. A desktop that draws its own title bar
+# adds that bar outside this size. When the window controls share the brand
+# row, this size already includes it. The floor is a little smaller so the
+# window can still shrink.
+DEFAULT_WINDOW_WIDTH = 680
+DEFAULT_WINDOW_HEIGHT = 480
+MINIMUM_WINDOW_WIDTH = 640
+MINIMUM_WINDOW_HEIGHT = 440
+
+
+def default_window_size() -> tuple[int, int]:
+    """Client size for Choose Software and the rest of the ordinary UI."""
+    return DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT
 
 # The sidebar brand title and the version badge beside it share one size.
 _BRAND_FONT_SIZE = "14px"
@@ -168,103 +187,20 @@ _INSTALL_RUN_STATES = (
 )
 
 
-class TranslucentCentralWidget(QWidget):
-    """Central container with translucent background that cleanly clears dirty rects."""
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setObjectName("centralWidget")
-        self.setAttribute(Qt.WA_TranslucentBackground, True)
-
-    def paintEvent(self, event):
-        p = QPainter(self)
-        p.setCompositionMode(QPainter.CompositionMode_Clear)
-        p.fillRect(event.rect(), Qt.transparent)
-        p.end()
-        super().paintEvent(event)
-
-
-class ClearStackedWidget(QStackedWidget):
-    """Stacked widget that cleanly hides inactive pages."""
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setAttribute(Qt.WA_TranslucentBackground, True)
-
-    def setCurrentIndex(self, index):
-        for i in range(self.count()):
-            w = self.widget(i)
-            if w and i != index:
-                w.hide()
-        target = self.widget(index)
-        if target:
-            target.show()
-        super().setCurrentIndex(index)
-        self.update()
-
-
-class ClearNavPanel(QWidget):
-    """Sidebar rail container matching native OS styles."""
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setAttribute(Qt.WA_TranslucentBackground, True)
-
-    def paintEvent(self, event):
-        p = QPainter(self)
-        p.setCompositionMode(QPainter.CompositionMode_Clear)
-        p.fillRect(event.rect(), Qt.transparent)
-        p.end()
-        super().paintEvent(event)
-
-
-class ClearNavButton(QPushButton):
-    """Sidebar navigation button matching native OS styles."""
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.setAttribute(Qt.WA_TranslucentBackground, True)
-
-    def paintEvent(self, event):
-        p = QPainter(self)
-        p.setCompositionMode(QPainter.CompositionMode_Clear)
-        p.fillRect(event.rect(), Qt.transparent)
-        p.end()
-        super().paintEvent(event)
-
-
-class ClearWidget(QWidget):
-    """Container that clears backing store before child rendering."""
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setAttribute(Qt.WA_TranslucentBackground, True)
-
-    def paintEvent(self, event):
-        p = QPainter(self)
-        p.setCompositionMode(QPainter.CompositionMode_Clear)
-        p.fillRect(event.rect(), Qt.transparent)
-        p.end()
-        super().paintEvent(event)
-
-
 class DraggableHeaderBar(QWidget):
-    """Unified draggable title and header bar matching native OS chrome."""
+    """Draggable header row: brand icon, title, and the active page name.
+
+    It does not paint its own background. A custom clear here used to punch
+    through the window backing store and leave the previous title on screen.
+    """
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("titleBar")
-        self.setFixedHeight(44)
-        self.setAttribute(Qt.WA_TranslucentBackground, True)
+        self.setFixedHeight(int(HEADER_CONTENT_HEIGHT))
+        self.setAutoFillBackground(False)
         self._dragging = False
         self._drag_offset = None
-
-    def paintEvent(self, event):
-        p = QPainter(self)
-        p.setCompositionMode(QPainter.CompositionMode_Clear)
-        p.fillRect(event.rect(), Qt.transparent)
-        p.end()
-        super().paintEvent(event)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -339,6 +275,19 @@ def can_inline_title_with_window_controls() -> bool:
     return any(d in desktop for d in ("gnome", "unity", "pantheon"))
 
 
+def page_title_alignment() -> Qt.AlignmentFlag:
+    """Where the large page title sits in the header.
+
+    Controls on the left (macOS, and desktops that put close/minimize there)
+    leave the trailing edge of the window free, so the title's last glyph
+    lines up with that edge. Controls on the right keep the title at the start,
+    beside the app name.
+    """
+    if are_window_controls_on_left():
+        return Qt.AlignRight | Qt.AlignVCenter
+    return Qt.AlignLeft | Qt.AlignVCenter
+
+
 def are_window_controls_on_left() -> bool:
     """Return True if window controls (close/minimize/zoom) are on the left (e.g. macOS)."""
     if sys.platform == "darwin":
@@ -373,8 +322,8 @@ class MainWindow(QMainWindow):
         flags = self.windowFlags() | Qt.WindowCloseButtonHint | Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint
         self.setWindowFlags(flags)
         ensure_window_maximize_enabled(self)
-        self.resize(800, 500)
-        self.setMinimumSize(680, 420)
+        self.resize(*default_window_size())
+        self.setMinimumSize(MINIMUM_WINDOW_WIDTH, MINIMUM_WINDOW_HEIGHT)
 
         self.sm = StateMachine(self)
         self.service = FlashService(self)
@@ -440,8 +389,39 @@ class MainWindow(QMainWindow):
         if worker is getattr(self, "_manifest_worker", None):
             self._on_manifest_loaded(entries)
 
+    def _paint_opaque(self, widget, color: str | None = None):
+        """Fill a surface so the next paint replaces the previous frame.
+
+        On Liquid Glass and WinUI acrylic the backdrop stays visible: the
+        widget replaces its rect with transparent pixels instead of a solid
+        theme color. Linux keeps the solid fill. This does not use
+        CompositionMode_Clear.
+        """
+        if widget is None:
+            return
+        from .surfaces import glass_surfaces_enabled, show_glass_backdrop
+        if glass_surfaces_enabled():
+            show_glass_backdrop(widget)
+            return
+        widget.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
+        widget.setAutoFillBackground(True)
+        tokens = T()
+        fill = QColor(color or tokens.bg)
+        fg = QColor(tokens.fg)
+        pal = widget.palette()
+        pal.setColor(QPalette.ColorRole.Window, fill)
+        pal.setColor(QPalette.ColorRole.Base, fill)
+        pal.setColor(QPalette.ColorRole.WindowText, fg)
+        pal.setColor(QPalette.ColorRole.Text, fg)
+        pal.setColor(QPalette.ColorRole.ButtonText, fg)
+        widget.setPalette(pal)
+
     def _build_ui(self):
-        central = TranslucentCentralWidget(self)
+        central = QWidget(self)
+        central.setObjectName("centralWidget")
+        # Opaque client area. A translucent central widget keeps the previous
+        # page's pixels, so the next screen is painted on top of the last one.
+        self._paint_opaque(central)
         self.setCentralWidget(central)
         central_layout = QVBoxLayout(central)
         central_layout.setContentsMargins(0, 0, 0, 0)
@@ -454,7 +434,7 @@ class MainWindow(QMainWindow):
             self._title_bar = self._build_header_bar()
             if is_mac:
                 self._title_bar.setParent(self)
-                self._title_bar.setGeometry(0, 0, self.width(), 44)
+                self._title_bar.setGeometry(0, 0, self.width(), int(HEADER_CONTENT_HEIGHT))
                 self._title_bar.raise_()
                 # On macOS, centralWidget is inset by 32px by Cocoa QPA.
                 # Setting 12px top margin ensures body begins cleanly at y = 44.
@@ -468,23 +448,36 @@ class MainWindow(QMainWindow):
         # 2. Body row: Navigation sidebar on left, stacked pages on right
         body = QWidget()
         body.setObjectName("mainBody")
-        body.setAttribute(Qt.WA_TranslucentBackground, True)
+        self._paint_opaque(body)
         outer = QHBoxLayout(body)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
         outer.addWidget(self._build_nav())
 
-        self._stack = ClearStackedWidget()
+        self._stack = CurrentPageStack()
+        self._paint_opaque(self._stack)
         self._select_page = SelectPackagePage()
         self._flash_page = FlashPage()
         self._error_page = ErrorPage()
         self._retry_page = RetryPage()
         self._settings_page = SettingsPage()
+        self._diagnostics_page = DiagnosticsView()
+        self._diagnostics_page.close_requested.connect(self._leave_diagnostics)
+        self.log_line_added.connect(self._diagnostics_page.append_line)
 
         # Mount select_page._title into the unified header bar if inlining
         if is_inline and hasattr(self, "_title_container"):
             self._title_container.layout().addWidget(self._select_page._title)
+            from .surfaces import seal_updating_text
+            seal_updating_text(self._select_page._title)
+            self._align_page_title()
+
+        self._notice_host = QWidget()
+        self._notice_host.setObjectName("noticeHost")
+        notice_layout = QVBoxLayout(self._notice_host)
+        notice_layout.setContentsMargins(16, 12, 16, 12)
+        self._paint_opaque(self._notice_host)
 
         for w in (
             self._select_page,
@@ -492,9 +485,21 @@ class MainWindow(QMainWindow):
             self._error_page,
             self._retry_page,
             self._settings_page,
+            self._diagnostics_page,
+            self._notice_host,
         ):
+            self._paint_opaque(w)
             self._stack.addWidget(w)
-        outer.addWidget(self._stack, 1)
+        content_col = QWidget()
+        content_col.setObjectName("contentColumn")
+        self._paint_opaque(content_col)
+        content_layout = QVBoxLayout(content_col)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(0)
+        content_layout.addWidget(self._stack, 1)
+        self._inline_prompt = self._build_inline_prompt()
+        content_layout.addWidget(self._inline_prompt)
+        outer.addWidget(content_col, 1)
         central_layout.addWidget(body, 1)
 
         self._settings_page.donation_visibility_changed.connect(
@@ -553,7 +558,7 @@ class MainWindow(QMainWindow):
             try:
                 from .glass import configure_traffic_lights
 
-                configure_traffic_lights(self, x_offset=18, y_offset=6)
+                configure_traffic_lights(self, x_offset=18)
             except Exception:
                 pass
         self._refresh_components()
@@ -566,7 +571,7 @@ class MainWindow(QMainWindow):
         t = T()
         self._brand_container = QWidget()
         self._brand_container.setObjectName("brandContainer")
-        self._brand_container.setAttribute(Qt.WA_TranslucentBackground, True)
+        self._brand_container.setAutoFillBackground(False)
         brand_row = QHBoxLayout(self._brand_container)
         brand_row.setContentsMargins(0, 0, 0, 0)
         brand_row.setSpacing(8)
@@ -594,15 +599,13 @@ class MainWindow(QMainWindow):
 
         self._brand_label = QLabel(get_app_name())
         self._brand_label.setStyleSheet(
-            f"font-size: {_BRAND_FONT_SIZE}; font-weight: 800; color: {t.fg}; letter-spacing: -0.02em;"
-            f" background: transparent; border: none;"
+            f"font-size: {_BRAND_FONT_SIZE}; font-weight: 800; color: palette(window-text); letter-spacing: -0.02em; background: transparent; border: none;"
         )
         title_version_row.addWidget(self._brand_label)
 
         self._brand_version = QLabel(APP_VERSION)
         self._brand_version.setStyleSheet(
-            f"font-size: {_BRAND_FONT_SIZE}; font-weight: 800; color: {t.fg}; letter-spacing: -0.02em;"
-            f" background: transparent; border: none;"
+            f"font-size: {_BRAND_FONT_SIZE}; font-weight: 800; color: palette(window-text); letter-spacing: -0.02em; background: transparent; border: none;"
         )
         title_version_row.addWidget(self._brand_version)
         title_version_row.addStretch(1)
@@ -614,7 +617,7 @@ class MainWindow(QMainWindow):
             f'by <a href="https://ko-fi.com/teamslide" style="color: {t.fg}; font-weight: 700; text-decoration: none;">Ryan Specter</a>'
         )
         self._version_label.setStyleSheet(
-            f"font-size: 11px; color: {t.fg}; background: transparent; border: none; margin: 0; padding: 0;"
+            "font-size: 11px; color: palette(window-text); background: transparent; border: none; margin: 0; padding: 0;"
         )
         self._version_label.setTextInteractionFlags(Qt.TextBrowserInteraction)
         self._version_label.setOpenExternalLinks(False)
@@ -627,7 +630,8 @@ class MainWindow(QMainWindow):
     def _build_header_bar(self):
         t = T()
         bar = DraggableHeaderBar(self)
-        bar.setFixedHeight(44)
+        bar.setFixedHeight(int(HEADER_CONTENT_HEIGHT))
+        self._paint_opaque(bar)
         is_mac = sys.platform == "darwin"
         is_win = sys.platform == "win32" or platform.system() == "Windows"
         controls_left = are_window_controls_on_left()
@@ -643,18 +647,20 @@ class MainWindow(QMainWindow):
         brand = self._build_brand_header_widget()
 
         # Title container for active page title
-        self._title_container = ClearWidget()
-        self._title_container.setAttribute(Qt.WA_TranslucentBackground, True)
+        self._title_container = QWidget()
+        self._paint_opaque(self._title_container)
         title_cont_layout = QHBoxLayout(self._title_container)
         title_cont_layout.setContentsMargins(0, 0, 0, 0)
         title_cont_layout.setSpacing(0)
         title_cont_layout.setAlignment(Qt.AlignVCenter)
 
         if controls_left:
-            # macOS / left-handed DEs: Brand beside controls, page headings on the right
+            # macOS / left-handed DEs: brand beside the controls, page title
+            # against the trailing edge of the window.
             bar_layout.addWidget(brand, 0, Qt.AlignVCenter)
             bar_layout.addStretch(1)
-            bar_layout.addWidget(self._title_container, 0, Qt.AlignVCenter)
+            title_cont_layout.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            bar_layout.addWidget(self._title_container, 0, Qt.AlignRight | Qt.AlignVCenter)
         else:
             # Windows / right-handed DEs: Brand on left, page headings beside brand, controls margin on right
             bar_layout.addWidget(brand, 0, Qt.AlignVCenter)
@@ -664,56 +670,40 @@ class MainWindow(QMainWindow):
 
         return bar
 
+    def _align_page_title(self):
+        """Keep the page title against the window edge opposite the controls."""
+        title = getattr(getattr(self, "_select_page", None), "_title", None)
+        if title is None:
+            return
+        title.setAlignment(page_title_alignment())
+
+    def _make_nav_button(self, text: str, icon_name: str, *, checkable: bool = False) -> QPushButton:
+        """A sidebar row. Aqua on macOS; a WinUI / Adwaita row on Windows and Linux.
+
+        No local stylesheet. A stylesheet on the button or its parent is what
+        painted blank plates and left the previous label behind.
+        """
+        btn = SidebarButton(text)
+        btn.setIcon(get_symbol_icon(icon_name, 16))
+        btn.setIconSize(QSize(16, 16))
+        btn.setCheckable(checkable)
+        btn.setMinimumHeight(max(btn.sizeHint().height(), sidebar_row_min_height()))
+        return btn
+
     def _build_nav(self):
         t = T()
-        nav = ClearNavPanel()
+        nav = QWidget()
         nav.setObjectName("navPanel")
-        nav.setAttribute(Qt.WA_TranslucentBackground, True)
         is_mac = sys.platform == "darwin"
         nav_width = 185 if is_mac else 175
         nav.setFixedWidth(nav_width)
 
-        use_glass = False
-        try:
-            from .glass import is_glass_supported, is_windows_acrylic_supported
-            use_glass = is_glass_supported() or is_windows_acrylic_supported()
-        except ImportError:
-            use_glass = False
-
-        if use_glass:
-            nav_bg = "transparent"
-            nav_border = "none"
-        else:
-            nav_bg = t.bg_nav
-            nav_border = f"1px solid {t.border}"
-        top_margin = content_top_margin()
-
-        nav.setStyleSheet(
-            f"QWidget#navPanel {{ background-color: {nav_bg}; border-right: {nav_border};"
-            f" border-radius: 0; }}"
-        )
-
-        sidebar_scroll = QScrollArea(nav)
-        sidebar_scroll.setObjectName("navScroll")
-        sidebar_scroll.setWidgetResizable(True)
-        configure_scroll_area(
-            sidebar_scroll,
-            horizontal=Qt.ScrollBarAlwaysOff,
-            vertical=Qt.ScrollBarAsNeeded,
-            transparent=True,
-        )
-        nav_outer = QVBoxLayout(nav)
-        nav_outer.setContentsMargins(0, 0, 0, 0)
-        nav_outer.setSpacing(0)
-        nav_outer.addWidget(sidebar_scroll)
-
-        nav_content = ClearNavPanel()
-        nav_content.setAttribute(Qt.WA_TranslucentBackground, True)
-        sidebar_scroll.setWidget(nav_content)
-
-        layout = QVBoxLayout(nav_content)
+        layout = QVBoxLayout(nav)
         layout.setContentsMargins(10, 8, 10, 10)
-        layout.setSpacing(2)
+        # Aqua draws the button about 6px outside the layout cell on each
+        # side, so macOS needs the wider gap. Windows and Linux paint inside
+        # the row, the way a WinUI or Adwaita sidebar does.
+        layout.setSpacing(sidebar_row_spacing())
 
         if not can_inline_title_with_window_controls():
             brand = self._build_brand_header_widget()
@@ -725,69 +715,56 @@ class MainWindow(QMainWindow):
         self._nav_btn_group.setExclusive(True)
 
         self._nav_buttons = {}
-        btn = ClearNavButton(tr("nav_select_package"))
-        btn.setIcon(get_symbol_icon("install", 16))
-        btn.setIconSize(QSize(16, 16))
-        btn.setCheckable(True)
+        btn = self._make_nav_button(tr("nav_select_package"), "install", checkable=True)
         btn.clicked.connect(self._on_select_nav_clicked)
         layout.addWidget(btn)
         self._nav_buttons["nav_select_package"] = (btn, _PAGE_SELECT)
         self._nav_btn_group.addButton(btn, _PAGE_SELECT)
 
-        self._settings_btn = ClearNavButton(tr("nav_settings"))
-        self._settings_btn.setIcon(get_symbol_icon("settings", 16))
-        self._settings_btn.setIconSize(QSize(16, 16))
-        self._settings_btn.setCheckable(True)
+        self._settings_btn = self._make_nav_button(tr("nav_settings"), "settings", checkable=True)
         self._settings_btn.clicked.connect(lambda: self._nav_to_page(_PAGE_SETTINGS))
         layout.addWidget(self._settings_btn)
         self._nav_buttons["nav_settings"] = (self._settings_btn, _PAGE_SETTINGS)
         self._nav_btn_group.addButton(self._settings_btn, _PAGE_SETTINGS)
 
+        # Primary pages stay at the top. Everything else sits with the language
+        # selector at the bottom of the window.
+        layout.addStretch(1)
+
         self._aux_nav_buttons = []
 
-        self._log_btn = ClearNavButton(tr("nav_log"))
-        self._log_btn.setIcon(get_symbol_icon("diagnostics", 16))
-        self._log_btn.setIconSize(QSize(16, 16))
-        self._log_btn.clicked.connect(self._show_diagnostics)
-        layout.addWidget(self._log_btn)
-        self._aux_nav_buttons.append(self._log_btn)
-
-        self._check_updates_btn = ClearNavButton(tr("nav_check_updates"))
-        self._check_updates_btn.setIcon(get_symbol_icon("update", 16))
-        self._check_updates_btn.setIconSize(QSize(16, 16))
-        self._check_updates_btn.clicked.connect(self._on_check_updates_clicked)
-        layout.addWidget(self._check_updates_btn)
-        self._aux_nav_buttons.append(self._check_updates_btn)
-
         if platform.system() == "Linux" and not paths.IS_MAC:
-            self._linux_setup_btn = ClearNavButton(tr("nav_linux_setup"))
-            self._linux_setup_btn.setIcon(get_symbol_icon("tools", 16))
-            self._linux_setup_btn.setIconSize(QSize(16, 16))
+            self._linux_setup_btn = self._make_nav_button(tr("nav_linux_setup"), "tools")
             self._linux_setup_btn.clicked.connect(self._show_linux_setup)
             layout.addWidget(self._linux_setup_btn)
             self._aux_nav_buttons.append(self._linux_setup_btn)
 
         from ..sp_flash_gui import is_sp_flash_gui_supported
         if is_sp_flash_gui_supported():
-            self._sp_flash_tool_btn = ClearNavButton(tr("nav_sp_flash_tool_gui"))
-            self._sp_flash_tool_btn.setIcon(get_symbol_icon("tools", 16))
-            self._sp_flash_tool_btn.setIconSize(QSize(16, 16))
+            self._sp_flash_tool_btn = self._make_nav_button(tr("nav_sp_flash_tool_gui"), "tools")
             self._sp_flash_tool_btn.clicked.connect(self._open_sp_flash_tool_gui)
             layout.addWidget(self._sp_flash_tool_btn)
             self._aux_nav_buttons.append(self._sp_flash_tool_btn)
 
-        self._support_btn = ClearNavButton(tr("nav_donate"))
-        self._support_btn.setIcon(get_symbol_icon("support", 16))
-        self._support_btn.setIconSize(QSize(16, 16))
+        self._support_btn = self._make_nav_button(tr("nav_donate"), "support")
         self._support_btn.clicked.connect(self._on_support_clicked)
         layout.addWidget(self._support_btn)
         self._aux_nav_buttons.append(self._support_btn)
 
-        layout.addStretch()
+        self._log_btn = self._make_nav_button(tr("nav_log"), "diagnostics", checkable=True)
+        self._log_btn.clicked.connect(self._show_diagnostics)
+        layout.addWidget(self._log_btn)
+        self._nav_btn_group.addButton(self._log_btn, _PAGE_DIAGNOSTICS)
+        self._aux_nav_buttons.append(self._log_btn)
+
+        self._check_updates_btn = self._make_nav_button(tr("nav_check_updates"), "update")
+        self._check_updates_btn.clicked.connect(self._on_check_updates_clicked)
+        layout.addWidget(self._check_updates_btn)
+        self._aux_nav_buttons.append(self._check_updates_btn)
 
         self._lang_label = QLabel(tr("nav_language"))
         self._lang_label.setStyleSheet(
-            f"font-size: 11px; color: {t.fg}; margin-top: 6px; background: transparent; border: none;"
+            "font-size: 11px; color: palette(window-text); margin-top: 6px; background: transparent; border: none;"
         )
         layout.addWidget(self._lang_label)
         self._lang_combo = QComboBox()
@@ -801,32 +778,29 @@ class MainWindow(QMainWindow):
         self._lang_combo.currentIndexChanged.connect(self._on_language_changed)
         layout.addWidget(self._lang_combo)
 
-        # Nav button styling — follows native OS desktop environment accent color with focus states
-        for btn, _ in self._nav_buttons.values():
-            btn.setStyleSheet(
-                f"QPushButton {{ background: transparent; color: {t.fg}; text-align: left;"
-                f" padding: 8px 12px; border-radius: 5px; border: 1px solid transparent; font-size: 13px; font-weight: 500; min-height: 34px; }}"
-                f"QPushButton:hover {{ background-color: {t.bg_hover}; color: {t.fg}; }}"
-                f"QPushButton:focus {{ border: 1px solid {t.border_focus}; outline: none; }}"
-                f"QPushButton:checked {{ background-color: {t.nav_active}; color: {t.nav_active_text}; font-weight: 600; border: 1px solid transparent; }}"
-                f"QPushButton:checked:focus {{ background-color: {t.nav_active}; color: {t.nav_active_text}; font-weight: 600; border: 1px solid {t.border_strong}; outline: none; }}"
-            )
-        aux_btns = [self._support_btn, self._log_btn, self._check_updates_btn]
-        if hasattr(self, "_linux_setup_btn"):
-            aux_btns.append(self._linux_setup_btn)
-        if hasattr(self, "_sp_flash_tool_btn"):
-            aux_btns.append(self._sp_flash_tool_btn)
-        for btn in aux_btns:
-            btn.setStyleSheet(
-                f"QPushButton {{ background: transparent; color: {t.fg}; text-align: left;"
-                f" padding: 7px 12px; border-radius: 5px; border: 1px solid transparent; font-size: 12px; font-weight: 500; min-height: 30px; }}"
-                f"QPushButton:hover {{ background-color: {t.bg_hover}; color: {t.fg}; }}"
-                f"QPushButton:focus {{ border: 1px solid {t.border_focus}; outline: none; }}"
-            )
         self._nav_panel = nav
-        self._aux_nav_buttons = aux_btns
+        self._nav_content = nav
+        self._apply_nav_surface()
         self._refresh_icons()
         return nav
+
+    def _apply_nav_surface(self):
+        """Color the sidebar from the palette.
+
+        A stylesheet on this panel would also restyle the buttons inside it,
+        which is what painted them as blank plates and left old labels behind.
+        """
+        nav = getattr(self, "_nav_panel", None)
+        if nav is None:
+            return
+        nav.setStyleSheet("")
+        # No stylesheet on the rail. On glass the gaps stay clear so the
+        # backdrop shows; the buttons repaint their own rows. Elsewhere the
+        # rail is a solid pane so a moved highlight cannot linger.
+        self._paint_opaque(nav, T().bg_nav)
+        nav.update()
+        for btn in nav.findChildren(SidebarButton):
+            btn.update()
 
     def _refresh_icons(self):
         """Update navigation and action button icons to match theme tokens and accent."""
@@ -852,33 +826,39 @@ class MainWindow(QMainWindow):
                 self._lang_combo.setItemIcon(i, lang_icon)
 
     def _refresh_components(self):
-        """Update window components to match active OS theme tokens."""
+        """Update window components to match active OS theme tokens.
+
+        Navigation buttons are left to the platform style. Repainting them with
+        a local stylesheet is what left the previous label on screen.
+        """
         t = T()
-        is_mac = sys.platform == "darwin"
-        use_glass = False
-        try:
-            from .glass import is_glass_supported, is_windows_acrylic_supported
-            use_glass = is_glass_supported() or is_windows_acrylic_supported()
-        except ImportError:
-            use_glass = False
-
-        nav_bg = "transparent" if use_glass else t.bg_nav
-        nav_border = "none" if use_glass else f"1px solid {t.border}"
-
-        if hasattr(self, "_nav_panel"):
-            self._nav_panel.setStyleSheet(
-                f"QWidget#navPanel {{ background-color: {nav_bg}; border-right: {nav_border}; border-radius: 0; }}"
-            )
+        self._apply_nav_surface()
+        for surface in (
+            self.centralWidget(),
+            getattr(self, "_title_bar", None),
+            getattr(self, "_title_container", None),
+            getattr(self, "body", None),
+            getattr(self, "_stack", None),
+            getattr(self, "_notice_host", None),
+            getattr(self, "_select_page", None),
+            getattr(self, "_flash_page", None),
+            getattr(self, "_error_page", None),
+            getattr(self, "_retry_page", None),
+            getattr(self, "_settings_page", None),
+            getattr(self, "_diagnostics_page", None),
+        ):
+            if surface is not None:
+                self._paint_opaque(surface)
 
         if hasattr(self, "_brand_label"):
             self._brand_label.setStyleSheet(
-                f"font-size: {_BRAND_FONT_SIZE}; font-weight: 800; color: {t.fg}; letter-spacing: -0.02em; background: transparent; border: none;"
+                f"font-size: {_BRAND_FONT_SIZE}; font-weight: 800; color: palette(window-text); letter-spacing: -0.02em; background: transparent; border: none;"
             )
 
         if hasattr(self, "_brand_version"):
             self._brand_version.setText(APP_VERSION)
             self._brand_version.setStyleSheet(
-                f"font-size: {_BRAND_FONT_SIZE}; font-weight: 800; color: {t.fg}; letter-spacing: -0.02em; background: transparent; border: none;"
+                f"font-size: {_BRAND_FONT_SIZE}; font-weight: 800; color: palette(window-text); letter-spacing: -0.02em; background: transparent; border: none;"
             )
 
         if hasattr(self, "_version_label"):
@@ -887,33 +867,13 @@ class MainWindow(QMainWindow):
                 f'by <a href="https://ko-fi.com/teamslide" style="color: {t.fg}; font-weight: 700; text-decoration: none;">Ryan Specter</a>'
             )
             self._version_label.setStyleSheet(
-                f"font-size: 11px; color: {t.fg}; background: transparent; border: none; margin: 0; padding: 0;"
+                "font-size: 11px; color: palette(window-text); background: transparent; border: none; margin: 0; padding: 0;"
             )
 
         if hasattr(self, "_lang_label"):
             self._lang_label.setStyleSheet(
-                f"font-size: 11px; color: {t.fg}; margin-top: 6px; background: transparent; border: none;"
+                "font-size: 11px; color: palette(window-text); margin-top: 6px; background: transparent; border: none;"
             )
-
-        if hasattr(self, "_nav_buttons"):
-            for btn, _ in self._nav_buttons.values():
-                btn.setStyleSheet(
-                    f"QPushButton {{ background: transparent; color: {t.fg}; text-align: left;"
-                    f" padding: 3px 8px; border-radius: 5px; border: 1px solid transparent; font-size: 12px; font-weight: 500; min-height: 26px; max-height: 28px; }}"
-                    f"QPushButton:hover {{ background-color: {t.bg_hover}; color: {t.fg}; }}"
-                    f"QPushButton:focus {{ border: 1px solid {t.border_focus}; outline: none; }}"
-                    f"QPushButton:checked {{ background-color: {t.nav_active}; color: {t.nav_active_text}; font-weight: 600; border: 1px solid transparent; }}"
-                    f"QPushButton:checked:focus {{ background-color: {t.nav_active}; color: {t.nav_active_text}; font-weight: 600; border: 1px solid {t.border_strong}; outline: none; }}"
-                )
-
-        if hasattr(self, "_aux_nav_buttons"):
-            for btn in self._aux_nav_buttons:
-                btn.setStyleSheet(
-                    f"QPushButton {{ background: transparent; color: {t.fg}; text-align: left;"
-                    f" padding: 3px 8px; border-radius: 5px; border: 1px solid transparent; font-size: 12px; font-weight: 500; min-height: 26px; max-height: 28px; }}"
-                    f"QPushButton:hover {{ background-color: {t.bg_hover}; color: {t.fg}; }}"
-                    f"QPushButton:focus {{ border: 1px solid {t.border_focus}; outline: none; }}"
-                )
 
         sb = self.statusBar()
         if sb and hasattr(sb, "refresh_theme"):
@@ -921,8 +881,15 @@ class MainWindow(QMainWindow):
 
         self._refresh_icons()
 
-        for page in (self._select_page, self._flash_page, self._error_page, self._retry_page, self._settings_page):
-            if hasattr(page, "refresh_theme") and callable(page.refresh_theme):
+        for page in (
+            self._select_page,
+            self._flash_page,
+            self._error_page,
+            self._retry_page,
+            self._settings_page,
+            getattr(self, "_diagnostics_page", None),
+        ):
+            if page is not None and hasattr(page, "refresh_theme") and callable(page.refresh_theme):
                 page.refresh_theme()
 
 
@@ -1007,7 +974,7 @@ class MainWindow(QMainWindow):
                 from .glass import _ensure_seamless_titlebar, apply_glass, configure_traffic_lights
                 _ensure_seamless_titlebar(self)
                 apply_glass(self)
-                configure_traffic_lights(self, x_offset=18, y_offset=6)
+                configure_traffic_lights(self, x_offset=18)
             elif sys.platform == "win32":
                 from .glass import apply_windows_acrylic, apply_windows_dark_titlebar
 
@@ -1109,13 +1076,13 @@ class MainWindow(QMainWindow):
         if not getattr(self, "_shown_once", False):
             self._shown_once = True
             if not self._install_run_active() and not self.isMaximized() and not self.isFullScreen():
-                self.resize(max(self.width(), 800), max(self.height(), 500))
+                self.resize(*default_window_size())
             if not os.environ.get("QT_QPA_PLATFORM") == "offscreen" and not os.environ.get("INNIOASIS_HEADLESS"):
                 QTimer.singleShot(1200, self._check_legacy_installations)
         if sys.platform == "darwin":
             from .glass import apply_glass, configure_traffic_lights
             apply_glass(self)
-            configure_traffic_lights(self, x_offset=18, y_offset=6)
+            configure_traffic_lights(self, x_offset=18)
         if event.type() == QEvent.Type.Show and not getattr(self, "_chrome_watchdog", None):
             # Started once: a reset can happen at any point in a session, and the
             # check is a property read rather than a repaint.
@@ -1127,7 +1094,7 @@ class MainWindow(QMainWindow):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if sys.platform == "darwin" and hasattr(self, "_title_bar"):
-            self._title_bar.setGeometry(0, 0, self.width(), 44)
+            self._title_bar.setGeometry(0, 0, self.width(), int(HEADER_CONTENT_HEIGHT))
             self._title_bar.raise_()
         self._verify_native_chrome()
 
@@ -1158,6 +1125,80 @@ class MainWindow(QMainWindow):
             return True
         return self.sm.state in _INSTALL_RUN_STATES
 
+    def _build_inline_prompt(self) -> QWidget:
+        """Install prompts live under the page, in the content column.
+
+        The window grows to fit the prompt and shrinks again when it closes.
+        """
+        host = QWidget()
+        host.setObjectName("installPrompt")
+        layout = QVBoxLayout(host)
+        layout.setContentsMargins(24, 4, 24, 12)
+        layout.setSpacing(8)
+        self._prompt_title = QLabel("")
+        self._prompt_title.setWordWrap(True)
+        self._prompt_title.setStyleSheet(
+            "font-size: 15px; font-weight: 700; color: palette(window-text); background: transparent;"
+        )
+        self._prompt_body = QLabel("")
+        self._prompt_body.setWordWrap(True)
+        self._prompt_body.setStyleSheet(
+            "font-size: 13px; color: palette(window-text); background: transparent;"
+        )
+        layout.addWidget(self._prompt_title)
+        layout.addWidget(self._prompt_body)
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        self._prompt_accept = QPushButton("")
+        self._prompt_reject = QPushButton("")
+        row.addWidget(self._prompt_accept)
+        row.addWidget(self._prompt_reject)
+        row.addStretch(1)
+        layout.addLayout(row)
+        host.hide()
+        self._prompt_loop = None
+        self._prompt_result = False
+        self._prompt_accept.clicked.connect(self._accept_inline_prompt)
+        self._prompt_reject.clicked.connect(self._dismiss_inline_prompt)
+        return host
+
+    def _show_inline_prompt(self, title: str, body: str, accept: str, reject: str, *, wait: bool) -> bool:
+        """Show a prompt in the content column. ``wait`` blocks until a button."""
+        self._prompt_title.setText(title)
+        self._prompt_body.setText(body)
+        self._prompt_accept.setText(accept)
+        self._prompt_reject.setText(reject)
+        self._prompt_result = False
+        self._inline_prompt.show()
+        self._adjust_window_geometry()
+        if not wait:
+            return False
+        loop = QEventLoop(self)
+        self._prompt_loop = loop
+        loop.exec()
+        self._prompt_loop = None
+        self._inline_prompt.hide()
+        self._adjust_window_geometry()
+        return self._prompt_result
+
+    def _accept_inline_prompt(self):
+        self._prompt_result = True
+        self._finish_inline_prompt()
+
+    def _dismiss_inline_prompt(self):
+        self._prompt_result = False
+        self._finish_inline_prompt()
+
+    def _finish_inline_prompt(self):
+        loop = getattr(self, "_prompt_loop", None)
+        if loop is not None and loop.isRunning():
+            loop.quit()
+            return
+        prompt = getattr(self, "_inline_prompt", None)
+        if prompt is not None:
+            prompt.hide()
+        self._adjust_window_geometry()
+
     def _adjust_window_geometry(self):
         """Adjust window size to fit the content of the active page without wasted space."""
         if (
@@ -1168,35 +1209,58 @@ class MainWindow(QMainWindow):
         ):
             return
 
+        curr_idx = self._stack.currentIndex() if hasattr(self, "_stack") else _PAGE_SELECT
+        # The log needs the full window, including while an install is running.
+        if curr_idx == _PAGE_NOTICE:
+            host = getattr(self, "_notice_host", None)
+            hint_h = host.sizeHint().height() if host is not None else 220
+            width = DEFAULT_WINDOW_WIDTH
+            height = max(200, min(520, hint_h + 72))
+            self.setMinimumSize(580, 180)
+            self.resize(width, height)
+            return
+
+        if curr_idx == _PAGE_DIAGNOSTICS:
+            width, height = default_window_size()
+            self.setMinimumSize(MINIMUM_WINDOW_WIDTH, MINIMUM_WINDOW_HEIGHT)
+            self.resize(width, height)
+            return
+
         is_install = self._install_run_active()
         donations_disabled = device_tracking.is_donation_ui_disabled(self.settings)
 
         if is_install:
-            target_w = 720
-            target_h = 220 if donations_disabled else 245
-            min_w = 580
-            min_h = 200
-            self.setMinimumSize(min_w, min_h)
+            # Hug the progress card. A prompt in the content column is the
+            # only reason this grows. The window collapses as soon as the
+            # install is pending, including before the flash page is shown.
+            self._stack.updateGeometry()
+            page_h = self._flash_page.sizeHint().height()
+            prompt = getattr(self, "_inline_prompt", None)
+            prompt_h = 0
+            if prompt is not None and not prompt.isHidden():
+                prompt_h = prompt.sizeHint().height()
+            bar = self.statusBar()
+            status_h = bar.sizeHint().height() if bar is not None and bar.isVisible() else 0
+            header_h = int(HEADER_CONTENT_HEIGHT) if sys.platform == "darwin" else 0
+            target_w = DEFAULT_WINDOW_WIDTH
+            if curr_idx == _PAGE_FLASH:
+                target_h = max(188, page_h + prompt_h + status_h + header_h)
+            else:
+                target_h = 228
+            if donations_disabled:
+                target_h = max(168, target_h - status_h)
+            self.setMinimumSize(580, 168)
             self.resize(target_w, target_h)
         else:
-            min_w = 680
-            min_h = 420
+            min_w = MINIMUM_WINDOW_WIDTH
+            min_h = MINIMUM_WINDOW_HEIGHT
             self.setMinimumSize(min_w, min_h)
 
-            curr_idx = self._stack.currentIndex() if hasattr(self, "_stack") else _PAGE_SELECT
-            if curr_idx == _PAGE_SETTINGS:
-                # Expands to show more settings without dead space
-                target_h = 540
-                target_w = max(self.width(), 800)
-                self.resize(target_w, target_h)
-            elif curr_idx == _PAGE_SELECT:
-                # Default size 800x500 for Select Software screen
-                target_h = 500
-                target_w = max(self.width(), 800)
-                self.resize(target_w, target_h)
-            else:
-                if self.width() < min_w or self.height() < min_h:
-                    self.resize(800, 500)
+            width, height = default_window_size()
+            if curr_idx in (_PAGE_SETTINGS, _PAGE_SELECT):
+                self.resize(width, height)
+            elif self.width() < min_w or self.height() < min_h:
+                self.resize(width, height)
 
     def _apply_install_ui_state(self, active: bool):
         if getattr(self, "_install_ui_active", None) == active:
@@ -1211,12 +1275,15 @@ class MainWindow(QMainWindow):
             # During active install/download:
             # Keep Settings visible but disabled so both are accommodated as requested
             if hasattr(self, "_settings_btn"):
-                self._settings_btn.setVisible(True)
+                # Pending installs show Install Software and Diagnostics only.
+                self._settings_btn.setVisible(False)
                 self._settings_btn.setEnabled(False)
             if hasattr(self, "_support_btn"):
                 self._support_btn.setVisible(False)
             if hasattr(self, "_log_btn"):
-                self._log_btn.setVisible(False)
+                # Diagnostics stays available for the whole install.
+                self._log_btn.setVisible(True)
+                self._log_btn.setEnabled(True)
             if hasattr(self, "_check_updates_btn"):
                 self._check_updates_btn.setVisible(False)
             if hasattr(self, "_linux_setup_btn"):
@@ -1247,6 +1314,9 @@ class MainWindow(QMainWindow):
                 self._lang_combo.setVisible(True)
             self._apply_donation_visibility()
 
+        nav = getattr(self, "_nav_panel", None)
+        if nav is not None:
+            nav.update()
         self._adjust_window_geometry()
 
     def _sync_install_nav_entry(self) -> bool:
@@ -1259,7 +1329,7 @@ class MainWindow(QMainWindow):
         if not entry:
             return False
         btn, _idx = entry
-        active = self._install_run_active()
+        active = self._install_run_active() or getattr(self, "_compact_install_screen", False)
         btn.setText(tr("nav_install_package" if active else "nav_select_package"))
         self._apply_install_ui_state(active)
         return active
@@ -1280,51 +1350,79 @@ class MainWindow(QMainWindow):
                 else:
                     self._on_cancel_wait()
         else:
+            if getattr(self, "_install_complete", False):
+                self._install_complete = False
+                self._compact_install_screen = False
             self._nav_to_page(_PAGE_SELECT)
 
+    def _page_title(self, page_idx, install_active: bool) -> str:
+        if page_idx == _PAGE_SETTINGS:
+            return tr("settings_title")
+        if page_idx == _PAGE_DIAGNOSTICS:
+            return tr("log_center")
+        if page_idx == _PAGE_FLASH:
+            if getattr(self, "_install_complete", False):
+                return tr("flash_install_complete")
+            if getattr(self, "_download_active", False):
+                return tr("flash_download_in_progress")
+            return tr("flash_install_in_progress") if install_active else tr("flash_ready_title")
+        if page_idx == _PAGE_ERROR:
+            return tr("flash_failed_title")
+        if page_idx == _PAGE_RETRY:
+            return tr("flash_retry_title")
+        if page_idx == _PAGE_NOTICE:
+            return getattr(self, "_notice_title", "") or tr("sel_title")
+        return tr("sel_title")
+
+    def _highlight_nav(self, page_idx, install_active: bool):
+        if page_idx == _PAGE_DIAGNOSTICS and hasattr(self, "_log_btn"):
+            checked = self._log_btn
+        elif install_active and page_idx == _PAGE_FLASH:
+            checked = self._nav_buttons["nav_select_package"][0]
+        else:
+            checked = None
+            for _key, (btn, idx) in self._nav_buttons.items():
+                if idx == page_idx:
+                    checked = btn
+                    break
+        if checked is not None:
+            checked.blockSignals(True)
+            checked.setChecked(True)
+            checked.clearFocus()
+            checked.blockSignals(False)
+        for btn in (
+            self._nav_buttons.get("nav_select_package", (None,))[0],
+            getattr(self, "_settings_btn", None),
+            getattr(self, "_log_btn", None),
+        ):
+            if btn is not None:
+                btn.update()
+
     def _nav_to_page(self, page_idx):
-        if self._install_run_active() and page_idx != _PAGE_FLASH:
+        if self._install_run_active() and page_idx not in (
+            _PAGE_FLASH, _PAGE_DIAGNOSTICS, _PAGE_NOTICE, _PAGE_ERROR, _PAGE_RETRY,
+        ):
+            # A click may already have checked the blocked entry. Put the
+            # highlight back on the page that is actually showing.
+            self._highlight_nav(self._stack.currentIndex(), True)
             return
         self._stack.setCurrentIndex(page_idx)
         install_active = self._sync_install_nav_entry()
-
-        target_idx = _PAGE_SELECT if install_active else page_idx
-        for key, (btn, idx) in self._nav_buttons.items():
-            is_target = (idx == target_idx)
-            btn.blockSignals(True)
-            btn.setChecked(is_target)
-            btn.clearFocus()
-            btn.blockSignals(False)
+        self._highlight_nav(page_idx, install_active)
 
         # Update header page title in the unified title bar
         if hasattr(self, "_select_page") and hasattr(self._select_page, "_title"):
-            title_text = tr("sel_title")
-            if page_idx == _PAGE_SETTINGS:
-                title_text = tr("settings_title")
-            elif page_idx == _PAGE_FLASH:
-                if getattr(self, "_download_active", False):
-                    title_text = tr("flash_download_in_progress")
-                else:
-                    title_text = tr("flash_install_in_progress") if install_active else tr("flash_ready_title")
-            elif page_idx == _PAGE_ERROR:
-                title_text = tr("flash_failed_title")
-            elif page_idx == _PAGE_RETRY:
-                title_text = tr("flash_retry_title")
-            self._select_page._title.setText(title_text)
+            title = self._select_page._title
+            title.setText(self._page_title(page_idx, install_active))
+            self._align_page_title()
+            from .surfaces import seal_updating_text
+            seal_updating_text(title)
+            title_host = getattr(self, "_title_container", None)
+            if title_host is not None:
+                self._paint_opaque(title_host)
+                title_host.update()
 
         self._adjust_window_geometry()
-        # Cleanly erase backing store and repaint full window to eliminate ghosting
-        if hasattr(self, "_title_bar"):
-            self._title_bar.repaint()
-        if hasattr(self, "_nav_panel"):
-            self._nav_panel.repaint()
-        if hasattr(self, "_nav_content"):
-            self._nav_content.repaint()
-        if hasattr(self, "_stack"):
-            self._stack.repaint()
-        if self.centralWidget():
-            self.centralWidget().repaint()
-        self.repaint()
         QTimer.singleShot(0, self._verify_native_chrome)
 
     def _on_package_selected(self, path, name, model):
@@ -1563,6 +1661,8 @@ class MainWindow(QMainWindow):
         self._flash_page.set_package_name(self._package_name)
         self._flash_page.set_model(self._package_model)
         self._flash_page.set_method(self._flash_method)
+        self._flash_page.show_completion_appeal(False)
+        self._apply_release_icon(complete=False)
         self._flash_page.show_preparing()
         self._nav_to_page(_PAGE_FLASH)
         self._append_log(
@@ -1651,8 +1751,9 @@ class MainWindow(QMainWindow):
 
     def _append_log(self, msg, dedupe=False):
         self._log_lines.append(msg)
-        if len(self._log_lines) > 2000:
-            self._log_lines = self._log_lines[-2000:]
+        from ..diagnostics import LOG_RETAINED_LINES
+        if len(self._log_lines) > LOG_RETAINED_LINES:
+            self._log_lines = self._log_lines[-LOG_RETAINED_LINES:]
         try:
             from ..diagnostics import DiagnosticsManager
             DiagnosticsManager.instance().record_log(msg, dedupe=dedupe)
@@ -1806,15 +1907,18 @@ class MainWindow(QMainWindow):
         self._is_360p_rockbox = is_360p_rockbox
 
         elapsed = self._elapsed_text()
-        self._reset_after_run()
-
-        if donation_disabled:
-            dialog = FlashCompleteDialog(
-                self, software, elapsed, model=model, is_360p_rockbox=is_360p_rockbox
-            )
-            dialog.exec()
-        else:
-            self._show_donation_dialog(context="install_success")
+        self._is_360p_rockbox = is_360p_rockbox
+        self._install_complete = True
+        self._compact_install_screen = True
+        self._flash_page.show_flashing()
+        self._flash_page.set_device_done()
+        self._flash_page.show_completion_appeal(not donation_disabled, self._on_completion_dont_ask)
+        self._apply_release_icon(complete=True)
+        self._nav_to_page(_PAGE_FLASH)
+        self._show_status(
+            tr("status_install_ok_fmt").format(software=software, steps=steps), 60000
+        )
+        del elapsed
 
     def _handle_flash_failure(self, error_code):
         try:
@@ -1939,8 +2043,51 @@ class MainWindow(QMainWindow):
             self._elapsed_timer.stop()
             self._reset_after_run()
 
+    def _on_completion_dont_ask(self):
+        device_tracking.set_donation_ui_disabled(True, self.settings)
+        device_tracking.set_donation_install_prompt_disabled(True, self.settings)
+        if hasattr(self, "_settings_page"):
+            self._settings_page.refresh_settings()
+        self._apply_donation_visibility()
+        self._flash_page.show_completion_appeal(False, self._on_completion_dont_ask)
+
+    def _apply_release_icon(self, complete: bool = False) -> None:
+        """Squircle for the install card: cached release icon, else the app icon."""
+        from .release_icon import load_release_pixmap
+        from ..release_icons import icon_candidate_urls
+
+        page = getattr(self, "_select_page", None)
+        release = getattr(page, "_current_selected_rel", None) if page else None
+        package = getattr(page, "_details_package", None) if page else None
+        pixmap = load_release_pixmap(release, package, allow_network=False)
+        self._flash_page.set_release_icon(pixmap, complete=complete)
+        if not icon_candidate_urls(release, package):
+            return
+
+        class _Loader(QThread):
+            loaded = Signal(object)
+
+            def __init__(self, rel, pkg):
+                super().__init__()
+                self._rel = rel
+                self._pkg = pkg
+
+            def run(self):
+                self.loaded.emit(load_release_pixmap(self._rel, self._pkg, allow_network=True))
+
+        previous = getattr(self, "_icon_loader", None)
+        if previous is not None and previous.isRunning():
+            previous.requestInterruption()
+        loader = _Loader(release, package)
+        loader.loaded.connect(lambda pix, done=complete: self._flash_page.set_release_icon(pix, complete=done or getattr(self, "_install_complete", False)))
+        loader.finished.connect(loader.deleteLater)
+        self._icon_loader = loader
+        loader.start()
+
     def _reset_after_run(self):
         self._pre_install_guided = False
+        self._install_complete = False
+        self._compact_install_screen = False
         self.sm.reset_full()
         self._package_path = ""
         self._package_name = ""
@@ -1965,12 +2112,24 @@ class MainWindow(QMainWindow):
         return f"{secs // 60:02d}:{secs % 60:02d}"
 
     def _show_diagnostics(self):
-        dlg = DiagnosticsDialog(self, self._log_lines)
-        self.log_line_added.connect(dlg.append_line)
-        try:
-            dlg.exec()
-        finally:
-            self.log_line_added.disconnect(dlg.append_line)
+        """Open the in-window diagnostics view, including during an install."""
+        if self._stack.currentIndex() == _PAGE_DIAGNOSTICS:
+            self._leave_diagnostics()
+            return
+        self._page_before_diagnostics = self._stack.currentIndex()
+        # The diagnostics manager is the retained log. A copy of the window's
+        # short list would freeze the count and drop tool output.
+        self._diagnostics_page.set_lines(None)
+        self._nav_to_page(_PAGE_DIAGNOSTICS)
+
+    def _leave_diagnostics(self):
+        if self._install_run_active():
+            self._nav_to_page(_PAGE_FLASH)
+            return
+        prev = getattr(self, "_page_before_diagnostics", _PAGE_SELECT)
+        if prev in (_PAGE_DIAGNOSTICS, None):
+            prev = _PAGE_SELECT
+        self._nav_to_page(prev)
 
     def _show_linux_setup(self):
         from .dialogs import LinuxSetupDialog
@@ -2116,25 +2275,16 @@ class MainWindow(QMainWindow):
             self._select_page.retranslate()
             if hasattr(self._select_page, "_title"):
                 curr_idx = self._stack.currentIndex() if hasattr(self, "_stack") else _PAGE_SELECT
-                if curr_idx == _PAGE_SETTINGS:
-                    t = tr("settings_title")
-                elif curr_idx == _PAGE_FLASH:
-                    if getattr(self, "_download_active", False):
-                        t = tr("flash_download_in_progress")
-                    else:
-                        t = tr("flash_install_in_progress") if self._install_run_active() else tr("flash_ready_title")
-                elif curr_idx == _PAGE_ERROR:
-                    t = tr("flash_failed_title")
-                elif curr_idx == _PAGE_RETRY:
-                    t = tr("flash_retry_title")
-                else:
-                    t = tr("sel_title")
-                self._select_page._title.setText(t)
+                self._select_page._title.setText(
+                    self._page_title(curr_idx, self._install_run_active())
+                )
         self._flash_page.retranslate()
         self._error_page.retranslate()
         self._retry_page.retranslate()
         if hasattr(self, "_settings_page"):
             self._settings_page.retranslate()
+        if hasattr(self, "_diagnostics_page") and hasattr(self._diagnostics_page, "retranslate"):
+            self._diagnostics_page.retranslate()
         if self.statusBar() and hasattr(self.statusBar(), "retranslate"):
             self.statusBar().retranslate()
         self._apply_generic_mtk_branding()

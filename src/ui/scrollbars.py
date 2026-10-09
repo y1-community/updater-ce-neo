@@ -19,7 +19,7 @@ scrollbar), and the platform's scrollbars are simply what you get.
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QPalette
+from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QAbstractScrollArea, QApplication, QFrame, QWidget
 
 __all__ = [
@@ -39,20 +39,49 @@ def make_transparent(area: QAbstractScrollArea) -> None:
     area.setFrameShadow(QFrame.Plain)
     area.setBackgroundRole(QPalette.ColorRole.NoRole)
     area.setAutoFillBackground(False)
-    area.setAttribute(Qt.WA_TranslucentBackground, True)
+    # The window is the only translucent surface. A translucent child skips
+    # its erase and the next paint leaves the previous text behind.
+    area.setAttribute(Qt.WA_TranslucentBackground, False)
+    area.setAttribute(Qt.WA_NoSystemBackground, True)
     viewport = area.viewport()
     if viewport is not None:
         viewport.setAutoFillBackground(False)
         viewport.setBackgroundRole(QPalette.ColorRole.NoRole)
-        viewport.setAttribute(Qt.WA_TranslucentBackground, True)
-        palette = viewport.palette()
-        palette.setColor(QPalette.ColorRole.Base, Qt.GlobalColor.transparent)
-        palette.setColor(QPalette.ColorRole.Window, Qt.GlobalColor.transparent)
-        viewport.setPalette(palette)
+        viewport.setAttribute(Qt.WA_TranslucentBackground, False)
+        viewport.setAttribute(Qt.WA_NoSystemBackground, True)
+        # A solid Base/Window is the gray plate. Zero alpha lets the glass
+        # or the solid parent show through; the keyword "transparent" does not.
+        clear = viewport.palette()
+        none = QColor(0, 0, 0, 0)
+        for group in (
+            QPalette.ColorGroup.Active,
+            QPalette.ColorGroup.Inactive,
+            QPalette.ColorGroup.Disabled,
+        ):
+            clear.setColor(group, QPalette.ColorRole.Base, none)
+            clear.setColor(group, QPalette.ColorRole.Window, none)
+        viewport.setPalette(clear)
+        area_palette = area.palette()
+        for group in (
+            QPalette.ColorGroup.Active,
+            QPalette.ColorGroup.Inactive,
+            QPalette.ColorGroup.Disabled,
+        ):
+            area_palette.setColor(group, QPalette.ColorRole.Base, none)
+            area_palette.setColor(group, QPalette.ColorRole.Window, none)
+        area.setPalette(area_palette)
     inner = area.widget() if hasattr(area, "widget") else None
     if isinstance(inner, QWidget):
         inner.setAutoFillBackground(False)
-        inner.setAttribute(Qt.WA_TranslucentBackground, True)
+        inner.setAttribute(Qt.WA_TranslucentBackground, False)
+    try:
+        from .surfaces import glass_surfaces_enabled, show_glass_backdrop
+        if glass_surfaces_enabled():
+            show_glass_backdrop(area)
+            if viewport is not None:
+                show_glass_backdrop(viewport)
+    except Exception:
+        pass
 
 
 def configure_scroll_area(

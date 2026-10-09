@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 from PySide6.QtCore import Qt, QThread, Signal
-from PySide6.QtGui import QPainter, QTextDocument
+from PySide6.QtGui import QTextDocument
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -69,21 +69,6 @@ def _network_polling_available() -> bool:
     the online listing and the local-file tab.
     """
     return os.environ.get("QT_QPA_PLATFORM") != "offscreen"
-
-
-class ClearLabel(QLabel):
-    """Transparent label that clears its dirty rect before painting, preventing ghosting."""
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.setAttribute(Qt.WA_TranslucentBackground, True)
-
-    def paintEvent(self, event):
-        p = QPainter(self)
-        p.setCompositionMode(QPainter.CompositionMode_Clear)
-        p.fillRect(event.rect(), Qt.transparent)
-        p.end()
-        super().paintEvent(event)
 
 
 class ReleasesWorker(QThread):
@@ -277,7 +262,7 @@ class SelectPackagePage(QWidget):
         layout.setContentsMargins(*page_margins())
         layout.setSpacing(8)
 
-        self._title = ClearLabel(tr("sel_title"))
+        self._title = QLabel(tr("sel_title"))
         self._title.setProperty("cssClass", "pageTitle")
         layout.addWidget(self._title)
 
@@ -466,6 +451,7 @@ class SelectPackagePage(QWidget):
         pkg_layout.addWidget(self._install_from_file_link)
 
         self._pkg_group.set_layout(pkg_layout)
+        self._pkg_group.set_glass_clear(True)
         split.addWidget(self._pkg_group, 5)
 
         # Right panel: Status and Notes
@@ -474,10 +460,42 @@ class SelectPackagePage(QWidget):
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(8)
 
-        self._notes_group = Card("sel_about_update")
+        self._notes_group = Card()
         notes_l = QVBoxLayout()
         notes_l.setContentsMargins(0, 0, 0, 0)
         notes_l.setSpacing(4)
+
+        details_row = QHBoxLayout()
+        details_row.setContentsMargins(0, 0, 0, 0)
+        details_row.setSpacing(8)
+        self._details_icon = QLabel()
+        self._details_icon.setFixedSize(40, 40)
+        self._details_icon.setAlignment(Qt.AlignCenter)
+        details_row.addWidget(self._details_icon, 0, Qt.AlignTop)
+        details_text = QVBoxLayout()
+        details_text.setContentsMargins(0, 0, 0, 0)
+        details_text.setSpacing(0)
+        self._details_name = QLabel("")
+        self._details_name.setStyleSheet(
+            "font-size: 13px; font-weight: 600; color: palette(window-text); background-color: rgba(0, 0, 0, 0); border: none;"
+        )
+        self._details_version = QLabel("")
+        self._details_version.setStyleSheet(
+            "font-size: 12px; color: palette(window-text); background-color: rgba(0, 0, 0, 0); border: none;"
+        )
+        details_text.addWidget(self._details_name)
+        details_text.addWidget(self._details_version)
+        details_row.addLayout(details_text, 1)
+        self._details_header = QWidget()
+        self._details_header.setLayout(details_row)
+        self._details_header.setAutoFillBackground(False)
+        self._details_header.setVisible(False)
+        from .surfaces import clear_glass_plate
+        clear_glass_plate(self._details_header)
+        clear_glass_plate(self._details_name)
+        clear_glass_plate(self._details_version)
+        clear_glass_plate(self._details_icon)
+        notes_l.addWidget(self._details_header)
 
         self._notes = QTextBrowser()
         self._notes.setObjectName("releaseNotes")
@@ -503,6 +521,9 @@ class SelectPackagePage(QWidget):
             vertical=Qt.ScrollBarAsNeeded,
             transparent=True,
         )
+        from .surfaces import clear_glass_plate
+        clear_glass_plate(self._release_list)
+        clear_glass_plate(self._notes)
         self._notes.anchorClicked.connect(self._on_notes_link_clicked)
         notes_l.addWidget(self._notes)
 
@@ -510,9 +531,8 @@ class SelectPackagePage(QWidget):
         self._translate_label.setObjectName("translateReleaseNotes")
         self._translate_label.setWordWrap(True)
         self._translate_label.setAlignment(Qt.AlignCenter)
-        t = T()
         self._translate_label.setStyleSheet(
-            f"color: {t.fg}; font-size: 11px; margin-top: 4px;"
+            "color: palette(window-text); font-size: 11px; margin-top: 4px; background: transparent;"
         )
         self._translate_label.setTextFormat(Qt.RichText)
         self._translate_label.setTextInteractionFlags(Qt.TextBrowserInteraction)
@@ -521,6 +541,7 @@ class SelectPackagePage(QWidget):
         notes_l.addWidget(self._translate_label)
 
         self._notes_group.set_layout(notes_l)
+        self._notes_group.set_glass_clear(True)
         right_layout.addWidget(self._notes_group, 1)
 
         split.addWidget(right_panel, 6)
@@ -529,6 +550,8 @@ class SelectPackagePage(QWidget):
 
     def _set_notes_content(self, html_text: str):
         self._notes.setHtml(html_text)
+        from .surfaces import clear_glass_plate
+        clear_glass_plate(self._notes)
         if hasattr(self, "_notes_group") and self._notes_group:
             self._notes_group.repaint()
         if hasattr(self, "_notes") and self._notes and self._notes.viewport():
@@ -728,7 +751,6 @@ class SelectPackagePage(QWidget):
             self._say(tr(self._download_status_key))
         if self._local_status_key:
             self._local_status.setText(tr(self._local_status_key))
-        self._notes_group.setTitle(tr("sel_about_update"))
         if self._current_selected_rel:
             if self._is_translated:
                 self._translate_current_release_in_app()
@@ -747,6 +769,16 @@ class SelectPackagePage(QWidget):
             self._update_translate_link()
         if hasattr(self, "_release_list"):
             make_transparent(self._release_list)
+            from .surfaces import clear_glass_plate
+            clear_glass_plate(self._release_list)
+        if hasattr(self, "_notes"):
+            from .surfaces import clear_glass_plate
+            clear_glass_plate(self._notes)
+        if hasattr(self, "_details_header"):
+            from .surfaces import clear_glass_plate
+            clear_glass_plate(self._details_header)
+            clear_glass_plate(self._details_name)
+            clear_glass_plate(self._details_version)
         if hasattr(self, "_registered_links"):
             for label, key, bold in self._registered_links:
                 label.setText(self._link_html(key, bold=bold))
@@ -1022,9 +1054,11 @@ class SelectPackagePage(QWidget):
             self._install_btn.setDefault(True)
         if current is None:
             self._current_selected_rel = None
+            self._details_package = None
             self._is_translated = False
             self._is_translating = False
             self._notes.clear()
+            self._set_details_header(None, None)
             self._update_translate_link()
             return
         rel = current.data(Qt.UserRole)
@@ -1033,6 +1067,7 @@ class SelectPackagePage(QWidget):
             self._is_translated = False
             self._is_translating = False
             self._set_notes_content(self._render_release_notes(rel, as_html=True))
+            self._set_details_header(rel, self._package_for_selection())
             self._update_translate_link()
 
     def _render_release_notes(self, rel, translated_body=None, translated_name=None, as_html: bool = False) -> str:
@@ -1059,6 +1094,14 @@ class SelectPackagePage(QWidget):
         doc = QTextDocument()
         doc.setMarkdown(cleaned_md)
         html = doc.toHtml()
+        # Qt's markdown export paints a solid paper colour on the body. The
+        # details pane sits on the card, which sits on the system material.
+        html = re.sub(
+            r"background(?:-color)?:\s*[^;\"']+;?",
+            "",
+            html,
+            flags=re.IGNORECASE,
+        )
 
         t = T()
         # 2. Re-style links: clickable, bold, same color as text (not blue #0000ff):
@@ -1083,7 +1126,6 @@ class SelectPackagePage(QWidget):
             color: {t.fg};
             font-size: 13px;
             line-height: 1.45;
-            background: transparent;
         }}
         body {{
             margin: 0;
@@ -1283,7 +1325,7 @@ class SelectPackagePage(QWidget):
         if dest.is_file() and dest.stat().st_size > 0 and _is_extract_complete(extract_dir):
             logger.info("Package %s already cached and extracted at %s, reusing immediately", dest.name, extract_dir)
             self._current_package_path = str(dest)
-            self._current_package_name = f"{pkg.name} ({eff_model})"
+            self._current_package_name = self._install_card_title(pkg.name, rel, eff_model)
             self._current_package_model = eff_model
             self._current_installed_release_info = self._pending_install_release_info
             self._download_status_key = "sel_prepare_done"
@@ -1295,7 +1337,7 @@ class SelectPackagePage(QWidget):
         if dest.is_file() and dest.stat().st_size > 0:
             logger.info("Package %s already downloaded, extracting directly", dest.name)
             self._current_package_path = str(dest)
-            self._current_package_name = f"{pkg.name} ({eff_model})"
+            self._current_package_name = self._install_card_title(pkg.name, rel, eff_model)
             self._current_package_model = eff_model
             self._current_installed_release_info = self._pending_install_release_info
             self._prepare_package(str(dest), self._on_online_prep_done)
@@ -1307,7 +1349,7 @@ class SelectPackagePage(QWidget):
         self._download_bar.setValue(0)
         self._download_bar.setVisible(True)
         self._install_btn.setEnabled(False)
-        display_name = f"{pkg.name} ({eff_model})"
+        display_name = self._install_card_title(pkg.name, rel, eff_model)
         self.download_started.emit(display_name, eff_model)
         self._download_worker = downloads.DownloadWorker(rel["download_url"], str(dest))
         self._download_worker.progress.connect(self._on_download_progress)
@@ -1350,7 +1392,11 @@ class SelectPackagePage(QWidget):
             return
         eff_model = getattr(self, "_current_package_model", "") or self.current_model()
         self._current_package_path = result
-        self._current_package_name = f"{self.current_software()} ({eff_model})"
+        self._current_package_name = self._install_card_title(
+            self.current_software(),
+            getattr(self, "_current_selected_rel", None),
+            eff_model,
+        )
         self._current_package_model = eff_model
         self._current_installed_release_info = getattr(self, "_pending_install_release_info", None)
         self._prepare_package(result, self._on_online_prep_done)
@@ -1477,7 +1523,6 @@ class SelectPackagePage(QWidget):
 
         self._path_edit.setText(package_target)
         self._current_package_path = package_target
-        self._current_package_name = display_name
         self._current_installed_release_info = None
 
         # Detect model and variant type from original browsed filename:
@@ -1496,6 +1541,9 @@ class SelectPackagePage(QWidget):
         else:
             self._selected_type = None
 
+        self._current_package_name = self._install_card_title(
+            Path(display_name).stem, None, self._current_package_model
+        )
         self._set_local_banner("sel_current_pkg", display_name)
         self._start_btn.setEnabled(False)
         self._prepare_package(package_target, self._on_local_prep_done)
@@ -1513,7 +1561,6 @@ class SelectPackagePage(QWidget):
 
         self._path_edit.setText(folder)
         self._current_package_path = folder
-        self._current_package_name = display_name
         self._current_installed_release_info = None
 
         det_m, det_t = detect_model_and_type_from_name(display_name)
@@ -1531,6 +1578,9 @@ class SelectPackagePage(QWidget):
         else:
             self._selected_type = None
 
+        self._current_package_name = self._install_card_title(
+            display_name, None, self._current_package_model
+        )
         self._set_local_banner("sel_current_pkg", display_name)
         self._start_btn.setEnabled(False)
         self._prepare_package(folder, self._on_local_prep_done)
@@ -1550,6 +1600,51 @@ class SelectPackagePage(QWidget):
             self._current_package_name,
             getattr(self, "_current_package_model", ""),
         )
+
+    def _package_for_selection(self):
+        try:
+            pkgs = catalog.packages_for_model_software(
+                self.current_model(), self._software_combo.currentText()
+            )
+        except Exception:
+            return None
+        return pkgs[0] if pkgs else None
+
+    def _set_details_header(self, rel, package) -> None:
+        """Icon, software name, and the same version string as the release list."""
+        self._details_package = package
+        if not rel:
+            self._details_header.setVisible(False)
+            self._details_name.setText("")
+            self._details_version.setText("")
+            return
+        name = package.name if package is not None and getattr(package, "name", "") else self._software_combo.currentText()
+        version = catalog.parse_clean_release_tag_label(
+            rel,
+            prefer_240p=self.release_listing_filters()[2],
+            version_only=True,
+        )
+        self._details_name.setText(name or "")
+        self._details_version.setText(version or "")
+        from .surfaces import seal_updating_text
+        seal_updating_text(self._details_name)
+        seal_updating_text(self._details_version)
+        self._details_header.setVisible(True)
+        from .release_icon import load_release_pixmap, squircle_pixmap
+
+        pixmap = load_release_pixmap(rel, package, allow_network=False)
+        self._details_icon.setPixmap(squircle_pixmap(pixmap, 40, complete=False))
+
+    def _install_card_title(self, software, rel, model) -> str:
+        """Progress-card title: software, the list's version string, and model."""
+        version = ""
+        if rel:
+            version = catalog.parse_clean_release_tag_label(
+                rel,
+                prefer_240p=self.release_listing_filters()[2],
+                version_only=True,
+            )
+        return catalog.format_install_card_title(software, version, model)
 
     def current_model(self):
         return self._model_combo.currentText()

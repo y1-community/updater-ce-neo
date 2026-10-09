@@ -1005,6 +1005,12 @@ _STRINGS: dict = {
         "fr": "Installation en cours",
         "es": "Instalación en curso",
     },
+    "flash_install_complete": {
+        "zh-CN": "安装完成",
+        "en": "Install Complete",
+        "fr": "Installation terminée",
+        "es": "Instalación completada",
+    },
     "dialog_pre_install_title": {
         "zh-CN": "准备设备",
         "en": "Device Preparation",
@@ -2506,16 +2512,16 @@ _STRINGS: dict = {
         "es": "Configuración de permisos",
     },
     "sel_type_a": {
-        "zh-CN": "A 型",
-        "en": "Type A",
-        "fr": "Type A",
-        "es": "Tipo A",
+        "zh-CN": "A",
+        "en": "A",
+        "fr": "A",
+        "es": "A",
     },
     "sel_type_b": {
-        "zh-CN": "B 型",
-        "en": "Type B",
-        "fr": "Type B",
-        "es": "Tipo B",
+        "zh-CN": "B",
+        "en": "B",
+        "fr": "B",
+        "es": "B",
     },
     "sel_type_help_btn": {
         "zh-CN": "类型？",

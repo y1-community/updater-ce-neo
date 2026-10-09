@@ -142,9 +142,9 @@ def main():
     )
     from .ui.main_window import MainWindow
 
-    # Apply native theme (detects OS dark/light mode automatically; locks vibrant dark on macOS for Quick Look glass).
-    force_dark = True if _sys.platform == "darwin" else None
-    apply_theme(app, force_dark=force_dark)
+    # Follow the host appearance. Older macOS uses vibrant light or vibrant
+    # dark to match; Tahoe and Golden Gate stay on the Liquid Glass path.
+    apply_theme(app, force_dark=None)
 
     # Default language: follow the system, fall back to English.
     import locale
@@ -162,7 +162,7 @@ def main():
     prepare_window_for_glass(window)
     window.show()
     apply_glass(window, dark=is_dark())
-    configure_traffic_lights(window, x_offset=18, y_offset=6)
+    configure_traffic_lights(window, x_offset=18)
     apply_windows_dark_titlebar(window, is_dark())
 
     # Match host appearance live: light/dark switches, desktop accent colours,

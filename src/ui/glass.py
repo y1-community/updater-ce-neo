@@ -348,6 +348,8 @@ def apply_glass(
                         primary_glass.setFrame_(target_rect)
                     except Exception:
                         pass
+                    if not is_golden_gate_or_newer():
+                        _sync_legacy_vibrancy(ns_win, primary_glass)
                     _ensure_seamless_titlebar(window)
                     apply_monochrome_window_buttons(window)
                     return True
@@ -402,36 +404,65 @@ def apply_glass(
     return False
 
 
+# Height of the in-window header that holds the app icon and title. Traffic
+# lights are centered on this band so they line up with that row.
+HEADER_CONTENT_HEIGHT = 44.0
+
+
+def traffic_light_center_from_top(
+    header_height: float = HEADER_CONTENT_HEIGHT,
+    nudge_down: float = 0.0,
+) -> float:
+    """Distance from the top of the content view to the control's center.
+
+    The 28px app icon is vertically centered in the header row, so this is
+    ``header_height / 2``. ``nudge_down`` moves the control further down.
+    """
+    return (float(header_height) / 2.0) + float(nudge_down)
+
+
+def traffic_light_origin_y(
+    button_height: float,
+    superview_height: float,
+    header_height: float = HEADER_CONTENT_HEIGHT,
+    nudge_down: float = 0.0,
+) -> float:
+    """Cocoa bottom-left y that centers a traffic light on the header row.
+
+    The icon and title occupy the top ``header_height`` points of the window.
+    A traffic-light superview uses a bottom-left origin and its top edge is the
+    top of the window, so the button is placed by measuring down from that edge
+    to the header's vertical center. ``nudge_down`` moves the button further
+    down, in points. A short titlebar view may need a negative origin so the
+    control can sit on the header row below that view.
+    """
+    height = max(float(button_height), 1.0)
+    super_h = max(float(superview_height), height)
+    center_from_top = traffic_light_center_from_top(header_height, nudge_down)
+    return super_h - center_from_top - (height / 2.0)
+
+
 def configure_traffic_lights(
     window: QMainWindow | QWidget,
     x_offset: int = 18,
-    y_offset: int = 6,
+    y_offset: int = 0,
 ) -> bool:
-    """Inset native macOS window traffic lights (close, minimize, zoom).
+    """Place native macOS window controls on the header row.
 
-    Safe no-op on non-macOS.
+    ``y_offset`` is an extra downward nudge in points. The default centers the
+    controls on the icon and title. Safe no-op on non-macOS.
     """
     if not is_glass_supported():
         return False
 
+    # The liquid-glass helper pins the buttons to the titlebar view's own
+    # center, which sits above the app icon. Placement is done here instead.
     success = False
-    if _has_pyqt_liquidglass and hasattr(_liquidglass_module, "setup_traffic_lights_inset"):
-        try:
-            _liquidglass_module.setup_traffic_lights_inset(
-                window,
-                x_offset=x_offset,
-                y_offset=y_offset,
-            )
-            success = True
-        except Exception as e:
-            logger.debug("pyqt_liquidglass.setup_traffic_lights_inset failed: %s", e)
-
-    if not success:
-        try:
-            success = _pyobjc_configure_traffic_lights(window, x_offset, y_offset)
-        except Exception as e:
-            logger.debug("Traffic lights inset fallback skipped: %s", e)
-            success = False
+    try:
+        success = _pyobjc_configure_traffic_lights(window, x_offset, y_offset)
+    except Exception as e:
+        logger.debug("Traffic lights inset fallback skipped: %s", e)
+        success = False
 
     if not success:
         try:
@@ -543,6 +574,31 @@ def _get_nsview(widget: QWidget) -> Any | None:
         return None
 
 
+def _sync_legacy_vibrancy(ns_window, glass_view=None) -> None:
+    """Match pre-Liquid Glass vibrancy to the current light or dark appearance.
+
+    Golden Gate is left alone: this returns immediately on macOS 26+.
+    """
+    if is_golden_gate_or_newer() or ns_window is None:
+        return
+    try:
+        from .dark import is_dark
+        dark_mode = bool(is_dark())
+    except Exception:
+        dark_mode = True
+    try:
+        import AppKit
+        name = "NSAppearanceNameVibrantDark" if dark_mode else "NSAppearanceNameVibrantLight"
+        appr = AppKit.NSAppearance.appearanceNamed_(getattr(AppKit, name, name))
+        if not appr:
+            return
+        ns_window.setAppearance_(appr)
+        if glass_view is not None:
+            glass_view.setAppearance_(appr)
+    except Exception as exc:
+        logger.debug("Could not sync legacy vibrancy: %s", exc)
+
+
 def _pyobjc_prepare_window(window: QMainWindow | QWidget) -> bool:
     """Configure NSWindow style masks and titlebar transparency."""
     view = _get_nsview(window)
@@ -567,10 +623,14 @@ def _pyobjc_prepare_window(window: QMainWindow | QWidget) -> bool:
         ns_window.setOpaque_(False)
         ns_window.setMovableByWindowBackground_(True)
         import AppKit
-        vibrant_dark = getattr(AppKit, "NSAppearanceNameVibrantDark", "NSAppearanceNameVibrantDark")
-        appr = AppKit.NSAppearance.appearanceNamed_(vibrant_dark)
-        if appr:
-            ns_window.setAppearance_(appr)
+        if is_golden_gate_or_newer():
+            # Liquid Glass keeps the appearance this path already used.
+            vibrant_dark = getattr(AppKit, "NSAppearanceNameVibrantDark", "NSAppearanceNameVibrantDark")
+            appr = AppKit.NSAppearance.appearanceNamed_(vibrant_dark)
+            if appr:
+                ns_window.setAppearance_(appr)
+        else:
+            _sync_legacy_vibrancy(ns_window)
         return True
     except Exception as e:
         logger.debug("PyObjC window prepare error: %s", e)
@@ -644,6 +704,7 @@ def _pyobjc_apply_glass(window: QMainWindow | QWidget, corner_radius: float) -> 
             appr = AppKit.NSAppearance.appearanceNamed_(appr_name)
             if appr:
                 glass_view.setAppearance_(appr)
+            _sync_legacy_vibrancy(ns_window, glass_view)
             logger.info("Activated NSVisualEffectView vibrancy for macOS %s", ".".join(map(str, MACOS_VERSION)))
 
         # NSViewWidthSizable (2) | NSViewHeightSizable (16) = 18
@@ -661,34 +722,100 @@ def _pyobjc_apply_glass(window: QMainWindow | QWidget, corner_radius: float) -> 
         return False
 
 
+def _drop_button_constraints(view, buttons: tuple) -> None:
+    """Remove Auto Layout rules that mention the traffic lights.
+
+    The chrome watchdog runs about once a second. Leaving the previous
+    constraints in place would stack a new set on every pass.
+    """
+    if view is None:
+        return
+    try:
+        current = list(view.constraints())
+    except Exception:
+        return
+    for constraint in current:
+        try:
+            first = constraint.firstItem()
+            second = constraint.secondItem()
+        except Exception:
+            continue
+        if first in buttons or second in buttons:
+            try:
+                view.removeConstraint_(constraint)
+            except Exception:
+                pass
+
+
 def _pyobjc_configure_traffic_lights(
     window: QMainWindow | QWidget,
     x_offset: int,
     y_offset: int,
 ) -> bool:
-    """Position macOS standard traffic light buttons."""
+    """Center the traffic lights on the header icon.
+
+    A positive Auto Layout constant moves the first item down, so
+    ``button.centerY = contentView.top + header/2`` sits the control on the
+    same line as the app icon. The titlebar view's own center is higher than
+    that row, which is why the buttons used to look too high.
+    """
     view = _get_nsview(window)
     if not view:
         return False
 
     try:
+        from AppKit import NSLayoutConstraint
+
         ns_window = view.window()
         if not ns_window:
             return False
+        content = ns_window.contentView()
+        if content is None:
+            return False
+        ancestor = content.superview() or content
 
-        # 0: close, 1: miniaturize, 2: zoom
-        spacing = 20
-        for i, button_type in enumerate((0, 1, 2)):
+        buttons = []
+        for button_type in (0, 1, 2):
             btn = ns_window.standardWindowButton_(button_type)
-            if btn:
+            if btn is not None:
                 btn.setEnabled_(True)
                 btn.setHidden_(False)
-                frame = btn.frame()
-                origin_x = x_offset + (i * spacing)
-                # In NSTitlebarView (height 32, bottom-left origin in subview):
-                # y_offset pushes button down: origin_y = max(2, 9 - y_offset)
-                origin_y = max(2, 9 - y_offset) if y_offset != 0 else 9
-                btn.setFrameOrigin_((origin_x, origin_y))
+                buttons.append(btn)
+        if not buttons:
+            return False
+
+        for host in {ancestor, content, *(btn.superview() for btn in buttons)}:
+            _drop_button_constraints(host, tuple(buttons))
+
+        for btn in buttons:
+            btn.setTranslatesAutoresizingMaskIntoConstraints_(False)
+            host = btn.superview()
+            if host is not None and hasattr(host, "setClipsToBounds_"):
+                host.setClipsToBounds_(False)
+
+        # NSLayoutAttributeLeading = 5, Trailing = 6, Top = 3, CenterY = 10.
+        # NSLayoutRelationEqual = 0. A positive constant moves the item down.
+        center = traffic_light_center_from_top(nudge_down=y_offset)
+        gap = 6.0
+
+        def pin(item, attr, to_item, to_attr, constant):
+            constraint = (
+                NSLayoutConstraint
+                .constraintWithItem_attribute_relatedBy_toItem_attribute_multiplier_constant_(
+                    item, attr, 0, to_item, to_attr, 1.0, float(constant),
+                )
+            )
+            ancestor.addConstraint_(constraint)
+
+        close_btn = buttons[0]
+        pin(close_btn, 5, content, 5, x_offset)
+        pin(close_btn, 10, content, 3, center)
+        previous = close_btn
+        for btn in buttons[1:]:
+            pin(btn, 5, previous, 6, gap)
+            pin(btn, 10, content, 3, center)
+            previous = btn
+
         enable_macos_zoom_button(window)
         return True
     except Exception as e:
@@ -938,12 +1065,25 @@ def _ctypes_configure_traffic_lights(window: QMainWindow | QWidget, x_offset: in
         sel_frame = objc.sel_registerName(b"frame")
 
         spacing = 20
-        origin_y = max(2.0, 9.0 - float(y_offset)) if y_offset != 0 else 9.0
+        origin_y = None
         for i, b_type in enumerate((0, 1, 2)):
             btn = _ctypes_msg(objc, ns_win, "standardWindowButton:", b_type, argtypes=[ctypes.c_ulong])
             if btn:
                 _ctypes_msg(objc, ctypes.c_void_p(btn), "setEnabled:", 1, argtypes=[ctypes.c_bool])
                 _ctypes_msg(objc, ctypes.c_void_p(btn), "setHidden:", 0, argtypes=[ctypes.c_bool])
+                frame = frame_fn(ctypes.c_void_p(btn), sel_frame)
+                if origin_y is None:
+                    superview = _ctypes_msg(objc, ctypes.c_void_p(btn), "superview")
+                    super_h = HEADER_CONTENT_HEIGHT
+                    if superview:
+                        super_frame = frame_fn(ctypes.c_void_p(superview), sel_frame)
+                        if super_frame.size.height > 0:
+                            super_h = float(super_frame.size.height)
+                    origin_y = traffic_light_origin_y(
+                        float(frame.size.height or 14.0),
+                        super_h,
+                        nudge_down=y_offset,
+                    )
                 origin_x = float(x_offset + (i * spacing))
                 set_origin_fn(ctypes.c_void_p(btn), sel_origin, CGPoint(origin_x, origin_y))
         _ctypes_enable_zoom_button(window)

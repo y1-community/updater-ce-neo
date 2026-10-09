@@ -1,14 +1,15 @@
 """Flash page — modern OS software update in-progress display (macOS / iOS / Windows Fluent style)."""
 
 from PySide6.QtCore import QSize, Qt
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QColor, QPalette, QPixmap
 from PySide6.QtWidgets import (
+    QCheckBox,
     QFrame,
     QHBoxLayout,
     QLabel,
     QProgressBar,
     QPushButton,
-    QStackedWidget,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -29,7 +30,7 @@ from ..flash_service import (
     normalise_method,
 )
 from ..i18n import tr
-from .widgets import Banner, Card, InfoRow, StatusTag
+from .widgets import Banner, Card, CurrentPageStack, InfoRow, StatusTag
 from .dark import T, page_top_margin
 from .icons import get_symbol_icon
 
@@ -42,6 +43,34 @@ _STEP_KEY = {
     STEP_WRITE: "step_write",
     STEP_DONE: "step_done",
 }
+
+
+class _StatusLabel(QLabel):
+    """Software title or status line on the progress card.
+
+    A text change asks the card to paint its frost again first, so the new
+    glyphs replace the old ones. The label itself stays transparent.
+    """
+
+    def setText(self, text):  # noqa: N802 (Qt naming)
+        super().setText(text)
+        host = self.parentWidget()
+        while host is not None and not isinstance(host, Card):
+            host = host.parentWidget()
+        if host is not None:
+            host.update()
+
+
+def _status_label(text: str, *, strong: bool = False) -> _StatusLabel:
+    label = _StatusLabel(text)
+    label.setMinimumHeight(18)
+    size = "13px" if strong else "12px"
+    weight = "600" if strong else "400"
+    label.setStyleSheet(
+        f"font-size: {size}; font-weight: {weight}; "
+        "color: palette(window-text); background: transparent; border: none;"
+    )
+    return label
 
 
 def _make_squircle_icon(symbol: str, asset_name: str = "") -> QLabel:
@@ -94,7 +123,7 @@ class FlashPage(QWidget):
         layout.setContentsMargins(16, 8, 16, 8)
         layout.setSpacing(8)
 
-        self._stack = QStackedWidget()
+        self._stack = CurrentPageStack()
         self._preparing_view = self._build_preparing_view()
         self._waiting_view = self._build_waiting_view()
         self._flashing_view = self._build_flashing_view()
@@ -102,6 +131,7 @@ class FlashPage(QWidget):
         for w in (self._preparing_view, self._waiting_view, self._flashing_view, self._downloading_view):
             self._stack.addWidget(w)
         layout.addWidget(self._stack, 1)
+        self._seal_status_labels()
 
     def _style_cancel_button(self, btn: QPushButton):
         t = T()
@@ -120,40 +150,33 @@ class FlashPage(QWidget):
         )
 
     def _wrap_centered(self, card_widget: QWidget, extra_below: QWidget | None = None) -> QWidget:
-        """Center the software update card with heading and generous spacing."""
+        """Fill the content width with the progress card."""
         container = QWidget()
         v = QVBoxLayout(container)
-        v.setContentsMargins(0, 0, 0, 0)
+        v.setContentsMargins(4, 2, 4, 2)
+        v.setSpacing(6)
         v.addStretch(1)
-        h = QHBoxLayout()
-        h.setContentsMargins(0, 0, 0, 0)
-        h.addStretch(1)
-
-        card_col = QVBoxLayout()
-        card_col.setContentsMargins(0, 0, 0, 0)
-        card_col.setSpacing(8)
 
         heading = QLabel(tr("flash_install_in_progress"))
-        t = T()
         heading.setStyleSheet(
-            f"font-size: 14px; font-weight: 700; color: {t.fg}; background: transparent; border: none; margin: 0; padding: 0;"
+            "font-size: 14px; font-weight: 700; color: palette(window-text); "
+            "background: transparent; border: none; margin: 0; padding: 0;"
         )
         self._headings.append(heading)
-        card_col.addWidget(heading, 0, Qt.AlignLeft)
+        # The window header already says "Install in Progress" / "Install
+        # Complete". This in-card copy is kept for tests but not shown.
+        heading.hide()
 
-        card_col.addWidget(card_widget, 0, Qt.AlignCenter)
+        card_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
+        v.addWidget(card_widget)
         if extra_below is not None:
-            card_col.addWidget(extra_below, 0, Qt.AlignCenter)
-
-        h.addLayout(card_col)
-        h.addStretch(1)
-        v.addLayout(h)
+            v.addWidget(extra_below, 0, Qt.AlignCenter)
         v.addStretch(1)
         return container
 
     def _build_preparing_view(self):
         self._prep_card = Card()
-        self._prep_card.setFixedWidth(470)
+        self._prep_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
         card_layout = QHBoxLayout()
         card_layout.setContentsMargins(16, 14, 16, 14)
         card_layout.setSpacing(14)
@@ -165,8 +188,7 @@ class FlashPage(QWidget):
         col.setContentsMargins(0, 0, 0, 0)
         col.setSpacing(6)
 
-        self._prep_pkg_label = QLabel(self._package_name or "\u2014")
-        self._prep_pkg_label.setStyleSheet("font-size: 13px; font-weight: 600; background: transparent; border: none;")
+        self._prep_pkg_label = _status_label(self._package_name or "\u2014", strong=True)
         col.addWidget(self._prep_pkg_label)
 
         self._prep_banner = Banner()
@@ -175,13 +197,11 @@ class FlashPage(QWidget):
         self._prep_progress = QProgressBar()
         self._prep_progress.setObjectName("softwareUpdateProgress")
         self._prep_progress.setRange(0, 100)
-        self._prep_progress.setFixedHeight(6)
+        self._prep_progress.setFixedHeight(8)
         self._prep_progress.setTextVisible(False)
         col.addWidget(self._prep_progress)
 
-        self._prep_step = QLabel(tr("step_extract"))
-        self._prep_step.setProperty("cssClass", "field-label")
-        self._prep_step.setStyleSheet("font-size: 12px; color: palette(placeholder-text); background: transparent;")
+        self._prep_step = _status_label(tr("step_extract"))
         col.addWidget(self._prep_step)
 
         card_layout.addLayout(col, 1)
@@ -203,7 +223,7 @@ class FlashPage(QWidget):
 
     def _build_waiting_view(self):
         self._wait_card = Card()
-        self._wait_card.setFixedWidth(470)
+        self._wait_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
         card_layout = QHBoxLayout()
         card_layout.setContentsMargins(16, 14, 16, 14)
         card_layout.setSpacing(14)
@@ -215,20 +235,20 @@ class FlashPage(QWidget):
         col.setContentsMargins(0, 0, 0, 0)
         col.setSpacing(6)
 
-        self._wait_pkg_label = QLabel(self._package_name or "\u2014")
-        self._wait_pkg_label.setStyleSheet("font-size: 13px; font-weight: 600; background: transparent; border: none;")
+        self._wait_pkg_label = _status_label(self._package_name or "\u2014", strong=True)
         col.addWidget(self._wait_pkg_label)
 
         self._wait_progress_bar = QProgressBar()
         self._wait_progress_bar.setObjectName("softwareUpdateProgress")
         self._wait_progress_bar.setRange(0, 100)
         self._wait_progress_bar.setValue(0)
-        self._wait_progress_bar.setFixedHeight(6)
+        self._wait_progress_bar.setFixedHeight(8)
         self._wait_progress_bar.setTextVisible(False)
         col.addWidget(self._wait_progress_bar)
 
-        self._wait_prompt_label = QLabel(tr("flash_connect_device_prompt").format(model=self._connect_model_text()))
-        self._wait_prompt_label.setStyleSheet("font-size: 12px; color: palette(placeholder-text); background: transparent;")
+        self._wait_prompt_label = _status_label(
+            tr("flash_connect_device_prompt").format(model=self._connect_model_text())
+        )
         col.addWidget(self._wait_prompt_label)
 
         self._wait_banner = Banner()
@@ -275,7 +295,7 @@ class FlashPage(QWidget):
 
     def _build_flashing_view(self):
         self._progress_card = Card()
-        self._progress_card.setFixedWidth(470)
+        self._progress_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
         card_layout = QHBoxLayout()
         card_layout.setContentsMargins(16, 14, 16, 14)
         card_layout.setSpacing(14)
@@ -287,8 +307,7 @@ class FlashPage(QWidget):
         col.setContentsMargins(0, 0, 0, 0)
         col.setSpacing(6)
 
-        self._flash_pkg_label = QLabel(self._package_name or "\u2014")
-        self._flash_pkg_label.setStyleSheet("font-size: 13px; font-weight: 600; background: transparent; border: none;")
+        self._flash_pkg_label = _status_label(self._package_name or "\u2014", strong=True)
         col.addWidget(self._flash_pkg_label)
 
         self._flash_banner = Banner()
@@ -298,7 +317,7 @@ class FlashPage(QWidget):
         self._progress_bar.setObjectName("softwareUpdateProgress")
         self._progress_bar.setRange(0, 100)
         self._progress_bar.setValue(0)
-        self._progress_bar.setFixedHeight(6)
+        self._progress_bar.setFixedHeight(8)
         self._progress_bar.setTextVisible(False)
         col.addWidget(self._progress_bar)
 
@@ -306,13 +325,10 @@ class FlashPage(QWidget):
         sub_row.setContentsMargins(0, 0, 0, 0)
         sub_row.setSpacing(6)
 
-        self._step_label = QLabel(tr("step_write"))
-        self._step_label.setProperty("cssClass", "field-label")
-        self._step_label.setStyleSheet("font-size: 12px; color: palette(placeholder-text); background: transparent;")
+        self._step_label = _status_label(tr("step_write"))
         sub_row.addWidget(self._step_label)
 
-        self._eta_label = QLabel("")
-        self._eta_label.setStyleSheet("font-size: 12px; color: palette(placeholder-text); background: transparent;")
+        self._eta_label = _status_label("")
         sub_row.addWidget(self._eta_label)
         sub_row.addStretch(1)
 
@@ -339,6 +355,22 @@ class FlashPage(QWidget):
         self._warning.setStyleSheet("font-size: 12px; color: palette(placeholder-text); background: transparent;")
         w_layout.addWidget(self._warning, 0, Qt.AlignCenter)
 
+        self._appeal = QWidget()
+        appeal_layout = QVBoxLayout(self._appeal)
+        appeal_layout.setContentsMargins(0, 8, 0, 0)
+        appeal_layout.setSpacing(4)
+        self._appeal_label = QLabel(tr("donate_thanks"))
+        self._appeal_label.setWordWrap(True)
+        self._appeal_label.setAlignment(Qt.AlignCenter)
+        self._appeal_label.setStyleSheet("font-size: 12px; background: transparent; border: none;")
+        appeal_layout.addWidget(self._appeal_label)
+        self._appeal_dont = QCheckBox(tr("donate_dont_ask"))
+        self._appeal_dont.toggled.connect(self._on_appeal_dont_ask)
+        appeal_layout.addWidget(self._appeal_dont, 0, Qt.AlignCenter)
+        self._appeal.setVisible(False)
+        self._appeal_callback = None
+        w_layout.addWidget(self._appeal, 0, Qt.AlignCenter)
+
         # Dummy attributes for backward compatibility
         self._flash_img = QLabel()
         self._flash_img.setVisible(False)
@@ -356,7 +388,7 @@ class FlashPage(QWidget):
 
     def _build_downloading_view(self):
         self._download_card = Card()
-        self._download_card.setFixedWidth(470)
+        self._download_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
         card_layout = QHBoxLayout()
         card_layout.setContentsMargins(16, 14, 16, 14)
         card_layout.setSpacing(14)
@@ -368,21 +400,18 @@ class FlashPage(QWidget):
         col.setContentsMargins(0, 0, 0, 0)
         col.setSpacing(6)
 
-        self._download_pkg_label = QLabel(self._package_name or "\u2014")
-        self._download_pkg_label.setStyleSheet("font-size: 13px; font-weight: 600; background: transparent; border: none;")
+        self._download_pkg_label = _status_label(self._package_name or "\u2014", strong=True)
         col.addWidget(self._download_pkg_label)
 
         self._download_progress = QProgressBar()
         self._download_progress.setObjectName("softwareUpdateProgress")
         self._download_progress.setRange(0, 100)
         self._download_progress.setValue(0)
-        self._download_progress.setFixedHeight(6)
+        self._download_progress.setFixedHeight(8)
         self._download_progress.setTextVisible(False)
         col.addWidget(self._download_progress)
 
-        self._download_status_label = QLabel(tr("sel_download_start"))
-        self._download_status_label.setProperty("cssClass", "field-label")
-        self._download_status_label.setStyleSheet("font-size: 12px; color: palette(placeholder-text); background: transparent;")
+        self._download_status_label = _status_label(tr("sel_download_start"))
         col.addWidget(self._download_status_label)
 
         card_layout.addLayout(col, 1)
@@ -411,7 +440,7 @@ class FlashPage(QWidget):
         self._download_heading = QLabel(tr("flash_download_in_progress"))
         t = T()
         self._download_heading.setStyleSheet(
-            f"font-size: 14px; font-weight: 700; color: {t.fg}; background: transparent; border: none; margin: 0; padding: 0;"
+            f"font-size: 14px; font-weight: 700; color: palette(window-text); background: transparent; border: none; margin: 0; padding: 0;"
         )
         card_col.addWidget(self._download_heading, 0, Qt.AlignLeft)
         card_col.addWidget(self._download_card, 0, Qt.AlignCenter)
@@ -510,6 +539,39 @@ class FlashPage(QWidget):
     def set_model(self, model):
         self._model = (model or "").strip() or ""
 
+    def show_completion_appeal(self, visible: bool, callback=None) -> None:
+        """Inline donations appeal under the finished install. Hidden when credits are off."""
+        self._appeal_callback = callback
+        if not hasattr(self, "_appeal"):
+            return
+        self._appeal_dont.blockSignals(True)
+        self._appeal_dont.setChecked(False)
+        self._appeal_dont.blockSignals(False)
+        self._appeal.setVisible(bool(visible))
+
+    def _on_appeal_dont_ask(self, checked: bool) -> None:
+        if not checked:
+            return
+        callback = self._appeal_callback
+        if hasattr(self, "_appeal"):
+            self._appeal.setVisible(False)
+        if callable(callback):
+            callback()
+
+    def set_release_icon(self, pixmap, complete: bool = False):
+        """Show the release squircle on every install card. ``complete`` adds the check badge."""
+        from .release_icon import app_icon_pixmap, squircle_pixmap
+
+        self._release_complete = bool(complete)
+        source = pixmap if pixmap is not None and not pixmap.isNull() else app_icon_pixmap()
+        self._release_source = source
+        painted = squircle_pixmap(source, 40, complete=self._release_complete)
+        for name in ("_prep_icon", "_wait_icon", "_flash_icon", "_download_icon"):
+            label = getattr(self, name, None)
+            if label is not None:
+                label.setPixmap(painted)
+                label.setText("")
+
     def set_package_name(self, name):
         self._package_name = name or ""
         val = self._package_name or "\u2014"
@@ -561,6 +623,9 @@ class FlashPage(QWidget):
 
     def set_device_done(self):
         self._warning.setVisible(False)
+        source = getattr(self, "_release_source", None)
+        if source is not None:
+            self.set_release_icon(source, complete=True)
         self._flash_banner.set_type("success")
         self._flash_banner.set_key("flash_banner_done")
         self._wait_status.set_status("complete")
@@ -630,6 +695,9 @@ class FlashPage(QWidget):
         for key, lbl in self._guide_texts:
             lbl.setText(tr(key))
         self._warning.setText(tr("flash_warning"))
+        if hasattr(self, "_appeal_label"):
+            self._appeal_label.setText(tr("donate_thanks"))
+            self._appeal_dont.setText(tr("donate_dont_ask"))
         self._update_method_note()
         self._apply_guide_highlight()
         if self._prep_step_key:
@@ -657,11 +725,51 @@ class FlashPage(QWidget):
             self._open_sp_gui_btn.setText(tr("flash_btn_open_sp_gui"))
             self._open_sp_gui_btn.setToolTip(tr("flash_sp_gui_tooltip"))
 
+    def _seal_status_labels(self):
+        """Erase the previous status string on the label's own rect."""
+        from .surfaces import glass_surfaces_enabled, seal_updating_text
+        fill = QColor(T().bg_card)
+        names = (
+            "_prep_pkg_label", "_prep_step", "_wait_pkg_label", "_wait_prompt_label",
+            "_flash_pkg_label", "_step_label", "_eta_label", "_warning",
+            "_download_pkg_label", "_download_status_label", "_download_heading",
+            "_appeal_label",
+        )
+        for name in names:
+            label = getattr(self, name, None)
+            if label is None:
+                continue
+            if glass_surfaces_enabled():
+                # These lines sit on the card. Punching them clear leaves the
+                # previous title and status smeared across the progress bar.
+                # The card repaints its frost, then the label draws the new text.
+                style = label.styleSheet()
+                if "color:" not in style:
+                    style = "color: palette(window-text); " + style
+                label.setStyleSheet(style)
+                label.setAutoFillBackground(False)
+                continue
+            label.setAutoFillBackground(True)
+            pal = label.palette()
+            pal.setColor(QPalette.ColorRole.Window, fill)
+            pal.setColor(QPalette.ColorRole.Base, fill)
+            label.setPalette(pal)
+        for heading in getattr(self, "_headings", []):
+            if glass_surfaces_enabled():
+                heading.setAutoFillBackground(False)
+                seal_updating_text(heading)
+                continue
+            heading.setAutoFillBackground(True)
+            pal = heading.palette()
+            pal.setColor(QPalette.ColorRole.Window, fill)
+            heading.setPalette(pal)
+
     def refresh_theme(self):
         t = T()
+        self._seal_status_labels()
         for h in getattr(self, "_headings", []):
             h.setStyleSheet(
-                f"font-size: 14px; font-weight: 700; color: {t.fg}; background: transparent; border: none; margin: 0; padding: 0;"
+                f"font-size: 14px; font-weight: 700; color: palette(window-text); background: transparent; border: none; margin: 0; padding: 0;"
             )
         for btn in (
             getattr(self, "_cancel_btn", None),

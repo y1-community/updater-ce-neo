@@ -4,7 +4,7 @@ import re
 import sys
 from datetime import datetime, timedelta
 
-from PySide6.QtCore import QDate, QDateTime, QTime, Qt, QTimer
+from PySide6.QtCore import QDate, QDateTime, QTime, Qt, QTimer, Signal
 from PySide6.QtGui import QTextCursor, QTextDocument
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -318,14 +318,19 @@ def _from_python(edit) -> datetime | None:
         return datetime(d.year(), d.month(), d.day(), tm.hour(), tm.minute(), tm.second())
 
 
-class DiagnosticsDialog(QDialog):
+class DiagnosticsView(QWidget):
+    """Diagnostics console.
+
+    Lives in the main window so it can be opened during an install. A
+    ``DiagnosticsDialog`` embeds the same view when a standalone window is
+    needed.
+    """
+
+    close_requested = Signal()
+
     def __init__(self, parent=None, lines=None, initial_category=CAT_ALL):
         super().__init__(parent)
-        apply_dialog_theme(self)
         t = T()
-        self.setWindowTitle(tr("log_center"))
-        self.resize(740, 500)
-        self.setMinimumSize(540, 360)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(14, 14, 14, 14)
@@ -335,9 +340,9 @@ class DiagnosticsDialog(QDialog):
         header_row = QHBoxLayout()
         header_row.setSpacing(8)
 
-        lbl = QLabel(f"{tr('log_center')}:")
-        lbl.setStyleSheet(f"font-weight: 600; color: {t.fg};")
-        header_row.addWidget(lbl)
+        self._header_lbl = QLabel(f"{tr('log_center')}:")
+        self._header_lbl.setStyleSheet(f"font-weight: 600; color: {t.fg};")
+        header_row.addWidget(self._header_lbl)
 
         self._category_combo = QComboBox()
         # Only the backends this host can actually produce (macOS has no SP
@@ -372,18 +377,18 @@ class DiagnosticsDialog(QDialog):
         filter_row = QHBoxLayout()
         filter_row.setSpacing(8)
 
-        session_lbl = QLabel(tr("log_session_label"))
-        session_lbl.setStyleSheet(f"color: {t.fg};")
-        filter_row.addWidget(session_lbl)
+        self._session_lbl = QLabel(tr("log_session_label"))
+        self._session_lbl.setStyleSheet(f"color: {t.fg};")
+        filter_row.addWidget(self._session_lbl)
 
         self._session_combo = QComboBox()
         self._session_combo.setToolTip(tr("log_session_tip"))
         self._session_combo.currentIndexChanged.connect(self._on_session_changed)
         filter_row.addWidget(self._session_combo, 1)
 
-        from_lbl = QLabel(tr("log_range_from"))
-        from_lbl.setStyleSheet(f"color: {t.fg};")
-        filter_row.addWidget(from_lbl)
+        self._from_lbl = QLabel(tr("log_range_from"))
+        self._from_lbl.setStyleSheet(f"color: {t.fg};")
+        filter_row.addWidget(self._from_lbl)
 
         self._from_edit = QDateTimeEdit()
         self._from_edit.setCalendarPopup(True)
@@ -392,9 +397,9 @@ class DiagnosticsDialog(QDialog):
         self._from_edit.dateTimeChanged.connect(self._on_filter_changed)
         filter_row.addWidget(self._from_edit)
 
-        to_lbl = QLabel(tr("log_range_to"))
-        to_lbl.setStyleSheet(f"color: {t.fg};")
-        filter_row.addWidget(to_lbl)
+        self._to_lbl = QLabel(tr("log_range_to"))
+        self._to_lbl.setStyleSheet(f"color: {t.fg};")
+        filter_row.addWidget(self._to_lbl)
 
         self._to_edit = QDateTimeEdit()
         self._to_edit.setCalendarPopup(True)
@@ -451,7 +456,8 @@ class DiagnosticsDialog(QDialog):
 
         self._close_btn = QPushButton(tr("close"))
         self._close_btn.setDefault(True)
-        self._close_btn.clicked.connect(self.accept)
+        self._close_btn.setAutoDefault(False)
+        self._close_btn.clicked.connect(self.close_requested.emit)
         action_row.addWidget(self._close_btn)
 
         layout.addLayout(action_row)
@@ -608,11 +614,7 @@ class DiagnosticsDialog(QDialog):
             self._view.setPlainText(tr("log_no_entries"))
             self._empty = True
 
-        self._count_label.setText(
-            tr("log_lines_count").format(shown=len(lines), total=len(raw))
-            if self._filter_active()
-            else tr("log_lines_total").format(total=len(raw))
-        )
+        self._set_count(lines, raw)
 
     def _apply_filters(self, lines: list[str]) -> list[str]:
         """Apply the date/time window and the problems-only switch."""
@@ -626,41 +628,38 @@ class DiagnosticsDialog(QDialog):
         end = None if self._open_end else (_from_python(self._to_edit) if self._range_active else None)
         return filter_log_lines(lines, start=start, end=end, problems_only=problems)
 
+    def _set_count(self, shown, raw) -> None:
+        """Show how many lines are on screen.
+
+        With no filter that is the retained log. A category, session, or
+        problems filter shows the matching count against the retained total,
+        and both numbers move only when lines are added or the filter changes.
+        """
+        shown_n = len(shown)
+        total_n = len(raw)
+        if self._filter_active() or shown_n != total_n:
+            self._count_label.setText(
+                tr("log_lines_count").format(shown=shown_n, total=total_n)
+            )
+        else:
+            self._count_label.setText(tr("log_lines_total").format(total=total_n))
+
     def set_lines(self, lines):
-        self._custom_lines = list(lines) if lines is not None else None
+        self._custom_lines = list(lines) if lines else None
         self._rebuild_session_combo()
         self._refresh_content()
 
     def append_line(self, line):
         mgr = DiagnosticsManager.instance()
-        line_str = str(line)
-        # The line is normally recorded by the caller that emitted it; dedupe
-        # keeps this display sink from storing the same event twice.
-        mgr.record_log(line_str, dedupe=True)
-        cat = self.current_category()
-        line_cat = mgr.classify_line(line_str)
-
-        if self._filter_active():
-            # A filtered view must stay consistent: a line the filter excludes
-            # cannot simply be appended, and the counts have to move.
-            self._refresh_content()
+        line_str = str(line).rstrip("\r\n")
+        if not line_str:
             return
-
-        if cat == CAT_ALL or cat == line_cat:
-            if self._empty:
-                # First live line: show the stored history first so an install
-                # does not lose everything logged before the dialog opened.
-                self._refresh_content()
-                if not self._empty:
-                    self._view.append(line_str)
-                else:
-                    self._view.setPlainText(line_str)
-                    self._empty = False
-            else:
-                self._view.append(line_str)
-            cursor = self._view.textCursor()
-            cursor.movePosition(QTextCursor.End)
-            self._view.setTextCursor(cursor)
+        # The caller often recorded this already. Dedupe stores it once.
+        mgr.record_log(line_str, dedupe=True)
+        # Drop a frozen snapshot so the next paint reads the retained log,
+        # not a shorter copy that would reset the count.
+        self._custom_lines = None
+        self._refresh_content(preserve_scroll=True)
 
     def _on_goto_file(self):
         cat = self.current_category()
@@ -714,7 +713,71 @@ class DiagnosticsDialog(QDialog):
 
     def _show_temp_status(self, msg: str, timeout_ms: int = 3500):
         self._status_label.setText(msg)
-        QTimer.singleShot(timeout_ms, lambda: self._status_label.setText(""))
+        label = self._status_label
+
+        def _clear():
+            try:
+                label.setText("")
+            except RuntimeError:
+                pass
+
+        QTimer.singleShot(timeout_ms, _clear)
+
+    def retranslate(self):
+        """Apply the active language without rebuilding the log widget."""
+        t = T()
+        self._header_lbl.setText(f"{tr('log_center')}:")
+        self._session_lbl.setText(tr("log_session_label"))
+        self._session_combo.setToolTip(tr("log_session_tip"))
+        self._from_lbl.setText(tr("log_range_from"))
+        self._from_edit.setToolTip(tr("log_range_from_tip"))
+        self._to_lbl.setText(tr("log_range_to"))
+        self._to_edit.setToolTip(tr("log_range_to_tip"))
+        self._problems_check.setText(tr("log_problems_only"))
+        self._problems_check.setToolTip(tr("log_problems_tip"))
+        self._goto_btn.setText(tr("log_btn_goto_file"))
+        self._save_btn.setText(tr("log_btn_save_file"))
+        self._copy_btn.setText(tr("log_btn_copy"))
+        self._close_btn.setText(tr("close"))
+        self._header_lbl.setStyleSheet(f"font-weight: 600; color: {t.fg};")
+        current = self.current_category()
+        self._category_combo.blockSignals(True)
+        try:
+            self._category_combo.clear()
+            for cat, label_key in available_categories():
+                self._category_combo.addItem(tr_brand(label_key), cat)
+            idx = self._category_combo.findData(current)
+            self._category_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        finally:
+            self._category_combo.blockSignals(False)
+        self._rebuild_session_combo()
+        self._refresh_content(preserve_scroll=True)
+
+
+class DiagnosticsDialog(QDialog):
+    """Standalone diagnostics window. The console itself is ``DiagnosticsView``."""
+
+    def __init__(self, parent=None, lines=None, initial_category=CAT_ALL):
+        super().__init__(parent)
+        apply_dialog_theme(self)
+        self.setWindowTitle(tr("log_center"))
+        self.resize(740, 500)
+        self.setMinimumSize(540, 360)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self._panel = DiagnosticsView(
+            parent=self, lines=lines, initial_category=initial_category
+        )
+        self._panel.close_requested.connect(self.accept)
+        layout.addWidget(self._panel)
+
+    def __getattr__(self, name):
+        panel = self.__dict__.get("_panel")
+        if panel is not None:
+            attr = getattr(panel, name, None)
+            if attr is not None or hasattr(panel, name):
+                return getattr(panel, name)
+        raise AttributeError(name)
 
 
 class UpdateAvailableDialog(QDialog):

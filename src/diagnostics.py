@@ -44,6 +44,11 @@ _LOCAL = threading.local()
 DEDUPE_WINDOW_SECONDS = 2.0
 _MAX_RECENT_RAW = 256
 
+# A full SP Flash Tool or MTKClient session is tens of thousands of lines.
+# The view, the memory buffer, and the startup tail all use this cap. When it
+# is hit, the oldest lines are dropped and the count is the lines still kept.
+LOG_RETAINED_LINES = 80000
+
 # Python logging writes every record to the console stream the flash capture
 # tees, so a record already stored by the logging handler would be stored a
 # second time from its console echo (with a different timestamp/colour prefix,
@@ -656,6 +661,17 @@ def _merge_repeated_sessions(sessions: list[InstallSession]) -> list[InstallSess
     return merged
 
 
+def display_line_key(line: str) -> str:
+    """Identity of a log line across the app buffer, stdout, and tool logs.
+
+    Timestamps and ``[SP]`` / ``[QT]`` / ``[MTK]`` tags are ignored so the same
+    tool line is stored once whichever source delivered it.
+    """
+    text = LINE_TIMESTAMP_RE.sub("", str(line or "")).strip()
+    text = re.sub(r"^\[(?:SP|QT|MTK)\]\s*", "", text, flags=re.IGNORECASE)
+    return re.sub(r"\s+", " ", text).strip().lower()
+
+
 def _qt_log_section_lines() -> list[str]:
     """Lines of SP Flash Tool's internal QT_FLASH_TOOL.log, or [] when absent."""
     qt_log = find_sp_qt_flash_tool_log()
@@ -682,7 +698,7 @@ class DiagnosticsManager:
             cls._instance = DiagnosticsManager()
         return cls._instance
 
-    def __init__(self, max_buffer_lines: int = 5000):
+    def __init__(self, max_buffer_lines: int = LOG_RETAINED_LINES):
         self._max_buffer = max_buffer_lines
         self._buffers: dict[str, list[str]] = {
             CAT_ALL: [],
@@ -709,7 +725,7 @@ class DiagnosticsManager:
                     # make these files large enough that readlines() is wasteful.
                     with open(fpath, "r", encoding="utf-8", errors="replace") as f:
                         lines = [
-                            ln.rstrip("\r\n") for ln in deque(f, maxlen=500)
+                            ln.rstrip("\r\n") for ln in deque(f, maxlen=self._max_buffer)
                         ]
                     self._buffers[cat] = lines
                 except Exception:
@@ -875,7 +891,16 @@ class DiagnosticsManager:
         if category in (CAT_ALL, CAT_SP) and include_qt_log:
             qt_lines = _qt_log_section_lines()
             if qt_lines:
-                lines = (lines + qt_lines) if lines else list(qt_lines)
+                seen = {display_line_key(ln) for ln in lines}
+                extra = []
+                for ln in qt_lines:
+                    key = display_line_key(ln)
+                    if not key or key in seen:
+                        continue
+                    seen.add(key)
+                    extra.append(ln)
+                if extra:
+                    lines = (lines + extra) if lines else extra
         return lines
 
     def get_full_text(self, category: str = CAT_ALL, include_qt_log: bool = True) -> str:

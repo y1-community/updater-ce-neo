@@ -264,33 +264,62 @@ def test_retry_guidance_dialog_size():
 
 
 def test_compact_window_mode_and_sidebar_hiding():
-    """Verify window shrinks to compact mode, retains Settings button (disabled) and hides superfluous buttons during active install."""
+    """Verify window shrinks to compact mode and hides Settings during an install."""
     from src.state import FlashState
-    from src.ui.main_window import _PAGE_SETTINGS, _PAGE_FLASH, _PAGE_SELECT
+    from src.ui.main_window import (
+        DEFAULT_WINDOW_HEIGHT,
+        DEFAULT_WINDOW_WIDTH,
+        MINIMUM_WINDOW_HEIGHT,
+        MINIMUM_WINDOW_WIDTH,
+        _PAGE_SETTINGS,
+        _PAGE_FLASH,
+        _PAGE_SELECT,
+        _PAGE_DIAGNOSTICS,
+    )
 
     app = QApplication.instance() or QApplication(sys.argv)
     w = MainWindow()
     w.show()
+    app.processEvents()
 
-    # Initial state
-    assert w.size().width() >= 800
-    assert w.size().height() >= 480
+    # Initial state. Diagnostics and Check for Updates sit with the language
+    # selector at the bottom of the sidebar, under the page buttons.
+    assert w.size().width() == DEFAULT_WINDOW_WIDTH
+    assert w.size().height() == DEFAULT_WINDOW_HEIGHT
     assert w._settings_btn.isVisible()
     assert w._log_btn.isVisible()
     assert w._check_updates_btn.isVisible()
+    assert w._log_btn.y() > w._settings_btn.y()
+    assert w._check_updates_btn.y() > w._log_btn.y()
+    assert w._lang_combo.y() > w._check_updates_btn.y()
+    assert not w._log_btn.styleSheet()
+    assert not w._settings_btn.styleSheet()
 
     # Simulate transition to active install
     w._set_state(FlashState.S2_WAIT_CONNECTION)
     assert w._install_run_active() is True
-    assert w._settings_btn.isVisible() is True
-    assert w._settings_btn.isEnabled() is False
+    assert w._settings_btn.isVisible() is False
     assert w._support_btn.isVisible() is False
-    assert w._log_btn.isVisible() is False
+    assert w._log_btn.isVisible() is True
+    assert w._log_btn.isEnabled() is True
     assert w._check_updates_btn.isVisible() is False
     assert w._lang_combo.isVisible() is False
     assert w._nav_buttons["nav_select_package"][0].isVisible() is True
     assert w._nav_buttons["nav_select_package"][0].isChecked() is True
     assert w.size().width() <= 750
+    assert w.size().height() <= 350
+
+    # Diagnostics is part of the main window and can be opened mid-install.
+    w._show_diagnostics()
+    app.processEvents()
+    assert w._stack.currentIndex() == _PAGE_DIAGNOSTICS
+    assert w._log_btn.isChecked() is True
+    assert w._nav_buttons["nav_select_package"][0].isChecked() is False
+    assert w.size().height() >= 420
+    w._nav_buttons["nav_select_package"][0].click()
+    app.processEvents()
+    assert w._stack.currentIndex() == _PAGE_FLASH
+    assert w._log_btn.isChecked() is False
     assert w.size().height() <= 350
 
     # User attempts to navigate to Settings during flash: must be blocked
@@ -307,8 +336,8 @@ def test_compact_window_mode_and_sidebar_hiding():
     assert w._log_btn.isVisible() is True
     assert w._check_updates_btn.isVisible() is True
     assert w._lang_combo.isVisible() is True
-    assert w.minimumSize().width() == 680
-    assert w.minimumSize().height() == 420
+    assert w.minimumSize().width() == MINIMUM_WINDOW_WIDTH
+    assert w.minimumSize().height() == MINIMUM_WINDOW_HEIGHT
 
 
 def test_window_maximization_enabled():
@@ -372,14 +401,19 @@ def test_close_interception_during_install(monkeypatch=None):
 
 
 def test_flash_page_compact_card_and_heading():
-    """Verify FlashPage layout matches mockup with compact 470px card and no idle badge."""
+    """The progress card fills the content width instead of a fixed 470px strip."""
+    from PySide6.QtWidgets import QSizePolicy
     from src.ui.flash_page import FlashPage
 
     app = QApplication.instance() or QApplication(sys.argv)
     fp = FlashPage()
-    assert fp._progress_card.maximumWidth() <= 480
-    assert fp._wait_card.maximumWidth() <= 480
-    assert fp._prep_card.maximumWidth() <= 480
+    for card in (fp._progress_card, fp._wait_card, fp._prep_card):
+        assert card.maximumWidth() > 480
+        assert card.sizePolicy().horizontalPolicy() == QSizePolicy.Policy.Expanding
+    fp.show()
+    fp.resize(720, 220)
+    app.processEvents()
+    assert fp._prep_card.width() >= fp.width() - 80, fp._prep_card.width()
     # Headings
     assert len(fp._headings) == 3
     for h in fp._headings:
@@ -472,6 +506,259 @@ def test_symbol_color_adaptation_and_states():
     assert norm_light != "#FFFFFF"  # Must be dark in light mode
 
 
+def test_traffic_lights_center_on_header():
+    """Window controls line up with the vertical center of the icon and title."""
+    from src.ui.glass import (
+        HEADER_CONTENT_HEIGHT,
+        traffic_light_center_from_top,
+        traffic_light_origin_y,
+    )
+
+    button = 14.0
+    header = HEADER_CONTENT_HEIGHT
+    assert abs(traffic_light_center_from_top(header) - (header / 2.0)) < 0.01
+    # A titlebar taller than the header can place the control on the header center.
+    superview = 52.0
+    origin = traffic_light_origin_y(button, superview, header)
+    center_from_top = superview - origin - (button / 2.0)
+    assert abs(center_from_top - (header / 2.0)) < 0.01
+
+    # A short titlebar view still aims at the header center, even when that
+    # origin sits below the view.
+    short = traffic_light_origin_y(button, 28.0, header)
+    short_center = 28.0 - short - (button / 2.0)
+    assert abs(short_center - (header / 2.0)) < 0.01
+
+
+def _image_diff(left, right) -> int:
+    count = 0
+    for y in range(left.height()):
+        for x in range(left.width()):
+            if left.pixel(x, y) != right.pixel(x, y):
+                count += 1
+    return count
+
+
+def test_platform_sidebar_row_hover_and_selection():
+    """Windows and Linux sidebar rows light up on hover and fill on selection.
+
+    The row stays on the platform style: no stylesheet, and the idle paint is
+    opaque so a previous label cannot show through.
+    """
+    from PySide6.QtGui import QImage
+
+    from src.ui.icons import get_symbol_icon
+    from src.ui.sidebar import SidebarButton, sidebar_corner_radius, sidebar_row_spacing
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    apply_theme(app, force_dark=True)
+
+    assert sidebar_row_spacing("darwin") == 16
+    assert sidebar_row_spacing("win32") == 4
+    assert sidebar_row_spacing("linux") == 4
+    assert sidebar_corner_radius("win32") == 4
+    assert sidebar_corner_radius("linux") == 6
+
+    btn = SidebarButton("Settings")
+    btn.setIcon(get_symbol_icon("settings", 16))
+    btn.setIconSize(btn.iconSize())
+    btn.setCheckable(True)
+    btn._force_platform_row = True
+    btn.resize(180, 36)
+    assert not btn.styleSheet()
+
+    def render():
+        image = QImage(btn.size(), QImage.Format.Format_ARGB32_Premultiplied)
+        image.fill(Qt.transparent)
+        btn.render(image)
+        return image
+
+    idle = render()
+    # Every pixel of the row is opaque. A clear or translucent fill is what
+    # left the previous sidebar label on screen.
+    assert idle.pixelColor(8, 8).alpha() == 255
+
+    btn._preview_hover = True
+    hover = render()
+    btn._preview_hover = False
+    btn.setChecked(True)
+    selected = render()
+
+    assert _image_diff(idle, hover) > 50
+    assert _image_diff(idle, selected) > 50
+    assert _image_diff(hover, selected) > 50
+    assert not btn.styleSheet()
+
+
+def test_native_style_candidates_follow_the_desktop():
+    """WinUI, Breeze, and Adwaita are the first styles offered on each desktop."""
+    from src.ui.dark import native_style_candidates, palette_color
+    from PySide6.QtGui import QColor, QPalette
+
+    assert native_style_candidates(system="darwin", offscreen=True) == ("fusion",)
+    assert native_style_candidates(system="darwin")[0] == "macOS"
+    assert native_style_candidates(system="windows")[0] == "windows11"
+    kde = native_style_candidates(system="linux", desktop="KDE")
+    assert kde[0] == "breeze"
+    gnome = native_style_candidates(system="linux", desktop="GNOME")
+    assert gnome[0] == "adwaita"
+    assert "breeze" in gnome
+    overridden = native_style_candidates(system="linux", desktop="GNOME", style_override="kvantum")
+    assert overridden[0] == "kvantum"
+
+    from src.ui.dark import _make_palette
+
+    dark_pal = _make_palette(True)
+    light_pal = _make_palette(False)
+    assert dark_pal.color(QPalette.Midlight) != QColor("#000000")
+    assert light_pal.color(QPalette.Button).lightness() > 200
+    hover = palette_color("rgba(255, 255, 255, 0.08)", over="#1e2227")
+    assert hover.isValid() and hover.alpha() == 255
+    assert hover != QColor("#000000")
+
+
+def test_pre_liquid_glass_light_fields_are_not_white_plates():
+    """Older macOS light mode uses Aqua's light control colors, not #ffffff plates."""
+    from PySide6.QtGui import QColor, QPalette
+
+    from src.ui import dark as dark_mod
+    import src.ui.glass as glass
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    assert app is not None
+    kept = dark_mod.legacy_light_role_color(QPalette.ColorRole.Button, QColor(232, 232, 232))
+    assert kept.red() == 232
+    plate = dark_mod.legacy_light_role_color(QPalette.ColorRole.Button, QColor("#ffffff"))
+    assert plate.name().lower() != "#ffffff"
+    assert plate.lightness() > 200
+    # A dark standard color must not become the light-mode popup.
+    field = dark_mod.legacy_light_role_color(QPalette.ColorRole.Base, QColor(28, 28, 30))
+    assert field.lightness() > 200
+    assert dark_mod.palette_color("rgba(255, 255, 255, 0.08)", over="#1e2227") != QColor("#000000")
+
+    real = glass.is_golden_gate_or_newer
+    glass.is_golden_gate_or_newer = lambda: False
+    try:
+        pal = dark_mod._make_palette(False)
+    finally:
+        glass.is_golden_gate_or_newer = real
+    button = pal.color(QPalette.Button)
+    assert button.lightness() > 200
+    assert button.name().lower() != "#ffffff"
+    assert pal.color(QPalette.Base).lightness() > 200
+    assert pal.color(QPalette.Text).lightness() < 80
+    # Dark mode stays on the blended dark control color.
+    assert dark_mod._make_palette(True).color(QPalette.Button).lightness() < 80
+
+
+def test_diagnostics_count_matches_lines_from_each_source():
+    """The line count is the number of lines actually retained, from every source."""
+    from src.diagnostics import DiagnosticsManager
+    from src.ui.dialogs import DiagnosticsView
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    assert app is not None
+    mgr = DiagnosticsManager.instance()
+    mgr.clear()
+    view = DiagnosticsView()
+    view.set_lines(None)
+    token = "retained-count-9f3a"
+    sources = [
+        f"{token} app ready",
+        f"[SP] {token} download da",
+        f"[MTK] {token} handshake",
+    ]
+    try:
+        for line in sources:
+            view.append_line(line)
+        retained = view.raw_lines()
+        text = "\n".join(retained)
+        for line in sources:
+            assert line in text
+        assert view._count_label.text() == tr("log_lines_total").format(total=len(retained))
+        before = len(retained)
+        view.append_line(f"[SP] {token} write")
+        after = view.raw_lines()
+        assert len(after) == before + 1
+        assert view._count_label.text() == tr("log_lines_total").format(total=len(after))
+    finally:
+        mgr.clear()
+        view.deleteLater()
+
+
+def test_live_theme_switch_updates_title_card_and_donation_text():
+    """A live theme change must restyle titles, card labels, and the donation line."""
+    from PySide6.QtGui import QPalette
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    window = MainWindow()
+    window.show()
+    app.processEvents()
+
+    def text_color(widget):
+        return widget.palette().color(QPalette.ColorRole.WindowText)
+
+    apply_theme(app, force_dark=True)
+    app.processEvents()
+    title = window._select_page._title
+    card = window._select_page._details_name
+    donation = window.statusBar()._goal_label
+    dark = {name: text_color(widget) for name, widget in (
+        ("title", title), ("card", card), ("donation", donation),
+    )}
+    for name, color in dark.items():
+        assert color.lightness() > 140, (name, color.name())
+
+    apply_theme(app, force_dark=False)
+    app.processEvents()
+    light = {name: text_color(widget) for name, widget in (
+        ("title", title), ("card", card), ("donation", donation),
+    )}
+    for name, color in light.items():
+        assert color.name() != dark[name].name(), (name, color.name(), dark[name].name())
+        assert color.lightness() < 120, (name, color.name())
+
+    assert window._select_page._notes_group.title() == ""
+    qss = _build_qss()
+    assert "0.96" not in qss
+    assert "background-color: transparent" in qss.split('cssClass="pageTitle"')[1][:240]
+    apply_theme(app, force_dark=None)
+
+
+def test_classic_windows_buttons_show_hover():
+    """The classic Windows style gets a hover wash. WinUI already has one."""
+    from PySide6.QtGui import QColor, QImage, QPainter
+    from PySide6.QtWidgets import QStyle, QStyleFactory, QStyleOptionButton
+
+    from src.ui.dark import _ClassicWindowsHoverStyle
+    from src.ui.sidebar import classic_windows_style_needs_hover
+
+    assert classic_windows_style_needs_hover("windows")
+    assert not classic_windows_style_needs_hover("windows11")
+    assert not classic_windows_style_needs_hover("windowsvista")
+    if "windows" not in {key.lower() for key in QStyleFactory.keys()}:
+        return
+
+    style = _ClassicWindowsHoverStyle("Windows")
+
+    def render(hovered: bool):
+        image = QImage(120, 32, QImage.Format.Format_ARGB32_Premultiplied)
+        image.fill(QColor("#1e2227"))
+        painter = QPainter(image)
+        option = QStyleOptionButton()
+        option.rect = image.rect().adjusted(1, 1, -1, -1)
+        option.text = "Install"
+        option.palette = QApplication.instance().palette()
+        option.state = QStyle.StateFlag.State_Enabled | QStyle.StateFlag.State_Active
+        if hovered:
+            option.state |= QStyle.StateFlag.State_MouseOver
+        style.drawControl(QStyle.ControlElement.CE_PushButton, option, painter, None)
+        painter.end()
+        return image
+
+    assert _image_diff(render(False), render(True)) > 20
+
+
 if __name__ == "__main__":
     test_dialog_theme_not_transparent()
     test_combobox_popup_styling()
@@ -489,5 +776,11 @@ if __name__ == "__main__":
     test_flash_page_compact_card_and_heading()
     test_os_standard_iconography()
     test_symbol_color_adaptation_and_states()
+    test_platform_sidebar_row_hover_and_selection()
+    test_native_style_candidates_follow_the_desktop()
+    test_pre_liquid_glass_light_fields_are_not_white_plates()
+    test_live_theme_switch_updates_title_card_and_donation_text()
+    test_diagnostics_count_matches_lines_from_each_source()
+    test_classic_windows_buttons_show_hover()
 
     print("All native UX enhancement tests passed!")

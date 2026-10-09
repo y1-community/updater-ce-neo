@@ -78,7 +78,7 @@ _WS_RE = re.compile(r"\s+")
 
 # Upper bound on internal-log lines forwarded per install: the file can grow to
 # thousands of lines and only the tail is interesting for a bug report.
-_SP_QT_LOG_MAX_LINES = 2000
+_SP_QT_LOG_MAX_LINES = 80000
 
 
 def _normalise_tool_line(line) -> str:

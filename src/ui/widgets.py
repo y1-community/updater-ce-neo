@@ -6,11 +6,12 @@ QSS) and ``dark.T()`` colour tokens only for dynamically computed styles
 """
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QPainter, QPainterPath
+from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -139,6 +140,22 @@ class InfoRow(QWidget):
         return self._value.text()
 
 
+class CurrentPageStack(QStackedWidget):
+    """Size to the visible page, not the tallest one in the stack."""
+
+    def sizeHint(self):
+        current = self.currentWidget()
+        if current is None:
+            return super().sizeHint()
+        return current.sizeHint()
+
+    def minimumSizeHint(self):
+        current = self.currentWidget()
+        if current is None:
+            return super().minimumSizeHint()
+        return current.minimumSizeHint()
+
+
 class Card(QFrame):
     """Native desktop card panel matching human interface guidelines."""
 
@@ -147,6 +164,7 @@ class Card(QFrame):
         self.setProperty("cssClass", "card")
         self._title_key = title_key
         self._title = None
+        self._glass_clear = False
         self._outer = QVBoxLayout(self)
         self._outer.setContentsMargins(14, 12, 14, 12)
         self._outer.setSpacing(10)
@@ -170,11 +188,57 @@ class Card(QFrame):
         if self._title_key:
             self.setTitle(tr(self._title_key))
 
+    def set_glass_clear(self, clear: bool = True) -> None:
+        """Show the system material through this card.
+
+        A frosted fill on an opaque widget buffer becomes a dark rectangle.
+        The version list and the notes sit on the same texture as the window.
+        """
+        self._glass_clear = bool(clear)
+        if self._glass_clear:
+            from .surfaces import clear_glass_plate
+            clear_glass_plate(self)
+        self.update()
+
     def set_layout(self, layout):
         self._outer.addLayout(layout)
 
     def add_widget(self, widget):
         self._outer.addWidget(widget)
+
+    def paintEvent(self, event):  # noqa: N802 (Qt naming)
+        """Frost the card in place. Source replaces the rect, so it does not
+        stack on the previous frame and does not clear the rest of the window."""
+        from .surfaces import glass_surfaces_enabled
+
+        if not glass_surfaces_enabled():
+            super().paintEvent(event)
+            return
+        if self._glass_clear:
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setClipRect(event.rect())
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
+        from .dark import is_dark
+        # A light veil, not a solid slab. Source keeps the alpha stable so
+        # repeated paints do not turn the card opaque.
+        # Light enough that Liquid Glass / acrylic stays visible through the
+        # card. The title and progress sit on top in the window text color.
+        fill = QColor(255, 255, 255, 18 if is_dark() else 32)
+        rect = self.rect().adjusted(0, 0, -1, -1)
+        painter.fillPath(self._rounded(rect), fill)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+        edge = QColor(255, 255, 255, 40) if is_dark() else QColor(0, 0, 0, 36)
+        painter.setPen(QPen(edge))
+        painter.drawPath(self._rounded(rect))
+        painter.end()
+
+    @staticmethod
+    def _rounded(rect):
+        path = QPainterPath()
+        path.addRoundedRect(rect, 8, 8)
+        return path
 
 
 class Banner(QLabel):

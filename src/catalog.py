@@ -51,6 +51,7 @@ class FirmwarePackage:
     repo: str
     package_name: str
     description: str = ""
+    icon: str = ""
 
 
 # Live manifest entries (see ``manifest.py``) replace the static table once
@@ -630,7 +631,55 @@ def release_sort_key(release):
     )
 
 
-def parse_clean_release_tag_label(rel, prefer_240p=False) -> str:
+def _release_datestamp_label(raw: str) -> str | None:
+    """Human date for a tag, or None when the tag has no datestamp.
+
+    The list and the install card share this so they cannot disagree.
+    """
+    text = str(raw or "")
+    match = re.search(
+        r"(?<!\d)((?:19|20)\d{2})[-_./]?(0[1-9]|1[0-2])[-_./]?(0[1-9]|[12]\d|3[01])(?!\d)",
+        text,
+    )
+    year = month = day = None
+    if match:
+        year, month, day = (int(match.group(i)) for i in (1, 2, 3))
+    else:
+        short = re.search(
+            r"(?<!\d)(\d{2})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])(?!\d)",
+            text,
+        )
+        if not short:
+            return None
+        yy = int(short.group(1))
+        year = 2000 + yy if yy < 70 else 1900 + yy
+        month, day = int(short.group(2)), int(short.group(3))
+    try:
+        dt = datetime(year, month, day)
+    except ValueError:
+        return None
+    return f"{dt.strftime('%B')} {dt.day} {dt.year}"
+
+
+def format_install_card_title(software: str, version_label: str = "", model: str = "") -> str:
+    """``{software} {version or date} for {model}``, omitting empty pieces.
+
+    ``version_label`` is the Choose Software list string (semantic version or
+    datestamp). The word "firmware" is not added; MediaTek branding uses the
+    software title it already has.
+    """
+    name = re.sub(r"\s*\([^)]*\)\s*$", "", str(software or "")).strip()
+    version = str(version_label or "").strip()
+    device = str(model or "").strip()
+    if version and name and version.lower() == name.lower():
+        version = ""
+    title = " ".join(part for part in (name, version) if part)
+    if device:
+        title = f"{title} for {device}" if title else device
+    return title
+
+
+def parse_clean_release_tag_label(rel, prefer_240p=False, version_only=False) -> str:
     """Parse release tag to isolate semantic version or datestamp, followed by parenthesized verbs.
 
     Adheres to user requirements:
@@ -647,16 +696,10 @@ def parse_clean_release_tag_label(rel, prefer_240p=False) -> str:
     if not raw:
         return ""
 
-    # 1. Datestamp check: YYYY-MM-DD or YYYYMMDD
-    date_match = re.search(r"\b(20\d{2})[-_.]?(0[1-9]|1[0-2])[-_.]?(0[1-9]|[12]\d|3[01])\b", raw)
-    date_str = None
-    if date_match:
-        try:
-            y, m, d = int(date_match.group(1)), int(date_match.group(2)), int(date_match.group(3))
-            dt = datetime(y, m, d)
-            date_str = dt.strftime("%B %-d %Y")
-        except Exception:
-            pass
+    # 1. Datestamp check. Same shapes the catalogue and GitHub tags use:
+    # YYYYMMDD, YYYY-MM-DD, YYYY.MM.DD, YYYY/MM/DD, YYMMDD, and the
+    # separated forms already accepted above.
+    date_str = _release_datestamp_label(raw)
 
     # 2. Semantic version check (e.g. 3.1.2, 0.9.0, 1.8.2)
     v_match = re.search(r"(?:^|[^\d.])(?:v|v\.)?(\d+\.\d+(?:\.\d+)?(?:[a-zA-Z0-9]+)?)(?:[^\d.]|$)", raw, re.IGNORECASE)
@@ -666,7 +709,7 @@ def parse_clean_release_tag_label(rel, prefer_240p=False) -> str:
 
     version_part = semver_str or date_str
     if not version_part:
-        return name or raw
+        return "" if version_only else (name or raw)
 
     # 3. Extract verbs from tag_name (and raw string)
     lower_raw = raw.lower()

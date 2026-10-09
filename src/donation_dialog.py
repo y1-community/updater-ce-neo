@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QProgressBar,
     QPushButton,
+    QSizePolicy,
     QStatusBar,
     QVBoxLayout,
     QWidget,
@@ -86,13 +87,74 @@ class _LineLabel(QLabel):
         ev.accept()
 
 
-    def paintEvent(self, ev):
-        from PySide6.QtGui import QPainter
-        p = QPainter(self)
-        p.setCompositionMode(QPainter.CompositionMode_Clear)
-        p.fillRect(ev.rect(), Qt.transparent)
-        p.end()
-        super().paintEvent(ev)
+class _Ticker(QWidget):
+    """Clips a status-bar line and scrolls it when the bar is too narrow.
+
+    Credits / Thanks and Support Us keep their own width. This middle slot is
+    the piece that gives up space: the full line stays put when it fits, and
+    marquees when it does not, so the corner links are never pushed off.
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setMinimumWidth(0)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        self._label = _LineLabel(self)
+        label = self._label
+        orig_set_text = label.setText
+        orig_set_visible = label.setVisible
+
+        def _set_text(text, _orig=orig_set_text):
+            _orig(text)
+            self.sync()
+
+        def _set_visible(visible, _orig=orig_set_visible):
+            _orig(bool(visible))
+            self.setVisible(bool(visible))
+
+        label.setText = _set_text
+        label.setVisible = _set_visible
+        self._offset = 0
+        self._hold = 0
+        self._timer = QTimer(self)
+        self._timer.setInterval(32)
+        self._timer.timeout.connect(self._tick)
+
+    @property
+    def label(self) -> _LineLabel:
+        return self._label
+
+    def resizeEvent(self, event):  # noqa: N802 (Qt naming)
+        super().resizeEvent(event)
+        self.sync()
+
+    def sync(self):
+        text_w = max(self._label.sizeHint().width(), 0)
+        avail = self.width()
+        height = max(self.height(), self._label.sizeHint().height())
+        if avail <= 0 or text_w <= avail:
+            self._timer.stop()
+            self._offset = 0
+            x = max(0, (avail - text_w) // 2)
+            self._label.setGeometry(x, 0, text_w, height)
+            return
+        self._label.setGeometry(-self._offset, 0, text_w, height)
+        if not self._timer.isActive():
+            self._hold = 36
+            self._timer.start()
+
+    def _tick(self):
+        if not decorative_updates_needed(self):
+            return
+        if self._hold > 0:
+            self._hold -= 1
+            return
+        self._offset += 1
+        limit = max(0, self._label.sizeHint().width() - self.width())
+        if self._offset > limit + 32:
+            self._offset = 0
+            self._hold = 36
+        self._label.move(-self._offset, 0)
 
 
 class _LinkButton(QPushButton):
@@ -109,14 +171,6 @@ class _LinkButton(QPushButton):
         self.setFlat(True)
         self.setCursor(Qt.PointingHandCursor)
         self.setAutoDefault(False)
-
-    def paintEvent(self, ev):
-        from PySide6.QtGui import QPainter
-        p = QPainter(self)
-        p.setCompositionMode(QPainter.CompositionMode_Clear)
-        p.fillRect(ev.rect(), Qt.transparent)
-        p.end()
-        super().paintEvent(ev)
 
 
 class DonationStatusBar(QStatusBar):
@@ -145,7 +199,7 @@ class DonationStatusBar(QStatusBar):
 
         self.setObjectName("donation_status_bar")
         self.setSizeGripEnabled(False)
-        self.setFixedHeight(44)
+        self.setFixedHeight(30)
         self._build_ui(on_support, on_credits)
         self._donor_lines = self._build_donor_lines()
         self._refresh_goal()
@@ -165,13 +219,16 @@ class DonationStatusBar(QStatusBar):
         # shown, so the visibility gate below would skip it.
         self._refresh_remote_donors(force=True)
 
-    def paintEvent(self, ev):
-        from PySide6.QtGui import QPainter
-        p = QPainter(self)
-        p.setCompositionMode(QPainter.CompositionMode_Clear)
-        p.fillRect(ev.rect(), Qt.transparent)
-        p.end()
-        super().paintEvent(ev)
+    def _seal_ticker(self, label) -> None:
+        """Erase the previous line without locking the bar to the full string.
+
+        A minimum width as wide as the sentence pushes Support Us off the
+        window. The ticker host clips and marquees instead.
+        """
+        from .ui.surfaces import seal_updating_text
+        label.setMinimumWidth(0)
+        seal_updating_text(label)
+        label.setMinimumWidth(0)
 
     def credits_link(self):
         """The bar's Credits / Thanks link; the window owns its visibility."""
@@ -181,10 +238,10 @@ class DonationStatusBar(QStatusBar):
         """Text-link styling for the bar's corner actions."""
         side = "left" if align == "left" else "right"
         btn.setStyleSheet(
-            f"QPushButton {{ background: transparent; color: {t.fg}; border: none;"
+            "QPushButton { background: transparent; color: palette(window-text); border: none;"
             f" padding: 2px 4px; font-size: 12px; font-weight: 700; text-align: {side}; }}"
-            f"QPushButton:hover {{ color: {t.fg}; }}"
-            f"QPushButton:focus {{ color: {t.fg}; border: 1px solid {t.border_focus};"
+            "QPushButton:hover { color: palette(window-text); }"
+            f"QPushButton:focus {{ color: palette(window-text); border: 1px solid {t.border_focus};"
             f" border-radius: 5px; outline: none; }}"
         )
 
@@ -199,12 +256,15 @@ class DonationStatusBar(QStatusBar):
 
         status_bg = "transparent" if use_glass else t.bg_card
         status_border = "none" if use_glass else f"1px solid {t.border}"
+        # The bar is clear so glass shows. Labels are not forced transparent:
+        # the ticker has to erase its own rect or the previous line stays.
         self.setStyleSheet(
             f"QStatusBar#donation_status_bar {{ background-color: {status_bg};"
-            f" border-top: {status_border}; color: {t.fg}; }}"
-            f"QStatusBar#donation_status_bar QLabel {{ color: {t.fg};"
-            f" background: transparent; border: none; }}"
+            f" border-top: {status_border}; color: palette(window-text); }}"
         )
+        if use_glass:
+            from .ui.surfaces import show_glass_backdrop
+            show_glass_backdrop(self)
 
         # Donation container: Credits / Thanks, the centred goal display, and
         # the Support Us link in the right corner.
@@ -233,28 +293,34 @@ class DonationStatusBar(QStatusBar):
         goal_row.setContentsMargins(0, 0, 0, 0)
         goal_row.setSpacing(10)
 
-        self._goal_label = _LineLabel()
+        self._goal_ticker = _Ticker(self._goal_group)
+        self._goal_label = self._goal_ticker.label
         self._goal_label.setAlignment(Qt.AlignCenter)
-        self._goal_label.setStyleSheet(f"font-size: 12px; font-weight: 600; color: {t.fg}; border: none; background: transparent;")
-        goal_row.addWidget(self._goal_label, 0, Qt.AlignVCenter)
+        self._goal_label.setStyleSheet("font-size: 12px; font-weight: 600; color: palette(window-text); background: transparent; border: none;")
+        self._seal_ticker(self._goal_label)
+        goal_row.addWidget(self._goal_ticker, 1, Qt.AlignVCenter)
 
         self._goal_bar = QProgressBar()
         self._goal_bar.setObjectName("softwareUpdateProgress")
         self._goal_bar.setRange(0, 1000)
         self._goal_bar.setTextVisible(False)
-        self._goal_bar.setFixedSize(120, 8)
+        self._goal_bar.setFixedHeight(8)
+        self._goal_bar.setMinimumWidth(48)
+        self._goal_bar.setMaximumWidth(120)
         goal_row.addWidget(self._goal_bar, 0, Qt.AlignVCenter)
 
-        self._donor_label = _LineLabel()
+        self._donor_ticker = _Ticker(self._goal_group)
+        self._donor_label = self._donor_ticker.label
         self._donor_label.setTextFormat(Qt.RichText)
         self._donor_label.setAlignment(Qt.AlignCenter)
-        self._donor_label.setStyleSheet(f"font-size: 12px; font-weight: 500; color: {t.fg}; border: none; background: transparent;")
+        self._donor_label.setStyleSheet("font-size: 12px; font-weight: 500; color: palette(window-text); background: transparent; border: none;")
+        self._seal_ticker(self._donor_label)
         self._donor_label.setVisible(False)
-        goal_row.addWidget(self._donor_label, 0, Qt.AlignVCenter)
+        goal_row.addWidget(self._donor_ticker, 1, Qt.AlignVCenter)
 
-        row.addStretch(1)
-        row.addWidget(self._goal_group, 0)
-        row.addStretch(1)
+        self._goal_group.setMinimumWidth(0)
+        self._goal_group.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        row.addWidget(self._goal_group, 1)
 
         self._support_btn = _LinkButton(tr("nav_donate"))
         self._support_btn.setToolTip(tr_brand("donate_title"))
@@ -270,10 +336,12 @@ class DonationStatusBar(QStatusBar):
         status_row = QHBoxLayout(self._status_container)
         status_row.setContentsMargins(12, 0, 12, 0)
         status_row.setSpacing(8)
-        self._status_label = QLabel()
+        self._status_ticker = _Ticker(self._status_container)
+        self._status_label = self._status_ticker.label
         self._status_label.setAlignment(Qt.AlignCenter)
-        self._status_label.setStyleSheet(f"font-size: 12px; font-weight: 500; color: {t.fg}; border: none; background: transparent;")
-        status_row.addWidget(self._status_label, 1)
+        self._status_label.setStyleSheet("font-size: 12px; font-weight: 500; color: palette(window-text); background: transparent; border: none;")
+        self._seal_ticker(self._status_label)
+        status_row.addWidget(self._status_ticker, 1)
         self._status_container.setVisible(False)
         self.addWidget(self._status_container, 1)
 
@@ -284,21 +352,36 @@ class DonationStatusBar(QStatusBar):
             label.setCursor(Qt.PointingHandCursor)
             label.clicked.connect(self._handle_label_click)
 
-    def _balance_links(self):
-        """Give both corner links one width so the goal display is centred.
+    def _link_text_width(self, btn) -> int:
+        return btn.fontMetrics().horizontalAdvance(btn.text()) + 16
 
-        The display sits between the two corners, so equal corner widths put it
-        on the bar's own centre line whatever the labels say in the active
-        language.
+    def _balance_links(self):
+        """Keep both corner links fully on screen.
+
+        When the bar is wide enough, the two links share one width so the goal
+        line stays centred. When it is not, each link keeps just its own text
+        and the middle line marquees in whatever is left.
         """
         if not (hasattr(self, "_credits_link") and hasattr(self, "_support_btn")):
             return
-        width = max(
-            self._credits_link.sizeHint().width(),
-            self._support_btn.sizeHint().width(),
-        )
-        for link in (self._credits_link, self._support_btn):
-            link.setFixedWidth(width)
+        credits_w = self._link_text_width(self._credits_link)
+        support_w = self._link_text_width(self._support_btn)
+        paired = max(credits_w, support_w)
+        available = self._donation_container.width() or self.width()
+        if available and paired * 2 + 80 > available:
+            self._credits_link.setFixedWidth(credits_w)
+            self._support_btn.setFixedWidth(support_w)
+        else:
+            self._credits_link.setFixedWidth(paired)
+            self._support_btn.setFixedWidth(paired)
+
+    def resizeEvent(self, event):  # noqa: N802 (Qt naming)
+        super().resizeEvent(event)
+        self._balance_links()
+        for name in ("_goal_ticker", "_donor_ticker", "_status_ticker"):
+            ticker = getattr(self, name, None)
+            if ticker is not None:
+                ticker.sync()
 
     def _relayout_links(self):
         """Re-measure the corner links (new wording, new font) and re-balance."""
@@ -330,22 +413,26 @@ class DonationStatusBar(QStatusBar):
         status_border = "none" if use_glass else f"1px solid {t.border}"
         self.setStyleSheet(
             f"QStatusBar#donation_status_bar {{ background-color: {status_bg};"
-            f" border-top: {status_border}; color: {t.fg}; }}"
-            f"QStatusBar#donation_status_bar QLabel {{ color: {t.fg};"
-            f" background: transparent; border: none; }}"
+            f" border-top: {status_border}; color: palette(window-text); }}"
         )
+        if use_glass:
+            from .ui.surfaces import show_glass_backdrop
+            show_glass_backdrop(self)
         if hasattr(self, "_goal_label"):
             self._goal_label.setStyleSheet(
-                f"font-size: 12px; font-weight: 600; color: {t.fg}; border: none; background: transparent;"
+                "font-size: 12px; font-weight: 600; color: palette(window-text); background: transparent; border: none;"
             )
+            self._seal_ticker(self._goal_label)
         if hasattr(self, "_donor_label"):
             self._donor_label.setStyleSheet(
-                f"font-size: 12px; font-weight: 500; color: {t.fg}; border: none; background: transparent;"
+                "font-size: 12px; font-weight: 500; color: palette(window-text); background: transparent; border: none;"
             )
+            self._seal_ticker(self._donor_label)
         if hasattr(self, "_status_label"):
             self._status_label.setStyleSheet(
-                f"font-size: 12px; font-weight: 500; color: {t.fg}; border: none; background: transparent;"
+                "font-size: 12px; font-weight: 500; color: palette(window-text); background: transparent; border: none;"
             )
+            self._seal_ticker(self._status_label)
         if hasattr(self, "_credits_link"):
             self._style_link(self._credits_link, t, "left")
             self._relayout_links()

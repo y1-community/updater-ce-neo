@@ -823,7 +823,7 @@ def test_ui_construction():
 def test_donation_status_bar():
     """The main window's bottom status area is the compact Support goal
     display, and it retranslates in place with the rest of the window."""
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication, QVBoxLayout, QWidget
     from src.donation_dialog import DonationStatusBar
     from src.i18n import translator
 
@@ -848,6 +848,21 @@ def test_donation_status_bar():
     assert "$25" in bar._goal_label.text()
     bar._support_btn.click()
     assert opened == [True]
+
+    # A narrow bar keeps Support Us on screen and lets the goal line marquee.
+    host = QWidget()
+    host_layout = QVBoxLayout(host)
+    host_layout.setContentsMargins(0, 0, 0, 0)
+    host_layout.addWidget(bar)
+    host.resize(460, 36)
+    host.show()
+    app.processEvents()
+    support_right = bar._support_btn.mapTo(host, bar._support_btn.rect().topRight()).x()
+    assert support_right <= host.width() + 1, support_right
+    assert bar._support_btn.width() >= bar._support_btn.fontMetrics().horizontalAdvance(
+        bar._support_btn.text()
+    )
+    assert bar._goal_label.minimumWidth() == 0
 
     # The goal and donor lines are clickable too: a click on plain text opens
     # the donation dialog (exactly once per click)...
@@ -1712,7 +1727,8 @@ def test_theme_refresh_live():
         light_fg = dark.T().fg
         assert light_bg in light_qss and light_fg  # baseline really is the light theme
         nav_btn = w._nav_buttons["nav_select_package"][0]
-        assert dark.T().accent in nav_btn.styleSheet()
+        assert not nav_btn.styleSheet(), "sidebar buttons stay on the native style"
+        assert dark.T().accent in app.styleSheet()
 
         # A widget whose refresher is broken must not stop the app-wide refresh.
         class _Hostile(QWidget):
@@ -1747,8 +1763,10 @@ def test_theme_refresh_live():
         assert dark_tokens.accent == "#ff375f", dark_tokens.accent
         assert app.palette().color(QPalette.Window).name() == dark_tokens.bg
         assert dark_tokens.bg in app.styleSheet() and light_bg not in app.styleSheet()
-        assert dark_tokens.accent in nav_btn.styleSheet(), nav_btn.styleSheet()
-        assert f"color: {dark_tokens.fg}" in w._brand_label.styleSheet()
+        assert not nav_btn.styleSheet(), nav_btn.styleSheet()
+        assert dark_tokens.accent in app.styleSheet()
+        assert "palette(window-text)" in w._brand_label.styleSheet()
+        assert w._brand_label.palette().color(QPalette.WindowText).name() == dark_tokens.fg
         # The window-level chrome (native title bar, glass) is refreshed too.
         assert applied, "the window chrome hook never ran"
 
@@ -2302,10 +2320,10 @@ def test_language_switch_keeps_screen():
 
 
 def test_success_dialog_flow():
-    """After a successful install the donation modal is shown directly (no
-    separate completion screen); the completion dialog only appears when the
-    user has opted out of the donation modal. The flash-page banner flips to
-    "Install complete" before either dialog opens."""
+    """A finished install stays on the flash page. The header becomes
+    "Install Complete" and the donations appeal is inline, unless that
+    prompt is turned off. Neither a donation modal nor a completion dialog
+    is opened."""
     from PySide6.QtWidgets import QApplication
     import src.ui.main_window as mw
     from src.flash_service import STEP_WRITE, STEP_DONE
@@ -2342,22 +2360,26 @@ def test_success_dialog_flow():
         w.service.step_changed.emit(STEP_DONE)
         assert w._flash_page._flash_banner.text() == "Install complete"
 
-        # Donation prompt enabled (default): donation modal only.
+        # Donation prompt enabled (default): stay on the install screen.
         w.settings.setValue("donation_install_prompt_disabled", False)
         w._package_name = "Rockbox (Y1)"
         w._handle_flash_success()
-        assert shown == [("donation", "install_success")], shown
+        assert shown == [], shown
+        assert w._stack.currentIndex() == mw._PAGE_FLASH
+        assert w._install_complete is True
+        assert w._page_title(mw._PAGE_FLASH, False) == "Install Complete"
+        assert w._flash_page._appeal.isVisible() is True
+        assert w._flash_page._flash_banner.text() == "Install complete"
 
-        # Opted out: completion dialog only, no donation modal.
+        # Opted out: same screen, no appeal, still no dialog.
         shown.clear()
         w.settings.setValue("donation_install_prompt_disabled", True)
-        w._package_name = "Rockbox (Y1)"  # _reset_after_run cleared it above
+        w._package_name = "Rockbox (Y1)"
         w._handle_flash_success()
-        assert shown == [("complete", "Rockbox (Y1)")], shown
-
-        # The top banner must read "Install complete" *while* the completion
-        # dialog is over the page, not keep saying "Install in Progress".
-        assert banner_during_dialog == ["Install complete", "Install complete"], banner_during_dialog
+        assert shown == [], shown
+        assert w._flash_page._appeal.isVisible() is False
+        assert w._page_title(mw._PAGE_FLASH, False) == "Install Complete"
+        assert banner_during_dialog == []
     finally:
         mw.FlashCompleteDialog = real_complete
         w.close()
@@ -3689,8 +3711,15 @@ def test_native_theming():
 
     app = QApplication.instance() or QApplication(sys.argv)
     style_name = dark.setup_native_app_style(app)
-    assert style_name is not None
-    assert len(style_name) > 0
+    assert style_name
+    if dark.IS_MACOS:
+        # Qt 6 ships Aqua as "macOS". Headless runs keep Fusion because the
+        # offscreen plugin cannot draw Aqua; a desktop session selects it.
+        assert dark._factory_style("macOS", "macintosh")
+        if os.environ.get("QT_QPA_PLATFORM") != "offscreen":
+            assert style_name.lower() in ("macos", "macintosh"), style_name
+    elif dark.IS_WINDOWS and os.environ.get("QT_QPA_PLATFORM") != "offscreen":
+        assert "windows" in style_name.lower(), style_name
 
     # Test Dark Mode Tokens
     dark_tokens = dark._Tokens(dark=True)
@@ -3706,11 +3735,11 @@ def test_native_theming():
     dark.apply_theme(app, force_dark=True)
     qss_dark = dark._build_qss()
     assert "font-family:" in qss_dark  # monospace diagnostics view only
-    assert "#navPanel" in qss_dark
+    assert "#navPanel" not in qss_dark, "a sidebar stylesheet restyles its buttons"
     assert "cssClass=\"cardTitle\"" in qss_dark
     assert "cssClass=\"field-label\"" in qss_dark
-    assert "min-height: 36px" in qss_dark, "Primary buttons must meet 36px touch point target"
-    assert "min-height: 34px" in qss_dark, "Form controls/nav buttons must meet 34px touch target"
+    assert "#navPanel QPushButton" not in qss_dark, "sidebar buttons are the platform's own"
+    assert "\nQPushButton {" not in qss_dark
     # Standard controls must not be restyled app-wide (tabs, buttons, combos...).
     _assert_no_unscoped_control_qss(qss_dark)
 
@@ -3750,7 +3779,7 @@ def test_native_theming():
     dark.apply_theme(app, force_dark=False)
     qss_light = dark._build_qss()
     assert "font-family:" in qss_light
-    assert "#navPanel" in qss_light
+    assert "#navPanel" not in qss_light
     _assert_no_unscoped_control_qss(qss_light)
 
     # The proof: every standard control paints identically with the app
@@ -6180,9 +6209,15 @@ def test_sp_flash_auth_file():
 
 
 def test_window_minimum_size_and_titlebar_stability():
-    """Verify minimum window size (680x420), 800x500 default, layout compactness, and titlebar stability."""
+    """Choose Software opens at the measured default. The floor stays smaller so it can shrink slightly."""
     from PySide6.QtWidgets import QApplication
-    from src.ui.main_window import MainWindow
+    from src.ui.main_window import (
+        DEFAULT_WINDOW_HEIGHT,
+        DEFAULT_WINDOW_WIDTH,
+        MINIMUM_WINDOW_HEIGHT,
+        MINIMUM_WINDOW_WIDTH,
+        MainWindow,
+    )
 
     _reset_app_settings()
     app = QApplication.instance() or QApplication(sys.argv)
@@ -6190,34 +6225,36 @@ def test_window_minimum_size_and_titlebar_stability():
     w.show()
     app.processEvents()
 
-    # 1. Minimum size constraint is 680 x 420 (allows free resizing above usable floor)
-    assert w.minimumSize().width() == 680
-    assert w.minimumSize().height() == 420
+    # 1. Minimum size stays under the default so the window can still shrink
+    assert w.minimumSize().width() == MINIMUM_WINDOW_WIDTH
+    assert w.minimumSize().height() == MINIMUM_WINDOW_HEIGHT
+    assert w.minimumSize().width() <= DEFAULT_WINDOW_WIDTH
+    assert w.minimumSize().height() <= DEFAULT_WINDOW_HEIGHT
 
-    # 2. Resizing to 800 x 500 default is allowed and pages fit within bounds
-    w.resize(800, 500)
-    app.processEvents()
-    assert w.size().width() == 800
-    assert w.size().height() == 500
+    # 2. Choose Software starts at the measured default
+    assert w.size().width() == DEFAULT_WINDOW_WIDTH
+    assert w.size().height() == DEFAULT_WINDOW_HEIGHT
 
-    # 3. Switching to Settings expands height smoothly to fit settings content
+    # 3. Settings keeps that compact size; the page scrolls
     w._nav_to_page(4)  # Settings
     app.processEvents()
-    assert w.size().width() == 800
-    assert w.size().height() >= 500
+    assert w.size().width() == DEFAULT_WINDOW_WIDTH
+    assert w.size().height() == DEFAULT_WINDOW_HEIGHT
 
     w._nav_to_page(0)  # Select
     app.processEvents()
-    assert w.size().width() == 800
+    assert w.size().width() == DEFAULT_WINDOW_WIDTH
+    assert w.size().height() == DEFAULT_WINDOW_HEIGHT
 
     # 4. Flashing view fits without issues
     w._nav_to_page(1)  # Flash
     app.processEvents()
-    assert w.size().width() == 800
+    assert w.size().width() == DEFAULT_WINDOW_WIDTH
 
     w._nav_to_page(0)  # Select
     app.processEvents()
-    assert w.size().width() == 800
+    assert w.size().width() == DEFAULT_WINDOW_WIDTH
+    assert w.size().height() == DEFAULT_WINDOW_HEIGHT
 
     # 5. Check macOS seamless titlebar properties if running on macOS
     if sys.platform == "darwin":

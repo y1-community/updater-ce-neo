@@ -81,6 +81,10 @@ _SVG_TEMPLATES = {
     "folder": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
     </svg>""",
+    "complete": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="9" fill="{color}" stroke="none"/>
+        <polyline points="8 12.5 11 15.5 16.5 9" stroke="#ffffff"/>
+    </svg>""",
 }
 
 # Platform mappings
@@ -95,6 +99,7 @@ _SF_SYMBOL_MAP = {
     "tools": "wrench.and.screwdriver",
     "file": "doc",
     "folder": "folder",
+    "complete": "checkmark.circle.fill",
 }
 
 _SEGOE_SYMBOL_MAP = {
@@ -108,6 +113,7 @@ _SEGOE_SYMBOL_MAP = {
     "tools": 0xE756,       # Repair
     "file": 0xE8A5,        # Document
     "folder": 0xED25,      # FolderOpen
+    "complete": 0xE73E,    # CheckMark
 }
 
 _FREEDESKTOP_MAP = {
@@ -121,6 +127,7 @@ _FREEDESKTOP_MAP = {
     "tools": ["applications-utilities-symbolic", "applications-utilities", "system-run-symbolic", "system-run"],
     "file": ["text-x-generic-symbolic", "text-x-generic", "document-symbolic", "document"],
     "folder": ["folder-open-symbolic", "folder-open", "folder-symbolic", "folder"],
+    "complete": ["emblem-ok-symbolic", "emblem-ok", "object-select-symbolic", "dialog-ok"],
 }
 
 _segoe_font_family: Optional[str] = None

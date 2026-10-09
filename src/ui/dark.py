@@ -13,12 +13,14 @@ colour helpers from this module instead of hard-coding hex literals.
 from __future__ import annotations
 
 import logging
+import os
 import platform
+import re
 import sys
 
 from PySide6.QtCore import QEvent, QObject, Qt, QTimer
-from PySide6.QtGui import QColor, QFont, QPalette
-from PySide6.QtWidgets import QApplication, QStyleFactory
+from PySide6.QtGui import QColor, QFont, QPainter, QPalette
+from PySide6.QtWidgets import QApplication, QProxyStyle, QStyle, QStyleFactory
 
 logger = logging.getLogger(__name__)
 
@@ -27,47 +29,180 @@ IS_WINDOWS = sys.platform == "win32" or platform.system() == "Windows"
 IS_LINUX = sys.platform.startswith("linux") or platform.system() == "Linux"
 
 
+def _factory_style(*names: str) -> str | None:
+    """Return the installed QStyle key matching any of *names*, ignoring case."""
+    by_lower = {key.lower(): key for key in QStyleFactory.keys()}
+    for name in names:
+        found = by_lower.get((name or "").lower())
+        if found:
+            return found
+    return None
+
+
+def native_style_candidates(
+    *,
+    system: str,
+    offscreen: bool = False,
+    desktop: str = "",
+    style_override: str = "",
+) -> tuple[str, ...]:
+    """Style keys to try, most native first.
+
+    Windows prefers the WinUI style (``windows11``). KDE and LXQt prefer
+    Breeze. GNOME and the other free desktops prefer Adwaita. ``style_override``
+    is ``QT_STYLE_OVERRIDE``, which Linux users set to pick their Qt style.
+    """
+    system = (system or "").lower()
+    if system in ("darwin", "macos"):
+        if offscreen:
+            return ("fusion",)
+        return ("macOS", "macintosh")
+    if system in ("windows", "win32"):
+        return ("windows11", "windowsvista", "windows")
+
+    names: list[str] = []
+    override = style_override.strip()
+    if override:
+        names.append(override)
+    blob = desktop.lower()
+    if any(token in blob for token in ("kde", "plasma", "lxqt")):
+        names.extend(("breeze", "oxygen", "adwaita", "fusion"))
+    else:
+        names.extend(("adwaita", "adwaita-dark", "breeze", "fusion"))
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for name in names:
+        key = name.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        ordered.append(name)
+    return tuple(ordered)
+
+
+class _ClassicWindowsHoverStyle(QProxyStyle):
+    """Hover wash for the classic Windows style.
+
+    ``windows11`` and ``windowsvista`` already paint a hot state. The older
+    ``windows`` style only changes when the button is pressed, so a pointer
+    move does nothing. This draws one translucent accent wash after the
+    native button, and leaves the pressed look to the base style.
+    """
+
+    def drawControl(self, element, option, painter, widget=None):  # noqa: ANN001
+        super().drawControl(element, option, painter, widget)
+        if element != QStyle.ControlElement.CE_PushButton:
+            return
+        state = option.state
+        enabled = bool(state & QStyle.StateFlag.State_Enabled)
+        hovered = bool(state & QStyle.StateFlag.State_MouseOver)
+        pressed = bool(state & (QStyle.StateFlag.State_Sunken | QStyle.StateFlag.State_On))
+        if not (enabled and hovered) or pressed:
+            return
+        painter.save()
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        wash = QColor(option.palette.color(QPalette.ColorRole.Highlight))
+        wash.setAlpha(40)
+        painter.setBrush(wash)
+        painter.drawRoundedRect(option.rect.adjusted(2, 2, -2, -2), 4, 4)
+        painter.restore()
+
+
 def setup_native_app_style(app: QApplication) -> str:
     """Apply the host platform's native QStyle.
 
-    - macOS: 'macintosh' (Aqua/Cocoa native controls)
-    - Windows: 'windows11' on Win 11, 'windowsvista' / 'windows' on older Win
-    - Linux: system desktop default (e.g. Breeze on KDE, Adwaita/Fusion on GNOME)
+    - macOS: ``macOS`` / ``macintosh`` (Aqua)
+    - Windows: ``windows11`` (WinUI), then ``windowsvista`` / ``windows``
+    - Linux: the desktop's style (Breeze, Adwaita) or Fusion
+
+    The offscreen plugin used by headless tests cannot draw Aqua, so it keeps
+    Fusion. A real desktop session still gets the platform style.
     """
-    keys = [k.lower() for k in QStyleFactory.keys()]
+    offscreen = os.environ.get("QT_QPA_PLATFORM") == "offscreen"
     if IS_MACOS:
-        if "macintosh" in keys:
-            app.setStyle("macintosh")
-            return "macintosh"
+        system = "darwin"
     elif IS_WINDOWS:
-        if "windows11" in keys:
-            app.setStyle("windows11")
-            return "windows11"
-        elif "windowsvista" in keys:
-            app.setStyle("windowsvista")
-            return "windowsvista"
-        elif "windows" in keys:
-            app.setStyle("windows")
-            return "windows"
-    else:  # Linux
-        import os
-        de = os.environ.get("XDG_CURRENT_DESKTOP", "").lower()
-        full_session = os.environ.get("KDE_FULL_SESSION", "").lower()
-        desktop_session = os.environ.get("DESKTOP_SESSION", "").lower()
-        is_kde = any("kde" in s or "plasma" in s for s in (de, full_session, desktop_session))
-        if is_kde and "breeze" in keys:
-            app.setStyle("breeze")
-            return "breeze"
-        elif "breeze" in keys:
-            app.setStyle("breeze")
-            return "breeze"
-        elif "adwaita" in keys:
-            app.setStyle("adwaita")
-            return "adwaita"
-        elif "fusion" in keys:
-            app.setStyle("fusion")
-            return "fusion"
-    return app.style().objectName()
+        system = "windows"
+    else:
+        system = "linux"
+    desktop = " ".join(
+        os.environ.get(name, "")
+        for name in (
+            "XDG_CURRENT_DESKTOP",
+            "DESKTOP_SESSION",
+            "XDG_SESSION_DESKTOP",
+        )
+    )
+    if os.environ.get("KDE_FULL_SESSION"):
+        desktop = f"{desktop} kde"
+    # Aqua cannot be forced under the offscreen plugin. On Linux, honor the
+    # desktop's own QT_STYLE_OVERRIDE so Kvantum and similar styles still win.
+    override = ""
+    if system == "linux":
+        override = os.environ.get("QT_STYLE_OVERRIDE", "")
+    candidates = native_style_candidates(
+        system=system,
+        offscreen=offscreen and IS_MACOS,
+        desktop=desktop,
+        style_override=override,
+    )
+    key = _factory_style(*candidates)
+    if key:
+        app.setStyle(key)
+        if IS_WINDOWS and key.lower() == "windows":
+            app.setStyle(_ClassicWindowsHoverStyle(key))
+        return key
+    return app.style().objectName() or "fusion"
+
+
+_RGBA_RE = re.compile(
+    r"rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([0-9.]+)\s*\)",
+    re.IGNORECASE,
+)
+
+
+def palette_color(value: str, *, over: str | None = None) -> QColor:
+    """A ``QColor`` for a token.
+
+    Stylesheets accept CSS ``rgba()``. ``QColor`` does not, and an invalid
+    color becomes black, which painted light-theme buttons as black plates.
+    When a base color is given, the translucent token is flattened onto it.
+    """
+    direct = QColor(value)
+    if direct.isValid():
+        return direct
+    match = _RGBA_RE.fullmatch((value or "").strip())
+    if match is None:
+        return QColor("#000000")
+    red, green, blue = (int(match.group(index)) for index in (1, 2, 3))
+    alpha = float(match.group(4))
+    if alpha > 1:
+        alpha /= 255.0
+    alpha = min(1.0, max(0.0, alpha))
+    if over is None or alpha >= 1:
+        color = QColor(red, green, blue)
+        color.setAlphaF(alpha)
+        return color
+    base = QColor(over)
+    if not base.isValid():
+        color = QColor(red, green, blue)
+        color.setAlphaF(alpha)
+        return color
+    return QColor(
+        int(red * alpha + base.red() * (1.0 - alpha)),
+        int(green * alpha + base.green() * (1.0 - alpha)),
+        int(blue * alpha + base.blue() * (1.0 - alpha)),
+    )
+
+
+def _hex_rgba(value: str, alpha: float) -> str:
+    """CSS rgba() for a stylesheet. ``QColor`` cannot parse this string."""
+    color = QColor(value)
+    if not color.isValid():
+        return value
+    amount = min(1.0, max(0.0, float(alpha)))
+    return f"rgba({color.red()}, {color.green()}, {color.blue()}, {amount:.3f})"
 
 
 # ---------------------------------------------------------------------------
@@ -482,6 +617,62 @@ def T() -> _Tokens:
 # QPalette builder
 # ---------------------------------------------------------------------------
 
+def _pre_liquid_glass_macos() -> bool:
+    """macOS before Tahoe / Golden Gate, where Aqua still paints the controls."""
+    if sys.platform != "darwin":
+        return False
+    try:
+        from .glass import is_golden_gate_or_newer
+        return not is_golden_gate_or_newer()
+    except Exception:
+        return False
+
+
+def _is_opaque_white(color: QColor) -> bool:
+    return (
+        color.isValid()
+        and color.alpha() >= 250
+        and color.red() >= 250
+        and color.green() >= 250
+        and color.blue() >= 250
+    )
+
+
+# Aqua's light control and field fills from before Liquid Glass. Used only
+# when the style's own color is missing or pure white, which is what made
+# the combo boxes sit on the glass as bright plates.
+_AQUA_LIGHT_CONTROL = QColor(236, 236, 236)
+_AQUA_LIGHT_FIELD = QColor(246, 246, 246)
+
+
+def legacy_light_role_color(role: QPalette.ColorRole, standard: QColor | None) -> QColor:
+    """Light-mode field color for macOS older than Liquid Glass.
+
+    Prefer the style's own light color so Aqua draws the control the way the
+    desktop does. A pure white role is the unthemed plate. A dark role would
+    force a dark popup while the window is light, so that is not used either.
+    """
+    if standard is not None and standard.isValid() and not _is_opaque_white(standard):
+        if standard.lightness() > 180:
+            return QColor(standard)
+    if role == QPalette.ColorRole.Button:
+        return QColor(_AQUA_LIGHT_CONTROL)
+    return QColor(_AQUA_LIGHT_FIELD)
+
+
+def _legacy_light_palette_color(role: QPalette.ColorRole) -> QColor | None:
+    if not _pre_liquid_glass_macos():
+        return None
+    standard = None
+    app = QApplication.instance()
+    if app is not None:
+        try:
+            standard = app.style().standardPalette().color(role)
+        except Exception:
+            standard = None
+    return legacy_light_role_color(role, standard)
+
+
 def _make_palette(dark: bool, pure_black: bool = False) -> QPalette:
     p = QPalette()
     t = _Tokens(dark, pure_black=pure_black)
@@ -502,7 +693,7 @@ def _make_palette(dark: bool, pure_black: bool = False) -> QPalette:
         p.setColor(QPalette.HighlightedText, QColor("#ffffff"))
         if hasattr(QPalette.ColorRole, "Accent"):
             p.setColor(QPalette.ColorRole.Accent, QColor(t.accent))
-        p.setColor(QPalette.Midlight, QColor(t.bg_hover))
+        p.setColor(QPalette.Midlight, palette_color(t.bg_hover, over=t.bg))
         p.setColor(QPalette.Mid, QColor(t.border))
         p.setColor(QPalette.Dark, QColor(t.border_strong))
         p.setColor(QPalette.Shadow, QColor("#000000"))
@@ -514,12 +705,18 @@ def _make_palette(dark: bool, pure_black: bool = False) -> QPalette:
     else:
         p.setColor(QPalette.Window, QColor(t.bg))
         p.setColor(QPalette.WindowText, QColor(t.fg))
-        p.setColor(QPalette.Base, QColor(t.bg_input))
-        p.setColor(QPalette.AlternateBase, QColor(t.bg_elev))
+        # On macOS before Liquid Glass, a forced #ffffff Button/Base makes
+        # Aqua paint opaque white plates. Use the style's light control
+        # colors instead. Tahoe and Golden Gate keep the token colors.
+        base = _legacy_light_palette_color(QPalette.Base)
+        button = _legacy_light_palette_color(QPalette.Button)
+        alternate = _legacy_light_palette_color(QPalette.AlternateBase)
+        p.setColor(QPalette.Base, base if base is not None else QColor(t.bg_input))
+        p.setColor(QPalette.AlternateBase, alternate if alternate is not None else QColor(t.bg_elev))
         p.setColor(QPalette.ToolTipBase, QColor(t.bg_tooltip))
         p.setColor(QPalette.ToolTipText, QColor(t.fg))
         p.setColor(QPalette.Text, QColor(t.fg))
-        p.setColor(QPalette.Button, QColor(t.bg_hover))
+        p.setColor(QPalette.Button, button if button is not None else palette_color(t.bg_card))
         p.setColor(QPalette.ButtonText, QColor(t.fg))
         p.setColor(QPalette.BrightText, QColor("#dc2626"))
         p.setColor(QPalette.Link, QColor(t.fg))
@@ -528,7 +725,7 @@ def _make_palette(dark: bool, pure_black: bool = False) -> QPalette:
         p.setColor(QPalette.HighlightedText, QColor("#ffffff"))
         if hasattr(QPalette.ColorRole, "Accent"):
             p.setColor(QPalette.ColorRole.Accent, QColor(t.accent))
-        p.setColor(QPalette.Midlight, QColor(t.bg_card))
+        p.setColor(QPalette.Midlight, palette_color(t.bg_hover, over=t.bg))
         p.setColor(QPalette.Mid, QColor(t.border))
         p.setColor(QPalette.Dark, QColor(t.border_strong))
         p.setColor(QPalette.Shadow, QColor("#000000"))
@@ -555,25 +752,31 @@ def _build_qss() -> str:
     except ImportError:
         use_glass = False
 
+    # The window itself is transparent so Liquid Glass / acrylic shows in the
+    # margins, sidebar gaps, and title bar. Cards are a light frost. Labels
+    # that change text are not left transparent: they erase their own rect.
+    window_bg = t.bg
+    dialog_bg = t.bg_card
+    dialog_border = f"1px solid {t.border}"
+    card_bg = t.bg_card
+    card_border = t.border
+    title_bg = "transparent"
+    title_color = "palette(window-text)"
+    text_color = "palette(window-text)"
+    progress_track = t.progress_track
     if use_glass:
         window_bg = "transparent"
-        nav_bg = "transparent"
-        nav_border = "none"
-        dialog_bg = "rgba(30, 30, 32, 0.82)" if _state.is_dark else "rgba(245, 245, 248, 0.85)"
         dialog_border = "1px solid rgba(255, 255, 255, 0.12)" if _state.is_dark else "1px solid rgba(0, 0, 0, 0.10)"
-    else:
-        window_bg = t.bg
-        nav_bg = t.bg_nav
-        nav_border = f"1px solid {t.border}"
-        dialog_bg = t.bg_card
-        dialog_border = f"1px solid {t.border}"
-
-    if use_glass:
-        card_bg = "rgba(255, 255, 255, 0.07)" if _state.is_dark else "rgba(255, 255, 255, 0.65)"
-        card_border = "rgba(255, 255, 255, 0.12)" if _state.is_dark else "rgba(0, 0, 0, 0.08)"
-    else:
-        card_bg = t.bg_card
-        card_border = t.border
+        # The card's own paint supplies a faint frost. A stylesheet fill here
+        # would stack into a solid plate.
+        card_bg = "transparent"
+        card_border = "transparent"
+        title_bg = "transparent"
+        # The groove stays see-through. The chunk (below) stays the accent so
+        # the bar still reads on glass.
+        progress_track = (
+            "rgba(255, 255, 255, 0.28)" if _state.is_dark else "rgba(0, 0, 0, 0.18)"
+        )
 
     tab_bar_bg = "rgba(255, 255, 255, 0.08)" if _state.is_dark else "rgba(0, 0, 0, 0.06)"
 
@@ -587,24 +790,24 @@ def _build_qss() -> str:
 /* Surface: {t.bg} */
 QMainWindow {{
     background-color: {window_bg};
-    color: {t.fg};
+    color: {text_color};
 }}
 
 QDialog {{
     background-color: {dialog_bg};
     border: {dialog_border};
     border-radius: 12px;
-    color: {t.fg};
+    color: {text_color};
 }}
 
 QMessageBox {{
     background-color: {dialog_bg};
     border: {dialog_border};
     border-radius: 12px;
-    color: {t.fg};
+    color: {text_color};
 }}
 QMessageBox QLabel {{
-    color: {t.fg};
+    color: {text_color};
     background: transparent;
 }}
 
@@ -615,55 +818,36 @@ QFrame[cssClass="card"] {{
     border-radius: 8px;
 }}
 
-/* ── Navigation sidebar (OS-native docked rail) ──────── */
-#navPanel {{
-    background-color: {nav_bg};
-    border-right: {nav_border};
-    border-radius: 0;
-}}
-#navPanel QLabel {{
-    color: {t.fg};
-}}
-#navPanel QPushButton {{
-    /* Layout only — the frame, fill, hover and checked states are the host
-       style's, so the sidebar matches the platform's own sidebars. */
-    text-align: left;
-    padding: 3px 8px;
-    min-height: 34px;
-    border-radius: 5px;
-}}
-#navPanel QPushButton[primary="true"],
-#navPanel QPushButton[cssClass="primary"] {{
-    min-height: 36px;
-}}
-#navPanel .nav-bottom {{
-    color: {t.fg};
-    font-size: 12px;
-}}
+/* ── Navigation sidebar ─────────────────────────────────
+   The rail itself is not styled here. A stylesheet that matches the
+   sidebar also restyles every button inside it, and those buttons then
+   paint as blank plates. The window sets the rail color from the palette
+   and leaves the buttons to the platform style. */
 
-/* ── Release notes rich display (clean translucent view) ─ */
-QTextBrowser#releaseNotes, QTextEdit#releaseNotes {{
+/* ── Release notes and the version list ─────────────────
+   No background here. A stylesheet fill, including a zero-alpha rgba that
+   Qt stores as black, paints a rectangle over the glass. The palette leaves
+   these views clear, and the platform style draws the selection. */
+QTextBrowser#releaseNotes, QTextEdit#releaseNotes,
+QTextBrowser#releaseNotes::viewport, QTextEdit#releaseNotes::viewport {{
     background: transparent;
-    background-color: transparent;
     border: none;
-    color: {t.fg};
+    color: {text_color};
 }}
 
-/* ── Available software releases list (clean translucent view matching release notes) ─ */
 QListWidget#releaseList,
 QListView#releaseList,
 QListWidget#releaseList::viewport,
 QListView#releaseList::viewport {{
     background: transparent;
-    background-color: transparent;
     border: none;
-    color: {t.fg};
+    color: {text_color};
     outline: none;
 }}
 QListWidget#releaseList::item, QListView#releaseList::item {{
     padding: 3px 6px;
     border-radius: 4px;
-    color: {t.fg};
+    color: {text_color};
 }}
 QListWidget#releaseList::item:hover, QListView#releaseList::item:hover {{
     background-color: {t.bg_hover};
@@ -680,7 +864,7 @@ QListWidget#releaseList::item:selected:hover, QListView#releaseList::item:select
 
 /* ── Modern OS software update progress bar (macOS / Windows Fluent) ─ */
 QProgressBar#softwareUpdateProgress {{
-    background-color: {t.progress_track};
+    background-color: {progress_track};
     border: none;
     border-radius: 3px;
     max-height: 6px;
@@ -715,18 +899,20 @@ QPushButton#softwareUpdateCancelBtn:hover {{
 QLabel[cssClass="pageTitle"] {{
     font-size: 20px;
     font-weight: 700;
-    color: {t.fg};
+    color: {title_color};
     letter-spacing: -0.01em;
+    background: transparent;
+    background-color: {title_bg};
 }}
 QLabel[cssClass="sectionTitle"] {{
     font-size: 15px;
     font-weight: 600;
-    color: {t.fg};
+    color: {text_color};
 }}
 QLabel[cssClass="cardTitle"] {{
     font-size: 14px;
     font-weight: 600;
-    color: {t.fg};
+    color: {text_color};
     background: transparent;
     border: none;
     padding: 0;
@@ -734,33 +920,33 @@ QLabel[cssClass="cardTitle"] {{
 }}
 QLabel[cssClass="subtitle"] {{
     font-size: 13px;
-    color: {t.fg};
+    color: {text_color};
     background: transparent;
     border: none;
 }}
 QLabel[cssClass="dimmed"] {{
     font-size: 12px;
-    color: {t.fg};
+    color: {text_color};
     background: transparent;
     border: none;
 }}
 QLabel[cssClass="hint"] {{
     font-size: 13px;
-    color: {t.fg};
+    color: {text_color};
     background: transparent;
     border: none;
 }}
 QLabel[cssClass="field-label"] {{
     font-size: 13px;
     font-weight: 600;
-    color: {t.fg};
+    color: {text_color};
     background: transparent;
     border: none;
 }}
 QLabel[cssClass="infoValue"] {{
     font-size: 12px;
     font-weight: 600;
-    color: {t.fg};
+    color: {text_color};
     background: transparent;
     border: none;
 }}

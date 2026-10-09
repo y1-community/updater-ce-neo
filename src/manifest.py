@@ -86,6 +86,7 @@ def parse_manifest_xml(xml_text: str):
             device = (node.get("device") or "").strip().upper()
             handler = (node.get("handler") or "").strip()
             ptype = (node.get("type") or "").strip()
+            icon = (node.get("icon") or "").strip()
         except Exception:
             continue
         if not name or not repo or device not in ("Y1", "Y2", "A5"):
@@ -104,6 +105,7 @@ def parse_manifest_xml(xml_text: str):
                 repo=resolve_firmware_repo(repo),
                 package_name="rom_a5.zip" if device == "A5" else ("rom_y2.zip" if device == "Y2" else "rom.zip"),
                 description="",
+                icon=icon,
             )
         )
     return entries
@@ -163,7 +165,8 @@ def cache_manifest(entries):
 
         data = [
             {"name": e.name, "repo": e.repo, "device": e.model,
-             "package_name": e.package_name, "slug": e.slug}
+             "package_name": e.package_name, "slug": e.slug,
+             "icon": getattr(e, "icon", "") or ""}
             for e in entries
         ]
         _cache_root().joinpath("packages.json").write_text(
@@ -187,6 +190,7 @@ def load_cached_manifest():
                 slug=e.get("slug", ""), name=e.get("name", ""),
                 model=e.get("device", ""), repo=e.get("repo", ""),
                 package_name=e.get("package_name", "rom.zip"),
+                icon=e.get("icon", "") or "",
             )
             for e in data
             if e.get("name") and e.get("repo")
