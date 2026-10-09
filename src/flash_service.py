@@ -33,7 +33,7 @@ from pathlib import Path
 from struct import pack, unpack
 from typing import Optional
 
-from PySide6.QtCore import QObject, QThread, Signal
+from PySide6.QtCore import QObject, Qt, QThread, Signal
 
 from . import linux_sp_flash, paths
 from .i18n import tr
@@ -644,6 +644,8 @@ class ExtractWorker(QThread):
                         if pct != last_pct:
                             last_pct = pct
                             self.progress.emit(pct)
+                            # Let the GUI thread take the GIL and paint the bar.
+                            QThread.msleep(1)
             self.progress.emit(99)
 
     def _extract_rar(self, package, extract_dir):
@@ -671,6 +673,7 @@ class ExtractWorker(QThread):
                 if pct != last_pct:
                     last_pct = pct
                     self.progress.emit(pct)
+                    QThread.msleep(1)
             if len(buf) > 4096:
                 buf = buf[-256:]
         if self._cancelled:
@@ -1022,6 +1025,12 @@ class FlashWorker(QThread):
         self._sp_stdout_seen: set[str] = set()
         # Tag for output the tooling prints itself ("SP"/"MTK"/"TOOL").
         self._tool_tag = "TOOL"
+        self._log_pending: list[str] = []
+        self._log_flushed = 0.0
+        self._log_lock = threading.Lock()
+        self._log_timer = None
+        # Previous worker this run must wait for, off the GUI thread.
+        self._wait_for = None
 
     # -- lifecycle ----------------------------------------------------------
     def cancel(self):
@@ -1053,7 +1062,30 @@ class FlashWorker(QThread):
                         pass
 
     def _log(self, msg):
-        self.log_message.emit(str(msg))
+        flush_now = False
+        with self._log_lock:
+            self._log_pending.append(str(msg))
+            now = time.monotonic()
+            if len(self._log_pending) >= 24 or now - self._log_flushed >= 0.08:
+                flush_now = True
+            elif self._log_timer is None or not self._log_timer.is_alive():
+                # A burst can end before the next line. Without this the last
+                # lines stay invisible until the install finishes.
+                self._log_timer = threading.Timer(0.09, self._flush_log)
+                self._log_timer.daemon = True
+                self._log_timer.start()
+        if flush_now:
+            self._flush_log()
+
+    def _flush_log(self):
+        """Hand the GUI a batch of lines so progress paints between them."""
+        with self._log_lock:
+            if not self._log_pending:
+                return
+            chunk = "\n".join(self._log_pending)
+            self._log_pending.clear()
+            self._log_flushed = time.monotonic()
+        self.log_message.emit(chunk)
 
     def _update_time(self):
         pass  # UI computes elapsed/ETA from its own timer
@@ -1061,6 +1093,14 @@ class FlashWorker(QThread):
     # -- pipeline ------------------------------------------------------------
     def run(self):
         from .diagnostics import capture_tool_output
+
+        pred = getattr(self, "_wait_for", None)
+        if pred is not None:
+            try:
+                if pred.isRunning():
+                    pred.wait(3000)
+            except Exception:
+                pass
 
         # Everything the backends print themselves (MTKClient runs in process,
         # so its USB/DA traces never reach the UI otherwise) is mirrored into
@@ -1080,6 +1120,8 @@ class FlashWorker(QThread):
                 except Exception:
                     pass
                 self.finished.emit(False, "INTERNAL_ERROR")
+            finally:
+                self._flush_log()
 
     def _do_flash(self):
         pre = Path(self.pre_extracted_dir) if self.pre_extracted_dir else None
@@ -1250,6 +1292,9 @@ class FlashWorker(QThread):
     # -- extraction ----------------------------------------------------------
     def _extract_package(self):
         worker = ExtractWorker(self.package_path)
+        # The helper emits on its own signal. Forward that onto this worker so
+        # the progress card moves during unzip instead of sitting at 5%.
+        worker.progress.connect(self.progress, Qt.ConnectionType.DirectConnection)
         # Reuse the extraction helpers synchronously inside the flash worker.
         extract_dir = compute_extract_dir(self.package_path)
         if _is_extract_complete(extract_dir):
@@ -1764,13 +1809,13 @@ class FlashWorker(QThread):
                 elif line.startswith("[ACTION] "):
                     self.action_changed.emit(line[len("[ACTION] "):])
                 elif line.startswith("[LOG] "):
-                    self.log_message.emit(line[len("[LOG] "):])
+                    self._log(line[len("[LOG] "):])
                 elif line.startswith("[RESULT] "):
                     parts = line[len("[RESULT] "):].split(" ", 1)
                     final_ok = bool(int(parts[0]))
                     final_msg = parts[1] if len(parts) > 1 else ""
                 else:
-                    self.log_message.emit(line)
+                    self._log(line)
 
             self._process.wait()
             if self._cancelled:
@@ -2570,7 +2615,7 @@ class FlashService(QObject):
         # Kill any backend still running (e.g. a searching flash_tool) first,
         # then start the new one. The cancelled worker's late terminal signals
         # are detached so they cannot reach the UI or clobber the new run.
-        self.cancel_flash()
+        retired = self.cancel_flash()
         worker = FlashWorker(
             package_path,
             pre_extracted_dir,
@@ -2578,6 +2623,7 @@ class FlashService(QObject):
             model=model,
             device_loss_hold=self.hold_device_lost,
         )
+        worker._wait_for = retired
         self._flash_worker = worker
         worker.step_changed.connect(self.step_changed)
         worker.progress.connect(self.progress)
@@ -2594,17 +2640,21 @@ class FlashService(QObject):
             monitor.hold_lost(seconds)
 
     def cancel_flash(self):
+        """Stop the current backend without blocking the GUI thread.
+
+        The next ``start_flash`` waits for this worker on its own thread, so
+        a cancel or a backend switch cannot freeze the window for the old
+        extract. Returns the retired worker, or None.
+        """
         worker = self._flash_worker
         if worker is None:
-            return
+            return None
         # Detach first: a run cancelled to switch backends must not emit
         # USER_CANCELLED into the UI or clear the reference of a newer worker.
         self._detach_worker(worker)
         worker.cancel()
-        # Brief wait: the old thread (possibly mid-extraction) must die
-        # before the new worker tries to rmtree the same extract dir.
-        worker.wait(3000)
         self._flash_worker = None
+        return worker
 
     @staticmethod
     def _detach_worker(worker):

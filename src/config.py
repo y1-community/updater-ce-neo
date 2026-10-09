@@ -294,12 +294,9 @@ def power_on_button_for_model(model: str = "") -> str:
     """Hardware button used to power the player on after an install."""
     from .i18n import tr
 
-    if is_y2_model(model):
-        return tr("btn_power_lock")
-    if is_a5_model(model):
-        return tr("btn_power")
     if is_y1_model(model):
         return tr("btn_centre")
+    # Y2 and every other model power on with the power button.
     return tr("btn_power")
 
 

@@ -267,6 +267,12 @@ class SettingsPage(QWidget):
         self._lbl_skip_tip.setContentsMargins(24, 0, 0, 0)
         don_layout.addWidget(self._lbl_skip_tip)
 
+        self._settings_coffee_btn = QPushButton(tr("donate_coffee_btn"))
+        self._settings_coffee_btn.setCursor(Qt.ArrowCursor)
+        self._settings_coffee_btn.setStyleSheet("")
+        self._settings_coffee_btn.clicked.connect(self._open_settings_coffee)
+        don_layout.addWidget(self._settings_coffee_btn, alignment=Qt.AlignLeft)
+
         self._donations_card.set_layout(don_layout)
         layout.addWidget(self._donations_card)
 
@@ -653,6 +659,7 @@ class SettingsPage(QWidget):
             device_tracking.is_donation_install_prompt_disabled()
         )
         self._cb_skip_install_donations.blockSignals(False)
+        self._sync_donation_opt_out()
 
         # Rockbox release filters
         self._apply_filter_flags()
@@ -710,8 +717,22 @@ class SettingsPage(QWidget):
     def _on_sp_gui_install_toggled(self, checked: bool):
         device_tracking.set_sp_gui_install_enabled(bool(checked))
 
+    def _open_settings_coffee(self) -> None:
+        from ..browser import open_browser
+        open_browser("https://ko-fi.com/teamslide")
+
+    def _sync_donation_opt_out(self) -> None:
+        """The coffee button stays. Other donation prompts in this card do not."""
+        off = self._cb_hide_donations.isChecked()
+        self._cb_skip_install_donations.setVisible(not off)
+        if hasattr(self, "_lbl_skip_tip"):
+            self._lbl_skip_tip.setVisible(not off)
+        if hasattr(self, "_settings_coffee_btn"):
+            self._settings_coffee_btn.setVisible(True)
+
     def _on_hide_donations_toggled(self, checked: bool):
         device_tracking.set_donation_ui_disabled(checked)
+        self._sync_donation_opt_out()
         self.donation_visibility_changed.emit(checked)
 
     def _on_skip_install_donations_toggled(self, checked: bool):
@@ -763,6 +784,9 @@ class SettingsPage(QWidget):
             self._lbl_hide_tip.setText(tr("settings_hide_donations_tip"))
         if hasattr(self, "_lbl_skip_tip"):
             self._lbl_skip_tip.setText(tr("settings_skip_install_donations_tip"))
+        if hasattr(self, "_settings_coffee_btn"):
+            self._settings_coffee_btn.setText(tr("donate_coffee_btn"))
+        self._sync_donation_opt_out()
         if hasattr(self, "_checker_card"):
             self._checker_card.retranslate()
         if hasattr(self, "_driver_card"):

@@ -151,6 +151,20 @@ def test_i18n_languages():
     }
     assert not missing["fr"], f"fr missing: {missing['fr']}"
     assert not missing["es"], f"es missing: {missing['es']}"
+    touched = (
+        "donate_coffee_pitch",
+        "donate_coffee_btn",
+        "settings_hide_donations",
+        "settings_hide_donations_tip",
+        "btn_centre",
+        "btn_power",
+        "flash_btn_retry",
+        "install_power_on_steps_fmt",
+        "status_install_ok_fmt",
+    )
+    for key in touched:
+        absent = [lang for lang in ("zh-CN", "en", "fr", "es", "de", "ja") if not i18n._STRINGS[key].get(lang)]
+        assert not absent, f"{key} missing {absent}"
     # Language switching actually changes strings.
     translator().set_language("fr")
     assert tr("nav_log") == "Diagnostics"
@@ -846,6 +860,7 @@ def test_donation_status_bar():
     assert bar._remote_refresh_timer.interval() == 5 * 60 * 1000
     assert bar._goal_bar.value() == 125
     assert "$25" in bar._goal_label.text()
+    assert not bar._support_btn.isVisible()
     bar._support_btn.click()
     assert opened == [True]
 
@@ -857,11 +872,7 @@ def test_donation_status_bar():
     host.resize(460, 36)
     host.show()
     app.processEvents()
-    support_right = bar._support_btn.mapTo(host, bar._support_btn.rect().topRight()).x()
-    assert support_right <= host.width() + 1, support_right
-    assert bar._support_btn.width() >= bar._support_btn.fontMetrics().horizontalAdvance(
-        bar._support_btn.text()
-    )
+    assert bar._goal_group.width() > 200
     assert bar._goal_label.minimumWidth() == 0
 
     # The goal and donor lines are clickable too: a click on plain text opens
@@ -1040,29 +1051,21 @@ def test_donation_bar_corner_links():
     assert isinstance(bar._credits_link, _LinkButton)
     assert isinstance(bar._support_btn, _LinkButton)
     assert bar._credits_link.isFlat() and bar._support_btn.isFlat()
+    assert not bar._support_btn.isVisible()
     assert bar._credits_link.text() == "Credits / Thanks"
     bar._credits_link.click()
     bar._support_btn.click()
     assert credits_clicks == [True]
     assert support_clicks == [True]
 
-    # Credits / Thanks hugs one edge, Support Us the other, by equal margins.
+    # Credits stays on the left. The goal line uses the space the corner link left.
     assert bar._credits_link.x() < bar._goal_group.x()
-    assert bar._support_btn.x() + bar._support_btn.width() > bar._goal_group.x() + bar._goal_group.width()
-    left_margin = bar._credits_link.x()
-    right_margin = bar.width() - (bar._support_btn.x() + bar._support_btn.width())
-    assert abs(left_margin - right_margin) <= 2, (left_margin, right_margin)
+    assert bar._goal_group.x() + bar._goal_group.width() >= bar.width() - 16
 
-    def goal_centre():
-        return bar._goal_group.x() + bar._goal_group.width() // 2
-
-    # The goal display is on the bar's centre line, and the donor ticker takes
-    # its place in the same centred slot when it rotates in.
-    assert abs(goal_centre() - bar.width() // 2) <= 2, (goal_centre(), bar.width() // 2)
     bar._rotate()
     app.processEvents()
     assert bar._donor_label.isVisible() and bar._goal_label.isHidden()
-    assert abs(goal_centre() - bar.width() // 2) <= 2, (goal_centre(), bar.width() // 2)
+    assert bar._goal_group.x() + bar._goal_group.width() >= bar.width() - 16
     bar.deleteLater()
     app.processEvents()
 
@@ -1098,10 +1101,12 @@ def test_donation_bar_corner_links():
         w._apply_donation_visibility()
         sb.clearMessage()  # brand changes post a status message too
         app.processEvents()
-        assert sb.isVisible() and sb._support_btn.isVisible()
+        assert sb.isVisible() and not sb._support_btn.isVisible()
         assert not sb._credits_link.isVisible()
-        centre = sb._goal_group.x() + sb._goal_group.width() // 2
-        assert abs(centre - sb.width() // 2) <= 2, (centre, sb.width() // 2)
+        box = sb._donation_container
+        assert box.isVisible()
+        right_gap = box.width() - (sb._goal_group.x() + sb._goal_group.width())
+        assert right_gap < 24, (right_gap, box.width(), sb._goal_group.geometry(), sb.width())
     finally:
         config.IS_MEDIATEK_INSTALLER = False
         w.close()
@@ -3979,11 +3984,12 @@ def test_install_power_on_steps():
 
     y1_steps = install_power_on_steps("Y1")
     assert "Unplug your Y1" in y1_steps
-    assert "centre button" in y1_steps
+    assert "center (OK) button" in y1_steps
 
     y2_steps = install_power_on_steps("Y2")
     assert "Unplug your Y2" in y2_steps
-    assert "power/lock button" in y2_steps
+    assert "power button" in y2_steps
+    assert "power/lock" not in y2_steps
 
     generic_steps = install_power_on_steps("")
     assert "Unplug your device" in generic_steps
@@ -4019,7 +4025,7 @@ def test_donation_dialog_install_completion():
         assert "We've installed" in joined
         assert "Rockbox (Y1)" in joined
         assert "Unplug your Y1" in joined
-        assert "centre button" in joined
+        assert "center (OK) button" in joined
         dlg.close()
 
         dlg_gen = DonationDialog(
@@ -4133,9 +4139,8 @@ def test_sp_flash_tool_gui():
     w = MainWindow()
     if sp_flash_gui.is_sp_flash_gui_supported():
         assert hasattr(w, "_sp_flash_tool_btn")
-        assert hasattr(w._flash_page, "_open_sp_gui_btn")
+        assert not hasattr(w._flash_page, "_open_sp_gui_btn")
         assert w._sp_flash_tool_btn.text() != ""
-        assert w._flash_page._open_sp_gui_btn.text() != ""
     w.close()
     app.processEvents()
 
@@ -4670,12 +4675,14 @@ def test_settings_platform_prep_cards():
         assert not page._method_note.isHidden()
 
         flash_page = FlashPage()
+        # The flash page carries no backend explainer. Showing it there made a
+        # stray top-level window pop up on Windows (the SP Flash Tool note), so
+        # that note now lives only inside the Settings card.
+        assert not hasattr(flash_page, "_method_note")
         flash_page.set_method(METHOD_MTK)
-        assert flash_page._method_note.text() == ""
-        assert flash_page._method_note.isHidden()
+        assert not hasattr(flash_page, "_method_note")
         flash_page.set_method(METHOD_SP)
-        assert flash_page._method_note.text() == tr("flash_method_note_sp")
-        assert not flash_page._method_note.isHidden()
+        assert not hasattr(flash_page, "_method_note")
         flash_page.deleteLater()
         app.processEvents()
     finally:
@@ -4692,8 +4699,7 @@ def test_settings_platform_prep_cards():
         assert mac_page._method_note.isHidden()
         mac_flash_page = FlashPage()
         mac_flash_page.set_method(METHOD_MTK)
-        assert mac_flash_page._method_note.text() == ""
-        assert mac_flash_page._method_note.isHidden()
+        assert not hasattr(mac_flash_page, "_method_note")
         mac_flash_page.deleteLater()
         app.processEvents()
     finally:

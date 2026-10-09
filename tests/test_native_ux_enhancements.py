@@ -207,10 +207,10 @@ def test_subtitle_hints_and_eta_retranslation():
     fp = FlashPage()
 
     for lang, exp_hide, exp_skip in [
-        ("fr", "Supprime la reconnaissance des donateurs", "Affiche les détails d'achèvement"),
-        ("es", "Elimina el reconocimiento", "Muestra detalles simples de finalización"),
-        ("zh-CN", "移除状态栏捐赠滚动条", "刷机完成后直接显示标准完成说明"),
-        ("en", "Remove donor recognition and donation UI", "Show simple completion details"),
+        ("fr", "Masque les invites et les boutons de don", "Affiche les détails d'achèvement"),
+        ("es", "Oculta los avisos y botones de donación", "Muestra detalles simples de finalización"),
+        ("zh-CN", "隐藏捐赠提示和按钮", "刷机完成后直接显示标准完成说明"),
+        ("en", "Hides donation prompts and buttons", "Show simple completion details"),
     ]:
         translator().set_language(lang)
         sp.retranslate()
@@ -282,11 +282,14 @@ def test_compact_window_mode_and_sidebar_hiding():
     w.show()
     app.processEvents()
 
-    # Initial state. Diagnostics and Check for Updates sit with the language
-    # selector at the bottom of the sidebar, under the page buttons.
+    # Initial state. Diagnostics stays hidden until D is pressed.
     assert w.size().width() == DEFAULT_WINDOW_WIDTH
     assert w.size().height() == DEFAULT_WINDOW_HEIGHT
     assert w._settings_btn.isVisible()
+    assert w._log_btn.isVisible() is False
+    assert w._diagnostics_page is None
+    w._unlock_diagnostics()
+    app.processEvents()
     assert w._log_btn.isVisible()
     assert w._check_updates_btn.isVisible()
     assert w._log_btn.y() > w._settings_btn.y()
@@ -470,15 +473,16 @@ def test_os_standard_iconography():
 def test_symbol_color_adaptation_and_states():
     """Verify SF Symbols / Segoe / SVG icons adapt to dark/light mode and focus states."""
     from src.ui.icons import get_symbol_icon, get_symbol_data_uri, resolve_symbol_colors
-    from src.ui.dark import apply_theme
+    from src.ui.dark import T, apply_theme
     from PySide6.QtGui import QIcon
 
     app = QApplication.instance() or QApplication(sys.argv)
 
-    # 1. Dark mode
+    # 1. Dark mode. The accent follows this desktop, so compare with the theme
+    # token rather than one machine's green.
     apply_theme(app, force_dark=True)
     norm, foc = resolve_symbol_colors(match_accent=True)
-    assert norm == "#52b036"
+    assert norm.lower() == str(T().accent).lower()
     assert foc.upper() == "#FFFFFF"
 
     norm_no_acc, foc_no_acc = resolve_symbol_colors(match_accent=False)
@@ -542,13 +546,20 @@ def _image_diff(left, right) -> int:
 def test_platform_sidebar_row_hover_and_selection():
     """Windows and Linux sidebar rows light up on hover and fill on selection.
 
-    The row stays on the platform style: no stylesheet, and the idle paint is
-    opaque so a previous label cannot show through.
+    An idle row is not its own filled plate: on acrylic or glass the corner is
+    clear, and on a solid desktop it matches the pane color. Hover and the
+    selected row still paint differently, with no control stylesheet.
     """
     from PySide6.QtGui import QImage
 
     from src.ui.icons import get_symbol_icon
-    from src.ui.sidebar import SidebarButton, sidebar_corner_radius, sidebar_row_spacing
+    from src.ui.sidebar import (
+        SidebarButton,
+        sidebar_base_color,
+        sidebar_corner_radius,
+        sidebar_row_spacing,
+    )
+    from src.ui.surfaces import glass_surfaces_enabled
 
     app = QApplication.instance() or QApplication(sys.argv)
     apply_theme(app, force_dark=True)
@@ -574,9 +585,17 @@ def test_platform_sidebar_row_hover_and_selection():
         return image
 
     idle = render()
-    # Every pixel of the row is opaque. A clear or translucent fill is what
-    # left the previous sidebar label on screen.
-    assert idle.pixelColor(8, 8).alpha() == 255
+    corner = idle.pixelColor(8, 8)
+    if glass_surfaces_enabled():
+        assert corner.alpha() == 0
+    else:
+        base = sidebar_base_color()
+        assert corner.alpha() == 255
+        assert (corner.red(), corner.green(), corner.blue()) == (
+            base.red(),
+            base.green(),
+            base.blue(),
+        )
 
     btn._preview_hover = True
     hover = render()
@@ -622,7 +641,6 @@ def test_pre_liquid_glass_light_fields_are_not_white_plates():
     from PySide6.QtGui import QColor, QPalette
 
     from src.ui import dark as dark_mod
-    import src.ui.glass as glass
 
     app = QApplication.instance() or QApplication(sys.argv)
     assert app is not None
@@ -636,12 +654,14 @@ def test_pre_liquid_glass_light_fields_are_not_white_plates():
     assert field.lightness() > 200
     assert dark_mod.palette_color("rgba(255, 255, 255, 0.08)", over="#1e2227") != QColor("#000000")
 
-    real = glass.is_golden_gate_or_newer
-    glass.is_golden_gate_or_newer = lambda: False
+    # The Aqua fill is a macOS-before-Liquid-Glass path. Force it on so the
+    # assertion does not depend on this host being Darwin.
+    real_pre = dark_mod._pre_liquid_glass_macos
+    dark_mod._pre_liquid_glass_macos = lambda: True
     try:
         pal = dark_mod._make_palette(False)
     finally:
-        glass.is_golden_gate_or_newer = real
+        dark_mod._pre_liquid_glass_macos = real_pre
     button = pal.color(QPalette.Button)
     assert button.lightness() > 200
     assert button.name().lower() != "#ffffff"
@@ -759,6 +779,394 @@ def test_classic_windows_buttons_show_hover():
     assert _image_diff(render(False), render(True)) > 20
 
 
+def test_compact_install_height_counts_the_header_on_every_desktop():
+    """The in-app header is 44px of the window on Windows, Linux and macOS.
+
+    It used to be counted on macOS only, which left the compact install window
+    exactly one header too short on the other desktops and clipped the status
+    line under the progress card.
+    """
+    from src.ui.glass import HEADER_CONTENT_HEIGHT
+    from src.ui.main_window import (
+        COMPACT_INSTALL_MIN_HEIGHT,
+        COMPACT_INSTALL_MIN_HEIGHT_NO_DONATIONS,
+        compact_install_height,
+    )
+
+    header = int(HEADER_CONTENT_HEIGHT)
+    # Tall enough that the floor does not mask the header contribution.
+    base = dict(page_h=200, prompt_h=30, status_h=22, donations_disabled=False)
+
+    with_header = compact_install_height(inline_header=True, **base)
+    without_header = compact_install_height(inline_header=False, **base)
+    assert with_header - without_header == header
+    assert with_header == base["page_h"] + base["prompt_h"] + base["status_h"] + header
+
+    # A desktop whose window manager owns the title bar still gets the floor.
+    assert compact_install_height(
+        page_h=40, prompt_h=0, status_h=0, inline_header=False, donations_disabled=False
+    ) == COMPACT_INSTALL_MIN_HEIGHT
+    # Donations disabled drops the status row and keeps its own floor.
+    assert compact_install_height(inline_header=True, **{**base, "donations_disabled": True}) == (
+        with_header - base["status_h"]
+    )
+    assert compact_install_height(
+        page_h=40, prompt_h=0, status_h=40, inline_header=True, donations_disabled=True
+    ) == COMPACT_INSTALL_MIN_HEIGHT_NO_DONATIONS
+
+
+def test_da_payload_is_staged_from_this_desktops_tool_tree(tmp_path, monkeypatch):
+    """The DA written into history.ini comes from our own tree for this desktop.
+
+    SP Flash Tool takes the download agent path from history.ini, so the app
+    stages the copy it ships when the tool directory has none. The Windows and
+    Linux trees must not be borrowed from each other, and macOS (no SP Flash
+    Tool GUI) still resolves mtkclient's loader agents instead of failing.
+    """
+    from src import paths as paths_mod
+    from src import sp_flash_gui
+
+    def make_tree(repo, windows: bool, content: bytes):
+        sub = (
+            repo / "tools" / "windows" / "SP_Flash_Tool_v5.1904_Win"
+            if windows
+            else repo / "tools" / "linux" / "SP_Flash_Tool_v5.1904_Linux"
+        )
+        sub.mkdir(parents=True)
+        (sub / sp_flash_gui.DA_FILENAME).write_bytes(content)
+        return sub
+
+    sp_dir = tmp_path / "sp_tool"
+    sp_dir.mkdir()
+    absent = tmp_path / "absent"
+
+    for windows in (True, False):
+        repo = tmp_path / ("win_repo" if windows else "linux_repo")
+        content = b"WIN" if windows else b"LINUX"
+        sub = make_tree(repo, windows, content)
+        monkeypatch.setattr(paths_mod, "IS_WINDOWS", windows)
+        monkeypatch.setattr(paths_mod, "IS_MAC", False)
+        monkeypatch.setattr(paths_mod, "REPO_ROOT", repo)
+        monkeypatch.setattr(paths_mod, "SP_FLASH_TOOL_DIR", absent / "SP_Flash_Tool")
+        monkeypatch.setattr(paths_mod, "COMPAT_DIR", absent / "compat")
+        monkeypatch.setattr(paths_mod, "MTKCLIENT_DIR", absent / "mtkclient")
+
+        staged = sp_flash_gui._ensure_da_payload(sp_dir)
+        assert staged == sp_dir / sp_flash_gui.DA_FILENAME
+        assert staged.read_bytes() == (sub / sp_flash_gui.DA_FILENAME).read_bytes()
+        staged.unlink()
+
+    loader = tmp_path / "mtk" / "mtkclient" / "Loader"
+    loader.mkdir(parents=True)
+    (loader / "MTK_AllInOne_DA_2625.bin").write_bytes(b"OLD")
+    (loader / "MTK_AllInOne_DA_7687.bin").write_bytes(b"NEW")
+    monkeypatch.setattr(paths_mod, "IS_WINDOWS", False)
+    monkeypatch.setattr(paths_mod, "IS_MAC", True)
+    monkeypatch.setattr(paths_mod, "REPO_ROOT", tmp_path / "empty_repo")
+    monkeypatch.setattr(paths_mod, "MTKCLIENT_DIR", tmp_path / "mtk")
+    staged = sp_flash_gui._ensure_da_payload(sp_dir)
+    assert staged.read_bytes() == b"NEW", "the newest mtkclient loader agent wins"
+    staged.unlink()
+
+    # A tool directory that already carries an agent is left exactly as it is.
+    own = sp_dir / sp_flash_gui.DA_FILENAME
+    own.write_bytes(b"KEEP")
+    assert sp_flash_gui._ensure_da_payload(sp_dir) == own
+    assert own.read_bytes() == b"KEEP"
+
+
+def test_seal_hint_never_widens_the_layout(monkeypatch=None):
+    """Sealing a label must not widen the window past what the layout granted.
+
+    The backdrop erase covers the label's own rect, so a width the layout never
+    gave it could not have held the earlier text either; growing the minimum
+    instead would fight every resize, on acrylic and on macOS glass alike.
+    """
+    from PySide6.QtWidgets import QLabel
+
+    from src.ui import surfaces
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    assert app is not None
+    previous = surfaces.glass_surfaces_enabled
+    if monkeypatch is not None:
+        monkeypatch.setattr(surfaces, "glass_surfaces_enabled", lambda: True)
+    else:
+        surfaces.glass_surfaces_enabled = lambda: True
+
+    long_text = "Downloading DA \u2014 about 2 minutes remaining, please keep the device plugged in"
+    label = QLabel(long_text)
+    label.resize(90, 20)
+    surfaces.seal_updating_text(label)
+    # The hint never asks for more room than this label already owns.
+    assert 0 < label.minimumWidth() <= label.width() == 90
+
+    label.setText("DA")
+    surfaces.seal_updating_text(label)
+    # A shorter string cannot lower the seal, and cannot raise it either.
+    assert label.minimumWidth() == 90
+
+    # A label the layout has given more room than the text needs only keeps
+    # room for the text, not for the whole granted width.
+    roomy = QLabel("DA")
+    roomy.resize(1000, 20)
+    surfaces.seal_updating_text(roomy)
+    assert roomy.minimumWidth() <= roomy.fontMetrics().horizontalAdvance("DA") + 12
+    assert roomy.minimumWidth() < 1000
+
+    # A label with no width yet has painted nothing to seal, so no minimum is
+    # forced onto it and the layout stays free.
+    unbuilt = QLabel(long_text)
+    unbuilt.setFixedWidth(0)
+    surfaces.seal_updating_text(unbuilt)
+    assert unbuilt.minimumWidth() == 0
+    for widget in (label, roomy, unbuilt):
+        widget.deleteLater()
+    if monkeypatch is None:
+        surfaces.glass_surfaces_enabled = previous
+
+
+def test_symbol_pixmaps_are_marked_hi_dpi_and_never_oversized():
+    """Every icon source must hand back a hi-DPI pixmap at the requested size.
+
+    A 2x pixmap without a device pixel ratio (or a ratio without the extra
+    pixels) is what rendered half-clipped and blurry on scaled desktops.
+    """
+    from src.ui.icons import get_symbol_pixmap
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    assert app is not None
+    for sym in ("install", "cancel", "settings", "diagnostics", "tools", "support"):
+        for size in (16, 20, 24):
+            pix = get_symbol_pixmap(sym, size)
+            assert not pix.isNull(), (sym, size)
+            dpr = pix.devicePixelRatio()
+            assert dpr > 1.0, (sym, size, dpr)
+            assert pix.width() / dpr <= size + 1, (sym, size, pix.width(), dpr)
+            assert pix.height() / dpr <= size + 1, (sym, size, pix.height(), dpr)
+
+
+def test_install_failure_stays_on_progress_and_retry_does_not_reflash():
+    """A failed install stays on the progress card. Retry returns to the prompt."""
+    from src.state import FlashState
+    from src.ui.main_window import _PAGE_ERROR, _PAGE_FLASH
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    window = MainWindow()
+    window.show()
+    app.processEvents()
+
+    window._last_progress = 10
+    window._set_state(FlashState.S4_FLASHING)
+    app.processEvents()
+    assert window._sp_flash_tool_btn.isVisible()
+
+    window._handle_flash_failure("S_BROM_CMD_STARTCMD_FAIL (2005)")
+    app.processEvents()
+
+    assert window._stack.currentIndex() == _PAGE_FLASH
+    assert window._stack.currentIndex() != _PAGE_ERROR
+    assert not window._error_page.isVisible()
+    page = window._flash_page
+    assert page._flash_retry_btn.isVisible()
+    assert page._flash_retry_btn.text() == tr("flash_btn_retry")
+    assert page._flash_retry_btn.text() != tr("err_btn_retry")
+    assert not page._cancel_btn.isVisible()
+    assert page._progress_bar.value() == 10
+    assert "2005" in page._step_label.text()
+    for button in (
+        window._error_page._retry_btn,
+        window._error_page._reconnect_btn,
+        window._error_page._reselect_btn,
+        window._error_page._log_btn,
+    ):
+        assert not button.isVisible()
+
+    started = []
+    window.service.start_flash = lambda *args, **kwargs: started.append("start")
+    window.service.start_device_monitor = lambda: started.append("monitor")
+    page._flash_retry_btn.click()
+    app.processEvents()
+
+    assert started == []
+    assert window._power_off_prompt is True
+    assert page._wait_continue_btn.isVisible()
+    assert not page._flash_retry_btn.isVisible()
+    assert tr("flash_connect_prompt").split("{")[0].strip() in page._wait_prompt_label.text()
+
+    window._package_path = "firmware.zip"
+    window._package_name = "firmware"
+    page._wait_continue_btn.click()
+    app.processEvents()
+    assert "start" in started
+    window.close()
+    app.processEvents()
+
+
+def test_pin_sp_flash_history_uses_extract_scatter_and_tool_da():
+    """history.ini points at the extracted scatter and the tool's DA file."""
+    import os
+
+    from src import sp_flash_gui
+
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        extract = root / "cached_firmware"
+        extract.mkdir()
+        scatter = extract / "MT6582_Android_scatter.txt"
+        scatter.write_text("partition_index: SYS\n", encoding="utf-8")
+        sp_dir = root / "SP_Flash_Tool"
+        sp_dir.mkdir()
+        da = sp_dir / sp_flash_gui.DA_FILENAME
+        da.write_bytes(b"DA")
+
+        ok, da_abs, scatter_abs = sp_flash_gui.pin_sp_flash_history(sp_dir, scatter)
+        assert ok is True
+        assert os.path.isabs(scatter_abs)
+        assert os.path.isabs(da_abs)
+        assert Path(scatter_abs) == scatter.resolve()
+        assert Path(da_abs) == da.resolve()
+        text = (sp_dir / "history.ini").read_text(encoding="utf-8")
+        assert f"[RecentOpenFile]\nlastDir={scatter_abs}" in text
+        assert f"[LastDAFilePath]\nlastDir={da_abs}" in text
+        assert str((sp_dir / scatter.name).resolve()) != scatter_abs
+
+
+def test_sp_gui_sidebar_handoff_prefers_cache_and_cancels_first():
+    """The sidebar item cancels an in-app run, then hands the cached firmware over."""
+    from src import sp_flash_gui
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    window = MainWindow()
+    order = []
+    real_cancel = window.service.cancel_flash
+    real_stop = window.service.stop_device_monitor
+
+    def cancel():
+        order.append("cancel")
+        return real_cancel()
+
+    def stop():
+        order.append("stop")
+        return real_stop()
+
+    launched = []
+
+    def launch(**kwargs):
+        launched.append(kwargs)
+        order.append("launch")
+        return True, "ok"
+
+    window.service.cancel_flash = cancel
+    window.service.stop_device_monitor = stop
+    original_supported = sp_flash_gui.is_sp_flash_gui_supported
+    original_cached = sp_flash_gui.cached_install_firmware
+    original_launch = sp_flash_gui.launch_sp_flash_tool_gui
+    original_resolve = sp_flash_gui.resolve_cached_firmware
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            scatter = Path(td) / "rom_scatter.txt"
+            scatter.write_text("scatter\n", encoding="utf-8")
+            extract = Path(td)
+            sp_flash_gui.is_sp_flash_gui_supported = lambda: True
+            sp_flash_gui.cached_install_firmware = lambda latest: (scatter, extract)
+            sp_flash_gui.launch_sp_flash_tool_gui = launch
+            window._open_sp_flash_tool_gui()
+            assert order[:2] == ["cancel", "stop"]
+            assert order[-1] == "launch"
+            assert launched[-1]["scatter_path"] == scatter
+            assert launched[-1]["extract_dir"] == extract
+
+            order.clear()
+            launched.clear()
+            sp_flash_gui.cached_install_firmware = lambda latest: (None, None)
+            prepared = []
+
+            def begin(target, callback):
+                prepared.append(target)
+                return True
+
+            window._select_page.focused_firmware = lambda: {"kind": "online", "url": "https://example.invalid/rom.zip"}
+            window._select_page.begin_external_prepare = begin
+            window._open_sp_flash_tool_gui()
+            assert order[:2] == ["cancel", "stop"]
+            assert "launch" not in order
+            assert prepared and prepared[0]["kind"] == "online"
+
+            order.clear()
+            window._select_page.focused_firmware = lambda: None
+            sp_flash_gui.resolve_cached_firmware = lambda **kwargs: (scatter, extract, "Y1")
+            window._open_sp_flash_tool_gui()
+            assert launched[-1]["scatter_path"] == scatter
+            assert launched[-1]["model"] == "Y1"
+    finally:
+        sp_flash_gui.is_sp_flash_gui_supported = original_supported
+        sp_flash_gui.cached_install_firmware = original_cached
+        sp_flash_gui.launch_sp_flash_tool_gui = original_launch
+        sp_flash_gui.resolve_cached_firmware = original_resolve
+        window.close()
+        app.processEvents()
+
+
+def test_unified_caption_client_rect():
+    from src.ui.main_window import client_rect_for_unified_caption
+
+    restored = client_rect_for_unified_caption(
+        (10, 20, 800, 600), maximized=False, frame_x=8, frame_y=8, padded=4,
+    )
+    assert restored == (18, 20, 792, 592)
+    maximized = client_rect_for_unified_caption(
+        (0, 0, 1920, 1080), maximized=True, frame_x=8, frame_y=8, padded=4,
+    )
+    assert maximized == (12, 12, 1908, 1068)
+
+
+def test_completion_check_mark_and_opt_out():
+    """A finished install shows a check, hugs the card, and can hide the coffee note."""
+    from src.config import get_app_name
+    from src.ui.main_window import DEFAULT_WINDOW_HEIGHT, _PAGE_FLASH
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    window = MainWindow()
+    window.show()
+    app.processEvents()
+    try:
+        window._install_complete = True
+        window._flash_page.show_flashing()
+        window._flash_page.set_device_done()
+        window._flash_page.show_completion_appeal(True)
+        window._nav_to_page(_PAGE_FLASH)
+        app.processEvents()
+        page = window._flash_page
+        assert page._done_mark.isVisible()
+        assert not page._cancel_btn.isVisible()
+        assert not page._cancel_btn.isEnabled()
+        pitch = page._appeal_label.text()
+        assert "Hi, Ryan here" in pitch
+        assert get_app_name() in pitch
+        assert page._coffee_btn.text() == "Buy me a coffee"
+        assert page._appeal.isVisible()
+        with_note = window.height()
+        assert with_note < DEFAULT_WINDOW_HEIGHT - 40
+
+        window._settings_page._cb_hide_donations.setChecked(True)
+        app.processEvents()
+        page.show_completion_appeal(False)
+        window._adjust_window_geometry()
+        app.processEvents()
+        assert not page._appeal.isVisible()
+        coffee = window._settings_page._settings_coffee_btn
+        assert not coffee.isHidden()
+        assert coffee.text() == "Buy me a coffee"
+        assert window._settings_page._cb_hide_donations.text() == "Turn off Donations / Credits"
+        assert "buy a coffee from Settings" in window._settings_page._lbl_hide_tip.text()
+        assert window.height() <= with_note
+    finally:
+        device_tracking.set_donation_ui_disabled(False)
+        window.close()
+        app.processEvents()
+
+
 if __name__ == "__main__":
     test_dialog_theme_not_transparent()
     test_combobox_popup_styling()
@@ -782,5 +1190,13 @@ if __name__ == "__main__":
     test_live_theme_switch_updates_title_card_and_donation_text()
     test_diagnostics_count_matches_lines_from_each_source()
     test_classic_windows_buttons_show_hover()
+    test_compact_install_height_counts_the_header_on_every_desktop()
+    test_seal_hint_never_widens_the_layout()
+    test_symbol_pixmaps_are_marked_hi_dpi_and_never_oversized()
+    test_install_failure_stays_on_progress_and_retry_does_not_reflash()
+    test_pin_sp_flash_history_uses_extract_scatter_and_tool_da()
+    test_sp_gui_sidebar_handoff_prefers_cache_and_cancels_first()
+    test_unified_caption_client_rect()
+    test_completion_check_mark_and_opt_out()
 
     print("All native UX enhancement tests passed!")

@@ -261,6 +261,21 @@ class DraggableHeaderBar(QWidget):
         super().mouseReleaseEvent(event)
 
 
+def client_rect_for_unified_caption(rect, *, maximized: bool, frame_x: int, frame_y: int, padded: int):
+    """Client edges when the caption text band is part of the window.
+
+    Restored windows keep the side and bottom frame and pull the top edge up
+    to the window top, so the in-app title sits where the native caption was.
+    Maximized windows inset every side by the frame thickness.
+    """
+    left, top, right, bottom = rect
+    if maximized:
+        inset_x = int(frame_x) + int(padded)
+        inset_y = int(frame_y) + int(padded)
+        return (left + inset_x, top + inset_y, right - inset_x, bottom - inset_y)
+    return (left + int(frame_x), top, right - int(frame_x), bottom - int(frame_y))
+
+
 def can_inline_title_with_window_controls() -> bool:
     """Return True if the current platform/DE supports inlining custom title/controls seamlessly."""
     if sys.platform == "darwin":
@@ -273,6 +288,36 @@ def can_inline_title_with_window_controls() -> bool:
         return False
     desktop = (os.environ.get("XDG_CURRENT_DESKTOP") or "").lower()
     return any(d in desktop for d in ("gnome", "unity", "pantheon"))
+
+
+# Floor for the compact install window: the progress card plus whatever
+# chrome (header, status line) the current scenario shows must fit.
+COMPACT_INSTALL_MIN_HEIGHT = 188
+COMPACT_INSTALL_MIN_HEIGHT_NO_DONATIONS = 168
+
+
+def compact_install_height(
+    page_h: int,
+    prompt_h: int,
+    status_h: int,
+    inline_header: bool,
+    donations_disabled: bool,
+) -> int:
+    """Height the window needs to hug the install card, on any desktop.
+
+    The in-app header bar is a real 44px row of the window on every platform
+    that draws one: inside the central layout on Windows and Linux, and above
+    the body on macOS. It therefore belongs in the required height everywhere.
+    Only the macOS build used to count it, which left the Windows/Linux window
+    exactly one header short and clipped the bottom status line.
+    """
+    header_h = int(HEADER_CONTENT_HEIGHT) if inline_header else 0
+    height = max(COMPACT_INSTALL_MIN_HEIGHT, page_h + prompt_h + status_h + header_h)
+    if donations_disabled:
+        # Without the appeal under the card the status bar is the only extra
+        # row, so the window can give its height back.
+        height = max(COMPACT_INSTALL_MIN_HEIGHT_NO_DONATIONS, height - status_h)
+    return height
 
 
 def page_title_alignment() -> Qt.AlignmentFlag:
@@ -347,6 +392,9 @@ class MainWindow(QMainWindow):
         self._pre_install_guided = False
         self._install_ui_active = False
         self._download_active = False
+        self._install_failed = False
+        self._power_off_prompt = False
+        self._diagnostics_session = False
         # A stalled connection makes the backend repeat the same errno line
         # many times over; this keeps the guidance dialog to once per attempt.
         self._active_workers = set()
@@ -462,9 +510,12 @@ class MainWindow(QMainWindow):
         self._error_page = ErrorPage()
         self._retry_page = RetryPage()
         self._settings_page = SettingsPage()
-        self._diagnostics_page = DiagnosticsView()
-        self._diagnostics_page.close_requested.connect(self._leave_diagnostics)
-        self.log_line_added.connect(self._diagnostics_page.append_line)
+        # The diagnostics console is built the first time it is opened. Until
+        # D is pressed it is not constructed, so it cannot tail, relayout, or
+        # poll. Log lines still go to DiagnosticsManager.
+        self._diagnostics_page = None
+        self._diag_placeholder = QWidget()
+        self._diag_placeholder.setObjectName("diagnosticsPlaceholder")
 
         # Mount select_page._title into the unified header bar if inlining
         if is_inline and hasattr(self, "_title_container"):
@@ -485,7 +536,7 @@ class MainWindow(QMainWindow):
             self._error_page,
             self._retry_page,
             self._settings_page,
-            self._diagnostics_page,
+            self._diag_placeholder,
             self._notice_host,
         ):
             self._paint_opaque(w)
@@ -753,6 +804,7 @@ class MainWindow(QMainWindow):
 
         self._log_btn = self._make_nav_button(tr("nav_log"), "diagnostics", checkable=True)
         self._log_btn.clicked.connect(self._show_diagnostics)
+        self._log_btn.setVisible(False)
         layout.addWidget(self._log_btn)
         self._nav_btn_group.addButton(self._log_btn, _PAGE_DIAGNOSTICS)
         self._aux_nav_buttons.append(self._log_btn)
@@ -907,8 +959,9 @@ class MainWindow(QMainWindow):
         )
         self._flash_page.on_cancel(self._on_cancel_flash)
         self._flash_page.on_cancel_wait(self._on_cancel_wait)
-        self._flash_page.on_open_sp_gui(self._open_sp_flash_tool_gui)
-        self._error_page.on_retry(self._on_retry_flash)
+        self._flash_page.on_install_retry(self._on_progress_retry)
+        self._flash_page.on_power_off_continue(self._on_power_off_continue)
+        self._error_page.on_retry(self._on_progress_retry)
         self._error_page.on_reconnect(self._on_reconnect)
         self._error_page.on_reselect(lambda: self._nav_to_page(_PAGE_SELECT))
         self._error_page.on_view_log(self._show_diagnostics)
@@ -1098,12 +1151,90 @@ class MainWindow(QMainWindow):
             self._title_bar.raise_()
         self._verify_native_chrome()
 
+    def nativeEvent(self, eventType, message):
+        """Keep Windows caption buttons and drop the second title string."""
+        if sys.platform != "win32" or not can_inline_title_with_window_controls():
+            return super().nativeEvent(eventType, message)
+        try:
+            if bytes(eventType) != b"windows_generic_MSG":
+                return super().nativeEvent(eventType, message)
+            import ctypes
+            from ctypes import wintypes
+
+            msg = wintypes.MSG.from_address(int(message))
+            if msg.message == 0x0083 and msg.wParam:
+                class _RECT(ctypes.Structure):
+                    _fields_ = [
+                        ("left", wintypes.LONG),
+                        ("top", wintypes.LONG),
+                        ("right", wintypes.LONG),
+                        ("bottom", wintypes.LONG),
+                    ]
+
+                class _NCCALCSIZE_PARAMS(ctypes.Structure):
+                    _fields_ = [("rgrc", _RECT * 3), ("lppos", ctypes.c_void_p)]
+
+                params = _NCCALCSIZE_PARAMS.from_address(int(msg.lParam))
+                src = params.rgrc[0]
+                user32 = ctypes.windll.user32
+                left, top, right, bottom = client_rect_for_unified_caption(
+                    (src.left, src.top, src.right, src.bottom),
+                    maximized=bool(self.windowState() & Qt.WindowMaximized),
+                    frame_x=user32.GetSystemMetrics(32),
+                    frame_y=user32.GetSystemMetrics(33),
+                    padded=user32.GetSystemMetrics(92),
+                )
+                params.rgrc[0].left = left
+                params.rgrc[0].top = top
+                params.rgrc[0].right = right
+                params.rgrc[0].bottom = bottom
+                return True, 0
+            if msg.message == 0x0084:
+                dwmapi = ctypes.windll.dwmapi
+                hit = wintypes.LPARAM()
+                if dwmapi.DwmDefWindowProc(
+                    wintypes.HWND(int(self.winId())),
+                    ctypes.c_uint(msg.message),
+                    wintypes.WPARAM(msg.wParam),
+                    wintypes.LPARAM(msg.lParam),
+                    ctypes.byref(hit),
+                ):
+                    return True, int(hit.value)
+                bar = getattr(self, "_title_bar", None)
+                if bar is not None and bar.isVisible():
+                    x = ctypes.c_short(msg.lParam & 0xFFFF).value
+                    y = ctypes.c_short((msg.lParam >> 16) & 0xFFFF).value
+                    from PySide6.QtCore import QPoint
+                    local = bar.mapFromGlobal(QPoint(x, y))
+                    if bar.rect().contains(local):
+                        child = bar.childAt(local)
+                        interactive = False
+                        probe = child
+                        while probe is not None and probe is not bar:
+                            if isinstance(probe, (QPushButton, QComboBox)) or (
+                                isinstance(probe, QLabel)
+                                and (probe.textInteractionFlags() & Qt.LinksAccessibleByMouse)
+                            ):
+                                interactive = True
+                                break
+                            probe = probe.parentWidget()
+                        if not interactive:
+                            return True, 2
+        except Exception:
+            logging.getLogger(__name__).debug("unified caption event skipped", exc_info=True)
+        return super().nativeEvent(eventType, message)
+
     def keyPressEvent(self, event):
         # M or D reveal the hidden install-method entry. "MTKClient (Mac)" runs
         # the macOS code path on Linux/Windows so the Mac flow (MTKClient as the
         # only backend, mac-centric prompts) can be tested without a Mac.
         # NB: PySide6 6.11 returns a Flag here, so int(modifiers()) raises.
-        if event.key() in (Qt.Key_M, Qt.Key_D) and event.modifiers() == Qt.NoModifier:
+        if event.key() == Qt.Key_D and event.modifiers() == Qt.NoModifier:
+            # Session-only. M still reveals the hidden install backend.
+            self._unlock_diagnostics()
+            event.accept()
+            return
+        if event.key() == Qt.Key_M and event.modifiers() == Qt.NoModifier:
             self._settings_page.reveal_advanced_methods()
             if self._settings_page.advanced_methods_revealed():
                 # Remember the reveal across launches: it also unlocks the
@@ -1228,8 +1359,13 @@ class MainWindow(QMainWindow):
 
         is_install = self._install_run_active()
         donations_disabled = device_tracking.is_donation_ui_disabled(self.settings)
+        hug_install = is_install or bool(
+            getattr(self, "_install_complete", False)
+            or getattr(self, "_install_failed", False)
+            or getattr(self, "_power_off_prompt", False)
+        )
 
-        if is_install:
+        if hug_install:
             # Hug the progress card. A prompt in the content column is the
             # only reason this grows. The window collapses as soon as the
             # install is pending, including before the flash page is shown.
@@ -1241,14 +1377,17 @@ class MainWindow(QMainWindow):
                 prompt_h = prompt.sizeHint().height()
             bar = self.statusBar()
             status_h = bar.sizeHint().height() if bar is not None and bar.isVisible() else 0
-            header_h = int(HEADER_CONTENT_HEIGHT) if sys.platform == "darwin" else 0
             target_w = DEFAULT_WINDOW_WIDTH
             if curr_idx == _PAGE_FLASH:
-                target_h = max(188, page_h + prompt_h + status_h + header_h)
+                target_h = compact_install_height(
+                    page_h=page_h,
+                    prompt_h=prompt_h,
+                    status_h=status_h,
+                    inline_header=getattr(self, "_title_bar", None) is not None,
+                    donations_disabled=donations_disabled,
+                )
             else:
                 target_h = 228
-            if donations_disabled:
-                target_h = max(168, target_h - status_h)
             self.setMinimumSize(580, 168)
             self.resize(target_w, target_h)
         else:
@@ -1281,15 +1420,15 @@ class MainWindow(QMainWindow):
             if hasattr(self, "_support_btn"):
                 self._support_btn.setVisible(False)
             if hasattr(self, "_log_btn"):
-                # Diagnostics stays available for the whole install.
-                self._log_btn.setVisible(True)
-                self._log_btn.setEnabled(True)
+                self._sync_diagnostics_button()
             if hasattr(self, "_check_updates_btn"):
                 self._check_updates_btn.setVisible(False)
             if hasattr(self, "_linux_setup_btn"):
                 self._linux_setup_btn.setVisible(False)
             if hasattr(self, "_sp_flash_tool_btn"):
-                self._sp_flash_tool_btn.setVisible(False)
+                # Kept available during a run so it can take over as the fallback.
+                self._sp_flash_tool_btn.setVisible(True)
+                self._sp_flash_tool_btn.setEnabled(True)
             if hasattr(self, "_lang_label"):
                 self._lang_label.setVisible(False)
             if hasattr(self, "_lang_combo"):
@@ -1301,7 +1440,7 @@ class MainWindow(QMainWindow):
             if hasattr(self, "_support_btn"):
                 self._support_btn.setVisible(True)
             if hasattr(self, "_log_btn"):
-                self._log_btn.setVisible(True)
+                self._sync_diagnostics_button()
             if hasattr(self, "_check_updates_btn"):
                 self._check_updates_btn.setVisible(True)
             if hasattr(self, "_linux_setup_btn"):
@@ -1361,6 +1500,10 @@ class MainWindow(QMainWindow):
         if page_idx == _PAGE_DIAGNOSTICS:
             return tr("log_center")
         if page_idx == _PAGE_FLASH:
+            if getattr(self, "_install_failed", False):
+                return tr("flash_failed_title")
+            if getattr(self, "_power_off_prompt", False):
+                return tr("dialog_pre_install_title")
             if getattr(self, "_install_complete", False):
                 return tr("flash_install_complete")
             if getattr(self, "_download_active", False):
@@ -1631,6 +1774,8 @@ class MainWindow(QMainWindow):
     def _begin_flash_flow(self):
         if not self._package_path:
             return
+        self._install_failed = False
+        self._power_off_prompt = False
         if not getattr(self, "_pre_install_guided", False):
             if not (os.environ.get("QT_QPA_PLATFORM") == "offscreen" or os.environ.get("INNIOASIS_HEADLESS")):
                 from .dialogs import PreInstallGuidanceDialog
@@ -1740,7 +1885,9 @@ class MainWindow(QMainWindow):
 
     def _on_progress(self, percent):
         self._last_progress = percent
-        self._flash_page.update_prep_progress(percent)
+        if getattr(self, "_step_now", "") == STEP_EXTRACTING:
+            self._flash_page.update_prep_progress(percent)
+            return
         self._flash_page.update_progress(percent)
         self._retry_page.update_progress(percent)
 
@@ -1750,6 +1897,13 @@ class MainWindow(QMainWindow):
         self._append_log(msg, dedupe=True)
 
     def _append_log(self, msg, dedupe=False):
+        text = str(msg or "")
+        lines = text.splitlines() or ([text] if text else [])
+        for line in lines:
+            if line.strip():
+                self._append_log_line(line, dedupe=dedupe)
+
+    def _append_log_line(self, msg, dedupe=False):
         self._log_lines.append(msg)
         from ..diagnostics import LOG_RETAINED_LINES
         if len(self._log_lines) > LOG_RETAINED_LINES:
@@ -1829,8 +1983,7 @@ class MainWindow(QMainWindow):
             # background; a retry starts a fresh one.
             self.service.stop_device_monitor()
             self.service.cancel_flash()
-            self._error_page.show_usb_disconnected(self._last_progress or 0)
-            self._nav_to_page(_PAGE_ERROR)
+            self._show_install_failure(tr("err_usb_title"))
         elif self.sm.state in (FlashState.S2_WAIT_CONNECTION, FlashState.S3_DEVICE_DETECTED):
             try:
                 self.sm.transition_to(FlashState.S2_WAIT_CONNECTION)
@@ -1920,21 +2073,46 @@ class MainWindow(QMainWindow):
         )
         del elapsed
 
+    def _show_install_failure(self, message: str):
+        """Failure stays on the install progress card. Retry is where Cancel was."""
+        self._install_failed = True
+        self._power_off_prompt = False
+        self._install_complete = False
+        self._flash_page.show_install_failure(message, self._last_progress or 0)
+        self._nav_to_page(_PAGE_FLASH)
+
     def _handle_flash_failure(self, error_code):
         try:
             self.sm.transition_to(FlashState.S5_FAILED)
         except ValueError:
             self.sm.force_state(FlashState.S5_FAILED)
-        self._sync_install_nav_entry()
-        self._error_page.show_flash_failed(
-            self._last_progress or 0, self._step_now, error_code,
-            self._package_name, self.sm.context.retry_count,
-        )
-        self._nav_to_page(_PAGE_ERROR)
-        if error_code in _RETRY_GUIDANCE_CODES:
-            self._show_retry_guidance(
-                tr("retry_guidance_detail_failed").format(code=error_code)
-            )
+        self._show_install_failure(str(error_code or tr("flash_failed")))
+
+    def _on_progress_retry(self):
+        """Back to the power-off / unplug prompt. Does not start a flash."""
+        self.service.cancel_flash()
+        self.service.stop_device_monitor()
+        self._elapsed_timer.stop()
+        self._install_failed = False
+        self._power_off_prompt = True
+        self._pre_install_guided = False
+        if self.sm.state in (
+            FlashState.S5_FAILED,
+            FlashState.S5_USB_DISCONNECTED,
+            FlashState.S4_FLASHING,
+            FlashState.S5_COMPLETE,
+        ):
+            self.sm.reset_for_retry()
+        self._flash_page.set_model(self._package_model)
+        self._flash_page.show_power_off_prompt()
+        self._nav_to_page(_PAGE_FLASH)
+
+    def _on_power_off_continue(self):
+        """The user confirmed the device is off and unplugged. Start the run."""
+        self._power_off_prompt = False
+        self._pre_install_guided = True
+        self._flash_page.leave_power_off_prompt()
+        self._begin_flash_flow()
 
     def _on_retry_flash(self):
         self.sm.reset_for_retry()
@@ -2087,6 +2265,8 @@ class MainWindow(QMainWindow):
     def _reset_after_run(self):
         self._pre_install_guided = False
         self._install_complete = False
+        self._install_failed = False
+        self._power_off_prompt = False
         self._compact_install_screen = False
         self.sm.reset_full()
         self._package_path = ""
@@ -2111,18 +2291,69 @@ class MainWindow(QMainWindow):
             return "--:--"
         return f"{secs // 60:02d}:{secs % 60:02d}"
 
+    def _diagnostics_unlocked(self) -> bool:
+        return bool(getattr(self, "_diagnostics_session", False))
+
+    def _sync_diagnostics_button(self) -> None:
+        show = self._diagnostics_unlocked()
+        if hasattr(self, "_log_btn"):
+            self._log_btn.setVisible(show)
+            self._log_btn.setEnabled(show)
+
+    def _unlock_diagnostics(self) -> None:
+        """Show Diagnostics for this session only. Logs were already being kept."""
+        self._diagnostics_session = True
+        self._sync_diagnostics_button()
+
+    def _ensure_diagnostics_page(self):
+        page = getattr(self, "_diagnostics_page", None)
+        if page is not None:
+            return page
+        page = DiagnosticsView()
+        page.close_requested.connect(self._leave_diagnostics)
+        placeholder = getattr(self, "_diag_placeholder", None)
+        idx = self._stack.indexOf(placeholder) if placeholder is not None else -1
+        if placeholder is not None and idx >= 0:
+            self._stack.removeWidget(placeholder)
+            placeholder.hide()
+        self._stack.insertWidget(idx if idx >= 0 else _PAGE_DIAGNOSTICS, page)
+        self._diagnostics_page = page
+        return page
+
+    def _detach_diagnostics_tail(self) -> None:
+        if not getattr(self, "_diagnostics_tail_connected", False):
+            return
+        page = getattr(self, "_diagnostics_page", None)
+        self._diagnostics_tail_connected = False
+        if page is None:
+            return
+        try:
+            self.log_line_added.disconnect(page.append_line)
+        except Exception:
+            pass
+
     def _show_diagnostics(self):
         """Open the in-window diagnostics view, including during an install."""
-        if self._stack.currentIndex() == _PAGE_DIAGNOSTICS:
+        if not self._diagnostics_unlocked():
+            return
+        if (
+            self._diagnostics_page is not None
+            and self._stack.currentIndex() == _PAGE_DIAGNOSTICS
+        ):
             self._leave_diagnostics()
             return
         self._page_before_diagnostics = self._stack.currentIndex()
+        page = self._ensure_diagnostics_page()
         # The diagnostics manager is the retained log. A copy of the window's
         # short list would freeze the count and drop tool output.
-        self._diagnostics_page.set_lines(None)
+        self._detach_diagnostics_tail()
+        page.set_lines(None)
+        self.log_line_added.connect(page.append_line)
+        self._diagnostics_tail_connected = True
         self._nav_to_page(_PAGE_DIAGNOSTICS)
 
     def _leave_diagnostics(self):
+        self._detach_diagnostics_tail()
         if self._install_run_active():
             self._nav_to_page(_PAGE_FLASH)
             return
@@ -2137,8 +2368,18 @@ class MainWindow(QMainWindow):
         dlg.exec()
 
     def _open_sp_flash_tool_gui(self):
-        from ..config import device_label_for_model
-        from ..sp_flash_gui import is_sp_flash_gui_supported, launch_sp_flash_tool_gui
+        """Open the bundled SP Flash Tool GUI with the best firmware we have.
+
+        A run in this window is cancelled first so the GUI tool can own USB.
+        Firmware is chosen in this order: a previous install's extracted cache,
+        then a highlighted catalogue or local file (downloaded and extracted
+        if it is not cached yet), then the most recent download or cache.
+        """
+        from ..sp_flash_gui import (
+            cached_install_firmware,
+            is_sp_flash_gui_supported,
+            resolve_cached_firmware,
+        )
 
         if not is_sp_flash_gui_supported():
             QMessageBox.information(
@@ -2148,88 +2389,90 @@ class MainWindow(QMainWindow):
             )
             return
 
-        model = self._package_model or ""
+        if hasattr(self, "service") and self.service:
+            self.service.cancel_flash()
+            self.service.stop_device_monitor()
+        if getattr(self, "_download_active", False) and hasattr(self, "_select_page"):
+            self._select_page.cancel_download()
+            self._download_active = False
+        if getattr(self, "_elapsed_timer", None) is not None:
+            self._elapsed_timer.stop()
 
-        from .. import device_tracking
-        from ..flash_service import completed_extract_dir, compute_extract_dir, _find_scatter
-        from pathlib import Path
+        latest = device_tracking.get_latest_package(self.settings)
+        scatter, extract = cached_install_firmware(latest)
+        if scatter is not None:
+            model = (latest or {}).get("model") or self._package_model or ""
+            self._launch_sp_gui(scatter, extract, model)
+            return
 
-        scatter_path = None
-        extract_dir = None
-        pkg_path = getattr(self, "_package_path", None)
-        if not pkg_path and hasattr(self, "_select_page"):
-            pkg_path = getattr(self._select_page, "_current_package_path", None)
-        if pkg_path:
-            ed = completed_extract_dir(pkg_path) or compute_extract_dir(pkg_path)
-            if Path(ed).is_dir():
-                extract_dir = Path(ed)
-                sc = _find_scatter(extract_dir)
-                if sc:
-                    scatter_path = sc
-        if not scatter_path:
-            latest = device_tracking.get_latest_package(self.settings)
-            if latest:
-                if latest.get("scatter_path") and Path(latest["scatter_path"]).is_file():
-                    scatter_path = Path(latest["scatter_path"])
-                if latest.get("extract_dir") and Path(latest["extract_dir"]).is_dir():
-                    extract_dir = Path(latest["extract_dir"])
-        # Check readiness of cached firmware package before opening SP Flash Tool GUI
-        from ..config import is_mediatek_installer
-        from ..sp_flash_gui import check_cached_firmware_readiness
+        focused = None
+        if hasattr(self, "_select_page"):
+            focused = self._select_page.focused_firmware()
+        if focused and self._select_page.begin_external_prepare(
+            focused, self._on_sp_gui_firmware_ready
+        ):
+            return
 
-        ready, res_sc, res_ed, reason = check_cached_firmware_readiness(
-            scatter_path=scatter_path,
-            extract_dir=extract_dir,
-            model=model,
+        scatter, extract, model = resolve_cached_firmware(model=self._package_model or "")
+        if scatter is not None:
+            self._launch_sp_gui(scatter, extract, model or self._package_model or "")
+            return
+        QMessageBox.warning(
+            self,
+            tr("sp_gui_title"),
+            tr("sp_gui_no_cached_firmware"),
         )
-        if not ready:
+
+    def _on_sp_gui_firmware_ready(self, ok, extract_dir, err):
+        from ..flash_service import _find_scatter
+
+        if not ok or not extract_dir:
+            QMessageBox.warning(
+                self,
+                tr("sp_gui_error_title"),
+                f"{tr('sp_gui_error_desc')}\n\n{err or tr('sp_gui_no_cached_firmware')}",
+            )
+            return
+        scatter = _find_scatter(Path(extract_dir), allow_raise=False)
+        if not scatter or not Path(scatter).is_file():
             QMessageBox.warning(
                 self,
                 tr("sp_gui_title"),
-                tr("sp_gui_no_cached_firmware") + f"\n\n({reason})",
+                tr("sp_gui_no_cached_firmware"),
             )
             return
-
-        scatter_path = res_sc
-        extract_dir = res_ed
-
-        label = device_label_for_model(model)
-        if is_mediatek_installer():
-            hint = tr("terminal_hint_generic")
-        else:
-            hint = tr("terminal_hint_innioasis")
-
-        prompt_msg = (
-            f"{tr('sp_gui_launch_intro')}\n\n"
-            f"• If it isn't already off, power off your {label}.\n"
-            f"• If it is connected to USB, disconnect it first.\n"
-            f"{hint}\n"
-            f"• In SP Flash Tool, click Download (or Format All + Download as needed).\n\n"
-            f"Then connect the USB cable to begin flashing."
+        package_path = ""
+        name = Path(extract_dir).name
+        if hasattr(self, "_select_page"):
+            package_path = getattr(self._select_page, "_current_package_path", "") or ""
+            name = getattr(self._select_page, "_current_package_name", "") or name
+        device_tracking.record_latest_package(
+            model=self._package_model or "",
+            software_name=name,
+            tag_name="",
+            package_path=package_path,
+            extract_dir=str(Path(extract_dir).resolve()),
+            scatter_path=str(Path(scatter).resolve()),
+            settings=self.settings,
         )
-        if os.environ.get("QT_QPA_PLATFORM") != "offscreen":
-            reply = QMessageBox.question(
-                self,
-                tr("sp_gui_title"),
-                prompt_msg,
-                QMessageBox.Ok | QMessageBox.Cancel,
-                QMessageBox.Ok,
-            )
-            if reply != QMessageBox.Ok:
-                return
+        self._launch_sp_gui(Path(scatter), Path(extract_dir), self._package_model or "")
 
-        if hasattr(self, "service") and self.service:
-            self.service.cancel_flash()
+    def _launch_sp_gui(self, scatter, extract_dir, model):
+        from ..sp_flash_gui import launch_sp_flash_tool_gui
 
-        ok, msg = launch_sp_flash_tool_gui(model=model, scatter_path=scatter_path, extract_dir=extract_dir)
+        ok, msg = launch_sp_flash_tool_gui(
+            model=model or "",
+            scatter_path=scatter,
+            extract_dir=extract_dir,
+        )
         if not ok:
             QMessageBox.warning(
                 self,
                 tr("sp_gui_error_title"),
                 f"{tr('sp_gui_error_desc')}\n\n{msg}",
             )
-        else:
-            self._show_status(tr("sp_gui_launched_status"), 10000)
+            return
+        self._show_status(tr("sp_gui_launched_status"), 10000)
 
     def _check_linux_first_run(self):
         if paths.IS_MAC or os.environ.get("QT_QPA_PLATFORM") == "offscreen" or os.environ.get("CI"):
@@ -2283,7 +2526,7 @@ class MainWindow(QMainWindow):
         self._retry_page.retranslate()
         if hasattr(self, "_settings_page"):
             self._settings_page.retranslate()
-        if hasattr(self, "_diagnostics_page") and hasattr(self._diagnostics_page, "retranslate"):
+        if self._diagnostics_page is not None and hasattr(self._diagnostics_page, "retranslate"):
             self._diagnostics_page.retranslate()
         if self.statusBar() and hasattr(self.statusBar(), "retranslate"):
             self.statusBar().retranslate()

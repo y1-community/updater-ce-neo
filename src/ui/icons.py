@@ -182,7 +182,12 @@ def _get_sf_symbol_pixmap(symbol_name: str, size: int, color: str = "#FFFFFF") -
 
 
 def _get_segoe_pixmap(symbol_name: str, size: int, color: str = "#FFFFFF") -> Optional[QPixmap]:
-    """Render MS Segoe Symbol on Windows in target color with anti-aliasing."""
+    """Render an MS Segoe symbol glyph on Windows, crisp and unclipped.
+
+    The glyph is drawn on a 4x canvas and scaled down. Drawing straight into a
+    small box clipped the taller Segoe glyphs (the font's em box is bigger than
+    the requested pixmap), which is why only parts of a symbol showed.
+    """
     if not IS_WINDOWS:
         return None
     code = _SEGOE_SYMBOL_MAP.get(symbol_name)
@@ -194,18 +199,28 @@ def _get_segoe_pixmap(symbol_name: str, size: int, color: str = "#FFFFFF") -> Op
         return None
 
     try:
-        px_size = size * 2
-        pix = QPixmap(px_size, px_size)
-        pix.setDevicePixelRatio(2.0)
+        canvas = max(int(size), 1) * 4
+        pix = QPixmap(canvas, canvas)
         pix.fill(Qt.transparent)
         painter = QPainter(pix)
-        font = QFont(family, int(size * 1.5))
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setRenderHint(QPainter.TextAntialiasing, True)
+        font = QFont(family)
         font.setStyleStrategy(QFont.PreferAntialias)
+        # Leave headroom in the box so the full em box (ascent + descent, plus
+        # any glyph overhang) always fits instead of being cropped.
+        font.setPixelSize(max(1, int(canvas * 0.78)))
         painter.setFont(font)
         painter.setPen(QColor(color))
-        painter.drawText(QRect(0, 0, px_size, px_size), Qt.AlignCenter, chr(code))
+        painter.drawText(QRect(0, 0, canvas, canvas), Qt.AlignCenter, chr(code))
         painter.end()
-        return pix
+
+        out = pix.scaled(
+            max(int(size), 1) * 2, max(int(size), 1) * 2,
+            Qt.KeepAspectRatio, Qt.SmoothTransformation,
+        )
+        out.setDevicePixelRatio(2.0)
+        return out
     except Exception as e:
         logger.debug("Failed to render Segoe symbol %s: %s", symbol_name, e)
         return None
@@ -219,8 +234,11 @@ def _get_freedesktop_pixmap(symbol_name: str, size: int, color: str = "#FFFFFF")
     for name in names:
         icon = QIcon.fromTheme(name)
         if not icon.isNull():
-            pix = icon.pixmap(QSize(size, size))
+            # Ask for a 2x pixmap and mark it hi-DPI: requesting `size` alone
+            # gave a blurry, partly-clipped icon on scaled desktops.
+            pix = icon.pixmap(QSize(max(int(size), 1) * 2, max(int(size), 1) * 2))
             if not pix.isNull():
+                pix.setDevicePixelRatio(2.0)
                 if "symbolic" in name:
                     return tint_pixmap(pix, color)
                 return pix

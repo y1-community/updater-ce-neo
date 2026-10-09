@@ -28,6 +28,10 @@ from PySide6.QtWidgets import (
 
 from .. import paths
 from ..config import install_power_on_steps, device_label_for_model
+# Lines kept in the text widget. The manager still retains the full log;
+# painting tens of thousands of blocks on the GUI thread is what froze the window.
+VISIBLE_LOG_LINES = 2000
+
 from ..diagnostics import (
     CAT_ALL,
     CAT_SP,
@@ -594,25 +598,29 @@ class DiagnosticsView(QWidget):
         self._file_badge.setText(get_log_file(cat).name)
 
         raw = self.raw_lines(cat)
+        # Remember the retained totals so an incremental append can keep the
+        # counter exact without re-reading (and re-classifying) the whole log.
+        self._raw_total = len(raw)
+        self._buffer_was_empty = DiagnosticsManager.instance().buffer_count(cat) == 0
         lines = self._apply_filters(raw)
-        content = "\n".join(lines)
-
-        scroll = 0
-        if preserve_scroll:
-            scroll = self._view.verticalScrollBar().value()
+        shown = lines[-VISIBLE_LOG_LINES:] if len(lines) > VISIBLE_LOG_LINES else lines
+        content = "\n".join(shown)
+        bar = self._view.verticalScrollBar()
+        at_end = self._pinned_to_end()
+        scroll = bar.value() if preserve_scroll else 0
 
         if content.strip():
             self._view.setPlainText(content)
             self._empty = False
-            if preserve_scroll:
-                self._view.verticalScrollBar().setValue(scroll)
+            self._last_appended = shown[-1] if shown else None
+            if preserve_scroll and not at_end:
+                bar.setValue(min(scroll, bar.maximum()))
             else:
-                cursor = self._view.textCursor()
-                cursor.movePosition(QTextCursor.End)
-                self._view.setTextCursor(cursor)
+                bar.setValue(bar.maximum())
         else:
             self._view.setPlainText(tr("log_no_entries"))
             self._empty = True
+            self._last_appended = None
 
         self._set_count(lines, raw)
 
@@ -649,16 +657,78 @@ class DiagnosticsView(QWidget):
         self._rebuild_session_combo()
         self._refresh_content()
 
+    def _pinned_to_end(self) -> bool:
+        """True when the reader is already at the latest line."""
+        bar = self._view.verticalScrollBar()
+        if bar.maximum() <= 0:
+            return True
+        return bar.value() >= bar.maximum() - 2
+
+    def _trim_visible_blocks(self) -> None:
+        doc = self._view.document()
+        extra = doc.blockCount() - VISIBLE_LOG_LINES
+        if extra <= 0:
+            return
+        cursor = QTextCursor(doc)
+        cursor.movePosition(QTextCursor.MoveOperation.Start)
+        cursor.movePosition(
+            QTextCursor.MoveOperation.NextBlock,
+            QTextCursor.MoveMode.KeepAnchor,
+            extra,
+        )
+        cursor.removeSelectedText()
+
+    def _insert_log_line(self, stored: str) -> None:
+        """Add one line without replacing the document.
+
+        Follow the tail only when the reader is already there. A scroll
+        position above the end stays put.
+        """
+        follow = self._pinned_to_end()
+        bar = self._view.verticalScrollBar()
+        keep = bar.value()
+        cursor = QTextCursor(self._view.document())
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        prefix = "" if self._empty or not self._view.toPlainText().strip() else "\n"
+        cursor.insertText(prefix + stored)
+        self._empty = False
+        self._last_appended = stored
+        self._trim_visible_blocks()
+        if follow:
+            bar.setValue(bar.maximum())
+        else:
+            bar.setValue(min(keep, bar.maximum()))
+
     def append_line(self, line):
         mgr = DiagnosticsManager.instance()
         line_str = str(line).rstrip("\r\n")
         if not line_str:
             return
-        # The caller often recorded this already. Dedupe stores it once.
-        mgr.record_log(line_str, dedupe=True)
-        # Drop a frozen snapshot so the next paint reads the retained log,
-        # not a shorter copy that would reset the count.
+        # The window records the line before it tells the view. A second
+        # record is a duplicate and used to force a full document rebuild
+        # on every line, which is what made the screen lag.
+        stored = mgr.record_log(line_str, dedupe=True)
+        if stored is None:
+            recent = mgr.get_display_lines(CAT_ALL)
+            candidate = recent[-1] if recent else ""
+            if not candidate or candidate == getattr(self, "_last_appended", None):
+                return
+            stored = candidate
         self._custom_lines = None
+
+        cat = self.current_category()
+        if (
+            not self._empty
+            and not self._filter_active()
+            and not getattr(self, "_buffer_was_empty", True)
+            and (cat == CAT_ALL or mgr.classify_line(line_str) == cat)
+        ):
+            self._insert_log_line(stored)
+            self._raw_total = getattr(self, "_raw_total", 0) + 1
+            self._count_label.setText(
+                tr("log_lines_total").format(total=self._raw_total)
+            )
+            return
         self._refresh_content(preserve_scroll=True)
 
     def _on_goto_file(self):

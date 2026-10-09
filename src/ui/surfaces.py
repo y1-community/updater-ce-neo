@@ -99,8 +99,12 @@ def clear_glass_plate(widget: QWidget) -> None:
 def seal_updating_text(widget: QWidget, **_unused) -> None:
     """Erase a changing label from the backdrop, then let it draw the new text.
 
-    The minimum width tracks the longest string so a shorter title still
-    covers the previous one. No opaque fill is painted.
+    The width hint keeps a shorter string from shrinking the label below the
+    widest one already painted in it. It is capped at the width the layout has
+    already granted, because the erase only ever covers the widget's own rect:
+    a larger minimum could not have contained an earlier glyph either, and it
+    would stop the window from shrinking on every desktop. No opaque fill is
+    painted.
     """
     if widget is None:
         return
@@ -110,9 +114,14 @@ def seal_updating_text(widget: QWidget, **_unused) -> None:
         return
     _install_erase(widget)
     text = widget.text() if hasattr(widget, "text") else ""
-    if text and hasattr(widget, "fontMetrics"):
-        plain = str(text)
-        # Rich text still carries the visible words; width is only a hint.
-        width = widget.fontMetrics().horizontalAdvance(plain) + 12
-        if width > widget.minimumWidth():
-            widget.setMinimumWidth(width)
+    if not text or not hasattr(widget, "fontMetrics"):
+        return
+    # Nothing has been painted yet when the widget has no width, so there is
+    # nothing to seal and no reason to constrain the layout.
+    current = widget.width()
+    if current <= 0:
+        return
+    # Rich text still carries the visible words; width is only a hint.
+    width = min(widget.fontMetrics().horizontalAdvance(str(text)) + 12, current)
+    if width > widget.minimumWidth():
+        widget.setMinimumWidth(width)

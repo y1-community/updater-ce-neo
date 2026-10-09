@@ -81,12 +81,14 @@ def native_style_candidates(
 
 
 class _ClassicWindowsHoverStyle(QProxyStyle):
-    """Hover wash for the classic Windows style.
+    """Hover wash drawn after the native Windows button.
 
-    ``windows11`` and ``windowsvista`` already paint a hot state. The older
-    ``windows`` style only changes when the button is pressed, so a pointer
-    move does nothing. This draws one translucent accent wash after the
-    native button, and leaves the pressed look to the base style.
+    The classic ``windows`` style only changes when a button is pressed. WinUI
+    (``windows11``) and ``windowsvista`` do paint a hot state, but a fully
+    replaced dark palette often leaves that hot state the same color as the
+    idle button, so the control looks inert. This draws one translucent
+    accent wash after the native bevel. Pressed and checked buttons keep the
+    base style's own look. Sidebar rows paint themselves and never reach here.
     """
 
     def drawControl(self, element, option, painter, widget=None):  # noqa: ANN001
@@ -149,9 +151,10 @@ def setup_native_app_style(app: QApplication) -> str:
     )
     key = _factory_style(*candidates)
     if key:
-        app.setStyle(key)
-        if IS_WINDOWS and key.lower() == "windows":
+        if IS_WINDOWS:
             app.setStyle(_ClassicWindowsHoverStyle(key))
+        else:
+            app.setStyle(key)
         return key
     return app.style().objectName() or "fusion"
 
@@ -737,6 +740,108 @@ def _make_palette(dark: bool, pure_black: bool = False) -> QPalette:
     return p
 
 
+def apply_readable_palette(widget, *, progress: bool = False) -> None:
+    """Copy theme roles onto a widget so text and bars follow light and dark mode.
+
+    A stylesheet ``color: palette(...)`` resolves against a palette Qt replaced
+    when a parent card set a background, which painted black text on the dark
+    card. Roles are taken from the application palette instead.
+    """
+    app = QApplication.instance()
+    if app is None or widget is None:
+        return
+    src = app.palette()
+    pal = widget.palette()
+    for role in (
+        QPalette.ColorRole.Window,
+        QPalette.ColorRole.WindowText,
+        QPalette.ColorRole.Base,
+        QPalette.ColorRole.AlternateBase,
+        QPalette.ColorRole.Text,
+        QPalette.ColorRole.ButtonText,
+        QPalette.ColorRole.Highlight,
+        QPalette.ColorRole.HighlightedText,
+        QPalette.ColorRole.PlaceholderText,
+    ):
+        pal.setColor(role, src.color(role))
+    if progress:
+        # One text color has to clear both the unfilled groove and the filled
+        # chunk. Stylesheet ``palette()`` colors do not: a parent card replaces
+        # the palette and the percent is painted black on the dark bar.
+        groove = src.color(QPalette.ColorRole.AlternateBase)
+        chunk = src.color(QPalette.ColorRole.Highlight)
+        text = src.color(QPalette.ColorRole.WindowText)
+        if contrast_ratio(text, groove) < 4.5:
+            text = _readable_on(groove)
+        chunk = _shift_until_contrast(text, chunk)
+        pal.setColor(QPalette.ColorRole.Base, groove)
+        pal.setColor(QPalette.ColorRole.Window, groove)
+        pal.setColor(QPalette.ColorRole.Highlight, chunk)
+        for role in (
+            QPalette.ColorRole.Text,
+            QPalette.ColorRole.WindowText,
+            QPalette.ColorRole.ButtonText,
+            QPalette.ColorRole.HighlightedText,
+        ):
+            pal.setColor(role, text)
+    widget.setPalette(pal)
+    if progress:
+        widget.setForegroundRole(QPalette.ColorRole.WindowText)
+
+
+def _readable_on(background: QColor) -> QColor:
+    """Near-white or near-black, whichever clears the background more."""
+    light = QColor("#f8fafc")
+    dark = QColor("#0f172a")
+    if contrast_ratio(light, background) >= contrast_ratio(dark, background):
+        return light
+    return dark
+
+
+def _shift_until_contrast(foreground: QColor, background: QColor, minimum: float = 4.5) -> QColor:
+    """Keep the background hue and move its lightness until the text clears it."""
+    if contrast_ratio(foreground, background) >= minimum:
+        return QColor(background)
+    hue = background.hslHue()
+    if hue < 0:
+        hue = 210
+    saturation = background.hslSaturation()
+    start = background.lightness()
+    best = QColor(background)
+    best_ratio = contrast_ratio(foreground, background)
+    for delta in range(8, 256, 8):
+        for light in (start - delta, start + delta):
+            if light < 0 or light > 255:
+                continue
+            trial = QColor.fromHsl(hue, saturation, int(light))
+            ratio = contrast_ratio(foreground, trial)
+            if ratio > best_ratio:
+                best = trial
+                best_ratio = ratio
+            if ratio >= minimum:
+                return trial
+    return best
+
+
+def contrast_ratio(foreground: QColor, background: QColor) -> float:
+    """WCAG contrast of two opaque colors."""
+
+    def channel(value: int) -> float:
+        c = value / 255.0
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+    def luminance(color: QColor) -> float:
+        return (
+            0.2126 * channel(color.red())
+            + 0.7152 * channel(color.green())
+            + 0.0722 * channel(color.blue())
+        )
+
+    lighter = max(luminance(foreground), luminance(background))
+    darker = min(luminance(foreground), luminance(background))
+    return (lighter + 0.05) / (darker + 0.05)
+
+
 # ---------------------------------------------------------------------------
 # QSS generation
 # ---------------------------------------------------------------------------
@@ -763,7 +868,6 @@ def _build_qss() -> str:
     title_bg = "transparent"
     title_color = "palette(window-text)"
     text_color = "palette(window-text)"
-    progress_track = t.progress_track
     if use_glass:
         window_bg = "transparent"
         dialog_border = "1px solid rgba(255, 255, 255, 0.12)" if _state.is_dark else "1px solid rgba(0, 0, 0, 0.10)"
@@ -772,11 +876,6 @@ def _build_qss() -> str:
         card_bg = "transparent"
         card_border = "transparent"
         title_bg = "transparent"
-        # The groove stays see-through. The chunk (below) stays the accent so
-        # the bar still reads on glass.
-        progress_track = (
-            "rgba(255, 255, 255, 0.28)" if _state.is_dark else "rgba(0, 0, 0, 0.18)"
-        )
 
     tab_bar_bg = "rgba(255, 255, 255, 0.08)" if _state.is_dark else "rgba(0, 0, 0, 0.06)"
 
@@ -861,39 +960,6 @@ QListWidget#releaseList::item:selected:hover, QListView#releaseList::item:select
     color: {t.nav_active_text};
 }}
 
-
-/* ── Modern OS software update progress bar (macOS / Windows Fluent) ─ */
-QProgressBar#softwareUpdateProgress {{
-    background-color: {progress_track};
-    border: none;
-    border-radius: 3px;
-    max-height: 6px;
-    min-height: 6px;
-    text-align: center;
-}}
-QProgressBar#softwareUpdateProgress::chunk {{
-    background-color: {t.progress_fill};
-    border-radius: 3px;
-}}
-
-/* ── Cancel button on modern software update card (macOS Settings style) ─ */
-QPushButton#softwareUpdateCancelBtn {{
-    border: none;
-    border-radius: 12px;
-    min-width: 24px;
-    max-width: 24px;
-    min-height: 24px;
-    max-height: 24px;
-    background-color: {t.bg_hover};
-    color: {t.fg_muted};
-    font-size: 11px;
-    font-weight: bold;
-    padding: 0;
-}}
-QPushButton#softwareUpdateCancelBtn:hover {{
-    background-color: rgba(128, 128, 128, 0.35);
-    color: {t.fg};
-}}
 
 /* ── Semantic Labels & Titles (OS-Native Hierarchy) ──── */
 QLabel[cssClass="pageTitle"] {{

@@ -5,8 +5,11 @@ Windows and Linux draw a navigation row instead of a beveled button: icon and
 text on the left, a rounded hover wash, and the accent fill when the row is
 selected. Those shapes match WinUI NavigationView and Adwaita/Breeze sidebars.
 The row stays a real ``QPushButton`` with an empty stylesheet, so the platform
-font, palette, and icon states still do the work. The fill is opaque. A clear
-or translucent paint is what left the previous label on screen.
+font, palette, and icon states still do the work. An idle row does not paint
+its own plate: on acrylic the system material shows through, and on a solid
+sidebar the row uses the pane color so it does not read as a second button.
+Hover and selection paint the rounded wash. Text changes erase that rect
+first, which is what keeps the previous label from staying on screen.
 """
 
 from __future__ import annotations
@@ -47,20 +50,17 @@ def sidebar_corner_radius(platform_name: str | None = None) -> int:
 
 
 def sidebar_hover_color(base: QColor) -> QColor:
-    """A light lift on dark sidebars and a soft shade on light ones."""
+    """Hover veil for a navigation row.
+
+    WinUI and Adwaita lighten the row under the pointer. The wash is
+    translucent so acrylic (and a solid pane) stay visible through it. It is
+    not a second opaque button.
+    """
     if not base.isValid():
         base = QColor("#2b303c")
     if base.lightness() < 140:
-        return QColor(
-            min(255, base.red() + 24),
-            min(255, base.green() + 24),
-            min(255, base.blue() + 26),
-        )
-    return QColor(
-        max(0, base.red() - 14),
-        max(0, base.green() - 14),
-        max(0, base.blue() - 14),
-    )
+        return QColor(255, 255, 255, 40)
+    return QColor(0, 0, 0, 28)
 
 
 def sidebar_base_color() -> QColor:
@@ -92,6 +92,7 @@ class SidebarButton(QPushButton):
         self.setAutoDefault(False)
         self.setFlat(sys.platform != "darwin")
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setCursor(Qt.CursorShape.ArrowCursor)
         self.setStyleSheet("")
 
     def enterEvent(self, event):
@@ -120,13 +121,28 @@ class SidebarButton(QPushButton):
     def _hovered(self) -> bool:
         return self.isEnabled() and (self.underMouse() or self._preview_hover)
 
+    def _erase_row(self, painter: QPainter, rect: QRect) -> None:
+        """Drop the previous glyphs without leaving an idle plate.
+
+        On glass, a transparent source replaces this rect so acrylic shows
+        through an idle row. On a solid desktop the pane color is the
+        background, so the row does not look like its own filled button.
+        """
+        from .surfaces import glass_surfaces_enabled
+
+        if glass_surfaces_enabled():
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
+            painter.fillRect(rect, QColor(0, 0, 0, 0))
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+            return
+        painter.fillRect(rect, sidebar_base_color())
+
     def _paint_platform_row(self, event):
         painter = QPainter(self)
         painter.setClipRect(event.rect())
         try:
             rect = self.rect()
-            base = sidebar_base_color()
-            painter.fillRect(rect, base)
+            self._erase_row(painter, rect)
 
             selected = self.isEnabled() and self.isChecked()
             hovered = self._hovered() and not selected
@@ -137,7 +153,7 @@ class SidebarButton(QPushButton):
                 if selected:
                     painter.setBrush(self.palette().color(QPalette.ColorRole.Highlight))
                 else:
-                    painter.setBrush(sidebar_hover_color(base))
+                    painter.setBrush(sidebar_hover_color(sidebar_base_color()))
                 radius = sidebar_corner_radius()
                 painter.drawRoundedRect(row, radius, radius)
 

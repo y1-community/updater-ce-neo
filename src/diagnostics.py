@@ -17,6 +17,7 @@ import io
 import logging
 import os
 from pathlib import Path
+import queue
 import re
 import subprocess
 import sys
@@ -37,6 +38,42 @@ CAT_GUI = "gui"
 
 _LOCK = threading.RLock()
 _LOCAL = threading.local()
+_DISK_QUEUE: "queue.Queue" = queue.Queue()
+_DISK_WRITER_STARTED = False
+
+
+def _ensure_disk_writer() -> None:
+    """Append log lines on a background thread.
+
+    A chatty install used to open the log file on the GUI thread for every
+    line. On Windows that CreateFile is scanned by the antivirus and the
+    window stops painting, including the progress bar.
+    """
+    global _DISK_WRITER_STARTED
+    if _DISK_WRITER_STARTED:
+        return
+    _DISK_WRITER_STARTED = True
+
+    def _loop():
+        while True:
+            item = _DISK_QUEUE.get()
+            if item is None:
+                return
+            formatted, categories = item
+            for category in categories:
+                try:
+                    path = get_log_file(category)
+                    with open(path, "a", encoding="utf-8", errors="replace") as handle:
+                        handle.write(formatted + "\n")
+                except Exception:
+                    pass
+
+    threading.Thread(target=_loop, name="updater-log-disk", daemon=True).start()
+
+
+def _enqueue_log_disk(formatted: str, categories: tuple) -> None:
+    _ensure_disk_writer()
+    _DISK_QUEUE.put((formatted, categories))
 
 # Identical raw messages seen again inside this window are the same physical
 # event echoed twice (e.g. a tool line that reaches Diagnostics both through
@@ -672,19 +709,45 @@ def display_line_key(line: str) -> str:
     return re.sub(r"\s+", " ", text).strip().lower()
 
 
+# Parsed QT_FLASH_TOOL.log section, keyed by (path, mtime, size). The file can
+# be large and this is read on every diagnostics refresh, so it is parsed once
+# per change instead of on every repaint.
+_QT_LOG_CACHE: dict = {"key": None, "lines": []}
+
+
 def _qt_log_section_lines() -> list[str]:
     """Lines of SP Flash Tool's internal QT_FLASH_TOOL.log, or [] when absent."""
     qt_log = find_sp_qt_flash_tool_log()
-    if not qt_log or not qt_log.is_file() or not qt_log.stat().st_size:
+    if not qt_log:
+        _QT_LOG_CACHE["key"] = None
+        _QT_LOG_CACHE["lines"] = []
         return []
+    try:
+        stat = qt_log.stat()
+    except OSError:
+        return []
+    if not stat.st_size:
+        _QT_LOG_CACHE["key"] = None
+        _QT_LOG_CACHE["lines"] = []
+        return []
+    key = (str(qt_log), stat.st_mtime_ns, stat.st_size)
+    if _QT_LOG_CACHE["key"] == key:
+        return _QT_LOG_CACHE["lines"]
     try:
         content = qt_log.read_text(encoding="utf-8", errors="ignore")
     except Exception:
         return []
-    if not content.strip():
-        return []
-    sep = "-" * 70
-    return ["", sep, f"[SP Internal QT_FLASH_TOOL.log from {qt_log}]", sep, *content.splitlines()]
+    if content.strip():
+        sep = "-" * 70
+        lines: list[str] = [
+            "", sep, f"[SP Internal QT_FLASH_TOOL.log from {qt_log}]", sep,
+            *content.splitlines(),
+        ]
+    else:
+        lines = []
+    _QT_LOG_CACHE["key"] = key
+    _QT_LOG_CACHE["lines"] = lines
+    return lines
 
 
 class DiagnosticsManager:
@@ -789,11 +852,14 @@ class DiagnosticsManager:
             return
         _LOCAL.recording = True
         try:
-            self._record(msg, category, dedupe)
+            return self._record(msg, category, dedupe)
         finally:
             _LOCAL.recording = False
 
-    def _record(self, msg: str, category: str, dedupe: bool):
+    def _record(self, msg: str, category: str, dedupe: bool) -> Optional[str]:
+        """Store one line; return the stored "[ts] msg" text, or None if it
+        was dropped as a duplicate. The diagnostics view uses the return value
+        to append just this line instead of rebuilding the whole log."""
         now = time.monotonic()
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         formatted = f"[{ts}] {msg}"
@@ -821,14 +887,8 @@ class DiagnosticsManager:
                 if len(buf) > self._max_buffer:
                     self._buffers[target_cat] = buf[-self._max_buffer:]
 
-            # 2. Append to on-disk files
-            try:
-                for target_cat in (CAT_ALL, cat):
-                    target_file = get_log_file(target_cat)
-                    with open(target_file, "a", encoding="utf-8", errors="replace") as f:
-                        f.write(formatted + "\n")
-            except Exception as e:
-                logger.debug("Failed appending log to %s: %s", cat, e)
+        _enqueue_log_disk(formatted, (CAT_ALL, cat))
+        return formatted
 
     def start_flash_session(self, package_name: str, method: str, model: str = ""):
         """Log a prominent visual banner marking the start of a flash attempt."""
@@ -861,6 +921,11 @@ class DiagnosticsManager:
         for ln in lines:
             self.record_log(ln, category=target_cat)
         self.set_active_backend("")
+
+    def buffer_count(self, category: str = CAT_ALL) -> int:
+        """Number of lines held in memory for a category (cheap; no copy)."""
+        with _LOCK:
+            return len(self._buffers.get(category, []))
 
     def get_lines(self, category: str = CAT_ALL) -> list[str]:
         """Retrieve all currently buffered lines for a category, reading from disk if buffer is empty."""

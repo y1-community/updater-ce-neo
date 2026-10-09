@@ -427,8 +427,12 @@ class SelectPackagePage(QWidget):
 
         # Slim progress bar, only visible while downloading / preparing.
         self._download_bar = QProgressBar()
-        self._download_bar.setTextVisible(False)
-        self._download_bar.setFixedHeight(8)
+        self._download_bar.setTextVisible(True)
+        self._download_bar.setFormat("%p%")
+        self._download_bar.setMinimumHeight(18)
+        self._download_bar.setStyleSheet("")
+        from .dark import apply_readable_palette
+        apply_readable_palette(self._download_bar, progress=True)
         self._download_bar.setVisible(False)
         pkg_layout.addWidget(self._download_bar)
 
@@ -598,6 +602,12 @@ class SelectPackagePage(QWidget):
         grp_l.addWidget(self._local_banner)
 
         self._local_bar = QProgressBar()
+        self._local_bar.setTextVisible(True)
+        self._local_bar.setFormat("%p%")
+        self._local_bar.setMinimumHeight(18)
+        self._local_bar.setStyleSheet("")
+        from .dark import apply_readable_palette
+        apply_readable_palette(self._local_bar, progress=True)
         self._local_bar.setVisible(False)
         grp_l.addWidget(self._local_bar)
 
@@ -790,6 +800,12 @@ class SelectPackagePage(QWidget):
             self._browse_folder_btn.setIcon(get_symbol_icon("folder", 16))
         if hasattr(self, "_start_btn"):
             self._start_btn.setIcon(get_symbol_icon("install", 16))
+        from .dark import apply_readable_palette
+        for bar_name in ("_download_bar", "_local_bar"):
+            bar = getattr(self, bar_name, None)
+            if bar is not None:
+                bar.setStyleSheet("")
+                apply_readable_palette(bar, progress=True)
 
     def refresh_models(self):
         """Repopulate the device drop-down from what the catalogue offers.
@@ -1600,6 +1616,119 @@ class SelectPackagePage(QWidget):
             self._current_package_name,
             getattr(self, "_current_package_model", ""),
         )
+
+    def focused_firmware(self) -> Optional[dict]:
+        """The release or local package the user is looking at, if any.
+
+        Used when the SP Flash Tool GUI is opened and nothing is already
+        cached: a highlighted catalogue row or a local file is downloaded or
+        extracted first.
+        """
+        if self._views.currentWidget() is self._local_tab:
+            path = (self._current_package_path or self._path_edit.text() or "").strip()
+            if path:
+                return {
+                    "kind": "local",
+                    "path": path,
+                    "model": getattr(self, "_current_package_model", "") or "",
+                    "name": getattr(self, "_current_package_name", "") or Path(path).name,
+                }
+        rel = getattr(self, "_current_selected_rel", None)
+        if not rel or not rel.get("download_url"):
+            return None
+        pkg = self.current_package()
+        dest_dir = downloads.downloads_dir()
+        fname = Path(rel.get("asset_name") or "rom.zip").name
+        slug = getattr(pkg, "slug", None) or "firmware"
+        dest = dest_dir / f"{slug}_{rel.get('tag_name', 'latest')}_{fname}"
+        model = ""
+        if pkg is not None:
+            model = getattr(pkg, "device", "") or ""
+        return {
+            "kind": "online",
+            "path": str(dest),
+            "dest": dest,
+            "url": rel["download_url"],
+            "model": model,
+            "name": self._install_card_title(
+                pkg.name if pkg is not None and getattr(pkg, "name", "") else "",
+                rel,
+                model,
+            ),
+            "release": rel,
+        }
+
+    def begin_external_prepare(self, target: dict, callback) -> bool:
+        """Download or extract ``target``, then ``callback(ok, extract_dir, err)``.
+
+        The work runs on a worker thread. Progress uses the same signals as an
+        install download so the progress card updates and the window stays live.
+        """
+        if not target:
+            return False
+        self._external_tool_callback = callback
+        kind = target.get("kind")
+        if kind == "local":
+            path = target.get("path") or ""
+            if not path:
+                self._external_tool_callback = None
+                return False
+            self._current_package_path = path
+            self._current_package_model = target.get("model") or ""
+            self._current_package_name = target.get("name") or Path(path).name
+            self._prepare_package(path, self._on_external_prep_done)
+            return True
+        if kind != "online":
+            self._external_tool_callback = None
+            return False
+        dest = Path(target["dest"])
+        extract_dir = compute_extract_dir(dest)
+        from ..flash_service import completed_extract_dir
+
+        already = completed_extract_dir(dest)
+        if already and _is_extract_complete(already):
+            cb = self._external_tool_callback
+            self._external_tool_callback = None
+            cb(True, str(already), "")
+            return True
+        if dest.is_file() and dest.stat().st_size > 0 and _is_extract_complete(extract_dir):
+            cb = self._external_tool_callback
+            self._external_tool_callback = None
+            cb(True, str(extract_dir), "")
+            return True
+        self._current_package_model = target.get("model") or ""
+        self._current_package_name = target.get("name") or dest.name
+        if dest.is_file() and dest.stat().st_size > 0:
+            self._current_package_path = str(dest)
+            self._prepare_package(str(dest), self._on_external_prep_done)
+            return True
+        self._download_bar.setValue(0)
+        self._download_bar.setVisible(True)
+        self.download_started.emit(self._current_package_name, self._current_package_model)
+        self._download_worker = downloads.DownloadWorker(target["url"], str(dest))
+        self._download_worker.progress.connect(self._on_download_progress)
+        self._download_worker.status.connect(self._on_download_status)
+        self._download_worker.finished.connect(self._on_external_download_done)
+        self._download_worker.start()
+        return True
+
+    def _on_external_download_done(self, ok, result):
+        self._download_bar.setVisible(False)
+        self.download_finished.emit(ok, str(result))
+        if not ok:
+            cb = getattr(self, "_external_tool_callback", None)
+            self._external_tool_callback = None
+            if cb:
+                cb(False, "", str(result))
+            return
+        self._current_package_path = str(result)
+        self._prepare_package(str(result), self._on_external_prep_done)
+
+    def _on_external_prep_done(self, ok, extract_dir, err):
+        cb = getattr(self, "_external_tool_callback", None)
+        self._external_tool_callback = None
+        if cb:
+            cb(bool(ok), str(extract_dir or ""), str(err or ""))
 
     def _package_for_selection(self):
         try:

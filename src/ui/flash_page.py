@@ -1,7 +1,7 @@
 """Flash page — modern OS software update in-progress display (macOS / iOS / Windows Fluent style)."""
 
 from PySide6.QtCore import QSize, Qt
-from PySide6.QtGui import QColor, QPalette, QPixmap
+from PySide6.QtGui import QColor, QFont, QPalette, QPixmap
 from PySide6.QtWidgets import (
     QCheckBox,
     QFrame,
@@ -62,15 +62,37 @@ class _StatusLabel(QLabel):
 
 
 def _status_label(text: str, *, strong: bool = False) -> _StatusLabel:
+    from .dark import apply_readable_palette
+
     label = _StatusLabel(text)
     label.setMinimumHeight(18)
-    size = "13px" if strong else "12px"
-    weight = "600" if strong else "400"
-    label.setStyleSheet(
-        f"font-size: {size}; font-weight: {weight}; "
-        "color: palette(window-text); background: transparent; border: none;"
-    )
+    font = label.font()
+    font.setPixelSize(13 if strong else 12)
+    font.setWeight(QFont.Weight.DemiBold if strong else QFont.Weight.Normal)
+    label.setFont(font)
+    label.setStyleSheet("background: transparent; border: none;")
+    apply_readable_palette(label)
     return label
+
+
+def _configure_progress(bar: QProgressBar) -> None:
+    """A platform progress bar. No stylesheet, so Aqua / WinUI / Breeze paint it.
+
+    The percent is visible in the native groove. A fixed 6px stylesheet bar
+    was what disappeared on acrylic and never moved on screen.
+    """
+    from .dark import apply_readable_palette
+
+    bar.setObjectName("softwareUpdateProgress")
+    bar.setStyleSheet("")
+    apply_readable_palette(bar, progress=True)
+    bar.setRange(0, 100)
+    bar.setValue(0)
+    bar.setTextVisible(True)
+    bar.setFormat("%p%")
+    bar.setMinimumHeight(18)
+    bar.setMaximumHeight(24)
+    bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
 
 def _make_squircle_icon(symbol: str, asset_name: str = "") -> QLabel:
@@ -102,7 +124,6 @@ class FlashPage(QWidget):
         self._cancel_callback = None
         self._cancel_wait_callback = None
         self._cancel_download_callback = None
-        self._open_sp_gui_callback = None
         self._model = ""
         self._package_name = ""
         self._wait_banner_key = ""
@@ -115,6 +136,11 @@ class FlashPage(QWidget):
         # 0 = no step emphasised. Set by highlight_guide_step() when the
         # backend tells us the device is not in flash mode yet.
         self._guide_step = 0
+        self._failed = False
+        self._complete = False
+        self._prompt_only = False
+        self._install_retry_cb = None
+        self._power_off_continue_cb = None
         self._build_ui()
 
     def _build_ui(self):
@@ -134,34 +160,28 @@ class FlashPage(QWidget):
         self._seal_status_labels()
 
     def _style_cancel_button(self, btn: QPushButton):
-        t = T()
         btn.setFixedSize(24, 24)
-        btn.setCursor(Qt.PointingHandCursor)
+        btn.setCursor(Qt.ArrowCursor)
         btn.setIcon(get_symbol_icon("cancel", 12))
         btn.setIconSize(QSize(12, 12))
         btn.setText("")
-        btn.setStyleSheet(
-            f"QPushButton#softwareUpdateCancelBtn {{"
-            f"  background: {t.bg_hover}; color: {t.fg}; border: none; border-radius: 12px;"
-            f"}}"
-            f"QPushButton#softwareUpdateCancelBtn:hover {{"
-            f"  background: {t.border};"
-            f"}}"
-        )
+        btn.setStyleSheet("")
+        btn.setFlat(False)
 
     def _wrap_centered(self, card_widget: QWidget, extra_below: QWidget | None = None) -> QWidget:
         """Fill the content width with the progress card."""
         container = QWidget()
         v = QVBoxLayout(container)
         v.setContentsMargins(4, 2, 4, 2)
-        v.setSpacing(6)
-        v.addStretch(1)
+        v.setSpacing(8)
 
         heading = QLabel(tr("flash_install_in_progress"))
         heading.setStyleSheet(
-            "font-size: 14px; font-weight: 700; color: palette(window-text); "
+            "font-size: 14px; font-weight: 700; "
             "background: transparent; border: none; margin: 0; padding: 0;"
         )
+        from .dark import apply_readable_palette
+        apply_readable_palette(heading)
         self._headings.append(heading)
         # The window header already says "Install in Progress" / "Install
         # Complete". This in-card copy is kept for tests but not shown.
@@ -170,7 +190,8 @@ class FlashPage(QWidget):
         card_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
         v.addWidget(card_widget)
         if extra_below is not None:
-            v.addWidget(extra_below, 0, Qt.AlignCenter)
+            extra_below.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
+            v.addWidget(extra_below)
         v.addStretch(1)
         return container
 
@@ -195,10 +216,7 @@ class FlashPage(QWidget):
         self._prep_banner.setVisible(False)
 
         self._prep_progress = QProgressBar()
-        self._prep_progress.setObjectName("softwareUpdateProgress")
-        self._prep_progress.setRange(0, 100)
-        self._prep_progress.setFixedHeight(8)
-        self._prep_progress.setTextVisible(False)
+        _configure_progress(self._prep_progress)
         col.addWidget(self._prep_progress)
 
         self._prep_step = _status_label(tr("step_extract"))
@@ -239,11 +257,7 @@ class FlashPage(QWidget):
         col.addWidget(self._wait_pkg_label)
 
         self._wait_progress_bar = QProgressBar()
-        self._wait_progress_bar.setObjectName("softwareUpdateProgress")
-        self._wait_progress_bar.setRange(0, 100)
-        self._wait_progress_bar.setValue(0)
-        self._wait_progress_bar.setFixedHeight(8)
-        self._wait_progress_bar.setTextVisible(False)
+        _configure_progress(self._wait_progress_bar)
         col.addWidget(self._wait_progress_bar)
 
         self._wait_prompt_label = _status_label(
@@ -255,8 +269,6 @@ class FlashPage(QWidget):
         self._wait_banner.setVisible(False)
         self._wait_status = StatusTag("idle")
         self._wait_status.setVisible(False)
-        self._method_note = QLabel("")
-        self._method_note.setVisible(False)
 
         card_layout.addLayout(col, 1)
 
@@ -267,19 +279,16 @@ class FlashPage(QWidget):
         self._wait_cancel_btn.clicked.connect(self._on_cancel_wait)
         card_layout.addWidget(self._wait_cancel_btn, 0, Qt.AlignVCenter)
 
+        self._wait_continue_btn = QPushButton(tr("dialog_pre_install_continue"))
+        self._wait_continue_btn.setVisible(False)
+        self._wait_continue_btn.setCursor(Qt.ArrowCursor)
+        self._wait_continue_btn.setMinimumHeight(28)
+        self._wait_continue_btn.clicked.connect(self._on_power_off_continue)
+        card_layout.addWidget(self._wait_continue_btn, 0, Qt.AlignVCenter)
+
         self._wait_card.set_layout(card_layout)
 
-        below_widget = QWidget()
-        below_layout = QVBoxLayout(below_widget)
-        below_layout.setContentsMargins(0, 0, 0, 0)
-        below_layout.setSpacing(6)
-
-        from ..sp_flash_gui import is_sp_flash_gui_supported
-        if is_sp_flash_gui_supported():
-            self._open_sp_gui_btn = QPushButton(tr("flash_btn_open_sp_gui"))
-            self._open_sp_gui_btn.setToolTip(tr("flash_sp_gui_tooltip"))
-            self._open_sp_gui_btn.clicked.connect(self._on_open_sp_gui_clicked)
-            below_layout.addWidget(self._open_sp_gui_btn, 0, Qt.AlignCenter)
+        # SP Flash Tool GUI is a sidebar action. This page does not grow a second launcher.
 
         # Guidance images are removed; keep dummy attributes for backward compatibility
         self._status_img = QLabel()
@@ -291,7 +300,7 @@ class FlashPage(QWidget):
             text.setWordWrap(True)
             self._guide_texts.append((key, text))
 
-        return self._wrap_centered(self._wait_card, below_widget if is_sp_flash_gui_supported() else None)
+        return self._wrap_centered(self._wait_card)
 
     def _build_flashing_view(self):
         self._progress_card = Card()
@@ -314,11 +323,7 @@ class FlashPage(QWidget):
         self._flash_banner.setVisible(False)
 
         self._progress_bar = QProgressBar()
-        self._progress_bar.setObjectName("softwareUpdateProgress")
-        self._progress_bar.setRange(0, 100)
-        self._progress_bar.setValue(0)
-        self._progress_bar.setFixedHeight(8)
-        self._progress_bar.setTextVisible(False)
+        _configure_progress(self._progress_bar)
         col.addWidget(self._progress_bar)
 
         sub_row = QHBoxLayout()
@@ -342,28 +347,58 @@ class FlashPage(QWidget):
         self._cancel_btn.clicked.connect(self._on_cancel)
         card_layout.addWidget(self._cancel_btn, 0, Qt.AlignVCenter)
 
+        from .icons import get_symbol_pixmap
+        self._done_mark = QLabel()
+        self._done_mark.setPixmap(get_symbol_pixmap("complete", 22))
+        self._done_mark.setFixedSize(24, 24)
+        self._done_mark.setAlignment(Qt.AlignCenter)
+        self._done_mark.setVisible(False)
+        card_layout.addWidget(self._done_mark, 0, Qt.AlignVCenter)
+
+        self._flash_retry_btn = QPushButton(tr("flash_btn_retry"))
+        self._flash_retry_btn.setVisible(False)
+        self._flash_retry_btn.setCursor(Qt.ArrowCursor)
+        self._flash_retry_btn.setMinimumHeight(28)
+        self._flash_retry_btn.clicked.connect(self._on_install_retry)
+        card_layout.addWidget(self._flash_retry_btn, 0, Qt.AlignVCenter)
+
         self._progress_card.set_layout(card_layout)
 
         # Warning below the update card
         warning_container = QWidget()
         w_layout = QVBoxLayout(warning_container)
         w_layout.setContentsMargins(0, 0, 0, 0)
+        from .dark import apply_readable_palette
+
         self._warning = QLabel(tr("flash_warning"))
         self._warning.setWordWrap(True)
         self._warning.setAlignment(Qt.AlignCenter)
-        self._warning.setProperty("cssClass", "warning-banner")
-        self._warning.setStyleSheet("font-size: 12px; color: palette(placeholder-text); background: transparent;")
-        w_layout.addWidget(self._warning, 0, Qt.AlignCenter)
+        warn_font = self._warning.font()
+        warn_font.setPixelSize(13)
+        self._warning.setFont(warn_font)
+        self._warning.setStyleSheet("background: transparent; border: none;")
+        apply_readable_palette(self._warning)
+        w_layout.addWidget(self._warning)
 
         self._appeal = QWidget()
         appeal_layout = QVBoxLayout(self._appeal)
-        appeal_layout.setContentsMargins(0, 8, 0, 0)
-        appeal_layout.setSpacing(4)
-        self._appeal_label = QLabel(tr("donate_thanks"))
+        appeal_layout.setContentsMargins(0, 4, 0, 0)
+        appeal_layout.setSpacing(8)
+        self._appeal_label = QLabel(self._coffee_pitch())
         self._appeal_label.setWordWrap(True)
         self._appeal_label.setAlignment(Qt.AlignCenter)
-        self._appeal_label.setStyleSheet("font-size: 12px; background: transparent; border: none;")
+        pitch_font = self._appeal_label.font()
+        pitch_font.setPixelSize(15)
+        pitch_font.setWeight(QFont.Weight.DemiBold)
+        self._appeal_label.setFont(pitch_font)
+        self._appeal_label.setStyleSheet("background: transparent; border: none;")
+        apply_readable_palette(self._appeal_label)
         appeal_layout.addWidget(self._appeal_label)
+        self._coffee_btn = QPushButton(tr("donate_coffee_btn"))
+        self._coffee_btn.setCursor(Qt.ArrowCursor)
+        self._coffee_btn.setStyleSheet("")
+        self._coffee_btn.clicked.connect(self._open_coffee_page)
+        appeal_layout.addWidget(self._coffee_btn, 0, Qt.AlignCenter)
         self._appeal_dont = QCheckBox(tr("donate_dont_ask"))
         self._appeal_dont.toggled.connect(self._on_appeal_dont_ask)
         appeal_layout.addWidget(self._appeal_dont, 0, Qt.AlignCenter)
@@ -404,11 +439,7 @@ class FlashPage(QWidget):
         col.addWidget(self._download_pkg_label)
 
         self._download_progress = QProgressBar()
-        self._download_progress.setObjectName("softwareUpdateProgress")
-        self._download_progress.setRange(0, 100)
-        self._download_progress.setValue(0)
-        self._download_progress.setFixedHeight(8)
-        self._download_progress.setTextVisible(False)
+        _configure_progress(self._download_progress)
         col.addWidget(self._download_progress)
 
         self._download_status_label = _status_label(tr("sel_download_start"))
@@ -428,7 +459,6 @@ class FlashPage(QWidget):
         container = QWidget()
         v = QVBoxLayout(container)
         v.setContentsMargins(0, 0, 0, 0)
-        v.addStretch(1)
         h = QHBoxLayout()
         h.setContentsMargins(0, 0, 0, 0)
         h.addStretch(1)
@@ -438,10 +468,11 @@ class FlashPage(QWidget):
         card_col.setSpacing(8)
 
         self._download_heading = QLabel(tr("flash_download_in_progress"))
-        t = T()
         self._download_heading.setStyleSheet(
-            f"font-size: 14px; font-weight: 700; color: palette(window-text); background: transparent; border: none; margin: 0; padding: 0;"
+            "font-size: 14px; font-weight: 700; background: transparent; border: none; margin: 0; padding: 0;"
         )
+        from .dark import apply_readable_palette
+        apply_readable_palette(self._download_heading)
         card_col.addWidget(self._download_heading, 0, Qt.AlignLeft)
         card_col.addWidget(self._download_card, 0, Qt.AlignCenter)
 
@@ -468,7 +499,7 @@ class FlashPage(QWidget):
         self._switch_view(self._downloading_view)
 
     def update_download_progress(self, percent: int, status_text: str = ""):
-        self._download_progress.setValue(max(0, min(100, int(percent))))
+        self._set_determinate(self._download_progress, percent)
         if status_text:
             self._download_status_label.setText(status_text)
 
@@ -484,22 +515,98 @@ class FlashPage(QWidget):
         pass
 
     def show_preparing(self):
+        self._complete = False
         self._switch_view(self._preparing_view)
         self._prep_banner.set_key("flash_preparing")
         self._prep_step_key = "step_extract"
         self._prep_step.setText(tr("step_extract"))
 
     def show_waiting(self):
+        self._complete = False
         self._switch_view(self._waiting_view)
+        if not self._prompt_only:
+            # Searching for the device has no byte total yet. The native
+            # indeterminate groove keeps moving so the window does not look frozen.
+            self._wait_progress_bar.setRange(0, 0)
 
     def show_flashing(self):
         self._switch_view(self._flashing_view)
-        self._warning.setVisible(True)
+        failed = self._failed
+        done = bool(getattr(self, "_complete", False)) and not failed
+        self._warning.setVisible(not failed and not done)
+        if hasattr(self, "_flash_retry_btn"):
+            self._flash_retry_btn.setVisible(failed)
+            self._cancel_btn.setVisible(not failed and not done)
+        if hasattr(self, "_done_mark"):
+            self._done_mark.setVisible(done)
+
+    def _set_determinate(self, bar: QProgressBar, percent) -> None:
+        percent = max(0, min(100, int(percent)))
+        bar.setRange(0, 100)
+        bar.setFormat("%p%")
+        bar.setValue(percent)
+        bar.setTextVisible(True)
+
+    def show_install_failure(self, message: str, percent: int = 0) -> None:
+        """Keep the failure on the install progress card, with Retry in the cancel slot."""
+        self._failed = True
+        self._prompt_only = False
+        self.show_flashing()
+        self._warning.setVisible(False)
+        if hasattr(self, "_appeal"):
+            self._appeal.setVisible(False)
+        self._set_determinate(self._progress_bar, percent)
+        self._step_label.setText(message)
+        self._eta_label.setText("")
+        if hasattr(self, "_wait_continue_btn"):
+            self._wait_continue_btn.setVisible(False)
+
+    def clear_install_failure(self) -> None:
+        self._failed = False
+        self._complete = False
+        if hasattr(self, "_done_mark"):
+            self._done_mark.setVisible(False)
+        if hasattr(self, "_flash_retry_btn"):
+            self._flash_retry_btn.setVisible(False)
+            self._cancel_btn.setVisible(True)
+            self._cancel_btn.setEnabled(True)
+
+    def show_power_off_prompt(self) -> None:
+        """Prompt to power off and unplug. Does not start a flash by itself."""
+        self._failed = False
+        self._prompt_only = True
+        self.clear_install_failure()
+        self.show_waiting()
+        prompt = tr("flash_connect_prompt").format(model=self._connect_model_text())
+        self._wait_prompt_label.setText(prompt)
+        self._set_determinate(self._wait_progress_bar, 0)
+        self._wait_cancel_btn.setVisible(False)
+        self._wait_continue_btn.setVisible(True)
+
+    def leave_power_off_prompt(self) -> None:
+        self._prompt_only = False
+        if hasattr(self, "_wait_continue_btn"):
+            self._wait_continue_btn.setVisible(False)
+        if hasattr(self, "_wait_cancel_btn"):
+            self._wait_cancel_btn.setVisible(True)
+
+    def on_install_retry(self, cb) -> None:
+        self._install_retry_cb = cb
+
+    def _on_install_retry(self) -> None:
+        if callable(self._install_retry_cb):
+            self._install_retry_cb()
+
+    def on_power_off_continue(self, cb) -> None:
+        self._power_off_continue_cb = cb
+
+    def _on_power_off_continue(self) -> None:
+        if callable(self._power_off_continue_cb):
+            self._power_off_continue_cb()
 
     def set_method(self, method):
         """Record the install method chosen in Settings for this run."""
         self._method = normalise_method(method)
-        self._update_method_note()
 
     def _initsteps_image(self):
         if paths.IS_MAC:
@@ -512,16 +619,6 @@ class FlashPage(QWidget):
 
     def current_method(self):
         return self._method
-
-    def _update_method_note(self):
-        if self._method == METHOD_SP:
-            note = tr("flash_method_note_sp")
-        elif self._method == METHOD_MTK_MAC:
-            note = tr("flash_method_note_mtk_mac")
-        else:
-            note = ""
-        self._method_note.setText(note)
-        self._method_note.setVisible(bool(note))
 
     def highlight_guide_step(self, step):
         """Emphasise one numbered step of the connection guide."""
@@ -539,22 +636,33 @@ class FlashPage(QWidget):
     def set_model(self, model):
         self._model = (model or "").strip() or ""
 
+    def _coffee_pitch(self) -> str:
+        from ..config import get_app_name
+
+        return tr("donate_coffee_pitch").format(app=get_app_name())
+
+    def _open_coffee_page(self) -> None:
+        from ..browser import open_browser
+
+        open_browser("https://ko-fi.com/teamslide")
+
     def show_completion_appeal(self, visible: bool, callback=None) -> None:
-        """Inline donations appeal under the finished install. Hidden when credits are off."""
+        """Coffee note under a finished install. Hidden only when the user opted out before."""
         self._appeal_callback = callback
         if not hasattr(self, "_appeal"):
             return
+        if hasattr(self, "_appeal_label"):
+            self._appeal_label.setText(self._coffee_pitch())
         self._appeal_dont.blockSignals(True)
         self._appeal_dont.setChecked(False)
         self._appeal_dont.blockSignals(False)
         self._appeal.setVisible(bool(visible))
 
     def _on_appeal_dont_ask(self, checked: bool) -> None:
+        """Remember the choice for the next install. This success screen stays up."""
         if not checked:
             return
         callback = self._appeal_callback
-        if hasattr(self, "_appeal"):
-            self._appeal.setVisible(False)
         if callable(callback):
             callback()
 
@@ -622,7 +730,16 @@ class FlashPage(QWidget):
         self._warning.setVisible(True)
 
     def set_device_done(self):
+        self._complete = True
+        self._failed = False
         self._warning.setVisible(False)
+        if hasattr(self, "_cancel_btn"):
+            self._cancel_btn.setVisible(False)
+            self._cancel_btn.setEnabled(False)
+        if hasattr(self, "_done_mark"):
+            self._done_mark.setVisible(True)
+        if hasattr(self, "_flash_retry_btn"):
+            self._flash_retry_btn.setVisible(False)
         source = getattr(self, "_release_source", None)
         if source is not None:
             self.set_release_icon(source, complete=True)
@@ -633,10 +750,12 @@ class FlashPage(QWidget):
         self._eta_label.setText("")
 
     def update_prep_progress(self, percent):
-        self._prep_progress.setValue(percent)
+        self._set_determinate(self._prep_progress, percent)
 
     def update_progress(self, percent):
-        self._progress_bar.setValue(percent)
+        self._set_determinate(self._progress_bar, percent)
+        if self._stack.currentWidget() is self._waiting_view and not self._prompt_only:
+            self._set_determinate(self._wait_progress_bar, percent)
 
     def update_step(self, step_key):
         self._step_key = step_key
@@ -681,10 +800,18 @@ class FlashPage(QWidget):
             self._download_heading.setText(tr("flash_download_in_progress"))
         if hasattr(self, "_download_cancel_btn"):
             self._download_cancel_btn.setToolTip(tr("flash_btn_cancel"))
-        if hasattr(self, "_wait_prompt_label"):
+        if hasattr(self, "_wait_prompt_label") and not self._prompt_only:
             self._wait_prompt_label.setText(
                 tr("flash_connect_device_prompt").format(model=self._connect_model_text())
             )
+        elif self._prompt_only and hasattr(self, "_wait_prompt_label"):
+            self._wait_prompt_label.setText(
+                tr("flash_connect_prompt").format(model=self._connect_model_text())
+            )
+        if hasattr(self, "_flash_retry_btn"):
+            self._flash_retry_btn.setText(tr("flash_btn_retry"))
+        if hasattr(self, "_wait_continue_btn"):
+            self._wait_continue_btn.setText(tr("dialog_pre_install_continue"))
         self._prep_banner.retranslate()
         if self._wait_banner_key == "connect":
             self._wait_banner.set_key("flash_connect_device_prompt", model=self._connect_model_text())
@@ -696,9 +823,10 @@ class FlashPage(QWidget):
             lbl.setText(tr(key))
         self._warning.setText(tr("flash_warning"))
         if hasattr(self, "_appeal_label"):
-            self._appeal_label.setText(tr("donate_thanks"))
+            self._appeal_label.setText(self._coffee_pitch())
             self._appeal_dont.setText(tr("donate_dont_ask"))
-        self._update_method_note()
+        if hasattr(self, "_coffee_btn"):
+            self._coffee_btn.setText(tr("donate_coffee_btn"))
         self._apply_guide_highlight()
         if self._prep_step_key:
             self._prep_step.setText(tr(self._prep_step_key))
@@ -721,9 +849,6 @@ class FlashPage(QWidget):
         self._pkg_row.retranslate()
         self._elapsed_row.retranslate()
         self._eta_row.retranslate()
-        if hasattr(self, "_open_sp_gui_btn"):
-            self._open_sp_gui_btn.setText(tr("flash_btn_open_sp_gui"))
-            self._open_sp_gui_btn.setToolTip(tr("flash_sp_gui_tooltip"))
 
     def _seal_status_labels(self):
         """Erase the previous status string on the label's own rect."""
@@ -739,15 +864,17 @@ class FlashPage(QWidget):
             label = getattr(self, name, None)
             if label is None:
                 continue
+            from .dark import apply_readable_palette
+
+            apply_readable_palette(label)
             if glass_surfaces_enabled():
-                # These lines sit on the card. Punching them clear leaves the
-                # previous title and status smeared across the progress bar.
-                # The card repaints its frost, then the label draws the new text.
-                style = label.styleSheet()
-                if "color:" not in style:
-                    style = "color: palette(window-text); " + style
-                label.setStyleSheet(style)
+                # These lines sit on the card, whose frost fill is only a few
+                # percent alpha and so cannot erase the previous glyphs. Without
+                # an explicit backdrop erase the old package title / step / ETA
+                # smeared across the progress bar and overlapped the new text.
+                label.setStyleSheet("background: transparent; border: none;")
                 label.setAutoFillBackground(False)
+                seal_updating_text(label)
                 continue
             label.setAutoFillBackground(True)
             pal = label.palette()
@@ -765,12 +892,26 @@ class FlashPage(QWidget):
             heading.setPalette(pal)
 
     def refresh_theme(self):
-        t = T()
+        from .dark import apply_readable_palette
+
         self._seal_status_labels()
+        for bar_name in ("_prep_progress", "_wait_progress_bar", "_progress_bar", "_download_progress"):
+            bar = getattr(self, bar_name, None)
+            if bar is not None:
+                apply_readable_palette(bar, progress=True)
         for h in getattr(self, "_headings", []):
             h.setStyleSheet(
-                f"font-size: 14px; font-weight: 700; color: palette(window-text); background: transparent; border: none; margin: 0; padding: 0;"
+                "font-size: 14px; font-weight: 700; "
+                "background: transparent; border: none; margin: 0; padding: 0;"
             )
+            apply_readable_palette(h)
+        download_heading = getattr(self, "_download_heading", None)
+        if download_heading is not None:
+            download_heading.setStyleSheet(
+                "font-size: 14px; font-weight: 700; "
+                "background: transparent; border: none; margin: 0; padding: 0;"
+            )
+            apply_readable_palette(download_heading)
         for btn in (
             getattr(self, "_cancel_btn", None),
             getattr(self, "_wait_cancel_btn", None),
@@ -785,9 +926,6 @@ class FlashPage(QWidget):
     def on_cancel_wait(self, callback):
         self._cancel_wait_callback = callback
 
-    def on_open_sp_gui(self, callback):
-        self._open_sp_gui_callback = callback
-
     def _on_cancel(self):
         if self._cancel_callback:
             self._cancel_callback()
@@ -795,7 +933,3 @@ class FlashPage(QWidget):
     def _on_cancel_wait(self):
         if self._cancel_wait_callback:
             self._cancel_wait_callback()
-
-    def _on_open_sp_gui_clicked(self):
-        if self._open_sp_gui_callback:
-            self._open_sp_gui_callback()

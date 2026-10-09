@@ -15,6 +15,7 @@ from . import paths
 logger = logging.getLogger(__name__)
 
 HISTORY_INI = "history.ini"
+DA_FILENAME = "MTK_AllInOne_DA.bin"
 
 
 def is_sp_flash_gui_supported() -> bool:
@@ -292,6 +293,72 @@ def resolve_cached_firmware(
     return resolved_scatter, resolved_extract, model
 
 
+def cached_install_firmware(latest: Optional[dict]) -> Tuple[Optional[Path], Optional[Path]]:
+    """Extracted firmware from a previous install, if those files are still on disk.
+
+    This is the first choice when handing a package to the SP Flash Tool GUI:
+    a cached release is reused instead of downloading it again. Failed and
+    successful installs are both recorded the same way, so either can be
+    opened again.
+    """
+    if not latest:
+        return None, None
+    scatter_raw = latest.get("scatter_path") or ""
+    extract_raw = latest.get("extract_dir") or ""
+    scatter = Path(scatter_raw) if scatter_raw else None
+    extract = Path(extract_raw) if extract_raw else None
+    if scatter is not None and scatter.is_file():
+        if extract is None or not extract.is_dir():
+            extract = scatter.parent
+        return scatter.resolve(), extract.resolve()
+    if extract is not None and extract.is_dir():
+        from .flash_service import _find_scatter
+
+        found = _find_scatter(extract, allow_raise=False)
+        if found and Path(found).is_file():
+            return Path(found).resolve(), extract.resolve()
+    return None, None
+
+
+def pin_sp_flash_history(
+    sp_dir: Union[Path, str],
+    scatter_path: Union[Path, str],
+) -> Tuple[bool, str, str]:
+    """Write history.ini beside the SP Flash Tool binary.
+
+    ``RecentOpenFile.lastDir`` is the absolute path of the extracted scatter
+    on the user's computer (images live next to it). ``LastDAFilePath.lastDir``
+    is ``MTK_AllInOne_DA.bin`` inside ``sp_dir``. Returns ``(ok, da_abs, scatter_abs)``.
+    """
+    tool_dir = Path(sp_dir)
+    scatter = Path(scatter_path)
+    if not scatter.is_file() or not tool_dir.is_dir():
+        return False, "", ""
+    scatter_abs = str(scatter.resolve())
+    da_file = _ensure_da_payload(tool_dir)
+    if not da_file.is_file():
+        return False, "", scatter_abs
+    da_abs = str(da_file.resolve())
+    # The scatter entry must stay the extracted file, not a copy dropped into
+    # the tool directory. A copy has no partition images beside it, which is
+    # the "scatter not found / images missing" open.
+    wrote = update_sp_history_ini(
+        sp_dir=tool_dir,
+        scatter_path=scatter_abs,
+        extract_dir=str(scatter.resolve().parent),
+    )
+    if not wrote:
+        return False, da_abs, scatter_abs
+    history = tool_dir / HISTORY_INI
+    try:
+        text = history.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False, da_abs, scatter_abs
+    if scatter_abs not in text or da_abs not in text:
+        return False, da_abs, scatter_abs
+    return True, da_abs, scatter_abs
+
+
 def check_cached_firmware_readiness(
     scatter_path: Optional[Union[Path, str]] = None,
     extract_dir: Optional[Union[Path, str]] = None,
@@ -316,6 +383,74 @@ def check_cached_firmware_readiness(
         return False, sc_file, ext_dir, f"Images referenced in scatter file were not found: {missing_str}"
 
     return True, sc_file, ext_dir, "Firmware package is ready."
+
+
+def _da_source_dirs() -> List[Path]:
+    """Directories that may hold a download agent we are allowed to copy in.
+
+    Ordered most specific first and always platform first: each desktop stages
+    the payload from its own tool tree, so a Windows build never borrows the
+    Linux file (or the other way round). The trailing entries exist on every
+    platform, including macOS where the SP Flash Tool GUI itself does not run.
+    """
+    dirs: List[Path] = [
+        paths.SP_FLASH_TOOL_DIR,
+        paths.COMPAT_DIR,
+    ]
+    tools = paths.REPO_ROOT / "tools"
+    if paths.IS_WINDOWS:
+        dirs.append(tools / "windows" / "SP_Flash_Tool_v5.1904_Win")
+    elif not paths.IS_MAC:
+        dirs.append(tools / "linux" / "SP_Flash_Tool_v5.1904_Linux")
+    dirs.append(tools / "SP_Flash_Tool")
+    # mtkclient ships with the app everywhere; its loader directory carries
+    # the per-hardware-code agents as the platform-independent fallback.
+    dirs.append(paths.MTKCLIENT_DIR / "mtkclient" / "Loader")
+    return dirs
+
+
+def _da_source_files() -> List[Path]:
+    """Concrete DA files that could be staged, best candidate first."""
+    files: List[Path] = []
+    for directory in _da_source_dirs():
+        try:
+            exact = directory / DA_FILENAME
+            if exact.is_file():
+                files.append(exact)
+                continue
+            # mtkclient names its agents after the hardware code
+            # (MTK_AllInOne_DA_7687.bin); its highest code is the newest.
+            numbered = [
+                p for p in directory.glob("MTK_AllInOne_DA_*.bin")
+                if p.stem.rsplit("_", 1)[-1].isdigit()
+            ]
+            files.extend(sorted(numbered, key=lambda p: int(p.stem.rsplit("_", 1)[-1]), reverse=True))
+        except OSError:
+            continue
+    return files
+
+
+def _ensure_da_payload(sp_dir: Path) -> Path:
+    """Return ``sp_dir/MTK_AllInOne_DA.bin``, staging our bundled copy if absent.
+
+    SP Flash Tool takes the download-agent path from ``history.ini``. A staged
+    or updated tool directory (or one supplied by the user) may not carry the
+    DA yet, which would leave the GUI with an empty agent field; copy the copy
+    the app ships so the GUI opens populated. macOS never reaches this (the
+    SP Flash Tool GUI is unsupported there) but the same code keeps the
+    Linux/Windows payloads separate.
+    """
+    target = sp_dir / DA_FILENAME
+    if target.is_file():
+        return target
+    for src in _da_source_files():
+        try:
+            shutil.copy2(src, target)
+            logger.info("Staged DA payload into %s from %s", target, src)
+            return target
+        except Exception as e:
+            logger.debug("Could not stage DA payload from %s: %s", src, e)
+    return target
 
 
 def update_sp_history_ini(
@@ -357,8 +492,10 @@ def update_sp_history_ini(
         if not sp_dir.is_dir():
             return False
 
-        # 1. Resolve DA file path to absolute path conforming to OS conventions
-        da_file = sp_dir / "MTK_AllInOne_DA.bin"
+        # 1. Resolve DA file path to absolute path conforming to OS conventions.
+        # The GUI reads this from history.ini, so make sure the file exists in
+        # the tool directory even when the directory did not ship with it.
+        da_file = _ensure_da_payload(sp_dir)
         da_abs = os.path.abspath(str(da_file))
 
         # 2. Resolve cached firmware scatter & extract
@@ -508,6 +645,12 @@ def launch_sp_flash_tool_gui(
         # IMPORTANT: Run the binary directly with process_env(chosen_dir) instead of
         # flash_tool.sh. flash_tool.sh resets LD_LIBRARY_PATH and causes a segmentation fault.
         env = linux_sp_flash.process_env(chosen_dir)
+        pinned, _da_abs, _scatter_abs = pin_sp_flash_history(chosen_dir, scatter_path)
+        if not pinned:
+            return False, (
+                "Could not write history.ini with the extracted scatter and "
+                "MTK_AllInOne_DA.bin."
+            )
         try:
             subprocess.Popen(
                 [str(bin_path)],
@@ -546,6 +689,12 @@ def launch_sp_flash_tool_gui(
             model=model,
         )
 
+        pinned, _da_abs, _scatter_abs = pin_sp_flash_history(chosen_dir, scatter_path)
+        if not pinned:
+            return False, (
+                "Could not write history.ini with the extracted scatter and "
+                "MTK_AllInOne_DA.bin."
+            )
         try:
             creationflags = getattr(subprocess, "DETACHED_PROCESS", 0)
             subprocess.Popen(

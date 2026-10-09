@@ -142,11 +142,16 @@ Write-Host "[SUCCESS] Standalone application ready at dist\$AppDirName\$AppExeNa
 
 # 6. Inno Setup Compilation
 if (-not $NoInstaller) {
+    # Wrap the filtered list again. A single match comes back as a string, and
+    # indexing that string yields "C" instead of the compiler path.
     $IsccCandidates = @(
-        "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
-        "${env:ProgramFiles}\Inno Setup 6\ISCC.exe",
-        (Get-Command ISCC.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source)
-    ) | Where-Object { $_ -and (Test-Path $_) }
+        @(
+            "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+            "${env:ProgramFiles}\Inno Setup 6\ISCC.exe",
+            (Join-Path $env:LOCALAPPDATA "Programs\Inno Setup 6\ISCC.exe"),
+            (Get-Command ISCC.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source)
+        ) | Where-Object { $_ -and (Test-Path $_) }
+    )
 
     if ($IsccCandidates.Count -gt 0) {
         $Iscc = $IsccCandidates[0]

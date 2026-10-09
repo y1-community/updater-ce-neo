@@ -327,7 +327,8 @@ class DonationStatusBar(QStatusBar):
         self._style_link(self._support_btn, t, "right")
         if on_support:
             self._support_btn.clicked.connect(on_support)
-        row.addWidget(self._support_btn, 0, Qt.AlignVCenter)
+        # Sidebar Support Us is the entry point. This corner link is not shown.
+        self._support_btn.setVisible(False)
         self._balance_links()
         self.addWidget(self._donation_container, 1)
 
@@ -365,15 +366,10 @@ class DonationStatusBar(QStatusBar):
         if not (hasattr(self, "_credits_link") and hasattr(self, "_support_btn")):
             return
         credits_w = self._link_text_width(self._credits_link)
-        support_w = self._link_text_width(self._support_btn)
-        paired = max(credits_w, support_w)
-        available = self._donation_container.width() or self.width()
-        if available and paired * 2 + 80 > available:
-            self._credits_link.setFixedWidth(credits_w)
-            self._support_btn.setFixedWidth(support_w)
-        else:
-            self._credits_link.setFixedWidth(paired)
-            self._support_btn.setFixedWidth(paired)
+        self._credits_link.setFixedWidth(credits_w)
+        if hasattr(self, "_support_btn"):
+            self._support_btn.setVisible(False)
+            self._support_btn.setFixedWidth(0)
 
     def resizeEvent(self, event):  # noqa: N802 (Qt naming)
         super().resizeEvent(event)
