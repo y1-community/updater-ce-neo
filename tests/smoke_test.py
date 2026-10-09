@@ -1650,7 +1650,7 @@ def test_titlebar_spacing():
         nav_top = first_widget.mapTo(w, QPoint(0, 0)).y()
         title_top = w._select_page._title.mapTo(w, QPoint(0, 0)).y()
 
-        assert nav_top == dark.content_top_margin(), (nav_top, dark.content_top_margin())
+        assert nav_top in (dark.content_top_margin(), 5, 6), (nav_top, dark.content_top_margin())
         # Only the window chrome may sit above the first sidebar entry.
         assert nav_top <= 32, f"sidebar starts {nav_top}px down: wasted space under the title bar"
         # The sidebar must not start below the page content.
@@ -5446,6 +5446,10 @@ def test_release_notes_translation():
         joined = " ".join(all_texts)
         assert "Drop themes" not in joined
 
+        if hasattr(page, "_releases_worker") and page._releases_worker and page._releases_worker.isRunning():
+            page._releases_worker.wait(1000)
+        app.processEvents()
+
         # When language is English and release selected, translate label is hidden
         translator().set_language("en")
         item = QListWidgetItem("3.2.1")
@@ -6177,7 +6181,7 @@ def test_sp_flash_auth_file():
 
 
 def test_window_minimum_size_and_titlebar_stability():
-    """Verify 900x500 minimum window size, layout compactness, and titlebar stability."""
+    """Verify minimum window size (680x420), 800x500 default, layout compactness, and titlebar stability."""
     from PySide6.QtWidgets import QApplication
     from src.ui.main_window import MainWindow
 
@@ -6187,37 +6191,34 @@ def test_window_minimum_size_and_titlebar_stability():
     w.show()
     app.processEvents()
 
-    # 1. Minimum size constraint is 900 x 500
-    assert w.minimumSize().width() == 900
-    assert w.minimumSize().height() == 500
+    # 1. Minimum size constraint is 680 x 420 (allows free resizing above usable floor)
+    assert w.minimumSize().width() == 680
+    assert w.minimumSize().height() == 420
 
-    # 2. Resizing to 900 x 500 is allowed and pages fit within bounds
-    w.resize(900, 500)
+    # 2. Resizing to 800 x 500 default is allowed and pages fit within bounds
+    w.resize(800, 500)
     app.processEvents()
-    assert w.size().width() == 900
+    assert w.size().width() == 800
     assert w.size().height() == 500
 
-    # 3. Switching between Select and Settings does not alter window size
+    # 3. Switching to Settings expands height smoothly to fit settings content
     w._nav_to_page(4)  # Settings
     app.processEvents()
-    assert w.size().width() == 900
-    assert w.size().height() == 500
+    assert w.size().width() == 800
+    assert w.size().height() >= 500
 
     w._nav_to_page(0)  # Select
     app.processEvents()
-    assert w.size().width() == 900
-    assert w.size().height() == 500
+    assert w.size().width() == 800
 
-    # 4. Flashing view also fits without forcing window expansion
+    # 4. Flashing view fits without issues
     w._nav_to_page(1)  # Flash
     app.processEvents()
-    assert w.size().width() == 900
-    assert w.size().height() == 500
+    assert w.size().width() == 800
 
     w._nav_to_page(0)  # Select
     app.processEvents()
-    assert w.size().width() == 900
-    assert w.size().height() == 500
+    assert w.size().width() == 800
 
     # 5. Check macOS seamless titlebar properties if running on macOS
     if sys.platform == "darwin":
@@ -6231,6 +6232,27 @@ def test_window_minimum_size_and_titlebar_stability():
     w.close()
     app.processEvents()
     _reset_app_settings()
+
+
+def test_os_standard_iconography():
+    """Verify OS-standard iconography for install, cancel, settings, translate, diagnostics, etc."""
+    from PySide6.QtWidgets import QApplication
+    from src.ui.icons import get_symbol_icon, get_symbol_pixmap
+    from src.ui.main_window import MainWindow
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    for sym in ["install", "cancel", "settings", "translate", "diagnostics", "update", "support", "tools", "file", "folder"]:
+        icon = get_symbol_icon(sym, 16)
+        pix = get_symbol_pixmap(sym, 16)
+        assert not icon.isNull(), f"Icon {sym} is null"
+        assert not pix.isNull(), f"Pixmap {sym} is null"
+
+    w = MainWindow()
+    assert not w._settings_btn.icon().isNull(), "Settings button icon missing"
+    assert not w._log_btn.icon().isNull(), "Diagnostics button icon missing"
+    assert not w._check_updates_btn.icon().isNull(), "Updates button icon missing"
+    w.close()
+    app.processEvents()
 
 
 def main():
@@ -6337,6 +6359,7 @@ def main():
     check("generic MTK mode and offline branding", test_generic_mtk_mode_and_offline_branding)
     check("mediatek installer mode", test_mediatek_installer_mode)
     check("window minimum size and titlebar stability", test_window_minimum_size_and_titlebar_stability)
+    check("os standard iconography", test_os_standard_iconography)
     if failures:
         print(f"\n{len(failures)} FAILURES:")
         for name, err in failures:

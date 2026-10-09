@@ -557,10 +557,14 @@ def _build_qss() -> str:
         window_bg = "transparent"
         nav_bg = "transparent"
         nav_border = "none"
+        dialog_bg = "rgba(30, 30, 32, 0.82)" if _state.is_dark else "rgba(245, 245, 248, 0.85)"
+        dialog_border = "1px solid rgba(255, 255, 255, 0.12)" if _state.is_dark else "1px solid rgba(0, 0, 0, 0.10)"
     else:
         window_bg = t.bg
         nav_bg = t.bg_nav
         nav_border = f"1px solid {t.border}"
+        dialog_bg = t.bg_card
+        dialog_border = f"1px solid {t.border}"
 
     if use_glass:
         card_bg = "rgba(255, 255, 255, 0.05)" if _state.is_dark else "rgba(255, 255, 255, 0.65)"
@@ -585,12 +589,16 @@ QMainWindow {{
 }}
 
 QDialog {{
-    background-color: {t.bg_card};
+    background-color: {dialog_bg};
+    border: {dialog_border};
+    border-radius: 12px;
     color: {t.fg};
 }}
 
 QMessageBox {{
-    background-color: {t.bg_card};
+    background-color: {dialog_bg};
+    border: {dialog_border};
+    border-radius: 12px;
     color: {t.fg};
 }}
 QMessageBox QLabel {{

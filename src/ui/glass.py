@@ -145,15 +145,17 @@ def _ensure_seamless_titlebar(window: QMainWindow | QWidget) -> None:
             return
         from AppKit import NSColor, NSWindowTitleHidden
         current_mask = ns_win.styleMask()
-        # NSWindowStyleMaskFullSizeContentView = 1 << 15 (0x8000)
+        # NSWindowStyleMaskFullSizeContentView = 1 << 15 (0x8000), NSWindowStyleMaskResizable = 1 << 3 (0x8)
         # Qt's QTabBar or widget visibility changes reset styleMask to default flags;
-        # re-asserting 0x8000 preserves the full-window content extension under the titlebar.
-        if not (current_mask & 0x8000):
-            ns_win.setStyleMask_(current_mask | 0x8000)
+        # re-asserting 0x8008 preserves both full-window content extension and window resizability.
+        target_mask = current_mask | 0x8000 | 0x0008
+        if (current_mask & 0x8008) != 0x8008:
+            ns_win.setStyleMask_(target_mask)
         ns_win.setTitlebarAppearsTransparent_(True)
         ns_win.setTitleVisibility_(NSWindowTitleHidden)
         ns_win.setOpaque_(False)
         ns_win.setBackgroundColor_(NSColor.clearColor())
+        ns_win.setMovableByWindowBackground_(True)
         if hasattr(ns_win, "setTitlebarSeparatorStyle_"):
             ns_win.setTitlebarSeparatorStyle_(1)  # NSTitlebarSeparatorStyleNone
 
@@ -169,7 +171,8 @@ def _ensure_seamless_titlebar(window: QMainWindow | QWidget) -> None:
                             s.setHidden_(True)
                             if hasattr(s, "setAlphaValue_"):
                                 s.setAlphaValue_(0.0)
-        _disable_macos_zoom_button(window)
+        enable_macos_zoom_button(window)
+        apply_monochrome_window_buttons(window)
     except Exception:
         pass
 
@@ -232,27 +235,104 @@ def native_chrome_intact(window: QMainWindow | QWidget, dark: bool = True) -> bo
     return True
 
 
+def apply_monochrome_window_buttons(window: QMainWindow | QWidget) -> bool:
+    """Style native macOS close & miniaturize window controls with the monochrome Quick Look aesthetic."""
+    if not IS_MACOS:
+        return False
+    try:
+        view = _get_nsview(window)
+        if not view:
+            return False
+        ns_window = view.window()
+        if not ns_window:
+            return False
+        import Quartz
+        filt = Quartz.CIFilter.filterWithName_("CIColorControls")
+        filt.setValue_forKey_(0.0, "inputSaturation")
+        filt.setValue_forKey_(0.1, "inputBrightness")
+        filt.setValue_forKey_(1.0, "inputContrast")
+        for button_type in (0, 1, 2):
+            btn = ns_window.standardWindowButton_(button_type)
+            if btn:
+                btn.setWantsLayer_(True)
+                btn.layer().setFilters_([filt])
+                btn.setEnabled_(True)
+                btn.setHidden_(False)
+        enable_macos_zoom_button(window)
+        return True
+    except Exception as e:
+        logger.debug("Could not apply monochrome window buttons: %s", e)
+        return False
+
+
 def apply_glass(
     window: QMainWindow | QWidget,
-    corner_radius: float = 16.0,
+    corner_radius: float = 20.0,
     padding: float = 0.0,
     sidebar_only: bool = False,
     dark: bool | None = None,
 ) -> bool:
-    """Apply the Liquid Glass effect to the window after window.show().
+    """Apply the Liquid Glass Quick Look effect to the window after window.show().
 
     On macOS 26+ (Golden Gate), utilizes NSGlassEffectView.
-    On macOS 13–15 (Ventura through Sequoia), falls back to NSVisualEffectView.
+    On macOS 13–15 (Ventura through Sequoia), falls back to NSVisualEffectView (UnderWindowBackground).
     Safe no-op on Linux and Windows.
     """
     if not is_glass_supported():
         return False
 
+    # Check if a native glass view is already installed on this window.
+    # Re-applying glass unconditionally stacks multiple NSGlassEffectViews,
+    # destroying translucency and turning the window into an opaque dark slab.
+    try:
+        view = _get_nsview(window)
+        if view:
+            ns_win = view.window()
+            if ns_win:
+                content_view = ns_win.contentView()
+                tf = content_view.superview() if content_view else None
+                glass_views = []
+                if tf:
+                    glass_views.extend([
+                        s for s in tf.subviews()
+                        if "Glass" in str(type(s)) or "VisualEffect" in str(type(s))
+                    ])
+                if not glass_views and content_view:
+                    glass_views.extend([
+                        s for s in content_view.subviews()
+                        if "Glass" in str(type(s)) or "VisualEffect" in str(type(s))
+                    ])
+                if glass_views:
+                    # Deduplicate: if multiple glass views were added, remove any extras
+                    for extra in glass_views[1:]:
+                        try:
+                            extra.removeFromSuperview()
+                        except Exception:
+                            pass
+                    primary_glass = glass_views[0]
+                    target_rect = tf.bounds() if tf else content_view.bounds()
+                    try:
+                        primary_glass.setFrame_(target_rect)
+                    except Exception:
+                        pass
+                    _ensure_seamless_titlebar(window)
+                    apply_monochrome_window_buttons(window)
+                    return True
+    except Exception as e:
+        logger.debug("Existing glass view check error: %s", e)
+
     if _has_pyqt_liquidglass and hasattr(_liquidglass_module, "apply_glass_to_window"):
         try:
+            pad = (padding, padding, padding, padding) if isinstance(padding, (int, float)) else padding
             if hasattr(_liquidglass_module, "GlassOptions"):
-                pad = (padding, padding, padding, padding) if isinstance(padding, (int, float)) else padding
-                opts = _liquidglass_module.GlassOptions(corner_radius=corner_radius, padding=pad)
+                mat = getattr(_liquidglass_module.GlassMaterial, "UNDER_WINDOW_BACKGROUND", 21)
+                bm = getattr(_liquidglass_module.BlendingMode, "BEHIND_WINDOW", 0)
+                opts = _liquidglass_module.GlassOptions(
+                    material=mat,
+                    corner_radius=corner_radius,
+                    blending_mode=bm,
+                    padding=pad,
+                )
                 _liquidglass_module.apply_glass_to_window(window, opts)
             else:
                 _liquidglass_module.apply_glass_to_window(
@@ -261,6 +341,7 @@ def apply_glass(
                     padding=padding,
                 )
             _ensure_seamless_titlebar(window)
+            apply_monochrome_window_buttons(window)
             return True
         except Exception as e:
             logger.warning("pyqt_liquidglass.apply_glass_to_window failed: %s", e)
@@ -269,6 +350,7 @@ def apply_glass(
     try:
         res = _pyobjc_apply_glass(window, corner_radius)
         _ensure_seamless_titlebar(window)
+        apply_monochrome_window_buttons(window)
         return res
     except Exception as e:
         logger.warning("Native glass effect application failed: %s", e)
@@ -306,27 +388,31 @@ def configure_traffic_lights(
             logger.debug("Traffic lights inset fallback skipped: %s", e)
             success = False
 
-    _disable_macos_zoom_button(window)
+    enable_macos_zoom_button(window)
+    apply_monochrome_window_buttons(window)
     return success
 
 
-def disable_window_maximize(window: QMainWindow | QWidget) -> bool:
-    """Disable window maximization across macOS and Windows/Linux."""
+def ensure_window_maximize_enabled(window: QMainWindow | QWidget) -> bool:
+    """Ensure window maximize button is enabled across macOS and Windows/Linux."""
     try:
         from PySide6.QtCore import Qt
-        flags = window.windowFlags()
-        flags = (flags | Qt.CustomizeWindowHint | Qt.WindowCloseButtonHint | Qt.WindowMinimizeButtonHint) & ~Qt.WindowMaximizeButtonHint
-        window.setWindowFlags(flags)
+        if not window.isVisible():
+            flags = window.windowFlags() | Qt.WindowCloseButtonHint | Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint
+            window.setWindowFlags(flags)
     except Exception:
         pass
 
     if IS_MACOS:
-        _disable_macos_zoom_button(window)
+        enable_macos_zoom_button(window)
     return True
 
 
-def _disable_macos_zoom_button(window: QMainWindow | QWidget) -> None:
-    """Disable and hide zoom/maximize button on macOS, and prevent fullscreen."""
+disable_window_maximize = ensure_window_maximize_enabled
+
+
+def enable_macos_zoom_button(window: QMainWindow | QWidget) -> None:
+    """Ensure zoom/maximize button on macOS is enabled, visible, and supports fullscreen."""
     if not IS_MACOS:
         return
     try:
@@ -338,15 +424,18 @@ def _disable_macos_zoom_button(window: QMainWindow | QWidget) -> None:
             return
         zoom_btn = ns_win.standardWindowButton_(2)
         if zoom_btn:
-            zoom_btn.setEnabled_(False)
-            zoom_btn.setHidden_(True)
+            zoom_btn.setEnabled_(True)
+            zoom_btn.setHidden_(False)
         if hasattr(ns_win, "setCollectionBehavior_"):
             behavior = ns_win.collectionBehavior()
-            # Disable NSWindowCollectionBehaviorFullScreenPrimary (1 << 7)
-            # Add NSWindowCollectionBehaviorFullScreenNone (1 << 9)
-            ns_win.setCollectionBehavior_((behavior & ~(1 << 7)) | (1 << 9))
+            # Enable NSWindowCollectionBehaviorFullScreenPrimary (1 << 7)
+            # Remove NSWindowCollectionBehaviorFullScreenNone (1 << 9)
+            ns_win.setCollectionBehavior_((behavior & ~(1 << 9)) | (1 << 7))
     except Exception as e:
-        logger.debug("Disabling macOS zoom button skipped: %s", e)
+        logger.debug("Enabling macOS zoom button skipped: %s", e)
+
+
+_disable_macos_zoom_button = enable_macos_zoom_button
 
 
 def set_window_close_button_enabled(window: QMainWindow | QWidget, enabled: bool) -> bool:
@@ -418,13 +507,18 @@ def _pyobjc_prepare_window(window: QMainWindow | QWidget) -> bool:
             NSWindowTitleHidden,
         )
 
-        # NSWindowStyleMaskFullSizeContentView = 1 << 15
-        style_mask = ns_window.styleMask() | (1 << 15)
+        # NSWindowStyleMaskFullSizeContentView = 1 << 15 (0x8000), NSWindowStyleMaskResizable = 1 << 3 (0x8)
+        style_mask = ns_window.styleMask() | (1 << 15) | (1 << 3)
         ns_window.setStyleMask_(style_mask)
         ns_window.setTitlebarAppearsTransparent_(True)
         ns_window.setTitleVisibility_(NSWindowTitleHidden)
         ns_window.setOpaque_(False)
-        ns_window.setBackgroundColor_(NSColor.clearColor())
+        ns_window.setMovableByWindowBackground_(True)
+        import AppKit
+        vibrant_dark = getattr(AppKit, "NSAppearanceNameVibrantDark", "NSAppearanceNameVibrantDark")
+        appr = AppKit.NSAppearance.appearanceNamed_(vibrant_dark)
+        if appr:
+            ns_window.setAppearance_(appr)
         return True
     except Exception as e:
         logger.debug("PyObjC window prepare error: %s", e)
@@ -476,10 +570,18 @@ def _pyobjc_apply_glass(window: QMainWindow | QWidget, corner_radius: float) -> 
 
         # Fallback to NSVisualEffectView for Ventura (13.x) through Sequoia (15.x)
         if glass_view is None:
+            import AppKit
             glass_view = NSVisualEffectView.alloc().initWithFrame_(frame)
-            glass_view.setMaterial_(NSVisualEffectMaterialSidebar)
+            # Use UnderWindowBackground material (21) for authentic light translucent glass matching DiagnosticsDialog
+            mat = getattr(AppKit, "NSVisualEffectMaterialUnderWindowBackground", 21)
+            glass_view.setMaterial_(mat)
             glass_view.setBlendingMode_(NSVisualEffectBlendingModeBehindWindow)
             glass_view.setState_(NSVisualEffectStateActive)
+            vibrant_dark = getattr(AppKit, "NSAppearanceNameVibrantDark", "NSAppearanceNameVibrantDark")
+            appr = AppKit.NSAppearance.appearanceNamed_(vibrant_dark)
+            if appr:
+                glass_view.setAppearance_(appr)
+                ns_window.setAppearance_(appr)
             logger.info("Activated NSVisualEffectView vibrancy for macOS %s", ".".join(map(str, MACOS_VERSION)))
 
         # NSViewWidthSizable (2) | NSViewHeightSizable (16) = 18
@@ -514,16 +616,15 @@ def _pyobjc_configure_traffic_lights(
         for i, button_type in enumerate((0, 1, 2)):
             btn = ns_window.standardWindowButton_(button_type)
             if btn:
-                if button_type == 2:
-                    btn.setEnabled_(False)
-                    btn.setHidden_(True)
-                    continue
+                btn.setEnabled_(True)
+                btn.setHidden_(False)
                 frame = btn.frame()
                 origin_x = x_offset + (i * spacing)
-                # In AppKit, (0,0) is bottom-left, so calculate from top
-                origin_y = ns_window.frame().size.height - y_offset - frame.size.height
+                # In NSTitlebarView (height 32, bottom-left origin in subview):
+                # y_offset pushes button down: origin_y = max(2, 9 - y_offset)
+                origin_y = max(2, 9 - y_offset) if y_offset != 0 else 9
                 btn.setFrameOrigin_((origin_x, origin_y))
-        _disable_macos_zoom_button(window)
+        enable_macos_zoom_button(window)
         return True
     except Exception as e:
         logger.debug("Could not reposition traffic lights via PyObjC: %s", e)
@@ -710,7 +811,13 @@ class _DialogThemeWatcher(QObject):
         if event.type() == QEvent.Type.Show:
             try:
                 from .dark import is_dark
-                apply_windows_dark_titlebar(watched, is_dark())
+                dark = is_dark()
+                if IS_WINDOWS:
+                    apply_windows_dark_titlebar(watched, dark)
+                    apply_windows_acrylic(watched, dark=dark)
+                elif IS_MACOS and is_glass_supported() and isinstance(watched, QDialog):
+                    prepare_window_for_glass(watched)
+                    apply_glass(watched, corner_radius=16.0, dark=dark)
             except Exception:
                 pass
         return super().eventFilter(watched, event)
@@ -720,8 +827,8 @@ def apply_dialog_theme(dialog: QDialog) -> None:
     """Apply host OS native window decoration, titlebar styling, and backdrop to a dialog.
 
     - Windows: applies immersive dark/light mode titlebar, suppresses default accent color
-      on caption bar, and installs event filter so styling persists on Show.
-    - macOS: configures Liquid Glass / vibrancy when supported.
+      on caption bar, enables Acrylic / Aero glass frosted backdrop, and installs event filter so styling persists on Show.
+    - macOS: configures Liquid Glass / translucency matching DiagnosticsDialog across all dialogs.
     """
     try:
         from .dark import is_dark
@@ -729,8 +836,15 @@ def apply_dialog_theme(dialog: QDialog) -> None:
     except Exception:
         dark = False
 
+    disable_window_maximize(dialog)
+
     if IS_WINDOWS:
+        try:
+            dialog.setAttribute(Qt.WA_TranslucentBackground, True)
+        except Exception:
+            pass
         apply_windows_dark_titlebar(dialog, dark)
+        apply_windows_acrylic(dialog, dark=dark)
         try:
             dialog.installEventFilter(_DialogThemeWatcher.instance())
         except Exception:
@@ -738,6 +852,10 @@ def apply_dialog_theme(dialog: QDialog) -> None:
     elif IS_MACOS and is_glass_supported():
         try:
             prepare_window_for_glass(dialog)
-            apply_glass(dialog, corner_radius=12.0, dark=dark)
+            apply_glass(dialog, corner_radius=16.0, dark=dark)
+            try:
+                dialog.installEventFilter(_DialogThemeWatcher.instance())
+            except Exception:
+                pass
         except Exception as e:
             logger.debug("apply_dialog_theme glass skipped: %s", e)

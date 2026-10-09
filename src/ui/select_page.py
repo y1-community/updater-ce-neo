@@ -56,6 +56,7 @@ from ..translate import (
 from .widgets import Banner, Card
 from .dark import T, link_html, page_margins
 from .scrollbars import configure_scroll_area, make_transparent
+from .icons import get_symbol_icon
 
 logger = logging.getLogger(__name__)
 
@@ -148,6 +149,11 @@ class _TabsAdapter:
 
 class SelectPackagePage(QWidget):
     package_selected = Signal(str, str, str)
+    download_started = Signal(str, str)
+    download_progress = Signal(int, str)
+    download_finished = Signal(bool, str)
+    download_cancelled = Signal()
+    prep_progress = Signal(int)
     # (message, timeout_ms) -> shown in the main window's status bar.
     status_message = Signal(str, int)
 
@@ -428,6 +434,7 @@ class SelectPackagePage(QWidget):
         pkg_layout.addWidget(self._download_bar)
 
         self._install_btn = QPushButton(tr("sel_install"))
+        self._install_btn.setIcon(get_symbol_icon("install", 16))
         self._install_btn.setDefault(True)
         self._install_btn.setAutoDefault(True)
         self._install_btn.setMinimumHeight(32)
@@ -506,6 +513,13 @@ class SelectPackagePage(QWidget):
         layout.addLayout(split, 1)
         return page
 
+    def _set_notes_content(self, html_text: str):
+        self._notes.setHtml(html_text)
+        if hasattr(self, "_notes_group") and self._notes_group:
+            self._notes_group.repaint()
+        if hasattr(self, "_notes") and self._notes and self._notes.viewport():
+            self._notes.viewport().repaint()
+
     def _build_local_tab(self):
         t = T()
         page = QWidget()
@@ -533,8 +547,10 @@ class SelectPackagePage(QWidget):
         self._path_edit.setReadOnly(True)
         self._path_edit.setPlaceholderText(tr("sel_placeholder"))
         self._browse_btn = QPushButton(tr("sel_browse"))
+        self._browse_btn.setIcon(get_symbol_icon("file", 16))
         self._browse_btn.clicked.connect(self._on_choose_file)
         self._browse_folder_btn = QPushButton(tr("sel_browse_folder"))
+        self._browse_folder_btn.setIcon(get_symbol_icon("folder", 16))
         self._browse_folder_btn.clicked.connect(self._on_choose_folder)
         row.addWidget(self._path_edit, 1)
         row.addWidget(self._browse_btn)
@@ -555,6 +571,7 @@ class SelectPackagePage(QWidget):
         grp_l.addWidget(self._local_status)
 
         self._start_btn = QPushButton(tr("sel_btn_start"))
+        self._start_btn.setIcon(get_symbol_icon("install", 16))
         self._start_btn.setDefault(True)
         self._start_btn.setAutoDefault(True)
         self._start_btn.setMinimumHeight(32)
@@ -702,7 +719,7 @@ class SelectPackagePage(QWidget):
             if self._is_translated:
                 self._translate_current_release_in_app()
             else:
-                self._notes.setHtml(self._render_release_notes(self._current_selected_rel, as_html=True))
+                self._set_notes_content(self._render_release_notes(self._current_selected_rel, as_html=True))
         self._update_translate_link()
         if hasattr(self, "_registered_links"):
             for label, key, bold in self._registered_links:
@@ -711,7 +728,7 @@ class SelectPackagePage(QWidget):
     def refresh_theme(self):
         """Update components and release notes typography to match active theme tokens."""
         if hasattr(self, "_notes") and self._current_selected_rel:
-            self._notes.setHtml(self._render_release_notes(self._current_selected_rel, as_html=True))
+            self._set_notes_content(self._render_release_notes(self._current_selected_rel, as_html=True))
         if hasattr(self, "_translate_label"):
             self._update_translate_link()
         if hasattr(self, "_release_list"):
@@ -719,6 +736,14 @@ class SelectPackagePage(QWidget):
         if hasattr(self, "_registered_links"):
             for label, key, bold in self._registered_links:
                 label.setText(self._link_html(key, bold=bold))
+        if hasattr(self, "_install_btn"):
+            self._install_btn.setIcon(get_symbol_icon("install", 16))
+        if hasattr(self, "_browse_btn"):
+            self._browse_btn.setIcon(get_symbol_icon("file", 16))
+        if hasattr(self, "_browse_folder_btn"):
+            self._browse_folder_btn.setIcon(get_symbol_icon("folder", 16))
+        if hasattr(self, "_start_btn"):
+            self._start_btn.setIcon(get_symbol_icon("install", 16))
 
     def refresh_models(self):
         """Repopulate the device drop-down from what the catalogue offers.
@@ -993,7 +1018,7 @@ class SelectPackagePage(QWidget):
             self._current_selected_rel = rel
             self._is_translated = False
             self._is_translating = False
-            self._notes.setHtml(self._render_release_notes(rel, as_html=True))
+            self._set_notes_content(self._render_release_notes(rel, as_html=True))
             self._update_translate_link()
 
     def _render_release_notes(self, rel, translated_body=None, translated_name=None, as_html: bool = False) -> str:
@@ -1125,9 +1150,15 @@ class SelectPackagePage(QWidget):
         else:
             trans_txt = tr("translate_notes")
             open_txt = tr("open_in_google_translate")
+            try:
+                from .icons import get_symbol_data_uri
+                globe_uri = get_symbol_data_uri("translate", 12, match_accent=False)
+                globe_html = f'<img src="{globe_uri}" width="12" height="12" style="vertical-align: -1px;"> '
+            except Exception:
+                globe_html = ""
             self._translate_label.setText(
-            f'🌐 <a href="action:translate_in_app" style="color:{t.fg}; text-decoration:none; font-weight:700;">{trans_txt}</a> &nbsp;·&nbsp; '
-            f'<a href="{url}" style="color:{t.fg}; text-decoration:none; font-weight:700;">{open_txt} ↗</a>'
+                f'{globe_html}<a href="action:translate_in_app" style="color:{t.fg}; text-decoration:none; font-weight:700;">{trans_txt}</a> &nbsp;·&nbsp; '
+                f'<a href="{url}" style="color:{t.fg}; text-decoration:none; font-weight:700;">{open_txt} ↗</a>'
             )
 
     def _on_translate_link_clicked(self, link: str):
@@ -1162,7 +1193,7 @@ class SelectPackagePage(QWidget):
             trans_name, trans_body = cached
             self._is_translated = True
             self._is_translating = False
-            self._notes.setHtml(
+            self._set_notes_content(
                 self._render_release_notes(rel, translated_body=trans_body, translated_name=trans_name, as_html=True)
             )
             self._update_translate_link()
@@ -1179,16 +1210,18 @@ class SelectPackagePage(QWidget):
 
     def _on_translation_ready(self, rel, lang, trans_name, trans_body):
         self._translated_notes_cache[(rel.get("tag_name", ""), lang)] = (trans_name, trans_body)
-        if self._current_selected_rel == rel:
+        cur = self._current_selected_rel
+        if cur == rel or (cur and cur.get("tag_name") == rel.get("tag_name")):
             self._is_translating = False
             self._is_translated = True
-            self._notes.setHtml(
+            self._set_notes_content(
                 self._render_release_notes(rel, translated_body=trans_body, translated_name=trans_name, as_html=True)
             )
             self._update_translate_link()
 
     def _on_translation_failed(self, rel, lang, error):
-        if self._current_selected_rel == rel:
+        cur = self._current_selected_rel
+        if cur == rel or (cur and cur.get("tag_name") == rel.get("tag_name")):
             self._is_translating = False
             self._update_translate_link()
 
@@ -1196,7 +1229,7 @@ class SelectPackagePage(QWidget):
         self._is_translated = False
         self._is_translating = False
         if self._current_selected_rel:
-            self._notes.setHtml(self._render_release_notes(self._current_selected_rel, as_html=True))
+            self._set_notes_content(self._render_release_notes(self._current_selected_rel, as_html=True))
         self._update_translate_link()
 
     def _trigger_release_install(self, rel, package=None):
@@ -1260,11 +1293,21 @@ class SelectPackagePage(QWidget):
         self._download_bar.setValue(0)
         self._download_bar.setVisible(True)
         self._install_btn.setEnabled(False)
+        display_name = f"{pkg.name} ({eff_model})"
+        self.download_started.emit(display_name, eff_model)
         self._download_worker = downloads.DownloadWorker(rel["download_url"], str(dest))
-        self._download_worker.progress.connect(self._download_bar.setValue)
+        self._download_worker.progress.connect(self._on_download_progress)
         self._download_worker.status.connect(self._on_download_status)
         self._download_worker.finished.connect(self._on_download_done)
         self._download_worker.start()
+
+    def cancel_download(self):
+        if self._download_worker is not None:
+            self._download_worker.cancel()
+            self._download_worker = None
+        self._download_bar.setVisible(False)
+        self._install_btn.setEnabled(True)
+        self.download_cancelled.emit()
 
     def _on_install(self):
         item = self._release_list.currentItem()
@@ -1273,12 +1316,19 @@ class SelectPackagePage(QWidget):
         rel = item.data(Qt.UserRole)
         self._trigger_release_install(rel)
 
+    def _on_download_progress(self, val: int):
+        self._download_bar.setValue(val)
+        self.download_progress.emit(val, getattr(self, "_last_download_status_text", ""))
+
     def _on_download_status(self, text: str):
+        self._last_download_status_text = text
         self._download_status_key = ""
         self._say(text)
+        self.download_progress.emit(self._download_bar.value(), text)
 
     def _on_download_done(self, ok, result):
         self._download_bar.setVisible(False)
+        self.download_finished.emit(ok, str(result))
         if not ok:
             self._download_status_key = ""
             self._say(f"{tr('sel_download_failed')} \u2014 {result}", 15000)
@@ -1307,6 +1357,7 @@ class SelectPackagePage(QWidget):
         bar.setVisible(True)
         self._prep_worker = ExtractWorker(path)
         self._prep_worker.progress.connect(bar.setValue)
+        self._prep_worker.progress.connect(self.prep_progress)
         self._prep_worker.finished.connect(done_cb)
         self._prep_worker.finished.connect(self._on_prep_finished)
         self._prep_worker.start()

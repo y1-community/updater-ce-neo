@@ -264,7 +264,7 @@ def test_retry_guidance_dialog_size():
 
 
 def test_compact_window_mode_and_sidebar_hiding():
-    """Verify window shrinks to 700x300 and hides other sidebar buttons during active install."""
+    """Verify window shrinks to compact mode, retains Settings button (disabled) and hides superfluous buttons during active install."""
     from src.state import FlashState
     from src.ui.main_window import _PAGE_SETTINGS, _PAGE_FLASH, _PAGE_SELECT
 
@@ -273,8 +273,8 @@ def test_compact_window_mode_and_sidebar_hiding():
     w.show()
 
     # Initial state
-    assert w.size().width() >= 900
-    assert w.size().height() >= 500
+    assert w.size().width() >= 800
+    assert w.size().height() >= 480
     assert w._settings_btn.isVisible()
     assert w._log_btn.isVisible()
     assert w._check_updates_btn.isVisible()
@@ -282,7 +282,8 @@ def test_compact_window_mode_and_sidebar_hiding():
     # Simulate transition to active install
     w._set_state(FlashState.S2_WAIT_CONNECTION)
     assert w._install_run_active() is True
-    assert w._settings_btn.isVisible() is False
+    assert w._settings_btn.isVisible() is True
+    assert w._settings_btn.isEnabled() is False
     assert w._support_btn.isVisible() is False
     assert w._log_btn.isVisible() is False
     assert w._check_updates_btn.isVisible() is False
@@ -302,19 +303,20 @@ def test_compact_window_mode_and_sidebar_hiding():
     w._reset_after_run()
     assert w._install_run_active() is False
     assert w._settings_btn.isVisible() is True
+    assert w._settings_btn.isEnabled() is True
     assert w._log_btn.isVisible() is True
     assert w._check_updates_btn.isVisible() is True
     assert w._lang_combo.isVisible() is True
-    assert w.minimumSize().width() == 900
-    assert w.minimumSize().height() == 500
+    assert w.minimumSize().width() == 680
+    assert w.minimumSize().height() == 420
 
 
-def test_window_maximization_disabled():
-    """Verify window maximization is disabled across platforms (only close and minimize)."""
+def test_window_maximization_enabled():
+    """Verify window maximization is enabled across platforms and auto-resizing is disabled when maximized."""
     app = QApplication.instance() or QApplication(sys.argv)
     w = MainWindow()
     flags = w.windowFlags()
-    assert not (flags & Qt.WindowMaximizeButtonHint), "Maximize button hint must be disabled"
+    assert bool(flags & Qt.WindowMaximizeButtonHint), "Maximize button hint must be enabled"
     assert bool(flags & Qt.WindowMinimizeButtonHint), "Minimize button hint must be enabled"
     assert bool(flags & Qt.WindowCloseButtonHint), "Close button hint must be enabled"
 
@@ -387,6 +389,89 @@ def test_flash_page_compact_card_and_heading():
     assert fp._cancel_btn.height() <= 30
 
 
+def test_os_standard_iconography():
+    """Verify OS-standard iconography for install, cancel, settings, translate, diagnostics, etc."""
+    from src.ui.icons import get_symbol_icon, get_symbol_pixmap
+    from src.ui.main_window import MainWindow
+    from src.ui.select_page import SelectPackagePage
+    from src.ui.flash_page import FlashPage
+
+    app = QApplication.instance() or QApplication(sys.argv)
+
+    symbols = [
+        "install",
+        "cancel",
+        "settings",
+        "translate",
+        "diagnostics",
+        "update",
+        "support",
+        "tools",
+        "file",
+        "folder",
+    ]
+    for sym in symbols:
+        icon = get_symbol_icon(sym, 16)
+        pix = get_symbol_pixmap(sym, 16)
+        assert not icon.isNull(), f"Icon for {sym} must not be null"
+        assert not pix.isNull(), f"Pixmap for {sym} must not be null"
+
+    w = MainWindow()
+    assert not w._settings_btn.icon().isNull(), "Settings button must have an icon"
+    assert not w._support_btn.icon().isNull(), "Support button must have an icon"
+    assert not w._log_btn.icon().isNull(), "Diagnostics button must have an icon"
+    assert not w._check_updates_btn.icon().isNull(), "Update button must have an icon"
+    assert not w._lang_combo.itemIcon(0).isNull(), "Language combo items must have translate icon"
+
+    sp = SelectPackagePage()
+    assert not sp._install_btn.icon().isNull(), "Install button must have an icon"
+    assert not sp._start_btn.icon().isNull(), "Start button must have an icon"
+    assert not sp._browse_btn.icon().isNull(), "Browse file button must have an icon"
+    assert not sp._browse_folder_btn.icon().isNull(), "Browse folder button must have an icon"
+
+    fp = FlashPage()
+    assert not fp._cancel_btn.icon().isNull(), "Cancel button must have an icon"
+
+
+def test_symbol_color_adaptation_and_states():
+    """Verify SF Symbols / Segoe / SVG icons adapt to dark/light mode and focus states."""
+    from src.ui.icons import get_symbol_icon, get_symbol_data_uri, resolve_symbol_colors
+    from src.ui.dark import apply_theme
+    from PySide6.QtGui import QIcon
+
+    app = QApplication.instance() or QApplication(sys.argv)
+
+    # 1. Dark mode
+    apply_theme(app, force_dark=True)
+    norm, foc = resolve_symbol_colors(match_accent=True)
+    assert norm == "#52b036"
+    assert foc.upper() == "#FFFFFF"
+
+    norm_no_acc, foc_no_acc = resolve_symbol_colors(match_accent=False)
+    assert norm_no_acc.upper() == "#FFFFFF"
+    assert foc_no_acc.upper() == "#FFFFFF"
+
+    # Multi-state QIcon pixmaps
+    icon = get_symbol_icon("install", 16)
+    pix_norm = icon.pixmap(16, 16, QIcon.Mode.Normal, QIcon.State.Off)
+    pix_active = icon.pixmap(16, 16, QIcon.Mode.Active, QIcon.State.Off)
+    pix_on = icon.pixmap(16, 16, QIcon.Mode.Normal, QIcon.State.On)
+    assert not pix_norm.isNull()
+    assert not pix_active.isNull()
+    assert not pix_on.isNull()
+
+    # Data URI generation for HTML labels
+    uri = get_symbol_data_uri("translate", 12)
+    assert uri.startswith("data:image/png;base64,")
+    assert len(uri) > 50
+
+    # 2. Light mode
+    apply_theme(app, force_dark=False)
+    norm_light, foc_light = resolve_symbol_colors(match_accent=False)
+    assert norm_light.startswith("#")
+    assert norm_light != "#FFFFFF"  # Must be dark in light mode
+
+
 if __name__ == "__main__":
     test_dialog_theme_not_transparent()
     test_combobox_popup_styling()
@@ -399,8 +484,10 @@ if __name__ == "__main__":
     test_pre_install_guidance_dialog()
     test_retry_guidance_dialog_size()
     test_compact_window_mode_and_sidebar_hiding()
-    test_window_maximization_disabled()
+    test_window_maximization_enabled()
     test_close_interception_during_install()
     test_flash_page_compact_card_and_heading()
+    test_os_standard_iconography()
+    test_symbol_color_adaptation_and_states()
 
     print("All native UX enhancement tests passed!")

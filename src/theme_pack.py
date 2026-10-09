@@ -186,6 +186,8 @@ class ThemePackGuidanceDialog(QDialog):
 
     def __init__(self, parent=None, model="Y1"):
         super().__init__(parent)
+        from .ui.glass import apply_dialog_theme
+        apply_dialog_theme(self)
         self.model = model
         self._download_worker: Optional[DownloadWorker] = None
         self._install_worker: Optional[ThemePackInstallWorker] = None

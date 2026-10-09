@@ -86,6 +86,15 @@ class _LineLabel(QLabel):
         ev.accept()
 
 
+    def paintEvent(self, ev):
+        from PySide6.QtGui import QPainter
+        p = QPainter(self)
+        p.setCompositionMode(QPainter.CompositionMode_Clear)
+        p.fillRect(ev.rect(), Qt.transparent)
+        p.end()
+        super().paintEvent(ev)
+
+
 class _LinkButton(QPushButton):
     """A button that reads as a text link rather than a control.
 
@@ -100,6 +109,14 @@ class _LinkButton(QPushButton):
         self.setFlat(True)
         self.setCursor(Qt.PointingHandCursor)
         self.setAutoDefault(False)
+
+    def paintEvent(self, ev):
+        from PySide6.QtGui import QPainter
+        p = QPainter(self)
+        p.setCompositionMode(QPainter.CompositionMode_Clear)
+        p.fillRect(ev.rect(), Qt.transparent)
+        p.end()
+        super().paintEvent(ev)
 
 
 class DonationStatusBar(QStatusBar):
@@ -147,6 +164,14 @@ class DonationStatusBar(QStatusBar):
         # Startup fetch is unconditional: the bar is built before the window is
         # shown, so the visibility gate below would skip it.
         self._refresh_remote_donors(force=True)
+
+    def paintEvent(self, ev):
+        from PySide6.QtGui import QPainter
+        p = QPainter(self)
+        p.setCompositionMode(QPainter.CompositionMode_Clear)
+        p.fillRect(ev.rect(), Qt.transparent)
+        p.end()
+        super().paintEvent(ev)
 
     def credits_link(self):
         """The bar's Credits / Thanks link; the window owns its visibility."""
@@ -384,6 +409,8 @@ class DonationStatusBar(QStatusBar):
             if self._donor_lines:
                 self._donor_label.setText(self._donor_lines[0])
                 self._donor_lines = self._donor_lines[1:] + self._donor_lines[:1]
+            self.repaint()
+            self._donor_label.repaint()
             return
         self._showing_goal = not self._showing_goal
         self._goal_label.setVisible(self._showing_goal)
@@ -392,6 +419,9 @@ class DonationStatusBar(QStatusBar):
         if not self._showing_goal and self._donor_lines:
             self._donor_label.setText(self._donor_lines[0])
             self._donor_lines = self._donor_lines[1:] + self._donor_lines[:1]
+        self.repaint()
+        if not self._showing_goal:
+            self._donor_label.repaint()
 
     def showMessage(self, message: str, timeout: int = 0):
         text = str(message or "").strip()
@@ -404,6 +434,7 @@ class DonationStatusBar(QStatusBar):
         self._donation_container.setVisible(False)
         self._status_container.setVisible(True)
         self.setVisible(True)
+        self.repaint()
         self.messageChanged.emit(text)
 
         if self._donations_enabled:
@@ -426,6 +457,7 @@ class DonationStatusBar(QStatusBar):
         else:
             self._donation_container.setVisible(False)
             self.setVisible(False)
+        self.repaint()
         self.messageChanged.emit("")
 
     def currentMessage(self) -> str:

@@ -82,6 +82,7 @@ class SettingsPage(QWidget):
         # Header
         self._header = QLabel(tr("settings_title"))
         self._header.setProperty("cssClass", "pageTitle")
+        self._header.setVisible(False)
         root_layout.addWidget(self._header)
 
         # Scroll area for clean overflow handling. Transparency comes from the

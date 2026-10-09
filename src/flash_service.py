@@ -1736,6 +1736,7 @@ class FlashWorker(QThread):
             str(scatter_file),
             platform_name,
             str(self.package_path or ""),
+            str(self.model or ""),
         ])
 
         final_ok = False
@@ -1883,6 +1884,19 @@ class FlashWorker(QThread):
             self.action_changed.emit(msg)
             self._log(msg)
 
+        def _clear_mtk_state(*dirs):
+            for base in dirs:
+                if not base:
+                    continue
+                try:
+                    b_path = Path(base)
+                    for name in (".state", "hwparam.json"):
+                        p = b_path / name
+                        if p.exists():
+                            p.unlink()
+                except Exception:
+                    pass
+
         def _open_session():
             """One session bring-up: init, handshake, and BROM mode if needed.
 
@@ -1891,6 +1905,7 @@ class FlashWorker(QThread):
             ``_restart_in_brom``). Restarting it into BROM first is what makes
             the download agent actually run. Returns the session or ``None``.
             """
+            _clear_mtk_state(extract_dir, Path.cwd())
             try:
                 session = mtk_api.init(loader=None, preloader=preloader_path)
             except BaseException as e:

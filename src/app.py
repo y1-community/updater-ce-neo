@@ -65,11 +65,13 @@ def main():
         scatter_file = sys.argv[3]
         scatter_platform = sys.argv[4] if len(sys.argv) >= 5 else ""
         package_path = sys.argv[5] if len(sys.argv) >= 6 else ""
+        model = sys.argv[6] if len(sys.argv) >= 7 else ""
 
         worker = FlashWorker(
             package_path=package_path or "dummy.zip",
             method="mtk",
             pre_extracted_dir=extract_dir,
+            model=model,
         )
         worker.progress.connect(lambda x: print(f"[PROGRESS] {x}", flush=True))
         worker.step_changed.connect(lambda x: print(f"[STEP] {x}", flush=True))
@@ -91,7 +93,11 @@ def main():
             signal.signal(signal.SIGTERM, handle_sigterm)
             signal.signal(signal.SIGINT, handle_sigterm)
 
-        worker._flash_via_mtkclient_core(Path(extract_dir), Path(scatter_file), scatter_platform)
+        try:
+            worker._flash_via_mtkclient_core(Path(extract_dir), Path(scatter_file), scatter_platform)
+        except BaseException as e:
+            print(f"[RESULT] 0 {e}", flush=True)
+            sys.exit(1)
         return
 
     app = QApplication(sys.argv)
@@ -102,14 +108,17 @@ def main():
     app.setOrganizationName("innioasis")
 
     import sys as _sys
-    if _sys.platform == "darwin":
-        icon = paths.RESOURCES_DIR / "icon.icns"
-    else:
+    if _sys.platform != "darwin":
+        # On Windows and Linux, set the window/taskbar icon explicitly.
+        # On macOS, omit app.setWindowIcon: setting an application icon through
+        # Python/Qt overrides NSApplication's bundle icon and breaks macOS's
+        # native dock icon decoration (automatic coloration, dark mode tinting,
+        # and squircle dynamic lighting).
         icon = paths.RESOURCES_DIR / "icon.ico"
-    if not icon.exists():
-        icon = paths.RESOURCES_DIR / "icon.png"
-    if icon.exists():
-        app.setWindowIcon(QIcon(str(icon)))
+        if not icon.exists():
+            icon = paths.RESOURCES_DIR / "icon.png"
+        if icon.exists():
+            app.setWindowIcon(QIcon(str(icon)))
 
     from .i18n import translator
     from .ui.dark import ThemeWatcher, apply_theme, is_dark
@@ -121,8 +130,9 @@ def main():
     )
     from .ui.main_window import MainWindow
 
-    # Apply native theme (detects OS dark/light mode automatically).
-    apply_theme(app)
+    # Apply native theme (detects OS dark/light mode automatically; locks vibrant dark on macOS for Quick Look glass).
+    force_dark = True if _sys.platform == "darwin" else None
+    apply_theme(app, force_dark=force_dark)
 
     # Default language: follow the system, fall back to English.
     import locale
@@ -140,7 +150,7 @@ def main():
     prepare_window_for_glass(window)
     window.show()
     apply_glass(window, dark=is_dark())
-    configure_traffic_lights(window)
+    configure_traffic_lights(window, x_offset=18, y_offset=6)
     apply_windows_dark_titlebar(window, is_dark())
 
     # Match host appearance live: light/dark switches, desktop accent colours,

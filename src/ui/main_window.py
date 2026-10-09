@@ -22,15 +22,18 @@ from PySide6.QtCore import (
     QProcess,
     QProcessEnvironment,
     QSettings,
+    QSize,
     Qt,
     QThread,
     QTimer,
     Signal,
 )
-from PySide6.QtGui import QIcon, QPixmap
+from PySide6.QtGui import QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
+    QButtonGroup,
     QComboBox,
+    QDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -93,6 +96,7 @@ from .glass import (
     apply_windows_acrylic,
     apply_windows_dark_titlebar,
     disable_window_maximize,
+    ensure_window_maximize_enabled,
     set_window_close_button_enabled,
 )
 from .error_page import ErrorPage
@@ -100,6 +104,7 @@ from .flash_page import FlashPage
 from .retry_page import RetryPage
 from .select_page import SelectPackagePage
 from .settings_page import SettingsPage
+from .icons import get_symbol_icon
 
 logger = logging.getLogger(__name__)
 
@@ -163,17 +168,165 @@ _INSTALL_RUN_STATES = (
 )
 
 
+class TranslucentCentralWidget(QWidget):
+    """Central container that explicitly clears dirty rects before painting children.
+
+    Prevents transparent/semi-transparent backing store accumulation (ghosting / dual focus).
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("centralWidget")
+        self.setAttribute(Qt.WA_TranslucentBackground, True)
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setCompositionMode(QPainter.CompositionMode_Clear)
+        p.fillRect(event.rect(), Qt.transparent)
+        p.end()
+        super().paintEvent(event)
+
+
+class ClearStackedWidget(QStackedWidget):
+    """Stacked widget that cleanly hides inactive pages and clears backing store before painting."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAttribute(Qt.WA_TranslucentBackground, True)
+
+    def setCurrentIndex(self, index):
+        for i in range(self.count()):
+            w = self.widget(i)
+            if w and i != index:
+                w.hide()
+        target = self.widget(index)
+        if target:
+            target.show()
+        super().setCurrentIndex(index)
+        self.repaint()
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setCompositionMode(QPainter.CompositionMode_Clear)
+        p.fillRect(event.rect(), Qt.transparent)
+        p.end()
+        super().paintEvent(event)
+
+
+class ClearNavPanel(QWidget):
+    """Sidebar rail container that clears backing store before painting to prevent button hover/checked ghosting."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAttribute(Qt.WA_TranslucentBackground, True)
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setCompositionMode(QPainter.CompositionMode_Clear)
+        p.fillRect(event.rect(), Qt.transparent)
+        p.end()
+        super().paintEvent(event)
+
+
+class ClearNavButton(QPushButton):
+    """Sidebar navigation button that cleanly clears its backing store on state/hover changes."""
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setCompositionMode(QPainter.CompositionMode_Clear)
+        p.fillRect(event.rect(), Qt.transparent)
+        p.end()
+        super().paintEvent(event)
+
+
+class DraggableHeaderBar(QWidget):
+    """Unified draggable title and header bar matching native OS chrome."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("titleBar")
+        self.setFixedHeight(44)
+        self.setAttribute(Qt.WA_TranslucentBackground, True)
+        self._dragging = False
+        self._drag_offset = None
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setCompositionMode(QPainter.CompositionMode_Clear)
+        p.fillRect(event.rect(), Qt.transparent)
+        p.end()
+        super().paintEvent(event)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            child = self.childAt(event.position().toPoint())
+            is_interactive = False
+            w = child
+            while w and w is not self:
+                if isinstance(w, (QPushButton, QComboBox)) or (
+                    isinstance(w, QLabel) and (w.textInteractionFlags() & Qt.LinksAccessibleByMouse)
+                ):
+                    is_interactive = True
+                    break
+                w = w.parentWidget()
+            if not is_interactive:
+                win = self.window()
+                if win:
+                    dragged = False
+                    if sys.platform == "darwin":
+                        try:
+                            import AppKit
+                            from .glass import _get_nsview
+                            ns_app = AppKit.NSApplication.sharedApplication()
+                            curr_evt = ns_app.currentEvent()
+                            if curr_evt:
+                                view = _get_nsview(win)
+                                ns_win = view.window() if view else None
+                                if ns_win:
+                                    ns_win.performWindowDragWithEvent_(curr_evt)
+                                    dragged = True
+                        except Exception:
+                            pass
+                    if not dragged and hasattr(win, "windowHandle") and win.windowHandle():
+                        try:
+                            dragged = win.windowHandle().startSystemMove()
+                        except Exception:
+                            pass
+                    if dragged:
+                        event.accept()
+                        return
+                    self._dragging = True
+                    self._drag_offset = event.globalPosition().toPoint() - win.pos()
+                    event.accept()
+                    return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if getattr(self, "_dragging", False) and (event.buttons() & Qt.LeftButton):
+            win = self.window()
+            if win and getattr(self, "_drag_offset", None) is not None:
+                win.move(event.globalPosition().toPoint() - self._drag_offset)
+                event.accept()
+                return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        self._dragging = False
+        self._drag_offset = None
+        super().mouseReleaseEvent(event)
+
+
 class MainWindow(QMainWindow):
     log_line_added = Signal(str)
 
     def __init__(self):
         super().__init__()
         self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
-        flags = (self.windowFlags() | Qt.CustomizeWindowHint | Qt.WindowCloseButtonHint | Qt.WindowMinimizeButtonHint) & ~Qt.WindowMaximizeButtonHint
+        flags = self.windowFlags() | Qt.WindowCloseButtonHint | Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint
         self.setWindowFlags(flags)
-        disable_window_maximize(self)
-        self.resize(900, 520)
-        self.setMinimumSize(900, 500)
+        ensure_window_maximize_enabled(self)
+        self.resize(800, 500)
+        self.setMinimumSize(680, 420)
 
         self.sm = StateMachine(self)
         self.service = FlashService(self)
@@ -196,6 +349,7 @@ class MainWindow(QMainWindow):
         self._update_manual_pending = False
         self._pre_install_guided = False
         self._install_ui_active = False
+        self._download_active = False
         # A stalled connection makes the backend repeat the same errno line
         # many times over; this keeps the guidance dialog to once per attempt.
         self._active_workers = set()
@@ -239,20 +393,45 @@ class MainWindow(QMainWindow):
             self._on_manifest_loaded(entries)
 
     def _build_ui(self):
-        central = QWidget()
+        central = TranslucentCentralWidget(self)
         self.setCentralWidget(central)
-        outer = QHBoxLayout(central)
+        central_layout = QVBoxLayout(central)
+        central_layout.setContentsMargins(0, 0, 0, 0)
+        central_layout.setSpacing(0)
+
+        # 1. Unified Draggable Title / Header Bar at the top
+        self._title_bar = self._build_header_bar()
+        is_mac = sys.platform == "darwin"
+        if is_mac:
+            self._title_bar.setParent(self)
+            self._title_bar.setGeometry(0, 0, self.width(), 44)
+            self._title_bar.raise_()
+            # On macOS, centralWidget is inset by 32px by Cocoa QPA.
+            # Setting 12px top margin ensures body begins cleanly at y = 44.
+            central_layout.setContentsMargins(0, 12, 0, 0)
+        else:
+            central_layout.addWidget(self._title_bar)
+
+        # 2. Body row: Navigation sidebar on left, stacked pages on right
+        body = QWidget()
+        body.setObjectName("mainBody")
+        body.setAttribute(Qt.WA_TranslucentBackground, True)
+        outer = QHBoxLayout(body)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
         outer.addWidget(self._build_nav())
 
-        self._stack = QStackedWidget()
+        self._stack = ClearStackedWidget()
         self._select_page = SelectPackagePage()
         self._flash_page = FlashPage()
         self._error_page = ErrorPage()
         self._retry_page = RetryPage()
         self._settings_page = SettingsPage()
+
+        # Mount select_page._title into the unified header bar so it sits in the top title row
+        self._title_container.layout().addWidget(self._select_page._title)
+
         for w in (
             self._select_page,
             self._flash_page,
@@ -262,6 +441,7 @@ class MainWindow(QMainWindow):
         ):
             self._stack.addWidget(w)
         outer.addWidget(self._stack, 1)
+        central_layout.addWidget(body, 1)
 
         self._settings_page.donation_visibility_changed.connect(
             self._apply_donation_visibility
@@ -319,7 +499,7 @@ class MainWindow(QMainWindow):
             try:
                 from .glass import configure_traffic_lights
 
-                configure_traffic_lights(self)
+                configure_traffic_lights(self, x_offset=18, y_offset=6)
             except Exception:
                 pass
         self._refresh_components()
@@ -328,91 +508,47 @@ class MainWindow(QMainWindow):
         """Update window components to match active OS theme tokens."""
         self._on_theme_changed()
 
-    def _build_nav(self):
+    def _build_header_bar(self):
         t = T()
-        nav = QWidget()
-        nav.setObjectName("navPanel")
-        nav.setAttribute(Qt.WA_TranslucentBackground, True)
+        bar = DraggableHeaderBar(self)
+        bar.setFixedHeight(44)
         is_mac = sys.platform == "darwin"
-        nav_width = 185 if is_mac else 175
-        nav.setFixedWidth(nav_width)
+        is_win = sys.platform == "win32" or platform.system() == "Windows"
 
-        use_glass = False
-        try:
-            from .glass import is_glass_supported
-            use_glass = is_glass_supported()
-        except ImportError:
-            use_glass = False
+        # On macOS, clear native traffic lights at top left (x=18..72). Start brand block at x=84.
+        left_margin = 84 if is_mac else 14
+        # On Windows, clear native caption buttons at top right (minimize, maximize & close)
+        right_margin = 120 if is_win else 24
 
-        if use_glass:
-            nav_bg = "transparent"
-            nav_border = "none"
-        else:
-            nav_bg = t.bg_nav
-            nav_border = f"1px solid {t.border}"
-        # Just clear the window title bar (traffic lights on macOS); a larger
-        # inset only pushes the first sidebar entry down into empty space.
-        top_margin = content_top_margin()
+        bar_layout = QHBoxLayout(bar)
+        bar_layout.setContentsMargins(left_margin, 0, right_margin, 0)
+        bar_layout.setSpacing(10)
+        bar_layout.setAlignment(Qt.AlignVCenter)
 
-        nav.setStyleSheet(
-            f"QWidget#navPanel {{ background-color: {nav_bg}; border-right: {nav_border};"
-            f" border-radius: 0; }}"
-        )
-
-        # The sidebar is the one column that must survive every window height: it
-        # carries the install entries at the top and the brand block and language
-        # picker at the bottom, and on macOS the native title bar eats into the
-        # height Qt lays out (with the donation bar on, the bottom of this column
-        # used to be clipped and the bar itself pushed out of the window). Giving
-        # it a scroll area keeps every control reachable at any size, keeps the
-        # central widget shrinkable so the status bar always stays inside the
-        # window, and uses the OS's own bars: Qt draws nothing here, so macOS and
-        # WinUI overlay scrollbars appear only while scrolling.
-        sidebar_scroll = QScrollArea(nav)
-        sidebar_scroll.setObjectName("navScroll")
-        sidebar_scroll.setWidgetResizable(True)
-        # Palette-based transparency, never a stylesheet: a sheet set on a
-        # scroll area downgrades the host's floating overlay bars to classic
-        # ones (see src/ui/scrollbars.py).
-        configure_scroll_area(
-            sidebar_scroll,
-            horizontal=Qt.ScrollBarAlwaysOff,
-            vertical=Qt.ScrollBarAsNeeded,
-            transparent=True,
-        )
-        nav_outer = QVBoxLayout(nav)
-        nav_outer.setContentsMargins(0, 0, 0, 0)
-        nav_outer.setSpacing(0)
-        nav_outer.addWidget(sidebar_scroll)
-
-        nav_content = QWidget()
-        nav_content.setAttribute(Qt.WA_TranslucentBackground, True)
-        sidebar_scroll.setWidget(nav_content)
-
-        layout = QVBoxLayout(nav_content)
-        layout.setContentsMargins(12, top_margin, 12, 14)
-        layout.setSpacing(4)
-
-        # Brand header container at top left under the title bar on all platforms
+        # Brand header container: yellow icon + "Updater CE 3.0" + "by Ryan Specter"
         self._brand_container = QWidget()
+        self._brand_container.setObjectName("brandContainer")
+        self._brand_container.setAttribute(Qt.WA_TranslucentBackground, True)
         brand_row = QHBoxLayout(self._brand_container)
         brand_row.setContentsMargins(0, 0, 0, 0)
         brand_row.setSpacing(8)
+        brand_row.setAlignment(Qt.AlignVCenter)
 
         self._icon_label = QLabel()
         icon_path = paths.RESOURCES_DIR / "icon.png"
-        icon_size = 30
+        icon_size = 28
         if icon_path.exists():
             pix = QPixmap(str(icon_path)).scaled(
                 icon_size, icon_size, Qt.KeepAspectRatio, Qt.SmoothTransformation
             )
             self._icon_label.setPixmap(pix)
         self._icon_label.setStyleSheet("background: transparent; border: none;")
-        brand_row.addWidget(self._icon_label, 0, Qt.AlignTop)
+        brand_row.addWidget(self._icon_label, 0, Qt.AlignVCenter)
 
         brand_text_col = QVBoxLayout()
         brand_text_col.setContentsMargins(0, 0, 0, 0)
         brand_text_col.setSpacing(1)
+        brand_text_col.setAlignment(Qt.AlignVCenter)
 
         title_version_row = QHBoxLayout()
         title_version_row.setContentsMargins(0, 0, 0, 0)
@@ -425,7 +561,6 @@ class MainWindow(QMainWindow):
         )
         title_version_row.addWidget(self._brand_label)
 
-        # Version number displayed in-line with Updater CE at the same typeface size and colour
         self._brand_version = QLabel(APP_VERSION)
         self._brand_version.setStyleSheet(
             f"font-size: {_BRAND_FONT_SIZE}; font-weight: 800; color: {t.fg}; letter-spacing: -0.02em;"
@@ -449,44 +584,132 @@ class MainWindow(QMainWindow):
         brand_text_col.addWidget(self._version_label)
 
         brand_row.addLayout(brand_text_col, 1)
-        layout.addWidget(self._brand_container)
-        layout.addSpacing(10)
+        bar_layout.addWidget(self._brand_container, 0, Qt.AlignVCenter)
+
+        # Title container for active page title
+        self._title_container = QWidget()
+        self._title_container.setAttribute(Qt.WA_TranslucentBackground, True)
+        title_cont_layout = QHBoxLayout(self._title_container)
+        title_cont_layout.setContentsMargins(0, 0, 0, 0)
+        title_cont_layout.setSpacing(0)
+        title_cont_layout.setAlignment(Qt.AlignVCenter)
+
+        if is_win:
+            bar_layout.addSpacing(28)
+            bar_layout.addWidget(self._title_container, 0, Qt.AlignVCenter)
+            bar_layout.addStretch(1)
+        else:
+            bar_layout.addStretch(1)
+            bar_layout.addWidget(self._title_container, 0, Qt.AlignVCenter)
+
+        return bar
+
+    def _build_nav(self):
+        t = T()
+        nav = ClearNavPanel()
+        nav.setObjectName("navPanel")
+        nav.setAttribute(Qt.WA_TranslucentBackground, True)
+        is_mac = sys.platform == "darwin"
+        nav_width = 185 if is_mac else 175
+        nav.setFixedWidth(nav_width)
+
+        use_glass = False
+        try:
+            from .glass import is_glass_supported, is_windows_acrylic_supported
+            use_glass = is_glass_supported() or is_windows_acrylic_supported()
+        except ImportError:
+            use_glass = False
+
+        if use_glass:
+            nav_bg = "transparent"
+            nav_border = "none"
+        else:
+            nav_bg = t.bg_nav
+            nav_border = f"1px solid {t.border}"
+        top_margin = content_top_margin()
+
+        nav.setStyleSheet(
+            f"QWidget#navPanel {{ background-color: {nav_bg}; border-right: {nav_border};"
+            f" border-radius: 0; }}"
+        )
+
+        sidebar_scroll = QScrollArea(nav)
+        sidebar_scroll.setObjectName("navScroll")
+        sidebar_scroll.setWidgetResizable(True)
+        configure_scroll_area(
+            sidebar_scroll,
+            horizontal=Qt.ScrollBarAlwaysOff,
+            vertical=Qt.ScrollBarAsNeeded,
+            transparent=True,
+        )
+        nav_outer = QVBoxLayout(nav)
+        nav_outer.setContentsMargins(0, 0, 0, 0)
+        nav_outer.setSpacing(0)
+        nav_outer.addWidget(sidebar_scroll)
+
+        nav_content = ClearNavPanel()
+        nav_content.setAttribute(Qt.WA_TranslucentBackground, True)
+        sidebar_scroll.setWidget(nav_content)
+
+        layout = QVBoxLayout(nav_content)
+        layout.setContentsMargins(12, 10, 12, 14)
+        layout.setSpacing(4)
+
+        # Exclusive navigation button group to prevent dual focus or dual checked states
+        self._nav_btn_group = QButtonGroup(self)
+        self._nav_btn_group.setExclusive(True)
 
         self._nav_buttons = {}
-        btn = QPushButton(tr("nav_select_package"))
+        btn = ClearNavButton(tr("nav_select_package"))
+        btn.setIcon(get_symbol_icon("install", 16))
+        btn.setIconSize(QSize(16, 16))
         btn.setCheckable(True)
         btn.clicked.connect(self._on_select_nav_clicked)
         layout.addWidget(btn)
         self._nav_buttons["nav_select_package"] = (btn, _PAGE_SELECT)
+        self._nav_btn_group.addButton(btn, _PAGE_SELECT)
 
-        self._settings_btn = QPushButton(tr("nav_settings"))
+        self._settings_btn = ClearNavButton(tr("nav_settings"))
+        self._settings_btn.setIcon(get_symbol_icon("settings", 16))
+        self._settings_btn.setIconSize(QSize(16, 16))
         self._settings_btn.setCheckable(True)
         self._settings_btn.clicked.connect(lambda: self._nav_to_page(_PAGE_SETTINGS))
         layout.addWidget(self._settings_btn)
         self._nav_buttons["nav_settings"] = (self._settings_btn, _PAGE_SETTINGS)
+        self._nav_btn_group.addButton(self._settings_btn, _PAGE_SETTINGS)
 
         layout.addStretch()
 
-        self._support_btn = QPushButton(tr("nav_donate"))
+        self._support_btn = ClearNavButton(tr("nav_donate"))
+        self._support_btn.setIcon(get_symbol_icon("support", 16))
+        self._support_btn.setIconSize(QSize(16, 16))
         self._support_btn.clicked.connect(self._on_support_clicked)
         layout.addWidget(self._support_btn)
 
-        self._log_btn = QPushButton(tr("nav_log"))
+        self._log_btn = ClearNavButton(tr("nav_log"))
+        self._log_btn.setIcon(get_symbol_icon("diagnostics", 16))
+        self._log_btn.setIconSize(QSize(16, 16))
         self._log_btn.clicked.connect(self._show_diagnostics)
         layout.addWidget(self._log_btn)
 
-        self._check_updates_btn = QPushButton(tr("nav_check_updates"))
+        self._check_updates_btn = ClearNavButton(tr("nav_check_updates"))
+        self._check_updates_btn.setIcon(get_symbol_icon("update", 16))
+        self._check_updates_btn.setIconSize(QSize(16, 16))
         self._check_updates_btn.clicked.connect(self._on_check_updates_clicked)
         layout.addWidget(self._check_updates_btn)
 
         if platform.system() == "Linux" and not paths.IS_MAC:
-            self._linux_setup_btn = QPushButton(tr("nav_linux_setup"))
+            self._linux_setup_btn = ClearNavButton(tr("nav_linux_setup"))
+            self._linux_setup_btn.setIcon(get_symbol_icon("tools", 16))
+            self._linux_setup_btn.setIconSize(QSize(16, 16))
             self._linux_setup_btn.clicked.connect(self._show_linux_setup)
             layout.addWidget(self._linux_setup_btn)
 
         from ..sp_flash_gui import is_sp_flash_gui_supported
         if is_sp_flash_gui_supported():
-            self._sp_flash_tool_btn = QPushButton(tr("nav_sp_flash_tool_gui"))
+            self._sp_flash_tool_btn = ClearNavButton(tr("nav_sp_flash_tool_gui"))
+            self._sp_flash_tool_btn.setIcon(get_symbol_icon("tools", 16))
+            self._sp_flash_tool_btn.setIconSize(QSize(16, 16))
             self._sp_flash_tool_btn.clicked.connect(self._open_sp_flash_tool_gui)
             layout.addWidget(self._sp_flash_tool_btn)
 
@@ -532,7 +755,31 @@ class MainWindow(QMainWindow):
             )
         self._nav_panel = nav
         self._aux_nav_buttons = aux_btns
+        self._refresh_icons()
         return nav
+
+    def _refresh_icons(self):
+        """Update navigation and action button icons to match theme tokens and accent."""
+        if hasattr(self, "_nav_buttons"):
+            for key, (btn, _) in self._nav_buttons.items():
+                if key == "nav_select_package":
+                    btn.setIcon(get_symbol_icon("install", 16))
+                elif key == "nav_settings":
+                    btn.setIcon(get_symbol_icon("settings", 16))
+        if hasattr(self, "_support_btn"):
+            self._support_btn.setIcon(get_symbol_icon("support", 16))
+        if hasattr(self, "_log_btn"):
+            self._log_btn.setIcon(get_symbol_icon("diagnostics", 16))
+        if hasattr(self, "_check_updates_btn"):
+            self._check_updates_btn.setIcon(get_symbol_icon("update", 16))
+        if hasattr(self, "_linux_setup_btn"):
+            self._linux_setup_btn.setIcon(get_symbol_icon("tools", 16))
+        if hasattr(self, "_sp_flash_tool_btn"):
+            self._sp_flash_tool_btn.setIcon(get_symbol_icon("tools", 16))
+        if hasattr(self, "_lang_combo"):
+            lang_icon = get_symbol_icon("translate", 14)
+            for i in range(self._lang_combo.count()):
+                self._lang_combo.setItemIcon(i, lang_icon)
 
     def _refresh_components(self):
         """Update window components to match active OS theme tokens."""
@@ -540,8 +787,8 @@ class MainWindow(QMainWindow):
         is_mac = sys.platform == "darwin"
         use_glass = False
         try:
-            from .glass import is_glass_supported
-            use_glass = is_glass_supported()
+            from .glass import is_glass_supported, is_windows_acrylic_supported
+            use_glass = is_glass_supported() or is_windows_acrylic_supported()
         except ImportError:
             use_glass = False
 
@@ -602,6 +849,8 @@ class MainWindow(QMainWindow):
         if sb and hasattr(sb, "refresh_theme"):
             sb.refresh_theme()
 
+        self._refresh_icons()
+
         for page in (self._select_page, self._flash_page, self._error_page, self._retry_page, self._settings_page):
             if hasattr(page, "refresh_theme") and callable(page.refresh_theme):
                 page.refresh_theme()
@@ -609,6 +858,12 @@ class MainWindow(QMainWindow):
 
     def _connect_signals(self):
         self._select_page.package_selected.connect(self._on_package_selected)
+        self._select_page.download_started.connect(self._on_download_started)
+        self._select_page.download_progress.connect(self._on_download_progress)
+        self._select_page.download_finished.connect(self._on_download_finished)
+        self._select_page.download_cancelled.connect(self._on_download_cancelled)
+        self._select_page.prep_progress.connect(self._flash_page.update_prep_progress)
+        self._flash_page.set_cancel_download_callback(self._on_cancel_download)
         self._settings_page.flash_method_changed.connect(self._on_method_changed)
         self._settings_page.simulated_mac_requested.connect(
             self._restart_in_simulated_macos
@@ -630,6 +885,42 @@ class MainWindow(QMainWindow):
         self.service.device_found.connect(self._on_device_found)
         self.service.device_lost.connect(self._on_device_lost)
         self.service.monitor_error.connect(self._on_monitor_error)
+
+    def _on_download_started(self, name, model):
+        self._download_active = True
+        self._package_name = name
+        self._package_model = model or ""
+        self._flash_page.set_package_name(name)
+        self._flash_page.set_model(model or "")
+        self._flash_page.show_downloading()
+        self._nav_to_page(_PAGE_FLASH)
+
+    def _on_download_progress(self, percent, status_text):
+        if getattr(self, "_download_active", False):
+            self._flash_page.update_download_progress(percent, status_text)
+
+    def _on_download_finished(self, ok, result):
+        if not ok:
+            self._download_active = False
+            self._apply_install_ui_state(False)
+            self._nav_to_page(_PAGE_SELECT)
+            self._show_status(f"{tr('sel_download_failed')} \u2014 {result}", 15000)
+        else:
+            self._download_active = False
+            self._flash_page.show_preparing()
+            if hasattr(self, "_select_page") and hasattr(self._select_page, "_title"):
+                self._select_page._title.setText(tr("flash_install_in_progress"))
+
+    def _on_cancel_download(self):
+        self._download_active = False
+        self._select_page.cancel_download()
+        self._apply_install_ui_state(False)
+        self._nav_to_page(_PAGE_SELECT)
+
+    def _on_download_cancelled(self):
+        self._download_active = False
+        self._apply_install_ui_state(False)
+        self._nav_to_page(_PAGE_SELECT)
 
     # How often the seamless window chrome is verified on platforms where Qt can
     # silently wipe it (see _verify_native_chrome). The check is a native
@@ -669,7 +960,6 @@ class MainWindow(QMainWindow):
         if not self.isVisible() or self.isMinimized():
             return
         try:
-            disable_window_maximize(self)
             if self._install_run_active():
                 set_window_close_button_enabled(self, False)
         except Exception:
@@ -683,6 +973,61 @@ class MainWindow(QMainWindow):
             return
         self._reassert_mac_glass()
 
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            child = self.childAt(event.position().toPoint())
+            is_interactive = False
+            w = child
+            while w and w is not self:
+                if isinstance(w, (QPushButton, QComboBox)) or (
+                    isinstance(w, QLabel) and (w.textInteractionFlags() & Qt.LinksAccessibleByMouse)
+                ):
+                    is_interactive = True
+                    break
+                w = w.parentWidget()
+            if not is_interactive:
+                dragged = False
+                if sys.platform == "darwin":
+                    try:
+                        import AppKit
+                        from .glass import _get_nsview
+                        ns_app = AppKit.NSApplication.sharedApplication()
+                        curr_evt = ns_app.currentEvent()
+                        if curr_evt:
+                            view = _get_nsview(self)
+                            ns_win = view.window() if view else None
+                            if ns_win:
+                                ns_win.performWindowDragWithEvent_(curr_evt)
+                                dragged = True
+                    except Exception:
+                        pass
+                if not dragged and hasattr(self, "windowHandle") and self.windowHandle():
+                    try:
+                        dragged = self.windowHandle().startSystemMove()
+                    except Exception:
+                        pass
+                if dragged:
+                    event.accept()
+                    return
+                self._mw_dragging = True
+                self._mw_drag_offset = event.globalPosition().toPoint() - self.pos()
+                event.accept()
+                return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if getattr(self, "_mw_dragging", False) and (event.buttons() & Qt.LeftButton):
+            if hasattr(self, "_mw_drag_offset") and self._mw_drag_offset is not None:
+                self.move(event.globalPosition().toPoint() - self._mw_drag_offset)
+                event.accept()
+                return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        self._mw_dragging = False
+        self._mw_drag_offset = None
+        super().mouseReleaseEvent(event)
+
     def changeEvent(self, event):
         super().changeEvent(event)
         if event.type() in (QEvent.WindowStateChange, QEvent.ActivationChange):
@@ -690,10 +1035,14 @@ class MainWindow(QMainWindow):
 
     def showEvent(self, event):
         super().showEvent(event)
+        if not getattr(self, "_shown_once", False):
+            self._shown_once = True
+            if not self._install_run_active() and not self.isMaximized() and not self.isFullScreen():
+                self.resize(max(self.width(), 800), max(self.height(), 500))
         if sys.platform == "darwin":
             from .glass import apply_glass, configure_traffic_lights
             apply_glass(self)
-            configure_traffic_lights(self)
+            configure_traffic_lights(self, x_offset=18, y_offset=6)
         if event.type() == QEvent.Type.Show and not getattr(self, "_chrome_watchdog", None):
             # Started once: a reset can happen at any point in a session, and the
             # check is a property read rather than a repaint.
@@ -704,6 +1053,9 @@ class MainWindow(QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        if sys.platform == "darwin" and hasattr(self, "_title_bar"):
+            self._title_bar.setGeometry(0, 0, self.width(), 44)
+            self._title_bar.raise_()
         self._verify_native_chrome()
 
     def keyPressEvent(self, event):
@@ -728,31 +1080,50 @@ class MainWindow(QMainWindow):
         super().keyPressEvent(event)
 
     def _install_run_active(self) -> bool:
-        """True while a flash run is in progress (waiting, detected, writing)."""
+        """True while a flash run or download run is in progress."""
+        if getattr(self, "_download_active", False):
+            return True
         return self.sm.state in _INSTALL_RUN_STATES
 
     def _adjust_window_geometry(self):
         """Adjust window size to fit the content of the active page without wasted space."""
-        if self.isMinimized():
+        if (
+            self.isMinimized()
+            or self.isMaximized()
+            or self.isFullScreen()
+            or bool(self.windowState() & (Qt.WindowMaximized | Qt.WindowFullScreen))
+        ):
             return
 
         is_install = self._install_run_active()
         donations_disabled = device_tracking.is_donation_ui_disabled(self.settings)
 
         if is_install:
-            target_w = 700
-            target_h = 220 if donations_disabled else 255
-            min_w = 600
-            min_h = 210 if donations_disabled else 240
+            target_w = 720
+            target_h = 220 if donations_disabled else 245
+            min_w = 580
+            min_h = 200
             self.setMinimumSize(min_w, min_h)
             self.resize(target_w, target_h)
         else:
-            min_w = 900
-            min_h = 500
+            min_w = 680
+            min_h = 420
             self.setMinimumSize(min_w, min_h)
-            if self.width() < min_w or self.height() < min_h:
-                target_h = 500 if donations_disabled else 520
-                self.resize(900, target_h)
+
+            curr_idx = self._stack.currentIndex() if hasattr(self, "_stack") else _PAGE_SELECT
+            if curr_idx == _PAGE_SETTINGS:
+                # Expands to show more settings without dead space
+                target_h = 540
+                target_w = max(self.width(), 800)
+                self.resize(target_w, target_h)
+            elif curr_idx == _PAGE_SELECT:
+                # Default size 800x500 for Select Software screen
+                target_h = 500
+                target_w = max(self.width(), 800)
+                self.resize(target_w, target_h)
+            else:
+                if self.width() < min_w or self.height() < min_h:
+                    self.resize(800, 500)
 
     def _apply_install_ui_state(self, active: bool):
         if getattr(self, "_install_ui_active", None) == active:
@@ -764,8 +1135,11 @@ class MainWindow(QMainWindow):
             pass
 
         if active:
+            # During active install/download:
+            # Keep Settings visible but disabled so both are accommodated as requested
             if hasattr(self, "_settings_btn"):
-                self._settings_btn.setVisible(False)
+                self._settings_btn.setVisible(True)
+                self._settings_btn.setEnabled(False)
             if hasattr(self, "_support_btn"):
                 self._support_btn.setVisible(False)
             if hasattr(self, "_log_btn"):
@@ -783,6 +1157,7 @@ class MainWindow(QMainWindow):
         else:
             if hasattr(self, "_settings_btn"):
                 self._settings_btn.setVisible(True)
+                self._settings_btn.setEnabled(True)
             if hasattr(self, "_support_btn"):
                 self._support_btn.setVisible(True)
             if hasattr(self, "_log_btn"):
@@ -825,7 +1200,9 @@ class MainWindow(QMainWindow):
             if self._stack.currentIndex() != _PAGE_FLASH:
                 self._nav_to_page(_PAGE_FLASH)
             else:
-                if self.sm.state in (FlashState.S4_FLASHING,) or getattr(self, "_step_now", "") in _WRITE_STEPS:
+                if getattr(self, "_download_active", False):
+                    self._on_cancel_download()
+                elif self.sm.state in (FlashState.S4_FLASHING,) or getattr(self, "_step_now", "") in _WRITE_STEPS:
                     self._on_cancel_flash()
                 else:
                     self._on_cancel_wait()
@@ -837,15 +1214,42 @@ class MainWindow(QMainWindow):
             return
         self._stack.setCurrentIndex(page_idx)
         install_active = self._sync_install_nav_entry()
+
+        target_idx = _PAGE_SELECT if install_active else page_idx
         for key, (btn, idx) in self._nav_buttons.items():
-            if install_active:
-                btn.setChecked(key == "nav_select_package")
-            else:
-                btn.setChecked(idx == page_idx)
+            is_target = (idx == target_idx)
+            btn.blockSignals(True)
+            btn.setChecked(is_target)
+            btn.clearFocus()
+            btn.blockSignals(False)
+
+        # Update header page title in the unified title bar
+        if hasattr(self, "_select_page") and hasattr(self._select_page, "_title"):
+            title_text = tr("sel_title")
+            if page_idx == _PAGE_SETTINGS:
+                title_text = tr("settings_title")
+            elif page_idx == _PAGE_FLASH:
+                if getattr(self, "_download_active", False):
+                    title_text = tr("flash_download_in_progress")
+                else:
+                    title_text = tr("flash_install_in_progress") if install_active else tr("flash_ready_title")
+            elif page_idx == _PAGE_ERROR:
+                title_text = tr("flash_failed_title")
+            elif page_idx == _PAGE_RETRY:
+                title_text = tr("flash_retry_title")
+            self._select_page._title.setText(title_text)
+
         self._adjust_window_geometry()
-        # A page with a different size hint makes Qt reconfigure the window, and
-        # that re-applies Qt's own window flags — verify the chrome right after
-        # the new page has settled, so the title bar never visibly shifts.
+        # Cleanly erase backing store and repaint full window to eliminate ghosting
+        if hasattr(self, "_nav_panel"):
+            self._nav_panel.repaint()
+        if hasattr(self, "_nav_content"):
+            self._nav_content.repaint()
+        if hasattr(self, "_stack"):
+            self._stack.repaint()
+        if self.centralWidget():
+            self.centralWidget().repaint()
+        self.repaint()
         QTimer.singleShot(0, self._verify_native_chrome)
 
     def _on_package_selected(self, path, name, model):
@@ -1631,8 +2035,26 @@ class MainWindow(QMainWindow):
             self._linux_setup_btn.setText(tr("nav_linux_setup"))
         if hasattr(self, "_sp_flash_tool_btn"):
             self._sp_flash_tool_btn.setText(tr("nav_sp_flash_tool_gui"))
-        self._lang_label.setText(tr("nav_language"))
-        self._select_page.retranslate()
+        if hasattr(self, "_lang_label"):
+            self._lang_label.setText(tr("nav_language"))
+        if hasattr(self, "_select_page"):
+            self._select_page.retranslate()
+            if hasattr(self._select_page, "_title"):
+                curr_idx = self._stack.currentIndex() if hasattr(self, "_stack") else _PAGE_SELECT
+                if curr_idx == _PAGE_SETTINGS:
+                    t = tr("settings_title")
+                elif curr_idx == _PAGE_FLASH:
+                    if getattr(self, "_download_active", False):
+                        t = tr("flash_download_in_progress")
+                    else:
+                        t = tr("flash_install_in_progress") if self._install_run_active() else tr("flash_ready_title")
+                elif curr_idx == _PAGE_ERROR:
+                    t = tr("flash_failed_title")
+                elif curr_idx == _PAGE_RETRY:
+                    t = tr("flash_retry_title")
+                else:
+                    t = tr("sel_title")
+                self._select_page._title.setText(t)
         self._flash_page.retranslate()
         self._error_page.retranslate()
         self._retry_page.retranslate()

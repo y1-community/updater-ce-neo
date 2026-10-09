@@ -979,6 +979,12 @@ _STRINGS: dict = {
         "fr": "Éteignez d'abord l'appareil. S'il est connecté mais non détecté, essayez un autre câble ou port USB.",
         "es": "Apaga primero el dispositivo. Si está conectado pero no se detecta, prueba con otro cable o puerto USB.",
     },
+    "flash_download_in_progress": {
+        "zh-CN": "正在下载",
+        "en": "Download in Progress",
+        "fr": "Téléchargement en cours",
+        "es": "Descarga en curso",
+    },
     "flash_install_in_progress": {
         "zh-CN": "正在安装",
         "en": "Install in Progress",

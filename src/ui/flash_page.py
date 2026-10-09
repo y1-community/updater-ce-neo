@@ -1,6 +1,6 @@
 """Flash page — modern OS software update in-progress display (macOS / iOS / Windows Fluent style)."""
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QFrame,
@@ -31,6 +31,7 @@ from ..flash_service import (
 from ..i18n import tr
 from .widgets import Banner, Card, InfoRow, StatusTag
 from .dark import T, page_top_margin
+from .icons import get_symbol_icon
 
 _STEP_KEY = {
     STEP_EXTRACTING: "step_extract",
@@ -71,6 +72,7 @@ class FlashPage(QWidget):
         super().__init__(parent)
         self._cancel_callback = None
         self._cancel_wait_callback = None
+        self._cancel_download_callback = None
         self._open_sp_gui_callback = None
         self._model = ""
         self._package_name = ""
@@ -96,7 +98,8 @@ class FlashPage(QWidget):
         self._preparing_view = self._build_preparing_view()
         self._waiting_view = self._build_waiting_view()
         self._flashing_view = self._build_flashing_view()
-        for w in (self._preparing_view, self._waiting_view, self._flashing_view):
+        self._downloading_view = self._build_downloading_view()
+        for w in (self._preparing_view, self._waiting_view, self._flashing_view, self._downloading_view):
             self._stack.addWidget(w)
         layout.addWidget(self._stack, 1)
 
@@ -104,9 +107,12 @@ class FlashPage(QWidget):
         t = T()
         btn.setFixedSize(24, 24)
         btn.setCursor(Qt.PointingHandCursor)
+        btn.setIcon(get_symbol_icon("cancel", 12))
+        btn.setIconSize(QSize(12, 12))
+        btn.setText("")
         btn.setStyleSheet(
             f"QPushButton#softwareUpdateCancelBtn {{"
-            f"  background: {t.bg_hover}; color: {t.fg}; border: none; border-radius: 12px; font-size: 11px; font-weight: 700;"
+            f"  background: {t.bg_hover}; color: {t.fg}; border: none; border-radius: 12px;"
             f"}}"
             f"QPushButton#softwareUpdateCancelBtn:hover {{"
             f"  background: {t.border};"
@@ -348,6 +354,94 @@ class FlashPage(QWidget):
 
         return self._wrap_centered(self._progress_card, warning_container)
 
+    def _build_downloading_view(self):
+        self._download_card = Card()
+        self._download_card.setFixedWidth(470)
+        card_layout = QHBoxLayout()
+        card_layout.setContentsMargins(16, 14, 16, 14)
+        card_layout.setSpacing(14)
+
+        self._download_icon = _make_squircle_icon("📥", "icon.png")
+        card_layout.addWidget(self._download_icon, 0, Qt.AlignVCenter)
+
+        col = QVBoxLayout()
+        col.setContentsMargins(0, 0, 0, 0)
+        col.setSpacing(6)
+
+        self._download_pkg_label = QLabel(self._package_name or "\u2014")
+        self._download_pkg_label.setStyleSheet("font-size: 13px; font-weight: 600; background: transparent; border: none;")
+        col.addWidget(self._download_pkg_label)
+
+        self._download_progress = QProgressBar()
+        self._download_progress.setObjectName("softwareUpdateProgress")
+        self._download_progress.setRange(0, 100)
+        self._download_progress.setValue(0)
+        self._download_progress.setFixedHeight(6)
+        self._download_progress.setTextVisible(False)
+        col.addWidget(self._download_progress)
+
+        self._download_status_label = QLabel(tr("sel_download_start"))
+        self._download_status_label.setProperty("cssClass", "field-label")
+        self._download_status_label.setStyleSheet("font-size: 12px; color: palette(placeholder-text); background: transparent;")
+        col.addWidget(self._download_status_label)
+
+        card_layout.addLayout(col, 1)
+
+        self._download_cancel_btn = QPushButton("✕")
+        self._download_cancel_btn.setObjectName("softwareUpdateCancelBtn")
+        self._style_cancel_button(self._download_cancel_btn)
+        self._download_cancel_btn.setToolTip(tr("flash_btn_cancel"))
+        self._download_cancel_btn.clicked.connect(self._on_cancel_download)
+        card_layout.addWidget(self._download_cancel_btn, 0, Qt.AlignVCenter)
+
+        self._download_card.set_layout(card_layout)
+
+        container = QWidget()
+        v = QVBoxLayout(container)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.addStretch(1)
+        h = QHBoxLayout()
+        h.setContentsMargins(0, 0, 0, 0)
+        h.addStretch(1)
+
+        card_col = QVBoxLayout()
+        card_col.setContentsMargins(0, 0, 0, 0)
+        card_col.setSpacing(8)
+
+        self._download_heading = QLabel(tr("flash_download_in_progress"))
+        t = T()
+        self._download_heading.setStyleSheet(
+            f"font-size: 14px; font-weight: 700; color: {t.fg}; background: transparent; border: none; margin: 0; padding: 0;"
+        )
+        card_col.addWidget(self._download_heading, 0, Qt.AlignLeft)
+        card_col.addWidget(self._download_card, 0, Qt.AlignCenter)
+
+        h.addLayout(card_col)
+        h.addStretch(1)
+        v.addLayout(h)
+        v.addStretch(1)
+        return container
+
+    def show_downloading(self):
+        val = self._package_name or "\u2014"
+        if hasattr(self, "_download_pkg_label"):
+            self._download_pkg_label.setText(val)
+        self._download_progress.setValue(0)
+        self._download_status_label.setText(tr("sel_download_start"))
+        self._stack.setCurrentWidget(self._downloading_view)
+
+    def update_download_progress(self, percent: int, status_text: str = ""):
+        self._download_progress.setValue(max(0, min(100, int(percent))))
+        if status_text:
+            self._download_status_label.setText(status_text)
+
+    def set_cancel_download_callback(self, cb):
+        self._cancel_download_callback = cb
+
+    def _on_cancel_download(self):
+        if callable(self._cancel_download_callback):
+            self._cancel_download_callback()
+
     def _load_image(self, label, name, target_height=None):
         """Guidance images during firmware installs are removed in favor of native UI."""
         pass
@@ -417,6 +511,8 @@ class FlashPage(QWidget):
             self._wait_pkg_label.setText(val)
         if hasattr(self, "_flash_pkg_label"):
             self._flash_pkg_label.setText(val)
+        if hasattr(self, "_download_pkg_label"):
+            self._download_pkg_label.setText(val)
         self._pkg_row.set_value(val)
 
     def _connect_model_text(self):
@@ -508,6 +604,10 @@ class FlashPage(QWidget):
     def retranslate(self):
         for h in getattr(self, "_headings", []):
             h.setText(tr("flash_install_in_progress"))
+        if hasattr(self, "_download_heading"):
+            self._download_heading.setText(tr("flash_download_in_progress"))
+        if hasattr(self, "_download_cancel_btn"):
+            self._download_cancel_btn.setToolTip(tr("flash_btn_cancel"))
         if hasattr(self, "_wait_prompt_label"):
             self._wait_prompt_label.setText(
                 tr("flash_connect_device_prompt").format(model=self._connect_model_text())
