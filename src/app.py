@@ -5,6 +5,17 @@ donations modal (see ASSESSMENT.md for the port map)."""
 import logging
 import sys
 
+if __package__ is None or __package__ == "":
+    import os
+    from pathlib import Path
+
+    _repo_root = str(Path(__file__).resolve().parent.parent)
+    if _repo_root not in sys.path:
+        sys.path.insert(0, _repo_root)
+    import src
+    __package__ = "src"
+
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
@@ -101,6 +112,7 @@ def main():
         return
 
     app = QApplication(sys.argv)
+    app.setAttribute(Qt.ApplicationAttribute.AA_DontUseNativeDialogs, False)
     # Names the app to the desktop (menu entry matching, WM_CLASS, macOS Dock):
     # the packaged front end tells the environment which one it is. Read before
     # the language is restored, so the name is the stable English one.

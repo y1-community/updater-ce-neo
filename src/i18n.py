@@ -24,6 +24,8 @@ _STRINGS: dict = {
     },
 
     # Navigation
+    "nav_section_main": {"zh-CN": "导航", "en": "Navigation", "fr": "Navigation", "es": "Navegación"},
+    "nav_section_tools": {"zh-CN": "工具", "en": "Tools", "fr": "Outils", "es": "Herramientas"},
     "nav_home": {"zh-CN": "首页", "en": "Home", "fr": "Accueil", "es": "Inicio"},
     "nav_select_package": {
         "zh-CN": "选择软件",
@@ -54,6 +56,18 @@ _STRINGS: dict = {
         "en": "Language",
         "fr": "Langue",
         "es": "Idioma",
+    },
+    "nav_section_navigation": {
+        "zh-CN": "导航",
+        "en": "Navigation",
+        "fr": "Navigation",
+        "es": "Navegación",
+    },
+    "nav_section_tools": {
+        "zh-CN": "工具",
+        "en": "Tools",
+        "fr": "Outils",
+        "es": "Herramientas",
     },
     "nav_credits": {
         "zh-CN": "致谢",
@@ -1739,11 +1753,35 @@ _STRINGS: dict = {
         "fr": "Flashing terminé",
         "es": "Flashing completado",
     },
+    "flash_complete_title": {
+        "zh-CN": "刷机完成",
+        "en": "Flash Complete",
+        "fr": "Flashing terminé",
+        "es": "Flashing completado",
+    },
     "flash_failed": {
         "zh-CN": "刷机失败",
         "en": "Flash Failed",
         "fr": "Échec du flashing",
         "es": "Error de flashing",
+    },
+    "flash_failed_title": {
+        "zh-CN": "刷机失败",
+        "en": "Flash Failed",
+        "fr": "Échec du flashing",
+        "es": "Error de flashing",
+    },
+    "flash_retry_title": {
+        "zh-CN": "正在重试",
+        "en": "Retrying",
+        "fr": "Nouvelle tentative",
+        "es": "Reintentando",
+    },
+    "flash_ready_title": {
+        "zh-CN": "准备刷机",
+        "en": "Ready to Flash",
+        "fr": "Prêt pour le flashing",
+        "es": "Listo para flashear",
     },
     "close": {
         "zh-CN": "关闭",
@@ -2957,6 +2995,90 @@ _STRINGS: dict = {
         "en": "Could not locate or initialize a .rockbox directory on the selected drive. Please ensure you selected a folder on your player.",
         "fr": "Impossible de trouver ou d'initialiser le dossier .rockbox sur le lecteur sélectionné. Assurez-vous d'avoir choisi un dossier de votre lecteur.",
         "es": "No se pudo encontrar o inicializar el directorio .rockbox en la unidad seleccionada. Asegúrese de haber seleccionado una carpeta de su reproductor.",
+    },
+    "legacy_cleanup_title": {
+        "zh-CN": "清理旧版 Innioasis Updater",
+        "en": "Clean Up Older Innioasis Updater",
+        "fr": "Nettoyer l'ancienne version Innioasis Updater",
+        "es": "Limpiar versión anterior de Innioasis Updater",
+    },
+    "legacy_cleanup_desc": {
+        "zh-CN": "Updater CE 3.0 是完全重写的独立替代版本。检测到占用大量磁盘空间的旧版安装。",
+        "en": "Updater CE 3.0 is a complete rewrite and standalone replacement. An older pre-3.0 installation was detected taking up significant disk space.",
+        "fr": "Updater CE 3.0 est une réécriture complète et autonome. Une ancienne version occupant beaucoup d'espace a été détectée.",
+        "es": "Updater CE 3.0 es una reescritura completa e independiente. Se detectó una versión anterior que ocupa mucho espacio.",
+    },
+    "legacy_cleanup_reclaim": {
+        "zh-CN": "可释放约 {size} 磁盘空间",
+        "en": "Reclaims approx {size} of disk space",
+        "fr": "Libère environ {size} d'espace disque",
+        "es": "Libera aprox {size} de espacio en disco",
+    },
+    "legacy_cleanup_remove_app_cb": {
+        "zh-CN": "移除旧版 Innioasis Updater 应用程序及支持目录",
+        "en": "Remove older Innioasis Updater application and support folders",
+        "fr": "Supprimer l'ancienne application Innioasis Updater et ses dossiers",
+        "es": "Eliminar la aplicación Innioasis Updater anterior y carpetas de soporte",
+    },
+    "legacy_cleanup_keep_platform_tools_cb": {
+        "zh-CN": "保留已安装的 Android Platform Tools (ADB / Fastboot)",
+        "en": "Keep Android Platform Tools (ADB / Fastboot) installed",
+        "fr": "Conserver les outils Android Platform Tools (ADB / Fastboot)",
+        "es": "Mantener instaladas las herramientas de plataforma Android (ADB / Fastboot)",
+    },
+    "legacy_cleanup_platform_tools_hint": {
+        "zh-CN": "如果您在 Updater CE 之外不需要使用 ADB 或 Fastboot，可取消勾选以卸载并释放更多空间。",
+        "en": "If you do not use ADB or Fastboot outside Updater CE, uncheck to uninstall and reclaim additional storage.",
+        "fr": "Si vous n'utilisez pas ADB ou Fastboot en dehors d'Updater CE, décochez pour désinstaller et libérer de l'espace.",
+        "es": "Si no utiliza ADB o Fastboot fuera de Updater CE, desmárquelo para desinstalar y liberar espacio.",
+    },
+    "legacy_cleanup_btn_clean": {
+        "zh-CN": "卸载并清理",
+        "en": "Uninstall & Clean Up",
+        "fr": "Désinstaller et nettoyer",
+        "es": "Desinstalar y limpiar",
+    },
+    "legacy_cleanup_btn_later": {
+        "zh-CN": "暂不处理",
+        "en": "Not Now",
+        "fr": "Plus tard",
+        "es": "Ahora no",
+    },
+    "legacy_cleanup_done_title": {
+        "zh-CN": "清理完成",
+        "en": "Clean Up Complete",
+        "fr": "Nettoyage terminé",
+        "es": "Limpieza completada",
+    },
+    "legacy_cleanup_done_msg": {
+        "zh-CN": "已成功清理旧版安装并释放磁盘空间。",
+        "en": "Successfully cleaned up legacy installation and reclaimed disk space.",
+        "fr": "L'ancienne installation a été nettoyée avec succès.",
+        "es": "Se limpió con éxito la instalación anterior.",
+    },
+    "legacy_cleanup_card_title": {
+        "zh-CN": "旧版程序清理 (Pre-3.0)",
+        "en": "Legacy Installation Cleanup (Pre-3.0)",
+        "fr": "Nettoyage de l'ancienne version (Pre-3.0)",
+        "es": "Limpieza de versión anterior (Pre-3.0)",
+    },
+    "legacy_cleanup_card_desc": {
+        "zh-CN": "扫描并移除通过旧版 run_mac.sh / run_linux.sh 安装的旧版程序及运行库，释放数百兆空间。",
+        "en": "Scan and remove older installations created by pre-3.0 run_mac.sh / run_linux.sh to reclaim hundreds of megabytes.",
+        "fr": "Scannez et supprimez les anciennes installations de run_mac.sh / run_linux.sh.",
+        "es": "Escanee y elimine instalaciones anteriores de run_mac.sh / run_linux.sh.",
+    },
+    "legacy_cleanup_scan_btn": {
+        "zh-CN": "扫描旧版安装",
+        "en": "Scan for Legacy Installations",
+        "fr": "Rechercher les anciennes versions",
+        "es": "Buscar instalaciones anteriores",
+    },
+    "legacy_cleanup_none_found": {
+        "zh-CN": "未检测到旧版 Innioasis Updater 安装。",
+        "en": "No pre-3.0 legacy Innioasis Updater installations were found on your system.",
+        "fr": "Aucune ancienne installation d'Innioasis Updater n'a été trouvée.",
+        "es": "No se encontraron instalaciones anteriores de Innioasis Updater en su sistema.",
     },
 }
 

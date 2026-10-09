@@ -100,8 +100,8 @@ if IS_MACOS:
         _liquidglass_module = _lg
         _has_pyqt_liquidglass = True
         logger.info("Found pyqt-liquidglass library")
-    except ImportError:
-        logger.debug("pyqt-liquidglass not installed, using native PyObjC fallback if available")
+    except (ImportError, SyntaxError, Exception):
+        logger.debug("pyqt-liquidglass not available, using native PyObjC fallback")
 
 
 def prepare_window_for_glass(window: QMainWindow | QWidget) -> bool:
@@ -126,9 +126,16 @@ def prepare_window_for_glass(window: QMainWindow | QWidget) -> bool:
 
     # Native PyObjC preparation fallback
     try:
-        return _pyobjc_prepare_window(window)
+        if _pyobjc_prepare_window(window):
+            return True
     except Exception as e:
         logger.debug("PyObjC window preparation fallback skipped: %s", e)
+
+    # Zero-dependency ctypes preparation fallback
+    try:
+        return _ctypes_prepare_window(window)
+    except Exception as e:
+        logger.debug("ctypes window preparation fallback skipped: %s", e)
         return False
 
 
@@ -137,42 +144,44 @@ def _ensure_seamless_titlebar(window: QMainWindow | QWidget) -> None:
     if not is_glass_supported():
         return
     view = _get_nsview(window)
-    if not view:
-        return
-    try:
-        ns_win = view.window()
-        if not ns_win:
-            return
-        from AppKit import NSColor, NSWindowTitleHidden
-        current_mask = ns_win.styleMask()
-        # NSWindowStyleMaskFullSizeContentView = 1 << 15 (0x8000), NSWindowStyleMaskResizable = 1 << 3 (0x8)
-        # Qt's QTabBar or widget visibility changes reset styleMask to default flags;
-        # re-asserting 0x8008 preserves both full-window content extension and window resizability.
-        target_mask = current_mask | 0x8000 | 0x0008
-        if (current_mask & 0x8008) != 0x8008:
-            ns_win.setStyleMask_(target_mask)
-        ns_win.setTitlebarAppearsTransparent_(True)
-        ns_win.setTitleVisibility_(NSWindowTitleHidden)
-        ns_win.setOpaque_(False)
-        ns_win.setBackgroundColor_(NSColor.clearColor())
-        ns_win.setMovableByWindowBackground_(True)
-        if hasattr(ns_win, "setTitlebarSeparatorStyle_"):
-            ns_win.setTitlebarSeparatorStyle_(1)  # NSTitlebarSeparatorStyleNone
+    if view:
+        try:
+            ns_win = view.window()
+            if ns_win:
+                from AppKit import NSColor, NSWindowTitleHidden
+                current_mask = ns_win.styleMask()
+                # NSWindowStyleMaskFullSizeContentView = 1 << 15 (0x8000), NSWindowStyleMaskResizable = 1 << 3 (0x8)
+                target_mask = current_mask | 0x8000 | 0x0008
+                if (current_mask & 0x8008) != 0x8008:
+                    ns_win.setStyleMask_(target_mask)
+                ns_win.setTitlebarAppearsTransparent_(True)
+                ns_win.setTitleVisibility_(NSWindowTitleHidden)
+                ns_win.setOpaque_(False)
+                ns_win.setBackgroundColor_(NSColor.clearColor())
+                ns_win.setMovableByWindowBackground_(True)
+                if hasattr(ns_win, "setTitlebarSeparatorStyle_"):
+                    ns_win.setTitlebarSeparatorStyle_(1)  # NSTitlebarSeparatorStyleNone
 
-        # On macOS 14+, suppress _NSTitlebarDecorationView which draws a solid opaque
-        # titlebar background/line when windows are resized or views switch.
-        content_view = ns_win.contentView()
-        tf = content_view.superview() if content_view else None
-        if tf:
-            for sub in tf.subviews():
-                if "TitlebarContainerView" in str(type(sub)):
-                    for s in sub.subviews():
-                        if "DecorationView" in str(type(s)):
-                            s.setHidden_(True)
-                            if hasattr(s, "setAlphaValue_"):
-                                s.setAlphaValue_(0.0)
-        enable_macos_zoom_button(window)
-        apply_monochrome_window_buttons(window)
+                # On macOS 14+, suppress _NSTitlebarDecorationView which draws a solid opaque titlebar background
+                content_view = ns_win.contentView()
+                tf = content_view.superview() if content_view else None
+                if tf:
+                    for sub in tf.subviews():
+                        if "TitlebarContainerView" in str(type(sub)):
+                            for s in sub.subviews():
+                                if "DecorationView" in str(type(s)) or "BackgroundView" in str(type(s)):
+                                    s.setHidden_(True)
+                                    if hasattr(s, "setAlphaValue_"):
+                                        s.setAlphaValue_(0.0)
+                enable_macos_zoom_button(window)
+                apply_monochrome_window_buttons(window)
+                return
+        except Exception:
+            pass
+
+    # ctypes fallback if PyObjC is unavailable
+    try:
+        _ctypes_ensure_seamless_titlebar(window)
     except Exception:
         pass
 
@@ -194,16 +203,38 @@ def native_chrome_intact(window: QMainWindow | QWidget, dark: bool = True) -> bo
         if not is_glass_supported():
             return True
         try:
-            from AppKit import NSWindowTitleHidden  # noqa: F401 (API presence)
-
             view = _get_nsview(window)
             ns_win = view.window() if view else None
-            if not ns_win:
+            if ns_win:
+                # NSWindowStyleMaskFullSizeContentView = 1 << 15
+                if not (ns_win.styleMask() & 0x8000):
+                    return False
+                if not ns_win.titlebarAppearsTransparent():
+                    return False
+                if ns_win.titleVisibility() != 1:  # NSWindowTitleHidden = 1
+                    return False
                 return True
-            # NSWindowStyleMaskFullSizeContentView = 1 << 15
-            if not (ns_win.styleMask() & 0x8000):
+        except Exception:
+            pass
+        try:
+            ns_win_ptr = _ctypes_get_nswindow(window)
+            if not ns_win_ptr:
+                return True
+            objc = _get_ctypes_objc()
+            if not objc:
+                return True
+            import ctypes
+            ns_win = ctypes.c_void_p(ns_win_ptr)
+            cur_mask = _ctypes_msg(objc, ns_win, "styleMask", restype=ctypes.c_ulong)
+            if not (cur_mask & 0x8000):
                 return False
-            return bool(ns_win.titlebarAppearsTransparent())
+            transparent = _ctypes_msg(objc, ns_win, "titlebarAppearsTransparent", restype=ctypes.c_bool)
+            if not transparent:
+                return False
+            vis = _ctypes_msg(objc, ns_win, "titleVisibility", restype=ctypes.c_long)
+            if vis != 1:
+                return False
+            return True
         except Exception:
             return True
 
@@ -235,34 +266,36 @@ def native_chrome_intact(window: QMainWindow | QWidget, dark: bool = True) -> bo
     return True
 
 
-def apply_monochrome_window_buttons(window: QMainWindow | QWidget) -> bool:
-    """Style native macOS close & miniaturize window controls with the monochrome Quick Look aesthetic."""
+def apply_native_window_buttons(window: QMainWindow | QWidget) -> bool:
+    """Ensure native macOS window controls retain their original system/user colors (red, yellow, green / graphite)."""
     if not IS_MACOS:
         return False
     try:
         view = _get_nsview(window)
-        if not view:
-            return False
-        ns_window = view.window()
-        if not ns_window:
-            return False
-        import Quartz
-        filt = Quartz.CIFilter.filterWithName_("CIColorControls")
-        filt.setValue_forKey_(0.0, "inputSaturation")
-        filt.setValue_forKey_(0.1, "inputBrightness")
-        filt.setValue_forKey_(1.0, "inputContrast")
-        for button_type in (0, 1, 2):
-            btn = ns_window.standardWindowButton_(button_type)
-            if btn:
-                btn.setWantsLayer_(True)
-                btn.layer().setFilters_([filt])
-                btn.setEnabled_(True)
-                btn.setHidden_(False)
-        enable_macos_zoom_button(window)
-        return True
+        if view:
+            ns_window = view.window()
+            if ns_window:
+                for button_type in (0, 1, 2):
+                    btn = ns_window.standardWindowButton_(button_type)
+                    if btn:
+                        if hasattr(btn, "layer") and btn.layer():
+                            btn.layer().setFilters_(None)
+                        btn.setEnabled_(True)
+                        btn.setHidden_(False)
+                enable_macos_zoom_button(window)
+                return True
     except Exception as e:
-        logger.debug("Could not apply monochrome window buttons: %s", e)
+        logger.debug("Could not restore native window buttons via PyObjC: %s", e)
+
+    try:
+        return _ctypes_apply_native_window_buttons(window)
+    except Exception:
         return False
+
+
+def apply_monochrome_window_buttons(window: QMainWindow | QWidget) -> bool:
+    """Backwards compatibility alias for apply_native_window_buttons."""
+    return apply_native_window_buttons(window)
 
 
 def apply_glass(
@@ -349,18 +382,30 @@ def apply_glass(
     # Native PyObjC application fallback
     try:
         res = _pyobjc_apply_glass(window, corner_radius)
-        _ensure_seamless_titlebar(window)
-        apply_monochrome_window_buttons(window)
-        return res
+        if res:
+            _ensure_seamless_titlebar(window)
+            apply_monochrome_window_buttons(window)
+            return True
     except Exception as e:
-        logger.warning("Native glass effect application failed: %s", e)
-        return False
+        logger.debug("PyObjC glass effect application failed: %s", e)
+
+    # Native ctypes application fallback
+    try:
+        res = _ctypes_apply_glass(window, corner_radius)
+        if res:
+            _ensure_seamless_titlebar(window)
+            apply_monochrome_window_buttons(window)
+            return True
+    except Exception as e:
+        logger.debug("ctypes glass effect application failed: %s", e)
+
+    return False
 
 
 def configure_traffic_lights(
     window: QMainWindow | QWidget,
     x_offset: int = 18,
-    y_offset: int = 0,
+    y_offset: int = 6,
 ) -> bool:
     """Inset native macOS window traffic lights (close, minimize, zoom).
 
@@ -386,6 +431,13 @@ def configure_traffic_lights(
             success = _pyobjc_configure_traffic_lights(window, x_offset, y_offset)
         except Exception as e:
             logger.debug("Traffic lights inset fallback skipped: %s", e)
+            success = False
+
+    if not success:
+        try:
+            success = _ctypes_configure_traffic_lights(window, x_offset, y_offset)
+        except Exception as e:
+            logger.debug("ctypes traffic lights inset fallback skipped: %s", e)
             success = False
 
     enable_macos_zoom_button(window)
@@ -545,11 +597,17 @@ def _pyobjc_apply_glass(window: QMainWindow | QWidget, corner_radius: float) -> 
             return False
 
         content_view = ns_window.contentView()
-        frame = content_view.bounds()
+        superview = content_view.superview() if content_view else None
+        if not superview:
+            superview = content_view
+        frame = superview.bounds()
 
         existing_glass = getattr(window, "_pyobjc_glass_view", None)
         if existing_glass is not None:
             try:
+                if existing_glass.superview() != superview:
+                    existing_glass.removeFromSuperview()
+                    superview.addSubview_positioned_relativeTo_(existing_glass, -1, content_view)
                 existing_glass.setFrame_(frame)
                 return True
             except Exception:
@@ -572,23 +630,30 @@ def _pyobjc_apply_glass(window: QMainWindow | QWidget, corner_radius: float) -> 
         if glass_view is None:
             import AppKit
             glass_view = NSVisualEffectView.alloc().initWithFrame_(frame)
-            # Use UnderWindowBackground material (21) for authentic light translucent glass matching DiagnosticsDialog
+            # Use UnderWindowBackground material (21) for authentic translucent glass backdrop
             mat = getattr(AppKit, "NSVisualEffectMaterialUnderWindowBackground", 21)
             glass_view.setMaterial_(mat)
             glass_view.setBlendingMode_(NSVisualEffectBlendingModeBehindWindow)
             glass_view.setState_(NSVisualEffectStateActive)
-            vibrant_dark = getattr(AppKit, "NSAppearanceNameVibrantDark", "NSAppearanceNameVibrantDark")
-            appr = AppKit.NSAppearance.appearanceNamed_(vibrant_dark)
+            try:
+                from .dark import is_dark
+                dark_mode = is_dark()
+            except Exception:
+                dark_mode = True
+            appr_name = "NSAppearanceNameVibrantDark" if dark_mode else "NSAppearanceNameVibrantLight"
+            appr = AppKit.NSAppearance.appearanceNamed_(appr_name)
             if appr:
                 glass_view.setAppearance_(appr)
-                ns_window.setAppearance_(appr)
             logger.info("Activated NSVisualEffectView vibrancy for macOS %s", ".".join(map(str, MACOS_VERSION)))
 
         # NSViewWidthSizable (2) | NSViewHeightSizable (16) = 18
         glass_view.setAutoresizingMask_(18)
 
-        # Insert at the back: NSWindowBelow (-1)
-        content_view.addSubview_positioned_relativeTo_(glass_view, -1, None)
+        # Insert behind content_view in the root theme frame so Qt controls render crisp and sharp ON TOP of the glass
+        if superview is not content_view:
+            superview.addSubview_positioned_relativeTo_(glass_view, -1, content_view)
+        else:
+            content_view.addSubview_positioned_relativeTo_(glass_view, -1, None)
         window._pyobjc_glass_view = glass_view
         return True
     except Exception as e:
@@ -628,6 +693,263 @@ def _pyobjc_configure_traffic_lights(
         return True
     except Exception as e:
         logger.debug("Could not reposition traffic lights via PyObjC: %s", e)
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Zero-dependency ctypes fallback (macOS Ventura through Golden Gate+)
+# ---------------------------------------------------------------------------
+
+_ctypes_objc_lib = None
+
+
+def _get_ctypes_objc():
+    global _ctypes_objc_lib
+    if _ctypes_objc_lib is not None:
+        return _ctypes_objc_lib
+    if not IS_MACOS:
+        return None
+    try:
+        import ctypes
+        objc = ctypes.cdll.LoadLibrary("/usr/lib/libobjc.A.dylib")
+        objc.objc_getClass.restype = ctypes.c_void_p
+        objc.objc_getClass.argtypes = [ctypes.c_char_p]
+        objc.sel_registerName.restype = ctypes.c_void_p
+        objc.sel_registerName.argtypes = [ctypes.c_char_p]
+        objc.objc_msgSend.restype = ctypes.c_void_p
+        _ctypes_objc_lib = objc
+        return objc
+    except Exception:
+        return None
+
+
+def _ctypes_msg(objc, obj, sel_name: str, *args, restype=None, argtypes=None):
+    import ctypes
+    if not obj:
+        return 0
+    fn = ctypes.cast(objc.objc_msgSend, ctypes.c_void_p)
+    sel = objc.sel_registerName(sel_name.encode("ascii"))
+    actual_res = restype or ctypes.c_void_p
+    if argtypes is None:
+        actual_args = [ctypes.c_void_p, ctypes.c_void_p] + [ctypes.c_void_p] * len(args)
+    else:
+        actual_args = [ctypes.c_void_p, ctypes.c_void_p] + argtypes
+    func_type = ctypes.CFUNCTYPE(actual_res, *actual_args)
+    return func_type(fn.value)(obj, sel, *args)
+
+
+def _ctypes_get_nswindow(widget: QWidget) -> int | None:
+    objc = _get_ctypes_objc()
+    if not objc:
+        return None
+    try:
+        import ctypes
+        ptr = int(widget.winId())
+        ns_win = _ctypes_msg(objc, ctypes.c_void_p(ptr), "window")
+        return int(ns_win) if ns_win else None
+    except Exception:
+        return None
+
+
+def _ctypes_prepare_window(window: QMainWindow | QWidget) -> bool:
+    objc = _get_ctypes_objc()
+    if not objc:
+        return False
+    try:
+        import ctypes
+        ns_win_ptr = _ctypes_get_nswindow(window)
+        if not ns_win_ptr:
+            return False
+        ns_win = ctypes.c_void_p(ns_win_ptr)
+        cur_mask = _ctypes_msg(objc, ns_win, "styleMask", restype=ctypes.c_ulong)
+        target_mask = cur_mask | 0x8000 | 0x0008
+        _ctypes_msg(objc, ns_win, "setStyleMask:", target_mask, argtypes=[ctypes.c_ulong])
+        _ctypes_msg(objc, ns_win, "setTitlebarAppearsTransparent:", 1, argtypes=[ctypes.c_bool])
+        _ctypes_msg(objc, ns_win, "setTitleVisibility:", 1, argtypes=[ctypes.c_long])
+        _ctypes_msg(objc, ns_win, "setOpaque:", 0, argtypes=[ctypes.c_bool])
+        nscolor = objc.objc_getClass(b"NSColor")
+        clear_color = _ctypes_msg(objc, nscolor, "clearColor")
+        _ctypes_msg(objc, ns_win, "setBackgroundColor:", clear_color, argtypes=[ctypes.c_void_p])
+        _ctypes_msg(objc, ns_win, "setMovableByWindowBackground:", 1, argtypes=[ctypes.c_bool])
+        return True
+    except Exception as e:
+        logger.debug("_ctypes_prepare_window skipped: %s", e)
+        return False
+
+
+def _ctypes_ensure_seamless_titlebar(window: QMainWindow | QWidget) -> None:
+    objc = _get_ctypes_objc()
+    if not objc:
+        return
+    try:
+        import ctypes
+        ns_win_ptr = _ctypes_get_nswindow(window)
+        if not ns_win_ptr:
+            return
+        ns_win = ctypes.c_void_p(ns_win_ptr)
+        cur_mask = _ctypes_msg(objc, ns_win, "styleMask", restype=ctypes.c_ulong)
+        target_mask = cur_mask | 0x8000 | 0x0008
+        if (cur_mask & 0x8008) != 0x8008:
+            _ctypes_msg(objc, ns_win, "setStyleMask:", target_mask, argtypes=[ctypes.c_ulong])
+        _ctypes_msg(objc, ns_win, "setTitlebarAppearsTransparent:", 1, argtypes=[ctypes.c_bool])
+        _ctypes_msg(objc, ns_win, "setTitleVisibility:", 1, argtypes=[ctypes.c_long])
+        _ctypes_msg(objc, ns_win, "setOpaque:", 0, argtypes=[ctypes.c_bool])
+        nscolor = objc.objc_getClass(b"NSColor")
+        clear_color = _ctypes_msg(objc, nscolor, "clearColor")
+        _ctypes_msg(objc, ns_win, "setBackgroundColor:", clear_color, argtypes=[ctypes.c_void_p])
+        _ctypes_msg(objc, ns_win, "setMovableByWindowBackground:", 1, argtypes=[ctypes.c_bool])
+        _ctypes_enable_zoom_button(window)
+        _ctypes_apply_native_window_buttons(window)
+    except Exception as e:
+        logger.debug("_ctypes_ensure_seamless_titlebar skipped: %s", e)
+
+
+def _ctypes_enable_zoom_button(window: QMainWindow | QWidget) -> None:
+    objc = _get_ctypes_objc()
+    if not objc:
+        return
+    try:
+        import ctypes
+        ns_win_ptr = _ctypes_get_nswindow(window)
+        if not ns_win_ptr:
+            return
+        ns_win = ctypes.c_void_p(ns_win_ptr)
+        zoom_btn = _ctypes_msg(objc, ns_win, "standardWindowButton:", 2, argtypes=[ctypes.c_ulong])
+        if zoom_btn:
+            _ctypes_msg(objc, ctypes.c_void_p(zoom_btn), "setEnabled:", 1, argtypes=[ctypes.c_bool])
+            _ctypes_msg(objc, ctypes.c_void_p(zoom_btn), "setHidden:", 0, argtypes=[ctypes.c_bool])
+        beh = _ctypes_msg(objc, ns_win, "collectionBehavior", restype=ctypes.c_ulong)
+        # Enable FullScreenPrimary (1 << 7), Remove FullScreenNone (1 << 9)
+        new_beh = (beh & ~(1 << 9)) | (1 << 7)
+        _ctypes_msg(objc, ns_win, "setCollectionBehavior:", new_beh, argtypes=[ctypes.c_ulong])
+    except Exception:
+        pass
+
+
+def _ctypes_apply_native_window_buttons(window: QMainWindow | QWidget) -> bool:
+    objc = _get_ctypes_objc()
+    if not objc:
+        return False
+    try:
+        import ctypes
+        ns_win_ptr = _ctypes_get_nswindow(window)
+        if not ns_win_ptr:
+            return False
+        ns_win = ctypes.c_void_p(ns_win_ptr)
+        for b_type in (0, 1, 2):
+            btn = _ctypes_msg(objc, ns_win, "standardWindowButton:", b_type, argtypes=[ctypes.c_ulong])
+            if btn:
+                layer = _ctypes_msg(objc, ctypes.c_void_p(btn), "layer")
+                if layer:
+                    _ctypes_msg(objc, ctypes.c_void_p(layer), "setFilters:", None, argtypes=[ctypes.c_void_p])
+                _ctypes_msg(objc, ctypes.c_void_p(btn), "setEnabled:", 1, argtypes=[ctypes.c_bool])
+                _ctypes_msg(objc, ctypes.c_void_p(btn), "setHidden:", 0, argtypes=[ctypes.c_bool])
+        _ctypes_enable_zoom_button(window)
+        return True
+    except Exception:
+        return False
+
+
+def _ctypes_apply_glass(window: QMainWindow | QWidget, corner_radius: float) -> bool:
+    objc = _get_ctypes_objc()
+    if not objc:
+        return False
+    try:
+        import ctypes
+
+        class CGPoint(ctypes.Structure):
+            _fields_ = [("x", ctypes.c_double), ("y", ctypes.c_double)]
+
+        class CGSize(ctypes.Structure):
+            _fields_ = [("width", ctypes.c_double), ("height", ctypes.c_double)]
+
+        class CGRect(ctypes.Structure):
+            _fields_ = [("origin", CGPoint), ("size", CGSize)]
+
+        ns_win_ptr = _ctypes_get_nswindow(window)
+        if not ns_win_ptr:
+            return False
+        ns_win = ctypes.c_void_p(ns_win_ptr)
+        content_view = ctypes.c_void_p(_ctypes_msg(objc, ns_win, "contentView"))
+        if not content_view:
+            return False
+
+        fn = ctypes.cast(objc.objc_msgSend, ctypes.c_void_p)
+        bounds_fn = ctypes.CFUNCTYPE(CGRect, ctypes.c_void_p, ctypes.c_void_p)(fn.value)
+        rect = bounds_fn(content_view, objc.sel_registerName(b"bounds"))
+
+        # Look up NSGlassEffectView or NSVisualEffectView
+        glass_cls = objc.objc_getClass(b"NSGlassEffectView") if is_golden_gate_or_newer() else None
+        if not glass_cls:
+            glass_cls = objc.objc_getClass(b"NSVisualEffectView")
+        if not glass_cls:
+            return False
+
+        alloc_v = _ctypes_msg(objc, glass_cls, "alloc")
+        init_fn = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, CGRect)(fn.value)
+        glass_view = ctypes.c_void_p(init_fn(alloc_v, objc.sel_registerName(b"initWithFrame:"), rect))
+        if not glass_view:
+            return False
+
+        # Configure material: 21 (UnderWindowBackground), blendingMode: 0 (BehindWindow), state: 1 (Active)
+        _ctypes_msg(objc, glass_view, "setMaterial:", 21, argtypes=[ctypes.c_long])
+        _ctypes_msg(objc, glass_view, "setBlendingMode:", 0, argtypes=[ctypes.c_long])
+        _ctypes_msg(objc, glass_view, "setState:", 1, argtypes=[ctypes.c_long])
+        _ctypes_msg(objc, glass_view, "setAutoresizingMask:", 18, argtypes=[ctypes.c_ulong])
+
+        superview_ptr = _ctypes_msg(objc, content_view, "superview")
+        superview = ctypes.c_void_p(superview_ptr) if superview_ptr else content_view
+        parent_view = superview if superview.value else content_view
+        rel_view = content_view if superview.value else None
+
+        _ctypes_msg(objc, parent_view, "addSubview:positioned:relativeTo:", glass_view, -1, rel_view, argtypes=[ctypes.c_void_p, ctypes.c_long, ctypes.c_void_p])
+        window._ctypes_glass_view = glass_view
+        _ctypes_ensure_seamless_titlebar(window)
+        return True
+    except Exception as e:
+        logger.debug("_ctypes_apply_glass failed: %s", e)
+        return False
+
+
+def _ctypes_configure_traffic_lights(window: QMainWindow | QWidget, x_offset: int, y_offset: int) -> bool:
+    objc = _get_ctypes_objc()
+    if not objc:
+        return False
+    try:
+        import ctypes
+
+        class CGPoint(ctypes.Structure):
+            _fields_ = [("x", ctypes.c_double), ("y", ctypes.c_double)]
+
+        class CGSize(ctypes.Structure):
+            _fields_ = [("width", ctypes.c_double), ("height", ctypes.c_double)]
+
+        class CGRect(ctypes.Structure):
+            _fields_ = [("origin", CGPoint), ("size", CGSize)]
+
+        ns_win_ptr = _ctypes_get_nswindow(window)
+        if not ns_win_ptr:
+            return False
+        ns_win = ctypes.c_void_p(ns_win_ptr)
+        fn = ctypes.cast(objc.objc_msgSend, ctypes.c_void_p)
+        frame_fn = ctypes.CFUNCTYPE(CGRect, ctypes.c_void_p, ctypes.c_void_p)(fn.value)
+        set_origin_fn = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_void_p, CGPoint)(fn.value)
+        sel_origin = objc.sel_registerName(b"setFrameOrigin:")
+        sel_frame = objc.sel_registerName(b"frame")
+
+        spacing = 20
+        origin_y = max(2.0, 9.0 - float(y_offset)) if y_offset != 0 else 9.0
+        for i, b_type in enumerate((0, 1, 2)):
+            btn = _ctypes_msg(objc, ns_win, "standardWindowButton:", b_type, argtypes=[ctypes.c_ulong])
+            if btn:
+                _ctypes_msg(objc, ctypes.c_void_p(btn), "setEnabled:", 1, argtypes=[ctypes.c_bool])
+                _ctypes_msg(objc, ctypes.c_void_p(btn), "setHidden:", 0, argtypes=[ctypes.c_bool])
+                origin_x = float(x_offset + (i * spacing))
+                set_origin_fn(ctypes.c_void_p(btn), sel_origin, CGPoint(origin_x, origin_y))
+        _ctypes_enable_zoom_button(window)
+        return True
+    except Exception as e:
+        logger.debug("_ctypes_configure_traffic_lights failed: %s", e)
         return False
 
 

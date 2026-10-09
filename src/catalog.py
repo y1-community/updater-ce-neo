@@ -630,6 +630,87 @@ def release_sort_key(release):
     )
 
 
+def parse_clean_release_tag_label(rel, prefer_240p=False) -> str:
+    """Parse release tag to isolate semantic version or datestamp, followed by parenthesized verbs.
+
+    Adheres to user requirements:
+    - Removes everything except the semantic version (e.g. 3.0.7) or datestamp (e.g. 'January 3 2026').
+    - Any verbs listed in the release tag are placed after the version in separate parentheses,
+      e.g. 2.1.9-adb -> 2.1.9 (ADB)
+      1.8.2-adb-wifi or 1.8.2-adb-wi-fi -> 1.8.2 (ADB) (Wi-Fi)
+      Handles 'wi' and 'fi' permutations cleanly as 'Wi-Fi'.
+    """
+    tag_name = (rel.get("tag_name") or "").strip()
+    name = (rel.get("name") or "").strip()
+    is_prerelease = bool(rel.get("prerelease"))
+    raw = tag_name or name
+    if not raw:
+        return ""
+
+    # 1. Datestamp check: YYYY-MM-DD or YYYYMMDD
+    date_match = re.search(r"\b(20\d{2})[-_.]?(0[1-9]|1[0-2])[-_.]?(0[1-9]|[12]\d|3[01])\b", raw)
+    date_str = None
+    if date_match:
+        try:
+            y, m, d = int(date_match.group(1)), int(date_match.group(2)), int(date_match.group(3))
+            dt = datetime(y, m, d)
+            date_str = dt.strftime("%B %-d %Y")
+        except Exception:
+            pass
+
+    # 2. Semantic version check (e.g. 3.1.2, 0.9.0, 1.8.2)
+    v_match = re.search(r"(?:^|[^\d.])(?:v|v\.)?(\d+\.\d+(?:\.\d+)?(?:[a-zA-Z0-9]+)?)(?:[^\d.]|$)", raw, re.IGNORECASE)
+    semver_str = None
+    if v_match:
+        semver_str = v_match.group(1)
+
+    version_part = semver_str or date_str
+    if not version_part:
+        return name or raw
+
+    # 3. Extract verbs from tag_name (and raw string)
+    lower_raw = raw.lower()
+    verbs = []
+
+    # ADB
+    if re.search(r"\badb\b", lower_raw) or "-adb" in lower_raw or "adb-" in lower_raw or "(adb)" in lower_raw:
+        verbs.append("ADB")
+
+    # Wi-Fi permutations: wifi, wi-fi, wi_fi, or "wi"
+    if re.search(r"\b(?:wi[-_]?fi|wifi|wi)\b", lower_raw):
+        verbs.append("Wi-Fi")
+
+    # 240p / 360p
+    is_240p = (
+        prefer_240p
+        or rel.get("selected_resolution") == "240p"
+        or rel.get("prefer_240p")
+        or "240p" in str(rel.get("asset_name", "")).lower()
+        or "240p" in lower_raw
+    )
+    if is_240p:
+        if "240p" not in verbs:
+            verbs.append("240p")
+    elif "360p" in lower_raw:
+        verbs.append("360p")
+
+    # Root / Magisk
+    if re.search(r"\b(?:root|magisk)\b", lower_raw):
+        verbs.append("Root")
+
+    # Beta / Alpha / RC
+    rc_m = re.search(r"\b(rc\d*|beta\d*|alpha\d*)\b", lower_raw)
+    if rc_m:
+        val = rc_m.group(1)
+        verbs.append(val.upper() if "rc" in val else val.title())
+
+    verb_suffix = " ".join(f"({v})" for v in verbs)
+    label = f"{version_part} {verb_suffix}".strip()
+    if is_prerelease and "[preview]" not in label.lower() and "(beta)" not in label.lower() and "(alpha)" not in label.lower():
+        label += "  [preview]"
+    return label
+
+
 def format_release_display_label(rel, prefer_240p=False):
     """Format release display label adhering to legacy firmware_downloader.py rules."""
     tag_name = (rel.get("tag_name") or "").strip()
@@ -1106,13 +1187,23 @@ class ReleasesClient:
 
 
 def _app_cache_dir():
-    """Per-user cache dir, mirroring CE's ``_FIRMWARE_APP_DIR/.cache``."""
+    """Per-user cache dir, stored under 'Updater CE'."""
     import sys
 
     if os.name == "nt":
         base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
+        return base / "Updater CE" / ".cache"
     elif sys.platform == "darwin":
         base = Path.home() / "Library" / "Application Support"
+        target = base / "Updater CE" / ".cache"
+        legacy = base / "Innioasis Updater" / ".cache"
+        if not target.exists() and legacy.exists():
+            return legacy
+        return target
     else:
         base = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
-    return base / "innioasis-updater" / ".cache"
+        target = base / "updater-ce"
+        legacy = base / "innioasis-updater" / ".cache"
+        if not target.exists() and legacy.exists():
+            return legacy
+        return target

@@ -238,7 +238,7 @@ def _get_svg_pixmap(symbol_name: str, size: int, color: str = "#FFFFFF") -> QPix
 def resolve_symbol_colors(
     color: Optional[str] = None,
     focused_color: Optional[str] = None,
-    match_accent: bool = True,
+    match_accent: bool = False,
 ) -> tuple[str, str]:
     """Resolve (normal_color, focused_color) based on system appearance and accent color.
 
@@ -284,7 +284,7 @@ def get_symbol_pixmap(
     symbol_name: str,
     size: int = 16,
     color: Optional[str] = None,
-    match_accent: bool = True,
+    match_accent: bool = False,
 ) -> QPixmap:
     """Return a crisp QPixmap for the requested symbol adapting to host OS and theme color."""
     norm_color, _ = resolve_symbol_colors(color=color, match_accent=match_accent)
@@ -316,7 +316,7 @@ def get_symbol_icon(
     size: int = 16,
     color: Optional[str] = None,
     focused_color: Optional[str] = None,
-    match_accent: bool = True,
+    match_accent: bool = False,
 ) -> QIcon:
     """Return a multi-state QIcon adapting to host OS, dark/light mode, and focus/checked states.
 

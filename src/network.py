@@ -120,6 +120,10 @@ def fetch_releases_listing(repo: str, timeout: float = LISTING_TIMEOUT):
                 data = json.loads(resp.read().decode("utf-8", "replace"))
                 if isinstance(data, list):
                     return data
+        except urllib.error.HTTPError as e:
+            if e.code < 500:
+                # HTTP response from GitHub (e.g. 403 rate limit) proves server is reachable
+                return []
         except Exception:
             continue
     return None

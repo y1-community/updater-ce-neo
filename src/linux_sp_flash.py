@@ -86,11 +86,21 @@ SETUP_SCRIPT_FILENAME = "setup_sp_flash_linux.sh"
 def _app_cache_dir() -> Path:
     if os.name == "nt":
         base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
+        return base / "Updater CE"
     elif platform.system() == "Darwin":
         base = Path.home() / "Library" / "Application Support"
+        target = base / "Updater CE"
+        legacy = base / "Innioasis Updater"
+        if not target.exists() and legacy.exists():
+            return legacy
+        return target
     else:
         base = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
-    return base / "innioasis-updater"
+        target = base / "updater-ce"
+        legacy = base / "innioasis-updater"
+        if not target.exists() and legacy.exists():
+            return legacy
+        return target
 
 
 def _user_stage_dir() -> Path:

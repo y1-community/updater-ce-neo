@@ -3,7 +3,7 @@
 import logging
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, Signal
+from PySide6.QtCore import QSettings, Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -306,6 +306,23 @@ class SettingsPage(QWidget):
         self._offline_mode_card.set_layout(off_layout)
         self._offline_mode_card.setVisible(not is_mediatek_installer())
         layout.addWidget(self._offline_mode_card)
+
+        # --- Card 6: Legacy Installation Cleanup (Pre-3.0) ---
+        self._legacy_cleanup_card = Card("legacy_cleanup_card_title")
+        leg_layout = QVBoxLayout()
+        leg_layout.setSpacing(8)
+        self._legacy_cleanup_desc = QLabel(tr("legacy_cleanup_card_desc"))
+        self._legacy_cleanup_desc.setWordWrap(True)
+        self._legacy_cleanup_desc.setProperty("cssClass", "dimmed")
+        leg_layout.addWidget(self._legacy_cleanup_desc)
+
+        btn_scan = QPushButton(tr("legacy_cleanup_scan_btn"))
+        btn_scan.clicked.connect(self._on_scan_legacy_installations)
+        leg_layout.addWidget(btn_scan, alignment=Qt.AlignLeft)
+
+        self._legacy_cleanup_card.set_layout(leg_layout)
+        self._legacy_cleanup_card.setVisible(not is_mediatek_installer() and not paths.IS_WINDOWS)
+        layout.addWidget(self._legacy_cleanup_card)
 
         # SP Flash Tool is not supported on macOS (MTKClient only).
         # Hide backend selection and diagnostics cards on macOS.
@@ -766,4 +783,22 @@ class SettingsPage(QWidget):
         self._sp_auth_clear.setText(tr("settings_sp_auth_clear"))
         self._sp_auth_desc.setText(tr("settings_sp_auth_desc"))
         self._sp_auth_value.setPlaceholderText(tr("settings_sp_auth_none"))
+        if hasattr(self, "_legacy_cleanup_card"):
+            self._legacy_cleanup_card.retranslate()
+        if hasattr(self, "_legacy_cleanup_desc"):
+            self._legacy_cleanup_desc.setText(tr("legacy_cleanup_card_desc"))
         self.refresh_settings()
+
+    def _on_scan_legacy_installations(self):
+        from ..legacy_cleanup import detect_legacy_installations
+        info = detect_legacy_installations()
+        if info.get("has_legacy") or info.get("has_platform_tools"):
+            from .dialogs import LegacyMigrationDialog
+            dlg = LegacyMigrationDialog(self, scan_info=info)
+            dlg.exec()
+        else:
+            QMessageBox.information(
+                self,
+                tr("legacy_cleanup_title"),
+                tr("legacy_cleanup_none_found"),
+            )

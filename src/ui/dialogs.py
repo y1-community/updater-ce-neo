@@ -14,8 +14,10 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QFileDialog,
     QFrame,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
+    QMessageBox,
     QPushButton,
     QProgressBar,
     QTextBrowser,
@@ -1435,4 +1437,135 @@ class ReleaseReminderDialog(QDialog):
 
 # Alias for cross-platform and explicit system checking invocations
 SystemCheckerDialog = LinuxSetupDialog
+
+
+class LegacyMigrationDialog(QDialog):
+    """Dialog prompting users to clean up legacy pre-3.0 installations and reclaim disk space."""
+
+    def __init__(self, parent=None, scan_info: dict = None):
+        super().__init__(parent)
+        self.setWindowTitle(tr("legacy_cleanup_title"))
+        self.setMinimumWidth(520)
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+
+        self.scan_info = scan_info
+        if self.scan_info is None:
+            from ..legacy_cleanup import detect_legacy_installations
+            self.scan_info = detect_legacy_installations()
+
+        self._build_ui()
+
+    def _build_ui(self):
+        t = T()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(14)
+
+        # Header Title
+        title_lbl = QLabel(tr("legacy_cleanup_title"))
+        title_lbl.setStyleSheet(f"font-size: 16px; font-weight: 700; color: {t.fg};")
+        layout.addWidget(title_lbl)
+
+        # Description
+        desc_lbl = QLabel(tr("legacy_cleanup_desc"))
+        desc_lbl.setWordWrap(True)
+        desc_lbl.setStyleSheet(f"font-size: 13px; color: {t.fg}; line-height: 1.4;")
+        layout.addWidget(desc_lbl)
+
+        # Reclaim Space Badge / Label
+        from ..legacy_cleanup import format_bytes
+        est_bytes = self.scan_info.get("estimated_bytes", 0)
+        reclaim_text = tr("legacy_cleanup_reclaim").format(size=format_bytes(est_bytes))
+        reclaim_lbl = QLabel(reclaim_text)
+        reclaim_lbl.setStyleSheet("font-size: 13px; font-weight: 600; color: #22c55e;")
+        layout.addWidget(reclaim_lbl)
+
+        # Detected Items List
+        items = self.scan_info.get("items_summary", [])
+        if items:
+            items_box = QGroupBox("Detected Components")
+            items_box_layout = QVBoxLayout(items_box)
+            items_box_layout.setContentsMargins(12, 10, 12, 10)
+            items_box_layout.setSpacing(6)
+            for it in items:
+                lbl = QLabel(f"• {it}")
+                lbl.setStyleSheet("font-size: 12px; font-family: monospace;")
+                items_box_layout.addWidget(lbl)
+            layout.addWidget(items_box)
+
+        # Checkbox: Remove Legacy App & Library
+        self.cb_remove_legacy = QCheckBox(tr("legacy_cleanup_remove_app_cb"))
+        self.cb_remove_legacy.setChecked(True)
+        self.cb_remove_legacy.setStyleSheet(f"font-size: 13px; color: {t.fg}; font-weight: 500;")
+        layout.addWidget(self.cb_remove_legacy)
+
+        # Checkbox: Android Platform Tools (ADB/Fastboot)
+        if self.scan_info.get("has_platform_tools"):
+            self.cb_keep_platform_tools = QCheckBox(tr("legacy_cleanup_keep_platform_tools_cb"))
+            self.cb_keep_platform_tools.setChecked(True)
+            self.cb_keep_platform_tools.setStyleSheet(f"font-size: 13px; color: {t.fg}; font-weight: 500;")
+            layout.addWidget(self.cb_keep_platform_tools)
+
+            pt_hint = QLabel(tr("legacy_cleanup_platform_tools_hint"))
+            pt_hint.setWordWrap(True)
+            pt_hint.setStyleSheet(f"font-size: 11px; color: {t.fg_muted}; margin-left: 22px;")
+            layout.addWidget(pt_hint)
+
+        layout.addSpacing(6)
+
+        # Button Layout
+        btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(10)
+        btn_layout.addStretch()
+
+        btn_later = QPushButton(tr("legacy_cleanup_btn_later"))
+        btn_later.clicked.connect(self.reject)
+        btn_layout.addWidget(btn_later)
+
+        self.btn_clean = QPushButton(tr("legacy_cleanup_btn_clean"))
+        self.btn_clean.setDefault(True)
+        self.btn_clean.clicked.connect(self._on_clean)
+        btn_layout.addWidget(self.btn_clean)
+
+        layout.addLayout(btn_layout)
+
+    def _on_clean(self):
+        self.btn_clean.setEnabled(False)
+        self.btn_clean.setText("Cleaning up...")
+        from PySide6.QtWidgets import QApplication
+        QApplication.processEvents()
+
+        from .. import paths
+        from ..legacy_cleanup import remove_macos_legacy, remove_linux_legacy
+
+        remove_app = self.cb_remove_legacy.isChecked()
+        keep_pt = getattr(self, "cb_keep_platform_tools", None)
+        uninstall_pt = bool(keep_pt is not None and not keep_pt.isChecked())
+
+        if paths.IS_MAC:
+            success, removed, errors = remove_macos_legacy(
+                remove_apps=remove_app,
+                remove_app_support=remove_app,
+                uninstall_platform_tools=uninstall_pt,
+            )
+        else:
+            success, removed, errors = remove_linux_legacy(
+                remove_install_dir=remove_app,
+                uninstall_platform_tools=uninstall_pt,
+            )
+
+        if errors:
+            err_msg = "\n".join(errors)
+            QMessageBox.warning(
+                self,
+                tr("legacy_cleanup_title"),
+                f"Some items could not be removed:\n\n{err_msg}",
+            )
+        else:
+            QMessageBox.information(
+                self,
+                tr("legacy_cleanup_done_title"),
+                tr("legacy_cleanup_done_msg"),
+            )
+        self.accept()
 

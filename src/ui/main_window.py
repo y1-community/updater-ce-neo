@@ -169,10 +169,7 @@ _INSTALL_RUN_STATES = (
 
 
 class TranslucentCentralWidget(QWidget):
-    """Central container that explicitly clears dirty rects before painting children.
-
-    Prevents transparent/semi-transparent backing store accumulation (ghosting / dual focus).
-    """
+    """Central container with translucent background that cleanly clears dirty rects."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -188,7 +185,7 @@ class TranslucentCentralWidget(QWidget):
 
 
 class ClearStackedWidget(QStackedWidget):
-    """Stacked widget that cleanly hides inactive pages and clears backing store before painting."""
+    """Stacked widget that cleanly hides inactive pages."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -203,18 +200,11 @@ class ClearStackedWidget(QStackedWidget):
         if target:
             target.show()
         super().setCurrentIndex(index)
-        self.repaint()
-
-    def paintEvent(self, event):
-        p = QPainter(self)
-        p.setCompositionMode(QPainter.CompositionMode_Clear)
-        p.fillRect(event.rect(), Qt.transparent)
-        p.end()
-        super().paintEvent(event)
+        self.update()
 
 
 class ClearNavPanel(QWidget):
-    """Sidebar rail container that clears backing store before painting to prevent button hover/checked ghosting."""
+    """Sidebar rail container matching native OS styles."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -229,7 +219,26 @@ class ClearNavPanel(QWidget):
 
 
 class ClearNavButton(QPushButton):
-    """Sidebar navigation button that cleanly clears its backing store on state/hover changes."""
+    """Sidebar navigation button matching native OS styles."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setAttribute(Qt.WA_TranslucentBackground, True)
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setCompositionMode(QPainter.CompositionMode_Clear)
+        p.fillRect(event.rect(), Qt.transparent)
+        p.end()
+        super().paintEvent(event)
+
+
+class ClearWidget(QWidget):
+    """Container that clears backing store before child rendering."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAttribute(Qt.WA_TranslucentBackground, True)
 
     def paintEvent(self, event):
         p = QPainter(self)
@@ -316,6 +325,45 @@ class DraggableHeaderBar(QWidget):
         super().mouseReleaseEvent(event)
 
 
+def can_inline_title_with_window_controls() -> bool:
+    """Return True if the current platform/DE supports inlining custom title/controls seamlessly."""
+    if sys.platform == "darwin":
+        return True
+    if sys.platform == "win32" or platform.system() == "Windows":
+        return True
+    if os.environ.get("UPDATER_INLINE_TITLE") == "1":
+        return True
+    if os.environ.get("UPDATER_TRADITIONAL_TITLE") == "1":
+        return False
+    desktop = (os.environ.get("XDG_CURRENT_DESKTOP") or "").lower()
+    return any(d in desktop for d in ("gnome", "unity", "pantheon"))
+
+
+def are_window_controls_on_left() -> bool:
+    """Return True if window controls (close/minimize/zoom) are on the left (e.g. macOS)."""
+    if sys.platform == "darwin":
+        return True
+    if sys.platform == "win32" or platform.system() == "Windows":
+        return False
+    try:
+        import subprocess
+
+        res = subprocess.run(
+            ["gsettings", "get", "org.gnome.desktop.wm.preferences", "button-layout"],
+            capture_output=True,
+            text=True,
+            timeout=1,
+        )
+        if res.returncode == 0:
+            val = res.stdout.strip().strip("'\"")
+            if ":" in val:
+                left_part, _ = val.split(":", 1)
+                return any(x in left_part for x in ("close", "minimize", "maximize"))
+    except Exception:
+        pass
+    return False
+
+
 class MainWindow(QMainWindow):
     log_line_added = Signal(str)
 
@@ -399,18 +447,23 @@ class MainWindow(QMainWindow):
         central_layout.setContentsMargins(0, 0, 0, 0)
         central_layout.setSpacing(0)
 
-        # 1. Unified Draggable Title / Header Bar at the top
-        self._title_bar = self._build_header_bar()
+        # 1. Unified Draggable Title / Header Bar at the top (if supported)
+        is_inline = can_inline_title_with_window_controls()
         is_mac = sys.platform == "darwin"
-        if is_mac:
-            self._title_bar.setParent(self)
-            self._title_bar.setGeometry(0, 0, self.width(), 44)
-            self._title_bar.raise_()
-            # On macOS, centralWidget is inset by 32px by Cocoa QPA.
-            # Setting 12px top margin ensures body begins cleanly at y = 44.
-            central_layout.setContentsMargins(0, 12, 0, 0)
+        if is_inline:
+            self._title_bar = self._build_header_bar()
+            if is_mac:
+                self._title_bar.setParent(self)
+                self._title_bar.setGeometry(0, 0, self.width(), 44)
+                self._title_bar.raise_()
+                # On macOS, centralWidget is inset by 32px by Cocoa QPA.
+                # Setting 12px top margin ensures body begins cleanly at y = 44.
+                central_layout.setContentsMargins(0, 12, 0, 0)
+            else:
+                central_layout.addWidget(self._title_bar)
         else:
-            central_layout.addWidget(self._title_bar)
+            self._title_bar = None
+            central_layout.setContentsMargins(0, 0, 0, 0)
 
         # 2. Body row: Navigation sidebar on left, stacked pages on right
         body = QWidget()
@@ -429,8 +482,9 @@ class MainWindow(QMainWindow):
         self._retry_page = RetryPage()
         self._settings_page = SettingsPage()
 
-        # Mount select_page._title into the unified header bar so it sits in the top title row
-        self._title_container.layout().addWidget(self._select_page._title)
+        # Mount select_page._title into the unified header bar if inlining
+        if is_inline and hasattr(self, "_title_container"):
+            self._title_container.layout().addWidget(self._select_page._title)
 
         for w in (
             self._select_page,
@@ -508,24 +562,8 @@ class MainWindow(QMainWindow):
         """Update window components to match active OS theme tokens."""
         self._on_theme_changed()
 
-    def _build_header_bar(self):
+    def _build_brand_header_widget(self):
         t = T()
-        bar = DraggableHeaderBar(self)
-        bar.setFixedHeight(44)
-        is_mac = sys.platform == "darwin"
-        is_win = sys.platform == "win32" or platform.system() == "Windows"
-
-        # On macOS, clear native traffic lights at top left (x=18..72). Start brand block at x=84.
-        left_margin = 84 if is_mac else 14
-        # On Windows, clear native caption buttons at top right (minimize, maximize & close)
-        right_margin = 120 if is_win else 24
-
-        bar_layout = QHBoxLayout(bar)
-        bar_layout.setContentsMargins(left_margin, 0, right_margin, 0)
-        bar_layout.setSpacing(10)
-        bar_layout.setAlignment(Qt.AlignVCenter)
-
-        # Brand header container: yellow icon + "Updater CE 3.0" + "by Ryan Specter"
         self._brand_container = QWidget()
         self._brand_container.setObjectName("brandContainer")
         self._brand_container.setAttribute(Qt.WA_TranslucentBackground, True)
@@ -584,23 +622,45 @@ class MainWindow(QMainWindow):
         brand_text_col.addWidget(self._version_label)
 
         brand_row.addLayout(brand_text_col, 1)
-        bar_layout.addWidget(self._brand_container, 0, Qt.AlignVCenter)
+        return self._brand_container
+
+    def _build_header_bar(self):
+        t = T()
+        bar = DraggableHeaderBar(self)
+        bar.setFixedHeight(44)
+        is_mac = sys.platform == "darwin"
+        is_win = sys.platform == "win32" or platform.system() == "Windows"
+        controls_left = are_window_controls_on_left()
+
+        left_margin = (84 if is_mac else 70) if controls_left else 18
+        right_margin = 24 if controls_left else (120 if is_win else 90)
+
+        bar_layout = QHBoxLayout(bar)
+        bar_layout.setContentsMargins(left_margin, 0, right_margin, 0)
+        bar_layout.setSpacing(10)
+        bar_layout.setAlignment(Qt.AlignVCenter)
+
+        brand = self._build_brand_header_widget()
 
         # Title container for active page title
-        self._title_container = QWidget()
+        self._title_container = ClearWidget()
         self._title_container.setAttribute(Qt.WA_TranslucentBackground, True)
         title_cont_layout = QHBoxLayout(self._title_container)
         title_cont_layout.setContentsMargins(0, 0, 0, 0)
         title_cont_layout.setSpacing(0)
         title_cont_layout.setAlignment(Qt.AlignVCenter)
 
-        if is_win:
+        if controls_left:
+            # macOS / left-handed DEs: Brand beside controls, page headings on the right
+            bar_layout.addWidget(brand, 0, Qt.AlignVCenter)
+            bar_layout.addStretch(1)
+            bar_layout.addWidget(self._title_container, 0, Qt.AlignVCenter)
+        else:
+            # Windows / right-handed DEs: Brand on left, page headings beside brand, controls margin on right
+            bar_layout.addWidget(brand, 0, Qt.AlignVCenter)
             bar_layout.addSpacing(28)
             bar_layout.addWidget(self._title_container, 0, Qt.AlignVCenter)
             bar_layout.addStretch(1)
-        else:
-            bar_layout.addStretch(1)
-            bar_layout.addWidget(self._title_container, 0, Qt.AlignVCenter)
 
         return bar
 
@@ -652,8 +712,13 @@ class MainWindow(QMainWindow):
         sidebar_scroll.setWidget(nav_content)
 
         layout = QVBoxLayout(nav_content)
-        layout.setContentsMargins(12, 10, 12, 14)
-        layout.setSpacing(4)
+        layout.setContentsMargins(10, 8, 10, 10)
+        layout.setSpacing(2)
+
+        if not can_inline_title_with_window_controls():
+            brand = self._build_brand_header_widget()
+            layout.addWidget(brand)
+            layout.addSpacing(8)
 
         # Exclusive navigation button group to prevent dual focus or dual checked states
         self._nav_btn_group = QButtonGroup(self)
@@ -678,25 +743,21 @@ class MainWindow(QMainWindow):
         self._nav_buttons["nav_settings"] = (self._settings_btn, _PAGE_SETTINGS)
         self._nav_btn_group.addButton(self._settings_btn, _PAGE_SETTINGS)
 
-        layout.addStretch()
-
-        self._support_btn = ClearNavButton(tr("nav_donate"))
-        self._support_btn.setIcon(get_symbol_icon("support", 16))
-        self._support_btn.setIconSize(QSize(16, 16))
-        self._support_btn.clicked.connect(self._on_support_clicked)
-        layout.addWidget(self._support_btn)
+        self._aux_nav_buttons = []
 
         self._log_btn = ClearNavButton(tr("nav_log"))
         self._log_btn.setIcon(get_symbol_icon("diagnostics", 16))
         self._log_btn.setIconSize(QSize(16, 16))
         self._log_btn.clicked.connect(self._show_diagnostics)
         layout.addWidget(self._log_btn)
+        self._aux_nav_buttons.append(self._log_btn)
 
         self._check_updates_btn = ClearNavButton(tr("nav_check_updates"))
         self._check_updates_btn.setIcon(get_symbol_icon("update", 16))
         self._check_updates_btn.setIconSize(QSize(16, 16))
         self._check_updates_btn.clicked.connect(self._on_check_updates_clicked)
         layout.addWidget(self._check_updates_btn)
+        self._aux_nav_buttons.append(self._check_updates_btn)
 
         if platform.system() == "Linux" and not paths.IS_MAC:
             self._linux_setup_btn = ClearNavButton(tr("nav_linux_setup"))
@@ -704,6 +765,7 @@ class MainWindow(QMainWindow):
             self._linux_setup_btn.setIconSize(QSize(16, 16))
             self._linux_setup_btn.clicked.connect(self._show_linux_setup)
             layout.addWidget(self._linux_setup_btn)
+            self._aux_nav_buttons.append(self._linux_setup_btn)
 
         from ..sp_flash_gui import is_sp_flash_gui_supported
         if is_sp_flash_gui_supported():
@@ -712,8 +774,16 @@ class MainWindow(QMainWindow):
             self._sp_flash_tool_btn.setIconSize(QSize(16, 16))
             self._sp_flash_tool_btn.clicked.connect(self._open_sp_flash_tool_gui)
             layout.addWidget(self._sp_flash_tool_btn)
+            self._aux_nav_buttons.append(self._sp_flash_tool_btn)
 
-        layout.addSpacing(8)
+        self._support_btn = ClearNavButton(tr("nav_donate"))
+        self._support_btn.setIcon(get_symbol_icon("support", 16))
+        self._support_btn.setIconSize(QSize(16, 16))
+        self._support_btn.clicked.connect(self._on_support_clicked)
+        layout.addWidget(self._support_btn)
+        self._aux_nav_buttons.append(self._support_btn)
+
+        layout.addStretch()
 
         self._lang_label = QLabel(tr("nav_language"))
         self._lang_label.setStyleSheet(
@@ -829,7 +899,7 @@ class MainWindow(QMainWindow):
             for btn, _ in self._nav_buttons.values():
                 btn.setStyleSheet(
                     f"QPushButton {{ background: transparent; color: {t.fg}; text-align: left;"
-                    f" padding: 8px 12px; border-radius: 5px; border: 1px solid transparent; font-size: 13px; font-weight: 500; min-height: 34px; }}"
+                    f" padding: 3px 8px; border-radius: 5px; border: 1px solid transparent; font-size: 12px; font-weight: 500; min-height: 26px; max-height: 28px; }}"
                     f"QPushButton:hover {{ background-color: {t.bg_hover}; color: {t.fg}; }}"
                     f"QPushButton:focus {{ border: 1px solid {t.border_focus}; outline: none; }}"
                     f"QPushButton:checked {{ background-color: {t.nav_active}; color: {t.nav_active_text}; font-weight: 600; border: 1px solid transparent; }}"
@@ -840,7 +910,7 @@ class MainWindow(QMainWindow):
             for btn in self._aux_nav_buttons:
                 btn.setStyleSheet(
                     f"QPushButton {{ background: transparent; color: {t.fg}; text-align: left;"
-                    f" padding: 7px 12px; border-radius: 5px; border: 1px solid transparent; font-size: 12px; font-weight: 500; min-height: 30px; }}"
+                    f" padding: 3px 8px; border-radius: 5px; border: 1px solid transparent; font-size: 12px; font-weight: 500; min-height: 26px; max-height: 28px; }}"
                     f"QPushButton:hover {{ background-color: {t.bg_hover}; color: {t.fg}; }}"
                     f"QPushButton:focus {{ border: 1px solid {t.border_focus}; outline: none; }}"
                 )
@@ -934,9 +1004,10 @@ class MainWindow(QMainWindow):
         self._reasserting_chrome = True
         try:
             if sys.platform == "darwin":
-                from .glass import _ensure_seamless_titlebar, apply_glass
+                from .glass import _ensure_seamless_titlebar, apply_glass, configure_traffic_lights
                 _ensure_seamless_titlebar(self)
                 apply_glass(self)
+                configure_traffic_lights(self, x_offset=18, y_offset=6)
             elif sys.platform == "win32":
                 from .glass import apply_windows_acrylic, apply_windows_dark_titlebar
 
@@ -1039,6 +1110,8 @@ class MainWindow(QMainWindow):
             self._shown_once = True
             if not self._install_run_active() and not self.isMaximized() and not self.isFullScreen():
                 self.resize(max(self.width(), 800), max(self.height(), 500))
+            if not os.environ.get("QT_QPA_PLATFORM") == "offscreen" and not os.environ.get("INNIOASIS_HEADLESS"):
+                QTimer.singleShot(1200, self._check_legacy_installations)
         if sys.platform == "darwin":
             from .glass import apply_glass, configure_traffic_lights
             apply_glass(self)
@@ -1241,6 +1314,8 @@ class MainWindow(QMainWindow):
 
         self._adjust_window_geometry()
         # Cleanly erase backing store and repaint full window to eliminate ghosting
+        if hasattr(self, "_title_bar"):
+            self._title_bar.repaint()
         if hasattr(self, "_nav_panel"):
             self._nav_panel.repaint()
         if hasattr(self, "_nav_content"):
@@ -2204,6 +2279,21 @@ class MainWindow(QMainWindow):
                     tr("reminder_new_release_title"),
                     tr("settings_no_devices_tracked"),
                 )
+
+    def _check_legacy_installations(self):
+        try:
+            prompted = self.settings.value("legacy_cleanup_prompted", False, type=bool)
+            if prompted:
+                return
+            from ..legacy_cleanup import detect_legacy_installations
+            info = detect_legacy_installations()
+            if info.get("has_legacy") or info.get("has_platform_tools"):
+                from .dialogs import LegacyMigrationDialog
+                dlg = LegacyMigrationDialog(self, scan_info=info)
+                dlg.exec()
+                self.settings.setValue("legacy_cleanup_prompted", True)
+        except Exception:
+            pass
 
     def _show_status(self, text, timeout_ms=0):
         """Show a transient message in the status bar; it reverts to the

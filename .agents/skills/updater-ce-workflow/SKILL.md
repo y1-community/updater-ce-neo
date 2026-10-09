@@ -167,3 +167,32 @@ print(fetch_google_translation(text, 'zh-CN'))
 ```
 Expected output contains translated Markdown headers and bullet lists without HTTP 414 URI length errors.
 
+## 10. Legacy <3.0 Environment Cleanup & Migration Invariants
+
+### 1. Distinguishing Applications on macOS
+- **Legacy Target**: `Innioasis Updater.app` (with space, bundle/app created by `run_mac.sh`).
+- **PROTECTED Invariant**: `InnioasisUpdater.app` (NO space). This is the Chinese offline-only tool. Under NO circumstances should `InnioasisUpdater.app` be flagged, modified, or uninstalled.
+- **Paths**:
+  - System: `/Applications/Innioasis Updater.app` (requires administrator privileges via AppleScript to remove).
+  - User: `~/Applications/Innioasis Updater.app`.
+  - Application Support: `~/Library/Application Support/Innioasis Updater` (contains ~500MB-1GB of legacy Git repo, venv, packages).
+  - Updater CE storage: Stored in `~/Library/Application Support/Updater CE`.
+
+### 2. Android Platform Tools Retention Policy
+- On first run of Updater CE 3.0 (macOS & Linux), check for presence of Android Platform Tools (`adb`, `fastboot`).
+- Prompt user whether to keep Android Platform Tools:
+  - If user does not need standalone ADB/Fastboot, offer to uninstall (`brew uninstall android-platform-tools` on macOS, or remove `~/.local/bin/adb` / `~/.local/bin/fastboot` on Linux).
+  - Default: keep checked (user retains tools if unsure).
+
+### 3. Linux Legacy Footprint
+- Legacy installation folder: `~/.local/share/innioasis-updater`
+- Desktop shortcut: `~/.local/share/applications/innioasis-updater.desktop`
+- User bin launcher: `~/.local/bin/innioasis-updater`
+- Temp/cache directories: `~/.cache/innioasis-updater`, `~/innioasis-updater-temp`, `/tmp/innioasis-updater-*`
+- Shared udev rules: `/etc/udev/rules.d/99-mediatek.rules` (retain for hardware connectivity).
+
+### 4. Windows Inno Setup Migration Rules
+- Inno Setup installer detects legacy versions (<3.0) via registry/uninstall keys and automatically removes them before installing Updater CE 3.0+.
+- Automatically upgrades existing 3.0 releases if newer than `3.0.2`.
+- GitHub Actions workflow `windows_installer.yml` runs on `workflow_dispatch` (manual release trigger).
+

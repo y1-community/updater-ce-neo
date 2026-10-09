@@ -422,13 +422,21 @@ class FlashPage(QWidget):
         v.addStretch(1)
         return container
 
+    def _switch_view(self, target_view):
+        for v in (self._preparing_view, self._waiting_view, self._flashing_view, self._downloading_view):
+            if v is not target_view:
+                v.hide()
+        target_view.show()
+        self._stack.setCurrentWidget(target_view)
+        self.update()
+
     def show_downloading(self):
         val = self._package_name or "\u2014"
         if hasattr(self, "_download_pkg_label"):
             self._download_pkg_label.setText(val)
         self._download_progress.setValue(0)
         self._download_status_label.setText(tr("sel_download_start"))
-        self._stack.setCurrentWidget(self._downloading_view)
+        self._switch_view(self._downloading_view)
 
     def update_download_progress(self, percent: int, status_text: str = ""):
         self._download_progress.setValue(max(0, min(100, int(percent))))
@@ -447,16 +455,16 @@ class FlashPage(QWidget):
         pass
 
     def show_preparing(self):
-        self._stack.setCurrentWidget(self._preparing_view)
+        self._switch_view(self._preparing_view)
         self._prep_banner.set_key("flash_preparing")
         self._prep_step_key = "step_extract"
         self._prep_step.setText(tr("step_extract"))
 
     def show_waiting(self):
-        self._stack.setCurrentWidget(self._waiting_view)
+        self._switch_view(self._waiting_view)
 
     def show_flashing(self):
-        self._stack.setCurrentWidget(self._flashing_view)
+        self._switch_view(self._flashing_view)
         self._warning.setVisible(True)
 
     def set_method(self, method):

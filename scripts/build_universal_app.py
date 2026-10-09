@@ -205,27 +205,36 @@ def ensure_cached_assets():
         "shiboken6.whl": "https://files.pythonhosted.org/packages/47/44/11bf71c36e71936ab4e923e5dd23599dab527c4488b01860b0f689ce9947/shiboken6-6.11.2-cp310-abi3-macosx_13_0_universal2.whl",
         "pyside6.whl": "https://files.pythonhosted.org/packages/ae/b5/99ff75f604d69eda1c5d1fe85cc43fb697d95eabc30ba86af099c2ddcd96/pyside6-6.11.2-cp310-abi3-macosx_13_0_universal2.whl",
         "pycryptodome.whl": "https://files.pythonhosted.org/packages/db/6c/a1f71542c969912bb0e106f64f60a56cc1f0fabecf9396f45accbe63fa68/pycryptodome-3.23.0-cp37-abi3-macosx_10_9_universal2.whl",
+        "pyobjc_core.whl": "https://files.pythonhosted.org/packages/b8/02/b04297ca275c92c57ebbe197e4125b2067759a296541f92e7c3746c10129/pyobjc_core-12.1-cp311-cp311-macosx_10_9_universal2.whl",
+        "pyobjc_framework_cocoa.whl": "https://files.pythonhosted.org/packages/f8/f4/0488663ce911965bb7e201b22e15bc32f171092cae6ef4e0bc7f2dca5877/pyobjc_framework_Cocoa-12.1-cp311-cp311-macosx_10_9_universal2.whl",
     }
     pure_deps = ["requests", "pyusb", "pyserial", "colorama", "certifi", "urllib3", "idna", "charset_normalizer"]
+
+    import ssl
+    try:
+        import certifi
+        ctx = ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        ctx = ssl._create_unverified_context()
 
     for name, url in targets.items():
         dest = CACHE_DIR / name
         if not dest.exists() or dest.stat().st_size == 0:
             print(f">>> Downloading {name}...")
             req = urllib.request.Request(url, headers={"User-Agent": "updater-builder"})
-            with urllib.request.urlopen(req) as resp, open(dest, "wb") as f:
+            with urllib.request.urlopen(req, context=ctx) as resp, open(dest, "wb") as f:
                 shutil.copyfileobj(resp, f)
 
     for pkg in pure_deps:
         dest = CACHE_DIR / f"{pkg}.whl"
         if not dest.exists() or dest.stat().st_size == 0:
             print(f">>> Downloading {pkg}.whl from PyPI...")
-            req = urllib.request.urlopen(f"https://pypi.org/pypi/{pkg}/json")
+            req = urllib.request.urlopen(f"https://pypi.org/pypi/{pkg}/json", context=ctx)
             data = json.loads(req.read())
             whls = [u for u in data["urls"] if u["filename"].endswith(".whl") and ("none-any" in u["filename"] or "py3-none" in u["filename"])]
             if whls:
                 url = whls[-1]["url"]
-                with urllib.request.urlopen(url) as resp, open(dest, "wb") as f:
+                with urllib.request.urlopen(url, context=ctx) as resp, open(dest, "wb") as f:
                     shutil.copyfileobj(resp, f)
 
 
@@ -234,6 +243,17 @@ def compile_universal_launcher(out_path: Path):
         tdp = Path(td)
         c_file = tdp / "launcher.c"
         c_file.write_text(LAUNCHER_C)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if sys.platform == "darwin":
+            subprocess.run([
+                "clang", "-arch", "x86_64", "-arch", "arm64",
+                "-mmacosx-version-min=13.0",
+                str(c_file), "-o", str(out_path)
+            ], check=True)
+            os.chmod(out_path, 0o755)
+            return
+
         tbd_file = tdp / "libSystem.tbd"
         tbd_file.write_text(LIB_SYSTEM_TBD)
 
@@ -262,7 +282,6 @@ def compile_universal_launcher(out_path: Path):
         ], check=True)
 
         lipo = "llvm-lipo" if shutil.which("llvm-lipo") else "lipo"
-        out_path.parent.mkdir(parents=True, exist_ok=True)
         subprocess.run([
             lipo, "-create", str(x86_bin), str(arm_bin), "-output", str(out_path)
         ], check=True)

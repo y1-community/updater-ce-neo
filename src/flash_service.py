@@ -1719,16 +1719,15 @@ class FlashWorker(QThread):
             return
 
         cmd = [sys.executable]
+        repo_root = str(Path(__file__).resolve().parent.parent)
+        env = dict(os.environ)
+        if "PYTHONPATH" in env:
+            env["PYTHONPATH"] = f"{repo_root}{os.pathsep}{env['PYTHONPATH']}"
+        else:
+            env["PYTHONPATH"] = repo_root
+
         if not getattr(sys, "frozen", False):
-            try:
-                from . import app as app_main
-                main_file = getattr(app_main, "__file__", None)
-                if main_file:
-                    cmd.append(str(Path(main_file).resolve()))
-                else:
-                    cmd.extend(["-m", "src.app"])
-            except Exception:
-                cmd.extend(["-m", "src.app"])
+            cmd.extend(["-m", "src.app"])
         platform_name = str(getattr(self, "package_platform", "") or "")
         cmd.extend([
             "--flash-cli",
@@ -1748,6 +1747,8 @@ class FlashWorker(QThread):
                 stderr=subprocess.STDOUT,
                 text=True,
                 bufsize=1,
+                cwd=repo_root,
+                env=env,
             )
             for line in iter(self._process.stdout.readline, ""):
                 line = line.rstrip()

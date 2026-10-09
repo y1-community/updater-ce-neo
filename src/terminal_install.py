@@ -130,13 +130,7 @@ def mtkclient_command(
     """The app's own MTKClient console entry point (``--flash-cli``)."""
     cmd = [sys.executable]
     if not getattr(sys, "frozen", False):
-        from . import app as app_main
-
-        main_file = getattr(app_main, "__file__", None)
-        if main_file:
-            cmd.append(str(Path(main_file).resolve()))
-        else:
-            cmd.extend(["-m", "src.app"])
+        cmd.extend(["-m", "src.app"])
     cmd.extend([
         "--flash-cli",
         str(extract_dir),

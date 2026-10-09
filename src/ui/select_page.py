@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 from PySide6.QtCore import Qt, QThread, Signal
-from PySide6.QtGui import QTextDocument
+from PySide6.QtGui import QPainter, QTextDocument
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -69,6 +69,21 @@ def _network_polling_available() -> bool:
     the online listing and the local-file tab.
     """
     return os.environ.get("QT_QPA_PLATFORM") != "offscreen"
+
+
+class ClearLabel(QLabel):
+    """Transparent label that clears its dirty rect before painting, preventing ghosting."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setAttribute(Qt.WA_TranslucentBackground, True)
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setCompositionMode(QPainter.CompositionMode_Clear)
+        p.fillRect(event.rect(), Qt.transparent)
+        p.end()
+        super().paintEvent(event)
 
 
 class ReleasesWorker(QThread):
@@ -252,7 +267,6 @@ class SelectPackagePage(QWidget):
         if is_online:
             self._show_online_view(refresh=not was_available)
         else:
-            # With no catalogue to browse, the local-file screen is the screen.
             self._views.setCurrentWidget(self._local_tab)
             if was_available:
                 self._say(tr("sel_offline"), timeout_ms=3000)
@@ -263,7 +277,7 @@ class SelectPackagePage(QWidget):
         layout.setContentsMargins(*page_margins())
         layout.setSpacing(8)
 
-        self._title = QLabel(tr("sel_title"))
+        self._title = ClearLabel(tr("sel_title"))
         self._title.setProperty("cssClass", "pageTitle")
         layout.addWidget(self._title)
 
@@ -944,7 +958,7 @@ class SelectPackagePage(QWidget):
         is_same_sw = (not curr_sw) or (not installed_sw) or (installed_sw == curr_sw) or (installed_sw in curr_sw) or (curr_sw in installed_sw)
 
         for rel in releases:
-            label = catalog.format_release_display_label(rel, prefer_240p=prefer_240p)
+            label = catalog.parse_clean_release_tag_label(rel, prefer_240p=prefer_240p)
             tag = rel.get("tag_name", "")
             is_installed = bool(installed_tag and is_same_sw and tag == installed_tag)
 
@@ -1491,7 +1505,6 @@ class SelectPackagePage(QWidget):
             self,
             tr("sel_dialog_folder_title"),
             "",
-            QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks,
         )
         if not folder:
             return

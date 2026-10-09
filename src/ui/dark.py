@@ -271,6 +271,7 @@ class _Tokens:
             self.fg         = "#ffffff"
             self.fg_dim     = "#f9fafb"
             self.fg_muted   = "#e5e7eb"
+            self.subtext    = self.fg_muted
             self.fg_primary = os_accent
 
             # Borders
@@ -359,6 +360,7 @@ class _Tokens:
             self.fg         = "#000000"
             self.fg_dim     = "#111827"
             self.fg_muted   = "#374151"
+            self.subtext    = self.fg_muted
             self.fg_primary = os_accent
 
             # Borders
@@ -567,8 +569,8 @@ def _build_qss() -> str:
         dialog_border = f"1px solid {t.border}"
 
     if use_glass:
-        card_bg = "rgba(255, 255, 255, 0.05)" if _state.is_dark else "rgba(255, 255, 255, 0.65)"
-        card_border = "rgba(255, 255, 255, 0.10)" if _state.is_dark else "rgba(0, 0, 0, 0.08)"
+        card_bg = "rgba(255, 255, 255, 0.07)" if _state.is_dark else "rgba(255, 255, 255, 0.65)"
+        card_border = "rgba(255, 255, 255, 0.12)" if _state.is_dark else "rgba(0, 0, 0, 0.08)"
     else:
         card_bg = t.bg_card
         card_border = t.border
@@ -626,8 +628,9 @@ QFrame[cssClass="card"] {{
     /* Layout only — the frame, fill, hover and checked states are the host
        style's, so the sidebar matches the platform's own sidebars. */
     text-align: left;
-    padding: 8px 12px;
+    padding: 3px 8px;
     min-height: 34px;
+    border-radius: 5px;
 }}
 #navPanel QPushButton[primary="true"],
 #navPanel QPushButton[cssClass="primary"] {{

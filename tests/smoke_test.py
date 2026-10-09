@@ -2462,10 +2462,9 @@ def test_release_list_and_notes():
     ]
     page._on_releases_loaded(releases, "")
     labels = [page._release_list.item(i).text() for i in range(page._release_list.count())]
-    assert labels[0] == "Solar (adds YouTube)", labels
-    assert "v1.0.0" not in labels[0]
-    # Empty name falls back to the tag (with the preview marker kept).
-    assert labels[1] == "v0.9.0  [preview]", labels
+    # Clean parsed release tag is displayed in the available software list
+    assert labels[0] == "1.0.0", labels
+    assert labels[1] == "0.9.0  [preview]", labels
 
     md = page._render_release_notes(releases[0])
     assert "## Solar" not in md, md
