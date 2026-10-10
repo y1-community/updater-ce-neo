@@ -12,7 +12,6 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
     QGraphicsOpacityEffect,
-    QGridLayout,
     QHBoxLayout,
     QLabel,
     QProgressBar,
@@ -23,7 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .config import DONATION_CRYPTO, DONATION_LINKS, device_label_for_model, install_power_on_steps
+from .config import DONATION_LINKS, device_label_for_model, install_power_on_steps
 from .donors import fetch_remote_donors_async, get_monthly_goal_stats, relative_date
 from .i18n import tr, tr_brand
 from .ui.dark import T, is_dark
@@ -237,35 +236,127 @@ class DonationStatusBar(QStatusBar):
     def _style_link(self, btn, t, align="left"):
         """Text-link styling for the bar's corner actions."""
         side = "left" if align == "left" else "right"
+        # No background rule. ``background: transparent`` is stored as a slab
+        # and is the solid strip behind Credits / Thanks.
         btn.setStyleSheet(
-            f"QPushButton {{ background-color: {t.bg}; color: {t.fg}; border: none;"
+            f"QPushButton {{ color: {t.fg}; border: none;"
             f" padding: 2px 4px; font-size: 12px; font-weight: 700; text-align: {side}; }}"
             f"QPushButton:hover {{ color: {t.fg}; }}"
             f"QPushButton:focus {{ color: {t.fg}; border: 1px solid {t.border_focus};"
             f" border-radius: 5px; outline: none; }}"
         )
         btn.setCursor(Qt.ArrowCursor)
+        from PySide6.QtGui import QPalette
+        from .ui.dark import theme_foreground
+        fg = theme_foreground()
+        pal = btn.palette()
+        for group in (
+            QPalette.ColorGroup.Active,
+            QPalette.ColorGroup.Inactive,
+            QPalette.ColorGroup.Disabled,
+        ):
+            pal.setColor(group, QPalette.ColorRole.ButtonText, fg)
+            pal.setColor(group, QPalette.ColorRole.WindowText, fg)
+        btn.setPalette(pal)
+
+    def _style_bar_label(self, label, *, weight: int) -> None:
+        """Theme foreground, no background fill."""
+        from .ui.dark import apply_explicit_foreground
+        apply_explicit_foreground(
+            label,
+            f" font-size: 12px; font-weight: {weight}; border: none;",
+        )
+
+    def _apply_bar_material(self, t) -> None:
+        """Use the window surface. This bar does not paint its own plate."""
+        from PySide6.QtGui import QColor, QPalette
+        from .ui.surfaces import glass_surfaces_enabled, show_glass_backdrop
+
+        self.setObjectName("donation_status_bar")
+        if glass_surfaces_enabled():
+            self.setStyleSheet(
+                "QStatusBar#donation_status_bar { background: transparent;"
+                f" color: {t.fg}; border: none; min-height: 30px; }}"
+            )
+            self.setAutoFillBackground(False)
+            self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
+            self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+            self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+            clear = QColor(0, 0, 0, 0)
+            pal = self.palette()
+            for group in (
+                QPalette.ColorGroup.Active,
+                QPalette.ColorGroup.Inactive,
+                QPalette.ColorGroup.Disabled,
+            ):
+                pal.setColor(group, QPalette.ColorRole.Window, clear)
+                pal.setColor(group, QPalette.ColorRole.Base, clear)
+            self.setPalette(pal)
+            show_glass_backdrop(self)
+        else:
+            self.setStyleSheet(
+                f"QStatusBar#donation_status_bar {{ background-color: {t.bg};"
+                f" color: {t.fg}; border-top: 1px solid {t.border}; min-height: 30px; }}"
+            )
+            self.setAutoFillBackground(True)
+            self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, False)
+            self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+            from .ui.dark import apply_readable_palette
+            apply_readable_palette(self)
+
+    def paintEvent(self, event):  # noqa: N802 (Qt naming)
+        """Leave the window material in place. The native panel is the plate."""
+        from .ui.surfaces import glass_surfaces_enabled
+        if glass_surfaces_enabled():
+            from PySide6.QtGui import QColor, QPainter
+
+            painter = QPainter(self)
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
+            painter.fillRect(event.rect(), QColor(0, 0, 0, 0))
+            painter.end()
+        else:
+            super().paintEvent(event)
+
+    def _clear_bar_plates(self) -> None:
+        """Keep goal, status, and link hosts on the same surface as the bar."""
+        from PySide6.QtGui import QColor, QPalette
+        from .ui.surfaces import glass_surfaces_enabled, show_glass_backdrop
+
+        glass = glass_surfaces_enabled()
+        clear = QColor(0, 0, 0, 0)
+        for name in (
+            "_donation_container",
+            "_status_container",
+            "_goal_group",
+            "_goal_ticker",
+            "_donor_ticker",
+            "_status_ticker",
+        ):
+            host = getattr(self, name, None)
+            if host is None:
+                continue
+            host.setAutoFillBackground(False)
+            host.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
+            host.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+            host.setStyleSheet("")
+            pal = host.palette()
+            for group in (
+                QPalette.ColorGroup.Active,
+                QPalette.ColorGroup.Inactive,
+                QPalette.ColorGroup.Disabled,
+            ):
+                pal.setColor(group, QPalette.ColorRole.Window, clear)
+                pal.setColor(group, QPalette.ColorRole.Base, clear)
+            host.setPalette(pal)
+            if glass:
+                show_glass_backdrop(host)
 
     def _build_ui(self, on_support, on_credits=None):
         t = T()
-        use_glass = False
-        try:
-            from .ui.glass import is_glass_supported, is_windows_acrylic_supported
-            use_glass = is_glass_supported() or is_windows_acrylic_supported()
-        except ImportError:
-            use_glass = sys.platform == "darwin"
-
-        # Opaque theme fill. A transparent bar plus palette(window-text) paints
-        # white glyphs on the light window, so the credits and goal lines vanish.
-        status_bg = t.bg
-        self.setStyleSheet(
-            f"QStatusBar#donation_status_bar {{ background-color: {status_bg};"
-            f" color: {t.fg}; border: none; min-height: 30px; }}"
-        )
+        # The bar is the same surface as the window. An opaque fill here is
+        # the solid strip that no longer matches the translucent window.
+        self._apply_bar_material(t)
         self.setMinimumHeight(30)
-        self.setAutoFillBackground(True)
-        from .ui.dark import apply_readable_palette
-        apply_readable_palette(self)
 
         # Donation container: Credits / Thanks, the centred goal display, and
         # the Support Us link in the right corner.
@@ -297,9 +388,7 @@ class DonationStatusBar(QStatusBar):
         self._goal_ticker = _Ticker(self._goal_group)
         self._goal_label = self._goal_ticker.label
         self._goal_label.setAlignment(Qt.AlignCenter)
-        self._goal_label.setStyleSheet(
-            f"font-size: 12px; font-weight: 600; color: {t.fg}; background-color: {t.bg}; border: none;"
-        )
+        self._style_bar_label(self._goal_label, weight=600)
         self._seal_ticker(self._goal_label)
         goal_row.addWidget(self._goal_ticker, 1, Qt.AlignVCenter)
 
@@ -316,9 +405,7 @@ class DonationStatusBar(QStatusBar):
         self._donor_label = self._donor_ticker.label
         self._donor_label.setTextFormat(Qt.RichText)
         self._donor_label.setAlignment(Qt.AlignCenter)
-        self._donor_label.setStyleSheet(
-            f"font-size: 12px; font-weight: 500; color: {t.fg}; background-color: {t.bg}; border: none;"
-        )
+        self._style_bar_label(self._donor_label, weight=500)
         self._seal_ticker(self._donor_label)
         self._donor_label.setVisible(False)
         goal_row.addWidget(self._donor_ticker, 1, Qt.AlignVCenter)
@@ -345,13 +432,12 @@ class DonationStatusBar(QStatusBar):
         self._status_ticker = _Ticker(self._status_container)
         self._status_label = self._status_ticker.label
         self._status_label.setAlignment(Qt.AlignCenter)
-        self._status_label.setStyleSheet(
-            f"font-size: 12px; font-weight: 500; color: {t.fg}; background-color: {t.bg}; border: none;"
-        )
+        self._style_bar_label(self._status_label, weight=500)
         self._seal_ticker(self._status_label)
         status_row.addWidget(self._status_ticker, 1)
         self._status_container.setVisible(False)
         self.addWidget(self._status_container, 1)
+        self._clear_bar_plates()
 
         # The goal and donor lines are clickable: any plain word opens the
         # donation dialog, while a donor name that carries a transaction URL
@@ -405,41 +491,23 @@ class DonationStatusBar(QStatusBar):
     def refresh_theme(self):
         """Update status bar styling and labels to match active OS theme."""
         t = T()
-        use_glass = False
-        try:
-            from .ui.glass import is_glass_supported, is_windows_acrylic_supported
-            use_glass = is_glass_supported() or is_windows_acrylic_supported()
-        except ImportError:
-            use_glass = sys.platform == "darwin"
-
-        self.setStyleSheet(
-            f"QStatusBar#donation_status_bar {{ background-color: {t.bg};"
-            f" color: {t.fg}; border: none; min-height: 30px; }}"
-        )
+        self._apply_bar_material(t)
         self.setMinimumHeight(30)
-        self.setAutoFillBackground(True)
-        from .ui.dark import apply_readable_palette
-        apply_readable_palette(self)
         if hasattr(self, "_goal_label"):
-            self._goal_label.setStyleSheet(
-                f"font-size: 12px; font-weight: 600; color: {t.fg}; background-color: {t.bg}; border: none;"
-            )
+            self._style_bar_label(self._goal_label, weight=600)
             self._seal_ticker(self._goal_label)
         if hasattr(self, "_donor_label"):
-            self._donor_label.setStyleSheet(
-                f"font-size: 12px; font-weight: 500; color: {t.fg}; background-color: {t.bg}; border: none;"
-            )
+            self._style_bar_label(self._donor_label, weight=500)
             self._seal_ticker(self._donor_label)
         if hasattr(self, "_status_label"):
-            self._status_label.setStyleSheet(
-                f"font-size: 12px; font-weight: 500; color: {t.fg}; background-color: {t.bg}; border: none;"
-            )
+            self._style_bar_label(self._status_label, weight=500)
             self._seal_ticker(self._status_label)
         if hasattr(self, "_credits_link"):
             self._style_link(self._credits_link, t, "left")
             self._relayout_links()
         if hasattr(self, "_support_btn"):
             self._style_link(self._support_btn, t, "right")
+        self._clear_bar_plates()
         self._donor_lines = self._build_donor_lines()
         if hasattr(self, "_showing_goal") and not self._showing_goal and self._donor_lines:
             self._donor_label.setText(self._donor_lines[0])
@@ -770,92 +838,14 @@ class DonationDialog(QDialog):
             self._dont_ask = QCheckBox(tr("donate_dont_ask"))
             layout.addWidget(self._dont_ask)
 
-        # 5. Payment grid (2x2)
-        grid = QGridLayout()
-        grid.setSpacing(8)
-        self._add_pay_button(grid, 0, 0, tr("donate_kofi"), "#ff5e5b", "#e04b48", DONATION_LINKS["kofi"], symbol="☕")
-        self._add_pay_button(grid, 0, 1, tr("donate_paypal"), "#0070ba", "#005ea6", DONATION_LINKS["paypal"], symbol="💳")
-        self._add_pay_button(grid, 1, 0, tr("donate_revolut"), "#5850ec", "#4338ca", DONATION_LINKS["revolut"], symbol="⚡")
-        self._add_pay_button(grid, 1, 1, tr("donate_patreon"), "#e0533c", "#c9442e", DONATION_LINKS["patreon"], symbol="★")
-        layout.addLayout(grid)
-
-        # Space-saving text links row for Honeygain and Crypto
-        links_box = QWidget()
-        links_row = QHBoxLayout(links_box)
-        links_row.setContentsMargins(0, 4, 0, 2)
-        links_row.setSpacing(10)
-        links_row.setAlignment(Qt.AlignCenter)
-
-        honeygain_url = DONATION_LINKS.get("honeygain", "https://r.honeygain.me/RYANB0FEF2")
-        self._last_button = QPushButton(f"⚡ {tr('donate_honeygain')}")
-        self._last_button.setCursor(Qt.PointingHandCursor)
-        self._last_button.setToolTip(honeygain_url)
-        self._last_button.setStyleSheet(
-            f"QPushButton {{ background: transparent; border: none; color: {t.fg};"
-            f" font-size: 12px; font-weight: 700; text-decoration: none; padding: 4px 6px; }}"
-            f"QPushButton:hover {{ color: {t.fg}; }}"
-        )
-        self._last_button.clicked.connect(lambda _=False, u=honeygain_url: open_browser(u))
-        links_row.addWidget(self._last_button)
-
-        dot = QLabel("·")
-        dot.setStyleSheet(f"color: {t.border_strong}; font-size: 14px; font-weight: bold; background: transparent;")
-        links_row.addWidget(dot)
-
-        self._crypto_toggle = QPushButton(f"🪙 {tr('donate_crypto_toggle')}")
-        self._crypto_toggle.setCursor(Qt.PointingHandCursor)
-        self._crypto_toggle.setStyleSheet(
-            f"QPushButton {{ background: transparent; border: none; color: {t.fg};"
-            f" font-size: 12px; font-weight: 700; text-decoration: none; padding: 4px 6px; }}"
-            f"QPushButton:hover {{ color: {t.fg}; }}"
-        )
-        self._crypto_toggle.clicked.connect(self._toggle_crypto)
-        links_row.addWidget(self._crypto_toggle)
-        layout.addWidget(links_box)
-
-        # 6. Crypto options box (compact, space-saving)
-        self._crypto_box = QWidget()
-        crypto_layout = QVBoxLayout(self._crypto_box)
-        crypto_layout.setContentsMargins(8, 6, 8, 6)
-        crypto_layout.setSpacing(4)
-        self._crypto_box.setStyleSheet(
-            f"QWidget {{ background-color: {t.bg_elev}; border: 1px solid {t.border};"
-            f" border-radius: 8px; }}"
-        )
-
-        colors = {"Bitcoin": "#d97706", "Ethereum": "#4f46e5", "SHIBA": "#dc2626"}
-        for label, address in DONATION_CRYPTO.items():
-            color = next((c for k, c in colors.items() if k.lower() in label.lower()), t.accent)
-            row_w = QWidget()
-            row_w.setStyleSheet("background: transparent; border: none;")
-            r_lay = QHBoxLayout(row_w)
-            r_lay.setContentsMargins(2, 2, 2, 2)
-            r_lay.setSpacing(8)
-
-            coin_badge = QLabel(f"<span style='color:{color}; font-weight:bold;'>{label}</span>")
-            coin_badge.setTextFormat(Qt.RichText)
-            coin_badge.setMinimumWidth(140)
-            r_lay.addWidget(coin_badge)
-
-            addr_label = QLabel(address)
-            addr_label.setStyleSheet(f"color: {t.fg}; font-size: 11px; font-family: monospace;")
-            addr_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-            r_lay.addWidget(addr_label, 1)
-
-            copy_btn = QPushButton(tr("copy_btn"))
-            copy_btn.setCursor(Qt.PointingHandCursor)
-            copy_btn.setStyleSheet(
-                f"QPushButton {{ background-color: {t.bg_card}; color: {t.fg}; font-size: 11px;"
-                f" font-weight: 600; padding: 2px 10px; border-radius: 4px; border: 1px solid {t.border}; }}"
-                f"QPushButton:hover {{ background-color: {t.bg_hover}; color: {t.fg}; }}"
-            )
-            copy_btn.clicked.connect(lambda _=False, l=label, a=address: self._copy_donation_value(l, a))
-            r_lay.addWidget(copy_btn)
-
-            crypto_layout.addWidget(row_w)
-
-        self._crypto_box.setVisible(False)
-        layout.addWidget(self._crypto_box)
+        # Coffee is the only donation action.
+        coffee = QPushButton(tr("donate_buy_coffee"))
+        coffee.setCursor(Qt.ArrowCursor)
+        coffee.setStyleSheet("")
+        coffee.clicked.connect(lambda _=False: open_browser(DONATION_LINKS["kofi"]))
+        self._pay_buttons.append(coffee)
+        self._last_button = coffee
+        layout.addWidget(coffee, 0, Qt.AlignLeft)
 
         # 7. Bottom row with status message & Close button
         bottom_row = QHBoxLayout()
@@ -1009,13 +999,8 @@ class DonationDialog(QDialog):
             self._ticker_lines = self._donor_lines()
 
     def _toggle_crypto(self):
-        visible = not self._crypto_box.isVisible()
-        self._crypto_box.setVisible(visible)
-        toggle_text = tr("donate_crypto_hide") if visible else tr("donate_crypto_toggle")
-        self._crypto_toggle.setText(f"🪙 {toggle_text}")
-        self.adjustSize()
-        if self.height() < 460:
-            self.resize(max(self.width(), 710), 460)
+        """Crypto donations are not offered."""
+        return
 
     def _open_theme_pack_flow(self):
         from .theme_pack import ThemePackGuidanceDialog

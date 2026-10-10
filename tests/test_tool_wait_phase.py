@@ -110,6 +110,34 @@ def test_history_ini_is_not_rewritten_when_scatter_is_unchanged(tmp_path, monkey
     assert len(infos) == 1
 
 
+def test_firmware_history_ini_is_not_the_one_the_tool_opens(tmp_path):
+    from src import sp_flash_gui
+
+    tool = tmp_path / "SP_Flash_Tool"
+    tool.mkdir()
+    (tool / sp_flash_gui.DA_FILENAME).write_bytes(b"DA")
+    (tool / "flash_tool.exe").write_bytes(b"exe")
+    extract = tmp_path / "rom"
+    extract.mkdir()
+    scatter = extract / "MT6572_Android_scatter.txt"
+    scatter.write_text("partition_index: SYS0\n", encoding="utf-8")
+    (extract / "history.ini").write_text(
+        "[LastDAFilePath]\nlastDir=MTK_AllInOne_DA.bin\n\n"
+        "[RecentOpenFile]\nlastDir=\nscatterHistory=MT6572_Android_scatter.txt\n",
+        encoding="utf-8",
+    )
+
+    assert sp_flash_gui.update_sp_history_ini(
+        tool, scatter_path=scatter, extract_dir=extract, model="Y1"
+    ) is True
+    assert not (extract / "history.ini").is_file()
+    da_read, scatter_read, history = sp_flash_gui.read_history_paths(tool / "history.ini")
+    assert Path(scatter_read).resolve() == scatter.resolve()
+    assert Path(da_read).resolve() == (tool / sp_flash_gui.DA_FILENAME).resolve()
+    assert "MT6572_Android_scatter.txt" not in history or str(scatter.resolve()) in history
+    assert not (tool / "MT6572_Android_scatter.txt").is_file()
+
+
 def test_connect_sentence_and_please_wait_bar():
     from PySide6.QtWidgets import QApplication
 

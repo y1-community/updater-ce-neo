@@ -19,7 +19,7 @@ import re
 import sys
 
 from PySide6.QtCore import QEvent, QObject, QRect, Qt, QTimer
-from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPalette, QPen
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QPainter, QPainterPath, QPalette, QPen
 from PySide6.QtWidgets import QApplication, QProxyStyle, QStyle, QStyleFactory
 
 logger = logging.getLogger(__name__)
@@ -889,6 +889,84 @@ def _make_palette(dark: bool, pure_black: bool = False) -> QPalette:
     return p
 
 
+def theme_foreground() -> QColor:
+    """Foreground for the active theme: dark on light, light on dark."""
+    app = QApplication.instance()
+    if app is not None:
+        color = app.palette().color(QPalette.ColorRole.WindowText)
+        if color.isValid() and color.alpha() > 0:
+            return QColor(color)
+    return QColor(T().fg)
+
+
+def apply_explicit_foreground(widget, extra: str = "") -> None:
+    """Keep text on the theme foreground.
+
+    An empty stylesheet inherits ``color`` from the window rule. The next
+    application stylesheet polish then writes white into the label palette,
+    which is the unreadable progress line on a light card. An explicit color
+    with no background survives that polish and does not paint a plate.
+    """
+    if widget is None:
+        return
+    fg = theme_foreground()
+    widget.setAutoFillBackground(False)
+    widget.setStyleSheet(f"color: {fg.name()};{extra}")
+    pal = widget.palette()
+    for group in (
+        QPalette.ColorGroup.Active,
+        QPalette.ColorGroup.Inactive,
+        QPalette.ColorGroup.Disabled,
+    ):
+        for role in (
+            QPalette.ColorRole.WindowText,
+            QPalette.ColorRole.Text,
+            QPalette.ColorRole.ButtonText,
+        ):
+            pal.setColor(group, role, fg)
+    widget.setPalette(pal)
+    widget.setForegroundRole(QPalette.ColorRole.WindowText)
+
+
+class _ProgressTextStyle(QProxyStyle):
+    """Native groove and chunk, with the percent in the theme foreground.
+
+    WinUI draws that percent from HighlightedText, which the palette keeps
+    white for selections. White on the light groove cannot be read. The
+    color is read when painting, so a live theme change does not need a
+    new progress bar.
+    """
+
+    def drawControl(self, element, option, painter, widget=None):  # noqa: N802
+        label = element == QStyle.ControlElement.CE_ProgressBarLabel
+        if label:
+            text = getattr(option, "text", "") or ""
+            visible = getattr(option, "textVisible", True)
+            if not text or not visible:
+                return
+            painter.save()
+            painter.setPen(theme_foreground())
+            if widget is not None:
+                painter.setFont(widget.font())
+            painter.drawText(option.rect, int(Qt.AlignmentFlag.AlignCenter), text)
+            painter.restore()
+            return
+        super().drawControl(element, option, painter, widget)
+
+
+def install_progress_readability(bar) -> None:
+    """Theme the percent and keep the native bar. No progress stylesheet."""
+    if bar is None:
+        return
+    bar.setStyleSheet("")
+    bar.setAutoFillBackground(False)
+    apply_readable_palette(bar, progress=True)
+    if not isinstance(bar.style(), _ProgressTextStyle):
+        style = _ProgressTextStyle()
+        style.setParent(bar)
+        bar.setStyle(style)
+
+
 def apply_readable_palette(widget, *, progress: bool = False) -> None:
     """Copy theme roles onto a widget so text and bars follow light and dark mode.
 
@@ -920,15 +998,16 @@ def apply_readable_palette(widget, *, progress: bool = False) -> None:
         for role in roles:
             pal.setColor(group, role, src.color(group, role))
     if progress:
-        # One text color has to clear both the unfilled groove and the filled
-        # chunk. Stylesheet ``palette()`` colors do not: a parent card replaces
-        # the palette and the percent is painted black on the dark bar.
+        # The percent uses the theme foreground: dark on light, light on dark.
+        # HighlightedText on the application palette is white so selections
+        # stay readable, and WinUI was painting the percent with that white.
         groove = src.color(QPalette.ColorRole.AlternateBase)
         chunk = src.color(QPalette.ColorRole.Highlight)
-        text = src.color(QPalette.ColorRole.WindowText)
-        if contrast_ratio(text, groove) < 4.5:
-            text = _readable_on(groove)
-        chunk = _shift_until_contrast(text, chunk)
+        text = QColor(src.color(QPalette.ColorRole.WindowText))
+        # Keep the accent fill. Shifting it until the text clears both the
+        # groove and the chunk washed the bar out into the card.
+        if contrast_ratio(chunk, groove) < 1.5:
+            chunk = _shift_until_contrast(groove, chunk)
         pal.setColor(QPalette.ColorRole.Base, groove)
         pal.setColor(QPalette.ColorRole.Window, groove)
         pal.setColor(QPalette.ColorRole.Highlight, chunk)
@@ -1004,11 +1083,11 @@ def contrast_ratio(foreground: QColor, background: QColor) -> float:
 def _build_qss() -> str:
     t = _state.tokens
 
-    # Window background & sidebar transparency for Liquid Glass (macOS) and Acrylic/Mica (Windows)
+    # Window background & sidebar transparency for Liquid Glass (macOS)
     use_glass = False
     try:
-        from .glass import is_glass_supported, is_windows_acrylic_supported
-        use_glass = is_glass_supported() or is_windows_acrylic_supported()
+        from .glass import is_glass_supported
+        use_glass = is_glass_supported()
     except ImportError:
         use_glass = False
 
@@ -1153,12 +1232,15 @@ QLabel[cssClass="separator"], QFrame[cssClass="separator"] {{
    stay on the platform style and the live palette. The diagnostics
    console sets a monospace QFont on the widget itself. */
 
-/* ── Tooltips ─────────────────────────────────────────── */
+/* ── Tooltips ───────────────────────────────────────────
+   No border-radius: on Windows that leaves the native tip fill, and a
+   dark ToolTipBase with light-theme text is a solid black rectangle.
+   Rich text does not inherit this color; see tooltip_rich_text(). */
 QToolTip {{
+    background: {t.bg_tooltip};
     background-color: {t.bg_tooltip};
     color: {t.fg};
     border: 1px solid {t.border};
-    border-radius: 4px;
     padding: 4px 8px;
     font-size: 12px;
 }}
@@ -1252,21 +1334,39 @@ def native_font_families() -> list[str]:
     QSS rule, which defeats CoreText/fontconfig cascading and renders CJK text
     as tofu boxes. Qt resolves these families in order, per glyph.
     """
+    sys_font = QFontDatabase.systemFont(QFontDatabase.SystemFont.GeneralFont)
+    sys_family = sys_font.family() if sys_font else ""
+    families = []
+    if sys_family and sys_family not in families:
+        families.append(sys_family)
     if IS_MACOS:
-        return [
+        for f in [
             ".AppleSystemUIFont", "SF Pro Text", "SF Pro Display",
             "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
-        ]
+        ]:
+            if f not in families:
+                families.append(f)
+        return families
     if IS_WINDOWS:
-        return ["Segoe UI", "Segoe UI Variable Text", "Microsoft YaHei"]
-    return ["Noto Sans", "Cantarell", "Ubuntu", "WenQuanYi Micro Hei"]
+        for f in ["Segoe UI", "Segoe UI Variable Text", "Microsoft YaHei"]:
+            if f not in families:
+                families.append(f)
+        return families
+    for f in ["Noto Sans", "Cantarell", "Ubuntu", "WenQuanYi Micro Hei"]:
+        if f not in families:
+            families.append(f)
+    return families
 
 
 def _apply_native_font(app: QApplication) -> None:
     """Set the platform UI font (and CJK fallbacks) on the application."""
-    font = QFont()
+    sys_font = QFontDatabase.systemFont(QFontDatabase.SystemFont.GeneralFont)
+    font = QFont(sys_font) if sys_font and sys_font.family() else QFont()
     font.setFamilies(native_font_families())
-    if IS_MACOS:
+    sys_size = sys_font.pointSizeF() if sys_font else 0.0
+    if sys_size > 0:
+        font.setPointSizeF(sys_size)
+    elif IS_MACOS:
         font.setPointSize(13)
     elif IS_WINDOWS:
         font.setPointSize(10)
@@ -1275,6 +1375,75 @@ def _apply_native_font(app: QApplication) -> None:
         size = app.font().pointSizeF()
         font.setPointSizeF(size if size > 0 else 10.0)
     app.setFont(font)
+
+
+def tooltip_surface_colors() -> tuple[QColor, QColor]:
+    """Background and text for a tooltip on the active theme.
+
+    Light appearance: light surface, dark text. Dark appearance: the inverse.
+    """
+    tokens = _state.tokens
+    background = QColor(tokens.bg_tooltip)
+    foreground = QColor(tokens.fg)
+    if not background.isValid():
+        background = QColor("#ffffff" if not _state.is_dark else "#252932")
+    if not foreground.isValid() or contrast_ratio(foreground, background) < 4.5:
+        foreground = _readable_on(background)
+    return background, foreground
+
+
+def apply_tooltip_palette() -> QPalette:
+    """Point QToolTip at the theme pair.
+
+    Tooltips do not use the application palette. Qt keeps a separate one,
+    filled from the platform theme, and Windows 11 paints the tip from
+    ``ToolTipBase``. A dark platform tip plus the light theme's black text
+    is the solid black rectangle. Inactive is the group tooltips actually
+    read; every group is set so a stale Active color cannot win.
+    """
+    from PySide6.QtWidgets import QToolTip
+
+    background, foreground = tooltip_surface_colors()
+    palette = QPalette()
+    for role in (
+        QPalette.ColorRole.ToolTipBase,
+        QPalette.ColorRole.Base,
+        QPalette.ColorRole.Window,
+        QPalette.ColorRole.Button,
+    ):
+        palette.setColor(QPalette.ColorGroup.All, role, background)
+    for role in (
+        QPalette.ColorRole.ToolTipText,
+        QPalette.ColorRole.Text,
+        QPalette.ColorRole.WindowText,
+        QPalette.ColorRole.ButtonText,
+    ):
+        palette.setColor(QPalette.ColorGroup.All, role, foreground)
+    QToolTip.setPalette(palette)
+    return palette
+
+
+def tooltip_rich_text(body: str) -> str:
+    """Wrap plain help so the rich-text tip paints the theme pair.
+
+    ``QTextDocument`` does not inherit the ``QToolTip`` stylesheet color.
+    An unstyled ``<qt>`` paragraph is black text, which disappears on a
+    dark tip fill.
+    """
+    background, foreground = tooltip_surface_colors()
+    lines = []
+    for line in (body or "").split("\n"):
+        safe = (
+            line.replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+        )
+        lines.append(safe)
+    style = (
+        f"margin:0; color:{foreground.name()}; "
+        f"background-color:{background.name()};"
+    )
+    return "<qt><p style=\"" + style + "\">" + "<br>".join(lines) + "</p></qt>"
 
 
 def apply_theme(
@@ -1296,7 +1465,8 @@ def apply_theme(
         _state.detect()
     app.setPalette(_make_palette(_state.is_dark, pure_black=_state.is_pure_black))
     app.setStyleSheet(_build_qss())
-    sync_cached_palettes(app)
+    apply_tooltip_palette()
+    _restyle_existing_widgets(app)
 
 
 def theme_fingerprint(app: QApplication | None = None, *, platform_dark: bool = True) -> tuple:
@@ -1383,9 +1553,18 @@ def refresh_theme(app: QApplication | None = None) -> None:
     _apply_native_font(app)
     app.setPalette(_make_palette(_state.is_dark, pure_black=_state.is_pure_black))
     app.setStyleSheet(_build_qss())
+    apply_tooltip_palette()
+    _restyle_existing_widgets(app)
+
+
+def _restyle_existing_widgets(app: QApplication) -> None:
+    """Reapply colors that widgets cached before this palette.
+
+    Status, donation, and progress text keep their own palette. Updating only
+    the application palette leaves the previous foreground in place, which is
+    white text on the light surface after a live theme change.
+    """
     sync_cached_palettes(app)
-    # Descend the whole tree, not just top-level windows: pages and custom
-    # widgets keep their own token-derived styles.
     for widget in app.allWidgets():
         apply_native_scrollbar_policy(widget)
         hook = getattr(widget, "refresh_theme", None)

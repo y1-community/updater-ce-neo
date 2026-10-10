@@ -64,7 +64,7 @@ from ..config import (
 )
 from ..manifest import ManifestWorker
 from ..updates import UpdateCheckWorker, UpdateInfo
-from ..donation_dialog import DonationDialog, DonationStatusBar
+from ..donation_dialog import DonationStatusBar
 from ..donors import cached_donors_path, load_donors_file, parse_donors_csv_text
 from ..flash_service import (
     LINE_CONNECT_HINT,
@@ -106,6 +106,7 @@ from .flash_page import FlashPage
 from .retry_page import RetryPage
 from .select_page import SelectPackagePage
 from .settings_page import SettingsPage
+from .support_page import SupportPage
 from .icons import get_symbol_icon
 from .widgets import CurrentPageStack
 from .sidebar import SidebarButton, sidebar_row_min_height, sidebar_row_spacing
@@ -120,6 +121,7 @@ _PAGE_RETRY = 3
 _PAGE_SETTINGS = 4
 _PAGE_DIAGNOSTICS = 5
 _PAGE_NOTICE = 6
+_PAGE_SUPPORT = 7
 
 # Choose Software, and the app's ordinary size. Measured from the running
 # window on this desktop: 680×480. A desktop that draws its own title bar
@@ -786,6 +788,7 @@ class MainWindow(QMainWindow):
         notice_layout = QVBoxLayout(self._notice_host)
         notice_layout.setContentsMargins(16, 12, 16, 12)
         self._paint_opaque(self._notice_host)
+        self._support_page = SupportPage()
 
         for w in (
             self._select_page,
@@ -795,6 +798,7 @@ class MainWindow(QMainWindow):
             self._settings_page,
             self._diag_placeholder,
             self._notice_host,
+            self._support_page,
         ):
             self._paint_opaque(w)
             self._stack.addWidget(w)
@@ -852,6 +856,8 @@ class MainWindow(QMainWindow):
             self._theme_watcher = ThemeWatcher(app, parent=self, on_apply=self._on_theme_changed)
             self._theme_watcher.install()
             app._theme_watcher = self._theme_watcher
+        from .scrollbars import apply_native_scrolling
+        apply_native_scrolling(self)
 
     def _arm_caption_drag(self) -> None:
         """App icon, app name, and the page heading start a window move."""
@@ -1086,9 +1092,10 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._install_output_btn)
         self._aux_nav_buttons.append(self._install_output_btn)
 
-        self._support_btn = self._make_nav_button(tr("nav_donate"), "support")
+        self._support_btn = self._make_nav_button(tr("nav_donate"), "support", checkable=True)
         self._support_btn.clicked.connect(self._on_support_clicked)
         layout.addWidget(self._support_btn)
+        self._nav_btn_group.addButton(self._support_btn, _PAGE_SUPPORT)
         self._aux_nav_buttons.append(self._support_btn)
 
         self._log_btn = self._make_nav_button(tr("nav_log"), "diagnostics", checkable=True)
@@ -1189,6 +1196,7 @@ class MainWindow(QMainWindow):
             getattr(self, "_retry_page", None),
             getattr(self, "_settings_page", None),
             getattr(self, "_diagnostics_page", None),
+            getattr(self, "_support_page", None),
         ):
             if surface is not None:
                 self._paint_opaque(surface)
@@ -1323,15 +1331,13 @@ class MainWindow(QMainWindow):
                 self._select_page._title.setText(tr("flash_install_in_progress"))
 
     def _on_cancel_download(self):
-        self._download_active = False
-        self._select_page.cancel_download()
-        self._apply_install_ui_state(False)
-        self._nav_to_page(_PAGE_SELECT)
+        self._return_to_select_software()
 
     def _on_download_cancelled(self):
-        self._download_active = False
-        self._apply_install_ui_state(False)
-        self._nav_to_page(_PAGE_SELECT)
+        if getattr(self, "_returning_to_select", False):
+            self._download_active = False
+            return
+        self._return_to_select_software()
 
     # How often the seamless window chrome is verified on platforms where Qt can
     # silently wipe it (see _verify_native_chrome). The check is a native
@@ -1734,18 +1740,36 @@ class MainWindow(QMainWindow):
         )
 
         if hug_install:
-            # Hug the progress card. A prompt in the content column is the
-            # only reason this grows. The window collapses as soon as the
-            # install is pending, including before the flash page is shown.
+            # Hug the progress card. The minimum comes from the wrapped copy
+            # (package name, prompt, buttons), not a fixed height that clips it.
+            page = self._flash_page
+            if hasattr(page, "sync_text_fit"):
+                page.sync_text_fit()
             self._stack.updateGeometry()
-            page_h = self._flash_page.sizeHint().height()
+            page.updateGeometry()
+            page_h = page.sizeHint().height()
+            nav = getattr(self, "_nav_panel", None)
+            sidebar = nav.width() if nav is not None and nav.width() > 0 else 175
+            from .flash_page import install_horizontal_chrome
+
+            text_w = page.text_column_width() if hasattr(page, "text_column_width") else 260
+            content_w = max(1, int(text_w) + install_horizontal_chrome(0))
+            if page.hasHeightForWidth():
+                fitted = page.heightForWidth(content_w)
+                if 0 < fitted < 1600:
+                    page_h = max(page_h, fitted)
             prompt = getattr(self, "_inline_prompt", None)
             prompt_h = 0
             if prompt is not None and not prompt.isHidden():
                 prompt_h = prompt.sizeHint().height()
+                if prompt.hasHeightForWidth():
+                    body_w = max(1, int(text_w))
+                    fitted_prompt = prompt.heightForWidth(body_w)
+                    if 0 < fitted_prompt < 800:
+                        prompt_h = max(prompt_h, fitted_prompt)
             bar = self.statusBar()
             status_h = bar.sizeHint().height() if bar is not None and bar.isVisible() else 0
-            target_w = COMPACT_INSTALL_WIDTH
+            target_w = max(COMPACT_INSTALL_WIDTH, install_horizontal_chrome(sidebar) + int(text_w))
             if curr_idx == _PAGE_FLASH:
                 target_h = compact_install_height(
                     page_h=page_h,
@@ -1755,10 +1779,11 @@ class MainWindow(QMainWindow):
                     donations_disabled=donations_disabled,
                 )
             else:
+                # The catalogue is still showing. The short install size is
+                # applied once the progress card is the page on screen.
                 target_h = 228
-            self.setMinimumSize(580, 168)
             self._hugging_install = True
-            self._animate_window_size(target_w, target_h)
+            self._animate_window_size(target_w, target_h, minimum=(target_w, target_h))
         else:
             min_w = MINIMUM_WINDOW_WIDTH
             min_h = MINIMUM_WINDOW_HEIGHT
@@ -1794,6 +1819,14 @@ class MainWindow(QMainWindow):
             self._size_anim_minimum = (int(minimum[0]), int(minimum[1]))
         else:
             self._size_anim_minimum = None
+        # Drop the floor before the snap so a shorter install card can land.
+        # The final minimum is put back in _finish_size_anim.
+        floor = getattr(self, "_size_anim_minimum", None)
+        if floor is not None:
+            self.setMinimumSize(
+                min(self.minimumWidth(), floor[0], width),
+                min(self.minimumHeight(), floor[1], height),
+            )
         if (
             prefers_reduced_motion()
             or self.isMaximized()
@@ -1804,12 +1837,6 @@ class MainWindow(QMainWindow):
             self.resize(width, height)
             self._finish_size_anim()
             return
-        floor = getattr(self, "_size_anim_minimum", None)
-        if floor is not None:
-            self.setMinimumSize(
-                min(self.minimumWidth(), floor[0], width),
-                min(self.minimumHeight(), floor[1], height),
-            )
         self._size_animating = True
         anim = QPropertyAnimation(self, b"size", self)
         anim.setDuration(200)
@@ -1970,11 +1997,15 @@ class MainWindow(QMainWindow):
             return tr("flash_retry_title")
         if page_idx == _PAGE_NOTICE:
             return getattr(self, "_notice_title", "") or tr("sel_title")
+        if page_idx == _PAGE_SUPPORT:
+            return tr("nav_donate")
         return tr("sel_title")
 
     def _highlight_nav(self, page_idx, install_active: bool):
         if page_idx == _PAGE_DIAGNOSTICS and hasattr(self, "_log_btn"):
             checked = self._log_btn
+        elif page_idx == _PAGE_SUPPORT:
+            checked = getattr(self, "_support_btn", None)
         elif install_active and page_idx == _PAGE_FLASH:
             checked = self._nav_buttons["nav_select_package"][0]
         else:
@@ -1992,6 +2023,7 @@ class MainWindow(QMainWindow):
             self._nav_buttons.get("nav_select_package", (None,))[0],
             getattr(self, "_settings_btn", None),
             getattr(self, "_log_btn", None),
+            getattr(self, "_support_btn", None),
         ):
             if btn is not None:
                 btn.update()
@@ -2652,9 +2684,16 @@ class MainWindow(QMainWindow):
         self._compact_install_screen = True
         self._flash_page.show_flashing()
         self._flash_page.set_device_done()
-        self._flash_page.show_completion_appeal(not donation_disabled, self._on_completion_dont_ask)
+        self._flash_page.show_completion_appeal(False)
         self._apply_release_icon(complete=True)
         self._nav_to_page(_PAGE_FLASH)
+        # Compact completion first. The appeal is the only extra growth, and
+        # it uses the same short size animation. Install Software stays selected.
+        if not donation_disabled:
+            self._flash_page.show_completion_appeal(
+                True, self._on_completion_dont_ask, self._on_completion_not_now,
+            )
+            self._adjust_window_geometry()
         self._show_status(
             tr("status_install_ok_fmt").format(software=software, steps=steps), 60000
         )
@@ -2724,10 +2763,7 @@ class MainWindow(QMainWindow):
         self._nav_to_page(_PAGE_FLASH)
 
     def _on_cancel_wait(self):
-        self.service.cancel_flash()
-        self.service.stop_device_monitor()
-        self.sm.reset_full()
-        self._nav_to_page(_PAGE_SELECT)
+        self._return_to_select_software()
 
     def _on_method_changed(self, method):
         """Apply an install method chosen in Settings.
@@ -2792,28 +2828,87 @@ class MainWindow(QMainWindow):
             return
         QApplication.quit()
 
+    def _stop_running_install(self) -> None:
+        """Stop a download or flash so it does not keep running in the background."""
+        self._download_active = False
+        page = getattr(self, "_select_page", None)
+        if page is not None:
+            worker = getattr(page, "_download_worker", None)
+            if worker is not None:
+                try:
+                    worker.cancel()
+                except Exception:
+                    pass
+                page._download_worker = None
+            bar = getattr(page, "_download_bar", None)
+            if bar is not None:
+                bar.setVisible(False)
+            button = getattr(page, "_install_btn", None)
+            if button is not None:
+                button.setEnabled(True)
+        service = getattr(self, "service", None)
+        if service is not None:
+            for name in ("cancel_extract", "cancel_flash", "stop_device_monitor"):
+                fn = getattr(service, name, None)
+                if not callable(fn):
+                    continue
+                try:
+                    fn()
+                except Exception:
+                    pass
+        timer = getattr(self, "_elapsed_timer", None)
+        if timer is not None:
+            timer.stop()
+
+    def _return_to_select_software(self) -> None:
+        """Stop the run and select Select Software. Install Software does not stay selected."""
+        if getattr(self, "_returning_to_select", False):
+            return
+        self._returning_to_select = True
+        try:
+            self._stop_running_install()
+            self._reset_after_run()
+        finally:
+            self._returning_to_select = False
+
     def _on_cancel_flash(self):
-        # The progress card already asked. Continue on that card lands here.
-        self.service.cancel_flash()
-        self._elapsed_timer.stop()
-        self._reset_after_run()
+        # The progress card already asked. Either interruption button lands here.
+        self._return_to_select_software()
+
+    def _on_completion_not_now(self):
+        """Dismiss the appeal and return to Select Software. Donations stay on."""
+        self._on_install_done()
 
     def _on_completion_dont_ask(self):
+        """Hide donations, then the compact completion screen without the appeal."""
         device_tracking.set_donation_ui_disabled(True, self.settings)
-        device_tracking.set_donation_install_prompt_disabled(True, self.settings)
+        self._flash_page.show_completion_appeal(False)
         if hasattr(self, "_settings_page"):
             self._settings_page.refresh_settings()
-        self._apply_donation_visibility()
-        self._flash_page.show_completion_appeal(False, self._on_completion_dont_ask)
+        self._apply_donation_visibility(True)
+        self._highlight_nav(_PAGE_FLASH, True)
 
     def _apply_release_icon(self, complete: bool = False) -> None:
         """Squircle until a release icon is cached, then that image. The check overlays either."""
         from .release_icon import load_release_pixmap
         from ..release_icons import icon_candidate_urls
+        from ..sp_flash_gui import is_gui_local_package
+        from ..config import is_mediatek_installer
 
         page = getattr(self, "_select_page", None)
         release = getattr(page, "_current_selected_rel", None) if page else None
         package = getattr(page, "_details_package", None) if page else None
+        is_local = (
+            release is None
+            or is_mediatek_installer()
+            or is_gui_local_package(getattr(self, "_package_path", ""))
+            or (page is not None and getattr(page, "catalogue_section", lambda: "")() == "local")
+        )
+        if is_local:
+            # Locally browsed ROM / MediaTek mode: always use generic settings cog squircle icon!
+            self._flash_page.set_release_icon(QPixmap(), complete=complete)
+            return
+
         dark = bool(is_dark())
         pixmap = page.release_pixmap() if page is not None and hasattr(page, "release_pixmap") else None
         if pixmap is None or pixmap.isNull():
@@ -2837,7 +2932,11 @@ class MainWindow(QMainWindow):
                 ))
 
         previous = getattr(self, "_icon_loader", None)
-        if previous is not None and previous.isRunning():
+        try:
+            still_running = previous is not None and previous.isRunning()
+        except RuntimeError:
+            still_running = False
+        if still_running:
             previous.requestInterruption()
         loader = _Loader(release, package, dark)
         loader.loaded.connect(lambda pix, done=complete: self._flash_page.set_release_icon(pix, complete=done or getattr(self, "_install_complete", False)))
@@ -2851,6 +2950,7 @@ class MainWindow(QMainWindow):
         self._install_failed = False
         self._power_off_prompt = False
         self._compact_install_screen = False
+        self._flash_page.set_release_icon(QPixmap(), complete=False)
         self.sm.reset_full()
         self._package_path = ""
         self._package_name = ""
@@ -2901,6 +3001,8 @@ class MainWindow(QMainWindow):
             placeholder.hide()
         self._stack.insertWidget(idx if idx >= 0 else _PAGE_DIAGNOSTICS, page)
         self._diagnostics_page = page
+        from .scrollbars import apply_native_scrolling
+        apply_native_scrolling(page)
         return page
 
     def _detach_diagnostics_tail(self) -> None:
@@ -3121,6 +3223,15 @@ class MainWindow(QMainWindow):
             settings=self.settings,
         )
         self._gui_ready = (Path(scatter), Path(extract_dir), model)
+        try:
+            from ..sp_flash_gui import update_sp_history_ini
+            update_sp_history_ini(
+                scatter_path=Path(scatter),
+                extract_dir=Path(extract_dir),
+                model=model,
+            )
+        except Exception:
+            logger.debug("Could not prepare history.ini before the desktop tool", exc_info=True)
         launch_now = (
             getattr(self, "_gui_launch_when_ready", False)
             or getattr(self, "_gui_after_prepare", "") != "hint"
@@ -3250,6 +3361,8 @@ class MainWindow(QMainWindow):
                     self._page_title(curr_idx, self._install_run_active())
                 )
         self._flash_page.retranslate()
+        if hasattr(self, "_support_page"):
+            self._support_page.retranslate()
         self._error_page.retranslate()
         self._retry_page.retranslate()
         if hasattr(self, "_settings_page"):
@@ -3496,34 +3609,19 @@ class MainWindow(QMainWindow):
             self._donations = donations
 
     def _on_support_clicked(self):
-        self._show_donation_dialog(context="general")
+        """Open Support Us in the window. A finished install keeps Install Software selected."""
+        if self._install_run_active() or getattr(self, "_compact_install_screen", False):
+            self._highlight_nav(
+                self._stack.currentIndex(),
+                self._sync_install_nav_entry(),
+            )
+            return
+        self._nav_to_page(_PAGE_SUPPORT)
 
     def _show_donation_dialog(self, context="general", *args, **kwargs):
-        eff_model = self._package_model or ""
-        eff_name = self._package_name or ""
-        is_360p_rockbox = kwargs.get("is_360p_rockbox")
-        if is_360p_rockbox is None:
-            is_360p_rockbox = getattr(self, "_is_360p_rockbox", None)
-        if is_360p_rockbox is None:
-            is_y = eff_model.upper() in ("Y1", "Y2")
-            pkg_low = eff_name.lower()
-            path_low = (self._package_path or "").lower()
-            is_rb = "rockbox" in pkg_low or "rockbox" in path_low
-            is_240 = "_240p" in path_low or "240p" in pkg_low
-            is_360p_rockbox = bool(is_y and is_rb and not is_240) if context == "install_success" else False
-        dialog = DonationDialog(
-            parent=self,
-            context=context,
-            model=eff_model,
-            software_name=eff_name,
-            donations=self._donations,
-            on_dont_ask_again=self._on_donation_dont_ask_again,
-            is_360p_rockbox=is_360p_rockbox,
-        )
-        if self._install_run_active() or getattr(self, "_download_active", False):
-            dialog.exec()
-        else:
-            self._present_inline(dialog, tr("nav_donate"))
+        """Support lives in the window. Install completion does not open a dialog."""
+        del context, args, kwargs
+        self._on_support_clicked()
 
     def _on_donation_dont_ask_again(self):
         """"Don't ask me again" on the Support dialog: the user is not

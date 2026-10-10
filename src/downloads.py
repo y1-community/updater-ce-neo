@@ -33,6 +33,67 @@ def downloads_dir():
     return d
 
 
+def firmware_cache_size() -> tuple[int, int]:
+    """Calculate the number of files and total byte size of cached firmwares.
+
+    Returns (file_count, total_bytes).
+    """
+    d = downloads_dir()
+    if not d.is_dir():
+        return 0, 0
+    count = 0
+    total_bytes = 0
+    for root, _, files in os.walk(d):
+        for f in files:
+            try:
+                fp = Path(root) / f
+                if fp.is_file():
+                    count += 1
+                    total_bytes += fp.stat().st_size
+            except OSError:
+                pass
+    return count, total_bytes
+
+
+def clear_firmware_cache() -> tuple[int, int]:
+    """Delete all downloaded firmware archives (*.zip, *.rar, *.part) and extracted ROM
+    staging directories in downloads_dir(). Leaves device tracking records, update reminder
+    preferences, and install history completely intact.
+
+    Returns (items_removed_count, total_bytes_freed).
+    """
+    import shutil
+
+    d = downloads_dir()
+    if not d.is_dir():
+        return 0, 0
+    count = 0
+    bytes_freed = 0
+    for item in list(d.iterdir()):
+        try:
+            if item.is_file():
+                ext = item.suffix.lower()
+                if ext in (".zip", ".rar", ".part", ".tar", ".gz", ".7z") or item.name.endswith(".part"):
+                    size = item.stat().st_size
+                    item.unlink()
+                    count += 1
+                    bytes_freed += size
+            elif item.is_dir():
+                dir_size = 0
+                for root, _, files in os.walk(item):
+                    for f in files:
+                        try:
+                            dir_size += (Path(root) / f).stat().st_size
+                        except OSError:
+                            pass
+                shutil.rmtree(item, ignore_errors=True)
+                count += 1
+                bytes_freed += dir_size
+        except Exception as e:
+            logger.warning("Failed to remove cached firmware item %s: %s", item, e)
+    return count, bytes_freed
+
+
 class DownloadWorker(QThread):
     """Download a GitHub release asset to a local file, reporting progress."""
 

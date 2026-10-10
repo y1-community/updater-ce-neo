@@ -49,6 +49,7 @@ from ..i18n import tr, tr_brand
 from ..updates import asset_hint, pick_platform_asset
 from .dark import T
 from .glass import apply_dialog_theme
+from .scrollbars import configure_scroll_area
 
 
 class FlashCompleteDialog(QDialog):
@@ -431,6 +432,12 @@ class DiagnosticsView(QWidget):
         log_font.setStyleHint(QFont.StyleHint.Monospace)
         log_font.setPointSize(10)
         self._view.setFont(log_font)
+        # Windows hides the bar. Other desktops keep a vertical bar only when needed.
+        configure_scroll_area(
+            self._view,
+            horizontal=Qt.ScrollBarAlwaysOff,
+            vertical=Qt.ScrollBarAsNeeded,
+        )
         layout.addWidget(self._view, 1)
 
         # ── Action Buttons Bar: Go To File, Save File, Copy, Close ──
@@ -922,15 +929,76 @@ class UpdateAvailableDialog(QDialog):
         layout.addLayout(btn_row)
 
     def _on_download(self):
-        url = ""
-        if self._asset and self._asset.get("browser_download_url"):
-            url = self._asset["browser_download_url"]
-        elif self._info.html_url:
-            url = self._info.html_url
-        if url:
-            from ..browser import open_browser
-            open_browser(url)
-        self.accept()
+        import os
+        import subprocess
+        import tempfile
+        from pathlib import Path
+        from PySide6.QtWidgets import QApplication
+        from ..browser import open_browser
+        from ..downloads import DownloadWorker
+
+        # Linux / macOS: open the platform guide page so users can get the AppImage or .app
+        if sys.platform != "win32":
+            platform_id = "mac" if sys.platform == "darwin" else "linux"
+            open_browser(f"https://innioasis.app/guide?platform={platform_id}")
+            self.accept()
+            return
+
+        # Windows: download installer exe and offer to launch it
+        exe_asset = None
+        for a in (self._info.assets or []):
+            name = (a.get("name") or "").lower()
+            if name.endswith(".exe"):
+                exe_asset = a
+                break
+
+        url = (
+            exe_asset.get("browser_download_url")
+            if exe_asset
+            else (self._asset.get("browser_download_url") if self._asset else "")
+        )
+        if not url:
+            open_browser(self._info.html_url or "https://innioasis.app/guide?platform=windows")
+            self.accept()
+            return
+
+        filename = (exe_asset or {}).get("name") or f"UpdaterCE-Setup-{self._info.version}.exe"
+        dest_path = Path(tempfile.gettempdir()) / filename
+
+        self._download_btn.setEnabled(False)
+        self._download_btn.setText(tr("flash_download_in_progress"))
+
+        worker = DownloadWorker(url, str(dest_path), parent=self)
+        self._worker = worker
+
+        def on_done(ok, err):
+            if ok and dest_path.is_file():
+                reply = QMessageBox.question(
+                    self,
+                    tr("update_available"),
+                    "The update installer has been downloaded. Would you like to run it now to update Updater CE?",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.Yes,
+                )
+                if reply == QMessageBox.Yes:
+                    try:
+                        os.startfile(str(dest_path))
+                    except Exception:
+                        subprocess.Popen([str(dest_path)], shell=True)
+                    QApplication.quit()
+                    return
+                else:
+                    QMessageBox.information(
+                        self,
+                        tr("update_available"),
+                        f"Installer saved to:\n{dest_path}",
+                    )
+            else:
+                open_browser(url)
+            self.accept()
+
+        worker.finished.connect(on_done)
+        worker.start()
 
     def _on_skip_version(self):
         if self._on_skip:

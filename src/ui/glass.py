@@ -1113,23 +1113,16 @@ def apply_windows_dark_titlebar(window: QMainWindow | QWidget, dark: bool) -> bo
         for attr in (20, 19):
             dwm.DwmSetWindowAttribute(hwnd, attr, byref(val), sizeof(val))
 
-        # Windows 11 (Build 22000+): Make title bar seamless and suppress accent color
-        # DWMWA_CAPTION_COLOR = 35, DWMWA_BORDER_COLOR = 34, DWMWA_COLOR_NONE = 0xFFFFFFFE
-        color_none = c_int(0xFFFFFFFE)
-        dwm.DwmSetWindowAttribute(hwnd, 35, byref(color_none), sizeof(color_none))
-        dwm.DwmSetWindowAttribute(hwnd, 34, byref(color_none), sizeof(color_none))
+        # Windows 11 (Build 22000+): Make title bar seamless matching window background
+        caption_color = c_int(0x0027221e if dark else 0x00ffffff)
+        dwm.DwmSetWindowAttribute(hwnd, 35, byref(caption_color), sizeof(caption_color))
 
-        # Title text color (DWMWA_TEXT_COLOR = 36): white for dark mode (0x00FFFFFF), dark for light mode (0x00000000)
-        text_color = c_int(0x00FFFFFF if dark else 0x00000000)
+        border_color = c_int(0x0051443e if dark else 0x00dbd5d1)
+        dwm.DwmSetWindowAttribute(hwnd, 34, byref(border_color), sizeof(border_color))
+
+        # Title text color (DWMWA_TEXT_COLOR = 36): white for dark mode (0x00FFFFFF), dark for light mode (0x00111827)
+        text_color = c_int(0x00FFFFFF if dark else 0x00111827)
         dwm.DwmSetWindowAttribute(hwnd, 36, byref(text_color), sizeof(text_color))
-
-        # Also apply pywinstyles transparent titlebar if installed
-        try:
-            import pywinstyles
-            pywinstyles.change_header_color(window, "transparent")
-            pywinstyles.change_border_color(window, "transparent")
-        except Exception:
-            pass
 
         return True
     except Exception as e:
@@ -1138,124 +1131,10 @@ def apply_windows_dark_titlebar(window: QMainWindow | QWidget, dark: bool) -> bo
 
 
 def apply_windows_acrylic(window: QMainWindow | QWidget, dark: bool = True) -> bool:
-    """Apply native Windows 11 Acrylic material (or Win10 / Win7 Aero fallback).
-
-    - Windows 11 22H2+ (Build 22621+): DwmExtendFrameIntoClientArea (-1, -1, -1, -1)
-      and DwmSetWindowAttribute with DWMWA_SYSTEMBACKDROP_TYPE = 3 (DWMSBT_TRANSIENTWINDOW = Acrylic).
-    - Windows 11 21H2: DWMWA_MICA_EFFECT = 1029.
-    - Windows 10: SetWindowCompositionAttribute with ACCENT_ENABLE_ACRYLICBLURBEHIND (accent state 4).
-    - Fallback: pywinstyles / Aero glass DwmExtendFrameIntoClientArea (-1, -1, -1, -1).
-    Safe no-op on macOS and Linux.
-    """
+    """Apply native Windows title bar and theme styling. Safe no-op on macOS and Linux."""
     if sys.platform != "win32" and platform.system() != "Windows":
         return False
-
-    try:
-        import ctypes
-        from ctypes import byref, c_int, sizeof, Structure, pointer
-        from ctypes.wintypes import DWORD, ULONG
-
-        hwnd = int(window.winId())
-        dwm = ctypes.windll.dwmapi
-
-        # 1. Synchronize immersive dark mode titlebar attribute
-        apply_windows_dark_titlebar(window, dark)
-
-        # 2. Always extend frame into client area so DWM backdrop covers full window
-        class MARGINS(Structure):
-            _fields_ = [
-                ("cxLeftWidth", c_int),
-                ("cxRightWidth", c_int),
-                ("cyTopHeight", c_int),
-                ("cyBottomHeight", c_int),
-            ]
-
-        margins = MARGINS(-1, -1, -1, -1)
-        dwm.DwmExtendFrameIntoClientArea(hwnd, byref(margins))
-
-        class ACCENT_POLICY(Structure):
-            _fields_ = [
-                ("AccentState", DWORD),
-                ("AccentFlags", DWORD),
-                ("GradientColor", DWORD),
-                ("AnimationId", DWORD),
-            ]
-
-        class WINDOW_COMPOSITION_ATTRIBUTES(Structure):
-            _fields_ = [
-                ("Attribute", DWORD),
-                ("Data", ctypes.POINTER(ACCENT_POLICY)),
-                ("SizeOfData", ULONG),
-            ]
-
-        build = sys.getwindowsversion().build if hasattr(sys, "getwindowsversion") else 0
-
-        # Try pywinstyles if available
-        try:
-            import pywinstyles
-            pywinstyles.apply_style(window, "acrylic")
-        except Exception:
-            pass
-
-        # 3. Windows 11 22H2+ (Build 22621+): Official DWMWA_SYSTEMBACKDROP_TYPE
-        if build >= 22621:
-            try:
-                # DWMSBT_TRANSIENTWINDOW = 3 (Acrylic material)
-                backdrop_type = c_int(3)
-                hr = dwm.DwmSetWindowAttribute(hwnd, 38, byref(backdrop_type), sizeof(backdrop_type))
-
-                # Host backdrop accent policy
-                accent = ACCENT_POLICY(5, 0, 0, 0)
-                data = WINDOW_COMPOSITION_ATTRIBUTES(19, pointer(accent), sizeof(accent))
-                ctypes.windll.user32.SetWindowCompositionAttribute(hwnd, pointer(data))
-                if dark:
-                    data_dark = WINDOW_COMPOSITION_ATTRIBUTES(26, pointer(accent), sizeof(accent))
-                    ctypes.windll.user32.SetWindowCompositionAttribute(hwnd, pointer(data_dark))
-
-                if hr == 0:
-                    logger.info("Applied Windows 11 Acrylic backdrop (DWMWA_SYSTEMBACKDROP_TYPE=3)")
-                    return True
-            except Exception as e:
-                logger.debug("Win11 DWMWA_SYSTEMBACKDROP_TYPE failed: %s", e)
-
-        # 4. Windows 11 21H2 (Build 22000): DWMWA_MICA_EFFECT = 1029
-        elif build >= 22000:
-            try:
-                mica_val = c_int(1)
-                hr = dwm.DwmSetWindowAttribute(hwnd, 1029, byref(mica_val), sizeof(mica_val))
-                if hr == 0:
-                    logger.info("Applied Windows 11 21H2 Mica effect (DWMWA_MICA_EFFECT=1029)")
-                    return True
-            except Exception as e:
-                logger.debug("Win11 21H2 Mica effect failed: %s", e)
-
-        # 5. Fallback: Windows 10 SetWindowCompositionAttribute (Acrylic blur)
-        try:
-            gradient_color = 0x99202020 if dark else 0x99F0F0F0
-            accent = ACCENT_POLICY(
-                AccentState=4,  # ACCENT_ENABLE_ACRYLICBLURBEHIND
-                AccentFlags=2,
-                GradientColor=gradient_color,
-                AnimationId=0,
-            )
-            data = WINDOW_COMPOSITION_ATTRIBUTES(
-                Attribute=19,  # WCA_ACCENT_POLICY
-                Data=pointer(accent),
-                SizeOfData=sizeof(accent),
-            )
-            res = ctypes.windll.user32.SetWindowCompositionAttribute(hwnd, pointer(data))
-            if res != 0:
-                logger.info("Applied Windows 10 Acrylic blur via SetWindowCompositionAttribute")
-                return True
-        except Exception as e:
-            logger.debug("Win10 SetWindowCompositionAttribute fallback failed: %s", e)
-
-        return True
-
-    except Exception as e:
-        logger.debug("Could not apply Windows Acrylic backdrop: %s", e)
-
-    return False
+    return apply_windows_dark_titlebar(window, dark)
 
 
 class _DialogThemeWatcher(QObject):
@@ -1285,51 +1164,194 @@ class _DialogThemeWatcher(QObject):
         return super().eventFilter(watched, event)
 
 
-# A combo list is a separate popup. A fully opaque Base is the solid black
-# plate. This frost lets Acrylic, vibrancy, or the desktop tint show through
-# while the text stays on a readable veil.
+# A combo list is a separate popup. On a dark host the frost lets Acrylic,
+# vibrancy, or the desktop tint show through. On a light host that same frost
+# is painted over a dark backing and the menu turns into a near-black plate,
+# so light mode keeps an opaque light palette instead.
 POPUP_FROST_ALPHA = 150
 
 
-def apply_popup_material(popup: QWidget) -> None:
-    """Give a menu popup the desktop's translucent material.
+def host_palette_is_light(palette) -> bool:
+    """True when the application palette is a light theme.
 
-    Windows uses Acrylic, macOS uses the window vibrancy, and other desktops
-    get the same see-through frost so the list is not a solid slab.
+    The popup's own palette is not the host. Windows can hand a combo list a
+    dark Base while the window is light, and a frost on that Base stays dark.
+    """
+    from PySide6.QtGui import QPalette
+
+    if palette is None:
+        return False
+    window = palette.color(QPalette.ColorRole.Window)
+    if window.isValid() and window.alpha() > 0:
+        return window.lightness() >= 140
+    text = palette.color(QPalette.ColorRole.WindowText)
+    return bool(text.isValid() and text.lightness() < 140)
+
+
+def _application_palette(fallback):
+    from PySide6.QtWidgets import QApplication
+
+    app = QApplication.instance()
+    if app is not None:
+        return app.palette()
+    return fallback.palette() if fallback is not None else None
+
+
+def menu_palette(host, *, frost: bool = False):
+    """Combo-list palette that follows the host theme.
+
+    Light: opaque light field, dark text, selection that still clears the
+    field. Dark: the dark field, with the translucent frost only while the
+    popup is open. No stylesheet is involved.
     """
     from PySide6.QtGui import QColor, QPalette
-    from PySide6.QtWidgets import QAbstractItemView
 
+    from .dark import _readable_on, contrast_ratio
+
+    pal = QPalette(host)
+    light = host_palette_is_light(host)
+    base = QColor(host.color(QPalette.ColorRole.Base))
+    text = QColor(host.color(QPalette.ColorRole.Text))
+    window = QColor(host.color(QPalette.ColorRole.Window))
+    alternate = QColor(host.color(QPalette.ColorRole.AlternateBase))
+    highlight = QColor(host.color(QPalette.ColorRole.Highlight))
+    highlighted = QColor(host.color(QPalette.ColorRole.HighlightedText))
+
+    if light:
+        if (not base.isValid()) or base.lightness() < 160 or base.alpha() < 240:
+            base = QColor(window) if window.isValid() and window.lightness() >= 160 else QColor("#f8fafc")
+        if text.lightness() > 80:
+            text = QColor("#111827")
+        if (not alternate.isValid()) or alternate.lightness() < 140 or alternate.alpha() < 240:
+            alternate = QColor(base)
+        window = QColor(base)
+        base.setAlpha(255)
+        text.setAlpha(255)
+        window.setAlpha(255)
+        alternate.setAlpha(255)
+    else:
+        if (not base.isValid()) or base.lightness() > 80:
+            base = QColor("#181b20")
+        if text.lightness() < 160:
+            text = QColor("#f8fafc")
+        if (not alternate.isValid()) or alternate.lightness() > 100:
+            alternate = QColor(base)
+        window = QColor(base)
+        text.setAlpha(255)
+        alpha = POPUP_FROST_ALPHA if frost else 255
+        base.setAlpha(alpha)
+        window.setAlpha(alpha)
+        alternate.setAlpha(alpha)
+
+    field = QColor(base.red(), base.green(), base.blue())
+    if (not highlight.isValid()) or highlight.alpha() == 0 or contrast_ratio(highlight, field) < 1.5:
+        highlight = QColor("#1e293b") if light else QColor("#334155")
+    highlight.setAlpha(255)
+    if (not highlighted.isValid()) or contrast_ratio(highlighted, highlight) < 4.5:
+        highlighted = _readable_on(highlight)
+    highlighted.setAlpha(255)
+    if contrast_ratio(highlighted, highlight) < 4.5:
+        highlight = QColor("#1e293b") if light else QColor("#e2e8f0")
+        highlighted = _readable_on(highlight)
+        highlight.setAlpha(255)
+        highlighted.setAlpha(255)
+
+    roles = {
+        QPalette.ColorRole.Base: base,
+        QPalette.ColorRole.Window: window,
+        QPalette.ColorRole.AlternateBase: alternate,
+        QPalette.ColorRole.Text: text,
+        QPalette.ColorRole.WindowText: text,
+        QPalette.ColorRole.ButtonText: text,
+        QPalette.ColorRole.Highlight: highlight,
+        QPalette.ColorRole.HighlightedText: highlighted,
+    }
+    for group in (
+        QPalette.ColorGroup.Active,
+        QPalette.ColorGroup.Inactive,
+        QPalette.ColorGroup.Disabled,
+    ):
+        for role, color in roles.items():
+            pal.setColor(group, role, color)
+    return pal
+
+
+def _bind_menu_palette(widget, pal, *, fill: bool, translucent: bool | None = None) -> None:
+    from PySide6.QtGui import QPalette
+
+    if widget is None:
+        return
+    widget.setPalette(pal)
+    widget.setAutoFillBackground(fill)
+    widget.setBackgroundRole(QPalette.ColorRole.Base)
+    widget.setForegroundRole(QPalette.ColorRole.Text)
+    if translucent is not None:
+        widget.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, translucent)
+        widget.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, False)
+
+
+def _menu_views(popup, pal):
+    from PySide6.QtWidgets import QAbstractItemView, QComboBox
+
+    views = []
+    for combo in popup.findChildren(QComboBox):
+        # Palette only. Changing autofill here would restyle the closed control.
+        combo.setPalette(pal)
+        view = combo.view()
+        if view is not None and view not in views:
+            views.append(view)
+    found = popup.findChild(QAbstractItemView)
+    if found is not None and found not in views:
+        views.append(found)
+    return views
+
+
+def apply_combo_menu_palette(combo) -> None:
+    """Copy the host menu colors onto a combo and its list. Opaque, no frost."""
+    if combo is None:
+        return
+    host = _application_palette(combo)
+    if host is None:
+        return
+    pal = menu_palette(host, frost=False)
+    combo.setPalette(pal)
+    view = combo.view()
+    if view is None:
+        return
+    _bind_menu_palette(view, pal, fill=True, translucent=False)
+    _bind_menu_palette(view.viewport(), pal, fill=True, translucent=False)
+
+
+def apply_popup_material(popup: QWidget) -> None:
+    """Color an open combo list from the host theme.
+
+    A light window gets a light field and dark text. The dark frost and the
+    Acrylic tint are not applied there: both leave a near-black menu on a
+    light desktop. A dark window keeps the translucent material.
+    """
     if popup is None:
         return
-    try:
-        popup.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-        popup.setAutoFillBackground(False)
-    except Exception:
-        pass
-    pal = popup.palette()
-    for role in (
-        QPalette.ColorRole.Window,
-        QPalette.ColorRole.Base,
-        QPalette.ColorRole.AlternateBase,
-    ):
-        color = QColor(pal.color(role))
-        color.setAlpha(POPUP_FROST_ALPHA)
-        pal.setColor(role, color)
-    popup.setPalette(pal)
-    view = popup.findChild(QAbstractItemView)
-    if view is not None:
-        view.setPalette(pal)
-        view.setAutoFillBackground(False)
-        viewport = view.viewport()
-        if viewport is not None:
-            viewport.setPalette(pal)
-            viewport.setAutoFillBackground(False)
+    host = _application_palette(popup)
+    if host is None:
+        return
+    light = host_palette_is_light(host)
+    pal = menu_palette(host, frost=not light)
+    _bind_menu_palette(popup, pal, fill=light, translucent=not light)
+    for view in _menu_views(popup, pal):
+        _bind_menu_palette(view, pal, fill=light, translucent=False if light else None)
+        _bind_menu_palette(
+            view.viewport(),
+            pal,
+            fill=light,
+            translucent=False if light else None,
+        )
+    if light:
+        return
     try:
         from .dark import is_dark
         dark = is_dark()
     except Exception:
-        dark = False
+        dark = True
     if IS_WINDOWS:
         apply_windows_acrylic(popup, dark=dark)
     elif IS_MACOS and is_glass_supported():
@@ -1360,7 +1382,7 @@ class _ComboPopupMaterial(QObject):
 
 
 def arm_combo_popups(app) -> None:
-    """Watch every combo so its popup uses the translucent desktop material."""
+    """Watch every combo and give its list the host theme's menu palette."""
     from PySide6.QtWidgets import QComboBox
 
     if app is None:
@@ -1369,6 +1391,7 @@ def arm_combo_popups(app) -> None:
     for widget in app.allWidgets():
         if not isinstance(widget, QComboBox):
             continue
+        apply_combo_menu_palette(widget)
         view = widget.view()
         if view is None:
             continue

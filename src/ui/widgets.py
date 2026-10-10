@@ -8,10 +8,19 @@ QSS) and ``dark.T()`` colour tokens only for dynamically computed styles
 import os
 import sys
 
-from PySide6.QtCore import QEasingCurve, QEventLoop, QPropertyAnimation, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPalette, QPen
+from PySide6.QtCore import (
+    QAbstractAnimation,
+    QEasingCurve,
+    QEventLoop,
+    QPropertyAnimation,
+    Qt,
+    QVariantAnimation,
+    Signal,
+)
+from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPalette, QPen, QRegion
 from PySide6.QtWidgets import (
     QApplication,
+    QBoxLayout,
     QFrame,
     QGraphicsOpacityEffect,
     QHBoxLayout,
@@ -19,9 +28,13 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSizePolicy,
     QStackedWidget,
+    QStyle,
     QVBoxLayout,
     QWidget,
 )
+
+# Qt's QWIDGETSIZE_MAX. PySide6 does not re-export the macro.
+_WIDGET_SIZE_MAX = (1 << 24) - 1
 
 from ..i18n import tr
 from .dark import T
@@ -152,6 +165,10 @@ class InfoRow(QWidget):
 # 180ms is a short fade, not a slide or a bounce.
 PAGE_FADE_MS = 180
 
+# Closing a settings card. Same constraint as the fade: one short geometry
+# animation for Windows, macOS, and Linux. 200ms sits in the 180–220ms range.
+COLLAPSE_MS = 200
+
 
 def fade_in(widget) -> None:
     """Short opacity fade used when a page or a card swaps its contents.
@@ -205,6 +222,117 @@ def prefers_reduced_motion() -> bool:
         except Exception:
             return False
     return False
+
+
+def layout_gap_closing(widget) -> bool:
+    """True while *widget* is still animating closed."""
+    anim = getattr(widget, "_collapse_anim", None)
+    if anim is None:
+        return False
+    return anim.state() == QAbstractAnimation.State.Running
+
+
+def _vertical_layout_spacing(layout, parent) -> int:
+    spacing = layout.spacing()
+    if spacing >= 0:
+        return spacing
+    if parent is None:
+        return 0
+    metric = parent.style().pixelMetric(QStyle.PixelMetric.PM_LayoutVerticalSpacing, None, parent)
+    return max(0, int(metric))
+
+
+def close_layout_gap(widget) -> None:
+    """Remove *widget* and let the cards under it move up to close the gap.
+
+    The form stays top-aligned, so the cards above hold still and the cards
+    below travel up by the removed height plus the layout spacing. That is
+    the two sides of the gap meeting. Qt does not expose WinUI
+    NavigationTransitionInfo or macOS view transitions, so this short
+    geometry animation is the one shared by Windows, macOS, and Linux.
+    Reduced motion, ``UPDATER_REDUCE_MOTION=1``, and
+    ``QT_QPA_PLATFORM=offscreen`` hide the widget immediately.
+    """
+    if widget is None:
+        return
+    parent = widget.parentWidget()
+    layout = parent.layout() if parent is not None else None
+    vertical = (
+        isinstance(layout, QBoxLayout)
+        and layout.direction() == QBoxLayout.Direction.TopToBottom
+        and layout.indexOf(widget) >= 0
+    )
+    if (
+        prefers_reduced_motion()
+        or not widget.isVisible()
+        or widget.height() <= 0
+        or not vertical
+    ):
+        widget.hide()
+        return
+
+    layout.activate()
+    index = layout.indexOf(widget)
+    below = []
+    for i in range(index + 1, layout.count()):
+        item = layout.itemAt(i)
+        child = item.widget() if item is not None else None
+        if child is not None and child.isVisible():
+            below.append(child)
+    start_card = widget.geometry()
+    start_below = [child.geometry() for child in below]
+    # The next card has to land where this one starts, so the shift is the
+    # real distance between those tops (the card plus the gap under it).
+    if start_below:
+        shift = start_below[0].y() - start_card.y()
+    else:
+        shift = start_card.height() + _vertical_layout_spacing(layout, parent)
+    if shift <= 0:
+        widget.hide()
+        return
+    # The layout would fight setGeometry on every tick. It is turned back on
+    # when the cards are already in the positions it would have chosen.
+    layout.setEnabled(False)
+    # An explicit minimum lets the card shrink. A size hint would otherwise
+    # hold the old height and the gap would stay open.
+    widget.setMinimumHeight(0)
+
+    anim = QVariantAnimation(widget)
+    anim.setDuration(COLLAPSE_MS)
+    anim.setStartValue(0.0)
+    anim.setEndValue(1.0)
+    anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+
+    def on_value(progress):
+        t = max(0.0, min(1.0, float(progress)))
+        new_h = max(0, int(round(start_card.height() * (1.0 - t))))
+        widget.setGeometry(start_card.x(), start_card.y(), start_card.width(), new_h)
+        if new_h > 0 and start_card.width() > 0:
+            widget.setMask(QRegion(0, 0, start_card.width(), new_h))
+        else:
+            widget.clearMask()
+        dy = int(round(shift * t))
+        for child, geom in zip(below, start_below):
+            child.setGeometry(geom.x(), geom.y() - dy, geom.width(), geom.height())
+        if parent is not None:
+            parent.update()
+
+    def finish():
+        try:
+            widget.clearMask()
+            widget.hide()
+            widget.setMinimumHeight(0)
+            widget.setMaximumHeight(_WIDGET_SIZE_MAX)
+        finally:
+            layout.setEnabled(True)
+            layout.invalidate()
+            layout.activate()
+            widget._collapse_anim = None
+
+    anim.valueChanged.connect(on_value)
+    anim.finished.connect(finish)
+    widget._collapse_anim = anim
+    anim.start()
 
 
 class CurrentPageStack(QStackedWidget):

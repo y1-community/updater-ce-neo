@@ -146,19 +146,19 @@ _FREEDESKTOP_MAP = {
     "file": ["text-x-generic-symbolic", "text-x-generic", "document-symbolic", "document"],
     "folder": ["folder-open-symbolic", "folder-open", "folder-symbolic", "folder"],
     "complete": ["emblem-ok-symbolic", "emblem-ok", "object-select-symbolic", "dialog-ok"],
-    # Question-in-a-circle. First theme that resolves wins; no drawn substitute.
-    "help": ["help-about", "help-faq", "dialog-question"],
+    # Circle with an i. dialog-question is only used when the information icons are missing.
+    "help": ["dialog-information", "help-about", "dialog-question"],
 }
 
-# Help is U+E897 (question mark in a circle) in both Segoe icon fonts.
-_SEGOE_HELP_CODEPOINTS = (0xE897,)
+# Information is U+E946 (i in a circle) in Segoe Fluent Icons and Segoe MDL2 Assets.
+_SEGOE_HELP_CODEPOINTS = (0xE946,)
 # Fluent is registered as SegoeIcons.ttf on current Windows; older installs
 # used SegoeFluentIcons.ttf. MDL2 is the fallback family.
 _SEGOE_HELP_FONTS = (
     ("Segoe Fluent Icons", ("SegoeIcons.ttf", "SegoeFluentIcons.ttf")),
     ("Segoe MDL2 Assets", ("segmdl2.ttf",)),
 )
-_SF_HELP_SYMBOLS = ("questionmark.circle", "questionmark")
+_SF_HELP_SYMBOLS = ("info.circle",)
 HELP_ICON_PX = 16
 
 _segoe_font_family: Optional[str] = None
@@ -172,7 +172,7 @@ def _remember_help_source(source: str) -> None:
 
 
 def help_icon_source() -> str:
-    """Native glyph actually chosen: ``segoe:Family:U+E897``, ``sf:…``, ``theme:…``, or ``text:?``."""
+    """Native glyph actually chosen: ``segoe:Family:U+E946``, ``sf:info.circle``, ``theme:…``, or ``style:SP_MessageBoxInformation``."""
     return _help_icon_source
 
 
@@ -199,7 +199,7 @@ def _sf_symbol_names(symbol_name: str) -> tuple[str, ...]:
 
 
 def _load_sf_symbol(sf_name: str, size: int, color: str) -> Optional[QPixmap]:
-    """One SF Symbol by system name. ``questionmark.circle`` is the help glyph."""
+    """One SF Symbol by system name. ``info.circle`` is the information glyph."""
     try:
         from AppKit import NSImage, NSImageSymbolConfiguration
 
@@ -281,7 +281,7 @@ def _segoe_family_supports(family: str, code: int) -> bool:
 
 
 def _windows_help_glyph() -> Optional[tuple[str, int]]:
-    """Fluent Help (U+E897) when that font is installed, otherwise the same glyph in MDL2."""
+    """Segoe Fluent or MDL2 Information (U+E946) when that glyph is installed."""
     if not IS_WINDOWS:
         return None
     for family, filenames in _SEGOE_HELP_FONTS:
@@ -427,18 +427,38 @@ def resolve_symbol_colors(
     elif color is not None:
         foc = color
     else:
-        foc = "#FFFFFF" if dark else active_text
+        foc = "#FFFFFF" if dark else "#111827"
 
     return norm, foc
 
 
-def get_help_pixmap(size: int = HELP_ICON_PX, color: Optional[str] = None) -> QPixmap:
-    """Small platform help glyph. An empty pixmap means show a \"?\" instead of a drawn icon.
+def _windows_shell_information_pixmap(size: int) -> Optional[QPixmap]:
+    """Windows information icon, used only when the Segoe Information glyph is missing."""
+    from PySide6.QtWidgets import QApplication, QStyle
 
-    Windows uses Segoe Fluent Icons Help (U+E897) when that font is installed,
-    otherwise Segoe MDL2 Assets at the same codepoint. macOS uses the SF Symbol
-    ``questionmark.circle`` (then ``questionmark``). Linux uses the first
-    FreeDesktop theme among help-about, help-faq, and dialog-question.
+    app = QApplication.instance()
+    if app is None:
+        return None
+    icon = app.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxInformation)
+    if icon.isNull():
+        return None
+    side = max(int(size), 1) * 2
+    pix = icon.pixmap(QSize(side, side))
+    if pix.isNull():
+        return None
+    pix.setDevicePixelRatio(2.0)
+    _remember_help_source("style:SP_MessageBoxInformation")
+    return pix
+
+
+def get_help_pixmap(size: int = HELP_ICON_PX, color: Optional[str] = None) -> QPixmap:
+    """Small platform information glyph: a circle with an i.
+
+    Windows uses Segoe Fluent Icons or Segoe MDL2 Assets Information (U+E946).
+    If that glyph is missing, the Windows information icon is used.
+    macOS uses the SF Symbol ``info.circle``. Linux uses the first FreeDesktop
+    theme among dialog-information, help-about, and dialog-question.
+    An empty pixmap means no platform information icon was available.
     """
     norm, _ = resolve_symbol_colors(color=color)
     side = max(int(size), 1)
@@ -446,11 +466,13 @@ def get_help_pixmap(size: int = HELP_ICON_PX, color: Optional[str] = None) -> QP
         pix = _get_sf_symbol_pixmap("help", side, norm)
     elif IS_WINDOWS:
         pix = _get_segoe_pixmap("help", side, norm)
+        if pix is None or pix.isNull():
+            pix = _windows_shell_information_pixmap(side)
     else:
         pix = _get_freedesktop_pixmap("help", side, norm)
     if pix is not None and not pix.isNull():
         return pix
-    _remember_help_source("text:?")
+    _remember_help_source("")
     return QPixmap()
 
 

@@ -154,8 +154,15 @@ def test_i18n_languages():
     touched = (
         "donate_coffee_pitch",
         "donate_coffee_btn",
+        "donate_buy_coffee",
+        "donate_not_now",
+        "donate_dont_ask_link",
+        "flash_install_complete",
+        "donate_headline",
+        "donate_subtitle",
         "settings_hide_donations",
         "settings_hide_donations_tip",
+        "settings_donations_dismiss",
         "btn_centre",
         "btn_power",
         "flash_btn_retry",
@@ -2139,7 +2146,9 @@ def test_terminal_install_handoff():
 
         cb = w._settings_page._cb_terminal_install
         assert not cb.isChecked(), "terminal install must be opt-in by default"
-        assert cb.text() == tr("settings_terminal_install")
+        assert w._settings_page.switch_caption(cb) == tr(
+            "settings_terminal_install_windows" if paths.IS_WINDOWS else "settings_terminal_install"
+        )
         assert cb.toolTip() == settings_page.terminal_install_desc()
         assert w._settings_page._terminal_desc.text() == settings_page.terminal_install_desc()
 
@@ -2316,7 +2325,7 @@ def test_language_switch_keeps_screen():
     assert w._flash_page._progress_bar.value() == 57, "progress must survive"
     assert w._flash_page._step_label.text() == "Escribiendo imagen"
     # New Settings strings translate in place too.
-    assert w._settings_page._cb_reminders.text() == "Envíame recordatorios de nuevas versiones"
+    assert w._settings_page.switch_caption(w._settings_page._cb_reminders) == "Envíame recordatorios de nuevas versiones"
     exp_method_text = "SP Flash Tool" if not paths.IS_MAC else "MTKClient"
     assert w._settings_page._method_combo.itemText(0) == exp_method_text
 
@@ -2373,7 +2382,7 @@ def test_success_dialog_flow():
         assert shown == [], shown
         assert w._stack.currentIndex() == mw._PAGE_FLASH
         assert w._install_complete is True
-        assert w._page_title(mw._PAGE_FLASH, False) == "Install Complete"
+        assert w._page_title(mw._PAGE_FLASH, False) == "Install complete"
         assert w._flash_page._appeal.isVisible() is True
         assert w._flash_page._flash_banner.text() == "Install complete"
 
@@ -2384,7 +2393,7 @@ def test_success_dialog_flow():
         w._handle_flash_success()
         assert shown == [], shown
         assert w._flash_page._appeal.isVisible() is False
-        assert w._page_title(mw._PAGE_FLASH, False) == "Install Complete"
+        assert w._page_title(mw._PAGE_FLASH, False) == "Install complete"
         assert banner_during_dialog == []
     finally:
         mw.FlashCompleteDialog = real_complete
@@ -2393,13 +2402,10 @@ def test_success_dialog_flow():
 
 
 def test_dont_ask_again_disables_donation_ui():
-    """Checking \"Don't ask me again\" on the completion Support dialog also
-    turns off the donor / donation info: the bottom bar hides and the Settings
-    option reflects it (the user is not interested in the donations model)."""
+    """The completion link turns on hide-donations and leaves the compact finish screen."""
     from PySide6.QtWidgets import QApplication
     from src import device_tracking
-    from src.donation_dialog import DonationDialog
-    from src.ui.main_window import MainWindow
+    from src.ui.main_window import MainWindow, _PAGE_FLASH
 
     _reset_app_settings()
     app = QApplication.instance() or QApplication(sys.argv)
@@ -2409,25 +2415,18 @@ def test_dont_ask_again_disables_donation_ui():
     assert device_tracking.is_donation_ui_disabled(w.settings) is False
     assert w.statusBar().isVisible()
 
-    # Drive the real dialog path: tick the opt-out checkbox, then close.
-    real_exec = DonationDialog.exec
-
-    def _exec(dlg):
-        dlg._dont_ask.setChecked(True)
-        dlg._on_close()
-        return 1
-
-    DonationDialog.exec = _exec
-    try:
-        w._show_donation_dialog(context="install_success")
-    finally:
-        DonationDialog.exec = real_exec
+    w._package_name = "Rockbox"
+    w._handle_flash_success()
+    w._flash_page._appeal_dont.linkActivated.emit("dont-ask")
+    app.processEvents()
 
     assert device_tracking.is_donation_install_prompt_disabled(settings=w.settings) is True
     assert device_tracking.is_donation_ui_disabled(settings=w.settings) is True
     assert not w.statusBar().isVisible(), "donor/goal bar must hide"
     assert w._settings_page._cb_hide_donations.isChecked() is True
-    assert w._settings_page._cb_skip_install_donations.isChecked() is True
+    assert not w._flash_page._appeal.isVisible()
+    assert w._install_complete is True
+    assert w._stack.currentIndex() == _PAGE_FLASH
 
     w.close()
     app.processEvents()
@@ -4116,24 +4115,12 @@ def test_sp_flash_tool_gui():
     try:
         with tempfile.TemporaryDirectory() as td:
             sp_dir = Path(td)
-            assert sp_flash_gui.update_sp_history_ini(sp_dir, model="Y1") is True
-            ini_file = sp_dir / "history.ini"
-            assert ini_file.is_file()
-            exp_y1 = str((sp_dir / "MT6572_Android_scatter.txt").resolve())
-            _da, scatter_read, history = sp_flash_gui.read_history_paths(ini_file)
-            assert os.path.normcase(scatter_read) == os.path.normcase(exp_y1)
-            assert os.path.normcase(exp_y1) in os.path.normcase(history)
-            assert os.path.isabs(scatter_read)
-
-            # Update for Y2
-            assert sp_flash_gui.update_sp_history_ini(sp_dir, model="Y2") is True
-            exp_y2 = str((sp_dir / "MT6582_Android_scatter.txt").resolve())
-            _da, scatter_read, history = sp_flash_gui.read_history_paths(ini_file)
-            assert os.path.normcase(scatter_read) == os.path.normcase(exp_y2)
-            folded = os.path.normcase(history)
-            assert os.path.normcase(exp_y2) in folded
-            assert os.path.normcase(exp_y1) in folded
-            assert os.path.isabs(scatter_read)
+            # No extracted package: do not invent a scatter inside the tool folder.
+            assert sp_flash_gui.update_sp_history_ini(sp_dir, model="Y1") is False
+            assert not (sp_dir / "MT6572_Android_scatter.txt").is_file()
+            assert not (sp_dir / "history.ini").is_file()
+            assert sp_flash_gui.update_sp_history_ini(sp_dir, model="Y2") is False
+            assert not (sp_dir / "MT6582_Android_scatter.txt").is_file()
     finally:
         device_tracking.get_latest_package = orig_latest
         downloads.downloads_dir = orig_downloads_dir

@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtCore import QPoint, Qt, QThread, Signal
 from PySide6.QtGui import QPixmap, QTextDocument
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QStackedWidget,
     QTextBrowser,
+    QToolTip,
     QVBoxLayout,
     QWidget,
 )
@@ -147,6 +148,21 @@ class _TabsAdapter:
         return _TabBar()
 
 
+class _TypeInfoMark(QLabel):
+    """Small information mark beside Type. Hover and click both show the same tip."""
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.LeftButton and self.rect().contains(event.position().toPoint()):
+            tip = self.toolTip()
+            if tip:
+                QToolTip.showText(
+                    self.mapToGlobal(QPoint(0, self.height())),
+                    tip,
+                    self,
+                )
+        super().mouseReleaseEvent(event)
+
+
 class SelectPackagePage(QWidget):
     package_selected = Signal(str, str, str)
     gui_release_clicked = Signal(object)
@@ -163,6 +179,7 @@ class SelectPackagePage(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.settings = None
         self.client = catalog.ReleasesClient()
         self._active_workers = set()
         self._releases_worker = None
@@ -213,6 +230,26 @@ class SelectPackagePage(QWidget):
 
         if is_generic_mtk():
             self.apply_generic_mode(True)
+
+        self._check_and_load_cached_firmware()
+
+    def _check_and_load_cached_firmware(self):
+        """Restore last installed/attempted firmware from downloads_dir cache if still on disk."""
+        from .. import device_tracking
+        from ..sp_flash_gui import cached_install_firmware
+
+        latest = device_tracking.get_latest_package(getattr(self, "settings", None))
+        scatter, extract = cached_install_firmware(latest)
+        if scatter and extract and extract.is_dir():
+            target_path = str(extract)
+            self._path_edit.setText(target_path)
+            self._current_package_path = target_path
+            self._current_package_model = (latest or {}).get("model") or ""
+            self._current_package_name = (latest or {}).get("software_name") or extract.name
+            self._remember_gui_local(target_path, self._current_package_model, self._current_package_name)
+            self._set_local_banner("sel_current_pkg", extract.name)
+            self._start_btn.setEnabled(True)
+            self._auto_detect_auth_file(target_path)
 
     def _connectivity_monitor_applicable(self) -> bool:
         """True only when an online catalogue is actually on offer.
@@ -387,7 +424,7 @@ class SelectPackagePage(QWidget):
         type_row.setContentsMargins(0, 0, 0, 0)
         type_row.setSpacing(4)
         type_row.addWidget(self._type_combo, 1)
-        self._type_help_icon = QLabel(self._type_field)
+        self._type_help_icon = _TypeInfoMark(self._type_field)
         self._type_help_icon.setObjectName("typeHelpIcon")
         self._type_help_icon.setCursor(Qt.ArrowCursor)
         self._type_help_icon.setFocusPolicy(Qt.NoFocus)
@@ -463,9 +500,8 @@ class SelectPackagePage(QWidget):
         self._download_bar.setTextVisible(True)
         self._download_bar.setFormat("%p%")
         self._download_bar.setMinimumHeight(18)
-        self._download_bar.setStyleSheet("")
-        from .dark import apply_readable_palette
-        apply_readable_palette(self._download_bar, progress=True)
+        from .dark import install_progress_readability
+        install_progress_readability(self._download_bar)
         self._download_bar.setVisible(False)
         pkg_layout.addWidget(self._download_bar)
 
@@ -631,6 +667,26 @@ class SelectPackagePage(QWidget):
         row.addWidget(self._browse_folder_btn)
         grp_l.addLayout(row)
 
+        # Auth file row on the main screen (for MediaTek Installer mode & authenticated flashing)
+        self._auth_row = QHBoxLayout()
+        self._auth_row.setSpacing(8)
+        self._auth_label = QLabel(tr("settings_sp_auth") + ":")
+        self._auth_edit = QLineEdit()
+        self._auth_edit.setReadOnly(True)
+        self._auth_edit.setPlaceholderText(tr("settings_sp_auth_none"))
+        self._browse_auth_btn = QPushButton(tr("settings_sp_auth_browse"))
+        self._browse_auth_btn.setIcon(get_symbol_icon("file", 16))
+        self._browse_auth_btn.clicked.connect(self._on_choose_auth_file)
+        self._clear_auth_btn = QPushButton(tr("settings_sp_auth_clear"))
+        self._clear_auth_btn.setIcon(get_symbol_icon("cancel", 12))
+        self._clear_auth_btn.clicked.connect(self._on_clear_auth_file)
+        self._auth_row.addWidget(self._auth_label)
+        self._auth_row.addWidget(self._auth_edit, 1)
+        self._auth_row.addWidget(self._browse_auth_btn)
+        self._auth_row.addWidget(self._clear_auth_btn)
+        grp_l.addLayout(self._auth_row)
+        self._sync_auth_file_ui()
+
         self._local_banner = Banner()
         grp_l.addWidget(self._local_banner)
 
@@ -638,16 +694,14 @@ class SelectPackagePage(QWidget):
         self._local_bar.setTextVisible(True)
         self._local_bar.setFormat("%p%")
         self._local_bar.setMinimumHeight(18)
-        self._local_bar.setStyleSheet("")
-        from .dark import apply_readable_palette
-        apply_readable_palette(self._local_bar, progress=True)
+        from .dark import install_progress_readability
+        install_progress_readability(self._local_bar)
         self._local_bar.setVisible(False)
         grp_l.addWidget(self._local_bar)
 
         self._local_status = QLabel("")
-        self._local_status.setStyleSheet(
-            f"font-size: 12px; color: {t.fg}; border: none; background: transparent;"
-        )
+        from .dark import apply_explicit_foreground
+        apply_explicit_foreground(self._local_status, " font-size: 12px; border: none;")
         grp_l.addWidget(self._local_status)
 
         self._start_btn = QPushButton(tr("sel_btn_start"))
@@ -670,35 +724,81 @@ class SelectPackagePage(QWidget):
         layout.addStretch()
         return page
 
+    def _sync_auth_file_ui(self):
+        from .. import device_tracking
+        current = device_tracking.sp_auth_file(getattr(self, "settings", None))
+        if hasattr(self, "_auth_edit"):
+            self._auth_edit.setText(current or "")
+            if hasattr(self, "_clear_auth_btn"):
+                self._clear_auth_btn.setVisible(bool(current))
+
+    def _on_choose_auth_file(self):
+        from .. import device_tracking
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            tr("settings_sp_auth"),
+            "",
+            "Authentication Files (*.auth);;All Files (*.*)",
+        )
+        if path:
+            device_tracking.set_sp_auth_file(path, getattr(self, "settings", None))
+            self._sync_auth_file_ui()
+
+    def _on_clear_auth_file(self):
+        from .. import device_tracking
+        device_tracking.set_sp_auth_file("", getattr(self, "settings", None))
+        self._sync_auth_file_ui()
+
+    def _auto_detect_auth_file(self, target_path: str) -> None:
+        """Scan package directory or archive location for an .auth file (e.g. authsv.auth, *.auth)."""
+        from .. import device_tracking
+        p = Path(target_path)
+        candidates = []
+        if p.is_dir():
+            candidates.append(p)
+        elif p.is_file():
+            candidates.append(p.parent)
+        try:
+            from ..flash_service import compute_extract_dir
+            ext = compute_extract_dir(target_path)
+            if ext.is_dir() and ext not in candidates:
+                candidates.append(ext)
+        except Exception:
+            pass
+
+        for c in candidates:
+            try:
+                for f in c.rglob("*.auth"):
+                    if f.is_file() and f.stat().st_size > 0:
+                        logger.info("Auto-detected auth file: %s", f)
+                        device_tracking.set_sp_auth_file(str(f.resolve()), getattr(self, "settings", None))
+                        self._sync_auth_file_ui()
+                        return
+            except Exception:
+                pass
+
     def _type_help_tip(self) -> str:
         """Full device-type help as a wrapping tooltip. No dialog."""
+        from .dark import tooltip_rich_text
+
         body = tr("sel_type_help_body")
         if not body or body == "sel_type_help_body":
             body = tr("device_type_help_msg") or tr("sel_type_help_tooltip")
-        lines = []
-        for line in body.split("\n"):
-            safe = (
-                line.replace("&", "&amp;")
-                .replace("<", "&lt;")
-                .replace(">", "&gt;")
-            )
-            lines.append(safe)
-        return "<qt><p style=\"margin:0;\">" + "<br>".join(lines) + "</p></qt>"
+        return tooltip_rich_text(body or "")
 
     def _refresh_type_help_icon(self) -> None:
-        """Same hover tip as the Type combo, on the platform help glyph beside it."""
+        """Same hover tip as the Type combo, on the platform information glyph beside it."""
         icon = getattr(self, "_type_help_icon", None)
         if icon is None:
             return
         icon.setCursor(Qt.ArrowCursor)
         color = getattr(T(), "fg_muted", None)
         pix = get_help_pixmap(HELP_ICON_PX, color=color)
+        icon.setText("")
         if pix is not None and not pix.isNull():
-            icon.setText("")
             icon.setPixmap(pix)
         else:
             icon.setPixmap(QPixmap())
-            icon.setText("?")
         icon.setProperty("helpSource", help_icon_source())
 
     def _apply_type_help_hint(self) -> None:
@@ -900,6 +1000,14 @@ class SelectPackagePage(QWidget):
         self._browse_btn.setText(tr("sel_browse"))
         if hasattr(self, "_browse_folder_btn"):
             self._browse_folder_btn.setText(tr("sel_browse_folder"))
+        if hasattr(self, "_auth_label"):
+            self._auth_label.setText(tr("settings_sp_auth") + ":")
+        if hasattr(self, "_browse_auth_btn"):
+            self._browse_auth_btn.setText(tr("settings_sp_auth_browse"))
+        if hasattr(self, "_clear_auth_btn"):
+            self._clear_auth_btn.setText(tr("settings_sp_auth_clear"))
+        if hasattr(self, "_auth_edit"):
+            self._auth_edit.setPlaceholderText(tr("settings_sp_auth_none"))
         self._start_btn.setText(tr("sel_btn_start"))
         self._apply_online_banner()
         if hasattr(self, "_update_prompt"):
@@ -970,12 +1078,14 @@ class SelectPackagePage(QWidget):
             self._browse_folder_btn.setIcon(get_symbol_icon("folder", 16))
         if hasattr(self, "_start_btn"):
             self._start_btn.setIcon(get_symbol_icon("install", 16))
-        from .dark import apply_readable_palette
+        from .dark import apply_explicit_foreground, install_progress_readability
+        status = getattr(self, "_local_status", None)
+        if status is not None:
+            apply_explicit_foreground(status, " font-size: 12px; border: none;")
         for bar_name in ("_download_bar", "_local_bar"):
             bar = getattr(self, bar_name, None)
             if bar is not None:
-                bar.setStyleSheet("")
-                apply_readable_palette(bar, progress=True)
+                install_progress_readability(bar)
 
     def refresh_models(self):
         """Repopulate the device drop-down from what the catalogue offers.
@@ -1695,6 +1805,9 @@ class SelectPackagePage(QWidget):
         # Retain only this package's extracted files
         prune_extracted_cache(keep_package_path=self._current_package_path)
 
+        # Auto-detect .auth file in same folder/zip/rar
+        self._auto_detect_auth_file(extract_dir)
+
         scatter_file = _find_scatter(Path(extract_dir))
         scatter_abs = scatter_file.resolve() if scatter_file else None
         extract_abs = Path(extract_dir).resolve() if extract_dir else None
@@ -1721,7 +1834,7 @@ class SelectPackagePage(QWidget):
         if not path:
             return
         p = Path(path)
-        if p.is_file() and p.suffix.lower() == ".txt":
+        if p.is_file() and (p.suffix.lower() == ".txt" or "scatter" in p.name.lower()):
             package_target = str(p.parent)
             display_name = p.parent.name
         else:
@@ -1731,6 +1844,12 @@ class SelectPackagePage(QWidget):
         self._path_edit.setText(package_target)
         self._current_package_path = package_target
         self._current_installed_release_info = None
+        self._current_selected_rel = None
+        self._details_package = None
+        self._raw_release_pixmap = None
+
+        # Auto-detect .auth file in the same folder as the chosen file
+        self._auto_detect_auth_file(package_target)
 
         # Detect model and variant type from original browsed filename:
         det_m, det_t = detect_model_and_type_from_name(display_name)
@@ -1772,6 +1891,12 @@ class SelectPackagePage(QWidget):
         self._path_edit.setText(folder)
         self._current_package_path = folder
         self._current_installed_release_info = None
+        self._current_selected_rel = None
+        self._details_package = None
+        self._raw_release_pixmap = None
+
+        # Auto-detect .auth file in the selected folder
+        self._auto_detect_auth_file(folder)
 
         det_m, det_t = detect_model_and_type_from_name(display_name)
         if det_m:
@@ -1917,6 +2042,8 @@ class SelectPackagePage(QWidget):
         the user moves the highlight. A clicked release and a browsed local
         package are tracked separately.
         """
+        if is_generic_mtk() or self.catalogue_section() == "local":
+            return None
         return self._firmware_target_for_release(getattr(self, "_current_selected_rel", None))
 
     def begin_external_prepare(self, target: dict, callback) -> bool:
@@ -2048,6 +2175,8 @@ class SelectPackagePage(QWidget):
         """The release or software image already on screen, before the squircle paint."""
         from PySide6.QtGui import QPixmap
 
+        if self.catalogue_section() == "local" or getattr(self, "_current_selected_rel", None) is None:
+            return QPixmap()
         pix = getattr(self, "_raw_release_pixmap", None)
         return pix if pix is not None else QPixmap()
 
@@ -2056,8 +2185,10 @@ class SelectPackagePage(QWidget):
         from PySide6.QtGui import QPixmap
 
         source = raw if raw is not None and not getattr(raw, "isNull", lambda: True)() else QPixmap()
-        if not source.isNull():
+        if not source.isNull() and getattr(self, "_current_selected_rel", None) is not None:
             self._raw_release_pixmap = source
+        else:
+            self._raw_release_pixmap = None
         painted = squircle_pixmap(source, 40, complete=False)
         if immediate or not getattr(self, "_icon_presented", False):
             self._details_icon.show_stand_in(painted)

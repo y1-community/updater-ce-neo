@@ -34,8 +34,9 @@ from ..flash_service import (
 )
 from ..i18n import tr, tr_brand
 from .dark import page_margins
+from .icons import get_symbol_icon
 from .scrollbars import configure_scroll_area
-from .widgets import Card
+from .widgets import Card, close_layout_gap, layout_gap_closing
 
 
 def terminal_install_desc() -> str:
@@ -70,10 +71,49 @@ class SettingsPage(QWidget):
         # Guards the filter checkboxes while they are synced from settings, so
         # syncing never re-enters a handler or reopens a confirmation dialog.
         self._filters_loading = False
+        self._install_mode_guard = False
+        # checkbox -> (row widget, caption label). The switch sits on the right.
+        self._switch_rows = {}
         # model id -> install-status QLabel, filled in by _build_ui.
         self._install_status_labels = {}
         self._build_ui()
         self.refresh_settings()
+
+    def _add_switch(self, layout, text: str) -> QCheckBox:
+        """Label on the left, switch on the right, as on macOS and Windows."""
+        row = QWidget()
+        box = QHBoxLayout(row)
+        box.setContentsMargins(0, 0, 0, 0)
+        box.setSpacing(12)
+        caption = QLabel(text)
+        caption.setWordWrap(True)
+        caption.setCursor(Qt.ArrowCursor)
+        switch = QCheckBox()
+        switch.setCursor(Qt.ArrowCursor)
+        box.addWidget(caption, 1)
+        box.addWidget(switch, 0, Qt.AlignRight | Qt.AlignVCenter)
+        layout.addWidget(row)
+        self._switch_rows[switch] = (row, caption)
+        return switch
+
+    def switch_caption(self, switch: QCheckBox) -> str:
+        """The words beside a settings switch. The checkbox itself has no text."""
+        row = self._switch_rows.get(switch)
+        return row[1].text() if row else switch.text()
+
+    def _set_switch_caption(self, switch: QCheckBox, text: str) -> None:
+        row = self._switch_rows.get(switch)
+        if row is not None:
+            row[1].setText(text)
+        else:
+            switch.setText(text)
+
+    def _set_switch_row_visible(self, switch: QCheckBox, visible: bool) -> None:
+        row = self._switch_rows.get(switch)
+        if row is not None:
+            row[0].setVisible(visible)
+        else:
+            switch.setVisible(visible)
 
     def _build_ui(self):
         root_layout = QVBoxLayout(self)
@@ -169,27 +209,31 @@ class SettingsPage(QWidget):
         term_layout = QVBoxLayout()
         term_layout.setSpacing(8)
 
+        self._cb_guided_install = self._add_switch(term_layout, tr("settings_guided_install"))
+        self._cb_guided_install.setToolTip(tr("settings_guided_install_desc"))
+        self._cb_guided_install.toggled.connect(self._on_guided_install_toggled)
+        self._guided_desc = QLabel(tr("settings_guided_install_desc"))
+        self._guided_desc.setWordWrap(True)
+        self._guided_desc.setProperty("cssClass", "dimmed")
+        term_layout.addWidget(self._guided_desc)
+
         term_text = tr("settings_terminal_install_windows" if paths.IS_WINDOWS else "settings_terminal_install")
-        self._cb_terminal_install = QCheckBox(term_text)
+        self._cb_terminal_install = self._add_switch(term_layout, term_text)
         self._cb_terminal_install.setToolTip(terminal_install_desc())
         self._cb_terminal_install.toggled.connect(self._on_terminal_install_toggled)
-        term_layout.addWidget(self._cb_terminal_install)
 
         self._terminal_desc = QLabel(terminal_install_desc())
         self._terminal_desc.setWordWrap(True)
         self._terminal_desc.setProperty("cssClass", "dimmed")
-        self._terminal_desc.setContentsMargins(24, 0, 0, 0)
         term_layout.addWidget(self._terminal_desc)
 
-        self._cb_sp_gui_install = QCheckBox(tr("settings_sp_gui_install"))
+        self._cb_sp_gui_install = self._add_switch(term_layout, tr("settings_sp_gui_install"))
         self._cb_sp_gui_install.setToolTip(tr("settings_sp_gui_desc"))
         self._cb_sp_gui_install.toggled.connect(self._on_sp_gui_install_toggled)
-        term_layout.addWidget(self._cb_sp_gui_install)
 
         self._sp_gui_desc = QLabel(tr("settings_sp_gui_desc"))
         self._sp_gui_desc.setWordWrap(True)
         self._sp_gui_desc.setProperty("cssClass", "dimmed")
-        self._sp_gui_desc.setContentsMargins(24, 0, 0, 0)
         term_layout.addWidget(self._sp_gui_desc)
 
         self._terminal_card.set_layout(term_layout)
@@ -199,9 +243,8 @@ class SettingsPage(QWidget):
         rem_layout = QVBoxLayout()
         rem_layout.setSpacing(8)
 
-        self._cb_reminders = QCheckBox(tr("settings_reminders_enable"))
+        self._cb_reminders = self._add_switch(rem_layout, tr("settings_reminders_enable"))
         self._cb_reminders.toggled.connect(self._on_reminders_toggled)
-        rem_layout.addWidget(self._cb_reminders)
 
         self._reminders_card.set_layout(rem_layout)
         layout.addWidget(self._reminders_card)
@@ -218,19 +261,16 @@ class SettingsPage(QWidget):
         self._rockbox_desc.setProperty("cssClass", "subtitle")
         rock_layout.addWidget(self._rockbox_desc)
 
-        self._cb_old_rockbox = QCheckBox(tr("settings_filter_old_rockbox"))
+        self._cb_old_rockbox = self._add_switch(rock_layout, tr("settings_filter_old_rockbox"))
         self._cb_old_rockbox.setToolTip(tr("settings_old_rockbox_warn_body"))
         self._cb_old_rockbox.toggled.connect(self._on_old_rockbox_toggled)
-        rock_layout.addWidget(self._cb_old_rockbox)
 
-        self._cb_nightly = QCheckBox(tr("settings_filter_nightly"))
+        self._cb_nightly = self._add_switch(rock_layout, tr("settings_filter_nightly"))
         self._cb_nightly.toggled.connect(self._on_nightly_toggled)
-        rock_layout.addWidget(self._cb_nightly)
 
-        self._cb_240p = QCheckBox(tr("settings_filter_240p"))
+        self._cb_240p = self._add_switch(rock_layout, tr("settings_filter_240p"))
         self._cb_240p.setToolTip(tr("settings_240p_tip"))
         self._cb_240p.toggled.connect(self._on_240p_toggled)
-        rock_layout.addWidget(self._cb_240p)
 
         self._rockbox_card.set_layout(rock_layout)
         layout.addWidget(self._rockbox_card)
@@ -241,38 +281,72 @@ class SettingsPage(QWidget):
         don_layout = QVBoxLayout()
         don_layout.setSpacing(12)
 
-        # Hide donations checkbox
-        self._cb_hide_donations = QCheckBox(tr("settings_hide_donations"))
+        # Single combined donation opt-out switch
+        self._cb_hide_donations = self._add_switch(don_layout, tr("settings_hide_donations"))
         self._cb_hide_donations.setToolTip(tr("settings_hide_donations_tip"))
         self._cb_hide_donations.toggled.connect(self._on_hide_donations_toggled)
-        don_layout.addWidget(self._cb_hide_donations)
 
         self._lbl_hide_tip = QLabel(tr("settings_hide_donations_tip"))
         self._lbl_hide_tip.setWordWrap(True)
         self._lbl_hide_tip.setProperty("cssClass", "dimmed")
-        self._lbl_hide_tip.setContentsMargins(24, 0, 0, 0)
         don_layout.addWidget(self._lbl_hide_tip)
 
-        # Skip install donation prompt checkbox
-        self._cb_skip_install_donations = QCheckBox(tr("settings_skip_install_donations"))
-        self._cb_skip_install_donations.setToolTip(tr("settings_skip_install_donations_tip"))
-        self._cb_skip_install_donations.toggled.connect(self._on_skip_install_donations_toggled)
-        don_layout.addWidget(self._cb_skip_install_donations)
+        # Backward compatibility aliases
+        self._cb_skip_install_donations = self._cb_hide_donations
+        self._lbl_skip_tip = self._lbl_hide_tip
 
-        self._lbl_skip_tip = QLabel(tr("settings_skip_install_donations_tip"))
-        self._lbl_skip_tip.setWordWrap(True)
-        self._lbl_skip_tip.setProperty("cssClass", "dimmed")
-        self._lbl_skip_tip.setContentsMargins(24, 0, 0, 0)
-        don_layout.addWidget(self._lbl_skip_tip)
-
+        self._donations_actions = QWidget()
+        actions = QHBoxLayout(self._donations_actions)
+        actions.setContentsMargins(0, 0, 0, 0)
+        actions.setSpacing(12)
         self._settings_coffee_btn = QPushButton(tr("donate_coffee_btn"))
         self._settings_coffee_btn.setCursor(Qt.ArrowCursor)
         self._settings_coffee_btn.setStyleSheet("")
         self._settings_coffee_btn.clicked.connect(self._open_settings_coffee)
-        don_layout.addWidget(self._settings_coffee_btn, alignment=Qt.AlignLeft)
+        self._dismiss_donations_link = QLabel(self._donations_dismiss_html())
+        self._dismiss_donations_link.setTextFormat(Qt.TextFormat.RichText)
+        self._dismiss_donations_link.setTextInteractionFlags(
+            Qt.TextInteractionFlag.LinksAccessibleByMouse
+            | Qt.TextInteractionFlag.LinksAccessibleByKeyboard
+        )
+        self._dismiss_donations_link.setOpenExternalLinks(False)
+        self._dismiss_donations_link.setCursor(Qt.PointingHandCursor)
+        self._dismiss_donations_link.setAutoFillBackground(False)
+        self._dismiss_donations_link.setStyleSheet("")
+        self._dismiss_donations_link.linkActivated.connect(
+            lambda _href: self._on_dismiss_donations_section()
+        )
+        actions.addWidget(self._settings_coffee_btn, 0, Qt.AlignVCenter)
+        actions.addWidget(self._dismiss_donations_link, 0, Qt.AlignVCenter)
+        actions.addStretch(1)
+        don_layout.addWidget(self._donations_actions, alignment=Qt.AlignLeft)
 
         self._donations_card.set_layout(don_layout)
         layout.addWidget(self._donations_card)
+
+        # --- Firmware Storage & Cache Card ---
+        self._cache_card = Card("settings_cache_group")
+        cache_layout = QVBoxLayout()
+        cache_layout.setSpacing(8)
+
+        self._cache_desc = QLabel(tr("settings_cache_desc"))
+        self._cache_desc.setWordWrap(True)
+        self._cache_desc.setProperty("cssClass", "dimmed")
+        cache_layout.addWidget(self._cache_desc)
+
+        cache_btn_row = QHBoxLayout()
+        cache_btn_row.setSpacing(10)
+        self._clear_cache_btn = QPushButton(tr("settings_clear_cache_btn"))
+        self._clear_cache_btn.setIcon(get_symbol_icon("cancel", 12))
+        self._clear_cache_btn.clicked.connect(self._on_clear_firmware_cache)
+        cache_btn_row.addWidget(self._clear_cache_btn)
+
+        self._cache_status_lbl = QLabel("")
+        cache_btn_row.addWidget(self._cache_status_lbl, 1)
+        cache_layout.addLayout(cache_btn_row)
+
+        self._cache_card.set_layout(cache_layout)
+        layout.addWidget(self._cache_card)
 
         # --- Card 4: Platform preparation ---
         # Linux gets the SP Flash Tool system checker (udev rules, kernel
@@ -296,15 +370,13 @@ class SettingsPage(QWidget):
         off_layout = QVBoxLayout()
         off_layout.setSpacing(8)
 
-        self._cb_offline_mode = QCheckBox(tr("settings_offline_mode"))
+        self._cb_offline_mode = self._add_switch(off_layout, tr("settings_offline_mode"))
         self._cb_offline_mode.setToolTip(tr("settings_offline_mode_desc"))
         self._cb_offline_mode.toggled.connect(self._on_offline_mode_toggled)
-        off_layout.addWidget(self._cb_offline_mode)
 
         self._offline_mode_desc = QLabel(tr("settings_offline_mode_desc"))
         self._offline_mode_desc.setWordWrap(True)
         self._offline_mode_desc.setProperty("cssClass", "dimmed")
-        self._offline_mode_desc.setContentsMargins(24, 0, 0, 0)
         off_layout.addWidget(self._offline_mode_desc)
 
         self._offline_mode_card.set_layout(off_layout)
@@ -668,40 +740,25 @@ class SettingsPage(QWidget):
         self._cb_reminders.setChecked(any_enabled)
         self._cb_reminders.blockSignals(False)
 
-        # Donation checkboxes
-        self._cb_hide_donations.blockSignals(True)
-        self._cb_hide_donations.setChecked(device_tracking.is_donation_ui_disabled())
-        self._cb_hide_donations.blockSignals(False)
-
-        self._cb_skip_install_donations.blockSignals(True)
-        self._cb_skip_install_donations.setChecked(
-            device_tracking.is_donation_install_prompt_disabled()
+        # Single donation opt-out switch
+        opted_out = (
+            device_tracking.is_donation_ui_disabled()
+            or device_tracking.is_donation_install_prompt_disabled()
         )
-        self._cb_skip_install_donations.blockSignals(False)
+        self._cb_hide_donations.blockSignals(True)
+        self._cb_hide_donations.setChecked(opted_out)
+        self._cb_hide_donations.blockSignals(False)
         self._sync_donation_opt_out()
+        self._apply_donations_section_visibility()
 
         # Rockbox release filters
         self._apply_filter_flags()
 
-        # Terminal install mode
         term_text = tr("settings_terminal_install_windows" if paths.IS_WINDOWS else "settings_terminal_install")
-        self._cb_terminal_install.setText(term_text)
-        self._cb_terminal_install.blockSignals(True)
-        self._cb_terminal_install.setChecked(
-            device_tracking.terminal_install_enabled()
-        )
-        self._cb_terminal_install.blockSignals(False)
-
-        # SP Flash Tool GUI install mode
-        from ..sp_flash_gui import is_sp_flash_gui_supported
-        sp_supported = is_sp_flash_gui_supported()
-        self._cb_sp_gui_install.setVisible(sp_supported)
-        self._sp_gui_desc.setVisible(sp_supported)
-        self._cb_sp_gui_install.blockSignals(True)
-        self._cb_sp_gui_install.setChecked(
-            device_tracking.sp_gui_install_enabled()
-        )
-        self._cb_sp_gui_install.blockSignals(False)
+        self._set_switch_caption(self._cb_terminal_install, term_text)
+        self._set_switch_caption(self._cb_guided_install, tr("settings_guided_install"))
+        self._set_switch_caption(self._cb_sp_gui_install, tr("settings_sp_gui_install"))
+        self._sync_install_mode_switches()
 
         # Offline mode toggle
         self._cb_offline_mode.blockSignals(True)
@@ -730,11 +787,60 @@ class SettingsPage(QWidget):
         config.IS_OFFLINE_MODE = checked
         self.offline_mode_changed.emit(checked)
 
+    def _sync_install_mode_switches(self) -> None:
+        """One install choice at a time. Guided is the one that is on by default."""
+        from ..sp_flash_gui import is_sp_flash_gui_supported
+
+        sp_supported = is_sp_flash_gui_supported()
+        terminal = device_tracking.terminal_install_enabled()
+        sp_gui = device_tracking.sp_gui_install_enabled() and sp_supported
+        # The install path checks the graphical tool first, so that choice wins
+        # when an older build left both flags on.
+        if terminal and sp_gui:
+            device_tracking.set_terminal_install_enabled(False)
+            terminal = False
+        guided = not terminal and not sp_gui
+        self._install_mode_guard = True
+        try:
+            for box, checked in (
+                (self._cb_guided_install, guided),
+                (self._cb_terminal_install, terminal),
+                (self._cb_sp_gui_install, sp_gui),
+            ):
+                box.blockSignals(True)
+                box.setChecked(checked)
+                box.blockSignals(False)
+        finally:
+            self._install_mode_guard = False
+        self._set_switch_row_visible(self._cb_sp_gui_install, sp_supported)
+        self._sp_gui_desc.setVisible(sp_supported)
+
+    def _on_guided_install_toggled(self, checked: bool):
+        if self._install_mode_guard:
+            return
+        if checked:
+            device_tracking.set_terminal_install_enabled(False)
+            device_tracking.set_sp_gui_install_enabled(False)
+        self._sync_install_mode_switches()
+
     def _on_terminal_install_toggled(self, checked: bool):
+        if self._install_mode_guard:
+            return
         device_tracking.set_terminal_install_enabled(bool(checked))
+        if checked:
+            device_tracking.set_sp_gui_install_enabled(False)
+        self._sync_install_mode_switches()
 
     def _on_sp_gui_install_toggled(self, checked: bool):
+        if self._install_mode_guard:
+            return
         device_tracking.set_sp_gui_install_enabled(bool(checked))
+        if checked:
+            device_tracking.set_terminal_install_enabled(False)
+        self._sync_install_mode_switches()
+
+    def _donations_dismiss_html(self) -> str:
+        return f'<a href="dismiss">{tr("settings_donations_dismiss")}</a>'
 
     def _open_settings_coffee(self) -> None:
         from ..browser import open_browser
@@ -742,20 +848,52 @@ class SettingsPage(QWidget):
 
     def _sync_donation_opt_out(self) -> None:
         """The coffee button stays. Other donation prompts in this card do not."""
-        off = self._cb_hide_donations.isChecked()
-        self._cb_skip_install_donations.setVisible(not off)
-        if hasattr(self, "_lbl_skip_tip"):
-            self._lbl_skip_tip.setVisible(not off)
         if hasattr(self, "_settings_coffee_btn"):
             self._settings_coffee_btn.setVisible(True)
+        if hasattr(self, "_dismiss_donations_link"):
+            self._dismiss_donations_link.setVisible(True)
+
+    def _apply_donations_section_visibility(self) -> None:
+        """The dismiss link removes this card. The donation switch does not."""
+        if layout_gap_closing(self._donations_card):
+            return
+        dismissed = device_tracking.is_settings_donations_section_dismissed()
+        if not dismissed:
+            self._donations_card.setMaximumHeight((1 << 24) - 1)
+            self._donations_card.setMinimumHeight(0)
+            self._donations_card.clearMask()
+        self._donations_card.setVisible(not dismissed)
+
+    def _on_dismiss_donations_section(self) -> None:
+        """Drop the donations card for good. Prompts elsewhere are unchanged."""
+        if layout_gap_closing(self._donations_card):
+            return
+        if not device_tracking.is_settings_donations_section_dismissed():
+            device_tracking.set_settings_donations_section_dismissed(True)
+        close_layout_gap(self._donations_card)
 
     def _on_hide_donations_toggled(self, checked: bool):
         device_tracking.set_donation_ui_disabled(checked)
+        device_tracking.set_donation_install_prompt_disabled(checked)
         self._sync_donation_opt_out()
         self.donation_visibility_changed.emit(checked)
 
     def _on_skip_install_donations_toggled(self, checked: bool):
         device_tracking.set_donation_install_prompt_disabled(checked)
+        device_tracking.set_donation_ui_disabled(checked)
+        self._cb_hide_donations.setChecked(checked)
+
+    def _on_clear_firmware_cache(self):
+        from ..downloads import clear_firmware_cache
+        count, freed = clear_firmware_cache()
+        if freed >= 1024 * 1024:
+            freed_str = f"{freed / (1024 * 1024):.1f} MB"
+        elif freed >= 1024:
+            freed_str = f"{freed / 1024:.1f} KB"
+        else:
+            freed_str = f"{freed} B"
+        msg = tr("settings_cache_cleared_msg").format(count=count, size=freed_str)
+        self._cache_status_lbl.setText(msg)
 
     def _on_run_checker(self):
         from .dialogs import LinuxSetupDialog
@@ -779,33 +917,41 @@ class SettingsPage(QWidget):
         self._reload_method_options()
         self._terminal_card.retranslate()
         term_text = tr("settings_terminal_install_windows" if paths.IS_WINDOWS else "settings_terminal_install")
-        self._cb_terminal_install.setText(term_text)
+        self._set_switch_caption(self._cb_guided_install, tr("settings_guided_install"))
+        self._cb_guided_install.setToolTip(tr("settings_guided_install_desc"))
+        if hasattr(self, "_guided_desc"):
+            self._guided_desc.setText(tr("settings_guided_install_desc"))
+        self._set_switch_caption(self._cb_terminal_install, term_text)
         self._cb_terminal_install.setToolTip(terminal_install_desc())
         self._terminal_desc.setText(terminal_install_desc())
-        self._cb_sp_gui_install.setText(tr("settings_sp_gui_install"))
+        self._set_switch_caption(self._cb_sp_gui_install, tr("settings_sp_gui_install"))
         self._cb_sp_gui_install.setToolTip(tr("settings_sp_gui_desc"))
         self._sp_gui_desc.setText(tr("settings_sp_gui_desc"))
         self._reminders_card.retranslate()
-        self._cb_reminders.setText(tr("settings_reminders_enable"))
+        self._set_switch_caption(self._cb_reminders, tr("settings_reminders_enable"))
         self._rockbox_card.retranslate()
         self._rockbox_desc.setText(tr("settings_rockbox_desc"))
-        self._cb_old_rockbox.setText(tr("settings_filter_old_rockbox"))
+        self._set_switch_caption(self._cb_old_rockbox, tr("settings_filter_old_rockbox"))
         self._cb_old_rockbox.setToolTip(tr("settings_old_rockbox_warn_body"))
-        self._cb_nightly.setText(tr("settings_filter_nightly"))
-        self._cb_240p.setText(tr("settings_filter_240p"))
+        self._set_switch_caption(self._cb_nightly, tr("settings_filter_nightly"))
+        self._set_switch_caption(self._cb_240p, tr("settings_filter_240p"))
         self._cb_240p.setToolTip(tr("settings_240p_tip"))
         self._donations_card.retranslate()
-        self._cb_hide_donations.setText(tr("settings_hide_donations"))
+        self._set_switch_caption(self._cb_hide_donations, tr("settings_hide_donations"))
         self._cb_hide_donations.setToolTip(tr("settings_hide_donations_tip"))
-        self._cb_skip_install_donations.setText(tr("settings_skip_install_donations"))
-        self._cb_skip_install_donations.setToolTip(tr("settings_skip_install_donations_tip"))
         if hasattr(self, "_lbl_hide_tip"):
             self._lbl_hide_tip.setText(tr("settings_hide_donations_tip"))
-        if hasattr(self, "_lbl_skip_tip"):
-            self._lbl_skip_tip.setText(tr("settings_skip_install_donations_tip"))
         if hasattr(self, "_settings_coffee_btn"):
             self._settings_coffee_btn.setText(tr("donate_coffee_btn"))
+        if hasattr(self, "_dismiss_donations_link"):
+            self._dismiss_donations_link.setText(self._donations_dismiss_html())
         self._sync_donation_opt_out()
+        if hasattr(self, "_cache_card"):
+            self._cache_card.retranslate()
+        if hasattr(self, "_cache_desc"):
+            self._cache_desc.setText(tr("settings_cache_desc"))
+        if hasattr(self, "_clear_cache_btn"):
+            self._clear_cache_btn.setText(tr("settings_clear_cache_btn"))
         if hasattr(self, "_checker_card"):
             self._checker_card.retranslate()
         if hasattr(self, "_driver_card"):
@@ -818,7 +964,7 @@ class SettingsPage(QWidget):
             self._driver_desc.setText(tr("settings_driver_desc"))
             self._btn_download_drivers.setText(tr("settings_download_drivers_btn"))
         self._offline_mode_card.retranslate()
-        self._cb_offline_mode.setText(tr("settings_offline_mode"))
+        self._set_switch_caption(self._cb_offline_mode, tr("settings_offline_mode"))
         self._cb_offline_mode.setToolTip(tr("settings_offline_mode_desc"))
         self._offline_mode_desc.setText(tr("settings_offline_mode_desc"))
         self._sp_auth_label.setText(tr("settings_sp_auth"))

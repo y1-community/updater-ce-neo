@@ -609,9 +609,18 @@ def _to_short_path(path):
 
 def compute_extract_dir(package_path):
     package = Path(package_path)
+    from .downloads import downloads_dir
+    dd = downloads_dir()
+    if package.is_file() and (package.suffix.lower() == ".txt" or "scatter" in package.name.lower()):
+        return dd / f".{package.parent.name}_extracted"
     if package.is_dir():
-        return package
-    return package.parent / f".{package.stem}_extracted"
+        try:
+            if package.resolve() == dd.resolve() or package.resolve().is_relative_to(dd.resolve()):
+                return package
+        except Exception:
+            pass
+        return dd / f".{package.name}_extracted"
+    return dd / f".{package.stem}_extracted"
 
 
 def completed_extract_dir(package_path):
@@ -718,11 +727,41 @@ class ExtractWorker(QThread):
 
     def _extract(self, package_path):
         p = Path(package_path)
-        if p.is_dir():
+        is_scatter_file = p.is_file() and (p.suffix.lower() == ".txt" or "scatter" in p.name.lower())
+        if is_scatter_file or p.is_dir():
+            source_dir = p.parent if is_scatter_file else p
+            from .downloads import downloads_dir
+            from .sp_flash_gui import discard_firmware_history
+            dd = downloads_dir()
+            work_dir = compute_extract_dir(package_path)
+
+            try:
+                is_in_work_dir = source_dir.resolve() == work_dir.resolve()
+            except Exception:
+                is_in_work_dir = False
+
+            if not is_in_work_dir:
+                work_dir.mkdir(parents=True, exist_ok=True)
+                for item in source_dir.iterdir():
+                    if self._cancelled:
+                        return work_dir
+                    target = work_dir / item.name
+                    try:
+                        if item.is_file():
+                            shutil.copy2(item, target)
+                        elif item.is_dir() and not item.name.startswith("."):
+                            shutil.copytree(item, target, dirs_exist_ok=True)
+                    except Exception as err:
+                        logger.debug("Copying rom item %s failed: %s", item, err)
             self.progress.emit(100)
-            return p
+            discard_firmware_history(work_dir)
+            _mark_extract_complete(work_dir)
+            return work_dir
+
         extract_dir = compute_extract_dir(package_path)
+        from .sp_flash_gui import discard_firmware_history
         if _is_extract_complete(extract_dir):
+            discard_firmware_history(extract_dir)
             return extract_dir
         shutil.rmtree(extract_dir, ignore_errors=True)
         extract_dir.mkdir(parents=True, exist_ok=True)
@@ -731,6 +770,7 @@ class ExtractWorker(QThread):
             self._extract_zip(package_path, extract_dir)
         else:
             self._extract_rar(package_path, extract_dir)
+        discard_firmware_history(extract_dir)
         _mark_extract_complete(extract_dir)
         return extract_dir
 
@@ -1510,6 +1550,8 @@ class FlashWorker(QThread):
             worker._extract_zip(self.package_path, extract_dir)
         else:
             worker._extract_rar(self.package_path, extract_dir)
+        from .sp_flash_gui import discard_firmware_history
+        discard_firmware_history(extract_dir)
         _mark_extract_complete(extract_dir)
         return extract_dir
 

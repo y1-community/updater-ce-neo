@@ -223,12 +223,13 @@ def format_sp_history_ini(
                 entry = _ini_unescape(raw.strip())
                 if not entry or entry.startswith("@Invalid"):
                     continue
-                if os.path.isabs(entry):
-                    p_entry = str(Path(entry).resolve())
-                elif sp_dir:
-                    p_entry = str((Path(sp_dir) / entry).resolve())
-                else:
+                # A relative name is the history.ini shipped inside a firmware
+                # zip (``scatterHistory=MT6572_Android_scatter.txt``). Resolving
+                # it against the tool folder points SP Flash Tool at a scatter
+                # that has no images beside it.
+                if not os.path.isabs(entry):
                     continue
+                p_entry = str(Path(entry).resolve())
                 # A scatter copied into the tool folder has no package images
                 # beside it. Keep only files that are still on disk.
                 if not Path(p_entry).is_file():
@@ -457,6 +458,37 @@ def cached_install_firmware(latest: Optional[dict]) -> Tuple[Optional[Path], Opt
         if found and Path(found).is_file():
             return Path(found).resolve(), extract.resolve()
     return None, None
+
+
+def discard_firmware_history(extract_dir: Union[Path, str, None]) -> int:
+    """Delete ``history.ini`` files that arrived inside a firmware package.
+
+    SP Flash Tool must read the history file written beside its own binary.
+    The copy in the zip uses relative paths and an empty ``lastDir``, which
+    is the "scatter file cannot find" dialog.
+    """
+    root = Path(extract_dir) if extract_dir else None
+    if root is None or not root.is_dir():
+        return 0
+    removed = 0
+    try:
+        candidates = list(root.rglob(HISTORY_INI))
+    except OSError:
+        return 0
+    for path in candidates:
+        parent = path.parent
+        if (
+            (parent / "flash_tool.exe").is_file()
+            or (parent / "flash_tool").is_file()
+            or (parent / DA_FILENAME).is_file()
+        ):
+            continue
+        try:
+            path.unlink()
+            removed += 1
+        except OSError:
+            logger.debug("Could not remove firmware history.ini at %s", path, exc_info=True)
+    return removed
 
 
 def pin_sp_flash_history(
@@ -689,6 +721,9 @@ def update_sp_history_ini(
             model = resolved_model
         if resolved_ext and not extract_dir:
             extract_dir = resolved_ext
+        if scatter_file is not None and scatter_file.parent.resolve() == sp_dir.resolve():
+            # A scatter copied into the tool folder has no package images.
+            scatter_file = None
 
         # 3. Keep a scatter the tool can already open. Do not replace it with
         # the bare file that sits in the tool folder.
@@ -704,26 +739,12 @@ def update_sp_history_ini(
                 ):
                     scatter_file = existing_path.resolve()
 
-        # 4. Fallback to model-specific scatter file: MT6582 for Y2, MT6572 for Y1
-        if scatter_file is None:
-            default_scatter_name = (
-                "MT6582_Android_scatter.txt"
-                if "Y2" in (model or "").upper()
-                else "MT6572_Android_scatter.txt"
-            )
-            cand_sp = sp_dir / default_scatter_name
-            if cand_sp.is_file():
-                scatter_file = cand_sp.resolve()
-            else:
-                compat_sc = paths.COMPAT_DIR / default_scatter_name
-                if compat_sc.is_file():
-                    try:
-                        shutil.copy2(compat_sc, cand_sp)
-                        scatter_file = cand_sp.resolve()
-                    except Exception:
-                        scatter_file = compat_sc.resolve()
-                else:
-                    scatter_file = cand_sp.resolve()
+        if scatter_file is None or not Path(scatter_file).is_file():
+            return False
+        if Path(scatter_file).parent.resolve() == sp_dir.resolve():
+            return False
+
+        discard_firmware_history(extract_dir or Path(scatter_file).parent)
 
         scatter_abs = os.path.abspath(str(scatter_file))
         if not Path(scatter_abs).is_file():

@@ -117,25 +117,25 @@ def test_release_reminder_dialog_markdown_and_opt_out():
 
 
 def test_donation_dialog_toned_down_and_themed():
-    """Verify DonationDialog applies native styling, default 710x460 size, and Buy Us A Coffee label."""
+    """Coffee is the only donation action. Crypto and Honeygain are not offered."""
+    from PySide6.QtWidgets import QWidget
+
     app = QApplication.instance() or QApplication(sys.argv)
     dlg = DonationDialog(context="install_success", model="Y1")
     assert dlg.width() == 710
     assert dlg.height() == 460
     assert hasattr(dlg, "_close_btn")
-    # Native buttons should have symbols and no overriding stylesheet
-    assert hasattr(dlg, "_pay_buttons") and len(dlg._pay_buttons) == 4
-    for btn in dlg._pay_buttons:
-        assert not bool(btn.styleSheet()), f"Button {btn.text()} has overriding stylesheet"
-    grid_buttons = [btn.text() for btn in dlg._pay_buttons]
-    assert any("☕" in txt for txt in grid_buttons)
-    assert any("Buy Us A Coffee" in txt for txt in grid_buttons)
-    assert any("💳" in txt for txt in grid_buttons)
-    assert any("⚡" in txt for txt in grid_buttons)
-    assert any("★" in txt for txt in grid_buttons)
-    # Honeygain and crypto remain non-native (links/toggles)
-    assert bool(dlg._last_button.styleSheet())
-    assert bool(dlg._crypto_toggle.styleSheet())
+    assert hasattr(dlg, "_pay_buttons") and len(dlg._pay_buttons) == 1
+    coffee = dlg._pay_buttons[0]
+    assert coffee.text() == "Buy us a coffee"
+    assert not coffee.styleSheet()
+    assert coffee.cursor().shape() == Qt.ArrowCursor
+    assert not hasattr(dlg, "_crypto_toggle")
+    joined = " ".join(
+        child.text() for child in dlg.findChildren(QWidget) if hasattr(child, "text")
+    )
+    for banned in ("Honeygain", "PayPal", "Revolut", "Patreon", "Bitcoin", "Crypto"):
+        assert banned not in joined, banned
     dlg.close()
 
 
@@ -159,6 +159,83 @@ def test_model_and_type_label_strings():
         "de": "Typ",
         "ja": "タイプ",
     }
+
+
+def test_type_info_click_shows_existing_tip():
+    """A click on the information mark shows the same Type A / Type B tip as hover."""
+    from unittest.mock import patch
+
+    from PySide6.QtCore import QPoint
+    from PySide6.QtTest import QTest
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    page = SelectPackagePage()
+    icon = page._type_help_icon
+    page._type_field.setVisible(True)
+    icon.setVisible(True)
+    page._views.setCurrentWidget(page._online_tab)
+    page.resize(720, 520)
+    page.show()
+    app.processEvents()
+
+    tip = icon.toolTip()
+    assert tip == page._type_combo.toolTip()
+    assert "Type A" in tip
+    assert "Type B" in tip
+    assert icon.cursor().shape() == Qt.ArrowCursor
+    assert icon.width() == 16
+    assert not hasattr(page, "_type_help_btn")
+    assert not hasattr(page, "_show_device_type_help")
+    _assert_type_information_icon(icon)
+
+    with patch("src.ui.select_page.QToolTip.showText") as show:
+        QTest.mouseClick(icon, Qt.LeftButton)
+        app.processEvents()
+        assert show.called
+        args = show.call_args.args
+        assert args[1] == tip
+        assert args[2] is icon
+        assert args[0] == icon.mapToGlobal(QPoint(0, icon.height()))
+    page.close()
+    app.processEvents()
+
+
+def _assert_type_information_icon(icon):
+    """The Type mark is a platform information glyph, never a question-mark button."""
+    from src.ui import icons
+
+    assert icon.text() != "?"
+    assert "?" not in (icon.text() or "")
+    assert "Type?" not in (icon.text() or "")
+    source = icon.property("helpSource") or ""
+    assert "questionmark" not in source
+    assert "U+E897" not in source
+    assert source != "text:?"
+    assert icons._SF_HELP_SYMBOLS == ("info.circle",)
+    assert icons._SEGOE_HELP_CODEPOINTS == (0xE946,)
+    assert icons._FREEDESKTOP_MAP["help"] == [
+        "dialog-information",
+        "help-about",
+        "dialog-question",
+    ]
+    if sys.platform == "win32":
+        assert source.startswith("segoe:") or source == "style:SP_MessageBoxInformation"
+        if source.startswith("segoe:"):
+            assert "U+E946" in source
+            assert "Segoe Fluent Icons" in source or "Segoe MDL2 Assets" in source
+        assert icon.pixmap() is not None and not icon.pixmap().isNull()
+    elif sys.platform == "darwin":
+        assert source == "sf:info.circle"
+        assert icon.pixmap() is not None and not icon.pixmap().isNull()
+    else:
+        assert source.startswith("theme:") or source == ""
+        if source.startswith("theme:"):
+            assert source.split(":", 1)[1] in (
+                "dialog-information",
+                "help-about",
+                "dialog-question",
+            )
+            assert icon.pixmap() is not None and not icon.pixmap().isNull()
 
 
 def test_select_page_installed_release_badge_and_button_rename():
@@ -190,16 +267,9 @@ def test_select_page_installed_release_badge_and_button_rename():
     assert "Type A" in page._type_help_icon.toolTip()
     assert "Type B" in page._type_help_icon.toolTip()
     assert page._type_help_icon.width() == 16
-    source = page._type_help_icon.property("helpSource") or ""
-    if sys.platform == "win32":
-        assert source.startswith("segoe:")
-        assert "U+E897" in source
-        assert "Segoe Fluent Icons" in source or "Segoe MDL2 Assets" in source
-        assert not page._type_help_icon.pixmap().isNull()
-    elif sys.platform == "darwin":
-        assert source.startswith("sf:questionmark")
-    else:
-        assert source.startswith("theme:") or source == "text:?"
+    assert page._type_help_icon.text() != "?"
+    assert "?" not in (page._type_help_icon.text() or "")
+    _assert_type_information_icon(page._type_help_icon)
 
     with tempfile.TemporaryDirectory() as td:
         s = QSettings(f"{td}/settings.ini", QSettings.IniFormat)
@@ -1465,50 +1535,120 @@ def test_install_method_confirmation_stays_in_the_card():
 
 
 def test_progress_cancel_stays_in_the_card():
-    """Cancel during install or download asks in the progress card."""
+    """The stop prompt fits the card, and either button leaves Select Software selected."""
+    from PySide6.QtGui import QPalette
+
+    from src import i18n
     from src.i18n import translator
-    from src.ui.main_window import _PAGE_FLASH
+    from src.state import FlashState
+    from src.ui.main_window import _PAGE_FLASH, _PAGE_SELECT
+
+    for lang in ("en", "zh-CN", "fr", "es", "de", "ja"):
+        cancel = i18n._STRINGS["install_interrupt_cancel"][lang]
+        back = i18n._STRINGS["install_interrupt_back"][lang]
+        assert cancel and back
+        assert len(cancel) <= 16
+        assert len(back) <= 8
+        for banned in ("SP Flash", "MTKClient", "MTK", "firmware", "Firmware"):
+            assert banned not in cancel and banned not in back
+    assert i18n._STRINGS["install_interrupt_cancel"]["en"] == "Cancel Install"
+    assert i18n._STRINGS["install_interrupt_back"]["en"] == "Back"
 
     translator().set_language("en")
     app = QApplication.instance() or QApplication(sys.argv)
     window = MainWindow()
     window.show()
-    window._nav_to_page(_PAGE_FLASH)
     app.processEvents()
-    page = window._flash_page
-    page.show_flashing()
-    cancelled = []
-    page.on_cancel(lambda: cancelled.append("install"))
-    page._on_cancel()
-    assert page._stop_open
-    assert not page._cancel_btn.isVisible()
-    assert page._stop_continue.isVisible()
-    assert page._stop_back.isVisible()
-    assert page._stop_continue.text() == "Continue"
-    assert page._stop_back.text() == "Go back"
-    assert "software" in page._stop_message.lower()
-    assert "firmware" not in page._stop_message.lower()
-    page._stop_back.click()
-    assert cancelled == []
-    assert page._cancel_btn.isVisible()
-    assert not page._stop_open
+    long_name = "Original Software 2.1.9 (ADB) for Innioasis Y1 Community Archive release"
+    try:
+        window._set_state(FlashState.S4_FLASHING)
+        page = window._flash_page
+        page.set_package_name(long_name)
+        page.show_flashing()
+        window._nav_to_page(_PAGE_FLASH)
+        app.processEvents()
 
-    page._on_cancel()
-    page._stop_continue.click()
-    assert cancelled == ["install"]
+        calls = []
+        window.service.cancel_flash = lambda: calls.append("flash") or None
+        window.service.cancel_extract = lambda: calls.append("extract") or None
+        window.service.stop_device_monitor = lambda: calls.append("monitor") or None
 
-    page.show_downloading()
-    downloaded = []
-    page.set_cancel_download_callback(lambda: downloaded.append("download"))
-    page._on_cancel_download()
-    assert page._stop_open
-    assert "download" in page._stop_message.lower()
-    assert not page._download_cancel_btn.isVisible()
-    page._stop_back.click()
-    assert downloaded == []
-    assert page._download_cancel_btn.isVisible()
-    window.close()
-    app.processEvents()
+        page._on_cancel()
+        app.processEvents()
+        prompt = page._step_label
+        package = page._flash_pkg_label
+        assert page._stop_open
+        assert page._stop_continue.isVisible()
+        assert page._stop_back.isVisible()
+        assert not page._cancel_btn.isVisible()
+        assert page._stop_continue.text() == "Cancel Install"
+        assert page._stop_back.text() == "Back"
+        assert "software" in page._stop_message.lower()
+        assert "firmware" not in page._stop_message.lower()
+        assert prompt.wordWrap() and package.wordWrap()
+        assert prompt.foregroundRole() == QPalette.ColorRole.WindowText
+        assert "#fff" not in prompt.styleSheet().lower()
+
+        wrap_w = max(prompt.sizeHint().width(), prompt.minimumWidth(), 160)
+        line = prompt.fontMetrics().height()
+        prompt_h = prompt.heightForWidth(wrap_w)
+        assert prompt.minimumSizeHint().height() >= prompt_h - 2
+        if prompt.fontMetrics().horizontalAdvance(prompt.text()) > wrap_w + 8:
+            assert prompt_h > line + 2
+        assert package.fontMetrics().horizontalAdvance(long_name) > package.sizeHint().width()
+        assert package.minimumSizeHint().height() > line + 2
+
+        card = page._progress_card
+        card_h = max(card.sizeHint().height(), card.minimumSizeHint().height())
+        buttons_h = max(page._stop_continue.sizeHint().height(), page._stop_back.sizeHint().height())
+        assert card_h >= prompt.minimumSizeHint().height() + package.minimumSizeHint().height() + buttons_h - 8
+        assert card_h > buttons_h + line
+        assert window.minimumHeight() >= page.sizeHint().height()
+        assert window.minimumWidth() >= 600
+
+        page._stop_back.click()
+        app.processEvents()
+        assert "flash" in calls
+        assert "extract" in calls
+        assert not window._install_run_active()
+        assert not window._download_active
+        assert window._stack.currentIndex() == _PAGE_SELECT
+        select = window._nav_buttons["nav_select_package"][0]
+        assert select.isChecked()
+        assert select.text() == "Select Software"
+
+        calls.clear()
+        window._download_active = True
+
+        class _Worker:
+            def cancel(self):
+                calls.append("download")
+
+        window._select_page._download_worker = _Worker()
+        window._set_state(FlashState.S2_WAIT_CONNECTION)
+        page.show_downloading()
+        page.set_package_name(long_name)
+        window._nav_to_page(_PAGE_FLASH)
+        app.processEvents()
+        page._on_cancel_download()
+        app.processEvents()
+        status = page._download_status_label
+        status_h = status.heightForWidth(max(status.sizeHint().width(), 160))
+        assert status.minimumSizeHint().height() >= status_h - 2
+        assert page._stop_continue.text() == "Cancel Install"
+        assert page._stop_back.text() == "Back"
+        page._stop_continue.click()
+        app.processEvents()
+        assert "download" in calls
+        assert window._select_page._download_worker is None
+        assert not window._download_active
+        assert not window._install_run_active()
+        assert window._stack.currentIndex() == _PAGE_SELECT
+        assert select.isChecked()
+        assert select.text() == "Select Software"
+    finally:
+        window.close()
+        app.processEvents()
 
 
 def test_dark_to_light_leaves_combos_and_notes_readable():
@@ -1585,7 +1725,6 @@ def test_unified_caption_client_rect():
 
 def test_completion_check_mark_and_opt_out():
     """A finished install shows a check, hugs the card, and can hide the coffee note."""
-    from src.config import get_app_name
     from src.ui.main_window import DEFAULT_WINDOW_HEIGHT, _PAGE_FLASH
 
     app = QApplication.instance() or QApplication(sys.argv)
@@ -1604,9 +1743,9 @@ def test_completion_check_mark_and_opt_out():
         assert not page._cancel_btn.isVisible()
         assert not page._cancel_btn.isEnabled()
         pitch = page._appeal_label.text()
-        assert "Hi, Ryan here" in pitch
-        assert get_app_name() in pitch
-        assert page._coffee_btn.text() == "Buy me a coffee"
+        assert "It takes" in pitch
+        assert "you" in pitch
+        assert page._coffee_btn.text() == "Buy us a coffee"
         assert page._appeal.isVisible()
         with_note = window.height()
         assert with_note < DEFAULT_WINDOW_HEIGHT - 40
@@ -1620,7 +1759,9 @@ def test_completion_check_mark_and_opt_out():
         coffee = window._settings_page._settings_coffee_btn
         assert not coffee.isHidden()
         assert coffee.text() == "Buy me a coffee"
-        assert window._settings_page._cb_hide_donations.text() == "Turn off Donations / Credits"
+        assert window._settings_page.switch_caption(
+            window._settings_page._cb_hide_donations
+        ) == "Turn off Donations / Credits"
         assert "buy a coffee from Settings" in window._settings_page._lbl_hide_tip.text()
         assert window.height() <= with_note
     finally:
@@ -1691,6 +1832,683 @@ def test_combo_popup_uses_translucent_material():
     assert view.autoFillBackground() is False
 
 
+def test_light_menus_and_sidebar_selection_follow_the_theme():
+    """Light windows keep a light combo menu. Selection contrasts in both themes."""
+    import re
+
+    from PySide6.QtGui import QColor, QPalette
+    from PySide6.QtWidgets import QComboBox, QWidget
+
+    from src.ui.dark import contrast_ratio
+    from src.ui.glass import POPUP_FROST_ALPHA, apply_popup_material
+    from src.ui.sidebar import (
+        sidebar_selected_color,
+        sidebar_selected_fill,
+        sidebar_selected_text_color,
+    )
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    apply_theme(app, force_dark=False)
+    try:
+        window = app.palette().color(QPalette.ColorRole.Window)
+        assert window.lightness() > 140
+
+        popup = QWidget()
+        popup.setWindowFlag(Qt.WindowType.Popup, True)
+        combo = QComboBox(popup)
+        combo.addItems(["English", "Français", "Español"])
+        apply_popup_material(popup)
+
+        def assert_light_menu(widget, label):
+            palette = widget.palette()
+            base = palette.color(QPalette.ColorGroup.Active, QPalette.ColorRole.Base)
+            text = palette.color(QPalette.ColorGroup.Active, QPalette.ColorRole.Text)
+            assert base.lightness() > 160, (label, base.name(), base.alpha())
+            assert base.alpha() > 200, (label, base.alpha())
+            assert text.lightness() < 80, (label, text.name())
+            assert contrast_ratio(text, base) >= 4.5, (label, text.name(), base.name())
+            highlight = palette.color(QPalette.ColorGroup.Active, QPalette.ColorRole.Highlight)
+            highlighted = palette.color(
+                QPalette.ColorGroup.Active, QPalette.ColorRole.HighlightedText
+            )
+            assert contrast_ratio(highlighted, highlight) >= 4.5, (
+                label,
+                highlighted.name(),
+                highlight.name(),
+            )
+
+        assert_light_menu(popup, "popup")
+        assert_light_menu(combo, "combo")
+        view = combo.view()
+        assert_light_menu(view, "view")
+        assert_light_menu(view.viewport(), "viewport")
+        sheet = app.styleSheet()
+        assert re.search(r"(^|\n)\s*QComboBox\b", sheet) is None
+        assert re.search(r"(^|\n)\s*QScrollBar\b", sheet) is None
+
+        apply_theme(app, force_dark=True)
+        dark_popup = QWidget()
+        dark_popup.setWindowFlag(Qt.WindowType.Popup, True)
+        dark_combo = QComboBox(dark_popup)
+        dark_combo.addItems(["English"])
+        apply_popup_material(dark_popup)
+        dark_base = dark_popup.palette().color(QPalette.ColorRole.Base)
+        dark_text = dark_popup.palette().color(QPalette.ColorRole.Text)
+        assert dark_base.lightness() < 80
+        assert dark_base.alpha() == POPUP_FROST_ALPHA
+        assert dark_text.lightness() > 160
+        assert app.palette().color(QPalette.ColorRole.Window).lightness() < 80
+
+        light_bg = QColor("#f8fafc")
+        light_fill = sidebar_selected_fill(light_bg)
+        assert light_fill.lightness() < light_bg.lightness()
+        assert contrast_ratio(sidebar_selected_text_color(light_bg), light_fill) >= 4.5
+
+        dark_bg = QColor("#181b20")
+        dark_fill = sidebar_selected_fill(dark_bg)
+        dark_raw = sidebar_selected_color(dark_bg)
+        assert dark_fill.lightness() < 80
+        assert not (dark_raw.alpha() > 200 and dark_raw.lightness() > 180)
+        assert contrast_ratio(sidebar_selected_text_color(dark_bg), dark_fill) >= 4.5
+        accent = QColor("#e11d48")
+        assert (light_fill.red(), light_fill.green(), light_fill.blue()) != (
+            accent.red(),
+            accent.green(),
+            accent.blue(),
+        )
+    finally:
+        apply_theme(app, force_dark=None)
+
+
+def test_settings_switches_are_on_the_right_and_install_modes_exclude_each_other():
+    from PySide6.QtWidgets import QAbstractScrollArea, QScrollArea
+
+    from src import config, device_tracking
+    from src.donation_dialog import DonationStatusBar
+    from src.i18n import tr
+    from src.sp_flash_gui import is_sp_flash_gui_supported
+    from src.ui.dialogs import DiagnosticsView
+    from src.ui.main_window import MainWindow
+    from src.ui.scrollbars import configure_scroll_area
+    from src.ui.settings_page import SettingsPage
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    device_tracking.set_terminal_install_enabled(False)
+    device_tracking.set_sp_gui_install_enabled(False)
+    page = SettingsPage()
+    try:
+        row, caption = page._switch_rows[page._cb_guided_install]
+        layout = row.layout()
+        assert layout.itemAt(0).widget() is caption
+        assert layout.itemAt(1).widget() is page._cb_guided_install
+        assert caption.cursor().shape() == Qt.ArrowCursor
+        assert page._cb_guided_install.cursor().shape() == Qt.ArrowCursor
+        assert page.switch_caption(page._cb_guided_install) == tr("settings_guided_install")
+        assert page._cb_guided_install.isChecked()
+        assert not page._cb_terminal_install.isChecked()
+        assert not page._cb_sp_gui_install.isChecked()
+        assert not device_tracking.terminal_install_enabled()
+        assert not device_tracking.sp_gui_install_enabled()
+
+        page._cb_terminal_install.setChecked(True)
+        app.processEvents()
+        assert page._cb_terminal_install.isChecked()
+        assert not page._cb_guided_install.isChecked()
+        assert not page._cb_sp_gui_install.isChecked()
+        assert device_tracking.terminal_install_enabled()
+        assert not device_tracking.sp_gui_install_enabled()
+
+        if is_sp_flash_gui_supported():
+            page._cb_sp_gui_install.setChecked(True)
+            app.processEvents()
+            assert page._cb_sp_gui_install.isChecked()
+            assert not page._cb_terminal_install.isChecked()
+            assert not page._cb_guided_install.isChecked()
+            assert device_tracking.sp_gui_install_enabled()
+            assert not device_tracking.terminal_install_enabled()
+            device_tracking.set_terminal_install_enabled(True)
+            page.refresh_settings()
+            assert page._cb_sp_gui_install.isChecked()
+            assert not page._cb_terminal_install.isChecked()
+            assert not device_tracking.terminal_install_enabled()
+
+        page._cb_guided_install.setChecked(True)
+        app.processEvents()
+        assert page._cb_guided_install.isChecked()
+        assert not page._cb_terminal_install.isChecked()
+        assert not page._cb_sp_gui_install.isChecked()
+        assert not device_tracking.terminal_install_enabled()
+        assert not device_tracking.sp_gui_install_enabled()
+
+        was_mtk = config.IS_MEDIATEK_INSTALLER
+        config.IS_MEDIATEK_INSTALLER = True
+        try:
+            mediatek = SettingsPage()
+            mediatek.apply_brand_mode(True)
+            assert mediatek._cb_guided_install.isChecked()
+            assert mediatek.switch_caption(mediatek._cb_guided_install) == tr(
+                "settings_guided_install"
+            )
+            assert not mediatek._switch_rows[mediatek._cb_guided_install][0].isHidden()
+            assert not mediatek._terminal_card.isHidden()
+            mediatek.deleteLater()
+        finally:
+            config.IS_MEDIATEK_INSTALLER = was_mtk
+
+        if sys.platform == "win32":
+            area = QScrollArea()
+            configure_scroll_area(area, vertical=Qt.ScrollBarAsNeeded)
+            assert area.verticalScrollBarPolicy() == Qt.ScrollBarAlwaysOff
+            assert area.horizontalScrollBarPolicy() == Qt.ScrollBarAlwaysOff
+            window = MainWindow()
+            window.show()
+            app.processEvents()
+            try:
+                areas = window.findChildren(QAbstractScrollArea)
+                assert areas
+                for area in areas:
+                    assert area.verticalScrollBarPolicy() == Qt.ScrollBarAlwaysOff, type(area)
+                    assert area.horizontalScrollBarPolicy() == Qt.ScrollBarAlwaysOff, type(area)
+                window._unlock_diagnostics()
+                diag = window._ensure_diagnostics_page()
+                assert isinstance(diag, DiagnosticsView)
+                assert diag._view.verticalScrollBarPolicy() == Qt.ScrollBarAlwaysOff
+                assert "QScrollBar" not in app.styleSheet()
+                bar = window.statusBar()
+                assert bar.autoFillBackground() is False
+                assert not bar.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+                assert "background: transparent" in bar.styleSheet()
+                assert "background-color:" not in bar.styleSheet()
+            finally:
+                window.close()
+                app.processEvents()
+
+        loose = DonationStatusBar()
+        assert loose.autoFillBackground() is False
+        assert "background: transparent" in loose.styleSheet()
+        loose.deleteLater()
+    finally:
+        device_tracking.set_terminal_install_enabled(False)
+        device_tracking.set_sp_gui_install_enabled(False)
+        page.deleteLater()
+        app.processEvents()
+
+
+def test_post_install_support_appeal():
+    """A finished install grows into a coffee appeal. Install Software stays selected."""
+    from PySide6.QtGui import QPixmap
+    from PySide6.QtWidgets import QCheckBox, QDialog, QWidget
+
+    from src.ui.main_window import _PAGE_FLASH, _PAGE_SELECT, _PAGE_SUPPORT
+    from src.ui.support_appeal import PORTRAIT_URL, bundled_portrait_path, circle_pixmap
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    device_tracking.set_donation_ui_disabled(False)
+    device_tracking.set_donation_install_prompt_disabled(False)
+    assert bundled_portrait_path().is_file()
+    assert PORTRAIT_URL.endswith("developer.png")
+    sample = circle_pixmap(QPixmap(str(bundled_portrait_path())), 56)
+    assert not sample.isNull()
+    corner = sample.toImage().pixelColor(0, 0)
+    center = sample.toImage().pixelColor(28, 28)
+    assert corner.alpha() < 20
+    assert center.alpha() > 200
+
+    window = MainWindow()
+    window.show()
+    app.processEvents()
+    try:
+        heights = []
+        original = window._animate_window_size
+
+        def _spy(width, height, minimum=None):
+            heights.append(int(height))
+            return original(width, height, minimum)
+
+        window._animate_window_size = _spy
+        window._package_name = "Rockbox"
+        window._handle_flash_success()
+        app.processEvents()
+
+        page = window._flash_page
+        install = window._nav_buttons["nav_select_package"][0]
+        assert window._stack.currentIndex() == _PAGE_FLASH
+        assert install.isChecked()
+        assert install.text() == "Install Software"
+        assert not window._support_btn.isChecked()
+        assert window._select_page._title.text() == "Install complete"
+        assert page._appeal.isVisible()
+        assert page._done_mark.isVisible()
+        assert page._coffee_btn.text() == "Buy us a coffee"
+        assert page._coffee_btn.cursor().shape() == Qt.ArrowCursor
+        assert page._not_now_btn.text() == "Not now"
+        assert page._not_now_btn.cursor().shape() == Qt.ArrowCursor
+        assert "Don't ask me again" in page._appeal_dont.text()
+        assert page._appeal_dont.cursor().shape() == Qt.PointingHandCursor
+        assert not isinstance(page._appeal_dont, QCheckBox)
+        assert "It takes" in page._intro.headline.text()
+        assert "underline" in page._intro.headline.text()
+        portrait = page._intro.portrait.pixmap()
+        assert portrait is not None and not portrait.isNull()
+        assert portrait.toImage().pixelColor(0, 0).alpha() < 20
+        blob = " ".join(
+            widget.text()
+            for widget in page._appeal.findChildren(QWidget)
+            if hasattr(widget, "text") and callable(widget.text)
+        )
+        for banned in ("Honeygain", "PayPal", "Revolut", "Patreon", "Bitcoin", "Crypto"):
+            assert banned not in blob, banned
+        assert heights and max(heights) > min(heights)
+        import inspect
+        source = inspect.getsource(type(window)._animate_window_size)
+        assert "200" in source and "OutCubic" in source
+
+        window._flash_page._appeal_dont.linkActivated.emit("dont-ask")
+        app.processEvents()
+        assert device_tracking.is_donation_ui_disabled(window.settings)
+        assert window._settings_page._cb_hide_donations.isChecked()
+        assert not page._appeal.isVisible()
+        assert window._install_complete
+        assert window._stack.currentIndex() == _PAGE_FLASH
+        assert install.isChecked()
+        assert window._select_page._title.text() == "Install complete"
+
+        page._done_mark.click()
+        app.processEvents()
+        assert window._stack.currentIndex() == _PAGE_SELECT
+        assert not window._install_complete
+
+        device_tracking.set_donation_ui_disabled(False, window.settings)
+        window._settings_page.refresh_settings()
+        window._package_name = "Rockbox"
+        window._handle_flash_success()
+        app.processEvents()
+        assert window._flash_page._appeal.isVisible()
+        window._flash_page._not_now_btn.click()
+        app.processEvents()
+        assert not device_tracking.is_donation_ui_disabled(window.settings)
+        assert window._stack.currentIndex() == _PAGE_SELECT
+
+        device_tracking.set_donation_ui_disabled(True, window.settings)
+        window._package_name = "Rockbox"
+        window._handle_flash_success()
+        app.processEvents()
+        assert not window._flash_page._appeal.isVisible()
+        assert window._stack.currentIndex() == _PAGE_FLASH
+        assert install.isChecked()
+
+        device_tracking.set_donation_ui_disabled(False, window.settings)
+        window._settings_page.refresh_settings()
+        window._on_install_done()
+        window._support_btn.click()
+        app.processEvents()
+        support = window._support_page
+        assert window._stack.currentIndex() == _PAGE_SUPPORT
+        assert window._support_btn.isChecked()
+        assert not isinstance(support, QDialog)
+        assert support.styleSheet() == ""
+        labels = " ".join(
+            widget.text()
+            for widget in support.findChildren(QWidget)
+            if hasattr(widget, "text") and callable(widget.text)
+        )
+        assert support._coffee.text() == "Buy us a coffee"
+        assert "Honeygain" not in labels
+        assert "PayPal" not in labels
+        assert "Revolut" not in labels
+        assert "Patreon" not in labels
+        assert not support._intro.portrait.pixmap().isNull()
+    finally:
+        device_tracking.set_donation_ui_disabled(False)
+        window.close()
+        app.processEvents()
+
+
+def test_settings_donations_dismiss_link():
+    """The donations card link removes that Settings section and keeps it removed."""
+    from PySide6.QtCore import QEasingCurve, QSettings
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QLabel, QSizePolicy, QVBoxLayout, QWidget
+
+    from src import i18n
+    from src.i18n import tr, tr_brand, translator
+    from src.ui import widgets as widgets_mod
+    from src.ui.settings_page import SettingsPage
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    translator().set_language("en")
+    for lang in ("en", "zh-CN", "fr", "es", "de", "ja"):
+        assert i18n._STRINGS["settings_donations_dismiss"].get(lang)
+    assert "settings_donations_dismiss_mediatek" not in i18n._STRINGS
+    assert tr_brand("settings_donations_dismiss") == "Never show me this again"
+    assert 180 <= widgets_mod.COLLAPSE_MS <= 220
+
+    store = QSettings("innioasis", "updater")
+    key = "settings_donations_section_dismissed"
+    grouped = f"preferences/{key}"
+    had_key = key in store.allKeys() or grouped in store.allKeys()
+    previous = device_tracking.is_settings_donations_section_dismissed()
+    donations_were_off = device_tracking.is_donation_ui_disabled()
+    device_tracking.set_settings_donations_section_dismissed(False)
+
+    page = SettingsPage()
+    page2 = None
+    host = None
+    original_motion = None
+    try:
+        page.resize(720, 960)
+        page.show()
+        app.processEvents()
+        coffee = page._settings_coffee_btn
+        link = page._dismiss_donations_link
+        assert isinstance(link, QLabel)
+        assert coffee.parentWidget() is link.parentWidget()
+        row = coffee.parentWidget().layout()
+        assert row.indexOf(link) > row.indexOf(coffee)
+        assert link.cursor().shape() == Qt.PointingHandCursor
+        assert coffee.cursor().shape() == Qt.ArrowCursor
+        assert "Never show me this again" in link.text()
+        assert 'href="dismiss"' in link.text()
+        assert coffee.width() > 0 and link.width() > 0
+        assert link.x() >= coffee.x() + coffee.width() - 2
+        assert page._donations_card.isVisible()
+        assert page._card_layout.isEnabled()
+
+        link.linkActivated.emit("dismiss")
+        app.processEvents()
+        assert device_tracking.is_settings_donations_section_dismissed()
+        assert device_tracking.is_donation_ui_disabled() is donations_were_off
+        if widgets_mod.prefers_reduced_motion():
+            assert page._donations_card.isHidden()
+            assert page._card_layout.isEnabled()
+        else:
+            QTest.qWait(widgets_mod.COLLAPSE_MS + 80)
+            assert page._donations_card.isHidden()
+        assert not page._settings_coffee_btn.isVisible()
+        assert not page._cb_hide_donations.isVisible()
+        assert not page._lbl_hide_tip.isVisible()
+
+        page2 = SettingsPage()
+        page2.resize(720, 960)
+        page2.show()
+        app.processEvents()
+        page2._card_layout.activate()
+        app.processEvents()
+        assert page2._donations_card.isHidden()
+        assert not page2._donations_card.isVisible()
+        assert not page2._settings_coffee_btn.isVisible()
+        assert not page2._dismiss_donations_link.isVisible()
+        assert "Never show me this again" not in _visible_text(page2)
+        _assert_no_hole_where_the_card_was(page2)
+
+        original_motion = widgets_mod.prefers_reduced_motion
+        widgets_mod.prefers_reduced_motion = lambda: False
+        host = QWidget()
+        lay = QVBoxLayout(host)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(18)
+        above = QWidget()
+        closing = QWidget()
+        below = QWidget()
+        for card, height in ((above, 40), (closing, 80), (below, 50)):
+            card.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+            card.setFixedHeight(height)
+            lay.addWidget(card)
+        lay.addStretch(1)
+        host.resize(240, 320)
+        host.show()
+        app.processEvents()
+        start_below = below.y()
+        start_above = above.y()
+        widgets_mod.close_layout_gap(closing)
+        anim = closing._collapse_anim
+        assert anim is not None
+        assert anim.duration() == widgets_mod.COLLAPSE_MS
+        assert anim.easingCurve().type() == QEasingCurve.Type.OutCubic
+        # setCurrentTime is synchronous. Pumping events here would let the
+        # timer run past the sample we want.
+        anim.setCurrentTime(widgets_mod.COLLAPSE_MS // 2)
+        assert closing.isVisible()
+        # OutCubic is front-loaded: halfway through the 200ms, most of the gap is gone.
+        assert closing.height() == 10
+        assert below.y() < start_below
+        assert above.y() == start_above
+        anim.setCurrentTime(widgets_mod.COLLAPSE_MS)
+        assert closing.isHidden()
+        assert host.layout().isEnabled()
+        assert below.y() == above.y() + above.height() + lay.spacing()
+        assert above.y() == start_above
+    finally:
+        if original_motion is not None:
+            widgets_mod.prefers_reduced_motion = original_motion
+        if host is not None and host.layout() is not None:
+            host.layout().setEnabled(True)
+            host.close()
+            host.deleteLater()
+        translator().set_language("en")
+        store = QSettings("innioasis", "updater")
+        if had_key:
+            device_tracking.set_settings_donations_section_dismissed(previous)
+        else:
+            store.remove(key)
+            store.remove(grouped)
+        store.sync()
+        page.close()
+        page.deleteLater()
+        if page2 is not None:
+            page2.close()
+            page2.deleteLater()
+        app.processEvents()
+    print("settings donations dismiss: pass")
+
+
+def _visible_text(root) -> str:
+    from PySide6.QtWidgets import QWidget
+
+    parts = []
+    for widget in root.findChildren(QWidget):
+        if not widget.isVisible() or not hasattr(widget, "text"):
+            continue
+        text = widget.text
+        if callable(text):
+            parts.append(str(text()))
+    return " ".join(parts)
+
+
+def _assert_no_hole_where_the_card_was(page):
+    layout = page._card_layout
+    index = layout.indexOf(page._donations_card)
+
+    def nearest(step):
+        i = index + step
+        while 0 <= i < layout.count():
+            item = layout.itemAt(i)
+            widget = item.widget() if item is not None else None
+            if widget is not None and widget.isVisible():
+                return widget
+            i += step
+        return None
+
+    above = nearest(-1)
+    below = nearest(1)
+    assert above is not None and below is not None
+    assert above.height() > 0 and below.height() > 0
+    gap = below.y() - (above.y() + above.height())
+    assert 0 <= gap <= layout.spacing() + 6, gap
+
+
+def test_tooltip_contrast_follows_light_and_dark():
+    """Light tips are a light surface with dark text. Dark tips invert that.
+
+    QToolTip keeps its own palette. A dark platform tip with the light
+    theme's black text is the solid black type hint.
+    """
+    import re
+
+    from PySide6.QtCore import QPoint
+    from PySide6.QtGui import QColor, QPalette
+    from PySide6.QtWidgets import QToolTip, QWidget
+
+    from src.ui.dark import T, apply_theme, contrast_ratio, tooltip_rich_text
+
+    app = QApplication.instance() or QApplication(sys.argv)
+
+    def _block(qss: str) -> str:
+        start = qss.find("QToolTip")
+        assert start >= 0, "stylesheet is missing a QToolTip rule"
+        end = qss.find("}", start)
+        return qss[start:end]
+
+    def _assert_theme(dark: bool) -> None:
+        poisoned = QPalette()
+        poisoned.setColor(QPalette.ColorGroup.All, QPalette.ColorRole.ToolTipBase, QColor("#000000"))
+        poisoned.setColor(QPalette.ColorGroup.All, QPalette.ColorRole.ToolTipText, QColor("#000000"))
+        QToolTip.setPalette(poisoned)
+
+        apply_theme(app, force_dark=dark)
+        tokens = T()
+        background = QColor(tokens.bg_tooltip)
+        foreground = QColor(tokens.fg)
+        block = _block(app.styleSheet())
+        bg_match = re.search(r"background-color:\s*(#[0-9A-Fa-f]{6})", block)
+        fg_match = re.search(r"(?:^|[;\n])\s*color:\s*(#[0-9A-Fa-f]{6})", block)
+        assert bg_match and fg_match, block
+        assert QColor(bg_match.group(1)).name() == background.name()
+        assert QColor(fg_match.group(1)).name() == foreground.name()
+
+        palette = QToolTip.palette()
+        for group in (QPalette.ColorGroup.Active, QPalette.ColorGroup.Inactive):
+            tip_bg = palette.color(group, QPalette.ColorRole.ToolTipBase)
+            tip_fg = palette.color(group, QPalette.ColorRole.ToolTipText)
+            assert tip_bg.name() == background.name(), (dark, group, tip_bg.name())
+            assert tip_fg.name() == foreground.name(), (dark, group, tip_fg.name())
+            assert contrast_ratio(tip_fg, tip_bg) >= 4.5
+            if dark:
+                assert tip_bg.lightness() < 80
+                assert tip_fg.lightness() > 180
+            else:
+                assert tip_bg.lightness() > 180
+                assert tip_fg.lightness() < 80
+
+        host = QWidget()
+        host.resize(120, 40)
+        host.show()
+        QToolTip.showText(QPoint(8, 8), tooltip_rich_text("Type A\nType B"), host)
+        app.processEvents()
+        label = next(
+            (widget for widget in app.allWidgets() if widget.metaObject().className() == "QTipLabel"),
+            None,
+        )
+        assert label is not None
+        image = label.grab().toImage()
+        light_pixels = dark_pixels = 0
+        for y in range(0, image.height(), 2):
+            for x in range(0, image.width(), 2):
+                lightness = image.pixelColor(x, y).lightness()
+                if lightness > 180:
+                    light_pixels += 1
+                elif lightness < 80:
+                    dark_pixels += 1
+        assert light_pixels > 0 and dark_pixels > 0, (dark, light_pixels, dark_pixels, image.width(), image.height())
+        QToolTip.hideText()
+        host.close()
+        app.processEvents()
+
+    _assert_theme(False)
+    _assert_theme(True)
+
+
+def test_progress_and_status_follow_the_live_theme():
+    """Light text is dark, dark text is light, and the bars stay transparent.
+
+    Applying the other theme updates the existing window. A stylesheet polish
+    must not put the previous foreground back.
+    """
+    from PySide6.QtGui import QPalette
+
+    from src.ui.dark import _build_qss
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    apply_theme(app, force_dark=False)
+    window = MainWindow()
+    window.show()
+    app.processEvents()
+    page = window._flash_page
+    page.show_downloading()
+    page.update_download_progress(87, "200.1 MB / 2300 MB (87%) — 17.9 MB/s")
+    window._stack.setCurrentWidget(page)
+    bar = window.statusBar()
+    bar.showMessage("Package ready")
+    app.processEvents()
+    same = window
+
+    def foreground(widget):
+        return widget.palette().color(widget.foregroundRole())
+
+    def assert_text(dark_words: bool):
+        for widget in (
+            page._download_status_label,
+            page._download_pkg_label,
+            page._download_progress,
+            bar._status_label,
+            bar._goal_label,
+        ):
+            lightness = foreground(widget).lightness()
+            if dark_words:
+                assert lightness < 80, (type(widget).__name__, foreground(widget).name())
+            else:
+                assert lightness > 180, (type(widget).__name__, foreground(widget).name())
+        image = page._download_progress.grab().toImage()
+        dark_pixels = light_pixels = accent_pixels = 0
+        for y in range(image.height()):
+            for x in range(image.width()):
+                color = image.pixelColor(x, y)
+                if color.alpha() < 20:
+                    continue
+                if color.lightness() < 60:
+                    dark_pixels += 1
+                elif color.lightness() > 200:
+                    light_pixels += 1
+                if color.blue() > 140 and color.red() < 80:
+                    accent_pixels += 1
+        assert accent_pixels > 20, "progress bar fill disappeared"
+        if dark_words:
+            assert dark_pixels > 10, "progress percent is not dark on the light bar"
+        else:
+            assert light_pixels > 10, "progress percent is not light on the dark bar"
+
+    def assert_transparent_surface():
+        for widget in (bar, bar._donation_container, bar._status_container):
+            assert widget.autoFillBackground() is False
+            assert not widget.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+            fill = widget.palette().color(QPalette.ColorRole.Window)
+            assert fill.alpha() == 0, (type(widget).__name__, fill.name(), fill.alpha())
+        assert "background: transparent" in bar.styleSheet()
+        assert "background-color:" not in bar.styleSheet()
+        image = bar.grab().toImage()
+        corner = image.pixelColor(max(0, image.width() - 4), 2)
+        assert corner.alpha() < 16, (corner.name(), corner.alpha())
+
+    try:
+        assert_text(True)
+        assert_transparent_surface()
+        apply_theme(app, force_dark=True)
+        app.processEvents()
+        assert window is same
+        assert_text(False)
+        assert_transparent_surface()
+        apply_theme(app, force_dark=False)
+        app.processEvents()
+        app.setStyleSheet(_build_qss())
+        app.processEvents()
+        assert window is same
+        assert_text(True)
+        assert_transparent_surface()
+    finally:
+        window.close()
+        app.processEvents()
+
+
 if __name__ == "__main__":
     test_dialog_theme_not_transparent()
     test_combobox_popup_styling()
@@ -1729,5 +2547,10 @@ if __name__ == "__main__":
     test_caption_drag_leaves_controls_alone()
     test_unified_caption_client_rect()
     test_completion_check_mark_and_opt_out()
+    test_post_install_support_appeal()
+    test_settings_switches_are_on_the_right_and_install_modes_exclude_each_other()
+    test_settings_donations_dismiss_link()
+    test_tooltip_contrast_follows_light_and_dark()
+    test_progress_and_status_follow_the_live_theme()
 
     print("All native UX enhancement tests passed!")

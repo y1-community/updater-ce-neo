@@ -16,10 +16,10 @@ from PySide6.QtWidgets import QTextEdit, QWidget
 
 
 def glass_surfaces_enabled() -> bool:
-    """True when the host window has a real glass or acrylic backdrop."""
+    """True when the host window has a real glass backdrop (macOS Liquid Glass)."""
     try:
-        from .glass import is_glass_supported, is_windows_acrylic_supported
-        return bool(is_glass_supported() or is_windows_acrylic_supported())
+        from .glass import is_glass_supported
+        return bool(is_glass_supported())
     except Exception:
         return False
 

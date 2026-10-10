@@ -26,6 +26,7 @@ _KEY_REMINDER_PREFIX = "reminders_enabled_"
 _KEY_LAST_NOTIFIED_PREFIX = "last_notified_tag_"
 _KEY_DONATION_UI_DISABLED = "donation_ui_disabled"
 _KEY_DONATION_INSTALL_PROMPT_DISABLED = "donation_install_prompt_disabled"
+_KEY_SETTINGS_DONATIONS_DISMISSED = "settings_donations_section_dismissed"
 _KEY_HIDDEN_MTK_OPTIONS = "hidden_mtk_options"
 _KEY_TERMINAL_INSTALL = "terminal_install"
 _KEY_SP_AUTH_FILE = "sp_auth_file"
@@ -454,6 +455,26 @@ def set_donation_install_prompt_disabled(disabled: bool, settings: Optional[QSet
     s = _get_settings(settings)
     s.setValue(_KEY_DONATION_INSTALL_PROMPT_DISABLED, bool(disabled))
     s.setValue(f"{_GROUP_PREFS}/{_KEY_DONATION_INSTALL_PROMPT_DISABLED}", bool(disabled))
+
+
+def is_settings_donations_section_dismissed(settings: Optional[QSettings] = None) -> bool:
+    """True when the Settings donations card has been removed for good.
+
+    This is separate from hiding donation prompts. The switch can still hide
+    prompts elsewhere; this only records that the Settings section itself is gone.
+    """
+    s = _get_settings(settings)
+    val = s.value(_KEY_SETTINGS_DONATIONS_DISMISSED, None)
+    if val is not None:
+        return s.value(_KEY_SETTINGS_DONATIONS_DISMISSED, False, type=bool)
+    return s.value(f"{_GROUP_PREFS}/{_KEY_SETTINGS_DONATIONS_DISMISSED}", False, type=bool)
+
+
+def set_settings_donations_section_dismissed(dismissed: bool, settings: Optional[QSettings] = None) -> None:
+    """Remember that the Settings donations card should stay removed."""
+    s = _get_settings(settings)
+    s.setValue(_KEY_SETTINGS_DONATIONS_DISMISSED, bool(dismissed))
+    s.setValue(f"{_GROUP_PREFS}/{_KEY_SETTINGS_DONATIONS_DISMISSED}", bool(dismissed))
 
 
 # ---------------------------------------------------------------------------

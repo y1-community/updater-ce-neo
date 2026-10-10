@@ -18,7 +18,7 @@ from __future__ import annotations
 import sys
 
 from PySide6.QtCore import QEvent, QRect, QSize, Qt
-from PySide6.QtGui import QColor, QIcon, QPainter, QPalette
+from PySide6.QtGui import QColor, QIcon, QPainter, QPalette, QPixmap
 from PySide6.QtWidgets import QPushButton
 
 
@@ -67,17 +67,50 @@ def sidebar_nav_kind(platform_name: str | None = None) -> str:
 
 
 def sidebar_selected_color(base: QColor) -> QColor:
-    """Selected row veil. Neutral and translucent, never a solid accent plate.
+    """Selected row fill. Neutral, never a solid accent plate.
 
-    Windows Settings tints the row with a faint gray and puts the accent only
-    in the leading bar. A wash made from the accent itself reads as a solid
-    pill on a dark window.
+    A dark pane keeps a faint light veil so the row is not a light plate.
+    A light pane uses a subtle neutral wash so the row matches native WinUI/macOS sidebars.
     """
     if not base.isValid():
         base = QColor("#2b303c")
     if base.lightness() < 140:
         return QColor(255, 255, 255, 32)
     return QColor(0, 0, 0, 22)
+
+
+def sidebar_selected_fill(base: QColor) -> QColor:
+    """Opaque color of the selected row after the veil is drawn on ``base``."""
+    veil = sidebar_selected_color(base)
+    if not base.isValid():
+        base = QColor("#2b303c")
+    if veil.alpha() >= 250:
+        return QColor(veil.red(), veil.green(), veil.blue())
+    alpha = veil.alpha() / 255.0
+    return QColor(
+        int(round(veil.red() * alpha + base.red() * (1.0 - alpha))),
+        int(round(veil.green() * alpha + base.green() * (1.0 - alpha))),
+        int(round(veil.blue() * alpha + base.blue() * (1.0 - alpha))),
+    )
+
+
+def sidebar_selected_text_color(base: QColor) -> QColor:
+    """Light glyphs on a dark selection, dark glyphs on a light one."""
+    if sidebar_selected_fill(base).lightness() < 140:
+        return QColor("#f8fafc")
+    return QColor("#111827")
+
+
+def _tint_pixmap(pixmap: QPixmap, color: QColor) -> QPixmap:
+    tinted = QPixmap(pixmap.size())
+    tinted.setDevicePixelRatio(pixmap.devicePixelRatio())
+    tinted.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(tinted)
+    painter.drawPixmap(0, 0, pixmap)
+    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+    painter.fillRect(tinted.rect(), color)
+    painter.end()
+    return tinted
 
 
 def sidebar_hover_color(base: QColor) -> QColor:
@@ -229,6 +262,14 @@ class SidebarButton(QPushButton):
         else:
             mode = QIcon.Mode.Normal
         state = QIcon.State.On if selected else QIcon.State.Off
+        if selected and self.isEnabled():
+            pixmap = icon.pixmap(size, mode, state)
+            if not pixmap.isNull():
+                tinted = _tint_pixmap(pixmap, sidebar_selected_text_color(sidebar_base_color()))
+                target = QRect(0, 0, size.width(), size.height())
+                target.moveCenter(icon_rect.center())
+                painter.drawPixmap(target, tinted)
+                return
         icon.paint(
             painter,
             icon_rect,
@@ -244,7 +285,9 @@ class SidebarButton(QPushButton):
         left = row.left() + (8 + icon_w + 8 if icon_w else 8)
         text_rect = QRect(left, row.top(), max(0, row.right() - left - 6), row.height())
         pal = QPalette(self.palette())
-        if self.isEnabled():
+        if self.isEnabled() and selected:
+            color = sidebar_selected_text_color(sidebar_base_color())
+        elif self.isEnabled():
             color = QColor(T().fg)
         else:
             color = pal.color(QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText)

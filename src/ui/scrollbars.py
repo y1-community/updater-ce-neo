@@ -1,10 +1,9 @@
 """Scroll areas that keep the platform's own scrollbars.
 
-Qt draws scrollbars with the active platform style (Cocoa, WinUI/Win32,
-Adwaita/Breeze), and that style also decides how they look and when they show:
-macOS fades overlay scrollers in while scrolling, Windows 11 shows its thin
-bars on hover/scroll, a Linux desktop does whatever it is configured to do.
-Nothing here re-implements that, and nothing here asks the system about it.
+macOS and Linux keep the policy the caller asked for, drawn by the platform
+style. Windows hides scrollbars outright (``ScrollBarAlwaysOff``): a matching
+application stylesheet forces classic arrow bars, and those are not repainted
+here. Nothing in this module adds a ``QScrollBar`` stylesheet rule.
 
 The one thing that breaks it: giving a scroll area its own stylesheet. A widget
 with a local stylesheet is drawn by ``QStyleSheetStyle`` instead of the platform
@@ -17,6 +16,8 @@ scrollbar), and the platform's scrollbars are simply what you get.
 """
 
 from __future__ import annotations
+
+import sys
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QPalette
@@ -98,6 +99,17 @@ def make_transparent(area: QAbstractScrollArea) -> None:
         pass
 
 
+def _windows_hides_scrollbars() -> bool:
+    return sys.platform == "win32"
+
+
+def _scroll_policy(requested: Qt.ScrollBarPolicy) -> Qt.ScrollBarPolicy:
+    """Windows scroll areas show no bar. Other desktops keep the caller's policy."""
+    if _windows_hides_scrollbars():
+        return Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+    return requested
+
+
 def configure_scroll_area(
     area: QAbstractScrollArea,
     *,
@@ -106,8 +118,8 @@ def configure_scroll_area(
     transparent: bool = False,
 ) -> QAbstractScrollArea:
     """Let the platform widget decide: as-needed bars, no stylesheet of ours."""
-    area.setHorizontalScrollBarPolicy(horizontal)
-    area.setVerticalScrollBarPolicy(vertical)
+    area.setHorizontalScrollBarPolicy(_scroll_policy(horizontal))
+    area.setVerticalScrollBarPolicy(_scroll_policy(vertical))
     if transparent:
         make_transparent(area)
     return area
@@ -125,6 +137,10 @@ def ensure_native_scrolling(widget) -> None:
     if widget.styleSheet():
         widget.setStyleSheet("")
         make_transparent(widget)
+    if _windows_hides_scrollbars():
+        widget.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        widget.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        return
     if widget.verticalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOn:
         widget.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
     if widget.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOn:
