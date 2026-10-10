@@ -904,6 +904,38 @@ class MainWindow(QMainWindow):
         """Update window components to match active OS theme tokens."""
         self._on_theme_changed()
 
+    def _apply_caption_icon(self) -> None:
+        """Draw the app icon in the caption the way this Mac draws app icons.
+
+        On macOS the icon comes from IconServices, which applies the user's
+        "Icon & widget style" (Dark, Clear, Tinted) and tint colour, so the
+        caption matches the Dock, Finder and Spotlight art exactly — including
+        the tinted style, which no bundled PNG can imitate. Anywhere else (or
+        if the system draw fails) the bundled artwork is used, and the styled
+        icon is re-fetched only when the style actually changes.
+        """
+        from . import icons
+
+        label = getattr(self, "_icon_label", None)
+        if label is None:
+            return
+        style = icons.macos_icon_style()
+        if style != getattr(self, "_icon_style", None) or label.pixmap().isNull():
+            pix = icons.macos_app_icon_pixmap(self._icon_size)
+            self._icon_style = style
+            self._caption_icon = pix
+        pix = getattr(self, "_caption_icon", None)
+        if pix is not None and not pix.isNull():
+            label.setPixmap(pix)
+            return
+        icon_path = paths.RESOURCES_DIR / "icon.png"
+        if icon_path.exists():
+            label.setPixmap(
+                QPixmap(str(icon_path)).scaled(
+                    self._icon_size, self._icon_size, Qt.KeepAspectRatio, Qt.SmoothTransformation
+                )
+            )
+
     def _build_brand_header_widget(self):
         t = T()
         self._brand_container = QWidget()
@@ -915,13 +947,9 @@ class MainWindow(QMainWindow):
         brand_row.setAlignment(Qt.AlignVCenter)
 
         self._icon_label = QLabel()
-        icon_path = paths.RESOURCES_DIR / "icon.png"
-        icon_size = 28
-        if icon_path.exists():
-            pix = QPixmap(str(icon_path)).scaled(
-                icon_size, icon_size, Qt.KeepAspectRatio, Qt.SmoothTransformation
-            )
-            self._icon_label.setPixmap(pix)
+        self._icon_size = 28
+        self._icon_style = None
+        self._apply_caption_icon()
         self._icon_label.setStyleSheet("background: transparent; border: none;")
         brand_row.addWidget(self._icon_label, 0, Qt.AlignVCenter)
 
@@ -1206,6 +1234,11 @@ class MainWindow(QMainWindow):
                 f"font-size: {_BRAND_FONT_SIZE}; font-weight: 800; color: palette(window-text); letter-spacing: -0.02em; background: transparent; border: none;"
             )
 
+        if hasattr(self, "_icon_label"):
+            # The icon style is a system setting of its own (Appearance → Icon &
+            # widget style): follow it here as well as the light/dark switch.
+            self._apply_caption_icon()
+
         if hasattr(self, "_brand_version"):
             self._brand_version.setText(APP_VERSION)
             self._brand_version.setStyleSheet(
@@ -1249,6 +1282,7 @@ class MainWindow(QMainWindow):
         self._select_page.gui_release_clicked.connect(self._on_gui_release_clicked)
         self._select_page.release_icon_ready.connect(self._on_release_icon_ready)
         self._select_page.gui_handoff_abandoned.connect(self._on_gui_handoff_abandoned)
+        self._select_page.content_size_changed.connect(self._on_select_content_changed)
         self._select_page.download_started.connect(self._on_download_started)
         self._select_page.download_progress.connect(self._on_download_progress)
         self._select_page.download_finished.connect(self._on_download_finished)
@@ -1437,6 +1471,10 @@ class MainWindow(QMainWindow):
                 self.resize(*default_window_size())
             if not os.environ.get("QT_QPA_PLATFORM") == "offscreen" and not os.environ.get("INNIOASIS_HEADLESS"):
                 QTimer.singleShot(1200, self._check_legacy_installations)
+            self._ensure_theme_sync()
+        if getattr(self, "_pending_select_fit", False):
+            self._pending_select_fit = False
+            QTimer.singleShot(0, self._on_select_content_changed)
         if sys.platform == "darwin":
             from .glass import apply_glass, configure_traffic_lights
             apply_glass(self)
@@ -1451,11 +1489,17 @@ class MainWindow(QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        # The inline header is a manually placed child of the window on macOS,
+        # so it must follow every width change *including* an animated resize.
+        # Skipping it mid-animation left the right-anchored page heading at the
+        # width the animation started from — the heading visibly slid left or
+        # right instead of holding its place against the window edge.
+        bar = getattr(self, "_title_bar", None)
+        if sys.platform == "darwin" and bar is not None:
+            bar.setGeometry(0, 0, self.width(), int(HEADER_CONTENT_HEIGHT))
+            bar.raise_()
         if getattr(self, "_size_animating", False):
             return
-        if sys.platform == "darwin" and hasattr(self, "_title_bar"):
-            self._title_bar.setGeometry(0, 0, self.width(), int(HEADER_CONTENT_HEIGHT))
-            self._title_bar.raise_()
         self._verify_native_chrome()
         self._schedule_caption_button_refresh()
         overlay = getattr(self, "_drop_overlay", None)
@@ -1802,6 +1846,97 @@ class MainWindow(QMainWindow):
             else:
                 self.setMinimumSize(min_w, min_h)
 
+    def _on_select_content_changed(self):
+        """Grow the window height for the software list contents.
+
+        The release list hugs its rows, so the window grows to show more
+        items — clamped to the available screen height. It never shrinks:
+        a shorter list keeps the size the window already has, and the
+        install flow keeps owning the window size while it runs. Skipped
+        on other pages, or when not yet visible (retried on show).
+        """
+        try:
+            if (
+                self.isMinimized()
+                or self.isMaximized()
+                or self.isFullScreen()
+                or bool(self.windowState() & (Qt.WindowMaximized | Qt.WindowFullScreen))
+                or self._install_run_active()
+                or getattr(self, "_install_complete", False)
+                or getattr(self, "_install_failed", False)
+                or getattr(self, "_power_off_prompt", False)
+            ):
+                return
+            stack = getattr(self, "_stack", None)
+            page = getattr(self, "_select_page", None)
+            if stack is None or page is None or stack.currentWidget() is not page:
+                return
+            if not self.isVisible() or stack.height() <= 0:
+                self._pending_select_fit = True
+                return
+            self._pending_select_fit = False
+            # The fit signal fires synchronously from the list refill, while
+            # the layout item caches still describe the previous rows — Qt
+            # only refreshes them on the next relayout pass. Defer the
+            # measurement a tick (coalescing rapid refills) so the hint
+            # below measures the new rows instead of the old ones.
+            if getattr(self, "_select_fit_queued", False):
+                return
+            self._select_fit_queued = True
+            QTimer.singleShot(0, self._fit_window_to_select_content)
+        except Exception:
+            logger.debug("Select content fit failed", exc_info=True)
+
+    def _fit_window_to_select_content(self):
+        """Deferred half of _on_select_content_changed: measure and grow."""
+        self._select_fit_queued = False
+        try:
+            if (
+                self.isMinimized()
+                or self.isMaximized()
+                or self.isFullScreen()
+                or bool(self.windowState() & (Qt.WindowMaximized | Qt.WindowFullScreen))
+                or self._install_run_active()
+                or getattr(self, "_install_complete", False)
+                or getattr(self, "_install_failed", False)
+                or getattr(self, "_power_off_prompt", False)
+            ):
+                return
+            stack = getattr(self, "_stack", None)
+            page = getattr(self, "_select_page", None)
+            if stack is None or page is None or stack.currentWidget() is not page:
+                return
+            if not self.isVisible() or stack.height() <= 0:
+                self._pending_select_fit = True
+                return
+            # The relayout cascade crosses several nesting levels (and a
+            # stacked widget), so one pass is not enough: flush posted
+            # events until the measured height settles, with a small cap.
+            need = -1
+            for _ in range(5):
+                QApplication.sendPostedEvents()
+                settled = page.content_height_hint()
+                if settled == need:
+                    break
+                need = settled
+            stack.updateGeometry()
+            chrome = self.height() - stack.height()
+            target_h = need + chrome
+            target_h = max(int(target_h), MINIMUM_WINDOW_HEIGHT)
+            scr = self.screen()
+            if scr is not None:
+                avail = scr.availableGeometry().height() - 48
+                if avail >= MINIMUM_WINDOW_HEIGHT:
+                    target_h = min(int(target_h), int(avail))
+            if target_h - self.height() >= 4:
+                self._animate_window_size(
+                    self.width(),
+                    int(target_h),
+                    minimum=(MINIMUM_WINDOW_WIDTH, MINIMUM_WINDOW_HEIGHT),
+                )
+        except Exception:
+            logger.debug("Select content fit failed", exc_info=True)
+
     def _animate_window_size(self, width: int, height: int, minimum=None) -> None:
         """Ease a programmatic resize. Reduced motion and a maximized window snap."""
         from .widgets import prefers_reduced_motion
@@ -2057,6 +2192,33 @@ class MainWindow(QMainWindow):
         self._adjust_window_geometry()
         QTimer.singleShot(0, self._verify_native_chrome)
 
+    def _flash_inputs(self):
+        """Explicit Download Agent / auth file from Select Software.
+
+        The MediaTek Installer carries a DA (and optionally an auth file) beside
+        the scatter; Updater CE leaves the DA empty so the bundled
+        ``MTK_AllInOne_DA.bin`` applies and falls back to the saved auth file.
+        """
+        da = ""
+        auth = ""
+        page = getattr(self, "_select_page", None)
+        if page is not None:
+            getter = getattr(page, "installer_da_file", None)
+            if callable(getter):
+                try:
+                    da = getter() or ""
+                except Exception:
+                    da = ""
+            getter = getattr(page, "installer_auth_file", None)
+            if callable(getter):
+                try:
+                    auth = getter() or ""
+                except Exception:
+                    auth = ""
+        if not auth:
+            auth = device_tracking.sp_auth_file(self.settings)
+        return da, auth
+
     def _on_package_selected(self, path, name, model):
         self._remember_catalogue_section()
         self._package_path = path
@@ -2110,13 +2272,16 @@ class MainWindow(QMainWindow):
         except Exception as e:
             logger.debug("Terminal install: platform detection failed: %s", e)
 
+        da_file, auth_file = self._flash_inputs()
         command = terminal_install.build_install_command(
             self._flash_method,
             extract_dir,
             scatter,
             package_path=self._package_path,
             platform_name=platform_name,
-            auth_file=device_tracking.sp_auth_file(self.settings),
+            auth_file=auth_file,
+            da_file=da_file,
+            model=self._package_model,
         )
         if command is None:
             self._nav_to_page(_PAGE_SELECT)
@@ -2156,12 +2321,17 @@ class MainWindow(QMainWindow):
         script = None
         try:
             # The script exports whatever the console tool needs that this
-            # machine's environment lacks (Linux SP Flash Tool libraries).
+            # machine's environment lacks (Linux SP Flash Tool libraries), and
+            # carries the app's other copies as fallbacks: the bundle it is
+            # running from is a build output, so a rebuild between generating
+            # this launcher and running it must not break a hand-run install.
             script = terminal_install.build_script(
                 command,
                 title=tr("terminal_install_title"),
                 cwd=extract_dir,
                 env=terminal_install.script_env(command),
+                fallbacks=terminal_install.launcher_candidates(command[0]),
+                identity=terminal_install.launcher_identity(command[0]),
             )
         except OSError as e:
             logger.warning("Terminal install: could not write the launcher: %s", e)
@@ -2286,6 +2456,10 @@ class MainWindow(QMainWindow):
         self._power_off_prompt = True
         self._flash_page.set_package_name(self._package_name)
         self._flash_page.set_model(self._package_model)
+        # This screen shows the release's own image, not only the settings
+        # stand-in: it is the first thing the user sees when the install starts,
+        # and the catalogue already has the image by then.
+        self._apply_release_icon(complete=False)
         self._flash_page.show_power_off_prompt()
         self._nav_to_page(_PAGE_FLASH)
 
@@ -2419,11 +2593,14 @@ class MainWindow(QMainWindow):
             )
         except Exception as e:
             logger.debug("Could not pre-update SP history.ini in _begin_flash_flow: %s", e)
+        da_file, auth_file = self._flash_inputs()
         self.service.start_flash(
             self._package_path,
             pre_extracted_dir=pre_extracted,
             method=self._flash_method,
             model=self._package_model,
+            da_file=da_file,
+            auth_file=auth_file,
         )
         self.service.start_device_monitor()
 
@@ -2689,7 +2866,12 @@ class MainWindow(QMainWindow):
         self._nav_to_page(_PAGE_FLASH)
         # Compact completion first. The appeal is the only extra growth, and
         # it uses the same short size animation. Install Software stays selected.
-        if not donation_disabled:
+        # A 360p Rockbox install carries straight into the themes stage: the
+        # wizard takes the completion screen's place, and the appeal follows
+        # once the wizard closes (themes installed or dismissed).
+        if is_360p_rockbox:
+            self._start_themes_stage(eff_model, donation_disabled)
+        elif not donation_disabled:
             self._flash_page.show_completion_appeal(
                 True, self._on_completion_dont_ask, self._on_completion_not_now,
             )
@@ -2698,6 +2880,62 @@ class MainWindow(QMainWindow):
             tr("status_install_ok_fmt").format(software=software, steps=steps), 60000
         )
         del elapsed
+
+    def _create_themes_wizard(self, model: str):
+        """Factory seam for the 360p themes stage (tests stub the dialog)."""
+        from ..theme_pack import Rockbox360pSetupWizard
+
+        return Rockbox360pSetupWizard(parent=self, model=model)
+
+    def _start_themes_stage(self, model: str, donation_disabled: bool) -> None:
+        """Open the themes install stage after a 360p Rockbox install.
+
+        Modeless, so the completion screen stays behind it and tests never
+        block on a modal loop. The donation appeal follows when the wizard
+        closes, however it closes — the install itself already completed.
+        """
+        self._themes_stage_done = False
+        try:
+            dlg = self._create_themes_wizard(model)
+        except Exception:
+            logger.debug("Themes stage could not open", exc_info=True)
+            if not donation_disabled:
+                self._flash_page.show_completion_appeal(
+                    True, self._on_completion_dont_ask, self._on_completion_not_now,
+                )
+                self._adjust_window_geometry()
+            return
+        dlg.installed_success.connect(lambda: self._finish_themes_stage(donation_disabled))
+        dlg.finished.connect(lambda _result: self._finish_themes_stage(donation_disabled))
+        dlg.show()
+        try:
+            dlg.raise_()
+            dlg.activateWindow()
+        except Exception:
+            pass
+
+    def _finish_themes_stage(self, donation_disabled: bool) -> None:
+        if getattr(self, "_themes_stage_done", False):
+            return
+        self._themes_stage_done = True
+        if not donation_disabled:
+            self._flash_page.show_completion_appeal(
+                True, self._on_completion_dont_ask, self._on_completion_not_now,
+            )
+            self._adjust_window_geometry()
+
+    def _ensure_theme_sync(self) -> None:
+        """Start the passive 360p theme sync (self-gating; idle when untracked)."""
+        if getattr(self, "_theme_sync_service", None) is not None:
+            return
+        try:
+            from ..theme_sync import ThemeSyncService
+
+            service = ThemeSyncService(self.settings, parent=self)
+            self._theme_sync_service = service
+            service.start()
+        except Exception:
+            logger.debug("Passive theme sync could not start", exc_info=True)
 
     def _show_install_failure(self, message: str):
         """Failure stays on the install progress card. Retry is where Cancel was."""
@@ -2730,6 +2968,7 @@ class MainWindow(QMainWindow):
         ):
             self.sm.reset_for_retry()
         self._flash_page.set_model(self._package_model)
+        self._apply_release_icon(complete=False)
         self._flash_page.show_power_off_prompt()
         self._nav_to_page(_PAGE_FLASH)
 
@@ -2872,7 +3111,9 @@ class MainWindow(QMainWindow):
             self._returning_to_select = False
 
     def _on_cancel_flash(self):
-        # The progress card already asked. Either interruption button lands here.
+        # Only the ✕ (confirm stop) button lands here, via the stop-check
+        # callback. The ← (back) button only dismisses the check inside the
+        # progress card so the run keeps going — it must never navigate away.
         self._return_to_select_software()
 
     def _on_completion_not_now(self):
@@ -2892,16 +3133,20 @@ class MainWindow(QMainWindow):
         """Squircle until a release icon is cached, then that image. The check overlays either."""
         from .release_icon import load_release_pixmap
         from ..release_icons import icon_candidate_urls
-        from ..sp_flash_gui import is_gui_local_package
         from ..config import is_mediatek_installer
 
         page = getattr(self, "_select_page", None)
         release = getattr(page, "_current_selected_rel", None) if page else None
         package = getattr(page, "_details_package", None) if page else None
+        # A downloaded release lands in the working folder as an extracted
+        # tree containing a scatter file, which is also what a hand-browsed
+        # zip looks like. Only the *absence* of a catalogue release (or a
+        # deliberately local browse) means the generic squircle: otherwise an
+        # online release would lose its own updater.jpg the moment it was
+        # unpacked, and the install card showed a placeholder instead.
         is_local = (
             release is None
             or is_mediatek_installer()
-            or is_gui_local_package(getattr(self, "_package_path", ""))
             or (page is not None and getattr(page, "catalogue_section", lambda: "")() == "local")
         )
         if is_local:
@@ -3596,6 +3841,10 @@ class MainWindow(QMainWindow):
             self._settings_page.apply_brand_mode(mediatek)
         if hasattr(self, "_select_page"):
             self._select_page.apply_generic_mode(offline)
+            # The MediaTek Installer takes the DA + scatter SP Flash Tool's own
+            # setup takes instead of a firmware package.
+            if hasattr(self._select_page, "apply_installer_mode"):
+                self._select_page.apply_installer_mode(mediatek)
         self._apply_donation_visibility()
 
     def _on_offline_mode_changed(self, enabled: bool):
@@ -3692,6 +3941,12 @@ class MainWindow(QMainWindow):
         if hasattr(self, "_theme_watcher") and self._theme_watcher:
             try:
                 self._theme_watcher.stop()
+            except Exception:
+                pass
+        service = getattr(self, "_theme_sync_service", None)
+        if service is not None:
+            try:
+                service.stop()
             except Exception:
                 pass
         self.cleanup_workers()

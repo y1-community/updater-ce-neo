@@ -33,6 +33,10 @@ class SupportPage(QWidget):
         self._intro.retranslate()
         self._coffee.setText(tr("donate_buy_coffee"))
 
+    def refresh_theme(self) -> None:
+        """Nothing cached: children repaint from the live palette."""
+        self.update()
+
     def _open_coffee(self) -> None:
         from ..browser import open_browser
 

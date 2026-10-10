@@ -59,6 +59,11 @@ if ASSETS.exists():
     datas.append((str(ASSETS), "assets"))
 if VENDOR_MTK.exists():
     datas.append((str(VENDOR_MTK), "mtkclient"))
+# Minimal vendored ADB binaries for the Rockbox 360p post-install wizard
+# (tools/adb/<platform>/adb[.exe]); resolved at runtime via src/adb.py.
+ADB_TOOLS = PROJECT_ROOT / "tools" / "adb"
+if ADB_TOOLS.exists():
+    datas.append((str(ADB_TOOLS), "tools/adb"))
 
 # NOTE: SP Flash Tool is NOT bundled through datas — the app resolves it at
 # INSTALL_DIR / "SP_Flash_Tool" (next to the exe), which datas cannot target

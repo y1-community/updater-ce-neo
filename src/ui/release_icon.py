@@ -69,10 +69,18 @@ def _squircle_path(side: float) -> QPainterPath:
 
 
 def glyph_box(side: int) -> tuple[int, int, int, int]:
-    """Centered square for the settings glyph: x, y, width, height."""
+    """Centered square for the settings glyph: x, y, width, height.
+
+    The glyph keeps the squircle's parity. An odd glyph inside an even squircle
+    can only be placed half a pixel off centre (40 - 25 leaves 15, and 15 // 2
+    is 7), which is what made the settings cog look nudged up and to the left.
+    """
     side = max(int(side), 1)
     glyph = max(16, int(round(side * GLYPH_OF_SIDE)))
     glyph = min(glyph, max(1, side - 4))
+    if glyph % 2 != side % 2:
+        glyph -= 1
+    glyph = max(1, glyph)
     origin = (side - glyph) // 2
     return origin, origin, glyph, glyph
 

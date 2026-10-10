@@ -295,6 +295,85 @@ def test_update_toast_is_a_translucent_row():
         apply_theme(app)
 
 
+def test_downloaded_release_keeps_its_own_icon(tmp_path=None):
+    """An unpacked online release is not a local browse: keep its updater.jpg.
+
+    A downloaded release is extracted into the working folder, scatter file and
+    all, which is exactly what a hand-browsed zip looks like. Deciding "local"
+    from that path dropped the release artwork for the settings squircle on
+    every online install.
+    """
+    from types import SimpleNamespace
+
+    from PySide6.QtGui import QPixmap
+
+    import src.release_icons as icons
+    from src.ui.main_window import MainWindow
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    work = Path(__file__).resolve().parent / "_icon_work"
+    extract = work / "original-software-y1_Latest-3.1.2_rom_extracted"
+    extract.mkdir(parents=True, exist_ok=True)
+    extract.joinpath("MT6572_Android_scatter.txt").write_text("fake scatter")
+    art = QPixmap(8, 8)
+    art.fill(QColor("#c81e5b"))
+
+    class _Page:
+        def __init__(self, section, release):
+            self._current_selected_rel = release
+            self._details_package = _package()
+            self._section = section
+
+        def catalogue_section(self):
+            return self._section
+
+        def release_pixmap(self):
+            return art
+
+    class _Flash:
+        def __init__(self):
+            self.calls = []
+
+        def set_release_icon(self, pixmap, complete=False):
+            self.calls.append((pixmap, complete))
+
+    release = {"tag_name": "v3.1.2", "source_repo": "y1-community/y1-stock-rom"}
+    stub = SimpleNamespace(
+        _select_page=_Page("online", release),
+        _flash_page=_Flash(),
+        _package_path=str(extract),
+        _install_complete=False,
+    )
+    original = icons.icon_candidate_urls
+    # Short-circuit the background fetch: this test is about the decision, not
+    # the download.
+    icons.icon_candidate_urls = lambda *a, **k: []
+    try:
+        MainWindow._apply_release_icon(stub)
+        assert stub._flash_page.calls, "no icon was applied"
+        applied = stub._flash_page.calls[0][0]
+        assert not applied.isNull(), "release artwork was replaced by the squircle"
+
+        # No catalogue release (a hand-browsed zip / MediaTek mode): squircle.
+        stub._select_page = _Page("local", None)
+        stub._flash_page.calls.clear()
+        MainWindow._apply_release_icon(stub)
+        assert stub._flash_page.calls[0][0].isNull()
+
+        # The local catalogue tab is local, even with a release remembered.
+        stub._select_page = _Page("local", release)
+        stub._flash_page.calls.clear()
+        MainWindow._apply_release_icon(stub)
+        assert stub._flash_page.calls[0][0].isNull()
+    finally:
+        icons.icon_candidate_urls = original
+        for child in extract.glob("*"):
+            child.unlink()
+        extract.rmdir()
+        work.rmdir()
+        del app
+
+
 def _near(color: QColor, other: QColor, tolerance: int) -> bool:
     return (
         abs(color.red() - other.red())

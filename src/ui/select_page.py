@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import QPoint, Qt, QThread, Signal
+from PySide6.QtCore import QPoint, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QPixmap, QTextDocument
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -46,6 +46,7 @@ from ..config import (
     device_label_for_model,
     install_disconnect_guidance,
     is_generic_mtk,
+    is_mediatek_installer,
     is_offline_mode,
 )
 from ..i18n import tr, translator
@@ -60,6 +61,17 @@ from .scrollbars import configure_scroll_area, make_transparent
 from .icons import HELP_ICON_PX, get_help_pixmap, get_symbol_icon, help_icon_source
 
 logger = logging.getLogger(__name__)
+
+# How long a clicked Type tip stays on screen. Long enough to read the whole
+# Type A / Type B explanation without the pointer having to stay put.
+TYPE_TIP_VISIBLE_MS = 12000
+
+# Release list sizing. The list hugs its contents so Install / Restore and
+# the file link sit directly below the items; past MAX rows it scrolls
+# internally instead of growing the window without bound. An empty list
+# keeps a small placeholder height instead of collapsing to nothing.
+MAX_VISIBLE_RELEASE_ROWS = 8
+EMPTY_RELEASE_LIST_ROWS = 3
 
 
 def _network_polling_available() -> bool:
@@ -119,7 +131,20 @@ class ReleasesWorker(QThread):
                 self.finished.emit([], str(e))
 
 
+def display_software_name(name):
+    """User-facing software name with preset i18n replacements.
+
+    Catalogue and tracking names stay canonical English (they are lookup
+    keys); only the displayed name is localised. "Original Software" has
+    a preset translation per language (``software_original``).
+    """
+    if (name or "").strip() == "Original Software":
+        return tr("software_original")
+    return name
+
+
 class _TabsAdapter:
+
     """Compatibility adapter presenting QStackedWidget as a QTabWidget interface for tests."""
 
     def __init__(self, page):
@@ -149,18 +174,27 @@ class _TabsAdapter:
 
 
 class _TypeInfoMark(QLabel):
-    """Small information mark beside Type. Hover and click both show the same tip."""
+    """Small information mark beside Type. Hover waits; a click shows the tip now."""
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton and self.rect().contains(event.position().toPoint()):
-            tip = self.toolTip()
-            if tip:
-                QToolTip.showText(
-                    self.mapToGlobal(QPoint(0, self.height())),
-                    tip,
-                    self,
-                )
+            # One event-loop turn later, on purpose: Qt tears a tooltip down on
+            # the very mouse release that asked for it, so showing it inline
+            # made the tip vanish again before it could be read.
+            QTimer.singleShot(0, self._show_tip_now)
         super().mouseReleaseEvent(event)
+
+    def _show_tip_now(self) -> None:
+        tip = self.toolTip()
+        if not tip:
+            return
+        QToolTip.showText(
+            self.mapToGlobal(QPoint(0, self.height())),
+            tip,
+            self,
+            self.rect(),
+            TYPE_TIP_VISIBLE_MS,
+        )
 
 
 class SelectPackagePage(QWidget):
@@ -176,6 +210,9 @@ class SelectPackagePage(QWidget):
     prep_started = Signal(str, str)
     # (message, timeout_ms) -> shown in the main window's status bar.
     status_message = Signal(str, int)
+    # Emitted whenever the release list is (re)filled, so the window can
+    # grow or shrink its height to fit the items.
+    content_size_changed = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -187,6 +224,11 @@ class SelectPackagePage(QWidget):
         self._current_package_path = ""
         self._current_package_name = ""
         self._current_package_model = ""
+        # MediaTek Installer inputs (Download Agent + scatter are required, the
+        # auth file optional). Updater CE leaves the DA empty so the bundled
+        # MTK_AllInOne_DA.bin applies.
+        self._installer_da = ""
+        self._installer_mode = False
         self._online_banner_key = ""
         self._online_banner_count = 0
         self._local_banner_key = ""
@@ -200,6 +242,9 @@ class SelectPackagePage(QWidget):
         self._gui_handoff_worker = False
         self._is_translated = False
         self._is_translating = False
+        # Sticky choice: once the user translates once, newly focused
+        # releases translate automatically. "Show original" opts back out.
+        self._auto_translate_notes = False
         self._translated_notes_cache = {}
         self._translate_worker = None
         # Whether the online catalogue is on offer. It starts hidden and is only
@@ -231,6 +276,7 @@ class SelectPackagePage(QWidget):
         if is_generic_mtk():
             self.apply_generic_mode(True)
 
+        self.apply_installer_mode(is_mediatek_installer())
         self._check_and_load_cached_firmware()
 
     def _check_and_load_cached_firmware(self):
@@ -376,8 +422,17 @@ class SelectPackagePage(QWidget):
             self._on_model_changed()
 
     def _update_view_links(self):
-        """The file link exists wherever the catalogue does, and vice versa."""
-        available = bool(self._online_available) and not is_generic_mtk()
+        """Both links are catalogue affordances: no catalogue, no links.
+
+        Offline Mode (and the MediaTek Installer, which is offline-first) has no
+        list to choose from and no catalogue to return to, so neither link is
+        shown there.
+        """
+        available = (
+            bool(self._online_available)
+            and not is_generic_mtk()
+            and not is_offline_mode()
+        )
         self._install_from_file_link.setVisible(available)
         self._install_online_link.setVisible(available)
 
@@ -494,6 +549,7 @@ class SelectPackagePage(QWidget):
         self._release_list.itemActivated.connect(self._on_install)
         self._release_list.itemDoubleClicked.connect(self._on_release_double_clicked)
         pkg_layout.addWidget(self._release_list)
+        self._fit_release_list_height()
 
         # Slim progress bar, only visible while downloading / preparing.
         self._download_bar = QProgressBar()
@@ -667,8 +723,56 @@ class SelectPackagePage(QWidget):
         row.addWidget(self._browse_folder_btn)
         grp_l.addLayout(row)
 
-        # Auth file row on the main screen (for MediaTek Installer mode & authenticated flashing)
-        self._auth_row = QHBoxLayout()
+        # MediaTek Installer: the three files SP Flash Tool's own setup asks
+        # for. The Download Agent and scatter are required; an auth file is
+        # only needed by some secure-booted firmwares. Updater CE hides both
+        # rows — there the firmware package (and its bundled DA) is the whole
+        # input.
+        self._da_row_widget = QWidget()
+        da_row = QHBoxLayout(self._da_row_widget)
+        da_row.setContentsMargins(0, 0, 0, 0)
+        da_row.setSpacing(8)
+        self._da_label = QLabel(tr("mtk_da_label") + ":")
+        self._da_edit = QLineEdit()
+        self._da_edit.setReadOnly(True)
+        self._da_edit.setPlaceholderText(tr("mtk_da_placeholder"))
+        self._browse_da_btn = QPushButton(tr("sel_browse"))
+        self._browse_da_btn.setIcon(get_symbol_icon("file", 16))
+        self._browse_da_btn.clicked.connect(self._on_choose_da_file)
+        self._clear_da_btn = QPushButton(tr("settings_sp_auth_clear"))
+        self._clear_da_btn.setIcon(get_symbol_icon("cancel", 12))
+        self._clear_da_btn.clicked.connect(self._on_clear_da_file)
+        da_row.addWidget(self._da_label)
+        da_row.addWidget(self._da_edit, 1)
+        da_row.addWidget(self._browse_da_btn)
+        da_row.addWidget(self._clear_da_btn)
+        grp_l.addWidget(self._da_row_widget)
+        self._da_row_widget.setVisible(False)
+
+        self._scatter_row_widget = QWidget()
+        scatter_row = QHBoxLayout(self._scatter_row_widget)
+        scatter_row.setContentsMargins(0, 0, 0, 0)
+        scatter_row.setSpacing(8)
+        self._scatter_label = QLabel(tr("mtk_scatter_label") + ":")
+        self._scatter_edit = QLineEdit()
+        self._scatter_edit.setReadOnly(True)
+        self._scatter_edit.setPlaceholderText(tr("mtk_scatter_placeholder"))
+        self._browse_scatter_btn = QPushButton(tr("sel_browse"))
+        self._browse_scatter_btn.setIcon(get_symbol_icon("file", 16))
+        self._browse_scatter_btn.clicked.connect(self._on_choose_scatter_file)
+        scatter_row.addWidget(self._scatter_label)
+        scatter_row.addWidget(self._scatter_edit, 1)
+        scatter_row.addWidget(self._browse_scatter_btn)
+        grp_l.addWidget(self._scatter_row_widget)
+        self._scatter_row_widget.setVisible(False)
+
+        # Auth file row: MediaTek Installer only. The Innioasis targets Updater
+        # CE serves have no secure boot to answer — they flash with the bundled
+        # MTK_AllInOne_DA.bin, the same way the Chinese build does — so Updater
+        # CE never offers an auth file at all.
+        self._auth_row_widget = QWidget()
+        self._auth_row = QHBoxLayout(self._auth_row_widget)
+        self._auth_row.setContentsMargins(0, 0, 0, 0)
         self._auth_row.setSpacing(8)
         self._auth_label = QLabel(tr("settings_sp_auth") + ":")
         self._auth_edit = QLineEdit()
@@ -684,7 +788,8 @@ class SelectPackagePage(QWidget):
         self._auth_row.addWidget(self._auth_edit, 1)
         self._auth_row.addWidget(self._browse_auth_btn)
         self._auth_row.addWidget(self._clear_auth_btn)
-        grp_l.addLayout(self._auth_row)
+        grp_l.addWidget(self._auth_row_widget)
+        self._auth_row_widget.setVisible(False)
         self._sync_auth_file_ui()
 
         self._local_banner = Banner()
@@ -713,9 +818,11 @@ class SelectPackagePage(QWidget):
         self._start_btn.clicked.connect(self._on_start_flash)
         grp_l.addWidget(self._start_btn)
 
-        # ...and the way back to the catalogue.
+        # ...and the way back to the catalogue list. Same weight as the file
+        # link above: both are secondary navigation, and the primary action is
+        # the button.
         self._install_online_link = self._make_link(
-            "sel_install_online", self._show_online_view
+            "sel_install_online", self._show_online_view, bold=False
         )
         grp_l.addWidget(self._install_online_link)
 
@@ -777,22 +884,140 @@ class SelectPackagePage(QWidget):
             except Exception:
                 pass
 
-    def _type_help_tip(self) -> str:
-        """Full device-type help as a wrapping tooltip. No dialog."""
-        from .dark import tooltip_rich_text
+    # ── MediaTek Installer: Download Agent / scatter ──────────────────────
+    def apply_installer_mode(self, enabled: bool) -> None:
+        """Show the DA + scatter + auth fields the generic installer flashes with.
 
+        The installer is a front end for the same two backends Updater CE uses;
+        it just takes the three files SP Flash Tool's own setup takes (Download
+        Agent, scatter, optional auth) instead of a firmware package. Updater CE
+        keeps its single package row and its bundled DA — and no auth row, since
+        none of its targets use one.
+        """
+        self._installer_mode = bool(enabled)
+        for widget in (
+            getattr(self, "_da_row_widget", None),
+            getattr(self, "_scatter_row_widget", None),
+            getattr(self, "_auth_row_widget", None),
+        ):
+            if widget is not None:
+                widget.setVisible(bool(enabled))
+        for name in ("_path_edit", "_browse_btn", "_browse_folder_btn"):
+            widget = getattr(self, name, None)
+            if widget is not None:
+                widget.setVisible(not enabled)
+        if enabled:
+            self._prefill_da()
+        self._sync_auth_file_ui()
+        self._update_local_labels()
+
+    def _update_local_labels(self) -> None:
+        if hasattr(self, "_da_label"):
+            self._da_label.setText(tr("mtk_da_label") + ":")
+            self._da_edit.setPlaceholderText(tr("mtk_da_placeholder"))
+            self._browse_da_btn.setText(tr("sel_browse"))
+            self._scatter_label.setText(tr("mtk_scatter_label") + ":")
+            self._scatter_edit.setPlaceholderText(tr("mtk_scatter_placeholder"))
+            self._browse_scatter_btn.setText(tr("sel_browse"))
+        if self._installer_mode and hasattr(self, "_local_group"):
+            self._local_group.setTitle(tr("mtk_choose_flash_files"))
+
+    def _prefill_da(self) -> None:
+        """Offer the Download Agent the app already ships, when there is one."""
+        if not self._installer_da:
+            try:
+                from ..sp_flash_gui import bundled_da_path
+
+                da = bundled_da_path()
+            except Exception:
+                logger.debug("Could not locate a bundled download agent", exc_info=True)
+                da = None
+            if da:
+                self._installer_da = str(da)
+        self._sync_da_ui()
+
+    def _sync_da_ui(self) -> None:
+        if not hasattr(self, "_da_edit"):
+            return
+        self._da_edit.setText(self._installer_da or "")
+        self._clear_da_btn.setVisible(bool(self._installer_da))
+
+    def _on_choose_da_file(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, tr("mtk_da_label"), "", tr("mtk_da_filter")
+        )
+        if path:
+            self._installer_da = path
+            self._sync_da_ui()
+
+    def _on_clear_da_file(self) -> None:
+        self._installer_da = ""
+        self._sync_da_ui()
+
+    def _on_choose_scatter_file(self) -> None:
+        """Point the installer at a scatter file (its images live beside it)."""
+        path, _ = QFileDialog.getOpenFileName(
+            self, tr("mtk_scatter_label"), "", tr("mtk_scatter_filter")
+        )
+        if not path:
+            return
+        p = Path(path)
+        if not p.is_file():
+            return
+        self._scatter_edit.setText(str(p))
+        # SP Flash Tool's own layout: the partition images sit in the folder
+        # beside the scatter file, so that folder is the package for this run.
+        package_target = str(p.parent)
+        self._path_edit.setText(package_target)
+        self._current_package_path = package_target
+        self._current_installed_release_info = None
+        self._current_selected_rel = None
+        self._details_package = None
+        self._raw_release_pixmap = None
+        self._auto_detect_auth_file(package_target)
+        det_m, det_t = detect_model_and_type_from_name(p.name)
+        self._current_package_model = det_m or ""
+        if det_m:
+            self._select_model_for_manual(det_m)
+        self._selected_type = det_t or None
+        self._current_package_name = p.stem
+        self._remember_gui_local(package_target, self._current_package_model, p.stem)
+        self._set_local_banner("sel_current_pkg", p.name)
+        self._start_btn.setEnabled(False)
+        self._prepare_package(package_target, self._on_local_prep_done)
+
+    def installer_da_file(self) -> str:
+        """The Download Agent chosen for a MediaTek Installer flash (or "")."""
+        return self._installer_da if self._installer_mode else ""
+
+    def installer_auth_file(self) -> str:
+        """The auth file chosen on this screen (falls back to the saved one)."""
+        return device_tracking.sp_auth_file(getattr(self, "settings", None)) or ""
+
+    def _type_help_tip(self) -> str:
+        """Full device-type help as a wrapping tooltip. No dialog.
+
+        Plain text, not rich text: the tip is drawn by the platform, and a
+        rich-text document would need its own colours written into it — which
+        is what made these tips look nothing like the host's own tooltips.
+        """
         body = tr("sel_type_help_body")
         if not body or body == "sel_type_help_body":
             body = tr("device_type_help_msg") or tr("sel_type_help_tooltip")
-        return tooltip_rich_text(body or "")
+        return (body or "").strip()
 
     def _refresh_type_help_icon(self) -> None:
-        """Same hover tip as the Type combo, on the platform information glyph beside it."""
+        """Same hover tip as the Type combo, on the platform information glyph beside it.
+
+        Tinted with the accent, matching the information badge the host desktop
+        draws in its own settings panes.
+        """
         icon = getattr(self, "_type_help_icon", None)
         if icon is None:
             return
         icon.setCursor(Qt.ArrowCursor)
-        color = getattr(T(), "fg_muted", None)
+        theme = T()
+        color = getattr(theme, "accent", "") or getattr(theme, "fg_muted", None)
         pix = get_help_pixmap(HELP_ICON_PX, color=color)
         icon.setText("")
         if pix is not None and not pix.isNull():
@@ -972,7 +1197,9 @@ class SelectPackagePage(QWidget):
         self._install_from_file_link.setText(
             self._link_html("sel_install_from_file", bold=False)
         )
-        self._install_online_link.setText(self._link_html("sel_install_online"))
+        self._install_online_link.setText(
+            self._link_html("sel_install_online", bold=False)
+        )
         self._model_label.setText(f"{tr('sel_model')}:")
         self._type_label.setText(f"{tr('sel_type')}:")
         self._software_label.setText(f"{tr('sel_software')}:")
@@ -1008,6 +1235,7 @@ class SelectPackagePage(QWidget):
             self._clear_auth_btn.setText(tr("settings_sp_auth_clear"))
         if hasattr(self, "_auth_edit"):
             self._auth_edit.setPlaceholderText(tr("settings_sp_auth_none"))
+        self._update_local_labels()
         self._start_btn.setText(tr("sel_btn_start"))
         self._apply_online_banner()
         if hasattr(self, "_update_prompt"):
@@ -1015,20 +1243,38 @@ class SelectPackagePage(QWidget):
         self._apply_local_banner()
         self._type_combo.setItemText(0, tr("sel_type_a"))
         self._type_combo.setItemText(1, tr("sel_type_b"))
+        # Software names carry preset translations: re-label the dropdown rows
+        # in place, keeping the canonical English name as each row's data.
+        self._software_combo.blockSignals(True)
+        for i in range(self._software_combo.count()):
+            canonical = str(
+                self._software_combo.itemData(i) or self._software_combo.itemText(i)
+            )
+            self._software_combo.setItemData(i, canonical)
+            self._software_combo.setItemText(i, display_software_name(canonical))
+        self._software_combo.blockSignals(False)
         self._apply_type_help_hint()
         self._refresh_btn.setToolTip(tr("sel_refresh_tooltip"))
         self._pkg_group.setTitle(tr("sel_available_software"))
-        self._local_group.setTitle(tr("sel_choose_firmware_pkg"))
+        self._local_group.setTitle(
+            tr("mtk_choose_flash_files") if self._installer_mode else tr("sel_choose_firmware_pkg")
+        )
         self._update_device_status_copy()
         if self._download_status_key:
             self._say(tr(self._download_status_key))
         if self._local_status_key:
             self._local_status.setText(tr(self._local_status_key))
         if self._current_selected_rel:
-            if self._is_translated:
+            if self._is_translated or (
+                self._auto_translate_notes and (translator().lang or "en").strip() != "en"
+            ):
                 self._translate_current_release_in_app()
             else:
                 self._set_notes_content(self._render_release_notes(self._current_selected_rel, as_html=True))
+            self._set_details_header(
+                self._current_selected_rel,
+                getattr(self, "_details_package", None) or self._package_for_selection(),
+            )
         self._update_translate_link()
         if hasattr(self, "_registered_links"):
             for label, key, bold in self._registered_links:
@@ -1078,6 +1324,16 @@ class SelectPackagePage(QWidget):
             self._browse_folder_btn.setIcon(get_symbol_icon("folder", 16))
         if hasattr(self, "_start_btn"):
             self._start_btn.setIcon(get_symbol_icon("install", 16))
+        for attr, symbol, size in (
+            ("_browse_da_btn", "file", 16),
+            ("_clear_da_btn", "cancel", 12),
+            ("_browse_scatter_btn", "file", 16),
+            ("_browse_auth_btn", "file", 16),
+            ("_clear_auth_btn", "cancel", 12),
+        ):
+            btn = getattr(self, attr, None)
+            if btn is not None:
+                btn.setIcon(get_symbol_icon(symbol, size))
         from .dark import apply_explicit_foreground, install_progress_readability
         status = getattr(self, "_local_status", None)
         if status is not None:
@@ -1144,12 +1400,41 @@ class SelectPackagePage(QWidget):
         else:
             self._selected_type = self._type_combo.currentData() or "A"
         names = catalog.software_names_for_model(model)
-        self._software_combo.blockSignals(True)
-        self._software_combo.clear()
-        self._software_combo.addItems(names)
-        self._software_combo.blockSignals(False)
+        self._populate_software_combo(names)
         self._update_device_status_copy()
         self._on_software_changed()
+
+    def _populate_software_combo(self, names, select=None) -> None:
+        """Fill the Software dropdown with localised labels.
+
+        The canonical English name stays as the item's ``Qt.UserRole`` data:
+        catalogue lookups and device tracking key off it, and only the label
+        is translated (see :func:`display_software_name`). ``select`` is a
+        canonical name to restore after the rebuild.
+        """
+        combo = self._software_combo
+        combo.blockSignals(True)
+        combo.clear()
+        for name in names:
+            combo.addItem(display_software_name(name), name)
+        if select is not None:
+            idx = self._find_software_index(select)
+            if idx >= 0:
+                combo.setCurrentIndex(idx)
+        combo.blockSignals(False)
+
+    def _find_software_index(self, name) -> int:
+        """Row for a canonical or displayed software name, or -1."""
+        combo = self._software_combo
+        target = (name or "").strip()
+        for i in range(combo.count()):
+            if str(combo.itemData(i) or "") == target or combo.itemText(i) == target:
+                return i
+        localized = display_software_name(target)
+        for i in range(combo.count()):
+            if combo.itemText(i) == localized:
+                return i
+        return -1
 
     def _update_device_status_copy(self):
         model = self.current_model()
@@ -1160,7 +1445,7 @@ class SelectPackagePage(QWidget):
 
     def is_rockbox_y1_browsing(self) -> bool:
         """True when the Rockbox package for Y1 is the one being browsed."""
-        software = (self.current_software() or self._software_combo.currentText()).lower()
+        software = (self.current_software() or "").lower()
         return self.current_model().upper() == "Y1" and "rockbox" in software
 
     def release_listing_filters(self) -> tuple:
@@ -1255,22 +1540,100 @@ class SelectPackagePage(QWidget):
 
     def _on_manifest_refreshed(self, entries):
         if entries:
-            current_sw = self._software_combo.currentText()
+            current_sw = self.current_software()
             names = catalog.software_names_for_model(self.current_model())
-            existing = [self._software_combo.itemText(i) for i in range(self._software_combo.count())]
+            combo = self._software_combo
+            existing = [
+                str(combo.itemData(i) or combo.itemText(i)) for i in range(combo.count())
+            ]
             if names != existing:
-                self._software_combo.blockSignals(True)
-                self._software_combo.clear()
-                self._software_combo.addItems(names)
-                idx = self._software_combo.findText(current_sw)
-                if idx >= 0:
-                    self._software_combo.setCurrentIndex(idx)
-                self._software_combo.blockSignals(False)
+                self._populate_software_combo(names, select=current_sw)
+
+    def _release_row_height(self) -> int:
+        """Height of one release row, from a real row or the list font."""
+        if self._release_list.count():
+            return max(1, self._release_list.sizeHintForRow(0))
+        return self._release_list.fontMetrics().lineSpacing() + 8
+
+    def _fit_release_list_height(self):
+        """Size the release list to its contents (capped).
+
+        With few items the list is exactly as tall as its rows, so the
+        Install / Restore button and the Install-from-file link sit directly
+        below them instead of floating under list whitespace. With many
+        items the list stops at MAX_VISIBLE_RELEASE_ROWS and scrolls.
+        """
+        count = self._release_list.count()
+        if count:
+            rows = min(count, MAX_VISIBLE_RELEASE_ROWS)
+            height = sum(
+                max(1, self._release_list.sizeHintForRow(i)) for i in range(rows)
+            )
+        else:
+            rows = EMPTY_RELEASE_LIST_ROWS
+            height = rows * self._release_row_height()
+        height += 2 * self._release_list.frameWidth() + 2
+        self._release_list.setMinimumHeight(height)
+        self._release_list.setMaximumHeight(height)
+        self._release_list.updateGeometry()
+
+    def content_height_hint(self) -> int:
+        """Height the page needs to show its contents without compression.
+
+        The list sits several layouts deep (card, split, view stack), and a
+        refill leaves stale hint caches in those nested layouts — measuring
+        the page directly would report the previous rows. So invalidate
+        every layout from the list up to the page, then take the larger of
+        the page's size and minimum hints (the list enforces its height via
+        min/max, which sizeHint() alone ignores).
+        """
+        page_layout = self.layout()
+        if page_layout is not None:
+            self._invalidate_layout_tree(page_layout)
+            page_layout.activate()
+        return max(self.sizeHint().height(), self.minimumSizeHint().height())
+
+    @staticmethod
+    def _invalidate_layout_tree(layout) -> None:
+        """Recursively clear cached hint/size data for a layout subtree."""
+        try:
+            layout.invalidate()
+        except Exception:
+            return
+        try:
+            count = layout.count()
+        except Exception:
+            return
+        for i in range(count):
+            try:
+                item = layout.itemAt(i)
+            except Exception:
+                continue
+            if item is None:
+                continue
+            try:
+                child = item.layout()
+            except Exception:
+                continue
+            if child is None:
+                try:
+                    widget = item.widget()
+                except Exception:
+                    continue
+                if widget is not None:
+                    try:
+                        child = widget.layout()
+                    except Exception:
+                        continue
+            if child is not None:
+                SelectPackagePage._invalidate_layout_tree(child)
 
     def _on_releases_loaded(self, releases, error):
         if error:
             self._set_online_banner("sel_offline")
             self._set_update_prompt(self.current_software(), self.current_model(), None)
+            self._fit_release_list_height()
+            self.content_size_changed.emit()
             return
         self._release_list.clear()
         releases = sorted(releases or [], key=catalog.release_sort_key, reverse=True)
@@ -1365,6 +1728,9 @@ class SelectPackagePage(QWidget):
                         self._release_list.setCurrentRow(row)
                         self._trigger_release_install(r)
                         break
+            self._fit_release_list_height()
+            self.updateGeometry()
+            self.content_size_changed.emit()
 
     def _asset_line(self, rel):
         assets = ", ".join(
@@ -1392,6 +1758,8 @@ class SelectPackagePage(QWidget):
             self._is_translating = False
             self._set_notes_content(self._render_release_notes(rel, as_html=True))
             self._set_details_header(rel, self._package_for_selection())
+            if self._auto_translate_notes and (translator().lang or "en").strip() != "en":
+                self._translate_current_release_in_app()
             self._update_translate_link()
 
     def _render_release_notes(self, rel, translated_body=None, translated_name=None, as_html: bool = False) -> str:
@@ -1543,6 +1911,7 @@ class SelectPackagePage(QWidget):
 
     def _on_translate_link_clicked(self, link: str):
         if link == "action:translate_in_app":
+            self._auto_translate_notes = True
             self._translate_current_release_in_app()
         elif link == "action:show_original":
             self._show_original_release_notes()
@@ -1554,6 +1923,7 @@ class SelectPackagePage(QWidget):
         if not url_str:
             return
         if url_str == "action:translate_in_app":
+            self._auto_translate_notes = True
             self._translate_current_release_in_app()
         elif url_str == "action:show_original":
             self._show_original_release_notes()
@@ -1608,6 +1978,7 @@ class SelectPackagePage(QWidget):
     def _show_original_release_notes(self):
         self._is_translated = False
         self._is_translating = False
+        self._auto_translate_notes = False
         if self._current_selected_rel:
             self._set_notes_content(self._render_release_notes(self._current_selected_rel, as_html=True))
         self._update_translate_link()
@@ -1922,6 +2293,9 @@ class SelectPackagePage(QWidget):
         self._prepare_package(folder, self._on_local_prep_done)
 
     def _on_start_flash(self):
+        if self._installer_mode and not self._installer_da:
+            QMessageBox.warning(self, tr("mtk_da_label"), tr("mtk_da_required"))
+            return
         if self._current_package_path:
             eff_model = getattr(self, "_current_package_model", "")
             eff_type = getattr(self, "_selected_type", None)
@@ -2126,7 +2500,7 @@ class SelectPackagePage(QWidget):
     def _package_for_selection(self):
         try:
             pkgs = catalog.packages_for_model_software(
-                self.current_model(), self._software_combo.currentText()
+                self.current_model(), self.current_software()
             )
         except Exception:
             return None
@@ -2140,7 +2514,8 @@ class SelectPackagePage(QWidget):
             self._details_name.setText("")
             self._details_version.setText("")
             return
-        name = package.name if package is not None and getattr(package, "name", "") else self._software_combo.currentText()
+        raw_name = package.name if package is not None and getattr(package, "name", "") else self.current_software()
+        name = display_software_name(raw_name)
         version = catalog.parse_clean_release_tag_label(
             rel,
             prefer_240p=self.release_listing_filters()[2],
@@ -2274,9 +2649,15 @@ class SelectPackagePage(QWidget):
         # A page method queues onto the UI thread. A lambda can run in the
         # worker and crash when it touches widgets.
         job.ready.connect(self._on_icon_bytes)
+        job.finished.connect(lambda: self._clear_icon_job(job))
         job.finished.connect(job.deleteLater)
         self._icon_job = job
         job.start()
+
+    def _clear_icon_job(self, job) -> None:
+        """Drop the job reference once it finishes (before deleteLater)."""
+        if getattr(self, "_icon_job", None) is job:
+            self._icon_job = None
 
     def _on_icon_bytes(self, tag: str, data: bytes) -> None:
         job = self.sender()
@@ -2315,7 +2696,15 @@ class SelectPackagePage(QWidget):
         return self._model_combo.currentText()
 
     def current_software(self):
-        return self._software_combo.currentText()
+        """Canonical English software name behind the selected row.
+
+        The dropdown shows preset translations, so a row's text is not a
+        lookup key; the canonical name lives in the item data instead.
+        """
+        idx = self._software_combo.currentIndex()
+        if idx < 0:
+            return self._software_combo.currentText()
+        return str(self._software_combo.itemData(idx) or self._software_combo.itemText(idx))
 
     def current_package(self):
         model = self.current_model()
@@ -2349,7 +2738,7 @@ class SelectPackagePage(QWidget):
         m_idx = self._model_combo.findText(model)
         if m_idx >= 0 and m_idx != self._model_combo.currentIndex():
             self._model_combo.setCurrentIndex(m_idx)
-        sw_idx = self._software_combo.findText(software_name)
+        sw_idx = self._find_software_index(software_name)
         if sw_idx >= 0 and sw_idx != self._software_combo.currentIndex():
             self._software_combo.setCurrentIndex(sw_idx)
         if tag_name:

@@ -2242,6 +2242,107 @@ def test_terminal_install_handoff():
     _reset_app_settings()
 
 
+def test_terminal_install_launcher_survives_a_rebuild():
+    """The launcher runs the same app even after the bundle was rebuilt away.
+
+    A frozen build runs itself with ``--flash-cli``, and the path recorded in
+    the script is a build output: rebuilding the app replaces or renames the
+    bundle in place, so a launcher written before the rebuild pointed at a
+    binary that no longer existed (bash: "No such file or directory"). The
+    script must find the rebuilt app again — and never fall back on a different
+    product or an older installed copy.
+    """
+    import subprocess
+    from src import paths, terminal_install
+
+    if not paths.IS_MAC or not shutil.which("bash"):
+        return  # the fallback search uses the macOS app-bundle layout
+
+    def bundle(dist, name, *, version="3.0.0", identifier="com.innioasis.updater"):
+        app = dist / f"{name}.app"
+        (app / "Contents" / "MacOS").mkdir(parents=True)
+        (app / "Contents" / "Info.plist").write_text(
+            '<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict>\n'
+            f"<key>CFBundleIdentifier</key><string>{identifier}</string>\n"
+            f"<key>CFBundleShortVersionString</key><string>{version}</string>\n"
+            "</dict></plist>\n",
+            encoding="utf-8",
+        )
+        binary = app / "Contents" / "MacOS" / name
+        binary.write_text("#!/bin/bash\necho \"$0\"\n", encoding="utf-8")
+        binary.chmod(0o755)
+        return binary
+
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        dist = root / "dist"
+        dist.mkdir()
+        recorded = bundle(dist, "Updater CE")
+        rebuilt = bundle(dist, "Updater CE 3.0")
+        bundle(dist, "MediaTek Installer", identifier="com.innioasis.mediatekinstaller")
+        bundle(dist, "Updater CE 2.9", version="2.9.0")
+
+        # Exactly what the app hands the launcher writer.
+        command = [str(recorded), "--flash-cli", str(root / "rom"), "scatter.txt"]
+        candidates = terminal_install.launcher_candidates(command[0])
+        identity = terminal_install.launcher_identity(command[0])
+        assert candidates[0] == str(recorded), candidates
+        assert identity == ("com.innioasis.updater", "3.0.0"), identity
+        assert str(rebuilt) in candidates, candidates
+
+        script_root = root / "terminal"
+        script_root.mkdir()
+        orig_script_dir = terminal_install.script_dir
+        terminal_install.script_dir = lambda: script_root
+        try:
+            script = terminal_install.build_script(
+                command,
+                cwd=str(root),
+                fallbacks=candidates,
+                identity=identity,
+                is_windows=False,
+            )
+        finally:
+            terminal_install.script_dir = orig_script_dir
+
+        # The rebuild wiped the recorded bundle: the script must still run.
+        shutil.rmtree(recorded.parents[2])
+        run = subprocess.run(
+            ["bash", str(script)],
+            capture_output=True,
+            text=True,
+            stdin=subprocess.DEVNULL,
+        )
+        assert run.returncode == 0, (run.returncode, run.stdout, run.stderr)
+        assert run.stdout.splitlines()[0] == str(rebuilt), run.stdout
+        assert terminal_install.POSIX_DONE_MSG in run.stdout, run.stdout
+        assert not run.stderr, run.stderr
+
+        # A failed install is reported as one: the launcher hands the tool's
+        # own status back to the shell instead of swallowing it.
+        rebuilt.write_text("#!/bin/bash\nexit 3\n", encoding="utf-8")
+        failed = subprocess.run(
+            ["bash", str(script)],
+            capture_output=True,
+            text=True,
+            stdin=subprocess.DEVNULL,
+        )
+        assert failed.returncode == 3, (failed.returncode, failed.stdout, failed.stderr)
+        assert "exited with status 3" in failed.stderr, failed.stderr
+
+        # Nothing of this build left: a clear message, not bash's own error.
+        shutil.rmtree(rebuilt.parents[2])
+        gone = subprocess.run(
+            ["bash", str(script)],
+            capture_output=True,
+            text=True,
+            stdin=subprocess.DEVNULL,
+        )
+        assert gone.returncode == 1, (gone.returncode, gone.stdout, gone.stderr)
+        assert "Could not find the app" in gone.stderr, gone.stderr
+        assert str(recorded) in gone.stderr, gone.stderr
+
+
 def test_flash_method_switch():
     """Switching the install method in Settings while waiting restarts the run
     with the new backend, and the choice is persisted. Legacy "auto" resolves
@@ -2703,6 +2804,110 @@ def test_mtk_api_init():
     mtk = mtk_api.init(None, None)
     assert mtk is not None
     assert type(mtk).__name__ == "Mtk"
+
+
+def test_installer_da_auth_wiring():
+    """A Download Agent / auth file chosen in the MediaTek Installer must reach
+    both backends — SP Flash Tool's ``-d`` (and its console configuration for
+    the auth file) and MTKClient's ``--loader`` / ``--auth`` — while Updater CE
+    keeps the bundled ``MTK_AllInOne_DA.bin`` and the saved auth file."""
+    from PySide6.QtWidgets import QApplication
+
+    from src import device_tracking, mtk_api, terminal_install
+    from src.flash_service import METHOD_MTK, METHOD_SP, FlashWorker
+
+    _reset_app_settings()
+
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        da = root / "MTK_AllInOne_DA.bin"
+        da.write_bytes(b"DA")
+        auth = root / "auth_sv5.auth"
+        auth.write_bytes(b"AUTH")
+        preloader = root / "preloader.bin"
+        preloader.write_bytes(b"PL")
+
+        # --- MTKClient receives both (its own CLI's --loader/--auth) ---------
+        mtk = mtk_api.init(loader=str(da), preloader=str(preloader), auth=str(auth))
+        assert str(mtk.config.auth) == str(auth), mtk.config.auth
+        assert str(mtk.config.loader) == str(da), mtk.config.loader
+        # A missing auth file is reported and ignored, never fatal.
+        gone = mtk_api.init(auth=str(root / "gone.auth"))
+        assert not getattr(gone.config, "auth", None)
+
+        extract = root / "rom"
+        extract.mkdir()
+        scatter = extract / "MT6572_Android_scatter.txt"
+        scatter.write_text("platform: MT6572\n", encoding="utf-8")
+
+        # --- terminal installs carry them too -------------------------------
+        plain = terminal_install.mtkclient_command(extract, scatter, "MT6572", "pkg.zip")
+        assert plain[-5:] == [
+            "--flash-cli", str(extract), str(scatter), "MT6572", "pkg.zip"
+        ], plain
+        with_da = terminal_install.mtkclient_command(
+            extract, scatter, "MT6572", "pkg.zip", "Y1", str(da), str(auth)
+        )
+        assert with_da[-3:] == ["Y1", str(da), str(auth)], with_da
+        built = terminal_install.build_install_command(
+            METHOD_MTK, extract, scatter, package_path="pkg.zip",
+            platform_name="MT6572", auth_file=str(auth), da_file=str(da), model="Y1",
+        )
+        assert built[-3:] == ["Y1", str(da), str(auth)], built
+
+        # --- SP Flash Tool takes the chosen DA ------------------------------
+        worker = FlashWorker("pkg.zip", method=METHOD_SP, da_file=str(da), auth_file=str(auth))
+        assert worker._resolve_da_file(root) == da
+        assert worker._resolve_auth_file() == str(auth)
+        # A DA that vanished falls back to the bundled payload, not a guess.
+        stale = FlashWorker("pkg.zip", method=METHOD_SP, da_file=str(root / "gone.bin"))
+        assert stale._resolve_da_file(root) == root / "MTK_AllInOne_DA.bin"
+        # Updater CE (no explicit inputs) uses the bundled DA + saved auth file.
+        ce = FlashWorker("pkg.zip", method=METHOD_SP)
+        assert ce._resolve_da_file(root) == root / "MTK_AllInOne_DA.bin"
+        device_tracking.set_sp_auth_file(str(auth))
+        assert ce._resolve_auth_file() == str(auth)
+        device_tracking.set_sp_auth_file("")
+
+        # --- Select Software: the three-file setup --------------------------
+        app = QApplication.instance() or QApplication(sys.argv)
+        import src.ui.select_page as select_page
+        from src.ui.select_page import SelectPackagePage
+
+        orig_warning = select_page.QMessageBox.warning
+        warned = []
+        select_page.QMessageBox.warning = lambda *a, **kw: warned.append(a)
+        page = SelectPackagePage()
+        try:
+            # isHidden() is the "explicitly hidden" flag; isVisible() is False
+            # for every child while this page is not shown.
+            assert page._da_row_widget.isHidden()
+            assert page._scatter_row_widget.isHidden()
+            page.apply_installer_mode(True)
+            app.processEvents()
+            assert not page._da_row_widget.isHidden(), "installer mode offers a Download Agent"
+            assert not page._scatter_row_widget.isHidden(), "...and a scatter file"
+            assert page._path_edit.isHidden(), "the package row gives way"
+            assert page._auth_edit is not None, "auth file stays optional"
+
+            # DA is required: starting without one warns instead of flashing.
+            page._installer_da = ""
+            page._sync_da_ui()
+            page._current_package_path = ""
+            page._on_start_flash()
+            assert warned, "a missing Download Agent must be reported"
+
+            page._installer_da = str(da)
+            assert page.installer_da_file() == str(da)
+            page.apply_installer_mode(False)
+            app.processEvents()
+            assert page._da_row_widget.isHidden()
+            assert not page._path_edit.isHidden()
+            assert page.installer_da_file() == "", "Updater CE leaves the DA to the bundle"
+        finally:
+            select_page.QMessageBox.warning = orig_warning
+            page.deleteLater()
+    _reset_app_settings()
 
 
 def test_cancel_kills_sp_process():
@@ -6319,6 +6524,7 @@ def main():
     check("flash flow launch", test_flash_flow_launch)
     check("install nav entry during run", test_install_nav_entry_during_run)
     check("terminal install handoff", test_terminal_install_handoff)
+    check("terminal launcher finds a rebuilt app", test_terminal_install_launcher_survives_a_rebuild)
     check("sp flash auth file", test_sp_flash_auth_file)
     check("flash method switch", test_flash_method_switch)
     check("language switch keeps screen", test_language_switch_keeps_screen)
@@ -6379,6 +6585,7 @@ def main():
     check("windows m key shortcut and method defaults", test_windows_m_key_shortcut_and_method_defaults)
     check("scatter discovery and folder packages", test_scatter_discovery_and_folder_packages)
     check("generic MTK mode and offline branding", test_generic_mtk_mode_and_offline_branding)
+    check("installer DA/auth wiring", test_installer_da_auth_wiring)
     check("mediatek installer mode", test_mediatek_installer_mode)
     check("window minimum size and titlebar stability", test_window_minimum_size_and_titlebar_stability)
     check("os standard iconography", test_os_standard_iconography)

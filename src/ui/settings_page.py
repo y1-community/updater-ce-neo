@@ -108,6 +108,26 @@ class SettingsPage(QWidget):
         else:
             switch.setText(text)
 
+    def _add_title_row_switch(self, card, caption_key: str, *, tooltip: str = "") -> QCheckBox:
+        """A switch on the card's own title line.
+
+        Used where the title already says it all ("Offline Mode", "Device
+        Firmware Release Reminders"), so the words are not printed twice. The
+        caption label still exists, hidden, because it is the single place the
+        caption wording lives: ``switch_caption()`` and the translations keep
+        reading it.
+        """
+        switch = QCheckBox()
+        switch.setCursor(Qt.ArrowCursor)
+        caption = QLabel(tr(caption_key))
+        caption.setWordWrap(True)
+        caption.setVisible(False)
+        if tooltip:
+            switch.setToolTip(tooltip)
+        self._switch_rows[switch] = (caption, caption)
+        card.put_widget_on_title_row(switch)
+        return switch
+
     def _set_switch_row_visible(self, switch: QCheckBox, visible: bool) -> None:
         row = self._switch_rows.get(switch)
         if row is not None:
@@ -132,7 +152,6 @@ class SettingsPage(QWidget):
         # bars silently become classic ones (see src/ui/scrollbars.py).
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        configure_scroll_area(scroll, transparent=True)
 
         container = QWidget()
         layout = QVBoxLayout(container)
@@ -243,15 +262,20 @@ class SettingsPage(QWidget):
         rem_layout = QVBoxLayout()
         rem_layout.setSpacing(8)
 
-        self._cb_reminders = self._add_switch(rem_layout, tr("settings_reminders_enable"))
+        # The card title already names the setting, so the switch rides on that
+        # line instead of a second, identical caption under it.
+        self._cb_reminders = self._add_title_row_switch(
+            self._reminders_card, "settings_reminders_enable",
+        )
         self._cb_reminders.toggled.connect(self._on_reminders_toggled)
 
         self._reminders_card.set_layout(rem_layout)
         layout.addWidget(self._reminders_card)
 
-        # --- Card 3: Rockbox release filters ---
+        # --- Rockbox release filters ---
         # These choose between the online Y1/Y2 Rockbox release builds, so they
-        # are offered only when there is a catalogue to filter.
+        # are offered only when there is a catalogue to filter. The card is
+        # built here but added to the layout below Firmware Storage & Cache.
         self._rockbox_card = Card("settings_rockbox_group")
         rock_layout = QVBoxLayout()
         rock_layout.setSpacing(8)
@@ -273,8 +297,6 @@ class SettingsPage(QWidget):
         self._cb_240p.toggled.connect(self._on_240p_toggled)
 
         self._rockbox_card.set_layout(rock_layout)
-        layout.addWidget(self._rockbox_card)
-        self._update_rockbox_visibility()
 
         # --- Card 3: Community Acknowledgements & Donations ---
         self._donations_card = Card("settings_donations_group")
@@ -348,6 +370,10 @@ class SettingsPage(QWidget):
         self._cache_card.set_layout(cache_layout)
         layout.addWidget(self._cache_card)
 
+        # Rockbox filters sit directly below Firmware Storage & Cache.
+        layout.addWidget(self._rockbox_card)
+        self._update_rockbox_visibility()
+
         # --- Card 4: Platform preparation ---
         # Linux gets the SP Flash Tool system checker (udev rules, kernel
         # modules); Windows instead needs the MediaTek USB driver installed
@@ -370,8 +396,10 @@ class SettingsPage(QWidget):
         off_layout = QVBoxLayout()
         off_layout.setSpacing(8)
 
-        self._cb_offline_mode = self._add_switch(off_layout, tr("settings_offline_mode"))
-        self._cb_offline_mode.setToolTip(tr("settings_offline_mode_desc"))
+        self._cb_offline_mode = self._add_title_row_switch(
+            self._offline_mode_card, "settings_offline_mode",
+            tooltip=tr("settings_offline_mode_desc"),
+        )
         self._cb_offline_mode.toggled.connect(self._on_offline_mode_toggled)
 
         self._offline_mode_desc = QLabel(tr("settings_offline_mode_desc"))
@@ -383,7 +411,7 @@ class SettingsPage(QWidget):
         self._offline_mode_card.setVisible(not is_mediatek_installer())
         layout.addWidget(self._offline_mode_card)
 
-        # --- Card 6: Legacy Installation Cleanup (Pre-3.0) ---
+        # --- Card 6: Remove old app (shown only for a pre-3.0 install) ---
         self._legacy_cleanup_card = Card("legacy_cleanup_card_title")
         leg_layout = QVBoxLayout()
         leg_layout.setSpacing(8)
@@ -392,12 +420,12 @@ class SettingsPage(QWidget):
         self._legacy_cleanup_desc.setProperty("cssClass", "dimmed")
         leg_layout.addWidget(self._legacy_cleanup_desc)
 
-        btn_scan = QPushButton(tr("legacy_cleanup_scan_btn"))
-        btn_scan.clicked.connect(self._on_scan_legacy_installations)
-        leg_layout.addWidget(btn_scan, alignment=Qt.AlignLeft)
+        self._legacy_uninstall_btn = QPushButton(tr("legacy_cleanup_scan_btn"))
+        self._legacy_uninstall_btn.clicked.connect(self._on_scan_legacy_installations)
+        leg_layout.addWidget(self._legacy_uninstall_btn, alignment=Qt.AlignLeft)
 
         self._legacy_cleanup_card.set_layout(leg_layout)
-        self._legacy_cleanup_card.setVisible(not is_mediatek_installer() and not paths.IS_WINDOWS)
+        self._update_legacy_cleanup_visibility()
         layout.addWidget(self._legacy_cleanup_card)
         layout.addWidget(self._terminal_card)
         layout.addWidget(self._method_card)
@@ -410,6 +438,10 @@ class SettingsPage(QWidget):
 
         layout.addStretch()
         scroll.setWidget(container)
+        # Transparent *after* the content widget is in place: QScrollArea turns
+        # that widget's auto-fill back on inside setWidget(), and the solid
+        # Base it then painted was the dark band between the cards.
+        configure_scroll_area(scroll, transparent=True)
         root_layout.addWidget(scroll, 1)
 
     # ------------------------------------------------------------------
@@ -643,6 +675,26 @@ class SettingsPage(QWidget):
         """
         self._rockbox_card.setVisible(not is_offline_mode())
 
+    def _update_legacy_cleanup_visibility(self):
+        """Show the removal card only while a pre-3.0 install is on disk.
+
+        The card is an offer to uninstall the old pre-3.0 app (its .app, its
+        Application Support folder, or the Linux leftovers). It is not a
+        general cleaner: stray Android platform tools alone do not raise it,
+        and the card disappears again once the old app is gone.
+        """
+        if is_mediatek_installer() or paths.IS_WINDOWS:
+            self._legacy_cleanup_card.setVisible(False)
+            return
+        try:
+            from ..legacy_cleanup import detect_legacy_installations
+
+            info = detect_legacy_installations()
+            visible = bool(info.get("has_legacy"))
+        except Exception:
+            visible = False
+        self._legacy_cleanup_card.setVisible(visible)
+
     def _update_sp_auth_visibility(self):
         """Offer the auth file only where it can actually be used.
 
@@ -728,6 +780,7 @@ class SettingsPage(QWidget):
         self._method_card.setVisible(not paths.IS_MAC)
         self._prep_card.setVisible(not paths.IS_MAC)
         self._update_rockbox_visibility()
+        self._update_legacy_cleanup_visibility()
 
         # Install method selector
         self.set_method(self._persisted_method())
@@ -976,7 +1029,15 @@ class SettingsPage(QWidget):
             self._legacy_cleanup_card.retranslate()
         if hasattr(self, "_legacy_cleanup_desc"):
             self._legacy_cleanup_desc.setText(tr("legacy_cleanup_card_desc"))
+        if hasattr(self, "_legacy_uninstall_btn"):
+            self._legacy_uninstall_btn.setText(tr("legacy_cleanup_scan_btn"))
         self.refresh_settings()
+
+    def refresh_theme(self):
+        """Re-fetch theme-colored icons after a system appearance change."""
+        if hasattr(self, "_clear_cache_btn"):
+            self._clear_cache_btn.setIcon(get_symbol_icon("cancel", 12))
+        self.update()
 
     def _on_scan_legacy_installations(self):
         from ..legacy_cleanup import detect_legacy_installations
@@ -985,6 +1046,7 @@ class SettingsPage(QWidget):
             from .dialogs import LegacyMigrationDialog
             dlg = LegacyMigrationDialog(self, scan_info=info)
             dlg.exec()
+            self._update_legacy_cleanup_visibility()
         else:
             QMessageBox.information(
                 self,

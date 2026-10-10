@@ -561,6 +561,15 @@ class UsbClass(DeviceClass):
                     extend(buffer[:rlen])
                     if rlen < sz and maxtimeout == -1:
                         break
+                    if rlen == 0 and maxtimeout != -1:
+                        # A zero-byte read with no USBError is a stalled endpoint.
+                        # Upstream re-reads immediately, so the loop spins forever
+                        # and the install looks hung with its last log line
+                        # frozen (seen right after "Checksum: 0000" in the
+                        # legacy DRAM-config handshake). Count it like a timeout.
+                        timeout += 1
+                        if timeout >= maxtimeout:
+                            return b""
                 else:
                     # macOS libusb: 用 max packet size 读取避免 Overflow（小 buffer 会触发 USB Overflow 错误）
                     read_sz = max(sz, w_max_packet_size)
@@ -575,6 +584,12 @@ class UsbClass(DeviceClass):
                         extend(dt)
                     if rlen < sz and maxtimeout == -1:
                         break
+                    if rlen == 0 and maxtimeout != -1:
+                        # See the fast-path note: a silent zero-byte read must
+                        # burn the same budget as a USB timeout, not loop.
+                        timeout += 1
+                        if timeout >= maxtimeout:
+                            return b""
             except usb.core.USBError as e:
                 error = str(e.strerror or str(e))
                 is_timeout = "timed out" in error.lower() or (hasattr(e, "backend_error_code") and e.backend_error_code == -7)

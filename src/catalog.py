@@ -775,11 +775,11 @@ def parse_clean_release_tag_label(rel, prefer_240p=False, version_only=False) ->
     if re.search(r"\b(?:wi[-_]?fi|wifi|wi)\b", lower_raw):
         verbs.append("Wi-Fi")
 
-    # 240p / 360p
+    # 240p / 360p. The suffix follows the row's own asset/resolution only:
+    # a global prefer_240p flag must never mark 360p rows as 240p. Rows whose
+    # asset is a 240p variant only exist when the Settings toggle allows them.
     is_240p = (
-        prefer_240p
-        or rel.get("selected_resolution") == "240p"
-        or rel.get("prefer_240p")
+        rel.get("selected_resolution") == "240p"
         or "240p" in str(rel.get("asset_name", "")).lower()
         or "240p" in lower_raw
     )
@@ -816,11 +816,10 @@ def format_release_display_label(rel, prefer_240p=False):
     display_version = get_display_version(version_info, published_date, is_prerelease)
 
     designations = list(version_info.get("designations") or [])
-    # Append (240p) if 240p is selected or preferred
+    # Append (240p) only when this row's own asset is the 240p variant.
+    # Such rows only exist when the Settings toggle allows them.
     is_240p = (
-        prefer_240p
-        or rel.get("selected_resolution") == "240p"
-        or rel.get("prefer_240p")
+        rel.get("selected_resolution") == "240p"
         or "240p" in str(rel.get("asset_name", "")).lower()
     )
     if is_240p:
@@ -1263,6 +1262,39 @@ class ReleasesClient:
                 # 240p builds (rom*_240p.zip) drive the 240p screen mod and are
                 # incompatible with Y1 units older than OS 3.0.7, so they stay
                 # out of the list until the Settings toggle asks for them.
+                continue
+            if prefer_240p:
+                # The toggle is on: list the 240p variant as its own row with
+                # a "(240p)" suffix, next to the standard (360p) row, so the
+                # two ROMs for the same tag are distinguishable. Each row
+                # carries its own download asset, honouring the Type A/B pick.
+                std_variants = [v for v in rom_variants if v.get("resolution") != "240p"]
+                low_variants = [v for v in rom_variants if v.get("resolution") == "240p"]
+                std_pick = (
+                    select_preferred_rom_asset(
+                        std_variants, selected_type=selected_type, model=model,
+                    )
+                    if std_variants
+                    else None
+                )
+                low_pick = (
+                    select_preferred_rom_asset(
+                        low_variants, selected_type=selected_type, model=model,
+                        prefer_240p=True,
+                    )
+                    if low_variants
+                    else None
+                )
+                for pick in (std_pick, low_pick):
+                    if not pick:
+                        continue
+                    row = dict(rel)  # shallow copy, don't mutate cache
+                    row["download_url"] = pick["asset"]["browser_download_url"]
+                    row["asset_name"] = pick["asset"]["name"]
+                    row["asset_size"] = pick["asset"].get("size", 0)
+                    row["selected_resolution"] = pick.get("resolution")
+                    row["prefer_240p"] = True
+                    out.append(row)
                 continue
             preferred = select_preferred_rom_asset(
                 rom_variants,

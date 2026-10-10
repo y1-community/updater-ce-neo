@@ -37,6 +37,17 @@ THEME_PACK_URL = "https://github.com/rockbox-y1/themes/archive/refs/heads/themep
 THEME_PACK_ZIP_NAME = "rockbox_360p_themepack.zip"
 
 
+def open_wizards():
+    """Currently open setup wizards (lets the passive sync report inline)."""
+    import weakref
+
+    registry = getattr(open_wizards, "_registry", None)
+    if registry is None:
+        registry = weakref.WeakSet()
+        open_wizards._registry = registry
+    return registry
+
+
 def get_mount_root(path: Path) -> Path:
     """Return the filesystem mount root or volume root containing path."""
     curr = path.resolve()
@@ -375,3 +386,636 @@ class ThemePackGuidanceDialog(QDialog):
         if self._download_worker and self._download_worker.isRunning():
             self._download_worker.cancel()
         self.accept()
+
+
+# ---------------------------------------------------------------------------
+# Directory merge + combined theme-dir builder (360p wizard)
+# ---------------------------------------------------------------------------
+
+def bundled_rockbox_dir() -> Path:
+    """The app's own ``.rockbox`` content: themes plus the fonts pack.
+
+    The remote themepack zip carries themes only, so the bundled copy (which
+    includes the Rockbox fonts pack) is always the merge base: remote files
+    overlay it, never the other way round.
+    """
+    from . import paths as _paths
+
+    base = getattr(_paths, "RESOURCES_DIR", None) or (_paths.REPO_ROOT / "assets")
+    return Path(base) / "360p" / "themes-themepack" / ".rockbox"
+
+
+def merge_dirs(src_dir: str | Path, dst_dir: str | Path,
+               progress_cb: Optional[Callable[[int, int], None]] = None) -> int:
+    """Merge ``src_dir`` into ``dst_dir``, overwriting same-name files.
+
+    Only files are copied (directories are created as needed). Returns the
+    number of files written.
+    """
+    src = Path(src_dir)
+    dst = Path(dst_dir)
+    dst.mkdir(parents=True, exist_ok=True)
+    files = [p for p in src.rglob("*") if p.is_file()]
+    total = len(files)
+    count = 0
+    for i, src_file in enumerate(files):
+        if progress_cb is not None:
+            try:
+                progress_cb(i, total)
+            except Exception:
+                pass
+        rel = src_file.relative_to(src)
+        dest = dst / rel
+        try:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src_file, dest)
+            count += 1
+        except (OSError, PermissionError) as e:
+            logger.warning("merge_dirs: skipping %s: %s", src_file, e)
+    if progress_cb is not None:
+        try:
+            progress_cb(total, total)
+        except Exception:
+            pass
+    return count
+
+
+def build_combined_rockbox_dir(zip_path: str | Path, dest_dir: str | Path,
+                               progress_cb: Optional[Callable[[int, int], None]] = None) -> int:
+    """Build the full 360p payload: bundled base + remote overlay.
+
+    Copies :func:`bundled_rockbox_dir` (themes + fonts pack) into
+    ``dest_dir``, then extracts the latest remote themepack ``zip_path`` over
+    it, overwriting same-name files. Bundled-only files (notably fonts) are
+    preserved. Returns the number of remote files merged.
+    """
+    dest = Path(dest_dir)
+    dest.mkdir(parents=True, exist_ok=True)
+    base = bundled_rockbox_dir()
+    if base.is_dir():
+        merge_dirs(base, dest)
+    else:
+        logger.warning("build_combined_rockbox_dir: bundled dir missing: %s", base)
+    return extract_theme_pack_zip(Path(zip_path), dest, progress_cb=progress_cb)
+
+
+def sync_bundled_themepack_from_remote(zip_path: str | Path,
+                                       assets_rockbox_dir: Optional[str | Path] = None) -> int:
+    """Refresh the in-repo ``assets/360p`` copy from a downloaded remote zip.
+
+    Merges the zip over ``assets/360p/themes-themepack/.rockbox`` (or the
+    given dir), overwriting same-name files while keeping bundled-only files
+    such as the fonts pack. Used to refresh what ships with the app; the
+    per-install merge in :func:`build_combined_rockbox_dir` applies the same
+    ordering at install time.
+    """
+    target = Path(assets_rockbox_dir) if assets_rockbox_dir else bundled_rockbox_dir()
+    return extract_theme_pack_zip(Path(zip_path), target)
+
+
+class AdbWatchWorker(QThread):
+    """Watch for an ADB device for up to ``timeout`` seconds."""
+
+    found = Signal(str)  # serial
+    timed_out = Signal()
+    watch_progress = Signal(float)  # 0.0-1.0
+
+    def __init__(self, adb: str, timeout: float = 30, parent=None):
+        super().__init__(parent)
+        self._adb = adb
+        self._timeout = timeout
+
+    def run(self):
+        try:
+            from . import adb as _adb
+
+            serial = _adb.wait_for_adb_device(
+                self._adb,
+                timeout=self._timeout,
+                cancel_cb=self.isInterruptionRequested,
+                progress_cb=self.watch_progress.emit,
+            )
+        except Exception as e:
+            logger.debug("ADB watch failed: %s", e)
+            serial = None
+        if self.isInterruptionRequested():
+            return
+        if serial:
+            self.found.emit(serial)
+        else:
+            self.timed_out.emit()
+
+
+class AdbPushWorker(QThread):
+    """Push the combined theme dir to the player over ADB, then reboot it."""
+
+    progress = Signal(int, int)
+    finished = Signal(bool, str)  # success, message
+
+    def __init__(self, adb: str, serial: str, local_dir: Path, parent=None):
+        super().__init__(parent)
+        self._adb = adb
+        self._serial = serial
+        self._local_dir = Path(local_dir)
+
+    def run(self):
+        try:
+            from . import adb as _adb
+
+            device_dir = _adb.adb_find_rockbox_dir(self._adb, self._serial)
+            if not device_dir:
+                # The player may expose storage without a probed path; fall
+                # back to the primary candidate and let push create it.
+                device_dir = _adb.DEVICE_ROCKBOX_CANDIDATES[0]
+            ok, msg = _adb.adb_push_merge(
+                self._adb, self._serial, self._local_dir, device_dir,
+                progress_cb=self._on_progress,
+            )
+            if not ok:
+                self.finished.emit(False, msg or "ADB push failed")
+                return
+            _adb.adb_reboot(self._adb, self._serial)
+            self.finished.emit(True, msg)
+        except Exception as e:
+            logger.exception("ADB theme push failed: %s", e)
+            self.finished.emit(False, str(e))
+
+    def _on_progress(self, curr: int, total: int):
+        self.progress.emit(curr, total)
+
+
+class DirMergeWorker(QThread):
+    """Merge the combined theme dir into a USB-storage ``.rockbox`` folder."""
+
+    progress = Signal(int, int)
+    finished = Signal(bool, str, int)  # success, error, count
+
+    def __init__(self, src_dir: Path, dst_dir: Path, parent=None):
+        super().__init__(parent)
+        self._src = Path(src_dir)
+        self._dst = Path(dst_dir)
+
+    def run(self):
+        try:
+            count = merge_dirs(self._src, self._dst, progress_cb=self._on_progress)
+            self.finished.emit(True, "", count)
+        except Exception as e:
+            logger.exception("Theme merge failed: %s", e)
+            self.finished.emit(False, str(e), 0)
+
+    def _on_progress(self, curr: int, total: int):
+        self.progress.emit(curr, total)
+
+
+class Rockbox360pSetupWizard(QDialog):
+    """Post-flash wizard for 360p Rockbox installs: themes + fonts on-device.
+
+    Page 0 asks the user to disconnect, boot into Rockbox, and reconnect.
+    Page 1 watches for an ADB device (30 s) and pushes automatically,
+    rebooting the player when done. When no ADB binary or device is
+    available, page 2 falls back to the USB Storage Mode folder picker (any
+    folder on the device; the ``.rockbox`` location is resolved from there).
+    The closing page mirrors the install-done checkmark style.
+    """
+
+    installed_success = Signal()
+    finished_via_adb = Signal(bool)
+
+    def __init__(self, parent=None, model="Y1"):
+        super().__init__(parent)
+        from .ui.glass import apply_dialog_theme
+        apply_dialog_theme(self)
+        self.model = model
+        self._adb_binary: Optional[str] = None
+        self._adb_serial: Optional[str] = None
+        self._via_adb = False
+        self._combined_dir: Optional[Path] = None
+        self._work_dir: Optional[Path] = None
+        self._zip_path = downloads_dir() / THEME_PACK_ZIP_NAME
+        self._download_worker: Optional[DownloadWorker] = None
+        self._watch_worker: Optional[AdbWatchWorker] = None
+        self._push_worker: Optional[AdbPushWorker] = None
+        self._merge_worker: Optional[DirMergeWorker] = None
+
+        self.setWindowTitle(tr("rockbox_wizard_title"))
+        self.setModal(True)
+        self.setMinimumWidth(540)
+        self._build_ui()
+        try:
+            open_wizards().add(self)
+        except Exception:
+            pass
+
+    # -- pages ----------------------------------------------------------
+    def _build_ui(self):
+        from PySide6.QtWidgets import QStackedWidget
+
+        t = T()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 18)
+        layout.setSpacing(14)
+
+        title_lbl = QLabel(f"<h3 style='margin:0; color:{t.fg};'>{tr('rockbox_wizard_title')}</h3>")
+        title_lbl.setTextFormat(Qt.RichText)
+        layout.addWidget(title_lbl)
+
+        self._stack = QStackedWidget()
+        layout.addWidget(self._stack)
+
+        self._reboot_page = self._card(tr("rockbox_wizard_reboot_title"), tr("rockbox_wizard_reboot_desc"))
+        self._stack.addWidget(self._reboot_page)
+
+        self._adb_page = self._build_adb_page()
+        self._stack.addWidget(self._adb_page)
+
+        self._usb_page = self._build_usb_page()
+        self._stack.addWidget(self._usb_page)
+
+        self._done_page = self._build_done_page()
+        self._stack.addWidget(self._done_page)
+
+        # Bottom buttons: Back / primary action, like the install prompts.
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        self._back_btn = QPushButton(tr("rockbox_wizard_back"))
+        self._back_btn.clicked.connect(self._on_back)
+        btn_row.addWidget(self._back_btn)
+        self._next_btn = QPushButton(tr("rockbox_wizard_next"))
+        self._next_btn.setDefault(True)
+        self._next_btn.clicked.connect(self._on_next)
+        btn_row.addWidget(self._next_btn)
+        layout.addLayout(btn_row)
+        self._sync_buttons()
+
+    def _card(self, title: str, desc: str) -> QWidget:
+        t = T()
+        card = QWidget()
+        card.setStyleSheet(
+            f"QWidget {{ background-color: {t.bg_card}; border: 1px solid {t.border};"
+            f" border-radius: 8px; }}"
+        )
+        box = QVBoxLayout(card)
+        box.setContentsMargins(14, 12, 14, 12)
+        box.setSpacing(6)
+        title_lbl = QLabel(f"<b>{title}</b>")
+        title_lbl.setStyleSheet("font-size: 13px; border: none; background: transparent;")
+        box.addWidget(title_lbl)
+        desc_lbl = QLabel(desc)
+        desc_lbl.setWordWrap(True)
+        desc_lbl.setStyleSheet("font-size: 12px; border: none; background: transparent; line-height: 1.4;")
+        box.addWidget(desc_lbl)
+        return card
+
+    def _build_adb_page(self) -> QWidget:
+        t = T()
+        page = QWidget()
+        box = QVBoxLayout(page)
+        box.setContentsMargins(0, 0, 0, 0)
+        box.setSpacing(8)
+        box.addWidget(self._card(tr("rockbox_wizard_adb_title"), tr("rockbox_wizard_adb_desc")))
+        self._adb_bar = QProgressBar()
+        self._adb_bar.setRange(0, 100)
+        self._adb_bar.setValue(0)
+        self._adb_bar.setFixedHeight(12)
+        box.addWidget(self._adb_bar)
+        self._adb_status = QLabel(tr("rockbox_wizard_adb_searching"))
+        self._adb_status.setWordWrap(True)
+        self._adb_status.setStyleSheet(f"font-size: 12px; color: {t.fg};")
+        box.addWidget(self._adb_status)
+        return page
+
+    def _build_usb_page(self) -> QWidget:
+        page = QWidget()
+        box = QVBoxLayout(page)
+        box.setContentsMargins(0, 0, 0, 0)
+        box.setSpacing(8)
+        box.addWidget(self._card(tr("rockbox_wizard_usb_title"), tr("rockbox_wizard_usb_desc")))
+        row = QHBoxLayout()
+        row.setSpacing(10)
+        self._usb_select_btn = QPushButton(tr("themepack_btn_select_folder"))
+        self._usb_select_btn.setStyleSheet("font-weight: 600; padding: 6px 14px;")
+        self._usb_select_btn.clicked.connect(self._on_usb_pick)
+        row.addWidget(self._usb_select_btn)
+        self._usb_folder_label = QLabel()
+        self._usb_folder_label.setWordWrap(True)
+        row.addWidget(self._usb_folder_label, 1)
+        box.addLayout(row)
+        self._usb_bar = QProgressBar()
+        self._usb_bar.setRange(0, 100)
+        self._usb_bar.setValue(0)
+        self._usb_bar.setFixedHeight(12)
+        self._usb_bar.setVisible(False)
+        box.addWidget(self._usb_bar)
+        self._usb_status = QLabel()
+        self._usb_status.setWordWrap(True)
+        self._usb_status.setVisible(False)
+        box.addWidget(self._usb_status)
+        return page
+
+    def _build_done_page(self) -> QWidget:
+        t = T()
+        page = QWidget()
+        box = QVBoxLayout(page)
+        box.setContentsMargins(0, 0, 0, 0)
+        box.setSpacing(8)
+        done_lbl = QLabel(
+            f"<span style='color:{t.ok_fg}; font-weight:700; font-size:14px;'>\u2713 "
+            f"{tr('rockbox_wizard_done_title')}</span>"
+        )
+        done_lbl.setTextFormat(Qt.RichText)
+        box.addWidget(done_lbl)
+        info = QLabel(tr("rockbox_wizard_done_desc"))
+        info.setWordWrap(True)
+        box.addWidget(info)
+        return page
+
+    # -- navigation -----------------------------------------------------
+    def _sync_buttons(self):
+        idx = self._stack.currentIndex()
+        self._back_btn.setVisible(idx in (1, 2))
+        if idx == 0:
+            self._next_btn.setText(tr("rockbox_wizard_next"))
+            self._next_btn.setVisible(True)
+        elif idx == 1:
+            self._next_btn.setText(tr("rockbox_wizard_skip_adb"))
+            self._next_btn.setVisible(True)
+        elif idx == 2:
+            self._next_btn.setVisible(False)
+        else:
+            self._next_btn.setText(tr("rockbox_wizard_done"))
+            self._next_btn.setVisible(True)
+
+    def _on_back(self):
+        idx = self._stack.currentIndex()
+        if idx == 1:
+            self._stop_watch()
+            self._stack.setCurrentIndex(0)
+        elif idx == 2:
+            self._stack.setCurrentIndex(1)
+            self._start_watch()
+        self._sync_buttons()
+
+    def _on_next(self):
+        idx = self._stack.currentIndex()
+        if idx == 0:
+            self._stack.setCurrentIndex(1)
+            self._sync_buttons()
+            self._start_watch()
+        elif idx == 1:
+            self._stop_watch()
+            self._stack.setCurrentIndex(2)
+            self._sync_buttons()
+        else:
+            self._cleanup_work_dir()
+            self.accept()
+
+    # -- ADB watch ------------------------------------------------------
+    def _start_watch(self):
+        from . import adb as _adb
+
+        self._adb_binary = _adb.find_adb_binary()
+        if not self._adb_binary:
+            self._adb_status.setText(tr("rockbox_wizard_no_adb"))
+            self._stack.setCurrentIndex(2)
+            self._sync_buttons()
+            return
+        self._adb_bar.setValue(0)
+        self._adb_status.setText(tr("rockbox_wizard_adb_searching"))
+        self._stop_watch()
+        self._watch_worker = AdbWatchWorker(self._adb_binary, timeout=_adb.ADB_WATCH_TIMEOUT_SECONDS, parent=self)
+        self._watch_worker.watch_progress.connect(lambda f: self._adb_bar.setValue(int(f * 100)))
+        self._watch_worker.found.connect(self._on_adb_found)
+        self._watch_worker.timed_out.connect(self._on_adb_timeout)
+        self._watch_worker.start()
+
+    def _stop_watch(self):
+        w = self._watch_worker
+        self._watch_worker = None
+        if w is not None:
+            w.requestInterruption()
+            w.wait(1500)
+
+    def maybe_adopt_passive_push(self, serial: str) -> bool:
+        """Take over a passive ADB push instead of waiting out the watch.
+
+        Only while the ADB page is still watching (no push of our own yet).
+        Returns True when adopted.
+        """
+        try:
+            if self._stack.currentIndex() != 1:
+                return False
+            push = getattr(self, "_push_worker", None)
+            if push is not None and push.isRunning():
+                return False
+            if getattr(self, "_via_adb", False):
+                return False
+        except Exception:
+            return False
+        self._on_adb_found(serial or "")
+        return True
+
+    def note_passive_progress(self, done: int, total: int, label: str) -> None:
+        """Show background merge progress while the wizard sits idle on it."""
+        try:
+            idx = self._stack.currentIndex()
+            push = getattr(self, "_push_worker", None)
+            pushing = push is not None and push.isRunning()
+            if idx == 1 and not pushing and not getattr(self, "_via_adb", False):
+                text = f"{label}: {done}/{total}" if total else str(label)
+                self._adb_status.setText(text)
+                if total:
+                    self._adb_bar.setValue(int(done / total * 100))
+            elif idx == 2 and getattr(self, "_usb_target", None) is None:
+                self._usb_status.setVisible(True)
+                self._usb_status.setText(f"{label}: {done}/{total}" if total else str(label))
+        except Exception:
+            pass
+
+    def _on_adb_found(self, serial: str):
+        self._stop_watch()
+        self._adb_serial = serial
+        self._adb_status.setText(tr("rockbox_wizard_adb_found").format(serial=serial))
+        self._next_btn.setVisible(False)
+        self._back_btn.setVisible(False)
+        self._ensure_payload_then(self._start_adb_push)
+
+    def _on_adb_timeout(self):
+        # A push of our own may have started (found, or adopted passive push)
+        # while the watch was winding down: never yank the page mid-push.
+        push = getattr(self, "_push_worker", None)
+        if (push is not None and push.isRunning()) or getattr(self, "_via_adb", False):
+            return
+        try:
+            if self._stack.currentIndex() != 1:
+                return
+        except Exception:
+            pass
+        self._adb_status.setText(tr("rockbox_wizard_adb_timeout"))
+        self._stack.setCurrentIndex(2)
+        self._sync_buttons()
+
+    def _start_adb_push(self):
+        if not self._adb_binary or not self._adb_serial or not self._combined_dir:
+            return
+        self._adb_status.setText(tr("rockbox_wizard_adb_pushing"))
+        self._push_worker = AdbPushWorker(self._adb_binary, self._adb_serial, self._combined_dir, parent=self)
+        self._push_worker.progress.connect(self._on_push_progress)
+        self._push_worker.finished.connect(self._on_push_finished)
+        self._push_worker.start()
+
+    def _on_push_progress(self, curr: int, total: int):
+        if total > 0:
+            self._adb_bar.setValue(int(curr / total * 100))
+
+    def _on_push_finished(self, ok: bool, msg: str):
+        if not ok:
+            self._adb_status.setText(f"{tr('rockbox_wizard_adb_push_failed')}: {msg}")
+            self._stack.setCurrentIndex(2)
+            self._sync_buttons()
+            return
+        self._via_adb = True
+        self._show_done()
+
+    # -- payload (bundled base + latest remote overlay) ------------------
+    def _ensure_payload_then(self, ready_cb):
+        """Make sure the combined theme dir exists, downloading first if needed."""
+        if self._combined_dir and self._combined_dir.is_dir():
+            ready_cb()
+            return
+        self._pending_ready_cb = ready_cb
+        if self._zip_path.exists() and self._zip_path.stat().st_size > 1024:
+            self._build_combined()
+        else:
+            self._adb_status.setText(tr("themepack_status_downloading"))
+            self._download_worker = DownloadWorker(THEME_PACK_URL, self._zip_path, parent=self)
+            self._download_worker.finished.connect(self._on_payload_downloaded)
+            self._download_worker.start()
+
+    def _on_payload_downloaded(self, ok: bool, result_or_err: str):
+        if not ok:
+            # Offline: fall back to whatever the bundled copy alone provides.
+            base = bundled_rockbox_dir()
+            if base.is_dir():
+                import tempfile
+
+                self._work_dir = Path(tempfile.mkdtemp(prefix="rockbox_360p_"))
+                self._combined_dir = self._work_dir / ".rockbox"
+                merge_dirs(base, self._combined_dir)
+                cb = getattr(self, "_pending_ready_cb", None)
+                if cb:
+                    cb()
+                return
+            self._adb_status.setText(f"Download failed: {result_or_err}")
+            return
+        self._build_combined()
+
+    def _build_combined(self):
+        import tempfile
+
+        self._cleanup_work_dir()
+        self._work_dir = Path(tempfile.mkdtemp(prefix="rockbox_360p_"))
+        self._combined_dir = self._work_dir / ".rockbox"
+        try:
+            build_combined_rockbox_dir(self._zip_path, self._combined_dir)
+        except Exception as e:
+            logger.exception("Combined theme build failed: %s", e)
+        cb = getattr(self, "_pending_ready_cb", None)
+        self._pending_ready_cb = None
+        if cb:
+            cb()
+
+    # -- USB storage fallback --------------------------------------------
+    def _on_usb_pick(self):
+        chosen = QFileDialog.getExistingDirectory(
+            self,
+            tr("rockbox_wizard_usb_title"),
+            str(Path.home()),
+            QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks,
+        )
+        if not chosen:
+            return
+        try:
+            target = find_or_create_rockbox_dir(chosen)
+        except Exception as e:
+            self._usb_status.setVisible(True)
+            self._usb_status.setText(f"{tr('themepack_err_not_found')} ({e})")
+            return
+        self._usb_target = target
+        self._usb_folder_label.setText(f"Target: {target}")
+        self._usb_select_btn.setEnabled(False)
+        self._ensure_payload_then(self._start_usb_merge)
+
+    def _start_usb_merge(self):
+        target = getattr(self, "_usb_target", None)
+        if not target or not self._combined_dir:
+            return
+        t = T()
+        self._usb_bar.setVisible(True)
+        self._usb_bar.setValue(0)
+        self._usb_status.setVisible(True)
+        self._usb_status.setStyleSheet(f"font-size: 12px; color: {t.fg};")
+        self._usb_status.setText(tr("themepack_status_extracting"))
+        self._merge_worker = DirMergeWorker(self._combined_dir, target, parent=self)
+        self._merge_worker.progress.connect(self._on_usb_progress)
+        self._merge_worker.finished.connect(self._on_usb_finished)
+        self._merge_worker.start()
+
+    def _on_usb_progress(self, curr: int, total: int):
+        if total > 0:
+            self._usb_bar.setValue(int(curr / total * 100))
+
+    def _on_usb_finished(self, ok: bool, err: str, count: int):
+        t = T()
+        if not ok:
+            self._usb_status.setStyleSheet(f"font-size: 12px; color: {t.err_fg};")
+            self._usb_status.setText(f"{tr('sel_themepack_failed')}: {err}")
+            self._usb_select_btn.setEnabled(True)
+            return
+        del count
+        self._usb_bar.setValue(100)
+        self._usb_status.setStyleSheet(f"font-size: 12px; font-weight: 600; color: {t.ok_fg};")
+        self._usb_status.setText(tr("themepack_complete"))
+        self._show_done()
+
+    # -- done -------------------------------------------------------------
+    def _show_done(self):
+        self._stop_watch()
+        self._stack.setCurrentIndex(3)
+        self._sync_buttons()
+        try:
+            from . import theme_sync as _sync
+
+            _sync.record_theme_sync(self.model)
+            target = getattr(self, "_usb_target", None)
+            if target:
+                _sync.remember_theme_target(self.model, str(target))
+        except Exception:
+            pass
+        self.finished_via_adb.emit(self._via_adb)
+        self.installed_success.emit()
+
+    def _cleanup_work_dir(self):
+        work = self._work_dir
+        self._work_dir = None
+        self._combined_dir = None
+        if work:
+            try:
+                shutil.rmtree(work, ignore_errors=True)
+            except Exception:
+                pass
+
+    def closeEvent(self, event):
+        try:
+            open_wizards().discard(self)
+        except Exception:
+            pass
+        self._stop_watch()
+        for w in (self._download_worker, self._push_worker, self._merge_worker):
+            try:
+                if w is not None and w.isRunning():
+                    w.requestInterruption()
+                    w.wait(1500)
+            except Exception:
+                pass
+        self._cleanup_work_dir()
+        super().closeEvent(event)

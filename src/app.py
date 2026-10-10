@@ -83,12 +83,18 @@ def main():
         scatter_platform = sys.argv[4] if len(sys.argv) >= 5 else ""
         package_path = sys.argv[5] if len(sys.argv) >= 6 else ""
         model = sys.argv[6] if len(sys.argv) >= 7 else ""
+        # Optional trailing facts, forwarded by the app (and by the terminal
+        # install script): a user-chosen Download Agent and auth file.
+        da_file = sys.argv[7] if len(sys.argv) >= 8 else ""
+        auth_file = sys.argv[8] if len(sys.argv) >= 9 else ""
 
         worker = FlashWorker(
             package_path=package_path or "dummy.zip",
             method="mtk",
             pre_extracted_dir=extract_dir,
             model=model,
+            da_file=da_file,
+            auth_file=auth_file,
         )
         worker.progress.connect(lambda x: print(f"[PROGRESS] {x}", flush=True))
         worker.step_changed.connect(lambda x: print(f"[STEP] {x}", flush=True))
@@ -111,7 +117,13 @@ def main():
             signal.signal(signal.SIGINT, handle_sigterm)
 
         try:
-            worker._flash_via_mtkclient_core(Path(extract_dir), Path(scatter_file), scatter_platform)
+            worker._flash_via_mtkclient_core(
+                Path(extract_dir),
+                Path(scatter_file),
+                scatter_platform,
+                da_file=da_file,
+                auth_file=auth_file,
+            )
         except BaseException as e:
             print(f"[RESULT] 0 {e}", flush=True)
             sys.exit(1)

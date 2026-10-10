@@ -62,6 +62,14 @@ _SVG_TEMPLATES = {
         <line x1="18" y1="6" x2="6" y2="18"/>
         <line x1="6" y1="6" x2="18" y2="18"/>
     </svg>""",
+    "next": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="4" y1="12" x2="20" y2="12"/>
+        <polyline points="13 5 20 12 13 19"/>
+    </svg>""",
+    "back": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="20" y1="12" x2="4" y2="12"/>
+        <polyline points="11 5 4 12 11 19"/>
+    </svg>""",
     "settings": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="3"/>
         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
@@ -102,6 +110,8 @@ _SVG_TEMPLATES = {
 _SF_SYMBOL_MAP = {
     "install": "arrow.down.circle",
     "cancel": "xmark",
+    "next": "arrow.right",
+    "back": "arrow.left",
     "settings": "gearshape",
     "translate": "globe",
     "diagnostics": "waveform.path.ecg",
@@ -116,6 +126,8 @@ _SF_SYMBOL_MAP = {
 _SEGOE_SYMBOL_MAP = {
     "install": 0xE896,     # Download
     "cancel": 0xE711,      # ChromeClose
+    "next": 0xE72A,        # Forward
+    "back": 0xE72B,        # Back
     "settings": 0xE713,    # Settings
     "translate": 0xE774,   # Globe
     "diagnostics": 0xEC7A, # Diagnostic
@@ -130,6 +142,8 @@ _SEGOE_SYMBOL_MAP = {
 _FREEDESKTOP_MAP = {
     "install": ["system-software-install-symbolic", "system-software-install", "document-save-symbolic", "document-save"],
     "cancel": ["process-stop-symbolic", "process-stop", "dialog-cancel-symbolic", "dialog-cancel"],
+    "next": ["go-next-symbolic", "go-next", "arrow-right-symbolic", "arrow-right"],
+    "back": ["go-previous-symbolic", "go-previous", "arrow-left-symbolic", "arrow-left"],
     "settings": [
         "preferences-system-symbolic",
         "preferences-system",
@@ -158,7 +172,8 @@ _SEGOE_HELP_FONTS = (
     ("Segoe Fluent Icons", ("SegoeIcons.ttf", "SegoeFluentIcons.ttf")),
     ("Segoe MDL2 Assets", ("segmdl2.ttf",)),
 )
-_SF_HELP_SYMBOLS = ("info.circle",)
+# The filled badge first: that is the information mark macOS itself draws.
+_SF_HELP_SYMBOLS = ("info.circle.fill", "info.circle")
 HELP_ICON_PX = 16
 
 _segoe_font_family: Optional[str] = None
@@ -172,8 +187,82 @@ def _remember_help_source(source: str) -> None:
 
 
 def help_icon_source() -> str:
-    """Native glyph actually chosen: ``segoe:Family:U+E946``, ``sf:info.circle``, ``theme:…``, or ``style:SP_MessageBoxInformation``."""
+    """Native glyph actually chosen: ``segoe:Family:U+E946``, ``sf:info.circle.fill``, ``theme:…``, or ``style:SP_MessageBoxInformation``."""
     return _help_icon_source
+
+
+def _enclosed_see_through(image) -> list[tuple[int, int]]:
+    """See-through pixels the glyph's ink closes off from the image edge.
+
+    Filled platform information glyphs (SF Symbol ``info.circle.fill``, Segoe
+    ``Info``) knock the letter out of a disc, so the ``i`` is a hole in the
+    middle of opaque ink. The transparent area outside the disc touches the
+    edge and is skipped; the enclosed knockout is the letter.
+    """
+    width, height = image.width(), image.height()
+    clear = [[image.pixelColor(x, y).alpha() < 100 for x in range(width)] for y in range(height)]
+    reached = [[False] * width for _ in range(height)]
+    stack = []
+    for x in range(width):
+        for y in (0, height - 1):
+            if clear[y][x] and not reached[y][x]:
+                reached[y][x] = True
+                stack.append((x, y))
+    for y in range(height):
+        for x in (0, width - 1):
+            if clear[y][x] and not reached[y][x]:
+                reached[y][x] = True
+                stack.append((x, y))
+    while stack:
+        x, y = stack.pop()
+        for nx, ny in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
+            if 0 <= nx < width and 0 <= ny < height and clear[ny][nx] and not reached[ny][nx]:
+                reached[ny][nx] = True
+                stack.append((nx, ny))
+    return [
+        (x, y)
+        for y in range(height)
+        for x in range(width)
+        if clear[y][x] and not reached[y][x]
+    ]
+
+
+def _knockout_color(base: str) -> str:
+    """White knockout on a dark disc, dark knockout on a light one."""
+    color = QColor(base)
+    if not color.isValid():
+        return "#ffffff"
+    luminance = (0.299 * color.red() + 0.587 * color.green() + 0.114 * color.blue()) / 255.0
+    return "#000000" if luminance > 0.6 else "#ffffff"
+
+
+def fill_glyph_knockout(pixmap: QPixmap, color: Optional[str] = None) -> QPixmap:
+    """Paint the letter inside a filled information glyph.
+
+    macOS draws ``info.circle.fill`` as the accent disc with a light ``i``. A
+    raw tint of that symbol leaves the letter transparent, so on a dark card it
+    reads as a dark letter instead. The enclosed hole is filled here. An outline
+    symbol (no filled disc) keeps its own shape: its whole interior is enclosed
+    and filling it would replace the glyph with a blob, so that is left alone.
+    """
+    if pixmap is None or pixmap.isNull():
+        return pixmap
+    image = pixmap.toImage().convertToFormat(QImage.Format.Format_ARGB32)
+    holes = _enclosed_see_through(image)
+    if not holes:
+        return pixmap
+    box = max(1, image.width() * image.height())
+    if len(holes) > box * 0.45:
+        return pixmap
+    ink = QColor(color) if color else QColor(_knockout_color("#000000"))
+    if not ink.isValid():
+        ink = QColor("#ffffff")
+    painted = QImage(image)
+    for x, y in holes:
+        painted.setPixelColor(x, y, ink)
+    out = QPixmap.fromImage(painted)
+    out.setDevicePixelRatio(pixmap.devicePixelRatio())
+    return out
 
 
 def _detect_segoe_font() -> Optional[str]:
@@ -199,7 +288,7 @@ def _sf_symbol_names(symbol_name: str) -> tuple[str, ...]:
 
 
 def _load_sf_symbol(sf_name: str, size: int, color: str) -> Optional[QPixmap]:
-    """One SF Symbol by system name. ``info.circle`` is the information glyph."""
+    """One SF Symbol by system name. ``info.circle.fill`` is the information badge."""
     try:
         from AppKit import NSImage, NSImageSymbolConfiguration
 
@@ -223,6 +312,154 @@ def _load_sf_symbol(sf_name: str, size: int, color: str) -> Optional[QPixmap]:
     except Exception as e:
         logger.debug("Failed to load SF Symbol %s: %s", sf_name, e)
         return None
+
+
+def app_bundle_path() -> str:
+    """The app bundle IconServices should draw the icon of.
+
+    A frozen build is inside its own ``*.app``. A development run has no bundle
+    around it, so a build of this same front end in the repo's ``dist`` is used
+    when one exists (the icon of a plain PNG is a document icon, which is not
+    what the caption should show). Empty when neither is available, which
+    leaves the caller on the artwork the build packages.
+    """
+    from pathlib import Path
+
+    for parent in Path(sys.executable).resolve().parents:
+        if parent.suffix == ".app":
+            return str(parent)
+    from .. import paths
+
+    try:
+        from ..config import get_app_name
+
+        name = get_app_name().lower()
+        for candidate in sorted((paths.REPO_ROOT / "dist").glob("*.app")):
+            plist = candidate / "Contents" / "Info.plist"
+            if not plist.is_file():
+                continue
+            import plistlib
+
+            with plist.open("rb") as handle:
+                data = plistlib.load(handle)
+            bundle_name = str(data.get("CFBundleName") or data.get("CFBundleDisplayName") or "")
+            if bundle_name and (name.startswith(bundle_name.lower()) or bundle_name.lower().startswith(name)):
+                return str(candidate)
+    except Exception as e:
+        logger.debug("No built app bundle to read the icon of: %s", e)
+    return ""
+
+
+def macos_icon_style() -> tuple:
+    """The Mac's current app-icon style: (theme, tint colour name).
+
+    System Settings → Appearance → "Icon & widget style" (Default, Dark, Clear,
+    Tinted) is published by AppKit as an icon appearance configuration, and the
+    resolved tint is the user's chosen colour ("Automatic" resolves to the
+    system accent). Reading it is what lets the app's own icon match Finder's.
+
+    Returns ``("", "")`` on anything but a Mac with that API.
+    """
+    if not IS_MAC:
+        return ("", "")
+    try:
+        from AppKit import NSWorkspace
+
+        configuration = NSWorkspace.sharedWorkspace().currentIconAppearanceConfiguration()
+        if configuration is None:
+            return ("", "")
+        theme = configuration.iconAppearanceTheme()
+        tint = configuration.resolvedIconTintColor()
+        description = ""
+        if tint is not None:
+            try:
+                description = str(tint.colorUsingColorSpaceName_("NSCalibratedRGBColorSpace"))
+            except Exception:
+                description = str(tint)
+        return (str(theme), description)
+    except Exception as e:
+        logger.debug("Could not read the icon appearance configuration: %s", e)
+        return ("", "")
+
+
+def macos_app_icon_pixmap(size: int, *, bundle=None) -> Optional[QPixmap]:
+    """This app's icon drawn the way Finder draws it, including the icon style.
+
+    ``NSWorkspace`` returns the bundle icon as an *appearance-sensitive* image:
+    macOS resolves the user's icon style and tint when it is drawn — Dark, Clear
+    or Tinted, with the accent the user picked — so the caption is the same art
+    the Dock, Finder and Spotlight show for this app, and nothing about the
+    tint has to be reimplemented. Returns ``None`` when the platform has no such
+    icon (or the drawing fails), leaving the caller on the bundled artwork.
+    """
+    if not IS_MAC:
+        return None
+    try:
+        import Foundation
+        from AppKit import (
+            NSBitmapImageFileTypePNG,
+            NSBitmapImageRep,
+            NSCompositingOperationSourceOver,
+            NSDeviceRGBColorSpace,
+            NSGraphicsContext,
+            NSWorkspace,
+        )
+
+        if bundle is None:
+            bundle = app_bundle_path()
+        if not bundle:
+            return None
+        image = NSWorkspace.sharedWorkspace().iconForFile_(str(bundle))
+        if image is None:
+            return None
+        from PySide6.QtWidgets import QApplication
+
+        dpr = 2.0
+        app = QApplication.instance()
+        if app is not None:
+            screen = app.primaryScreen()
+            if screen is not None:
+                dpr = max(1.0, float(screen.devicePixelRatio()))
+        pixels = max(int(round(size * dpr)), size)
+        rep = NSBitmapImageRep.alloc().initWithBitmapDataPlanes_pixelsWide_pixelsHigh_bitsPerSample_samplesPerPixel_hasAlpha_isPlanar_colorSpaceName_bytesPerRow_bitsPerPixel_(
+            None, pixels, pixels, 8, 4, True, False, NSDeviceRGBColorSpace, 0, 0
+        )
+        rep.setSize_(Foundation.NSMakeSize(size, size))
+        context = NSGraphicsContext.graphicsContextWithBitmapImageRep_(rep)
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.setCurrentContext_(context)
+        image.drawInRect_fromRect_operation_fraction_(
+            Foundation.NSMakeRect(0, 0, size, size),
+            Foundation.NSZeroRect,
+            NSCompositingOperationSourceOver,
+            1.0,
+        )
+        NSGraphicsContext.restoreGraphicsState()
+        data = rep.representationUsingType_properties_(NSBitmapImageFileTypePNG, {})
+        if not data:
+            return None
+        painted = QPixmap()
+        if not painted.loadFromData(bytes(data), "PNG"):
+            return None
+        if painted.hasAlphaChannel() and painted.devicePixelRatio() != dpr:
+            painted.setDevicePixelRatio(painted.width() / float(size))
+        if not _has_visible_pixels(painted):
+            return None
+        return painted
+    except Exception as e:
+        logger.debug("Could not draw the system app icon: %s", e)
+        return None
+
+
+def _has_visible_pixels(pixmap: QPixmap) -> bool:
+    """False for a blank render, so a failed draw never replaces real artwork."""
+    image = pixmap.toImage().convertToFormat(QImage.Format.Format_ARGB32)
+    step = max(1, image.width() // 32)
+    for y in range(0, image.height(), step):
+        for x in range(0, image.width(), step):
+            if (image.pixel(x, y) >> 24) & 0xFF > 40:
+                return True
+    return False
 
 
 def _get_sf_symbol_pixmap(symbol_name: str, size: int, color: str = "#FFFFFF") -> Optional[QPixmap]:
@@ -454,11 +691,13 @@ def _windows_shell_information_pixmap(size: int) -> Optional[QPixmap]:
 def get_help_pixmap(size: int = HELP_ICON_PX, color: Optional[str] = None) -> QPixmap:
     """Small platform information glyph: a circle with an i.
 
-    Windows uses Segoe Fluent Icons or Segoe MDL2 Assets Information (U+E946).
-    If that glyph is missing, the Windows information icon is used.
-    macOS uses the SF Symbol ``info.circle``. Linux uses the first FreeDesktop
-    theme among dialog-information, help-about, and dialog-question.
-    An empty pixmap means no platform information icon was available.
+    macOS uses the SF Symbol ``info.circle.fill`` — the badge macOS itself
+    draws — with the letter knocked out in the contrast colour. Windows uses
+    Segoe Fluent Icons or Segoe MDL2 Assets Information (U+E946); if that
+    glyph is missing, the Windows information icon is used. Linux uses the
+    first FreeDesktop theme among dialog-information, help-about, and
+    dialog-question. An empty pixmap means no platform information icon was
+    available.
     """
     norm, _ = resolve_symbol_colors(color=color)
     side = max(int(size), 1)
@@ -471,7 +710,7 @@ def get_help_pixmap(size: int = HELP_ICON_PX, color: Optional[str] = None) -> QP
     else:
         pix = _get_freedesktop_pixmap("help", side, norm)
     if pix is not None and not pix.isNull():
-        return pix
+        return fill_glyph_knockout(pix, _knockout_color(norm))
     _remember_help_source("")
     return QPixmap()
 

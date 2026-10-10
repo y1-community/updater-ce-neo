@@ -91,6 +91,11 @@ def make_transparent(area: QAbstractScrollArea) -> None:
         inner.setAttribute(Qt.WA_TranslucentBackground, False)
     try:
         from .surfaces import glass_surfaces_enabled, show_glass_backdrop
+        # The content column is part of the page it sits on, not a list. Left
+        # unfilled, the gaps between its cards stay on the window surface
+        # instead of showing a second, darker plate behind the whole column.
+        if isinstance(inner, QWidget):
+            show_glass_backdrop(inner)
         if glass_surfaces_enabled():
             show_glass_backdrop(area)
             if viewport is not None:

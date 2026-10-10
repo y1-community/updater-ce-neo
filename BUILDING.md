@@ -2,6 +2,8 @@
 
 This guide contains everything required for anyone to clone this repository and build the complete updater stack on **macOS**, **Windows**, or **Linux**.
 
+> Looking for the copy-paste command for a specific CPU architecture (arm64, x86_64, Universal 2, arm64 Windows, aarch64 Linux)? See **[BUILD_TARGETS.md](BUILD_TARGETS.md)**, the per-target command matrix.
+
 ---
 
 ## 1. Prerequisites by Platform

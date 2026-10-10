@@ -81,9 +81,59 @@ def test_legacy_dialog_instantiation():
     app.processEvents()
 
 
+def test_remove_old_app_card_follows_the_detection():
+    """The Settings card is "Remove old app" and only for a real pre-3.0 install."""
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    import src.legacy_cleanup as legacy
+    from src.i18n import translator
+    from src.ui.settings_page import SettingsPage
+
+    app = QApplication.instance() or QApplication(["--platform", "offscreen"])
+    original_lang = translator().lang
+    original_detect = legacy.detect_legacy_installations
+    translator().set_language("en")
+    page = None
+    try:
+        # Stray platform tools are not "an old version of the app".
+        legacy.detect_legacy_installations = lambda: {
+            "has_legacy": False,
+            "has_platform_tools": True,
+            "platform_tools_paths": [Path("/tmp/mock/adb")],
+            "estimated_bytes": 0,
+        }
+        page = SettingsPage()
+        assert page._legacy_cleanup_card.isHidden(), "platform tools alone must not offer removal"
+
+        legacy.detect_legacy_installations = lambda: {
+            "has_legacy": True,
+            "has_platform_tools": False,
+            "macos_apps": [Path("/Applications/Innioasis Updater.app")],
+            "estimated_bytes": 1024,
+        }
+        page._update_legacy_cleanup_visibility()
+        assert not page._legacy_cleanup_card.isHidden()
+        assert page._legacy_cleanup_card.title() == "Remove old app"
+        assert page._legacy_uninstall_btn.text() == "Uninstall"
+        assert "older version" in page._legacy_cleanup_desc.text()
+
+        # …and it goes away again once the old app is gone.
+        legacy.detect_legacy_installations = lambda: {"has_legacy": False, "estimated_bytes": 0}
+        page._update_legacy_cleanup_visibility()
+        assert page._legacy_cleanup_card.isHidden()
+    finally:
+        legacy.detect_legacy_installations = original_detect
+        translator().set_language(original_lang)
+        if page is not None:
+            page.deleteLater()
+            app.processEvents()
+
+
 if __name__ == "__main__":
     test_protected_app_invariants()
     test_format_bytes()
     test_calc_dir_size()
     test_legacy_dialog_instantiation()
+    test_remove_old_app_card_follows_the_detection()
     print("All legacy cleanup tests passed!")

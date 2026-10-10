@@ -1,0 +1,62 @@
+# AGENTS.md
+
+## Local dev environment
+- Dependencies live in **`.venv-build/`** (not `.venv/`, despite `.gitignore` listing it); the system
+  `python3` has no `requests`/`PySide6`, so tests silently fail on import if you use it.
+- Run one test without the whole suite: `/tmp/run_one.py <tests/file.py> <test_name>`
+  (offscreen Qt, sets `QT_QPA_PLATFORM=offscreen`, prints `PASS <name>`). Recreate it if `/tmp` was cleared.
+- `scripts/build_universal_app.py` **deletes and rebuilds `dist/*.app` in place**: a rebuild wipes any
+  already-running app's bundle, so never build while the user is testing from `dist/`.
+- Build entry points are `./build_macos.sh [--arch arm64|x86_64|universal2] [--dmg] [--brand …]`,
+  `build_windows.{bat,ps1}` and `./build_appimage.sh --arch …`; a run builds **both** front ends
+  unless `--brand` names one. Per-arch commands are in `BUILD_TARGETS.md`.
+- `/tmp/run_one.py` is not executable — run `.venv-build/bin/python /tmp/run_one.py <file> <test>`.
+  A whole file is `.venv-build/bin/python -m pytest tests/<file>.py`.
+- `tests/test_native_ux_enhancements.py` **cannot be run whole**: network icon preloads hang it and
+  `test_caption_icon_follows_the_macos_icon_style` aborts ("Abort trap: 6") at teardown. Select with `-k`.
+  Some of its failures are stale tests (`_sp_flash_tool_btn`) or host-appearance/order artifacts
+  (`'#fff' not in styleSheet`, `640 == 680` window width) rather than regressions — check individually
+  with `pytest tests/test_native_ux_enhancements.py::<name>` before blaming a change.
+
+## Native macOS UI (PyObjC is bundled — AppKit is fair game)
+- Prefer real OS controls: PyObjC/Cocoa is available and already used (`src/ui/glass.py` NSView interop).
+  The user asks for OS-native tooltips, switches and iconography over hand-painted ones.
+- **Never style `QToolTip` via QSS or force its palette** — either one puts the tip on `QStyleSheetStyle`
+  and replaces the host's own tip (macOS help tag / WinUI), and rich-text tips then need hand-set colours.
+  Keep tip text plain so the platform draws it.
+- macOS draws app icons in the user's *Icon & widget style*, and it is reachable:
+  `NSWorkspace.currentIconAppearanceConfiguration()` gives the theme + `resolvedIconTintColor()`, and
+  `NSWorkspace.icon(forFile:)` returns an appearance-sensitive image (`NSISIconImageRep`). Verified: on a
+  Tinted system the app's icon renders green-tinted rather than as the bundled PNG.
+- `NSWorkspace.accessibilityDisplayShouldShowWindowTitlebarIcons()` is the "Show window title icons"
+  setting, and there is no document-proxy-icon slot in this app (content extends under the traffic lights).
+- The Software dropdown must never key off item *text*: canonical English names are the lookup keys, so the
+  preset localisation rides in `Qt.UserRole` item data (`select_page._populate_software_combo`), and
+  `retranslate()` re-labels rows in place. `display_software_name()` localises the label only.
+- `_FitLabel` wraps into a *fixed* column (`INSTALL_TEXT_WIDTH`), so copy never reflows when the window
+  widens; `_FlowRow` (flash_page) joins step + ETA onto one row when they fit and stacks them otherwise,
+  and `prompt_stop` calls `set_forced_stacked(True)` so the sanity-check sentence still wraps.
+- `_RoundNextButton` chips paint translucent discs (alphas in flash_page) and are `AlignVCenter` in their
+  cards. To test their translucency paint the brush with `QPainter` — `QWidget.render()` fills an opaque
+  background first, so a rendered chip always reads alpha 255.
+- `MainWindow._apply_release_icon` must decide "generic squircle" from *no catalogue release / local tab*
+  only: a downloaded release's unpacked working copy also contains a scatter file, and treating that as a
+  local browse replaced the release's own `updater.jpg` with the settings cog on the install card.
+
+## Reverse-engineering the shipped Chinese build (1.1.7)
+- The reference macOS app (`/Volumes/InnioasisUpdater/InnioasisUpdater.app`) is a PyInstaller
+  onedir bundle running **Python 3.10**: unmarshal its PYZ with `/opt/homebrew/bin/python3.10`,
+  not `.venv-build` (3.13 → `bad marshal data`). Dump raw entries first with 3.13
+  (`CArchiveReader(...).open_embedded_archive('PYZ.pyz').extract(name, raw=True)`), then parse with 3.10.
+- Its **running UI is the frozen `app.*` package (14 modules) inside `PYZ.pyz`**, not mtkclient's GUI; the
+  bundled plaintext `mtkclient/` (v2.1.4) is only the library it calls. Don't read `mtk_gui.py` for app behaviour.
+- `app.i18n` defaults to **`en`** (`QSettings('Innioasis', 'Innioasis Updater')['language']`), labels are
+  `English/中文/Deutsch/…`; the Chinese UI comes from a stored setting, not from the code default.
+- Quick constant/API map instead of a decompiler: `/tmp/analyze_cn.py` (names, args, constants per module) and
+  `/tmp/dis_cn.py <qualname>` (dis one function). Filter strings with `len >= 2` or `'中文'`/`'en'` vanish.
+- `Contents/Resources/*` is a tree of **symlinks** into `Contents/Frameworks/` (`tools`, `QtCore`, `Python.framework`…),
+  so `find`/`ls` there under-report — `tools/unar` really lives in `Frameworks/tools/`.
+- `pyi-archive_viewer` is interactive: drive it with piped input
+  (e.g. `printf 'O PYZ.pyz\nl\nQ\nQ\n' | ...`), never run it bare (it hangs the tool call).
+- `mental_model/` is gitignored scratch for per-model reverse-engineering notes;
+  suffix files with your model name and reuse `/tmp/cn_raw/*.marshal` dumps instead of re-extracting.

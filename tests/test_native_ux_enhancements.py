@@ -211,7 +211,9 @@ def _assert_type_information_icon(icon):
     assert "questionmark" not in source
     assert "U+E897" not in source
     assert source != "text:?"
-    assert icons._SF_HELP_SYMBOLS == ("info.circle",)
+    # The filled badge macOS itself draws comes first; the outline is the
+    # fallback for a system whose SF Symbols has no filled info glyph.
+    assert icons._SF_HELP_SYMBOLS == ("info.circle.fill", "info.circle")
     assert icons._SEGOE_HELP_CODEPOINTS == (0xE946,)
     assert icons._FREEDESKTOP_MAP["help"] == [
         "dialog-information",
@@ -225,7 +227,7 @@ def _assert_type_information_icon(icon):
             assert "Segoe Fluent Icons" in source or "Segoe MDL2 Assets" in source
         assert icon.pixmap() is not None and not icon.pixmap().isNull()
     elif sys.platform == "darwin":
-        assert source == "sf:info.circle"
+        assert source == "sf:info.circle.fill"
         assert icon.pixmap() is not None and not icon.pixmap().isNull()
     else:
         assert source.startswith("theme:") or source == ""
@@ -565,7 +567,12 @@ def test_os_standard_iconography():
     assert not sp._browse_folder_btn.icon().isNull(), "Browse folder button must have an icon"
 
     fp = FlashPage()
-    assert not fp._cancel_btn.icon().isNull(), "Cancel button must have an icon"
+    fp.show()
+    # Cancel chips are circular glyph discs, not QIcons: the painted arrow is
+    # the icon contract, with the wording in the tooltip and accessible name.
+    assert fp._cancel_btn.toolTip(), "Cancel button must name its action"
+    fp._cancel_btn.rebuild_arrow()
+    assert not fp._cancel_btn._arrow.isNull(), "Cancel button must paint its glyph"
 
 
 def test_symbol_color_adaptation_and_states():
@@ -1534,6 +1541,81 @@ def test_install_method_confirmation_stays_in_the_card():
     app.processEvents()
 
 
+def test_title_row_switches_when_the_title_says_it_all():
+    """No duplicated wording: the toggle rides on the title line instead."""
+    from src.i18n import tr, translator
+    from src.ui.settings_page import SettingsPage
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    original = translator().lang
+    translator().set_language("en")
+    page = SettingsPage()
+    try:
+        for card, switch, caption_key in (
+            (page._reminders_card, page._cb_reminders, "settings_reminders_enable"),
+            (page._offline_mode_card, page._cb_offline_mode, "settings_offline_mode"),
+        ):
+            row = card._title_row
+            assert switch.parentWidget() is row, caption_key
+            assert card.title_label().parentWidget() is row, caption_key
+            # The caption still holds the wording (a11y + switch_caption) but
+            # is never drawn: the title above it already says the same thing.
+            caption = page._switch_rows[switch][1]
+            assert caption.isHidden(), caption_key
+            assert page.switch_caption(switch) == tr(caption_key)
+
+        # A card whose title is a group name keeps its caption row.
+        other = page._switch_rows[page._cb_guided_install][1]
+        assert not other.isHidden()
+        assert page.switch_caption(page._cb_guided_install) == tr("settings_guided_install")
+    finally:
+        translator().set_language(original)
+        page.deleteLater()
+        app.processEvents()
+
+
+def test_header_bar_follows_an_animated_resize():
+    """The right-anchored page heading must not slide during a resize animation."""
+    import sys as _sys
+
+    from src.ui.main_window import MainWindow
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    window = MainWindow()
+    bar = getattr(window, "_title_bar", None)
+    if bar is None or not _sys.platform.startswith("darwin"):
+        window.deleteLater()
+        app.processEvents()
+        return
+    try:
+        # An unshown widget only stores its new geometry, so the resize has to
+        # land on a visible window for the header to be re-placed at all.
+        window.show()
+        app.processEvents()
+        window._size_animating = False
+        window.resize(700, 520)
+        app.processEvents()
+        assert bar.width() == window.width(), bar.width()
+
+        # The hug/animate path resizes with the flag set; the inline header is
+        # a manually placed child, so it still has to take the new width rather
+        # than the one the animation started from.
+        window._size_animating = True
+        window.resize(980, 640)
+        app.processEvents()
+        assert bar.width() == window.width(), bar.width()
+
+        window._size_animating = False
+        window.resize(640, 480)
+        app.processEvents()
+        assert bar.width() == window.width(), bar.width()
+    finally:
+        window._size_animating = False
+        window.close()
+        window.deleteLater()
+        app.processEvents()
+
+
 def test_progress_cancel_stays_in_the_card():
     """The stop prompt fits the card, and either button leaves Select Software selected."""
     from PySide6.QtGui import QPalette
@@ -1581,8 +1663,14 @@ def test_progress_cancel_stays_in_the_card():
         assert page._stop_continue.isVisible()
         assert page._stop_back.isVisible()
         assert not page._cancel_btn.isVisible()
-        assert page._stop_continue.text() == "Cancel Install"
-        assert page._stop_back.text() == "Back"
+        # Round glyph buttons: the wording is the hover tip and the accessible
+        # name, never a label on the button.
+        assert page._stop_continue.text() == ""
+        assert page._stop_back.text() == ""
+        assert page._stop_continue.toolTip() == "Cancel Install"
+        assert page._stop_back.toolTip() == "Back"
+        assert page._stop_continue.accessibleName() == "Cancel Install"
+        assert page._stop_back.accessibleName() == "Back"
         assert "software" in page._stop_message.lower()
         assert "firmware" not in page._stop_message.lower()
         assert prompt.wordWrap() and package.wordWrap()
@@ -1600,13 +1688,34 @@ def test_progress_cancel_stays_in_the_card():
 
         card = page._progress_card
         card_h = max(card.sizeHint().height(), card.minimumSizeHint().height())
-        buttons_h = max(page._stop_continue.sizeHint().height(), page._stop_back.sizeHint().height())
-        assert card_h >= prompt.minimumSizeHint().height() + package.minimumSizeHint().height() + buttons_h - 8
+        buttons_h = max(page._stop_continue.height(), page._stop_back.height())
+        # Round glyph buttons: a square, fixed-size chip per action.
+        from src.ui.flash_page import ROUND_NEXT_BUTTON_PX
+
+        assert page._stop_continue.width() == ROUND_NEXT_BUTTON_PX
+        assert page._stop_continue.height() == ROUND_NEXT_BUTTON_PX
+        # They sit beside the copy, so they no longer add a row to the card:
+        # the height is the wrapped copy plus the card's own padding.
+        assert card_h >= prompt.minimumSizeHint().height() + package.minimumSizeHint().height() - 8
         assert card_h > buttons_h + line
         assert window.minimumHeight() >= page.sizeHint().height()
         assert window.minimumWidth() >= 600
 
+        # The back arrow only puts the check away: the install keeps running.
         page._stop_back.click()
+        app.processEvents()
+        assert calls == []
+        assert window._install_run_active()
+        assert window._stack.currentIndex() == _PAGE_FLASH
+        assert not page._stop_open
+        assert not page._stop_actions.isVisible()
+        assert page._stop_label.text() != page._stop_message
+
+        # ...and the cross is the one that confirms the stop.
+        page._on_cancel()
+        app.processEvents()
+        assert page._stop_open
+        page._stop_continue.click()
         app.processEvents()
         assert "flash" in calls
         assert "extract" in calls
@@ -1635,8 +1744,22 @@ def test_progress_cancel_stays_in_the_card():
         status = page._download_status_label
         status_h = status.heightForWidth(max(status.sizeHint().width(), 160))
         assert status.minimumSizeHint().height() >= status_h - 2
-        assert page._stop_continue.text() == "Cancel Install"
-        assert page._stop_back.text() == "Back"
+        # Round glyph buttons: the wording is the hover tip and the accessible
+        # name, never a label on the button.
+        assert page._stop_continue.text() == ""
+        assert page._stop_back.text() == ""
+        assert page._stop_continue.toolTip() == "Cancel Install"
+        assert page._stop_back.toolTip() == "Back"
+        assert page._stop_continue.accessibleName() == "Cancel Install"
+        assert page._stop_back.accessibleName() == "Back"
+        # On the download card the cross confirms the stop too, and the back
+        # arrow would have left the download alone.
+        page._stop_back.click()
+        app.processEvents()
+        assert "download" not in calls
+        assert window._download_active
+        page._on_cancel_download()
+        app.processEvents()
         page._stop_continue.click()
         app.processEvents()
         assert "download" in calls
@@ -1684,7 +1807,9 @@ def test_dark_to_light_leaves_combos_and_notes_readable():
     tip = page._type_combo.toolTip()
     assert "Type A" in tip
     assert "Type B" in tip
-    assert "<br>" in tip
+    # Plain text with real newlines: the platform draws this tip, and a
+    # rich-text document would need its own colours written into it.
+    assert "\n" in tip and "<qt>" not in tip
     assert page._type_help_icon.toolTip() == tip
     assert page._type_label.toolTip() == tip
     assert page._type_help_icon.cursor().shape() == Qt.ArrowCursor
@@ -2337,11 +2462,61 @@ def _assert_no_hole_where_the_card_was(page):
     assert 0 <= gap <= layout.spacing() + 6, gap
 
 
-def test_tooltip_contrast_follows_light_and_dark():
-    """Light tips are a light surface with dark text. Dark tips invert that.
+def test_caption_icon_follows_the_macos_icon_style():
+    """The caption icon is the system's own art for this app, style included.
 
-    QToolTip keeps its own palette. A dark platform tip with the light
-    theme's black text is the solid black type hint.
+    System Settings → Appearance → Icon & widget style (Default / Dark / Clear /
+    Tinted) is published by AppKit as the icon appearance configuration, and
+    IconServices draws the bundle icon in it — so the caption matches the Dock
+    and Finder, including a tint the bundled PNG cannot imitate. The bundled
+    artwork stays as the fallback, and the system is only asked again when the
+    style actually changes.
+    """
+    from unittest.mock import patch
+
+    from PySide6.QtGui import QPixmap
+
+    from src.ui import icons
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    window = MainWindow()
+    label = window._icon_label
+    assert not label.pixmap().isNull()
+    assert label.pixmap().width() == window._icon_size
+
+    marker = QPixmap(window._icon_size, window._icon_size)
+    marker.fill(Qt.red)
+    with patch.object(icons, "macos_icon_style", return_value=("7", "tinted")):
+        with patch.object(icons, "macos_app_icon_pixmap", return_value=marker) as draw:
+            window._apply_caption_icon()
+            assert draw.call_count == 1
+            assert label.pixmap().toImage() == marker.toImage()
+            window._apply_caption_icon()
+            assert draw.call_count == 1, "an unchanged style must not redraw the icon"
+
+    # No system icon (other platforms, or a failed draw): bundled artwork, and
+    # never a blank caption.
+    with patch.object(icons, "macos_icon_style", return_value=("", "")):
+        with patch.object(icons, "macos_app_icon_pixmap", return_value=None):
+            window._apply_caption_icon()
+            assert not label.pixmap().isNull()
+            assert label.pixmap().width() == window._icon_size
+
+    if sys.platform == "darwin":
+        theme, tint = icons.macos_icon_style()
+        assert theme, "this Mac must publish its icon appearance configuration"
+        assert isinstance(tint, str)
+    window.close()
+    app.processEvents()
+
+
+def test_tooltips_stay_native_and_readable():
+    """Tooltips are the host's own, drawn by the platform style.
+
+    No QToolTip stylesheet rule and no forced tip palette: a rule puts the tip
+    on QStyleSheetStyle, which replaces the desktop's own tip frame (the macOS
+    help tag, the WinUI tip) with a flat plate — the ugly tips this replaced.
+    The theme pairs still exist for anything that paints a surface itself.
     """
     import re
 
@@ -2349,54 +2524,52 @@ def test_tooltip_contrast_follows_light_and_dark():
     from PySide6.QtGui import QColor, QPalette
     from PySide6.QtWidgets import QToolTip, QWidget
 
-    from src.ui.dark import T, apply_theme, contrast_ratio, tooltip_rich_text
+    from src.ui.dark import T, apply_theme, contrast_ratio, tooltip_surface_colors
+
+    # Comments may name the widget; a *rule* for it is what must not exist.
+    rules = re.sub(r"/\*.*?\*/", "", _build_qss(), flags=re.S)
+    assert not re.search(r"(?m)^\s*QToolTip\b", rules), "tooltips must not be styled"
+    assert not re.search(r"(?m)QToolTip[^\n]*\{", rules), "tooltips must not be styled"
 
     app = QApplication.instance() or QApplication(sys.argv)
 
-    def _block(qss: str) -> str:
-        start = qss.find("QToolTip")
-        assert start >= 0, "stylesheet is missing a QToolTip rule"
-        end = qss.find("}", start)
-        return qss[start:end]
-
     def _assert_theme(dark: bool) -> None:
+        # A palette the platform set is left exactly as it is.
         poisoned = QPalette()
-        poisoned.setColor(QPalette.ColorGroup.All, QPalette.ColorRole.ToolTipBase, QColor("#000000"))
-        poisoned.setColor(QPalette.ColorGroup.All, QPalette.ColorRole.ToolTipText, QColor("#000000"))
+        poisoned.setColor(
+            QPalette.ColorGroup.All, QPalette.ColorRole.ToolTipBase, QColor("#123456")
+        )
+        poisoned.setColor(
+            QPalette.ColorGroup.All, QPalette.ColorRole.ToolTipText, QColor("#abcdef")
+        )
         QToolTip.setPalette(poisoned)
 
         apply_theme(app, force_dark=dark)
-        tokens = T()
-        background = QColor(tokens.bg_tooltip)
-        foreground = QColor(tokens.fg)
-        block = _block(app.styleSheet())
-        bg_match = re.search(r"background-color:\s*(#[0-9A-Fa-f]{6})", block)
-        fg_match = re.search(r"(?:^|[;\n])\s*color:\s*(#[0-9A-Fa-f]{6})", block)
-        assert bg_match and fg_match, block
-        assert QColor(bg_match.group(1)).name() == background.name()
-        assert QColor(fg_match.group(1)).name() == foreground.name()
-
-        palette = QToolTip.palette()
+        kept = QToolTip.palette()
         for group in (QPalette.ColorGroup.Active, QPalette.ColorGroup.Inactive):
-            tip_bg = palette.color(group, QPalette.ColorRole.ToolTipBase)
-            tip_fg = palette.color(group, QPalette.ColorRole.ToolTipText)
-            assert tip_bg.name() == background.name(), (dark, group, tip_bg.name())
-            assert tip_fg.name() == foreground.name(), (dark, group, tip_fg.name())
-            assert contrast_ratio(tip_fg, tip_bg) >= 4.5
-            if dark:
-                assert tip_bg.lightness() < 80
-                assert tip_fg.lightness() > 180
-            else:
-                assert tip_bg.lightness() > 180
-                assert tip_fg.lightness() < 80
+            assert kept.color(group, QPalette.ColorRole.ToolTipBase).name() == "#123456"
+            assert kept.color(group, QPalette.ColorRole.ToolTipText).name() == "#abcdef"
+
+        # And what the platform then draws stays legible in both appearances:
+        # the tip is a surface with text on it, never one flat block.
+        background, foreground = tooltip_surface_colors()
+        assert contrast_ratio(foreground, background) >= 4.5
+        if dark:
+            assert background.lightness() < 80
+            assert foreground.lightness() > 180
+        else:
+            assert background.lightness() > 180
+            assert foreground.lightness() < 80
+        tokens = T()
+        assert background.name() == QColor(tokens.bg_tooltip).name()
 
         host = QWidget()
         host.resize(120, 40)
         host.show()
-        QToolTip.showText(QPoint(8, 8), tooltip_rich_text("Type A\nType B"), host)
+        QToolTip.showText(QPoint(8, 8), "Type A\nType B", host)
         app.processEvents()
         label = next(
-            (widget for widget in app.allWidgets() if widget.metaObject().className() == "QTipLabel"),
+            (w for w in app.allWidgets() if w.metaObject().className() == "QTipLabel"),
             None,
         )
         assert label is not None
@@ -2409,13 +2582,33 @@ def test_tooltip_contrast_follows_light_and_dark():
                     light_pixels += 1
                 elif lightness < 80:
                     dark_pixels += 1
-        assert light_pixels > 0 and dark_pixels > 0, (dark, light_pixels, dark_pixels, image.width(), image.height())
+        assert light_pixels > 0 and dark_pixels > 0, (
+            dark,
+            light_pixels,
+            dark_pixels,
+            image.width(),
+            image.height(),
+        )
         QToolTip.hideText()
         host.close()
         app.processEvents()
 
     _assert_theme(False)
     _assert_theme(True)
+
+
+def test_type_help_tip_is_plain_text():
+    """The Type tip is plain text so the platform draws it, rich text does not."""
+    app = QApplication.instance() or QApplication(sys.argv)
+    apply_theme(app)
+    page = SelectPackagePage()
+    tip = page._type_combo.toolTip()
+    assert tip
+    assert "<qt>" not in tip and "<span" not in tip and "style=" not in tip
+    assert "Type A" in tip and "Type B" in tip
+    assert tip == page._type_help_icon.toolTip()
+    page.close()
+    app.processEvents()
 
 
 def test_progress_and_status_follow_the_live_theme():
@@ -2550,7 +2743,9 @@ if __name__ == "__main__":
     test_post_install_support_appeal()
     test_settings_switches_are_on_the_right_and_install_modes_exclude_each_other()
     test_settings_donations_dismiss_link()
-    test_tooltip_contrast_follows_light_and_dark()
+    test_caption_icon_follows_the_macos_icon_style()
+    test_tooltips_stay_native_and_readable()
+    test_type_help_tip_is_plain_text()
     test_progress_and_status_follow_the_live_theme()
 
     print("All native UX enhancement tests passed!")

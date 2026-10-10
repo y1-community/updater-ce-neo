@@ -53,12 +53,18 @@ def _ensure_imports():
     _imports_done = True
 
 
-def init(loader=None, preloader=None, serialport=None, loglevel=logging.INFO):
+def init(loader=None, preloader=None, serialport=None, loglevel=logging.INFO, auth=None):
     """Initialise an MTK connection context.
 
     Mirrors the upstream (InniUpdaterChin / mtkclient) signature. The camelCase
     variant was a porting typo that made every MTKClient install die with a
     TypeError.
+
+    ``loader`` is mtkclient's download-agent override (its CLI's ``--loader``):
+    when given, DA autodetection is disabled and exactly that file is uploaded.
+    ``auth`` is the secure-boot authentication file (its CLI's ``--auth``); the
+    preloader only sends one when explicitly present and the target needs it,
+    so a missing file is reported and ignored rather than fatal.
     """
     _ensure_imports()
 
@@ -68,6 +74,15 @@ def init(loader=None, preloader=None, serialport=None, loglevel=logging.INFO):
     if preloader and os.path.exists(preloader):
         config.preloader_filename = preloader
         config.preloader = open(config.preloader_filename, "rb").read()
+    if auth:
+        if os.path.exists(auth):
+            # mtkclient reads config.auth itself during the BROM handshake
+            # (mtk_preloader.send_auth), so only the path is stored here.
+            config.auth = auth
+        else:
+            logging.getLogger(__name__).warning(
+                "Auth file not found, continuing without one: %s", auth
+            )
     mtk = _Mtk(config=config, loglevel=loglevel, serialportname=serialport)
     return mtk
 

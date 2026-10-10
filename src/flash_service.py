@@ -1155,11 +1155,16 @@ class FlashWorker(QThread):
     finished = Signal(bool, str)  # ok, error_code
 
     def __init__(self, package_path, pre_extracted_dir="", method="auto", model="",
-                 parent=None, device_loss_hold=None):
+                 parent=None, device_loss_hold=None, da_file="", auth_file=""):
         super().__init__(parent)
         self.package_path = package_path
         self.pre_extracted_dir = pre_extracted_dir
         self.model = (model or "").strip()
+        # User-chosen Download Agent and authentication file. Updater CE leaves
+        # both empty (the bundled MTK_AllInOne_DA.bin and the saved SP auth file
+        # apply); the MediaTek Installer hands the three files the user picked.
+        self.da_file = str(da_file or "").strip()
+        self.auth_file = str(auth_file or "").strip()
         # Flash backend method: "auto" (platform default), "sp" (SP Flash
         # Tool), or "mtk" (MTKClient). The user can pick manually; on macOS
         # "sp" is unavailable and always falls back to MTKClient.
@@ -1567,6 +1572,34 @@ class FlashWorker(QThread):
         self.progress.emit(min(40, 5 + int(pct * 0.35)))
 
     # -- SP Flash Tool backend (Windows + staged Linux) ----------------------
+    def _resolve_da_file(self, sp_dir):
+        """Download agent for this run: the user's choice, else the bundled DA.
+
+        Updater CE always flashes with the payload's own ``MTK_AllInOne_DA.bin``
+        (the reference behaviour, and the only DA known to match our packages).
+        The MediaTek Installer lets the user point at any vendor's DA, so that
+        file wins when it is present; a path that vanished falls back to the
+        bundled payload with a line saying so rather than flashing with the
+        wrong agent silently.
+        """
+        chosen = self.da_file
+        if chosen:
+            if Path(chosen).is_file():
+                return Path(chosen)
+            self._log(f"Download agent not found, using the bundled DA: {chosen}")
+        return Path(sp_dir) / "MTK_AllInOne_DA.bin"
+
+    def _resolve_auth_file(self):
+        """Authentication file for this run: the installer's choice, else saved."""
+        if self.auth_file:
+            return self.auth_file
+        try:
+            from . import device_tracking
+
+            return device_tracking.sp_auth_file()
+        except Exception:
+            return ""
+
     def _flash_via_sp_flash_tool(self, scatter_file):
         # Raw output printed while this backend runs is flash_tool's.
         self._tool_tag = "SP"
@@ -1579,7 +1612,7 @@ class FlashWorker(QThread):
                 self.finished.emit(False, "SP_FLASH_TOOL_NOT_FOUND")
                 return
             flash_tool_exe = sp_dir / "flash_tool.exe"
-            da_file = sp_dir / "MTK_AllInOne_DA.bin"
+            da_file = self._resolve_da_file(sp_dir)
             log_root = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "SP_FT_Logs"
             env = None
             creationflags = _SUBPROCESS_NO_WINDOW
@@ -1595,7 +1628,7 @@ class FlashWorker(QThread):
             sp_dir = linux_sp_flash.stage_dir()
             linux_sp_flash.fix_option_ini(sp_dir)
             flash_tool_exe = sp_dir / linux_sp_flash.FLASH_TOOL_LINUX_BIN
-            da_file = sp_dir / "MTK_AllInOne_DA.bin"
+            da_file = self._resolve_da_file(sp_dir)
             log_root = sp_dir / linux_sp_flash.LOG_DIR_NAME
             log_root.mkdir(parents=True, exist_ok=True)
             env = linux_sp_flash.process_env(sp_dir)
@@ -1621,9 +1654,9 @@ class FlashWorker(QThread):
         except Exception as e:
             logger.debug("Could not update SP history.ini before flash_tool: %s", e)
 
-        from . import device_tracking
-
-        auth_file = device_tracking.sp_auth_file()
+        auth_file = self._resolve_auth_file()
+        if self.da_file and str(Path(da_file)) != str(Path(sp_dir) / "MTK_AllInOne_DA.bin"):
+            self._log(f"Download agent: {Path(da_file).name}")
 
         self._announce_please_wait()
         if IS_WINDOWS:
@@ -1969,7 +2002,11 @@ class FlashWorker(QThread):
         self._log("Device is in BROM mode - reconnecting...")
 
         try:
-            session = mtk_api.init(loader=None, preloader=preloader_path)
+            session = mtk_api.init(
+                loader=getattr(self, "da_file", "") or None,
+                preloader=preloader_path,
+                auth=getattr(self, "auth_file", "") or None,
+            )
         except BaseException as e:
             self._log(f"mtkclient init failed: {type(e).__name__}: {e}")
             return None
@@ -2015,7 +2052,9 @@ class FlashWorker(QThread):
             or (len(sys.argv) > 0 and "smoke_test" in sys.argv[0])
             or "pytest" in sys.modules
         ):
-            self._flash_via_mtkclient_core(extract_dir, scatter_file)
+            self._flash_via_mtkclient_core(
+                extract_dir, scatter_file, da_file=self.da_file, auth_file=self._resolve_auth_file()
+            )
             return
 
         self._tool_tag = "MTK"
@@ -2038,6 +2077,9 @@ class FlashWorker(QThread):
         if not getattr(sys, "frozen", False):
             cmd.extend(["-m", "src.app"])
         platform_name = str(getattr(self, "package_platform", "") or "")
+        # Trailing optional facts the CLI forwards to mtkclient: a user-chosen
+        # Download Agent (--loader) and an authentication file (--auth). Empty
+        # strings keep the bundled DA / no-auth behaviour.
         cmd.extend([
             "--flash-cli",
             str(extract_dir),
@@ -2045,6 +2087,8 @@ class FlashWorker(QThread):
             platform_name,
             str(self.package_path or ""),
             str(self.model or ""),
+            self.da_file,
+            self._resolve_auth_file(),
         ])
 
         final_ok = False
@@ -2111,9 +2155,15 @@ class FlashWorker(QThread):
             self._log(f"Failed to start flash CLI: {e}")
             self.finished.emit(False, "CLI_START_FAILED")
 
-    def _flash_via_mtkclient_core(self, extract_dir, scatter_file, platform=""):
+    def _flash_via_mtkclient_core(self, extract_dir, scatter_file, platform="", da_file="", auth_file=""):
         # Raw output printed while this backend runs comes from MTKClient.
         self._tool_tag = "MTK"
+        # A Download Agent / auth file chosen by the user (MediaTek Installer)
+        # beats whatever this worker was constructed with; both are optional.
+        if da_file:
+            self.da_file = str(da_file).strip()
+        if auth_file:
+            self.auth_file = str(auth_file).strip()
         self._announce_please_wait()
         self.action_changed.emit(tr("action_init_mtkclient"))
         self._log(tr("action_init_mtkclient"))
@@ -2155,6 +2205,18 @@ class FlashWorker(QThread):
             self._log(f"Preloader image: {os.path.basename(preloader_path)}")
         else:
             self._log("No preloader image found; using built-in EMI")
+        # mtkclient accepts a Download Agent override and an auth file; report
+        # which ones this run will actually use so a failure is diagnosable.
+        if self.da_file and Path(self.da_file).is_file():
+            self._log(f"Download agent: {os.path.basename(self.da_file)}")
+        elif self.da_file:
+            self._log(f"Download agent not found, using mtkclient's built-in DA: {self.da_file}")
+            self.da_file = ""
+        if self.auth_file and Path(self.auth_file).is_file():
+            self._log(f"Auth file: {os.path.basename(self.auth_file)}")
+        elif self.auth_file:
+            self._log(f"Auth file not found, continuing without one: {self.auth_file}")
+            self.auth_file = ""
 
         self._announce_please_wait()
         self.action_changed.emit(tr("action_wait_mtk"))
@@ -2226,7 +2288,11 @@ class FlashWorker(QThread):
             """
             _clear_mtk_state(extract_dir, Path.cwd())
             try:
-                session = mtk_api.init(loader=None, preloader=preloader_path)
+                session = mtk_api.init(
+                    loader=self.da_file or None,
+                    preloader=preloader_path,
+                    auth=self.auth_file or None,
+                )
             except BaseException as e:
                 self._log(f"mtkclient init failed: {type(e).__name__}: {e}")
                 return None
@@ -2249,7 +2315,11 @@ class FlashWorker(QThread):
                     # upload run exactly as it did before the restart existed.
                     self._log("Falling back to a preloader-mode session...")
                     try:
-                        session = mtk_api.init(loader=None, preloader=preloader_path)
+                        session = mtk_api.init(
+                            loader=self.da_file or None,
+                            preloader=preloader_path,
+                            auth=self.auth_file or None,
+                        )
                     except BaseException as e:
                         self._log(f"mtkclient init failed: {type(e).__name__}: {e}")
                         return None
@@ -2885,7 +2955,8 @@ class FlashService(QObject):
         self._extract_worker = None
 
     # -- flashing -----------------------------------------------------------
-    def start_flash(self, package_path, pre_extracted_dir="", method="auto", model=""):
+    def start_flash(self, package_path, pre_extracted_dir="", method="auto", model="",
+                    da_file="", auth_file=""):
         # Kill any backend still running (e.g. a searching flash_tool) first,
         # then start the new one. The cancelled worker's late terminal signals
         # are detached so they cannot reach the UI or clobber the new run.
@@ -2896,6 +2967,8 @@ class FlashService(QObject):
             method,
             model=model,
             device_loss_hold=self.hold_device_lost,
+            da_file=da_file,
+            auth_file=auth_file,
         )
         worker._wait_for = retired
         self._flash_worker = worker

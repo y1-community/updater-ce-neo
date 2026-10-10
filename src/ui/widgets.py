@@ -481,6 +481,33 @@ class Card(QFrame):
         """Return the current title text."""
         return self._title.text() if self._title is not None else ""
 
+    def title_label(self):
+        """The title QLabel itself, for a row that shares the header line."""
+        return self._title
+
+    def put_widget_on_title_row(self, widget) -> None:
+        """Move ``widget`` onto the title line, right-aligned.
+
+        For a card whose title already names the setting ("Offline Mode"), the
+        switch belongs on that line: repeating the same words underneath as a
+        caption is a row the eye skips over and a row of vertical space.
+        """
+        if widget is None or self._title is None:
+            return
+        row = getattr(self, "_title_row", None)
+        if row is None:
+            row = QWidget()
+            box = QHBoxLayout(row)
+            box.setContentsMargins(0, 0, 0, 0)
+            box.setSpacing(12)
+            # The title label itself moves into the row, so retranslate() and
+            # title() keep addressing the same widget.
+            self._outer.removeWidget(self._title)
+            box.addWidget(self._title, 1)
+            self._outer.insertWidget(0, row)
+            self._title_row = row
+        row.layout().addWidget(widget, 0, Qt.AlignRight | Qt.AlignVCenter)
+
     def retranslate(self):
         if self._title_key:
             self.setTitle(tr(self._title_key))

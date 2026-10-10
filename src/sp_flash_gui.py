@@ -643,6 +643,25 @@ def _da_source_files() -> List[Path]:
     return files
 
 
+def bundled_da_path() -> Optional[Path]:
+    """The download agent the app ships, for prefilling a DA field.
+
+    Prefers ``MTK_AllInOne_DA.bin`` beside the installed SP Flash Tool payload
+    (the exact file the guided SP Flash Tool flash uses); falls back to the
+    bundled mtkclient loader directory. ``None`` when nothing is present, so a
+    caller can leave the field empty rather than guess a path.
+    """
+    tool_dir = paths.find_sp_flash_tool()
+    if tool_dir is not None:
+        candidate = Path(tool_dir) / DA_FILENAME
+        if candidate.is_file():
+            return candidate
+    for src in _da_source_files():
+        if src.is_file():
+            return src
+    return None
+
+
 def _ensure_da_payload(sp_dir: Path) -> Path:
     """Return ``sp_dir/MTK_AllInOne_DA.bin``, staging our bundled copy if absent.
 

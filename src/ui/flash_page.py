@@ -1,8 +1,9 @@
 """Flash page — modern OS software update in-progress display (macOS / iOS / Windows Fluent style)."""
 
-from PySide6.QtCore import QEventLoop, QSize, Qt, QTimer
-from PySide6.QtGui import QFont, QPainter, QPixmap
+from PySide6.QtCore import QEventLoop, QRect, QSize, Qt, QTimer
+from PySide6.QtGui import QColor, QFont, QPainter, QPixmap
 from PySide6.QtWidgets import (
+    QBoxLayout,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -32,7 +33,7 @@ from ..i18n import tr, tr_brand
 from .support_appeal import SupportIntro
 from .widgets import Banner, Card, CurrentPageStack, InfoRow, StatusTag, fade_in
 from .dark import T, page_top_margin
-from .icons import get_symbol_icon
+from .icons import get_symbol_icon, get_symbol_pixmap
 
 # Width the progress copy wraps into. A wrapped QLabel inside a horizontal
 # card reports a one-line size hint unless it is given this width.
@@ -92,6 +93,7 @@ class _FitLabel(_StatusLabel):
         self._wrap_width = INSTALL_TEXT_WIDTH
         self._elide = False
         self._marquee = False
+        self._single_line = False
         self._offset = 0
         self._timer = None
         self._ready = False
@@ -103,9 +105,30 @@ class _FitLabel(_StatusLabel):
 
     def set_column_width(self, width: int) -> None:
         self._wrap_width = max(160, int(width))
-        self.setMinimumWidth(self._wrap_width)
+        if not self._single_line:
+            self.setMinimumWidth(self._wrap_width)
         self._refresh_mode()
         self.updateGeometry()
+
+    def set_single_line(self, single: bool) -> None:
+        """Report the text's own width, for a status row the card can widen.
+
+        Wrapped mode keeps the fixed column so the card has a predictable
+        height; single-line mode lets the label sit beside another line and
+        only measure one row tall.
+        """
+        single = bool(single)
+        if single == self._single_line:
+            return
+        self._single_line = single
+        self.setMinimumWidth(0 if single else self._wrap_width)
+        self.setWordWrap(not single)
+        self._refresh_mode()
+        self.updateGeometry()
+
+    def line_width(self) -> int:
+        """Width of the text on one line, plus a pixel of slack."""
+        return self.fontMetrics().horizontalAdvance(self.text() or "") + 2
 
     def setText(self, text):  # noqa: N802 (Qt naming)
         super().setText(text)
@@ -114,22 +137,31 @@ class _FitLabel(_StatusLabel):
             self.updateGeometry()
 
     def hasHeightForWidth(self) -> bool:  # noqa: N802 (Qt naming)
-        return not self._elide and not self._marquee
+        return not (self._single_line or self._elide or self._marquee)
 
     def _wrapped_height(self, width: int) -> int:
+        """Height of this label's text wrapped into ``width`` pixels.
+
+        Measured from the font metrics alone. QLabel's own ``heightForWidth``
+        must not be folded in: it reflects the minimum height this method sets,
+        so including it makes every relayout two pixels taller than the last —
+        the window would creep downwards for as long as a backend keeps
+        printing lines (mtkclient's connect hint arrives once per USB retry).
+        """
         width = max(1, int(width))
         text = self.text() or " "
         flags = int(Qt.AlignmentFlag.AlignLeft | Qt.TextFlag.TextWordWrap)
         rect = self.fontMetrics().boundingRect(0, 0, width, 10000, flags, text)
-        native = super().heightForWidth(width)
-        return max(self.fontMetrics().height(), rect.height(), native) + 2
+        return max(self.fontMetrics().height(), rect.height()) + 2
 
     def heightForWidth(self, width: int) -> int:  # noqa: N802 (Qt naming)
-        if self._elide or self._marquee:
+        if self._single_line or self._elide or self._marquee:
             return max(18, self.fontMetrics().height() + 2)
         return self._wrapped_height(width)
 
     def sizeHint(self):  # noqa: N802 (Qt naming)
+        if self._single_line:
+            return QSize(self.line_width(), self.heightForWidth(self._wrap_width))
         if self._elide or self._marquee:
             return QSize(self._wrap_width, self.heightForWidth(self._wrap_width))
         return QSize(self._wrap_width, self._wrapped_height(self._wrap_width))
@@ -147,6 +179,14 @@ class _FitLabel(_StatusLabel):
 
     def _refresh_mode(self) -> None:
         if not getattr(self, "_ready", False):
+            return
+        if self._single_line:
+            # A shared status row stacks again instead of overflowing, so the
+            # scroll / elide fallbacks stay out of the way here.
+            self._stop_marquee()
+            self.setToolTip("")
+            self.setWordWrap(False)
+            self.setMinimumHeight(max(18, self.fontMetrics().height() + 2))
             return
         overflows = self._unbroken_width() > self._wrap_width + 8
         self._elide = False
@@ -261,6 +301,228 @@ def _status_label(text: str, *, strong: bool = False) -> _FitLabel:
     return label
 
 
+ROUND_NEXT_BUTTON_PX = 30
+_ROUND_NEXT_ARROW_PX = 15
+# Round chips sit on a glass card, so their discs are translucent too. The
+# accent (the step that moves the install on) stays nearly opaque; a neutral
+# cancel/back chip reads as a wash over whatever is behind it.
+_ACCENT_DISC_ALPHA = 235
+_NEUTRAL_DISC_ALPHA = 150
+
+
+class _GlyphActions(QWidget):
+    """Up to three round glyph buttons: a row when there is room, else a column.
+
+    The row is right-aligned beside the copy. When the card is too narrow for
+    that, the same buttons stack in the order they were given, the way a
+    traffic light does. No button ever carries a word: the wording lives in the
+    hover tip and the accessible name.
+    """
+
+    def __init__(self, buttons, parent=None):
+        super().__init__(parent)
+        self._buttons = list(buttons)
+        self._box = QBoxLayout(QBoxLayout.Direction.LeftToRight, self)
+        self._box.setContentsMargins(0, 0, 0, 0)
+        self._box.setSpacing(10)
+        for button in self._buttons:
+            self._box.addWidget(button, 0, Qt.AlignCenter)
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+
+    def set_stacked(self, stacked: bool) -> None:
+        """Column instead of row, for a card with no horizontal room left."""
+        direction = (
+            QBoxLayout.Direction.TopToBottom
+            if stacked
+            else QBoxLayout.Direction.LeftToRight
+        )
+        if self._box.direction() != direction:
+            self._box.setDirection(direction)
+            self.updateGeometry()
+
+
+class _FlowRow(QWidget):
+    """Status lines that share one row when the card is wide enough.
+
+    The install step and its ETA were two fixed rows, each wrapping into its
+    own column: a wide window kept them stacked. On one row they read as a
+    single sentence and give the copy band its height back; a card too narrow
+    for both stacks them again, exactly as before.
+    """
+
+    def __init__(self, first, second, parent=None):
+        super().__init__(parent)
+        self._labels = (first, second)
+        self._box = QBoxLayout(QBoxLayout.Direction.TopToBottom, self)
+        self._box.setContentsMargins(0, 0, 0, 0)
+        self._box.setSpacing(4)
+        for label in self._labels:
+            self._box.addWidget(label, 0, Qt.AlignVCenter)
+        self._forced_stacked = False
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+
+    def row_width(self) -> int:
+        """Width both lines need side by side."""
+        width = 0
+        for label in self._labels:
+            text = label.text() or ""
+            if text:
+                width += label.fontMetrics().horizontalAdvance(text)
+        return width + self._box.spacing() * (len(self._labels) - 1) + 4
+
+    def _horizontal_for(self, width: int) -> bool:
+        if self._forced_stacked:
+            return False
+        return int(width) >= self.row_width()
+
+    def set_forced_stacked(self, stacked: bool) -> None:
+        """Keep the lines stacked whatever the width, while the copy needs to wrap.
+
+        The stop sanity check borrows the step line for a full sentence, and
+        that sentence must wrap into the card rather than run off one row.
+        """
+        stacked = bool(stacked)
+        if stacked == self._forced_stacked:
+            return
+        self._forced_stacked = stacked
+        self.set_horizontal(self._horizontal_for(self.width()))
+
+    def set_horizontal(self, horizontal: bool) -> None:
+        direction = (
+            QBoxLayout.Direction.LeftToRight if horizontal else QBoxLayout.Direction.TopToBottom
+        )
+        if self._box.direction() == direction:
+            return
+        self._box.setDirection(direction)
+        for label in self._labels:
+            setter = getattr(label, "set_single_line", None)
+            if callable(setter):
+                setter(horizontal)
+        self.updateGeometry()
+
+    def refresh(self) -> None:
+        """Re-decide the direction after a label's text changed."""
+        self.set_horizontal(self._horizontal_for(self.width()))
+
+    def hasHeightForWidth(self) -> bool:  # noqa: N802 (Qt naming)
+        return True
+
+    def heightForWidth(self, width: int) -> int:  # noqa: N802 (Qt naming)
+        if self._horizontal_for(width):
+            return max(18, self.fontMetrics().height() + 2)
+        return sum(label.heightForWidth(width) for label in self._labels) + self._box.spacing()
+
+    def sizeHint(self):  # noqa: N802 (Qt naming)
+        return QSize(self.row_width(), self.heightForWidth(self.row_width()))
+
+    def minimumSizeHint(self):  # noqa: N802 (Qt naming)
+        return QSize(0, self.heightForWidth(self.row_width()))
+
+    def resizeEvent(self, event):  # noqa: N802 (Qt naming)
+        self.set_horizontal(self._horizontal_for(self.width()))
+        super().resizeEvent(event)
+
+
+class _RoundNextButton(QPushButton):
+    """One round glyph button: a platform symbol in a filled disc.
+
+    The power-off step used to end with a wide "Continue" button on a row of its
+    own, which read like a form to fill in. A single round chip reads as the next
+    step of a software-update assistant, and the same chip carries a cancel or a
+    back arrow. Every other control on the card stays native; this one draws its
+    own disc so the accent, the hover wash and the press state do not depend on a
+    platform style. Hover text is the button's tooltip.
+    """
+
+    def __init__(self, parent=None, *, symbol: str = "next", accent: bool = True):
+        super().__init__("", parent)
+        self._symbol = symbol
+        # Neutral chips (cancel, back) are a muted disc: only the step that
+        # moves the install forward wears the accent colour.
+        self._accent = bool(accent)
+        self.setObjectName("roundNextButton" if accent else "roundGlyphButton")
+        self.setCursor(Qt.PointingHandCursor)
+        self.setFixedSize(ROUND_NEXT_BUTTON_PX, ROUND_NEXT_BUTTON_PX)
+        self.setFlat(True)
+        self.setAutoDefault(False)
+        self.setDefault(False)
+        self._hovered = False
+        self._pressed = False
+        self._arrow = QPixmap()
+
+    def _colors(self) -> tuple[QColor, str]:
+        """Disc and the glyph's contrast colour, from the live theme."""
+        from .dark import T, get_native_accent_color
+
+        if self._accent:
+            disc = QColor(getattr(T(), "accent", "") or "#52b036")
+            disc.setAlpha(_ACCENT_DISC_ALPHA)
+        else:
+            disc = QColor(getattr(T(), "bg_elev", "") or "#3a3f4b")
+            disc.setAlpha(_NEUTRAL_DISC_ALPHA)
+        _accent, text = get_native_accent_color()
+        if not self._accent:
+            dark = disc.lightness() < 140
+            text = "#ffffff" if dark else "#111827"
+        return disc, text
+
+    def rebuild_arrow(self) -> None:
+        """Re-render the platform glyph for the current theme colours."""
+        _disc, text = self._colors()
+        self._arrow = get_symbol_pixmap(self._symbol, _ROUND_NEXT_ARROW_PX, text)
+        self.update()
+
+    def paintEvent(self, event):  # noqa: N802 (Qt naming)
+        if self._arrow.isNull():
+            self.rebuild_arrow()
+        disc, _text = self._colors()
+        if not self.isEnabled():
+            disc.setAlpha(min(disc.alpha(), 110))
+        elif self._pressed:
+            disc = disc.darker(118)
+        elif self._hovered:
+            disc = disc.lighter(112)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(disc)
+        painter.drawEllipse(self.rect())
+        if not self._arrow.isNull():
+            size = _ROUND_NEXT_ARROW_PX
+            painter.drawPixmap(
+                QRect(
+                    (self.width() - size) // 2,
+                    (self.height() - size) // 2,
+                    size,
+                    size,
+                ),
+                self._arrow,
+                self._arrow.rect(),
+            )
+        painter.end()
+
+    def enterEvent(self, event):  # noqa: N802 (Qt naming)
+        self._hovered = True
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):  # noqa: N802 (Qt naming)
+        self._hovered = False
+        self._pressed = False
+        self.update()
+        super().leaveEvent(event)
+
+    def mousePressEvent(self, event):  # noqa: N802 (Qt naming)
+        self._pressed = True
+        self.update()
+        super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event):  # noqa: N802 (Qt naming)
+        self._pressed = False
+        self.update()
+        super().mouseReleaseEvent(event)
+
+
 def _configure_progress(bar: QProgressBar) -> None:
     """A platform progress bar. No stylesheet, so Aqua / WinUI / Breeze paint it.
 
@@ -336,15 +598,6 @@ class FlashPage(QWidget):
         layout.addWidget(self._stack, 1)
         self._seal_status_labels()
 
-    def _style_cancel_button(self, btn: QPushButton):
-        btn.setFixedSize(24, 24)
-        btn.setCursor(Qt.ArrowCursor)
-        btn.setIcon(get_symbol_icon("cancel", 12))
-        btn.setIconSize(QSize(12, 12))
-        btn.setText("")
-        btn.setStyleSheet("")
-        btn.setFlat(False)
-
     def _wrap_centered(self, card_widget: QWidget, extra_below: QWidget | None = None) -> QWidget:
         """Fill the content width with the progress card."""
         container = QWidget()
@@ -397,12 +650,11 @@ class FlashPage(QWidget):
         card_layout.addLayout(col, 1)
         self._prep_col = col
 
-        self._prep_cancel_btn = QPushButton("✕")
+        self._prep_cancel_btn = _RoundNextButton(symbol="cancel", accent=False)
         self._prep_cancel_btn.setObjectName("softwareUpdateCancelBtn")
-        self._style_cancel_button(self._prep_cancel_btn)
         self._prep_cancel_btn.setToolTip(tr("flash_btn_cancel_wait"))
         self._prep_cancel_btn.clicked.connect(self._on_cancel_wait)
-        card_layout.addWidget(self._prep_cancel_btn, 0, Qt.AlignTop)
+        card_layout.addWidget(self._prep_cancel_btn, 0, Qt.AlignVCenter)
 
         self._prep_card.set_layout(card_layout)
         self._prep_row = card_layout
@@ -438,7 +690,20 @@ class FlashPage(QWidget):
             tr("flash_connect_device_prompt").format(model=self._connect_model_text())
         )
         self._wait_prompt_label.setWordWrap(True)
-        col.addWidget(self._wait_prompt_label)
+
+        # The next step is one round arrow at the end of the status line it
+        # advances, not a wide button on a row of its own.
+        self._wait_continue_btn = _RoundNextButton()
+        self._wait_continue_btn.setVisible(False)
+        self._wait_continue_btn.setToolTip(tr("dialog_pre_install_continue"))
+        self._wait_continue_btn.setAccessibleName(tr("dialog_pre_install_continue"))
+        self._wait_continue_btn.clicked.connect(self._on_power_off_continue)
+        wait_actions = QHBoxLayout()
+        wait_actions.setContentsMargins(0, 0, 0, 0)
+        wait_actions.setSpacing(10)
+        wait_actions.addWidget(self._wait_prompt_label, 1, Qt.AlignVCenter)
+        wait_actions.addWidget(self._wait_continue_btn, 0, Qt.AlignVCenter)
+        col.addLayout(wait_actions)
 
         self._wait_mode_hint = _status_label("")
         self._wait_mode_hint.setWordWrap(True)
@@ -448,18 +713,6 @@ class FlashPage(QWidget):
         self._wait_mode_hint.setVisible(False)
         col.addWidget(self._wait_mode_hint)
 
-        self._wait_continue_btn = QPushButton(tr("dialog_pre_install_continue"))
-        self._wait_continue_btn.setVisible(False)
-        self._wait_continue_btn.setCursor(Qt.ArrowCursor)
-        self._wait_continue_btn.setMinimumHeight(28)
-        self._wait_continue_btn.clicked.connect(self._on_power_off_continue)
-        wait_actions = QHBoxLayout()
-        wait_actions.setContentsMargins(0, 0, 0, 0)
-        wait_actions.setSpacing(8)
-        wait_actions.addWidget(self._wait_continue_btn)
-        wait_actions.addStretch(1)
-        col.addLayout(wait_actions)
-
         self._wait_banner = Banner()
         self._wait_banner.setVisible(False)
         self._wait_status = StatusTag("idle")
@@ -468,12 +721,11 @@ class FlashPage(QWidget):
         card_layout.addLayout(col, 1)
         self._wait_col = col
 
-        self._wait_cancel_btn = QPushButton("✕")
+        self._wait_cancel_btn = _RoundNextButton(symbol="cancel", accent=False)
         self._wait_cancel_btn.setObjectName("softwareUpdateCancelBtn")
-        self._style_cancel_button(self._wait_cancel_btn)
         self._wait_cancel_btn.setToolTip(tr("flash_btn_cancel_wait"))
         self._wait_cancel_btn.clicked.connect(self._on_cancel_wait)
-        card_layout.addWidget(self._wait_cancel_btn, 0, Qt.AlignTop)
+        card_layout.addWidget(self._wait_cancel_btn, 0, Qt.AlignVCenter)
 
         self._wait_card.set_layout(card_layout)
         self._wait_row = card_layout
@@ -490,7 +742,22 @@ class FlashPage(QWidget):
             text.setWordWrap(True)
             self._guide_texts.append((key, text))
 
-        return self._wrap_centered(self._wait_card)
+        # Paperclip hint, under the card that carries the progress and install
+        # information: the hidden button is the only way these players power on
+        # once they are off. It names where to find it, which differs by model.
+        self._paperclip_hint = _status_label("")
+        hint_font = self._paperclip_hint.font()
+        hint_font.setPixelSize(11)
+        self._paperclip_hint.setFont(hint_font)
+        self._paperclip_hint_host = QWidget()
+        hint_layout = QVBoxLayout(self._paperclip_hint_host)
+        hint_layout.setContentsMargins(16, 0, 16, 0)
+        hint_layout.setSpacing(0)
+        hint_layout.addWidget(self._paperclip_hint)
+        self._paperclip_hint_host.setVisible(False)
+        self._update_paperclip_hint()
+
+        return self._wrap_centered(self._wait_card, self._paperclip_hint_host)
 
     def _build_flashing_view(self):
         self._progress_card = Card()
@@ -517,10 +784,10 @@ class FlashPage(QWidget):
         col.addWidget(self._progress_bar)
 
         self._step_label = _status_label(tr("step_write"))
-        col.addWidget(self._step_label)
-
         self._eta_label = _status_label("")
-        col.addWidget(self._eta_label)
+        # Step and ETA share one row on a wide card, stack on a narrow one.
+        self._status_flow = _FlowRow(self._step_label, self._eta_label)
+        col.addWidget(self._status_flow)
 
         self._flash_retry_btn = QPushButton(tr("flash_btn_retry"))
         self._flash_retry_btn.setVisible(False)
@@ -537,14 +804,15 @@ class FlashPage(QWidget):
         card_layout.addLayout(col, 1)
         self._flash_col = col
 
-        self._cancel_btn = QPushButton("✕")
+        self._cancel_btn = _RoundNextButton(symbol="cancel", accent=False)
         self._cancel_btn.setObjectName("softwareUpdateCancelBtn")
-        self._style_cancel_button(self._cancel_btn)
         self._cancel_btn.setToolTip(tr("flash_btn_cancel"))
         self._cancel_btn.clicked.connect(self._on_cancel)
-        card_layout.addWidget(self._cancel_btn, 0, Qt.AlignTop)
+        # Vertically centred on the card: the chip lines up with the progress
+        # band and the copy beside it instead of floating above them.
+        card_layout.addWidget(self._cancel_btn, 0, Qt.AlignVCenter)
 
-        from .icons import get_symbol_icon
+        from .icons import get_symbol_icon, get_symbol_pixmap
         self._done_mark = QPushButton()
         self._done_mark.setObjectName("installDoneButton")
         self._done_mark.setFixedSize(28, 28)
@@ -558,7 +826,7 @@ class FlashPage(QWidget):
         self._done_mark.setVisible(False)
         self._done_mark.clicked.connect(self._on_install_done)
         self._install_done_cb = None
-        card_layout.addWidget(self._done_mark, 0, Qt.AlignTop)
+        card_layout.addWidget(self._done_mark, 0, Qt.AlignVCenter)
 
         self._progress_card.set_layout(card_layout)
         self._flash_row = card_layout
@@ -659,12 +927,11 @@ class FlashPage(QWidget):
         card_layout.addLayout(col, 1)
         self._download_col = col
 
-        self._download_cancel_btn = QPushButton("✕")
+        self._download_cancel_btn = _RoundNextButton(symbol="cancel", accent=False)
         self._download_cancel_btn.setObjectName("softwareUpdateCancelBtn")
-        self._style_cancel_button(self._download_cancel_btn)
         self._download_cancel_btn.setToolTip(tr("flash_btn_cancel"))
         self._download_cancel_btn.clicked.connect(self._on_cancel_download)
-        card_layout.addWidget(self._download_cancel_btn, 0, Qt.AlignTop)
+        card_layout.addWidget(self._download_cancel_btn, 0, Qt.AlignVCenter)
 
         self._download_card.set_layout(card_layout)
         self._download_row = card_layout
@@ -695,6 +962,33 @@ class FlashPage(QWidget):
         if getattr(self, "_stop_open", False):
             return
         self._stack.setCurrentWidget(target_view)
+        self._update_paperclip_hint()
+
+    def _update_paperclip_hint(self) -> None:
+        """Show how to press the hidden button, when the model is known.
+
+        Sits below the progress/install card while the card is asking for a
+        powered-off player. Every known model hides that button beside the
+        headphone port except the A5, where it is below the power button.
+        """
+        host = getattr(self, "_paperclip_hint_host", None)
+        label = getattr(self, "_paperclip_hint", None)
+        if host is None or label is None:
+            return
+        model = (self._model or "").strip()
+        copy = getattr(self, "_wait_copy", "")
+        wanted = bool(model) and (
+            self._prompt_only or copy in ("power_off", "connect", "")
+        )
+        if not wanted:
+            host.setVisible(False)
+            return
+        key = "flash_paperclip_hint_a5" if model.upper() == "A5" else "flash_paperclip_hint"
+        label.setText(tr(key))
+        # Not during construction (the waiting view does not exist yet) and not
+        # while another card is on screen.
+        waiting = getattr(self, "_waiting_view", None)
+        host.setVisible(waiting is not None and self._stack.currentWidget() is waiting)
 
     def show_downloading(self):
         val = self._package_name or "\u2014"
@@ -940,6 +1234,7 @@ class FlashPage(QWidget):
 
     def set_model(self, model):
         self._model = (model or "").strip() or ""
+        self._update_paperclip_hint()
 
     def _dont_ask_html(self) -> str:
         return f'<a href="dont-ask">{tr("donate_dont_ask_link")}</a>'
@@ -1092,6 +1387,9 @@ class FlashPage(QWidget):
             self._apply_stop_hold()
             return
         self._step_label.setText(tr(step_key))
+        flow = getattr(self, "_status_flow", None)
+        if flow is not None:
+            flow.refresh()
 
     def update_action(self, text):
         self._action_label.setText(text)
@@ -1101,6 +1399,9 @@ class FlashPage(QWidget):
         self._eta_row.set_value(eta)
         friendly = self._format_friendly_eta(eta)
         self._eta_label.setText(f"— {friendly}" if friendly else "")
+        flow = getattr(self, "_status_flow", None)
+        if flow is not None:
+            flow.refresh()
 
     @staticmethod
     def _format_friendly_eta(eta_str: str) -> str:
@@ -1155,7 +1456,8 @@ class FlashPage(QWidget):
         if hasattr(self, "_flash_retry_btn"):
             self._flash_retry_btn.setText(tr("flash_btn_retry"))
         if hasattr(self, "_wait_continue_btn"):
-            self._wait_continue_btn.setText(tr("dialog_pre_install_continue"))
+            self._wait_continue_btn.setToolTip(tr("dialog_pre_install_continue"))
+            self._wait_continue_btn.setAccessibleName(tr("dialog_pre_install_continue"))
         self._prep_banner.retranslate()
         if self._wait_banner_key == "connect":
             self._wait_banner.set_key("flash_connect_device_prompt", model=self._connect_model_text())
@@ -1190,11 +1492,10 @@ class FlashPage(QWidget):
             self._dev_row.set_value(tr(self._dev_value_key))
         if hasattr(self, "_prep_cancel_btn"):
             self._prep_cancel_btn.setToolTip(tr("flash_btn_cancel_wait"))
+        self._update_paperclip_hint()
         self._wait_cancel_btn.setToolTip(tr("flash_btn_cancel_wait"))
         self._cancel_btn.setToolTip(tr("flash_btn_cancel"))
-        if hasattr(self, "_stop_continue"):
-            self._stop_continue.setText(tr("install_interrupt_cancel"))
-            self._stop_back.setText(tr("install_interrupt_back"))
+        self._retranslate_stop_buttons()
         self._apply_stop_hold()
         self._wait_status.retranslate()
         self._prep_card.retranslate()
@@ -1212,7 +1513,7 @@ class FlashPage(QWidget):
             "_prep_pkg_label", "_prep_step", "_wait_pkg_label", "_wait_prompt_label",
             "_flash_pkg_label", "_step_label", "_eta_label", "_warning",
             "_download_pkg_label", "_download_status_label", "_download_heading",
-            "_appeal_label",
+            "_appeal_label", "_paperclip_hint",
         )
         for name in names:
             label = getattr(self, name, None)
@@ -1242,16 +1543,20 @@ class FlashPage(QWidget):
             getattr(self, "_cancel_btn", None),
             getattr(self, "_wait_cancel_btn", None),
             getattr(self, "_prep_cancel_btn", None),
+            getattr(self, "_download_cancel_btn", None),
+            getattr(self, "_wait_continue_btn", None),
+            getattr(self, "_stop_continue", None),
+            getattr(self, "_stop_back", None),
         ):
-            if btn is not None:
-                self._style_cancel_button(btn)
+            if btn is not None and hasattr(btn, "rebuild_arrow"):
+                btn.rebuild_arrow()
         self.sync_text_fit()
 
     def _style_done_button(self) -> None:
         button = getattr(self, "_done_mark", None)
         if not isinstance(button, QPushButton):
             return
-        from .icons import get_symbol_icon
+        from .icons import get_symbol_icon, get_symbol_pixmap
 
         button.setIcon(get_symbol_icon("complete", 18))
         button.setText("")
@@ -1290,6 +1595,17 @@ class FlashPage(QWidget):
             width = max(width, buttons)
         return width
 
+    def _status_row_reserve(self) -> int:
+        """Pixels the round next-step chip takes out of the status line.
+
+        The chip sits on the status line, so the copy beside it wraps that much
+        earlier. Zero while the chip is hidden, which is most of the run.
+        """
+        button = getattr(self, "_wait_continue_btn", None)
+        if button is None or button.isHidden():
+            return 0
+        return button.width() + 10
+
     def sync_text_fit(self) -> None:
         """Give wrapping labels a real width so their size hint includes every line."""
         width = self.text_column_width()
@@ -1297,12 +1613,17 @@ class FlashPage(QWidget):
             "_prep_pkg_label", "_prep_step",
             "_wait_pkg_label", "_wait_prompt_label", "_wait_mode_hint",
             "_flash_pkg_label", "_step_label", "_eta_label",
-            "_download_pkg_label", "_download_status_label",
+            "_download_pkg_label", "_download_status_label", "_paperclip_hint",
         )
         for name in names:
             label = getattr(self, name, None)
             if isinstance(label, _FitLabel):
                 label.set_column_width(width)
+        row_width = max(140, width - self._status_row_reserve())
+        for name in ("_wait_prompt_label", "_wait_mode_hint"):
+            label = getattr(self, name, None)
+            if isinstance(label, _FitLabel):
+                label.set_column_width(row_width)
         warning = getattr(self, "_warning", None)
         if isinstance(warning, QLabel):
             warning.setWordWrap(True)
@@ -1322,18 +1643,18 @@ class FlashPage(QWidget):
     def _ensure_stop_buttons(self) -> None:
         if hasattr(self, "_stop_continue"):
             return
-        self._stop_continue = QPushButton(tr("install_interrupt_cancel"))
-        self._stop_back = QPushButton(tr("install_interrupt_back"))
-        for button in (self._stop_continue, self._stop_back):
-            button.setCursor(Qt.ArrowCursor)
-            button.setMinimumHeight(28)
-        self._stop_actions = QWidget()
-        actions = QHBoxLayout(self._stop_actions)
-        actions.setContentsMargins(0, 4, 0, 0)
-        actions.setSpacing(8)
-        actions.addWidget(self._stop_continue)
-        actions.addWidget(self._stop_back)
-        actions.addStretch(1)
+        # Circular glyphs, not words: a cross for "stop the install" and a
+        # left arrow for "back to it". Both carry the wording as the hover tip
+        # and as the accessible name.
+        self._stop_continue = _RoundNextButton(symbol="cancel", accent=False)
+        self._stop_back = _RoundNextButton(symbol="back", accent=True)
+        for button, key in (
+            (self._stop_continue, "install_interrupt_cancel"),
+            (self._stop_back, "install_interrupt_back"),
+        ):
+            button.setToolTip(tr(key))
+            button.setAccessibleName(tr(key))
+        self._stop_actions = _GlyphActions([self._stop_continue, self._stop_back])
         self._stop_actions.hide()
         self._stop_host = None
         self._stop_continue.clicked.connect(self._accept_stop)
@@ -1344,14 +1665,44 @@ class FlashPage(QWidget):
         self._stop_callback = None
         self._stop_message = ""
 
-    def _place_stop_actions(self, column) -> None:
-        """Buttons sit under the prompt, not beside it, so the prompt can wrap."""
+    def _retranslate_stop_buttons(self) -> None:
+        if not hasattr(self, "_stop_continue"):
+            return
+        for button, key in (
+            (self._stop_continue, "install_interrupt_cancel"),
+            (self._stop_back, "install_interrupt_back"),
+        ):
+            button.setToolTip(tr(key))
+            button.setAccessibleName(tr(key))
+
+    def _place_stop_actions(self, column, row=None) -> None:
+        """Buttons sit beside the message while the card is wide enough.
+
+        Right of the copy when there is horizontal room, in the order they were
+        given; otherwise the same buttons stack under the copy, in that same
+        order, as a traffic-light column.
+        """
+        card = getattr(self, "_stop_card", None)
+        room = card.width() if card is not None and card.width() > 0 else 0
+        count = len(getattr(self._stop_actions, "_buttons", ())) or 2
+        buttons_w = count * ROUND_NEXT_BUTTON_PX + (count - 1) * 10
+        # Copy column, the buttons, and the icon plus card padding beside them.
+        beside = row is not None and room >= self.text_column_width() + buttons_w + 80
+        target = row if beside else column
         host = getattr(self, "_stop_host", None)
-        if host is not None and host is not column:
+        if host is not None and host is not target:
             host.removeWidget(self._stop_actions)
-        if self._stop_host is not column:
-            column.addWidget(self._stop_actions)
-            self._stop_host = column
+            host.addStretch(1)
+        if self._stop_host is not target:
+            if beside:
+                # Just left of the card's own cancel chip, which is hidden while
+                # the stop check is open.
+                target.insertWidget(max(0, target.count() - 1), self._stop_actions)
+            else:
+                # Under the copy, against the right edge of the column.
+                target.addWidget(self._stop_actions, 0, Qt.AlignRight)
+            self._stop_host = target
+        self._stop_actions.set_stacked(not beside)
         self._stop_actions.show()
         self._stop_continue.show()
         self._stop_back.show()
@@ -1409,9 +1760,12 @@ class FlashPage(QWidget):
         if getattr(self, "_stop_open", False):
             return False
         self._ensure_stop_buttons()
-        card, _row, label, bar, cancel, extra, column = self._stop_target()
+        card, row, label, bar, cancel, extra, column = self._stop_target()
         self._stop_open = True
         self._stop_message = message or ""
+        flow = getattr(self, "_status_flow", None)
+        if flow is not None:
+            flow.set_forced_stacked(True)
         self._stop_callback = on_continue
         self._stop_card = card
         self._stop_label = label
@@ -1434,9 +1788,8 @@ class FlashPage(QWidget):
             cancel.hide()
         if extra is not None:
             extra.hide()
-        self._stop_continue.setText(tr("install_interrupt_cancel"))
-        self._stop_back.setText(tr("install_interrupt_back"))
-        self._place_stop_actions(column)
+        self._retranslate_stop_buttons()
+        self._place_stop_actions(column, row)
         self._relayout_for_text()
         fade_in(card)
         if not wait:
@@ -1472,11 +1825,19 @@ class FlashPage(QWidget):
             self._stop_back.show()
 
     def _finish_stop(self, accepted: bool) -> None:
+        """✕ stops the run; ← puts the check away and leaves the run alone.
+
+        Only the cross confirms the stop. The back arrow is the way out of the
+        check without touching the install, for a user who opened it by
+        accident — it must never stop anything.
+        """
         callback = getattr(self, "_stop_callback", None)
         waiting = self._stop_loop is not None and self._stop_loop.isRunning()
         self._dismiss_stop(accepted)
-        # The close confirmation waits: Back keeps the window open. The
-        # interruption card does not wait, so either button stops the run.
+        if not accepted and not waiting:
+            return
+        # The close confirmation waits for either button; the caller reads the
+        # result from ``_stop_result`` rather than the callback.
         if waiting or not callable(callback):
             return
         callback()
@@ -1509,6 +1870,10 @@ class FlashPage(QWidget):
                 cancel.setVisible(cancel_visible)
             if extra is not None:
                 extra.setVisible(extra_visible)
+        flow = getattr(self, "_status_flow", None)
+        if flow is not None:
+            flow.set_forced_stacked(False)
+            flow.refresh()
         host = getattr(self, "_stop_host", None)
         actions = getattr(self, "_stop_actions", None)
         if host is not None and actions is not None:

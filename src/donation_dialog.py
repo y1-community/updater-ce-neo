@@ -1003,9 +1003,9 @@ class DonationDialog(QDialog):
         return
 
     def _open_theme_pack_flow(self):
-        from .theme_pack import ThemePackGuidanceDialog
+        from .theme_pack import Rockbox360pSetupWizard
         raw_m = getattr(self, "raw_model", "Y1")
-        dlg = ThemePackGuidanceDialog(parent=self, model=raw_m)
+        dlg = Rockbox360pSetupWizard(parent=self, model=raw_m)
         dlg.installed_success.connect(self._on_theme_pack_installed)
         dlg.exec()
 

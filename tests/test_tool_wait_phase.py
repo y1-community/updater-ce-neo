@@ -167,6 +167,53 @@ def test_connect_sentence_and_please_wait_bar():
     assert page._wait_progress_bar.maximum() == 100
     assert page._wait_progress_bar.value() == 0
 
+    # The power-off sentence names the action the round arrow performs.
+    page.show_power_off_prompt()
+    assert page._wait_prompt_label.text().endswith("and click Next")
+
+
+def test_paperclip_hint_names_the_hidden_button_per_model():
+    """Below the card: where the hidden button is, once the model is known."""
+    from PySide6.QtWidgets import QApplication
+
+    from src.i18n import tr, translator
+    from src.ui.flash_page import FlashPage
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    original_lang = translator().lang
+    translator().set_language("en")
+    page = FlashPage()
+    try:
+        # No model yet: the hint stays out of the way.
+        page.set_model("")
+        page.show_power_off_prompt()
+        assert page._paperclip_hint_host.isHidden()
+
+        # Every known model but the A5 hides the button beside the headphone port.
+        for model in ("Y1", "Y2"):
+            page.set_model(model)
+            page.show_power_off_prompt()
+            assert not page._paperclip_hint_host.isHidden(), model
+            assert page._paperclip_hint.text() == tr("flash_paperclip_hint"), model
+            assert "headphone" in page._paperclip_hint.text(), model
+            assert "paperclip" in page._paperclip_hint.text(), model
+
+        page.set_model("A5")
+        page.show_power_off_prompt()
+        assert page._paperclip_hint.text() == tr("flash_paperclip_hint_a5")
+        assert "power button" in page._paperclip_hint.text()
+        assert "headphone" not in page._paperclip_hint.text()
+
+        # Once the install is past the power-off step, the hint goes away.
+        page.show_please_wait()
+        assert page._paperclip_hint_host.isHidden()
+        page.show_flashing()
+        assert page._paperclip_hint_host.isHidden()
+    finally:
+        translator().set_language(original_lang)
+        page.deleteLater()
+        app.processEvents()
+
     page.show_please_wait()
     assert page._wait_prompt_label.text() == tr("flash_please_wait")
     assert page._wait_progress_bar.maximum() == 0

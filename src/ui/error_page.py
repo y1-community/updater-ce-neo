@@ -154,6 +154,11 @@ class ErrorPage(QWidget):
             self._banner.set_type("info")
             self._banner.setText("")
 
+    def refresh_theme(self):
+        """Re-render the banner with the live theme colors."""
+        self._render()
+        self.update()
+
     def retranslate(self):
         self._banner.retranslate()
         self._render()

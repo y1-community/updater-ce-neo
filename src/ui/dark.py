@@ -151,9 +151,9 @@ def _draw_settings_switch(painter, option, *, kind: str) -> None:
         accent = QColor("#0078d4" if kind == "windows" else "#0a84ff")
     window = option.palette.color(QPalette.ColorRole.Window)
     if window.lightness() > 140:
-        off = QColor("#c5c7cc")
+        off = QColor("#c5c7cc") if kind == "windows" else QColor("#c9c9ce")
     else:
-        off = QColor("#5c6168")
+        off = QColor("#5b5f66") if kind == "windows" else QColor("#48484a")
     if not enabled:
         accent.setAlpha(120)
         off.setAlpha(120)
@@ -166,6 +166,11 @@ def _draw_settings_switch(painter, option, *, kind: str) -> None:
     painter.drawRoundedRect(track, radius, radius)
     knob_d = max(10, track_h - 6)
     knob_x = track.right() - knob_d - 3 if checked else track.left() + 3
+    # The knob is a raised white disc on both desktop switches: a soft shadow
+    # is what separates it from the track instead of blending into it.
+    shadow = QColor(0, 0, 0, 46)
+    painter.setBrush(shadow)
+    painter.drawEllipse(knob_x, track.center().y() - knob_d // 2 + 1, knob_d, knob_d)
     painter.setBrush(knob)
     painter.drawEllipse(knob_x, track.center().y() - knob_d // 2, knob_d, knob_d)
     painter.restore()
@@ -1233,17 +1238,12 @@ QLabel[cssClass="separator"], QFrame[cssClass="separator"] {{
    console sets a monospace QFont on the widget itself. */
 
 /* ── Tooltips ───────────────────────────────────────────
-   No border-radius: on Windows that leaves the native tip fill, and a
-   dark ToolTipBase with light-theme text is a solid black rectangle.
-   Rich text does not inherit this color; see tooltip_rich_text(). */
-QToolTip {{
-    background: {t.bg_tooltip};
-    background-color: {t.bg_tooltip};
-    color: {t.fg};
-    border: 1px solid {t.border};
-    padding: 4px 8px;
-    font-size: 12px;
-}}
+   Deliberately not styled. A QToolTip rule puts the tip on
+   QStyleSheetStyle, which throws away the host's own tip frame — the
+   rounded help tag on macOS, the WinUI tip on Windows — and leaves a
+   flat plate with our border and padding. The platform draws tooltips
+   here, and tooltip text is plain, so nothing needs forcing a colour
+   into a rich-text document either. */
 
 /* ── Buttons are the platform's, not ours ─────────────────
    Every action button (primary, secondary, navigation) is drawn by the host
@@ -1392,60 +1392,6 @@ def tooltip_surface_colors() -> tuple[QColor, QColor]:
     return background, foreground
 
 
-def apply_tooltip_palette() -> QPalette:
-    """Point QToolTip at the theme pair.
-
-    Tooltips do not use the application palette. Qt keeps a separate one,
-    filled from the platform theme, and Windows 11 paints the tip from
-    ``ToolTipBase``. A dark platform tip plus the light theme's black text
-    is the solid black rectangle. Inactive is the group tooltips actually
-    read; every group is set so a stale Active color cannot win.
-    """
-    from PySide6.QtWidgets import QToolTip
-
-    background, foreground = tooltip_surface_colors()
-    palette = QPalette()
-    for role in (
-        QPalette.ColorRole.ToolTipBase,
-        QPalette.ColorRole.Base,
-        QPalette.ColorRole.Window,
-        QPalette.ColorRole.Button,
-    ):
-        palette.setColor(QPalette.ColorGroup.All, role, background)
-    for role in (
-        QPalette.ColorRole.ToolTipText,
-        QPalette.ColorRole.Text,
-        QPalette.ColorRole.WindowText,
-        QPalette.ColorRole.ButtonText,
-    ):
-        palette.setColor(QPalette.ColorGroup.All, role, foreground)
-    QToolTip.setPalette(palette)
-    return palette
-
-
-def tooltip_rich_text(body: str) -> str:
-    """Wrap plain help so the rich-text tip paints the theme pair.
-
-    ``QTextDocument`` does not inherit the ``QToolTip`` stylesheet color.
-    An unstyled ``<qt>`` paragraph is black text, which disappears on a
-    dark tip fill.
-    """
-    background, foreground = tooltip_surface_colors()
-    lines = []
-    for line in (body or "").split("\n"):
-        safe = (
-            line.replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-        )
-        lines.append(safe)
-    style = (
-        f"margin:0; color:{foreground.name()}; "
-        f"background-color:{background.name()};"
-    )
-    return "<qt><p style=\"" + style + "\">" + "<br>".join(lines) + "</p></qt>"
-
-
 def apply_theme(
     app: QApplication,
     force_dark: bool | None = None,
@@ -1465,7 +1411,7 @@ def apply_theme(
         _state.detect()
     app.setPalette(_make_palette(_state.is_dark, pure_black=_state.is_pure_black))
     app.setStyleSheet(_build_qss())
-    apply_tooltip_palette()
+    # QToolTip keeps the host theme's palette: tooltips are the platform's.
     _restyle_existing_widgets(app)
 
 
@@ -1495,6 +1441,12 @@ def theme_fingerprint(app: QApplication | None = None, *, platform_dark: bool = 
     except Exception:
         system_palette = app.palette()
     accent, accent_text = get_native_accent_color(system_palette)
+    try:
+        from .icons import macos_icon_style
+
+        icon_style = macos_icon_style()
+    except Exception:
+        icon_style = ("", "")
     return (
         scheme,
         is_system_dark_mode() if platform_dark else None,
@@ -1502,6 +1454,7 @@ def theme_fingerprint(app: QApplication | None = None, *, platform_dark: bool = 
         accent_text,
         system_palette.color(QPalette.ColorRole.Window).name(),
         system_palette.color(QPalette.ColorRole.WindowText).name(),
+        icon_style,
     )
 
 
@@ -1553,7 +1506,7 @@ def refresh_theme(app: QApplication | None = None) -> None:
     _apply_native_font(app)
     app.setPalette(_make_palette(_state.is_dark, pure_black=_state.is_pure_black))
     app.setStyleSheet(_build_qss())
-    apply_tooltip_palette()
+    # QToolTip keeps the host theme's palette: tooltips are the platform's.
     _restyle_existing_widgets(app)
 
 

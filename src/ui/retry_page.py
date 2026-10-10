@@ -71,6 +71,14 @@ class RetryPage(QWidget):
         self._step_key = step_key
         self._step_label.setText(tr(step_key))
 
+    def refresh_theme(self):
+        """Keep the progress percent readable in the live theme."""
+        from .dark import install_progress_readability
+
+        if hasattr(self, "_progress"):
+            install_progress_readability(self._progress)
+        self.update()
+
     def retranslate(self):
         self._title.setText(tr("retry_title"))
         self._card.retranslate()

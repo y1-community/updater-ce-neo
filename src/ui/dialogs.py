@@ -110,8 +110,8 @@ class FlashCompleteDialog(QDialog):
         layout.addWidget(buttons)
 
     def _open_theme_pack_flow(self):
-        from ..theme_pack import ThemePackGuidanceDialog
-        dlg = ThemePackGuidanceDialog(parent=self, model=self.model)
+        from ..theme_pack import Rockbox360pSetupWizard
+        dlg = Rockbox360pSetupWizard(parent=self, model=self.model)
         dlg.installed_success.connect(self._on_theme_pack_installed)
         dlg.exec()
 
