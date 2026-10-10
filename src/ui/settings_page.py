@@ -94,7 +94,6 @@ class SettingsPage(QWidget):
         configure_scroll_area(scroll, transparent=True)
 
         container = QWidget()
-        container.setStyleSheet("background: transparent;")
         layout = QVBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(18)

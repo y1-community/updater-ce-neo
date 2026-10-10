@@ -70,8 +70,10 @@ def _status_label(text: str, *, strong: bool = False) -> _StatusLabel:
     font.setPixelSize(13 if strong else 12)
     font.setWeight(QFont.Weight.DemiBold if strong else QFont.Weight.Normal)
     label.setFont(font)
-    label.setStyleSheet("background: transparent; border: none;")
+    label.setAutoFillBackground(False)
+    label.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
     apply_readable_palette(label)
+    label.setForegroundRole(QPalette.ColorRole.WindowText)
     return label
 
 
@@ -85,6 +87,7 @@ def _configure_progress(bar: QProgressBar) -> None:
 
     bar.setObjectName("softwareUpdateProgress")
     bar.setStyleSheet("")
+    bar.setAutoFillBackground(False)
     apply_readable_palette(bar, progress=True)
     bar.setRange(0, 100)
     bar.setValue(0)
@@ -347,12 +350,20 @@ class FlashPage(QWidget):
         self._cancel_btn.clicked.connect(self._on_cancel)
         card_layout.addWidget(self._cancel_btn, 0, Qt.AlignVCenter)
 
-        from .icons import get_symbol_pixmap
-        self._done_mark = QLabel()
-        self._done_mark.setPixmap(get_symbol_pixmap("complete", 22))
-        self._done_mark.setFixedSize(24, 24)
-        self._done_mark.setAlignment(Qt.AlignCenter)
+        from .icons import get_symbol_icon
+        self._done_mark = QPushButton()
+        self._done_mark.setObjectName("installDoneButton")
+        self._done_mark.setFixedSize(28, 28)
+        self._done_mark.setCursor(Qt.ArrowCursor)
+        self._done_mark.setIcon(get_symbol_icon("complete", 18))
+        self._done_mark.setIconSize(QSize(18, 18))
+        self._done_mark.setFocusPolicy(Qt.StrongFocus)
+        self._done_mark.setAutoDefault(False)
+        self._done_mark.setFlat(False)
+        self._style_done_button()
         self._done_mark.setVisible(False)
+        self._done_mark.clicked.connect(self._on_install_done)
+        self._install_done_cb = None
         card_layout.addWidget(self._done_mark, 0, Qt.AlignVCenter)
 
         self._flash_retry_btn = QPushButton(tr("flash_btn_retry"))
@@ -525,9 +536,9 @@ class FlashPage(QWidget):
         self._complete = False
         self._switch_view(self._waiting_view)
         if not self._prompt_only:
-            # Searching for the device has no byte total yet. The native
-            # indeterminate groove keeps moving so the window does not look frozen.
-            self._wait_progress_bar.setRange(0, 0)
+            # Nothing has been written yet. The bar stays at 0 until DA or
+            # partition progress arrives.
+            self._set_determinate(self._wait_progress_bar, 0)
 
     def show_flashing(self):
         self._switch_view(self._flashing_view)
@@ -667,11 +678,14 @@ class FlashPage(QWidget):
             callback()
 
     def set_release_icon(self, pixmap, complete: bool = False):
-        """Show the release squircle on every install card. ``complete`` adds the check badge."""
-        from .release_icon import app_icon_pixmap, squircle_pixmap
+        """Show the release squircle on every install card. ``complete`` adds the check badge.
+
+        A missing release icon is the settings squircle, not the application icon.
+        """
+        from .release_icon import squircle_pixmap
 
         self._release_complete = bool(complete)
-        source = pixmap if pixmap is not None and not pixmap.isNull() else app_icon_pixmap()
+        source = pixmap if pixmap is not None and not pixmap.isNull() else QPixmap()
         self._release_source = source
         painted = squircle_pixmap(source, 40, complete=self._release_complete)
         for name in ("_prep_icon", "_wait_icon", "_flash_icon", "_download_icon"):
@@ -827,6 +841,7 @@ class FlashPage(QWidget):
             self._appeal_dont.setText(tr("donate_dont_ask"))
         if hasattr(self, "_coffee_btn"):
             self._coffee_btn.setText(tr("donate_coffee_btn"))
+        self._style_done_button()
         self._apply_guide_highlight()
         if self._prep_step_key:
             self._prep_step.setText(tr(self._prep_step_key))
@@ -919,6 +934,25 @@ class FlashPage(QWidget):
         ):
             if btn is not None:
                 self._style_cancel_button(btn)
+
+    def _style_done_button(self) -> None:
+        button = getattr(self, "_done_mark", None)
+        if not isinstance(button, QPushButton):
+            return
+        from .icons import get_symbol_icon
+
+        button.setIcon(get_symbol_icon("complete", 18))
+        button.setText("")
+        button.setToolTip(tr("install_done_dismiss"))
+        button.setAccessibleName(tr("install_done_dismiss"))
+        button.setCursor(Qt.ArrowCursor)
+
+    def on_install_done(self, callback) -> None:
+        self._install_done_cb = callback
+
+    def _on_install_done(self) -> None:
+        if callable(getattr(self, "_install_done_cb", None)):
+            self._install_done_cb()
 
     def on_cancel(self, callback):
         self._cancel_callback = callback

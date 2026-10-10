@@ -29,47 +29,61 @@ __all__ = [
 ]
 
 
+def _theme_role(role: QPalette.ColorRole, fallback: str) -> QColor:
+    """Opaque theme color. A zero-alpha black is painted as a solid black plate."""
+    app = QApplication.instance()
+    color = app.palette().color(role) if app is not None else QColor(fallback)
+    if not color.isValid() or color.alpha() == 0:
+        color = QColor(fallback)
+    color = QColor(color)
+    color.setAlpha(255)
+    return color
+
+
+def _paint_theme_surface(widget: QWidget) -> None:
+    if widget is None:
+        return
+    base = _theme_role(QPalette.ColorRole.Base, "#ffffff")
+    window = _theme_role(QPalette.ColorRole.Window, "#ffffff")
+    text = _theme_role(QPalette.ColorRole.Text, "#1a1a1a")
+    window_text = _theme_role(QPalette.ColorRole.WindowText, "#1a1a1a")
+    palette = widget.palette()
+    for group in (
+        QPalette.ColorGroup.Active,
+        QPalette.ColorGroup.Inactive,
+        QPalette.ColorGroup.Disabled,
+    ):
+        palette.setColor(group, QPalette.ColorRole.Base, base)
+        palette.setColor(group, QPalette.ColorRole.Window, window)
+        palette.setColor(group, QPalette.ColorRole.Text, text)
+        palette.setColor(group, QPalette.ColorRole.WindowText, window_text)
+    widget.setPalette(palette)
+
+
 def make_transparent(area: QAbstractScrollArea) -> None:
-    """Blend a scroll area with its parent without a stylesheet.
+    """Blend a scroll area with the current theme without a stylesheet.
 
     The palette/attribute equivalent of ``setStyleSheet("background:
-    transparent;")``, which would cost the platform's scrollbars.
+    transparent;")``, which would cost the platform's scrollbars. The fill is
+    the live theme color, never ``QColor(0, 0, 0, 0)``: Windows paints that
+    stored black as an opaque slab after a dark-to-light switch.
     """
     area.setFrameShape(QFrame.NoFrame)
     area.setFrameShadow(QFrame.Plain)
-    area.setBackgroundRole(QPalette.ColorRole.NoRole)
+    area.setBackgroundRole(QPalette.ColorRole.Base)
     area.setAutoFillBackground(False)
     # The window is the only translucent surface. A translucent child skips
     # its erase and the next paint leaves the previous text behind.
     area.setAttribute(Qt.WA_TranslucentBackground, False)
-    area.setAttribute(Qt.WA_NoSystemBackground, True)
+    area.setAttribute(Qt.WA_NoSystemBackground, False)
+    _paint_theme_surface(area)
     viewport = area.viewport()
     if viewport is not None:
-        viewport.setAutoFillBackground(False)
-        viewport.setBackgroundRole(QPalette.ColorRole.NoRole)
+        viewport.setAutoFillBackground(True)
+        viewport.setBackgroundRole(QPalette.ColorRole.Base)
         viewport.setAttribute(Qt.WA_TranslucentBackground, False)
-        viewport.setAttribute(Qt.WA_NoSystemBackground, True)
-        # A solid Base/Window is the gray plate. Zero alpha lets the glass
-        # or the solid parent show through; the keyword "transparent" does not.
-        clear = viewport.palette()
-        none = QColor(0, 0, 0, 0)
-        for group in (
-            QPalette.ColorGroup.Active,
-            QPalette.ColorGroup.Inactive,
-            QPalette.ColorGroup.Disabled,
-        ):
-            clear.setColor(group, QPalette.ColorRole.Base, none)
-            clear.setColor(group, QPalette.ColorRole.Window, none)
-        viewport.setPalette(clear)
-        area_palette = area.palette()
-        for group in (
-            QPalette.ColorGroup.Active,
-            QPalette.ColorGroup.Inactive,
-            QPalette.ColorGroup.Disabled,
-        ):
-            area_palette.setColor(group, QPalette.ColorRole.Base, none)
-            area_palette.setColor(group, QPalette.ColorRole.Window, none)
-        area.setPalette(area_palette)
+        viewport.setAttribute(Qt.WA_NoSystemBackground, False)
+        _paint_theme_surface(viewport)
     inner = area.widget() if hasattr(area, "widget") else None
     if isinstance(inner, QWidget):
         inner.setAutoFillBackground(False)

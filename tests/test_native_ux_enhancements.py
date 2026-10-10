@@ -959,7 +959,8 @@ def test_install_failure_stays_on_progress_and_retry_does_not_reflash():
     window._last_progress = 10
     window._set_state(FlashState.S4_FLASHING)
     app.processEvents()
-    assert window._sp_flash_tool_btn.isVisible()
+    assert not window._sp_flash_tool_btn.isVisible()
+    assert window._install_output_btn.isVisible()
 
     window._handle_flash_failure("S_BROM_CMD_STARTCMD_FAIL (2005)")
     app.processEvents()
@@ -1108,13 +1109,69 @@ def test_sp_gui_sidebar_handoff_prefers_cache_and_cancels_first():
         app.processEvents()
 
 
+def test_dark_to_light_leaves_combos_and_notes_readable():
+    """A live dark-to-light switch must not leave a black list or unreadable combos."""
+    from PySide6.QtGui import QPalette
+
+    from src.ui.dark import apply_theme, contrast_ratio, refresh_theme
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    apply_theme(app, force_dark=True)
+    window = MainWindow()
+    window.show()
+    app.processEvents()
+    page = window._select_page
+    page._notes.setHtml("<p>Koensayr 2.4.0 release notes</p>")
+    page._release_list.addItem("2.4.0")
+    apply_theme(app, force_dark=False)
+    refresh_theme(app)
+    app.processEvents()
+
+    def readable(widget, label):
+        palette = widget.palette()
+        fg = palette.color(QPalette.ColorGroup.Active, QPalette.ColorRole.Text)
+        bg = palette.color(QPalette.ColorGroup.Active, QPalette.ColorRole.Base)
+        assert bg.alpha() > 200, (label, bg.name(), bg.alpha())
+        assert bg.lightness() > 40, (label, bg.name())
+        assert contrast_ratio(fg, bg) >= 3.0, (label, fg.name(), bg.name())
+
+    for combo in (page._model_combo, page._type_combo, page._software_combo):
+        readable(combo, "combo")
+        readable(combo.view().viewport(), "combo-popup")
+    readable(page._notes.viewport(), "notes")
+    readable(page._release_list.viewport(), "releases")
+    tip = page._type_help_btn.toolTip()
+    assert "Type A" in tip
+    assert "Type B" in tip
+    assert "<br>" in tip
+    assert not hasattr(page, "_show_device_type_help")
+    notes_rule = app.styleSheet().split("QTextBrowser#releaseNotes", 1)[1][:200]
+    assert "background: transparent" not in notes_rule
+    window.close()
+    app.processEvents()
+
+
+def test_caption_drag_leaves_controls_alone():
+    """The title band moves the window. Buttons, combos, and links do not."""
+    from PySide6.QtWidgets import QComboBox, QLabel, QPushButton
+
+    from src.ui.main_window import caption_drag_blocked
+
+    assert not caption_drag_blocked(QLabel("Select Software"))
+    link = QLabel('<a href="https://example.com">Ryan Specter</a>')
+    link.setTextInteractionFlags(Qt.TextInteractionFlag.LinksAccessibleByMouse)
+    assert caption_drag_blocked(link)
+    assert caption_drag_blocked(QPushButton("Close"))
+    assert caption_drag_blocked(QComboBox())
+
+
 def test_unified_caption_client_rect():
     from src.ui.main_window import client_rect_for_unified_caption
 
     restored = client_rect_for_unified_caption(
         (10, 20, 800, 600), maximized=False, frame_x=8, frame_y=8, padded=4,
     )
-    assert restored == (18, 20, 792, 592)
+    assert restored == (11, 20, 799, 599)
     maximized = client_rect_for_unified_caption(
         (0, 0, 1920, 1080), maximized=True, frame_x=8, frame_y=8, padded=4,
     )
@@ -1196,6 +1253,8 @@ if __name__ == "__main__":
     test_install_failure_stays_on_progress_and_retry_does_not_reflash()
     test_pin_sp_flash_history_uses_extract_scatter_and_tool_da()
     test_sp_gui_sidebar_handoff_prefers_cache_and_cancels_first()
+    test_dark_to_light_leaves_combos_and_notes_readable()
+    test_caption_drag_leaves_controls_alone()
     test_unified_caption_client_rect()
     test_completion_check_mark_and_opt_out()
 

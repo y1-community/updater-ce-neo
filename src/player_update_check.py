@@ -9,6 +9,7 @@ manages preferences for device reminders and donation UI visibility.
 from dataclasses import dataclass
 from datetime import datetime
 import logging
+import re
 from typing import Optional
 
 from PySide6.QtCore import QSettings
@@ -39,6 +40,43 @@ def _get_settings(settings: Optional[QSettings] = None) -> QSettings:
 # Device Installation Records
 # ---------------------------------------------------------------------------
 
+def _software_settings_key(software_name: str) -> str:
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "_", (software_name or "").strip())
+    return slug or "software"
+
+
+def _write_install_fields(settings, group, software_name, tag_name, release_label, package_slug, published_at, installed_at):
+    settings.beginGroup(group)
+    try:
+        settings.setValue("software_name", software_name or "")
+        settings.setValue("tag_name", tag_name or "")
+        settings.setValue("release_label", release_label or tag_name or "")
+        settings.setValue("package_slug", package_slug or "")
+        settings.setValue("published_at", published_at or "")
+        settings.setValue("installed_at", installed_at)
+    finally:
+        settings.endGroup()
+
+
+def _read_install_fields(settings, group, model):
+    settings.beginGroup(group)
+    try:
+        tag_name = settings.value("tag_name", "", type=str)
+        if not tag_name:
+            return None
+        return {
+            "model": model,
+            "software_name": settings.value("software_name", "", type=str),
+            "tag_name": tag_name,
+            "release_label": settings.value("release_label", "", type=str) or tag_name,
+            "package_slug": settings.value("package_slug", "", type=str),
+            "published_at": settings.value("published_at", "", type=str),
+            "installed_at": settings.value("installed_at", "", type=str),
+        }
+    finally:
+        settings.endGroup()
+
+
 def record_device_install(
     model: str,
     software_name: str,
@@ -53,16 +91,21 @@ def record_device_install(
         return
     s = _get_settings(settings)
     now_iso = datetime.now().isoformat()
-    s.beginGroup(f"{_GROUP_INSTALLS}/{model}")
-    try:
-        s.setValue("software_name", software_name or "")
-        s.setValue("tag_name", tag_name or "")
-        s.setValue("release_label", release_label or tag_name or "")
-        s.setValue("package_slug", package_slug or "")
-        s.setValue("published_at", published_at or "")
-        s.setValue("installed_at", now_iso)
-    finally:
-        s.endGroup()
+    fields = (
+        software_name,
+        tag_name,
+        release_label,
+        package_slug,
+        published_at,
+        now_iso,
+    )
+    _write_install_fields(s, f"{_GROUP_INSTALLS}/{model}", *fields)
+    if software_name:
+        _write_install_fields(
+            s,
+            f"{_GROUP_INSTALLS}/{model}/software/{_software_settings_key(software_name)}",
+            *fields,
+        )
     # Reset last_notified_tag so future releases of this software will be notified
     set_last_notified_tag(model, "", settings=s)
     logger.info("Recorded install for %s: %s (%s)", model, software_name, tag_name)
@@ -72,23 +115,34 @@ def get_device_install(model: str, settings: Optional[QSettings] = None) -> Opti
     """Return the last recorded install for ``model``, or None if none recorded."""
     if not model:
         return None
+    return _read_install_fields(_get_settings(settings), f"{_GROUP_INSTALLS}/{model}", model)
+
+
+def get_software_install(model: str, software_name: str, settings: Optional[QSettings] = None) -> Optional[dict]:
+    """Return the last successful install of this software on ``model``.
+
+    A later install of a different package does not replace this record.
+    Older saves that only stored one install per model still match when the
+    software name is the same.
+    """
+    if not model or not software_name:
+        return None
     s = _get_settings(settings)
-    s.beginGroup(f"{_GROUP_INSTALLS}/{model}")
-    try:
-        tag_name = s.value("tag_name", "", type=str)
-        if not tag_name:
-            return None
-        return {
-            "model": model,
-            "software_name": s.value("software_name", "", type=str),
-            "tag_name": tag_name,
-            "release_label": s.value("release_label", "", type=str) or tag_name,
-            "package_slug": s.value("package_slug", "", type=str),
-            "published_at": s.value("published_at", "", type=str),
-            "installed_at": s.value("installed_at", "", type=str),
-        }
-    finally:
-        s.endGroup()
+    rec = _read_install_fields(
+        s,
+        f"{_GROUP_INSTALLS}/{model}/software/{_software_settings_key(software_name)}",
+        model,
+    )
+    if rec:
+        return rec
+    legacy = get_device_install(model, settings=s)
+    if not legacy:
+        return None
+    stored = (legacy.get("software_name") or "").casefold()
+    wanted = software_name.casefold()
+    if stored and (stored == wanted or stored in wanted or wanted in stored):
+        return legacy
+    return None
 
 
 def clear_device_install(model: str, settings: Optional[QSettings] = None) -> None:

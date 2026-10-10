@@ -605,6 +605,50 @@ def get_display_version(version_info, published_date="", is_prerelease=False, no
     return version_text
 
 
+def classify_release_list(releases, installed_tag, installed_published=""):
+    """Mark which listed releases are the installed one and which are newer.
+
+    Ordering is ``release_sort_key`` (semver, then datestamp, then publish
+    time), not the order the rows were clicked. ``prompt`` is set only when
+    something in the list is newer than the installed tag.
+    """
+    rows = {}
+    releases = list(releases or [])
+    installed_tag = installed_tag or ""
+    installed_rel = None
+    for rel in releases:
+        if (rel.get("tag_name") or "") == installed_tag:
+            installed_rel = rel
+            break
+    if installed_tag and installed_rel is not None:
+        installed_key = release_sort_key(installed_rel)
+    elif installed_tag:
+        installed_key = release_sort_key({
+            "tag_name": installed_tag,
+            "published_at": installed_published or "",
+        })
+    else:
+        installed_key = None
+    newer = []
+    for rel in releases:
+        tag = rel.get("tag_name") or ""
+        is_installed = bool(installed_tag) and tag == installed_tag
+        is_newer = installed_key is not None and not is_installed and release_sort_key(rel) > installed_key
+        rows[tag] = {"installed": is_installed, "newer": is_newer}
+        if is_newer:
+            newer.append(rel)
+    prompt = None
+    if newer:
+        newest = max(newer, key=release_sort_key)
+        prompt = {
+            "newer_tag": newest.get("tag_name") or "",
+            "newer_release": newest,
+            "installed_tag": installed_tag,
+            "installed_release": installed_rel,
+        }
+    return {"rows": rows, "prompt": prompt}
+
+
 def release_sort_key(release):
     """Build a sortable 5-tier key so newer releases appear first in reverse sort."""
     tag_name = (release or {}).get("tag_name", "")

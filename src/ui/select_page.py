@@ -311,6 +311,19 @@ class SelectPackagePage(QWidget):
         """Show the local-file screen ("Install from a file")."""
         self._views.setCurrentWidget(self._local_tab)
 
+    def catalogue_section(self) -> str:
+        """Which catalogue the current install was started from."""
+        views = getattr(self, "_views", None)
+        if views is not None and views.currentWidget() is getattr(self, "_local_tab", None):
+            return "local"
+        return "online"
+
+    def show_catalogue_section(self, section: str) -> None:
+        if section == "local":
+            self._show_local_view()
+        else:
+            self._show_online_view()
+
     def _show_online_view(self, refresh: bool = False):
         """Show the catalogue ("Install from the catalogue")."""
         if is_generic_mtk():
@@ -368,8 +381,8 @@ class SelectPackagePage(QWidget):
         type_row.addWidget(self._type_combo)
 
         self._type_help_btn = QPushButton(tr("sel_type_help_btn"))
-        self._type_help_btn.setToolTip(tr("sel_type_help_body").replace("\n\n", " "))
-        self._type_help_btn.clicked.connect(self._show_device_type_help)
+        self._type_help_btn.setCursor(Qt.ArrowCursor)
+        self._apply_type_help_hint()
         type_row.addWidget(self._type_help_btn)
         filter_layout.addLayout(type_row, 0, 3)
 
@@ -399,6 +412,11 @@ class SelectPackagePage(QWidget):
         self._online_banner = Banner()
         self._online_banner.setVisible(False)
         layout.addWidget(self._online_banner)
+        self._update_prompt = Banner()
+        self._update_prompt.setObjectName("releaseUpdatePrompt")
+        self._update_prompt.setVisible(False)
+        self._update_prompt_versions = None
+        layout.addWidget(self._update_prompt)
 
         # ── Split Content: Left = Packages + Install; Right = Status + Notes ──
         split = QHBoxLayout()
@@ -481,11 +499,11 @@ class SelectPackagePage(QWidget):
         details_text.setSpacing(0)
         self._details_name = QLabel("")
         self._details_name.setStyleSheet(
-            "font-size: 13px; font-weight: 600; color: palette(window-text); background-color: rgba(0, 0, 0, 0); border: none;"
+            "font-size: 13px; font-weight: 600; color: palette(window-text); border: none;"
         )
         self._details_version = QLabel("")
         self._details_version.setStyleSheet(
-            "font-size: 12px; color: palette(window-text); background-color: rgba(0, 0, 0, 0); border: none;"
+            "font-size: 12px; color: palette(window-text); border: none;"
         )
         details_text.addWidget(self._details_name)
         details_text.addWidget(self._details_version)
@@ -637,12 +655,29 @@ class SelectPackagePage(QWidget):
         layout.addStretch()
         return page
 
-    def _show_device_type_help(self):
-        QMessageBox.information(
-            self,
-            tr("sel_type_help_title"),
-            tr("sel_type_help_body"),
-        )
+    def _type_help_tip(self) -> str:
+        """Full device-type help as a wrapping tooltip. No dialog."""
+        body = tr("sel_type_help_body")
+        if not body or body == "sel_type_help_body":
+            body = tr("device_type_help_msg") or tr("sel_type_help_tooltip")
+        lines = []
+        for line in body.split("\n"):
+            safe = (
+                line.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+            )
+            lines.append(safe)
+        return "<qt><p style=\"margin:0;\">" + "<br>".join(lines) + "</p></qt>"
+
+    def _apply_type_help_hint(self) -> None:
+        tip = self._type_help_tip()
+        if hasattr(self, "_type_help_btn"):
+            self._type_help_btn.setToolTip(tip)
+        if hasattr(self, "_type_combo"):
+            self._type_combo.setToolTip(tip)
+        if hasattr(self, "_type_label"):
+            self._type_label.setToolTip(tip)
 
     def _should_prompt_pre_install(self) -> bool:
         """On Linux with SP Flash Tool methods, step 1 (ensuring USB cable is removed
@@ -664,20 +699,31 @@ class SelectPackagePage(QWidget):
         return False
 
     def _prompt_pre_install(self, model="", type_variant=None):
-        if os.environ.get("QT_QPA_PLATFORM") == "offscreen" or os.environ.get("INNIOASIS_HEADLESS"):
-            return True
-        from .dialogs import PreInstallGuidanceDialog
-        from ..branding import is_generic_mtk_brand
-        dlg = PreInstallGuidanceDialog(
-            self,
-            model=model,
-            is_mtk_generic=is_generic_mtk_brand(),
-        )
-        ok = dlg.exec() == QDialog.Accepted
-        win = self.window()
-        if ok and win is not None and hasattr(win, "_pre_install_guided"):
-            win._pre_install_guided = True
-        return ok
+        """Device preparation is a page in the install flow, not a dialog."""
+        return True
+
+    def _set_update_prompt(self, newer_label: str, installed_label: str) -> None:
+        """Inline note when a listed release is newer than the installed one.
+
+        Hidden when the installed version is the newest, or when nothing was
+        installed. Set from the release list, not from a paint event.
+        """
+        prompt = getattr(self, "_update_prompt", None)
+        if prompt is None:
+            return
+        newer_label = (newer_label or "").strip()
+        installed_label = (installed_label or "").strip()
+        if not newer_label or not installed_label:
+            self._update_prompt_versions = None
+            prompt.setVisible(False)
+            prompt.setText("")
+            return
+        self._update_prompt_versions = (newer_label, installed_label)
+        prompt.set_type("info")
+        prompt.setText(tr("sel_update_available").format(
+            newer=newer_label, installed=installed_label,
+        ))
+        prompt.setVisible(True)
 
     def _set_online_banner(self, key, count=0):
         self._online_banner_key = key
@@ -748,11 +794,14 @@ class SelectPackagePage(QWidget):
             self._browse_folder_btn.setText(tr("sel_browse_folder"))
         self._start_btn.setText(tr("sel_btn_start"))
         self._apply_online_banner()
+        versions = getattr(self, "_update_prompt_versions", None)
+        if versions:
+            self._set_update_prompt(versions[0], versions[1])
         self._apply_local_banner()
         self._type_combo.setItemText(0, tr("sel_type_a"))
         self._type_combo.setItemText(1, tr("sel_type_b"))
         self._type_help_btn.setText(tr("sel_type_help_btn"))
-        self._type_help_btn.setToolTip(tr("sel_type_help_body").replace("\n\n", " "))
+        self._apply_type_help_hint()
         self._refresh_btn.setToolTip(tr("sel_refresh_tooltip"))
         self._pkg_group.setTitle(tr("sel_available_software"))
         self._local_group.setTitle(tr("sel_choose_firmware_pkg"))
@@ -773,6 +822,11 @@ class SelectPackagePage(QWidget):
 
     def refresh_theme(self):
         """Update components and release notes typography to match active theme tokens."""
+        self._apply_type_help_hint()
+        if hasattr(self, "_notes"):
+            self._notes.document().setDefaultStyleSheet(
+                f"a {{ color: {T().fg}; font-weight: 700; text-decoration: none; }}"
+            )
         if hasattr(self, "_notes") and self._current_selected_rel:
             self._set_notes_content(self._render_release_notes(self._current_selected_rel, as_html=True))
         if hasattr(self, "_translate_label"):
@@ -988,45 +1042,69 @@ class SelectPackagePage(QWidget):
     def _on_releases_loaded(self, releases, error):
         if error:
             self._set_online_banner("sel_offline")
+            self._set_update_prompt("", "")
             return
         self._release_list.clear()
         releases = sorted(releases or [], key=catalog.release_sort_key, reverse=True)
         prefer_240p = self.release_listing_filters()[2]
-        install_rec = None
+        installed_tag = ""
+        installed_published = ""
+        installed_label = ""
         try:
             from .. import device_tracking
             curr_model = self.current_model() or "Y1"
             curr_settings = getattr(self, "settings", None)
-            install_rec = device_tracking.get_device_install(curr_model, settings=curr_settings)
+            software_name = self.current_software() or ""
+            install_rec = device_tracking.get_software_install(
+                curr_model, software_name, settings=curr_settings,
+            )
+            if install_rec:
+                installed_tag = install_rec.get("tag_name") or ""
+                installed_published = install_rec.get("published_at") or ""
+                installed_label = install_rec.get("release_label") or ""
         except Exception:
             pass
-        installed_tag = (install_rec.get("tag_name") or "") if install_rec else ""
-        installed_sw = (install_rec.get("software_name") or "").lower() if install_rec else ""
-        curr_sw = (self.current_software() or "").lower()
-        is_same_sw = (not curr_sw) or (not installed_sw) or (installed_sw == curr_sw) or (installed_sw in curr_sw) or (curr_sw in installed_sw)
+
+        marks = catalog.classify_release_list(
+            releases, installed_tag, installed_published,
+        )
+        prompt = marks.get("prompt")
+        if prompt and installed_tag:
+            newer_rel = prompt.get("newer_release") or {}
+            newer_label = catalog.parse_clean_release_tag_label(newer_rel, prefer_240p=prefer_240p) or prompt.get("newer_tag") or ""
+            installed_rel = prompt.get("installed_release")
+            if installed_rel:
+                installed_label = catalog.parse_clean_release_tag_label(installed_rel, prefer_240p=prefer_240p) or installed_label
+            if not installed_label:
+                installed_label = catalog.parse_clean_release_tag_label(
+                    {"tag_name": installed_tag}, prefer_240p=prefer_240p,
+                ) or installed_tag
+            self._set_update_prompt(newer_label, installed_label)
+        else:
+            self._set_update_prompt("", "")
 
         for rel in releases:
             label = catalog.parse_clean_release_tag_label(rel, prefer_240p=prefer_240p)
             tag = rel.get("tag_name", "")
-            is_installed = bool(installed_tag and is_same_sw and tag == installed_tag)
+            row = marks["rows"].get(tag) or {}
+            is_installed = bool(row.get("installed"))
+            is_newer = bool(row.get("newer"))
 
-            if is_installed:
-                display_label = f"● {label}  ({tr('installed_badge')})"
-            else:
-                display_label = label
+            display_label = f"● {label}" if is_installed else label
 
             item = QListWidgetItem(display_label)
             item.setData(Qt.UserRole, rel)
-            if is_installed:
-                f = item.font()
-                f.setBold(True)
-                item.setFont(f)
+            font = item.font()
+            font.setBold(is_newer and not is_installed)
+            item.setFont(font)
 
             tooltip = self._asset_line(rel)
             if tag:
                 tooltip = f"{tag}\n{tooltip}".strip()
             if is_installed:
-                tooltip = f"[{tr('installed_badge')}] {tooltip}"
+                tip = tr("sel_installed_tip")
+                tooltip = f"{tip}\n{tooltip}".strip()
+                item.setData(Qt.ItemDataRole.AccessibleDescriptionRole, tip)
             item.setToolTip(tooltip)
             self._release_list.addItem(item)
         if not releases:

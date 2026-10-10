@@ -203,47 +203,18 @@ class DraggableHeaderBar(QWidget):
         self._drag_offset = None
 
     def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            child = self.childAt(event.position().toPoint())
-            is_interactive = False
-            w = child
-            while w and w is not self:
-                if isinstance(w, (QPushButton, QComboBox)) or (
-                    isinstance(w, QLabel) and (w.textInteractionFlags() & Qt.LinksAccessibleByMouse)
-                ):
-                    is_interactive = True
-                    break
-                w = w.parentWidget()
-            if not is_interactive:
-                win = self.window()
-                if win:
-                    dragged = False
-                    if sys.platform == "darwin":
-                        try:
-                            import AppKit
-                            from .glass import _get_nsview
-                            ns_app = AppKit.NSApplication.sharedApplication()
-                            curr_evt = ns_app.currentEvent()
-                            if curr_evt:
-                                view = _get_nsview(win)
-                                ns_win = view.window() if view else None
-                                if ns_win:
-                                    ns_win.performWindowDragWithEvent_(curr_evt)
-                                    dragged = True
-                        except Exception:
-                            pass
-                    if not dragged and hasattr(win, "windowHandle") and win.windowHandle():
-                        try:
-                            dragged = win.windowHandle().startSystemMove()
-                        except Exception:
-                            pass
-                    if dragged:
-                        event.accept()
-                        return
-                    self._dragging = True
-                    self._drag_offset = event.globalPosition().toPoint() - win.pos()
-                    event.accept()
-                    return
+        if event.button() == Qt.LeftButton and not caption_drag_blocked(
+            self.childAt(event.position().toPoint())
+        ):
+            win = self.window()
+            if begin_unified_caption_drag(win):
+                event.accept()
+                return
+            if win is not None:
+                self._dragging = True
+                self._drag_offset = event.globalPosition().toPoint() - win.pos()
+                event.accept()
+                return
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
@@ -261,6 +232,74 @@ class DraggableHeaderBar(QWidget):
         super().mouseReleaseEvent(event)
 
 
+def caption_drag_blocked(widget) -> bool:
+    """True when a title-band control must keep the click for itself."""
+    from PySide6.QtWidgets import QAbstractSlider, QAbstractSpinBox, QLineEdit
+
+    probe = widget
+    while probe is not None:
+        if isinstance(probe, (QPushButton, QComboBox, QLineEdit, QAbstractSpinBox, QAbstractSlider)):
+            return True
+        if isinstance(probe, QLabel) and (
+            probe.textInteractionFlags() & Qt.TextInteractionFlag.LinksAccessibleByMouse
+        ):
+            return True
+        probe = probe.parentWidget()
+    return False
+
+
+def pass_caption_presses(widget) -> None:
+    """Let a title icon or label start a window move instead of eating the press."""
+    if widget is None:
+        return
+    widget.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+
+
+def begin_unified_caption_drag(window) -> bool:
+    """Move the window the way its native title bar does.
+
+    Windows sends WM_NCLBUTTONDOWN / HTCAPTION, so double-click maximize stays
+    the system's gesture. macOS uses the AppKit window drag. Other desktops
+    use Qt startSystemMove.
+    """
+    if window is None:
+        return False
+    if sys.platform == "win32":
+        try:
+            import ctypes
+
+            hwnd = int(window.winId())
+            user32 = ctypes.windll.user32
+            user32.ReleaseCapture()
+            user32.SendMessageW(hwnd, 0x00A1, 2, 0)
+            return True
+        except Exception:
+            return False
+    if sys.platform == "darwin":
+        try:
+            import AppKit
+
+            from .glass import _get_nsview
+
+            ns_app = AppKit.NSApplication.sharedApplication()
+            curr_evt = ns_app.currentEvent()
+            if curr_evt:
+                view = _get_nsview(window)
+                ns_win = view.window() if view else None
+                if ns_win is not None:
+                    ns_win.performWindowDragWithEvent_(curr_evt)
+                    return True
+        except Exception:
+            pass
+    handle = window.windowHandle() if hasattr(window, "windowHandle") else None
+    if handle is not None:
+        try:
+            return bool(handle.startSystemMove())
+        except Exception:
+            return False
+    return False
+
+
 def client_rect_for_unified_caption(rect, *, maximized: bool, frame_x: int, frame_y: int, padded: int):
     """Client edges when the caption text band is part of the window.
 
@@ -273,7 +312,10 @@ def client_rect_for_unified_caption(rect, *, maximized: bool, frame_x: int, fram
         inset_x = int(frame_x) + int(padded)
         inset_y = int(frame_y) + int(padded)
         return (left + inset_x, top + inset_y, right - inset_x, bottom - inset_y)
-    return (left + int(frame_x), top, right - int(frame_x), bottom - int(frame_y))
+    # Restored windows keep a 1px resize edge. Insetting by the full frame
+    # leaves a non-client strip that DWM paints in the default window color,
+    # which shows up as a white bar on the right.
+    return (left + 1, top, right - 1, bottom - 1)
 
 
 def can_inline_title_with_window_controls() -> bool:
@@ -379,6 +421,9 @@ class MainWindow(QMainWindow):
         self._package_name = ""
         self._package_model = ""
         self._log_lines = []
+        self._run_output = []
+        self._run_output_open = False
+        self._catalogue_section = "online"
         # Legacy "auto" values resolve to the platform default so users are
         # steered to SP Flash Tool's console-mode XML flow (MTKClient on macOS).
         self._flash_method = normalise_method(self.settings.value("flash_method", ""))
@@ -523,6 +568,7 @@ class MainWindow(QMainWindow):
             from .surfaces import seal_updating_text
             seal_updating_text(self._select_page._title)
             self._align_page_title()
+            self._arm_caption_drag()
 
         self._notice_host = QWidget()
         self._notice_host.setObjectName("noticeHost")
@@ -596,7 +642,30 @@ class MainWindow(QMainWindow):
             self._theme_watcher.install()
             app._theme_watcher = self._theme_watcher
 
+    def _arm_caption_drag(self) -> None:
+        """App icon, app name, and the page heading start a window move."""
+        title = getattr(getattr(self, "_select_page", None), "_title", None)
+        for widget in (
+            getattr(self, "_brand_container", None),
+            getattr(self, "_icon_label", None),
+            getattr(self, "_brand_label", None),
+            getattr(self, "_brand_version", None),
+            getattr(self, "_title_container", None),
+            title,
+        ):
+            pass_caption_presses(widget)
+
+    def _refresh_opaque_surfaces(self) -> None:
+        """Repaint fills that were copied from the previous theme."""
+        root = self.centralWidget()
+        if root is None:
+            return
+        for widget in (root, *root.findChildren(QWidget)):
+            if widget.autoFillBackground():
+                self._paint_opaque(widget)
+
     def _on_theme_changed(self):
+        self._refresh_opaque_surfaces()
         dark = is_dark()
         if sys.platform == "win32" or platform.system() == "Windows":
             apply_windows_acrylic(self, dark=dark)
@@ -719,6 +788,7 @@ class MainWindow(QMainWindow):
             bar_layout.addWidget(self._title_container, 0, Qt.AlignVCenter)
             bar_layout.addStretch(1)
 
+        self._arm_caption_drag()
         return bar
 
     def _align_page_title(self):
@@ -797,6 +867,14 @@ class MainWindow(QMainWindow):
             layout.addWidget(self._sp_flash_tool_btn)
             self._aux_nav_buttons.append(self._sp_flash_tool_btn)
 
+        # Same slot as SP Flash Tool GUI. Visible only while an install runs.
+        # It is not the D-key diagnostics page.
+        self._install_output_btn = self._make_nav_button(tr("nav_install_output"), "diagnostics")
+        self._install_output_btn.clicked.connect(self._show_install_output)
+        self._install_output_btn.setVisible(False)
+        layout.addWidget(self._install_output_btn)
+        self._aux_nav_buttons.append(self._install_output_btn)
+
         self._support_btn = self._make_nav_button(tr("nav_donate"), "support")
         self._support_btn.clicked.connect(self._on_support_clicked)
         layout.addWidget(self._support_btn)
@@ -872,6 +950,8 @@ class MainWindow(QMainWindow):
             self._linux_setup_btn.setIcon(get_symbol_icon("tools", 16))
         if hasattr(self, "_sp_flash_tool_btn"):
             self._sp_flash_tool_btn.setIcon(get_symbol_icon("tools", 16))
+        if hasattr(self, "_install_output_btn"):
+            self._install_output_btn.setIcon(get_symbol_icon("diagnostics", 16))
         if hasattr(self, "_lang_combo"):
             lang_icon = get_symbol_icon("translate", 14)
             for i in range(self._lang_combo.count()):
@@ -961,6 +1041,7 @@ class MainWindow(QMainWindow):
         self._flash_page.on_cancel_wait(self._on_cancel_wait)
         self._flash_page.on_install_retry(self._on_progress_retry)
         self._flash_page.on_power_off_continue(self._on_power_off_continue)
+        self._flash_page.on_install_done(self._on_install_done)
         self._error_page.on_retry(self._on_progress_retry)
         self._error_page.on_reconnect(self._on_reconnect)
         self._error_page.on_reselect(lambda: self._nav_to_page(_PAGE_SELECT))
@@ -977,6 +1058,8 @@ class MainWindow(QMainWindow):
         self.service.monitor_error.connect(self._on_monitor_error)
 
     def _on_download_started(self, name, model):
+        self._remember_catalogue_section()
+        self._begin_run_output()
         self._download_active = True
         self._package_name = name
         self._package_model = model or ""
@@ -1066,38 +1149,13 @@ class MainWindow(QMainWindow):
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
-            child = self.childAt(event.position().toPoint())
-            is_interactive = False
-            w = child
-            while w and w is not self:
-                if isinstance(w, (QPushButton, QComboBox)) or (
-                    isinstance(w, QLabel) and (w.textInteractionFlags() & Qt.LinksAccessibleByMouse)
-                ):
-                    is_interactive = True
-                    break
-                w = w.parentWidget()
-            if not is_interactive:
-                dragged = False
-                if sys.platform == "darwin":
-                    try:
-                        import AppKit
-                        from .glass import _get_nsview
-                        ns_app = AppKit.NSApplication.sharedApplication()
-                        curr_evt = ns_app.currentEvent()
-                        if curr_evt:
-                            view = _get_nsview(self)
-                            ns_win = view.window() if view else None
-                            if ns_win:
-                                ns_win.performWindowDragWithEvent_(curr_evt)
-                                dragged = True
-                    except Exception:
-                        pass
-                if not dragged and hasattr(self, "windowHandle") and self.windowHandle():
-                    try:
-                        dragged = self.windowHandle().startSystemMove()
-                    except Exception:
-                        pass
-                if dragged:
+            bar = getattr(self, "_title_bar", None)
+            local = None
+            if bar is not None and bar.isVisible():
+                local = bar.mapFromGlobal(event.globalPosition().toPoint())
+            in_bar = local is not None and bar.rect().contains(local)
+            if in_bar and not caption_drag_blocked(bar.childAt(local)):
+                if begin_unified_caption_drag(self):
                     event.accept()
                     return
                 self._mw_dragging = True
@@ -1162,6 +1220,17 @@ class MainWindow(QMainWindow):
             from ctypes import wintypes
 
             msg = wintypes.MSG.from_address(int(message))
+            if msg.message == 0x001A:  # WM_SETTINGCHANGE
+                setting = ""
+                if msg.lParam:
+                    try:
+                        setting = ctypes.cast(msg.lParam, ctypes.c_wchar_p).value or ""
+                    except Exception:
+                        setting = ""
+                if "ImmersiveColor" in setting or "WindowsThemeElement" in setting:
+                    watcher = getattr(self, "_theme_watcher", None)
+                    if watcher is not None:
+                        watcher.schedule()
             if msg.message == 0x0083 and msg.wParam:
                 class _RECT(ctypes.Structure):
                     _fields_ = [
@@ -1202,23 +1271,10 @@ class MainWindow(QMainWindow):
                     return True, int(hit.value)
                 bar = getattr(self, "_title_bar", None)
                 if bar is not None and bar.isVisible():
-                    x = ctypes.c_short(msg.lParam & 0xFFFF).value
-                    y = ctypes.c_short((msg.lParam >> 16) & 0xFFFF).value
-                    from PySide6.QtCore import QPoint
-                    local = bar.mapFromGlobal(QPoint(x, y))
+                    from PySide6.QtGui import QCursor
+                    local = bar.mapFromGlobal(QCursor.pos())
                     if bar.rect().contains(local):
-                        child = bar.childAt(local)
-                        interactive = False
-                        probe = child
-                        while probe is not None and probe is not bar:
-                            if isinstance(probe, (QPushButton, QComboBox)) or (
-                                isinstance(probe, QLabel)
-                                and (probe.textInteractionFlags() & Qt.LinksAccessibleByMouse)
-                            ):
-                                interactive = True
-                                break
-                            probe = probe.parentWidget()
-                        if not interactive:
+                        if not caption_drag_blocked(bar.childAt(local)):
                             return True, 2
         except Exception:
             logging.getLogger(__name__).debug("unified caption event skipped", exc_info=True)
@@ -1426,9 +1482,11 @@ class MainWindow(QMainWindow):
             if hasattr(self, "_linux_setup_btn"):
                 self._linux_setup_btn.setVisible(False)
             if hasattr(self, "_sp_flash_tool_btn"):
-                # Kept available during a run so it can take over as the fallback.
-                self._sp_flash_tool_btn.setVisible(True)
-                self._sp_flash_tool_btn.setEnabled(True)
+                self._sp_flash_tool_btn.setVisible(False)
+                self._sp_flash_tool_btn.setEnabled(False)
+            if hasattr(self, "_install_output_btn"):
+                self._install_output_btn.setVisible(True)
+                self._install_output_btn.setEnabled(True)
             if hasattr(self, "_lang_label"):
                 self._lang_label.setVisible(False)
             if hasattr(self, "_lang_combo"):
@@ -1447,6 +1505,9 @@ class MainWindow(QMainWindow):
                 self._linux_setup_btn.setVisible(True)
             if hasattr(self, "_sp_flash_tool_btn"):
                 self._sp_flash_tool_btn.setVisible(True)
+                self._sp_flash_tool_btn.setEnabled(True)
+            if hasattr(self, "_install_output_btn"):
+                self._install_output_btn.setVisible(False)
             if hasattr(self, "_lang_label"):
                 self._lang_label.setVisible(True)
             if hasattr(self, "_lang_combo"):
@@ -1569,6 +1630,7 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(0, self._verify_native_chrome)
 
     def _on_package_selected(self, path, name, model):
+        self._remember_catalogue_section()
         self._package_path = path
         self._package_name = name
         self._package_model = model or ""
@@ -1771,23 +1833,99 @@ class MainWindow(QMainWindow):
             from PySide6.QtWidgets import QApplication
             QApplication.quit()
 
+    def _remember_catalogue_section(self) -> None:
+        page = getattr(self, "_select_page", None)
+        if page is not None and hasattr(page, "catalogue_section"):
+            self._catalogue_section = page.catalogue_section()
+
+    def _begin_run_output(self) -> None:
+        if not getattr(self, "_run_output_open", False):
+            self._run_output = []
+            self._run_output_open = True
+
+    def _needs_device_prep(self) -> bool:
+        if os.environ.get("QT_QPA_PLATFORM") == "offscreen" or os.environ.get("INNIOASIS_HEADLESS"):
+            return False
+        page = getattr(self, "_select_page", None)
+        if page is not None and hasattr(page, "_should_prompt_pre_install"):
+            return bool(page._should_prompt_pre_install())
+        return True
+
+    def _show_device_prep(self) -> None:
+        """Device preparation lives on the install page, not in a dialog."""
+        self._install_failed = False
+        self._install_complete = False
+        self._power_off_prompt = True
+        self._flash_page.set_package_name(self._package_name)
+        self._flash_page.set_model(self._package_model)
+        self._flash_page.show_power_off_prompt()
+        self._nav_to_page(_PAGE_FLASH)
+
+    def _on_install_done(self) -> None:
+        """Leave the completed install and reopen the catalogue the run started from."""
+        section = getattr(self, "_catalogue_section", "online") or "online"
+        self._run_output_open = False
+        self._reset_after_run()
+        page = getattr(self, "_select_page", None)
+        if page is not None and hasattr(page, "show_catalogue_section"):
+            page.show_catalogue_section(section)
+        self._nav_to_page(_PAGE_SELECT)
+
+    def _show_install_output(self) -> None:
+        """Small live terminal for the install tool. Closing it does not cancel."""
+        from .dialogs import InstallConsoleDialog
+
+        dialog = getattr(self, "_install_output_dialog", None)
+        if dialog is None:
+            dialog = InstallConsoleDialog(self)
+            self._install_output_dialog = dialog
+            self.log_line_added.connect(dialog.append_line)
+        dialog.set_lines(list(getattr(self, "_run_output", [])))
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+
+    def _present_inline(self, widget, title: str) -> None:
+        """Show a former dialog inside the main window."""
+        host = getattr(self, "_notice_host", None)
+        if host is None or widget is None:
+            return
+        layout = host.layout()
+        while layout.count():
+            item = layout.takeAt(0)
+            child = item.widget()
+            if child is not None:
+                child.hide()
+                child.setParent(None)
+        if isinstance(widget, QDialog):
+            widget.setWindowFlags(Qt.WindowType.Widget)
+            widget.setModal(False)
+            try:
+                widget.finished.connect(lambda *_: self._leave_notice())
+            except Exception:
+                pass
+        widget.setParent(host)
+        layout.addWidget(widget)
+        widget.show()
+        self._notice_title = title
+        self._notice_return = self._stack.currentIndex()
+        self._nav_to_page(_PAGE_NOTICE)
+
+    def _leave_notice(self) -> None:
+        back = getattr(self, "_notice_return", _PAGE_SELECT)
+        if back in (_PAGE_NOTICE, None):
+            back = _PAGE_SELECT
+        self._nav_to_page(back)
+
     def _begin_flash_flow(self):
         if not self._package_path:
             return
         self._install_failed = False
         self._power_off_prompt = False
-        if not getattr(self, "_pre_install_guided", False):
-            if not (os.environ.get("QT_QPA_PLATFORM") == "offscreen" or os.environ.get("INNIOASIS_HEADLESS")):
-                from .dialogs import PreInstallGuidanceDialog
-                from ..branding import is_generic_mtk_brand
-                dlg = PreInstallGuidanceDialog(
-                    self,
-                    model=self._package_model,
-                    is_mtk_generic=is_generic_mtk_brand(),
-                )
-                if dlg.exec() != QDialog.Accepted:
-                    return
-                self._pre_install_guided = True
+        if self._needs_device_prep() and not getattr(self, "_pre_install_guided", False):
+            self._show_device_prep()
+            return
+        self._begin_run_output()
         try:
             from ..diagnostics import DiagnosticsManager
             DiagnosticsManager.instance().start_flash_session(
@@ -1845,7 +1983,9 @@ class MainWindow(QMainWindow):
         if step == STEP_EXTRACTING:
             self._flash_page.show_preparing()
         elif step == STEP_WAITING:
+            self._last_progress = 0
             self._flash_page.show_waiting()
+            self._flash_page.update_progress(0)
             self._flash_page.set_waiting_device()
             self._flash_page.highlight_guide_step(1)
             # Still waiting for the device: the method may be switched.
@@ -1905,6 +2045,10 @@ class MainWindow(QMainWindow):
 
     def _append_log_line(self, msg, dedupe=False):
         self._log_lines.append(msg)
+        if getattr(self, "_run_output_open", False):
+            self._run_output.append(msg)
+            if len(self._run_output) > 4000:
+                self._run_output = self._run_output[-4000:]
         from ..diagnostics import LOG_RETAINED_LINES
         if len(self._log_lines) > LOG_RETAINED_LINES:
             self._log_lines = self._log_lines[-LOG_RETAINED_LINES:]
@@ -2512,6 +2656,8 @@ class MainWindow(QMainWindow):
             self._linux_setup_btn.setText(tr("nav_linux_setup"))
         if hasattr(self, "_sp_flash_tool_btn"):
             self._sp_flash_tool_btn.setText(tr("nav_sp_flash_tool_gui"))
+        if hasattr(self, "_install_output_btn"):
+            self._install_output_btn.setText(tr("nav_install_output"))
         if hasattr(self, "_lang_label"):
             self._lang_label.setText(tr("nav_language"))
         if hasattr(self, "_select_page"):
@@ -2780,7 +2926,10 @@ class MainWindow(QMainWindow):
             on_dont_ask_again=self._on_donation_dont_ask_again,
             is_360p_rockbox=is_360p_rockbox,
         )
-        dialog.exec()
+        if self._install_run_active() or getattr(self, "_download_active", False):
+            dialog.exec()
+        else:
+            self._present_inline(dialog, tr("nav_donate"))
 
     def _on_donation_dont_ask_again(self):
         """"Don't ask me again" on the Support dialog: the user is not

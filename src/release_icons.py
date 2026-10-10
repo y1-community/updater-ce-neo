@@ -3,7 +3,8 @@
 Priority, first match that actually loads:
 1. ``updater.png`` attached to the GitHub release.
 2. The optional ``icon`` attribute on the catalogue package (slidia_manifest.xml).
-3. The Updater app's own icon.
+3. No image. The install card then draws a theme squircle and a settings glyph.
+   The application icon is not a release placeholder.
 
 A missing file or a failed download falls through. Nothing here is required
 for older clients: ``icon`` is optional and ``updater.png`` is not required.

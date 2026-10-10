@@ -119,7 +119,14 @@ _SEGOE_SYMBOL_MAP = {
 _FREEDESKTOP_MAP = {
     "install": ["system-software-install-symbolic", "system-software-install", "document-save-symbolic", "document-save"],
     "cancel": ["process-stop-symbolic", "process-stop", "dialog-cancel-symbolic", "dialog-cancel"],
-    "settings": ["preferences-system-symbolic", "preferences-system", "settings-configure-symbolic", "settings-configure"],
+    "settings": [
+        "preferences-system-symbolic",
+        "preferences-system",
+        "emblem-system-symbolic",
+        "emblem-system",
+        "settings-configure-symbolic",
+        "settings-configure",
+    ],
     "translate": ["preferences-desktop-locale-symbolic", "preferences-desktop-locale", "locale-symbolic", "locale"],
     "diagnostics": ["utilities-system-monitor-symbolic", "utilities-system-monitor", "system-run-symbolic", "system-run"],
     "update": ["view-refresh-symbolic", "view-refresh", "system-software-update-symbolic", "system-software-update"],

@@ -75,17 +75,12 @@ def clear_glass_plate(widget: QWidget) -> None:
     if widget is None or not glass_surfaces_enabled():
         return
     show_glass_backdrop(widget)
-    none = QColor(0, 0, 0, 0)
-    palette = widget.palette()
-    for group in (
-        QPalette.ColorGroup.Active,
-        QPalette.ColorGroup.Inactive,
-        QPalette.ColorGroup.Disabled,
-    ):
-        palette.setColor(group, QPalette.ColorRole.Base, none)
-        palette.setColor(group, QPalette.ColorRole.Window, none)
-    widget.setPalette(palette)
-    widget.setAutoFillBackground(False)
+    # Zero-alpha black is what Windows stores for "transparent", then paints
+    # as a solid black rectangle once the theme turns light. Use the live
+    # theme surface instead so the list and notes stay readable.
+    from .scrollbars import _paint_theme_surface
+    _paint_theme_surface(widget)
+    widget.setAutoFillBackground(True)
     if isinstance(widget, QTextEdit):
         frame = widget.document().rootFrame()
         fmt = frame.frameFormat()

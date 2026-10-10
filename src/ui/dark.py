@@ -18,8 +18,8 @@ import platform
 import re
 import sys
 
-from PySide6.QtCore import QEvent, QObject, Qt, QTimer
-from PySide6.QtGui import QColor, QFont, QPainter, QPalette
+from PySide6.QtCore import QEvent, QObject, QRect, Qt, QTimer
+from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPalette, QPen
 from PySide6.QtWidgets import QApplication, QProxyStyle, QStyle, QStyleFactory
 
 logger = logging.getLogger(__name__)
@@ -80,6 +80,54 @@ def native_style_candidates(
     return tuple(ordered)
 
 
+class _ThinWindowsScrollStyle(QProxyStyle):
+    """Thin scrollbar for classic Windows styles that cannot draw WinUI bars.
+
+    Only the scrollbar is replaced. Buttons, combos, and the rest of the
+    layout stay on the native style. Colors come from the live palette.
+    """
+
+    def pixelMetric(self, metric, option=None, widget=None):  # noqa: ANN001
+        if metric == QStyle.PixelMetric.PM_ScrollBarExtent:
+            return 8
+        return super().pixelMetric(metric, option, widget)
+
+    def styleHint(self, hint, option=None, widget=None, returnData=None):  # noqa: ANN001
+        if hint == QStyle.StyleHint.SH_ScrollBar_Transient:
+            return 1
+        return super().styleHint(hint, option, widget, returnData)
+
+    def subControlRect(self, control, option, subControl, widget=None):  # noqa: ANN001
+        if control == QStyle.ComplexControl.CC_ScrollBar and subControl in (
+            QStyle.SubControl.SC_ScrollBarAddLine,
+            QStyle.SubControl.SC_ScrollBarSubLine,
+        ):
+            return QRect()
+        return super().subControlRect(control, option, subControl, widget)
+
+    def drawComplexControl(self, control, option, painter, widget=None):  # noqa: ANN001
+        if control != QStyle.ComplexControl.CC_ScrollBar:
+            super().drawComplexControl(control, option, painter, widget)
+            return
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        palette = option.palette
+        painter.fillRect(option.rect, palette.color(QPalette.ColorRole.Window))
+        slider = self.subControlRect(
+            control, option, QStyle.SubControl.SC_ScrollBarSlider, widget,
+        )
+        if slider.isValid() and slider.width() > 1 and slider.height() > 1:
+            color = palette.color(QPalette.ColorRole.Mid)
+            if option.state & QStyle.StateFlag.State_MouseOver:
+                color = palette.color(QPalette.ColorRole.ButtonText)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(color)
+            thumb = slider.adjusted(1, 1, -1, -1)
+            radius = max(1, min(thumb.width(), thumb.height()) / 2)
+            painter.drawRoundedRect(thumb, radius, radius)
+        painter.restore()
+
+
 class _ClassicWindowsHoverStyle(QProxyStyle):
     """Hover wash drawn after the native Windows button.
 
@@ -108,6 +156,48 @@ class _ClassicWindowsHoverStyle(QProxyStyle):
         wash.setAlpha(40)
         painter.setBrush(wash)
         painter.drawRoundedRect(option.rect.adjusted(2, 2, -2, -2), 4, 4)
+        painter.restore()
+
+    def drawPrimitive(self, element, option, painter, widget=None):  # noqa: ANN001
+        """Checked Windows boxes use the live accent. Unchecked stay native.
+
+        windowsvista draws the tick in a gray that disappears on the settings
+        card. macOS and Linux never use this style.
+        """
+        if element != QStyle.PrimitiveElement.PE_IndicatorCheckBox:
+            super().drawPrimitive(element, option, painter, widget)
+            return
+        state = option.state
+        checked = bool(state & (QStyle.StateFlag.State_On | QStyle.StateFlag.State_NoChange))
+        if not checked:
+            super().drawPrimitive(element, option, painter, widget)
+            return
+        accent = option.palette.color(QPalette.ColorRole.Highlight)
+        if not accent.isValid() or accent.alpha() == 0:
+            accent = QColor("#2563eb")
+        mark = option.palette.color(QPalette.ColorRole.HighlightedText)
+        if not mark.isValid() or contrast_ratio(mark, accent) < 3:
+            mark = _readable_on(accent)
+        rect = option.rect
+        side = max(12, min(rect.width(), rect.height()) - 2)
+        box = QRect(
+            rect.center().x() - side // 2,
+            rect.center().y() - side // 2,
+            side,
+            side,
+        )
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(accent)
+        painter.drawRoundedRect(box, 3, 3)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.setPen(QPen(mark, max(1.6, side / 7), Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+        path = QPainterPath()
+        path.moveTo(box.left() + side * 0.22, box.top() + side * 0.52)
+        path.lineTo(box.left() + side * 0.42, box.top() + side * 0.72)
+        path.lineTo(box.left() + side * 0.78, box.top() + side * 0.30)
+        painter.drawPath(path)
         painter.restore()
 
 
@@ -152,7 +242,13 @@ def setup_native_app_style(app: QApplication) -> str:
     key = _factory_style(*candidates)
     if key:
         if IS_WINDOWS:
-            app.setStyle(_ClassicWindowsHoverStyle(key))
+            # windows11 is WinUI (thin bars, fluent combos). Older Windows keep
+            # the same layout on the classic style, with a thin palette-colored
+            # scrollbar because windowsvista cannot draw WinUI bars.
+            style = _ClassicWindowsHoverStyle(key)
+            if key.lower() != "windows11":
+                style = _ThinWindowsScrollStyle(style)
+            app.setStyle(style)
         else:
             app.setStyle(key)
         return key
@@ -752,7 +848,7 @@ def apply_readable_palette(widget, *, progress: bool = False) -> None:
         return
     src = app.palette()
     pal = widget.palette()
-    for role in (
+    roles = (
         QPalette.ColorRole.Window,
         QPalette.ColorRole.WindowText,
         QPalette.ColorRole.Base,
@@ -762,8 +858,14 @@ def apply_readable_palette(widget, *, progress: bool = False) -> None:
         QPalette.ColorRole.Highlight,
         QPalette.ColorRole.HighlightedText,
         QPalette.ColorRole.PlaceholderText,
+    )
+    for group in (
+        QPalette.ColorGroup.Active,
+        QPalette.ColorGroup.Inactive,
+        QPalette.ColorGroup.Disabled,
     ):
-        pal.setColor(role, src.color(role))
+        for role in roles:
+            pal.setColor(group, role, src.color(group, role))
     if progress:
         # One text color has to clear both the unfilled groove and the filled
         # chunk. Stylesheet ``palette()`` colors do not: a parent card replaces
@@ -907,7 +1009,6 @@ QMessageBox {{
 }}
 QMessageBox QLabel {{
     color: {text_color};
-    background: transparent;
 }}
 
 /* ── Native Cards & Section Panels ───────────────────── */
@@ -924,12 +1025,11 @@ QFrame[cssClass="card"] {{
    and leaves the buttons to the platform style. */
 
 /* ── Release notes and the version list ─────────────────
-   No background here. A stylesheet fill, including a zero-alpha rgba that
-   Qt stores as black, paints a rectangle over the glass. The palette leaves
-   these views clear, and the platform style draws the selection. */
+   No stylesheet background. ``background: transparent`` is stored as black
+   and stays a slab after a dark-to-light switch. The palette supplies the
+   fill, and the platform style draws the selection. */
 QTextBrowser#releaseNotes, QTextEdit#releaseNotes,
 QTextBrowser#releaseNotes::viewport, QTextEdit#releaseNotes::viewport {{
-    background: transparent;
     border: none;
     color: {text_color};
 }}
@@ -938,7 +1038,6 @@ QListWidget#releaseList,
 QListView#releaseList,
 QListWidget#releaseList::viewport,
 QListView#releaseList::viewport {{
-    background: transparent;
     border: none;
     color: {text_color};
     outline: none;
@@ -1242,6 +1341,35 @@ def theme_fingerprint(app: QApplication | None = None, *, platform_dark: bool = 
     )
 
 
+def sync_cached_palettes(app: QApplication) -> None:
+    """Rewrite brushes that a widget cached from the previous theme.
+
+    Combo popups and scroll viewports keep their own palette. A dark Base
+    left on those widgets is the black slab, and dark text on that Base is
+    why the dropdowns become unreadable after a live switch.
+    """
+    from PySide6.QtWidgets import QAbstractScrollArea, QComboBox
+
+    for widget in app.allWidgets():
+        if isinstance(widget, QComboBox):
+            apply_readable_palette(widget)
+            view = widget.view()
+            if view is not None:
+                apply_readable_palette(view)
+                viewport = view.viewport()
+                if viewport is not None:
+                    apply_readable_palette(viewport)
+                    viewport.setAutoFillBackground(True)
+        elif isinstance(widget, QAbstractScrollArea):
+            viewport = widget.viewport()
+            if viewport is None:
+                continue
+            base = viewport.palette().color(QPalette.ColorRole.Base)
+            if base.alpha() == 0 or widget.autoFillBackground():
+                apply_readable_palette(viewport)
+                viewport.setAutoFillBackground(True)
+
+
 def refresh_theme(app: QApplication | None = None) -> None:
     """Re-read the host appearance and repaint the whole app with the new tokens.
 
@@ -1270,6 +1398,7 @@ def refresh_theme(app: QApplication | None = None) -> None:
             widget.update()
         except Exception:
             pass
+    sync_cached_palettes(app)
 
 
 class ThemeWatcher(QObject):

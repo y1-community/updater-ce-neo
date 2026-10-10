@@ -1702,3 +1702,40 @@ class LegacyMigrationDialog(QDialog):
             )
         self.accept()
 
+
+class InstallConsoleDialog(QDialog):
+    """Small live view of the install tool's terminal. Closing it does not cancel."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setModal(False)
+        self.setWindowTitle(tr("install_output_title"))
+        self.resize(560, 360)
+        self._stick = True
+        layout = QVBoxLayout(self)
+        self._log = QTextEdit()
+        self._log.setReadOnly(True)
+        self._log.setPlaceholderText(tr("install_output_empty"))
+        layout.addWidget(self._log)
+        self._log.verticalScrollBar().valueChanged.connect(self._on_scroll)
+
+    def set_lines(self, lines) -> None:
+        self._log.setPlainText("\n".join(lines or []))
+        if self._stick:
+            self._log.moveCursor(QTextCursor.MoveOperation.End)
+
+    def append_line(self, line) -> None:
+        if not self.isVisible():
+            return
+        self._log.append(str(line))
+        if self._stick:
+            self._log.moveCursor(QTextCursor.MoveOperation.End)
+
+    def _on_scroll(self, value: int) -> None:
+        bar = self._log.verticalScrollBar()
+        self._stick = value >= max(0, bar.maximum() - 2)
+
+    def retranslate(self) -> None:
+        self.setWindowTitle(tr("install_output_title"))
+        self._log.setPlaceholderText(tr("install_output_empty"))
+

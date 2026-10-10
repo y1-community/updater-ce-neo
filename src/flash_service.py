@@ -1132,7 +1132,7 @@ class FlashWorker(QThread):
             self._log(f"Reusing extracted directory: {pre}")
             extract_dir = pre
             self.step_changed.emit(STEP_WAITING)
-            self.progress.emit(8)
+            self.progress.emit(0)
         else:
             self.step_changed.emit(STEP_EXTRACTING)
             self.progress.emit(5)
@@ -1387,7 +1387,7 @@ class FlashWorker(QThread):
                 ),
             ]
             self.step_changed.emit(STEP_WAITING)
-            self.progress.emit(10)
+            self.progress.emit(0)
             self.action_changed.emit(tr("action_searching"))
             self._log("Launching SP Flash Tool (console mode, searching USB)...")
             self._log("Keep the device unplugged until the connect prompt appears.")
@@ -1497,13 +1497,21 @@ class FlashWorker(QThread):
         else:
             self.finished.emit(False, f"SP_EXIT_{exit_code}")
 
+    def _mapped_phase_percent(self, line, start, span):
+        """Map a tool's own percent into a slice of the install bar."""
+        match = re.search(r"(\d+(?:\.\d+)?)\s*%", line or "")
+        if not match:
+            return int(start)
+        frac = max(0.0, min(100.0, float(match.group(1)))) / 100.0
+        return int(round(start + span * frac))
+
     def _classify_sp_stdout(self, line):
         low = line.lower()
         if "s_chip_type_not_match" in low:
             self._sp_mismatch = True
         elif "scanning usb" in low or "search usb" in low:
             self.step_changed.emit(STEP_WAITING)
-            self.progress.emit(10)
+            self.progress.emit(0)
             self.action_changed.emit(tr("action_searching"))
         elif "brom connected" in low:
             self.step_changed.emit(STEP_DETECT)
@@ -1511,11 +1519,11 @@ class FlashWorker(QThread):
             self.action_changed.emit(tr("action_brom_detected"))
         elif "of da has been sent" in low:
             self.step_changed.emit(STEP_DOWNLOAD_DA)
-            self.progress.emit(15)
+            self.progress.emit(self._mapped_phase_percent(line, 12, 6))
             self.action_changed.emit(tr("action_downloading_da"))
         elif "of bootloader has been sent" in low:
             self.step_changed.emit(STEP_DOWNLOAD_BL)
-            self.progress.emit(18)
+            self.progress.emit(self._mapped_phase_percent(line, 16, 2))
             self.action_changed.emit(tr("action_downloading_bootloader"))
         elif "format succeeded" in low:
             self.progress.emit(20)
@@ -1611,6 +1619,8 @@ class FlashWorker(QThread):
                         elif "brom connected" in low:
                             self.step_changed.emit(STEP_DETECT)
                             self.progress.emit(12)
+                        elif "of da has been sent" in low or "of bootloader has been sent" in low:
+                            self._classify_sp_stdout(ln)
                         # Forward the internal log itself, minus lines the
                         # console stream already reported, so the diagnostics
                         # window holds everything flash_tool emitted.
@@ -1755,7 +1765,7 @@ class FlashWorker(QThread):
 
         self._tool_tag = "MTK"
         self.step_changed.emit(STEP_WAITING)
-        self.progress.emit(8)
+        self.progress.emit(0)
         self.action_changed.emit(tr("action_init_mtkclient"))
         self._log(tr("action_init_mtkclient"))
 
@@ -1842,7 +1852,7 @@ class FlashWorker(QThread):
         # Raw output printed while this backend runs comes from MTKClient.
         self._tool_tag = "MTK"
         self.step_changed.emit(STEP_WAITING)
-        self.progress.emit(10)
+        self.progress.emit(0)
         self.action_changed.emit(tr("action_init_mtkclient"))
         self._log(tr("action_init_mtkclient"))
         try:
@@ -1885,7 +1895,7 @@ class FlashWorker(QThread):
             self._log("No preloader image found; using built-in EMI")
 
         self.step_changed.emit(STEP_WAITING)
-        self.progress.emit(10)
+        self.progress.emit(0)
         self.action_changed.emit(tr("action_wait_mtk"))
         self._log("Waiting for MTK device... Power off the device and connect USB.")
 
