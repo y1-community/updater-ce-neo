@@ -33,7 +33,7 @@ def test_no_prompt_when_installed_is_newest():
     assert not any(row["newer"] for row in marks["rows"].values())
 
 
-def test_software_install_is_remembered_separately():
+def test_one_software_type_per_model():
     from PySide6.QtCore import QSettings
 
     from src import device_tracking
@@ -47,14 +47,20 @@ def test_software_install_is_remembered_separately():
             "Y1", "Original Software", "v3.1.2", release_label="3.1.2", settings=settings,
         )
         device_tracking.record_device_install(
+            "Y2", "Original Software", "v3.0.7", release_label="3.0.7", settings=settings,
+        )
+        # A second title on Y1 replaces the first. Y2 stays on its own software.
+        device_tracking.record_device_install(
             "Y1", "Rockbox", "v1.0.0", release_label="1.0.0", settings=settings,
         )
-        original = device_tracking.get_software_install("Y1", "Original Software", settings=settings)
-        rockbox = device_tracking.get_software_install("Y1", "Rockbox", settings=settings)
-        assert original["tag_name"] == "v3.1.2"
-        assert rockbox["tag_name"] == "v1.0.0"
-        # The model still remembers the latest install for older callers.
-        assert device_tracking.get_device_install("Y1", settings=settings)["tag_name"] == "v1.0.0"
+        assert device_tracking.get_software_install("Y1", "Original Software", settings=settings) is None
+        assert device_tracking.get_software_install("Y1", "Rockbox", settings=settings)["tag_name"] == "v1.0.0"
+        assert device_tracking.get_device_install("Y1", settings=settings)["software_name"] == "Rockbox"
+        assert device_tracking.get_software_install("Y2", "Original Software", settings=settings)["tag_name"] == "v3.0.7"
+        device_tracking.record_device_install(
+            "Y1", "Local File", "local", release_label="rom.zip", settings=settings,
+        )
+        assert device_tracking.get_device_install("Y1", settings=settings)["software_name"] == "Rockbox"
     finally:
         settings.sync()
         path.unlink(missing_ok=True)
@@ -115,8 +121,9 @@ def test_installed_row_is_a_circle_without_the_word():
     assert newer_bold is True
     assert not page._update_prompt.isHidden()
     text = page._update_prompt.text()
-    assert "3.2.0" in text or "v3.2.0" in text
-    assert "3.1.2" in text
+    assert "Original Software" in text
+    assert "Y1" in text
+    assert "update" in text.lower()
     page._on_releases_loaded(
         [rel for rel in _releases() if rel["tag_name"] != "v3.2.0"],
         "",
@@ -135,6 +142,6 @@ def test_installed_row_is_a_circle_without_the_word():
 if __name__ == "__main__":
     test_newer_rows_and_prompt_use_version_order()
     test_no_prompt_when_installed_is_newest()
-    test_software_install_is_remembered_separately()
+    test_one_software_type_per_model()
     test_installed_row_is_a_circle_without_the_word()
     print("release mark tests passed")

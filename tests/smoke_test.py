@@ -416,7 +416,7 @@ def test_update_checker():
 def test_update_dialog_and_wiring():
     """Update dialog renders (translated) and main-window wiring shows it
     once per session, honoring the skipped-version setting."""
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication, QWidget
     from src.i18n import translator
     from src.ui.dialogs import UpdateAvailableDialog
     from src.updates import UpdateInfo
@@ -426,7 +426,7 @@ def test_update_dialog_and_wiring():
     app = QApplication.instance() or QApplication(sys.argv)
     w = mw.MainWindow()
     w.show()
-    assert w._check_updates_btn.text() == "Check for Updates"
+    assert w._check_updates_btn.text() == "App Updates"
 
     translator().set_language("fr")
     info = UpdateInfo(
@@ -441,8 +441,9 @@ def test_update_dialog_and_wiring():
     shown = []
     real_dlg = mw.UpdateAvailableDialog
 
-    class _StubUpdateDialog:
+    class _StubUpdateDialog(QWidget):
         def __init__(self, parent=None, info=None, current_version="", on_skip=None):
+            super().__init__(parent)
             shown.append(info)
 
         def exec(self):
@@ -3438,7 +3439,7 @@ def test_package_prep_gates_flash_start():
     import zipfile
     from PySide6.QtWidgets import QApplication
     from src.ui.select_page import SelectPackagePage
-    from src.flash_service import FlashWorker, STEP_EXTRACTING, STEP_WAITING
+    from src.flash_service import FlashWorker, STEP_EXTRACTING, STEP_PLEASE_WAIT, STEP_WAITING
 
     _reset_app_settings()
     app = QApplication.instance() or QApplication(sys.argv)
@@ -3471,7 +3472,8 @@ def test_package_prep_gates_flash_start():
     fw.step_changed.connect(steps.append)
     fw.run()
     assert STEP_EXTRACTING not in steps, steps
-    assert STEP_WAITING in steps, steps
+    assert STEP_PLEASE_WAIT in steps, steps
+    assert STEP_WAITING not in steps, steps
 
     # Without a prepared dir the extraction fallback still exists (safety net).
     steps2 = []
@@ -3739,7 +3741,7 @@ def test_native_theming():
 
     dark.apply_theme(app, force_dark=True)
     qss_dark = dark._build_qss()
-    assert "font-family:" in qss_dark  # monospace diagnostics view only
+    assert "font-family:" not in qss_dark  # scroll views stay on the platform style
     assert "#navPanel" not in qss_dark, "a sidebar stylesheet restyles its buttons"
     assert "cssClass=\"cardTitle\"" in qss_dark
     assert "cssClass=\"field-label\"" in qss_dark
@@ -3783,7 +3785,7 @@ def test_native_theming():
 
     dark.apply_theme(app, force_dark=False)
     qss_light = dark._build_qss()
-    assert "font-family:" in qss_light
+    assert "font-family:" not in qss_light
     assert "#navPanel" not in qss_light
     _assert_no_unscoped_control_qss(qss_light)
 
@@ -4117,19 +4119,21 @@ def test_sp_flash_tool_gui():
             assert sp_flash_gui.update_sp_history_ini(sp_dir, model="Y1") is True
             ini_file = sp_dir / "history.ini"
             assert ini_file.is_file()
-            content = ini_file.read_text(encoding="utf-8")
             exp_y1 = str((sp_dir / "MT6572_Android_scatter.txt").resolve())
-            assert f"scatterHistory={exp_y1}" in content
-            assert f"lastDir={exp_y1}" in content
-            assert os.path.isabs(exp_y1)
+            _da, scatter_read, history = sp_flash_gui.read_history_paths(ini_file)
+            assert os.path.normcase(scatter_read) == os.path.normcase(exp_y1)
+            assert os.path.normcase(exp_y1) in os.path.normcase(history)
+            assert os.path.isabs(scatter_read)
 
             # Update for Y2
             assert sp_flash_gui.update_sp_history_ini(sp_dir, model="Y2") is True
-            content2 = ini_file.read_text(encoding="utf-8")
             exp_y2 = str((sp_dir / "MT6582_Android_scatter.txt").resolve())
-            assert f"scatterHistory={exp_y2},{exp_y1}" in content2
-            assert f"lastDir={exp_y2}" in content2
-            assert os.path.isabs(exp_y2)
+            _da, scatter_read, history = sp_flash_gui.read_history_paths(ini_file)
+            assert os.path.normcase(scatter_read) == os.path.normcase(exp_y2)
+            folded = os.path.normcase(history)
+            assert os.path.normcase(exp_y2) in folded
+            assert os.path.normcase(exp_y1) in folded
+            assert os.path.isabs(scatter_read)
     finally:
         device_tracking.get_latest_package = orig_latest
         downloads.downloads_dir = orig_downloads_dir
@@ -4479,11 +4483,12 @@ def test_latest_package_tracking_and_history_ini():
         assert ok is True
         hist_ini = sp_bin_dir / "history.ini"
         assert hist_ini.is_file()
-        text = hist_ini.read_text(encoding="utf-8")
-        assert f"scatterHistory={scatter.resolve()}" in text
-        assert f"lastDir={extract_dir.resolve()}" in text
-        # Verify scatter file was copied to sp_bin_dir
-        assert (sp_bin_dir / "MT6582_Android_scatter.txt").is_file()
+        _da, scatter_read, history = sp_flash_gui.read_history_paths(hist_ini)
+        assert os.path.normcase(scatter_read) == os.path.normcase(str(scatter.resolve()))
+        assert os.path.normcase(str(scatter.resolve())) in os.path.normcase(history)
+        # The scatter stays beside the package images. A copy in the tool folder
+        # is what makes SP Flash Tool report that the scatter cannot be found.
+        assert not (sp_bin_dir / "MT6582_Android_scatter.txt").is_file()
 
         # 4. Clear latest package
         device_tracking.clear_latest_package(settings=settings)
@@ -4771,7 +4776,6 @@ def test_sp_history_ini_subsequent_attempts_and_absolute_paths():
     """Verify that update_sp_history_ini always writes valid absolute paths
     across subsequent install attempts, retries, and fixes any legacy relative paths."""
     from src import sp_flash_gui, device_tracking
-    from PySide6.QtCore import QSettings
 
     with tempfile.TemporaryDirectory() as td:
         sp_dir = Path(td) / "sp_tool"
@@ -4801,18 +4805,12 @@ def test_sp_history_ini_subsequent_attempts_and_absolute_paths():
         ini_file = sp_dir / "history.ini"
         assert ini_file.is_file()
 
-        # Check with QSettings
-        ini_text1 = ini_file.read_text(encoding="utf-8")
-        assert f"lastDir={da_file.resolve()}" in ini_text1
-        assert f"lastDir={sc1.resolve()}" in ini_text1
-        assert f"scatterHistory={sc1.resolve()}" in ini_text1
-        if sys.platform != "win32":
-            qs1 = QSettings(str(ini_file), QSettings.IniFormat)
-            assert qs1.value("LastDAFilePath/lastDir") == str(da_file.resolve())
-            assert qs1.value("RecentOpenFile/lastDir") == str(sc1.resolve())
-            assert qs1.value("RecentOpenFile/scatterHistory") == str(sc1.resolve())
-            assert os.path.isabs(qs1.value("LastDAFilePath/lastDir"))
-            assert os.path.isabs(qs1.value("RecentOpenFile/lastDir"))
+        da_read, scatter_read, history = sp_flash_gui.read_history_paths(ini_file)
+        assert os.path.normcase(da_read) == os.path.normcase(str(da_file.resolve()))
+        assert os.path.normcase(scatter_read) == os.path.normcase(str(sc1.resolve()))
+        assert os.path.normcase(history) == os.path.normcase(str(sc1.resolve()))
+        assert os.path.isabs(da_read)
+        assert os.path.isabs(scatter_read)
 
         # --- Attempt 2: Subsequent install attempt (Y2) ---
         ok2 = sp_flash_gui.update_sp_history_ini(
@@ -4823,16 +4821,15 @@ def test_sp_history_ini_subsequent_attempts_and_absolute_paths():
         )
         assert ok2 is True
 
-        expected_hist = f"{sc2.resolve()},{sc1.resolve()}"
-        assert f"scatterHistory={expected_hist}" in ini_file.read_text(encoding="utf-8")
-        if sys.platform != "win32":
-            qs2 = QSettings(str(ini_file), QSettings.IniFormat)
-            assert qs2.value("LastDAFilePath/lastDir") == str(da_file.resolve())
-            assert qs2.value("RecentOpenFile/lastDir") == str(sc2.resolve())
-            raw_val = qs2.value("RecentOpenFile/scatterHistory")
-            items = raw_val if isinstance(raw_val, list) else [raw_val]
-            assert items == [str(sc2.resolve()), str(sc1.resolve())]
-            assert os.path.isabs(qs2.value("RecentOpenFile/lastDir"))
+        da_read, scatter_read, history = sp_flash_gui.read_history_paths(ini_file)
+        assert os.path.normcase(da_read) == os.path.normcase(str(da_file.resolve()))
+        assert os.path.normcase(scatter_read) == os.path.normcase(str(sc2.resolve()))
+        items = [item.strip() for item in history.split(",") if item.strip()]
+        assert [os.path.normcase(item) for item in items] == [
+            os.path.normcase(str(sc2.resolve())),
+            os.path.normcase(str(sc1.resolve())),
+        ]
+        assert os.path.isabs(scatter_read)
 
         # --- Test upgrade of legacy/malformed history.ini with relative paths ---
         malformed_text = (
@@ -4846,22 +4843,18 @@ def test_sp_history_ini_subsequent_attempts_and_absolute_paths():
 
         ok3 = sp_flash_gui.update_sp_history_ini(
             sp_dir=sp_dir,
+            scatter_path=sc2,
+            extract_dir=fw2_dir,
             model="Y2",
         )
         assert ok3 is True
-        if sys.platform != "win32":
-            qs3 = QSettings(str(ini_file), QSettings.IniFormat)
-            assert qs3.value("LastDAFilePath/lastDir") == str(da_file.resolve())
-            assert os.path.isabs(qs3.value("LastDAFilePath/lastDir"))
-            assert os.path.isabs(qs3.value("RecentOpenFile/lastDir"))
-            raw3 = qs3.value("RecentOpenFile/scatterHistory")
-            items3 = raw3 if isinstance(raw3, list) else [raw3]
-            assert str((da_file.parent / "MT6572_Android_scatter.txt").resolve()) in items3
-        else:
-            ini3_text = ini_file.read_text(encoding="utf-8")
-            assert f"lastDir={da_file.resolve()}" in ini3_text
-            assert "MT6572_Android_scatter.txt" in ini3_text
-            items3 = [str((da_file.parent / "MT6572_Android_scatter.txt").resolve())]
+        da_read, scatter_read, history = sp_flash_gui.read_history_paths(ini_file)
+        assert os.path.normcase(da_read) == os.path.normcase(str(da_file.resolve()))
+        assert os.path.normcase(scatter_read) == os.path.normcase(str(sc2.resolve()))
+        assert os.path.isabs(da_read)
+        assert os.path.isabs(scatter_read)
+        # The relative scatter in the broken file is not on disk, so it is dropped.
+        items3 = [item.strip() for item in history.split(",") if item.strip()]
         for item in items3:
             item_str = str(item).strip()
             assert os.path.isabs(item_str), f"Expected absolute path, got {item_str}"

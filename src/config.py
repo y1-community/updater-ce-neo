@@ -316,3 +316,34 @@ def install_disconnect_guidance(model: str = "", type_variant: str | None = None
     label = device_label_for_model(model, type_variant)
     return tr("install_disconnect_guidance_fmt").format(label=label)
 
+
+_HEADPHONE_PORT_MODELS = ("Y1", "Y2", "G1", "G3", "G5", "Q5", "Q3E")
+
+
+def download_mode_model(model: str) -> str:
+    """Model id used to pick the download-mode hint, or "" when none matches."""
+    text = re.sub(r"[^A-Z0-9]", "", (model or "").upper())
+    if "Q3E" in text:
+        return "Q3E"
+    for mid in ("Y1", "Y2", "G1", "G3", "G5", "Q5", "A5"):
+        if mid in text:
+            return mid
+    return ""
+
+
+def download_mode_hint(model: str = "") -> str:
+    """Small in-window hint for how to power this model into download mode.
+
+    Y1, Y2, G1, G3, G5, Q5 and Q3e use the hole beside the headphone port.
+    A5 uses the hole under the power button. Anything else gets one short
+    generic line. Copy does not name the desktop tool.
+    """
+    from .i18n import tr, tr_brand
+
+    mid = download_mode_model(model)
+    if mid in _HEADPHONE_PORT_MODELS:
+        return tr("gui_handoff_hint_headphone")
+    if mid == "A5":
+        return tr("gui_handoff_hint_a5")
+    return tr_brand("gui_handoff_hint_generic")
+

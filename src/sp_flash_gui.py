@@ -18,6 +18,57 @@ HISTORY_INI = "history.ini"
 DA_FILENAME = "MTK_AllInOne_DA.bin"
 
 
+def _user_sp_copy_dir() -> Path:
+    """Per-user folder used when the installed SP Flash Tool cannot be written."""
+    if paths.IS_WINDOWS:
+        base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
+        return base / "Updater CE" / "SP_Flash_Tool"
+    if paths.IS_MAC:
+        return Path.home() / "Library" / "Application Support" / "Updater CE" / "SP_Flash_Tool"
+    base = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
+    return Path(base) / "updater-ce" / "SP_Flash_Tool"
+
+
+def _dir_is_writable(directory: Path) -> bool:
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+        probe = directory / ".updater_write_probe"
+        probe.write_text("1", encoding="utf-8")
+        probe.unlink(missing_ok=True)
+        return True
+    except OSError:
+        return False
+
+
+def _tool_binary_name() -> str:
+    return "flash_tool.exe" if paths.IS_WINDOWS else "flash_tool"
+
+
+def ensure_launch_dir(source: Path) -> Path:
+    """Return a tool directory the current account can write ``history.ini`` into.
+
+    A system-wide install keeps SP Flash Tool under Program Files, and an
+    AppImage keeps it on a read-only mount. When that folder is not writable,
+    the tree is copied once into the per-user data directory and that copy is
+    launched, so ``history.ini`` still sits beside the binary.
+    """
+    source = Path(source)
+    if _dir_is_writable(source):
+        return source
+    dest = _user_sp_copy_dir()
+    try:
+        dest.mkdir(parents=True, exist_ok=True)
+        if not (dest / _tool_binary_name()).is_file():
+            shutil.copytree(source, dest, dirs_exist_ok=True)
+    except OSError:
+        logger.warning("Could not copy SP Flash Tool to %s", dest, exc_info=True)
+        return source
+    if _dir_is_writable(dest):
+        logger.info("Using writable SP Flash Tool copy at %s", dest)
+        return dest
+    return source
+
+
 def is_sp_flash_gui_supported() -> bool:
     """Return True if the host platform supports running the SP Flash Tool GUI.
 
@@ -98,6 +149,47 @@ def find_sp_flash_tool_dirs() -> List[Path]:
     return found
 
 
+def _ini_escape(value: str) -> str:
+    """Escape a path the way Qt's INI reader expects it.
+
+    SP Flash Tool reads ``history.ini`` with QSettings. A single backslash
+    starts an escape, so ``C:\\Users`` is read as ``C:Users`` and the scatter
+    file "cannot be found". Doubling the backslash keeps the real path.
+    """
+    return (value or "").replace("\\", "\\\\")
+
+
+def _ini_unescape(value: str) -> str:
+    """Undo one level of INI backslash escaping. Single-backslash files stay intact."""
+    text = value or ""
+    out: List[str] = []
+    index = 0
+    while index < len(text):
+        if text[index] == "\\" and index + 1 < len(text) and text[index + 1] == "\\":
+            out.append("\\")
+            index += 2
+            continue
+        out.append(text[index])
+        index += 1
+    return "".join(out)
+
+
+def read_history_paths(history_file: Union[Path, str]) -> Tuple[str, str, str]:
+    """Paths SP Flash Tool will actually load from ``history.ini``."""
+    from PySide6.QtCore import QSettings
+
+    settings = QSettings(str(history_file), QSettings.Format.IniFormat)
+    settings.sync()
+    da = str(settings.value("LastDAFilePath/lastDir") or "")
+    scatter = str(settings.value("RecentOpenFile/lastDir") or "")
+    history = settings.value("RecentOpenFile/scatterHistory")
+    if isinstance(history, (list, tuple)):
+        history_text = ",".join(str(item) for item in history)
+    else:
+        history_text = str(history or "")
+    return da, scatter, history_text
+
+
 def format_sp_history_ini(
     existing_text: str,
     da_path: str,
@@ -128,14 +220,26 @@ def format_sp_history_ini(
         m = re.search(r"(?m)^\s*scatterHistory\s*=\s*(.*)$", cleaned_text)
         if m:
             for raw in m.group(1).split(","):
-                entry = raw.strip()
-                if not entry:
+                entry = _ini_unescape(raw.strip())
+                if not entry or entry.startswith("@Invalid"):
                     continue
                 if os.path.isabs(entry):
                     p_entry = str(Path(entry).resolve())
                 elif sp_dir:
                     p_entry = str((Path(sp_dir) / entry).resolve())
                 else:
+                    continue
+                # A scatter copied into the tool folder has no package images
+                # beside it. Keep only files that are still on disk.
+                if not Path(p_entry).is_file():
+                    continue
+                # Drop a scatter that was copied into the tool folder once the
+                # package extract itself is the file being opened.
+                if (
+                    sp_dir
+                    and Path(scatter_abs).parent.resolve() != Path(sp_dir).resolve()
+                    and Path(p_entry).parent.resolve() == Path(sp_dir).resolve()
+                ):
                     continue
                 if p_entry not in history_entries:
                     history_entries.append(p_entry)
@@ -155,13 +259,13 @@ def format_sp_history_ini(
                     other_sections.append(sec_match.group(0).strip())
 
     history_entries = history_entries[:10]
-    scatter_history_line = ",".join(history_entries)
+    scatter_history_line = ",".join(_ini_escape(entry) for entry in history_entries)
 
     base = (
         f"[LastDAFilePath]\n"
-        f"lastDir={da_abs}\n\n"
+        f"lastDir={_ini_escape(da_abs)}\n\n"
         f"[RecentOpenFile]\n"
-        f"lastDir={scatter_abs}\n"
+        f"lastDir={_ini_escape(scatter_abs)}\n"
         f"scatterHistory={scatter_history_line}\n"
         f"authHistory={auth_history}\n"
     )
@@ -293,13 +397,48 @@ def resolve_cached_firmware(
     return resolved_scatter, resolved_extract, model
 
 
-def cached_install_firmware(latest: Optional[dict]) -> Tuple[Optional[Path], Optional[Path]]:
-    """Extracted firmware from a previous install, if those files are still on disk.
+def choose_sp_gui_package(explicit, cached, focused):
+    """Firmware to open in the desktop tool.
 
-    This is the first choice when handing a package to the SP Flash Tool GUI:
-    a cached release is reused instead of downloading it again. Failed and
-    successful installs are both recorded the same way, so either can be
-    opened again.
+    Order: a release the user clicked, or a zip/rar/scatter they browsed to;
+    otherwise the newest extract still in the working folder; otherwise the
+    release focused on screen (usually the latest Original Software).
+    """
+    if explicit:
+        return explicit
+    if cached:
+        return cached
+    if focused:
+        return focused
+    return None
+
+
+def is_gui_local_package(path) -> bool:
+    """True for a zip, rar, scatter text file, or a folder that contains one."""
+    if not path:
+        return False
+    candidate = Path(path)
+    try:
+        if candidate.is_file():
+            name = candidate.name.lower()
+            if candidate.suffix.lower() in (".zip", ".rar"):
+                return True
+            return "scatter" in name and name.endswith(".txt")
+        if candidate.is_dir():
+            from .flash_service import find_scatter_files
+
+            return bool(find_scatter_files(candidate))
+    except OSError:
+        return False
+    return False
+
+
+def cached_install_firmware(latest: Optional[dict]) -> Tuple[Optional[Path], Optional[Path]]:
+    """Extracted firmware still in the working folder, if those files are on disk.
+
+    Used when nothing was clicked and nothing was browsed: the cache is opened
+    as-is, without downloading it again. Failed and successful installs are
+    both recorded the same way, so either can be opened again.
     """
     if not latest:
         return None, None
@@ -350,13 +489,55 @@ def pin_sp_flash_history(
     if not wrote:
         return False, da_abs, scatter_abs
     history = tool_dir / HISTORY_INI
-    try:
-        text = history.read_text(encoding="utf-8", errors="replace")
-    except OSError:
+    if not history.is_file():
         return False, da_abs, scatter_abs
-    if scatter_abs not in text or da_abs not in text:
+    read_da, read_scatter, _history = read_history_paths(history)
+    if os.path.normcase(read_da) != os.path.normcase(da_abs):
+        return False, da_abs, scatter_abs
+    if os.path.normcase(read_scatter) != os.path.normcase(scatter_abs):
         return False, da_abs, scatter_abs
     return True, da_abs, scatter_abs
+
+
+def stage_history_before_launch(
+    sp_dir: Union[Path, str],
+    scatter_path: Union[Path, str],
+) -> Tuple[bool, str]:
+    """Write history.ini beside the tool binary, then confirm both files exist.
+
+    The GUI is not started unless the extracted scatter and this folder's
+    ``MTK_AllInOne_DA.bin`` are real files and both absolute paths are in
+    ``history.ini``.
+    """
+    tool_dir = Path(sp_dir)
+    scatter = Path(scatter_path) if scatter_path else None
+    if scatter is None or not scatter.is_file() or not tool_dir.is_dir():
+        return False, "The extracted scatter file is missing."
+    ok, da_abs, scatter_abs = pin_sp_flash_history(tool_dir, scatter)
+    if not ok or not da_abs or not scatter_abs:
+        return False, (
+            "Could not write history.ini with the extracted scatter and "
+            "MTK_AllInOne_DA.bin."
+        )
+    if not os.path.isabs(da_abs) or not os.path.isabs(scatter_abs):
+        return False, "history.ini paths must be absolute."
+    da_file = Path(da_abs)
+    scatter_file = Path(scatter_abs)
+    if (
+        not da_file.is_file()
+        or not scatter_file.is_file()
+        or da_file.name != DA_FILENAME
+        or da_file.parent.resolve() != tool_dir.resolve()
+    ):
+        return False, "The scatter file or MTK_AllInOne_DA.bin is missing."
+    if not (tool_dir / HISTORY_INI).is_file():
+        return False, "history.ini could not be read back."
+    read_da, read_scatter, _history = read_history_paths(tool_dir / HISTORY_INI)
+    if os.path.normcase(read_da) != os.path.normcase(da_abs):
+        return False, "history.ini does not list the download agent."
+    if os.path.normcase(read_scatter) != os.path.normcase(scatter_abs):
+        return False, "history.ini does not list the scatter file."
+    return True, ""
 
 
 def check_cached_firmware_readiness(
@@ -509,7 +690,21 @@ def update_sp_history_ini(
         if resolved_ext and not extract_dir:
             extract_dir = resolved_ext
 
-        # 3. Fallback to model-specific scatter file: MT6582 for Y2, MT6572 for Y1
+        # 3. Keep a scatter the tool can already open. Do not replace it with
+        # the bare file that sits in the tool folder.
+        if scatter_file is None:
+            history_ini_path = sp_dir / HISTORY_INI
+            if history_ini_path.is_file():
+                _da, existing_scatter, _hist = read_history_paths(history_ini_path)
+                existing_path = Path(existing_scatter) if existing_scatter else None
+                if (
+                    existing_path is not None
+                    and existing_path.is_file()
+                    and existing_path.parent.resolve() != sp_dir.resolve()
+                ):
+                    scatter_file = existing_path.resolve()
+
+        # 4. Fallback to model-specific scatter file: MT6582 for Y2, MT6572 for Y1
         if scatter_file is None:
             default_scatter_name = (
                 "MT6582_Android_scatter.txt"
@@ -531,13 +726,11 @@ def update_sp_history_ini(
                     scatter_file = cand_sp.resolve()
 
         scatter_abs = os.path.abspath(str(scatter_file))
-
-        # Copy scatter file to sp_dir so local relative lookups by SP Flash Tool also succeed
-        if scatter_file.is_file() and sp_dir.resolve() != scatter_file.parent.resolve():
-            try:
-                shutil.copy2(scatter_file, sp_dir / scatter_file.name)
-            except Exception as e:
-                logger.debug("Could not copy scatter file to %s: %s", sp_dir, e)
+        if not Path(scatter_abs).is_file():
+            return False
+        # The scatter must stay in the extracted package. A copy inside the
+        # tool folder has no partition images beside it, and that is the
+        # "scatter file cannot find" dialog.
 
         # Write or update history.ini
         history_ini_path = sp_dir / HISTORY_INI
@@ -551,7 +744,15 @@ def update_sp_history_ini(
             scatter_path=scatter_abs,
             sp_dir=sp_dir,
         )
+        if existing_text.replace("\r\n", "\n").strip() == new_content.replace("\r\n", "\n").strip():
+            return True
         history_ini_path.write_text(new_content, encoding="utf-8")
+        try:
+            from .diagnostics import guard_broken_stream_handlers
+
+            guard_broken_stream_handlers()
+        except Exception:
+            pass
         logger.info("Updated %s with absolute scatter: %s", history_ini_path, scatter_abs)
         return True
     except Exception as e:
@@ -580,6 +781,9 @@ def launch_sp_flash_tool_gui(
                 "flash backend, matching a real macOS build.",
             )
         return False, "SP Flash Tool is not available on macOS. macOS uses MTKClient only."
+
+    if scatter_path and not Path(scatter_path).is_file():
+        return False, "The extracted scatter file is missing."
 
     ready, sc_file, ext_dir, reason = check_cached_firmware_readiness(
         scatter_path=scatter_path,
@@ -629,6 +833,9 @@ def launch_sp_flash_tool_gui(
         if not bin_path.is_file():
             return False, f"SP Flash Tool binary not found at {bin_path}"
 
+        chosen_dir = ensure_launch_dir(chosen_dir)
+        bin_path = chosen_dir / linux_sp_flash.FLASH_TOOL_LINUX_BIN
+
         # Update history.ini in ALL candidate directories
         update_sp_history_ini(
             sp_dir=None,
@@ -645,12 +852,9 @@ def launch_sp_flash_tool_gui(
         # IMPORTANT: Run the binary directly with process_env(chosen_dir) instead of
         # flash_tool.sh. flash_tool.sh resets LD_LIBRARY_PATH and causes a segmentation fault.
         env = linux_sp_flash.process_env(chosen_dir)
-        pinned, _da_abs, _scatter_abs = pin_sp_flash_history(chosen_dir, scatter_path)
-        if not pinned:
-            return False, (
-                "Could not write history.ini with the extracted scatter and "
-                "MTK_AllInOne_DA.bin."
-            )
+        ready_history, history_msg = stage_history_before_launch(chosen_dir, scatter_path)
+        if not ready_history:
+            return False, history_msg
         try:
             subprocess.Popen(
                 [str(bin_path)],
@@ -681,6 +885,9 @@ def launch_sp_flash_tool_gui(
         if not flash_tool_exe.is_file():
             return False, f"flash_tool.exe not found at {flash_tool_exe}"
 
+        chosen_dir = ensure_launch_dir(chosen_dir)
+        flash_tool_exe = chosen_dir / "flash_tool.exe"
+
         # Update history.ini in all candidate directories
         update_sp_history_ini(
             sp_dir=None,
@@ -689,12 +896,9 @@ def launch_sp_flash_tool_gui(
             model=model,
         )
 
-        pinned, _da_abs, _scatter_abs = pin_sp_flash_history(chosen_dir, scatter_path)
-        if not pinned:
-            return False, (
-                "Could not write history.ini with the extracted scatter and "
-                "MTK_AllInOne_DA.bin."
-            )
+        ready_history, history_msg = stage_history_before_launch(chosen_dir, scatter_path)
+        if not ready_history:
+            return False, history_msg
         try:
             creationflags = getattr(subprocess, "DETACHED_PROCESS", 0)
             subprocess.Popen(

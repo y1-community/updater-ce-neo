@@ -424,6 +424,48 @@ _LOG_HANDLER_DEPTH = 0
 _LOG_HANDLERS: "list[tuple[logging.Logger, logging.Handler]]" = []
 
 
+def guard_broken_stream_handlers() -> int:
+    """Drop StreamHandlers whose stream is missing or closed.
+
+    ``pythonw`` leaves ``sys.stderr`` as ``None``. ``logging.basicConfig`` still
+    attaches a StreamHandler, and ``StreamHandler.emit`` then raises
+    ``AttributeError`` on ``stream.write``. ``Handler.handleError`` writes that
+    traceback to stderr, which during a flash is the captured tool log.
+
+    File handlers stay, so real errors still reach ``updater.log``. A root
+    logger left with no handlers gets a ``NullHandler`` so logging's last-resort
+    stderr handler is not installed in their place.
+    """
+    removed = 0
+    seen: set[int] = set()
+    loggers = [logging.getLogger()]
+    for obj in list(logging.Logger.manager.loggerDict.values()):
+        if isinstance(obj, logging.Logger):
+            loggers.append(obj)
+    for target in loggers:
+        if id(target) in seen:
+            continue
+        seen.add(id(target))
+        for handler in list(target.handlers):
+            if isinstance(handler, logging.FileHandler):
+                continue
+            if not isinstance(handler, logging.StreamHandler):
+                continue
+            stream = getattr(handler, "stream", None)
+            if stream is not None and not getattr(stream, "closed", False):
+                continue
+            target.removeHandler(handler)
+            try:
+                handler.close()
+            except Exception:
+                pass
+            removed += 1
+    root = logging.getLogger()
+    if removed and not root.handlers:
+        root.addHandler(logging.NullHandler())
+    return removed
+
+
 def install_log_capture(include_root: bool = False) -> None:
     """Attach the Diagnostics logging handler (idempotent, reference counted).
 
@@ -432,6 +474,7 @@ def install_log_capture(include_root: bool = False) -> None:
     handlers attached to the root logger.
     """
     global _LOG_HANDLER_DEPTH
+    guard_broken_stream_handlers()
     with _LOCK:
         _LOG_HANDLER_DEPTH += 1
         names = _LOG_HANDLER_TARGETS + (("",) if include_root else ())

@@ -139,6 +139,28 @@ def test_donation_dialog_toned_down_and_themed():
     dlg.close()
 
 
+def test_model_and_type_label_strings():
+    """Model and Type labels are the short names in every shipped language."""
+    from src import i18n
+
+    assert i18n._STRINGS["sel_model"] == {
+        "zh-CN": "型号",
+        "en": "Model",
+        "fr": "Modèle",
+        "es": "Modelo",
+        "de": "Modell",
+        "ja": "モデル",
+    }
+    assert i18n._STRINGS["sel_type"] == {
+        "zh-CN": "类型",
+        "en": "Type",
+        "fr": "Type",
+        "es": "Tipo",
+        "de": "Typ",
+        "ja": "タイプ",
+    }
+
+
 def test_select_page_installed_release_badge_and_button_rename():
     """Verify SelectPackagePage highlights currently installed release and renames install button."""
     app = QApplication.instance() or QApplication(sys.argv)
@@ -156,8 +178,28 @@ def test_select_page_installed_release_badge_and_button_rename():
     assert page._start_btn.isDefault()
     assert not page._refresh_btn.styleSheet()
     assert page._refresh_btn.property("cssClass") is None
-    assert not page._type_help_btn.styleSheet()
-    assert page._type_help_btn.property("cssClass") is None
+    assert not hasattr(page, "_type_help_btn")
+    assert page._model_label.text() == "Model:"
+    assert page._type_label.text() == "Type:"
+    assert page._type_help_icon.parent() is page._type_field
+    assert page._type_help_icon.cursor().shape() == Qt.ArrowCursor
+    assert page._type_help_icon.text() != "Type?"
+    assert "Type?" not in page._type_help_icon.text()
+    assert page._type_help_icon.toolTip() == page._type_combo.toolTip()
+    assert page._type_label.toolTip() == page._type_combo.toolTip()
+    assert "Type A" in page._type_help_icon.toolTip()
+    assert "Type B" in page._type_help_icon.toolTip()
+    assert page._type_help_icon.width() == 16
+    source = page._type_help_icon.property("helpSource") or ""
+    if sys.platform == "win32":
+        assert source.startswith("segoe:")
+        assert "U+E897" in source
+        assert "Segoe Fluent Icons" in source or "Segoe MDL2 Assets" in source
+        assert not page._type_help_icon.pixmap().isNull()
+    elif sys.platform == "darwin":
+        assert source.startswith("sf:questionmark")
+    else:
+        assert source.startswith("theme:") or source == "text:?"
 
     with tempfile.TemporaryDirectory() as td:
         s = QSettings(f"{td}/settings.ini", QSettings.IniFormat)
@@ -176,14 +218,14 @@ def test_select_page_installed_release_badge_and_button_rename():
             ]
             page._on_releases_loaded(mock_releases, None)
 
-            # Check that row with 2026-01-01 is bold and badged
-            item0 = page._release_list.item(0) # newer
-            item1 = page._release_list.item(1) # installed
+            # Newer than the installed release is bold. The installed row is a
+            # circle only, with no "(Installed)" label and no extra bold.
+            item0 = page._release_list.item(0)  # newer
+            item1 = page._release_list.item(1)  # installed
             assert "Installed" not in item0.text()
-            assert not item0.font().bold()
-
-            assert "Installed" in item1.text()
-            assert item1.font().bold()
+            assert item0.font().bold()
+            assert "Installed" not in item1.text()
+            assert not item1.font().bold()
         finally:
             puc._get_settings = old_set
 
@@ -354,7 +396,8 @@ def test_window_maximization_enabled():
 
 
 def test_close_interception_during_install(monkeypatch=None):
-    """Verify close attempt during active install prompts confirmation and cancels safely if confirmed."""
+    """Closing during an install asks inside the progress card, not a modal."""
+    from PySide6.QtCore import QTimer
     from PySide6.QtGui import QCloseEvent
     from src.state import FlashState
     from src.config import get_app_name
@@ -363,44 +406,29 @@ def test_close_interception_during_install(monkeypatch=None):
     w = MainWindow()
     w.show()
 
-    # Enter active flash state
     w._set_state(FlashState.S4_FLASHING)
+    w._flash_page.show_flashing()
     assert w._install_run_active() is True
     w._test_close_prompt = True
 
-    # Test 1: User says "No" to closing
-    prompted_box = []
-    original_question = QMessageBox.question
+    def click_back():
+        assert w._flash_page._stop_open
+        assert get_app_name() in w._flash_page._stop_message
+        w._flash_page._stop_back.click()
 
-    def mock_question_no(parent, title, text, buttons, default):
-        prompted_box.append((title, text))
-        return QMessageBox.No
+    QTimer.singleShot(0, click_back)
+    ev1 = QCloseEvent()
+    w.closeEvent(ev1)
+    assert not ev1.isAccepted(), "Close event should be ignored when the user goes back"
+    assert not w._flash_page._stop_open
 
-    QMessageBox.question = mock_question_no
-    try:
-        ev1 = QCloseEvent()
-        w.closeEvent(ev1)
-        assert not ev1.isAccepted(), "Close event should be ignored when user selects No"
-        assert len(prompted_box) == 1
-        assert get_app_name() in prompted_box[0][1]
-    finally:
-        QMessageBox.question = original_question
+    def click_continue():
+        w._flash_page._stop_continue.click()
 
-    # Test 2: User says "Yes" to closing
-    prompted_box.clear()
-
-    def mock_question_yes(parent, title, text, buttons, default):
-        prompted_box.append((title, text))
-        return QMessageBox.Yes
-
-    QMessageBox.question = mock_question_yes
-    try:
-        ev2 = QCloseEvent()
-        w.closeEvent(ev2)
-        assert ev2.isAccepted(), "Close event should be accepted when user confirms"
-        assert len(prompted_box) == 1
-    finally:
-        QMessageBox.question = original_question
+    QTimer.singleShot(0, click_continue)
+    ev2 = QCloseEvent()
+    w.closeEvent(ev2)
+    assert ev2.isAccepted(), "Close event should be accepted when the user continues"
 
 
 def test_flash_page_compact_card_and_heading():
@@ -755,7 +783,7 @@ def test_classic_windows_buttons_show_hover():
 
     assert classic_windows_style_needs_hover("windows")
     assert not classic_windows_style_needs_hover("windows11")
-    assert not classic_windows_style_needs_hover("windowsvista")
+    assert classic_windows_style_needs_hover("windowsvista")
     if "windows" not in {key.lower() for key in QStyleFactory.keys()}:
         return
 
@@ -1027,15 +1055,18 @@ def test_pin_sp_flash_history_uses_extract_scatter_and_tool_da():
         assert os.path.isabs(da_abs)
         assert Path(scatter_abs) == scatter.resolve()
         assert Path(da_abs) == da.resolve()
-        text = (sp_dir / "history.ini").read_text(encoding="utf-8")
-        assert f"[RecentOpenFile]\nlastDir={scatter_abs}" in text
-        assert f"[LastDAFilePath]\nlastDir={da_abs}" in text
-        assert str((sp_dir / scatter.name).resolve()) != scatter_abs
+        da_read, scatter_read, _history = sp_flash_gui.read_history_paths(sp_dir / "history.ini")
+        assert os.path.normcase(scatter_read) == os.path.normcase(scatter_abs)
+        assert os.path.normcase(da_read) == os.path.normcase(da_abs)
+        assert not (sp_dir / scatter.name).is_file()
 
 
-def test_sp_gui_sidebar_handoff_prefers_cache_and_cancels_first():
-    """The sidebar item cancels an in-app run, then hands the cached firmware over."""
+def test_sp_gui_handoff_choice_continue_and_sidebar():
+    """Clicked release, else cache, else the focused release. Continue and the sidebar both open the tool from Select Software."""
     from src import sp_flash_gui
+    from src.config import download_mode_hint
+    from src.i18n import tr
+    from src.ui.main_window import _PAGE_FLASH, _PAGE_SELECT
 
     app = QApplication.instance() or QApplication(sys.argv)
     window = MainWindow()
@@ -1063,57 +1094,428 @@ def test_sp_gui_sidebar_handoff_prefers_cache_and_cancels_first():
     original_supported = sp_flash_gui.is_sp_flash_gui_supported
     original_cached = sp_flash_gui.cached_install_firmware
     original_launch = sp_flash_gui.launch_sp_flash_tool_gui
-    original_resolve = sp_flash_gui.resolve_cached_firmware
     try:
         with tempfile.TemporaryDirectory() as td:
             scatter = Path(td) / "rom_scatter.txt"
             scatter.write_text("scatter\n", encoding="utf-8")
             extract = Path(td)
-            sp_flash_gui.is_sp_flash_gui_supported = lambda: True
-            sp_flash_gui.cached_install_firmware = lambda latest: (scatter, extract)
-            sp_flash_gui.launch_sp_flash_tool_gui = launch
-            window._open_sp_flash_tool_gui()
-            assert order[:2] == ["cancel", "stop"]
-            assert order[-1] == "launch"
-            assert launched[-1]["scatter_path"] == scatter
-            assert launched[-1]["extract_dir"] == extract
-
-            order.clear()
-            launched.clear()
-            sp_flash_gui.cached_install_firmware = lambda latest: (None, None)
+            clicked = {"kind": "online", "url": "https://example.invalid/clicked.zip", "model": "Y1"}
+            focused = {"kind": "online", "url": "https://example.invalid/original.zip", "model": "Y1"}
             prepared = []
 
             def begin(target, callback):
                 prepared.append(target)
                 return True
 
-            window._select_page.focused_firmware = lambda: {"kind": "online", "url": "https://example.invalid/rom.zip"}
+            sp_flash_gui.is_sp_flash_gui_supported = lambda: True
+            sp_flash_gui.cached_install_firmware = lambda latest: (scatter, extract)
+            sp_flash_gui.launch_sp_flash_tool_gui = launch
+            window._select_page.explicit_firmware = lambda: clicked
+            window._select_page.focused_firmware = lambda: focused
             window._select_page.begin_external_prepare = begin
             window._open_sp_flash_tool_gui()
             assert order[:2] == ["cancel", "stop"]
             assert "launch" not in order
-            assert prepared and prepared[0]["kind"] == "online"
+            assert prepared == [clicked]
 
             order.clear()
-            window._select_page.focused_firmware = lambda: None
-            sp_flash_gui.resolve_cached_firmware = lambda **kwargs: (scatter, extract, "Y1")
+            prepared.clear()
+            window._gui_handoff_prepare = False
+            window._gui_launch_when_ready = False
+            window._select_page.explicit_firmware = lambda: None
             window._open_sp_flash_tool_gui()
+            assert order[:2] == ["cancel", "stop"]
+            assert order[-1] == "launch"
+            assert prepared == []
             assert launched[-1]["scatter_path"] == scatter
-            assert launched[-1]["model"] == "Y1"
+            assert launched[-1]["extract_dir"] == extract
+            assert window._stack.currentIndex() == _PAGE_SELECT
+
+            order.clear()
+            launched.clear()
+            sp_flash_gui.cached_install_firmware = lambda latest: (None, None)
+            window._open_sp_flash_tool_gui()
+            assert "launch" not in order
+            assert prepared == [focused]
+
+            window._gui_ready = (scatter, extract, "Y2")
+            window._gui_handoff_ready = True
+            window._stack.setCurrentIndex(_PAGE_FLASH)
+            window._on_power_off_continue()
+            assert window._stack.currentIndex() == _PAGE_SELECT
+            assert launched[-1]["model"] == "Y2"
+            assert launched[-1]["scatter_path"] == scatter
+
+            window._gui_ready = (scatter, extract, "G5")
+            window._gui_handoff_ready = True
+            window._power_off_prompt = True
+            window._stack.setCurrentIndex(_PAGE_FLASH)
+            before = len(order)
+            window._open_sp_flash_tool_gui()
+            assert window._stack.currentIndex() == _PAGE_SELECT
+            assert launched[-1]["model"] == "G5"
+            assert "cancel" not in order[before:]
+            assert window._nav_buttons["nav_select_package"][0].text() == tr("nav_select_package")
+
+            window.show()
+            window._nav_to_page(_PAGE_FLASH)
+            window._flash_page.set_model("Y1")
+            window._flash_page.show_gui_handoff_prompt(download_mode_hint("Y1"))
+            app.processEvents()
+            hint = window._flash_page._wait_mode_hint.text()
+            assert hint == download_mode_hint("Y1")
+            assert window._flash_page._wait_mode_hint.isVisible()
+            assert "SP Flash Tool" not in hint
+            assert "MTKClient" not in hint
+            assert "Y1" in window._flash_page._wait_prompt_label.text()
     finally:
         sp_flash_gui.is_sp_flash_gui_supported = original_supported
         sp_flash_gui.cached_install_firmware = original_cached
         sp_flash_gui.launch_sp_flash_tool_gui = original_launch
-        sp_flash_gui.resolve_cached_firmware = original_resolve
         window.close()
         app.processEvents()
+
+
+def test_release_click_downloads_for_handoff_not_in_app_install():
+    """A list click only selects that release. The sidebar tool downloads it."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QListWidgetItem
+
+    from src import sp_flash_gui
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    window = MainWindow()
+    original = sp_flash_gui.is_sp_flash_gui_supported
+    installs = []
+    try:
+        sp_flash_gui.is_sp_flash_gui_supported = lambda: True
+        prepared = []
+
+        def begin(target, callback):
+            prepared.append(target)
+            return True
+
+        window._select_page.begin_external_prepare = begin
+        item = QListWidgetItem("1.0")
+        item.setData(
+            Qt.UserRole,
+            {
+                "download_url": "https://example.invalid/rom_y1.zip",
+                "asset_name": "rom_y1.zip",
+                "tag_name": "v1",
+            },
+        )
+        window._select_page._release_list.addItem(item)
+        window._select_page._release_list.itemClicked.emit(item)
+        assert prepared == []
+        assert window._gui_handoff_prepare is False
+        assert window._select_page.explicit_firmware()["url"].endswith("rom_y1.zip")
+        window._open_sp_flash_tool_gui()
+        assert prepared and prepared[0]["kind"] == "online"
+        assert prepared[0]["model"] == "Y1"
+        assert window._gui_after_prepare == "hint"
+
+        window._select_page._release_list.setCurrentItem(item)
+        window._select_page._trigger_release_install = lambda rel: installs.append(rel)
+        window._select_page._on_install()
+        assert installs and installs[0]["tag_name"] == "v1"
+        assert window._gui_handoff_prepare is False
+        assert window._gui_after_prepare == ""
+    finally:
+        sp_flash_gui.is_sp_flash_gui_supported = original
+        window.close()
+        app.processEvents()
+
+
+def test_gui_handoff_package_rules_and_hint_copy():
+    """Local packages qualify, hints stay tool-agnostic, and every language has the new lines."""
+    from src import config, i18n
+    from src.i18n import translator
+    from src.sp_flash_gui import choose_sp_gui_package, is_gui_local_package
+
+    clicked = {"kind": "online", "name": "clicked"}
+    cached = {"kind": "cache", "name": "cached"}
+    focused = {"kind": "online", "name": "original"}
+    assert choose_sp_gui_package(clicked, cached, focused) is clicked
+    assert choose_sp_gui_package(None, cached, focused) is cached
+    assert choose_sp_gui_package(None, None, focused) is focused
+    assert choose_sp_gui_package(None, None, None) is None
+
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        zip_path = root / "rom.zip"
+        zip_path.write_bytes(b"PK")
+        rar_path = root / "rom.rar"
+        rar_path.write_bytes(b"Rar")
+        scatter = root / "MT6572_Android_scatter.txt"
+        scatter.write_text("scatter\n", encoding="utf-8")
+        notes = root / "readme.txt"
+        notes.write_text("notes\n", encoding="utf-8")
+        folder = root / "pkg"
+        folder.mkdir()
+        (folder / "MT6582_Android_scatter.txt").write_text("scatter\n", encoding="utf-8")
+        assert is_gui_local_package(zip_path)
+        assert is_gui_local_package(rar_path)
+        assert is_gui_local_package(scatter)
+        assert is_gui_local_package(folder)
+        assert not is_gui_local_package(notes)
+
+    previous = translator().lang
+    translator().set_language("en")
+    try:
+        for model in ("Y1", "Y2", "G3", "G1", "G5", "Q5", "Q3e"):
+            assert "headphone" in config.download_mode_hint(model).lower()
+        assert "power button" in config.download_mode_hint("A5").lower()
+        assert "player" in config.download_mode_hint("Q8").lower()
+        original = config.is_mediatek_installer
+        config.is_mediatek_installer = lambda: True
+        try:
+            generic = config.download_mode_hint("Q8")
+            assert "firmware" in generic.lower()
+            assert "player" not in generic.lower()
+        finally:
+            config.is_mediatek_installer = original
+    finally:
+        translator().set_language(previous)
+
+    keys = (
+        "gui_handoff_hint_headphone",
+        "gui_handoff_hint_a5",
+        "gui_handoff_hint_generic",
+        "gui_handoff_hint_generic_mediatek",
+        "gui_handoff_failed_title",
+        "gui_handoff_failed",
+        "gui_handoff_no_package",
+        "gui_handoff_no_package_mediatek",
+    )
+    for key in keys:
+        for lang in ("en", "zh-CN", "fr", "es", "de", "ja"):
+            text = i18n._STRINGS[key][lang]
+            assert text.strip()
+            assert "SP Flash Tool" not in text
+            assert "MTKClient" not in text
+
+
+def test_history_ini_absolute_paths_before_gui_launch():
+    """history.ini lists the extracted scatter and the tool DA before the GUI process starts."""
+    import os
+
+    from src import paths, sp_flash_gui
+
+    if paths.IS_MAC:
+        ok, _msg = sp_flash_gui.launch_sp_flash_tool_gui()
+        assert ok is False
+        return
+
+    original_popen = sp_flash_gui.subprocess.Popen
+    original_find = sp_flash_gui.find_sp_flash_tool_dirs
+    launched = []
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            extract = root / "cached_firmware"
+            extract.mkdir()
+            scatter = extract / "MT6572_Android_scatter.txt"
+            scatter.write_text("file_name: system.img\n", encoding="utf-8")
+            (extract / "system.img").write_bytes(b"img")
+            sp_dir = root / "SP_Flash_Tool"
+            sp_dir.mkdir()
+            exe_name = "flash_tool.exe" if paths.IS_WINDOWS else "flash_tool"
+            (sp_dir / exe_name).write_bytes(b"tool")
+            da = sp_dir / sp_flash_gui.DA_FILENAME
+            da.write_bytes(b"DA")
+            scatter_abs = str(scatter.resolve())
+            da_abs = str(da.resolve())
+
+            captured = {}
+
+            def fake_popen(*args, **kwargs):
+                captured["text"] = (sp_dir / "history.ini").read_text(encoding="utf-8")
+                captured["scatter_exists"] = Path(scatter_abs).is_file()
+                captured["da_exists"] = Path(da_abs).is_file()
+                launched.append(args[0])
+                return object()
+
+            sp_flash_gui.find_sp_flash_tool_dirs = lambda: [sp_dir]
+            sp_flash_gui.subprocess.Popen = fake_popen
+            if not paths.IS_WINDOWS:
+                from src import linux_sp_flash
+
+                linux_sp_flash.arch_supported = lambda: True
+                linux_sp_flash.ensure_linux_sp_flash_tool = lambda: (True, "")
+                linux_sp_flash.bundled_dir = lambda: None
+                linux_sp_flash.stage_dir = lambda: sp_dir
+                linux_sp_flash.process_env = lambda _directory: os.environ.copy()
+
+            missing = root / "missing_scatter.txt"
+            ok, _msg = sp_flash_gui.launch_sp_flash_tool_gui(
+                scatter_path=missing,
+                extract_dir=extract,
+            )
+            assert ok is False
+            assert launched == []
+
+            ok, _msg = sp_flash_gui.launch_sp_flash_tool_gui(
+                model="Y1",
+                scatter_path=scatter,
+                extract_dir=extract,
+            )
+            assert ok is True, _msg
+            assert launched
+            assert Path(launched[-1][0]).name == exe_name
+            da_read, scatter_read, _history = sp_flash_gui.read_history_paths(sp_dir / "history.ini")
+            assert os.path.normcase(scatter_read) == os.path.normcase(scatter_abs)
+            assert os.path.normcase(da_read) == os.path.normcase(da_abs)
+            assert captured["scatter_exists"] is True
+            assert captured["da_exists"] is True
+    finally:
+        sp_flash_gui.subprocess.Popen = original_popen
+        sp_flash_gui.find_sp_flash_tool_dirs = original_find
+
+
+def _assert_scroll_widgets_stay_off_the_stylesheet(sheet: str) -> None:
+    """A matching rule forces QStyleSheetStyle and its classic arrow bars."""
+    for token in (
+        "QScrollBar",
+        "QScrollArea",
+        "QListWidget",
+        "QListView",
+        "QTextBrowser",
+        "QTextEdit",
+        "QPlainTextEdit",
+        "releaseList",
+        "releaseNotes",
+        "logView",
+        "statusView",
+        "updateNotes",
+    ):
+        assert token not in sheet, token
+
+
+def test_windows_scrollbar_uses_winui_when_it_exists():
+    """windows11 draws the fluent bar. The thin proxy is only the fallback."""
+    from src.ui.dark import IS_WINDOWS, _ThinWindowsScrollStyle, setup_native_app_style
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    _assert_scroll_widgets_stay_off_the_stylesheet(_build_qss())
+    key = setup_native_app_style(app)
+    style = app.style()
+    names = []
+    seen = set()
+    while style is not None and id(style) not in seen:
+        seen.add(id(style))
+        names.append(type(style).__name__)
+        style = style.baseStyle() if hasattr(style, "baseStyle") else None
+    if str(key).lower() == "windows11":
+        assert "_ThinWindowsScrollStyle" not in names
+        assert not isinstance(app.style(), _ThinWindowsScrollStyle)
+    elif IS_WINDOWS:
+        assert "_ThinWindowsScrollStyle" in names
+    apply_theme(app)
+
+
+def test_install_method_confirmation_stays_in_the_card():
+    """MTKClient (Mac) asks inside the Install Method card, then restores it."""
+    from PySide6.QtCore import QTimer
+
+    from src.flash_service import METHOD_MTK_MAC, METHOD_SP
+    from src.i18n import translator
+    from src.ui.main_window import _PAGE_SETTINGS
+
+    translator().set_language("en")
+    app = QApplication.instance() or QApplication(sys.argv)
+    window = MainWindow()
+    window.show()
+    window._nav_to_page(_PAGE_SETTINGS)
+    app.processEvents()
+    page = window._settings_page
+    page.reveal_advanced_methods()
+    page.set_method(METHOD_SP)
+    try:
+        page.simulated_mac_requested.disconnect(window._restart_in_simulated_macos)
+    except Exception:
+        pass
+    restarted = []
+    page.simulated_mac_requested.connect(lambda: restarted.append(1))
+    idx = page._method_combo.findData(METHOD_MTK_MAC)
+    assert idx >= 0
+
+    def choose_later():
+        assert not page._method_combo.isVisible()
+        labels = page._method_card.findChildren(type(page._method_desc))
+        assert any("Simulated macOS mode" in label.text() for label in labels)
+        page._method_card._confirm_reject.click()
+
+    QTimer.singleShot(0, choose_later)
+    page._method_combo.setCurrentIndex(idx)
+    assert page.current_method() == METHOD_SP
+    assert page._method_combo.isVisible()
+    assert restarted == []
+
+    def choose_restart():
+        page._method_card._confirm_accept.click()
+
+    QTimer.singleShot(0, choose_restart)
+    page._method_combo.setCurrentIndex(idx)
+    assert page.current_method() == METHOD_MTK_MAC
+    assert restarted == [1]
+    assert page._method_combo.isVisible()
+    window.close()
+    app.processEvents()
+
+
+def test_progress_cancel_stays_in_the_card():
+    """Cancel during install or download asks in the progress card."""
+    from src.i18n import translator
+    from src.ui.main_window import _PAGE_FLASH
+
+    translator().set_language("en")
+    app = QApplication.instance() or QApplication(sys.argv)
+    window = MainWindow()
+    window.show()
+    window._nav_to_page(_PAGE_FLASH)
+    app.processEvents()
+    page = window._flash_page
+    page.show_flashing()
+    cancelled = []
+    page.on_cancel(lambda: cancelled.append("install"))
+    page._on_cancel()
+    assert page._stop_open
+    assert not page._cancel_btn.isVisible()
+    assert page._stop_continue.isVisible()
+    assert page._stop_back.isVisible()
+    assert page._stop_continue.text() == "Continue"
+    assert page._stop_back.text() == "Go back"
+    assert "software" in page._stop_message.lower()
+    assert "firmware" not in page._stop_message.lower()
+    page._stop_back.click()
+    assert cancelled == []
+    assert page._cancel_btn.isVisible()
+    assert not page._stop_open
+
+    page._on_cancel()
+    page._stop_continue.click()
+    assert cancelled == ["install"]
+
+    page.show_downloading()
+    downloaded = []
+    page.set_cancel_download_callback(lambda: downloaded.append("download"))
+    page._on_cancel_download()
+    assert page._stop_open
+    assert "download" in page._stop_message.lower()
+    assert not page._download_cancel_btn.isVisible()
+    page._stop_back.click()
+    assert downloaded == []
+    assert page._download_cancel_btn.isVisible()
+    window.close()
+    app.processEvents()
 
 
 def test_dark_to_light_leaves_combos_and_notes_readable():
     """A live dark-to-light switch must not leave a black list or unreadable combos."""
     from PySide6.QtGui import QPalette
 
-    from src.ui.dark import apply_theme, contrast_ratio, refresh_theme
+    from src.ui.dark import apply_theme, contrast_ratio
 
     app = QApplication.instance() or QApplication(sys.argv)
     apply_theme(app, force_dark=True)
@@ -1124,7 +1526,6 @@ def test_dark_to_light_leaves_combos_and_notes_readable():
     page._notes.setHtml("<p>Koensayr 2.4.0 release notes</p>")
     page._release_list.addItem("2.4.0")
     apply_theme(app, force_dark=False)
-    refresh_theme(app)
     app.processEvents()
 
     def readable(widget, label):
@@ -1140,13 +1541,17 @@ def test_dark_to_light_leaves_combos_and_notes_readable():
         readable(combo.view().viewport(), "combo-popup")
     readable(page._notes.viewport(), "notes")
     readable(page._release_list.viewport(), "releases")
-    tip = page._type_help_btn.toolTip()
+    tip = page._type_combo.toolTip()
     assert "Type A" in tip
     assert "Type B" in tip
     assert "<br>" in tip
+    assert page._type_help_icon.toolTip() == tip
+    assert page._type_label.toolTip() == tip
+    assert page._type_help_icon.cursor().shape() == Qt.ArrowCursor
+    assert not hasattr(page, "_type_help_btn")
     assert not hasattr(page, "_show_device_type_help")
-    notes_rule = app.styleSheet().split("QTextBrowser#releaseNotes", 1)[1][:200]
-    assert "background: transparent" not in notes_rule
+    sheet = app.styleSheet()
+    _assert_scroll_widgets_stay_off_the_stylesheet(sheet)
     window.close()
     app.processEvents()
 
@@ -1224,6 +1629,68 @@ def test_completion_check_mark_and_opt_out():
         app.processEvents()
 
 
+def test_read_only_sp_flash_tool_is_copied_before_launch():
+    """Program Files and an AppImage cannot store history.ini. Launch uses a copy."""
+    from src import sp_flash_gui
+
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        source = root / "Program Files" / "SP_Flash_Tool"
+        source.mkdir(parents=True)
+        binary = "flash_tool.exe" if sys.platform.startswith("win") else "flash_tool"
+        (source / binary).write_bytes(b"tool")
+        dest = root / "user" / "SP_Flash_Tool"
+
+        def writable(directory):
+            return Path(directory) == dest
+
+        original_user = sp_flash_gui._user_sp_copy_dir
+        original_writable = sp_flash_gui._dir_is_writable
+        sp_flash_gui._user_sp_copy_dir = lambda: dest
+        sp_flash_gui._dir_is_writable = writable
+        try:
+            launched = sp_flash_gui.ensure_launch_dir(source)
+        finally:
+            sp_flash_gui._user_sp_copy_dir = original_user
+            sp_flash_gui._dir_is_writable = original_writable
+
+        assert launched == dest
+        assert (dest / binary).is_file()
+
+
+def test_sidebar_selection_is_not_an_accent_plate():
+    """The selected row is a neutral veil. The accent stays on the Windows bar."""
+    from PySide6.QtGui import QColor
+
+    from src.ui.sidebar import sidebar_selected_color
+
+    dark = sidebar_selected_color(QColor("#181b20"))
+    accent = QColor("#e11d48")
+    assert dark.alpha() < 80
+    assert (dark.red(), dark.green(), dark.blue()) != (accent.red(), accent.green(), accent.blue())
+
+
+def test_combo_popup_uses_translucent_material():
+    """An open combo list is a frost, not a solid plate."""
+    from PySide6.QtGui import QPalette
+    from PySide6.QtWidgets import QComboBox, QWidget
+
+    from src.ui.glass import POPUP_FROST_ALPHA, apply_popup_material
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    apply_theme(app, force_dark=True)
+    popup = QWidget()
+    popup.setWindowFlag(Qt.WindowType.Popup, True)
+    combo = QComboBox(popup)
+    combo.addItems(["Original Software", "Rockbox"])
+    apply_popup_material(popup)
+    base = popup.palette().color(QPalette.ColorRole.Base)
+    assert base.alpha() == POPUP_FROST_ALPHA
+    assert base.alpha() < 200
+    view = combo.view()
+    assert view.autoFillBackground() is False
+
+
 if __name__ == "__main__":
     test_dialog_theme_not_transparent()
     test_combobox_popup_styling()
@@ -1252,8 +1719,13 @@ if __name__ == "__main__":
     test_symbol_pixmaps_are_marked_hi_dpi_and_never_oversized()
     test_install_failure_stays_on_progress_and_retry_does_not_reflash()
     test_pin_sp_flash_history_uses_extract_scatter_and_tool_da()
-    test_sp_gui_sidebar_handoff_prefers_cache_and_cancels_first()
+    test_sp_gui_handoff_choice_continue_and_sidebar()
+    test_release_click_downloads_for_handoff_not_in_app_install()
+    test_gui_handoff_package_rules_and_hint_copy()
+    test_history_ini_absolute_paths_before_gui_launch()
     test_dark_to_light_leaves_combos_and_notes_readable()
+    test_sidebar_selection_is_not_an_accent_plate()
+    test_combo_popup_uses_translucent_material()
     test_caption_drag_leaves_controls_alone()
     test_unified_caption_client_rect()
     test_completion_check_mark_and_opt_out()

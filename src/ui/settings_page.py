@@ -32,7 +32,7 @@ from ..flash_service import (
     default_flash_method,
     normalise_method,
 )
-from ..i18n import tr
+from ..i18n import tr, tr_brand
 from .dark import page_margins
 from .scrollbars import configure_scroll_area
 from .widgets import Card
@@ -66,6 +66,7 @@ class SettingsPage(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._advanced_revealed = False
+        self._method_before = ""
         # Guards the filter checkboxes while they are synced from settings, so
         # syncing never re-enters a handler or reopens a confirmation dialog.
         self._filters_loading = False
@@ -162,7 +163,6 @@ class SettingsPage(QWidget):
         method_layout.addWidget(self._sp_auth_box)
 
         self._method_card.set_layout(method_layout)
-        layout.addWidget(self._method_card)
 
         # --- Card 2: Installation mode (terminal and SP GUI installs) ---
         self._terminal_card = Card("settings_terminal_group")
@@ -193,7 +193,6 @@ class SettingsPage(QWidget):
         term_layout.addWidget(self._sp_gui_desc)
 
         self._terminal_card.set_layout(term_layout)
-        layout.addWidget(self._terminal_card)
 
         # --- Card 2: Firmware Release Reminders ---
         self._reminders_card = Card("settings_reminders_group")
@@ -328,8 +327,11 @@ class SettingsPage(QWidget):
         self._legacy_cleanup_card.set_layout(leg_layout)
         self._legacy_cleanup_card.setVisible(not is_mediatek_installer() and not paths.IS_WINDOWS)
         layout.addWidget(self._legacy_cleanup_card)
+        layout.addWidget(self._terminal_card)
+        layout.addWidget(self._method_card)
+        self._card_layout = layout
 
-        # SP Flash Tool is not supported on macOS (MTKClient only).
+        # The desktop installer is not offered on macOS.
         # Hide backend selection and diagnostics cards on macOS.
         self._method_card.setVisible(not paths.IS_MAC)
         self._prep_card.setVisible(not paths.IS_MAC)
@@ -342,15 +344,12 @@ class SettingsPage(QWidget):
     # Rockbox release filters
     # ------------------------------------------------------------------
     def _confirm_old_rockbox(self) -> bool:
-        """Ask before unlocking pre-0.5 Rockbox builds (they brick newer Y1s)."""
-        reply = QMessageBox.warning(
-            self,
-            tr("settings_old_rockbox_warn_title"),
+        """Ask, inside the filter card, before unlocking pre-0.5 Rockbox builds."""
+        return self._rockbox_card.run_confirmation(
             tr("settings_old_rockbox_warn_body"),
-            QMessageBox.Yes | QMessageBox.Cancel,
-            QMessageBox.Cancel,
+            tr("dialog_pre_install_continue"),
+            tr("flash_btn_cancel"),
         )
-        return reply == QMessageBox.Yes
 
     def _apply_filter_flags(self, filters=None):
         """Sync the checkboxes with the persisted Rockbox filters."""
@@ -528,6 +527,7 @@ class SettingsPage(QWidget):
             self._method_combo.blockSignals(False)
         self._update_method_note()
         self._update_sp_auth_visibility()
+        self._method_before = self.current_method()
 
     def set_method_enabled(self, enabled: bool):
         """Lock the selector while a run is in progress."""
@@ -535,6 +535,26 @@ class SettingsPage(QWidget):
 
     def _on_method_changed(self):
         method = self.current_method()
+        previous = getattr(self, "_method_before", "") or self._persisted_method()
+        if method == METHOD_MTK_MAC and previous != METHOD_MTK_MAC:
+            # The restart question replaces this card. Later puts the previous
+            # method back. Restart Now is what actually relaunches.
+            accepted = self._method_card.run_confirmation(
+                tr_brand("simulated_mac_body"),
+                tr("simulated_mac_restart_now"),
+                tr("simulated_mac_later"),
+                note=tr("flash_method_note_mtk_mac"),
+            )
+            if not accepted:
+                self.set_method(previous)
+                return
+            self._method_before = method
+            self._update_method_note()
+            self._update_sp_auth_visibility()
+            self.flash_method_changed.emit(method)
+            self.simulated_mac_requested.emit()
+            return
+        self._method_before = method
         self._update_method_note()
         self._update_sp_auth_visibility()
         self.flash_method_changed.emit(method)

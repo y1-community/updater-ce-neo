@@ -238,12 +238,13 @@ class DonationStatusBar(QStatusBar):
         """Text-link styling for the bar's corner actions."""
         side = "left" if align == "left" else "right"
         btn.setStyleSheet(
-            "QPushButton { background: transparent; color: palette(window-text); border: none;"
+            f"QPushButton {{ background-color: {t.bg}; color: {t.fg}; border: none;"
             f" padding: 2px 4px; font-size: 12px; font-weight: 700; text-align: {side}; }}"
-            "QPushButton:hover { color: palette(window-text); }"
-            f"QPushButton:focus {{ color: palette(window-text); border: 1px solid {t.border_focus};"
+            f"QPushButton:hover {{ color: {t.fg}; }}"
+            f"QPushButton:focus {{ color: {t.fg}; border: 1px solid {t.border_focus};"
             f" border-radius: 5px; outline: none; }}"
         )
+        btn.setCursor(Qt.ArrowCursor)
 
     def _build_ui(self, on_support, on_credits=None):
         t = T()
@@ -254,17 +255,17 @@ class DonationStatusBar(QStatusBar):
         except ImportError:
             use_glass = sys.platform == "darwin"
 
-        status_bg = "transparent" if use_glass else t.bg_card
-        status_border = "none" if use_glass else f"1px solid {t.border}"
-        # The bar is clear so glass shows. Labels are not forced transparent:
-        # the ticker has to erase its own rect or the previous line stays.
+        # Opaque theme fill. A transparent bar plus palette(window-text) paints
+        # white glyphs on the light window, so the credits and goal lines vanish.
+        status_bg = t.bg
         self.setStyleSheet(
             f"QStatusBar#donation_status_bar {{ background-color: {status_bg};"
-            f" border-top: {status_border}; color: palette(window-text); }}"
+            f" color: {t.fg}; border: none; min-height: 30px; }}"
         )
-        if use_glass:
-            from .ui.surfaces import show_glass_backdrop
-            show_glass_backdrop(self)
+        self.setMinimumHeight(30)
+        self.setAutoFillBackground(True)
+        from .ui.dark import apply_readable_palette
+        apply_readable_palette(self)
 
         # Donation container: Credits / Thanks, the centred goal display, and
         # the Support Us link in the right corner.
@@ -296,7 +297,9 @@ class DonationStatusBar(QStatusBar):
         self._goal_ticker = _Ticker(self._goal_group)
         self._goal_label = self._goal_ticker.label
         self._goal_label.setAlignment(Qt.AlignCenter)
-        self._goal_label.setStyleSheet("font-size: 12px; font-weight: 600; color: palette(window-text); background: transparent; border: none;")
+        self._goal_label.setStyleSheet(
+            f"font-size: 12px; font-weight: 600; color: {t.fg}; background-color: {t.bg}; border: none;"
+        )
         self._seal_ticker(self._goal_label)
         goal_row.addWidget(self._goal_ticker, 1, Qt.AlignVCenter)
 
@@ -313,7 +316,9 @@ class DonationStatusBar(QStatusBar):
         self._donor_label = self._donor_ticker.label
         self._donor_label.setTextFormat(Qt.RichText)
         self._donor_label.setAlignment(Qt.AlignCenter)
-        self._donor_label.setStyleSheet("font-size: 12px; font-weight: 500; color: palette(window-text); background: transparent; border: none;")
+        self._donor_label.setStyleSheet(
+            f"font-size: 12px; font-weight: 500; color: {t.fg}; background-color: {t.bg}; border: none;"
+        )
         self._seal_ticker(self._donor_label)
         self._donor_label.setVisible(False)
         goal_row.addWidget(self._donor_ticker, 1, Qt.AlignVCenter)
@@ -340,7 +345,9 @@ class DonationStatusBar(QStatusBar):
         self._status_ticker = _Ticker(self._status_container)
         self._status_label = self._status_ticker.label
         self._status_label.setAlignment(Qt.AlignCenter)
-        self._status_label.setStyleSheet("font-size: 12px; font-weight: 500; color: palette(window-text); background: transparent; border: none;")
+        self._status_label.setStyleSheet(
+            f"font-size: 12px; font-weight: 500; color: {t.fg}; background-color: {t.bg}; border: none;"
+        )
         self._seal_ticker(self._status_label)
         status_row.addWidget(self._status_ticker, 1)
         self._status_container.setVisible(False)
@@ -405,28 +412,27 @@ class DonationStatusBar(QStatusBar):
         except ImportError:
             use_glass = sys.platform == "darwin"
 
-        status_bg = "transparent" if use_glass else t.bg_card
-        status_border = "none" if use_glass else f"1px solid {t.border}"
         self.setStyleSheet(
-            f"QStatusBar#donation_status_bar {{ background-color: {status_bg};"
-            f" border-top: {status_border}; color: palette(window-text); }}"
+            f"QStatusBar#donation_status_bar {{ background-color: {t.bg};"
+            f" color: {t.fg}; border: none; min-height: 30px; }}"
         )
-        if use_glass:
-            from .ui.surfaces import show_glass_backdrop
-            show_glass_backdrop(self)
+        self.setMinimumHeight(30)
+        self.setAutoFillBackground(True)
+        from .ui.dark import apply_readable_palette
+        apply_readable_palette(self)
         if hasattr(self, "_goal_label"):
             self._goal_label.setStyleSheet(
-                "font-size: 12px; font-weight: 600; color: palette(window-text); background: transparent; border: none;"
+                f"font-size: 12px; font-weight: 600; color: {t.fg}; background-color: {t.bg}; border: none;"
             )
             self._seal_ticker(self._goal_label)
         if hasattr(self, "_donor_label"):
             self._donor_label.setStyleSheet(
-                "font-size: 12px; font-weight: 500; color: palette(window-text); background: transparent; border: none;"
+                f"font-size: 12px; font-weight: 500; color: {t.fg}; background-color: {t.bg}; border: none;"
             )
             self._seal_ticker(self._donor_label)
         if hasattr(self, "_status_label"):
             self._status_label.setStyleSheet(
-                "font-size: 12px; font-weight: 500; color: palette(window-text); background: transparent; border: none;"
+                f"font-size: 12px; font-weight: 500; color: {t.fg}; background-color: {t.bg}; border: none;"
             )
             self._seal_ticker(self._status_label)
         if hasattr(self, "_credits_link"):

@@ -46,6 +46,12 @@ def _configure_logging():
         install_log_capture()
     except Exception:
         pass
+    try:
+        from .diagnostics import guard_broken_stream_handlers
+
+        guard_broken_stream_handlers()
+    except Exception:
+        pass
 
 
 def main():

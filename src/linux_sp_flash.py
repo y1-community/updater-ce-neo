@@ -146,17 +146,40 @@ def _bundled_complete(bundled: Path) -> bool:
     return not missing
 
 
+def _dir_is_writable(directory: Path) -> bool:
+    """True when this account can create a file in ``directory``."""
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+        probe = directory / ".updater_write_probe"
+        probe.write_text("1", encoding="utf-8")
+        probe.unlink(missing_ok=True)
+        return True
+    except OSError:
+        return False
+
+
 def stage_dir() -> Path:
     """Active SP Flash Tool directory on Linux.
 
     Prefers the copy bundled with the application (complete payload next to
-    the frozen executable) so shipped builds work offline; otherwise the
-    per-user staging directory populated by ``ensure_linux_sp_flash_tool``
+    the frozen executable) so shipped builds work offline. An AppImage or a
+    system-wide install is often read-only, so that payload is copied once
+    into the per-user cache and the copy is what actually runs. Otherwise the
+    per-user staging directory is populated by ``ensure_linux_sp_flash_tool``
     from the ``flash_tool_linux.zip`` download.
     """
     bundled = bundled_dir()
     if bundled is not None and _bundled_complete(bundled):
-        return bundled
+        if _dir_is_writable(bundled):
+            return bundled
+        staged = _user_stage_dir()
+        if not (staged / FLASH_TOOL_LINUX_BIN).is_file():
+            try:
+                shutil.copytree(bundled, staged, dirs_exist_ok=True)
+            except OSError:
+                logger.warning("Could not copy bundled SP Flash Tool into %s", staged, exc_info=True)
+                return bundled
+        return staged
     return _user_stage_dir()
 
 

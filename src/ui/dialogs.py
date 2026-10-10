@@ -5,7 +5,7 @@ import sys
 from datetime import datetime, timedelta
 
 from PySide6.QtCore import QDate, QDateTime, QTime, Qt, QTimer, Signal
-from PySide6.QtGui import QTextCursor, QTextDocument
+from PySide6.QtGui import QFont, QTextCursor, QTextDocument
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -423,9 +423,14 @@ class DiagnosticsView(QWidget):
         self._view = QTextEdit()
         self._view.setObjectName("logView")
         self._view.setReadOnly(True)
-        # The console look comes from the app-wide logView rule. Styling the view
-        # itself would make Qt drop the host's overlay scrollbars for classic
-        # ones (see src/ui/scrollbars.py).
+        # Monospace comes from the widget font. A stylesheet on this view, or
+        # an app rule that matches it, would make Qt draw classic arrow bars
+        # (see src/ui/scrollbars.py).
+        log_font = QFont(self._view.font())
+        log_font.setFamilies(["SF Mono", "Cascadia Code", "Consolas", "Courier New"])
+        log_font.setStyleHint(QFont.StyleHint.Monospace)
+        log_font.setPointSize(10)
+        self._view.setFont(log_font)
         layout.addWidget(self._view, 1)
 
         # ── Action Buttons Bar: Go To File, Save File, Copy, Close ──
@@ -1113,8 +1118,12 @@ class LinuxSetupDialog(QDialog):
         self._status_view.setReadOnly(True)
         self._status_view.setVisible(False)
         self._status_view.setFixedHeight(120)
-        # Framed by the app-wide statusView rule so the view itself keeps the
-        # host's scroll behaviour (see src/ui/scrollbars.py).
+        # Platform style and the live palette. No stylesheet: that would
+        # replace the host scrollbar (see src/ui/scrollbars.py).
+        status_font = QFont(self._status_view.font())
+        status_font.setStyleHint(QFont.StyleHint.Monospace)
+        status_font.setPointSize(10)
+        self._status_view.setFont(status_font)
         main_layout.addWidget(self._status_view)
 
         # Footer Actions
@@ -1488,8 +1497,8 @@ class ReleaseReminderDialog(QDialog):
             self._notes_view.document().setDefaultStyleSheet(
                 f"a {{ color: {t.fg}; font-weight: 700; text-decoration: none; }}"
             )
-            # Framed by the app-wide updateNotes rule (no local stylesheet: see
-            # src/ui/scrollbars.py).
+            # Platform style and the live palette. No widget stylesheet:
+            # that would replace the host scrollbar (see src/ui/scrollbars.py).
             html = format_markdown_release_notes(notes_body, latest_rel.get("name", ""))
             self._notes_view.setHtml(html)
             layout.addWidget(self._notes_view, 1)

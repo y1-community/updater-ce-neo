@@ -9,7 +9,6 @@ manages preferences for device reminders and donation UI visibility.
 from dataclasses import dataclass
 from datetime import datetime
 import logging
-import re
 from typing import Optional
 
 from PySide6.QtCore import QSettings
@@ -40,12 +39,7 @@ def _get_settings(settings: Optional[QSettings] = None) -> QSettings:
 # Device Installation Records
 # ---------------------------------------------------------------------------
 
-def _software_settings_key(software_name: str) -> str:
-    slug = re.sub(r"[^A-Za-z0-9._-]+", "_", (software_name or "").strip())
-    return slug or "software"
-
-
-def _write_install_fields(settings, group, software_name, tag_name, release_label, package_slug, published_at, installed_at):
+def _write_install_fields(settings, group, software_name, tag_name, release_label, package_slug, published_at, installed_at, notify_ceiling=""):
     settings.beginGroup(group)
     try:
         settings.setValue("software_name", software_name or "")
@@ -54,6 +48,7 @@ def _write_install_fields(settings, group, software_name, tag_name, release_labe
         settings.setValue("package_slug", package_slug or "")
         settings.setValue("published_at", published_at or "")
         settings.setValue("installed_at", installed_at)
+        settings.setValue("notify_ceiling", notify_ceiling or "")
     finally:
         settings.endGroup()
 
@@ -72,9 +67,38 @@ def _read_install_fields(settings, group, model):
             "package_slug": settings.value("package_slug", "", type=str),
             "published_at": settings.value("published_at", "", type=str),
             "installed_at": settings.value("installed_at", "", type=str),
+            "notify_ceiling": settings.value("notify_ceiling", "", type=str) or "",
         }
     finally:
         settings.endGroup()
+
+
+def _tag_sort(tag: str):
+    return catalog.release_sort_key({"tag_name": tag or ""})
+
+
+def _same_software(left: str, right: str) -> bool:
+    a = (left or "").casefold()
+    b = (right or "").casefold()
+    if not a or not b:
+        return False
+    return a == b or a in b or b in a
+
+
+def update_notification_due(installed_tag: str, latest_tag: str, ceiling: str = "") -> bool:
+    """True when a startup or in-window notice should mention ``latest_tag``.
+
+    A downgrade stores the catalogue latest at that moment as ``ceiling``.
+    Notices stay quiet until a release sorts newer than that ceiling.
+    """
+    if not latest_tag or latest_tag == installed_tag:
+        return False
+    latest_key = _tag_sort(latest_tag)
+    if latest_key <= _tag_sort(installed_tag):
+        return False
+    if ceiling and latest_key <= _tag_sort(ceiling):
+        return False
+    return True
 
 
 def record_device_install(
@@ -85,27 +109,43 @@ def record_device_install(
     package_slug: str = "",
     published_at: str = "",
     settings: Optional[QSettings] = None,
+    catalogue_latest: str = "",
 ) -> None:
-    """Record that ``software_name`` with ``tag_name`` was installed on ``model``."""
-    if not model or not tag_name:
+    """Record the one online software type last installed on ``model``.
+
+    Models are independent: installing on Y1 does not change Y2. A model
+    keeps only one software type. Installing a different title on that model
+    replaces the previous one. Offline installs are not recorded (no tag, or
+    the ``local`` tag used for a file chosen on disk).
+    """
+    if not model or not tag_name or str(tag_name).strip().casefold() == "local":
         return
     s = _get_settings(settings)
+    previous = get_device_install(model, settings=s)
+    ceiling = ""
+    if previous and _same_software(previous.get("software_name") or "", software_name or ""):
+        previous_tag = previous.get("tag_name") or ""
+        if _tag_sort(tag_name) < _tag_sort(previous_tag):
+            ceiling = (catalogue_latest or "").strip() or (previous.get("notify_ceiling") or "")
+        elif _tag_sort(tag_name) > _tag_sort(previous_tag):
+            ceiling = ""
+        else:
+            ceiling = previous.get("notify_ceiling") or ""
     now_iso = datetime.now().isoformat()
-    fields = (
+    # Drop any older per-software records under this model so only one remains.
+    # A lower tag replaces a higher one: the circle follows the last online install.
+    s.remove(f"{_GROUP_INSTALLS}/{model}")
+    _write_install_fields(
+        s,
+        f"{_GROUP_INSTALLS}/{model}",
         software_name,
         tag_name,
         release_label,
         package_slug,
         published_at,
         now_iso,
+        notify_ceiling=ceiling,
     )
-    _write_install_fields(s, f"{_GROUP_INSTALLS}/{model}", *fields)
-    if software_name:
-        _write_install_fields(
-            s,
-            f"{_GROUP_INSTALLS}/{model}/software/{_software_settings_key(software_name)}",
-            *fields,
-        )
     # Reset last_notified_tag so future releases of this software will be notified
     set_last_notified_tag(model, "", settings=s)
     logger.info("Recorded install for %s: %s (%s)", model, software_name, tag_name)
@@ -119,29 +159,21 @@ def get_device_install(model: str, settings: Optional[QSettings] = None) -> Opti
 
 
 def get_software_install(model: str, software_name: str, settings: Optional[QSettings] = None) -> Optional[dict]:
-    """Return the last successful install of this software on ``model``.
+    """Return this model's tracked install when it is ``software_name``.
 
-    A later install of a different package does not replace this record.
-    Older saves that only stored one install per model still match when the
-    software name is the same.
+    Each model tracks one software type. A different title on the same model
+    is not remembered, so the catalogue only marks the software currently
+    selected for that model.
     """
     if not model or not software_name:
         return None
-    s = _get_settings(settings)
-    rec = _read_install_fields(
-        s,
-        f"{_GROUP_INSTALLS}/{model}/software/{_software_settings_key(software_name)}",
-        model,
-    )
-    if rec:
-        return rec
-    legacy = get_device_install(model, settings=s)
-    if not legacy:
+    rec = get_device_install(model, settings=settings)
+    if not rec:
         return None
-    stored = (legacy.get("software_name") or "").casefold()
+    stored = (rec.get("software_name") or "").casefold()
     wanted = software_name.casefold()
     if stored and (stored == wanted or stored in wanted or wanted in stored):
-        return legacy
+        return rec
     return None
 
 
@@ -210,6 +242,31 @@ def set_release_skipped(model: str, tag: str, skipped: bool = True, settings: Op
         return
     s = _get_settings(settings)
     s.setValue(f"{_GROUP_PREFS}/skip_release_{model}_{tag}", bool(skipped))
+
+
+def set_notify_ceiling(model: str, ceiling: str, settings: Optional[QSettings] = None) -> None:
+    """Stop update toasts until a release sorts newer than ``ceiling``.
+
+    The installed software record is otherwise left as it is. A downgrade
+    still raises its own ceiling when that install is recorded.
+    """
+    if not model or not ceiling:
+        return
+    s = _get_settings(settings)
+    rec = get_device_install(model, settings=s)
+    if not rec:
+        return
+    _write_install_fields(
+        s,
+        f"{_GROUP_INSTALLS}/{model}",
+        rec.get("software_name") or "",
+        rec.get("tag_name") or "",
+        rec.get("release_label") or "",
+        rec.get("package_slug") or "",
+        rec.get("published_at") or "",
+        rec.get("installed_at") or "",
+        notify_ceiling=ceiling,
+    )
 
 
 def hidden_mtk_options_enabled(settings: Optional[QSettings] = None) -> bool:
@@ -543,7 +600,9 @@ def check_device_updates(
 
         latest_key = catalog.release_sort_key(latest_rel)
 
-        if latest_key > installed_key:
+        if latest_key > installed_key and update_notification_due(
+            installed_tag, latest_tag, install.get("notify_ceiling") or "",
+        ):
             updates.append({
                 "model": model,
                 "software_name": matched_pkg.name,

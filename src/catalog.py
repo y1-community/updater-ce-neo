@@ -52,6 +52,7 @@ class FirmwarePackage:
     package_name: str
     description: str = ""
     icon: str = ""
+    icon_dark: str = ""
 
 
 # Live manifest entries (see ``manifest.py``) replace the static table once
@@ -605,7 +606,7 @@ def get_display_version(version_info, published_date="", is_prerelease=False, no
     return version_text
 
 
-def classify_release_list(releases, installed_tag, installed_published=""):
+def classify_release_list(releases, installed_tag, installed_published="", notify_ceiling=""):
     """Mark which listed releases are the installed one and which are newer.
 
     Ordering is ``release_sort_key`` (semver, then datestamp, then publish
@@ -640,12 +641,19 @@ def classify_release_list(releases, installed_tag, installed_published=""):
     prompt = None
     if newer:
         newest = max(newer, key=release_sort_key)
-        prompt = {
-            "newer_tag": newest.get("tag_name") or "",
-            "newer_release": newest,
-            "installed_tag": installed_tag,
-            "installed_release": installed_rel,
-        }
+        ceiling = (notify_ceiling or "").strip()
+        blocked = False
+        if ceiling:
+            # Compare the version, not the publish timestamp. A ceiling stored
+            # as a tag has no date, and that must still hide that same release.
+            blocked = release_sort_key(newest)[:3] <= release_sort_key({"tag_name": ceiling})[:3]
+        if not blocked:
+            prompt = {
+                "newer_tag": newest.get("tag_name") or "",
+                "newer_release": newest,
+                "installed_tag": installed_tag,
+                "installed_release": installed_rel,
+            }
     return {"rows": rows, "prompt": prompt}
 
 

@@ -2,8 +2,9 @@
 
 macOS keeps the Aqua push button, which already lights up under the pointer.
 Windows and Linux draw a navigation row instead of a beveled button: icon and
-text on the left, a rounded hover wash, and the accent fill when the row is
-selected. Those shapes match WinUI NavigationView and Adwaita/Breeze sidebars.
+text on the left, a rounded hover wash, and a quiet selection. Windows adds a
+short accent bar. The row is not filled with the accent color. Those shapes
+match WinUI NavigationView and Adwaita/Breeze sidebars.
 The row stays a real ``QPushButton`` with an empty stylesheet, so the platform
 font, palette, and icon states still do the work. An idle row does not paint
 its own plate: on acrylic the system material shows through, and on a solid
@@ -49,6 +50,36 @@ def sidebar_corner_radius(platform_name: str | None = None) -> int:
     return 6
 
 
+def sidebar_nav_kind(platform_name: str | None = None) -> str:
+    """Which settings-app sidebar to paint.
+
+    Windows 11 Settings uses a quiet highlight and a short accent bar.
+    macOS System Settings uses a translucent selection and no bar.
+    Linux follows the desktop row (Breeze / Adwaita) and does not copy the
+    Windows bar.
+    """
+    name = sys.platform if platform_name is None else platform_name
+    if name == "darwin":
+        return "macos"
+    if name == "win32":
+        return "windows"
+    return "linux"
+
+
+def sidebar_selected_color(base: QColor) -> QColor:
+    """Selected row veil. Neutral and translucent, never a solid accent plate.
+
+    Windows Settings tints the row with a faint gray and puts the accent only
+    in the leading bar. A wash made from the accent itself reads as a solid
+    pill on a dark window.
+    """
+    if not base.isValid():
+        base = QColor("#2b303c")
+    if base.lightness() < 140:
+        return QColor(255, 255, 255, 32)
+    return QColor(0, 0, 0, 22)
+
+
 def sidebar_hover_color(base: QColor) -> QColor:
     """Hover veil for a navigation row.
 
@@ -79,9 +110,9 @@ def sidebar_base_color() -> QColor:
 class SidebarButton(QPushButton):
     """One sidebar entry.
 
-    On macOS this is an Aqua button. On Windows and Linux ``paintEvent`` draws
-    the navigation row. ``_preview_hover`` and ``_force_platform_row`` exist so
-    tests can render the Windows/Linux row on any host.
+    Windows paints a Settings navigation row. macOS paints a System Settings
+    selection. Linux paints the desktop's quiet row. ``_preview_hover`` and
+    ``_force_platform_row`` exist so tests can render the Windows row on any host.
     """
 
     def __init__(self, text: str = "", parent=None):
@@ -90,7 +121,7 @@ class SidebarButton(QPushButton):
         self._force_platform_row = False
         self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
         self.setAutoDefault(False)
-        self.setFlat(sys.platform != "darwin")
+        self.setFlat(True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setCursor(Qt.CursorShape.ArrowCursor)
         self.setStyleSheet("")
@@ -112,10 +143,12 @@ class SidebarButton(QPushButton):
             self.update()
         super().changeEvent(event)
 
+    def _row_kind(self) -> str:
+        if self._force_platform_row:
+            return "windows"
+        return sidebar_nav_kind()
+
     def paintEvent(self, event):
-        if sys.platform == "darwin" and not self._force_platform_row:
-            super().paintEvent(event)
-            return
         self._paint_platform_row(event)
 
     def _hovered(self) -> bool:
@@ -146,16 +179,30 @@ class SidebarButton(QPushButton):
 
             selected = self.isEnabled() and self.isChecked()
             hovered = self._hovered() and not selected
+            kind = self._row_kind()
             row = rect.adjusted(4, 2, -4, -2)
+            accent = self.palette().color(QPalette.ColorRole.Highlight)
             if selected or hovered:
                 painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
                 painter.setPen(Qt.PenStyle.NoPen)
                 if selected:
-                    painter.setBrush(self.palette().color(QPalette.ColorRole.Highlight))
+                    painter.setBrush(sidebar_selected_color(sidebar_base_color()))
                 else:
                     painter.setBrush(sidebar_hover_color(sidebar_base_color()))
-                radius = sidebar_corner_radius()
+                radius = 8 if kind == "macos" else sidebar_corner_radius(
+                    "win32" if kind == "windows" else "linux"
+                )
                 painter.drawRoundedRect(row, radius, radius)
+                if selected and kind == "windows":
+                    bar_h = max(10, row.height() - 16)
+                    bar = QRect(
+                        row.left() + 2,
+                        row.center().y() - bar_h // 2,
+                        3,
+                        bar_h,
+                    )
+                    painter.setBrush(accent)
+                    painter.drawRoundedRect(bar, 1, 1)
 
             if self.hasFocus() and not selected:
                 painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
@@ -179,8 +226,6 @@ class SidebarButton(QPushButton):
         icon_rect = QRect(row.left() + 8, row.top(), size.width(), row.height())
         if not self.isEnabled():
             mode = QIcon.Mode.Disabled
-        elif selected:
-            mode = QIcon.Mode.Selected
         else:
             mode = QIcon.Mode.Normal
         state = QIcon.State.On if selected else QIcon.State.Off
@@ -199,9 +244,7 @@ class SidebarButton(QPushButton):
         left = row.left() + (8 + icon_w + 8 if icon_w else 8)
         text_rect = QRect(left, row.top(), max(0, row.right() - left - 6), row.height())
         pal = QPalette(self.palette())
-        if selected:
-            color = QColor(T().nav_active_text)
-        elif self.isEnabled():
+        if self.isEnabled():
             color = QColor(T().fg)
         else:
             color = pal.color(QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText)
@@ -229,9 +272,8 @@ class SidebarButton(QPushButton):
 
 
 def classic_windows_style_needs_hover(style_name: str) -> bool:
-    """The classic Windows style draws a pressed button and no hover.
+    """Classic and Vista Win32 styles do not paint a visible hot button.
 
-    ``windows11`` and ``windowsvista`` already light up under the pointer, so
-    they must not get a second wash on top.
+    WinUI (``windows11``) does. Linux and macOS keep their own hover.
     """
-    return (style_name or "").lower() == "windows"
+    return (style_name or "").strip().lower() in {"windows", "windowsvista"}

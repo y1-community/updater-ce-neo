@@ -128,20 +128,104 @@ class _ThinWindowsScrollStyle(QProxyStyle):
         painter.restore()
 
 
+def _draw_settings_switch(painter, option, *, kind: str) -> None:
+    """Pill switch. Windows uses the user accent; macOS and Linux use Highlight too.
+
+    The shape is the platform switch (track and knob), not a checkbox tick and
+    not the Windows navigation accent bar.
+    """
+    state = option.state
+    checked = bool(state & (QStyle.StateFlag.State_On | QStyle.StateFlag.State_NoChange))
+    enabled = bool(state & QStyle.StateFlag.State_Enabled)
+    rect = option.rect
+    track_h = max(16, min(22, rect.height()))
+    track_w = max(32, min(40, rect.width() if rect.width() > 24 else 40))
+    track = QRect(
+        rect.center().x() - track_w // 2,
+        rect.center().y() - track_h // 2,
+        track_w,
+        track_h,
+    )
+    accent = option.palette.color(QPalette.ColorRole.Highlight)
+    if not accent.isValid() or accent.alpha() == 0:
+        accent = QColor("#0078d4" if kind == "windows" else "#0a84ff")
+    window = option.palette.color(QPalette.ColorRole.Window)
+    if window.lightness() > 140:
+        off = QColor("#c5c7cc")
+    else:
+        off = QColor("#5c6168")
+    if not enabled:
+        accent.setAlpha(120)
+        off.setAlpha(120)
+    knob = QColor("#ffffff")
+    painter.save()
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(accent if checked else off)
+    radius = track_h / 2
+    painter.drawRoundedRect(track, radius, radius)
+    knob_d = max(10, track_h - 6)
+    knob_x = track.right() - knob_d - 3 if checked else track.left() + 3
+    painter.setBrush(knob)
+    painter.drawEllipse(knob_x, track.center().y() - knob_d // 2, knob_d, knob_d)
+    painter.restore()
+
+
+class _SwitchIndicatorStyle(QProxyStyle):
+    """Replace the checkbox glyph with the desktop's switch. Everything else stays native."""
+
+    def pixelMetric(self, metric, option=None, widget=None):  # noqa: ANN001
+        if metric == QStyle.PixelMetric.PM_IndicatorWidth:
+            return 40
+        if metric == QStyle.PixelMetric.PM_IndicatorHeight:
+            return 22
+        return super().pixelMetric(metric, option, widget)
+
+    def drawPrimitive(self, element, option, painter, widget=None):  # noqa: ANN001
+        if element != QStyle.PrimitiveElement.PE_IndicatorCheckBox:
+            super().drawPrimitive(element, option, painter, widget)
+            return
+        kind = "macos" if IS_MACOS else "linux"
+        _draw_settings_switch(painter, option, kind=kind)
+
+
 class _ClassicWindowsHoverStyle(QProxyStyle):
     """Hover wash drawn after the native Windows button.
 
-    The classic ``windows`` style only changes when a button is pressed. WinUI
-    (``windows11``) and ``windowsvista`` do paint a hot state, but a fully
-    replaced dark palette often leaves that hot state the same color as the
-    idle button, so the control looks inert. This draws one translucent
-    accent wash after the native bevel. Pressed and checked buttons keep the
-    base style's own look. Sidebar rows paint themselves and never reach here.
+    The classic ``windows`` style only changes when a button is pressed, so
+    those buttons get a translucent accent wash. WinUI (``windows11``) paints
+    a hot state, but a fully replaced dark palette often leaves that hot state
+    the same color as the idle button. WinUI buttons therefore get a neutral
+    veil. The default button is left to the WinUI accent fill. Pressed and
+    checked buttons keep the base style's own look. Sidebar rows paint
+    themselves and never reach here.
     """
+
+    def pixelMetric(self, metric, option=None, widget=None):  # noqa: ANN001
+        if metric == QStyle.PixelMetric.PM_IndicatorWidth:
+            return 40
+        if metric == QStyle.PixelMetric.PM_IndicatorHeight:
+            return 22
+        return super().pixelMetric(metric, option, widget)
 
     def drawControl(self, element, option, painter, widget=None):  # noqa: ANN001
         super().drawControl(element, option, painter, widget)
         if element != QStyle.ControlElement.CE_PushButton:
+            return
+        base = self.baseStyle()
+        name = ((base.objectName() if base is not None else "") or "").lower()
+        from PySide6.QtWidgets import QStyleOptionButton
+
+        from .sidebar import classic_windows_style_needs_hover
+
+        features = getattr(option, "features", QStyleOptionButton.ButtonFeature(0))
+        is_default = bool(features & QStyleOptionButton.ButtonFeature.DefaultButton)
+        is_winui = name == "windows11"
+        # The WinUI style already fills the default button with the accent.
+        # A veil on top of that fill hides it.
+        if is_winui and is_default:
+            return
+        if name and not is_winui and not classic_windows_style_needs_hover(name):
             return
         state = option.state
         enabled = bool(state & QStyle.StateFlag.State_Enabled)
@@ -152,53 +236,22 @@ class _ClassicWindowsHoverStyle(QProxyStyle):
         painter.save()
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        wash = QColor(option.palette.color(QPalette.ColorRole.Highlight))
-        wash.setAlpha(40)
+        if is_winui:
+            window = option.palette.color(QPalette.ColorRole.Window)
+            wash = QColor(255, 255, 255, 32) if window.lightness() < 140 else QColor(0, 0, 0, 22)
+        else:
+            wash = QColor(option.palette.color(QPalette.ColorRole.Highlight))
+            wash.setAlpha(40)
         painter.setBrush(wash)
         painter.drawRoundedRect(option.rect.adjusted(2, 2, -2, -2), 4, 4)
         painter.restore()
 
     def drawPrimitive(self, element, option, painter, widget=None):  # noqa: ANN001
-        """Checked Windows boxes use the live accent. Unchecked stay native.
-
-        windowsvista draws the tick in a gray that disappears on the settings
-        card. macOS and Linux never use this style.
-        """
+        """Settings toggles are WinUI switches. The track uses the live accent."""
         if element != QStyle.PrimitiveElement.PE_IndicatorCheckBox:
             super().drawPrimitive(element, option, painter, widget)
             return
-        state = option.state
-        checked = bool(state & (QStyle.StateFlag.State_On | QStyle.StateFlag.State_NoChange))
-        if not checked:
-            super().drawPrimitive(element, option, painter, widget)
-            return
-        accent = option.palette.color(QPalette.ColorRole.Highlight)
-        if not accent.isValid() or accent.alpha() == 0:
-            accent = QColor("#2563eb")
-        mark = option.palette.color(QPalette.ColorRole.HighlightedText)
-        if not mark.isValid() or contrast_ratio(mark, accent) < 3:
-            mark = _readable_on(accent)
-        rect = option.rect
-        side = max(12, min(rect.width(), rect.height()) - 2)
-        box = QRect(
-            rect.center().x() - side // 2,
-            rect.center().y() - side // 2,
-            side,
-            side,
-        )
-        painter.save()
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(accent)
-        painter.drawRoundedRect(box, 3, 3)
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.setPen(QPen(mark, max(1.6, side / 7), Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
-        path = QPainterPath()
-        path.moveTo(box.left() + side * 0.22, box.top() + side * 0.52)
-        path.lineTo(box.left() + side * 0.42, box.top() + side * 0.72)
-        path.lineTo(box.left() + side * 0.78, box.top() + side * 0.30)
-        painter.drawPath(path)
-        painter.restore()
+        _draw_settings_switch(painter, option, kind="windows")
 
 
 def setup_native_app_style(app: QApplication) -> str:
@@ -250,7 +303,7 @@ def setup_native_app_style(app: QApplication) -> str:
                 style = _ThinWindowsScrollStyle(style)
             app.setStyle(style)
         else:
-            app.setStyle(key)
+            app.setStyle(_SwitchIndicatorStyle(key))
         return key
     return app.style().objectName() or "fusion"
 
@@ -1024,42 +1077,6 @@ QFrame[cssClass="card"] {{
    paint as blank plates. The window sets the rail color from the palette
    and leaves the buttons to the platform style. */
 
-/* ── Release notes and the version list ─────────────────
-   No stylesheet background. ``background: transparent`` is stored as black
-   and stays a slab after a dark-to-light switch. The palette supplies the
-   fill, and the platform style draws the selection. */
-QTextBrowser#releaseNotes, QTextEdit#releaseNotes,
-QTextBrowser#releaseNotes::viewport, QTextEdit#releaseNotes::viewport {{
-    border: none;
-    color: {text_color};
-}}
-
-QListWidget#releaseList,
-QListView#releaseList,
-QListWidget#releaseList::viewport,
-QListView#releaseList::viewport {{
-    border: none;
-    color: {text_color};
-    outline: none;
-}}
-QListWidget#releaseList::item, QListView#releaseList::item {{
-    padding: 3px 6px;
-    border-radius: 4px;
-    color: {text_color};
-}}
-QListWidget#releaseList::item:hover, QListView#releaseList::item:hover {{
-    background-color: {t.bg_hover};
-}}
-QListWidget#releaseList::item:selected, QListView#releaseList::item:selected {{
-    background-color: {t.accent};
-    color: {t.nav_active_text};
-}}
-QListWidget#releaseList::item:selected:hover, QListView#releaseList::item:selected:hover {{
-    background-color: {t.accent_hover};
-    color: {t.nav_active_text};
-}}
-
-
 /* ── Semantic Labels & Titles (OS-Native Hierarchy) ──── */
 QLabel[cssClass="pageTitle"] {{
     font-size: 20px;
@@ -1130,35 +1147,11 @@ QLabel[cssClass="separator"], QFrame[cssClass="separator"] {{
     border: none;
 }}
 
-/* ── Monospace Diagnostic Console ──────────────────────
-   Styled from here, never from the widget: a stylesheet set *on* a scroll
-   area makes Qt answer SH_ScrollBar_Transient with 0 and the host's floating
-   bars silently become classic ones (see src/ui/scrollbars.py). */
-QTextEdit#logView, QPlainTextEdit#logView {{
-    background-color: {t.log_bg};
-    color: {t.log_fg};
-    font-family: "SF Mono", "Cascadia Code", "Consolas", "Courier New", monospace;
-    font-size: 12px;
-    border: 1px solid {t.border};
-    border-radius: 4px;
-    padding: 8px;
-}}
-QTextEdit#statusView, QPlainTextEdit#statusView {{
-    background-color: {t.bg};
-    color: {t.fg};
-    border: 1px solid {t.border};
-    border-radius: 8px;
-    font-family: "SF Mono", "Cascadia Code", "Consolas", "Courier New", monospace;
-    font-size: 11px;
-    padding: 8px;
-}}
-QTextBrowser#updateNotes, QTextEdit#updateNotes {{
-    background-color: {t.bg_input};
-    color: {t.fg};
-    border: 1px solid {t.border};
-    border-radius: 6px;
-    padding: 6px;
-}}
+/* Scroll areas, lists, and text views are not styled here. A matching
+   rule puts that widget on QStyleSheetStyle, which draws classic arrow
+   scrollbars even when the app style is windows11. Selection and hover
+   stay on the platform style and the live palette. The diagnostics
+   console sets a monospace QFont on the widget itself. */
 
 /* ── Tooltips ─────────────────────────────────────────── */
 QToolTip {{
@@ -1303,6 +1296,7 @@ def apply_theme(
         _state.detect()
     app.setPalette(_make_palette(_state.is_dark, pure_black=_state.is_pure_black))
     app.setStyleSheet(_build_qss())
+    sync_cached_palettes(app)
 
 
 def theme_fingerprint(app: QApplication | None = None, *, platform_dark: bool = True) -> tuple:
@@ -1368,6 +1362,11 @@ def sync_cached_palettes(app: QApplication) -> None:
             if base.alpha() == 0 or widget.autoFillBackground():
                 apply_readable_palette(viewport)
                 viewport.setAutoFillBackground(True)
+    try:
+        from .glass import arm_combo_popups
+        arm_combo_popups(app)
+    except Exception:
+        logger.debug("combo popup material was not armed", exc_info=True)
 
 
 def refresh_theme(app: QApplication | None = None) -> None:
@@ -1384,6 +1383,7 @@ def refresh_theme(app: QApplication | None = None) -> None:
     _apply_native_font(app)
     app.setPalette(_make_palette(_state.is_dark, pure_black=_state.is_pure_black))
     app.setStyleSheet(_build_qss())
+    sync_cached_palettes(app)
     # Descend the whole tree, not just top-level windows: pages and custom
     # widgets keep their own token-derived styles.
     for widget in app.allWidgets():

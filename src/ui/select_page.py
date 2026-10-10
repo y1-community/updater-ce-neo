@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 from PySide6.QtCore import Qt, QThread, Signal
-from PySide6.QtGui import QTextDocument
+from PySide6.QtGui import QPixmap, QTextDocument
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -53,10 +53,10 @@ from ..translate import (
     get_google_translate_release_url,
     ReleaseTranslateWorker,
 )
-from .widgets import Banner, Card
+from .widgets import Banner, Card, CurrentPageStack, UpdateToast
 from .dark import T, link_html, page_margins
 from .scrollbars import configure_scroll_area, make_transparent
-from .icons import get_symbol_icon
+from .icons import HELP_ICON_PX, get_help_pixmap, get_symbol_icon, help_icon_source
 
 logger = logging.getLogger(__name__)
 
@@ -149,11 +149,15 @@ class _TabsAdapter:
 
 class SelectPackagePage(QWidget):
     package_selected = Signal(str, str, str)
+    gui_release_clicked = Signal(object)
+    release_icon_ready = Signal(object)
+    gui_handoff_abandoned = Signal()
     download_started = Signal(str, str)
     download_progress = Signal(int, str)
     download_finished = Signal(bool, str)
     download_cancelled = Signal()
     prep_progress = Signal(int)
+    prep_started = Signal(str, str)
     # (message, timeout_ms) -> shown in the main window's status bar.
     status_message = Signal(str, int)
 
@@ -175,6 +179,8 @@ class SelectPackagePage(QWidget):
         self._prep_worker = None
         self._selected_type = None  # None = all types; 'A' or 'B' for filtered
         self._current_selected_rel = None
+        self._gui_explicit = None
+        self._gui_handoff_worker = False
         self._is_translated = False
         self._is_translating = False
         self._translated_notes_cache = {}
@@ -272,7 +278,7 @@ class SelectPackagePage(QWidget):
         # a time keeps the layout identical between them, leaves every control
         # a native widget, and gives the file flow the full page instead of a
         # tab-sized strip.
-        self._views = QStackedWidget()
+        self._views = CurrentPageStack()
         self._online_tab = self._build_online_tab()
         self._local_tab = self._build_local_tab()
         self._views.addWidget(self._online_tab)
@@ -356,7 +362,7 @@ class SelectPackagePage(QWidget):
         filter_layout.setHorizontalSpacing(8)
         filter_layout.setVerticalSpacing(6)
 
-        # Row 0: Device Model & Device Type
+        # Row 0: Model and Type. The help mark sits in the type cell, beside the combo.
         self._model_label = QLabel(f"{tr('sel_model')}:")
         self._model_label.setProperty("cssClass", "field-label")
         filter_layout.addWidget(self._model_label, 0, 0)
@@ -371,20 +377,26 @@ class SelectPackagePage(QWidget):
         self._type_label.setProperty("cssClass", "field-label")
         filter_layout.addWidget(self._type_label, 0, 2)
 
-        type_row = QHBoxLayout()
-        type_row.setContentsMargins(0, 0, 0, 0)
-        type_row.setSpacing(6)
         self._type_combo = QComboBox()
         self._type_combo.addItem(tr("sel_type_a"), "A")
         self._type_combo.addItem(tr("sel_type_b"), "B")
         self._type_combo.currentIndexChanged.connect(self._on_type_changed)
-        type_row.addWidget(self._type_combo)
 
-        self._type_help_btn = QPushButton(tr("sel_type_help_btn"))
-        self._type_help_btn.setCursor(Qt.ArrowCursor)
+        self._type_field = QWidget()
+        type_row = QHBoxLayout(self._type_field)
+        type_row.setContentsMargins(0, 0, 0, 0)
+        type_row.setSpacing(4)
+        type_row.addWidget(self._type_combo, 1)
+        self._type_help_icon = QLabel(self._type_field)
+        self._type_help_icon.setObjectName("typeHelpIcon")
+        self._type_help_icon.setCursor(Qt.ArrowCursor)
+        self._type_help_icon.setFocusPolicy(Qt.NoFocus)
+        self._type_help_icon.setAlignment(Qt.AlignCenter)
+        self._type_help_icon.setFixedSize(HELP_ICON_PX, HELP_ICON_PX)
+        self._type_help_icon.setContentsMargins(0, 0, 0, 0)
+        type_row.addWidget(self._type_help_icon, 0, Qt.AlignVCenter)
         self._apply_type_help_hint()
-        type_row.addWidget(self._type_help_btn)
-        filter_layout.addLayout(type_row, 0, 3)
+        filter_layout.addWidget(self._type_field, 0, 3)
 
         # Row 1: Software & Refresh
         self._software_label = QLabel(f"{tr('sel_software')}:")
@@ -412,10 +424,12 @@ class SelectPackagePage(QWidget):
         self._online_banner = Banner()
         self._online_banner.setVisible(False)
         layout.addWidget(self._online_banner)
-        self._update_prompt = Banner()
-        self._update_prompt.setObjectName("releaseUpdatePrompt")
-        self._update_prompt.setVisible(False)
-        self._update_prompt_versions = None
+        self._update_prompt = UpdateToast()
+        self._update_prompt.install_clicked.connect(self._on_toast_install)
+        self._update_prompt.close_clicked.connect(self._on_toast_close)
+        self._update_prompt.model_clicked.connect(self._on_toast_model)
+        self._update_offers = []
+        self._toast_session_mute = set()
         layout.addWidget(self._update_prompt)
 
         # ── Split Content: Left = Packages + Install; Right = Status + Notes ──
@@ -439,8 +453,9 @@ class SelectPackagePage(QWidget):
             transparent=True,
         )
         self._release_list.currentItemChanged.connect(self._on_release_selected)
+        self._release_list.itemClicked.connect(self._on_release_clicked)
         self._release_list.itemActivated.connect(self._on_install)
-        self._release_list.itemDoubleClicked.connect(self._on_install)
+        self._release_list.itemDoubleClicked.connect(self._on_release_double_clicked)
         pkg_layout.addWidget(self._release_list)
 
         # Slim progress bar, only visible while downloading / preparing.
@@ -490,9 +505,9 @@ class SelectPackagePage(QWidget):
         details_row = QHBoxLayout()
         details_row.setContentsMargins(0, 0, 0, 0)
         details_row.setSpacing(8)
-        self._details_icon = QLabel()
-        self._details_icon.setFixedSize(40, 40)
-        self._details_icon.setAlignment(Qt.AlignCenter)
+        from .release_icon import FadingIcon
+
+        self._details_icon = FadingIcon(40)
         details_row.addWidget(self._details_icon, 0, Qt.AlignTop)
         details_text = QVBoxLayout()
         details_text.setContentsMargins(0, 0, 0, 0)
@@ -534,9 +549,9 @@ class SelectPackagePage(QWidget):
         self._notes.document().setDefaultStyleSheet(
             f"a {{ color: {T().fg}; font-weight: 700; text-decoration: none; }}"
         )
-        # Host policies plus palette-based transparency; the look itself comes
-        # from the app-wide releaseNotes rule. A stylesheet set on the view
-        # would cost the host's overlay scrollbars (see src/ui/scrollbars.py).
+        # Host policies plus the live palette. No stylesheet on this view:
+        # a matching rule would cost the host's overlay scrollbars
+        # (see src/ui/scrollbars.py).
         configure_scroll_area(
             self._notes,
             horizontal=Qt.ScrollBarAlwaysOff,
@@ -670,14 +685,31 @@ class SelectPackagePage(QWidget):
             lines.append(safe)
         return "<qt><p style=\"margin:0;\">" + "<br>".join(lines) + "</p></qt>"
 
+    def _refresh_type_help_icon(self) -> None:
+        """Same hover tip as the Type combo, on the platform help glyph beside it."""
+        icon = getattr(self, "_type_help_icon", None)
+        if icon is None:
+            return
+        icon.setCursor(Qt.ArrowCursor)
+        color = getattr(T(), "fg_muted", None)
+        pix = get_help_pixmap(HELP_ICON_PX, color=color)
+        if pix is not None and not pix.isNull():
+            icon.setText("")
+            icon.setPixmap(pix)
+        else:
+            icon.setPixmap(QPixmap())
+            icon.setText("?")
+        icon.setProperty("helpSource", help_icon_source())
+
     def _apply_type_help_hint(self) -> None:
         tip = self._type_help_tip()
-        if hasattr(self, "_type_help_btn"):
-            self._type_help_btn.setToolTip(tip)
         if hasattr(self, "_type_combo"):
             self._type_combo.setToolTip(tip)
         if hasattr(self, "_type_label"):
             self._type_label.setToolTip(tip)
+        if hasattr(self, "_type_help_icon"):
+            self._type_help_icon.setToolTip(tip)
+            self._refresh_type_help_icon()
 
     def _should_prompt_pre_install(self) -> bool:
         """On Linux with SP Flash Tool methods, step 1 (ensuring USB cable is removed
@@ -702,28 +734,104 @@ class SelectPackagePage(QWidget):
         """Device preparation is a page in the install flow, not a dialog."""
         return True
 
-    def _set_update_prompt(self, newer_label: str, installed_label: str) -> None:
-        """Inline note when a listed release is newer than the installed one.
+    def _set_update_prompt(self, software: str, model: str, offer=None) -> None:
+        """Keep the catalogue's current model in the update note.
 
-        Hidden when the installed version is the newest, or when nothing was
-        installed. Set from the release list, not from a paint event.
+        Other models already on the note stay. An empty offer removes only
+        this model. Session dismiss hides a release until the next launch.
         """
+        software = (software or "").strip()
+        model = (model or "").strip()
+        offers = [
+            item for item in (getattr(self, "_update_offers", None) or [])
+            if not (item.get("model") == model and item.get("software") == software)
+        ]
+        if software and model and offer:
+            offers.append({
+                "model": model,
+                "software": software,
+                "tag": str(offer.get("tag") or ""),
+                "release": offer.get("release"),
+                "package": offer.get("package"),
+            })
+        self._update_offers = offers
+        self._present_update_offers()
+
+    def show_update_offers(self, updates) -> None:
+        """Show every device that has a newer release. Does not start an install."""
+        offers = []
+        for upd in updates or []:
+            model = str((upd or {}).get("model") or "").strip()
+            software = str((upd or {}).get("software_name") or "").strip()
+            if not model or not software:
+                continue
+            offers.append({
+                "model": model,
+                "software": software,
+                "tag": str((upd or {}).get("latest_tag") or ""),
+                "release": (upd or {}).get("latest_release"),
+                "package": (upd or {}).get("package"),
+            })
+        self._update_offers = offers
+        self._present_update_offers()
+
+    def _present_update_offers(self) -> None:
         prompt = getattr(self, "_update_prompt", None)
         if prompt is None:
             return
-        newer_label = (newer_label or "").strip()
-        installed_label = (installed_label or "").strip()
-        if not newer_label or not installed_label:
-            self._update_prompt_versions = None
-            prompt.setVisible(False)
-            prompt.setText("")
+        muted = getattr(self, "_toast_session_mute", set())
+        visible = [
+            offer for offer in (getattr(self, "_update_offers", None) or [])
+            if (offer.get("model"), offer.get("software"), str(offer.get("tag") or "")) not in muted
+        ]
+        prompt.set_offers(visible)
+
+    def _on_toast_install(self) -> None:
+        offers = []
+        prompt = getattr(self, "_update_prompt", None)
+        if prompt is not None and hasattr(prompt, "offers"):
+            offers = prompt.offers()
+        offer = offers[0] if len(offers) == 1 else {}
+        release = offer.get("release")
+        if not release:
             return
-        self._update_prompt_versions = (newer_label, installed_label)
-        prompt.set_type("info")
-        prompt.setText(tr("sel_update_available").format(
-            newer=newer_label, installed=installed_label,
-        ))
-        prompt.setVisible(True)
+        self.start_install_for_release(
+            model=str(offer.get("model") or self.current_model()),
+            software_name=str(offer.get("software") or self.current_software()),
+            tag_name=str(offer.get("tag") or ""),
+            release=release,
+            package=offer.get("package") or self._package_for_selection(),
+        )
+
+    def _on_toast_close(self) -> None:
+        """Hide every offer on the note until the next launch.
+
+        This does not store a notify ceiling or a skipped release.
+        """
+        self._toast_session_mute = set(getattr(self, "_toast_session_mute", set()))
+        for offer in list(getattr(self, "_update_offers", None) or []):
+            self._toast_session_mute.add((
+                offer.get("model"),
+                offer.get("software"),
+                str(offer.get("tag") or ""),
+            ))
+        self._present_update_offers()
+
+    def _on_toast_model(self, offer) -> None:
+        """Select that model and focus its release. Does not start an install."""
+        if not isinstance(offer, dict):
+            return
+        self.navigate_to_package(
+            str(offer.get("model") or ""),
+            str(offer.get("software") or ""),
+            tag_name=str(offer.get("tag") or "") or None,
+        )
+        release = offer.get("release")
+        if not release:
+            return
+        target = self._firmware_target_for_release(release)
+        if target:
+            self._gui_explicit = target
 
     def _set_online_banner(self, key, count=0):
         self._online_banner_key = key
@@ -794,13 +902,11 @@ class SelectPackagePage(QWidget):
             self._browse_folder_btn.setText(tr("sel_browse_folder"))
         self._start_btn.setText(tr("sel_btn_start"))
         self._apply_online_banner()
-        versions = getattr(self, "_update_prompt_versions", None)
-        if versions:
-            self._set_update_prompt(versions[0], versions[1])
+        if hasattr(self, "_update_prompt"):
+            self._update_prompt.retranslate()
         self._apply_local_banner()
         self._type_combo.setItemText(0, tr("sel_type_a"))
         self._type_combo.setItemText(1, tr("sel_type_b"))
-        self._type_help_btn.setText(tr("sel_type_help_btn"))
         self._apply_type_help_hint()
         self._refresh_btn.setToolTip(tr("sel_refresh_tooltip"))
         self._pkg_group.setTitle(tr("sel_available_software"))
@@ -848,6 +954,16 @@ class SelectPackagePage(QWidget):
                 label.setText(self._link_html(key, bold=bold))
         if hasattr(self, "_install_btn"):
             self._install_btn.setIcon(get_symbol_icon("install", 16))
+        if hasattr(self, "_update_prompt") and hasattr(self._update_prompt, "refresh_theme"):
+            self._update_prompt.refresh_theme()
+        rel = getattr(self, "_current_selected_rel", None)
+        if rel and hasattr(self, "_details_icon"):
+            self._set_details_header(rel, getattr(self, "_details_package", None) or self._package_for_selection())
+        listed = list(getattr(self, "_listed_releases", None) or [])
+        if listed:
+            self._prefetch_release_icons(listed)
+        elif rel:
+            self._ensure_release_icon(rel)
         if hasattr(self, "_browse_btn"):
             self._browse_btn.setIcon(get_symbol_icon("file", 16))
         if hasattr(self, "_browse_folder_btn"):
@@ -909,8 +1025,10 @@ class SelectPackagePage(QWidget):
         has_types = model.upper() == "Y1"
         self._type_label.setVisible(has_types)
         self._type_combo.setVisible(has_types)
-        if hasattr(self, "_type_help_btn"):
-            self._type_help_btn.setVisible(has_types)
+        if hasattr(self, "_type_help_icon"):
+            self._type_help_icon.setVisible(has_types)
+        if hasattr(self, "_type_field"):
+            self._type_field.setVisible(has_types)
         if not has_types:
             self._selected_type = "A"
         else:
@@ -1042,46 +1160,47 @@ class SelectPackagePage(QWidget):
     def _on_releases_loaded(self, releases, error):
         if error:
             self._set_online_banner("sel_offline")
-            self._set_update_prompt("", "")
+            self._set_update_prompt(self.current_software(), self.current_model(), None)
             return
         self._release_list.clear()
         releases = sorted(releases or [], key=catalog.release_sort_key, reverse=True)
         prefer_240p = self.release_listing_filters()[2]
         installed_tag = ""
         installed_published = ""
-        installed_label = ""
+        install_rec = None
+        curr_model = self.current_model() or "Y1"
+        software_name = self.current_software() or ""
         try:
             from .. import device_tracking
-            curr_model = self.current_model() or "Y1"
-            curr_settings = getattr(self, "settings", None)
-            software_name = self.current_software() or ""
             install_rec = device_tracking.get_software_install(
-                curr_model, software_name, settings=curr_settings,
+                curr_model, software_name, settings=getattr(self, "settings", None),
             )
             if install_rec:
                 installed_tag = install_rec.get("tag_name") or ""
                 installed_published = install_rec.get("published_at") or ""
-                installed_label = install_rec.get("release_label") or ""
         except Exception:
             pass
 
+        self._listed_releases = list(releases)
+        ceiling = (install_rec or {}).get("notify_ceiling") or ""
         marks = catalog.classify_release_list(
-            releases, installed_tag, installed_published,
+            releases, installed_tag, installed_published, ceiling,
         )
         prompt = marks.get("prompt")
         if prompt and installed_tag:
-            newer_rel = prompt.get("newer_release") or {}
-            newer_label = catalog.parse_clean_release_tag_label(newer_rel, prefer_240p=prefer_240p) or prompt.get("newer_tag") or ""
-            installed_rel = prompt.get("installed_release")
-            if installed_rel:
-                installed_label = catalog.parse_clean_release_tag_label(installed_rel, prefer_240p=prefer_240p) or installed_label
-            if not installed_label:
-                installed_label = catalog.parse_clean_release_tag_label(
-                    {"tag_name": installed_tag}, prefer_240p=prefer_240p,
-                ) or installed_tag
-            self._set_update_prompt(newer_label, installed_label)
+            package = None
+            try:
+                pkgs = catalog.packages_for_model_software(curr_model, software_name)
+                package = pkgs[0] if pkgs else None
+            except Exception:
+                package = None
+            self._set_update_prompt(software_name, curr_model, {
+                "tag": prompt.get("newer_tag") or "",
+                "release": prompt.get("newer_release"),
+                "package": package,
+            })
         else:
-            self._set_update_prompt("", "")
+            self._set_update_prompt(software_name, curr_model, None)
 
         for rel in releases:
             label = catalog.parse_clean_release_tag_label(rel, prefer_240p=prefer_240p)
@@ -1122,6 +1241,7 @@ class SelectPackagePage(QWidget):
                         selected_row = row
                         break
             self._release_list.setCurrentRow(selected_row)
+            self._prefetch_release_icons(releases)
             if self._install_btn.isEnabled():
                 self._install_btn.setDefault(True)
                 self._install_btn.setFocus()
@@ -1423,7 +1543,6 @@ class SelectPackagePage(QWidget):
             self._current_package_model = eff_model
             self._current_installed_release_info = self._pending_install_release_info
             self._download_status_key = "sel_prepare_done"
-            self._say(tr("sel_prepare_done"), 8000)
             self._on_online_prep_done(True, str(extract_dir), "")
             return
 
@@ -1437,14 +1556,12 @@ class SelectPackagePage(QWidget):
             self._prepare_package(str(dest), self._on_online_prep_done)
             return
 
-        # 3. Otherwise, start download worker
+        # 3. Otherwise, start download worker. Package progress is on the install card.
         self._download_status_key = "sel_download_start"
-        self._say(tr("sel_download_start"))
-        self._download_bar.setValue(0)
-        self._download_bar.setVisible(True)
         self._install_btn.setEnabled(False)
         display_name = self._install_card_title(pkg.name, rel, eff_model)
         self.download_started.emit(display_name, eff_model)
+        self._gui_handoff_worker = False
         self._download_worker = downloads.DownloadWorker(rel["download_url"], str(dest))
         self._download_worker.progress.connect(self._on_download_progress)
         self._download_worker.status.connect(self._on_download_status)
@@ -1463,18 +1580,19 @@ class SelectPackagePage(QWidget):
         item = self._release_list.currentItem()
         if item is None:
             return
+        self._stop_gui_handoff_workers()
+        self.gui_handoff_abandoned.emit()
         rel = item.data(Qt.UserRole)
         self._trigger_release_install(rel)
 
     def _on_download_progress(self, val: int):
-        self._download_bar.setValue(val)
+        self._last_download_percent = int(val)
         self.download_progress.emit(val, getattr(self, "_last_download_status_text", ""))
 
     def _on_download_status(self, text: str):
         self._last_download_status_text = text
         self._download_status_key = ""
-        self._say(text)
-        self.download_progress.emit(self._download_bar.value(), text)
+        self.download_progress.emit(int(getattr(self, "_last_download_percent", 0)), text)
 
     def _on_download_done(self, ok, result):
         self._download_bar.setVisible(False)
@@ -1499,18 +1617,14 @@ class SelectPackagePage(QWidget):
         if self._prep_worker is not None:
             self._prep_worker.cancel()
         self._download_status_key = "sel_preparing"
-        self._say(tr("sel_preparing"))
         self._local_status_key = "sel_preparing"
-        self._local_status.setText(tr("sel_preparing"))
-        bar = (
-            self._local_bar
-            if self._views.currentWidget() is self._local_tab
-            else self._download_bar
+        self._download_bar.setVisible(False)
+        self._local_bar.setVisible(False)
+        self.prep_started.emit(
+            getattr(self, "_current_package_name", "") or "",
+            getattr(self, "_current_package_model", "") or "",
         )
-        bar.setValue(0)
-        bar.setVisible(True)
         self._prep_worker = ExtractWorker(path)
-        self._prep_worker.progress.connect(bar.setValue)
         self._prep_worker.progress.connect(self.prep_progress)
         self._prep_worker.finished.connect(done_cb)
         self._prep_worker.finished.connect(self._on_prep_finished)
@@ -1535,7 +1649,6 @@ class SelectPackagePage(QWidget):
             self._install_btn.setEnabled(True)
             return
         self._download_status_key = "sel_prepare_done"
-        self._say(tr("sel_prepare_done"), 8000)
 
         # Retain only the most recently downloaded software package!
         prune_extracted_cache(keep_package_path=self._current_package_path)
@@ -1638,6 +1751,9 @@ class SelectPackagePage(QWidget):
         self._current_package_name = self._install_card_title(
             Path(display_name).stem, None, self._current_package_model
         )
+        self._remember_gui_local(
+            package_target, self._current_package_model, self._current_package_name
+        )
         self._set_local_banner("sel_current_pkg", display_name)
         self._start_btn.setEnabled(False)
         self._prepare_package(package_target, self._on_local_prep_done)
@@ -1675,6 +1791,7 @@ class SelectPackagePage(QWidget):
         self._current_package_name = self._install_card_title(
             display_name, None, self._current_package_model
         )
+        self._remember_gui_local(folder, self._current_package_model, self._current_package_name)
         self._set_local_banner("sel_current_pkg", display_name)
         self._start_btn.setEnabled(False)
         self._prepare_package(folder, self._on_local_prep_done)
@@ -1695,23 +1812,80 @@ class SelectPackagePage(QWidget):
             getattr(self, "_current_package_model", ""),
         )
 
-    def focused_firmware(self) -> Optional[dict]:
-        """The release or local package the user is looking at, if any.
+    def _on_release_clicked(self, item):
+        """A click only records which package the desktop tool should use.
 
-        Used when the SP Flash Tool GUI is opened and nothing is already
-        cached: a highlighted catalogue row or a local file is downloaded or
-        extracted first.
+        It does not download or start an install. Install / Restore starts the
+        guided flow. The sidebar tool button downloads this package later.
         """
-        if self._views.currentWidget() is self._local_tab:
-            path = (self._current_package_path or self._path_edit.text() or "").strip()
-            if path:
-                return {
-                    "kind": "local",
-                    "path": path,
-                    "model": getattr(self, "_current_package_model", "") or "",
-                    "name": getattr(self, "_current_package_name", "") or Path(path).name,
-                }
-        rel = getattr(self, "_current_selected_rel", None)
+        from ..sp_flash_gui import is_sp_flash_gui_supported
+
+        if not is_sp_flash_gui_supported() or item is None:
+            return
+        rel = item.data(Qt.UserRole)
+        target = self._firmware_target_for_release(rel)
+        if not target:
+            return
+        self._gui_explicit = target
+
+    def _on_release_double_clicked(self, _item):
+        from ..sp_flash_gui import is_sp_flash_gui_supported
+
+        if is_sp_flash_gui_supported():
+            return
+        self._on_install()
+
+    def _remember_gui_local(self, path: str, model: str, name: str) -> None:
+        from ..sp_flash_gui import is_gui_local_package, is_sp_flash_gui_supported
+
+        if not is_sp_flash_gui_supported() or not is_gui_local_package(path):
+            return
+        self._gui_explicit = {
+            "kind": "local",
+            "path": path,
+            "model": model or "",
+            "name": name or Path(path).name,
+        }
+
+    def _stop_gui_handoff_workers(self) -> None:
+        """Drop a handoff download so Install / Restore can run on its own."""
+        self._external_tool_callback = None
+        if not getattr(self, "_gui_handoff_worker", False):
+            return
+        worker = self._download_worker
+        if worker is not None:
+            try:
+                worker.finished.disconnect()
+            except Exception:
+                pass
+            try:
+                worker.progress.disconnect()
+            except Exception:
+                pass
+            try:
+                worker.status.disconnect()
+            except Exception:
+                pass
+            worker.cancel()
+            self._download_worker = None
+        prep = self._prep_worker
+        if prep is not None:
+            prep.cancel()
+        self._gui_handoff_worker = False
+
+    def explicit_firmware(self) -> Optional[dict]:
+        """A release the user clicked, or a qualifying file they browsed to."""
+        target = getattr(self, "_gui_explicit", None)
+        if not target:
+            return None
+        if target.get("kind") == "local":
+            from ..sp_flash_gui import is_gui_local_package
+
+            if not is_gui_local_package(target.get("path") or ""):
+                return None
+        return target
+
+    def _firmware_target_for_release(self, rel) -> Optional[dict]:
         if not rel or not rel.get("download_url"):
             return None
         pkg = self.current_package()
@@ -1719,15 +1893,15 @@ class SelectPackagePage(QWidget):
         fname = Path(rel.get("asset_name") or "rom.zip").name
         slug = getattr(pkg, "slug", None) or "firmware"
         dest = dest_dir / f"{slug}_{rel.get('tag_name', 'latest')}_{fname}"
-        model = ""
-        if pkg is not None:
-            model = getattr(pkg, "device", "") or ""
+        orig_name = rel.get("asset_name") or rel.get("download_url") or ""
+        det_m, _det_t = detect_model_and_type_from_name(orig_name)
+        model = det_m or (getattr(pkg, "device", "") if pkg is not None else "") or self.current_model()
         return {
             "kind": "online",
             "path": str(dest),
             "dest": dest,
             "url": rel["download_url"],
-            "model": model,
+            "model": model or "",
             "name": self._install_card_title(
                 pkg.name if pkg is not None and getattr(pkg, "name", "") else "",
                 rel,
@@ -1735,6 +1909,15 @@ class SelectPackagePage(QWidget):
             ),
             "release": rel,
         }
+
+    def focused_firmware(self) -> Optional[dict]:
+        """The catalogue release highlighted on screen.
+
+        That is the default row (usually the latest Original Software) until
+        the user moves the highlight. A clicked release and a browsed local
+        package are tracked separately.
+        """
+        return self._firmware_target_for_release(getattr(self, "_current_selected_rel", None))
 
     def begin_external_prepare(self, target: dict, callback) -> bool:
         """Download or extract ``target``, then ``callback(ok, extract_dir, err)``.
@@ -1745,11 +1928,13 @@ class SelectPackagePage(QWidget):
         if not target:
             return False
         self._external_tool_callback = callback
+        self._gui_handoff_worker = True
         kind = target.get("kind")
         if kind == "local":
             path = target.get("path") or ""
             if not path:
                 self._external_tool_callback = None
+                self._gui_handoff_worker = False
                 return False
             self._current_package_path = path
             self._current_package_model = target.get("model") or ""
@@ -1758,6 +1943,7 @@ class SelectPackagePage(QWidget):
             return True
         if kind != "online":
             self._external_tool_callback = None
+            self._gui_handoff_worker = False
             return False
         dest = Path(target["dest"])
         extract_dir = compute_extract_dir(dest)
@@ -1767,11 +1953,13 @@ class SelectPackagePage(QWidget):
         if already and _is_extract_complete(already):
             cb = self._external_tool_callback
             self._external_tool_callback = None
+            self._gui_handoff_worker = False
             cb(True, str(already), "")
             return True
         if dest.is_file() and dest.stat().st_size > 0 and _is_extract_complete(extract_dir):
             cb = self._external_tool_callback
             self._external_tool_callback = None
+            self._gui_handoff_worker = False
             cb(True, str(extract_dir), "")
             return True
         self._current_package_model = target.get("model") or ""
@@ -1780,8 +1968,6 @@ class SelectPackagePage(QWidget):
             self._current_package_path = str(dest)
             self._prepare_package(str(dest), self._on_external_prep_done)
             return True
-        self._download_bar.setValue(0)
-        self._download_bar.setVisible(True)
         self.download_started.emit(self._current_package_name, self._current_package_model)
         self._download_worker = downloads.DownloadWorker(target["url"], str(dest))
         self._download_worker.progress.connect(self._on_download_progress)
@@ -1796,6 +1982,7 @@ class SelectPackagePage(QWidget):
         if not ok:
             cb = getattr(self, "_external_tool_callback", None)
             self._external_tool_callback = None
+            self._gui_handoff_worker = False
             if cb:
                 cb(False, "", str(result))
             return
@@ -1805,6 +1992,7 @@ class SelectPackagePage(QWidget):
     def _on_external_prep_done(self, ok, extract_dir, err):
         cb = getattr(self, "_external_tool_callback", None)
         self._external_tool_callback = None
+        self._gui_handoff_worker = False
         if cb:
             cb(bool(ok), str(extract_dir or ""), str(err or ""))
 
@@ -1836,11 +2024,150 @@ class SelectPackagePage(QWidget):
         from .surfaces import seal_updating_text
         seal_updating_text(self._details_name)
         seal_updating_text(self._details_version)
-        self._details_header.setVisible(True)
-        from .release_icon import load_release_pixmap, squircle_pixmap
+        from .dark import is_dark
+        from .release_icon import cached_icon_pixmap
+        from ..release_icons import release_asset_urls, software_icon_urls
 
-        pixmap = load_release_pixmap(rel, package, allow_network=False)
-        self._details_icon.setPixmap(squircle_pixmap(pixmap, 40, complete=False))
+        dark = bool(is_dark())
+        release_pm = cached_icon_pixmap(release_asset_urls(rel, package, dark=dark))
+        if not release_pm.isNull():
+            self._present_details_icon(release_pm, immediate=not getattr(self, "_icon_presented", False))
+            self._icon_phase = "release"
+        else:
+            software_pm = cached_icon_pixmap(software_icon_urls(package, dark=dark))
+            self._present_details_icon(
+                software_pm, immediate=not getattr(self, "_icon_presented", False),
+            )
+            self._icon_phase = "software" if not software_pm.isNull() else "placeholder"
+            if software_pm.isNull() and software_icon_urls(package, dark=dark):
+                self._fetch_software_icon(package, dark)
+        self._details_header.setVisible(True)
+        self._ensure_release_icon(rel)
+
+    def release_pixmap(self):
+        """The release or software image already on screen, before the squircle paint."""
+        from PySide6.QtGui import QPixmap
+
+        pix = getattr(self, "_raw_release_pixmap", None)
+        return pix if pix is not None else QPixmap()
+
+    def _present_details_icon(self, raw, *, immediate: bool) -> None:
+        from .release_icon import squircle_pixmap
+        from PySide6.QtGui import QPixmap
+
+        source = raw if raw is not None and not getattr(raw, "isNull", lambda: True)() else QPixmap()
+        if not source.isNull():
+            self._raw_release_pixmap = source
+        painted = squircle_pixmap(source, 40, complete=False)
+        if immediate or not getattr(self, "_icon_presented", False):
+            self._details_icon.show_stand_in(painted)
+            self._icon_presented = True
+        else:
+            self._details_icon.cross_fade_to(painted)
+
+    def _fetch_software_icon(self, package, dark: bool) -> None:
+        from ..release_icons import software_icon_urls
+        from .release_icon import SoftwareIconJob
+
+        urls = tuple(software_icon_urls(package, dark=dark))
+        if not urls or getattr(self, "_software_icon_urls", None) == urls:
+            return
+        self._software_icon_urls = urls
+        previous = getattr(self, "_software_job", None)
+        if previous is not None:
+            previous.requestInterruption()
+        job = SoftwareIconJob(package, dark=dark)
+        job.ready.connect(self._on_software_icon_ready)
+        job.finished.connect(job.deleteLater)
+        self._software_job = job
+        job.start()
+
+    def _on_software_icon_ready(self, data: bytes) -> None:
+        if getattr(self, "_icon_phase", "") == "release":
+            return
+        from .release_icon import pixmap_from_icon_bytes
+
+        pixmap = pixmap_from_icon_bytes(data)
+        if pixmap.isNull():
+            return
+        self._present_details_icon(pixmap, immediate=False)
+        self._icon_phase = "software"
+        self.release_icon_ready.emit(pixmap)
+
+    def _prefetch_release_icons(self, releases) -> None:
+        """Start icon downloads for the visible list. The selected tag goes first."""
+        rel = getattr(self, "_current_selected_rel", None) or (releases[0] if releases else None)
+        tag = str((rel or {}).get("tag_name") or "")
+        self._start_icon_job(releases, priority_tag=tag)
+
+    def _ensure_release_icon(self, rel) -> None:
+        """Keep the selected release at the front of the paced preload."""
+        if not rel:
+            return
+        tag = str(rel.get("tag_name") or "")
+        running = getattr(self, "_icon_job", None)
+        if running is not None and running.isRunning():
+            running.promote(tag)
+            return
+        listed = list(getattr(self, "_listed_releases", None) or [])
+        self._start_icon_job(listed or [rel], priority_tag=tag)
+
+    def _start_icon_job(self, releases, priority_tag: str = "") -> None:
+        from .dark import is_dark
+        from .release_icon import ReleaseIconJob
+
+        previous = getattr(self, "_icon_job", None)
+        if previous is not None:
+            previous.requestInterruption()
+            try:
+                previous.ready.disconnect()
+            except Exception:
+                pass
+            previous.finished.connect(previous.deleteLater)
+        self._icon_gen = int(getattr(self, "_icon_gen", 0)) + 1
+        generation = self._icon_gen
+        package = getattr(self, "_details_package", None) or self._package_for_selection()
+        repo = getattr(package, "repo", "") or ""
+        if repo:
+            for rel in releases or []:
+                if isinstance(rel, dict) and not rel.get("source_repo"):
+                    rel["source_repo"] = repo
+        job = ReleaseIconJob(
+            releases,
+            package,
+            dark=bool(is_dark()),
+            priority_tag=priority_tag,
+            parent=self,
+        )
+        job._generation = generation
+        # A page method queues onto the UI thread. A lambda can run in the
+        # worker and crash when it touches widgets.
+        job.ready.connect(self._on_icon_bytes)
+        job.finished.connect(job.deleteLater)
+        self._icon_job = job
+        job.start()
+
+    def _on_icon_bytes(self, tag: str, data: bytes) -> None:
+        job = self.sender()
+        generation = getattr(job, "_generation", None)
+        self._on_release_icon_ready(tag, data, generation)
+
+    def _on_release_icon_ready(self, tag: str, data: bytes, generation: int) -> None:
+        if generation != getattr(self, "_icon_gen", None):
+            return
+        rel = getattr(self, "_current_selected_rel", None)
+        if not rel or str(rel.get("tag_name") or "") != str(tag or ""):
+            return
+        if not data:
+            return
+        from .release_icon import pixmap_from_icon_bytes
+
+        pixmap = pixmap_from_icon_bytes(data)
+        if pixmap.isNull():
+            return
+        self._present_details_icon(pixmap, immediate=False)
+        self._icon_phase = "release"
+        self.release_icon_ready.emit(pixmap)
 
     def _install_card_title(self, software, rel, model) -> str:
         """Progress-card title: software, the list's version string, and model."""
@@ -1876,6 +2203,14 @@ class SelectPackagePage(QWidget):
     def current_installed_release_info(self):
         """Return release details dict if an online release was prepared for installation."""
         return getattr(self, "_current_installed_release_info", None)
+
+    def catalogue_latest_tag(self) -> str:
+        """Newest tag in the list that was last shown, used as a downgrade ceiling."""
+        releases = list(getattr(self, "_listed_releases", None) or [])
+        if not releases:
+            return ""
+        newest = max(releases, key=catalog.release_sort_key)
+        return newest.get("tag_name") or ""
 
     def navigate_to_package(self, model: str, software_name: str, tag_name=None):
         """Switch to the catalogue, select specified model/software, highlight tag_name."""

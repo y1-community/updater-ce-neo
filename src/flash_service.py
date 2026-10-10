@@ -50,6 +50,7 @@ _SUBPROCESS_NO_WINDOW = CREATE_NO_WINDOW
 
 # --- pipeline steps ----------------------------------------------------------
 STEP_EXTRACTING = "EXTRACTING"
+STEP_PLEASE_WAIT = "PLEASE_WAIT"
 STEP_WAITING = "WAITING"
 STEP_DETECT = "DETECT"
 STEP_DOWNLOAD_DA = "DOWNLOAD_DA"
@@ -79,6 +80,122 @@ _WS_RE = re.compile(r"\s+")
 # Upper bound on internal-log lines forwarded per install: the file can grow to
 # thousands of lines and only the tail is interesting for a bug report.
 _SP_QT_LOG_MAX_LINES = 80000
+
+
+_TOOL_LINE_PREFIXES = ("[LOG] ", "[SP] ", "[MTK] ", "[QT] ", "[TOOL] ")
+
+
+def tool_line_body(line) -> str:
+    """Drop log tokens so a search check sees the tool's own text."""
+    text = str(line or "").strip()
+    while True:
+        stripped = text.lstrip()
+        for prefix in _TOOL_LINE_PREFIXES:
+            if stripped.startswith(prefix):
+                text = stripped[len(prefix):]
+                break
+        else:
+            return stripped
+
+
+def is_sp_usb_search_line(line) -> bool:
+    """True when flash_tool is searching USB.
+
+    The connect sentence follows this prefix only: case-insensitive, with
+    leading whitespace (and a log timestamp) ignored. A later mention inside
+    a write log is not a search.
+    """
+    text = _TIMESTAMP_PREFIX_RE.sub("", tool_line_body(line)).lstrip()
+    return text.lower().startswith("search usb")
+
+
+def is_mtk_usb_search_line(line) -> bool:
+    """MTKClient search state: a hint line, ``Port - Hint``, or a line of dots.
+
+    After the log token and surrounding whitespace are removed, a search line
+    starts with ``...`` or, case-insensitively, ``hint``. ``Port - Hint:``
+    does not start with ``hint``, so that prefix is a search line too.
+    """
+    text = tool_line_body(line)
+    if not text:
+        return False
+    if text.startswith("..."):
+        return True
+    low = text.lower()
+    return low.startswith("hint") or low.startswith("port - hint")
+
+
+def is_logging_noise_line(line) -> bool:
+    """Python logging failures that must not look like install progress.
+
+    A ``StreamHandler`` whose stream is ``None`` (pythonw, or a closed
+    console) raises ``AttributeError`` inside ``emit``. That traceback used
+    to land in the tool log and was then read as forward progress.
+    """
+    text = tool_line_body(line)
+    low = text.lower()
+    if not low:
+        return True
+    if "attributeerror" in low:
+        return True
+    if "nonetype" in low and "write" in low:
+        return True
+    if "has no attribute 'write'" in low or 'has no attribute "write"' in low:
+        return True
+    if "streamhandler" in low:
+        return True
+    if low.startswith("traceback (most recent call last)"):
+        return True
+    if low.startswith("during handling of the above exception"):
+        return True
+    if low.startswith("the above exception"):
+        return True
+    if "history.ini" in low and "updated" in low:
+        return True
+    if low.startswith("file ") and "logging" in low:
+        return True
+    return False
+
+
+# Install status while the tool is running, before a numbered stage.
+PHASE_BEFORE = "before"
+PHASE_CONNECT = "connect"
+PHASE_PLEASE_WAIT = "please_wait"
+
+
+def classify_tool_wait_line(line) -> str:
+    """``connect``, ``forward``, or ``""`` when the line must not move the UI.
+
+    Search / hint / dots lines are the connect phase. A later line that is
+    real tool output is forward progress. Logging-error spam is ignored.
+    """
+    if is_logging_noise_line(line):
+        return ""
+    if is_sp_usb_search_line(line) or is_mtk_usb_search_line(line):
+        return "connect"
+    body = tool_line_body(line)
+    if not body:
+        return ""
+    low = body.lower()
+    if any(marker in low for marker in _HINT_MARKERS):
+        return "connect"
+    return "forward"
+
+
+def advance_tool_wait_phase(phase: str, line: str) -> str:
+    """Move the connect / please-wait phase from one tool line.
+
+    The connect sentence is only the search phase. A later forward line
+    leaves it for please-wait. Another search or hint line comes back.
+    Lines before the first search, and logging spam, do not invent it.
+    """
+    kind = classify_tool_wait_line(line)
+    current = phase or PHASE_BEFORE
+    if kind == "connect":
+        return PHASE_CONNECT
+    if kind == "forward" and current == PHASE_CONNECT:
+        return PHASE_PLEASE_WAIT
+    return current
 
 
 def _normalise_tool_line(line) -> str:
@@ -160,7 +277,7 @@ def classify_backend_line(line):
     match = _ERRNO_RE.search(text)
     if match and int(match.group(1)) in RETRY_ERRNOS:
         return LINE_RETRY
-    if "hint:" in low or any(marker in low for marker in _HINT_MARKERS):
+    if is_mtk_usb_search_line(text) or any(marker in low for marker in _HINT_MARKERS):
         return LINE_CONNECT_HINT
     return ""
 
@@ -1031,6 +1148,13 @@ class FlashWorker(QThread):
         self._log_timer = None
         # Previous worker this run must wait for, off the GUI thread.
         self._wait_for = None
+        # USB search is a stdout state, not the moment the install starts.
+        # The connect sentence is up only while the latest tool line is a
+        # search or hint. A later search line shows it again.
+        self._usb_search_active = False
+        self._past_usb_search = False
+        # "before" until a search line. Please-wait is a later forward line.
+        self._tool_wait_phase = PHASE_BEFORE
 
     # -- lifecycle ----------------------------------------------------------
     def cancel(self):
@@ -1061,7 +1185,87 @@ class FlashWorker(QThread):
                     except Exception:
                         pass
 
+    def _announce_please_wait(self):
+        """Before any search line: do not show the connect sentence."""
+        if getattr(self, "_tool_wait_phase", PHASE_BEFORE) != PHASE_BEFORE:
+            return
+        if self._past_usb_search or self._usb_search_active:
+            return
+        self.step_changed.emit(STEP_PLEASE_WAIT)
+        self.progress.emit(0)
+
+    def _enter_usb_search(self):
+        """The tool is on a search line. Show the connect sentence, still at 0%.
+
+        A later handshake retry prints search or hint again, so this returns
+        even after please-wait or a numbered stage.
+        """
+        already = getattr(self, "_tool_wait_phase", PHASE_BEFORE) == PHASE_CONNECT
+        self._usb_search_active = True
+        self._past_usb_search = False
+        self._tool_wait_phase = PHASE_CONNECT
+        if already:
+            return
+        self.step_changed.emit(STEP_WAITING)
+        self.progress.emit(0)
+        self.action_changed.emit(tr("action_searching"))
+
+    def _note_tool_wait_line(self, line):
+        """Connect only on a search line; please-wait on the next real line."""
+        current = getattr(self, "_tool_wait_phase", PHASE_BEFORE)
+        phase = advance_tool_wait_phase(current, line)
+        if phase == current:
+            return
+        if phase == PHASE_CONNECT:
+            # _enter_usb_search records the phase and emits STEP_WAITING.
+            self._enter_usb_search()
+            return
+        self._tool_wait_phase = phase
+        if phase == PHASE_PLEASE_WAIT:
+            self._usb_search_active = False
+            self.step_changed.emit(STEP_PLEASE_WAIT)
+            self.progress.emit(0)
+
+    def _leave_usb_search(self):
+        """A numbered stage started. A later search line may show connect again."""
+        self._usb_search_active = False
+        self._past_usb_search = True
+
+    def _classify_mtk_output(self, line):
+        """Search and forward lines from MTKClient stdout or a ``[LOG]`` payload."""
+        if is_mtk_usb_search_line(line):
+            self._enter_usb_search()
+            return
+        text = tool_line_body(line)
+        low = text.lower()
+        if not text:
+            return
+        if (
+            "port - device detected" in low
+            or "usb port detected" in low
+            or "brom connected" in low
+        ):
+            self._leave_usb_search()
+            self.step_changed.emit(STEP_DETECT)
+            self.progress.emit(12)
+            return
+        if (
+            "download da" in low
+            or "of da has been sent" in low
+            or "connect da" in low
+        ):
+            self._leave_usb_search()
+            self.step_changed.emit(STEP_DOWNLOAD_DA)
+            self.progress.emit(12)
+            return
+        if "of image data has been sent" in low or "writing partition" in low:
+            self._leave_usb_search()
+            self.step_changed.emit(STEP_WRITE)
+            return
+
     def _log(self, msg):
+        for line in str(msg).splitlines() or [str(msg)]:
+            self._note_tool_wait_line(line)
         flush_now = False
         with self._log_lock:
             self._log_pending.append(str(msg))
@@ -1131,8 +1335,8 @@ class FlashWorker(QThread):
             # phase before a backend switch); skip re-extraction entirely.
             self._log(f"Reusing extracted directory: {pre}")
             extract_dir = pre
-            self.step_changed.emit(STEP_WAITING)
-            self.progress.emit(0)
+            # Ready on disk. The connect sentence waits for a real search line.
+            self._announce_please_wait()
         else:
             self.step_changed.emit(STEP_EXTRACTING)
             self.progress.emit(5)
@@ -1379,6 +1583,7 @@ class FlashWorker(QThread):
 
         auth_file = device_tracking.sp_auth_file()
 
+        self._announce_please_wait()
         if IS_WINDOWS:
             cmd = [
                 str(flash_tool_exe),
@@ -1386,9 +1591,6 @@ class FlashWorker(QThread):
                     scatter_arg, da_arg, auth_file, self._log
                 ),
             ]
-            self.step_changed.emit(STEP_WAITING)
-            self.progress.emit(0)
-            self.action_changed.emit(tr("action_searching"))
             self._log("Launching SP Flash Tool (console mode, searching USB)...")
             self._log("Keep the device unplugged until the connect prompt appears.")
             guardian = None
@@ -1506,32 +1708,38 @@ class FlashWorker(QThread):
         return int(round(start + span * frac))
 
     def _classify_sp_stdout(self, line):
+        if is_sp_usb_search_line(line):
+            self._enter_usb_search()
+            return
         low = line.lower()
         if "s_chip_type_not_match" in low:
             self._sp_mismatch = True
-        elif "scanning usb" in low or "search usb" in low:
-            self.step_changed.emit(STEP_WAITING)
-            self.progress.emit(0)
-            self.action_changed.emit(tr("action_searching"))
         elif "brom connected" in low:
+            self._leave_usb_search()
             self.step_changed.emit(STEP_DETECT)
             self.progress.emit(12)
             self.action_changed.emit(tr("action_brom_detected"))
         elif "of da has been sent" in low:
+            self._leave_usb_search()
             self.step_changed.emit(STEP_DOWNLOAD_DA)
             self.progress.emit(self._mapped_phase_percent(line, 12, 6))
             self.action_changed.emit(tr("action_downloading_da"))
         elif "of bootloader has been sent" in low:
+            self._leave_usb_search()
             self.step_changed.emit(STEP_DOWNLOAD_BL)
             self.progress.emit(self._mapped_phase_percent(line, 16, 2))
             self.action_changed.emit(tr("action_downloading_bootloader"))
         elif "format succeeded" in low:
+            self._leave_usb_search()
+            self.step_changed.emit(STEP_WRITE)
             self.progress.emit(20)
             self.action_changed.emit(tr("action_format_succeeded"))
         elif "of image data has been sent" in low:
+            self._leave_usb_search()
             self.step_changed.emit(STEP_WRITE)
             self._update_sp_image_progress(line)
         elif "download ok" in low:
+            self._leave_usb_search()
             self.step_changed.emit(STEP_DONE)
             self.progress.emit(100)
             self.action_changed.emit(tr("action_flash_complete"))
@@ -1611,15 +1819,20 @@ class FlashWorker(QThread):
                     for ln in new_lines:
                         low = ln.lower()
                         if "of image data has been sent" in low:
+                            self._leave_usb_search()
                             self.step_changed.emit(STEP_WRITE)
                             self._update_sp_image_progress(ln)
                         elif "download ok" in low:
+                            self._leave_usb_search()
                             self.step_changed.emit(STEP_DONE)
                             self.progress.emit(100)
                         elif "brom connected" in low:
+                            self._leave_usb_search()
                             self.step_changed.emit(STEP_DETECT)
                             self.progress.emit(12)
                         elif "of da has been sent" in low or "of bootloader has been sent" in low:
+                            self._classify_sp_stdout(ln)
+                        elif is_sp_usb_search_line(ln):
                             self._classify_sp_stdout(ln)
                         # Forward the internal log itself, minus lines the
                         # console stream already reported, so the diagnostics
@@ -1764,8 +1977,7 @@ class FlashWorker(QThread):
             return
 
         self._tool_tag = "MTK"
-        self.step_changed.emit(STEP_WAITING)
-        self.progress.emit(0)
+        self._announce_please_wait()
         self.action_changed.emit(tr("action_init_mtkclient"))
         self._log(tr("action_init_mtkclient"))
 
@@ -1811,21 +2023,30 @@ class FlashWorker(QThread):
                     continue
                 if line.startswith("[PROGRESS] "):
                     try:
-                        self.progress.emit(int(line[len("[PROGRESS] "):]))
+                        pct = int(line[len("[PROGRESS] "):])
                     except ValueError:
-                        pass
+                        pct = None
+                    # Stay at 0 until the tool has moved past the USB search.
+                    if pct is not None and (self._past_usb_search or pct == 0):
+                        self.progress.emit(0 if not self._past_usb_search else pct)
                 elif line.startswith("[STEP] "):
-                    self.step_changed.emit(line[len("[STEP] "):])
+                    step = line[len("[STEP] "):]
+                    if step not in (STEP_WAITING, STEP_PLEASE_WAIT):
+                        self._leave_usb_search()
+                    self.step_changed.emit(step)
                 elif line.startswith("[ACTION] "):
                     self.action_changed.emit(line[len("[ACTION] "):])
                 elif line.startswith("[LOG] "):
-                    self._log(line[len("[LOG] "):])
+                    payload = line[len("[LOG] "):]
+                    self._log(payload)
+                    self._classify_mtk_output(payload)
                 elif line.startswith("[RESULT] "):
                     parts = line[len("[RESULT] "):].split(" ", 1)
                     final_ok = bool(int(parts[0]))
                     final_msg = parts[1] if len(parts) > 1 else ""
                 else:
                     self._log(line)
+                    self._classify_mtk_output(line)
 
             self._process.wait()
             if self._cancelled:
@@ -1851,8 +2072,7 @@ class FlashWorker(QThread):
     def _flash_via_mtkclient_core(self, extract_dir, scatter_file, platform=""):
         # Raw output printed while this backend runs comes from MTKClient.
         self._tool_tag = "MTK"
-        self.step_changed.emit(STEP_WAITING)
-        self.progress.emit(0)
+        self._announce_please_wait()
         self.action_changed.emit(tr("action_init_mtkclient"))
         self._log(tr("action_init_mtkclient"))
         try:
@@ -1894,8 +2114,7 @@ class FlashWorker(QThread):
         else:
             self._log("No preloader image found; using built-in EMI")
 
-        self.step_changed.emit(STEP_WAITING)
-        self.progress.emit(0)
+        self._announce_please_wait()
         self.action_changed.emit(tr("action_wait_mtk"))
         self._log("Waiting for MTK device... Power off the device and connect USB.")
 
@@ -1917,6 +2136,7 @@ class FlashWorker(QThread):
                 self._log(f"  (repeated {repeated['count']}x)")
             repeated["text"], repeated["count"] = text, 1
             self._log(text)
+            self._classify_mtk_output(text)
 
         def _on_mtk_stall(idle):
             seconds = int(idle)
@@ -1928,6 +2148,7 @@ class FlashWorker(QThread):
         watcher = _StallWatcher(_on_mtk_stall)
 
         def _on_connected(mtk):
+            self._leave_usb_search()
             self.step_changed.emit(STEP_DETECT)
             self.progress.emit(12)
             # Report the mode mtkclient actually found: PID 0x2000 (and the
@@ -2116,6 +2337,7 @@ class FlashWorker(QThread):
                     # The install is considered started once the DA actually
                     # writes images (the reference updater derives install
                     # progress from image writes, not from the handshake).
+                    self._leave_usb_search()
                     self.step_changed.emit(STEP_WRITE)
                     self.progress.emit(20)
                     self.action_changed.emit(tr("action_install_in_progress"))

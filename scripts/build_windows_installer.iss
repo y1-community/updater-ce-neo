@@ -62,9 +62,21 @@ AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}/issues
 AppUpdatesURL={#MyAppURL}/releases
+; {autopf} is Program Files for an all-users install and the per-user
+; Programs folder when the person chooses "just for me". Either way it is
+; not the old %LocalAppData%\Innioasis Updater directory.
 DefaultDirName={autopf}\{#MyAppDirParent}\{#MyAppName}
 DefaultGroupName={#MyAppGroup}
 DisableProgramGroupPage=yes
+; Same AppId updates an existing install in place. A previous directory is
+; kept, except the retired LocalAppData\Innioasis Updater folder, which the
+; [Code] section sends to {autopf} instead.
+UsePreviousAppDir=yes
+UsePreviousTasks=yes
+PrivilegesRequired=admin
+PrivilegesRequiredOverridesAllowed=dialog
+CloseApplications=yes
+RestartApplications=no
 LicenseFile=..\LICENSE
 OutputDir=..\dist
 OutputBaseFilename={#MyOutputBase}-{#MyAppVersion}
@@ -87,8 +99,16 @@ Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.i
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
+[Dirs]
+; The tool writes history.ini and logs beside flash_tool.exe. A standard
+; account cannot modify Program Files, so an all-users install grants Users
+; modify on this folder only. A per-user install is already writable.
+Name: "{app}\SP_Flash_Tool"; Permissions: users-modify; Check: IsAdminInstallMode
+Name: "{commonappdata}\SP_FT_Logs"; Permissions: users-modify; Check: IsAdminInstallMode
+
 [Files]
 ; Main application binaries, _internal runtime, and bundled SP Flash Tool 5.1904
+; ignoreversion replaces older files, so this same installer updates in place.
 Source: "{#MyDistDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
@@ -105,84 +125,249 @@ Type: filesandordirs; Name: "{app}\SP_Flash_Tool\history.ini"
 Type: files; Name: "{app}\updater.log"
 
 [Code]
-// Helper to compare two semantic version strings (e.g. '3.0.2' and '3.0.7')
-function CompareVersion(V1, V2: String): Integer;
+const
+  UninstallRoot = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\';
+  CurrentUninstallKey = UninstallRoot + '{#MyAppId}_is1';
+  LegacyUninstallKey = UninstallRoot + 'Innioasis Updater_is1';
+
 var
-  P1, P2, N1, N2: Integer;
+  PriorDesktopShortcut: Boolean;
+
+function IsUpdaterCeBrand: Boolean;
 begin
-  Result := 0;
-  while (Length(V1) > 0) or (Length(V2) > 0) do
+#ifdef MyIsMediaTek
+  Result := False;
+#else
+  Result := True;
+#endif
+end;
+
+function QueryUninstallValue(const SubKey, ValueName: String; var Value: String): Boolean;
+begin
+  Result :=
+    RegQueryStringValue(HKLM64, SubKey, ValueName, Value) or
+    RegQueryStringValue(HKLM32, SubKey, ValueName, Value) or
+    RegQueryStringValue(HKCU, SubKey, ValueName, Value);
+end;
+
+function IsLegacyLocalInstall(const Dir: String): Boolean;
+begin
+  { The pre-3.x tree, and any 3.x copy that was still living there. }
+  Result := Pos('\appdata\local\innioasis updater', Lowercase(Dir)) > 0;
+end;
+
+function UninstallerExe(const Uninst: String): String;
+var
+  S: String;
+  P: Integer;
+begin
+  S := Trim(Uninst);
+  if (Length(S) > 1) and (S[1] = '"') then
   begin
-    P1 := Pos('.', V1);
-    if P1 > 0 then
-    begin
-      N1 := StrToIntDef(Copy(V1, 1, P1 - 1), 0);
-      Delete(V1, 1, P1);
-    end
-    else
-    begin
-      N1 := StrToIntDef(V1, 0);
-      V1 := '';
-    end;
+    Delete(S, 1, 1);
+    P := Pos('"', S);
+    if P > 0 then
+      S := Copy(S, 1, P - 1);
+  end
+  else
+  begin
+    P := Pos(' ', S);
+    if P > 0 then
+      S := Copy(S, 1, P - 1);
+  end;
+  Result := S;
+end;
 
-    P2 := Pos('.', V2);
-    if P2 > 0 then
-    begin
-      N2 := StrToIntDef(Copy(V2, 1, P2 - 1), 0);
-      Delete(V2, 1, P2);
-    end
-    else
-    begin
-      N2 := StrToIntDef(V2, 0);
-      V2 := '';
-    end;
+procedure RunSilentUninstall(const SubKey: String);
+var
+  Uninst, Exe: String;
+  ResultCode: Integer;
+begin
+  if not QueryUninstallValue(SubKey, 'UninstallString', Uninst) then
+    Exit;
+  Exe := UninstallerExe(Uninst);
+  if (Exe = '') or (not FileExists(Exe)) then
+    Exit;
+  Exec(Exe, '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
 
-    if N1 > N2 then
-    begin
-      Result := 1;
-      Exit;
-    end
-    else if N1 < N2 then
-    begin
-      Result := -1;
-      Exit;
-    end;
+function NameContains(const Name, Needle: String): Boolean;
+begin
+  Result := Pos(Lowercase(Needle), Lowercase(Name)) > 0;
+end;
+
+function IsRetiredShortcut(const Name: String): Boolean;
+begin
+  Result :=
+    NameContains(Name, 'Innioasis') or
+    NameContains(Name, 'SP Flash Tool') or
+    NameContains(Name, 'Updater CE');
+end;
+
+{ Drop Start Menu folders named *Innioasis*, and shortcuts for the old
+  app or SP Flash Tool, on this user's menus and desktops and on the
+  system-wide ones. The new shortcuts are created afterwards from the
+  tasks the person just confirmed. }
+procedure PurgeShortcutTree(const Root: String);
+var
+  FindRec: TFindRec;
+  Path: String;
+begin
+  if (Root = '') or (not DirExists(Root)) then
+    Exit;
+  if not FindFirst(Root + '\*', FindRec) then
+    Exit;
+  try
+    repeat
+      if (FindRec.Name = '.') or (FindRec.Name = '..') then
+        Continue;
+      Path := Root + '\' + FindRec.Name;
+      if (FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0 then
+      begin
+        if NameContains(FindRec.Name, 'Innioasis') then
+          DelTree(Path, True, True, True)
+        else
+          PurgeShortcutTree(Path);
+      end
+      else if IsRetiredShortcut(FindRec.Name) then
+        DeleteFile(Path);
+    until not FindNext(FindRec);
+  finally
+    FindClose(FindRec);
   end;
 end;
 
-// Detect and automatically remove legacy pre-3.0 software, and update existing 3.0 releases if newer than 3.0.2
-function InitializeSetup(): Boolean;
-var
-  UninstPath: String;
-  InstalledVer: String;
-  ResultCode: Integer;
+procedure PurgeRetiredShortcuts;
 begin
-  Result := True;
+  if not IsUpdaterCeBrand then
+    Exit;
+  PurgeShortcutTree(ExpandConstant('{userprograms}'));
+  PurgeShortcutTree(ExpandConstant('{userdesktop}'));
+  PurgeShortcutTree(ExpandConstant('{commonprograms}'));
+  PurgeShortcutTree(ExpandConstant('{commondesktop}'));
+end;
 
-  // 1. Check for legacy pre-3.0 Innioasis Updater uninstall registry entry in 64-bit and 32-bit registry
-  if RegQueryStringValue(HKLM64, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\Innioasis Updater_is1', 'UninstallString', UninstPath) or
-     RegQueryStringValue(HKLM32, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\Innioasis Updater_is1', 'UninstallString', UninstPath) or
-     RegQueryStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\Innioasis Updater_is1', 'UninstallString', UninstPath) then
-  begin
-    // Run legacy uninstaller silently
-    Exec(RemoveQuotes(UninstPath), '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  end;
-
-  // 2. Check existing version of Updater CE
-  if RegQueryStringValue(HKLM64, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppId}_is1', 'DisplayVersion', InstalledVer) or
-     RegQueryStringValue(HKLM32, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppId}_is1', 'DisplayVersion', InstalledVer) or
-     RegQueryStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppId}_is1', 'DisplayVersion', InstalledVer) then
-  begin
-    // Update existing 3.0 releases if incoming version is newer than 3.0.2
-    if (CompareVersion(InstalledVer, '3.0.0') >= 0) and (CompareVersion(InstalledVer, '3.0.2') <= 0) then
-    begin
-      if CompareVersion('{#MyAppVersion}', '3.0.2') <= 0 then
+function DirHasRetiredShortcut(const Dir: String): Boolean;
+var
+  FindRec: TFindRec;
+begin
+  Result := False;
+  if (Dir = '') or (not DirExists(Dir)) then
+    Exit;
+  if not FindFirst(Dir + '\*', FindRec) then
+    Exit;
+  try
+    repeat
+      if (FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) = 0 then
       begin
-        MsgBox('An existing release of Updater CE (' + InstalledVer + ') is installed. Version must be newer than 3.0.2 to update.', mbInformation, MB_OK);
-        Result := False;
-        Exit;
+        if IsRetiredShortcut(FindRec.Name) then
+        begin
+          Result := True;
+          Exit;
+        end;
       end;
-    end;
+    until not FindNext(FindRec);
+  finally
+    FindClose(FindRec);
   end;
+end;
+
+procedure RemoveLegacyDataDir(const Dir: String);
+begin
+  if (Dir <> '') and DirExists(Dir) and IsLegacyLocalInstall(Dir) then
+    DelTree(Dir, True, True, True);
+end;
+
+{ %LocalAppData%\Innioasis Updater for this account, and for every
+  profile when the install is allowed to touch the machine. }
+procedure RemoveLegacyLocalAppData;
+var
+  UsersRoot, ProfileDir: String;
+  FindRec: TFindRec;
+begin
+  if not IsUpdaterCeBrand then
+    Exit;
+  RemoveLegacyDataDir(ExpandConstant('{localappdata}\Innioasis Updater'));
+  if not IsAdminInstallMode then
+    Exit;
+  UsersRoot := ExpandConstant('{sd}\Users');
+  if not FindFirst(UsersRoot + '\*', FindRec) then
+    Exit;
+  try
+    repeat
+      if ((FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0) and
+         (FindRec.Name <> '.') and (FindRec.Name <> '..') then
+      begin
+        ProfileDir := UsersRoot + '\' + FindRec.Name + '\AppData\Local\Innioasis Updater';
+        RemoveLegacyDataDir(ProfileDir);
+      end;
+    until not FindNext(FindRec);
+  finally
+    FindClose(FindRec);
+  end;
+end;
+
+function TasksWereRecorded: Boolean;
+var
+  Tasks: String;
+begin
+  Result := QueryUninstallValue(CurrentUninstallKey, 'Inno Setup: Selected Tasks', Tasks);
+end;
+
+function InitializeSetup(): Boolean;
+begin
+  { Any earlier release of this AppId is updated by installing over it.
+    There is no version floor: the same file is a clean install and an update. }
+  Result := True;
+  PriorDesktopShortcut := False;
+  if IsUpdaterCeBrand then
+  begin
+    PriorDesktopShortcut :=
+      DirHasRetiredShortcut(ExpandConstant('{userdesktop}')) or
+      DirHasRetiredShortcut(ExpandConstant('{commondesktop}'));
+  end;
+end;
+
+procedure InitializeWizard;
+var
+  Prev: String;
+begin
+  if IsUpdaterCeBrand then
+  begin
+    Prev := WizardForm.DirEdit.Text;
+    if IsLegacyLocalInstall(Prev) then
+      WizardForm.DirEdit.Text := ExpandConstant('{autopf}\{#MyAppDirParent}\{#MyAppName}');
+  end;
+  if IsUpdaterCeBrand and (not TasksWereRecorded) and PriorDesktopShortcut then
+  begin
+    WizardSelectTasks('desktopicon');
+  end;
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  Prev, Dest: String;
+begin
+  Result := '';
+  NeedsRestart := False;
+  if not IsUpdaterCeBrand then
+    Exit;
+
+  { Pre-3.x registered itself under a different uninstall key. }
+  RunSilentUninstall(LegacyUninstallKey);
+
+  { A 3.x copy that still lives in LocalAppData is removed so the new
+    files and shortcuts are the Program Files (or per-user Programs) ones.
+    An install that is already in the destination folder is updated in place. }
+  if QueryUninstallValue(CurrentUninstallKey, 'InstallLocation', Prev) then
+  begin
+    Dest := ExpandConstant('{app}');
+    if IsLegacyLocalInstall(Prev) and
+       (CompareText(RemoveBackslashUnlessRoot(Prev), RemoveBackslashUnlessRoot(Dest)) <> 0) then
+      RunSilentUninstall(CurrentUninstallKey);
+  end;
+
+  PurgeRetiredShortcuts;
+  RemoveLegacyLocalAppData;
 end;
 

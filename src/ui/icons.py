@@ -10,12 +10,23 @@ Integrates native system iconography across desktop operating systems:
 from __future__ import annotations
 
 import logging
+import os
 import platform
 import sys
 from typing import Optional
 
 from PySide6.QtCore import QByteArray, QRect, QSize, Qt
-from PySide6.QtGui import QColor, QFont, QFontInfo, QIcon, QImage, QPainter, QPixmap
+from PySide6.QtGui import (
+    QColor,
+    QFont,
+    QFontDatabase,
+    QFontInfo,
+    QIcon,
+    QImage,
+    QPainter,
+    QPixmap,
+    QRawFont,
+)
 from PySide6.QtSvg import QSvgRenderer
 
 logger = logging.getLogger(__name__)
@@ -135,9 +146,34 @@ _FREEDESKTOP_MAP = {
     "file": ["text-x-generic-symbolic", "text-x-generic", "document-symbolic", "document"],
     "folder": ["folder-open-symbolic", "folder-open", "folder-symbolic", "folder"],
     "complete": ["emblem-ok-symbolic", "emblem-ok", "object-select-symbolic", "dialog-ok"],
+    # Question-in-a-circle. First theme that resolves wins; no drawn substitute.
+    "help": ["help-about", "help-faq", "dialog-question"],
 }
 
+# Help is U+E897 (question mark in a circle) in both Segoe icon fonts.
+_SEGOE_HELP_CODEPOINTS = (0xE897,)
+# Fluent is registered as SegoeIcons.ttf on current Windows; older installs
+# used SegoeFluentIcons.ttf. MDL2 is the fallback family.
+_SEGOE_HELP_FONTS = (
+    ("Segoe Fluent Icons", ("SegoeIcons.ttf", "SegoeFluentIcons.ttf")),
+    ("Segoe MDL2 Assets", ("segmdl2.ttf",)),
+)
+_SF_HELP_SYMBOLS = ("questionmark.circle", "questionmark")
+HELP_ICON_PX = 16
+
 _segoe_font_family: Optional[str] = None
+_activated_segoe_families: set[str] = set()
+_help_icon_source: str = ""
+
+
+def _remember_help_source(source: str) -> None:
+    global _help_icon_source
+    _help_icon_source = source
+
+
+def help_icon_source() -> str:
+    """Native glyph actually chosen: ``segoe:Family:U+E897``, ``sf:…``, ``theme:…``, or ``text:?``."""
+    return _help_icon_source
 
 
 def _detect_segoe_font() -> Optional[str]:
@@ -155,14 +191,15 @@ def _detect_segoe_font() -> Optional[str]:
     return None
 
 
-def _get_sf_symbol_pixmap(symbol_name: str, size: int, color: str = "#FFFFFF") -> Optional[QPixmap]:
-    """Load native Apple SF Symbol on macOS and tint to target color with Retina clarity."""
-    if not IS_MAC:
-        return None
-    sf_name = _SF_SYMBOL_MAP.get(symbol_name)
-    if not sf_name:
-        return None
+def _sf_symbol_names(symbol_name: str) -> tuple[str, ...]:
+    if symbol_name == "help":
+        return _SF_HELP_SYMBOLS
+    mapped = _SF_SYMBOL_MAP.get(symbol_name)
+    return (mapped,) if mapped else ()
 
+
+def _load_sf_symbol(sf_name: str, size: int, color: str) -> Optional[QPixmap]:
+    """One SF Symbol by system name. ``questionmark.circle`` is the help glyph."""
     try:
         from AppKit import NSImage, NSImageSymbolConfiguration
 
@@ -188,23 +225,76 @@ def _get_sf_symbol_pixmap(symbol_name: str, size: int, color: str = "#FFFFFF") -
         return None
 
 
-def _get_segoe_pixmap(symbol_name: str, size: int, color: str = "#FFFFFF") -> Optional[QPixmap]:
-    """Render an MS Segoe symbol glyph on Windows, crisp and unclipped.
+def _get_sf_symbol_pixmap(symbol_name: str, size: int, color: str = "#FFFFFF") -> Optional[QPixmap]:
+    """Load native Apple SF Symbol on macOS and tint to target color with Retina clarity."""
+    if not IS_MAC:
+        return None
+    names = _sf_symbol_names(symbol_name)
+    if not names:
+        return None
+    for sf_name in names:
+        pix = _load_sf_symbol(sf_name, size, color)
+        if pix is not None and not pix.isNull():
+            if symbol_name == "help":
+                _remember_help_source(f"sf:{sf_name}")
+            return pix
+    return None
 
-    The glyph is drawn on a 4x canvas and scaled down. Drawing straight into a
-    small box clipped the taller Segoe glyphs (the font's em box is bigger than
-    the requested pixmap), which is why only parts of a symbol showed.
-    """
+
+def _windows_font_file(filenames: tuple[str, ...]) -> Optional[str]:
+    windir = os.environ.get("WINDIR") or os.environ.get("SystemRoot") or r"C:\Windows"
+    folder = os.path.join(windir, "Fonts")
+    for filename in filenames:
+        path = os.path.join(folder, filename)
+        if os.path.isfile(path):
+            return path
+    return None
+
+
+def _activate_segoe_family(family: str, filenames: tuple[str, ...]) -> bool:
+    """Make ``family`` resolvable. Headless Qt often misses installed icon fonts until the file is loaded."""
+    if family in _activated_segoe_families:
+        return True
+    font = QFont(family)
+    info = QFontInfo(font)
+    if info.exactMatch() and info.family() == family:
+        _activated_segoe_families.add(family)
+        return True
+    path = _windows_font_file(filenames)
+    if not path:
+        return False
+    font_id = QFontDatabase.addApplicationFont(path)
+    if font_id < 0:
+        return False
+    if family not in QFontDatabase.applicationFontFamilies(font_id):
+        return False
+    _activated_segoe_families.add(family)
+    return True
+
+
+def _segoe_family_supports(family: str, code: int) -> bool:
+    font = QFont(family)
+    raw = QRawFont.fromFont(font)
+    if not raw.isValid() or raw.familyName() != family:
+        return False
+    return bool(raw.supportsCharacter(code))
+
+
+def _windows_help_glyph() -> Optional[tuple[str, int]]:
+    """Fluent Help (U+E897) when that font is installed, otherwise the same glyph in MDL2."""
     if not IS_WINDOWS:
         return None
-    code = _SEGOE_SYMBOL_MAP.get(symbol_name)
-    if not code:
-        return None
+    for family, filenames in _SEGOE_HELP_FONTS:
+        if not _activate_segoe_family(family, filenames):
+            continue
+        for code in _SEGOE_HELP_CODEPOINTS:
+            if _segoe_family_supports(family, code):
+                return family, code
+    return None
 
-    family = _detect_segoe_font()
-    if not family:
-        return None
 
+def _render_segoe_glyph(family: str, code: int, size: int, color: str) -> Optional[QPixmap]:
+    """Draw one Segoe icon-font glyph. Shared by toolbar symbols and the help mark."""
     try:
         canvas = max(int(size), 1) * 4
         pix = QPixmap(canvas, canvas)
@@ -229,8 +319,36 @@ def _get_segoe_pixmap(symbol_name: str, size: int, color: str = "#FFFFFF") -> Op
         out.setDevicePixelRatio(2.0)
         return out
     except Exception as e:
-        logger.debug("Failed to render Segoe symbol %s: %s", symbol_name, e)
+        logger.debug("Failed to render Segoe glyph U+%04X from %s: %s", code, family, e)
         return None
+
+
+def _get_segoe_pixmap(symbol_name: str, size: int, color: str = "#FFFFFF") -> Optional[QPixmap]:
+    """Render an MS Segoe symbol glyph on Windows, crisp and unclipped.
+
+    The glyph is drawn on a 4x canvas and scaled down. Drawing straight into a
+    small box clipped the taller Segoe glyphs (the font's em box is bigger than
+    the requested pixmap), which is why only parts of a symbol showed.
+    """
+    if not IS_WINDOWS:
+        return None
+    if symbol_name == "help":
+        found = _windows_help_glyph()
+        if not found:
+            return None
+        family, code = found
+        pix = _render_segoe_glyph(family, code, size, color)
+        if pix is not None and not pix.isNull():
+            _remember_help_source(f"segoe:{family}:U+{code:04X}")
+        return pix
+
+    code = _SEGOE_SYMBOL_MAP.get(symbol_name)
+    if not code:
+        return None
+    family = _detect_segoe_font()
+    if not family:
+        return None
+    return _render_segoe_glyph(family, code, size, color)
 
 
 def _get_freedesktop_pixmap(symbol_name: str, size: int, color: str = "#FFFFFF") -> Optional[QPixmap]:
@@ -246,6 +364,8 @@ def _get_freedesktop_pixmap(symbol_name: str, size: int, color: str = "#FFFFFF")
             pix = icon.pixmap(QSize(max(int(size), 1) * 2, max(int(size), 1) * 2))
             if not pix.isNull():
                 pix.setDevicePixelRatio(2.0)
+                if symbol_name == "help":
+                    _remember_help_source(f"theme:{name}")
                 if "symbolic" in name:
                     return tint_pixmap(pix, color)
                 return pix
@@ -310,6 +430,28 @@ def resolve_symbol_colors(
         foc = "#FFFFFF" if dark else active_text
 
     return norm, foc
+
+
+def get_help_pixmap(size: int = HELP_ICON_PX, color: Optional[str] = None) -> QPixmap:
+    """Small platform help glyph. An empty pixmap means show a \"?\" instead of a drawn icon.
+
+    Windows uses Segoe Fluent Icons Help (U+E897) when that font is installed,
+    otherwise Segoe MDL2 Assets at the same codepoint. macOS uses the SF Symbol
+    ``questionmark.circle`` (then ``questionmark``). Linux uses the first
+    FreeDesktop theme among help-about, help-faq, and dialog-question.
+    """
+    norm, _ = resolve_symbol_colors(color=color)
+    side = max(int(size), 1)
+    if IS_MAC:
+        pix = _get_sf_symbol_pixmap("help", side, norm)
+    elif IS_WINDOWS:
+        pix = _get_segoe_pixmap("help", side, norm)
+    else:
+        pix = _get_freedesktop_pixmap("help", side, norm)
+    if pix is not None and not pix.isNull():
+        return pix
+    _remember_help_source("text:?")
+    return QPixmap()
 
 
 def get_symbol_pixmap(

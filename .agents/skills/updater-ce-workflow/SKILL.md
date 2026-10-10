@@ -193,6 +193,6 @@ Expected output contains translated Markdown headers and bullet lists without HT
 
 ### 4. Windows Inno Setup Migration Rules
 - Inno Setup installer detects legacy versions (<3.0) via registry/uninstall keys and automatically removes them before installing Updater CE 3.0+.
-- Automatically upgrades existing 3.0 releases if newer than `3.0.2`.
+- The same installer is a clean install and an update of any earlier Updater CE release (same AppId, no version floor). It removes `%LocalAppData%\Innioasis Updater` and retired Innioasis / SP Flash Tool shortcuts, then installs under Program Files for all users or the per-user Programs folder when setup is told "just for me".
 - GitHub Actions workflow `windows_installer.yml` runs on `workflow_dispatch` (manual release trigger).
 

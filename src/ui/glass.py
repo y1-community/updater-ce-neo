@@ -1285,6 +1285,97 @@ class _DialogThemeWatcher(QObject):
         return super().eventFilter(watched, event)
 
 
+# A combo list is a separate popup. A fully opaque Base is the solid black
+# plate. This frost lets Acrylic, vibrancy, or the desktop tint show through
+# while the text stays on a readable veil.
+POPUP_FROST_ALPHA = 150
+
+
+def apply_popup_material(popup: QWidget) -> None:
+    """Give a menu popup the desktop's translucent material.
+
+    Windows uses Acrylic, macOS uses the window vibrancy, and other desktops
+    get the same see-through frost so the list is not a solid slab.
+    """
+    from PySide6.QtGui import QColor, QPalette
+    from PySide6.QtWidgets import QAbstractItemView
+
+    if popup is None:
+        return
+    try:
+        popup.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        popup.setAutoFillBackground(False)
+    except Exception:
+        pass
+    pal = popup.palette()
+    for role in (
+        QPalette.ColorRole.Window,
+        QPalette.ColorRole.Base,
+        QPalette.ColorRole.AlternateBase,
+    ):
+        color = QColor(pal.color(role))
+        color.setAlpha(POPUP_FROST_ALPHA)
+        pal.setColor(role, color)
+    popup.setPalette(pal)
+    view = popup.findChild(QAbstractItemView)
+    if view is not None:
+        view.setPalette(pal)
+        view.setAutoFillBackground(False)
+        viewport = view.viewport()
+        if viewport is not None:
+            viewport.setPalette(pal)
+            viewport.setAutoFillBackground(False)
+    try:
+        from .dark import is_dark
+        dark = is_dark()
+    except Exception:
+        dark = False
+    if IS_WINDOWS:
+        apply_windows_acrylic(popup, dark=dark)
+    elif IS_MACOS and is_glass_supported():
+        try:
+            apply_glass(popup, corner_radius=8.0, dark=dark)
+        except Exception:
+            pass
+
+
+class _ComboPopupMaterial(QObject):
+    """Apply the desktop material when a combo list opens."""
+
+    _instance = None
+
+    @classmethod
+    def instance(cls) -> _ComboPopupMaterial:
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        if event.type() == QEvent.Type.Show and isinstance(watched, QWidget):
+            window = watched.window()
+            flags = window.windowFlags() if window is not None else Qt.WindowType.Widget
+            if window is not None and window is not watched and bool(flags & Qt.WindowType.Popup):
+                apply_popup_material(window)
+        return False
+
+
+def arm_combo_popups(app) -> None:
+    """Watch every combo so its popup uses the translucent desktop material."""
+    from PySide6.QtWidgets import QComboBox
+
+    if app is None:
+        return
+    filt = _ComboPopupMaterial.instance()
+    for widget in app.allWidgets():
+        if not isinstance(widget, QComboBox):
+            continue
+        view = widget.view()
+        if view is None:
+            continue
+        view.removeEventFilter(filt)
+        view.installEventFilter(filt)
+
+
 def apply_dialog_theme(dialog: QDialog) -> None:
     """Apply host OS native window decoration, titlebar styling, and backdrop to a dialog.
 
