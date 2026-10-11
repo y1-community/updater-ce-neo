@@ -125,6 +125,34 @@ def is_mtk_usb_search_line(line) -> bool:
     return low.startswith("hint") or low.startswith("port - hint")
 
 
+# Tool-reported failures. mtkclient catches its own DA errors and still exits
+# 0, so these lines — not the exit code — are what tells a real install from a
+# wedged one: "Error on sending emmc read flash command, response: 0x0" left
+# the player half-written while the app announced "Install complete".
+_TOOL_FATAL_ERROR_RE = re.compile(
+    r"error on (sending|writing|reading|erasing)|"
+    r"^error\b|"
+    r"error:\s|"
+    r"failed to (write|send|erase|read)|"
+    r"response:\s*0x0\b|"
+    r"\bbrom error\b|"
+    r"\bda error:",
+    re.IGNORECASE,
+)
+
+
+def is_fatal_tool_line(line) -> bool:
+    """True when the tool reported a failure that must not read as success.
+
+    The app's own notices are exempt: "Notice: userdata format non-fatal: ..."
+    is a decision this side of the pipe made, not the tool reporting a failure.
+    """
+    text = tool_line_body(line)
+    if not text or text.lower().startswith("notice:"):
+        return False
+    return bool(_TOOL_FATAL_ERROR_RE.search(text))
+
+
 def is_logging_noise_line(line) -> bool:
     """Python logging failures that must not look like install progress.
 
@@ -1173,6 +1201,9 @@ class FlashWorker(QThread):
         # worker deliberately restarts the target (preloader -> BROM).
         self._device_loss_hold = device_loss_hold
         self._cancelled = False
+        # The first tool line that reported a failure, if any: a finished run
+        # with one of these is a failed install, whatever the exit code says.
+        self._tool_error = ""
         self._process = None
         self._sp_progress_hwm = 0
         self._sp_total_bytes = 0
@@ -1311,6 +1342,8 @@ class FlashWorker(QThread):
     def _log(self, msg):
         for line in str(msg).splitlines() or [str(msg)]:
             self._note_tool_wait_line(line)
+            if not self._tool_error and is_fatal_tool_line(line):
+                self._tool_error = line.strip()
         flush_now = False
         with self._log_lock:
             self._log_pending.append(str(msg))
@@ -2138,7 +2171,10 @@ class FlashWorker(QThread):
             if self._cancelled:
                 self.finished.emit(False, "USER_CANCELLED")
                 return
-            if self._process.returncode == 0:
+            if self._tool_error:
+                self._log(f"Install failed: {self._tool_error}")
+                self.finished.emit(False, "TOOL_ERROR")
+            elif self._process.returncode == 0:
                 self.finished.emit(True, "")
             else:
                 self.finished.emit(final_ok, final_msg or f"MTK_FLASH_FAILED ({self._process.returncode})")
@@ -2560,6 +2596,13 @@ class FlashWorker(QThread):
             except Exception as e:
                 self._log(f"Notice: userdata format non-fatal: {e}")
 
+            if self._tool_error:
+                # The tool said a command failed and then stopped; the player
+                # is very likely half written. Say so instead of "complete".
+                self._log(f"Install failed: {self._tool_error}")
+                self.step_changed.emit(STEP_WRITE)
+                self.finished.emit(False, "TOOL_ERROR")
+                return
             self.step_changed.emit(STEP_DONE)
             self.progress.emit(100)
             self.action_changed.emit(tr("action_flash_complete"))

@@ -13,7 +13,9 @@ from PySide6.QtCore import (
     QEasingCurve,
     QEventLoop,
     QPropertyAnimation,
+    QRectF,
     Qt,
+    QTimer,
     QVariantAnimation,
     Signal,
 )
@@ -25,6 +27,7 @@ from PySide6.QtWidgets import (
     QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
+    QProgressBar,
     QPushButton,
     QSizePolicy,
     QStackedWidget,
@@ -37,7 +40,7 @@ from PySide6.QtWidgets import (
 _WIDGET_SIZE_MAX = (1 << 24) - 1
 
 from ..i18n import tr
-from .dark import T
+from .dark import T, progress_bar_colors
 
 
 class StatusTag(QLabel):
@@ -866,4 +869,163 @@ class UpdateToast(QWidget):
         painter.setPen(Qt.NoPen)
         painter.setBrush(banner_material_color("info"))
         painter.drawRoundedRect(self.rect().adjusted(0, 0, -1, -1), 8, 8)
+        painter.end()
+
+
+# ---------------------------------------------------------------------------
+# Progress bars
+# ---------------------------------------------------------------------------
+
+BUSY_SEGMENT = 0.28
+"""Width of the sweeping segment in the busy state, as a fraction of the bar."""
+
+
+def paint_progress_bar(
+    painter,
+    rect,
+    *,
+    track: QColor,
+    fill: QColor,
+    label_color: QColor,
+    fraction: float = 0.0,
+    text: str = "",
+    busy: bool = False,
+    offset: float = 0.0,
+) -> None:
+    """Paint a rounded progress bar: track, accent chunk and centred percent.
+
+    A free function on purpose so the paint can be checked on its own canvas:
+    ``QWidget.render()`` fills an opaque background first, so a rendered
+    widget never proves what the bar itself drew.
+    """
+    rect = QRectF(rect)
+    if rect.width() <= 1 or rect.height() <= 1:
+        return
+    radius = min(8.0, rect.height() / 2.0)
+    painter.save()
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(track)
+    painter.drawRoundedRect(rect, radius, radius)
+
+    if busy:
+        span = rect.width() * BUSY_SEGMENT
+        travel = rect.width() + span
+        left = rect.left() - span + travel * (offset % 1.0)
+        chunk = QRectF(left, rect.top(), span, rect.height()).intersected(rect)
+    else:
+        width = rect.width() * max(0.0, min(1.0, float(fraction)))
+        chunk = QRectF(rect.left(), rect.top(), width, rect.height())
+    if chunk.width() > 1:
+        chunk_radius = min(radius, chunk.width() / 2.0, chunk.height() / 2.0)
+        painter.setBrush(fill)
+        painter.drawRoundedRect(chunk, chunk_radius, chunk_radius)
+
+    if text and not busy:
+        # A sweeping bar has no percentage to name.
+        painter.setPen(label_color)
+        painter.drawText(rect, int(Qt.AlignmentFlag.AlignCenter), text)
+    painter.restore()
+
+
+class InstallProgress(QProgressBar):
+    """Install and download progress bar, painted from the live theme.
+
+    The platform styles stopped drawing the chunk on some hosts — Aqua under
+    the app palette and acrylic on Windows both showed a groove with no fill,
+    so an install looked stalled at every percentage. The bar is painted here
+    instead: rounded track, accent chunk, and the percent centred on the bar
+    the way a system updater shows progress. A range of ``(0, 0)`` is the busy
+    state, drawn as a segment sweeping across an empty track.
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        # The sweep state comes first: property setters below ask for it.
+        self._sweep = 0.0
+        self._timer = QTimer(self)
+        self._timer.setInterval(40)
+        self._timer.timeout.connect(self._tick)
+        self.setObjectName("softwareUpdateProgress")
+        self.setRange(0, 100)
+        self.setValue(0)
+        self.setTextVisible(True)
+        self.setFormat("%p%")
+        self.setMinimumHeight(18)
+        self.setMaximumHeight(24)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+
+    # -- state ---------------------------------------------------------
+    def is_busy(self) -> bool:
+        """A bar with nothing left to fill sweeps instead of filling."""
+        return self.maximum() <= self.minimum()
+
+    def set_busy(self, busy: bool = True) -> None:
+        """``(0, 0)`` for the sweeping state, ``(0, 100)`` at zero otherwise."""
+        if busy:
+            self.setRange(0, 0)
+            return
+        self.setRange(0, 100)
+        self.setFormat("%p%")
+        self.setTextVisible(True)
+        self.setValue(0)
+
+    def showEvent(self, event):  # noqa: N802 (Qt naming)
+        super().showEvent(event)
+        self._sync_animation()
+
+    def hideEvent(self, event):  # noqa: N802 (Qt naming)
+        self._timer.stop()
+        super().hideEvent(event)
+
+    def setRange(self, minimum, maximum):  # noqa: N802 (Qt naming)
+        super().setRange(minimum, maximum)
+        self._sync_animation()
+
+    def setValue(self, value):  # noqa: N802 (Qt naming)
+        super().setValue(value)
+        if self.is_busy():
+            self._sync_animation()
+
+    def _sync_animation(self) -> None:
+        """Sweep only while a busy bar is on screen and motion is allowed."""
+        timer = getattr(self, "_timer", None)
+        if timer is None:
+            return
+        wanted = self.is_busy() and self.isVisible() and not prefers_reduced_motion()
+        if wanted and not timer.isActive():
+            self._sweep = 0.0
+            timer.start()
+        elif not wanted and timer.isActive():
+            timer.stop()
+        self.update()
+
+    def _tick(self) -> None:
+        self._sweep = (self._sweep + 0.02) % 1.0
+        self.update()
+
+    def fraction(self) -> float:
+        """How much of the track the chunk covers, 0.0 to 1.0."""
+        span = self.maximum() - self.minimum()
+        if span <= 0:
+            return 0.0
+        return max(0.0, min(1.0, (self.value() - self.minimum()) / span))
+
+    # -- paint ---------------------------------------------------------
+    def paintEvent(self, event):  # noqa: N802 (Qt naming)
+        busy = self.is_busy()
+        track, fill, label_color = progress_bar_colors(self)
+        text = "" if busy or not self.isTextVisible() else (self.text() or "")
+        painter = QPainter(self)
+        paint_progress_bar(
+            painter,
+            self.rect(),
+            track=track,
+            fill=fill,
+            label_color=label_color,
+            fraction=self.fraction(),
+            text=text,
+            busy=busy,
+            offset=self._sweep,
+        )
         painter.end()

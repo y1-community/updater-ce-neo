@@ -6400,7 +6400,7 @@ def test_sp_flash_auth_file():
 
 
 def test_window_minimum_size_and_titlebar_stability():
-    """Choose Software opens at the measured default. The floor stays smaller so it can shrink slightly."""
+    """Choose Software opens compact; every page then takes the size it needs."""
     from PySide6.QtWidgets import QApplication
     from src.ui.main_window import (
         DEFAULT_WINDOW_HEIGHT,
@@ -6408,6 +6408,7 @@ def test_window_minimum_size_and_titlebar_stability():
         MINIMUM_WINDOW_HEIGHT,
         MINIMUM_WINDOW_WIDTH,
         MainWindow,
+        default_window_size,
     )
 
     _reset_app_settings()
@@ -6422,30 +6423,35 @@ def test_window_minimum_size_and_titlebar_stability():
     assert w.minimumSize().width() <= DEFAULT_WINDOW_WIDTH
     assert w.minimumSize().height() <= DEFAULT_WINDOW_HEIGHT
 
-    # 2. Choose Software starts at the measured default
-    assert w.size().width() == DEFAULT_WINDOW_WIDTH
-    assert w.size().height() == DEFAULT_WINDOW_HEIGHT
+    # 2. Choose Software opens compact, clamped to this screen, and never
+    #    larger than the ceiling its own content can fill.
+    started_w, started_h = default_window_size(w.screen())
+    assert w.size().width() == started_w
+    assert started_h <= w.size().height() <= w.maximumHeight()
+    assert w.size().height() >= MINIMUM_WINDOW_HEIGHT
 
-    # 3. Settings keeps that compact size; the page scrolls
+    # 3. Each page owns the size it needs: the form takes room, and the
+    #    catalogue gives it back when it comes around again.
     w._nav_to_page(4)  # Settings
     app.processEvents()
-    assert w.size().width() == DEFAULT_WINDOW_WIDTH
-    assert w.size().height() == DEFAULT_WINDOW_HEIGHT
+    assert w.size().width() == started_w
+    assert w.size().height() <= w.maximumHeight()
 
     w._nav_to_page(0)  # Select
     app.processEvents()
-    assert w.size().width() == DEFAULT_WINDOW_WIDTH
-    assert w.size().height() == DEFAULT_WINDOW_HEIGHT
+    assert w.size().width() == started_w
+    fits_select_h = w.size().height()
+    assert fits_select_h <= w.maximumHeight()
 
     # 4. Flashing view fits without issues
     w._nav_to_page(1)  # Flash
     app.processEvents()
-    assert w.size().width() == DEFAULT_WINDOW_WIDTH
+    assert w.size().width() == started_w
 
     w._nav_to_page(0)  # Select
     app.processEvents()
-    assert w.size().width() == DEFAULT_WINDOW_WIDTH
-    assert w.size().height() == DEFAULT_WINDOW_HEIGHT
+    assert w.size().width() == started_w
+    assert w.size().height() == fits_select_h
 
     # 5. Check macOS seamless titlebar properties if running on macOS
     if sys.platform == "darwin":

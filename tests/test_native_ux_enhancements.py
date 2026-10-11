@@ -381,14 +381,13 @@ def test_compact_window_mode_and_sidebar_hiding():
     """Verify window shrinks to compact mode and hides Settings during an install."""
     from src.state import FlashState
     from src.ui.main_window import (
-        DEFAULT_WINDOW_HEIGHT,
-        DEFAULT_WINDOW_WIDTH,
         MINIMUM_WINDOW_HEIGHT,
         MINIMUM_WINDOW_WIDTH,
         _PAGE_SETTINGS,
         _PAGE_FLASH,
         _PAGE_SELECT,
         _PAGE_DIAGNOSTICS,
+        default_window_size,
     )
 
     app = QApplication.instance() or QApplication(sys.argv)
@@ -396,9 +395,11 @@ def test_compact_window_mode_and_sidebar_hiding():
     w.show()
     app.processEvents()
 
-    # Initial state. Diagnostics stays hidden until D is pressed.
-    assert w.size().width() == DEFAULT_WINDOW_WIDTH
-    assert w.size().height() == DEFAULT_WINDOW_HEIGHT
+    # Initial state. The window opens at the catalogue size, clamped to the
+    # screen it is on, and Diagnostics stays hidden until D is pressed.
+    expected_w, expected_h = default_window_size(w.screen())
+    assert w.size().width() == expected_w
+    assert w.size().height() == expected_h
     assert w._settings_btn.isVisible()
     assert w._log_btn.isVisible() is False
     assert w._diagnostics_page is None
@@ -423,7 +424,9 @@ def test_compact_window_mode_and_sidebar_hiding():
     assert w._lang_combo.isVisible() is False
     assert w._nav_buttons["nav_select_package"][0].isVisible() is True
     assert w._nav_buttons["nav_select_package"][0].isChecked() is True
-    assert w.size().width() <= 750
+    # Only the height hugs the progress card. The install window keeps the
+    # width the app already had, so the card does not jump sideways.
+    assert w.size().width() == expected_w
     assert w.size().height() <= 350
 
     # Diagnostics is part of the main window and can be opened mid-install.
@@ -510,17 +513,21 @@ def test_flash_page_compact_card_and_heading():
 
     app = QApplication.instance() or QApplication(sys.argv)
     fp = FlashPage()
-    for card in (fp._progress_card, fp._wait_card, fp._prep_card):
+    for card in (fp._progress_card, fp._wait_card, fp._prep_card, fp._download_card):
         assert card.maximumWidth() > 480
         assert card.sizePolicy().horizontalPolicy() == QSizePolicy.Policy.Expanding
     fp.show()
     fp.resize(720, 220)
     app.processEvents()
     assert fp._prep_card.width() >= fp.width() - 80, fp._prep_card.width()
-    # Headings
-    assert len(fp._headings) == 3
-    for h in fp._headings:
-        assert h.text() == tr("flash_install_in_progress")
+    # Every progress screen is wrapped the same way, one heading each, and the
+    # download screen keeps its own wording.
+    assert len(fp._headings) == 4
+    for heading, key in fp._headings:
+        assert heading.text() == tr(key)
+    assert [key for _h, key in fp._headings].count("flash_install_in_progress") == 3
+    assert fp._headings[-1][1] == "flash_download_in_progress"
+    assert fp._download_card.width() == fp._progress_card.width()
     # Cancel button
     assert fp._cancel_btn.width() <= 30
     assert fp._cancel_btn.height() <= 30
@@ -1671,7 +1678,10 @@ def test_progress_cancel_stays_in_the_card():
         assert page._stop_back.toolTip() == "Back"
         assert page._stop_continue.accessibleName() == "Cancel Install"
         assert page._stop_back.accessibleName() == "Back"
-        assert "software" in page._stop_message.lower()
+        # The interruption card asks the question the round buttons answer, and
+        # names the install it is about rather than the firmware.
+        assert "cancel" in page._stop_message.lower()
+        assert "install" in page._stop_message.lower()
         assert "firmware" not in page._stop_message.lower()
         assert prompt.wordWrap() and package.wordWrap()
         assert prompt.foregroundRole() == QPalette.ColorRole.WindowText
@@ -2611,6 +2621,15 @@ def test_type_help_tip_is_plain_text():
     app.processEvents()
 
 
+def _near(color, reference, tolerance: int = 24) -> bool:
+    """True when *color* is the painted *reference* up to anti-aliasing."""
+    return (
+        abs(color.red() - reference.red()) <= tolerance
+        and abs(color.green() - reference.green()) <= tolerance
+        and abs(color.blue() - reference.blue()) <= tolerance
+    )
+
+
 def test_progress_and_status_follow_the_live_theme():
     """Light text is dark, dark text is light, and the bars stay transparent.
 
@@ -2651,8 +2670,11 @@ def test_progress_and_status_follow_the_live_theme():
                 assert lightness < 80, (type(widget).__name__, foreground(widget).name())
             else:
                 assert lightness > 180, (type(widget).__name__, foreground(widget).name())
+        from src.ui.dark import contrast_ratio, progress_bar_colors
+
+        track, fill, label = progress_bar_colors(page._download_progress)
         image = page._download_progress.grab().toImage()
-        dark_pixels = light_pixels = accent_pixels = 0
+        dark_pixels = light_pixels = accent_pixels = track_pixels = 0
         for y in range(image.height()):
             for x in range(image.width()):
                 color = image.pixelColor(x, y)
@@ -2662,9 +2684,13 @@ def test_progress_and_status_follow_the_live_theme():
                     dark_pixels += 1
                 elif color.lightness() > 200:
                     light_pixels += 1
-                if color.blue() > 140 and color.red() < 80:
+                if _near(color, fill):
                     accent_pixels += 1
+                elif _near(color, track):
+                    track_pixels += 1
         assert accent_pixels > 20, "progress bar fill disappeared"
+        assert track_pixels > 20, "progress bar track disappeared"
+        assert contrast_ratio(label, fill) >= 3.0
         if dark_words:
             assert dark_pixels > 10, "progress percent is not dark on the light bar"
         else:

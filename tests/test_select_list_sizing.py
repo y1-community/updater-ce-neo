@@ -163,7 +163,7 @@ def _quiesce(app, window, timeout_s=10.0):
     return False
 
 
-def test_window_grows_with_list_but_never_shrinks():
+def test_window_follows_the_list_both_ways():
     from PySide6.QtWidgets import QApplication
     from src.ui.main_window import MainWindow, MINIMUM_WINDOW_HEIGHT
 
@@ -185,13 +185,142 @@ def test_window_grows_with_list_but_never_shrinks():
         assert _pump_until(app, lambda: w.height() > base_h), (base_h, w.height())
         grown_h = w.height()
 
-        # A shorter list keeps the size the window already has.
+        # A shorter list gives the room back: the window shrinks to the fit
+        # instead of keeping a band of empty space under the button.
         _fill_big_rows(sp, 1)
-        assert _pump_until(app, lambda: True)
-        assert w.height() == grown_h
+        assert _pump_until(app, lambda: w.height() < grown_h), (grown_h, w.height())
+        assert w.height() >= MINIMUM_WINDOW_HEIGHT
     finally:
         restore_workers()
     w.close()
+    app.processEvents()
+
+
+def test_default_size_is_wide_but_clamped_to_the_screen():
+    """The catalogue opens wide; a small screen gets a smaller window, not an oversize one."""
+    from PySide6.QtCore import QRect
+    from PySide6.QtGui import QGuiApplication
+    from PySide6.QtWidgets import QApplication
+    from src.ui.main_window import (
+        DEFAULT_WINDOW_HEIGHT,
+        DEFAULT_WINDOW_WIDTH,
+        MINIMUM_WINDOW_HEIGHT,
+        MINIMUM_WINDOW_WIDTH,
+        MainWindow,
+        default_window_size,
+    )
+
+    app = QApplication.instance() or QApplication(["--platform", "offscreen"])
+    screen = QGuiApplication.primaryScreen()
+    assert screen is not None
+
+    # The intended starting window is the compact one, and the ceiling is the
+    # widest catalogue layout.
+    from src.ui.main_window import MAXIMUM_WINDOW_WIDTH
+
+    assert DEFAULT_WINDOW_WIDTH == MINIMUM_WINDOW_WIDTH
+    assert DEFAULT_WINDOW_HEIGHT == MINIMUM_WINDOW_HEIGHT
+    assert MAXIMUM_WINDOW_WIDTH > DEFAULT_WINDOW_WIDTH
+
+    # On a screen that can hold it, the caller gets it unclamped.
+    class _Big:
+        def availableGeometry(self):
+            return QRect(0, 0, 3008, 1572)
+
+    assert default_window_size(_Big()) == (DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT)
+
+    # On a small screen it shrinks to fit, never past the floor.
+    class _Small:
+        def availableGeometry(self):
+            return QRect(0, 0, 700, 400)
+
+    assert default_window_size(_Small()) == (DEFAULT_WINDOW_WIDTH, MINIMUM_WINDOW_HEIGHT)
+    class _Tiny:
+        def availableGeometry(self):
+            return QRect(0, 0, 500, 320)
+
+    assert default_window_size(_Tiny()) == (MINIMUM_WINDOW_WIDTH, MINIMUM_WINDOW_HEIGHT)
+    assert default_window_size(None) == (
+        min(DEFAULT_WINDOW_WIDTH, screen.availableGeometry().width()),
+        min(DEFAULT_WINDOW_HEIGHT, screen.availableGeometry().height()),
+    )
+
+    # The window itself opens inside the screen it lands on.
+    w = MainWindow()
+    w.show()
+    app.processEvents()
+    avail = w.screen().availableGeometry()
+    assert w.width() <= avail.width()
+    assert w.height() <= avail.height()
+    assert w.width() >= MINIMUM_WINDOW_WIDTH
+    assert w.height() >= MINIMUM_WINDOW_HEIGHT
+    # Only the height hugs the install card: the width does not jump sideways.
+    wide = w.width()
+    w._power_off_prompt = True
+    try:
+        w._adjust_window_geometry()
+        app.processEvents()
+        assert w.width() == wide
+    finally:
+        w._power_off_prompt = False
+    w.close()
+    app.processEvents()
+
+
+def test_resizing_is_capped_at_the_content_and_the_design_width():
+    """The window can be dragged neither into empty space nor wider than designed."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QApplication
+    from src.ui.main_window import MainWindow, MAXIMUM_WINDOW_WIDTH
+
+    app = QApplication.instance() or QApplication(["--platform", "offscreen"])
+    w = MainWindow()
+    w.show()
+    assert _quiesce(app, w)
+    sp = w._select_page
+    restore_workers = _freeze_background_listing(w, sp)
+    try:
+        _fill_big_rows(sp, 2)
+        assert _pump_until(app, lambda: True)
+        screen_h = w.screen().availableGeometry().height()
+        assert w.maximumWidth() == min(MAXIMUM_WINDOW_WIDTH, w.screen().availableGeometry().width())
+        assert w.maximumHeight() < screen_h, "a short page must not offer empty height"
+
+        # Ask for more than the ceiling: the page's own content wins.
+        w.resize(MAXIMUM_WINDOW_WIDTH + 400, screen_h)
+        app.processEvents()
+        assert w.width() <= MAXIMUM_WINDOW_WIDTH
+        assert w.height() <= w.maximumHeight()
+
+        # The log is the one page that keeps every pixel.
+        w._unlock_diagnostics()
+        w._show_diagnostics()
+        app.processEvents()
+        assert w.maximumHeight() >= screen_h - 2
+    finally:
+        restore_workers()
+    w.close()
+    app.processEvents()
+
+
+def test_catalogue_links_hug_the_install_button():
+    """Install-from-file stays under the button, not floating in the card."""
+    from PySide6.QtWidgets import QApplication
+
+    app = QApplication.instance() or QApplication(["--platform", "offscreen"])
+    page = SelectPackagePage()
+    page.resize(900, 700)
+    page.show()
+    app.processEvents()
+    button = page._install_btn
+    link = page._install_from_file_link
+    gap = link.mapTo(page, link.rect().topLeft()).y() - button.mapTo(
+        page, button.rect().bottomLeft()
+    ).y()
+    assert 0 <= gap <= 40, gap
+    # The card's slack sits below the link, so the label keeps its own height.
+    assert link.height() <= link.sizeHint().height() + 4
+    page.close()
     app.processEvents()
 
 

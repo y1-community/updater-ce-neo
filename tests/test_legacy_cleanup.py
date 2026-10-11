@@ -22,16 +22,89 @@ from src.legacy_cleanup import (
 
 
 def test_protected_app_invariants():
-    """Verify safety invariants: InnioasisUpdater.app (no space) MUST NEVER be flagged."""
-    assert is_protected_app(Path("/Applications/InnioasisUpdater.app")) is True
-    assert is_protected_app(Path("~/Applications/InnioasisUpdater.app")) is True
-    assert is_protected_app(Path("/Applications/InnioasisUpdater.APP")) is True
+    """Current product bundles are protected; both old apps are removable.
+
+    The no-space bundle used to be listed as protected because it is the
+    standalone offline tool. It is now an *old* app: the user asked for either
+    or both of 'Innioasis Updater.app' and 'InnioasisUpdater.app' to be removed,
+    and the invariant that replaced it is the running bundle — whatever the
+    build is called, it can never offer to delete itself.
+    """
+    from src import legacy_cleanup
+
     assert is_protected_app(Path("/Applications/Updater CE.app")) is True
     assert is_protected_app(Path("/Applications/UpdaterCE.app")) is True
+    assert is_protected_app(Path("/Applications/MediaTek Installer.app")) is True
 
-    # The legacy version WITH A SPACE is not protected:
+    # Both old apps are offered, wherever they sit.
     assert is_protected_app(Path("/Applications/Innioasis Updater.app")) is False
     assert is_protected_app(Path("~/Applications/Innioasis Updater.app")) is False
+    assert is_protected_app(Path("/Applications/InnioasisUpdater.app")) is False
+
+    # …but never the bundle this process runs from, even when it has that name.
+    original = legacy_cleanup._running_app_bundle
+    legacy_cleanup._running_app_bundle = lambda: Path("/Applications/InnioasisUpdater.app")
+    try:
+        assert is_protected_app(Path("/Applications/InnioasisUpdater.app")) is True
+        assert is_protected_app(Path("/Applications/Innioasis Updater.app")) is False
+    finally:
+        legacy_cleanup._running_app_bundle = original
+
+
+def test_detection_finds_both_old_apps(tmp_path=None):
+    """Either old bundle — or both — raises the removal offer; current ones do not."""
+    import tempfile
+
+    from src import legacy_cleanup
+
+    original_dirs = legacy_cleanup.LEGACY_APP_DIRS
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "Innioasis Updater.app").mkdir()
+        (root / "InnioasisUpdater.app").mkdir()
+        (root / "Updater CE.app").mkdir()  # current product: never offered
+        legacy_cleanup.LEGACY_APP_DIRS = (root,)
+        try:
+            info = legacy_cleanup.detect_legacy_installations()
+            names = sorted(item.name for item in info["macos_apps"])
+            assert names == ["Innioasis Updater.app", "InnioasisUpdater.app"], names
+            assert info["has_legacy"] is True
+        finally:
+            legacy_cleanup.LEGACY_APP_DIRS = original_dirs
+
+
+def test_removal_takes_both_old_apps():
+    """Both old bundles go at once; the current one in the same folder stays."""
+    import tempfile
+
+    from src import legacy_cleanup
+
+    original_dirs = legacy_cleanup.LEGACY_APP_DIRS
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        spaced = root / "Innioasis Updater.app"
+        nospace = root / "InnioasisUpdater.app"
+        current = root / "Updater CE.app"
+        for bundle in (spaced, nospace, current):
+            bundle.mkdir()
+            (bundle / "marker").write_text("x", encoding="utf-8")
+        legacy_cleanup.LEGACY_APP_DIRS = (root,)
+        try:
+            ok, removed, errors = legacy_cleanup.remove_macos_legacy(
+                remove_apps=True, remove_app_support=False,
+                uninstall_platform_tools=False,
+            )
+            assert errors == [], errors
+            assert ok is True
+            assert sorted(Path(item).name for item in removed) == [
+                "Innioasis Updater.app",
+                "InnioasisUpdater.app",
+            ], removed
+            assert not spaced.exists()
+            assert not nospace.exists()
+            assert current.is_dir(), "a current product bundle must never be removed"
+        finally:
+            legacy_cleanup.LEGACY_APP_DIRS = original_dirs
 
 
 def test_format_bytes():
@@ -130,10 +203,219 @@ def test_remove_old_app_card_follows_the_detection():
             app.processEvents()
 
 
+def _answer_card(page, answers):
+    """Answer each in-card confirmation as it opens (True = accept button).
+
+    Returns the accept-button label of every question that was put to the
+    user, in order, so a test can prove which questions the card asked.
+    """
+    from PySide6.QtCore import QTimer
+
+    pending = list(answers)
+    asked = []
+
+    def tick():
+        card = page._legacy_cleanup_card
+        if getattr(card, "_confirm_accept", None) is None:
+            QTimer.singleShot(0, tick)
+            return
+        asked.append(card._confirm_accept.text())
+        answer = pending.pop(0) if pending else True
+        (card._confirm_accept if answer else card._confirm_reject).click()
+        if pending:
+            QTimer.singleShot(0, tick)
+
+    QTimer.singleShot(0, tick)
+    return asked
+
+
+def test_platform_tools_question_asks_and_is_honoured():
+    """The card asks before taking ADB, and the answer decides the removal."""
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    import src.legacy_cleanup as legacy
+    from src.i18n import tr, translator
+    from src.ui.settings_page import SettingsPage
+
+    app = QApplication.instance() or QApplication(["--platform", "offscreen"])
+    original_lang = translator().lang
+    original_detect = legacy.detect_legacy_installations
+    original_mac = legacy.remove_macos_legacy
+    original_linux = legacy.remove_linux_legacy
+    translator().set_language("en")
+    calls = []
+
+    def record(name):
+        def run(**kwargs):
+            calls.append((name, dict(kwargs)))
+            return True, ["/tmp/removed"], []
+
+        return run
+
+    legacy.remove_macos_legacy = record("mac")
+    legacy.remove_linux_legacy = record("linux")
+    page = None
+    try:
+        legacy.detect_legacy_installations = lambda: {
+            "has_legacy": True,
+            "has_platform_tools": True,
+            "macos_apps": [Path("/Applications/Innioasis Updater.app")],
+            "platform_tools_paths": [Path("/tmp/mock/adb")],
+            "estimated_bytes": 2 * 1024 * 1024,
+        }
+        page = SettingsPage()
+
+        # 1. Keep the tools: the app is removed, the tools are left alone.
+        asked = _answer_card(page, [True, True])
+        page._on_scan_legacy_installations()
+        app.processEvents()
+        assert asked == ["Uninstall", "Keep"], asked
+        assert len(calls) == 1, calls
+        assert calls[0][1]["uninstall_platform_tools"] is False
+        assert "ADB" in tr("legacy_cleanup_tools_body")
+
+        # 2. Remove the tools as well: the same two questions, the other answer
+        # on the second one, and that answer reaches the cleanup service.
+        calls.clear()
+        asked = _answer_card(page, [True, False])
+        page._on_scan_legacy_installations()
+        app.processEvents()
+        assert asked == ["Uninstall", "Keep"], asked
+        assert len(calls) == 1, calls
+        assert calls[0][1]["uninstall_platform_tools"] is True
+
+        # 3. Walking away at the app question asks nothing else and removes nothing.
+        calls.clear()
+        asked = _answer_card(page, [False])
+        page._on_scan_legacy_installations()
+        app.processEvents()
+        assert asked == ["Uninstall"], asked
+        assert calls == []
+    finally:
+        legacy.detect_legacy_installations = original_detect
+        legacy.remove_macos_legacy = original_mac
+        legacy.remove_linux_legacy = original_linux
+        translator().set_language(original_lang)
+        if page is not None:
+            page.deleteLater()
+            app.processEvents()
+
+
+def test_removal_journey_stays_in_the_card():
+    """Uninstall asks, removes and reports inside the card — no modal window."""
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtCore import QTimer
+    from PySide6.QtWidgets import QApplication
+
+    import src.legacy_cleanup as legacy
+    import src.ui.dialogs as dialogs
+    import src.ui.settings_page as settings_page
+    from src.i18n import translator
+    from src.ui.settings_page import SettingsPage
+
+    app = QApplication.instance() or QApplication(["--platform", "offscreen"])
+    original_lang = translator().lang
+    original_detect = legacy.detect_legacy_installations
+    original_mac = legacy.remove_macos_legacy
+    original_linux = legacy.remove_linux_legacy
+    original_dialog = dialogs.LegacyMigrationDialog
+    translator().set_language("en")
+    calls = []
+    opened = []
+
+    def fake_mac(**kwargs):
+        calls.append(("mac", kwargs))
+        return True, ["/Applications/Innioasis Updater.app"], []
+
+    def fake_linux(**kwargs):
+        calls.append(("linux", kwargs))
+        return True, ["~/.local/share/applications/innioasis.desktop"], []
+
+    class NoDialog:
+        def __init__(self, *a, **kw):
+            opened.append(a)
+            raise AssertionError("the removal journey must not open a dialog")
+
+    page = None
+    try:
+        legacy.detect_legacy_installations = lambda: {
+            "has_legacy": True,
+            "has_platform_tools": False,
+            "macos_apps": [Path("/Applications/Innioasis Updater.app")],
+            "estimated_bytes": 428 * 1024 * 1024,
+        }
+        legacy.remove_macos_legacy = fake_mac
+        legacy.remove_linux_legacy = fake_linux
+        dialogs.LegacyMigrationDialog = NoDialog
+
+        page = SettingsPage()
+        # Accept the in-card confirmation, then let the removal run.
+        QTimer.singleShot(0, lambda: page._legacy_cleanup_card._confirm_accept.click())
+        page._on_scan_legacy_installations()
+        app.processEvents()
+
+        assert opened == [], opened
+        assert len(calls) == 1, calls
+        platform_id, kwargs = calls[0]
+        if platform_id == "mac":
+            assert kwargs == {
+                "remove_apps": True,
+                "remove_app_support": True,
+                "uninstall_platform_tools": False,
+            }
+        else:
+            assert kwargs == {
+                "remove_install_dir": True,
+                "uninstall_platform_tools": False,
+            }
+        # The result lands on the card itself, without an information box.
+        assert page._legacy_status_lbl.isHidden() is False
+        assert "428" in page._legacy_status_lbl.text()
+
+        # Declining changes nothing.
+        legacy.detect_legacy_installations = lambda: {
+            "has_legacy": True,
+            "estimated_bytes": 1024,
+        }
+        QTimer.singleShot(0, lambda: page._legacy_cleanup_card._confirm_reject.click())
+        page._on_scan_legacy_installations()
+        app.processEvents()
+        assert len(calls) == 1, calls
+
+        # Nothing left: the card says so in place and the removal is not run.
+        page._legacy_status_lbl.clear()
+        legacy.detect_legacy_installations = lambda: {"has_legacy": False, "estimated_bytes": 0}
+        page._on_scan_legacy_installations()
+        app.processEvents()
+        assert len(calls) == 1, calls
+        assert page._legacy_status_lbl.text() == "No old version was found."
+        assert not page._legacy_status_lbl.isHidden()
+
+        # Once the old app is gone the card goes too, status line included.
+        settings_page.QTimer.singleShot(0, lambda: None)
+        page._update_legacy_cleanup_visibility()
+        assert page._legacy_cleanup_card.isHidden()
+        assert page._legacy_status_lbl.text() == ""
+    finally:
+        legacy.detect_legacy_installations = original_detect
+        legacy.remove_macos_legacy = original_mac
+        legacy.remove_linux_legacy = original_linux
+        dialogs.LegacyMigrationDialog = original_dialog
+        translator().set_language(original_lang)
+        if page is not None:
+            page.deleteLater()
+            app.processEvents()
+
+
 if __name__ == "__main__":
     test_protected_app_invariants()
     test_format_bytes()
     test_calc_dir_size()
     test_legacy_dialog_instantiation()
     test_remove_old_app_card_follows_the_detection()
+    test_detection_finds_both_old_apps()
+    test_removal_takes_both_old_apps()
+    test_platform_tools_question_asks_and_is_honoured()
+    test_removal_journey_stays_in_the_card()
     print("All legacy cleanup tests passed!")

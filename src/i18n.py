@@ -1,13 +1,28 @@
 """Internationalisation module.
 
 Structure mirrors InniUpdaterChin's ``app.i18n`` (a ``_Translator`` with a
-``t(key)`` lookup). The original app ships six languages (zh-CN, en, ja, de,
-fr, es); this port ships Chinese, English, French and Spanish for every string
-it uses. The remaining tables (ja, de) can be mined from
-``app/i18n.pyc`` in the InniUpdaterChin install and dropped into ``_STRINGS``.
+``t(key)`` lookup). ``_STRINGS`` below is the source of truth: every English
+string the app can display, plus the hand-checked translations for Chinese,
+English, French and Spanish (German and Japanese are partially checked).
+
+Everything else comes from ``assets/i18n/<code>.json`` — one flat
+``{string_id: text}`` catalog per language, generated from the English strings
+by ``scripts/i18n_fill.py`` with Google Translate, which is what makes the app
+usable in the ~250 languages Google can translate English into. A catalog is
+read the first time its language is used, so shipping them all costs nothing at
+startup. ``tr()`` prefers the catalog, then the tables here, then English.
 """
 
-_SUPPORTED = ("zh-CN", "en", "fr", "es")
+import json
+import logging
+import os
+import sys
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+# The languages whose copy is reviewed by hand (see the module docstring).
+_SUPPORTED = ("zh-CN", "en", "de", "fr", "es", "ja")
 
 _STRINGS: dict = {
     "app_name": {
@@ -268,10 +283,58 @@ _STRINGS: dict = {
         "es": "Verificación completa de controladores, módulos del kernel, permisos y bibliotecas para un flasheo confiable.",
     },
     "system_checker_run_btn": {
-        "zh-CN": "运行系统检查器",
-        "en": "Run System Checker",
-        "fr": "Lancer le vérificateur de système",
-        "es": "Ejecutar comprobador de sistema",
+        "zh-CN": "准备 SP Flash Tool",
+        "en": "Prepare SP Flash Tool",
+        "fr": "Préparer SP Flash Tool",
+        "es": "Preparar SP Flash Tool",
+    },
+    "linux_prep_starting": {
+        "zh-CN": "正在准备 SP Flash Tool…",
+        "en": "Preparing SP Flash Tool…",
+        "fr": "Préparation de SP Flash Tool…",
+        "es": "Preparando SP Flash Tool…",
+    },
+    "linux_prep_ready": {
+        "zh-CN": "就绪 — SP Flash Tool 已准备好。",
+        "en": "Ready — SP Flash Tool is prepared.",
+        "fr": "Prêt — SP Flash Tool est préparé.",
+        "es": "Listo: SP Flash Tool está preparado.",
+    },
+    "linux_prep_blocked": {
+        "zh-CN": "此电脑无法运行 SP Flash Tool。",
+        "en": "This computer cannot run SP Flash Tool.",
+        "fr": "Cet ordinateur ne peut pas exécuter SP Flash Tool.",
+        "es": "Este equipo no puede ejecutar SP Flash Tool.",
+    },
+    "linux_prep_fix_body": {
+        "zh-CN": "还需要一次管理员授权：MediaTek 设备的 USB 规则与串口访问权限。",
+        "en": "One root step is still needed: the USB rules for MediaTek devices and serial port access.",
+        "fr": "Une étape root reste nécessaire : les règles USB des appareils MediaTek et l'accès au port série.",
+        "es": "Falta un paso con root: las reglas USB para dispositivos MediaTek y el acceso al puerto serie.",
+    },
+    "linux_prep_fix_btn": {
+        "zh-CN": "授权",
+        "en": "Allow Access",
+        "fr": "Autoriser",
+        "es": "Permitir acceso",
+    },
+    "linux_prep_needs_access": {
+        "zh-CN": "未获得授权 — 刷机需要此权限。",
+        "en": "Access was not granted — flashing needs it.",
+        "fr": "Accès non accordé — le flashage en a besoin.",
+        "es": "No se concedió el acceso; el flasheo lo necesita.",
+    },
+    "linux_prep_fixing": {
+        "zh-CN": "正在应用…",
+        "en": "Applying…",
+        "fr": "Application…",
+        "es": "Aplicando…",
+    },
+    "linux_prep_fixed": {
+        "zh-CN": "已授权 — SP Flash Tool 已就绪。",
+        "en": "Access granted — SP Flash Tool is ready.",
+        "fr": "Accès accordé — SP Flash Tool est prêt.",
+        "es": "Acceso concedido: SP Flash Tool está listo.",
     },
     "settings_checker_group": {
         "zh-CN": "SP Flash Tool 诊断与硬件检查",
@@ -280,10 +343,10 @@ _STRINGS: dict = {
         "es": "Diagnósticos de SP Flash Tool y Hardware",
     },
     "settings_checker_desc": {
-        "zh-CN": "检查 USB 访问权限 (udev)、用户组、内核 serial 模块与 MediaTek 设备驱动状态。",
-        "en": "Inspect USB udev rules, user group memberships, kernel serial modules, and MediaTek driver readiness.",
-        "fr": "Inspecter les règles udev, appartenance aux groupes, modules de noyau et pilotes MediaTek.",
-        "es": "Inspeccionar reglas udev, grupos de usuario, módulos del kernel y estado del controlador MediaTek.",
+        "zh-CN": "准备刷机引擎，并检查 USB 访问权限、用户组与内核 serial 模块。",
+        "en": "Prepares the flashing engine, then checks USB access, user groups and kernel serial modules.",
+        "fr": "Prépare le moteur de flashage, puis vérifie l'accès USB, les groupes et les modules du noyau.",
+        "es": "Prepara el motor de flasheo y comprueba el acceso USB, los grupos y los módulos del kernel.",
     },
     "settings_driver_group": {
         "zh-CN": "联发科 USB 驱动",
@@ -802,10 +865,10 @@ _STRINGS: dict = {
         "es": "Traduciendo notas de versión…",
     },
     "open_in_google_translate": {
-        "zh-CN": "在 Google 翻译中打开",
-        "en": "Open in Google Translate",
-        "fr": "Ouvrir dans Google Traduction",
-        "es": "Abrir en Google Traductor",
+        "zh-CN": "在浏览器中查看",
+        "en": "View in browser",
+        "fr": "Voir dans le navigateur",
+        "es": "Ver en el navegador",
     },
     "sel_dialog_title": {
         "zh-CN": "选择固件包",
@@ -1182,22 +1245,28 @@ _STRINGS: dict = {
         "es": "dispositivo",
     },
     "flash_connect_prompt": {
-        "zh-CN": "请确认您的 {model} 已关机并断开连接，然后点击下一步",
-        "en": "Please make sure your {model} is powered off and disconnected and click Next",
-        "fr": "Veuillez vous assurer que votre {model} est éteint et déconnecté, puis cliquez sur Suivant",
-        "es": "Asegúrate de que tu {model} esté apagado y desconectado y haz clic en Siguiente",
+        "zh-CN": "请断开 {model} 的连接并按中间的按钮，然后点击下一步",
+        "en": "Please disconnect your {model} and press the centre button, then click Next",
+        "fr": "Déconnectez votre {model} et appuyez sur le bouton central, puis cliquez sur Suivant",
+        "es": "Desconecta tu {model} y pulsa el botón central, luego haz clic en Siguiente",
+    },
+    "flash_connect_prompt_power": {
+        "zh-CN": "请断开 {model} 的连接并按电源按钮，然后点击下一步",
+        "en": "Please disconnect your {model} and press the power button, then click Next",
+        "fr": "Déconnectez votre {model} et appuyez sur le bouton d'alimentation, puis cliquez sur Suivant",
+        "es": "Desconecta tu {model} y pulsa el botón de encendido, luego haz clic en Siguiente",
     },
     "flash_paperclip_hint": {
-        "zh-CN": "提示：用回形针按下耳机插孔旁边的隐藏按钮。",
-        "en": "Tip: press the hidden button beside the headphone port with a paperclip.",
-        "fr": "Astuce : appuyez avec un trombone sur le bouton caché à côté de la prise casque.",
-        "es": "Consejo: pulsa con un clip el botón oculto junto al puerto de auriculares.",
+        "zh-CN": "提示：用回形针或卡针按下耳机插孔旁边的隐藏按钮即可关机。",
+        "en": "Tip: Power off the device by pressing the hidden button beside the headphone jack with a paperclip or pin.",
+        "fr": "Astuce : éteignez l'appareil en appuyant avec un trombone ou une aiguille sur le bouton caché à côté de la prise casque.",
+        "es": "Consejo: apague el dispositivo pulsando con un clip o una aguja el botón oculto junto a la toma de auriculares.",
     },
     "flash_paperclip_hint_a5": {
-        "zh-CN": "提示：用回形针按下电源键下方的隐藏按钮。",
-        "en": "Tip: press the hidden button below the power button with a paperclip.",
-        "fr": "Astuce : appuyez avec un trombone sur le bouton caché sous le bouton d'alimentation.",
-        "es": "Consejo: pulsa con un clip el botón oculto bajo el botón de encendido.",
+        "zh-CN": "提示：用回形针或卡针按下电源键附近的隐藏按钮即可关机。",
+        "en": "Tip: Power off the device by pressing the hidden button near the power button with a paperclip or pin.",
+        "fr": "Astuce : éteignez l'appareil en appuyant avec un trombone ou une aiguille sur le bouton caché près du bouton d'alimentation.",
+        "es": "Consejo: apague el dispositivo pulsando con un clip o una aguja el botón oculto junto al botón de encendido.",
     },
     "gui_handoff_hint_headphone": {
         "zh-CN": "用卡针或回形针插入耳机孔旁边的小孔来关机，然后在桌面工具等待时连接 USB。",
@@ -1783,37 +1852,39 @@ _STRINGS: dict = {
         "fr": "Un processus de flashing est en cours. Voulez-vous l'annuler et recommencer ?",
         "es": "Se está ejecutando un proceso de flashing. ¿Quieres cancelarlo y empezar de nuevo?",
     },
+    # The interruption card asks the question the two round buttons answer:
+    # stop the run, or go back to it.
     "install_stop_check": {
-        "zh-CN": "软件安装仍在进行。",
-        "en": "This software install is still running.",
-        "fr": "L'installation du logiciel est encore en cours.",
-        "es": "La instalación del software sigue en curso.",
-        "de": "Die Softwareinstallation läuft noch.",
-        "ja": "ソフトウェアのインストールはまだ進行中です。",
+        "zh-CN": "要取消安装吗？",
+        "en": "Would you like to cancel the install?",
+        "fr": "Voulez-vous annuler l'installation ?",
+        "es": "¿Quieres cancelar la instalación?",
+        "de": "Möchten Sie die Installation abbrechen?",
+        "ja": "インストールをキャンセルしますか？",
     },
     "install_stop_check_mediatek": {
-        "zh-CN": "固件安装仍在进行。",
-        "en": "This firmware install is still running.",
-        "fr": "L'installation du firmware est encore en cours.",
-        "es": "La instalación del firmware sigue en curso.",
-        "de": "Die Firmware-Installation läuft noch.",
-        "ja": "ファームウェアのインストールはまだ進行中です。",
+        "zh-CN": "要取消固件安装吗？",
+        "en": "Would you like to cancel the firmware install?",
+        "fr": "Voulez-vous annuler l'installation du firmware ?",
+        "es": "¿Quieres cancelar la instalación del firmware?",
+        "de": "Möchten Sie die Firmware-Installation abbrechen?",
+        "ja": "ファームウェアのインストールをキャンセルしますか？",
     },
     "download_stop_check": {
-        "zh-CN": "软件下载仍在进行。",
-        "en": "This software download is still running.",
-        "fr": "Le téléchargement du logiciel est encore en cours.",
-        "es": "La descarga del software sigue en curso.",
-        "de": "Der Software-Download läuft noch.",
-        "ja": "ソフトウェアのダウンロードはまだ進行中です。",
+        "zh-CN": "要取消下载吗？",
+        "en": "Would you like to cancel the download?",
+        "fr": "Voulez-vous annuler le téléchargement ?",
+        "es": "¿Quieres cancelar la descarga?",
+        "de": "Möchten Sie den Download abbrechen?",
+        "ja": "ダウンロードをキャンセルしますか？",
     },
     "download_stop_check_mediatek": {
-        "zh-CN": "固件下载仍在进行。",
-        "en": "This firmware download is still running.",
-        "fr": "Le téléchargement du firmware est encore en cours.",
-        "es": "La descarga del firmware sigue en curso.",
-        "de": "Der Firmware-Download läuft noch.",
-        "ja": "ファームウェアのダウンロードはまだ進行中です。",
+        "zh-CN": "要取消固件下载吗？",
+        "en": "Would you like to cancel the firmware download?",
+        "fr": "Voulez-vous annuler le téléchargement du firmware ?",
+        "es": "¿Quieres cancelar la descarga del firmware?",
+        "de": "Möchten Sie den Firmware-Download abbrechen?",
+        "ja": "ファームウェアのダウンロードをキャンセルしますか？",
     },
     "inline_go_back": {
         "zh-CN": "返回",
@@ -3644,12 +3715,255 @@ _STRINGS: dict = {
         "es": "Desinstalar",
     },
     "legacy_cleanup_none_found": {
-        "zh-CN": "未检测到旧版 Innioasis Updater 安装。",
-        "en": "No pre-3.0 legacy Innioasis Updater installations were found on your system.",
-        "fr": "Aucune ancienne installation d'Innioasis Updater n'a été trouvée.",
-        "es": "No se encontraron instalaciones anteriores de Innioasis Updater en su sistema.",
+        "zh-CN": "未找到旧版应用。",
+        "en": "No old version was found.",
+        "fr": "Aucune ancienne version n'a été trouvée.",
+        "es": "No se encontró ninguna versión anterior.",
+    },
+    "legacy_cleanup_confirm_body": {
+        "zh-CN": "这会移除旧版应用及其支持文件。下载的固件会保留。",
+        "en": "This removes the old app and its support files. Downloaded firmware is kept.",
+        "fr": "Cela supprime l'ancienne app et ses fichiers de support. Les firmwares téléchargés sont conservés.",
+        "es": "Esto elimina la app anterior y sus archivos de soporte. El firmware descargado se mantiene.",
+    },
+    "legacy_cleanup_tools_body": {
+        "zh-CN": "是否同时移除 Android Platform Tools (ADB / Fastboot)？如果使用 ADB，请选择“保留”。",
+        "en": "Remove the Android Platform Tools (ADB / Fastboot) as well? Choose Keep if you use ADB.",
+        "fr": "Supprimer aussi les outils Android Platform Tools (ADB / Fastboot) ? Choisissez Conserver si vous utilisez ADB.",
+        "es": "¿Eliminar también las herramientas de plataforma Android (ADB / Fastboot)? Elija Conservar si usa ADB.",
+    },
+    "legacy_cleanup_keep_btn": {
+        "zh-CN": "保留",
+        "en": "Keep",
+        "fr": "Conserver",
+        "es": "Conservar",
+    },
+    "legacy_cleanup_remove_btn": {
+        "zh-CN": "移除",
+        "en": "Remove",
+        "fr": "Supprimer",
+        "es": "Eliminar",
+    },
+    "legacy_cleanup_done_inline": {
+        "zh-CN": "已移除，释放约 {size}。",
+        "en": "Removed — about {size} freed.",
+        "fr": "Supprimé — environ {size} libérés.",
+        "es": "Eliminado: se liberaron unos {size}.",
     },
 }
+
+
+# ---------------------------------------------------------------------------
+# Language catalogs (assets/i18n/<code>.json)
+# ---------------------------------------------------------------------------
+_LANGUAGES: dict = {}
+_CATALOGS: dict = {}
+
+# Language code -> the country whose flag stands for it. Google's list is
+# language-based, so a representative country is chosen where the code carries
+# no region of its own; a code like pt-BR, fr-CA or zh-TW already names one.
+_FLAG_REGIONS = {
+    "af": "ZA", "am": "ET", "ar": "SA", "as": "IN", "az": "AZ", "be": "BY",
+    "bg": "BG", "bho": "IN", "bm": "ML", "bn": "BD", "bs": "BA", "ca": "ES",
+    "ceb": "PH", "co": "FR", "cs": "CZ", "cy": "GB", "da": "DK", "de": "DE",
+    "doi": "IN", "dv": "MV", "ee": "GH", "el": "GR", "en": "GB", "eo": "EU",
+    "es": "ES", "et": "EE", "eu": "ES", "fa": "IR", "fi": "FI", "fil": "PH",
+    "fr": "FR", "fy": "NL", "ga": "IE", "gd": "GB", "gl": "ES", "gn": "PY",
+    "gu": "IN", "ha": "NG", "haw": "US", "he": "IL", "hi": "IN", "hmn": "LA",
+    "hr": "HR", "ht": "HT", "hu": "HU", "hy": "AM", "id": "ID", "ig": "NG",
+    "ilo": "PH", "is": "IS", "it": "IT", "ja": "JP", "jv": "ID", "ka": "GE",
+    "kk": "KZ", "km": "KH", "kn": "IN", "ko": "KR", "kri": "SL", "ku": "TR",
+    "ky": "KG", "la": "VA", "lb": "LU", "lg": "UG", "ln": "CD", "lo": "LA",
+    "lt": "LT", "lus": "IN", "lv": "LV", "mai": "IN", "mg": "MG", "mi": "NZ",
+    "mk": "MK", "ml": "IN", "mn": "MN", "mni": "IN", "mr": "IN", "ms": "MY",
+    "mt": "MT", "my": "MM", "ne": "NP", "nl": "NL", "no": "NO", "nso": "ZA",
+    "ny": "MW", "om": "ET", "or": "IN", "pa": "IN", "pl": "PL", "ps": "AF",
+    "pt": "PT", "qu": "PE", "ro": "RO", "ru": "RU", "rw": "RW", "sa": "IN",
+    "sd": "PK", "si": "LK", "sk": "SK", "sl": "SI", "sm": "WS", "sn": "ZW",
+    "so": "SO", "sq": "AL", "sr": "RS", "st": "ZA", "su": "ID", "sv": "SE",
+    "sw": "KE", "ta": "IN", "te": "IN", "tg": "TJ", "th": "TH", "ti": "ET",
+    "tk": "TM", "tr": "TR", "ts": "ZA", "tt": "RU", "ug": "CN", "uk": "UA",
+    "ur": "PK", "uz": "UZ", "vi": "VN", "xh": "ZA", "yi": "IL", "yo": "NG",
+    "zh": "CN", "zu": "ZA",
+}
+
+
+def catalog_dir() -> Path:
+    """Where the language catalogs live, in a checkout or in the bundle."""
+    try:
+        from . import paths
+
+        candidates = [paths.RESOURCES_DIR / "i18n", paths.REPO_ROOT / "assets" / "i18n"]
+    except Exception:  # paths is optional when i18n is used standalone
+        candidates = [Path(__file__).resolve().parent.parent / "assets" / "i18n"]
+    for candidate in candidates:
+        if (candidate / "languages.json").is_file():
+            return candidate
+    return candidates[0]
+
+
+def languages() -> dict:
+    """``{code: {"native": ..., "english": ...}}`` as shipped in languages.json."""
+    if "table" not in _LANGUAGES:
+        data = {}
+        try:
+            raw = json.loads(
+                (catalog_dir() / "languages.json").read_text(encoding="utf-8")
+            )
+            data = {
+                str(code): entry
+                for code, entry in (raw or {}).items()
+                if isinstance(entry, dict)
+            }
+        except Exception:
+            logger.debug("Language list unavailable", exc_info=True)
+        _LANGUAGES["table"] = data
+    return _LANGUAGES["table"]
+
+
+def catalog_codes() -> tuple:
+    """Every language the app can be set to, curated ones first."""
+    found = [code for code in _SUPPORTED]
+    directory = catalog_dir()
+    if directory.is_dir():
+        for path in sorted(directory.glob("*.json")):
+            code = path.stem
+            if code != "languages" and code not in found:
+                found.append(code)
+    return tuple(found)
+
+
+def catalog(code: str) -> dict:
+    """The ``{string_id: text}`` catalog for ``code`` (empty when missing)."""
+    code = (code or "").strip()
+    if code in _CATALOGS:
+        return _CATALOGS[code]
+    table: dict = {}
+    path = catalog_dir() / f"{code}.json"
+    if code and path.is_file():
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            table = {
+                str(key): value
+                for key, value in (raw or {}).items()
+                if isinstance(value, str) and value.strip()
+            }
+        except Exception:
+            logger.debug("Catalog %s unreadable", code, exc_info=True)
+    _CATALOGS[code] = table
+    return table
+
+
+def language_label(code: str) -> str:
+    """The language's own name, then its English name, then the code."""
+    entry = languages().get(code) or {}
+    return entry.get("native") or entry.get("english") or code
+
+
+def curated_codes() -> tuple:
+    """The languages the app is hand-translated into, in picker order."""
+    found = set(catalog_codes()) | set(_SUPPORTED)
+    return tuple(code for code in _SUPPORTED if code in found)
+
+
+def language_choices() -> list:
+    """``[(code, native, english)]`` for the picker, in native-name order."""
+    rows = []
+    for code in catalog_codes():
+        entry = languages().get(code) or {}
+        native = entry.get("native") or entry.get("english") or code
+        english = entry.get("english") or native
+        rows.append((code, native, english))
+    rows.sort(key=lambda row: row[1].casefold())
+    return rows
+
+
+def flag_supported() -> bool:
+    """Whether this platform can draw flag emoji.
+
+    macOS and the usual Linux desktops ship a colour emoji font with regional
+    indicators. Windows' Segoe UI Emoji does not, and a flag there renders as
+    two letters — so no flag is offered at all rather than a broken glyph.
+    ``UPDATER_LANGUAGE_FLAGS`` overrides the guess.
+    """
+    override = os.environ.get("UPDATER_LANGUAGE_FLAGS")
+    if override is not None and override.strip() != "":
+        return override.strip().lower() not in ("0", "false", "no", "off")
+    return sys.platform == "darwin" or sys.platform.startswith("linux")
+
+
+def flag(code: str) -> str:
+    """A flag emoji for a language code, or ``""`` when there is no good one."""
+    if not flag_supported():
+        return ""
+    region = ""
+    parts = (code or "").split("-")
+    if len(parts) >= 2 and len(parts[-1]) == 2 and parts[-1].isalpha():
+        region = parts[-1].upper()
+    if not region:
+        region = _FLAG_REGIONS.get(code) or _FLAG_REGIONS.get(parts[0], "")
+    if len(region) != 2 or not region.isalpha():
+        return ""
+    return "".join(chr(0x1F1E6 + ord(letter) - ord("A")) for letter in region.upper())
+
+
+def language_for_locale(name: str) -> str:
+    """Map a locale name such as ``fr_CA`` onto a language the app can show."""
+    raw = (name or "").replace("_", "-").strip()
+    available = set(catalog_codes()) | set(languages())
+    if not raw:
+        return "en"
+    # Chinese is the one language where the region decides the table: the app
+    # ships Simplified, so any zh-* locale that has no table of its own lands
+    # on zh-CN rather than on English.
+    if raw.lower().startswith("zh"):
+        for candidate in ("zh-CN" if raw.lower() in ("zh", "zh-hans") or "cn" in raw.lower() or "sg" in raw.lower() else "zh-TW", "zh-CN"):
+            if candidate in available:
+                return candidate
+    candidates = [raw] + _locale_variants(raw)
+    lowered = {code.lower(): code for code in available}
+    for candidate in candidates:
+        if candidate in available:
+            return candidate
+        if candidate.lower() in lowered:
+            return lowered[candidate.lower()]
+    return "en"
+
+
+def _locale_variants(raw: str) -> list:
+    """Progressively looser matches for a locale name."""
+    out = []
+    parts = raw.split("-")
+    if len(parts) > 1:
+        out.append(parts[0])
+    # pt-BR has its own table; plain pt, de-AT and the like fall back to the
+    # base language, then to the closest table sharing that base.
+    out.append(raw.replace("-", "_"))
+    return out
+
+
+def system_language() -> str:
+    """The language to use when the user has never chosen one."""
+    try:
+        from PySide6.QtCore import QLocale
+
+        name = QLocale.system().name() or ""
+    except Exception:
+        name = ""
+    return language_for_locale(name)
+
+
+def initial_language(stored: str = "") -> str:
+    """The user's chosen language, or else the system's.
+
+    A stored value only wins when it is a language the app still has. Nothing
+    is stored for a detected language, so the app keeps following the system
+    until the user picks one in the app.
+    """
+    chosen = (stored or "").strip()
+    if chosen and chosen in set(catalog_codes()) | set(_SUPPORTED) | set(languages()):
+        return chosen
+    return system_language()
 
 
 class _Translator:
@@ -3661,14 +3975,19 @@ class _Translator:
         return self._lang
 
     def set_language(self, lang: str):
-        if lang in _SUPPORTED:
-            self._lang = lang
+        code = (lang or "").strip()
+        if code and (code in catalog_codes() or code in _SUPPORTED):
+            self._lang = code
 
     def t(self, key: str) -> str:
         table = _STRINGS.get(key)
         if not table:
             return key
-        return table.get(self._lang) or table.get("en") or key
+        translated = catalog(self._lang).get(key)
+        if translated:
+            return translated
+        english_catalog = catalog("en")
+        return table.get(self._lang) or english_catalog.get(key) or table.get("en") or key
 
 
 _global_translator = _Translator()

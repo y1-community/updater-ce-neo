@@ -956,20 +956,83 @@ class _ProgressTextStyle(QProxyStyle):
             painter.drawText(option.rect, int(Qt.AlignmentFlag.AlignCenter), text)
             painter.restore()
             return
+        if element == QStyle.ControlElement.CE_ProgressBar:
+            super().drawControl(element, option, painter, widget)
+            # Aqua never asks for CE_ProgressBarLabel, so a native bar on macOS
+            # showed the groove and no percentage at all. Paint the percent over
+            # the groove there; the native styles that do draw their own label
+            # are left alone.
+            if sys.platform == "darwin":
+                text = getattr(option, "text", "") or ""
+                if text and getattr(option, "textVisible", True):
+                    painter.save()
+                    painter.setPen(theme_foreground())
+                    if widget is not None:
+                        painter.setFont(widget.font())
+                    painter.drawText(option.rect, int(Qt.AlignmentFlag.AlignCenter), text)
+                    painter.restore()
+            return
         super().drawControl(element, option, painter, widget)
 
 
 def install_progress_readability(bar) -> None:
-    """Theme the percent and keep the native bar. No progress stylesheet."""
+    """Theme a progress bar's roles and percent. No progress stylesheet.
+
+    A bar that paints itself (:class:`ui.widgets.InstallProgress`) needs the
+    roles and nothing else — an extra text proxy over it would draw the
+    percent twice. Bars left on the platform style keep the proxy, because
+    Aqua never asks for the label and WinUI takes it from HighlightedText.
+    """
     if bar is None:
         return
     bar.setStyleSheet("")
     bar.setAutoFillBackground(False)
     apply_readable_palette(bar, progress=True)
+    from .widgets import InstallProgress
+
+    if isinstance(bar, InstallProgress):
+        return
     if not isinstance(bar.style(), _ProgressTextStyle):
         style = _ProgressTextStyle()
         style.setParent(bar)
         bar.setStyle(style)
+
+
+def progress_bar_colors(bar=None) -> tuple[QColor, QColor, QColor]:
+    """Track, fill and percent colours for a progress bar, from the live theme.
+
+    Straight from the theme tokens, not the bar's palette: a QProgressBar's
+    resolved palette reports the style's own Highlight, which is a grey on the
+    platforms that made the chunk invisible in the first place. The label is
+    whichever candidate clears both the track and the chunk, because the
+    percent sits over both as the bar fills.
+    """
+    del bar  # kept for callers that pass their widget
+    t = T()
+
+    def opaque(value) -> QColor:
+        color = QColor(value)
+        if not color.isValid():
+            return QColor("#808080")
+        color.setAlpha(255)
+        return color
+
+    track = opaque(t.progress_track)
+    fill = opaque(t.progress_fill)
+    return track, fill, _progress_label_color(theme_foreground(), track, fill)
+
+
+def _progress_label_color(foreground: QColor, track: QColor, fill: QColor) -> QColor:
+    """Percent colour the eye can read over both the track and the chunk."""
+    candidates = (QColor(foreground), QColor("#ffffff"), QColor("#0f172a"))
+
+    def worst(color: QColor) -> float:
+        return min(contrast_ratio(color, track), contrast_ratio(color, fill))
+
+    best = max(candidates, key=worst)
+    if worst(best) < 1.8:
+        return QColor(foreground)
+    return best
 
 
 def apply_readable_palette(widget, *, progress: bool = False) -> None:

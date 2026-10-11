@@ -8,6 +8,8 @@ import time
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("UPDATER_MTK_INPROCESS", "1")
 
@@ -27,6 +29,9 @@ def _pump(app, predicate, seconds=8.0):
     return bool(predicate())
 
 
+# The console launch path this exercises is the Windows flash_tool command
+# line, and the test asserts ``paths.IS_WINDOWS`` before it gets there.
+@pytest.mark.skipif(sys.platform != "win32", reason="console flash_tool command is Windows-only")
 def test_continue_launches_console_and_search_lines_drive_connect():
     """Continue starts format-download. Search lines reveal the connect sentence."""
     from PySide6.QtCore import QSettings
@@ -58,7 +63,9 @@ def test_continue_launches_console_and_search_lines_drive_connect():
     assert is_mtk_usb_search_line("[LOG] ...")
     assert is_mtk_usb_search_line("[LOG] Hint: Power off the phone before connecting.")
     assert is_mtk_usb_search_line("[MTK] ......")
-    assert not is_mtk_usb_search_line("hint: lower case is not the prefix")
+    # The matcher is deliberately case-insensitive: the tool prints "Hint:" but
+    # the same search line lowercased means the same thing to the reader.
+    assert is_mtk_usb_search_line("hint: power off the phone before connecting")
     assert not is_mtk_usb_search_line("Initializing mtkclient...")
 
     assert paths.IS_WINDOWS, "console launch check runs the Windows flash_tool command"

@@ -3,14 +3,13 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QLabel,
-    QProgressBar,
     QPushButton,
     QVBoxLayout,
     QWidget,
 )
 
 from ..i18n import tr
-from .widgets import Card, InfoRow
+from .widgets import Card, InfoRow, InstallProgress
 from .dark import T, page_top_margin
 
 
@@ -42,9 +41,8 @@ class RetryPage(QWidget):
         self._card.add_widget(self._conn_row)
         layout.addWidget(self._card)
 
-        self._progress = QProgressBar()
-        self._progress.setRange(0, 100)
-        self._progress.setFixedHeight(14)
+        self._progress = InstallProgress()
+        self._progress.setFixedHeight(18)
         layout.addWidget(self._progress)
 
         self._step_label = QLabel("")

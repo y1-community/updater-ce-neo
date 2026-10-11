@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMessageBox,
+    QSizePolicy,
     QProgressBar,
     QPushButton,
     QStackedWidget,
@@ -55,7 +56,7 @@ from ..translate import (
     get_google_translate_release_url,
     ReleaseTranslateWorker,
 )
-from .widgets import Banner, Card, CurrentPageStack, UpdateToast
+from .widgets import Banner, Card, CurrentPageStack, InstallProgress, UpdateToast
 from .dark import T, link_html, page_margins
 from .scrollbars import configure_scroll_area, make_transparent
 from .icons import HELP_ICON_PX, get_help_pixmap, get_symbol_icon, help_icon_source
@@ -552,7 +553,7 @@ class SelectPackagePage(QWidget):
         self._fit_release_list_height()
 
         # Slim progress bar, only visible while downloading / preparing.
-        self._download_bar = QProgressBar()
+        self._download_bar = InstallProgress()
         self._download_bar.setTextVisible(True)
         self._download_bar.setFormat("%p%")
         self._download_bar.setMinimumHeight(18)
@@ -578,6 +579,13 @@ class SelectPackagePage(QWidget):
             "sel_install_from_file", self._show_local_view, bold=False
         )
         pkg_layout.addWidget(self._install_from_file_link)
+        # The card is as tall as the notes column beside it, so the slack has
+        # to go *after* the link: a plain label would otherwise grow to take
+        # it and centre its text half a card below the button.
+        self._install_from_file_link.setSizePolicy(
+            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed
+        )
+        pkg_layout.addStretch(1)
 
         self._pkg_group.set_layout(pkg_layout)
         self._pkg_group.set_glass_clear(True)
@@ -795,7 +803,7 @@ class SelectPackagePage(QWidget):
         self._local_banner = Banner()
         grp_l.addWidget(self._local_banner)
 
-        self._local_bar = QProgressBar()
+        self._local_bar = InstallProgress()
         self._local_bar.setTextVisible(True)
         self._local_bar.setFormat("%p%")
         self._local_bar.setMinimumHeight(18)
@@ -824,7 +832,11 @@ class SelectPackagePage(QWidget):
         self._install_online_link = self._make_link(
             "sel_install_online", self._show_online_view, bold=False
         )
+        self._install_online_link.setSizePolicy(
+            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed
+        )
         grp_l.addWidget(self._install_online_link)
+        grp_l.addStretch(1)
 
         local_group.set_layout(grp_l)
         layout.addWidget(local_group)
@@ -1764,8 +1776,9 @@ class SelectPackagePage(QWidget):
 
     def _render_release_notes(self, rel, translated_body=None, translated_name=None, as_html: bool = False) -> str:
         body = translated_body or (rel.get("body") or "").strip() or tr("update_no_notes")
-        if translated_body:
-            body = f"{body}\n\n*{tr('translated_with_google')}*"
+        # The badge is not repeated here: the line under the notes already says
+        # the copy was translated, and the reader should see the release notes
+        # themselves, not the provenance twice.
 
         # 1. Normalise markdown: turn any markdown headings #{1,6} into bold text
         # so all text is rendered at uniform body text size.
@@ -1929,6 +1942,25 @@ class SelectPackagePage(QWidget):
             self._show_original_release_notes()
         elif url_str.startswith(("http://", "https://", "mailto:")):
             open_browser(url_str)
+
+    def set_auto_translate_notes(self, enabled: bool):
+        """Translate release notes from now on, starting with what is on screen.
+
+        Called when the app language changes, so a reader who switches to
+        another language sees the visible release notes in that language
+        immediately — no extra click — and every release they select afterwards
+        is translated too.
+        """
+        self._auto_translate_notes = bool(enabled)
+        lang = (translator().lang or "en").strip()
+        if not enabled or lang == "en":
+            # Switching back to English (or turning translation off) puts the
+            # published notes back, so the very same change that turned it on
+            # can turn it off.
+            if self._is_translated or self._is_translating:
+                self._show_original_release_notes()
+            return
+        self._translate_current_release_in_app()
 
     def _translate_current_release_in_app(self):
         rel = self._current_selected_rel

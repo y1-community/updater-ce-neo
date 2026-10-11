@@ -173,3 +173,78 @@ def test_details_header_shows_translated_original_software():
         translator().set_language(orig_lang)
         page.deleteLater()
         app.processEvents()
+
+
+def test_notes_copy_never_repeats_the_translated_badge():
+    """The badge lives under the notes, once, not inside the release text."""
+    from src.i18n import tr, translator
+    from src.ui.select_page import SelectPackagePage
+
+    app = _app()
+    orig_lang = translator().lang
+    page = SelectPackagePage()
+    try:
+        translator().set_language("zh-CN")
+        rel = _rel("3.2.1")
+        html = page._render_release_notes(
+            rel, translated_body="改进后的性能", translated_name="3.2.1", as_html=True
+        )
+        assert "改进后的性能" in html
+        assert tr("translated_with_google") not in html
+        # The line under the notes still says where it came from, and the link
+        # out is a plain browser link now.
+        assert tr("open_in_google_translate") == "在浏览器中查看"
+    finally:
+        translator().set_language(orig_lang)
+        page.deleteLater()
+        app.processEvents()
+
+
+def test_language_change_translates_the_visible_notes_without_a_click():
+    """Switching language re-renders the notes already on screen."""
+    from src.i18n import translator
+    from src.ui.main_window import MainWindow
+
+    app = _app()
+    orig_lang = translator().lang
+    w = MainWindow()
+    w.show()
+    app.processEvents()
+    try:
+        page = w._select_page
+        seen = []
+        page._translate_current_release_in_app = lambda: seen.append(
+            (page._current_selected_rel or {}).get("tag_name")
+        )
+        page._on_release_selected(_item(_rel("3.2.1")), None)
+        seen.clear()
+
+        combo = w._lang_combo
+        # Start from English, so the switch below is a real language change no
+        # matter what an earlier test left behind.
+        w.settings.remove("translate_release_notes")
+        combo.setCurrentIndex(combo.findData("en"))
+        app.processEvents()
+        assert page._auto_translate_notes is False
+        seen.clear()
+
+        combo.setCurrentIndex(combo.findData("es"))
+        app.processEvents()
+        # The change alone asked for the on-screen notes to be translated, and
+        # left translation switched on for the next release as well.
+        assert seen, "the language change must translate what is on screen"
+        assert page._auto_translate_notes is True
+        assert str(w.settings.value("translate_release_notes", "")) in ("True", "true", "1")
+
+        # ...and switching back to English puts the published text back.
+        page._current_selected_rel = _rel("3.2.1")
+        page._is_translated = True
+        combo.setCurrentIndex(combo.findData("en"))
+        app.processEvents()
+        assert page._is_translated is False
+        assert page._auto_translate_notes is False
+    finally:
+        translator().set_language(orig_lang)
+        w.settings.remove("translate_release_notes")
+        w.close()
+        app.processEvents()

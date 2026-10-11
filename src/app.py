@@ -15,7 +15,7 @@ if __package__ is None or __package__ == "":
     import src
     __package__ = "src"
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QSettings
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
@@ -164,17 +164,15 @@ def main():
     # dark to match; Tahoe and Golden Gate stay on the Liquid Glass path.
     apply_theme(app, force_dark=None)
 
-    # Default language: follow the system, fall back to English.
-    import locale
+    # Default language: the reader's saved choice, else the system's own
+    # language when the app ships a catalog for it, else English.
+    from .i18n import initial_language
 
     try:
-        lang = locale.getlocale()[0] or ""
-        if lang.lower().startswith("zh"):
-            translator().set_language("zh-CN")
-        else:
-            translator().set_language("en")
+        stored = str(QSettings("innioasis", "updater").value("language", "") or "")
     except Exception:
-        translator().set_language("en")
+        stored = ""
+    translator().set_language(initial_language(stored))
 
     window = MainWindow()
     prepare_window_for_glass(window)

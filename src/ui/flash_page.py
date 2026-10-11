@@ -31,7 +31,15 @@ from ..flash_service import (
 )
 from ..i18n import tr, tr_brand
 from .support_appeal import SupportIntro
-from .widgets import Banner, Card, CurrentPageStack, InfoRow, StatusTag, fade_in
+from .widgets import (
+    Banner,
+    Card,
+    CurrentPageStack,
+    InfoRow,
+    InstallProgress,
+    StatusTag,
+    fade_in,
+)
 from .dark import T, page_top_margin
 from .icons import get_symbol_icon, get_symbol_pixmap
 
@@ -598,16 +606,28 @@ class FlashPage(QWidget):
         layout.addWidget(self._stack, 1)
         self._seal_status_labels()
 
-    def _wrap_centered(self, card_widget: QWidget, extra_below: QWidget | None = None) -> QWidget:
-        """Fill the content width with the progress card."""
+    def _wrap_centered(
+        self,
+        card_widget: QWidget,
+        extra_below: QWidget | None = None,
+        *,
+        heading_key: str = "flash_install_in_progress",
+    ) -> QWidget:
+        """Fill the content width with the progress card.
+
+        Every progress screen — preparing, waiting, installing, downloading —
+        comes through here: one width, one set of margins and one gap under the
+        card, so the screens do not shift their padding as the app moves
+        between them.
+        """
         container = QWidget()
         v = QVBoxLayout(container)
         v.setContentsMargins(4, 2, 4, 2)
         v.setSpacing(8)
 
-        heading = QLabel(tr("flash_install_in_progress"))
+        heading = QLabel(tr(heading_key))
         _style_card_heading(heading)
-        self._headings.append(heading)
+        self._headings.append((heading, heading_key))
         # The window header already says "Install in Progress" / "Install
         # Complete". This in-card copy is kept for tests but not shown.
         heading.hide()
@@ -640,7 +660,7 @@ class FlashPage(QWidget):
         self._prep_banner = Banner()
         self._prep_banner.setVisible(False)
 
-        self._prep_progress = QProgressBar()
+        self._prep_progress = InstallProgress()
         _configure_progress(self._prep_progress)
         col.addWidget(self._prep_progress)
 
@@ -649,6 +669,10 @@ class FlashPage(QWidget):
 
         card_layout.addLayout(col, 1)
         self._prep_col = col
+        # The card can be taller than its copy (a taller window). The slack
+        # belongs under the last row, so the title, the prompt and the progress
+        # bar stay packed together the way a system updater shows them.
+        col.addStretch(1)
 
         self._prep_cancel_btn = _RoundNextButton(symbol="cancel", accent=False)
         self._prep_cancel_btn.setObjectName("softwareUpdateCancelBtn")
@@ -682,7 +706,7 @@ class FlashPage(QWidget):
         self._wait_pkg_label = _status_label(self._package_name or "\u2014", strong=True)
         col.addWidget(self._wait_pkg_label)
 
-        self._wait_progress_bar = QProgressBar()
+        self._wait_progress_bar = InstallProgress()
         _configure_progress(self._wait_progress_bar)
         col.addWidget(self._wait_progress_bar)
 
@@ -691,19 +715,17 @@ class FlashPage(QWidget):
         )
         self._wait_prompt_label.setWordWrap(True)
 
-        # The next step is one round arrow at the end of the status line it
-        # advances, not a wide button on a row of its own.
+        # The next step is one round arrow in the card's own row, not a wide
+        # button on a row of its own.
         self._wait_continue_btn = _RoundNextButton()
         self._wait_continue_btn.setVisible(False)
         self._wait_continue_btn.setToolTip(tr("dialog_pre_install_continue"))
         self._wait_continue_btn.setAccessibleName(tr("dialog_pre_install_continue"))
         self._wait_continue_btn.clicked.connect(self._on_power_off_continue)
-        wait_actions = QHBoxLayout()
-        wait_actions.setContentsMargins(0, 0, 0, 0)
-        wait_actions.setSpacing(10)
-        wait_actions.addWidget(self._wait_prompt_label, 1, Qt.AlignVCenter)
-        wait_actions.addWidget(self._wait_continue_btn, 0, Qt.AlignVCenter)
-        col.addLayout(wait_actions)
+        # The prompt owns the text column; the arrow is a sibling of that
+        # column, so it centres on the card — and on the release icon — however
+        # many lines the prompt wraps to.
+        col.addWidget(self._wait_prompt_label)
 
         self._wait_mode_hint = _status_label("")
         self._wait_mode_hint.setWordWrap(True)
@@ -720,6 +742,11 @@ class FlashPage(QWidget):
 
         card_layout.addLayout(col, 1)
         self._wait_col = col
+        card_layout.addWidget(self._wait_continue_btn, 0, Qt.AlignVCenter)
+        # The card can be taller than its copy (a taller window). The slack
+        # belongs under the last row, so the title, the prompt and the progress
+        # bar stay packed together the way a system updater shows them.
+        col.addStretch(1)
 
         self._wait_cancel_btn = _RoundNextButton(symbol="cancel", accent=False)
         self._wait_cancel_btn.setObjectName("softwareUpdateCancelBtn")
@@ -779,7 +806,7 @@ class FlashPage(QWidget):
         self._flash_banner = Banner()
         self._flash_banner.setVisible(False)
 
-        self._progress_bar = QProgressBar()
+        self._progress_bar = InstallProgress()
         _configure_progress(self._progress_bar)
         col.addWidget(self._progress_bar)
 
@@ -803,6 +830,10 @@ class FlashPage(QWidget):
 
         card_layout.addLayout(col, 1)
         self._flash_col = col
+        # The card can be taller than its copy (a taller window). The slack
+        # belongs under the last row, so the title, the prompt and the progress
+        # bar stay packed together the way a system updater shows them.
+        col.addStretch(1)
 
         self._cancel_btn = _RoundNextButton(symbol="cancel", accent=False)
         self._cancel_btn.setObjectName("softwareUpdateCancelBtn")
@@ -917,7 +948,7 @@ class FlashPage(QWidget):
         self._download_pkg_label = _status_label(self._package_name or "\u2014", strong=True)
         col.addWidget(self._download_pkg_label)
 
-        self._download_progress = QProgressBar()
+        self._download_progress = InstallProgress()
         _configure_progress(self._download_progress)
         col.addWidget(self._download_progress)
 
@@ -926,6 +957,10 @@ class FlashPage(QWidget):
 
         card_layout.addLayout(col, 1)
         self._download_col = col
+        # The card can be taller than its copy (a taller window). The slack
+        # belongs under the last row, so the title, the prompt and the progress
+        # bar stay packed together the way a system updater shows them.
+        col.addStretch(1)
 
         self._download_cancel_btn = _RoundNextButton(symbol="cancel", accent=False)
         self._download_cancel_btn.setObjectName("softwareUpdateCancelBtn")
@@ -936,26 +971,13 @@ class FlashPage(QWidget):
         self._download_card.set_layout(card_layout)
         self._download_row = card_layout
 
-        container = QWidget()
-        v = QVBoxLayout(container)
-        v.setContentsMargins(0, 0, 0, 0)
-        h = QHBoxLayout()
-        h.setContentsMargins(0, 0, 0, 0)
-        h.addStretch(1)
-
-        card_col = QVBoxLayout()
-        card_col.setContentsMargins(0, 0, 0, 0)
-        card_col.setSpacing(8)
-
-        self._download_heading = QLabel(tr("flash_download_in_progress"))
-        _style_card_heading(self._download_heading)
-        card_col.addWidget(self._download_heading, 0, Qt.AlignLeft)
-        card_col.addWidget(self._download_card, 0, Qt.AlignCenter)
-
-        h.addLayout(card_col)
-        h.addStretch(1)
-        v.addLayout(h)
-        v.addStretch(1)
+        # Same wrapper as the install screens: the download card used to sit in
+        # a narrow centred column of its own, so its padding, width and spacing
+        # did not line up with the install card it hands over to.
+        container = self._wrap_centered(
+            self._download_card, heading_key="flash_download_in_progress"
+        )
+        self._download_heading = self._headings[-1][0]
         return container
 
     def _switch_view(self, target_view):
@@ -965,11 +987,15 @@ class FlashPage(QWidget):
         self._update_paperclip_hint()
 
     def _update_paperclip_hint(self) -> None:
-        """Show how to press the hidden button, when the model is known.
+        """Show how to press the hidden button, at the power-off step only.
 
-        Sits below the progress/install card while the card is asking for a
-        powered-off player. Every known model hides that button beside the
-        headphone port except the A5, where it is below the power button.
+        The card that asks the user to disconnect and power off their player is
+        the one place this helps: once it is asking them to *connect*, the
+        player is already on its way. The words only make sense when the model
+        is known — every model hides that button beside the headphone jack
+        except the A5, where it is by the power button — so the generic
+        "device" wording (an offline package with no model in its name, or
+        MediaTek Installer branding) shows nothing at all.
         """
         host = getattr(self, "_paperclip_hint_host", None)
         label = getattr(self, "_paperclip_hint", None)
@@ -977,8 +1003,10 @@ class FlashPage(QWidget):
             return
         model = (self._model or "").strip()
         copy = getattr(self, "_wait_copy", "")
-        wanted = bool(model) and (
-            self._prompt_only or copy in ("power_off", "connect", "")
+        wanted = (
+            bool(model)
+            and copy == "power_off"
+            and not getattr(self, "_stop_open", False)
         )
         if not wanted:
             host.setVisible(False)
@@ -1157,6 +1185,20 @@ class FlashPage(QWidget):
             self._cancel_btn.setVisible(True)
             self._cancel_btn.setEnabled(True)
 
+    def _power_off_prompt_key(self) -> str:
+        """Which button powers this player off.
+
+        The Y1 family is powered off with the centre button; every other model
+        uses its power button, which is also the one near the A5's hidden reset
+        hole. With no model known the generic sentence is used.
+        """
+        model = (self._model or "").strip().upper()
+        if model in ("Y1", "Y2"):
+            return "flash_connect_prompt"
+        if model:
+            return "flash_connect_prompt_power"
+        return "flash_connect_prompt"
+
     def show_power_off_prompt(self) -> None:
         """Prompt to power off and unplug. Does not start a flash by itself."""
         self._failed = False
@@ -1164,10 +1206,12 @@ class FlashPage(QWidget):
         self._wait_copy = "power_off"
         self.clear_install_failure()
         self.show_waiting()
-        prompt = tr("flash_connect_prompt").format(model=self._connect_model_text())
+        prompt = tr(self._power_off_prompt_key()).format(model=self._connect_model_text())
         self._wait_prompt_label.setText(prompt)
         self._set_determinate(self._wait_progress_bar, 0)
-        self._wait_cancel_btn.setVisible(False)
+        # Nothing has been flashed yet, so stepping back needs no question:
+        # the cancel chip stops the run outright.
+        self._wait_cancel_btn.setVisible(True)
         self._wait_continue_btn.setVisible(True)
         if hasattr(self, "_wait_mode_hint"):
             self._wait_mode_hint.setVisible(False)
@@ -1427,8 +1471,8 @@ class FlashPage(QWidget):
         return tr("flash_eta_remaining_fallback").format(eta=eta_str)
 
     def retranslate(self):
-        for h in getattr(self, "_headings", []):
-            h.setText(tr("flash_install_in_progress"))
+        for label, key in getattr(self, "_headings", []):
+            label.setText(tr(key))
         if hasattr(self, "_download_heading"):
             self._download_heading.setText(tr("flash_download_in_progress"))
         if hasattr(self, "_download_cancel_btn"):
@@ -1523,7 +1567,7 @@ class FlashPage(QWidget):
                 _style_card_heading(label)
             else:
                 _apply_card_text(label)
-        for heading in getattr(self, "_headings", []):
+        for heading, _key in getattr(self, "_headings", []):
             _style_card_heading(heading)
 
     def refresh_theme(self):
@@ -1581,6 +1625,17 @@ class FlashPage(QWidget):
         self.prompt_stop(tr_brand("install_stop_check"), on_continue=self._cancel_callback)
 
     def _on_cancel_wait(self):
+        """Stop the run. Before anything is written this needs no confirmation.
+
+        At the power-off step the player has not been touched: the chip goes
+        straight back to Select Software. Once a run is under way the same
+        chip asks first, because there the target is already mid-write.
+        """
+        if getattr(self, "_prompt_only", False):
+            callback = self._cancel_wait_callback
+            if callable(callback):
+                callback()
+            return
         self.prompt_stop(tr_brand("install_stop_check"), on_continue=self._cancel_wait_callback)
 
     def text_column_width(self) -> int:
@@ -1762,6 +1817,7 @@ class FlashPage(QWidget):
         self._ensure_stop_buttons()
         card, row, label, bar, cancel, extra, column = self._stop_target()
         self._stop_open = True
+        self._update_paperclip_hint()
         self._stop_message = message or ""
         flow = getattr(self, "_status_flow", None)
         if flow is not None:
@@ -1853,6 +1909,7 @@ class FlashPage(QWidget):
             return
         self._stop_result = accepted
         self._stop_open = False
+        self._update_paperclip_hint()
         saved = getattr(self, "_stop_saved", None)
         label = getattr(self, "_stop_label", None)
         bar = getattr(self, "_stop_bar", None)

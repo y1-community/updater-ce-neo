@@ -3,8 +3,9 @@
 import logging
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, Qt, Signal
+from PySide6.QtCore import QSettings, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QComboBox,
     QFileDialog,
@@ -152,6 +153,7 @@ class SettingsPage(QWidget):
         # bars silently become classic ones (see src/ui/scrollbars.py).
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
+        self._settings_scroll = scroll
 
         container = QWidget()
         layout = QVBoxLayout(container)
@@ -424,6 +426,14 @@ class SettingsPage(QWidget):
         self._legacy_uninstall_btn.clicked.connect(self._on_scan_legacy_installations)
         leg_layout.addWidget(self._legacy_uninstall_btn, alignment=Qt.AlignLeft)
 
+        # One line that carries the result of the journey, in place. The card
+        # is not taller for it: the label stays hidden until there is news.
+        self._legacy_status_lbl = QLabel("")
+        self._legacy_status_lbl.setWordWrap(True)
+        self._legacy_status_lbl.setProperty("cssClass", "subtitle")
+        self._legacy_status_lbl.setVisible(False)
+        leg_layout.addWidget(self._legacy_status_lbl)
+
         self._legacy_cleanup_card.set_layout(leg_layout)
         self._update_legacy_cleanup_visibility()
         layout.addWidget(self._legacy_cleanup_card)
@@ -533,6 +543,16 @@ class SettingsPage(QWidget):
         btn_row.addWidget(self._btn_launch_sp)
         btn_row.addStretch()
         layout.addLayout(btn_row)
+
+        # The preparation reports here instead of in a window of its own: the
+        # engine download, the readiness verdict, and anything that needs the
+        # user's say-so all land on this one line. Hidden while there is
+        # nothing to say, so the card is no taller for it.
+        self._checker_status_lbl = QLabel("")
+        self._checker_status_lbl.setWordWrap(True)
+        self._checker_status_lbl.setProperty("cssClass", "subtitle")
+        self._checker_status_lbl.setVisible(False)
+        layout.addWidget(self._checker_status_lbl)
 
         card.set_layout(layout)
         return card
@@ -694,6 +714,9 @@ class SettingsPage(QWidget):
         except Exception:
             visible = False
         self._legacy_cleanup_card.setVisible(visible)
+        if not visible and hasattr(self, "_legacy_status_lbl"):
+            self._legacy_status_lbl.clear()
+            self._legacy_status_lbl.setVisible(False)
 
     def _update_sp_auth_visibility(self):
         """Offer the auth file only where it can actually be used.
@@ -949,17 +972,138 @@ class SettingsPage(QWidget):
         self._cache_status_lbl.setText(msg)
 
     def _on_run_checker(self):
-        from .dialogs import LinuxSetupDialog
+        """Prepare SP Flash Tool from this card, not from a window of its own.
 
-        dlg = LinuxSetupDialog(self, auto_start=False)
-        dlg.exec()
+        The old journey opened a setup window with a header, a download box,
+        three status cards and a log — a second Settings page for one button.
+        The same worker runs here instead and the card carries its progress:
+        stage the engine, verify the host, and ask once on the card before
+        anything that needs root.
+        """
+        if getattr(self, "_sp_prep_worker", None) is not None:
+            return
+        try:
+            from .. import linux_sp_flash
+        except Exception as exc:
+            logger.debug("SP Flash Tool prep unavailable", exc_info=True)
+            self._show_checker_status(str(exc), warn=True)
+            return
+        self._btn_run_checker.setEnabled(False)
+        self._show_checker_status(tr("linux_prep_starting"))
+        worker = linux_sp_flash.LinuxStagingWorker(self)
+        self._sp_prep_worker = worker
+        worker.progress.connect(self._on_sp_prep_progress)
+        worker.finished.connect(self._on_sp_prep_finished)
+        worker.finished.connect(worker.deleteLater)
+        worker.start()
+
+    def start_sp_flash_prep(self):
+        """Prepare SP Flash Tool on this card, for the Linux entry points.
+
+        The Linux preparation used to be a window of its own opened from the
+        navigation rail and on first run. Both now land here, so there is one
+        place that prepares the engine and says how it went.
+        """
+        if paths.IS_MAC or is_mediatek_installer() or not hasattr(self, "_checker_status_lbl"):
+            # macOS has no SP Flash Tool, and the Windows card is the driver
+            # card rather than the preparation one.
+            return
+        self._checker_card.setVisible(True)
+        self._reveal_checker_card()
+        if getattr(self, "_sp_prep_worker", None) is None:
+            self._on_run_checker()
+
+    def _on_sp_prep_progress(self, percent: int, message: str):
+        line = f"{int(percent)}%"
+        if message:
+            line = f"{line} — {message}"
+        self._show_checker_status(line)
+
+    def _on_sp_prep_finished(self, ok: bool, message: str, report: dict):
+        self._sp_prep_worker = None
+        self._btn_run_checker.setEnabled(True)
+        if not ok:
+            self._show_checker_status(
+                tr("linux_setup_issue_fmt").format(msg=message), warn=True
+            )
+            return
+        self._render_sp_report(report or {})
+
+    def _render_sp_report(self, report: dict, *, ask_again: bool = True):
+        """Say the verdict in one line, and offer the fix on the card."""
+        items = [it for it in report.get("items", []) if it.get("status") != "ok"]
+        blocking = [it for it in items if not it.get("can_fix")]
+        if blocking:
+            first = blocking[0]
+            self._show_checker_status(
+                first.get("detail") or first.get("badge") or tr("linux_prep_blocked"),
+                warn=True,
+            )
+            return
+        if not items:
+            self._show_checker_status(tr("linux_prep_ready"))
+            return
+        if not report.get("can_auto_fix", True):
+            self._show_checker_status(tr("linux_prep_ready"))
+            return
+        if not ask_again:
+            # One root attempt per press: asking for the same password twice
+            # is noise, and a second prompt would not fix anything more.
+            first = items[0]
+            self._show_checker_status(
+                first.get("badge") or first.get("detail") or tr("linux_prep_needs_access"),
+                warn=True,
+            )
+            return
+        agreed = self._checker_card.run_confirmation(
+            tr("linux_prep_fix_body"),
+            tr("linux_prep_fix_btn"),
+            tr("flash_btn_cancel"),
+        )
+        if not agreed:
+            self._show_checker_status(tr("linux_prep_needs_access"), warn=True)
+            return
+        self._show_checker_status(tr("linux_prep_fixing"))
+        QApplication.processEvents()
+        try:
+            from .. import linux_sp_flash
+
+            linux_sp_flash.auto_fix_permissions()
+            verdict = linux_sp_flash.run_system_checker()
+        except Exception as exc:
+            logger.debug("SP Flash Tool permission fix failed", exc_info=True)
+            self._show_checker_status(str(exc), warn=True)
+            return
+        if verdict.get("overall_ready"):
+            self._show_checker_status(tr("linux_prep_fixed"))
+        else:
+            self._render_sp_report(verdict, ask_again=False)
+
+    def _show_checker_status(self, text: str, *, warn: bool = False):
+        label = self._checker_status_lbl
+        label.setText(text)
+        label.setProperty("cssClass", "warning-banner" if warn else "subtitle")
+        style = label.style()
+        style.unpolish(label)
+        style.polish(label)
+        label.setVisible(True)
+        self._reveal_checker_card()
+
+    def _reveal_checker_card(self):
+        """Scroll the preparation card fully into view as it grows."""
+        card = getattr(self, "_checker_card", None)
+        scroll = getattr(self, "_settings_scroll", None)
+        if card is None or scroll is None:
+            return
+        card.adjustSize()
+        QTimer.singleShot(0, card, lambda: scroll.ensureWidgetVisible(card, 0, 12))
 
     def _on_launch_sp(self):
         from .. import sp_flash_gui
 
         ok, msg = sp_flash_gui.open_sp_flash_tool_gui()
         if not ok:
-            QMessageBox.warning(self, "SP Flash Tool GUI", msg)
+            self._show_checker_status(msg, warn=True)
 
     def retranslate(self):
         """Retranslate UI elements upon language switch."""
@@ -1040,16 +1184,102 @@ class SettingsPage(QWidget):
         self.update()
 
     def _on_scan_legacy_installations(self):
-        from ..legacy_cleanup import detect_legacy_installations
+        """The removal journey, compact and inside this card.
+
+        The old app used to be removed from a modal of its own: a title, a
+        paragraph, a boxed component list, two checkboxes and a button pair
+        that took over the screen for one decision. The card now says what
+        goes, asks once in place, and reports the space it freed before
+        hiding itself — no dialog, no window, just the card changing.
+        """
+        from ..legacy_cleanup import detect_legacy_installations, format_bytes
+
         info = detect_legacy_installations()
-        if info.get("has_legacy") or info.get("has_platform_tools"):
-            from .dialogs import LegacyMigrationDialog
-            dlg = LegacyMigrationDialog(self, scan_info=info)
-            dlg.exec()
-            self._update_legacy_cleanup_visibility()
-        else:
-            QMessageBox.information(
-                self,
-                tr("legacy_cleanup_title"),
-                tr("legacy_cleanup_none_found"),
+        if not (info.get("has_legacy") or info.get("has_platform_tools")):
+            self._show_legacy_status(tr("legacy_cleanup_none_found"))
+            return
+
+        reclaim = format_bytes(int(info.get("estimated_bytes", 0) or 0))
+        agreed = self._legacy_cleanup_card.run_confirmation(
+            tr("legacy_cleanup_confirm_body"),
+            tr("legacy_cleanup_btn_clean"),
+            tr("legacy_cleanup_btn_later"),
+            note=tr("legacy_cleanup_reclaim").format(size=reclaim),
+        )
+        if not agreed:
+            self._reveal_legacy_card()
+            return
+
+        # Android platform tools are the app's own ADB backend, but they are
+        # also the user's: ask before taking them, and put the answer that
+        # keeps a working ADB first. Asked only once the removal is agreed to,
+        # so walking away asks nothing.
+        remove_tools = False
+        if info.get("has_platform_tools"):
+            keep_tools = self._legacy_cleanup_card.run_confirmation(
+                tr("legacy_cleanup_tools_body"),
+                tr("legacy_cleanup_keep_btn"),
+                tr("legacy_cleanup_remove_btn"),
             )
+            remove_tools = not keep_tools
+
+        errors = self._run_legacy_removal(uninstall_platform_tools=remove_tools)
+        if errors:
+            self._show_legacy_status("\n".join(errors), warn=True)
+            return
+        self._show_legacy_status(
+            tr("legacy_cleanup_done_inline").format(size=reclaim),
+            hide_after_ms=4000,
+        )
+
+    def _run_legacy_removal(self, *, uninstall_platform_tools: bool = False):
+        """Delete the pre-3.0 leftovers. Returns the errors, if any.
+
+        ``uninstall_platform_tools`` is the user's answer to this card's own
+        question; it defaults to keeping them, since a flash run needs ADB.
+        """
+        from ..legacy_cleanup import remove_linux_legacy, remove_macos_legacy
+
+        try:
+            if paths.IS_MAC:
+                _ok, _removed, errors = remove_macos_legacy(
+                    remove_apps=True,
+                    remove_app_support=True,
+                    uninstall_platform_tools=bool(uninstall_platform_tools),
+                )
+            else:
+                _ok, _removed, errors = remove_linux_legacy(
+                    remove_install_dir=True,
+                    uninstall_platform_tools=bool(uninstall_platform_tools),
+                )
+        except Exception as exc:  # a stubborn path must not take the page down
+            logger.debug("Legacy removal failed", exc_info=True)
+            return [str(exc)]
+        return [str(e) for e in (errors or [])]
+
+    def _show_legacy_status(self, text: str, *, warn: bool = False, hide_after_ms: int = 0):
+        """Write the journey's result on the card and scroll it into view."""
+        label = self._legacy_status_lbl
+        label.setText(text)
+        label.setProperty("cssClass", "warning-banner" if warn else "subtitle")
+        style = label.style()
+        style.unpolish(label)
+        style.polish(label)
+        label.setVisible(True)
+        self._reveal_legacy_card()
+        if hide_after_ms:
+            QTimer.singleShot(int(hide_after_ms), self, self._update_legacy_cleanup_visibility)
+
+    def _reveal_legacy_card(self):
+        """Grow the card and move the scroll so the whole card is on screen.
+
+        The card sits low in the Settings column, so a taller card can grow
+        past the bottom edge — the scroll follows it instead of leaving the
+        new line half cut off.
+        """
+        card = self._legacy_cleanup_card
+        card.adjustSize()
+        scroll = getattr(self, "_settings_scroll", None)
+        if scroll is None:
+            return
+        QTimer.singleShot(0, card, lambda: scroll.ensureWidgetVisible(card, 0, 12))

@@ -50,6 +50,7 @@ from ..updates import asset_hint, pick_platform_asset
 from .dark import T
 from .glass import apply_dialog_theme
 from .scrollbars import configure_scroll_area
+from .widgets import InstallProgress as _InstallProgress
 
 
 class FlashCompleteDialog(QDialog):
@@ -1058,7 +1059,7 @@ class LinuxSetupDialog(QDialog):
         self._progress_msg.setStyleSheet(f"font-size: 12px; color: {t.fg}; font-weight: 500;")
         prog_layout.addWidget(self._progress_msg)
 
-        self._progress_bar = QProgressBar()
+        self._progress_bar = _InstallProgress()
         self._progress_bar.setRange(0, 100)
         self._progress_bar.setValue(0)
         self._progress_bar.setTextVisible(False)

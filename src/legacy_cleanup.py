@@ -9,9 +9,14 @@ Updater CE 3.0 is a complete rewrite and standalone replacement packaged as comp
 optimized native binaries.
 
 SAFETY INVARIANTS:
-1. NEVER detect, touch, or remove 'InnioasisUpdater.app' (no space). That is the
-   standalone Chinese offline tool and must be completely preserved.
-2. Only detect 'Innioasis Updater.app' (with space) created by pre-3.0 run_mac.sh.
+1. Both pre-3.0 bundles are old apps and are offered for removal:
+   'Innioasis Updater.app' (with space, created by pre-3.0 run_mac.sh) and
+   'InnioasisUpdater.app' (no space). Either or both may be installed.
+2. NEVER detect, touch, or remove the bundle this process is running from,
+   whatever it is called: `_running_app_bundle()` is resolved from
+   ``sys.executable`` and both detection and removal refuse it. The current
+   product names ('Updater CE.app', 'UpdaterCE.app', 'MediaTek Installer.app')
+   are refused by name as well.
 3. Updater CE stores its own data in 'Updater CE' application support / cache.
 """
 
@@ -23,12 +28,24 @@ import subprocess
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+# Current product bundles. Their *contents* are the app, never a leftover, so
+# they are refused even when an old copy sits in another Applications folder.
 PROTECTED_APP_NAMES = {
-    "innioasisupdater.app",
     "updater ce.app",
     "updaterce.app",
     "mediatek installer.app",
 }
+
+# The old apps this service offers to remove. The no-space bundle is the
+# standalone offline tool; the spaced one is what run_mac.sh installed.
+LEGACY_APP_NAMES = (
+    "Innioasis Updater.app",
+    "InnioasisUpdater.app",
+)
+LEGACY_APP_DIRS = (
+    Path("/Applications"),
+    Path.home() / "Applications",
+)
 
 
 def _calc_dir_size(path: Path) -> int:
@@ -63,10 +80,47 @@ def format_bytes(n: int) -> str:
     return f"{gb:.2f} GB"
 
 
+def _running_app_bundle() -> Optional[Path]:
+    """The .app bundle this process runs from, when there is one.
+
+    A frozen build lives at ``<bundle>.app/Contents/MacOS/<exe>``, so the bundle
+    is the first ``.app`` ancestor of the executable. Running from a source
+    checkout finds nothing, which is correct: there is no bundle to protect.
+    """
+    try:
+        exe = Path(sys.executable).resolve()
+    except Exception:
+        return None
+    for parent in exe.parents:
+        if parent.suffix == ".app":
+            return parent
+    return None
+
+
 def is_protected_app(path: Path) -> bool:
-    """Return True if path represents a protected application that must never be removed."""
+    """Return True if path must never be removed.
+
+    Two ways to be protected: the name is a current product bundle, or the path
+    *is* the bundle this process is running from. The second rule is what keeps
+    a build named 'InnioasisUpdater.app' from offering to delete itself while it
+    still treats that name, elsewhere on disk, as an old app.
+    """
     name_lower = path.name.lower().strip()
-    return name_lower in PROTECTED_APP_NAMES
+    if name_lower in PROTECTED_APP_NAMES:
+        return True
+    running = _running_app_bundle()
+    if running is None:
+        return False
+    try:
+        return path.resolve() == running
+    except OSError:
+        return False
+
+
+def is_legacy_app(path: Path) -> bool:
+    """Return True when ``path`` is one of the old app bundles this offers."""
+    name_lower = path.name.lower().strip()
+    return name_lower in {name.lower() for name in LEGACY_APP_NAMES}
 
 
 def detect_legacy_installations() -> dict:
@@ -91,18 +145,15 @@ def detect_legacy_installations() -> dict:
 
     # 1. macOS Detection
     if sys.platform == "darwin" or os.environ.get("INNIOASIS_SIMULATE_MACOS"):
-        candidates = [
-            Path("/Applications/Innioasis Updater.app"),
-            Path.home() / "Applications" / "Innioasis Updater.app",
-        ]
-        for c in candidates:
-            if c.exists() and not is_protected_app(c):
-                # Ensure it specifically is 'Innioasis Updater.app'
-                if c.name == "Innioasis Updater.app":
-                    result["macos_apps"].append(c)
-                    sz = _calc_dir_size(c)
-                    result["estimated_bytes"] += sz
-                    result["items_summary"].append(f"{c.name} ({format_bytes(sz)})")
+        for folder in LEGACY_APP_DIRS:
+            for name in LEGACY_APP_NAMES:
+                c = folder / name
+                if not c.exists() or is_protected_app(c):
+                    continue
+                result["macos_apps"].append(c)
+                sz = _calc_dir_size(c)
+                result["estimated_bytes"] += sz
+                result["items_summary"].append(f"{c.name} ({format_bytes(sz)})")
 
         legacy_support = Path.home() / "Library" / "Application Support" / "Innioasis Updater"
         if legacy_support.is_dir():
@@ -191,7 +242,7 @@ def remove_macos_legacy(
 
     if remove_apps:
         for app_path in info.get("macos_apps", []):
-            if is_protected_app(app_path) or app_path.name != "Innioasis Updater.app":
+            if is_protected_app(app_path) or not is_legacy_app(app_path):
                 errors.append(f"Safety guard: refusing to remove protected app {app_path}")
                 continue
 

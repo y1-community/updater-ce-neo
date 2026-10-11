@@ -32,7 +32,7 @@ from PySide6.QtCore import (
     QUrl,
     Signal,
 )
-from PySide6.QtGui import QColor, QFont, QIcon, QPalette, QPixmap
+from PySide6.QtGui import QColor, QFont, QGuiApplication, QIcon, QPalette, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
@@ -83,7 +83,7 @@ from ..flash_service import (
     completed_extract_dir,
     normalise_method,
 )
-from ..i18n import tr, tr_brand, translator
+from ..i18n import initial_language, tr, tr_brand, translator
 from ..state import FlashState, StateMachine
 from .dialogs import (
     DiagnosticsView,
@@ -123,20 +123,40 @@ _PAGE_DIAGNOSTICS = 5
 _PAGE_NOTICE = 6
 _PAGE_SUPPORT = 7
 
-# Choose Software, and the app's ordinary size. Measured from the running
-# window on this desktop: 680×480. A desktop that draws its own title bar
-# adds that bar outside this size. When the window controls share the brand
-# row, this size already includes it. The floor is a little smaller so the
-# window can still shrink.
-DEFAULT_WINDOW_WIDTH = 680
-DEFAULT_WINDOW_HEIGHT = 480
+# Choose Software, and the app's starting size: the compact window the app has
+# always fitted on small screens. It is also the floor, and the ceiling is the
+# widest catalogue layout — the window grows to the content in between, so a
+# page that needs room takes it and a short one gives it back.
+DEFAULT_WINDOW_WIDTH = 640
+DEFAULT_WINDOW_HEIGHT = 440
 MINIMUM_WINDOW_WIDTH = 640
 MINIMUM_WINDOW_HEIGHT = 440
+MAXIMUM_WINDOW_WIDTH = 1240
+
+# Slack added to a page's own content height when the window hugs it, so the
+# last card's shadow and the status bar are never clipped.
+CONTENT_FIT_SLACK = 16
 
 
-def default_window_size() -> tuple[int, int]:
-    """Client size for Choose Software and the rest of the ordinary UI."""
-    return DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT
+def default_window_size(screen=None) -> tuple[int, int]:
+    """Client size for Choose Software and the rest of the ordinary UI.
+
+    Clamped to the screen the window lives on. The catalogue size is wide
+    enough that it does not fit every display, and a window larger than the
+    screen would open with its edges — and the page title — off-screen.
+    """
+    width, height = DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT
+    try:
+        if screen is None:
+            screen = QGuiApplication.primaryScreen()
+        if screen is not None:
+            available = screen.availableGeometry()
+            width = max(MINIMUM_WINDOW_WIDTH, min(width, int(available.width())))
+            height = max(MINIMUM_WINDOW_HEIGHT, min(height, int(available.height())))
+    except Exception:
+        logger.debug("Screen clamp failed", exc_info=True)
+    return width, height
+
 
 # The sidebar brand title and the version badge beside it share one size.
 _BRAND_FONT_SIZE = "14px"
@@ -371,11 +391,13 @@ def can_inline_title_with_window_controls() -> bool:
     return any(d in desktop for d in ("gnome", "unity", "pantheon"))
 
 
-# Floor for the compact install window: the progress card plus whatever
-# chrome (header, status line) the current scenario shows must fit.
+# Floor for the install window's height: the progress card plus whatever
+# chrome (header, status line) the current scenario shows must fit. The window
+# keeps the app's full width while it installs — only the height hugs the card,
+# and it grows again for on-screen prompts, the completion card and the
+# donation appeal.
 COMPACT_INSTALL_MIN_HEIGHT = 188
 COMPACT_INSTALL_MIN_HEIGHT_NO_DONATIONS = 168
-COMPACT_INSTALL_WIDTH = 600
 
 
 def compact_install_height(
@@ -514,7 +536,9 @@ class MainWindow(QMainWindow):
         self.sm = StateMachine(self)
         self.service = FlashService(self)
         self.settings = QSettings("innioasis", "updater")
-        translator().set_language(str(self.settings.value("language", "en")))
+        translator().set_language(
+            initial_language(str(self.settings.value("language", "") or ""))
+        )
 
         self._package_path = ""
         self._package_name = ""
@@ -814,6 +838,7 @@ class MainWindow(QMainWindow):
         outer.addWidget(content_col, 1)
         central_layout.addWidget(body, 1)
 
+        self._restore_notes_language()
         self._settings_page.donation_visibility_changed.connect(
             self._apply_donation_visibility
         )
@@ -1145,10 +1170,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._lang_label)
         self._lang_combo = QComboBox()
         self._lang_combo.setObjectName("langCombo")
-        self._lang_combo.addItem("\u4e2d\u6587", "zh-CN")
-        self._lang_combo.addItem("English", "en")
-        self._lang_combo.addItem("Fran\u00e7ais", "fr")
-        self._lang_combo.addItem("Espa\u00f1ol", "es")
+        self._populate_languages()
         idx = self._lang_combo.findData(translator().lang)
         self._lang_combo.setCurrentIndex(idx if idx >= 0 else 1)
         self._lang_combo.currentIndexChanged.connect(self._on_language_changed)
@@ -1159,6 +1181,37 @@ class MainWindow(QMainWindow):
         self._apply_nav_surface()
         self._refresh_icons()
         return nav
+
+    def _populate_languages(self):
+        """Fill the picker: hand-translated languages, then every catalog.
+
+        The text is the language's own name, with its flag in front where this
+        desktop's emoji font has one (Windows' Segoe UI Emoji does not, and two
+        letters there read worse than no flag). The code itself always rides in
+        the item data, so a label is never the lookup key.
+        """
+        from ..i18n import curated_codes, flag, language_choices
+
+        combo = self._lang_combo
+        combo.clear()
+        rows = {code: (code, native, english) for code, native, english in language_choices()}
+        curated = list(curated_codes())
+        # The hand-translated languages keep their own order first; everything
+        # the catalogs added follows, in each language's own name.
+        ordered = [rows[code] for code in curated if code in rows]
+        ordered += [
+            rows[code] for code in sorted(rows, key=lambda c: rows[c][1].casefold())
+            if code not in set(curated)
+        ]
+        for code, native, english in ordered:
+            glyph = flag(code)
+            label = f"{glyph} {native}" if glyph else native
+            combo.addItem(label, code)
+            index = combo.count() - 1
+            tip = english if english and english != native else native
+            combo.setItemData(index, f"{tip} ({code})", Qt.ToolTipRole)
+            combo.setItemData(index, bool(glyph), Qt.UserRole + 1)
+        combo.setToolTip(tr("nav_language"))
 
     def _apply_nav_surface(self):
         """Color the sidebar from the palette.
@@ -1176,6 +1229,10 @@ class MainWindow(QMainWindow):
         self._paint_opaque(nav, T().bg_nav)
         nav.update()
         for btn in nav.findChildren(SidebarButton):
+            # The rows belong over the rail's own plate. Raising them is what
+            # keeps them visible after a window state change re-stacks the
+            # window's native view.
+            btn.raise_()
             btn.update()
 
     def _refresh_icons(self):
@@ -1199,8 +1256,15 @@ class MainWindow(QMainWindow):
         if hasattr(self, "_install_output_btn"):
             self._install_output_btn.setIcon(get_symbol_icon("diagnostics", 16))
         if hasattr(self, "_lang_combo"):
+            from PySide6.QtGui import QIcon
+
             lang_icon = get_symbol_icon("translate", 14)
             for i in range(self._lang_combo.count()):
+                # A row that carries its language's flag needs no second mark;
+                # the ones without a flag keep the translate glyph.
+                if self._lang_combo.itemData(i, Qt.UserRole + 1):
+                    self._lang_combo.setItemIcon(i, QIcon())
+                    continue
                 self._lang_combo.setItemIcon(i, lang_icon)
 
     def _refresh_components(self):
@@ -1462,6 +1526,8 @@ class MainWindow(QMainWindow):
         if event.type() in (QEvent.WindowStateChange, QEvent.ActivationChange):
             self._verify_native_chrome()
             self._schedule_caption_button_refresh()
+            if event.type() == QEvent.WindowStateChange:
+                self._schedule_window_state_resync()
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -1469,6 +1535,9 @@ class MainWindow(QMainWindow):
             self._shown_once = True
             if not self._install_run_active() and not self.isMaximized() and not self.isFullScreen():
                 self.resize(*default_window_size())
+            # The starting size is the compact one; the page on screen may need
+            # more, so it gets the chance to take it once the layout is live.
+            QTimer.singleShot(0, self._fit_window_to_page)
             if not os.environ.get("QT_QPA_PLATFORM") == "offscreen" and not os.environ.get("INNIOASIS_HEADLESS"):
                 QTimer.singleShot(1200, self._check_legacy_installations)
             self._ensure_theme_sync()
@@ -1505,6 +1574,43 @@ class MainWindow(QMainWindow):
         overlay = getattr(self, "_drop_overlay", None)
         if overlay is not None and overlay.isVisible():
             overlay.setGeometry(self.rect())
+
+    def _schedule_window_state_resync(self) -> None:
+        """Re-assemble the window after a full-screen round trip.
+
+        macOS re-lays out a full-screen window natively: the app's header is a
+        manually placed child, the sidebar rows paint their own plate, and the
+        seamless chrome is re-applied outside the transition. One pass once the
+        animation has settled is what keeps the rows and the header in place.
+        """
+        if getattr(self, "_state_resync_pending", False):
+            return
+        self._state_resync_pending = True
+        QTimer.singleShot(280, self._resync_window_state)
+
+    def _resync_window_state(self) -> None:
+        self._state_resync_pending = False
+        try:
+            if not self.isFullScreen() and not self.isMinimized():
+                self._reassert_mac_glass()
+            bar = getattr(self, "_title_bar", None)
+            if sys.platform == "darwin" and bar is not None:
+                bar.setGeometry(0, 0, self.width(), int(HEADER_CONTENT_HEIGHT))
+                bar.show()
+                bar.raise_()
+            self._apply_nav_surface()
+            nav = getattr(self, "_nav_panel", None)
+            if nav is not None:
+                nav.update()
+                for btn in nav.findChildren(SidebarButton):
+                    btn.update()
+            central = self.centralWidget()
+            layout = central.layout() if central is not None else None
+            if layout is not None:
+                layout.activate()
+            self.update()
+        except Exception:
+            logger.debug("Window state resync failed", exc_info=True)
 
     def _schedule_caption_button_refresh(self) -> None:
         """Re-run the frame change a manual resize ends with.
@@ -1755,6 +1861,124 @@ class MainWindow(QMainWindow):
             prompt.hide()
         self._adjust_window_geometry()
 
+    def _window_chrome(self) -> tuple[int, int]:
+        """``(width, height)`` outside the page stack: rail, header, status bar."""
+        stack = getattr(self, "_stack", None)
+        if stack is None or stack.width() <= 0 or stack.height() <= 0:
+            return (0, 0)
+        return (
+            max(0, self.width() - stack.width()),
+            max(0, self.height() - stack.height()),
+        )
+
+    def _page_content_height(self, page) -> int:
+        """The height a page wants, with nothing clipped.
+
+        The catalogue measures itself (its list hugs its rows), a settings-style
+        page measures the widget inside its scroll area, and anything else falls
+        back to its own size hint.
+        """
+        hint = getattr(page, "content_height_hint", None)
+        if callable(hint):
+            try:
+                value = int(hint())
+                if value > 0:
+                    return value
+            except Exception:
+                logger.debug("Content height hint failed", exc_info=True)
+        if page is not None:
+            from PySide6.QtWidgets import QAbstractScrollArea
+
+            for area in page.findChildren(QAbstractScrollArea):
+                try:
+                    if not area.widgetResizable():
+                        continue
+                    inner = area.widget()
+                except Exception:
+                    continue
+                if inner is not None:
+                    value = int(inner.sizeHint().height()) + 2 * area.frameWidth()
+                    if value > 0:
+                        return value
+            try:
+                return max(int(page.sizeHint().height()), int(page.minimumSizeHint().height()))
+            except Exception:
+                logger.debug("Page size hint failed", exc_info=True)
+        return self.height()
+
+    def _apply_window_size_limits(self, content_height: int | None = None, fill_height: bool = False) -> None:
+        """Cap resizing at the sizes this page can fill.
+
+        Width stops at the widest catalogue layout; height at the page's own
+        content, so dragging a border past either only spreads the two columns
+        apart or leaves an empty band under the last card. Full screen still
+        gives the log every pixel (``fill_height``).
+        """
+        stack = getattr(self, "_stack", None)
+        page = stack.currentWidget() if stack is not None else None
+        if content_height is None:
+            content_height = self._page_content_height(page) if page is not None else 0
+        _, chrome_h = self._window_chrome()
+        max_w = MAXIMUM_WINDOW_WIDTH
+        max_h = max(MINIMUM_WINDOW_HEIGHT, int(content_height) + chrome_h + CONTENT_FIT_SLACK)
+        screen = self.screen()
+        if screen is not None:
+            available = screen.availableGeometry()
+            max_w = max(MINIMUM_WINDOW_WIDTH, min(max_w, int(available.width())))
+            if fill_height:
+                max_h = int(available.height())
+            else:
+                max_h = max(MINIMUM_WINDOW_HEIGHT, min(max_h, int(available.height())))
+        if (max_w, max_h) != (self.maximumWidth(), self.maximumHeight()):
+            self.setMaximumSize(max_w, max_h)
+
+    def _fit_window_to_page(self, *_args) -> None:
+        """Size the window to the page on screen — shrinking as well as growing.
+
+        Every page switch and every content change ends here: a release picked
+        from the list, a refilled list, retranslated copy, a finished download.
+        A page that needs room takes it and a short one gives it back, so the
+        empty band a taller window would add is never left behind. The install
+        progress card keeps its own hug, and the log keeps the size the user
+        gave it.
+        """
+        if (
+            self.isMinimized()
+            or self.isMaximized()
+            or self.isFullScreen()
+            or bool(self.windowState() & (Qt.WindowMaximized | Qt.WindowFullScreen))
+        ):
+            return
+        stack = getattr(self, "_stack", None)
+        page = stack.currentWidget() if stack is not None else None
+        if page is None:
+            return
+        if stack.currentIndex() == _PAGE_DIAGNOSTICS:
+            self._apply_window_size_limits(fill_height=True)
+            return
+        chrome_w, chrome_h = self._window_chrome()
+        content_h = self._page_content_height(page)
+        target_h = int(content_h) + chrome_h + CONTENT_FIT_SLACK
+        try:
+            target_h = max(target_h, int(page.minimumSizeHint().height()) + chrome_h)
+            need_w = int(page.minimumSizeHint().width()) + chrome_w
+        except Exception:
+            need_w = MINIMUM_WINDOW_WIDTH
+        target_h = max(MINIMUM_WINDOW_HEIGHT, target_h)
+        # The width the user chose is kept: only a page that cannot be drawn in
+        # it (long translated words, a wide form) makes the window wider.
+        target_w = max(self.width(), MINIMUM_WINDOW_WIDTH, need_w)
+        screen = self.screen()
+        if screen is not None:
+            available = screen.availableGeometry()
+            target_w = min(target_w, int(available.width()), MAXIMUM_WINDOW_WIDTH)
+            target_h = min(target_h, int(available.height()))
+        self._apply_window_size_limits(target_h)
+        if target_w != self.width() or target_h != self.height():
+            self._animate_window_size(
+                target_w, target_h, minimum=(MINIMUM_WINDOW_WIDTH, MINIMUM_WINDOW_HEIGHT)
+            )
+
     def _adjust_window_geometry(self):
         """Adjust window size to fit the content of the active page without wasted space."""
         if (
@@ -1766,9 +1990,11 @@ class MainWindow(QMainWindow):
             return
 
         curr_idx = self._stack.currentIndex() if hasattr(self, "_stack") else _PAGE_SELECT
-        # The log needs the full window, including while an install is running.
+        # The log needs the full window, including while an install is running:
+        # it is the one page that is allowed to keep growing past its content.
         if curr_idx == _PAGE_DIAGNOSTICS:
-            width, height = default_window_size()
+            self._apply_window_size_limits(fill_height=True)
+            width, height = default_window_size(self.screen())
             self._animate_window_size(
                 width, height, minimum=(MINIMUM_WINDOW_WIDTH, MINIMUM_WINDOW_HEIGHT),
             )
@@ -1813,7 +2039,14 @@ class MainWindow(QMainWindow):
                         prompt_h = max(prompt_h, fitted_prompt)
             bar = self.statusBar()
             status_h = bar.sizeHint().height() if bar is not None and bar.isVisible() else 0
-            target_w = max(COMPACT_INSTALL_WIDTH, install_horizontal_chrome(sidebar) + int(text_w))
+            # Only the height hugs the progress card: the window keeps the width
+            # it already has (the app's ordinary width), widened if the wrapped
+            # copy needs more room. Clamped to the screen so a wide window does
+            # not push the card off the display.
+            target_w = max(self.width(), install_horizontal_chrome(sidebar) + int(text_w))
+            scr = self.screen()
+            if scr is not None:
+                target_w = min(target_w, int(scr.availableGeometry().width()))
             if curr_idx == _PAGE_FLASH:
                 target_h = compact_install_height(
                     page_h=page_h,
@@ -1827,33 +2060,25 @@ class MainWindow(QMainWindow):
                 # applied once the progress card is the page on screen.
                 target_h = 228
             self._hugging_install = True
+            self._apply_window_size_limits(target_h)
             self._animate_window_size(target_w, target_h, minimum=(target_w, target_h))
         else:
             min_w = MINIMUM_WINDOW_WIDTH
             min_h = MINIMUM_WINDOW_HEIGHT
-            was_hugging = getattr(self, "_hugging_install", False)
             self._hugging_install = False
-            # Select Software, Settings, and App Updates keep the size the
-            # window already has. Only leaving the install card restores the
-            # catalogue size. The taller minimum is applied after that ease,
-            # so the window does not jump to the floor and then animate.
-            if was_hugging:
-                width, height = default_window_size()
-                self._animate_window_size(width, height, minimum=(min_w, min_h))
-            elif self.width() < min_w or self.height() < min_h:
-                self.setMinimumSize(min_w, min_h)
-                self.resize(min_w, min_h)
-            else:
-                self.setMinimumSize(min_w, min_h)
+            self.setMinimumSize(min_w, min_h)
+            # Whatever page is on screen now owns the window size: leaving the
+            # install card grows it back, a short page gives the room up.
+            self._fit_window_to_page()
 
     def _on_select_content_changed(self):
-        """Grow the window height for the software list contents.
+        """Resize the window for the software list contents.
 
-        The release list hugs its rows, so the window grows to show more
-        items — clamped to the available screen height. It never shrinks:
-        a shorter list keeps the size the window already has, and the
-        install flow keeps owning the window size while it runs. Skipped
-        on other pages, or when not yet visible (retried on show).
+        The release list hugs its rows, so the window grows to show more items
+        and shrinks back when the list is shorter — clamped to the screen and
+        to the page's own content. The install flow keeps owning the window
+        size while it runs. Skipped on other pages, or when not yet visible
+        (retried on show).
         """
         try:
             if (
@@ -1910,8 +2135,8 @@ class MainWindow(QMainWindow):
                 self._pending_select_fit = True
                 return
             # The relayout cascade crosses several nesting levels (and a
-            # stacked widget), so one pass is not enough: flush posted
-            # events until the measured height settles, with a small cap.
+            # stacked widget), so one pass is not enough: flush posted events
+            # until the measured height settles, with a small cap.
             need = -1
             for _ in range(5):
                 QApplication.sendPostedEvents()
@@ -1920,20 +2145,7 @@ class MainWindow(QMainWindow):
                     break
                 need = settled
             stack.updateGeometry()
-            chrome = self.height() - stack.height()
-            target_h = need + chrome
-            target_h = max(int(target_h), MINIMUM_WINDOW_HEIGHT)
-            scr = self.screen()
-            if scr is not None:
-                avail = scr.availableGeometry().height() - 48
-                if avail >= MINIMUM_WINDOW_HEIGHT:
-                    target_h = min(int(target_h), int(avail))
-            if target_h - self.height() >= 4:
-                self._animate_window_size(
-                    self.width(),
-                    int(target_h),
-                    minimum=(MINIMUM_WINDOW_WIDTH, MINIMUM_WINDOW_HEIGHT),
-                )
+            self._fit_window_to_page()
         except Exception:
             logger.debug("Select content fit failed", exc_info=True)
 
@@ -3293,9 +3505,11 @@ class MainWindow(QMainWindow):
         self._nav_to_page(prev)
 
     def _show_linux_setup(self):
-        from .dialogs import LinuxSetupDialog
-        dlg = LinuxSetupDialog(self, auto_start=False)
-        dlg.exec()
+        """Reveal the preparation card: there is no preparation window any more."""
+        self._nav_to_page(_PAGE_SETTINGS)
+        page = getattr(self, "_settings_page", None)
+        if page is not None and hasattr(page, "start_sp_flash_prep"):
+            page.start_sp_flash_prep()
 
     def _reveal_sp_gui_button(self) -> None:
         """Keep the sidebar tool button available during a download handoff."""
@@ -3557,10 +3771,15 @@ class MainWindow(QMainWindow):
             return
 
     def _check_linux_first_run(self):
+        """First run on Linux: prepare on the Settings card, not in a window.
+
+        This used to open the setup window on top of the app. The card holds
+        the same preparation, so the first run simply lands on it — a flash
+        run stages the engine on its own either way.
+        """
         if paths.IS_MAC or os.environ.get("QT_QPA_PLATFORM") == "offscreen" or os.environ.get("CI"):
             return
         from .. import linux_sp_flash
-        from .dialogs import LinuxSetupDialog
 
         stage = linux_sp_flash.stage_dir()
         first_run_done = self.settings.value("linux_first_run_completed", False, type=bool)
@@ -3568,8 +3787,7 @@ class MainWindow(QMainWindow):
 
         if not files_ready or not first_run_done:
             self.settings.setValue("linux_first_run_completed", True)
-            dlg = LinuxSetupDialog(self, auto_start=True)
-            dlg.exec()
+            self._show_linux_setup()
 
     def _open_credits(self):
         from ..browser import open_browser
@@ -3580,6 +3798,39 @@ class MainWindow(QMainWindow):
         translator().set_language(lang)
         self.settings.setValue("language", lang)
         self._retranslate_all()
+        self._sync_notes_language()
+        # German labels are longer than English ones: refit the window to the
+        # copy it now holds.
+        QTimer.singleShot(0, self._fit_window_to_page)
+
+    def _restore_notes_language(self):
+        """Apply the saved release-notes choice once the pages exist.
+
+        A reader who left the app on German (or Spanish, or Japanese) and had
+        the notes translated sees them translated again next time, without
+        asking twice.
+        """
+        if not hasattr(self, "_select_page"):
+            return
+        if (translator().lang or "en").strip() == "en":
+            return
+        stored = self.settings.value("translate_release_notes", None)
+        if stored is None or str(stored).strip().lower() not in ("false", "0", "no", "off"):
+            self._select_page.set_auto_translate_notes(True)
+
+    def _sync_notes_language(self):
+        """Keep the release notes in the language the reader just chose.
+
+        Switching to any language but English turns the in-app translation on
+        and translates what is already on screen, so no second click is needed.
+        Switching back to English restores the published text. The choice is
+        remembered, so the next release selected is shown translated too.
+        """
+        if not hasattr(self, "_select_page"):
+            return
+        wanted = (translator().lang or "en").strip() != "en"
+        self.settings.setValue("translate_release_notes", wanted)
+        self._select_page.set_auto_translate_notes(wanted)
 
     def _retranslate_all(self):
         self._brand_label.setText(get_brand_name())

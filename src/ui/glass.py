@@ -186,6 +186,34 @@ def _ensure_seamless_titlebar(window: QMainWindow | QWidget) -> None:
         pass
 
 
+def in_fullscreen(window: QMainWindow | QWidget) -> bool:
+    """True while the window is in macOS full screen.
+
+    A full-screen window has no titlebar, so the seamless-titlebar check cannot
+    say anything about it. Worse, the watchdog's repair (style mask, fleet of
+    window controls) run against a window macOS owns leaves the restored
+    window mis-framed: an empty band above the app's own header.
+    """
+    try:
+        from PySide6.QtCore import Qt
+
+        if window.windowState() & Qt.WindowState.WindowFullScreen:
+            return True
+    except Exception:
+        pass
+    if sys.platform != "darwin":
+        return False
+    try:
+        view = _get_nsview(window)
+        ns_win = view.window() if view else None
+        if ns_win is None:
+            return False
+        # NSWindowStyleMaskFullScreen = 1 << 14
+        return bool(ns_win.styleMask() & 0x4000)
+    except Exception:
+        return False
+
+
 def native_chrome_intact(window: QMainWindow | QWidget, dark: bool = True) -> bool:
     """True when the platform's seamless window chrome is still in place.
 
@@ -201,6 +229,8 @@ def native_chrome_intact(window: QMainWindow | QWidget, dark: bool = True) -> bo
     """
     if sys.platform == "darwin":
         if not is_glass_supported():
+            return True
+        if in_fullscreen(window):
             return True
         try:
             view = _get_nsview(window)
