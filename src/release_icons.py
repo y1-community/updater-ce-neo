@@ -126,7 +126,15 @@ def software_icon_urls(package, *, dark: bool | None = None) -> list[str]:
 
 
 def icon_candidate_urls(release, package=None, *, dark: bool | None = None) -> list[str]:
-    """Release files, then the software logo. Built without the GitHub API."""
+    """Release files, then the software logo. Built without the GitHub API.
+
+    When the current install is a locally browsed package (no release/source_repo),
+    the software-logo path is intentionally skipped: offline zips do not carry a
+    release-page icon, and the card should fall back to the settings-gear squircle
+    rather than reuse a remote software logo (e.g. the original-software icon).
+    """
+    if not release or not (release.get("source_repo") or (release.get("html_url") or "").startswith("https://github.com/")):
+        return _deduped(list(release_asset_urls(release, package, dark=dark)))
     return _deduped(
         list(release_asset_urls(release, package, dark=dark))
         + list(software_icon_urls(package, dark=dark))

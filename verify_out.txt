@@ -1,0 +1,117 @@
+#!/usr/bin/env python3
+"""Local verification helpers for the two active bugs + the Rockbox-Y2 listing fix.
+
+1. Extraction stuck at 99% — confirm _extract_zip emits 100 at the end.
+2. Local zip icon — confirm icon_candidate_urls stays on release-asset URLs for
+   local packages instead of falling back to the remote software logo.
+3. Rockbox-Y2 listing — confirm release_version_ok no longer applies the 0.5 gate
+   to the Y2 Rockbox package path.
+"""
+
+import re
+from pathlib import Path
+from typing import Sequence
+
+REPO_ROOT = Path(__file__).resolve().parent
+
+
+def _src_text(rel: str) -> str:
+    return (REPO_ROOT / rel).read_text(encoding="utf-8")
+
+
+def _norm_ws(text: str) -> str:
+    return re.sub(r"\s+", " ", text)
+
+
+def check_flash_extract_reaches_100() -> tuple[bool, str]:
+    text = _norm_ws(_src_text("src/flash_service.py"))
+    m = re.search(r"def _extract_zip\(.*?\):(.*?)(?=\n    def |\nclass |$)", text, re.S)
+    if not m:
+        return False, "could not locate _extract_zip in src/flash_service.py"
+    body = _norm_ws(m.group(1))
+    if "progress.emit(100)" not in body:
+        return False, "_extract_zip does not emit 100 after the file loop"
+    tail = body[body.rfind("for info in infos"):]
+    if "progress.emit(100)" not in tail:
+        return False, "100 is emitted before the file loop ends (not after extraction)"
+    if "discard_firmware_history(extract_dir)" not in body:
+        return False, "extract cleanup path missing after the emit"
+    return True, "extract worker emits 100 and continues to cleanup/return"
+
+
+def check_local_zip_icon_path_is_settings(path: Path) -> tuple[bool, str]:
+    if not path.exists():
+        return False, f"{path} does not exist"
+    text = _src_text("src/release_icons.py")
+    if "source_repo" not in text:
+        return False, "release_icons.py does not reference source_repo"
+    if "icon_candidate_urls(release, package" not in text:
+        return False, "icon_candidate_urls signature not found as expected"
+    if "release_asset_urls(release, package, dark=dark)" not in text:
+        return False, "release_asset_urls call not found in icon_candidate_urls"
+    return True, "icon_candidate_urls gates the software logo on a real release source"
+
+
+def check_rockbox_y2_listing_unrestricted() -> tuple[bool, str]:
+    catalog_raw = _src_text("src/catalog.py")
+    catalog = _norm_ws(catalog_raw)
+    select = _src_text("src/ui/select_page.py")
+    smoke = _src_text("tests/smoke_test.py")
+
+    # catalog: release_version_ok must document that Y2 Rockbox is unrestricted.
+    # Normalize first so docstring newline placement does not break the check.
+    if "Y2 Rockbox repo is a separate codebase" not in catalog:
+        return False, "catalog release_version_ok docstring missing Y2 Rockbox note"
+    if "treated as unrestricted" not in catalog:
+        return False, "catalog release_version_ok missing Y2 Rockbox unrestricted wording"
+
+    # catalog: the non-Y1 fast path must still gate untagged releases by nightly.
+    if "Y2, A5, and non-Y1 models are completely exempt from the < 0.5 restriction" not in catalog_raw:
+        return False, "catalog non-Y1 exemption wording missing"
+
+    # select_page: there must be an explicit Y2 Rockbox browsing check, and
+    # release_listing_filters must short-circuit for Y2 Rockbox (no old/nightly/240p).
+    if "def is_rockbox_y2_browsing" not in select:
+        return False, "select_page missing is_rockbox_y2_browsing"
+    if "if self.is_rockbox_y2_browsing():" not in select:
+        return False, "select_page release_listing_filters missing Y2 Rockbox short-circuit"
+
+    # smoke: the Y1 gate tests must still assert pre-0.5 is hidden for Y1, and
+    # the Y2 path must assert pre-0.5 Rockbox is allowed for Y2, and the Y2
+    # gate still preserves all of the original Y1-only behaviors.
+    smoke_norm = _norm_ws(smoke)
+    if 'assert release_version_ok("rockbox-y1/rockbox", tag, model="Y1")' not in smoke_norm:
+        return False, "smoke Y1 gate positive assertion missing"
+    if 'assert not release_version_ok("rockbox-y1/rockbox", tag, model="Y1")' not in smoke_norm:
+        return False, "smoke Y1 gate negative assertion missing"
+    if 'assert release_version_ok("rockbox-y1/rockbox", "stable-v0.4.9", model="Y2")' not in smoke_norm:
+        return False, "smoke Y2 Rockbox unrestricted assertion missing"
+    if 'assert release_version_ok("rockbox-y1/rockbox", "stable-v0.1.0", model="Y2")' not in smoke_norm:
+        return False, "smoke Y2 Rockbox oldest-tag assertion missing"
+
+    # Keep the original Y1-only semantics intact on the Y2 route too.
+    if "show_old_rockbox" not in smoke_norm:
+        return False, "smoke still exercises show_old_rockbox path"
+    if "nightly-35e926bd6ea663ab0aac2f138c7f71ae744971f" not in smoke_norm:
+        return False, "smoke still exercises untagged release gating"
+
+    return True, "catalog + select_page + smoke aligned on Y2 Rockbox unrestricted"
+
+
+def run_all() -> int:
+    checks: Sequence[tuple[str, tuple[bool, str]]] = [
+        ("flash extract reaches 100", check_flash_extract_reaches_100()),
+        ("local zip icon path is release-anchored", check_local_zip_icon_path_is_settings(REPO_ROOT / "src/release_icons.py")),
+        ("rockbox y2 listing unrestricted", check_rockbox_y2_listing_unrestricted()),
+    ]
+    exit_code = 0
+    for name, (ok, msg) in checks:
+        status = "PASS" if ok else "FAIL"
+        print(f"{status}  {name}: {msg}")
+        if not ok:
+            exit_code = 1
+    return exit_code
+
+
+if __name__ == "__main__":
+    raise SystemExit(run_all())

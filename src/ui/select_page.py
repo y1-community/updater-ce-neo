@@ -995,6 +995,14 @@ class SelectPackagePage(QWidget):
         self._current_package_name = p.stem
         self._remember_gui_local(package_target, self._current_package_model, p.stem)
         self._set_local_banner("sel_current_pkg", p.name)
+        self._details_package = catalog.FirmwarePackage(
+            slug="local-" + str(Path(package_target).name),
+            name=self._current_package_name or Path(package_target).name,
+            model=self._current_package_model or "",
+            repo="",
+            package_name="",
+        )
+        self._set_details_header(None, self._details_package)
         self._start_btn.setEnabled(False)
         self._prepare_package(package_target, self._on_local_prep_done)
 
@@ -1464,12 +1472,20 @@ class SelectPackagePage(QWidget):
         software = (self.current_software() or "").lower()
         return self.current_model().upper() == "Y1" and "rockbox" in software
 
+    def is_rockbox_y2_browsing(self) -> bool:
+        """True when the Rockbox package for Y2 is the one being browsed."""
+        software = (self.current_software() or "").lower()
+        return self.current_model().upper() == "Y2" and "rockbox" in software
+
     def release_listing_filters(self) -> tuple:
         """``(show_old, show_nightly, prefer_240p)`` for the current browse.
 
         The Settings toggles only take effect for Rockbox releases on Y1.
+        For Y2, restriction gating is intentionally removed; Rockbox-Y2	odo everywhere.
         """
         if not self.is_rockbox_y1_browsing():
+            return (False, False, False)
+        if self.is_rockbox_y2_browsing():
             return (False, False, False)
         filters = device_tracking.rockbox_release_filters()
         return (
@@ -1770,10 +1786,12 @@ class SelectPackagePage(QWidget):
         rel = current.data(Qt.UserRole)
         if rel:
             self._current_selected_rel = rel
+            self._details_package = self._package_for_selection()
             self._is_translated = False
             self._is_translating = False
             self._set_notes_content(self._render_release_notes(rel, as_html=True))
-            self._set_details_header(rel, self._package_for_selection())
+            self._set_details_header(rel, self._details_package)
+            self._start_icon_job(self._listed_releases or [rel], priority_tag=str(rel.get("tag_name") or ""))
             if self._auto_translate_notes and (translator().lang or "en").strip() != "en":
                 self._translate_current_release_in_app()
             self._update_translate_link()
@@ -2025,6 +2043,7 @@ class SelectPackagePage(QWidget):
         pkg = package or self.current_package()
         if pkg is None:
             return
+        self._details_package = pkg
 
         # Determine model and variant from original asset name / download URL:
         orig_name = rel.get("asset_name") or rel.get("download_url") or ""
@@ -2101,6 +2120,7 @@ class SelectPackagePage(QWidget):
         self.gui_handoff_abandoned.emit()
         rel = item.data(Qt.UserRole)
         self._trigger_release_install(rel)
+        self._current_selected_rel = rel
 
     def _on_download_progress(self, val: int):
         self._last_download_percent = int(val)
@@ -2128,6 +2148,8 @@ class SelectPackagePage(QWidget):
         )
         self._current_package_model = eff_model
         self._current_installed_release_info = getattr(self, "_pending_install_release_info", None)
+        self._details_package = self.current_package()
+        self._set_details_header(self._current_selected_rel, self._details_package)
         self._prepare_package(result, self._on_online_prep_done)
 
     def _prepare_package(self, path, done_cb):
@@ -2212,6 +2234,16 @@ class SelectPackagePage(QWidget):
         # Retain only this package's extracted files
         prune_extracted_cache(keep_package_path=self._current_package_path)
 
+        # Show the browsed package in the details header and start its icon path.
+        self._details_package = self._details_package or catalog.FirmwarePackage(
+            slug="local-" + str(Path(self._current_package_path).name),
+            name=self._current_package_name or Path(self._current_package_path).name,
+            model=self._current_package_model or "",
+            repo="",
+            package_name="",
+        )
+        self._set_details_header(self._current_selected_rel, self._details_package)
+
         # Auto-detect .auth file in same folder/zip/rar
         self._auto_detect_auth_file(extract_dir)
 
@@ -2277,10 +2309,18 @@ class SelectPackagePage(QWidget):
         self._current_package_name = self._install_card_title(
             Path(display_name).stem, None, self._current_package_model
         )
+        self._details_package = catalog.FirmwarePackage(
+            slug="local-" + str(Path(package_target).name),
+            name=self._current_package_name or Path(package_target).name,
+            model=self._current_package_model or "",
+            repo="",
+            package_name="",
+        )
         self._remember_gui_local(
             package_target, self._current_package_model, self._current_package_name
         )
         self._set_local_banner("sel_current_pkg", display_name)
+        self._set_details_header(None, self._details_package)
         self._start_btn.setEnabled(False)
         self._prepare_package(package_target, self._on_local_prep_done)
 
@@ -2325,6 +2365,14 @@ class SelectPackagePage(QWidget):
         )
         self._remember_gui_local(folder, self._current_package_model, self._current_package_name)
         self._set_local_banner("sel_current_pkg", display_name)
+        self._details_package = catalog.FirmwarePackage(
+            slug="local-" + display_name,
+            name=self._current_package_name or display_name,
+            model=self._current_package_model or "",
+            repo="",
+            package_name="",
+        )
+        self._set_details_header(None, self._details_package)
         self._start_btn.setEnabled(False)
         self._prepare_package(folder, self._on_local_prep_done)
 
@@ -2679,6 +2727,7 @@ class SelectPackagePage(QWidget):
             package,
             dark=bool(is_dark()),
             priority_tag=priority_tag,
+            cache_dir=None,
             parent=self,
         )
         job._generation = generation

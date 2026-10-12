@@ -1,0 +1,82 @@
+flash: MTK_OP_start: found=False
+  MISSING
+flash: 정품: found=False
+  MISSING
+flash: 인증: found=False
+  MISSING
+flash: msg warn msg=[: found=False
+  MISSING
+flash: dark 위로: found=False
+  MISSING
+flash: extract_zip header: found=False
+  MISSING
+flash: rar footer 99: found=False
+  MISSING
+flash: on_local_package_ready: found=False
+  MISSING
+flash: progress emit 100: found=True
+  ctx: 'opying rom item %s failed: %s", item, err)\n            self.progress.emit(100)\n            discard_firmware_history(work_dir)\n            _mark_extract_complete(work_dir)\n            return work_dir\n\n        extract_dir = compute_extract_dir(package_path)\n        from .sp_flash_gui import discard_firmware_history\n        if _is_extract_'
+  ---
+flash: discard_firmware_history after emit: found=True
+  ctx: 'y\n        if _is_extract_complete(extract_dir):\n            discard_firmware_history(extract_dir)\n            return extract_dir\n        shutil.rmtree(extract_dir, ignore_errors=True)\n        extract_dir.mkdir(parents=True, exist_ok=True)\n        suffix = Path(package_path).suffix.lower()\n        if suffix == ".zip":\n            self._extract_zip(package_'
+  ---
+catalog: Y2 separate codebase doc: found=False
+  MISSING
+catalog: treated as unrestricted: found=True
+  ctx: 'compatible with that gate, so the Y2 Rockbox package is\n    treated as unrestricted. Only the Y1 Rockbox path keeps the pre-0.5 gate,\n    and only the Settings toggle can restore pre-0.5 rows there.\n\n    For Y2, A5, and other non-Y1 models, this gating is NEVER applied.\n\n    Tags that carry no semantic version (e.g. nightly-<sha>) are hidden'
+  ---
+catalog: non-Y1 exemption sentence: found=True
+  ctx: ' "Y1" and "Y1" not in model_str\n    if is_non_y1:\n        # Y2, A5, and non-Y1 models are completely exempt from the < 0.5 restriction\n        version = release_version_tuple(tag_name)\n        if version is None and not show_nightly:\n            return False\n        return True\n\n    # The legacy < 0.5 gate historically applied to rockbox-y1/rockbox. The Y2\n    # Rockbox repo is a separate co'
+  ---
+select: is_rockbox_y2_browsing def: found=True
+  ctx: 'rent_model().upper() == "Y1" and "rockbox" in software\n\n    def is_rockbox_y2_browsing(self) -> bool:\n        """True when the Rockbox package for Y2 is the one being browsed."""\n        software = (self.current_software() or "").lower()\n        return self.current_model().upper() == "Y2" and "rockbox" in software\n\n    def release_listing_filter'
+  ---
+select: Y2 short-circuit in filters: found=True
+  ctx: 'rowsing():\n            return (False, False, False)\n        if self.is_rockbox_y2_browsing():\n            return (False, False, False)\n        filters = device_tracking.rockbox_release_filters()\n        return (\n            bool(filters.old_rockbox),\n            bool(filters.nightly),\n            bool(filters.rockbox_240p),\n        )\n\n    def refresh_'
+  ---
+select: release_listing_filters: found=True
+  ctx: 'rent_model().upper() == "Y2" and "rockbox" in software\n\n    def release_listing_filters(self) -> tuple:\n        """``(show_old, show_nightly, prefer_240p)`` for the current browse.\n\n        The Settings toggles only take effect for Rockbox releases on Y1.\n        For Y2, restriction gating is intentionally removed; Rockbox-Y2\todo everywhere.\n   '
+  ---
+select: is_jailed_package_candidate: found=False
+  MISSING
+icon: SoftwareIconJob class: found=True
+  ctx: '.isNull():\n            return pixmap\n    return QPixmap()\n\n\nclass SoftwareIconJob(QThread):\n    """Fetch the manifest software logo off the UI thread."""\n\n    ready = Signal(bytes)\n\n    def __init__(self, package, *, dark: bool = False, parent=None):\n        super().__init__(parent)\n        self._package = package\n        self._dark = bool'
+  ---
+icon: software_icon_urls acc: found=True
+  ctx: 'con_urls\n\n        data = load_first_icon_bytes(\n            software_icon_urls(self._package, dark=self._dark),\n            default_icon_cache_dir(),\n            allow_network=True,\n        )\n        self.ready.emit(data or b"")\n\n\ndef pixmap_from_icon_bytes(data: bytes) -> QPixmap:\n    """Decode icon bytes. A failed decode is a null pixm'
+  ---
+icon: download_glyph acc: found=False
+  MISSING
+icon: settings_placeholder path: found=True
+  ctx: ' target, Qt.KeepAspectRatio, Qt.SmoothTransformation)\n\n\ndef placeholder_settings_pixmap(size: int = SQUIRCLE_ICON_SIDE) -> QPixmap:\n    """Accent squircle with a centered host settings glyph. Not the application icon.\n\n    The fill is the system accent (a pink accent is a pink squircle). The glyph\n    is white or black from the same luminance ru'
+  ---
+icons: icon_candidate_urls acc: found=True
+  ctx: 'ttr(package, "icon", "") or "")\n    return _deduped(urls)\n\n\ndef icon_candidate_urls(release, package=None, *, dark: bool | None = None) -> list[str]:\n    """Release files, then the software logo. Built without the GitHub API.\n\n    When the current install is a locally browsed package (no release/source_repo),\n    the software-logo path is in'
+  ---
+icons: release_asset_urls acc: found=True
+  ctx: 'text)\n            ordered.append(text)\n    return ordered\n\n\ndef release_asset_urls(release, package=None, *, dark: bool | None = None) -> list[str]:\n    """Release-file URLs only. Built from owner, repo, and tag. No GitHub API."""\n    dark = _dark_flag(dark)\n    repo, tag = _repo_and_tag(release, package)\n    if not repo or not tag or "/" n'
+  ---
+icons: software_icon_urls acc: found=True
+  ctx: 'load_icon_url(repo, tag, filename) for filename in names]\n\n\ndef software_icon_urls(package, *, dark: bool | None = None) -> list[str]:\n    """Software logo from ``slidia_manifest.xml``. ``icon`` is the existing key.\n\n    Dark mode tries ``icon_dark`` (which also accepts ``image_dark``) first.\n    """\n    dark = _dark_flag(dark)\n    urls = ['
+  ---
+smoke: Y1 positive gate: found=True
+  ctx: ', "stable-v0.6", "stable-v1.0.2", "v1.0", "0.5.1"):\n        assert release_version_ok("rockbox-y1/rockbox", tag, model="Y1"), tag\n    assert release_version_tuple("stable-v0.5") == (0, 5)\n\n    for tag in ("stable-v0.4", "stable-v0.3", "v0.4.9", "0.2", "0.4"):\n        assert not release_version_ok("rockbox-y1/rockbox", tag, model="Y1"), tag\n\n    # No readable version (nightlies, bra'
+  ---
+smoke: Y1 negative gate: found=True
+  ctx: 'able-v0.4", "stable-v0.3", "v0.4.9", "0.2", "0.4"):\n        assert not release_version_ok("rockbox-y1/rockbox", tag, model="Y1"), tag\n\n    # No readable version (nightlies, branch names) can\'t be proven new enough.\n    for tag in ("nightly-35e926bd6ea663ab0aac2f138c7f71ae744971f",\n                "type-a-base", "stock-menu", ""):\n        assert not release_version_ok("rockbox-y1/rockbo'
+  ---
+smoke: Y2 positive gate: found=True
+  ctx: ' unrestricted: the same pre-0.5 tags are allowed there.\n    assert release_version_ok("rockbox-y1/rockbox", "stable-v0.4.9", model="Y2")\n    assert release_version_ok("rockbox-y1/rockbox", "stable-v0.1.0", model="Y2")\n\n\ndef test_rockbox_min_release_gate_filters_listings():\n    """The gate applies to cached and freshly fetched listings alike, so a\n    cache written before the gate cannot resurf'
+  ---
+smoke: Y2 oldest-tag gate: found=True
+  ctx: 'n_ok("rockbox-y1/rockbox", "stable-v0.4.9", model="Y2")\n    assert release_version_ok("rockbox-y1/rockbox", "stable-v0.1.0", model="Y2")\n\n\ndef test_rockbox_min_release_gate_filters_listings():\n    """The gate applies to cached and freshly fetched listings alike, so a\n    cache written before the gate cannot resurface a hidden release."""\n    with tempfile.TemporaryDirectory() as td:\n        cl'
+  ---
+smoke: show_old_rockbox path: found=True
+  ctx: 'ge = SelectPackagePage()\n    for gone in ("_options_bar", "_show_old_rockbox_cb", "_show_nightly_cb", "_show_240p_cb"):\n        assert not hasattr(select_page, gone), f"{gone} should not be on the browser anymore"\n    assert not hasattr(select_page, "_update_filter_checkboxes_visibility")\n\n    select_page.current_software = lambda: "O'
+  ---
+smoke: untagged nightly gate: found=True
+  ctx: ' branch names) can\'t be proven new enough.\n    for tag in ("nightly-35e926bd6ea663ab0aac2f138c7f71ae744971f",\n                "type-a-base", "stock-menu", ""):\n        assert not release_version_ok("rockbox-y1/rockbox", tag, model="Y1"), tag\n\n    # Other repos are untouched, and a full GitHub URL still matches the Y1 gate.\n    assert release_version_ok("y1-communit'
+  ---
+catalog parseable: yes
+select parseable: yes
+release_icons parseable: yes

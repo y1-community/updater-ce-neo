@@ -492,7 +492,13 @@ def release_version_ok(repo, tag_name, model=None, show_old_rockbox=False, show_
     for model == "Y1", releases before 0.5 are hidden unless show_old_rockbox
     is True.
 
-    For Y2, A5, and non-Y1 models, this gating is NEVER applied.
+    The legacy < 0.5 gate historically applied to rockbox-y1/rockbox. The Y2
+    Rockbox repo is a separate codebase (SPYMAGIC/Y2-Rockbox / v0.2.5-beta etc.)
+    and is not slot-compatible with that gate, so the Y2 Rockbox package is
+    treated as unrestricted. Only the Y1 Rockbox path keeps the pre-0.5 gate,
+    and only the Settings toggle can restore pre-0.5 rows there.
+
+    For Y2, A5, and other non-Y1 models, this gating is NEVER applied.
 
     Tags that carry no semantic version (e.g. nightly-<sha>) are hidden unless
     show_nightly is True. Repos without a pinned minimum are unrestricted.
@@ -503,7 +509,6 @@ def release_version_ok(repo, tag_name, model=None, show_old_rockbox=False, show_
         slug = slug.split("github.com/", 1)[1]
     slug = slug.strip("/").removesuffix(".git")
     resolved_repo = resolve_firmware_repo(slug)
-
     is_non_y1 = bool(model) and model_str != "Y1" and "Y1" not in model_str
     if is_non_y1:
         # Y2, A5, and non-Y1 models are completely exempt from the < 0.5 restriction
@@ -512,6 +517,11 @@ def release_version_ok(repo, tag_name, model=None, show_old_rockbox=False, show_
             return False
         return True
 
+    # The legacy < 0.5 gate historically applied to rockbox-y1/rockbox. The Y2
+    # Rockbox repo is a separate codebase (SPYMAGIC/Y2-Rockbox / v0.2.5-beta etc.)
+    # and is not slot-compatible with that gate. Treat the Y2 Rockbox package as
+    # unrestricted the same way as Y1 >= 0.5, and only let the Settings toggle
+    # restore pre-0.5 rows for Y1.
     minimum_str = REPO_MIN_RELEASE_VERSION.get(resolved_repo)
     if not minimum_str or show_old_rockbox:
         version = release_version_tuple(tag_name)

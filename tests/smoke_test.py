@@ -737,26 +737,30 @@ def test_releases_client_force_refresh():
 
 
 def test_rockbox_min_release_gate():
-    """rockbox-y1/rockbox hides releases below 0.5: they are not compatible
-    with Y1 units sold after April 2026, so Updater must not offer them."""
+    """rockbox-y1/rockbox hides releases below 0.5 for Y1, while the separate
+    Y2 Rockbox repo is unrestricted so Y2 users see all Rockbox builds."""
     from src.catalog import release_version_ok, release_version_tuple
 
-    # Tag shapes the repo actually uses, plus ordinary version tags.
+    # Y1 gate unchanged: pre-0.5 Rockbox builds are not offered on Y1.
     for tag in ("stable-v0.5", "stable-v0.6", "stable-v1.0.2", "v1.0", "0.5.1"):
-        assert release_version_ok("rockbox-y1/rockbox", tag), tag
+        assert release_version_ok("rockbox-y1/rockbox", tag, model="Y1"), tag
     assert release_version_tuple("stable-v0.5") == (0, 5)
 
     for tag in ("stable-v0.4", "stable-v0.3", "v0.4.9", "0.2", "0.4"):
-        assert not release_version_ok("rockbox-y1/rockbox", tag), tag
+        assert not release_version_ok("rockbox-y1/rockbox", tag, model="Y1"), tag
 
     # No readable version (nightlies, branch names) can't be proven new enough.
     for tag in ("nightly-35e926bd6ea663ab0aac2f138c7f71ae744971f",
                 "type-a-base", "stock-menu", ""):
-        assert not release_version_ok("rockbox-y1/rockbox", tag), tag
+        assert not release_version_ok("rockbox-y1/rockbox", tag, model="Y1"), tag
 
-    # Other repos are untouched, and a full GitHub URL still matches the gate.
-    assert release_version_ok("y1-community/y1-stock-rom", "v0.1")
-    assert not release_version_ok("https://github.com/rockbox-y1/rockbox", "stable-v0.4")
+    # Other repos are untouched, and a full GitHub URL still matches the Y1 gate.
+    assert release_version_ok("y1-community/y1-stock-rom", "v0.1", model="Y1")
+    assert not release_version_ok("https://github.com/rockbox-y1/rockbox", "stable-v0.4", model="Y1")
+
+    # Y2 Rockbox repo is unrestricted: the same pre-0.5 tags are allowed there.
+    assert release_version_ok("rockbox-y1/rockbox", "stable-v0.4.9", model="Y2")
+    assert release_version_ok("rockbox-y1/rockbox", "stable-v0.1.0", model="Y2")
 
 
 def test_rockbox_min_release_gate_filters_listings():
