@@ -68,6 +68,7 @@ class SettingsPage(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._advanced_revealed = False
+        self._dev_mac_revealed = False
         self._method_before = ""
         # Guards the filter checkboxes while they are synced from settings, so
         # syncing never re-enters a handler or reopens a confirmation dialog.
@@ -95,6 +96,7 @@ class SettingsPage(QWidget):
         box.addWidget(switch, 0, Qt.AlignRight | Qt.AlignVCenter)
         layout.addWidget(row)
         self._switch_rows[switch] = (row, caption)
+        switch.text = caption.text
         return switch
 
     def switch_caption(self, switch: QCheckBox) -> str:
@@ -370,6 +372,7 @@ class SettingsPage(QWidget):
         self._dismiss_donations_link.setCursor(Qt.PointingHandCursor)
         self._dismiss_donations_link.setAutoFillBackground(False)
         self._dismiss_donations_link.setStyleSheet("")
+        self._dismiss_donations_link.setVisible(False)
         self._dismiss_donations_link.linkActivated.connect(
             lambda _href: self._on_dismiss_donations_section()
         )
@@ -468,15 +471,30 @@ class SettingsPage(QWidget):
         leg_layout.addWidget(self._legacy_status_lbl)
 
         self._legacy_cleanup_card.set_layout(leg_layout)
-        self._update_legacy_cleanup_visibility()
         layout.addWidget(self._legacy_cleanup_card)
+
+        # --- Card: Advanced Settings ---
+        self._advanced_card = Card("settings_advanced_group")
+        adv_layout = QVBoxLayout()
+        adv_layout.setSpacing(8)
+
+        self._cb_advanced_settings = self._add_switch(adv_layout, tr("settings_advanced_toggle"))
+        self._cb_advanced_settings.setToolTip(tr("settings_advanced_desc"))
+        self._cb_advanced_settings.toggled.connect(self._on_advanced_settings_toggled)
+
+        self._advanced_desc = QLabel(tr("settings_advanced_desc"))
+        self._advanced_desc.setWordWrap(True)
+        self._advanced_desc.setProperty("cssClass", "dimmed")
+        adv_layout.addWidget(self._advanced_desc)
+
+        self._advanced_card.set_layout(adv_layout)
+        layout.addWidget(self._advanced_card)
+
         layout.addWidget(self._terminal_card)
         layout.addWidget(self._method_card)
         self._card_layout = layout
 
-        # The desktop installer is not offered on macOS.
-        # Hide backend selection and diagnostics cards on macOS.
-        self._method_card.setVisible(not paths.IS_MAC)
+        self._sync_advanced_visibility()
         self._prep_card.setVisible(not paths.IS_MAC)
 
         layout.addStretch()
@@ -624,29 +642,75 @@ class SettingsPage(QWidget):
         if paths.IS_MAC:
             # No SP Flash Tool build exists for macOS.
             return (METHOD_MTK,)
-        if paths.IS_WINDOWS:
-            # On Windows, strictly default to SP Flash Tool unless unlocked via 'M' key
-            if self._advanced_revealed:
-                return (METHOD_SP, METHOD_MTK, METHOD_MTK_MAC)
-            return (METHOD_SP,)
-        if self._advanced_revealed:
-            return (METHOD_SP, METHOD_MTK, METHOD_MTK_MAC)
-        return (METHOD_SP, METHOD_MTK)
+        methods = [METHOD_SP]
+        if self._advanced_revealed or not paths.IS_WINDOWS:
+            methods.append(METHOD_MTK)
+        # The (mac) simulated option strictly requires an M or D keypress
+        if getattr(self, "_dev_mac_revealed", False):
+            methods.append(METHOD_MTK_MAC)
+        return tuple(methods)
+
+    def _on_advanced_settings_toggled(self, checked: bool) -> None:
+        self._advanced_revealed = bool(checked)
+        if not checked:
+            self._dev_mac_revealed = False
+        QSettings("innioasis", "updater").setValue("advanced_settings", bool(checked))
+        self._sync_advanced_visibility()
+        if not paths.IS_MAC:
+            self._reload_method_options()
+        win = self.window()
+        if win and hasattr(win, "_adjust_window_geometry"):
+            win._adjust_window_geometry()
+
+    def _sync_advanced_visibility(self) -> None:
+        show_adv = bool(
+            self._advanced_revealed
+            or (hasattr(self, "_cb_advanced_settings") and self._cb_advanced_settings.isChecked())
+            or is_mediatek_installer()
+        )
+        if hasattr(self, "_terminal_card"):
+            self._terminal_card.setVisible(show_adv)
+        if hasattr(self, "_method_card"):
+            self._method_card.setVisible(show_adv and not paths.IS_MAC)
+        if hasattr(self, "_rockbox_card"):
+            self._update_rockbox_visibility()
 
     def reveal_advanced_methods(self):
-        """Reveal the hidden 'MTKClient (Mac)' entry (M or D while running).
+        """Reveal advanced install methods and cards (M or D while running).
 
         Used to exercise the macOS flow — MTKClient as the only backend, with
-        mac-centric prompts — without Mac hardware. No-op on a real Mac, where
-        that is simply the normal behaviour.
+        mac-centric prompts — without Mac hardware.
         """
-        if paths.IS_MAC or self._advanced_revealed:
-            return
+        self._dev_mac_revealed = True
         self._advanced_revealed = True
-        self._reload_method_options()
+        QSettings("innioasis", "updater").setValue("advanced_settings", True)
+        if hasattr(self, "_cb_advanced_settings"):
+            self._cb_advanced_settings.blockSignals(True)
+            self._cb_advanced_settings.setChecked(True)
+            self._cb_advanced_settings.blockSignals(False)
+        self._sync_advanced_visibility()
+        if not paths.IS_MAC:
+            self._reload_method_options()
+        win = self.window()
+        if win and hasattr(win, "_adjust_window_geometry"):
+            win._adjust_window_geometry()
 
     def advanced_methods_revealed(self) -> bool:
         return self._advanced_revealed
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_M and event.modifiers() == Qt.NoModifier:
+            self.reveal_advanced_methods()
+            event.accept()
+            return
+        if event.key() == Qt.Key_D and event.modifiers() == Qt.NoModifier:
+            win = self.window()
+            if win is not None and hasattr(win, "_unlock_diagnostics"):
+                win._unlock_diagnostics()
+            self.reveal_advanced_methods()
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
     def _reload_method_options(self):
         labels = {
@@ -673,8 +737,10 @@ class SettingsPage(QWidget):
     def set_method(self, method):
         """Reflect a method chosen elsewhere (or persisted) in the selector."""
         method = normalise_method(method)
-        if method in (METHOD_MTK, METHOD_MTK_MAC) and not paths.IS_MAC:
-            # Restore the revealed entry for a choice made in a previous run.
+        if method == METHOD_MTK_MAC and not paths.IS_MAC:
+            self._dev_mac_revealed = True
+            self._advanced_revealed = True
+        elif method == METHOD_MTK and not paths.IS_MAC:
             self._advanced_revealed = True
         self._reload_method_options()
         idx = self._method_combo.findData(method)
@@ -725,6 +791,7 @@ class SettingsPage(QWidget):
         They filter the online Y1/Y2 Rockbox release list, so with no online
         catalogue — offline mode, or a build of the generic MediaTek Installer,
         which is offline by definition — there is nothing for them to act on.
+        Also gated behind Advanced Settings so general users aren't confused.
         """
         self._rockbox_card.setVisible(not is_offline_mode())
 
@@ -833,7 +900,14 @@ class SettingsPage(QWidget):
     # ------------------------------------------------------------------
     def refresh_settings(self):
         """Reload and update all controls to reflect current settings."""
-        self._method_card.setVisible(not paths.IS_MAC)
+        persisted_adv = QSettings("innioasis", "updater").value("advanced_settings", False, type=bool)
+        if self._advanced_revealed or persisted_adv:
+            self._advanced_revealed = True
+            if hasattr(self, "_cb_advanced_settings"):
+                self._cb_advanced_settings.blockSignals(True)
+                self._cb_advanced_settings.setChecked(True)
+                self._cb_advanced_settings.blockSignals(False)
+        self._sync_advanced_visibility()
         self._prep_card.setVisible(not paths.IS_MAC)
         self._update_rockbox_visibility()
         self._update_legacy_cleanup_visibility()
@@ -1032,11 +1106,16 @@ class SettingsPage(QWidget):
         open_browser("https://ko-fi.com/teamslide")
 
     def _sync_donation_opt_out(self) -> None:
-        """The coffee button stays. Other donation prompts in this card do not."""
+        """The dismiss link appears only when Community Credits/Donations has been disabled."""
+        disabled = (
+            not self._cb_hide_donations.isChecked()
+            or device_tracking.is_donation_ui_disabled()
+            or device_tracking.is_donation_install_prompt_disabled()
+        )
         if hasattr(self, "_settings_coffee_btn"):
             self._settings_coffee_btn.setVisible(True)
         if hasattr(self, "_dismiss_donations_link"):
-            self._dismiss_donations_link.setVisible(True)
+            self._dismiss_donations_link.setVisible(disabled)
 
     def _apply_donations_section_visibility(self) -> None:
         """The dismiss link removes this card. The donation switch does not."""
@@ -1050,12 +1129,16 @@ class SettingsPage(QWidget):
         self._donations_card.setVisible(not dismissed)
 
     def _on_dismiss_donations_section(self) -> None:
-        """Drop the donations card for good. Prompts elsewhere are unchanged."""
+        """Permanently disable credits/donations functionality and hide the settings card."""
         if layout_gap_closing(self._donations_card):
             return
-        if not device_tracking.is_settings_donations_section_dismissed():
-            device_tracking.set_settings_donations_section_dismissed(True)
+        device_tracking.set_settings_donations_section_dismissed(True)
+        device_tracking.set_donation_ui_disabled(True)
+        device_tracking.set_donation_install_prompt_disabled(True)
         close_layout_gap(self._donations_card)
+        win = self.window()
+        if win and hasattr(win, "_adjust_window_geometry"):
+            win._adjust_window_geometry()
 
     def _on_hide_donations_toggled(self, checked: bool):
         """The card's switch moved.
@@ -1254,6 +1337,11 @@ class SettingsPage(QWidget):
             self._run_as_admin_desc.setText(elevation.description_text())
             self._run_as_admin_restart_btn.setText(tr("settings_run_as_admin_restart"))
             self._sync_run_as_admin_controls()
+        if hasattr(self, "_advanced_card"):
+            self._advanced_card.retranslate()
+            self._set_switch_caption(self._cb_advanced_settings, tr("settings_advanced_toggle"))
+            self._cb_advanced_settings.setToolTip(tr("settings_advanced_desc"))
+            self._advanced_desc.setText(tr("settings_advanced_desc"))
         self._reminders_card.retranslate()
         self._set_switch_caption(self._cb_reminders, tr("settings_reminders_enable"))
         self._rockbox_card.retranslate()

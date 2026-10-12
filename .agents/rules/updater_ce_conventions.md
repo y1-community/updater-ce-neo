@@ -86,4 +86,21 @@ To ensure MediaTek SP Flash Tool executes reliably across all Linux distribution
 - **Space-Free Paths**: SP Flash Tool v5 crashes or fails on file paths containing spaces or non-ASCII characters; package downloads and extractions must be located in clean paths.
 - **2–3 Second Enumeration Rule**: Turned-off MediaTek devices remain in Preloader handshake mode for only 2–3 seconds before exiting. Flashing software must be listening before connecting the device.
 
+### C. Windows SP Flash Tool Console Invocation & 8.3 Short Paths
+- **8.3 Short Path Conversion (`GetShortPathNameW`)**: SP Flash Tool's C++ parser fails on path strings with spaces or non-ASCII characters. On Windows, always convert scatter and DA file paths to short 8.3 paths via `ctypes.windll.kernel32.GetShortPathNameW` before passing them as CLI arguments.
+- **Console Mode CLI Shape**: SP Flash Tool console mode must be invoked with:
+  `flash_tool.exe -c format-download -s <scatter_8.3> -d <da_8.3> -t without -r`
+  (omitting DA when default DA is loaded, and never adding spurious `-f` arguments which SP Flash Tool v5 rejects).
+- **Background Log Monitoring**: SP Flash Tool on Windows emits UI progress and partition details to `C:\ProgramData\SP_FT_Logs\*\QT_FLASH_TOOL.log` rather than stdout. Tail this file in the background during flash runs to stream accurate progress.
+
+## 7. Archive Extraction & Progress Guarantees
+- **No Duplicate Unpacking Loops**: Ensure extraction functions (`_extract_zip`, `_extract_rar`) don't invoke both high-level and low-level extraction loops.
+- **100% Progress Guarantee**: Archive extraction workers must emit 100% upon completion. The UI must transition immediately from `STEP_EXTRACTING` to `STEP_WAITING` so the user is never left looking at a 99% progress bar.
+
+## 8. UX, Settings Gating & Responsive Window Geometry
+- **Streamlined Settings for Casual Users**: Hide advanced developer/repair toggles (Backend selection between MTKClient / SP Flash Tool, terminal launch, SP Flash Tool GUI handoff, Run as Admin) behind an "Advanced Settings" switch and 'M'/'D' key shortcuts.
+- **768p Laptop Display Adaptability**: On low-resolution screens (e.g. 1366x768), clamp Settings page height to comfortable bounds (e.g. max 560px), relying on smooth scroll areas rather than forcing the OS window off-screen.
+- **Local Package Icon Support**: When flashing locally browsed `.zip` archives or unpacked folders, inspect the package contents for `updater.png` / `updater.jpg` without extracting the multi-gigabyte payload. Fall back to the system settings squircle only when no package icon is present.
+
+
 

@@ -196,3 +196,20 @@ Expected output contains translated Markdown headers and bullet lists without HT
 - The same installer is a clean install and an update of any earlier Updater CE release (same AppId, no version floor). It removes `%LocalAppData%\Innioasis Updater` and retired Innioasis / SP Flash Tool shortcuts, then installs under Program Files for all users or the per-user Programs folder when setup is told "just for me".
 - GitHub Actions workflow `windows_installer.yml` runs on `workflow_dispatch` (manual release trigger).
 
+## 11. Windows SP Flash Tool Integration & UI Verification
+
+### 1. Verification of Windows Console Mode & 8.3 Paths
+- Test scatter and DA path conversion using `ctypes.windll.kernel32.GetShortPathNameW`.
+- Verify SP Flash Tool console invocation shape matches vendor reference:
+  `flash_tool.exe -c format-download -s <scatter_8.3> -d <da_8.3> -t without -r`
+- Verify background log streaming monitors `C:\ProgramData\SP_FT_Logs\*\QT_FLASH_TOOL.log` without polling lag.
+
+### 2. Archive Extraction & Progress Bar Validation
+- Verify extraction percentage monotonically reaches 100% and immediately announces `STEP_WAITING`.
+- Test local package offline icon detection by loading `.zip` containing `updater.png` / `updater.jpg`.
+
+### 3. Responsive Height & Advanced Settings Gating
+- Ensure Settings page height is capped on low-resolution displays (e.g. 1366x768).
+- Verify 'M' and 'D' key shortcuts toggle "Advanced Settings" and reveal Installation Mode and Method cards.
+
+

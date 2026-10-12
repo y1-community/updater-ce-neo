@@ -56,6 +56,7 @@ def _reset_app_settings():
     s.setValue("donation_install_prompt_disabled", False)
     s.setValue("preferences/donation_ui_disabled", False)
     s.setValue("preferences/donation_install_prompt_disabled", False)
+    s.setValue("advanced_settings", False)
     s.setValue("linux_first_run_completed", True)
     s.remove("preferences")
     s.remove("device_installs")
@@ -494,7 +495,7 @@ def test_flash_service_import():
     import src.flash_service as fs
 
     assert fs.IS_WINDOWS is not None
-    assert fs.compute_extract_dir("C:/fw/My.zip") == Path("C:/fw/.My_extracted")
+    assert fs.compute_extract_dir("C:/fw/My.zip") == fs.downloads_dir() / ".My_extracted"
 
 
 def test_backend_method_dispatch():
@@ -1163,69 +1164,78 @@ def test_diagnostics_live_update():
     gui_line = f"first live line {os.getpid()}"
     mtk_line = f"Waiting for MTK device {os.getpid()}... Power off the device and connect USB."
 
-    # Wire it the same way _show_diagnostics does.
-    w.log_line_added.connect(dlg.append_line)
-    w._append_log(gui_line)
-    w._append_log("second live line")
-    w._append_log("[SP] 0% of image data has been sent")
-    w._append_log(mtk_line)
-
-    # 1. Unified category shows all lines
-    dlg._category_combo.setCurrentIndex(dlg._category_combo.findData("all"))
-    text_all = dlg._view.toPlainText()
-    assert gui_line in text_all
-    assert "image data" in text_all
-    assert "Waiting for MTK" in text_all
-    # A live line is stored once, not once per recording path.
-    assert text_all.count(gui_line) == 1, text_all
-
-    # 2. SP Flash Tool category shows SP output (where the host offers it)
-    from src.diagnostics import CAT_SP, CAT_MTK
-    if dlg._category_combo.findData(CAT_SP) >= 0:
-        dlg._category_combo.setCurrentIndex(dlg._category_combo.findData(CAT_SP))
-        text_sp = dlg._view.toPlainText()
-        assert "image data" in text_sp
-        assert gui_line not in text_sp
-
-    # 3. MTKClient category shows MTK output (where the host offers it)
-    if dlg._category_combo.findData(CAT_MTK) >= 0:
-        dlg._category_combo.setCurrentIndex(dlg._category_combo.findData(CAT_MTK))
-        text_mtk = dlg._view.toPlainText()
-        assert "Waiting for MTK" in text_mtk
-        assert gui_line not in text_mtk
-    dlg._category_combo.setCurrentIndex(dlg._category_combo.findData("all"))
-
-    # 4. Save file test
-    with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as tf:
-        tmp_save = tf.name
-    from PySide6.QtWidgets import QFileDialog
-    orig_save = QFileDialog.getSaveFileName
-    QFileDialog.getSaveFileName = lambda *a, **k: (tmp_save, "Text Files (*.log *.txt)")
+    import src.diagnostics as diag
+    orig_qt_lines = diag._qt_log_section_lines
+    diag._qt_log_section_lines = lambda: []
     try:
-        dlg._on_save_file()
-        saved_text = Path(tmp_save).read_text(encoding="utf-8")
-        assert "Waiting for MTK" in saved_text
-    finally:
-        QFileDialog.getSaveFileName = orig_save
+        # Wire it the same way _show_diagnostics does.
+        w.log_line_added.connect(dlg.append_line)
+        w._append_log(gui_line)
+        w._append_log("second live line")
+        w._append_log("[SP] 0% of image data has been sent")
+        w._append_log(mtk_line)
+
+        # 1. Unified category shows all lines
+        dlg._category_combo.setCurrentIndex(dlg._category_combo.findData("all"))
+        text_all = dlg._view.toPlainText()
+        assert gui_line in text_all
+        assert "image data" in text_all
+        assert "Waiting for MTK" in text_all
+        # A live line is stored once, not once per recording path.
+        assert text_all.count(gui_line) == 1, text_all
+
+        # 2. SP Flash Tool category shows SP output (where the host offers it)
+        from src.diagnostics import CAT_SP, CAT_MTK
+        if dlg._category_combo.findData(CAT_SP) >= 0:
+            dlg._category_combo.setCurrentIndex(dlg._category_combo.findData(CAT_SP))
+            text_sp = dlg._view.toPlainText()
+            assert "image data" in text_sp
+            assert gui_line not in text_sp
+
+        # 3. MTKClient category shows MTK output (where the host offers it)
+        if dlg._category_combo.findData(CAT_MTK) >= 0:
+            dlg._category_combo.setCurrentIndex(dlg._category_combo.findData(CAT_MTK))
+            text_mtk = dlg._view.toPlainText()
+            assert "Waiting for MTK" in text_mtk
+            assert gui_line not in text_mtk
+        dlg._category_combo.setCurrentIndex(dlg._category_combo.findData("all"))
+
+        # 4. Save file test
+        with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as tf:
+            tmp_save = tf.name
+        from PySide6.QtWidgets import QFileDialog
+        orig_save = QFileDialog.getSaveFileName
+        QFileDialog.getSaveFileName = lambda *a, **k: (tmp_save, "Text Files (*.log *.txt)")
         try:
-            os.unlink(tmp_save)
+            dlg._on_save_file()
+            saved_text = Path(tmp_save).read_text(encoding="utf-8")
+            assert "Waiting for MTK" in saved_text
+        finally:
+            QFileDialog.getSaveFileName = orig_save
+            try:
+                os.unlink(tmp_save)
+            except Exception:
+                pass
+
+        # 5. Copy to clipboard test
+        dlg._on_copy()
+        assert "Waiting for MTK" in QApplication.clipboard().text()
+
+        # 6. Reveal in file manager test
+        from unittest.mock import patch
+        with patch("subprocess.run") as mock_subproc:
+            dlg._on_goto_file()
+            assert mock_subproc.called
+
+    finally:
+        diag._qt_log_section_lines = orig_qt_lines
+        try:
+            w.log_line_added.disconnect(dlg.append_line)
         except Exception:
             pass
-
-    # 5. Copy to clipboard test
-    dlg._on_copy()
-    assert "Waiting for MTK" in QApplication.clipboard().text()
-
-    # 6. Reveal in file manager test
-    from unittest.mock import patch
-    with patch("subprocess.run") as mock_subproc:
-        dlg._on_goto_file()
-        assert mock_subproc.called
-
-    w.log_line_added.disconnect(dlg.append_line)
-    dlg.close()
-    w.close()
-    app.processEvents()
+        dlg.close()
+        w.close()
+        app.processEvents()
 
 
 def test_tool_output_capture():
@@ -1324,6 +1334,10 @@ def test_sp_internal_log_streamed():
         # Two passes over the tail loop (the monitor waits for flash_tool to
         # create its run directory, then follows the file).
         w._monitor_sp_log_file(_StopAfter(3), str(log_root))
+
+        from PySide6.QtCore import QCoreApplication
+        app = QCoreApplication.instance() or QCoreApplication([])
+        app.processEvents()
 
         forwarded = [line for line in logs if line.startswith("[QT] ")]
         assert any("DA version: 1.0.0.0" in line for line in forwarded), logs

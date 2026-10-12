@@ -146,7 +146,8 @@ def test_continue_launches_console_and_search_lines_drive_connect():
             window.show()
             app.processEvents()
 
-            with patch("src.sp_flash_gui.update_sp_history_ini", lambda *a, **k: None), \
+            with patch("src.downloads.downloads_dir", lambda: root), \
+                 patch("src.sp_flash_gui.update_sp_history_ini", lambda *a, **k: None), \
                  patch("src.device_tracking.record_latest_package", lambda *a, **k: None), \
                  patch("src.device_tracking.sp_auth_file", lambda *a, **k: ""), \
                  patch("src.paths.find_sp_flash_tool", lambda: sp_dir), \
@@ -165,10 +166,11 @@ def test_continue_launches_console_and_search_lines_drive_connect():
                 assert args[3] == "-s", args
                 assert "-d" in args and "-t" in args and args[-1] == "-r", args
                 assert args[args.index("-t") + 1] == "without", args
-                assert page._wait_prompt_label.text() == tr("flash_please_wait")
-                assert "please connect your" not in page._wait_prompt_label.text().lower()
+                assert "connect your" in page._wait_prompt_label.text().lower()
+                assert "Y1" in page._wait_prompt_label.text()
+                assert "30s" in page._wait_prompt_label.text()
                 assert page._wait_progress_bar.minimum() == 0
-                assert page._wait_progress_bar.maximum() == 0
+                assert page._wait_progress_bar.maximum() == 100
                 assert window._last_progress == 0
 
                 stream.put("  search usb, timeout 3600000 ms...\n")
@@ -177,7 +179,7 @@ def test_continue_launches_console_and_search_lines_drive_connect():
                     lambda: "connect your" in page._wait_prompt_label.text().lower(),
                 ), page._wait_prompt_label.text()
                 assert "Y1" in page._wait_prompt_label.text()
-                assert page._wait_progress_bar.maximum() == 0
+                assert page._wait_progress_bar.maximum() == 100
                 assert window._last_progress == 0
 
                 stream.put("12% of DA has been sent\n")
@@ -211,7 +213,7 @@ def test_continue_launches_console_and_search_lines_drive_connect():
                 assert mtk._usb_search_active
                 assert STEP_WAITING in steps
                 assert "connect your" in page._wait_prompt_label.text().lower()
-                assert page._wait_progress_bar.maximum() == 0
+                assert page._wait_progress_bar.maximum() == 100
                 assert window._last_progress == 0
 
                 mtk._classify_mtk_output("Hint: Power off the phone before connecting.")
@@ -258,3 +260,95 @@ def test_continue_launches_console_and_search_lines_drive_connect():
                 settings.remove(key)
             else:
                 settings.setValue(key, value)
+
+
+def test_sp_monitor_ignores_stale_prior_session_logs():
+    """SP Flash Tool log monitoring ignores directories from prior runs."""
+    from PySide6.QtCore import QCoreApplication
+    from src.flash_service import FlashWorker, STEP_WRITE
+
+    app = QCoreApplication.instance() or QCoreApplication([])
+
+    class _StopAfter:
+        def __init__(self, checks):
+            self._left = checks
+
+        def is_set(self):
+            self._left -= 1
+            return self._left <= 0
+
+    with tempfile.TemporaryDirectory() as td:
+        log_root = Path(td)
+        # Create an old dump directory with a 85% progress log from a past session
+        old_dir = log_root / "SP_FT_Dump_old_session"
+        old_dir.mkdir()
+        old_log = old_dir / "QT_FLASH_TOOL.log"
+        old_log.write_text(
+            "10/12/2026 15:02:44.713  85% of image data has been sent (2.67G of 3.15G)\n",
+            encoding="utf-8",
+        )
+        stale_mtime = time.time() - 3600
+        os.utime(old_dir, (stale_mtime, stale_mtime))
+        os.utime(old_log, (stale_mtime, stale_mtime))
+
+        w = FlashWorker("pkg.zip", method="sp")
+        steps = []
+        progress_values = []
+        w.step_changed.connect(steps.append)
+        w.progress.connect(progress_values.append)
+
+        # Launch time is now: the monitor must ignore old_dir
+        launch_time = time.time()
+        stop_event = _StopAfter(2)
+        w._monitor_sp_log_file(stop_event, str(log_root), launch_time=launch_time)
+        app.processEvents()
+
+        assert not w._past_usb_search
+        assert not w._device_seen
+        assert STEP_WRITE not in steps
+        assert 85 not in progress_values
+
+
+def test_sp_monitor_accepts_current_session_logs():
+    """SP Flash Tool log monitoring tails new directories matching launch_time."""
+    from PySide6.QtCore import QCoreApplication
+    from src.flash_service import FlashWorker, STEP_WRITE
+
+    app = QCoreApplication.instance() or QCoreApplication([])
+
+    class _StopAfter:
+        def __init__(self, checks):
+            self._left = checks
+
+        def is_set(self):
+            self._left -= 1
+            return self._left <= 0
+
+    with tempfile.TemporaryDirectory() as td:
+        log_root = Path(td)
+        launch_time = time.time()
+        # Create a fresh dump directory matching launch_time
+        fresh_dir = log_root / "SP_FT_Dump_current"
+        fresh_dir.mkdir()
+        fresh_log = fresh_dir / "QT_FLASH_TOOL.log"
+        fresh_log.write_text(
+            "10/12/2026 15:02:44.713  42% of image data has been sent (1.00G of 2.00G)\n",
+            encoding="utf-8",
+        )
+
+        w = FlashWorker("pkg.zip", method="sp")
+        steps = []
+        progress_values = []
+        w.step_changed.connect(steps.append)
+        w.progress.connect(progress_values.append)
+
+        stop_event = _StopAfter(3)
+        w._monitor_sp_log_file(stop_event, str(log_root), launch_time=launch_time)
+        app.processEvents()
+
+        assert w._past_usb_search
+        assert w._device_seen
+        assert STEP_WRITE in steps
+        assert len(progress_values) > 0
+
+

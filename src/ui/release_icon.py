@@ -221,7 +221,15 @@ def pixmap_from_icon_bytes(data: bytes) -> QPixmap:
     return pixmap if not pixmap.isNull() else QPixmap()
 
 
-def load_release_pixmap(release, package=None, *, allow_network: bool = True, cache_dir: Path | None = None, dark: bool | None = None) -> QPixmap:
+def load_release_pixmap(
+    release,
+    package=None,
+    *,
+    allow_network: bool = True,
+    cache_dir: Path | None = None,
+    dark: bool | None = None,
+    package_path: str | Path | None = None,
+) -> QPixmap:
     """First real release icon, or a null pixmap so the caller draws the squircle.
 
     URLs are built from owner, repo, and tag. A null result is the settings
@@ -234,6 +242,16 @@ def load_release_pixmap(release, package=None, *, allow_network: bool = True, ca
             dark = bool(is_dark())
         except Exception:
             dark = False
+
+    if package_path:
+        from ..release_icons import load_local_package_icon_bytes
+
+        local_bytes = load_local_package_icon_bytes(package_path, dark=dark)
+        if local_bytes:
+            pixmap = pixmap_from_icon_bytes(local_bytes)
+            if not pixmap.isNull():
+                return pixmap
+
     directory = cache_dir or default_icon_cache_dir()
     for url in icon_candidate_urls(release, package, dark=dark):
         data = read_cached_icon(url, directory)

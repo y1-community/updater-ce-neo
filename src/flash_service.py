@@ -35,7 +35,7 @@ from pathlib import Path
 from struct import pack, unpack
 from typing import Optional
 
-from PySide6.QtCore import QObject, Qt, QThread, Signal
+from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal
 
 from . import linux_sp_flash, paths
 from .i18n import tr
@@ -146,8 +146,12 @@ def is_mtk_usb_search_line(line) -> bool:
         return False
     if text.startswith("..."):
         return True
+    if text.startswith("Hint:"):
+        return True
     low = text.lower()
-    return low.startswith("hint") or low.startswith("port - hint")
+    if low.startswith("port - hint"):
+        return True
+    return "power off the phone" in low
 
 
 # Tool-reported failures. mtkclient catches its own DA errors and still exits
@@ -1081,7 +1085,15 @@ class ExtractWorker(QThread):
 
             if not is_in_work_dir:
                 work_dir.mkdir(parents=True, exist_ok=True)
-                for item in source_dir.iterdir():
+                # Local scatter / folder installs do not need extraction: they only
+                # need the files copied or moved into the app's working directory so
+                # SP Flash Tool and MTKClient both see a populated scatter + images.
+                # Show real progress through the copy so a folder of images does not
+                # look stalled the moment the spinner starts.
+                total = sum(1 for _ in source_dir.iterdir())
+                if total <= 0:
+                    self.progress.emit(100)
+                for idx, item in enumerate(source_dir.iterdir(), start=1):
                     if self._cancelled:
                         return work_dir
                     target = work_dir / item.name
@@ -1092,14 +1104,24 @@ class ExtractWorker(QThread):
                             shutil.copytree(item, target, dirs_exist_ok=True)
                     except Exception as err:
                         logger.debug("Copying rom item %s failed: %s", item, err)
-            self.progress.emit(100)
+                    if self._cancelled:
+                        return work_dir
+                    if self._last_copy_pct == -1:
+                        self._last_copy_pct = 0
+                    if total > 0:
+                        pct = min(100, int(idx * 100 / total))
+                        if pct != self._last_copy_pct:
+                            self._last_copy_pct = pct
+                            self.progress.emit(pct)
             discard_firmware_history(work_dir)
             _mark_extract_complete(work_dir)
+            self._last_copy_pct = -1
             return work_dir
 
         extract_dir = compute_extract_dir(package_path)
         from .sp_flash_gui import discard_firmware_history
         if _is_extract_complete(extract_dir):
+            self.progress.emit(100)
             discard_firmware_history(extract_dir)
             return extract_dir
         shutil.rmtree(extract_dir, ignore_errors=True)
@@ -1143,6 +1165,14 @@ class ExtractWorker(QThread):
                             # Let the GUI thread take the GIL and paint the bar.
                             QThread.msleep(1)
             self.progress.emit(99)
+            # Do not leave the bar pinned at 99% after the last file.
+            # The user saw a real stall every time the final archive entry was
+            # large (the last chunk writes finish long after the 99 tick), which
+            # read as a hang even though extraction was only still flushing the
+            # biggest file. Emit a 100 only after every entry is on disk, then
+            # report the real total so the next run prepopulates history.ini from
+            # the finished extract rather than the cached zip path.
+            self.progress.emit(100)
 
     def _extract_rar(self, package, extract_dir):
         unrar = paths.find_unrar()
@@ -1178,7 +1208,7 @@ class ExtractWorker(QThread):
         proc.wait()
         if proc.returncode != 0:
             raise RuntimeError(f"UnRAR exit code {proc.returncode}")
-        self.progress.emit(99)
+        self.progress.emit(100)
 
 
 # ---------------------------------------------------------------------------
@@ -1522,6 +1552,10 @@ class _AttemptWatchdog(threading.Thread):
         self._stopped.set()
 
     def run(self):
+        try:
+            self._on_tick(int(math.ceil(self._timeout)))
+        except Exception:
+            pass
         while not self._stopped.wait(self._interval):
             with self._lock:
                 if not self._armed:
@@ -1547,7 +1581,7 @@ class FlashWorker(QThread):
     """Background flash: extract → validate → dispatch to the platform backend."""
 
     step_changed = Signal(str)
-    progress = Signal(int)
+    progress = Signal(object)
     action_changed = Signal(str)
     log_message = Signal(str)
     # Seconds left of the app's no-progress window while a backend command is
@@ -1557,6 +1591,7 @@ class FlashWorker(QThread):
     # -1 while the rate is not yet known (the card shows elapsed time instead).
     eta_changed = Signal(int)
     finished = Signal(bool, str)  # ok, error_code
+    usb_disconnected = Signal()
 
     # How many times an expired device search is restarted before the install
     # is reported as failed. Each run searches for the tool's own configured
@@ -1573,11 +1608,13 @@ class FlashWorker(QThread):
     reboot_after_success = True
 
     def __init__(self, package_path, pre_extracted_dir="", method="auto", model="",
-                 parent=None, device_loss_hold=None, da_file="", auth_file=""):
+                 parent=None, device_loss_hold=None, da_file="", auth_file="", is_rockbox=False):
         super().__init__(parent)
         self.package_path = package_path
         self.pre_extracted_dir = pre_extracted_dir
         self.model = (model or "").strip()
+        pkg_low = (Path(package_path).name if package_path else "").lower()
+        self._is_rockbox_flow = bool(is_rockbox or "rockbox" in pkg_low)
         # User-chosen Download Agent and authentication file. Updater CE leaves
         # both empty (the bundled MTK_AllInOne_DA.bin and the saved SP auth file
         # apply); the MediaTek Installer hands the three files the user picked.
@@ -1740,15 +1777,12 @@ class FlashWorker(QThread):
             logger.debug("Could not terminate a silent backend", exc_info=True)
 
     def _enter_usb_search(self):
-        """The tool is on a search line. Show the connect sentence, still at 0%.
-
-        A later handshake retry prints search or hint again, so this returns
-        even after please-wait or a numbered stage.
-        """
+        """The tool is on a search line. Show the connect sentence, still at 0%."""
+        if getattr(self, "_past_usb_search", False):
+            return
         already = getattr(self, "_tool_wait_phase", PHASE_BEFORE) == PHASE_CONNECT
         self._search_started = True
         self._usb_search_active = True
-        self._past_usb_search = False
         self._tool_wait_phase = PHASE_CONNECT
         if already:
             return
@@ -1904,6 +1938,8 @@ class FlashWorker(QThread):
             self.finished.emit(False, "USER_CANCELLED")
             return
 
+        self._announce_please_wait()
+
         try:
             scatter_file, missing = self._validate_extract(extract_dir)
         except ScatterDiscoveryError as e:
@@ -2055,7 +2091,7 @@ class FlashWorker(QThread):
         worker = ExtractWorker(self.package_path)
         # The helper emits on its own signal. Forward that onto this worker so
         # the progress card moves during unzip instead of sitting at 5%.
-        worker.progress.connect(self.progress, Qt.ConnectionType.DirectConnection)
+        worker.progress.connect(lambda p: self.progress.emit(p))
         # Reuse the extraction helpers synchronously inside the flash worker.
         extract_dir = compute_extract_dir(self.package_path)
         if _is_extract_complete(extract_dir):
@@ -2067,6 +2103,7 @@ class FlashWorker(QThread):
             worker._extract_zip(self.package_path, extract_dir)
         else:
             worker._extract_rar(self.package_path, extract_dir)
+        self.progress.emit(100)
         from .sp_flash_gui import discard_firmware_history
         discard_firmware_history(extract_dir)
         _mark_extract_complete(extract_dir)
@@ -2283,7 +2320,7 @@ class FlashWorker(QThread):
         while True:
             attempts += 1
             launch_time = time.time()
-            exit_code = self._sp_console_run_once(spawn, log_root)
+            exit_code = self._sp_console_run_once(spawn, log_root, launch_time)
             if exit_code is None:
                 return None, launch_time
             if (
@@ -2303,7 +2340,7 @@ class FlashWorker(QThread):
             self._enter_usb_search()
             time.sleep(self.SP_SEARCH_RESTART_PAUSE)
 
-    def _sp_console_run_once(self, spawn, log_root):
+    def _sp_console_run_once(self, spawn, log_root, launch_time=None):
         """Launch the console tool once, stream it to the log, return its code.
 
         ``None`` means the user cancelled: ``USER_CANCELLED`` has been emitted.
@@ -2317,6 +2354,9 @@ class FlashWorker(QThread):
             except Exception:
                 guardian = None
 
+        if launch_time is None:
+            launch_time = time.time()
+
         self._process = spawn()
         register_sp_session(getattr(self._process, "pid", 0))
         self._start_attempt_watchdog()
@@ -2324,7 +2364,9 @@ class FlashWorker(QThread):
         # Background thread tailing the SP Flash Tool log file.
         stop_monitor = threading.Event()
         monitor = threading.Thread(
-            target=self._monitor_sp_log_file, args=(stop_monitor, log_root), daemon=True
+            target=self._monitor_sp_log_file,
+            args=(stop_monitor, log_root, launch_time),
+            daemon=True,
         )
         monitor.start()
 
@@ -2424,7 +2466,10 @@ class FlashWorker(QThread):
         elif "download ok" in low:
             self._leave_usb_search()
             self.step_changed.emit(STEP_DONE)
-            self.progress.emit(100)
+            if not getattr(self, "_is_rockbox_flow", False):
+                self.progress.emit(100.0)
+            else:
+                self.progress.emit(90.0)
             self.action_changed.emit(tr("action_flash_complete"))
         elif "download failed" in low or "s_ft_" in low:
             m = re.search(r"(S_\w+)\s*\((\d+)\)", line)
@@ -2439,10 +2484,12 @@ class FlashWorker(QThread):
 
     def _emit_progress(self, mapped):
         """Monotonic write-phase progress: a bar never goes backwards."""
-        mapped = int(min(95, max(20, mapped)))
-        if mapped > self._sp_progress_hwm:
-            self._sp_progress_hwm = mapped
-            self.progress.emit(mapped)
+        from .progress_model import scale_flash_progress
+        is_rockbox = getattr(self, "_is_rockbox_flow", False)
+        scaled = scale_flash_progress(float(mapped), is_rockbox=is_rockbox)
+        if scaled > self._sp_progress_hwm:
+            self._sp_progress_hwm = scaled
+            self.progress.emit(round(scaled, 1))
 
     def _emit_eta(self, done, total):
         """Publish the measured time remaining (``-1`` while it is unknown)."""
@@ -2461,12 +2508,13 @@ class FlashWorker(QThread):
         the tool: it read "half way" while the much larger images were still to
         come, which is precisely the case the estimate must get right.
         """
+        from .progress_model import float_percent_of, format_size_bytes
         m = re.search(r"(\d+)%\s+of image data has been sent\s+\(([^)]+)\s+of\s+([^)]+)\)", line)
         if not m:
             m_simple = re.search(r"(\d+)%\s+of image data", line)
             if m_simple:
                 pct = min(100, max(0, int(m_simple.group(1))))
-                self._emit_progress(percent_of(pct, 100, 20, 75))
+                self._emit_progress(float_percent_of(pct, 100, 20, 75))
                 self.action_changed.emit(tr("action_writing_image_fmt").format(pct=pct))
             return
 
@@ -2477,31 +2525,55 @@ class FlashWorker(QThread):
             total = self._sp_total_bytes
         if total > 0:
             self._sp_total_bytes = total
-            self._emit_progress(percent_of(sent, total, 20, 75))
+            self._emit_progress(float_percent_of(sent, total, 20, 75))
             self._emit_eta(sent, total)
         else:
-            self._emit_progress(percent_of(pct, 100, 20, 75))
-        self.action_changed.emit(tr("action_writing_image_fmt").format(pct=pct))
+            self._emit_progress(float_percent_of(pct, 100, 20, 75))
 
-    def _monitor_sp_log_file(self, stop_event, log_root=None):
-        log_root = Path(log_root or _SP_LOG_ROOT)
-        time.sleep(2)
-        try:
-            if not log_root.exists():
-                return
-            newest = max(
-                (p for p in log_root.iterdir() if p.is_dir()),
-                key=lambda p: p.stat().st_mtime,
-                default=None,
+        sent_str = format_size_bytes(sent) if sent > 0 else m.group(2)
+        total_str = format_size_bytes(total) if total > 0 else m.group(3)
+        img_name = getattr(self, "_current_image_name", "") or "system"
+        self.action_changed.emit(
+            tr("action_writing_file_status").format(
+                image=img_name, sent=sent_str, total=total_str
             )
-            if newest is None:
-                return
-            log_file = newest / "QT_FLASH_TOOL.log"
+        )
+
+    def _monitor_sp_log_file(self, stop_event, log_root=None, launch_time=None):
+        log_root = Path(log_root or _SP_LOG_ROOT)
+        try:
+            log_file = None
             last_pos = 0
             forwarded = 0
+
+            def _find_newest_log():
+                if not log_root.exists():
+                    return None
+                dirs = [
+                    p
+                    for p in log_root.iterdir()
+                    if p.is_dir()
+                    and (launch_time is None or p.stat().st_mtime >= launch_time - 5.0)
+                ]
+                if not dirs:
+                    return None
+                newest = max(dirs, key=lambda p: p.stat().st_mtime)
+                candidate = newest / "QT_FLASH_TOOL.log"
+                return candidate if candidate.exists() else None
+
+            log_file = _find_newest_log()
+            while log_file is None and not stop_event.is_set():
+                time.sleep(0.5)
+                log_file = _find_newest_log()
+
+            if log_file is None:
+                return
+
             while not stop_event.is_set():
                 time.sleep(0.5)
                 try:
+                    if not log_file.exists():
+                        continue
                     size = log_file.stat().st_size
                     if size < last_pos:
                         last_pos = 0
@@ -2543,6 +2615,11 @@ class FlashWorker(QThread):
                     continue
         except Exception as e:
             logger.debug("SP log monitor stopped: %s", e)
+        finally:
+            try:
+                self._flush_log()
+            except Exception:
+                pass
 
     def _read_sp_log_result(self, launch_time, log_root=None):
         log_root = Path(log_root or _SP_LOG_ROOT)
@@ -2791,7 +2868,10 @@ class FlashWorker(QThread):
         install never restarts the player into half-written firmware.
         """
         self.step_changed.emit(STEP_DONE)
-        self.progress.emit(100)
+        if not getattr(self, "_is_rockbox_flow", False):
+            self.progress.emit(100.0)
+        else:
+            self.progress.emit(90.0)
         self.action_changed.emit(tr("action_flash_complete"))
         # The DA session is still open: end it by starting the player, the way
         # an SP Flash Tool run already leaves the device booting.
@@ -3169,6 +3249,14 @@ class FlashWorker(QThread):
                         target_parts = ("user",)
 
                 try:
+                    from .progress_model import format_size_bytes
+                    sent_str = format_size_bytes(completed_bytes)
+                    total_str = format_size_bytes(total_bytes)
+                    self.action_changed.emit(
+                        tr("action_writing_file_status").format(
+                            image=part_name, sent=sent_str, total=total_str
+                        )
+                    )
                     for target_part in target_parts:
                         self._write_mtk_partition(
                             da_handler,
@@ -3587,7 +3675,7 @@ class FlashService(QObject):
 
     # forwarded worker signals
     step_changed = Signal(str)
-    progress = Signal(int)
+    progress = Signal(object)
     action_changed = Signal(str)
     log_message = Signal(str)
     attempt_timeout = Signal(int)
@@ -3600,12 +3688,64 @@ class FlashService(QObject):
     device_found = Signal(str)
     device_lost = Signal()
     monitor_error = Signal(str)
+    usb_disconnected = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._extract_worker = None
         self._flash_worker = None
         self._device_monitor = None
+        self._retired_workers = set()
+        self._retired_monitors = set()
+        self._retired_extractors = set()
+
+    def _retire_worker(self, worker):
+        if worker is None:
+            return
+        self._retired_workers.add(worker)
+
+        def _cleanup():
+            if hasattr(worker, "isRunning") and worker.isRunning():
+                QTimer.singleShot(500, _cleanup)
+            else:
+                self._retired_workers.discard(worker)
+
+        try:
+            worker.finished.connect(_cleanup)
+        except Exception:
+            _cleanup()
+
+    def _retire_monitor(self, monitor):
+        if monitor is None:
+            return
+        self._retired_monitors.add(monitor)
+
+        def _cleanup():
+            if hasattr(monitor, "isRunning") and monitor.isRunning():
+                QTimer.singleShot(500, _cleanup)
+            else:
+                self._retired_monitors.discard(monitor)
+
+        try:
+            monitor.finished.connect(_cleanup)
+        except Exception:
+            _cleanup()
+
+    def _retire_extractor(self, extractor):
+        if extractor is None:
+            return
+        self._retired_extractors.add(extractor)
+
+        def _cleanup():
+            if hasattr(extractor, "isRunning") and extractor.isRunning():
+                QTimer.singleShot(500, _cleanup)
+            else:
+                self._retired_extractors.discard(extractor)
+
+        try:
+            extractor.finished.connect(_cleanup)
+        except Exception:
+            _cleanup()
 
     # -- extraction ---------------------------------------------------------
     def extract_async(self, package_path):
@@ -3618,14 +3758,19 @@ class FlashService(QObject):
 
     def cancel_extract(self):
         if self._extract_worker is not None:
-            self._extract_worker.cancel()
+            worker = self._extract_worker
+            self._retire_extractor(worker)
+            worker.cancel()
+            self._extract_worker = None
 
     def _on_extract_done(self, *args):
-        self._extract_worker = None
+        if self._extract_worker is not None:
+            self._retire_extractor(self._extract_worker)
+            self._extract_worker = None
 
     # -- flashing -----------------------------------------------------------
     def start_flash(self, package_path, pre_extracted_dir="", method="auto", model="",
-                    da_file="", auth_file=""):
+                    da_file="", auth_file="", is_rockbox=False):
         # Kill any backend still running (e.g. a searching flash_tool) first,
         # then start the new one. The cancelled worker's late terminal signals
         # are detached so they cannot reach the UI or clobber the new run.
@@ -3638,6 +3783,7 @@ class FlashService(QObject):
             device_loss_hold=self.hold_device_lost,
             da_file=da_file,
             auth_file=auth_file,
+            is_rockbox=is_rockbox,
         )
         worker._wait_for = retired
         self._flash_worker = worker
@@ -3649,6 +3795,7 @@ class FlashService(QObject):
         worker.eta_changed.connect(self.eta_changed)
         worker.finished.connect(self.flash_finished)
         worker.finished.connect(lambda ok, err, w=worker: self._on_flash_done(w, ok, err))
+        worker.usb_disconnected.connect(self.usb_disconnected)
         worker.start()
 
     def hold_device_lost(self, seconds):
@@ -3670,6 +3817,7 @@ class FlashService(QObject):
         # Detach first: a run cancelled to switch backends must not emit
         # USER_CANCELLED into the UI or clear the reference of a newer worker.
         self._detach_worker(worker)
+        self._retire_worker(worker)
         worker.cancel()
         self._flash_worker = None
         return worker
@@ -3689,11 +3837,14 @@ class FlashService(QObject):
         # finish from a previous (cancelled) run cannot orphan a newer worker.
         if self._flash_worker is worker:
             self._flash_worker = None
+        self._retire_worker(worker)
 
     # -- device monitor -----------------------------------------------------
     def start_device_monitor(self):
         if self._device_monitor is not None and self._device_monitor.isRunning():
             return
+        if self._device_monitor is not None:
+            self._retire_monitor(self._device_monitor)
         self._device_monitor = DeviceMonitor()
         self._device_monitor.device_found.connect(self.device_found)
         self._device_monitor.device_lost.connect(self.device_lost)
@@ -3701,10 +3852,23 @@ class FlashService(QObject):
         self._device_monitor.start()
 
     def stop_device_monitor(self):
-        if self._device_monitor is not None:
-            self._device_monitor.stop()
-            if self._device_monitor.isRunning():
-                self._device_monitor.wait(2000)
+        monitor = self._device_monitor
+        if monitor is not None:
+            self._device_monitor = None
+            try:
+                monitor.device_found.disconnect()
+            except Exception:
+                pass
+            try:
+                monitor.device_lost.disconnect()
+            except Exception:
+                pass
+            try:
+                monitor.error.disconnect()
+            except Exception:
+                pass
+            self._retire_monitor(monitor)
+            monitor.stop()
 
     def terminate_install_sessions(self, timeout: float = 8.0) -> str:
         """Stop every session this app started, before another route takes over.

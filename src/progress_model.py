@@ -138,3 +138,61 @@ def percent_of(done, total, start: float = 0.0, span: float = 100.0) -> int:
         return int(round(start))
     ratio = min(1.0, max(0.0, done / total))
     return int(round(start + span * ratio))
+
+
+def float_percent_of(done, total, start: float = 0.0, span: float = 100.0) -> float:
+    """The byte fraction of ``total`` inside a slice of the bar, returning a float with 1-decimal precision."""
+    try:
+        total = float(total)
+        done = float(done)
+    except (TypeError, ValueError):
+        return round(float(start), 1)
+    if total <= 0:
+        return round(float(start), 1)
+    ratio = min(1.0, max(0.0, done / total))
+    return round(start + span * ratio, 1)
+
+
+def scale_flash_progress(pct: float, is_rockbox: bool = False) -> float:
+    """Scale firmware flashing progress.
+
+    For releases with Rockbox, firmware writing accounts for 0% to 90.0% of the bar,
+    reserving 90.0% to 100.0% for theme and fontpack installation.
+    For standard releases, flashing spans the full 0% to 100.0%.
+    """
+    try:
+        p = float(pct)
+    except (TypeError, ValueError):
+        p = 0.0
+    p = max(0.0, min(100.0, p))
+    if is_rockbox:
+        return round(p * 0.90, 1)
+    return round(p, 1)
+
+
+def scale_theme_progress(theme_pct: float) -> float:
+    """Map theme pack install progress (0% - 100%) into the final 90.0% - 100.0% bar segment."""
+    try:
+        p = float(theme_pct)
+    except (TypeError, ValueError):
+        p = 0.0
+    p = max(0.0, min(100.0, p))
+    return round(90.0 + (p * 0.10), 1)
+
+
+def format_size_bytes(bytes_count: float) -> str:
+    """Format bytes as a human-readable size string (e.g. 581.6 MB, 3.15 GB)."""
+    try:
+        b = float(bytes_count)
+    except (TypeError, ValueError):
+        return "0 B"
+    if b < 0:
+        return "0 B"
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if b < 1024.0 or unit == "TB":
+            if unit in ("B", "KB"):
+                return f"{int(round(b))} {unit}"
+            val = f"{b:.2f}".rstrip("0").rstrip(".")
+            return f"{val} {unit}"
+        b /= 1024.0
+    return f"{b:.2f} TB"

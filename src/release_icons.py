@@ -289,3 +289,46 @@ def load_first_icon_bytes(urls, cache_dir: Path, *, allow_network: bool = True) 
         if code == 404:
             remember_icon_miss(url, cache_dir)
     return None
+
+
+def load_local_package_icon_bytes(package_path: str | Path | None, *, dark: bool | None = None) -> bytes | None:
+    """Inspect a local package (zip file or folder) for an embedded updater image.
+
+    Checks updater_dark.* first when dark is True, then updater.jpg, updater.jpeg, updater.png.
+    Returns the raw image bytes if found and valid, otherwise None.
+    """
+    if not package_path:
+        return None
+    try:
+        p = Path(package_path)
+        if not p.exists():
+            return None
+        dark = _dark_flag(dark)
+        names = list(DARK_ICON_NAMES) + list(LIGHT_ICON_NAMES) if dark else list(LIGHT_ICON_NAMES)
+        if p.is_dir():
+            for name in names:
+                cand = p / name
+                if cand.is_file():
+                    data = cand.read_bytes()
+                    if image_bytes_ok(data):
+                        return data
+        elif p.is_file():
+            if p.suffix.lower() == ".zip":
+                import zipfile
+
+                with zipfile.ZipFile(p, "r") as zf:
+                    entry_names = {
+                        Path(info.filename).name.lower(): info.filename
+                        for info in zf.infolist()
+                        if not info.is_dir()
+                    }
+                    for name in names:
+                        entry = entry_names.get(name.lower())
+                        if entry:
+                            data = zf.read(entry)
+                            if image_bytes_ok(data):
+                                return data
+    except Exception as exc:
+        logger.debug("Could not inspect local package icon for %s: %s", package_path, exc)
+    return None
+

@@ -943,6 +943,7 @@ class InstallProgress(QProgressBar):
         super().__init__(parent)
         # The sweep state comes first: property setters below ask for it.
         self._sweep = 0.0
+        self._precise_value: float | None = None
         self._timer = QTimer(self)
         self._timer.setInterval(40)
         self._timer.timeout.connect(self._tick)
@@ -962,6 +963,7 @@ class InstallProgress(QProgressBar):
 
     def set_busy(self, busy: bool = True) -> None:
         """``(0, 0)`` for the sweeping state, ``(0, 100)`` at zero otherwise."""
+        self._precise_value = None
         if busy:
             self.setRange(0, 0)
             return
@@ -969,6 +971,19 @@ class InstallProgress(QProgressBar):
         self.setFormat("%p%")
         self.setTextVisible(True)
         self.setValue(0)
+
+    def set_precise_value(self, value: float) -> None:
+        """Set a decimal percentage (e.g. 18.4) for 1-decimal display."""
+        try:
+            val = float(value)
+        except (TypeError, ValueError):
+            val = 0.0
+        val = max(0.0, min(100.0, val))
+        self._precise_value = val
+        self.setRange(0, 100)
+        self.setTextVisible(True)
+        super().setValue(int(round(val)))
+        self.update()
 
     def showEvent(self, event):  # noqa: N802 (Qt naming)
         super().showEvent(event)
@@ -983,7 +998,11 @@ class InstallProgress(QProgressBar):
         self._sync_animation()
 
     def setValue(self, value):  # noqa: N802 (Qt naming)
-        super().setValue(value)
+        if isinstance(value, float):
+            self.set_precise_value(value)
+            return
+        self._precise_value = None
+        super().setValue(int(value) if value is not None else 0)
         if self.is_busy():
             self._sync_animation()
 
@@ -1004,8 +1023,17 @@ class InstallProgress(QProgressBar):
         self._sweep = (self._sweep + 0.02) % 1.0
         self.update()
 
+    def text(self) -> str:
+        pv = getattr(self, "_precise_value", None)
+        if pv is not None and not self.is_busy():
+            return f"{pv:.1f}%"
+        return super().text()
+
     def fraction(self) -> float:
         """How much of the track the chunk covers, 0.0 to 1.0."""
+        pv = getattr(self, "_precise_value", None)
+        if pv is not None and not self.is_busy():
+            return max(0.0, min(1.0, pv / 100.0))
         span = self.maximum() - self.minimum()
         if span <= 0:
             return 0.0

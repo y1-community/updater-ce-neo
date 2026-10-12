@@ -167,15 +167,17 @@ def test_connect_sentence_and_please_wait_bar():
     assert page._wait_progress_bar.maximum() == 100
     assert page._wait_progress_bar.value() == 0
 
-    # The power-off sentence names the button that powers this player off, and
-    # still says how the run proceeds.
+    # The power-off sentence tells the user to make sure the player is powered-off
+    # and disconnected, then press Next.
     page.show_power_off_prompt()
-    assert page._wait_prompt_label.text().endswith("then click Next")
-    assert "centre button" in page._wait_prompt_label.text()
+    assert page._wait_prompt_label.text().endswith("then press Next.")
+    assert "powered-off and disconnected" in page._wait_prompt_label.text()
+    assert "centre button" not in page._wait_prompt_label.text()
     page.set_model("A5")
     page.show_power_off_prompt()
-    assert "power button" in page._wait_prompt_label.text()
-    assert "centre" not in page._wait_prompt_label.text()
+    assert "A5" in page._wait_prompt_label.text()
+    assert "powered-off and disconnected" in page._wait_prompt_label.text()
+    assert "power button" not in page._wait_prompt_label.text()
     page.set_model("Y1")
 
 

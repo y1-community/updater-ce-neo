@@ -145,8 +145,8 @@ def test_the_tool_own_total_is_what_the_bar_follows():
 
     worker._classify_sp_stdout("[SP] 1% of image data has been sent (7.37M of 711.46M)")
     worker._classify_sp_stdout("[SP] 50% of image data has been sent (356.62M of 711.46M)")
-    assert progress[0] == percent_of(7.37 * 1024**2, 711.46 * 1024**2, 20, 75)
-    assert progress[-1] == percent_of(356.62 * 1024**2, 711.46 * 1024**2, 20, 75)
+    assert round(progress[0]) == percent_of(7.37 * 1024**2, 711.46 * 1024**2, 20, 75)
+    assert round(progress[-1]) == percent_of(356.62 * 1024**2, 711.46 * 1024**2, 20, 75)
     # 50% of the bytes is around the middle of the write slice, not "63%".
     assert 55 <= progress[-1] <= 60, progress
     assert etas, "the card is told the ETA, even while it is still unknown"

@@ -82,7 +82,7 @@ CATALOG = [
                     "The stock software for restoring an Innioasis Y2."),
     FirmwarePackage("rockbox-y1", "Rockbox", "Y1", "rockbox-y1/rockbox", "rom.zip",
                     "A music-first custom software with deep playback and theme options."),
-    FirmwarePackage("rockbox-y2", "Rockbox", "Y2", "y1-community/rockbox-y2-rom", "rom_y2.zip",
+    FirmwarePackage("rockbox-y2", "Rockbox", "Y2", "spycemagic/y2-rockbox", "rom_y2.zip",
                     "The Y2 Rockbox build."),
     FirmwarePackage("solar-y1", "Solar", "Y1", "thesolarproject/solar", "rom.zip",
                     "A Y1 custom software with network features, including YouTube support."),
@@ -1255,7 +1255,8 @@ class ReleasesClient:
             if not _release_matches_model(model, rel, package, selected_type):
                 continue
             if rel.get("prerelease") and not show_nightly:
-                continue
+                if not (package.slug == "rockbox-y2" or package.repo == "spycemagic/y2-rockbox" or (str(model or "").upper() == "Y2" and "rockbox" in package.slug)):
+                    continue
             # Re-pick the preferred asset with the model filter so the
             # download URL points to the correct rom*.zip for this model.
             rom_variants = filter_rom_variants_for_model(

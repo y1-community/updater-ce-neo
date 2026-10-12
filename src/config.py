@@ -121,6 +121,7 @@ UPDATE_ASSET_ARCH_PRIORITY = ("universal", "x86_64", "amd64", "arm64", "aarch64"
 FIRMWARE_REPO_FALLBACKS = {
     "y1-community/stock-rom": "y1-community/y1-stock-rom",
     "y1-community/y2-stock-rom": "y1-community/y1-stock-rom",
+    "y1-community/rockbox-y2-rom": "spycemagic/y2-rockbox",
 }
 
 # Minimum visible release per (model, repo): anything older is hidden by default.

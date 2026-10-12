@@ -730,6 +730,9 @@ class MainWindow(QMainWindow):
             page._current_installed_release_info = None
             page._current_package_path = flash_path
             page._current_package_name = Path(flash_path).name
+            page._current_selected_rel = None
+            page._details_package = None
+            page._raw_release_pixmap = None
         self._on_package_selected(flash_path, Path(flash_path).name, "")
 
     def _on_manifest_worker_finished(self, worker, entries):
@@ -820,6 +823,10 @@ class MainWindow(QMainWindow):
 
         # Mount select_page._title into the unified header bar if inlining
         if is_inline and hasattr(self, "_title_container"):
+            if sys.platform == "darwin":
+                self._select_page._title.setStyleSheet(
+                    "font-size: 13px; font-weight: 600; color: palette(window-text); letter-spacing: normal; background: transparent; border: none;"
+                )
             self._title_container.layout().addWidget(self._select_page._title)
             from .surfaces import seal_updating_text
             seal_updating_text(self._select_page._title)
@@ -907,7 +914,6 @@ class MainWindow(QMainWindow):
         """App icon, app name, and the page heading start a window move."""
         title = getattr(getattr(self, "_select_page", None), "_title", None)
         for widget in (
-            getattr(self, "_brand_container", None),
             getattr(self, "_icon_label", None),
             getattr(self, "_brand_label", None),
             getattr(self, "_brand_version", None),
@@ -1006,15 +1012,20 @@ class MainWindow(QMainWindow):
         title_version_row.setContentsMargins(0, 0, 0, 0)
         title_version_row.setSpacing(5)
 
+        is_mac = sys.platform == "darwin"
+        brand_font_size = "13px" if is_mac else _BRAND_FONT_SIZE
+        brand_font_weight = "600" if is_mac else "800"
+        brand_letter_spacing = "normal" if is_mac else "-0.02em"
+
         self._brand_label = QLabel(get_app_name())
         self._brand_label.setStyleSheet(
-            f"font-size: {_BRAND_FONT_SIZE}; font-weight: 800; color: palette(window-text); letter-spacing: -0.02em; background: transparent; border: none;"
+            f"font-size: {brand_font_size}; font-weight: {brand_font_weight}; color: palette(window-text); letter-spacing: {brand_letter_spacing}; background: transparent; border: none;"
         )
         title_version_row.addWidget(self._brand_label)
 
         self._brand_version = QLabel(APP_VERSION)
         self._brand_version.setStyleSheet(
-            f"font-size: {_BRAND_FONT_SIZE}; font-weight: 800; color: palette(window-text); letter-spacing: -0.02em; background: transparent; border: none;"
+            f"font-size: {brand_font_size}; font-weight: {brand_font_weight}; color: palette(window-text); letter-spacing: {brand_letter_spacing}; background: transparent; border: none;"
         )
         title_version_row.addWidget(self._brand_version)
         title_version_row.addStretch(1)
@@ -1022,19 +1033,36 @@ class MainWindow(QMainWindow):
         brand_text_col.addLayout(title_version_row)
 
         from .. import browser
-        self._version_label = QLabel(
-            f'by <a href="https://ko-fi.com/teamslide" style="color: {t.fg}; font-weight: 700; text-decoration: none;">Ryan Specter</a>'
-        )
-        self._version_label.setStyleSheet(
-            "font-size: 11px; color: palette(window-text); background: transparent; border: none; margin: 0; padding: 0;"
-        )
-        self._version_label.setTextInteractionFlags(Qt.TextBrowserInteraction)
+        self._version_label = QLabel()
+        self._version_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
         self._version_label.setOpenExternalLinks(False)
         self._version_label.linkActivated.connect(lambda url: browser.open_browser(url))
+        self._version_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
+        self._version_label.setCursor(Qt.PointingHandCursor)
+        self._update_author_label()
         brand_text_col.addWidget(self._version_label)
 
         brand_row.addLayout(brand_text_col, 1)
         return self._brand_container
+
+    def _update_author_label(self):
+        """Update author credit label text and styling according to current locale and theme."""
+        if not hasattr(self, "_version_label") or self._version_label is None:
+            return
+        t = T()
+        by_word = tr("author_by")
+        author_color = t.fg or "#e5e7eb"
+        author_link = f'<a href="https://ko-fi.com/teamslide" style="color: {author_color}; font-weight: 600; text-decoration: none;">Ryan Specter</a>'
+        self._version_label.setText(
+            tr("brand_author_by").format(by=by_word, author=author_link)
+        )
+        self._version_label.setStyleSheet(
+            "font-size: 11px; color: palette(window-text); background: transparent; border: none; margin: 0; padding: 0;"
+        )
+        self._version_label.setVisible(
+            not device_tracking.is_donation_ui_disabled(self.settings)
+            and not is_mediatek_installer()
+        )
 
     def _build_header_bar(self):
         t = T()
@@ -1330,9 +1358,14 @@ class MainWindow(QMainWindow):
             if surface is not None:
                 self._paint_opaque(surface)
 
+        is_mac = sys.platform == "darwin"
+        brand_font_size = "13px" if is_mac else _BRAND_FONT_SIZE
+        brand_font_weight = "600" if is_mac else "800"
+        brand_letter_spacing = "normal" if is_mac else "-0.02em"
+
         if hasattr(self, "_brand_label"):
             self._brand_label.setStyleSheet(
-                f"font-size: {_BRAND_FONT_SIZE}; font-weight: 800; color: palette(window-text); letter-spacing: -0.02em; background: transparent; border: none;"
+                f"font-size: {brand_font_size}; font-weight: {brand_font_weight}; color: palette(window-text); letter-spacing: {brand_letter_spacing}; background: transparent; border: none;"
             )
 
         if hasattr(self, "_icon_label"):
@@ -1343,16 +1376,13 @@ class MainWindow(QMainWindow):
         if hasattr(self, "_brand_version"):
             self._brand_version.setText(APP_VERSION)
             self._brand_version.setStyleSheet(
-                f"font-size: {_BRAND_FONT_SIZE}; font-weight: 800; color: palette(window-text); letter-spacing: -0.02em; background: transparent; border: none;"
+                f"font-size: {brand_font_size}; font-weight: {brand_font_weight}; color: palette(window-text); letter-spacing: {brand_letter_spacing}; background: transparent; border: none;"
             )
 
-        if hasattr(self, "_version_label"):
-            # Attribution only — the version lives beside the brand title, not here.
-            self._version_label.setText(
-                f'by <a href="https://ko-fi.com/teamslide" style="color: {t.fg}; font-weight: 700; text-decoration: none;">Ryan Specter</a>'
-            )
-            self._version_label.setStyleSheet(
-                "font-size: 11px; color: palette(window-text); background: transparent; border: none; margin: 0; padding: 0;"
+        self._update_author_label()
+        if is_mac and hasattr(self, "_select_page") and hasattr(self._select_page, "_title"):
+            self._select_page._title.setStyleSheet(
+                "font-size: 13px; font-weight: 600; color: palette(window-text); letter-spacing: normal; background: transparent; border: none;"
             )
 
         if hasattr(self, "_lang_label"):
@@ -1425,6 +1455,8 @@ class MainWindow(QMainWindow):
         self.service.flash_finished.connect(self._on_flash_finished)
         self.service.device_found.connect(self._on_device_found)
         self.service.device_lost.connect(self._on_device_lost)
+        if hasattr(self.service, "usb_disconnected"):
+            self.service.usb_disconnected.connect(self._on_device_lost)
         self.service.monitor_error.connect(self._on_monitor_error)
 
     def _on_download_started(self, name, model):
@@ -1830,16 +1862,21 @@ class MainWindow(QMainWindow):
         # only backend, mac-centric prompts) can be tested without a Mac.
         # NB: PySide6 6.11 returns a Flag here, so int(modifiers()) raises.
         if event.key() == Qt.Key_D and event.modifiers() == Qt.NoModifier:
-            # Session-only. M still reveals the hidden install backend.
             self._unlock_diagnostics()
+            self._settings_page.reveal_advanced_methods()
+            try:
+                from ..device_tracking import set_hidden_mtk_options
+
+                set_hidden_mtk_options(True)
+            except Exception:
+                pass
+            self._nav_to_page(_PAGE_SETTINGS)
+            self._append_log("Advanced install methods and diagnostics revealed (D).")
             event.accept()
             return
         if event.key() == Qt.Key_M and event.modifiers() == Qt.NoModifier:
             self._settings_page.reveal_advanced_methods()
             if self._settings_page.advanced_methods_revealed():
-                # Remember the reveal across launches: it also unlocks the
-                # MTKClient diagnostics view on Windows, which is otherwise
-                # hidden because SP Flash Tool is the supported backend there.
                 try:
                     from ..device_tracking import set_hidden_mtk_options
 
@@ -1847,7 +1884,9 @@ class MainWindow(QMainWindow):
                 except Exception:
                     pass
                 self._nav_to_page(_PAGE_SETTINGS)
-                self._append_log("Advanced install methods revealed (M/D).")
+                self._append_log("Advanced install methods revealed (M).")
+            event.accept()
+            return
         super().keyPressEvent(event)
 
     def _install_run_active(self) -> bool:
@@ -2042,6 +2081,9 @@ class MainWindow(QMainWindow):
             available = screen.availableGeometry()
             target_w = min(target_w, int(available.width()), MAXIMUM_WINDOW_WIDTH)
             target_h = min(target_h, int(available.height()))
+        if stack.currentIndex() == _PAGE_SETTINGS:
+            max_settings_h = min(int(available.height()) - 60, 560) if screen is not None else 560
+            target_h = min(target_h, max(DEFAULT_WINDOW_HEIGHT, max_settings_h))
         self._apply_window_size_limits(target_h)
         if target_w != self.width() or target_h != self.height():
             self._animate_window_size(
@@ -2070,7 +2112,11 @@ class MainWindow(QMainWindow):
             return
 
         is_install = self._install_run_active()
-        donations_disabled = device_tracking.is_donation_ui_disabled(self.settings)
+        donations_disabled = (
+            device_tracking.is_donation_ui_disabled(self.settings)
+            or device_tracking.is_donation_install_prompt_disabled(self.settings)
+            or not (hasattr(self._flash_page, "_appeal") and self._flash_page._appeal.isVisible())
+        )
         hug_install = is_install or bool(
             getattr(self, "_install_complete", False)
             or getattr(self, "_install_failed", False)
@@ -2084,6 +2130,8 @@ class MainWindow(QMainWindow):
             page = self._flash_page
             if hasattr(page, "sync_text_fit"):
                 page.sync_text_fit()
+            if page.layout() is not None:
+                page.layout().activate()
             self._stack.updateGeometry()
             page.updateGeometry()
             page_h = page.sizeHint().height()
@@ -2334,7 +2382,7 @@ class MainWindow(QMainWindow):
             if hasattr(self, "_log_btn"):
                 self._sync_diagnostics_button()
             if hasattr(self, "_check_updates_btn"):
-                self._check_updates_btn.setVisible(True)
+                self._check_updates_btn.setVisible(not is_generic_mtk() and not is_offline_mode())
             if hasattr(self, "_linux_setup_btn"):
                 self._linux_setup_btn.setVisible(True)
             if hasattr(self, "_sp_flash_tool_btn"):
@@ -2449,7 +2497,7 @@ class MainWindow(QMainWindow):
 
     def _nav_to_page(self, page_idx):
         if self._install_run_active() and page_idx not in (
-            _PAGE_FLASH, _PAGE_DIAGNOSTICS, _PAGE_NOTICE, _PAGE_ERROR, _PAGE_RETRY,
+            _PAGE_FLASH, _PAGE_DIAGNOSTICS, _PAGE_NOTICE, _PAGE_RETRY,
         ):
             # A click may already have checked the blocked entry. Put the
             # highlight back on the page that is actually showing.
@@ -2792,6 +2840,7 @@ class MainWindow(QMainWindow):
         """Leave the completed install and reopen the catalogue the run started from."""
         section = getattr(self, "_catalogue_section", "online") or "online"
         self._run_output_open = False
+        self._download_active = False
         self._reset_after_run()
         page = getattr(self, "_select_page", None)
         if page is not None and hasattr(page, "show_catalogue_section"):
@@ -2889,6 +2938,22 @@ class MainWindow(QMainWindow):
         except ValueError:
             self.sm.reset_full()
             self.sm.transition_to(FlashState.S2_WAIT_CONNECTION)
+
+        eff_model = (self._package_model or "").upper()
+        is_y_target = eff_model in ("Y1", "Y2")
+        pkg_low = (self._package_name or "").lower()
+        path_low = (self._package_path or "").lower()
+        is_rockbox = "rockbox" in pkg_low or "rockbox" in path_low
+        is_240p = "_240p" in path_low or "240p" in pkg_low
+        local_cb = getattr(self._select_page, "is_local_rockbox_themes_checked", lambda: False)()
+        self._is_360p_rockbox = bool((is_y_target and is_rockbox and not is_240p) or local_cb)
+
+        try:
+            from ..sleep_inhibit import acquire_sleep_inhibition
+            acquire_sleep_inhibition("Firmware installation in progress")
+        except Exception as e:
+            logger.debug("Could not acquire sleep inhibition: %s", e)
+
         self._flash_page.set_package_name(self._package_name)
         self._flash_page.set_model(self._package_model)
         self._flash_page.set_method(self._flash_method)
@@ -2899,9 +2964,10 @@ class MainWindow(QMainWindow):
         self._last_progress = 0
         pre_extracted = completed_extract_dir(self._package_path)
         if pre_extracted:
-            self._flash_page.show_please_wait()
+            self._flash_page.show_connect_search()
         else:
             self._flash_page.show_preparing()
+            self._flash_page.set_attempt_timeout(0)
         self._nav_to_page(_PAGE_FLASH)
         self._append_log(
             f"Starting flash for {self._package_name} "
@@ -2928,6 +2994,7 @@ class MainWindow(QMainWindow):
             model=self._package_model,
             da_file=da_file,
             auth_file=auth_file,
+            is_rockbox=self._is_360p_rockbox,
         )
         self.service.start_device_monitor()
 
@@ -2945,7 +3012,8 @@ class MainWindow(QMainWindow):
         elif step == STEP_PLEASE_WAIT:
             self._usb_search_active = False
             self._last_progress = 0
-            self._flash_page.show_please_wait()
+            if self._past_usb_search or not getattr(self, "_pre_install_guided", False):
+                self._flash_page.show_please_wait()
             self._settings_page.set_method_enabled(True)
             self._set_state(FlashState.S2_WAIT_CONNECTION)
         elif step == STEP_WAITING:
@@ -3109,7 +3177,20 @@ class MainWindow(QMainWindow):
             # background; a retry starts a fresh one.
             self.service.stop_device_monitor()
             self.service.cancel_flash()
-            self._show_install_failure(tr("err_usb_title"))
+            try:
+                from ..sleep_inhibit import release_sleep_inhibition
+                release_sleep_inhibition()
+            except Exception:
+                pass
+            self._install_failed = True
+            self._power_off_prompt = False
+            self._install_complete = False
+            self._flash_page.show_usb_disconnected(
+                on_retry=self._on_progress_retry,
+                on_cancel=self._on_cancel_flash,
+            )
+            self._nav_to_page(_PAGE_FLASH)
+            self._adjust_window_geometry()
         elif self.sm.state in (FlashState.S2_WAIT_CONNECTION, FlashState.S3_DEVICE_DETECTED):
             try:
                 self.sm.transition_to(FlashState.S2_WAIT_CONNECTION)
@@ -3148,9 +3229,6 @@ class MainWindow(QMainWindow):
         model = self._package_model or ""
         software = self._package_name or "Firmware"
         steps = install_power_on_steps(model)
-        self._show_status(
-            tr("status_install_ok_fmt").format(software=software, steps=steps), 60000
-        )
 
         # Record install for device tracking & future release reminders
         rel_info = getattr(self._select_page, "current_installed_release_info", lambda: None)()
@@ -3180,35 +3258,36 @@ class MainWindow(QMainWindow):
         path_low = (self._package_path or "").lower()
         is_rockbox = "rockbox" in pkg_low or "rockbox" in path_low
         is_240p = "_240p" in path_low or "240p" in pkg_low
-        is_360p_rockbox = bool(is_y_target and is_rockbox and not is_240p)
+        local_cb = getattr(self._select_page, "is_local_rockbox_themes_checked", lambda: False)()
+        is_360p_rockbox = bool((is_y_target and is_rockbox and not is_240p) or local_cb)
 
         self._is_360p_rockbox = is_360p_rockbox
+        self._download_active = False
 
-        elapsed = self._elapsed_text()
-        self._is_360p_rockbox = is_360p_rockbox
-        self._install_complete = True
-        self._compact_install_screen = True
-        self._flash_page.show_flashing()
-        self._flash_page.set_device_done()
-        self._flash_page.show_completion_appeal(False)
-        self._apply_release_icon(complete=True)
-        self._nav_to_page(_PAGE_FLASH)
-        # Compact completion first. The appeal is the only extra growth, and
-        # it uses the same short size animation. Install Software stays selected.
-        # A 360p Rockbox install carries straight into the themes stage: the
-        # wizard takes the completion screen's place, and the appeal follows
-        # once the wizard closes (themes installed or dismissed).
         if is_360p_rockbox:
+            self._nav_to_page(_PAGE_FLASH)
             self._start_themes_stage(eff_model, donation_disabled)
-        elif not donation_disabled:
-            self._flash_page.show_completion_appeal(
-                True, self._on_completion_dont_ask, self._on_completion_not_now,
-            )
+        else:
+            try:
+                from ..sleep_inhibit import release_sleep_inhibition
+                release_sleep_inhibition()
+            except Exception:
+                pass
+            self._install_complete = True
+            self._compact_install_screen = True
+            self._flash_page.show_flashing()
+            self._flash_page.set_device_done()
+            self._flash_page.show_completion_appeal(False)
+            self._apply_release_icon(complete=True)
+            self._nav_to_page(_PAGE_FLASH)
+            if not donation_disabled:
+                self._flash_page.show_completion_appeal(
+                    True, self._on_completion_dont_ask, self._on_completion_not_now,
+                )
             self._adjust_window_geometry()
-        self._show_status(
-            tr("status_install_ok_fmt").format(software=software, steps=steps), 60000
-        )
-        del elapsed
+            self._show_status(
+                tr("status_install_ok_fmt").format(software=software, steps=steps), 60000
+            )
 
     def _create_themes_wizard(self, model: str):
         """Factory seam for the 360p themes stage (tests stub the dialog)."""
@@ -3217,41 +3296,63 @@ class MainWindow(QMainWindow):
         return Rockbox360pSetupWizard(parent=self, model=model)
 
     def _start_themes_stage(self, model: str, donation_disabled: bool) -> None:
-        """Open the themes install stage after a 360p Rockbox install.
-
-        Modeless, so the completion screen stays behind it and tests never
-        block on a modal loop. The donation appeal follows when the wizard
-        closes, however it closes — the install itself already completed.
-        """
+        """Open the themes install stage after a 360p Rockbox install."""
         self._themes_stage_done = False
+        # Check if caller or test suite stubbed _create_themes_wizard
         try:
-            dlg = self._create_themes_wizard(model)
+            is_custom = self._create_themes_wizard.__code__ != MainWindow._create_themes_wizard.__code__
         except Exception:
-            logger.debug("Themes stage could not open", exc_info=True)
-            if not donation_disabled:
-                self._flash_page.show_completion_appeal(
-                    True, self._on_completion_dont_ask, self._on_completion_not_now,
-                )
-                self._adjust_window_geometry()
-            return
-        dlg.installed_success.connect(lambda: self._finish_themes_stage(donation_disabled))
-        dlg.finished.connect(lambda _result: self._finish_themes_stage(donation_disabled))
-        dlg.show()
-        try:
-            dlg.raise_()
-            dlg.activateWindow()
-        except Exception:
-            pass
+            is_custom = False
+
+        if is_custom:
+            try:
+                dlg = self._create_themes_wizard(model)
+                if dlg is not None:
+                    dlg.installed_success.connect(lambda: self._finish_themes_stage(donation_disabled))
+                    dlg.finished.connect(lambda _result: self._finish_themes_stage(donation_disabled))
+                    dlg.show()
+                    try:
+                        dlg.raise_()
+                        dlg.activateWindow()
+                    except Exception:
+                        pass
+                    return
+            except Exception:
+                logger.debug("Custom themes wizard could not open", exc_info=True)
+
+        self._flash_page.start_rockbox_themes_stage(
+            model=model,
+            on_done=lambda: self._finish_themes_stage(donation_disabled),
+            on_recover=self._on_progress_retry,
+        )
+        self._adjust_window_geometry()
 
     def _finish_themes_stage(self, donation_disabled: bool) -> None:
         if getattr(self, "_themes_stage_done", False):
             return
         self._themes_stage_done = True
+        try:
+            from ..sleep_inhibit import release_sleep_inhibition
+            release_sleep_inhibition()
+        except Exception:
+            pass
+        self._install_complete = True
+        self._compact_install_screen = True
+        self._flash_page.show_flashing()
+        self._flash_page.set_device_done()
+        self._apply_release_icon(complete=True)
+        self._nav_to_page(_PAGE_FLASH)
         if not donation_disabled:
             self._flash_page.show_completion_appeal(
                 True, self._on_completion_dont_ask, self._on_completion_not_now,
             )
-            self._adjust_window_geometry()
+        self._adjust_window_geometry()
+        model = self._package_model or ""
+        software = self._package_name or "Firmware"
+        steps = install_power_on_steps(model)
+        self._show_status(
+            tr("status_install_ok_fmt").format(software=software, steps=steps), 60000
+        )
 
     def _ensure_theme_sync(self) -> None:
         """Start the passive 360p theme sync (self-gating; idle when untracked)."""
@@ -3275,6 +3376,12 @@ class MainWindow(QMainWindow):
         self._nav_to_page(_PAGE_FLASH)
 
     def _handle_flash_failure(self, error_code):
+        try:
+            from ..sleep_inhibit import release_sleep_inhibition
+            release_sleep_inhibition()
+        except Exception:
+            pass
+        self._download_active = False
         # A backend that never got going is not the end of the install on a
         # host that has the other engine: hand the user back to the power-off
         # step and start the other one from there.
@@ -3381,7 +3488,7 @@ class MainWindow(QMainWindow):
             self.sm.reset_for_retry()
         self._flash_page.set_model(self._package_model)
         self._apply_release_icon(complete=False)
-        self._flash_page.show_power_off_prompt()
+        self._flash_page.show_power_off_prompt(show_pin_tip=True)
         self._nav_to_page(_PAGE_FLASH)
 
     def _on_power_off_continue(self):
@@ -3480,6 +3587,13 @@ class MainWindow(QMainWindow):
     def _stop_running_install(self) -> None:
         """Stop a download or flash so it does not keep running in the background."""
         self._download_active = False
+        try:
+            from ..sleep_inhibit import release_sleep_inhibition
+            release_sleep_inhibition()
+        except Exception:
+            pass
+        if hasattr(self, "_flash_page") and hasattr(self._flash_page, "stop_theme_workers"):
+            self._flash_page.stop_theme_workers()
         page = getattr(self, "_select_page", None)
         if page is not None:
             worker = getattr(page, "_download_worker", None)
@@ -3533,11 +3647,13 @@ class MainWindow(QMainWindow):
     def _on_completion_dont_ask(self):
         """Hide donations, then the compact completion screen without the appeal."""
         device_tracking.set_donation_ui_disabled(True, self.settings)
+        device_tracking.set_donation_install_prompt_disabled(True, self.settings)
         self._flash_page.show_completion_appeal(False)
         if hasattr(self, "_settings_page"):
             self._settings_page.refresh_settings()
         self._apply_donation_visibility(True)
         self._highlight_nav(_PAGE_FLASH, True)
+        self._adjust_window_geometry()
 
     def _apply_release_icon(self, complete: bool = False) -> None:
         """Squircle until a release icon is cached, then that image. The check overlays either."""
@@ -3559,15 +3675,20 @@ class MainWindow(QMainWindow):
             or is_mediatek_installer()
             or (page is not None and getattr(page, "catalogue_section", lambda: "")() == "local")
         )
+        dark = bool(is_dark())
         if is_local:
-            # Locally browsed ROM / MediaTek mode: always use generic settings cog squircle icon!
-            self._flash_page.set_release_icon(QPixmap(), complete=complete)
+            from ..release_icons import load_local_package_icon_bytes
+            from .release_icon import pixmap_from_icon_bytes
+
+            pkg_path = getattr(self, "_package_path", None)
+            local_bytes = load_local_package_icon_bytes(pkg_path, dark=dark) if pkg_path else None
+            pixmap = pixmap_from_icon_bytes(local_bytes) if local_bytes else QPixmap()
+            self._flash_page.set_release_icon(pixmap, complete=complete)
             return
 
-        dark = bool(is_dark())
         pixmap = page.release_pixmap() if page is not None and hasattr(page, "release_pixmap") else None
         if pixmap is None or pixmap.isNull():
-            pixmap = load_release_pixmap(release, package, allow_network=False, dark=dark)
+            pixmap = load_release_pixmap(release, package, allow_network=False, dark=dark, package_path=getattr(self, "_package_path", None))
         self._flash_page.set_release_icon(pixmap, complete=complete)
         if not icon_candidate_urls(release, package, dark=dark):
             return
@@ -3605,6 +3726,7 @@ class MainWindow(QMainWindow):
         self._install_failed = False
         self._power_off_prompt = False
         self._compact_install_screen = False
+        self._download_active = False
         self._flash_page.set_release_icon(QPixmap(), complete=False)
         self.sm.reset_full()
         self._package_path = ""
@@ -4096,6 +4218,7 @@ class MainWindow(QMainWindow):
     def _retranslate_all(self):
         self._brand_label.setText(get_brand_name())
         self.setWindowTitle(f"{get_app_name()} v{APP_VERSION}")
+        self._update_author_label()
         for key, (btn, _idx) in self._nav_buttons.items():
             btn.setText(tr(key))
         self._sync_install_nav_entry()
@@ -4324,7 +4447,7 @@ class MainWindow(QMainWindow):
         if hasattr(self, "_support_btn") and self._support_btn is not None:
             self._support_btn.setVisible((not is_disabled) and not quiet)
         if hasattr(self, "_version_label") and self._version_label is not None:
-            self._version_label.setVisible(not is_disabled)
+            self._version_label.setVisible(not is_disabled and not is_mediatek_installer())
         if hasattr(self, "_credits_btn") and self._credits_btn is not None:
             self._credits_btn.setVisible(not is_mediatek_installer() and not is_disabled)
         self._adjust_window_geometry()
@@ -4449,6 +4572,11 @@ class MainWindow(QMainWindow):
                     self.service.cancel_flash()
                 except Exception:
                     pass
+            try:
+                from ..sleep_inhibit import release_sleep_inhibition
+                release_sleep_inhibition()
+            except Exception:
+                pass
 
         if hasattr(self, "_theme_watcher") and self._theme_watcher:
             try:

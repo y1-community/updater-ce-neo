@@ -3,6 +3,7 @@
 import logging
 import os
 import re
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -354,6 +355,10 @@ class SelectPackagePage(QWidget):
 
         self._title = QLabel(tr("sel_title"))
         self._title.setProperty("cssClass", "pageTitle")
+        if sys.platform == "darwin":
+            self._title.setStyleSheet(
+                "font-size: 13px; font-weight: 600; color: palette(window-text); letter-spacing: normal; background: transparent; border: none;"
+            )
         layout.addWidget(self._title)
 
         # No tabs: the catalogue *is* the Select Software screen, and the
@@ -399,6 +404,8 @@ class SelectPackagePage(QWidget):
 
     def _show_local_view(self):
         """Show the local-file screen ("Install from a file")."""
+        self._current_selected_rel = None
+        self._raw_release_pixmap = None
         self._views.setCurrentWidget(self._local_tab)
 
     def catalogue_section(self) -> str:
@@ -816,6 +823,10 @@ class SelectPackagePage(QWidget):
         from .dark import apply_explicit_foreground
         apply_explicit_foreground(self._local_status, " font-size: 12px; border: none;")
         grp_l.addWidget(self._local_status)
+
+        self._local_rockbox_themes_cb = QCheckBox(tr("sel_local_rockbox_themes_option"))
+        self._local_rockbox_themes_cb.setChecked(False)
+        grp_l.addWidget(self._local_rockbox_themes_cb)
 
         self._start_btn = QPushButton(tr("sel_btn_start"))
         self._start_btn.setIcon(get_symbol_icon("install", 16))
@@ -1260,6 +1271,8 @@ class SelectPackagePage(QWidget):
         if hasattr(self, "_auth_edit"):
             self._auth_edit.setPlaceholderText(tr("settings_sp_auth_none"))
         self._update_local_labels()
+        if hasattr(self, "_local_rockbox_themes_cb"):
+            self._local_rockbox_themes_cb.setText(tr("sel_local_rockbox_themes_option"))
         self._start_btn.setText(tr("sel_btn_start"))
         self._apply_online_banner()
         if hasattr(self, "_update_prompt"):
@@ -1472,6 +1485,12 @@ class SelectPackagePage(QWidget):
         software = (self.current_software() or "").lower()
         return self.current_model().upper() == "Y1" and "rockbox" in software
 
+    def is_local_rockbox_themes_checked(self) -> bool:
+        """True if the user chose to install Rockbox 360p themes & fonts for local file."""
+        if hasattr(self, "_local_rockbox_themes_cb"):
+            return self._local_rockbox_themes_cb.isChecked()
+        return False
+
     def is_rockbox_y2_browsing(self) -> bool:
         """True when the Rockbox package for Y2 is the one being browsed."""
         software = (self.current_software() or "").lower()
@@ -1481,8 +1500,10 @@ class SelectPackagePage(QWidget):
         """``(show_old, show_nightly, prefer_240p)`` for the current browse.
 
         The Settings toggles only take effect for Rockbox releases on Y1.
-        For Y2, restriction gating is intentionally removed; Rockbox-Y2	odo everywhere.
+        Gated behind Advanced Settings to prevent installer errors for standard users.
         """
+        if not device_tracking.advanced_settings_enabled():
+            return (False, False, False)
         if not self.is_rockbox_y1_browsing():
             return (False, False, False)
         if self.is_rockbox_y2_browsing():
@@ -2635,6 +2656,17 @@ class SelectPackagePage(QWidget):
         from PySide6.QtGui import QPixmap
 
         if self.catalogue_section() == "local" or getattr(self, "_current_selected_rel", None) is None:
+            pkg_path = getattr(self, "_current_package_path", None)
+            if pkg_path:
+                from ..release_icons import load_local_package_icon_bytes
+                from .release_icon import pixmap_from_icon_bytes
+                from .dark import is_dark
+
+                data = load_local_package_icon_bytes(pkg_path, dark=bool(is_dark()))
+                if data:
+                    pix = pixmap_from_icon_bytes(data)
+                    if not pix.isNull():
+                        return pix
             return QPixmap()
         pix = getattr(self, "_raw_release_pixmap", None)
         return pix if pix is not None else QPixmap()

@@ -1019,7 +1019,10 @@ def progress_bar_colors(bar=None) -> tuple[QColor, QColor, QColor]:
 
     track = opaque(t.progress_track)
     fill = opaque(t.progress_fill)
-    return track, fill, _progress_label_color(theme_foreground(), track, fill)
+    label = _progress_label_color(theme_foreground(), track, fill)
+    if contrast_ratio(label, fill) < 3.0:
+        fill = _shift_until_contrast(label, fill, 3.0)
+    return track, fill, label
 
 
 def _progress_label_color(foreground: QColor, track: QColor, fill: QColor) -> QColor:

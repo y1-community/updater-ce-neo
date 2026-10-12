@@ -323,6 +323,11 @@ class RockboxReleaseFilters:
         }
 
 
+def advanced_settings_enabled(settings: Optional[QSettings] = None) -> bool:
+    """True when advanced settings and options are enabled."""
+    return bool(_get_settings(settings).value("advanced_settings", False, type=bool))
+
+
 def rockbox_release_filters(settings: Optional[QSettings] = None) -> RockboxReleaseFilters:
     """Current Rockbox listing filters, with the 240p/older-builds invariant applied."""
     s = _get_settings(settings)
