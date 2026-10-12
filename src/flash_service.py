@@ -264,6 +264,7 @@ def classify_tool_wait_line(line) -> str:
 _DEVICE_SEEN_MARKERS = (
     "usb port detected",
     "port - device detected",
+    "port - device detected :)",
     "brom connected",
     "da connected",
     "download da now",
@@ -275,6 +276,8 @@ _DEVICE_SEEN_MARKERS = (
     "format succeeded",
     "downloading images",
     "download ok",
+    "done",
+    "progress",
 )
 
 
@@ -381,6 +384,16 @@ def backend_method(method):
     tests that name the concept.
     """
     return normalise_method(method)
+
+
+def is_mtk_method(method) -> bool:
+    """True when the method uses the MTKClient engine."""
+    val = str(method or "").strip().lower()
+    if val == METHOD_SP:
+        return False
+    if paths.IS_MAC:
+        return True
+    return val in (METHOD_MTK, METHOD_MTK_MAC) or backend_method(val) == METHOD_MTK
 
 
 # --- MediaTek / SP Flash Tool error knowledge --------------------------------
@@ -587,6 +600,7 @@ MTK_DA_ATTEMPTS = 2
 # the images start moving. SP Flash Tool's own connection window is set to the
 # same value through its console configuration file.
 ATTEMPT_PROGRESS_TIMEOUT = 30.0
+ATTEMPT_PROGRESS_TIMEOUT_MTK = 480.0
 # The target re-enumerates while being restarted into BROM; the USB monitor
 # must not read that as the player being unplugged mid-flash.
 MTK_DEVICE_LOSS_GRACE_SECONDS = 90.0
@@ -699,6 +713,26 @@ SIGNED_IMAGE_OVERHEAD_SIZE = 300
 _LEGACY_MBR_BIAS_PLATFORMS = frozenset({"MT8382", "MT6572", "MT6574", "MT6582", "MT6580"})
 LEGACY_MBR_USER_ADDR_BIAS = 8388608  # 8MB (0x800000)
 LEGACY_SEGMENTED_WRITE_BYTES = 52428800  # 50MB per USB transfer chunk
+
+
+def layman_task_name(part_name: str) -> str:
+    """Return user-friendly layman description for a partition or task."""
+    low = (part_name or "").lower().strip()
+    if any(k in low for k in ("system", "android", "innios")):
+        return tr("task_writing_system")
+    if any(k in low for k in ("boot", "bootimg")):
+        return tr("task_writing_boot")
+    if "recovery" in low:
+        return tr("task_writing_recovery")
+    if any(k in low for k in ("preloader", "uboot", "lk")):
+        return tr("task_writing_bootloader")
+    if "logo" in low:
+        return tr("task_writing_logo")
+    if any(k in low for k in ("userdata", "cache")):
+        return tr("task_preparing_storage")
+    if any(k in low for k in ("mbr", "ebr", "gpt", "pgpt")):
+        return tr("task_writing_partition_table")
+    return tr("task_writing_partition_generic")
 
 
 def _is_android_sparse(file_path) -> bool:
@@ -1726,11 +1760,17 @@ class FlashWorker(QThread):
         """
         self._stop_attempt_watchdog()
         self._attempt_expired = False
+        if timeout is None:
+            is_mtk = (
+                is_mtk_method(getattr(self, "method", ""))
+                or getattr(self, "_tool_tag", "") == "MTK"
+            )
+            timeout = ATTEMPT_PROGRESS_TIMEOUT_MTK if is_mtk else ATTEMPT_PROGRESS_TIMEOUT
         try:
             watchdog = _AttemptWatchdog(
                 self.attempt_timeout.emit,
                 self._expire_attempt,
-                timeout=timeout or ATTEMPT_PROGRESS_TIMEOUT,
+                timeout=timeout,
             )
             watchdog.start()
         except Exception:
@@ -1766,8 +1806,9 @@ class FlashWorker(QThread):
         if getattr(self, "_attempt_expired", False):
             return
         self._attempt_expired = True
+        timeout_val = getattr(getattr(self, "_attempt_watchdog", None), "_timeout", ATTEMPT_PROGRESS_TIMEOUT)
         self._log(
-            tr("err_attempt_timeout").format(seconds=int(ATTEMPT_PROGRESS_TIMEOUT))
+            tr("err_attempt_timeout").format(seconds=int(timeout_val))
         )
         process = getattr(self, "_process", None)
         try:
@@ -1820,6 +1861,7 @@ class FlashWorker(QThread):
 
     def _classify_mtk_output(self, line):
         """Search and forward lines from MTKClient stdout or a ``[LOG]`` payload."""
+        self._touch_attempt()
         if is_mtk_usb_search_line(line):
             self._enter_usb_search()
             return
@@ -1828,13 +1870,44 @@ class FlashWorker(QThread):
         if not text:
             return
         if (
-            "port - device detected" in low
+            low.startswith("port - device detected")
+            or "port - device detected" in low
             or "usb port detected" in low
             or "brom connected" in low
         ):
             self._leave_usb_search()
+            self._tool_error = ""
             self.step_changed.emit(STEP_DETECT)
             self.progress.emit(12)
+            return
+        if "sdmmc_write_data" in low or "segmented write" in low:
+            self._leave_usb_search()
+            self._tool_error = ""
+            self._note_install_progress()
+            self._touch_attempt()
+            return
+        if low.startswith("done") or low.startswith("progress"):
+            self._leave_usb_search()
+            self._tool_error = ""
+            self._note_install_progress()
+            self._touch_attempt()
+            m = re.search(r"(\d+(?:\.\d+)?)\s*%", text)
+            if m:
+                try:
+                    pct_val = float(m.group(1))
+                except ValueError:
+                    pct_val = None
+                if pct_val is not None:
+                    if "stage 2" in low or "stage2" in low:
+                        scaled = 14 + int(min(1.0, max(0.0, pct_val / 100.0)) * 4)
+                        self.step_changed.emit(STEP_DOWNLOAD_DA)
+                        self.progress.emit(min(18, max(14, scaled)))
+                    else:
+                        scaled = 20 + int(min(1.0, max(0.0, pct_val / 100.0)) * 75)
+                        self.step_changed.emit(STEP_WRITE)
+                        self.progress.emit(min(95, max(20, scaled)))
+                    return
+            self.step_changed.emit(STEP_WRITE)
             return
         if (
             "download da" in low
@@ -1842,20 +1915,31 @@ class FlashWorker(QThread):
             or "connect da" in low
         ):
             self._leave_usb_search()
+            self._tool_error = ""
             self._note_install_progress()
+            self._touch_attempt()
             self.step_changed.emit(STEP_DOWNLOAD_DA)
             self.progress.emit(12)
             return
         if "of image data has been sent" in low or "writing partition" in low:
             self._leave_usb_search()
+            self._tool_error = ""
             self._note_install_progress()
+            self._touch_attempt()
             self.step_changed.emit(STEP_WRITE)
             return
 
     def _log(self, msg):
         for line in str(msg).splitlines() or [str(msg)]:
             self._note_tool_wait_line(line)
-            if not self._tool_error and is_fatal_tool_line(line):
+            is_mtk = (
+                is_mtk_method(getattr(self, "method", ""))
+                or getattr(self, "_tool_tag", "") == "MTK"
+            )
+            if is_mtk:
+                self._touch_attempt()
+            waiting_mtk = is_mtk and not self._past_usb_search
+            if not self._tool_error and is_fatal_tool_line(line) and not waiting_mtk:
                 self._tool_error = line.strip()
         flush_now = False
         with self._log_lock:
@@ -2533,9 +2617,12 @@ class FlashWorker(QThread):
         sent_str = format_size_bytes(sent) if sent > 0 else m.group(2)
         total_str = format_size_bytes(total) if total > 0 else m.group(3)
         img_name = getattr(self, "_current_image_name", "") or "system"
+        task_label = layman_task_name(img_name)
+        self._note_install_progress()
+        self._stop_attempt_watchdog()
         self.action_changed.emit(
-            tr("action_writing_file_status").format(
-                image=img_name, sent=sent_str, total=total_str
+            tr("action_writing_task_fmt").format(
+                task=task_label, pct=pct
             )
         )
 
@@ -2805,6 +2892,7 @@ class FlashWorker(QThread):
                 line = line.rstrip()
                 if not line:
                     continue
+                self._touch_attempt()
                 if line.startswith("[PROGRESS] "):
                     try:
                         pct = int(line[len("[PROGRESS] "):])
@@ -2813,6 +2901,12 @@ class FlashWorker(QThread):
                     # Stay at 0 until the tool has moved past the USB search.
                     if pct is not None and (self._past_usb_search or pct == 0):
                         self.progress.emit(0 if not self._past_usb_search else pct)
+                elif line.startswith("[ETA] "):
+                    try:
+                        eta_val = int(line[len("[ETA] "):])
+                        self.eta_changed.emit(eta_val)
+                    except ValueError:
+                        pass
                 elif line.startswith("[STEP] "):
                     step = line[len("[STEP] "):]
                     if step not in (STEP_WAITING, STEP_PLEASE_WAIT):
@@ -3114,8 +3208,12 @@ class FlashWorker(QThread):
                         mtk, da_handler = None, None
                 if mtk is not None and da_handler is not None:
                     break
-                if attempt >= MTK_DA_ATTEMPTS:
+                max_attempts = 120 if is_mtk_method(self.method) else MTK_DA_ATTEMPTS
+                if attempt >= max_attempts or getattr(self, "_attempt_expired", False) or self._cancelled:
                     break
+                if mtk is None:
+                    time.sleep(0.5)
+                    continue
                 self._log("The download agent did not come up.")
                 self.action_changed.emit(tr("action_da_wait_back"))
                 if not self._wait_for_retry(attempt):
@@ -3167,16 +3265,77 @@ class FlashWorker(QThread):
             return 50
 
         ordered_images = sorted(image_files, key=_partition_sort_key)
+        # Preloader partition is omitted for MTKClient flashing: the player is already
+        # booted into preloader mode and running the preloader from memory. Rewriting
+        # EMMC boot1 via legacy DA is unsupported on MT6582/MT6572 and risks bricking the device.
+        filtered_images = [img for img in ordered_images if img[0].lower() != "preloader"]
+        if filtered_images and len(filtered_images) < len(ordered_images):
+            self._log("Skipping preloader partition write in MTKClient (device is active in preloader mode; preserving working bootloader).")
+            ordered_images = filtered_images
+
         total_bytes = sum(file_path.stat().st_size for _, file_path in ordered_images if file_path.exists())
         completed_bytes = 0
+        part_completed_bytes = 0
+        cur_part_name = ""
+        cur_part_len = 0
+        last_log_time = 0.0
+        last_log_pct = -1.0
+
+        def on_segment_done(seg_len):
+            nonlocal completed_bytes, part_completed_bytes
+            completed_bytes += seg_len
+            part_completed_bytes += seg_len
+            self._touch_attempt()
+            self._note_install_progress()
 
         def on_mtk_write_progress(pos):
+            nonlocal last_log_time, last_log_pct
             if self._cancelled:
                 return
+            self._touch_attempt()
+            self._note_install_progress()
             current_done = completed_bytes + pos
+            current_part_done = part_completed_bytes + pos
             if total_bytes > 0:
                 self._emit_progress(percent_of(current_done, total_bytes, 20, 75))
                 self._emit_eta(current_done, total_bytes)
+
+            now = time.monotonic()
+            part_pct = (current_part_done / max(1, cur_part_len)) * 100.0 if cur_part_len > 0 else 0.0
+            if now - last_log_time >= 0.5 or part_pct - last_log_pct >= 2.0 or current_part_done >= cur_part_len:
+                last_log_time = now
+                last_log_pct = part_pct
+                rate = getattr(self._eta, "_rate", 0.0) or 0.0
+                speed_mb = rate / (1024 * 1024)
+                part_done_mb = current_part_done / (1024 * 1024)
+                part_tot_mb = cur_part_len / (1024 * 1024)
+
+                sec_left = self._eta.note(current_done, total_bytes) if total_bytes > 0 else None
+                if sec_left is not None and sec_left > 0:
+                    min_rem = sec_left // 60
+                    sec_rem = sec_left % 60
+                    if min_rem > 60:
+                        h = min_rem // 60
+                        min_rem = min_rem % 60
+                        hinfo = f"{h:02d}h:{min_rem:02d}m:{sec_rem:02d}s left"
+                    elif min_rem > 0:
+                        hinfo = f"{min_rem:02d}m:{sec_rem:02d}s left"
+                    else:
+                        hinfo = f"{sec_rem:02d}s left"
+                else:
+                    hinfo = "-- left"
+
+                line = (
+                    f"Progress: {part_pct:.1f}% Write {cur_part_name} "
+                    f"({part_done_mb:.1f}MB/{part_tot_mb:.1f}MB), {speed_mb:.2f} MB/s ({hinfo})"
+                )
+                self._log(line)
+                task_label = layman_task_name(cur_part_name)
+                self.action_changed.emit(
+                    tr("action_writing_task_fmt").format(
+                        task=task_label, pct=int(part_pct)
+                    )
+                )
 
         if hasattr(mtk, "config"):
             mtk.config.guiprogress = _ProgressEmitter(on_mtk_write_progress)
@@ -3191,6 +3350,9 @@ class FlashWorker(QThread):
                     # writes images (the reference updater derives install
                     # progress from image writes, not from the handshake).
                     self._leave_usb_search()
+                    self._stop_attempt_watchdog()
+                    self._note_install_progress()
+                    watcher.stop()
                     self.step_changed.emit(STEP_WRITE)
                     self.progress.emit(20)
                     self._eta.reset()
@@ -3199,9 +3361,12 @@ class FlashWorker(QThread):
                 self._log(tr("action_writing_part_fmt").format(
                     part=part_name, i=i + 1, total=total, file=file_path.name,
                 ))
-                self.action_changed.emit(tr("action_writing_part_fmt").format(
-                    part=part_name, i=i + 1, total=total, file=file_path.name,
-                ))
+                task_label = layman_task_name(part_name)
+                self.action_changed.emit(
+                    tr("action_writing_task_fmt").format(
+                        task=task_label, pct=0
+                    )
+                )
 
                 entry = scatter_entries_map.get(part_name.lower())
                 region = entry.get("region", "EMMC_USER") if entry else "EMMC_USER"
@@ -3248,15 +3413,12 @@ class FlashWorker(QThread):
                     else:
                         target_parts = ("user",)
 
+                cur_part_name = part_name
+                cur_part_len = write_len
+                part_completed_bytes = 0
+                last_log_pct = -1.0
+
                 try:
-                    from .progress_model import format_size_bytes
-                    sent_str = format_size_bytes(completed_bytes)
-                    total_str = format_size_bytes(total_bytes)
-                    self.action_changed.emit(
-                        tr("action_writing_file_status").format(
-                            image=part_name, sent=sent_str, total=total_str
-                        )
-                    )
                     for target_part in target_parts:
                         self._write_mtk_partition(
                             da_handler,
@@ -3267,13 +3429,17 @@ class FlashWorker(QThread):
                             offset=offset,
                             file_offset=file_off,
                             write_length=write_len,
+                            bytes_progress_cb=on_segment_done,
                         )
                 except BaseException as e:
                     # BaseException: mtkclient may sys.exit() on DA errors; keep it
                     # a clean per-partition failure, never an app crash.
-                    self._log(f"Writing {part_name} failed: {e}\n{traceback.format_exc()}")
-                    self.finished.emit(False, "WRITE_FAILED")
-                    return
+                    if is_preloader:
+                        self._log(f"Warning: Non-fatal preloader write issue ignored: {e}")
+                    else:
+                        self._log(f"Writing {part_name} failed: {e}\n{traceback.format_exc()}")
+                        self.finished.emit(False, "WRITE_FAILED")
+                        return
                 finally:
                     if temp_unsparse and temp_unsparse.exists():
                         try:
@@ -3286,7 +3452,9 @@ class FlashWorker(QThread):
                         except Exception:
                             pass
                     if file_path.exists():
-                        completed_bytes += file_path.stat().st_size
+                        actual_len = file_path.stat().st_size
+                        if actual_len > part_completed_bytes:
+                            completed_bytes += (actual_len - part_completed_bytes)
                     if total_bytes > 0:
                         self._emit_progress(percent_of(completed_bytes, total_bytes, 20, 75))
                         self._emit_eta(completed_bytes, total_bytes)
@@ -3402,6 +3570,7 @@ class FlashWorker(QThread):
             offset += seg_len
             if bytes_progress_cb:
                 bytes_progress_cb(seg_len)
+            self._touch_attempt()
 
     def _write_mtk_partition(
         self,

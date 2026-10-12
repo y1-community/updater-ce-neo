@@ -793,7 +793,12 @@ class SettingsPage(QWidget):
         which is offline by definition — there is nothing for them to act on.
         Also gated behind Advanced Settings so general users aren't confused.
         """
-        self._rockbox_card.setVisible(not is_offline_mode())
+        show_adv = bool(
+            getattr(self, "_advanced_revealed", False)
+            or (hasattr(self, "_cb_advanced_settings") and self._cb_advanced_settings.isChecked())
+            or device_tracking.advanced_settings_enabled()
+        )
+        self._rockbox_card.setVisible(show_adv and not is_offline_mode())
 
     def _update_legacy_cleanup_visibility(self):
         """Show the removal card only while a pre-3.0 install is on disk.

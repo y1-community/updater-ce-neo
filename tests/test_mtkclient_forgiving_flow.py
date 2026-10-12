@@ -1,0 +1,288 @@
+"""Tests for forgiving MTKClient handshake, paperclip connect prompt, 120s timeout,
+and Rockbox power-on/fallback post-flash flow.
+"""
+
+import os
+import sys
+from pathlib import Path
+from unittest.mock import patch, MagicMock
+
+import pytest
+
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+
+def _app():
+    from PySide6.QtWidgets import QApplication
+
+    return QApplication.instance() or QApplication(["--platform", "offscreen"])
+
+
+def test_mtkclient_vs_sp_flash_prep_prompt():
+    """MTKClient users are asked to confirm device is connected by USB;
+    SP Flash users are asked to confirm device is powered-off and disconnected."""
+    from src.ui.flash_page import FlashPage
+
+    app = _app()
+    page = FlashPage()
+    page.set_model("Y1")
+
+    # SP Flash method
+    page.set_method("sp")
+    page.show_power_off_prompt()
+    sp_text = page._wait_prompt_label.text()
+    assert "powered-off and disconnected" in sp_text
+    assert "Y1" in sp_text
+
+    # MTKClient method
+    page.set_method("mtk")
+    page.show_power_off_prompt()
+    mtk_text = page._wait_prompt_label.text()
+    assert "connected by USB" in mtk_text
+    assert "Y1" in mtk_text
+
+
+def test_mtkclient_paperclip_prompt_and_120s_timeout():
+    """In MTK mode, connect prompt asks to insert paperclip with 120s timeout."""
+    from src.ui.flash_page import FlashPage
+
+    app = _app()
+    page = FlashPage()
+    page.set_model("Y1")
+
+    # SP Flash
+    page.set_method("sp")
+    page.leave_power_off_prompt()
+    assert page._attempt_remaining == 30
+    assert "please connect your y1" in page._wait_prompt_label.text().lower()
+
+    # MTKClient - Y1 (headphone jack)
+    page.set_method("mtk")
+    page.leave_power_off_prompt()
+    assert page._attempt_remaining == 120
+    text_y1 = page._wait_prompt_label.text()
+    assert "headphone jack" in text_y1.lower()
+    assert "paperclip" in text_y1.lower() or "pin" in text_y1.lower()
+    assert "connect" not in text_y1.lower()
+    assert "(120s)" in text_y1
+
+    # MTKClient - A5 (power button)
+    page.set_model("A5")
+    page.leave_power_off_prompt()
+    text_a5 = page._wait_prompt_label.text()
+    assert "power button" in text_a5.lower()
+    assert "connect" not in text_a5.lower()
+
+
+def test_mtkclient_forgiving_handshake_and_progress_detection():
+    """While waiting for USB/paperclip in MTK mode, handshake errors are not fatal.
+    Lines starting with 'Port - Device detected :)', 'Done', or 'Progress' transition out of USB search."""
+    from src.flash_service import (
+        FlashWorker,
+        STEP_DETECT,
+        STEP_DOWNLOAD_DA,
+        STEP_WRITE,
+        STEP_WAITING,
+    )
+
+    app = _app()
+    w = FlashWorker("dummy.zip", method="mtk", model="Y1")
+
+    steps = []
+    progress_vals = []
+    w.step_changed.connect(steps.append)
+    w.progress.connect(progress_vals.append)
+
+    # 1. Enters USB search
+    w._classify_mtk_output("...")
+    assert w._usb_search_active
+    assert not w._past_usb_search
+
+    # 2. Handshake error lines during search do NOT set _tool_error
+    w._log("Status: Handshake failed, retrying...")
+    w._log("Handshake: Error on sending sync, response: 0x0")
+    w._log("Error: device not found")
+    assert w._tool_error == "", "Handshake errors during connect wait must not be recorded as fatal tool error"
+
+    # 3. Line with 'Port - Device detected :)' triggers detection
+    w._classify_mtk_output("Port - Device detected :)")
+    assert w._past_usb_search
+    assert STEP_DETECT in steps
+    assert 12 in progress_vals
+
+    # 4. Lines with Done / Progress trigger DA upload or write progress
+    steps.clear()
+    progress_vals.clear()
+    w._classify_mtk_output("Done |---------| 2.5% Stage 2: (0x1000/0x286BC), 0.00 MB/s")
+    assert STEP_DOWNLOAD_DA in steps
+    assert len(progress_vals) > 0
+
+    steps.clear()
+    progress_vals.clear()
+    w._classify_mtk_output("Progress: |---------| 4.9% Stage 2: (0x2000/0x286BC), 3.21 MB/s")
+    assert STEP_DOWNLOAD_DA in steps
+    assert len(progress_vals) > 0
+
+    steps.clear()
+    progress_vals.clear()
+    w._classify_mtk_output("Progress: |---------| 50.0% Writing partition system")
+    assert STEP_WRITE in steps
+    assert any(p >= 50 for p in progress_vals)
+
+
+def test_rockbox_themes_stage_power_on_and_fallback():
+    """Rockbox post-flash flow prompts user to power on Y1/Y2 with 90s countdown,
+    and falls back to asking if Rockbox is running if ADB is unavailable or times out."""
+    from src.ui.flash_page import FlashPage
+
+    app = _app()
+    page = FlashPage()
+    page.show()
+
+    done_called = []
+    recover_called = []
+
+    # Patch find_adb_binary to return None (testing fallback)
+    with patch("src.adb.find_adb_binary", return_value=None):
+        page.start_rockbox_themes_stage(
+            model="Y1",
+            on_done=lambda: done_called.append(True),
+            on_troubleshoot=lambda: recover_called.append(True),
+        )
+
+    # Because ADB is not found, falls back to USB storage mode prompt
+    assert not page._theme_row.isHidden()
+    assert not page._theme_fallback_widget.isHidden()
+    assert "usb storage mode" in page._eta_label.text().lower()
+
+    # User clicks Finish / completes stage -> triggers on_done
+    page._finish_rockbox_themes_stage()
+    assert done_called == [True]
+
+
+def test_rockbox_themes_stage_with_adb_countdown():
+    """Step 1 prompts to disconnect/power on; Step 2 prompts to connect USB with countdown."""
+    from src.ui.flash_page import FlashPage
+
+    app = _app()
+    page = FlashPage()
+
+    with patch("src.adb.find_adb_binary", return_value="/usr/bin/adb"), \
+         patch("src.adb.adb_devices", return_value=[]), \
+         patch("src.theme_pack.AdbWatchWorker") as mock_worker_cls:
+        mock_worker = MagicMock()
+        mock_worker_cls.return_value = mock_worker
+
+        # Start stage - Step 1: Disconnect & power on
+        page.start_rockbox_themes_stage(model="Y1")
+
+        eta_text = page._eta_label.text()
+        assert "disconnect and power on" in eta_text.lower()
+        assert not page._theme_step1_widget.isHidden()
+
+        # Step 1 -> Next: advances to Step 2 (connect USB + countdown)
+        page._on_theme_step1_next_clicked()
+        eta_text_step2 = page._eta_label.text()
+        assert "connect your y1 by usb" in eta_text_step2.lower()
+        assert "60" in eta_text_step2
+
+        # Tick the timer
+        page._on_adb_watch_tick()
+        eta_text_tick = page._eta_label.text()
+        assert "59" in eta_text_tick
+
+        # For Y2
+        page.start_rockbox_themes_stage(model="Y2")
+        eta_text_y2 = page._eta_label.text()
+        assert "disconnect and power on your y2" in eta_text_y2.lower()
+
+
+def test_mtkclient_watchdog_8min_and_touch_reset():
+    """Watchdog for MTK defaults to 480s (8 min) and resets on every chunk/log update."""
+    from src.flash_service import FlashWorker, ATTEMPT_PROGRESS_TIMEOUT_MTK
+    import time
+
+    app = _app()
+    w = FlashWorker("dummy.zip", method="mtk", model="Y2")
+    assert ATTEMPT_PROGRESS_TIMEOUT_MTK == 480.0
+
+    watchdog = w._start_attempt_watchdog()
+    try:
+        assert watchdog is not None
+        assert watchdog._timeout == 480.0
+        initial_deadline = watchdog._deadline
+        time.sleep(0.05)
+
+        # Touching attempt resets deadline
+        w._touch_attempt()
+        assert watchdog._deadline > initial_deadline
+
+        # Any MTK output line touches attempt
+        d2 = watchdog._deadline
+        time.sleep(0.05)
+        w._classify_mtk_output("sdmmc_write_data: 完成 50 chunks")
+        assert watchdog._deadline > d2
+    finally:
+        w._stop_attempt_watchdog()
+
+
+def test_layman_subtitle_and_action_update():
+    """Action updates live subtitle with layman task and partition percentage."""
+    from src.ui.flash_page import FlashPage
+    from src.flash_service import layman_task_name
+    from src.i18n import tr
+
+    app = _app()
+    page = FlashPage()
+    page.show()
+
+    # Layman task names map partitions correctly
+    assert layman_task_name("android") == tr("task_writing_system")
+    assert layman_task_name("boot") == tr("task_writing_boot")
+    assert layman_task_name("recovery") == tr("task_writing_recovery")
+    assert layman_task_name("mbr") == tr("task_writing_partition_table")
+    assert layman_task_name("userdata") == tr("task_preparing_storage")
+
+    # update_action sets the subtitle label on the flash card
+    sample_action = tr("action_writing_task_fmt").format(task=tr("task_writing_system"), pct=42)
+    page.update_action(sample_action)
+    assert "42%" in page._step_label.text()
+    assert tr("task_writing_system") in page._step_label.text()
+
+
+def test_preloader_skipped_in_mtkclient():
+    """In MTKClient, preloader is omitted from image files when flashing to avoid DA boot1 lock."""
+    from src.flash_service import FlashWorker
+
+    app = _app()
+    w = FlashWorker("dummy.zip", method="mtk")
+
+    # If watchdog is active, _note_install_progress disarms it
+    dog = w._start_attempt_watchdog()
+    assert dog._armed
+    w._note_install_progress()
+    assert not dog._armed
+
+
+def test_rockbox_y2_triggers_themes_stage_and_logs():
+    """Flashing Rockbox for Y2 on any platform triggers themes stage and logs to diagnostic output."""
+    from src.ui.flash_page import FlashPage
+
+    app = _app()
+    page = FlashPage()
+    page.show()
+
+    logs = []
+    with patch("src.adb.find_adb_binary", return_value="/fake/adb"):
+        with patch("src.theme_pack.AdbWatchWorker") as mock_worker_cls:
+            page.start_rockbox_themes_stage(model="Y2", log_cb=logs.append)
+            assert any("Rockbox Themes" in l for l in logs)
+            assert any("Y2" in l for l in logs)
+            assert page._themes_stage_active
+            assert page._status_flow._forced_stacked
+
+

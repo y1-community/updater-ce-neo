@@ -522,20 +522,43 @@ class AdbPushWorker(QThread):
         try:
             from . import adb as _adb
 
-            device_dir = _adb.adb_find_rockbox_dir(self._adb, self._serial)
-            if not device_dir:
+            device_dirs = _adb.adb_find_all_rockbox_dirs(self._adb, self._serial)
+            if not device_dirs:
                 # The player may expose storage without a probed path; fall
                 # back to the primary candidate and let push create it.
-                device_dir = _adb.DEVICE_ROCKBOX_CANDIDATES[0]
-            ok, msg = _adb.adb_push_merge(
-                self._adb, self._serial, self._local_dir, device_dir,
-                progress_cb=self._on_progress,
-            )
-            if not ok:
-                self.finished.emit(False, msg or "ADB push failed")
+                device_dirs = [_adb.DEVICE_ROCKBOX_CANDIDATES[0]]
+
+            total_dirs = len(device_dirs)
+            all_ok = True
+            messages: list[str] = []
+
+            for idx, d_dir in enumerate(device_dirs):
+                def _dir_progress(curr: int, total: int, idx=idx, total_dirs=total_dirs):
+                    if total > 0:
+                        overall_curr = idx * total + curr
+                        overall_total = total_dirs * total
+                        self.progress.emit(overall_curr, overall_total)
+                    else:
+                        self.progress.emit(curr, total)
+
+                ok, msg = _adb.adb_push_merge(
+                    self._adb,
+                    self._serial,
+                    self._local_dir,
+                    d_dir,
+                    progress_cb=_dir_progress,
+                )
+                if not ok:
+                    all_ok = False
+                    messages.append(f"{d_dir}: {msg or 'push failed'}")
+                elif msg:
+                    messages.append(msg)
+
+            if not all_ok:
+                self.finished.emit(False, "; ".join(messages) or "ADB push failed")
                 return
             _adb.adb_reboot(self._adb, self._serial)
-            self.finished.emit(True, msg)
+            self.finished.emit(True, "; ".join(messages))
         except Exception as e:
             logger.exception("ADB theme push failed: %s", e)
             self.finished.emit(False, str(e))

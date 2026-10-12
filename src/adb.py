@@ -23,14 +23,17 @@ from typing import Callable, Optional
 logger = logging.getLogger(__name__)
 
 ADB_WATCH_TIMEOUT_SECONDS = 30
+STANDARD_Y_ADB_SERIAL = "0123456789ABCDEF"
 
 # Candidate on-device locations for the Rockbox data directory, probed in
 # order via ``adb shell ls``.
 DEVICE_ROCKBOX_CANDIDATES = (
+    "/storage/sdcard0/.rockbox",
+    "/storage/sdcard1/.rockbox",
     "/sdcard/.rockbox",
     "/storage/emulated/0/.rockbox",
     "/mnt/sdcard/.rockbox",
-    "/storage/sdcard0/.rockbox",
+    "/mnt/sdcard2/.rockbox",
 )
 
 
@@ -57,15 +60,25 @@ def candidate_adb_paths() -> list[Path]:
     exe = "adb.exe" if os.name == "nt" else "adb"
     plat = _platform_adb_dir()
     candidates: list[Path] = []
-    for base in (
+    bases = [
         getattr(_paths, "BUNDLE_DIR", None),
         getattr(_paths, "INSTALL_DIR", None),
         getattr(_paths, "REPO_ROOT", None),
-    ):
+    ]
+    install_d = getattr(_paths, "INSTALL_DIR", None)
+    if install_d is not None:
+        bases.append(Path(install_d) / "_internal")
+
+    for base in bases:
         if base is None:
             continue
-        candidates.append(Path(base) / "tools" / "adb" / plat / exe)
-        candidates.append(Path(base) / "tools" / "adb" / exe)
+        p_base = Path(base)
+        candidates.append(p_base / "tools" / "adb" / plat / exe)
+        candidates.append(p_base / "tools" / "adb" / exe)
+        candidates.append(p_base / "_internal" / "tools" / "adb" / plat / exe)
+        candidates.append(p_base / "_internal" / "tools" / "adb" / exe)
+        candidates.append(p_base / plat / exe)
+        candidates.append(p_base / exe)
     env = os.environ.get("ADB_BINARY", "")
     if env:
         candidates.insert(0, Path(env))
@@ -99,11 +112,16 @@ def find_adb_binary() -> Optional[str]:
 
 
 def _run_adb(adb: str, *args: str, timeout: float = 15) -> subprocess.CompletedProcess:
+    env = os.environ.copy()
+    if os.name == "nt":
+        adb_dir = str(Path(adb).parent)
+        env["PATH"] = f"{adb_dir};{env.get('PATH', '')}"
     return subprocess.run(
         [adb, *args],
         capture_output=True,
         text=True,
         timeout=timeout,
+        env=env,
     )
 
 
@@ -121,6 +139,9 @@ def adb_devices(adb: str) -> list[str]:
         parts = line.split()
         if len(parts) >= 2 and parts[1] == "device":
             serials.append(parts[0])
+    if STANDARD_Y_ADB_SERIAL in serials:
+        serials.remove(STANDARD_Y_ADB_SERIAL)
+        serials.insert(0, STANDARD_Y_ADB_SERIAL)
     return serials
 
 
@@ -173,10 +194,37 @@ def adb_find_rockbox_dir(adb: str, serial: str) -> Optional[str]:
 def adb_find_all_rockbox_dirs(adb: str, serial: str) -> list[str]:
     """Every probed ``.rockbox`` directory on the device (passive merges hit all)."""
     found: list[str] = []
+    try:
+        proc = _run_adb(
+            adb,
+            "-s",
+            serial,
+            "shell",
+            'for p in /storage/*/.rockbox /sdcard/.rockbox /mnt/*/.rockbox; do '
+            '[ -d "$p" ] && (readlink -f "$p" 2>/dev/null || echo "$p"); done',
+            timeout=15,
+        )
+        if proc.returncode == 0 and proc.stdout:
+            for line in proc.stdout.splitlines():
+                line = line.strip()
+                if (
+                    line
+                    and line.startswith("/")
+                    and line not in found
+                    and "No such" not in line
+                    and "not found" not in line
+                ):
+                    found.append(line)
+            if found:
+                return found
+    except Exception as e:
+        logger.debug("ADB shell rockbox discovery failed: %s", e)
+
     for cand in DEVICE_ROCKBOX_CANDIDATES:
         try:
             if adb_shell_ls(adb, serial, cand):
-                found.append(cand)
+                if cand not in found:
+                    found.append(cand)
         except Exception:
             continue
     return found

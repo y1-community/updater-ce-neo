@@ -2117,11 +2117,19 @@ class MainWindow(QMainWindow):
             or device_tracking.is_donation_install_prompt_disabled(self.settings)
             or not (hasattr(self._flash_page, "_appeal") and self._flash_page._appeal.isVisible())
         )
-        hug_install = is_install or bool(
+        install_flags = is_install or bool(
             getattr(self, "_install_complete", False)
             or getattr(self, "_install_failed", False)
             or getattr(self, "_power_off_prompt", False)
             or getattr(self, "_drop_check_active", False)
+        )
+        # The flags outlive the card (a failed or finished install keeps its
+        # state for when the user comes back), so they only decide the size
+        # while the card is the page on screen. Any other page owns the window
+        # and grows it back. The catalogue is the one exception: it is still
+        # showing for a moment after Install starts.
+        hug_install = install_flags and (
+            curr_idx == _PAGE_FLASH or (curr_idx == _PAGE_SELECT and is_install)
         )
 
         if hug_install:
@@ -2829,6 +2837,7 @@ class MainWindow(QMainWindow):
         self._power_off_prompt = True
         self._flash_page.set_package_name(self._package_name)
         self._flash_page.set_model(self._package_model)
+        self._flash_page.set_method(self._flash_method)
         # This screen shows the release's own image, not only the settings
         # stand-in: it is the first thing the user sees when the install starts,
         # and the catalogue already has the image by then.
@@ -2940,9 +2949,18 @@ class MainWindow(QMainWindow):
             self.sm.transition_to(FlashState.S2_WAIT_CONNECTION)
 
         eff_model = (self._package_model or "").upper()
-        is_y_target = eff_model in ("Y1", "Y2")
         pkg_low = (self._package_name or "").lower()
         path_low = (self._package_path or "").lower()
+        if "Y1" in eff_model:
+            eff_model = "Y1"
+        elif "Y2" in eff_model:
+            eff_model = "Y2"
+        elif "y1" in path_low or "y1" in pkg_low:
+            eff_model = "Y1"
+        elif "y2" in path_low or "y2" in pkg_low:
+            eff_model = "Y2"
+
+        is_y_target = eff_model in ("Y1", "Y2")
         is_rockbox = "rockbox" in pkg_low or "rockbox" in path_low
         is_240p = "_240p" in path_low or "240p" in pkg_low
         local_cb = getattr(self._select_page, "is_local_rockbox_themes_checked", lambda: False)()
@@ -3253,9 +3271,18 @@ class MainWindow(QMainWindow):
 
         donation_disabled = device_tracking.is_donation_install_prompt_disabled(self.settings)
         eff_model = (model or self._package_model or "").upper()
-        is_y_target = eff_model in ("Y1", "Y2")
         pkg_low = (self._package_name or "").lower()
         path_low = (self._package_path or "").lower()
+        if "Y1" in eff_model:
+            eff_model = "Y1"
+        elif "Y2" in eff_model:
+            eff_model = "Y2"
+        elif "y1" in path_low or "y1" in pkg_low:
+            eff_model = "Y1"
+        elif "y2" in path_low or "y2" in pkg_low:
+            eff_model = "Y2"
+
+        is_y_target = eff_model in ("Y1", "Y2")
         is_rockbox = "rockbox" in pkg_low or "rockbox" in path_low
         is_240p = "_240p" in path_low or "240p" in pkg_low
         local_cb = getattr(self._select_page, "is_local_rockbox_themes_checked", lambda: False)()
@@ -3298,6 +3325,7 @@ class MainWindow(QMainWindow):
     def _start_themes_stage(self, model: str, donation_disabled: bool) -> None:
         """Open the themes install stage after a 360p Rockbox install."""
         self._themes_stage_done = False
+        self._append_log(f"Starting Rockbox 360p themes & fonts post-install stage for {model}...")
         # Check if caller or test suite stubbed _create_themes_wizard
         try:
             is_custom = self._create_themes_wizard.__code__ != MainWindow._create_themes_wizard.__code__
@@ -3324,6 +3352,7 @@ class MainWindow(QMainWindow):
             model=model,
             on_done=lambda: self._finish_themes_stage(donation_disabled),
             on_recover=self._on_progress_retry,
+            log_cb=self._append_log,
         )
         self._adjust_window_geometry()
 

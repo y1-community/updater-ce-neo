@@ -1,5 +1,9 @@
 """Flash page — modern OS software update in-progress display (macOS / iOS / Windows Fluent style)."""
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 from PySide6.QtCore import QEventLoop, QRect, QSize, Qt, QTimer
 from PySide6.QtGui import QColor, QFont, QPainter, QPixmap
 from PySide6.QtWidgets import (
@@ -838,21 +842,59 @@ class FlashPage(QWidget):
         col.addLayout(retry_row)
 
         self._theme_row = QWidget()
-        theme_box = QHBoxLayout(self._theme_row)
-        theme_box.setContentsMargins(0, 4, 0, 0)
-        theme_box.setSpacing(10)
-        self._theme_browse_btn = QPushButton(tr("sel_browse_folder"))
-        self._theme_browse_btn.setIcon(get_symbol_icon("folder", 16))
-        self._theme_browse_btn.clicked.connect(self._on_theme_browse_clicked)
-        theme_box.addWidget(self._theme_browse_btn)
+        theme_vbox = QVBoxLayout(self._theme_row)
+        theme_vbox.setContentsMargins(0, 4, 0, 0)
+        theme_vbox.setSpacing(8)
+
+        # Step 1: Disconnect and power on -> Next
+        self._theme_step1_widget = QWidget()
+        step1_box = QHBoxLayout(self._theme_step1_widget)
+        step1_box.setContentsMargins(0, 0, 0, 0)
+        step1_box.setSpacing(10)
+        self._theme_step1_next_btn = QPushButton(tr("dialog_pre_install_continue"))
+        self._theme_step1_next_btn.clicked.connect(self._on_theme_step1_next_clicked)
+        step1_box.addWidget(self._theme_step1_next_btn)
+        step1_box.addStretch(1)
+        theme_vbox.addWidget(self._theme_step1_widget)
+
+        # Fallback: USB storage mode -> Next
+        self._theme_fallback_widget = QWidget()
+        fallback_box = QHBoxLayout(self._theme_fallback_widget)
+        fallback_box.setContentsMargins(0, 0, 0, 0)
+        fallback_box.setSpacing(10)
+        self._theme_fallback_next_btn = QPushButton(tr("dialog_pre_install_continue"))
+        self._theme_fallback_next_btn.clicked.connect(self._on_theme_fallback_next_clicked)
+        fallback_box.addWidget(self._theme_fallback_next_btn)
 
         self._theme_recover_link = QLabel(f'<a href="recover">{tr("rockbox_recover_troubleshoot")}</a>')
         self._theme_recover_link.setTextFormat(Qt.TextFormat.RichText)
         self._theme_recover_link.setTextInteractionFlags(Qt.TextInteractionFlag.LinksAccessibleByMouse)
         self._theme_recover_link.setOpenExternalLinks(False)
         self._theme_recover_link.linkActivated.connect(self._on_theme_recover_clicked)
-        theme_box.addWidget(self._theme_recover_link)
-        theme_box.addStretch(1)
+        fallback_box.addWidget(self._theme_recover_link)
+        fallback_box.addStretch(1)
+        theme_vbox.addWidget(self._theme_fallback_widget)
+
+        # Backward compatibility aliases
+        self._theme_ask_widget = self._theme_step1_widget
+        self._theme_yes_btn = self._theme_step1_next_btn
+        self._theme_manual_widget = self._theme_fallback_widget
+        self._theme_browse_btn = self._theme_fallback_next_btn
+
+        # Trouble recovery section
+        self._theme_trouble_widget = QWidget()
+        trouble_box = QHBoxLayout(self._theme_trouble_widget)
+        trouble_box.setContentsMargins(0, 0, 0, 0)
+        trouble_box.setSpacing(10)
+        self._theme_trouble_recover_btn = QPushButton(tr("rockbox_recover_troubleshoot"))
+        self._theme_trouble_recover_btn.clicked.connect(self._on_theme_recover_clicked)
+        trouble_box.addWidget(self._theme_trouble_recover_btn)
+        self._theme_back_btn = QPushButton(tr("rockbox_wizard_back"))
+        self._theme_back_btn.clicked.connect(self._show_theme_fallback_usb_mode)
+        trouble_box.addWidget(self._theme_back_btn)
+        trouble_box.addStretch(1)
+        theme_vbox.addWidget(self._theme_trouble_widget)
+
         self._theme_row.setVisible(False)
         col.addWidget(self._theme_row)
 
@@ -1043,6 +1085,7 @@ class FlashPage(QWidget):
         wanted = (
             bool(model)
             and copy == "power_off"
+            and not self._is_mtk_active()
             and not getattr(self, "_stop_open", False)
         )
         if not wanted:
@@ -1165,8 +1208,25 @@ class FlashPage(QWidget):
             self._wait_mode_hint.setVisible(False)
         self._apply_stop_hold()
 
+    def _is_mtk_active(self) -> bool:
+        from ..flash_service import is_mtk_method
+        raw = getattr(self, "_raw_method", "")
+        if raw == "sp":
+            return False
+        return is_mtk_method(getattr(self, "_method", ""))
+
+    def set_step(self, text: str) -> None:
+        """Set step title or status line."""
+        if hasattr(self, "_step_label"):
+            self._step_label.setText(text)
+
     def _connect_device_prompt_text(self) -> str:
-        prompt = tr("flash_connect_device_prompt").format(model=self._connect_model_text())
+        if self._is_mtk_active():
+            model_str = (getattr(self, "_model", "") or "").upper()
+            key = "flash_connect_paperclip_prompt_a5" if "A5" in model_str else "flash_connect_paperclip_prompt"
+            prompt = tr(key).format(model=self._connect_model_text())
+        else:
+            prompt = tr("flash_connect_device_prompt").format(model=self._connect_model_text())
         remaining = getattr(self, "_attempt_remaining", 0)
         if remaining > 0 and not getattr(self, "_prompt_only", False):
             return f"{prompt} ({remaining}s)"
@@ -1308,11 +1368,27 @@ class FlashPage(QWidget):
     # ------------------------------------------------------------------
     # Rockbox 360p themes & fonts post-install flow
     # ------------------------------------------------------------------
-    def start_rockbox_themes_stage(self, model="Y1", on_done=None, on_recover=None) -> None:
+    def _log_theme(self, msg: str) -> None:
+        cb = getattr(self, "_theme_log_cb", None)
+        if callable(cb):
+            cb(msg)
+        else:
+            logger.info("%s", msg)
+
+    def start_rockbox_themes_stage(
+        self,
+        model="Y1",
+        on_done=None,
+        on_recover=None,
+        log_cb=None,
+        on_troubleshoot=None,
+    ) -> None:
         """Seamless in-card Rockbox 360p themes & fonts post-install flow."""
         self._theme_stage_model = model
         self._theme_stage_done_cb = on_done
-        self._theme_stage_recover_cb = on_recover
+        self._theme_stage_recover_cb = on_troubleshoot or on_recover
+        self._theme_log_cb = log_cb
+        self._themes_stage_active = True
         self._failed = False
         self._complete = False
         self.show_flashing()
@@ -1328,27 +1404,85 @@ class FlashPage(QWidget):
         if hasattr(self, "_done_mark"):
             self._done_mark.setVisible(False)
 
+        if hasattr(self, "_status_flow"):
+            self._status_flow.set_forced_stacked(True)
+
         self.set_step(tr("rockbox_stage_installing"))
         self._progress_bar.set_precise_value(90.0)
 
-        # Passive ADB watch for up to 90 seconds
-        from ..adb import find_adb_binary
+        model_str = (model or "Y1").upper()
+        self._log_theme(f"[Rockbox Themes] Starting 360p themes & fonts stage for {model_str}...")
+
+        from ..adb import find_adb_binary, adb_devices
         adb_bin = find_adb_binary()
         if not adb_bin:
-            self._show_theme_manual_prompt()
+            self._log_theme("[Rockbox Themes] ADB binary not found on host/bundle. Guiding user via USB Storage Mode.")
+            self._show_theme_fallback_usb_mode()
             return
 
-        self._adb_watch_seconds = 90
-        self._eta_label.setText(
-            tr("rockbox_stage_waiting_adb_fmt").format(remaining=self._adb_watch_seconds)
-        )
+        self._log_theme(f"[Rockbox Themes] Located ADB binary at: {adb_bin}")
 
+        # Seamless mode: check if an ADB device is already connected
+        existing_devices = adb_devices(adb_bin)
+        if existing_devices:
+            serial = existing_devices[0]
+            self._log_theme(f"[Rockbox Themes] Seamless match: ADB device {serial} already detected! Pushing themes silently...")
+            self._on_adb_device_found(serial)
+            return
+
+        # Not yet connected: start Step 1
+        self._show_theme_step1_disconnect_power_on()
+
+    def _show_theme_step1_disconnect_power_on(self) -> None:
+        model_str = getattr(self, "_theme_stage_model", "Y1").upper()
+        step1_text = tr("rockbox_step1_disconnect_power_on").format(model=model_str)
+        self._eta_label.setText(step1_text)
+        self._log_theme(f"[Rockbox Themes] Step 1: Prompting user to disconnect and power on {model_str}.")
+        if hasattr(self, "_theme_row"):
+            self._theme_row.setVisible(True)
+        if hasattr(self, "_theme_step1_widget"):
+            self._theme_step1_widget.setVisible(True)
+        if hasattr(self, "_theme_fallback_widget"):
+            self._theme_fallback_widget.setVisible(False)
+        if hasattr(self, "_theme_trouble_widget"):
+            self._theme_trouble_widget.setVisible(False)
+        win = self.window()
+        if win and hasattr(win, "_adjust_window_geometry"):
+            win._adjust_window_geometry()
+
+    def _on_theme_step1_next_clicked(self) -> None:
+        self._log_theme("[Rockbox Themes] User clicked Next on Step 1 (device powered on). Advancing to Step 2 (connect USB).")
+        self._start_theme_step2_connect_usb()
+
+    def _start_theme_step2_connect_usb(self) -> None:
+        if hasattr(self, "_theme_step1_widget"):
+            self._theme_step1_widget.setVisible(False)
+        if hasattr(self, "_theme_fallback_widget"):
+            self._theme_fallback_widget.setVisible(False)
+        if hasattr(self, "_theme_trouble_widget"):
+            self._theme_trouble_widget.setVisible(False)
+        win = self.window()
+        if win and hasattr(win, "_adjust_window_geometry"):
+            win._adjust_window_geometry()
+
+        model_str = getattr(self, "_theme_stage_model", "Y1").upper()
+        self._adb_watch_seconds = 60
+        usb_prompt = tr("rockbox_step2_connect_usb").format(model=model_str)
+        adb_status = tr("rockbox_stage_waiting_adb_fmt").format(remaining=self._adb_watch_seconds)
+        self._eta_label.setText(f"{usb_prompt}\n{adb_status}")
+        self._log_theme(f"[Rockbox Themes] Step 2: Waiting for USB connection and ADB handshake ({self._adb_watch_seconds}s timeout)...")
+
+        from ..adb import find_adb_binary
         from ..theme_pack import AdbWatchWorker
-        self._adb_watch_worker = AdbWatchWorker(adb_bin, timeout=90.0, parent=self)
-        self._adb_watch_worker.found.connect(self._on_adb_device_found)
-        self._adb_watch_worker.timed_out.connect(self._show_theme_manual_prompt)
+        adb_bin = find_adb_binary()
+        if not adb_bin:
+            self._show_theme_fallback_usb_mode()
+            return
 
-        # 1s countdown timer for UI responsiveness
+        self._adb_watch_worker = AdbWatchWorker(adb_bin, timeout=float(self._adb_watch_seconds), parent=self)
+        self._adb_watch_worker.found.connect(self._on_adb_device_found)
+        self._adb_watch_worker.timed_out.connect(self._show_theme_fallback_usb_mode)
+
         self._adb_watch_timer = QTimer(self)
         self._adb_watch_timer.setInterval(1000)
         self._adb_watch_timer.timeout.connect(self._on_adb_watch_tick)
@@ -1358,9 +1492,12 @@ class FlashPage(QWidget):
     def _on_adb_watch_tick(self) -> None:
         if getattr(self, "_adb_watch_seconds", 0) > 0:
             self._adb_watch_seconds -= 1
-            self._eta_label.setText(
-                tr("rockbox_stage_waiting_adb_fmt").format(remaining=self._adb_watch_seconds)
-            )
+            model_str = getattr(self, "_theme_stage_model", "Y1").upper()
+            usb_prompt = tr("rockbox_step2_connect_usb").format(model=model_str)
+            adb_status = tr("rockbox_stage_waiting_adb_fmt").format(remaining=self._adb_watch_seconds)
+            self._eta_label.setText(f"{usb_prompt}\n{adb_status}")
+            if self._adb_watch_seconds in (50, 40, 30, 20, 10, 5):
+                self._log_theme(f"[Rockbox Themes] Waiting for ADB device... ({self._adb_watch_seconds}s remaining)")
         else:
             if hasattr(self, "_adb_watch_timer"):
                 self._adb_watch_timer.stop()
@@ -1368,6 +1505,9 @@ class FlashPage(QWidget):
     def _on_adb_device_found(self, serial: str) -> None:
         if hasattr(self, "_adb_watch_timer"):
             self._adb_watch_timer.stop()
+        if hasattr(self, "_theme_row"):
+            self._theme_row.setVisible(False)
+        self._log_theme(f"[Rockbox Themes] Player detected via ADB (serial: {serial})! Pushing 360p themes & fonts...")
         self._eta_label.setText(tr("rockbox_stage_pushing"))
         from ..adb import find_adb_binary
         from ..theme_pack import AdbPushWorker, bundled_rockbox_dir
@@ -1387,31 +1527,49 @@ class FlashPage(QWidget):
         self._eta_label.setText(
             tr("rockbox_stage_pushing_files_fmt").format(curr=curr, total=total)
         )
+        if curr == 1 or curr == total or curr % 25 == 0:
+            self._log_theme(f"[Rockbox Themes] Pushed {curr}/{total} theme files to player ({int(pct)}%)...")
 
     def _on_theme_push_finished(self, ok: bool, msg: str) -> None:
         if ok:
+            self._log_theme("[Rockbox Themes] Themes and fonts pushed successfully via ADB! Rebooting player into Rockbox...")
             self._finish_rockbox_themes_stage()
         else:
-            self._show_theme_manual_prompt()
+            self._log_theme(f"[Rockbox Themes] ADB theme push encountered an issue: {msg}. Falling back to USB storage guidance.")
+            self._show_theme_fallback_usb_mode()
 
-    def _show_theme_manual_prompt(self) -> None:
+    def _show_theme_fallback_usb_mode(self) -> None:
         if hasattr(self, "_adb_watch_timer"):
             self._adb_watch_timer.stop()
-        model = getattr(self, "_theme_stage_model", "Y1").upper()
-        desc = tr("rockbox_wizard_reboot_desc_y1") if model == "Y1" else tr("rockbox_wizard_reboot_desc_power")
-        self._eta_label.setText(desc)
+        if hasattr(self, "_status_flow"):
+            self._status_flow.set_forced_stacked(True)
+        self._log_theme("[Rockbox Themes] Guiding user: Please enable USB storage mode.")
+        self.set_step(tr("rockbox_stage_installing"))
+        self._eta_label.setText(tr("rockbox_step_usb_storage_mode"))
         if hasattr(self, "_theme_row"):
             self._theme_row.setVisible(True)
-            self._theme_browse_btn.setEnabled(True)
+        if hasattr(self, "_theme_step1_widget"):
+            self._theme_step1_widget.setVisible(False)
+        if hasattr(self, "_theme_fallback_widget"):
+            self._theme_fallback_widget.setVisible(True)
+        if hasattr(self, "_theme_trouble_widget"):
+            self._theme_trouble_widget.setVisible(False)
         win = self.window()
         if win and hasattr(win, "_adjust_window_geometry"):
             win._adjust_window_geometry()
 
-    def _on_theme_browse_clicked(self) -> None:
+    def _show_theme_manual_prompt(self) -> None:
+        self._show_theme_fallback_usb_mode()
+
+    def _on_theme_fallback_next_clicked(self) -> None:
         from PySide6.QtWidgets import QFileDialog
+        model = getattr(self, "_theme_stage_model", "Y1").upper()
+        title = tr("rockbox_step_select_player_folder")
+        self._eta_label.setText(title)
+        self._log_theme(f"[Rockbox Themes] Prompting user to select player drive/folder: {title}")
         chosen = QFileDialog.getExistingDirectory(
             self,
-            tr("theme_dialog_browse_title"),
+            title,
             "",
             QFileDialog.ShowDirsOnly,
         )
@@ -1420,20 +1578,52 @@ class FlashPage(QWidget):
         from ..theme_pack import find_or_create_rockbox_dir, DirMergeWorker, bundled_rockbox_dir
         dest_dir = find_or_create_rockbox_dir(chosen)
         src_dir = bundled_rockbox_dir()
-        self._theme_browse_btn.setEnabled(False)
+        self._log_theme(f"[Rockbox Themes] Selected folder: {chosen}. Resolved target .rockbox: {dest_dir}")
+        self._log_theme(f"[Rockbox Themes] Merging bundled themes & fonts from {src_dir} into {dest_dir}...")
+        if hasattr(self, "_theme_fallback_widget"):
+            self._theme_fallback_widget.setVisible(False)
         self._eta_label.setText(tr("rockbox_stage_pushing"))
 
         self._dir_merge_worker = DirMergeWorker(src_dir, dest_dir, parent=self)
         self._dir_merge_worker.progress.connect(self._on_theme_push_progress)
-        self._dir_merge_worker.finished.connect(lambda count: self._finish_rockbox_themes_stage())
+        self._dir_merge_worker.finished.connect(lambda count: self._finish_rockbox_themes_stage(manual_count=count, dest=str(dest_dir)))
         self._dir_merge_worker.start()
 
+    def _on_theme_yes_clicked(self) -> None:
+        self._on_theme_fallback_next_clicked()
+
+    def _on_theme_no_clicked(self) -> None:
+        model = getattr(self, "_theme_stage_model", "Y1").upper()
+        self._log_theme(f"[Rockbox Themes] User reported Rockbox is not yet running on {model}. Showing power-on troubleshoot help.")
+        self._eta_label.setText(tr("rockbox_troubleshoot_desc").format(model=model))
+        if hasattr(self, "_theme_step1_widget"):
+            self._theme_step1_widget.setVisible(False)
+        if hasattr(self, "_theme_fallback_widget"):
+            self._theme_fallback_widget.setVisible(False)
+        if hasattr(self, "_theme_trouble_widget"):
+            self._theme_trouble_widget.setVisible(True)
+        win = self.window()
+        if win and hasattr(win, "_adjust_window_geometry"):
+            win._adjust_window_geometry()
+
+    def _on_theme_browse_clicked(self) -> None:
+        self._on_theme_fallback_next_clicked()
+
     def _on_theme_recover_clicked(self) -> None:
+        self._log_theme("[Rockbox Themes] User requested troubleshooting/retry recovery.")
         cb = getattr(self, "_theme_stage_recover_cb", None)
         if callable(cb):
             cb()
 
-    def _finish_rockbox_themes_stage(self) -> None:
+    def _finish_rockbox_themes_stage(self, manual_count=None, dest=None) -> None:
+        if manual_count is not None:
+            self._log_theme(f"[Rockbox Themes] Successfully merged {manual_count} theme & font files into {dest}!")
+        self._log_theme("[Rockbox Themes] Rockbox 360p themes & fonts stage completed.")
+        self._themes_stage_active = False
+        if hasattr(self, "_adb_watch_timer"):
+            self._adb_watch_timer.stop()
+        if hasattr(self, "_status_flow"):
+            self._status_flow.set_forced_stacked(False)
         if hasattr(self, "_theme_row"):
             self._theme_row.setVisible(False)
         self._progress_bar.set_precise_value(100.0)
@@ -1443,7 +1633,9 @@ class FlashPage(QWidget):
             cb()
 
     def _power_off_prompt_key(self) -> str:
-        """Prompt to power off and disconnect."""
+        """Prompt to prepare device before flashing."""
+        if self._is_mtk_active():
+            return "flash_connect_prompt_mtk"
         return "flash_connect_prompt"
 
     def show_power_off_prompt(self, show_pin_tip: bool = False) -> None:
@@ -1462,7 +1654,7 @@ class FlashPage(QWidget):
         self._wait_cancel_btn.setVisible(True)
         self._wait_continue_btn.setVisible(True)
         if hasattr(self, "_wait_mode_hint"):
-            if show_pin_tip:
+            if show_pin_tip and not self._is_mtk_active():
                 model_str = (getattr(self, "_model", "") or "").upper()
                 tip_key = "flash_paperclip_hint_a5" if "A5" in model_str else "flash_paperclip_hint"
                 self._wait_mode_hint.setText(tr(tip_key))
@@ -1487,7 +1679,8 @@ class FlashPage(QWidget):
         if hasattr(self, "_wait_mode_hint"):
             self._wait_mode_hint.setVisible(False)
         self.set_waiting_device()
-        self.set_attempt_timeout(30)
+        timeout_sec = 120 if self._is_mtk_active() else 30
+        self.set_attempt_timeout(timeout_sec)
 
     def on_install_retry(self, cb) -> None:
         self._install_retry_cb = cb
@@ -1505,6 +1698,7 @@ class FlashPage(QWidget):
 
     def set_method(self, method):
         """Record the install method chosen in Settings for this run."""
+        self._raw_method = str(method or "").strip().lower()
         self._method = normalise_method(method)
 
     def _initsteps_image(self):
@@ -1715,6 +1909,12 @@ class FlashPage(QWidget):
 
     def update_action(self, text):
         self._action_label.setText(text)
+        if text and not getattr(self, "_stop_open", False) and not getattr(self, "_failed", False) and not getattr(self, "_themes_stage_active", False):
+            if hasattr(self, "_step_label"):
+                self._step_label.setText(text)
+            flow = getattr(self, "_status_flow", None)
+            if flow is not None:
+                flow.refresh()
 
     def update_time(self, elapsed, eta):
         self._elapsed_row.set_value(elapsed)
@@ -1780,11 +1980,30 @@ class FlashPage(QWidget):
             self._wait_continue_btn.setAccessibleName(tr("btn_next"))
         self._prep_banner.retranslate()
         if self._wait_banner_key == "connect":
-            self._wait_banner.set_key("flash_connect_device_prompt", model=self._connect_model_text())
+            if self._is_mtk_active():
+                model_str = (getattr(self, "_model", "") or "").upper()
+                banner_key = "flash_connect_paperclip_prompt_a5" if "A5" in model_str else "flash_connect_paperclip_prompt"
+            else:
+                banner_key = "flash_connect_device_prompt"
+            self._wait_banner.set_key(banner_key, model=self._connect_model_text())
         elif self._wait_banner_key == "please_wait":
             self._wait_banner.set_key("flash_please_wait")
         else:
             self._wait_banner.retranslate()
+        if hasattr(self, "_theme_yes_btn"):
+            self._theme_yes_btn.setText(tr("rockbox_running_yes"))
+        if hasattr(self, "_theme_no_btn"):
+            self._theme_no_btn.setText(tr("rockbox_running_no"))
+        if hasattr(self, "_theme_browse_btn"):
+            self._theme_browse_btn.setText(tr("sel_browse_folder"))
+        if hasattr(self, "_theme_finish_btn"):
+            self._theme_finish_btn.setText(tr("rockbox_btn_finish"))
+        if hasattr(self, "_theme_recover_link"):
+            self._theme_recover_link.setText(f'<a href="recover">{tr("rockbox_recover_troubleshoot")}</a>')
+        if hasattr(self, "_theme_trouble_recover_btn"):
+            self._theme_trouble_recover_btn.setText(tr("rockbox_recover_troubleshoot"))
+        if hasattr(self, "_theme_back_btn"):
+            self._theme_back_btn.setText(tr("rockbox_wizard_back"))
         self._flash_banner.retranslate()
         self._guide_title.setText(tr("flash_guide_title"))
         for key, lbl in self._guide_texts:

@@ -21,6 +21,38 @@ ES_CONTINUOUS = 0x80000000
 ES_SYSTEM_REQUIRED = 0x00000001
 ES_AWAYMODE_REQUIRED = 0x00000040
 
+_MACOS_LIBS = None
+
+
+def _macos_power_libs():
+    """IOKit + CoreFoundation with real C prototypes.
+
+    Without ``restype``/``argtypes`` ctypes treats every return value as a
+    32-bit ``int``, which truncates the 64-bit ``CFStringRef`` and makes IOKit
+    dereference a garbage pointer (a hard SIGSEGV, not a Python exception).
+    """
+    global _MACOS_LIBS
+    if _MACOS_LIBS is None:
+        iokit = ctypes.cdll.LoadLibrary("/System/Library/Frameworks/IOKit.framework/IOKit")
+        cf = ctypes.cdll.LoadLibrary(
+            "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation"
+        )
+        cf.CFStringCreateWithCString.restype = ctypes.c_void_p
+        cf.CFStringCreateWithCString.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_uint32]
+        cf.CFRelease.restype = None
+        cf.CFRelease.argtypes = [ctypes.c_void_p]
+        iokit.IOPMAssertionCreateWithName.restype = ctypes.c_int32
+        iokit.IOPMAssertionCreateWithName.argtypes = [
+            ctypes.c_void_p,
+            ctypes.c_uint32,
+            ctypes.c_void_p,
+            ctypes.POINTER(ctypes.c_uint32),
+        ]
+        iokit.IOPMAssertionRelease.restype = ctypes.c_int32
+        iokit.IOPMAssertionRelease.argtypes = [ctypes.c_uint32]
+        _MACOS_LIBS = (iokit, cf)
+    return _MACOS_LIBS
+
 
 class SleepInhibitor:
     """Manages system sleep inhibition across Windows, macOS, and Linux."""
@@ -104,22 +136,25 @@ class SleepInhibitor:
     def _acquire_macos(self, reason: str) -> None:
         # Prefer native IOPMAssertion via IOKit
         try:
-            iokit = ctypes.cdll.LoadLibrary("/System/Library/Frameworks/IOKit.framework/IOKit")
-            cf = ctypes.cdll.LoadLibrary("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")
+            iokit, cf = _macos_power_libs()
 
             # kIOPMAssertionTypePreventUserIdleSystemSleep
             cf_type = cf.CFStringCreateWithCString(None, b"PreventUserIdleSystemSleep", 0x08000100)
             cf_name = cf.CFStringCreateWithCString(None, reason.encode("utf-8"), 0x08000100)
             assertion_id = ctypes.c_uint32(0)
 
-            ret = iokit.IOPMAssertionCreateWithName(
-                cf_type,
-                255,  # kIOPMAssertionLevelOn
-                cf_name,
-                ctypes.byref(assertion_id),
-            )
-            cf.CFRelease(cf_type)
-            cf.CFRelease(cf_name)
+            ret = -1
+            if cf_type and cf_name:
+                ret = iokit.IOPMAssertionCreateWithName(
+                    cf_type,
+                    255,  # kIOPMAssertionLevelOn
+                    cf_name,
+                    ctypes.byref(assertion_id),
+                )
+            if cf_type:
+                cf.CFRelease(cf_type)
+            if cf_name:
+                cf.CFRelease(cf_name)
 
             if ret == 0:
                 self._assertion_id = assertion_id.value
@@ -140,8 +175,8 @@ class SleepInhibitor:
     def _release_macos(self) -> None:
         if self._assertion_id is not None:
             try:
-                iokit = ctypes.cdll.LoadLibrary("/System/Library/Frameworks/IOKit.framework/IOKit")
-                iokit.IOPMAssertionRelease(ctypes.c_uint32(self._assertion_id))
+                iokit, _cf = _macos_power_libs()
+                iokit.IOPMAssertionRelease(self._assertion_id)
             except Exception as e:
                 logger.debug("macOS IOPMAssertionRelease failed: %s", e)
             self._assertion_id = None
