@@ -257,6 +257,32 @@ class SettingsPage(QWidget):
         self._sp_gui_desc.setProperty("cssClass", "dimmed")
         term_layout.addWidget(self._sp_gui_desc)
 
+        # Superuser rights for the install. The switch is only a preference:
+        # the platform's own question grants the rights, and this app has to
+        # restart before its children — every flash tool it spawns, whichever
+        # install method is chosen — inherit them. Hence the restart line.
+        from .. import elevation
+
+        self._cb_run_as_admin = self._add_switch(term_layout, elevation.label_text())
+        self._cb_run_as_admin.setToolTip(elevation.description_text())
+        self._cb_run_as_admin.toggled.connect(self._on_run_as_admin_toggled)
+
+        self._run_as_admin_desc = QLabel(elevation.description_text())
+        self._run_as_admin_desc.setWordWrap(True)
+        self._run_as_admin_desc.setProperty("cssClass", "dimmed")
+        term_layout.addWidget(self._run_as_admin_desc)
+
+        self._run_as_admin_status = QLabel("")
+        self._run_as_admin_status.setWordWrap(True)
+        self._run_as_admin_status.setProperty("cssClass", "subtitle")
+        self._run_as_admin_status.setVisible(False)
+        term_layout.addWidget(self._run_as_admin_status)
+
+        self._run_as_admin_restart_btn = QPushButton(tr("settings_run_as_admin_restart"))
+        self._run_as_admin_restart_btn.clicked.connect(self._on_run_as_admin_restart)
+        self._run_as_admin_restart_btn.setVisible(False)
+        term_layout.addWidget(self._run_as_admin_restart_btn, alignment=Qt.AlignLeft)
+
         self._terminal_card.set_layout(term_layout)
 
         # --- Card 2: Firmware Release Reminders ---
@@ -300,20 +326,27 @@ class SettingsPage(QWidget):
 
         self._rockbox_card.set_layout(rock_layout)
 
-        # --- Card 3: Community Acknowledgements & Donations ---
+        # --- Card 3: Show App Supporter Credits and Donations ---
         self._donations_card = Card("settings_donations_group")
         don_layout = QVBoxLayout()
         don_layout.setSpacing(12)
 
-        # Single combined donation opt-out switch
-        self._cb_hide_donations = self._add_switch(don_layout, tr("settings_hide_donations"))
-        self._cb_hide_donations.setToolTip(tr("settings_hide_donations_tip"))
+        # The card's title *is* the switch's label, so the words are printed
+        # once and the switch sits on the title line. On means the supporter
+        # credits and the donation prompts are shown.
+        self._cb_hide_donations = self._add_title_row_switch(
+            self._donations_card, "settings_show_donations",
+            tooltip=tr("settings_hide_donations_tip"),
+        )
         self._cb_hide_donations.toggled.connect(self._on_hide_donations_toggled)
 
-        self._lbl_hide_tip = QLabel(tr("settings_hide_donations_tip"))
+        # No explainer paragraph: the title already says what the switch does.
+        # The label still exists — hidden — because it is where that wording
+        # lives for the translations and for switch_caption().
+        self._lbl_hide_tip = QLabel(tr("settings_hide_donations_tip"), self._donations_card)
         self._lbl_hide_tip.setWordWrap(True)
         self._lbl_hide_tip.setProperty("cssClass", "dimmed")
-        don_layout.addWidget(self._lbl_hide_tip)
+        self._lbl_hide_tip.setVisible(False)
 
         # Backward compatibility aliases
         self._cb_skip_install_donations = self._cb_hide_donations
@@ -822,7 +855,8 @@ class SettingsPage(QWidget):
             or device_tracking.is_donation_install_prompt_disabled()
         )
         self._cb_hide_donations.blockSignals(True)
-        self._cb_hide_donations.setChecked(opted_out)
+        # The switch reads "shown"; the stored flags read "disabled".
+        self._cb_hide_donations.setChecked(not opted_out)
         self._cb_hide_donations.blockSignals(False)
         self._sync_donation_opt_out()
         self._apply_donations_section_visibility()
@@ -835,6 +869,18 @@ class SettingsPage(QWidget):
         self._set_switch_caption(self._cb_guided_install, tr("settings_guided_install"))
         self._set_switch_caption(self._cb_sp_gui_install, tr("settings_sp_gui_install"))
         self._sync_install_mode_switches()
+
+        # Superuser preference. It is independent of the install-mode choice:
+        # it applies to whichever of them runs.
+        from .. import elevation
+
+        if self._run_as_admin_switch() is not None:
+            self._cb_run_as_admin.blockSignals(True)
+            self._cb_run_as_admin.setChecked(
+                elevation.run_as_admin_enabled(QSettings("innioasis", "updater"))
+            )
+            self._cb_run_as_admin.blockSignals(False)
+            self._sync_run_as_admin_controls()
 
         # Offline mode toggle
         self._cb_offline_mode.blockSignals(True)
@@ -915,6 +961,69 @@ class SettingsPage(QWidget):
             device_tracking.set_terminal_install_enabled(False)
         self._sync_install_mode_switches()
 
+    # ------------------------------------------------------------------
+    # Superuser rights
+    # ------------------------------------------------------------------
+    def _run_as_admin_switch(self) -> QCheckBox:
+        return getattr(self, "_cb_run_as_admin", None)
+
+    def run_as_admin(self) -> bool:
+        """The persisted preference, as this page shows it."""
+        from .. import elevation
+
+        switch = self._run_as_admin_switch()
+        if switch is not None:
+            return bool(switch.isChecked())
+        return elevation.run_as_admin_enabled(QSettings("innioasis", "updater"))
+
+    def _on_run_as_admin_toggled(self, checked: bool):
+        from .. import elevation
+
+        elevation.set_run_as_admin(QSettings("innioasis", "updater"), bool(checked))
+        self._sync_run_as_admin_controls()
+
+    def _on_run_as_admin_restart(self):
+        """Ask the platform to start an elevated copy and hand over to it."""
+        from .. import elevation
+
+        ok, message = elevation.restart_as_admin()
+        if ok:
+            # The elevated copy is starting; this one steps aside so there is
+            # never two apps driving the same ports.
+            QApplication.quit()
+            return
+        self._run_as_admin_status.setText(
+            message or tr("settings_run_as_admin_unavailable")
+        )
+        self._run_as_admin_status.setVisible(True)
+
+    def _sync_run_as_admin_controls(self):
+        """Say whether the next install really will run with the rights.
+
+        Three states, one line: the switch is unusable because this desktop has
+        no elevation helper; the switch is on but this copy is not elevated
+        yet, so a restart is offered; or everything already matches and there
+        is nothing to say.
+        """
+        from .. import elevation
+
+        switch = self._run_as_admin_switch()
+        if switch is None or not hasattr(self, "_run_as_admin_status"):
+            return
+        available = elevation.can_elevate()
+        switch.setEnabled(available)
+        needs_restart = bool(switch.isChecked() and available and not elevation.is_elevated())
+        if not available:
+            self._run_as_admin_status.setText(tr("settings_run_as_admin_unavailable"))
+            self._run_as_admin_status.setVisible(True)
+        elif needs_restart:
+            self._run_as_admin_status.setText(tr("settings_run_as_admin_restart_needed"))
+            self._run_as_admin_status.setVisible(True)
+        else:
+            self._run_as_admin_status.clear()
+            self._run_as_admin_status.setVisible(False)
+        self._run_as_admin_restart_btn.setVisible(needs_restart)
+
     def _donations_dismiss_html(self) -> str:
         return f'<a href="dismiss">{tr("settings_donations_dismiss")}</a>'
 
@@ -949,15 +1058,28 @@ class SettingsPage(QWidget):
         close_layout_gap(self._donations_card)
 
     def _on_hide_donations_toggled(self, checked: bool):
-        device_tracking.set_donation_ui_disabled(checked)
-        device_tracking.set_donation_install_prompt_disabled(checked)
+        """The card's switch moved.
+
+        The switch reads "Show App Supporter Credits and Donations", so
+        ``checked`` is the *shown* state: the persisted flags are its opposite,
+        and so is the emitted value (``donation_visibility_changed`` has always
+        carried "disabled").
+        """
+        self._set_donations_shown(checked)
+
+    def _set_donations_shown(self, shown: bool) -> None:
+        """Persist the choice and tell the rest of the app about it."""
+        disabled = not bool(shown)
+        device_tracking.set_donation_ui_disabled(disabled)
+        device_tracking.set_donation_install_prompt_disabled(disabled)
         self._sync_donation_opt_out()
-        self.donation_visibility_changed.emit(checked)
+        self.donation_visibility_changed.emit(disabled)
 
     def _on_skip_install_donations_toggled(self, checked: bool):
+        """Legacy alias handler: here ``checked`` means "prompts disabled"."""
         device_tracking.set_donation_install_prompt_disabled(checked)
         device_tracking.set_donation_ui_disabled(checked)
-        self._cb_hide_donations.setChecked(checked)
+        self._cb_hide_donations.setChecked(not checked)
 
     def _on_clear_firmware_cache(self):
         from ..downloads import clear_firmware_cache
@@ -1124,6 +1246,14 @@ class SettingsPage(QWidget):
         self._set_switch_caption(self._cb_sp_gui_install, tr("settings_sp_gui_install"))
         self._cb_sp_gui_install.setToolTip(tr("settings_sp_gui_desc"))
         self._sp_gui_desc.setText(tr("settings_sp_gui_desc"))
+        if hasattr(self, "_cb_run_as_admin"):
+            from .. import elevation
+
+            self._set_switch_caption(self._cb_run_as_admin, elevation.label_text())
+            self._cb_run_as_admin.setToolTip(elevation.description_text())
+            self._run_as_admin_desc.setText(elevation.description_text())
+            self._run_as_admin_restart_btn.setText(tr("settings_run_as_admin_restart"))
+            self._sync_run_as_admin_controls()
         self._reminders_card.retranslate()
         self._set_switch_caption(self._cb_reminders, tr("settings_reminders_enable"))
         self._rockbox_card.retranslate()
@@ -1134,7 +1264,7 @@ class SettingsPage(QWidget):
         self._set_switch_caption(self._cb_240p, tr("settings_filter_240p"))
         self._cb_240p.setToolTip(tr("settings_240p_tip"))
         self._donations_card.retranslate()
-        self._set_switch_caption(self._cb_hide_donations, tr("settings_hide_donations"))
+        self._set_switch_caption(self._cb_hide_donations, tr("settings_show_donations"))
         self._cb_hide_donations.setToolTip(tr("settings_hide_donations_tip"))
         if hasattr(self, "_lbl_hide_tip"):
             self._lbl_hide_tip.setText(tr("settings_hide_donations_tip"))

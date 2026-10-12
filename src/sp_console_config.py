@@ -38,6 +38,10 @@ from xml.sax.saxutils import escape
 logger = logging.getLogger(__name__)
 
 CONFIG_FILE_NAME = "console_config.xml"
+# The tool's own connection window (its ``timeout-count`` attribute). The long
+# default matches the payload; driven installs pass the app's no-progress
+# window so tool and app give up on the same schedule.
+CONNECTION_TIMEOUT_MS = 3600000
 STORAGE_TYPES = ("NAND", "EMMC", "UFS", "NOR", "SDMMC")
 # The schema's chip-name pattern: MT + four digits + optional letter, or ELBRUS.
 _CHIP_RE = re.compile(r"^(MT\d{4}[A-Z]?|ELBRUS)$")
@@ -98,11 +102,16 @@ def auth_file_usable(path) -> bool:
         return False
 
 
-def build_console_config_xml(scatter, da_file, auth_file) -> str:
+def build_console_config_xml(
+    scatter, da_file, auth_file, connection_timeout_ms: int = CONNECTION_TIMEOUT_MS
+) -> str:
     """Console configuration XML for a flash that needs an auth file.
 
     Raises :class:`SpConfigError` when the scatter does not tell us the chip
     or storage type, since a wrong guess there is worse than no flash.
+
+    ``connection_timeout_ms`` is the tool's connection window, the only place
+    it can be set for a driven flash.
     """
     if not auth_file:
         raise SpConfigError("no_auth_file", "no authentication file was given")
@@ -125,7 +134,8 @@ def build_console_config_xml(scatter, da_file, auth_file) -> str:
             f"        <scatter>{escape(str(scatter))}</scatter>",
             f"        <authentication>{escape(str(auth_file))}</authentication>",
             '        <connection type="BromUSB" high-speed="true"'
-            ' without-battery="true" timeout-count="3600000" com-port="" />',
+            ' without-battery="true"'
+            f' timeout-count="{int(connection_timeout_ms)}" com-port="" />',
             "    </general>",
             "    <commands>",
             "        <format-download/>",
@@ -137,13 +147,20 @@ def build_console_config_xml(scatter, da_file, auth_file) -> str:
 
 
 def write_console_config(
-    scatter, da_file, auth_file, target_dir: Optional[Path] = None
+    scatter,
+    da_file,
+    auth_file,
+    target_dir: Optional[Path] = None,
+    connection_timeout_ms: int = CONNECTION_TIMEOUT_MS,
 ) -> Path:
     """Write the console configuration for an authenticated flash."""
     directory = Path(target_dir) if target_dir else config_dir()
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / CONFIG_FILE_NAME
     path.write_text(
-        build_console_config_xml(scatter, da_file, auth_file), encoding="utf-8"
+        build_console_config_xml(
+            scatter, da_file, auth_file, connection_timeout_ms=connection_timeout_ms
+        ),
+        encoding="utf-8",
     )
     return path

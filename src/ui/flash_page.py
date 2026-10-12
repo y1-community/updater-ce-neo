@@ -30,7 +30,7 @@ from ..flash_service import (
     normalise_method,
 )
 from ..i18n import tr, tr_brand
-from .support_appeal import SupportIntro
+from .support_appeal import COMPLETION_KEYS, SupportIntro
 from .widgets import (
     Banner,
     Card,
@@ -727,6 +727,15 @@ class FlashPage(QWidget):
         # many lines the prompt wraps to.
         col.addWidget(self._wait_prompt_label)
 
+        # The app's own no-progress countdown: shown only while a backend
+        # command has produced nothing yet, and switched off the moment
+        # progress begins or the install leaves this stage.
+        self._attempt_lbl = QLabel("")
+        self._attempt_lbl.setProperty("cssClass", "hint")
+        self._attempt_lbl.setAlignment(Qt.AlignCenter)
+        self._attempt_lbl.setVisible(False)
+        col.addWidget(self._attempt_lbl)
+
         self._wait_mode_hint = _status_label("")
         self._wait_mode_hint.setWordWrap(True)
         hint_font = self._wait_mode_hint.font()
@@ -886,9 +895,19 @@ class FlashPage(QWidget):
         self._intro = SupportIntro()
         self._appeal_label = self._intro.headline
         appeal_layout.addWidget(self._intro)
+        # One plain sentence under the headline: what the app is, and what a
+        # coffee actually pays for. The appeal's own words, not the Support
+        # page's project pitch.
+        self._appeal_body = QLabel()
+        self._appeal_body.setWordWrap(True)
+        self._appeal_body.setProperty("cssClass", "dimmed")
+        self._appeal_body.setAutoFillBackground(False)
+        self._appeal_body.setStyleSheet("")
+        _apply_card_text(self._appeal_body)
+        appeal_layout.addWidget(self._appeal_body)
         actions = QHBoxLayout()
         actions.setSpacing(8)
-        self._coffee_btn = QPushButton(tr("donate_buy_coffee"))
+        self._coffee_btn = QPushButton(tr("donate_completion_coffee"))
         self._coffee_btn.setCursor(Qt.ArrowCursor)
         self._coffee_btn.setStyleSheet("")
         self._coffee_btn.clicked.connect(self._open_coffee_page)
@@ -1128,9 +1147,30 @@ class FlashPage(QWidget):
             self._wait_mode_hint.setVisible(False)
         self._apply_stop_hold()
 
+    def set_attempt_timeout(self, seconds) -> None:
+        """Show the app's own no-progress countdown for the current stage.
+
+        ``0`` hides it: the countdown only means something while a backend
+        command has produced nothing yet, and it must not outlive the stage.
+        """
+        label = getattr(self, "_attempt_lbl", None)
+        if label is None:
+            return
+        try:
+            remaining = int(seconds or 0)
+        except (TypeError, ValueError):
+            remaining = 0
+        if remaining <= 0:
+            label.setText("")
+            label.setVisible(False)
+            return
+        label.setText(tr("flash_attempt_timeout").format(seconds=remaining))
+        label.setVisible(True)
+
     def show_real_stage(self, text: str) -> None:
         """Drop the connect sentence and the throbber once the tool moves on."""
         self._prompt_only = False
+        self.set_attempt_timeout(0)
         self._wait_copy = "stage"
         if hasattr(self, "_wait_prompt_label"):
             self._wait_prompt_label.setText(text or "")
@@ -1289,22 +1329,44 @@ class FlashPage(QWidget):
 
         open_browser(DONATION_LINKS["kofi"])
 
+    def _render_appeal_copy(self) -> None:
+        """(Re)write the appeal's words for this language, install and model.
+
+        Shared by ``show_completion_appeal`` and ``retranslate``, so switching
+        language after an install still names the software that just finished
+        instead of falling back to the generic project pitch.
+        """
+        software = (getattr(self, "_package_name", "") or "").strip() or tr("flash_current_pkg")
+        model = (getattr(self, "_model", "") or "").strip() or tr("device_fallback_word")
+        if hasattr(self, "_intro"):
+            self._intro.retranslate(software=software, model=model)
+            _apply_card_text(self._intro.headline)
+            _apply_card_text(self._intro.subtitle)
+        if hasattr(self, "_appeal_body"):
+            self._appeal_body.setText(tr("donate_completion_body"))
+            _apply_card_text(self._appeal_body)
+        if hasattr(self, "_coffee_btn"):
+            self._coffee_btn.setText(tr("donate_completion_coffee"))
+        if hasattr(self, "_not_now_btn"):
+            self._not_now_btn.setText(tr("donate_not_now"))
+        if hasattr(self, "_appeal_dont"):
+            self._appeal_dont.setText(self._dont_ask_html())
+
     def show_completion_appeal(self, visible: bool, callback=None, on_not_now=None) -> None:
-        """Coffee note under a finished install. Hidden when donations are already off."""
+        """Coffee note under a finished install. Hidden when donations are already off.
+
+        The wording leads with what just happened — the software is installed
+        on the player — and only then asks for a coffee. An install the reader
+        just watched succeed is what makes the ask land as a thank-you rather
+        than as an interruption.
+        """
         self._appeal_callback = callback
         self._appeal_not_now = on_not_now
         if not hasattr(self, "_appeal"):
             return
         if hasattr(self, "_intro"):
-            self._intro.retranslate()
-            _apply_card_text(self._intro.headline)
-            _apply_card_text(self._intro.subtitle)
-        if hasattr(self, "_coffee_btn"):
-            self._coffee_btn.setText(tr("donate_buy_coffee"))
-        if hasattr(self, "_not_now_btn"):
-            self._not_now_btn.setText(tr("donate_not_now"))
-        if hasattr(self, "_appeal_dont"):
-            self._appeal_dont.setText(self._dont_ask_html())
+            self._intro.set_keys(COMPLETION_KEYS)
+        self._render_appeal_copy()
         self._appeal.setVisible(bool(visible))
 
     def _on_not_now(self) -> None:
@@ -1515,15 +1577,10 @@ class FlashPage(QWidget):
             lbl.setText(tr(key))
         self._warning.setText(tr("flash_warning"))
         if hasattr(self, "_intro"):
-            self._intro.retranslate()
-            _apply_card_text(self._intro.headline)
-            _apply_card_text(self._intro.subtitle)
-        if hasattr(self, "_appeal_dont"):
-            self._appeal_dont.setText(self._dont_ask_html())
-        if hasattr(self, "_coffee_btn"):
-            self._coffee_btn.setText(tr("donate_buy_coffee"))
-        if hasattr(self, "_not_now_btn"):
-            self._not_now_btn.setText(tr("donate_not_now"))
+            # The block keeps whichever wording it was set to: a language change
+            # must not turn a finished install's appeal back into the generic
+            # project pitch.
+            self._render_appeal_copy()
         self._style_done_button()
         self._apply_guide_highlight()
         if self._prep_step_key:
@@ -1557,7 +1614,7 @@ class FlashPage(QWidget):
             "_prep_pkg_label", "_prep_step", "_wait_pkg_label", "_wait_prompt_label",
             "_flash_pkg_label", "_step_label", "_eta_label", "_warning",
             "_download_pkg_label", "_download_status_label", "_download_heading",
-            "_appeal_label", "_paperclip_hint",
+            "_appeal_label", "_appeal_body", "_paperclip_hint",
         )
         for name in names:
             label = getattr(self, name, None)

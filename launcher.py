@@ -22,22 +22,12 @@ if "--simulate-macos" in sys.argv:
     os.environ["INNIOASIS_SIMULATE_MACOS"] = "1"
     sys.argv.remove("--simulate-macos")
 
-# Persisted simulated-macOS choice (Settings ▸ Install method ▸ "MTKClient
-# (Mac)"). Re-applied here, before any ``src.*`` import, because
-# paths.SIMULATE_MACOS is read at import time — long before the Settings UI
-# exists. Read with the stdlib (configparser) so nothing heavier than the
-# interpreter loads first; QSettings on Linux writes plain INI to this path.
-if not os.environ.get("INNIOASIS_SIMULATE_MACOS") and sys.platform.startswith("linux"):
-    try:
-        import configparser
-
-        config_dir = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
-        parser = configparser.ConfigParser()
-        parser.read(config_dir / "innioasis" / "updater.conf")
-        if parser.get("General", "flash_method", fallback="").strip().lower() == "mtk_mac":
-            os.environ["INNIOASIS_SIMULATE_MACOS"] = "1"
-    except Exception:
-        pass
+# The simulated-macOS flow is deliberately session-scoped. Choosing
+# "MTKClient (Mac)" restarts the app with INNIOASIS_SIMULATE_MACOS=1 in the
+# child's environment, so the flow applies for that run. It is NOT re-applied
+# here from the saved install method: doing that made a value left behind by
+# the M/D debug keys permanent, which turned SP Flash Tool into an unreachable
+# backend on Linux and pinned every later launch to MTKClient.
 
 if "--check-environment" in sys.argv or "--diagnostics" in sys.argv:
     from src import paths, flash_service, mtk_api

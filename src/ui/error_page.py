@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..flash_service import describe_backend_error, is_wrong_model_error
 from ..i18n import tr
 from .flash_page import _STEP_KEY
 from .widgets import Banner, Card, InfoRow
@@ -25,6 +26,7 @@ _ERROR_CODE_KEYS = {
     "NO_SCATTER_FILE": "err_code_no_scatter",
     "MISSING_IMAGES": "err_code_missing_images",
     "INTERNAL_ERROR": "err_code_internal",
+    "ERR_ATTEMPT_TIMEOUT": "err_attempt_timeout_title",
     "NO_DEVICE": "flash_no_device",
     "USB_DISCONNECTED": "err_usb_title",
 }
@@ -33,6 +35,10 @@ _ERROR_CODE_KEYS = {
 def _format_error_code(code) -> str:
     """Human-readable error code for the error page (keeps the raw code)."""
     code = str(code or "\u2014")
+    # A chip mismatch is the one failure whose name the user must read: it is
+    # the wrong player, not a bad cable, and no retry can fix it.
+    if is_wrong_model_error(code):
+        return f"{tr('err_sp_wrong_model_title')} ({code})"
     key = _ERROR_CODE_KEYS.get(code)
     if key:
         return f"{tr(key)} ({code})"
@@ -71,6 +77,12 @@ class ErrorPage(QWidget):
         self._detail_card.add_widget(self._step_row)
         self._detail_card.add_widget(self._retry_row)
         layout.addWidget(self._detail_card)
+
+        self._cause = QLabel("")
+        self._cause.setWordWrap(True)
+        self._cause.setProperty("cssClass", "hint")
+        self._cause.setVisible(False)
+        layout.addWidget(self._cause)
 
         self._hint = QLabel("")
         self._hint.setWordWrap(True)
@@ -120,6 +132,8 @@ class ErrorPage(QWidget):
 
     def _render(self):
         mode = self._mode
+        if hasattr(self, "_cause"):
+            self._cause.setVisible(False)
         if mode == "device":
             self._banner.set_type("danger")
             self._banner.set_key("err_device_title")
@@ -146,6 +160,9 @@ class ErrorPage(QWidget):
             step_label = tr(_STEP_KEY[step]) if step in _STEP_KEY else str(step)
             self._step_row.set_value(f"{step_label} @ {percent}%")
             self._retry_row.set_value(str(self._mode_args.get("retry_count", 0)))
+            guidance = describe_backend_error(self._mode_args.get("error_code"))
+            self._cause.setText(guidance)
+            self._cause.setVisible(bool(guidance))
             ndash = '\u2014'
             self._hint.setText(
                 f"{tr('flash_current_pkg')}: {self._mode_args.get('package_name') or ndash}"

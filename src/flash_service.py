@@ -20,9 +20,11 @@ extract → validate → flash pipeline for both backends) and ``FlashService``
 """
 
 import logging
+import math
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import threading
@@ -37,6 +39,7 @@ from PySide6.QtCore import QObject, Qt, QThread, Signal
 
 from . import linux_sp_flash, paths
 from .i18n import tr
+from .progress_model import ThroughputEta, percent_of
 
 paths.ensure_mtkclient_importable()
 
@@ -98,15 +101,37 @@ def tool_line_body(line) -> str:
             return stripped
 
 
+def _strip_qt_trace_prefix(text: str) -> str:
+    """The message part of an SP Flash Tool internal Qt trace line.
+
+    ``10/11/2026 17:07:43.796 FlashTool[2232][7880][D]: APCore::ConnMedia::
+    Search(): Search usb, timeout set as 120000 ms(..\\..\\Conn.cpp,21)``
+    becomes ``Search usb, timeout set as 120000 ms``. Text that is not a trace
+    line is returned untouched, so the console's own lines keep working.
+    """
+    if "FlashTool[" not in text:
+        return text
+    _head, _sep, tail = text.partition("]: ")
+    tail = tail.strip()
+    if tail.endswith(")"):
+        open_paren = tail.rfind("(")
+        if open_paren != -1:
+            tail = tail[:open_paren].rstrip()
+    if ": " in tail:
+        tail = tail.rsplit(": ", 1)[1].strip()
+    return tail
+
+
 def is_sp_usb_search_line(line) -> bool:
     """True when flash_tool is searching USB.
 
     The connect sentence follows this prefix only: case-insensitive, with
-    leading whitespace (and a log timestamp) ignored. A later mention inside
-    a write log is not a search.
+    leading whitespace (and a log timestamp) ignored, and recognised inside
+    the tool's own internal Qt trace as well as on its console stream. A later
+    mention inside a write log is not a search.
     """
     text = _TIMESTAMP_PREFIX_RE.sub("", tool_line_body(line)).lstrip()
-    return text.lower().startswith("search usb")
+    return _strip_qt_trace_prefix(text).lower().startswith("search usb")
 
 
 def is_mtk_usb_search_line(line) -> bool:
@@ -191,13 +216,29 @@ PHASE_CONNECT = "connect"
 PHASE_PLEASE_WAIT = "please_wait"
 
 
+def is_tool_trace_line(line) -> bool:
+    """True for SP Flash Tool's own internal Qt trace lines.
+
+    The tool mirrors its trace into the stream the app reads, shaped
+    ``10/11/2026 17:07:43.796 FlashTool[2232][7880][D]: ...`` (the app then
+    forwards it with a ``[QT] `` tag). Those lines are diagnostics, not device
+    progress: reading them as forward progress pushed the install card off
+    "please connect your player" and onto "please wait" while the tool was
+    still searching for the device.
+    """
+    return "FlashTool[" in tool_line_body(line)
+
+
 def classify_tool_wait_line(line) -> str:
     """``connect``, ``forward``, or ``""`` when the line must not move the UI.
 
     Search / hint / dots lines are the connect phase. A later line that is
-    real tool output is forward progress. Logging-error spam is ignored.
+    real tool output is forward progress. Logging-error spam and the tool's
+    own internal trace are ignored.
     """
     if is_logging_noise_line(line):
+        return ""
+    if is_tool_trace_line(line):
         return ""
     if is_sp_usb_search_line(line) or is_mtk_usb_search_line(line):
         return "connect"
@@ -210,18 +251,50 @@ def classify_tool_wait_line(line) -> str:
     return "forward"
 
 
+# Lines that mean the player answered and the tool is working on it. Only
+# these end the connect sentence: everything else a backend prints while it
+# searches (its startup banner, the internal Qt trace, the timeout lines of a
+# search that has just expired, the app's own "searching again" notice) must
+# leave the connect prompt exactly where it is, because that prompt *is* the
+# moment the user is being asked to connect the player.
+_DEVICE_SEEN_MARKERS = (
+    "usb port detected",
+    "port - device detected",
+    "brom connected",
+    "da connected",
+    "download da now",
+    "of da has been sent",
+    "of bootloader has been sent",
+    "of image data has been sent",
+    "formatting flash",
+    "of flash has been formatted",
+    "format succeeded",
+    "downloading images",
+    "download ok",
+)
+
+
+def is_tool_device_seen_line(line) -> bool:
+    """True when the backend reports the player and starts working on it."""
+    low = tool_line_body(line).lower()
+    return any(marker in low for marker in _DEVICE_SEEN_MARKERS)
+
+
 def advance_tool_wait_phase(phase: str, line: str) -> str:
     """Move the connect / please-wait phase from one tool line.
 
-    The connect sentence is only the search phase. A later forward line
-    leaves it for please-wait. Another search or hint line comes back.
-    Lines before the first search, and logging spam, do not invent it.
+    The connect sentence belongs to the search: it goes up on a search or hint
+    line and comes down only when the tool reports the player and starts
+    working (see :func:`is_tool_device_seen_line`). Other chatter is ignored,
+    so the prompt cannot be replaced by "please wait" while the user is still
+    being asked to connect the player — which is what the tool's own Qt banner,
+    its trace lines and a failed search's timeout lines used to do.
     """
     kind = classify_tool_wait_line(line)
     current = phase or PHASE_BEFORE
     if kind == "connect":
         return PHASE_CONNECT
-    if kind == "forward" and current == PHASE_CONNECT:
+    if kind == "forward" and current == PHASE_CONNECT and is_tool_device_seen_line(line):
         return PHASE_PLEASE_WAIT
     return current
 
@@ -276,18 +349,190 @@ def normalise_method(method):
     Legacy ``"auto"`` resolves to the platform default so users land on SP
     Flash Tool rather than an ambiguous automatic choice; on macOS every
     value collapses to MTKClient, the only backend that exists there.
+
+    ``METHOD_MTK_MAC`` is the hidden *simulated-macOS* debug entry, not a
+    backend in its own right: it runs MTKClient together with the mac flow,
+    and the launch flag that turns that flow on (``--simulate-macos`` /
+    ``INNIOASIS_SIMULATE_MACOS``) is scoped to one session. Outside that
+    session the value means nothing, so it must not pin the app to
+    MTKClient. Left sticky, it made SP Flash Tool unreachable on Windows and
+    Linux after the M/D debug keys had been used once.
     """
     value = str(method or "").strip().lower()
     if value not in (METHOD_SP, METHOD_MTK, METHOD_MTK_MAC, "auto"):
         return default_flash_method()
     if paths.IS_MAC:
         return METHOD_MTK
-    return default_flash_method() if value == "auto" else value
+    if value in ("auto", METHOD_MTK_MAC):
+        return default_flash_method()
+    return value
 
 
 def backend_method(method):
-    """Map an install method onto the backend id FlashWorker dispatches on."""
-    return METHOD_MTK if normalise_method(method) == METHOD_MTK_MAC else normalise_method(method)
+    """Map an install method onto the backend id FlashWorker dispatches on.
+
+    ``normalise_method`` has already folded the simulated-macOS entry into a
+    real backend (MTKClient while the simulation is running, the platform
+    default otherwise), so this is a thin alias kept for the call sites and
+    tests that name the concept.
+    """
+    return normalise_method(method)
+
+
+# --- MediaTek / SP Flash Tool error knowledge --------------------------------
+# The console tool reports failures as ``S_NAME (code)`` on stdout and in its
+# own QT_FLASH_TOOL.log. The raw name and code stay visible for support; the
+# handful below are the ones a normal user can actually hit, and each gets an
+# i18n key so the error page can say what happened and what to try.
+SP_ERROR_GUIDANCE = {
+    "S_TIMEOUT": "err_sp_timeout",
+    "S_BROM_CMD_STARTCMD_FAIL": "err_sp_brom_startcmd",
+    "S_CHIP_TYPE_NOT_MATCH": "err_sp_wrong_model",
+    "S_FT_DOWNLOAD_FAIL": "err_sp_download_fail",
+    "S_DA_INIT_SYNC_ERROR": "err_sp_da_init_sync",
+    "S_BROM_DOWNLOAD_DA_FAIL": "err_sp_brom_da_fail",
+    "S_COM_PORT_OPEN_FAIL": "err_sp_com_port",
+    "S_FT_ENABLE_DRAM_FAIL": "err_sp_enable_dram",
+    "S_DA_SDMMC_READ_FAILED": "err_sp_storage_read",
+}
+
+# Numeric-only fallback for the tail of a run that only carries
+# ``Exception: err_code[4008]``.
+SP_ERROR_CODE_NAMES = {
+    "1042": "S_TIMEOUT",
+    "2005": "S_BROM_CMD_STARTCMD_FAIL",
+    "3184": "S_CHIP_TYPE_NOT_MATCH",
+    "4008": "S_FT_DOWNLOAD_FAIL",
+    "1093": "S_DA_INIT_SYNC_ERROR",
+    "4032": "S_FT_ENABLE_DRAM_FAIL",
+}
+
+# Connecting the wrong player cannot be fixed by retrying or by switching
+# backends, so the flow stops and says so instead of looping.
+WRONG_MODEL_ERRORS = frozenset(
+    {"S_CHIP_TYPE_NOT_MATCH", "DEVICE_PACKAGE_MISMATCH", "SP_WRONG_MODEL"}
+)
+
+# The app's own code for "the command ran but never showed any progress": the
+# no-progress watchdog ended it and the flow may offer the other backend.
+ERR_ATTEMPT_TIMEOUT = "ERR_ATTEMPT_TIMEOUT"
+
+_SP_ERROR_NAME_RE = re.compile(r"(S_[A-Z0-9_]+)")
+
+
+def sp_error_name(value) -> str:
+    """``S_*`` name carried by a finished error code or tool message (or "")."""
+    match = _SP_ERROR_NAME_RE.search(str(value or "").upper())
+    return match.group(1) if match else ""
+
+
+def sp_error_code(value) -> str:
+    """Numeric MediaTek error code carried by a finished code (or "")."""
+    match = re.search(r"\((\d{3,5})\)", str(value or ""))
+    return match.group(1) if match else ""
+
+
+def is_wrong_model_error(value) -> bool:
+    """True when the failure means the wrong player is connected."""
+    text = str(value or "").upper()
+    if any(token in text for token in WRONG_MODEL_ERRORS):
+        return True
+    return sp_error_name(text) in WRONG_MODEL_ERRORS
+
+
+def describe_backend_error(value) -> str:
+    """Translated explanation of a backend failure, or "" when unknown.
+
+    Keeps a raw ``S_FT_DOWNLOAD_FAIL (4008)`` from being the only thing the
+    user ever sees.
+    """
+    if not value:
+        return ""
+    if is_wrong_model_error(value):
+        return tr("err_sp_wrong_model")
+    name = sp_error_name(value) or SP_ERROR_CODE_NAMES.get(sp_error_code(value), "")
+    key = SP_ERROR_GUIDANCE.get(name)
+    return tr(key) if key else ""
+
+
+# The BROM handshake failures. The console tool found the USB port but could
+# not start the boot ROM handshake; its own log says "Possibly target power up
+# too early", which is the real cause: the player was already powered/plugged
+# when the tool began scanning. The tool's message names the symptom, not the
+# fix, so these failures carry the one instruction that actually resolves them.
+BROM_HANDSHAKE_ERRORS = frozenset(
+    {
+        "S_BROM_CMD_STARTCMD_FAIL",
+        "S_BROM_CMD_START_FAIL",
+        "S_BROM_CMD_JUMP_DA_FAIL",
+    }
+)
+
+_BARE_CODE_RE = re.compile(r"(\d{3,5})")
+
+
+def is_brom_handshake_error(value) -> bool:
+    """True when a failure means the BROM handshake started too early.
+
+    Accepts anything the app passes around as an error: ``S_NAME (code)`` from
+    the console tool's log, a bare code (``SP_ERR_2005``), or the raw
+    ``err_code[2005]`` line.
+    """
+    text = str(value or "")
+    if not text:
+        return False
+    if sp_error_name(text) in BROM_HANDSHAKE_ERRORS:
+        return True
+    code = sp_error_code(text)
+    if not code:
+        # ``SP_ERR_2005`` / ``err_code[2005]`` carry the number with no
+        # parentheses; the table still names it.
+        match = _BARE_CODE_RE.search(text)
+        code = match.group(1) if match else ""
+    return bool(code) and SP_ERROR_CODE_NAMES.get(code, "") in BROM_HANDSHAKE_ERRORS
+
+
+def sp_brom_handshake_hint(value) -> str:
+    """Plain-English fix for a BROM handshake failure, else "".
+
+    The player has to be *powered off and unplugged* while the tool is
+    searching: plugging it in before the search starts is what makes the
+    handshake fail, and no amount of retrying or switching backends helps
+    until the order is right. It is plain English here; the caller decides how
+    to carry it (today it is appended to the failure the progress card shows).
+    """
+    if not is_brom_handshake_error(value):
+        return ""
+    return (
+        "Unplug the player, wait a few seconds, and plug it back in only once "
+        "the app is asking you to connect it — the tool has to be searching "
+        "before the player is powered on."
+    )
+
+
+def mtk_reset_to_normal(mtk, da_handler=None) -> bool:
+    """Reboot the player out of download mode after an MTKClient write.
+
+    This is mtkclient's own ``reset`` command (``daloader.shutdown(bootmode=0)``,
+    bootmode 0 == NORMAL): it tells the running DA to restart the target so the
+    freshly flashed firmware boots on its own, the way an SP Flash Tool run
+    already does, instead of leaving the player sitting in BROM/download mode
+    until the user power-cycles it.
+
+    Best effort by design: a player that fell off the bus or was already
+    power-cycled returns False and the (already successful) install stands.
+    """
+    loader = getattr(mtk, "daloader", None)
+    if loader is None or not hasattr(loader, "shutdown"):
+        loader = getattr(da_handler, "daloader", None)
+    if loader is None or not hasattr(loader, "shutdown"):
+        return False
+    try:
+        loader.shutdown(bootmode=0)
+    except BaseException as e:  # mtkclient may sys.exit() on a dead session
+        logger.debug("Post-install reboot could not be sent: %s", e)
+        return False
+    return True
 
 
 def classify_backend_line(line):
@@ -331,6 +576,13 @@ MTK_RECOVERY_WAIT_SECONDS = 60.0
 # One automatic retry after a DA failure (the target usually needs a power
 # cycle to come back), then the retry dialog takes over.
 MTK_DA_ATTEMPTS = 2
+# The app's own no-progress window, counted from the moment a backend command
+# starts. A command that has shown nothing by the time it elapses is ended by
+# the app (the vendor tools wait far longer), the countdown is refreshed when
+# the device is seen, and it is switched off as soon as the download agent or
+# the images start moving. SP Flash Tool's own connection window is set to the
+# same value through its console configuration file.
+ATTEMPT_PROGRESS_TIMEOUT = 30.0
 # The target re-enumerates while being restarted into BROM; the USB monitor
 # must not read that as the player being unplugged mid-flash.
 MTK_DEVICE_LOSS_GRACE_SECONDS = 90.0
@@ -363,6 +615,65 @@ def _wait_for_mtk_mode(pids, timeout):
         time.sleep(0.5)
 
 _SP_LOG_ROOT = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "SP_FT_Logs"
+
+# Console-mode SP Flash Tool runs this app started and has not reaped yet.
+# A cancel normally reaches the live process through the worker, but the
+# re-armed USB search spawns a fresh tool every couple of minutes; the pids are
+# kept here as well so switching to the desktop tool cannot leave a searching
+# flash_tool holding the USB port (or the tool's own settings files) behind.
+_SP_SESSION_PIDS: set = set()
+_SP_SESSION_LOCK = threading.Lock()
+
+
+def register_sp_session(pid) -> None:
+    """Remember a console-mode tool this app just started."""
+    try:
+        with _SP_SESSION_LOCK:
+            _SP_SESSION_PIDS.add(int(pid))
+    except Exception:
+        pass
+
+
+def unregister_sp_session(pid) -> None:
+    """Forget a console-mode tool that has exited."""
+    try:
+        with _SP_SESSION_LOCK:
+            _SP_SESSION_PIDS.discard(int(pid))
+    except Exception:
+        pass
+
+
+def active_sp_sessions() -> list:
+    """Pids of console-mode tool runs this app started and has not seen exit."""
+    with _SP_SESSION_LOCK:
+        return sorted(_SP_SESSION_PIDS)
+
+
+def terminate_sp_sessions() -> list:
+    """Stop any console-mode tool this app started. Returns the pids it killed.
+
+    Only pids this app spawned are touched, so a desktop tool the user opened
+    themselves is never killed; the process tree is taken down as well, because
+    flash_tool keeps a child for the device search.
+    """
+    killed = []
+    for pid in active_sp_sessions():
+        try:
+            if IS_WINDOWS:
+                subprocess.run(
+                    ["taskkill", "/PID", str(pid), "/T", "/F"],
+                    capture_output=True,
+                )
+            else:
+                os.kill(pid, signal.SIGKILL)
+            killed.append(pid)
+        except Exception as e:
+            logger.debug("Could not stop console tool pid %s: %s", pid, e)
+        finally:
+            unregister_sp_session(pid)
+    if killed:
+        logger.info("Stopped leftover SP Flash Tool console runs: %s", killed)
+    return killed
 
 # --- MediaTek preloader boot header constants (from vendor macOS build) -------
 _BOOT_HEADER_SIZE = 2048
@@ -1147,7 +1458,9 @@ class _StallWatcher(threading.Thread):
         self._on_stall = on_stall
         self._timeout = timeout
         self._interval = interval
-        self._stop = threading.Event()
+        # NB: not ``_stop`` — that name is a method on threading.Thread and
+        # shadowing it breaks join()/thread bookkeeping.
+        self._stopped = threading.Event()
         self._last = time.time()
         self._warned = False
 
@@ -1157,10 +1470,10 @@ class _StallWatcher(threading.Thread):
         self._warned = False
 
     def stop(self):
-        self._stop.set()
+        self._stopped.set()
 
     def run(self):
-        while not self._stop.wait(self._interval):
+        while not self._stopped.wait(self._interval):
             idle = time.time() - self._last
             if idle >= self._timeout and not self._warned:
                 self._warned = True
@@ -1168,6 +1481,63 @@ class _StallWatcher(threading.Thread):
                     self._on_stall(idle)
                 except Exception:
                     logger.debug("MTK stall callback failed", exc_info=True)
+
+
+class _AttemptWatchdog(threading.Thread):
+    """Counts down the app's own no-progress window for a backend command.
+
+    ``on_tick(remaining)`` is called once a second with the seconds left, so
+    the install card can show the countdown; ``on_expire()`` is called once
+    when it reaches zero. ``touch()`` refreshes the window (the device was
+    seen) and ``disarm()`` ends it for good (the transfer started), which
+    keeps a slow but working flash from ever being cut off.
+    """
+
+    def __init__(self, on_tick, on_expire, timeout=ATTEMPT_PROGRESS_TIMEOUT, interval=1.0):
+        super().__init__(daemon=True, name="AttemptWatchdog")
+        self._on_tick = on_tick
+        self._on_expire = on_expire
+        self._timeout = float(timeout)
+        self._interval = float(interval)
+        # Not ``_stop``: that is a threading.Thread method.
+        self._stopped = threading.Event()
+        self._lock = threading.Lock()
+        self._deadline = time.time() + float(timeout)
+        self._armed = True
+
+    def touch(self):
+        """The device was seen: start the window over."""
+        with self._lock:
+            if not self._armed:
+                return
+            self._deadline = time.time() + self._timeout
+
+    def disarm(self):
+        """Real progress began; the window no longer applies."""
+        with self._lock:
+            self._armed = False
+        self._stopped.set()
+
+    def stop(self):
+        self._stopped.set()
+
+    def run(self):
+        while not self._stopped.wait(self._interval):
+            with self._lock:
+                if not self._armed:
+                    return
+                remaining = self._deadline - time.time()
+            if remaining <= 0:
+                try:
+                    self._on_expire()
+                except Exception:
+                    logger.debug("Attempt timeout callback failed", exc_info=True)
+                return
+            try:
+                # Ceil: a partly-elapsed second still has time left in it.
+                self._on_tick(int(math.ceil(remaining)))
+            except Exception:
+                logger.debug("Attempt countdown tick failed", exc_info=True)
 
 
 # ---------------------------------------------------------------------------
@@ -1180,7 +1550,27 @@ class FlashWorker(QThread):
     progress = Signal(int)
     action_changed = Signal(str)
     log_message = Signal(str)
+    # Seconds left of the app's no-progress window while a backend command is
+    # still silent; 0 once the countdown ends (progress began, or it expired).
+    attempt_timeout = Signal(int)
+    # Seconds left of the write, measured from this install's own write rate;
+    # -1 while the rate is not yet known (the card shows elapsed time instead).
+    eta_changed = Signal(int)
     finished = Signal(bool, str)  # ok, error_code
+
+    # How many times an expired device search is restarted before the install
+    # is reported as failed. Each run searches for the tool's own configured
+    # timeout (two minutes as shipped), so four restarts keep the connect
+    # prompt true for roughly ten minutes; a device that never answers still
+    # ends as a failure rather than searching forever.
+    SP_SEARCH_RESTARTS = 4
+    SP_SEARCH_RESTART_PAUSE = 1.0
+    # Reboot the player out of download mode after a successful in-process
+    # MTKClient write (mtkclient's own ``reset``), so an MTKClient install ends
+    # the same way an SP Flash Tool one already does: with the player starting
+    # the firmware it was just given, no power-cycle by the user. Tests that
+    # stub the mtk session turn this off.
+    reboot_after_success = True
 
     def __init__(self, package_path, pre_extracted_dir="", method="auto", model="",
                  parent=None, device_loss_hold=None, da_file="", auth_file=""):
@@ -1205,13 +1595,23 @@ class FlashWorker(QThread):
         # with one of these is a failed install, whatever the exit code says.
         self._tool_error = ""
         self._process = None
+        # Set by the no-progress watchdog when it ends a backend command.
+        self._attempt_expired = False
+        self._attempt_watchdog = None
         self._sp_progress_hwm = 0
+        # Measured write rate for the ETA. Reset when the write phase begins:
+        # the handshake and the format are not the transfer being timed.
+        self._eta = ThroughputEta()
         self._sp_total_bytes = 0
         self._sp_completed_bytes = 0
         self._sp_last_part_total = 0
         self._sp_last_sent = 0
         self._sp_mismatch = False
         self._sp_err_code = None
+        # Actionable one-liner for the failure this run ended with (only the
+        # BROM handshake failures have one today), so the UI can explain a
+        # failure without re-parsing the tool's message itself.
+        self.error_hint = ""
         self._start_time = time.time()
         # Normalised SP Flash Tool console lines: used to skip the same line
         # when it is forwarded from the tool's internal QT_FLASH_TOOL.log.
@@ -1231,6 +1631,12 @@ class FlashWorker(QThread):
         self._past_usb_search = False
         # "before" until a search line. Please-wait is a later forward line.
         self._tool_wait_phase = PHASE_BEFORE
+        # A search that has begun and never seen the target: while that holds,
+        # the console run can be restarted without risking a half-written
+        # device, so the tool's own two-minute timeout does not end the install.
+        self._search_started = False
+        self._search_timed_out = False
+        self._device_seen = False
 
     # -- lifecycle ----------------------------------------------------------
     def cancel(self):
@@ -1270,6 +1676,69 @@ class FlashWorker(QThread):
         self.step_changed.emit(STEP_PLEASE_WAIT)
         self.progress.emit(0)
 
+    # -- attempt no-progress watchdog ---------------------------------------
+    def _start_attempt_watchdog(self, timeout=None):
+        """Arm the app's own no-progress window for a backend command.
+
+        Counted from the moment the command starts: a backend that never
+        reports the player, or goes quiet right after, is ended by the app
+        rather than left on the install card until the tool's own (much
+        longer) timeout. ``_touch_attempt`` refreshes it when the device is
+        seen and ``_note_install_progress`` switches it off once the download
+        agent or the images start moving.
+        """
+        self._stop_attempt_watchdog()
+        self._attempt_expired = False
+        try:
+            watchdog = _AttemptWatchdog(
+                self.attempt_timeout.emit,
+                self._expire_attempt,
+                timeout=timeout or ATTEMPT_PROGRESS_TIMEOUT,
+            )
+            watchdog.start()
+        except Exception:
+            logger.debug("Could not start the attempt watchdog", exc_info=True)
+            return None
+        self._attempt_watchdog = watchdog
+        return watchdog
+
+    def _stop_attempt_watchdog(self):
+        watchdog = getattr(self, "_attempt_watchdog", None)
+        self._attempt_watchdog = None
+        if watchdog is not None:
+            watchdog.stop()
+        try:
+            self.attempt_timeout.emit(0)
+        except Exception:
+            pass
+
+    def _touch_attempt(self):
+        """The backend reported the device: start the window over."""
+        watchdog = getattr(self, "_attempt_watchdog", None)
+        if watchdog is not None:
+            watchdog.touch()
+
+    def _note_install_progress(self):
+        """Real transfer began: the no-progress window no longer applies."""
+        watchdog = getattr(self, "_attempt_watchdog", None)
+        if watchdog is not None:
+            watchdog.disarm()
+
+    def _expire_attempt(self):
+        """End a backend command that showed nothing inside the window."""
+        if getattr(self, "_attempt_expired", False):
+            return
+        self._attempt_expired = True
+        self._log(
+            tr("err_attempt_timeout").format(seconds=int(ATTEMPT_PROGRESS_TIMEOUT))
+        )
+        process = getattr(self, "_process", None)
+        try:
+            if process is not None and process.poll() is None:
+                process.terminate()
+        except Exception:
+            logger.debug("Could not terminate a silent backend", exc_info=True)
+
     def _enter_usb_search(self):
         """The tool is on a search line. Show the connect sentence, still at 0%.
 
@@ -1277,6 +1746,7 @@ class FlashWorker(QThread):
         even after please-wait or a numbered stage.
         """
         already = getattr(self, "_tool_wait_phase", PHASE_BEFORE) == PHASE_CONNECT
+        self._search_started = True
         self._usb_search_active = True
         self._past_usb_search = False
         self._tool_wait_phase = PHASE_CONNECT
@@ -1306,6 +1776,13 @@ class FlashWorker(QThread):
         """A numbered stage started. A later search line may show connect again."""
         self._usb_search_active = False
         self._past_usb_search = True
+        self._device_seen = True
+        # The player answered, so the connect sentence is finished: mark the
+        # phase here rather than letting the next unrelated tool line decide.
+        self._tool_wait_phase = PHASE_PLEASE_WAIT
+        # The device answered: the app's window starts over instead of ending
+        # the run the moment it was making progress.
+        self._touch_attempt()
 
     def _classify_mtk_output(self, line):
         """Search and forward lines from MTKClient stdout or a ``[LOG]`` payload."""
@@ -1331,11 +1808,13 @@ class FlashWorker(QThread):
             or "connect da" in low
         ):
             self._leave_usb_search()
+            self._note_install_progress()
             self.step_changed.emit(STEP_DOWNLOAD_DA)
             self.progress.emit(12)
             return
         if "of image data has been sent" in low or "writing partition" in low:
             self._leave_usb_search()
+            self._note_install_progress()
             self.step_changed.emit(STEP_WRITE)
             return
 
@@ -1701,40 +2180,148 @@ class FlashWorker(QThread):
             ]
             self._log("Launching SP Flash Tool (console mode, searching USB)...")
             self._log("Keep the device unplugged until the connect prompt appears.")
-            guardian = None
-            self._process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-                cwd=str(sp_dir),
-                env=env,
-                creationflags=creationflags,
-            )
+
+            def spawn():
+                return subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1,
+                    cwd=str(sp_dir),
+                    env=env,
+                    creationflags=creationflags,
+                )
         else:
             cmd_args = sp_flash_tool_console_args(
                 scatter_arg, da_arg, auth_file, self._log
             )
             self._log("Preparing SP Flash Tool environment (Linux)...")
-            guardian = None
-            if os.name != "nt" and sys.platform.startswith("linux"):
-                try:
-                    guardian = linux_sp_flash.TtyAccessGuardian()
-                    guardian.start()
-                except Exception:
-                    guardian = None
 
-            self._process = linux_sp_flash.launch_linux_flash_tool(
-                stage=sp_dir,
-                cmd_args=cmd_args,
-                cwd=sp_dir,
-                env=env,
-                log_cb=self._log,
+            def spawn():
+                return linux_sp_flash.launch_linux_flash_tool(
+                    stage=sp_dir,
+                    cmd_args=cmd_args,
+                    cwd=sp_dir,
+                    env=env,
+                    log_cb=self._log,
+                )
+
+        exit_code, launch_time = self._sp_console_search(spawn, log_root)
+        if self._attempt_expired:
+            # Nothing happened inside the app's own window: report it as such
+            # so the flow can offer the other backend.
+            self.finished.emit(False, ERR_ATTEMPT_TIMEOUT)
+            return
+        if exit_code is None:
+            return
+
+        if self._sp_mismatch:
+            self.finished.emit(False, "DEVICE_PACKAGE_MISMATCH")
+            return
+        if exit_code == 0:
+            self.step_changed.emit(STEP_DONE)
+            self.progress.emit(100)
+            self._log("Flash complete! Disconnect USB and reboot the device.")
+            self.finished.emit(True, "")
+            return
+
+        log_success, error_detail = self._read_sp_log_result(launch_time, log_root)
+        if "CHIP_TYPE_NOT_MATCH" in str(error_detail).upper():
+            self.finished.emit(False, "DEVICE_PACKAGE_MISMATCH")
+        elif log_success:
+            self.step_changed.emit(STEP_DONE)
+            self.progress.emit(100)
+            self.finished.emit(True, "")
+        elif error_detail:
+            self._log(f"SP Flash Tool error: {error_detail}")
+            self._finish_sp_failure(str(error_detail))
+        elif self._sp_err_code:
+            # Name the number so the error page can explain it; the raw code
+            # stays in the message for support.
+            name = SP_ERROR_CODE_NAMES.get(str(self._sp_err_code), "")
+            self._finish_sp_failure(
+                f"{name} ({self._sp_err_code})" if name else f"SP_ERR_{self._sp_err_code}"
             )
+        else:
+            self._finish_sp_failure(f"SP_EXIT_{exit_code}")
+
+    def _finish_sp_failure(self, detail):
+        """Emit a failed SP run, carrying the hint that failure calls for.
+
+        ``S_BROM_CMD_STARTCMD_FAIL (2005)`` is the failure users hit most often
+        and the tool's own message ("Possibly target power up too early") does
+        not say what to do about it, so its hint travels on the error string the
+        progress card already shows. The raw code stays at the front of that
+        string, so :func:`sp_error_name` / :func:`sp_error_code` and the error
+        page's explanation keep working.
+        """
+        hint = sp_brom_handshake_hint(detail)
+        self.error_hint = hint
+        if hint:
+            self._log(f"Hint: {hint}")
+            detail = f"{detail} — {hint}"
+        self.finished.emit(False, str(detail))
+
+    def _sp_console_search(self, spawn, log_root):
+        """Run the console tool, re-arming its USB search while it expires unheard.
+
+        The tool's device search is bounded by its own ``option.ini``
+        (``[Conn] Timeout=3`` prints as "Search usb, timeout set as 120000 ms"),
+        and its ``-t`` switch is the battery mode, not a timeout: after two
+        minutes of nothing the run ends with ``S_TIMEOUT (1042)`` even though
+        the user is still following the on-screen connect prompt. Restarting the
+        search keeps that prompt true instead of failing the install under it.
+        Bounded, and only while no device has been seen, so a cable, driver or
+        device problem still ends as a failure rather than searching forever.
+
+        Returns ``(exit_code, launch_time)``; the exit code is ``None`` when the
+        user cancelled (the cancel signal has already been emitted).
+        """
+        attempts = 0
+        launch_time = time.time()
+        while True:
+            attempts += 1
+            launch_time = time.time()
+            exit_code = self._sp_console_run_once(spawn, log_root)
+            if exit_code is None:
+                return None, launch_time
+            if (
+                exit_code == 0
+                or self._sp_mismatch
+                or self._cancelled
+                or self._attempt_expired
+                or self._device_seen
+                or not (self._search_started and self._search_timed_out)
+                or attempts > self.SP_SEARCH_RESTARTS
+            ):
+                return exit_code, launch_time
+            self._log(tr("sp_search_restart").format(count=attempts))
+            # The run's own timeout lines read as forward progress and would
+            # leave the card on "please wait" while the player is still
+            # expected: put the connect sentence back before the next search.
+            self._enter_usb_search()
+            time.sleep(self.SP_SEARCH_RESTART_PAUSE)
+
+    def _sp_console_run_once(self, spawn, log_root):
+        """Launch the console tool once, stream it to the log, return its code.
+
+        ``None`` means the user cancelled: ``USER_CANCELLED`` has been emitted.
+        """
+        self._search_timed_out = False
+        guardian = None
+        if os.name != "nt" and sys.platform.startswith("linux"):
+            try:
+                guardian = linux_sp_flash.TtyAccessGuardian()
+                guardian.start()
+            except Exception:
+                guardian = None
+
+        self._process = spawn()
+        register_sp_session(getattr(self._process, "pid", 0))
+        self._start_attempt_watchdog()
 
         # Background thread tailing the SP Flash Tool log file.
-        launch_time = time.time()
         stop_monitor = threading.Event()
         monitor = threading.Thread(
             target=self._monitor_sp_log_file, args=(stop_monitor, log_root), daemon=True
@@ -1760,7 +2347,7 @@ class FlashWorker(QThread):
                     if guardian:
                         guardian.stop()
                     self.finished.emit(False, "USER_CANCELLED")
-                    return
+                    return None
                 self._classify_sp_stdout(line)
                 if self._sp_mismatch:
                     self._log("Device/package mismatch detected. Aborting.")
@@ -1779,33 +2366,10 @@ class FlashWorker(QThread):
                 except Exception:
                     pass
 
+        self._stop_attempt_watchdog()
         self._process.wait()
-        exit_code = self._process.returncode
-
-        if self._sp_mismatch:
-            self.finished.emit(False, "DEVICE_PACKAGE_MISMATCH")
-            return
-        if exit_code == 0:
-            self.step_changed.emit(STEP_DONE)
-            self.progress.emit(100)
-            self._log("Flash complete! Disconnect USB and reboot the device.")
-            self.finished.emit(True, "")
-            return
-
-        log_success, error_detail = self._read_sp_log_result(launch_time, log_root)
-        if "CHIP_TYPE_NOT_MATCH" in str(error_detail).upper():
-            self.finished.emit(False, "DEVICE_PACKAGE_MISMATCH")
-        elif log_success:
-            self.step_changed.emit(STEP_DONE)
-            self.progress.emit(100)
-            self.finished.emit(True, "")
-        elif error_detail:
-            self._log(f"SP Flash Tool error: {error_detail}")
-            self.finished.emit(False, str(error_detail))
-        elif self._sp_err_code:
-            self.finished.emit(False, f"SP_ERR_{self._sp_err_code}")
-        else:
-            self.finished.emit(False, f"SP_EXIT_{exit_code}")
+        unregister_sp_session(getattr(self._process, "pid", 0))
+        return self._process.returncode
 
     def _mapped_phase_percent(self, line, start, span):
         """Map a tool's own percent into a slice of the install bar."""
@@ -1820,6 +2384,10 @@ class FlashWorker(QThread):
             self._enter_usb_search()
             return
         low = line.lower()
+        if "searchusbportpool failed" in low or "failed to find usb port" in low:
+            # The console search gave up ("Connect BROM failed: S_TIMEOUT
+            # (1042)" follows). Only a restart can still catch a late player.
+            self._search_timed_out = True
         if "s_chip_type_not_match" in low:
             self._sp_mismatch = True
         elif "brom connected" in low:
@@ -1829,11 +2397,13 @@ class FlashWorker(QThread):
             self.action_changed.emit(tr("action_brom_detected"))
         elif "of da has been sent" in low:
             self._leave_usb_search()
+            self._note_install_progress()
             self.step_changed.emit(STEP_DOWNLOAD_DA)
             self.progress.emit(self._mapped_phase_percent(line, 12, 6))
             self.action_changed.emit(tr("action_downloading_da"))
         elif "of bootloader has been sent" in low:
             self._leave_usb_search()
+            self._note_install_progress()
             self.step_changed.emit(STEP_DOWNLOAD_BL)
             self.progress.emit(self._mapped_phase_percent(line, 16, 2))
             self.action_changed.emit(tr("action_downloading_bootloader"))
@@ -1844,6 +2414,11 @@ class FlashWorker(QThread):
             self.action_changed.emit(tr("action_format_succeeded"))
         elif "of image data has been sent" in low:
             self._leave_usb_search()
+            self._note_install_progress()
+            if not getattr(self, "_write_phase_started", False):
+                # First image bytes: this is the transfer the ETA is about.
+                self._write_phase_started = True
+                self._eta.reset()
             self.step_changed.emit(STEP_WRITE)
             self._update_sp_image_progress(line)
         elif "download ok" in low:
@@ -1862,38 +2437,50 @@ class FlashWorker(QThread):
         elif "error" in low and "fail" in low:
             self._log(f"Error: {line}")
 
+    def _emit_progress(self, mapped):
+        """Monotonic write-phase progress: a bar never goes backwards."""
+        mapped = int(min(95, max(20, mapped)))
+        if mapped > self._sp_progress_hwm:
+            self._sp_progress_hwm = mapped
+            self.progress.emit(mapped)
+
+    def _emit_eta(self, done, total):
+        """Publish the measured time remaining (``-1`` while it is unknown)."""
+        eta = self._eta.note(done, total)
+        self.eta_changed.emit(-1 if eta is None else int(eta))
+
     def _update_sp_image_progress(self, line):
+        """Overall progress and ETA from the tool's own byte counts.
+
+        The console reports ``62% of image data has been sent (441.62M of
+        711.46M)``: a fraction of *its* total, then the byte accounting behind
+        it. That parenthesised total is what the tool decided to write — it
+        auto-loads every image the scatter enables — so it, and not a sum this
+        app derives from the package's own file list, is the honest
+        denominator. Using the smaller app-side total made the bar run ahead of
+        the tool: it read "half way" while the much larger images were still to
+        come, which is precisely the case the estimate must get right.
+        """
         m = re.search(r"(\d+)%\s+of image data has been sent\s+\(([^)]+)\s+of\s+([^)]+)\)", line)
         if not m:
             m_simple = re.search(r"(\d+)%\s+of image data", line)
             if m_simple:
-                pct = int(m_simple.group(1))
-                mapped = 20 + int(pct * 0.75)
-                if mapped > self._sp_progress_hwm:
-                    self._sp_progress_hwm = mapped
-                    self.progress.emit(min(95, mapped))
+                pct = min(100, max(0, int(m_simple.group(1))))
+                self._emit_progress(percent_of(pct, 100, 20, 75))
                 self.action_changed.emit(tr("action_writing_image_fmt").format(pct=pct))
             return
+
         pct = int(m.group(1))
         sent = _parse_sp_size(m.group(2))
         total = _parse_sp_size(m.group(3))
-
-        if total != self._sp_last_part_total or sent < self._sp_last_sent:
-            if self._sp_last_part_total > 0:
-                self._sp_completed_bytes += self._sp_last_part_total
-            self._sp_last_part_total = total
-        self._sp_last_sent = sent
-
-        if self._sp_total_bytes > 0:
-            current_done = self._sp_completed_bytes + sent
-            ratio = min(1.0, max(0.0, current_done / self._sp_total_bytes))
-            mapped = 20 + int(ratio * 75)
+        if total <= 0:
+            total = self._sp_total_bytes
+        if total > 0:
+            self._sp_total_bytes = total
+            self._emit_progress(percent_of(sent, total, 20, 75))
+            self._emit_eta(sent, total)
         else:
-            mapped = 20 + int(pct * 0.75)
-
-        if mapped > self._sp_progress_hwm:
-            self._sp_progress_hwm = mapped
-            self.progress.emit(min(95, mapped))
+            self._emit_progress(percent_of(pct, 100, 20, 75))
         self.action_changed.emit(tr("action_writing_image_fmt").format(pct=pct))
 
     def _monitor_sp_log_file(self, stop_event, log_root=None):
@@ -2136,6 +2723,7 @@ class FlashWorker(QThread):
                 cwd=repo_root,
                 env=env,
             )
+            self._start_attempt_watchdog()
             for line in iter(self._process.stdout.readline, ""):
                 line = line.rstrip()
                 if not line:
@@ -2167,7 +2755,11 @@ class FlashWorker(QThread):
                     self._log(line)
                     self._classify_mtk_output(line)
 
+            self._stop_attempt_watchdog()
             self._process.wait()
+            if self._attempt_expired:
+                self.finished.emit(False, ERR_ATTEMPT_TIMEOUT)
+                return
             if self._cancelled:
                 self.finished.emit(False, "USER_CANCELLED")
                 return
@@ -2190,6 +2782,40 @@ class FlashWorker(QThread):
                         pass
             self._log(f"Failed to start flash CLI: {e}")
             self.finished.emit(False, "CLI_START_FAILED")
+
+    def _end_mtk_run_successfully(self, mtk, da_handler=None) -> None:
+        """The last step of a successful in-process MTKClient run.
+
+        Named so the reboot that closes the DA session has exactly one home:
+        the tool-error check in the run loop returns before this, so a failed
+        install never restarts the player into half-written firmware.
+        """
+        self.step_changed.emit(STEP_DONE)
+        self.progress.emit(100)
+        self.action_changed.emit(tr("action_flash_complete"))
+        # The DA session is still open: end it by starting the player, the way
+        # an SP Flash Tool run already leaves the device booting.
+        self._reboot_after_mtk_success(mtk, da_handler)
+        self.finished.emit(True, "")
+
+    def _reboot_after_mtk_success(self, mtk, da_handler=None) -> bool:
+        """Restart the player so the firmware just written boots by itself.
+
+        Only ever called on a successful in-process MTKClient run: the DA
+        session is still open at that point, and asking it to reboot leaves the
+        player starting the new firmware on its own instead of parked in
+        download mode waiting for a power cycle. Never raises — the install has
+        already succeeded and a device that rebooted or dropped off USB early
+        must not turn that into a failure.
+        """
+        if not self.reboot_after_success:
+            self._log("Flash complete! Disconnect USB and reboot the device.")
+            return False
+        if mtk_reset_to_normal(mtk, da_handler):
+            self._log("Flash complete! Rebooting the player into the installed firmware...")
+            return True
+        self._log("Flash complete! Disconnect USB and reboot the device.")
+        return False
 
     def _flash_via_mtkclient_core(self, extract_dir, scatter_file, platform="", da_file="", auth_file=""):
         # Raw output printed while this backend runs comes from MTKClient.
@@ -2469,9 +3095,8 @@ class FlashWorker(QThread):
                 return
             current_done = completed_bytes + pos
             if total_bytes > 0:
-                ratio = min(1.0, max(0.0, current_done / total_bytes))
-                mapped = 20 + int(ratio * 75)
-                self.progress.emit(min(95, max(20, mapped)))
+                self._emit_progress(percent_of(current_done, total_bytes, 20, 75))
+                self._emit_eta(current_done, total_bytes)
 
         if hasattr(mtk, "config"):
             mtk.config.guiprogress = _ProgressEmitter(on_mtk_write_progress)
@@ -2488,6 +3113,7 @@ class FlashWorker(QThread):
                     self._leave_usb_search()
                     self.step_changed.emit(STEP_WRITE)
                     self.progress.emit(20)
+                    self._eta.reset()
                     self.action_changed.emit(tr("action_install_in_progress"))
                     self._log(tr("log_install_writing"))
                 self._log(tr("action_writing_part_fmt").format(
@@ -2574,8 +3200,8 @@ class FlashWorker(QThread):
                     if file_path.exists():
                         completed_bytes += file_path.stat().st_size
                     if total_bytes > 0:
-                        mapped = 20 + int(min(1.0, completed_bytes / total_bytes) * 75)
-                        self.progress.emit(min(95, max(20, mapped)))
+                        self._emit_progress(percent_of(completed_bytes, total_bytes, 20, 75))
+                        self._emit_eta(completed_bytes, total_bytes)
 
             # 3. Format/wipe userdata and cache to ensure clean boot without encryption/stale data bootloops
             self._log("Formatting userdata and cache...")
@@ -2603,11 +3229,7 @@ class FlashWorker(QThread):
                 self.step_changed.emit(STEP_WRITE)
                 self.finished.emit(False, "TOOL_ERROR")
                 return
-            self.step_changed.emit(STEP_DONE)
-            self.progress.emit(100)
-            self.action_changed.emit(tr("action_flash_complete"))
-            self._log("Flash complete! Disconnect USB and reboot the device.")
-            self.finished.emit(True, "")
+            self._end_mtk_run_successfully(mtk, da_handler)
         finally:
             watcher.stop()
             # Hand mtkclient's messages back to its own logging so nothing is
@@ -2968,6 +3590,10 @@ class FlashService(QObject):
     progress = Signal(int)
     action_changed = Signal(str)
     log_message = Signal(str)
+    attempt_timeout = Signal(int)
+    # Seconds left of the write, measured from this install's own write rate;
+    # -1 while that rate is not yet known.
+    eta_changed = Signal(int)
     flash_finished = Signal(bool, str)
     extract_finished = Signal(bool, str, str)  # ok, extract_dir, err
     extract_progress = Signal(int)
@@ -3019,6 +3645,8 @@ class FlashService(QObject):
         worker.progress.connect(self.progress)
         worker.action_changed.connect(self.action_changed)
         worker.log_message.connect(self.log_message)
+        worker.attempt_timeout.connect(self.attempt_timeout)
+        worker.eta_changed.connect(self.eta_changed)
         worker.finished.connect(self.flash_finished)
         worker.finished.connect(lambda ok, err, w=worker: self._on_flash_done(w, ok, err))
         worker.start()
@@ -3049,7 +3677,8 @@ class FlashService(QObject):
     @staticmethod
     def _detach_worker(worker):
         for sig in (worker.step_changed, worker.progress, worker.action_changed,
-                    worker.log_message, worker.finished):
+                    worker.log_message, worker.attempt_timeout, worker.eta_changed,
+                    worker.finished):
             try:
                 sig.disconnect()
             except Exception:
@@ -3076,6 +3705,35 @@ class FlashService(QObject):
             self._device_monitor.stop()
             if self._device_monitor.isRunning():
                 self._device_monitor.wait(2000)
+
+    def terminate_install_sessions(self, timeout: float = 8.0) -> str:
+        """Stop every session this app started, before another route takes over.
+
+        The desktop tool opens the same USB port and reads the same history.ini
+        the guided backends use, so the backends are stopped *and* waited for:
+        ``cancel_flash`` only asks a worker to stop, and an MTKClient run
+        unwinds on its own thread. Returns a short report for the log.
+        """
+        worker = self.cancel_flash()
+        self.cancel_extract()
+        self.stop_device_monitor()
+        waited = None
+        if worker is not None and hasattr(worker, "wait"):
+            try:
+                if worker.isRunning() if hasattr(worker, "isRunning") else True:
+                    worker.wait(int(timeout * 1000))
+                    waited = worker.isRunning() if hasattr(worker, "isRunning") else False
+            except Exception:
+                logger.debug("Waiting for the install worker failed", exc_info=True)
+        killed = terminate_sp_sessions()
+        if worker is None and not killed:
+            return "No install session was running."
+        if waited:
+            return (
+                "The previous install backend is still stopping; "
+                f"stopped {len(killed)} leftover tool run(s)."
+            )
+        return f"Stopped the previous install session ({len(killed)} tool run(s))."
 
     def cleanup(self):
         self.cancel_flash()

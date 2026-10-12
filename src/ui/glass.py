@@ -507,7 +507,14 @@ def configure_traffic_lights(
 
 
 def ensure_window_maximize_enabled(window: QMainWindow | QWidget) -> bool:
-    """Ensure window maximize button is enabled across macOS and Windows/Linux."""
+    """Ensure window maximize is enabled across macOS, Windows and Linux.
+
+    Qt keeps its own maximize hint, but the live window's ``WS_MAXIMIZEBOX``
+    style bit can be missing (measured on Windows 11: Qt's hint is set while
+    the style bit is not), which silently disables the maximize button, Aero
+    Snap and the snap-layout gestures. On Windows the bit is re-added with a
+    frame change; elsewhere this stays a flag-only, safe no-op.
+    """
     try:
         from PySide6.QtCore import Qt
         if not window.isVisible():
@@ -518,6 +525,22 @@ def ensure_window_maximize_enabled(window: QMainWindow | QWidget) -> bool:
 
     if IS_MACOS:
         enable_macos_zoom_button(window)
+    elif IS_WINDOWS:
+        try:
+            import ctypes
+
+            GWL_STYLE = -16
+            WS_MAXIMIZEBOX = 0x00010000
+            SWP = 0x0001 | 0x0002 | 0x0004 | 0x0020  # NOSIZE|NOMOVE|NOZORDER|NOACTIVATE
+            hwnd = int(window.winId())
+            user32 = ctypes.windll.user32
+            style = user32.GetWindowLongW(hwnd, GWL_STYLE)
+            if not (style & WS_MAXIMIZEBOX):
+                user32.SetWindowLongW(hwnd, GWL_STYLE, style | WS_MAXIMIZEBOX)
+                user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, SWP)
+                logger.debug("Restored WS_MAXIMIZEBOX on the window")
+        except Exception as e:
+            logger.debug("Could not restore WS_MAXIMIZEBOX: %s", e)
     return True
 
 

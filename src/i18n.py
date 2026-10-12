@@ -16,6 +16,7 @@ startup. ``tr()`` prefers the catalog, then the tables here, then English.
 import json
 import logging
 import os
+import string
 import sys
 from pathlib import Path
 
@@ -924,6 +925,12 @@ _STRINGS: dict = {
         "fr": "Fichier d'authentification utilisé : {path}",
         "es": "Usando archivo de autenticación: {path}",
     },
+    "sp_search_restart": {
+        "zh-CN": "尚未检测到设备，重新开始搜索（第 {count} 次）…",
+        "en": "No device yet — searching again (attempt {count}). Keep the player powered off and connect it when prompted.",
+        "fr": "Aucun appareil détecté — nouvelle recherche (tentative {count}). Laissez le lecteur éteint et branchez-le quand l'invite apparaît.",
+        "es": "Aún no hay dispositivo — buscando de nuevo (intento {count}). Deja el reproductor apagado y conéctalo cuando se indique.",
+    },
     "sp_auth_missing_file": {
         "zh-CN": "找不到身份验证文件（{path}）；将在没有它的情况下刷机。",
         "en": "Authentication file not found ({path}); flashing without it.",
@@ -1332,6 +1339,52 @@ _STRINGS: dict = {
         "de": "Wähle zuerst ein Firmware-Paket.",
         "ja": "先にファームウェアを選んでください。",
     },
+    # Settings: run installs with superuser rights. The platform's own
+    # elevation question, asked once for the app so every install method it
+    # spawns (SP Flash Tool console, SP Flash Tool GUI, MTKClient, terminal)
+    # runs with the same rights.
+    "settings_run_as_admin": {
+        "zh-CN": "以管理员身份运行",
+        "en": "Run as administrator",
+        "fr": "Exécuter en tant qu'administrateur",
+        "es": "Ejecutar como administrador",
+    },
+    "settings_run_as_admin_desc": {
+        "zh-CN": "开始安装时向 Windows 请求管理员权限。SP Flash Tool 与 MTKClient 将以完整权限运行——当驱动或端口无法打开时的排查途径。",
+        "en": "Ask Windows for administrator rights when an install starts. SP Flash Tool and MTKClient then run with full access — a troubleshooting route when a driver or port refuses to open.",
+        "fr": "Demander les droits d'administrateur à Windows au début d'une installation. SP Flash Tool et MTKClient disposent alors d'un accès complet — une piste de dépannage quand un pilote ou un port refuse de s'ouvrir.",
+        "es": "Pedir permisos de administrador a Windows al iniciar una instalación. SP Flash Tool y MTKClient tendrán acceso completo: una vía de diagnóstico cuando un controlador o un puerto no se abre.",
+    },
+    "settings_run_as_superuser": {
+        "zh-CN": "以超级用户身份运行",
+        "en": "Run as superuser",
+        "fr": "Exécuter en tant que superutilisateur",
+        "es": "Ejecutar como superusuario",
+    },
+    "settings_run_as_superuser_desc": {
+        "zh-CN": "通过 pkexec 以 root 权限运行安装。当权限错误阻止刷机工具时使用。",
+        "en": "Run installs with root rights through pkexec. Use it when a permission error blocks the flash tool.",
+        "fr": "Exécuter les installations avec les droits root via pkexec. À utiliser lorsqu'une erreur de permission bloque l'outil de flash.",
+        "es": "Ejecutar las instalaciones con permisos de root mediante pkexec. Úsalo cuando un error de permisos bloquee la herramienta de flasheo.",
+    },
+    "settings_run_as_admin_restart_needed": {
+        "zh-CN": "Updater CE 需要重启，安装才能获得这些权限。",
+        "en": "Updater CE must restart for installs to run with these rights.",
+        "fr": "Updater CE doit redémarrer pour que les installations disposent de ces droits.",
+        "es": "Updater CE debe reiniciarse para que las instalaciones tengan estos permisos.",
+    },
+    "settings_run_as_admin_restart": {
+        "zh-CN": "以管理员身份重启",
+        "en": "Restart as administrator",
+        "fr": "Redémarrer en tant qu'administrateur",
+        "es": "Reiniciar como administrador",
+    },
+    "settings_run_as_admin_unavailable": {
+        "zh-CN": "此桌面没有可用的提权工具。",
+        "en": "This desktop has no elevation helper available.",
+        "fr": "Ce bureau n'a aucun outil d'élévation disponible.",
+        "es": "Este escritorio no tiene ninguna herramienta de elevación disponible.",
+    },
     "flash_preparing": {
         "zh-CN": "正在准备固件包… 请暂时保持设备未连接。",
         "en": "Preparing firmware package… Keep the device unplugged for now.",
@@ -1591,6 +1644,36 @@ _STRINGS: dict = {
         "en": "Failed to launch SP Flash Tool GUI:",
         "fr": "Échec du lancement de l'interface graphique SP Flash Tool :",
         "es": "No se pudo iniciar la interfaz gráfica de SP Flash Tool:",
+    },
+    "sp_gui_preparing_firmware": {
+        "en": "The firmware package is incomplete — downloading and extracting it before opening SP Flash Tool.",
+        "zh-CN": "固件包不完整——正在下载并解压，然后打开 SP Flash Tool。",
+        "fr": "Le paquet de micrologiciel est incomplet — téléchargement et extraction avant d'ouvrir SP Flash Tool.",
+        "es": "El paquete de firmware está incompleto: se descargará y extraerá antes de abrir SP Flash Tool.",
+    },
+    "install_needs_admin_title": {
+        "en": "Administrator rights",
+        "zh-CN": "管理员权限",
+        "fr": "Droits d'administrateur",
+        "es": "Permisos de administrador",
+    },
+    "install_needs_admin_body": {
+        "en": "\"Run as administrator\" is on in Settings. Updater CE restarts with those rights so the flash tools run with them too — the install must be started again after the restart. Restart now?",
+        "zh-CN": "设置中已开启“以管理员身份运行”。Updater CE 将以该权限重启，刷机工具也会随之获得权限——重启后需再次开始安装。现在重启？",
+        "fr": "« Exécuter en tant qu'administrateur » est activé dans les réglages. Updater CE redémarre avec ces droits, et les outils de flash aussi — l'installation devra être relancée après le redémarrage. Redémarrer maintenant ?",
+        "es": "\"Ejecutar como administrador\" está activado en Ajustes. Updater CE se reiniciará con esos permisos y las herramientas de flasheo también; la instalación debe iniciarse de nuevo tras el reinicio. ¿Reiniciar ahora?",
+    },
+    "install_without_admin": {
+        "en": "Continuing without administrator rights.",
+        "zh-CN": "将在没有管理员权限的情况下继续。",
+        "fr": "Poursuite sans droits d'administrateur.",
+        "es": "Se continúa sin permisos de administrador.",
+    },
+    "install_restarting_as_admin": {
+        "en": "Restarting Updater CE with administrator rights…",
+        "zh-CN": "正在以管理员权限重启 Updater CE…",
+        "fr": "Redémarrage d'Updater CE avec les droits d'administrateur…",
+        "es": "Reiniciando Updater CE con permisos de administrador…",
     },
     "sp_gui_no_cached_firmware": {
         "zh-CN": "未找到上次安装尝试缓存的固件包，或缺少所需的分区镜像。请在打开 SP Flash Tool 之前，先选择或下载一个固件版本。",
@@ -2214,6 +2297,41 @@ _STRINGS: dict = {
         "fr": "ce firmware",
         "es": "este firmware",
     },
+    # The note under a finished install. It says what just happened first, then
+    # asks — the install is the reason the reader is here, and the ask lands
+    # much better once the job is visibly done.
+    "donate_completion_headline": {
+        "zh-CN": "装好了，<span style='color:#ff5252; text-decoration:underline;'>谢谢你</span>。",
+        "en": "All done — thank <span style='color:#ff5252; text-decoration:underline;'>you</span>.",
+        "fr": "C'est fait — <span style='color:#ff5252; text-decoration:underline;'>merci</span> à vous.",
+        "es": "Listo — <span style='color:#ff5252; text-decoration:underline;'>gracias</span> a ti.",
+        "de": "Fertig — <span style='color:#ff5252; text-decoration:underline;'>danke</span> dir.",
+        "ja": "完了しました — <span style='color:#ff5252; text-decoration:underline;'>ありがとう</span>。",
+    },
+    "donate_completion_subtitle": {
+        "zh-CN": "{software} 已成功安装到你的 {model}。",
+        "en": "{software} is installed on your {model}.",
+        "fr": "{software} est installé sur votre {model}.",
+        "es": "{software} ya está instalado en tu {model}.",
+        "de": "{software} ist auf deinem {model} installiert.",
+        "ja": "{model} に {software} をインストールしました。",
+    },
+    "donate_completion_body": {
+        "zh-CN": "Updater CE 完全免费，没有广告，也不追踪你——它靠大家的小额捐助运行。如果它今天帮到了你，请我喝杯咖啡，就能让下载和服务器继续跑下去。",
+        "en": "Updater CE is free, has no ads and no tracking — it runs on small donations from people like you. If it saved you a job today, buying me a coffee keeps the downloads and the servers running.",
+        "fr": "Updater CE est gratuit, sans publicité ni suivi — il fonctionne grâce aux petits dons de gens comme vous. S'il vous a épargné du travail aujourd'hui, un café permet de payer les téléchargements et les serveurs.",
+        "es": "Updater CE es gratis, sin anuncios ni rastreo: funciona con pequeñas donaciones de gente como tú. Si hoy te ahorró trabajo, un café mantiene las descargas y los servidores en marcha.",
+        "de": "Updater CE ist kostenlos, ohne Werbung und ohne Tracking — es lebt von kleinen Spenden von Leuten wie dir. Wenn es dir heute Arbeit erspart hat, hält ein Kaffee die Downloads und Server am Laufen.",
+        "ja": "Updater CE は無料で、広告も追跡もありません。皆さんの少額の寄付で動いています。今日、手間が省けたなら、コーヒー一杯がダウンロードとサーバーを支えます。",
+    },
+    "donate_completion_coffee": {
+        "zh-CN": "请我喝杯咖啡",
+        "en": "Buy me a coffee",
+        "fr": "Offrez-moi un café",
+        "es": "Invítame a un café",
+        "de": "Spendier mir einen Kaffee",
+        "ja": "コーヒーをおごる",
+    },
     "donate_intro_success_mediatek": {
         "zh-CN": "我们已将 <b>{software}</b> 安装到您的 <b>{model}</b>。<br><br>你好！我是 Ryan，MediaTek 安装工具的开发者。我自掏腰包承担托管和存储费用，以保持这个安装工具免费开放。如果它帮到了您，请考虑捐赠——这让项目能持续为大家服务。",
         "en": "We've installed <b>{software}</b> on your <b>{model}</b>.<br><br>Hey! I'm Ryan, the developer behind MediaTek Installer. I cover hosting and storage costs out of pocket to keep this installer free and open. If it helped you, please consider donating — it keeps the project alive for everyone.",
@@ -2565,10 +2683,23 @@ _STRINGS: dict = {
         "es": "Aún no se ha registrado ninguna instalación de dispositivo. Flashee un dispositivo para habilitar el seguimiento.",
     },
     "settings_donations_group": {
-        "zh-CN": "社区鸣谢与捐赠选项",
-        "en": "Community Acknowledgements & Donations",
-        "fr": "Remerciements communautaires et dons",
-        "es": "Agradecimientos a la comunidad y donaciones",
+        "zh-CN": "显示应用支持者鸣谢与捐赠",
+        "en": "Show App Supporter Credits and Donations",
+        "fr": "Afficher les crédits des soutiens et les dons",
+        "es": "Mostrar créditos de patrocinadores y donaciones",
+        "de": "Unterstützer-Danksagungen und Spenden anzeigen",
+        "ja": "支援者のクレジットと寄付を表示",
+    },
+    # The switch on that card's own title line: on = credits and donation
+    # prompts are shown. The wording is the same as the card title, which is
+    # why the card uses a title-row switch and keeps no second caption.
+    "settings_show_donations": {
+        "zh-CN": "显示应用支持者鸣谢与捐赠",
+        "en": "Show App Supporter Credits and Donations",
+        "fr": "Afficher les crédits des soutiens et les dons",
+        "es": "Mostrar créditos de patrocinadores y donaciones",
+        "de": "Unterstützer-Danksagungen und Spenden anzeigen",
+        "ja": "支援者のクレジットと寄付を表示",
     },
     "settings_hide_donations": {
         "zh-CN": "关闭捐赠 / 致谢",
@@ -2579,12 +2710,12 @@ _STRINGS: dict = {
         "ja": "寄付 / クレジットをオフにする",
     },
     "settings_hide_donations_tip": {
-        "zh-CN": "隐藏捐赠提示和按钮。如果你愿意，仍可在设置中请我喝咖啡。",
-        "en": "Hides donation prompts and buttons. You can still buy a coffee from Settings if you like.",
-        "fr": "Masque les invites et les boutons de don. Vous pouvez toujours offrir un café depuis les réglages.",
-        "es": "Oculta los avisos y botones de donación. Aún puedes invitarme a un café desde Ajustes.",
-        "de": "Blendet Spendenhinweise und Schaltflächen aus. Einen Kaffee kannst du weiterhin in den Einstellungen spendieren.",
-        "ja": "寄付の案内とボタンを隠します。設定からコーヒーをご馳走することはできます。",
+        "zh-CN": "显示捐赠提示和按钮。关闭即可隐藏它们；你仍可在设置中请我喝咖啡。",
+        "en": "Shows credits and donation prompts. Turn it off to hide them — you can still buy a coffee from Settings any time.",
+        "fr": "Affiche les crédits et les invites de don. Désactivez pour les masquer — vous pouvez toujours offrir un café depuis les réglages.",
+        "es": "Muestra créditos y avisos de donación. Desactívalo para ocultarlos: aún puedes invitar a un café desde Ajustes.",
+        "de": "Zeigt Danksagungen und Spendenhinweise. Ausschalten blendet sie aus — einen Kaffee kannst du jederzeit in den Einstellungen spendieren.",
+        "ja": "クレジットと寄付の案内を表示します。オフにすると非表示になります（設定からいつでもコーヒーをご馳走できます）。",
     },
     "settings_donations_dismiss": {
         "zh-CN": "以后不再显示",
@@ -3241,6 +3372,46 @@ _STRINGS: dict = {
         "de": "{software} wurde installiert. {steps}",
         "ja": "{software} のインストールが完了しました。{steps}",
     },
+    "flash_watch_waiting": {
+        "zh-CN": "正在等待播放器重新启动……",
+        "en": "Waiting for your player to restart…",
+        "fr": "En attente du redémarrage de votre lecteur…",
+        "es": "Esperando a que tu reproductor se reinicie…",
+        "de": "Warte auf den Neustart deines Players…",
+        "ja": "プレーヤーの再起動を待っています…",
+    },
+    "flash_watch_waiting_hint": {
+        "zh-CN": "请保持连接——Rockbox 正在启动，主题将自动添加。",
+        "en": "Keep it plugged in — Rockbox is starting up and its themes will be added automatically.",
+        "fr": "Laissez-le branché — Rockbox démarre et ses thèmes seront ajoutés automatiquement.",
+        "es": "Déjalo conectado: Rockbox se está iniciando y sus temas se añadirán automáticamente.",
+        "de": "Lass es angesteckt — Rockbox startet und seine Themes werden automatisch hinzugefügt.",
+        "ja": "接続したままにしてください。Rockbox が起動中で、テーマは自動的に追加されます。",
+    },
+    "flash_watch_found": {
+        "zh-CN": "已检测到播放器——正在添加 Rockbox 主题……",
+        "en": "Player detected — adding Rockbox themes…",
+        "fr": "Lecteur détecté — ajout des thèmes Rockbox…",
+        "es": "Reproductor detectado: añadiendo temas de Rockbox…",
+        "de": "Player erkannt — Rockbox-Themes werden hinzugefügt…",
+        "ja": "プレーヤーを検出しました。Rockbox テーマを追加しています…",
+    },
+    "flash_watch_timeout": {
+        "zh-CN": "播放器尚未重新启动。",
+        "en": "Your player has not come back yet.",
+        "fr": "Votre lecteur n'est pas encore revenu.",
+        "es": "Tu reproductor aún no ha vuelto.",
+        "de": "Dein Player ist noch nicht zurück.",
+        "ja": "プレーヤーがまだ戻ってきていません。",
+    },
+    "flash_watch_timeout_hint": {
+        "zh-CN": "请检查是否已连接并开机。若仍然黑屏，请用针按住复位孔，并按住中心按钮（Y1）或电源键（其他机型）重新启动。若仍无法启动，说明固件未成功刷入，请安装其他固件。",
+        "en": "Check that it is plugged in and switched on. If it stays dark, press a pin into the reset hole and hold the centre button (Y1) or the power button (other players) to restart it. If it still will not start, the firmware did not take — install another one.",
+        "fr": "Vérifiez qu'il est branché et allumé. S'il reste éteint, enfoncez une aiguille dans le trou de réinitialisation et maintenez le bouton central (Y1) ou le bouton d'alimentation (autres lecteurs) pour le redémarrer. S'il ne démarre toujours pas, le firmware n'a pas pris — installez-en un autre.",
+        "es": "Comprueba que está conectado y encendido. Si sigue apagado, introduce un alfiler en el orificio de reinicio y mantén pulsado el botón central (Y1) o el botón de encendido (otros reproductores) para reiniciarlo. Si aún no arranca, el firmware no se aplicó: instala otro.",
+        "de": "Prüfe, ob es angesteckt und eingeschaltet ist. Bleibt es dunkel, stecke eine Nadel in das Reset-Loch und halte die mittlere Taste (Y1) bzw. die Power-Taste (andere Player) gedrückt, um es neu zu starten. Startet es weiterhin nicht, hat die Firmware nicht gegriffen — installiere eine andere.",
+        "ja": "接続と電源が入っているか確認してください。真っ暗なままなら、リセット穴にピンを差し、センターボタン（Y1）または電源ボタン（その他の機種）を押し続けて再起動します。それでも起動しない場合は、ファームウェアが入っていません。別のファームウェアをインストールしてください。",
+    },
     "install_disconnect_guidance_fmt": {
         "zh-CN": "继续之前，请：\n\n1. 如果尚未关机，请关闭您的 {label}\n   （如有需要，可用针或回形针按下复位键）\n\n2. 如果已连接，请从 {label} 上拔下 USB 线\n\n然后点击“确定”并按照屏幕上的说明操作。",
         "en": "Before continuing, please:\n\n1. If it isn't already off, power off your {label}\n   (You can use a pin or paperclip to press the reset button if needed)\n\n2. If it is connected, disconnect the USB cable from your {label}\n\nThen click OK and follow the on-screen instructions.",
@@ -3437,6 +3608,98 @@ _STRINGS: dict = {
         "en": "Internal error",
         "fr": "Erreur interne",
         "es": "Error interno",
+    },
+    # Backend failures explained in the user's terms. The raw tool name/code
+    # stays in the Error Code row above them.
+    "err_sp_wrong_model_title": {
+        "zh-CN": "连接了错误的型号",
+        "en": "Wrong Model Connected",
+        "fr": "Mauvais modèle connecté",
+        "es": "Modelo incorrecto conectado",
+    },
+    "err_sp_wrong_model": {
+        "zh-CN": "连接的播放器型号与本刷机包的目标型号不同。请断开该设备，然后为此播放器安装正确的固件。",
+        "en": "The connected player is a different model than this package targets. Disconnect it, then install the firmware built for this player.",
+        "fr": "Le lecteur connecté n'est pas le modèle visé par ce paquet. Débranchez-le, puis installez le firmware prévu pour ce lecteur.",
+        "es": "El reproductor conectado no es el modelo al que apunta este paquete. Desconéctelo e instale el firmware de este reproductor.",
+    },
+    "err_sp_timeout": {
+        "zh-CN": "工具没有检测到播放器。请让播放器保持关机并断开，然后在提示连接时再插入 USB。",
+        "en": "The tool never saw the player. Keep it powered off and unplugged, then connect the USB cable when prompted.",
+        "fr": "L'outil n'a pas vu le lecteur. Laissez-le éteint et débranché, puis branchez le câble USB à l'invite.",
+        "es": "La herramienta no detectó el reproductor. Déjelo apagado y desconectado y conecte el USB cuando se le indique.",
+    },
+    "err_sp_brom_startcmd": {
+        "zh-CN": "播放器启动过早。请完全关机后重新连接。",
+        "en": "The player powered up too early. Power it off completely, then connect it again.",
+        "fr": "Le lecteur s'est allumé trop tôt. Éteignez-le complètement, puis rebranchez-le.",
+        "es": "El reproductor se encendió demasiado pronto. Apáguelo por completo y vuelva a conectarlo.",
+    },
+    "err_sp_download_fail": {
+        "zh-CN": "写入被中断。请检查 USB 线与端口以及电池电量，然后重试。",
+        "en": "Writing was interrupted. Check the USB cable and port and the battery charge, then try again.",
+        "fr": "L'écriture a été interrompue. Vérifiez le câble et le port USB ainsi que la batterie, puis réessayez.",
+        "es": "La escritura se interrumpió. Compruebe el cable y el puerto USB y la batería, y vuelva a intentarlo.",
+    },
+    "err_sp_da_init_sync": {
+        "zh-CN": "下载代理（DA）无法启动。请尝试另一种刷机方式。",
+        "en": "The download agent could not start. Try the other flash method.",
+        "fr": "L'agent de téléchargement n'a pas pu démarrer. Essayez l'autre méthode de flashage.",
+        "es": "El agente de descarga no pudo iniciarse. Pruebe el otro método de flasheo.",
+    },
+    "err_sp_brom_da_fail": {
+        "zh-CN": "无法向播放器发送下载代理。请将播放器关机后重新连接。",
+        "en": "The download agent could not be sent to the player. Power it off and reconnect.",
+        "fr": "L'agent de téléchargement n'a pas pu être envoyé. Éteignez le lecteur et rebranchez-le.",
+        "es": "No se pudo enviar el agente de descarga. Apague el reproductor y vuelva a conectarlo.",
+    },
+    "err_sp_com_port": {
+        "zh-CN": "工具无法打开串口。请关闭其他刷机工具后重新连接。",
+        "en": "The tool could not open its serial port. Close other flashing tools and reconnect.",
+        "fr": "L'outil n'a pas pu ouvrir son port série. Fermez les autres outils de flashage et rebranchez.",
+        "es": "La herramienta no pudo abrir su puerto serie. Cierre otras herramientas de flasheo y vuelva a conectar.",
+    },
+    "err_sp_enable_dram": {
+        "zh-CN": "工具无法初始化播放器的内存。请使用专为此型号构建的刷机包。",
+        "en": "The tool could not start the player's memory. Use the package built for this exact model.",
+        "fr": "L'outil n'a pas pu initialiser la mémoire du lecteur. Utilisez le paquet prévu pour ce modèle.",
+        "es": "La herramienta no pudo iniciar la memoria del reproductor. Use el paquete de este modelo exacto.",
+    },
+    "err_sp_storage_read": {
+        "zh-CN": "工具无法读取播放器的存储。请检查连接；设备可能存在硬件故障。",
+        "en": "The tool could not read the player's storage. Check the connection; the device may have a hardware fault.",
+        "fr": "L'outil n'a pas pu lire le stockage du lecteur. Vérifiez la connexion ; l'appareil a peut-être un défaut matériel.",
+        "es": "La herramienta no pudo leer el almacenamiento del reproductor. Compruebe la conexión; puede haber un fallo de hardware.",
+    },
+    "err_attempt_timeout_title": {
+        "zh-CN": "设备无响应",
+        "en": "The device did not respond",
+        "fr": "L'appareil n'a pas répondu",
+        "es": "El dispositivo no respondió",
+    },
+    "err_attempt_timeout": {
+        "zh-CN": "刷机工具在 {seconds} 秒内没有检测到进度，已停止本次尝试。",
+        "en": "The flashing tool showed no progress within {seconds} seconds, so this attempt was stopped.",
+        "fr": "L'outil de flashage n'a montré aucun progrès en {seconds} secondes ; cette tentative a été arrêtée.",
+        "es": "La herramienta de flasheo no mostró progreso en {seconds} segundos; se detuvo este intento.",
+    },
+    "flash_attempt_timeout": {
+        "zh-CN": "正在等待设备… 剩余 {seconds} 秒",
+        "en": "Waiting for the player… {seconds}s left",
+        "fr": "En attente du lecteur… {seconds} s restantes",
+        "es": "Esperando al reproductor… quedan {seconds} s",
+    },
+    "flash_method_confirm": {
+        "zh-CN": "刷机方式已改为 {method}。请确认设备已断开并关机，然后点击“下一步”。",
+        "en": "Install method changed to {method}. Confirm the player is unplugged and powered off, then click Next.",
+        "fr": "Méthode changée pour {method}. Confirmez que le lecteur est débranché et éteint, puis cliquez sur Suivant.",
+        "es": "Método cambiado a {method}. Confirme que el reproductor está desconectado y apagado y pulse Siguiente.",
+    },
+    "flash_failover_note": {
+        "zh-CN": "{method} 未能开始刷机。在设备关机并断开后，将改用 {other}。",
+        "en": "{method} did not get the install started. After the player is powered off and unplugged, {other} will be used instead.",
+        "fr": "{method} n'a pas lancé l'installation. Une fois le lecteur éteint et débranché, {other} sera utilisé.",
+        "es": "{method} no inició la instalación. Con el reproductor apagado y desconectado se usará {other}.",
     },
     "themepack_card_title": {
         "zh-CN": "安装 360p Rockbox 主题包",
@@ -3966,6 +4229,56 @@ def initial_language(stored: str = "") -> str:
     return system_language()
 
 
+_FIELD_CACHE: dict = {}
+
+
+def _format_fields(text: str) -> frozenset:
+    """``{placeholder}`` names a string expects, for comparison across languages.
+
+    ``str.format`` raises ``KeyError`` when the text asks for a field the call
+    site did not pass, so the names — not the wording — have to survive
+    translation.
+    """
+    cached = _FIELD_CACHE.get(text)
+    if cached is not None:
+        return cached
+    names = set()
+    try:
+        for _literal, field, _spec, _conversion in string.Formatter().parse(text):
+            if field:
+                names.add(field.split(".")[0].split("[")[0])
+    except Exception:
+        names = set()
+    fields = frozenset(names)
+    if len(_FIELD_CACHE) < 8192:
+        _FIELD_CACHE[text] = fields
+    return fields
+
+
+def placeholder_safe_text(key: str, text: str) -> str:
+    """``text``, or its English original when a translation renamed a field.
+
+    The bundled catalogs are machine-translated, and a hundred of them turned
+    ``{day}`` into their own word for it (``{devezh}``, ``{nino}``). Every
+    ``tr(...).format(...)`` call site then raised ``KeyError`` — the supporters
+    ticker and the install status lines among them. A translation may use fewer
+    placeholders than the source (the argument is simply unused); it may not
+    invent one, so those fall back to the English string rather than crash.
+    """
+    source = catalog("en").get(key) or (_STRINGS.get(key) or {}).get("en") or ""
+    if not source or not text:
+        return text
+    invented = _format_fields(text) - _format_fields(source)
+    if not invented:
+        return text
+    logger.debug(
+        "Catalog translation for %r renamed placeholders %s; using English",
+        key,
+        sorted(invented),
+    )
+    return source
+
+
 class _Translator:
     def __init__(self):
         self._lang = "en"
@@ -3985,7 +4298,7 @@ class _Translator:
             return key
         translated = catalog(self._lang).get(key)
         if translated:
-            return translated
+            return placeholder_safe_text(key, translated)
         english_catalog = catalog("en")
         return table.get(self._lang) or english_catalog.get(key) or table.get("en") or key
 

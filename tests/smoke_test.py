@@ -162,6 +162,7 @@ def test_i18n_languages():
         "donate_subtitle",
         "settings_hide_donations",
         "settings_hide_donations_tip",
+        "settings_show_donations",
         "settings_donations_dismiss",
         "btn_centre",
         "btn_power",
@@ -1089,13 +1090,15 @@ def test_donation_bar_corner_links():
         assert tr("nav_credits") not in [b.text() for b in w._nav_panel.findChildren(QPushButton)]
         assert sb._credits_link.isVisible()
 
-        w._settings_page._cb_hide_donations.setChecked(True)
+        # The switch reads "Show App Supporter Credits and Donations", so the
+        # *off* state is the one that hides the credits link and the bar.
+        w._settings_page._cb_hide_donations.setChecked(False)
         app.processEvents()
         assert not w._credits_btn.isVisible()
         assert not sb._support_btn.isVisible()
         assert not sb.isVisible()
 
-        w._settings_page._cb_hide_donations.setChecked(False)
+        w._settings_page._cb_hide_donations.setChecked(True)
         # A status message takes the bar over while it shows — the donation
         # display (and with it the credits link) comes back once it clears.
         sb.clearMessage()
@@ -2344,9 +2347,11 @@ def test_terminal_install_launcher_survives_a_rebuild():
 
 
 def test_flash_method_switch():
-    """Switching the install method in Settings while waiting restarts the run
-    with the new backend, and the choice is persisted. Legacy "auto" resolves
-    to the platform default (SP Flash Tool) rather than its own mode."""
+    """Switching the install method in Settings while waiting re-arms the
+    power-off step: the new backend's command must not start until the user
+    confirms the player is unplugged and powered off, and the choice is
+    persisted. Legacy "auto" resolves to the platform default (SP Flash
+    Tool) rather than its own mode."""
     from PySide6.QtWidgets import QApplication
     from src.ui.main_window import MainWindow
     from src import paths
@@ -2358,6 +2363,9 @@ def test_flash_method_switch():
     calls = []
     w.service.start_flash = lambda pkg, pre="", method="auto", **kw: calls.append((pkg, method))
     w.service.start_device_monitor = lambda: None
+    w.service.cancel_flash = lambda: None
+    w.service.stop_device_monitor = lambda: None
+    w._ensure_elevated_for_install = lambda: True
     w.settings.setValue("flash_method", "auto")
     w._flash_method = "auto"
 
@@ -2371,9 +2379,16 @@ def test_flash_method_switch():
         combo = w._settings_page._method_combo
         combo.setCurrentIndex(combo.findData("mtk"))
         assert w._settings_page.current_method() == "mtk"
-        assert calls[-1] == ("C:/fake/rom.zip", "mtk"), "backend restarted with new method"
         assert w._flash_page.current_method() == "mtk", "flash page reflects the new method"
         assert w.settings.value("flash_method") == "mtk"
+        # The switch itself starts nothing: the power-off step comes first, so
+        # a tool is never left searching before the user is ready.
+        assert "mtk" not in [call[1] for call in calls], (
+            "the new backend must wait for the power-off confirmation"
+        )
+        assert w._power_off_prompt is True
+        w._on_power_off_continue()
+        assert calls[-1] == ("C:/fake/rom.zip", "mtk"), "Continue starts the new backend"
     else:
         # On macOS, MTKClient is the only engine; verify it is the active method.
         assert w._settings_page.current_method() == "mtk"
@@ -2524,7 +2539,7 @@ def test_dont_ask_again_disables_donation_ui():
     assert device_tracking.is_donation_install_prompt_disabled(settings=w.settings) is True
     assert device_tracking.is_donation_ui_disabled(settings=w.settings) is True
     assert not w.statusBar().isVisible(), "donor/goal bar must hide"
-    assert w._settings_page._cb_hide_donations.isChecked() is True
+    assert w._settings_page._cb_hide_donations.isChecked() is False
     assert not w._flash_page._appeal.isVisible()
     assert w._install_complete is True
     assert w._stack.currentIndex() == _PAGE_FLASH
@@ -4500,7 +4515,8 @@ def test_settings_page_and_dialogs():
         # Test donation visibility toggle
         emitted_vis = []
         sp.donation_visibility_changed.connect(lambda v: emitted_vis.append(v))
-        sp._cb_hide_donations.setChecked(True)
+        # "Show …" off disables the donation UI, which is what is emitted.
+        sp._cb_hide_donations.setChecked(False)
         assert emitted_vis == [True]
         assert device_tracking.is_donation_ui_disabled() is True
 
@@ -4864,9 +4880,13 @@ def test_settings_platform_prep_cards():
         page.set_method(METHOD_MTK)
         assert page._method_note.text() == "", page._method_note.text()
         assert page._method_note.isHidden()
+        # "MTKClient (Mac)" is the simulated-macOS debug entry, not a sticky
+        # backend: outside the macOS flow it resolves to the platform default,
+        # so the card shows the SP note for it.
         page.set_method(METHOD_MTK_MAC)
-        assert page._method_note.text() == tr("flash_method_note_mtk_mac")
+        assert page._method_note.text() == tr("flash_method_note_sp")
         assert not page._method_note.isHidden()
+        assert tr("flash_method_note_mtk_mac"), "the mac note string must exist"
         page.set_method(METHOD_SP)
         assert page._method_note.text() == tr("flash_method_note_sp")
         assert not page._method_note.isHidden()
@@ -6130,12 +6150,12 @@ def test_mediatek_installer_mode():
         assert w._support_btn.isVisible()
         assert w.statusBar()._donations_enabled
 
-        # The user's own donation opt-out still wins.
-        w._settings_page._cb_hide_donations.setChecked(True)
+        # The user's own donation opt-out still wins (switch off = hidden).
+        w._settings_page._cb_hide_donations.setChecked(False)
         app.processEvents()
         assert not w._support_btn.isVisible()
         assert not w.statusBar()._donations_enabled
-        w._settings_page._cb_hide_donations.setChecked(False)
+        w._settings_page._cb_hide_donations.setChecked(True)
         app.processEvents()
         assert w._support_btn.isVisible()
 

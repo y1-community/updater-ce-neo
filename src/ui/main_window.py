@@ -69,7 +69,9 @@ from ..donors import cached_donors_path, load_donors_file, parse_donors_csv_text
 from ..flash_service import (
     LINE_CONNECT_HINT,
     LINE_RETRY,
+    METHOD_MTK,
     METHOD_MTK_MAC,
+    METHOD_SP,
     STEP_DETECT,
     STEP_DONE,
     STEP_DOWNLOAD_BL,
@@ -79,8 +81,10 @@ from ..flash_service import (
     STEP_WAITING,
     STEP_WRITE,
     FlashService,
+    backend_method,
     classify_backend_line,
     completed_extract_dir,
+    is_wrong_model_error,
     normalise_method,
 )
 from ..i18n import initial_language, tr, tr_brand, translator
@@ -185,6 +189,10 @@ class DeviceUpdateCheckWorker(QThread):
             logger.debug("Device update check failed: %s", e)
             if not self.isInterruptionRequested():
                 self.finished.emit([])
+
+# The worker's way of saying "no honest estimate yet": the card then shows the
+# elapsed time instead of inventing a number.
+ETA_UNKNOWN = -1
 
 _STEP_KEY = {
     STEP_EXTRACTING: "step_extract",
@@ -339,14 +347,18 @@ def client_rect_for_unified_caption(rect, *, maximized: bool, frame_x: int, fram
     Maximized windows inset every side by the frame thickness.
     """
     left, top, right, bottom = rect
+    inset_x = int(frame_x) + int(padded)
+    inset_y = int(frame_y) + int(padded)
     if maximized:
-        inset_x = int(frame_x) + int(padded)
-        inset_y = int(frame_y) + int(padded)
         return (left + inset_x, top + inset_y, right - inset_x, bottom - inset_y)
-    # Restored windows keep a 1px resize edge. Insetting by the full frame
-    # leaves a non-client strip that DWM paints in the default window color,
-    # which shows up as a white bar on the right.
-    return (left + 1, top, right - 1, bottom - 1)
+    # Restored windows drop the caption but keep the resize frame exactly as
+    # Windows measures it. Qt sizes the window as client + (SM_CXSIZEFRAME +
+    # SM_CXPADDEDBORDER) per side, so a thinner edge here hands the app a
+    # client *wider* than the width Qt asked for and painted: the extra
+    # columns stay unpainted and show as an opaque black bar down the right
+    # edge. Matching the frame keeps Qt's own arithmetic true; the band that
+    # remains belongs to the frame and is drawn by DWM, not left blank.
+    return (left + inset_x, top, right - inset_x, bottom - inset_y)
 
 
 HTCAPTION = 2
@@ -552,6 +564,9 @@ class MainWindow(QMainWindow):
         self._flash_method = normalise_method(self.settings.value("flash_method", ""))
         self._last_progress = 0
         self._flash_start_ts = 0.0
+        # Seconds left as measured by the running backend (EtaUnknown until it
+        # has watched the write long enough to have a rate).
+        self._worker_eta = ETA_UNKNOWN
         self._elapsed_timer = QTimer(self)
         self._elapsed_timer.timeout.connect(self._tick_elapsed)
         self._step_now = ""
@@ -563,6 +578,9 @@ class MainWindow(QMainWindow):
         self._install_ui_active = False
         self._download_active = False
         self._install_failed = False
+        # True once this install has already fallen back to the other backend:
+        # one automatic switch per run, so a bad cable cannot ping-pong.
+        self._fallback_attempted = False
         self._power_off_prompt = False
         self._gui_handoff_prepare = False
         self._gui_handoff_ready = False
@@ -773,6 +791,7 @@ class MainWindow(QMainWindow):
                 central_layout.addWidget(self._title_bar)
         else:
             self._title_bar = None
+            self._window_controls = None
             central_layout.setContentsMargins(0, 0, 0, 0)
 
         # 2. Body row: Navigation sidebar on left, stacked pages on right
@@ -1026,8 +1045,24 @@ class MainWindow(QMainWindow):
         is_win = sys.platform == "win32" or platform.system() == "Windows"
         controls_left = are_window_controls_on_left()
 
+        # The window is all client area, so the caption never draws the system
+        # min/max/close buttons over it: DWM still reports their rectangle and
+        # paints nothing there. On Windows the header therefore draws them
+        # itself, flush with the trailing edge, and reserves no margin for
+        # buttons that would never appear. macOS keeps its native traffic
+        # lights; Linux keeps its window manager's decorations.
+        from .window_controls import WindowControls
+
+        self._window_controls = (
+            WindowControls(self)
+            if is_win and not controls_left and can_inline_title_with_window_controls()
+            else None
+        )
+
         left_margin = (84 if is_mac else 70) if controls_left else 18
         right_margin = 24 if controls_left else (120 if is_win else 90)
+        if self._window_controls is not None:
+            right_margin = 0
 
         bar_layout = QHBoxLayout(bar)
         bar_layout.setContentsMargins(left_margin, 0, right_margin, 0)
@@ -1057,6 +1092,8 @@ class MainWindow(QMainWindow):
             bar_layout.addSpacing(28)
             bar_layout.addWidget(self._title_container, 0, Qt.AlignVCenter)
             bar_layout.addStretch(1)
+            if self._window_controls is not None:
+                bar_layout.addWidget(self._window_controls, 0, Qt.AlignVCenter)
 
         self._arm_caption_drag()
         return bar
@@ -1340,6 +1377,13 @@ class MainWindow(QMainWindow):
             if page is not None and hasattr(page, "refresh_theme") and callable(page.refresh_theme):
                 page.refresh_theme()
 
+        # The caption controls are painted from the live palette, so a theme
+        # switch has to repaint them: their hover wash and glyph colour follow
+        # a light or dark surface and would otherwise keep the old theme's.
+        controls = getattr(self, "_window_controls", None)
+        if controls is not None and hasattr(controls, "refresh_theme"):
+            controls.refresh_theme()
+
 
     def _connect_signals(self):
         self._select_page.package_selected.connect(self._on_package_selected)
@@ -1355,6 +1399,11 @@ class MainWindow(QMainWindow):
         self._select_page.prep_started.connect(self._on_prep_started)
         self._flash_page.set_cancel_download_callback(self._on_cancel_download)
         self._settings_page.flash_method_changed.connect(self._on_method_changed)
+        # The app's own no-progress countdown, shown on the install card.
+        self.service.attempt_timeout.connect(self._flash_page.set_attempt_timeout)
+        # Time remaining, measured from the install's own write rate (the
+        # worker knows the byte totals; the card only knows the clock).
+        self.service.eta_changed.connect(self._on_worker_eta)
         self._settings_page.simulated_mac_requested.connect(
             self._restart_in_simulated_macos
         )
@@ -1476,8 +1525,13 @@ class MainWindow(QMainWindow):
         if not self.isVisible() or self.isMinimized():
             return
         try:
-            if self._install_run_active():
+            active = self._install_run_active()
+            if active:
                 set_window_close_button_enabled(self, False)
+            controls = getattr(self, "_window_controls", None)
+            if controls is not None:
+                # Our own control mirrors the system caption button's state.
+                controls.set_close_enabled(not active)
         except Exception:
             pass
         try:
@@ -1527,6 +1581,9 @@ class MainWindow(QMainWindow):
             self._verify_native_chrome()
             self._schedule_caption_button_refresh()
             if event.type() == QEvent.WindowStateChange:
+                controls = getattr(self, "_window_controls", None)
+                if controls is not None:
+                    controls.set_state(self.isMaximized())
                 self._schedule_window_state_resync()
 
     def showEvent(self, event):
@@ -1604,6 +1661,9 @@ class MainWindow(QMainWindow):
                 nav.update()
                 for btn in nav.findChildren(SidebarButton):
                     btn.update()
+            controls = getattr(self, "_window_controls", None)
+            if controls is not None:
+                controls.set_state(self.isMaximized())
             central = self.centralWidget()
             layout = central.layout() if central is not None else None
             if layout is not None:
@@ -1630,6 +1690,15 @@ class MainWindow(QMainWindow):
     def _refresh_caption_buttons(self) -> None:
         self._caption_refresh_pending = False
         if sys.platform != "win32" or getattr(self, "_caption_refreshing", False):
+            return
+        # Qt reconfigures the window behind our back (a page switch is enough)
+        # and that can drop its native maximize style again. This pass already
+        # applies a frame change, so re-assert it here.
+        ensure_window_maximize_enabled(self)
+        if getattr(self, "_window_controls", None) is not None:
+            # The header draws the controls at its trailing edge: there is no
+            # native caption-button rectangle to re-measure or reserve room for.
+            self._caption_button_bounds = None
             return
         self._caption_refreshing = True
         try:
@@ -2225,6 +2294,9 @@ class MainWindow(QMainWindow):
             set_window_close_button_enabled(self, not active)
         except Exception:
             pass
+        controls = getattr(self, "_window_controls", None)
+        if controls is not None:
+            controls.set_close_enabled(not active)
 
         quiet = active or handoff
         if quiet:
@@ -2460,6 +2532,8 @@ class MainWindow(QMainWindow):
         from ..flash_service import _find_scatter, compute_extract_dir, completed_extract_dir
         from ..config import device_label_for_model, is_mediatek_installer
 
+        if not self._ensure_elevated_for_install():
+            return
         extract_dir = completed_extract_dir(self._package_path) or compute_extract_dir(
             self._package_path
         )
@@ -2567,16 +2641,23 @@ class MainWindow(QMainWindow):
             )
 
     def _begin_sp_gui_install(self):
-        """Install via SP Flash Tool GUI:
-        Validates cached firmware readiness, shows instructions, launches SP Flash Tool GUI detached,
-        and quits Updater CE.
+        """Install with the SP Flash Tool GUI: prepare the firmware, then hand it over.
+
+        The selected package's extract is checked first, because a run that was
+        interrupted leaves a scatter with images missing from beside it. When it
+        is not usable the package is prepared again in this window — the usual
+        download/extract progress screen — and only once a complete scatter and
+        its images are on disk is history.ini written, every session this app
+        started is stopped, and the tool's own window opened. The app is then
+        back on its main screen while SP Flash Tool does the flashing.
         """
         from .. import sp_flash_gui
-        from ..config import device_label_for_model, is_mediatek_installer
         from ..flash_service import completed_extract_dir, compute_extract_dir, _find_scatter
 
         if not sp_flash_gui.is_sp_flash_gui_supported():
             QMessageBox.warning(self, tr("sp_gui_title"), tr("sp_gui_not_supported"))
+            return
+        if not self._ensure_elevated_for_install():
             return
 
         extract_dir = completed_extract_dir(self._package_path) or compute_extract_dir(
@@ -2594,54 +2675,86 @@ class MainWindow(QMainWindow):
             extract_dir=extract_dir,
             model=self._package_model,
         )
-        if not ready:
+        if ready:
+            self._gui_ready = (Path(sc), Path(ed), self._package_model or "")
+            self._complete_gui_handoff()
+            return
+
+        # Not usable yet: prepare it here instead of turning it into an error.
+        logger.info("The selected firmware is not complete, preparing it again: %s", reason)
+        self._append_log(tr("sp_gui_preparing_firmware"))
+        target = self._package_prepare_target()
+        if target is None:
+            page = getattr(self, "_select_page", None)
+            if page is not None and hasattr(page, "focused_firmware"):
+                target = page.focused_firmware()
+        if target is None:
             QMessageBox.warning(
                 self,
                 tr("sp_gui_title"),
-                tr("sp_gui_no_cached_firmware") + f"\n\n({reason})",
+                tr_brand("gui_handoff_no_package"),
             )
             return
-
-        dev_label = device_label_for_model(self._package_model) or tr("device_unknown")
-        if is_mediatek_installer():
-            hint = tr("terminal_hint_generic")
-        else:
-            hint = tr("terminal_hint_innioasis")
-
-        prompt_title = tr("sp_gui_install_prompt_title")
-        prompt_body = tr("sp_gui_install_prompt_body").format(
-            device=dev_label,
-            hint=hint,
-        )
-
-        if os.environ.get("QT_QPA_PLATFORM") != "offscreen":
-            reply = QMessageBox.information(
-                self,
-                prompt_title,
-                prompt_body,
-                QMessageBox.Ok | QMessageBox.Cancel,
-                QMessageBox.Ok,
-            )
-            if reply != QMessageBox.Ok:
-                return
-
-        sp_flash_gui.update_sp_history_ini(scatter_path=sc, extract_dir=ed, model=self._package_model)
-        ok, msg = sp_flash_gui.launch_sp_flash_tool_gui(
-            model=self._package_model,
-            scatter_path=sc,
-            extract_dir=ed,
-        )
-        if not ok:
+        self._gui_after_prepare = "launch"
+        self._gui_launch_when_ready = True
+        if not self._begin_gui_prepare(target):
             QMessageBox.warning(
                 self,
-                tr("sp_gui_error_title"),
-                f"{tr('sp_gui_error_desc')}\n\n{msg}",
+                tr("sp_gui_title"),
+                tr_brand("gui_handoff_no_package"),
             )
-            return
 
-        if os.environ.get("QT_QPA_PLATFORM") != "offscreen":
-            from PySide6.QtWidgets import QApplication
-            QApplication.quit()
+    def _package_prepare_target(self):
+        """The package the user selected, as something the prepare worker can take.
+
+        An archive that is already on disk only needs extracting again, which is
+        exactly what repairs an extract an interrupted run left half-written.
+        """
+        path = str(getattr(self, "_package_path", "") or "")
+        if not path or not Path(path).is_file():
+            return None
+        return {
+            "kind": "local",
+            "path": path,
+            "model": self._package_model or "",
+            "name": self._package_name or Path(path).name,
+        }
+
+    def _ensure_elevated_for_install(self) -> bool:
+        """Honour the Settings "run as administrator" switch before an install.
+
+        The flash tools are children of this process, so they inherit its
+        rights: asking Windows to restart Updater CE elevated once is what makes
+        every install mode elevated, and keeps the live progress stream and the
+        cancel path working (elevating one tool at a time would lose both).
+        Returns False when the elevated copy is taking over and this run must
+        not start.
+        """
+        from .. import elevation
+
+        if not elevation.run_as_admin_enabled(self.settings) or elevation.is_elevated():
+            return True
+        if os.environ.get("QT_QPA_PLATFORM") == "offscreen" or os.environ.get("CI"):
+            return True
+        reply = QMessageBox.warning(
+            self,
+            tr("install_needs_admin_title"),
+            tr("install_needs_admin_body"),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes,
+        )
+        if reply != QMessageBox.Yes:
+            self._append_log(tr("install_without_admin"))
+            return True
+        ok, msg = elevation.restart_as_admin()
+        if not ok:
+            self._append_log(msg or tr("install_without_admin"))
+            return True
+        from PySide6.QtWidgets import QApplication
+
+        self._append_log(tr("install_restarting_as_admin"))
+        QApplication.quit()
+        return False
 
     def _remember_catalogue_section(self) -> None:
         page = getattr(self, "_select_page", None)
@@ -2752,6 +2865,8 @@ class MainWindow(QMainWindow):
 
     def _begin_flash_flow(self):
         if not self._package_path:
+            return
+        if not self._ensure_elevated_for_install():
             return
         self._install_failed = False
         self._power_off_prompt = False
@@ -2883,6 +2998,8 @@ class MainWindow(QMainWindow):
         ):
             # Connect and the pre-search wait stay at 0. Do not paint 10%.
             self._last_progress = 0
+            # No ETA either: nothing has been written yet in this run.
+            self._worker_eta = ETA_UNKNOWN
             return
         self._last_progress = percent
         if getattr(self, "_step_now", "") == STEP_EXTRACTING:
@@ -3158,11 +3275,94 @@ class MainWindow(QMainWindow):
         self._nav_to_page(_PAGE_FLASH)
 
     def _handle_flash_failure(self, error_code):
+        # A backend that never got going is not the end of the install on a
+        # host that has the other engine: hand the user back to the power-off
+        # step and start the other one from there.
+        if self._offer_backend_failover(error_code):
+            return
         try:
             self.sm.transition_to(FlashState.S5_FAILED)
         except ValueError:
             self.sm.force_state(FlashState.S5_FAILED)
         self._show_install_failure(str(error_code or tr("flash_failed")))
+
+    # ------------------------------------------------------------------
+    # Backend failover
+    # ------------------------------------------------------------------
+    def _other_method(self, method) -> str:
+        """The other backend for ``method``, or "" when there is not one.
+
+        Only hosts that ship both engines can switch: macOS has no SP Flash
+        Tool at all. This is about the guided in-app flow only — the terminal
+        launcher and the SP Flash Tool GUI handoff are deliberately left to
+        run the tool themselves.
+        """
+        if paths.IS_MAC:
+            return ""
+        current = backend_method(method)
+        if current == METHOD_SP:
+            return METHOD_MTK
+        if current == METHOD_MTK:
+            return METHOD_SP
+        return ""
+
+    def _return_to_power_off_stage(self, method="") -> None:
+        """Re-arm the disconnect / power-off step; Continue starts ``method``.
+
+        A backend's command must not start hunting for the player until the
+        user has confirmed it is unplugged and powered off. SP Flash Tool's
+        console search expires on its own two-minute window, so a command
+        started too early reports S_TIMEOUT while nothing was actually wrong.
+        """
+        self.service.cancel_flash()
+        self.service.stop_device_monitor()
+        self._elapsed_timer.stop()
+        self._install_failed = False
+        self._power_off_prompt = True
+        self._pre_install_guided = False
+        if self.sm.state in (
+            FlashState.S5_FAILED,
+            FlashState.S5_USB_DISCONNECTED,
+            FlashState.S4_FLASHING,
+            FlashState.S5_COMPLETE,
+        ):
+            self.sm.reset_for_retry()
+        if method:
+            # Session-scoped: the saved preference stays whatever the user
+            # chose, so the next install starts from their pick again.
+            self._flash_method = backend_method(method)
+            self._flash_page.set_method(self._flash_method)
+        self._flash_page.set_package_name(self._package_name)
+        self._flash_page.set_model(self._package_model)
+        self._apply_release_icon(complete=False)
+        self._flash_page.show_power_off_prompt()
+        self._nav_to_page(_PAGE_FLASH)
+
+    def _offer_backend_failover(self, error_code) -> bool:
+        """Send the user back to the power-off step to try the other backend.
+
+        Applies to guided in-app installs on hosts with both engines. A
+        wrong-model result is never retried (no backend can fix it), and only
+        one switch is made per install, so an exhausted pair of engines ends
+        as an explained failure instead of a loop.
+        """
+        if getattr(self, "_fallback_attempted", False):
+            return False
+        if is_wrong_model_error(error_code):
+            return False
+        candidate = self._other_method(self._flash_method)
+        if not candidate:
+            return False
+        self._fallback_attempted = True
+        # Diagnostics only: the user should not have to read backend names.
+        logger.info(
+            "Install attempt with %s did not start (%s); offering %s",
+            backend_method(self._flash_method),
+            error_code,
+            candidate,
+        )
+        self._return_to_power_off_stage(candidate)
+        return True
 
     def _on_progress_retry(self):
         """Back to the power-off / unplug prompt. Does not start a flash."""
@@ -3228,12 +3428,13 @@ class MainWindow(QMainWindow):
         self._flash_method = method
         self.settings.setValue("flash_method", method)
         if method == METHOD_MTK_MAC:
-            # The settings card already asked. This only records the choice.
-            # The restart itself arrives on simulated_mac_requested.
-            self._append_log("Install method set to MTKClient (Mac) simulation.")
+            # The settings card already asked. This only records the choice;
+            # the restart itself arrives on simulated_mac_requested. The user
+            # is not told about backends.
+            logger.info("Install method set to the simulated macOS flow")
             return
         if self.sm.state not in (FlashState.S2_WAIT_CONNECTION, FlashState.S3_DEVICE_DETECTED):
-            self._append_log(f"Install method set to {_method_label(method)}.")
+            logger.info("Install method set to %s for the next run", backend_method(method))
             return
         if method in ("sp", "auto"):
             try:
@@ -3241,15 +3442,12 @@ class MainWindow(QMainWindow):
                 update_sp_history_ini(model=self._package_model)
             except Exception as e:
                 logger.debug("Could not update SP history.ini on method change: %s", e)
-        self._append_log(f"Flash method changed to {_method_label(method)}; restarting search...")
-        self.service.cancel_flash()
-        self.service.stop_device_monitor()
-        self._flash_page.set_method(method)
-        pre_extracted = completed_extract_dir(self._package_path)
-        self.service.start_flash(
-            self._package_path, pre_extracted_dir=pre_extracted, method=method
-        )
-        self.service.start_device_monitor()
+        # Kept silent for the user: the app is a front end for both engines and
+        # the install flow should read the same either way. The restart is a
+        # diagnostic detail, and the new command must not start until the user
+        # has again confirmed the player is unplugged and powered off.
+        logger.info("Install method changed to %s", backend_method(method))
+        self._return_to_power_off_stage(method)
 
     def _restart_in_simulated_macos(self):
         """Relaunch in simulated macOS mode so the Mac flow genuinely applies.
@@ -3424,7 +3622,27 @@ class MainWindow(QMainWindow):
         secs = int(time.time() - self._flash_start_ts) if self._flash_start_ts else 0
         return f"{secs // 60:02d}:{secs % 60:02d}"
 
+    def _on_worker_eta(self, seconds):
+        """The backend's measured time remaining; -1 while it is not known."""
+        try:
+            self._worker_eta = int(seconds)
+        except (TypeError, ValueError):
+            self._worker_eta = ETA_UNKNOWN
+        self._tick_elapsed()
+
     def _eta_text(self):
+        """Time remaining, measured when possible.
+
+        The measured figure comes from the bytes this install has actually
+        written (see :mod:`src.progress_model`), which is the only honest
+        answer while a 3 GB userdata image is going down after eight small
+        partitions. Until the rate is known the old extrapolation from the
+        elapsed time stands in — and once writing begins but the clock and the
+        bytes disagree, the measured number always wins.
+        """
+        measured = getattr(self, "_worker_eta", ETA_UNKNOWN)
+        if measured and measured > 0:
+            return f"{measured // 60:02d}:{measured % 60:02d}"
         pct = max(self._last_progress or 0, 1)
         secs = int((time.time() - self._flash_start_ts) * (100 - pct) / pct) if self._flash_start_ts else 0
         if secs <= 0:
@@ -3542,22 +3760,43 @@ class MainWindow(QMainWindow):
         """
         if not isinstance(target, dict):
             return
-        self._gui_after_prepare = "hint"
-        self._gui_launch_when_ready = False
+        # The click is the whole request: download that package and hand it to
+        # the desktop tool, instead of stopping on a preparation prompt.
+        self._gui_after_prepare = "launch"
+        self._gui_launch_when_ready = True
         self._begin_gui_prepare(target)
 
     def _cached_gui_package(self):
-        from ..sp_flash_gui import cached_install_firmware
+        """The cached extract, but only when the desktop tool can open it.
+
+        An extract from an interrupted run still has its scatter and some of
+        its images, so it looks like firmware and then fails inside the tool
+        ("images referenced in scatter file were not found"). Readiness is
+        checked here instead, and an unusable cache is reported as no cache at
+        all: the release on screen is downloaded as a fresh one.
+        """
+        from ..sp_flash_gui import cached_install_firmware, check_cached_firmware_readiness
 
         latest = device_tracking.get_latest_package(self.settings)
         scatter, extract = cached_install_firmware(latest)
         if scatter is None:
             return None
+        model = (latest or {}).get("model") or self._package_model or ""
+        ready, sc, ed, reason = check_cached_firmware_readiness(
+            scatter_path=scatter,
+            extract_dir=extract,
+            model=model,
+        )
+        if not ready:
+            self._gui_cache_reason = reason
+            logger.info("Cached firmware cannot be opened, preparing a fresh one: %s", reason)
+            return None
+        self._gui_cache_reason = ""
         return {
             "kind": "cache",
-            "scatter": scatter,
-            "extract": extract,
-            "model": (latest or {}).get("model") or self._package_model or "",
+            "scatter": sc or scatter,
+            "extract": ed or extract,
+            "model": model,
             "name": (latest or {}).get("software_name") or "",
         }
 
@@ -3576,6 +3815,8 @@ class MainWindow(QMainWindow):
                 tr("sp_gui_title"),
                 tr("sp_gui_not_supported"),
             )
+            return
+        if not self._ensure_elevated_for_install():
             return
 
         if getattr(self, "_gui_handoff_ready", False):
@@ -3613,8 +3854,11 @@ class MainWindow(QMainWindow):
             )
             self._complete_gui_handoff()
             return
-        self._gui_after_prepare = "hint"
-        self._gui_launch_when_ready = False
+        # Nothing usable on disk: download (or extract) the release in the app
+        # and open the desktop tool the moment history.ini is staged, then come
+        # back to this screen.
+        self._gui_after_prepare = "launch"
+        self._gui_launch_when_ready = True
         self._begin_gui_prepare(chosen)
 
     def _begin_gui_prepare(self, target) -> bool:
@@ -3693,7 +3937,7 @@ class MainWindow(QMainWindow):
             logger.debug("Could not prepare history.ini before the desktop tool", exc_info=True)
         launch_now = (
             getattr(self, "_gui_launch_when_ready", False)
-            or getattr(self, "_gui_after_prepare", "") != "hint"
+            or getattr(self, "_gui_after_prepare", "") == "launch"
         )
         if launch_now:
             self._complete_gui_handoff()
@@ -3750,7 +3994,24 @@ class MainWindow(QMainWindow):
             )
             return
         scatter, extract, model = ready
+        # The desktop tool opens the same USB port and the same history.ini the
+        # guided backends use, so nothing this app started may still be running:
+        # a console-mode flash_tool searching for the device (or an MTKClient
+        # session unwinding on its own thread) would fight it for both.
+        self._terminate_install_sessions()
         self._launch_sp_gui(scatter, extract, model or "")
+
+    def _terminate_install_sessions(self) -> None:
+        """Stop every install session this app started before handing over."""
+        service = getattr(self, "service", None)
+        if service is None or not hasattr(service, "terminate_install_sessions"):
+            return
+        try:
+            report = service.terminate_install_sessions()
+        except Exception:
+            logger.debug("Could not stop the previous install session", exc_info=True)
+            return
+        self._append_log(report)
 
     def _launch_sp_gui(self, scatter, extract_dir, model):
         from ..sp_flash_gui import launch_sp_flash_tool_gui

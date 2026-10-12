@@ -1,4 +1,11 @@
-"""Short support headline: a round portrait beside "It takes you."
+"""Short support headline: a round portrait beside a warm one-line pitch.
+
+The same block is used in two places, and they do not say the same thing:
+
+* the Support page introduces the project (``INTRO_KEYS``), and
+* the appeal under a finished install speaks about the install that just
+  succeeded (``COMPLETION_KEYS``) — the install is why the reader is here, so
+  it is the natural thing to name before asking for anything.
 
 The portrait is circle-cropped. A bundled copy is shown immediately, and the
 network image replaces it when it can be loaded. Nothing here paints a solid
@@ -19,6 +26,25 @@ from ..i18n import tr
 
 PORTRAIT_URL = "https://innioasis.app/mtkclient/gui/images/developer.png"
 PORTRAIT_DIAMETER = 56
+
+# (headline, subtitle) key pairs. The Support page keeps the project pitch;
+# the post-install appeal uses the completion wording.
+INTRO_KEYS = ("donate_headline", "donate_subtitle")
+COMPLETION_KEYS = ("donate_completion_headline", "donate_completion_subtitle")
+
+
+def _fill(text: str, **fields) -> str:
+    """Substitute the placeholders the caller actually has.
+
+    A subtitle is only rewritten for the fields passed in with a real value, so
+    a language that phrases the sentence without ``{model}`` — or a caller that
+    has no model to name — never leaves a literal ``{model}`` on screen.
+    """
+    for name, value in fields.items():
+        value = str(value or "").strip()
+        if value:
+            text = text.replace("{%s}" % name, value)
+    return text
 
 
 def bundled_portrait_path():
@@ -131,8 +157,9 @@ class DeveloperPortrait(QLabel):
 class SupportIntro(QWidget):
     """Portrait aligned with the headline block. No card behind it."""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, keys=INTRO_KEYS):
         super().__init__(parent)
+        self._keys = tuple(keys)
         self.setAutoFillBackground(False)
         self.setStyleSheet("")
         row = QHBoxLayout(self)
@@ -162,6 +189,12 @@ class SupportIntro(QWidget):
         row.addLayout(column, 1)
         self.retranslate()
 
-    def retranslate(self) -> None:
-        self.headline.setText(tr("donate_headline"))
-        self.subtitle.setText(tr("donate_subtitle"))
+    def set_keys(self, keys) -> None:
+        """Choose which wording this block shows (see ``INTRO_KEYS``)."""
+        self._keys = tuple(keys)
+        self.retranslate()
+
+    def retranslate(self, software: str = "", model: str = "") -> None:
+        headline_key, subtitle_key = self._keys
+        self.headline.setText(tr(headline_key))
+        self.subtitle.setText(_fill(tr(subtitle_key), software=software, model=model))

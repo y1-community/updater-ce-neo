@@ -1056,16 +1056,20 @@ class SelectPackagePage(QWidget):
         """
         import sys
         from PySide6.QtCore import QSettings
+        from ..flash_service import METHOD_MTK, backend_method
         from ..paths import IS_MAC, IS_WINDOWS
         if IS_WINDOWS or IS_MAC:
             return True
         if not sys.platform.startswith("linux"):
             return True
-        settings = QSettings("Innioasis", "UpdaterCE")
-        method = settings.value("flash_method", "auto")
-        if method == "mtk":
-            return True
-        return False
+        # On Linux the SP Flash Tool flow defers step 1 until the tool prints
+        # its "search usb" line (the app escalates and sets up udev first).
+        # MTKClient has no such line to hang it on, so its run is gated on the
+        # power-off screen. NB: the same settings handle the rest of the app
+        # uses — reading a differently-cased QSettings path silently returned
+        # the default, so an MTKClient run on Linux never prompted at all.
+        settings = QSettings("innioasis", "updater")
+        return backend_method(settings.value("flash_method", "")) == METHOD_MTK
 
     def _prompt_pre_install(self, model="", type_variant=None):
         """Device preparation is a page in the install flow, not a dialog."""

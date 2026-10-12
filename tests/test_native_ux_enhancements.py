@@ -320,18 +320,21 @@ def test_subtitle_hints_and_eta_retranslation():
     sp = SettingsPage()
     fp = FlashPage()
 
-    for lang, exp_hide, exp_skip in [
-        ("fr", "Masque les invites et les boutons de don", "Affiche les détails d'achèvement"),
-        ("es", "Oculta los avisos y botones de donación", "Muestra detalles simples de finalización"),
-        ("zh-CN", "隐藏捐赠提示和按钮", "刷机完成后直接显示标准完成说明"),
-        ("en", "Hides donation prompts and buttons", "Show simple completion details"),
-    ]:
+    for lang in ("fr", "es", "zh-CN", "en"):
         translator().set_language(lang)
         sp.retranslate()
-        assert exp_hide in sp._lbl_hide_tip.text(), f"Hide tip failed for {lang}: {sp._lbl_hide_tip.text()}"
-        assert exp_skip in sp._lbl_skip_tip.text(), f"Skip tip failed for {lang}: {sp._lbl_skip_tip.text()}"
-        assert exp_hide in sp._cb_hide_donations.toolTip(), f"Hide tooltip failed for {lang}"
-        assert exp_skip in sp._cb_skip_install_donations.toolTip(), f"Skip tooltip failed for {lang}"
+        # One switch, one caption, one tooltip: the caption is the card title's
+        # own words, and the tooltip explains what the switch shows and how to
+        # hide it again. The legacy "skip post-install donations" names now
+        # alias that single switch and label, so they read exactly the same.
+        show_tip = tr("settings_hide_donations_tip")
+        assert sp.switch_caption(sp._cb_hide_donations) == tr("settings_show_donations")
+        assert sp._lbl_hide_tip.text() == show_tip, f"Tip failed for {lang}: {sp._lbl_hide_tip.text()}"
+        assert sp._cb_hide_donations.toolTip() == show_tip, f"Tooltip failed for {lang}"
+        assert sp._lbl_skip_tip is sp._lbl_hide_tip
+        assert sp._cb_skip_install_donations is sp._cb_hide_donations
+        assert sp._lbl_skip_tip.text() == show_tip
+        assert sp._cb_skip_install_donations.toolTip() == show_tip
 
         # Test localized ETA
         eta_53s = fp._format_friendly_eta("00:53")
@@ -1180,8 +1183,12 @@ def test_sp_gui_handoff_choice_continue_and_sidebar():
     original_launch = sp_flash_gui.launch_sp_flash_tool_gui
     try:
         with tempfile.TemporaryDirectory() as td:
+            # A cache only counts as firmware when the images beside the scatter
+            # are really there: an interrupted extract is treated as no cache
+            # and downloaded again, so this fixture is a complete one.
             scatter = Path(td) / "rom_scatter.txt"
-            scatter.write_text("scatter\n", encoding="utf-8")
+            scatter.write_text("file_name: fat_sparse.img\n", encoding="utf-8")
+            (Path(td) / "fat_sparse.img").write_bytes(b"img")
             extract = Path(td)
             clicked = {"kind": "online", "url": "https://example.invalid/clicked.zip", "model": "Y1"}
             focused = {"kind": "online", "url": "https://example.invalid/original.zip", "model": "Y1"}
@@ -1238,7 +1245,10 @@ def test_sp_gui_handoff_choice_continue_and_sidebar():
             window._open_sp_flash_tool_gui()
             assert window._stack.currentIndex() == _PAGE_SELECT
             assert launched[-1]["model"] == "G5"
-            assert "cancel" not in order[before:]
+            # The hand-over stops the session first: a console-mode flash_tool
+            # still searching (or an MTKClient run unwinding) would fight the
+            # desktop tool for the port and for history.ini.
+            assert order[before:] == ["cancel", "stop", "launch"], order[before:]
             assert window._nav_buttons["nav_select_package"][0].text() == tr("nav_select_package")
 
             window.show()
@@ -1297,7 +1307,9 @@ def test_release_click_downloads_for_handoff_not_in_app_install():
         window._open_sp_flash_tool_gui()
         assert prepared and prepared[0]["kind"] == "online"
         assert prepared[0]["model"] == "Y1"
-        assert window._gui_after_prepare == "hint"
+        # The click is the whole request: the download is followed by the
+        # desktop tool opening, not by a preparation prompt.
+        assert window._gui_after_prepare == "launch"
 
         window._select_page._release_list.setCurrentItem(item)
         window._select_page._trigger_release_install = lambda rel: installs.append(rel)
@@ -1846,12 +1858,30 @@ def test_caption_drag_leaves_controls_alone():
 
 
 def test_unified_caption_client_rect():
+    """The client Qt paints is the client Windows reports, on every side.
+
+    Qt sizes a window as ``client + (SM_CXSIZEFRAME + SM_CXPADDEDBORDER)`` per
+    side. Returning a thinner edge than that hands the app a client *wider*
+    than the width Qt asked for and painted, and the leftover columns stay
+    unpainted: an opaque black bar down the right edge of the window. The
+    caption row is still the window's own (no extra top inset) when restored.
+    """
     from src.ui.main_window import client_rect_for_unified_caption
 
+    frame_x = frame_y = 8
+    padded = 4
+    inset = frame_x + padded
+    left, top, right, bottom = (10, 20, 800, 600)
+
     restored = client_rect_for_unified_caption(
-        (10, 20, 800, 600), maximized=False, frame_x=8, frame_y=8, padded=4,
+        (left, top, right, bottom), maximized=False,
+        frame_x=frame_x, frame_y=frame_y, padded=padded,
     )
-    assert restored == (11, 20, 799, 599)
+    assert restored == (left + inset, top, right - inset, bottom - inset)
+    # Qt's arithmetic, expressed as the invariant the black bar violated.
+    assert (right - left) - (restored[2] - restored[0]) == 2 * inset
+    assert (bottom - top) - (restored[3] - restored[1]) == inset
+
     maximized = client_rect_for_unified_caption(
         (0, 0, 1920, 1080), maximized=True, frame_x=8, frame_y=8, padded=4,
     )
@@ -1878,14 +1908,15 @@ def test_completion_check_mark_and_opt_out():
         assert not page._cancel_btn.isVisible()
         assert not page._cancel_btn.isEnabled()
         pitch = page._appeal_label.text()
-        assert "It takes" in pitch
-        assert "you" in pitch
-        assert page._coffee_btn.text() == "Buy us a coffee"
+        assert "All done" in pitch
+        assert "thank" in pitch
+        assert page._coffee_btn.text() == "Buy me a coffee"
         assert page._appeal.isVisible()
         with_note = window.height()
         assert with_note < DEFAULT_WINDOW_HEIGHT - 40
 
-        window._settings_page._cb_hide_donations.setChecked(True)
+        # Off means the supporter credits and donation prompts are hidden.
+        window._settings_page._cb_hide_donations.setChecked(False)
         app.processEvents()
         page.show_completion_appeal(False)
         window._adjust_window_geometry()
@@ -1896,7 +1927,7 @@ def test_completion_check_mark_and_opt_out():
         assert coffee.text() == "Buy me a coffee"
         assert window._settings_page.switch_caption(
             window._settings_page._cb_hide_donations
-        ) == "Turn off Donations / Credits"
+        ) == tr("settings_show_donations")
         assert "buy a coffee from Settings" in window._settings_page._lbl_hide_tip.text()
         assert window.height() <= with_note
     finally:
@@ -2214,14 +2245,14 @@ def test_post_install_support_appeal():
         assert window._select_page._title.text() == "Install complete"
         assert page._appeal.isVisible()
         assert page._done_mark.isVisible()
-        assert page._coffee_btn.text() == "Buy us a coffee"
+        assert page._coffee_btn.text() == "Buy me a coffee"
         assert page._coffee_btn.cursor().shape() == Qt.ArrowCursor
         assert page._not_now_btn.text() == "Not now"
         assert page._not_now_btn.cursor().shape() == Qt.ArrowCursor
         assert "Don't ask me again" in page._appeal_dont.text()
         assert page._appeal_dont.cursor().shape() == Qt.PointingHandCursor
         assert not isinstance(page._appeal_dont, QCheckBox)
-        assert "It takes" in page._intro.headline.text()
+        assert "All done" in page._intro.headline.text()
         assert "underline" in page._intro.headline.text()
         portrait = page._intro.portrait.pixmap()
         assert portrait is not None and not portrait.isNull()
@@ -2241,7 +2272,8 @@ def test_post_install_support_appeal():
         window._flash_page._appeal_dont.linkActivated.emit("dont-ask")
         app.processEvents()
         assert device_tracking.is_donation_ui_disabled(window.settings)
-        assert window._settings_page._cb_hide_donations.isChecked()
+        # "Show …" is off once the user asked never to see the appeal again.
+        assert not window._settings_page._cb_hide_donations.isChecked()
         assert not page._appeal.isVisible()
         assert window._install_complete
         assert window._stack.currentIndex() == _PAGE_FLASH

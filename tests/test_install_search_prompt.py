@@ -156,7 +156,7 @@ def test_continue_launches_console_and_search_lines_drive_connect():
                 page = window._flash_page
                 assert popen_calls == []
                 assert page._wait_continue_btn.isVisible()
-                assert "connect your" not in page._wait_prompt_label.text().lower()
+                assert "please connect your" not in page._wait_prompt_label.text().lower()
 
                 page._wait_continue_btn.click()
                 assert _pump(app, lambda: bool(popen_calls)), "Continue must start the console command"
@@ -166,7 +166,7 @@ def test_continue_launches_console_and_search_lines_drive_connect():
                 assert "-d" in args and "-t" in args and args[-1] == "-r", args
                 assert args[args.index("-t") + 1] == "without", args
                 assert page._wait_prompt_label.text() == tr("flash_please_wait")
-                assert "connect your" not in page._wait_prompt_label.text().lower()
+                assert "please connect your" not in page._wait_prompt_label.text().lower()
                 assert page._wait_progress_bar.minimum() == 0
                 assert page._wait_progress_bar.maximum() == 0
                 assert window._last_progress == 0
@@ -185,14 +185,14 @@ def test_continue_launches_console_and_search_lines_drive_connect():
                     app,
                     lambda: page._stack.currentWidget() is page._flashing_view,
                 ), page._wait_prompt_label.text()
-                assert "connect your" not in page._step_label.text().lower()
-                assert "connect your" not in page._wait_prompt_label.text().lower()
+                assert "please connect your" not in page._step_label.text().lower()
+                assert "please connect your" not in page._wait_prompt_label.text().lower()
 
                 stream.put("Search USB, timeout 3600000 ms...\n")
                 _pump(app, lambda: False, seconds=0.3)
                 assert page._stack.currentWidget() is page._flashing_view
-                assert "connect your" not in page._step_label.text().lower()
-                assert "connect your" not in page._wait_prompt_label.text().lower()
+                assert "please connect your" not in page._step_label.text().lower()
+                assert "please connect your" not in page._wait_prompt_label.text().lower()
 
                 window._past_usb_search = False
                 window._usb_search_active = False
@@ -202,7 +202,7 @@ def test_continue_launches_console_and_search_lines_drive_connect():
                 mtk = FlashWorker(str(package), method="mtk", model="Y1")
                 mtk.step_changed.connect(window._on_step_changed)
                 mtk.progress.connect(window._on_progress)
-                assert "connect your" not in page._wait_prompt_label.text().lower()
+                assert "please connect your" not in page._wait_prompt_label.text().lower()
 
                 steps = []
                 mtk.step_changed.connect(steps.append)
@@ -222,12 +222,12 @@ def test_continue_launches_console_and_search_lines_drive_connect():
                 app.processEvents()
                 assert mtk._past_usb_search
                 assert STEP_DETECT in steps
-                assert "connect your" not in page._wait_prompt_label.text().lower()
+                assert "please connect your" not in page._wait_prompt_label.text().lower()
 
                 mtk._classify_mtk_output("...")
                 mtk._classify_mtk_output("[LOG] Hint: Power off the phone before connecting.")
                 app.processEvents()
-                assert "connect your" not in page._wait_prompt_label.text().lower()
+                assert "please connect your" not in page._wait_prompt_label.text().lower()
 
                 quiet = FlashWorker(str(package), method="mtk", model="Y1")
                 quiet._classify_mtk_output("hint: lower case is not the prefix")
