@@ -62,6 +62,8 @@ class _StubPort:
 
 
 def _usb_class():
+    from src import mtk_api
+    mtk_api._ensure_imports()
     from mtkclient.Library.Connection.usblib import UsbClass
 
     return UsbClass

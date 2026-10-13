@@ -44,6 +44,9 @@
       <token>y1-stock</token>
       <token>y1_stock</token>
       <token>y1-community</token>
+      <token>y1_hvga</token>
+      <token>y1_</token>
+      <token>y1-</token>
       <token>_y1</token>
       <token>-y1</token>
     </tokens>
@@ -69,6 +72,10 @@
       <token>rom-y2</token>
       <token>y2-stock</token>
       <token>y2_stock</token>
+      <token>y2_v</token>
+      <token>y2-v</token>
+      <token>y2_</token>
+      <token>y2-</token>
       <token>_y2</token>
       <token>-y2</token>
     </tokens>
@@ -95,64 +102,114 @@
     </notes>
   </model>
 
-  <model id="G1" brand="Innioasis" product="Innioasis G1" flashable="false">
-    <platform>unknown</platform>
+  <model id="G1" brand="Innioasis" product="Innioasis G1" flashable="true">
+    <platform>MT6753</platform>
     <tokens>
       <token>rom_g1</token>
       <token>_g1</token>
       <token>-g1</token>
+      <token>mx3-9_en</token>
+      <token>mx3-g1</token>
+      <token>mx3-9_g1</token>
     </tokens>
-    <notes>Android based Innioasis player. Recognised for guidance only.</notes>
+    <notes>MediaTek MT6753 Innioasis player.</notes>
   </model>
 
-  <model id="G3" brand="Innioasis" product="Innioasis G3" flashable="false">
-    <platform>unknown</platform>
+  <model id="G3" brand="Innioasis" product="Innioasis G3" flashable="true">
+    <platform>MT6753</platform>
     <tokens>
       <token>rom_g3</token>
       <token>_g3</token>
       <token>-g3</token>
+      <token>mx3-g3</token>
+      <token>mx3-9_g3</token>
+      <token>mx3-9_en_g3</token>
     </tokens>
-    <notes>Android based Innioasis player. Recognised for guidance only.</notes>
+    <notes>MediaTek MT6753 Innioasis player.</notes>
   </model>
 
-  <model id="G5" brand="Innioasis" product="Innioasis G5" flashable="false">
-    <platform>unknown</platform>
+  <model id="G5" brand="Innioasis" product="Innioasis G5" flashable="true">
+    <platform>MT6765</platform>
     <tokens>
       <token>rom_g5</token>
       <token>_g5</token>
       <token>-g5</token>
+      <token>mx4_en</token>
+      <token>mx4</token>
     </tokens>
-    <notes>
-      Flagship Android based Innioasis player. Recognised for guidance only:
-      an imported *_g5.zip must still be named correctly in the connection
-      prompts even though it is not flashed through this tool.
-    </notes>
+    <notes>MediaTek MT6765 Innioasis flagship player with AVB 2.0 dynamic partitions.</notes>
+  </model>
+
+  <model id="PR1" brand="Innioasis" product="Innioasis PR1" flashable="true">
+    <platform>MT6765</platform>
+    <tokens>
+      <token>rom_pr1</token>
+      <token>_pr1</token>
+      <token>-pr1</token>
+      <token>pr1</token>
+      <token>r2-v</token>
+      <token>r2_v</token>
+    </tokens>
+    <notes>MediaTek MT6765 Innioasis player (internal hardware R2).</notes>
+  </model>
+
+  <model id="R1" brand="Innioasis" product="Innioasis R1" flashable="true">
+    <platform>MT6572</platform>
+    <tokens>
+      <token>rom_r1</token>
+      <token>_r1</token>
+      <token>-r1</token>
+      <token>r1_v</token>
+      <token>r1-v</token>
+    </tokens>
+    <notes>MediaTek MT6572 legacy Innioasis player.</notes>
+  </model>
+
+  <model id="SR1" brand="Innioasis" product="Innioasis SR1" flashable="true">
+    <platform>MT6582</platform>
+    <tokens>
+      <token>rom_sr1</token>
+      <token>_sr1</token>
+      <token>-sr1</token>
+      <token>sr1</token>
+      <token>r1p_v</token>
+      <token>r1p</token>
+    </tokens>
+    <notes>MediaTek MT6582 Innioasis player (internal hardware R1 Plus / R1P).</notes>
   </model>
 
   <!-- TIMMKOO -->
-  <model id="Q3E" brand="Timmkoo" product="Timmkoo Q3E" flashable="false">
-    <platform>unknown</platform>
+  <model id="Q3" brand="Timmkoo" product="Timmkoo Q3" flashable="true">
+    <platform>MT6582</platform>
     <tokens>
-      <token>rom_q3e</token>
-      <token>_q3e</token>
-      <token>-q3e</token>
-      <token>q3e</token>
+      <token>rom_q3</token>
+      <token>_q3</token>
+      <token>-q3</token>
+      <token>mx2d-wvga_tm</token>
+      <token>mx2e-wvga_tm</token>
+      <token>mx2-es-wv</token>
     </tokens>
-    <notes>Android 7.1 Timmkoo player. Recognised for guidance only.</notes>
+    <aliases>
+      <alias>Q3E</alias>
+    </aliases>
+    <notes>Timmkoo Q3 player (scatter platform MT6582 / MT6580).</notes>
   </model>
 
-  <model id="Q5" brand="Timmkoo" product="Timmkoo Q5" flashable="false">
-    <platform>unknown</platform>
+  <model id="Q5" brand="Timmkoo" product="Timmkoo Q5" flashable="true">
+    <platform>MT6582</platform>
     <tokens>
       <token>rom_q5</token>
       <token>_q5</token>
       <token>-q5</token>
       <token>q5</token>
+      <token>mx2-wvga_tm</token>
+      <token>mx2-es_q5</token>
+      <token>mx2d_q5d</token>
     </tokens>
-    <notes>Android 7.1 Timmkoo player with Wi-Fi and Bluetooth. Guidance only.</notes>
+    <notes>Timmkoo Q5 player (scatter platform MT6582 / MT6580).</notes>
   </model>
 
-  <model id="Q8" brand="Timmkoo" product="Timmkoo Q8" flashable="false">
+  <model id="Q8" brand="Timmkoo" product="Timmkoo Q8" flashable="true">
     <platform>unknown</platform>
     <tokens>
       <token>rom_q8</token>
@@ -160,7 +217,8 @@
       <token>-q8</token>
       <token>q8</token>
     </tokens>
-    <notes>Android based Timmkoo player. Recognised for guidance only.</notes>
+    <notes>Timmkoo Q8 player.</notes>
   </model>
 
 </device_models>
+

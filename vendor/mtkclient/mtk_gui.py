@@ -159,6 +159,10 @@ class DeviceHandler(QObject):
                                           gpt_part_entry_start_lba='0')  # This actually sets the right GPT settings..
         config.reconnect = True
         config.uartloglevel = 2
+        if "logchannel" in kwargs:
+            config.logchannel = kwargs["logchannel"]
+        else:
+            config.logchannel = "UART"
         self.loglevel = logging.DEBUG
         config.loader = loader
         config.preloader = preloader

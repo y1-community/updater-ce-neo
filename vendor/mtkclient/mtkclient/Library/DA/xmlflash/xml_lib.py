@@ -7,6 +7,7 @@ import sys
 from struct import pack, unpack
 from queue import Queue
 from threading import Thread
+from typing import Tuple, Optional
 
 from Cryptodome.Util.number import long_to_bytes
 from Cryptodome.Cipher import PKCS1_OAEP
@@ -108,18 +109,30 @@ class DAXML(metaclass=LogBase):
         self.carbonara = Carbonara(self.mtk, loglevel)
         self.xmlft = XmlFlashExt(self.mtk, self, loglevel)
 
-    def xread(self):
-        try:
-            hdr = self.usbread(4 + 4 + 4)
-            magic, datatype, length = unpack("<III", hdr)
-        except Exception as err:
-            self.error("xread error: " + str(err))
-            return -1
-        if magic != 0xFEEEEEEF:
-            self.error("xread error: Wrong magic")
-            return -1
-        resp = self.usbread(length)
-        return resp
+    def xread(self) -> Tuple[int,int]:
+        while True:
+            hdr = self.usbread()
+            if len(hdr) not in [12,16]:
+                self.error("xread: Wrong length")
+                return -1, -1
+            magic = int.from_bytes(hdr[:4],'little')
+            if magic != 0xFEEEEEEF:
+                self.error("xread: Wrong magic")
+                return -1, -1
+            datatype = int.from_bytes(hdr[4:8],'little')
+            length = int.from_bytes(hdr[8:0xC],'little')
+            if datatype == DataType.DT_MESSAGE:
+                priority = int.from_bytes(hdr[0xC:0x10],'little')
+                length -= 4
+                data = self.usbread(length)
+                try:
+                    msg = data.rstrip(b"\x00").decode('utf-8', errors='replace')
+                    self.config.uartlog.append(msg)
+                    self.debug(f"[DA] {priority} {msg}")
+                except Exception:
+                    pass
+            elif datatype == DataType.DT_PROTOCOL_FLOW:
+                return datatype, length
 
     def xsend(self, data, datatype=DataType.DT_PROTOCOL_FLOW, is64bit: bool = False):
         if isinstance(data, int):
@@ -153,7 +166,7 @@ class DAXML(metaclass=LogBase):
 
     def setup_env(self):
         da_log_level = int(self.daconfig.uartloglevel)
-        loglevel = "INFO"
+        loglevel = LogLevel().INFO
         if da_log_level == 0:
             loglevel = LogLevel().TRACE
         elif da_log_level == 1:
@@ -165,7 +178,11 @@ class DAXML(metaclass=LogBase):
         elif da_log_level == 4:
             loglevel = LogLevel().ERROR
         system_os = FtSystemOSE.OS_LINUX
-        res = self.send_command(self.cmd.cmd_set_runtime_parameter(da_log_level=loglevel, system_os=system_os))
+        logchannel = self.daconfig.logchannel
+        res = self.send_command(self.cmd.cmd_set_runtime_parameter(da_log_level=loglevel, system_os=system_os,
+                                                                   log_channel=logchannel,
+                                                                   version="1.1", battery_exist="AUTO-DETECT",
+                                                                   initialize_dram=True))
         return res
 
     def send_command(self, xmldata, noack: bool = False):
@@ -176,6 +193,9 @@ class DAXML(metaclass=LogBase):
                     return True
                 cmd, result = self.get_command_result()
                 if cmd == "CMD:END":
+                    if result!="OK":
+                        self.error(result)
+                        return False
                     self.ack()
                     if result == '2nd DA address is invalid. reset.\r\n':
                         self.error(result)
@@ -199,34 +219,30 @@ class DAXML(metaclass=LogBase):
                 return result
         return False
 
-    def get_response(self, raw: bool = False) -> str:
-        sync = self.usbread(4 * 3)
-        if len(sync) == 4 * 3:
-            if int.from_bytes(sync[:4], 'little') == 0xfeeeeeef:
-                if int.from_bytes(sync[4:8], 'little') == 0x1:
-                    length = int.from_bytes(sync[8:12], 'little')
-                    data = self.usbread(length)
-                    if len(data) == length:
-                        if raw:
-                            return data
-                        return data.rstrip(b"\x00").decode('utf-8')
+    def get_response(self, raw: bool = False):
+        datatype, length = self.xread()
+        if datatype == DataType.DT_PROTOCOL_FLOW:
+            data = self.usbread(length)
+            if raw:
+                return data
+            try:
+                return data.rstrip(b"\x00").decode('utf-8', errors='replace')
+            except Exception:
+                return ""
         return ""
 
     def get_response_data(self) -> bytes:
-        sync = self.usbread(4 * 3)
-        if len(sync) == 4 * 3:
-            if int.from_bytes(sync[:4], 'little') == 0xfeeeeeef:
-                if int.from_bytes(sync[4:8], 'little') == 0x1:
-                    length = int.from_bytes(sync[8:12], 'little')
-                    # usbepsz = self.mtk.port.cdc.get_read_packetsize()
-                    data = bytearray()
-                    bytestoread = length
-                    while bytestoread > 0:
-                        tmp = self.usbread(bytestoread, w_max_packet_size=bytestoread)
-                        data.extend(tmp)
-                        bytestoread -= len(tmp)
-                    if len(data) == length:
-                        return data
+        datatype, length = self.xread()
+        if datatype == -1 or datatype != DataType.DT_PROTOCOL_FLOW:
+            return b""
+        data = bytearray()
+        bytestoread = length
+        while bytestoread > 0:
+            tmp = self.usbread(bytestoread, w_max_packet_size=bytestoread)
+            data.extend(tmp)
+            bytestoread -= len(tmp)
+        if len(data) == length:
+            return data
         return b""
 
     def patch_da(self, da1, da2):
@@ -577,7 +593,6 @@ class DAXML(metaclass=LogBase):
         if type(result) is DwnFile:
             self.info("Uploading stage 2...")
             if self.upload(result, data):
-                self.info("Successfully uploaded stage 2.")
                 return True
         else:
             self.error("Wrong boot_to response :(")
@@ -636,7 +651,7 @@ class DAXML(metaclass=LogBase):
                 # Unprotected and patched OR stock option
                 loaded = self.boot_to(da2offset, da2)
             if loaded:
-                self.info("Successfully uploaded stage 2")
+                self.info("Successfully booted to stage 2")
                 self.setup_hw_init()
                 self.change_usb_speed()
                 res = self.check_sla()
@@ -688,13 +703,22 @@ class DAXML(metaclass=LogBase):
             self.reinit(True)
             self.check_lifecycle()
             if self.mtk.daloader.patch:
+                xdata = self.xmlft.patch()
+                """
+                i=0
+                val=self.read_register(0x4006E4C0)
+                for addr in range(0x4006E4C0,0x4006E4C0+len(xdata),4):
+                    self.write_register(addr=addr, data=xdata[i:i+4])
+                    i+=4
+                """
                 xmlcmd = self.cmd.create_cmd("CUSTOM")
                 if self.xsend(xmlcmd):
                     # result =
                     data = self.get_response()
                     if data == 'OK':
+                        print("CUSTOM command detected.")
+                        sys.stdout.flush()
                         # OUTPUT
-                        xdata = self.xmlft.patch()
                         self.xsend(int.to_bytes(len(xdata), 4, 'little'))
                         self.xsend(xdata)
                         # CMD:END

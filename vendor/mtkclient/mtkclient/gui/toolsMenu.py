@@ -61,17 +61,22 @@ class generateKeysMenu(QObject):
         self.sendToLog = sendToLog
         self.da_handler = da_handler
 
-    @Slot(object)
-    def updateKeys(self, result):
-        result = result or {}
+    @Slot()
+    def updateKeys(self):
         path = os.path.join(self.hwparamFolder, "hwparam.json")
         self.ui.keystatuslabel.setText(self.tr(f"Keys saved to {path}."))
-        self.ui.keytable.setRowCount(len(result))
+        keycount = len(self.parent.Status['result'])
+        self.ui.keytable.setRowCount(keycount)
         self.ui.keytable.setColumnCount(2)
-        for row, (key, skey) in enumerate(result.items()):
-            self.ui.keytable.setItem(row, 0, QTableWidgetItem(key))
-            self.ui.keytable.setItem(row, 1, QTableWidgetItem(str(skey) if skey is not None else ""))
-        self.sendToLog(self.tr("Keys generated!"))
+
+        column = 0
+        for key in self.parent.Status['result']:
+            skey = self.parent.Status['result'][key]
+            if skey is not None:
+                self.ui.keytable.setItem(column, 0, QTableWidgetItem(key))
+                self.ui.keytable.setItem(column, 1, QTableWidgetItem(skey))
+                column += 1
+        self.sendToLogSignal.emit(self.tr("Keys generated!"))
         self.enableButtonsSignal.emit()
 
     def generateKeys(self):
@@ -83,13 +88,15 @@ class generateKeysMenu(QObject):
         else:
             self.mtkClass.config.set_hwparam_path(hwparamFolder)
         self.hwparamFolder = hwparamFolder
-        self._thread = asyncThread(self.parent, 0, self.generateKeysAsync, [hwparamFolder])
-        self._thread.sendToLogSignal.connect(self.sendToLog)
-        self._thread.sendUpdateSignal.connect(self.updateKeys)
-        self._thread.start()
+        thread = asyncThread(self.parent, 0, self.generateKeysAsync, [hwparamFolder])
+        thread.sendToLogSignal.connect(self.sendToLog)
+        thread.sendUpdateSignal.connect(self.updateKeys)
+        thread.start()
         self.disableButtonsSignal.emit()
 
     def generateKeysAsync(self, toolkit, parameters):
+        self.sendToLogSignal = toolkit.sendToLogSignal
+        self.sendUpdateSignal = toolkit.sendUpdateSignal
         toolkit.sendToLogSignal.emit(self.tr("Generating keys"))
         res = self.mtkClass.daloader.keys()
         if res:

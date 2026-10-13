@@ -26,3 +26,6 @@ src/_build_brand.py
 scratch/
 tools/mtkclient-*-snapshot/
 mental_model/
+
+# debug harness run output
+debug/work/

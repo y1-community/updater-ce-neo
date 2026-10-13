@@ -408,10 +408,6 @@ class SettingsPage(QWidget):
         self._cache_card.set_layout(cache_layout)
         layout.addWidget(self._cache_card)
 
-        # Rockbox filters sit directly below Firmware Storage & Cache.
-        layout.addWidget(self._rockbox_card)
-        self._update_rockbox_visibility()
-
         # --- Card 4: Platform preparation ---
         # Linux gets the SP Flash Tool system checker (udev rules, kernel
         # modules); Windows instead needs the MediaTek USB driver installed
@@ -490,6 +486,9 @@ class SettingsPage(QWidget):
         self._advanced_card.set_layout(adv_layout)
         layout.addWidget(self._advanced_card)
 
+        # Settings hidden by Advanced Settings are placed below the Advanced
+        # Settings card itself so there is no layout shifting above it.
+        layout.addWidget(self._rockbox_card)
         layout.addWidget(self._terminal_card)
         layout.addWidget(self._method_card)
         self._card_layout = layout
@@ -695,6 +694,22 @@ class SettingsPage(QWidget):
         if win and hasattr(win, "_adjust_window_geometry"):
             win._adjust_window_geometry()
 
+    def hide_advanced_methods(self):
+        """Hide advanced install methods and cards (D toggle off)."""
+        self._dev_mac_revealed = False
+        self._advanced_revealed = False
+        QSettings("innioasis", "updater").setValue("advanced_settings", False)
+        if hasattr(self, "_cb_advanced_settings"):
+            self._cb_advanced_settings.blockSignals(True)
+            self._cb_advanced_settings.setChecked(False)
+            self._cb_advanced_settings.blockSignals(False)
+        self._sync_advanced_visibility()
+        if not paths.IS_MAC:
+            self._reload_method_options()
+        win = self.window()
+        if win and hasattr(win, "_adjust_window_geometry"):
+            win._adjust_window_geometry()
+
     def advanced_methods_revealed(self) -> bool:
         return self._advanced_revealed
 
@@ -705,11 +720,18 @@ class SettingsPage(QWidget):
             return
         if event.key() == Qt.Key_D and event.modifiers() == Qt.NoModifier:
             win = self.window()
-            if win is not None and hasattr(win, "_unlock_diagnostics"):
-                win._unlock_diagnostics()
-            self.reveal_advanced_methods()
+            if win is not None and hasattr(win, "toggle_diagnostics_and_advanced"):
+                win.toggle_diagnostics_and_advanced()
+            else:
+                self.reveal_advanced_methods()
             event.accept()
             return
+        if event.key() == Qt.Key_R and event.modifiers() == Qt.NoModifier:
+            win = self.window()
+            if win is not None and hasattr(win, "reset_all_configuration_and_caches"):
+                win.reset_all_configuration_and_caches()
+                event.accept()
+                return
         super().keyPressEvent(event)
 
     def _reload_method_options(self):

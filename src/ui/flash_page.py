@@ -425,10 +425,16 @@ class _FlowRow(QWidget):
         return sum(label.heightForWidth(width) for label in self._labels) + self._box.spacing()
 
     def sizeHint(self):  # noqa: N802 (Qt naming)
-        return QSize(self.row_width(), self.heightForWidth(self.row_width()))
+        w = self.width() if self.width() > 0 else INSTALL_TEXT_WIDTH
+        if self._horizontal_for(w):
+            return QSize(self.row_width(), max(18, self.fontMetrics().height() + 2))
+        return QSize(w, self.heightForWidth(w))
 
     def minimumSizeHint(self):  # noqa: N802 (Qt naming)
-        return QSize(0, self.heightForWidth(self.row_width()))
+        w = self.width() if self.width() > 0 else INSTALL_TEXT_WIDTH
+        if self._horizontal_for(w):
+            return QSize(0, max(18, self.fontMetrics().height() + 2))
+        return QSize(0, self.heightForWidth(w))
 
     def resizeEvent(self, event):  # noqa: N802 (Qt naming)
         self.set_horizontal(self._horizontal_for(self.width()))
@@ -1064,6 +1070,7 @@ class FlashPage(QWidget):
             return
         self._stack.setCurrentWidget(target_view)
         self._update_paperclip_hint()
+        self._notify_geometry_change()
 
     def _update_paperclip_hint(self) -> None:
         """Show how to press the hidden button, at the power-off step only.
@@ -1085,7 +1092,6 @@ class FlashPage(QWidget):
         wanted = (
             bool(model)
             and copy == "power_off"
-            and not self._is_mtk_active()
             and not getattr(self, "_stop_open", False)
         )
         if not wanted:
@@ -1221,12 +1227,7 @@ class FlashPage(QWidget):
             self._step_label.setText(text)
 
     def _connect_device_prompt_text(self) -> str:
-        if self._is_mtk_active():
-            model_str = (getattr(self, "_model", "") or "").upper()
-            key = "flash_connect_paperclip_prompt_a5" if "A5" in model_str else "flash_connect_paperclip_prompt"
-            prompt = tr(key).format(model=self._connect_model_text())
-        else:
-            prompt = tr("flash_connect_device_prompt").format(model=self._connect_model_text())
+        prompt = tr("flash_connect_device_prompt").format(model=self._connect_model_text())
         remaining = getattr(self, "_attempt_remaining", 0)
         if remaining > 0 and not getattr(self, "_prompt_only", False):
             return f"{prompt} ({remaining}s)"
@@ -1634,15 +1635,14 @@ class FlashPage(QWidget):
 
     def _power_off_prompt_key(self) -> str:
         """Prompt to prepare device before flashing."""
-        if self._is_mtk_active():
-            return "flash_connect_prompt_mtk"
         return "flash_connect_prompt"
 
-    def show_power_off_prompt(self, show_pin_tip: bool = False) -> None:
+    def show_power_off_prompt(self, show_pin_tip: bool = True) -> None:
         """Prompt to power off and unplug. Does not start a flash by itself."""
         self._failed = False
         self._prompt_only = True
         self._wait_copy = "power_off"
+        self._show_pin_tip = show_pin_tip
         self.set_attempt_timeout(0)
         self.clear_install_failure()
         self.show_waiting()
@@ -1654,9 +1654,14 @@ class FlashPage(QWidget):
         self._wait_cancel_btn.setVisible(True)
         self._wait_continue_btn.setVisible(True)
         if hasattr(self, "_wait_mode_hint"):
-            if show_pin_tip and not self._is_mtk_active():
+            if show_pin_tip:
                 model_str = (getattr(self, "_model", "") or "").upper()
-                tip_key = "flash_paperclip_hint_a5" if "A5" in model_str else "flash_paperclip_hint"
+                if "Y1" in model_str or "Y2" in model_str or "6572" in str(getattr(self, "_platform", "")) or "6582" in str(getattr(self, "_platform", "")):
+                    tip_key = "flash_y1_preloader_hint"
+                elif "A5" in model_str:
+                    tip_key = "flash_paperclip_hint_a5"
+                else:
+                    tip_key = "flash_paperclip_hint"
                 self._wait_mode_hint.setText(tr(tip_key))
                 self._wait_mode_hint.setVisible(True)
             else:
@@ -1728,6 +1733,10 @@ class FlashPage(QWidget):
 
     def set_model(self, model):
         self._model = (model or "").strip() or ""
+        self._update_paperclip_hint()
+
+    def set_platform(self, platform):
+        self._platform = (platform or "").strip() or ""
         self._update_paperclip_hint()
 
     def _dont_ask_html(self) -> str:
@@ -1906,6 +1915,7 @@ class FlashPage(QWidget):
         flow = getattr(self, "_status_flow", None)
         if flow is not None:
             flow.refresh()
+        self._notify_geometry_change()
 
     def update_action(self, text):
         self._action_label.setText(text)
@@ -1915,6 +1925,7 @@ class FlashPage(QWidget):
             flow = getattr(self, "_status_flow", None)
             if flow is not None:
                 flow.refresh()
+            self._notify_geometry_change()
 
     def update_time(self, elapsed, eta):
         self._elapsed_row.set_value(elapsed)
@@ -1924,6 +1935,7 @@ class FlashPage(QWidget):
         flow = getattr(self, "_status_flow", None)
         if flow is not None:
             flow.refresh()
+        self._notify_geometry_change()
 
     @staticmethod
     def _format_friendly_eta(eta_str: str) -> str:
@@ -1970,9 +1982,19 @@ class FlashPage(QWidget):
             hasattr(self, "_wait_mode_hint")
             and self._wait_mode_hint.isVisible()
         ):
-            from ..config import download_mode_hint
+            if getattr(self, "_show_pin_tip", False):
+                model_str = (getattr(self, "_model", "") or "").upper()
+                if "Y1" in model_str or "Y2" in model_str or "6572" in str(getattr(self, "_platform", "")) or "6582" in str(getattr(self, "_platform", "")):
+                    tip_key = "flash_y1_preloader_hint"
+                elif "A5" in model_str:
+                    tip_key = "flash_paperclip_hint_a5"
+                else:
+                    tip_key = "flash_paperclip_hint"
+                self._wait_mode_hint.setText(tr(tip_key))
+            else:
+                from ..config import download_mode_hint
 
-            self._wait_mode_hint.setText(download_mode_hint(self._model))
+                self._wait_mode_hint.setText(download_mode_hint(self._model))
         if hasattr(self, "_flash_retry_btn"):
             self._flash_retry_btn.setText(tr("flash_btn_retry"))
         if hasattr(self, "_wait_continue_btn"):
@@ -1980,12 +2002,7 @@ class FlashPage(QWidget):
             self._wait_continue_btn.setAccessibleName(tr("btn_next"))
         self._prep_banner.retranslate()
         if self._wait_banner_key == "connect":
-            if self._is_mtk_active():
-                model_str = (getattr(self, "_model", "") or "").upper()
-                banner_key = "flash_connect_paperclip_prompt_a5" if "A5" in model_str else "flash_connect_paperclip_prompt"
-            else:
-                banner_key = "flash_connect_device_prompt"
-            self._wait_banner.set_key(banner_key, model=self._connect_model_text())
+            self._wait_banner.set_key("flash_connect_device_prompt", model=self._connect_model_text())
         elif self._wait_banner_key == "please_wait":
             self._wait_banner.set_key("flash_please_wait")
         else:
@@ -2177,13 +2194,73 @@ class FlashPage(QWidget):
             if wrapped > 0:
                 warning.setMinimumHeight(wrapped)
 
+    def content_height_hint(self, width: int | None = None) -> int:
+        """Accurately compute total vertical space needed by the active view inside FlashPage."""
+        self.sync_text_fit()
+        margins = self.layout().contentsMargins() if self.layout() else None
+        top_m = margins.top() if margins else 8
+        bottom_m = margins.bottom() if margins else 8
+        cur_view = self._stack.currentWidget() if hasattr(self, "_stack") else None
+        if cur_view is None:
+            return self.sizeHint().height()
+
+        view_w = width if width is not None and width > 0 else self.width()
+        if view_w <= 0:
+            view_w = INSTALL_TEXT_WIDTH + 140
+
+        h = 0
+        if cur_view is self._flashing_view:
+            card_h = self._progress_card.sizeHint().height()
+            warn_h = 0
+            if hasattr(self, "_warning") and self._warning.isVisible():
+                warn_h = max(self._warning.sizeHint().height(), self._warning.heightForWidth(self.text_column_width())) + 8
+            appeal_h = 0
+            if hasattr(self, "_appeal") and self._appeal.isVisible():
+                appeal_h = self._appeal.sizeHint().height() + 8
+            h = card_h + warn_h + appeal_h
+        elif cur_view is self._waiting_view:
+            card_h = self._wait_card.sizeHint().height()
+            hint_h = 0
+            if hasattr(self, "_paperclip_hint_host") and self._paperclip_hint_host.isVisible():
+                hint_h = self._paperclip_hint_host.sizeHint().height() + 6
+            h = card_h + hint_h
+        elif cur_view is self._preparing_view:
+            h = self._prep_card.sizeHint().height()
+        elif cur_view is self._downloading_view:
+            h = self._download_card.sizeHint().height()
+        else:
+            h = cur_view.sizeHint().height()
+
+        return h + top_m + bottom_m + 8
+
+    def hasHeightForWidth(self) -> bool:  # noqa: N802 (Qt naming)
+        return True
+
+    def heightForWidth(self, width: int) -> int:  # noqa: N802 (Qt naming)
+        return self.content_height_hint(width)
+
+    def _notify_geometry_change(self) -> None:
+        """Debounced request to MainWindow to adjust window height to fit contents."""
+        timer = getattr(self, "_geom_notify_timer", None)
+        if timer is None:
+            from PySide6.QtCore import QTimer
+            timer = QTimer(self)
+            timer.setSingleShot(True)
+            timer.setInterval(40)
+            def _trigger():
+                win = self.window()
+                adjust = getattr(win, "_adjust_window_geometry", None)
+                if callable(adjust) and win is not self:
+                    adjust()
+            timer.timeout.connect(_trigger)
+            self._geom_notify_timer = timer
+        if not timer.isActive():
+            timer.start()
+
     def _relayout_for_text(self) -> None:
         self.sync_text_fit()
         self.updateGeometry()
-        window = self.window()
-        adjust = getattr(window, "_adjust_window_geometry", None)
-        if callable(adjust) and window is not self:
-            adjust()
+        self._notify_geometry_change()
 
     def _ensure_stop_buttons(self) -> None:
         if hasattr(self, "_stop_continue"):

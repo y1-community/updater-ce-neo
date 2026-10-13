@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
-# (c) B.Kerler 2018-2025 GPLv3 License
+# (c) B.Kerler 2018-2026 GPLv3 License
 from capstone import (Cs, CS_MODE_BIG_ENDIAN, CS_MODE_LITTLE_ENDIAN,
                       CS_ARCH_ARM, CS_ARCH_ARM64, CS_ARCH_MIPS,
                       CS_ARCH_X86, CS_ARCH_SPARC, CS_ARCH_SYSZ, CS_ARCH_XCORE,

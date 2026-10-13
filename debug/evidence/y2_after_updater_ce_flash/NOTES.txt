@@ -1,0 +1,9 @@
+Innioasis Y2 (MT6582) read back with plain mtkclient (debug/y2_mtk_test.py) after Updater CE
+reported a successful flash of the "rockbox for y2" ROM. Device did NOT boot.
+
+- MBR, EBR1, EBR2: all zero bytes (files here are the raw 512-byte readbacks).
+- LOGO: all zeros.
+- boot1_readback.bin.gz: EMMC_BOOT header @0x0, BRLYT @0x200, ROM preloader byte-exact @0x800.
+- lk/boot/recovery/secro: present but matched neither ROM at offset 0 (hashes in SHA256SUMS_not_committed;
+  images themselves are too large / proprietary to commit).
+- The same ROM flashed with SP Flash Tool (Windows) boots.

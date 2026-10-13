@@ -23,8 +23,8 @@ def _app():
 
 
 def test_mtkclient_vs_sp_flash_prep_prompt():
-    """MTKClient users are asked to confirm device is connected by USB;
-    SP Flash users are asked to confirm device is powered-off and disconnected."""
+    """Both MTKClient and SP Flash users have a consistent preparation flow:
+    asked to confirm device is powered-off and disconnected, with paperclip/pin hint where applicable."""
     from src.ui.flash_page import FlashPage
 
     app = _app()
@@ -38,16 +38,16 @@ def test_mtkclient_vs_sp_flash_prep_prompt():
     assert "powered-off and disconnected" in sp_text
     assert "Y1" in sp_text
 
-    # MTKClient method
+    # MTKClient method: unified Disconnect and Power Off flow
     page.set_method("mtk")
     page.show_power_off_prompt()
     mtk_text = page._wait_prompt_label.text()
-    assert "connected by USB" in mtk_text
+    assert "powered-off and disconnected" in mtk_text
     assert "Y1" in mtk_text
 
 
 def test_mtkclient_paperclip_prompt_and_120s_timeout():
-    """In MTK mode, connect prompt asks to insert paperclip with 120s timeout."""
+    """In MTK mode, connect prompt asks to connect device with 120s timeout and paperclip hint where applicable."""
     from src.ui.flash_page import FlashPage
 
     app = _app()
@@ -60,22 +60,37 @@ def test_mtkclient_paperclip_prompt_and_120s_timeout():
     assert page._attempt_remaining == 30
     assert "please connect your y1" in page._wait_prompt_label.text().lower()
 
-    # MTKClient - Y1 (headphone jack)
+    # MTKClient - Y1
     page.set_method("mtk")
     page.leave_power_off_prompt()
     assert page._attempt_remaining == 120
     text_y1 = page._wait_prompt_label.text()
-    assert "headphone jack" in text_y1.lower()
-    assert "paperclip" in text_y1.lower() or "pin" in text_y1.lower()
-    assert "connect" not in text_y1.lower()
+    assert "please connect your y1" in text_y1.lower()
     assert "(120s)" in text_y1
+
+    # Pin hint is available for both backends at the power-off step
+    page.show()
+    page.show_power_off_prompt(show_pin_tip=True)
+    assert not page._wait_mode_hint.isHidden()
+    assert "headphone jack" in page._wait_mode_hint.text().lower()
 
     # MTKClient - A5 (power button)
     page.set_model("A5")
+    page.show_power_off_prompt(show_pin_tip=True)
+    assert not page._wait_mode_hint.isHidden()
+    assert "power button" in page._wait_mode_hint.text().lower()
+
+    # MTKClient - Y2 (headphone jack + normal connect)
+    page.set_model("Y2")
+    page.show_power_off_prompt(show_pin_tip=True)
+    assert not page._wait_mode_hint.isHidden()
+    assert "headphone jack" in page._wait_mode_hint.text().lower()
+    assert "without holding buttons" in page._wait_mode_hint.text().lower()
     page.leave_power_off_prompt()
-    text_a5 = page._wait_prompt_label.text()
-    assert "power button" in text_a5.lower()
-    assert "connect" not in text_a5.lower()
+    assert page._attempt_remaining == 120
+    text_y2 = page._wait_prompt_label.text()
+    assert "please connect your y2" in text_y2.lower()
+    assert "(120s)" in text_y2
 
 
 def test_mtkclient_forgiving_handshake_and_progress_detection():
@@ -284,5 +299,41 @@ def test_rockbox_y2_triggers_themes_stage_and_logs():
             assert any("Y2" in l for l in logs)
             assert page._themes_stage_active
             assert page._status_flow._forced_stacked
+
+
+def test_device_prep_confirmation_before_watch_and_flash():
+    """Users are always prompted to power off and disconnect their model/device first.
+    The flash worker and device monitor are NOT triggered until the user confirms (presses Next)."""
+    from src.ui.main_window import MainWindow, _PAGE_FLASH
+
+    app = _app()
+    w = MainWindow()
+    w.show()
+
+    started_flash = []
+    started_monitor = []
+    w.service.start_flash = lambda *a, **k: started_flash.append(True)
+    w.service.start_device_monitor = lambda *a, **k: started_monitor.append(True)
+
+    # 1. Package selected triggers device prep
+    w._package_path = "/fake/rom.zip"
+    w._package_name = "Original Software 3.2.1"
+    w._package_model = "Y2"
+    w._show_device_prep()
+
+    assert w._stack.currentIndex() == _PAGE_FLASH
+    assert w._power_off_prompt is True
+    assert not started_flash, "Flash must not be started while asking user to prepare device"
+    assert not started_monitor, "Device monitor must not watch for connections during device prep"
+    assert "powered-off and disconnected" in w._flash_page._wait_prompt_label.text()
+    assert "Y2" in w._flash_page._wait_prompt_label.text()
+    assert w._flash_page._wait_continue_btn.isVisible()
+
+    # 2. User confirms by clicking Next -> flash starts and connection watching begins
+    w._on_power_off_continue()
+    assert w._power_off_prompt is False
+    assert started_flash == [True], "Flash must be triggered upon user confirmation"
+    assert started_monitor == [True], "Device monitor must start watching upon user confirmation"
+    assert "please connect your y2" in w._flash_page._wait_prompt_label.text().lower()
 
 

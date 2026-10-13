@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
-# (c) B.Kerler 2018-2025
+# (c) B.Kerler 2018-2026
 import codecs
 import io
 import json
@@ -23,23 +23,9 @@ except ImportError:
     pass
 
 try:
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding='utf-8')
-    elif hasattr(sys.stdout, "buffer"):
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-    elif hasattr(sys.stdout, "detach"):
-        sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding='utf-8')
-except Exception:
-    pass
-
-try:
-    if hasattr(sys.stderr, "reconfigure"):
-        sys.stderr.reconfigure(encoding='utf-8')
-    elif hasattr(sys.stderr, "buffer"):
-        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
-    elif hasattr(sys.stderr, "detach"):
-        sys.stderr = io.TextIOWrapper(sys.stderr.detach(), encoding='utf-8')
-except Exception:
+    sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.detach(), encoding='utf-8')
+except (io.UnsupportedOperation, AttributeError):
     pass
 
 

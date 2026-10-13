@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# (c) B.Kerler 2018-2023
+# (c) B.Kerler 2018-2026
 # GPLv3 License
 
 import copy
@@ -30,7 +30,7 @@ class progress:
         self.oldtime = time.time()
         self.offset = offset
         if guiprogress is not None:
-            self.guiprogress = getattr(guiprogress, "emit", guiprogress)
+            self.guiprogress = guiprogress.emit
         else:
             self.guiprogress = None
 

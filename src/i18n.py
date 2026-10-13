@@ -1359,6 +1359,12 @@ _STRINGS: dict = {
         "fr": "Astuce : éteignez l'appareil en appuyant avec un trombone ou une aiguille sur le bouton caché près du bouton d'alimentation.",
         "es": "Consejo: apague el dispositivo pulsando con un clip o una aguja el botón oculto junto al botón de encendido.",
     },
+    "flash_y1_preloader_hint": {
+        "zh-CN": "提示：用回形针或卡针按下耳机插孔旁边的隐藏按钮关机，关机后直接连接 USB 即可（无需长按按键）。",
+        "en": "Tip: Power off by pressing the hidden button beside the headphone jack with a paperclip or pin. Connect USB normally without holding buttons.",
+        "fr": "Astuce : éteignez en appuyant sur le bouton caché à côté de la prise casque avec un trombone ou une aiguille, puis connectez l'USB normalement.",
+        "es": "Consejo: apague pulsando el botón oculto junto a la toma de auriculares con un clip o una aguja, luego conecte el USB normalmente.",
+    },
     "gui_handoff_hint_headphone": {
         "zh-CN": "用卡针或回形针插入耳机孔旁边的小孔来关机，然后在桌面工具等待时连接 USB。",
         "en": "Power off by placing a pin or paperclip in the hole next to the headphone port, then connect USB when the desktop tool is waiting.",

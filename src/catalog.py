@@ -723,6 +723,114 @@ def _release_datestamp_label(raw: str) -> str | None:
     return f"{dt.strftime('%B')} {dt.day} {dt.year}"
 
 
+def parse_manufacturer_rom_info(name_or_path: str) -> dict | None:
+    """Identify manufacturer ROM naming patterns and extract model, version, and date.
+
+    Returns a dict with keys: 'model', 'version', 'date', 'software_name', 'title'
+    or None if the name is not a recognized manufacturer ROM pattern.
+    """
+    if not name_or_path:
+        return None
+    clean = Path(str(name_or_path).replace("\\", "/")).name.lower()
+
+    model = ""
+    if "mx3-g3" in clean or "mx3-9_g3" in clean or "mx3-9_en_g3" in clean:
+        model = "G3"
+    elif "mx3-g1" in clean or "mx3-9_g1" in clean or "mx3-9_en" in clean:
+        model = "G1"
+    elif "mx4" in clean:
+        model = "G5"
+    elif "r2-v" in clean or "r2_v" in clean or clean.startswith("r2"):
+        model = "PR1"
+    elif "r1p" in clean:
+        model = "SR1"
+    elif "r1_v" in clean or "r1-v" in clean or clean.startswith("r1_") or clean.startswith("r1-"):
+        model = "R1"
+    elif "q5" in clean or "mx2-wvga_tm" in clean:
+        model = "Q5"
+    elif "mx2d-wvga" in clean or "mx2e-wvga" in clean or "mx2-es-wv" in clean:
+        model = "Q3"
+    elif "y1_hvga" in clean or "y1-" in clean or "y1_" in clean or clean.startswith("y1"):
+        model = "Y1"
+    elif "y2_v" in clean or "y2-" in clean or "y2_" in clean or "rom_y2" in clean or clean.startswith("y2"):
+        model = "Y2"
+
+    if not model:
+        return None
+
+    version = ""
+    date_str = ""
+    matches = re.findall(r"(?:[-_]|wv|v)(\d+(?:\.\d+)+)(?:[.-](\d{8}))?", clean)
+    if matches:
+        version = matches[-1][0]
+        date_str = matches[-1][1] or ""
+    else:
+        m_simple = re.search(r"[-_](?:w?v)?(\d+(?:\.\d+)*)", clean)
+        if m_simple:
+            version = m_simple.group(1)
+
+    if not date_str:
+        m_date = re.search(r"(\d{8})", clean)
+        if m_date:
+            date_str = m_date.group(1)
+
+    title = f"Original Software {version} for {model}" if version else f"Original Software for {model}"
+    return {
+        "model": model,
+        "version": version,
+        "date": date_str,
+        "software_name": f"Original Software {version}".strip(),
+        "title": title,
+    }
+
+
+def parse_scatter_header(scatter_path: str | Path) -> tuple[str, str]:
+    """Parse (platform, project) from a MediaTek scatter file."""
+    plat, proj = "", ""
+    try:
+        content = Path(scatter_path).read_text(encoding="utf-8", errors="ignore")
+        m_plat = re.search(r"^\s*-?\s*platform\s*:\s*(\S+)", content, re.MULTILINE | re.IGNORECASE)
+        if m_plat:
+            plat = m_plat.group(1).strip().upper()
+        m_proj = re.search(r"^\s*-?\s*project\s*:\s*(\S+)", content, re.MULTILINE | re.IGNORECASE)
+        if m_proj:
+            proj = m_proj.group(1).strip()
+    except Exception:
+        pass
+    return plat, proj
+
+
+def infer_model_from_scatter(platform: str, project: str) -> str:
+    """Infer the hardware model from scatter header facts when the package name is unknown."""
+    plat = (platform or "").strip().upper()
+    proj = (project or "").strip().lower()
+
+    if proj == "k53v1_64_bsp":
+        return "G1"
+    if proj == "k62v1_64_bsp":
+        return "PR1"
+    if proj == "eastaeon80_wet_kk":
+        return "Q5"
+    if proj == "j5052":
+        return "SR1"
+    if proj == "g368_nyx":
+        return "R1"
+    if proj == "eastaeon82_wet_kk":
+        return "Y2"
+    if proj == "eastaeon72_wet_jb3":
+        return "Y1"
+
+    if plat == "MT6753":
+        return "G1"
+    if plat == "MT6765":
+        return "PR1"
+    if plat == "MT6572":
+        return "Y1"
+    if plat == "MT6582" or plat == "MT6580":
+        return "Y2"
+    return ""
+
+
 def format_install_card_title(software: str, version_label: str = "", model: str = "") -> str:
     """``{software} {version or date} for {model}``, omitting empty pieces.
 

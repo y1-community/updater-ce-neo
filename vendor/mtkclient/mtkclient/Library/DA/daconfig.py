@@ -89,6 +89,7 @@ class DAconfig(metaclass=LogBase):
         self.legacy_storage = Legacy_Storage(mtk, self, loglevel)
         self.reconnect = self.config.reconnect
         self.uartloglevel = self.config.uartloglevel
+        self.logchannel = self.config.logchannel
         self.sparesize = 0
         self.readsize = 0
         self.pagesize = 512
@@ -154,9 +155,8 @@ class DAconfig(metaclass=LogBase):
                 with open(preloader, "rb") as rf:
                     data = rf.read()
             else:
-                self.error(f"Preloader : {preloader} doesn't exist.")
-                self.emi = None
-                return bytearray()
+                self.error(f"Preloader : {preloader} doesn't exist. Aborting.")
+                exit(1)
         try:
             self.emiver, self.emi = self.m_extract_emi(data)
         except Exception:

@@ -54,6 +54,16 @@ def ensure_mtkclient_importable():
     a dev checkout (vendor/) and in a PyInstaller bundle (BUNDLE_DIR/mtkclient,
     Contents/Resources/mtkclient, etc.).
     """
+    for stream in (getattr(sys, "stdout", None), getattr(sys, "stderr", None)):
+        if stream is not None and hasattr(stream, "detach"):
+            try:
+                import io
+                def _no_detach():
+                    raise io.UnsupportedOperation("detach disabled to protect stream buffer")
+                stream.detach = _no_detach
+            except Exception:
+                pass
+
     candidates = [
         MTKCLIENT_DIR,
         BUNDLE_DIR / "mtkclient",

@@ -81,8 +81,10 @@ def test_author_localization():
     translator().set_language("en")
 
 
-def test_advanced_settings_gating_and_md_shortcut():
+def test_advanced_settings_gating_and_md_shortcut(monkeypatch):
     """Verify Advanced Settings hides terminal/method cards by default and reveals on M/D or toggle."""
+    import src.paths as paths
+    monkeypatch.setattr(paths, "IS_MAC", False)
     _app = _get_qapp()
     page = SettingsPage()
 
@@ -140,4 +142,90 @@ def test_extract_worker_emits_100_percent():
 
         assert len(emitted_percentages) > 0
         assert emitted_percentages[-1] == 100, f"Expected final emission 100, got {emitted_percentages[-1]}"
+
+
+def test_manufacturer_rom_detection_y1_y2():
+    """Verify parse_manufacturer_rom_info correctly extracts Y1 and Y2 info."""
+    y1_info = catalog.parse_manufacturer_rom_info("Y1_HVGA_V1.0.8_20220606.rar")
+    assert y1_info is not None
+    assert y1_info["model"] == "Y1"
+    assert y1_info["version"] == "1.0.8"
+    assert y1_info["date"] == "20220606"
+    assert "Original Software 1.0.8 for Y1" in y1_info["title"]
+
+    y2_info = catalog.parse_manufacturer_rom_info("Y2_V3.2.1_20220814.rar")
+    assert y2_info is not None
+    assert y2_info["model"] == "Y2"
+    assert y2_info["version"] == "3.2.1"
+    assert y2_info["date"] == "20220814"
+    assert "Original Software 3.2.1 for Y2" in y2_info["title"]
+
+    y2_extracted = catalog.parse_manufacturer_rom_info(".original-software-y2_3.2.1_rom_y2_extracted")
+    assert y2_extracted is not None
+    assert y2_extracted["model"] == "Y2"
+    assert y2_extracted["version"] == "3.2.1"
+
+    y1_simple = catalog.parse_manufacturer_rom_info("Y1-3.1.2.zip")
+    assert y1_simple is not None
+    assert y1_simple["model"] == "Y1"
+    assert y1_simple["version"] == "3.1.2"
+
+
+def test_device_monitor_priming_and_handoff():
+    """Verify DeviceMonitor primes session and hands it to FlashService / FlashWorker."""
+    from src.flash_service import DeviceMonitor, FlashService
+
+    monitor = DeviceMonitor()
+    mock_mtk = object()
+    monitor.primed_mtk = mock_mtk
+
+    taken = monitor.take_primed_mtk()
+    assert taken is mock_mtk
+    assert monitor.primed_mtk is None
+
+    service = FlashService()
+    service._device_monitor = monitor
+    monitor.primed_mtk = mock_mtk
+    assert service.take_primed_mtk() is mock_mtk
+    assert service.take_primed_mtk() is None
+
+
+def test_mtk_darwin_handshake_safe_read(monkeypatch):
+    """Verify patched_run_handshake avoids small bulk IN reads on Darwin."""
+    import sys
+    import logging
+    import src.mtk_api as mtk_api
+    mtk_api._ensure_imports()
+    from mtkclient.Library import Port
+
+    read_calls = []
+    class MockEPIn:
+        wMaxPacketSize = 64
+        def read(self, size, timeout=500):
+            read_calls.append(size)
+            curr_byte = len(read_calls)
+            mapping = {1: b"\x5f", 2: b"\xf5", 3: b"\xaf", 4: b"\xfa"}
+            return mapping.get(curr_byte, b"")
+
+    class MockEPOut:
+        def write(self, data, timeout=500):
+            return len(data)
+
+    class MockCDC:
+        pid = 0x2000
+        EP_IN = MockEPIn()
+        EP_OUT = MockEPOut()
+        def set_line_coding(self, *a, **k): pass
+        def setcontrollinestate(self, *a, **k): pass
+
+    port = Port.Port.__new__(Port.Port)
+    port.info = lambda *a: None
+    port.debug = lambda *a: None
+    port.cdc = MockCDC()
+
+    monkeypatch.setattr(sys, "platform", "darwin")
+    ok = port.run_handshake(retries=1)
+    assert ok is True
+    assert all(sz >= 64 for sz in read_calls), f"Expected all reads >= 64, got {read_calls}"
+
 

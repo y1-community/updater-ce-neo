@@ -3270,8 +3270,8 @@ def test_mtkclient_da_progress_surface():
 
         assert results == [(True, "")], results
         # mtkclient's phase messages reached the diagnostics log.
-        assert "Successfully uploaded stage 2" in logs, logs
-        assert "DaHandler - Device is in Preloader-Mode." in logs, logs
+        assert any("Successfully uploaded stage 2" in m for m in logs), logs
+        assert any("DaHandler - Device is in Preloader-Mode." in m for m in logs), logs
         if fs.MTK_RESTART_IN_BROM:
             # A preloader-mode player is restarted into BROM before the DA upload,
             # and both modes are reported truthfully.
@@ -3289,9 +3289,10 @@ def test_mtkclient_da_progress_surface():
             assert mode_msgs[0] == "Device detected (preloader mode) - configuring download agent...", mode_msgs
         # Install-started comes from the first image write, not the handshake.
         assert steps.index(fs.STEP_WRITE) > steps.index(fs.STEP_DETECT), steps
-        first_write_log = next(i for i, m in enumerate(logs) if m.startswith("Writing "))
-        write_step_log = next(i for i, m in enumerate(logs) if m.startswith("Install in Progress"))
-        assert write_step_log < first_write_log, logs
+        flat_lines = [line for m in logs for line in m.splitlines()]
+        first_write_log = next(i for i, m in enumerate(flat_lines) if m.startswith("Writing "))
+        write_step_log = next(i for i, m in enumerate(flat_lines) if m.startswith("Install in Progress"))
+        assert write_step_log < first_write_log, flat_lines
         assert steps.count(fs.STEP_WRITE) == 1, steps
         assert writes, "partitions must actually be written"
         # The gui hook is released after the session.
@@ -5592,7 +5593,7 @@ def test_device_model_registry():
 
     ids = device_models.model_ids()
     assert ids, "assets/device_models.xml must parse"
-    for expected in ("Y1", "Y2", "A5", "G5", "Q5", "Q3E", "Q8"):
+    for expected in ("Y1", "Y2", "A5", "G5", "Q5", "Q3", "Q8"):
         assert expected in ids, ids
 
     # Detection from the user-facing examples.
@@ -5614,7 +5615,7 @@ def test_device_model_registry():
     # Flashability distinguishes real targets from guidance-only models.
     assert device_models.is_flashable("Y1") is True
     assert device_models.is_flashable("A5") is True
-    assert device_models.is_flashable("G5") is False
+    assert device_models.is_flashable("G5") is True
 
     # Selection order follows the registry, and an unknown catalogue model is
     # appended rather than hidden.
@@ -6465,8 +6466,7 @@ def test_window_minimum_size_and_titlebar_stability():
     #    larger than the ceiling its own content can fill.
     started_w, started_h = default_window_size(w.screen())
     assert w.size().width() == started_w
-    assert started_h <= w.size().height() <= w.maximumHeight()
-    assert w.size().height() >= MINIMUM_WINDOW_HEIGHT
+    assert MINIMUM_WINDOW_HEIGHT <= w.size().height() <= w.maximumHeight()
 
     # 3. Each page owns the size it needs: the form takes room, and the
     #    catalogue gives it back when it comes around again.

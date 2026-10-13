@@ -61,6 +61,13 @@ class ArgHandler(metaclass=LogBase):
                 config.uartloglevel = args.uartloglevel
         except AttributeError:
             pass
+        config.logchannel = "UART"
+        try:
+            if args.logchannel is not None:
+                config.logchannel = args.logchannel
+        except AttributeError:
+            pass
+
         try:
             if args.payload is not None:
                 config.payloadfile = args.payload
@@ -106,7 +113,7 @@ class ArgHandler(metaclass=LogBase):
         except AttributeError:
             pass
         try:
-            if args.preloader is not None:
+            if args.var1 is not None:
                 config.chipconfig.var1 = getint(args.var1)
                 self.info("O:Var1:\t\t" + hex(config.chipconfig.var1))
         except AttributeError:
@@ -724,12 +731,22 @@ class Main(metaclass=LogBase):
                     mtk.step = int(self.args.step, 16)
             except Exception:
                 pass
+            try:
+                if self.args.iot is not None:
+                    mtk.config.iot = self.args.iot
+            except Exception:
+                pass
             mtk = da_handler.connect(mtk, directory)
             if mtk is not None:
                 mtk = da_handler.configure_da(mtk)
                 if mtk is not None:
                     self.info("Handling da commands ...")
                     da_handler.handle_da_cmds(mtk, cmd, self.args)
+                    if len(mtk.config.uartlog)>0:
+                        with open("uartlog.txt","w") as wf:
+                            for line in mtk.config.uartlog:
+                                wf.write(line)
+                        print("Uart Log written to uartlog.txt")
                     mtk.port.close()
             self.close()
 

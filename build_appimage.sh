@@ -246,6 +246,14 @@ if [ -d "$APPDIR/usr/bin/SP_Flash_Tool" ]; then
                "$APPDIR/usr/bin/SP_Flash_Tool/flash_tool.sh" 2>/dev/null || true
 fi
 
+# Bundle libusb-1.0 into AppDir/usr/lib if present on the build system
+mkdir -p "$APPDIR/usr/lib"
+for libusb_cand in /usr/lib/*/libusb-1.0.so* /usr/lib64/libusb-1.0.so* /usr/lib/libusb-1.0.so*; do
+    if [ -f "$libusb_cand" ]; then
+        cp -d "$libusb_cand" "$APPDIR/usr/lib/" 2>/dev/null || true
+    fi
+done
+
 # Copy / generate desktop integration
 DESKTOP_SRC="assets/innioasis-updater.desktop"
 if [ -f "$DESKTOP_SRC" ]; then

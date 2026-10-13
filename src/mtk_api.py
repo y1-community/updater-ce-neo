@@ -15,17 +15,361 @@ import io
 import logging
 import os
 import sys
+import time
 
 from . import paths
 
 # Ensure mtkclient is importable (adds vendor dir to sys.path).
 paths.ensure_mtkclient_importable()
 
+from pathlib import Path
+
 # Module-level references populated on first use.
 _DaHandler = None
 _Mtk = None
 _MtkConfig = None
 _imports_done = False
+logger = logging.getLogger(__name__)
+
+
+def find_cross_platform_libusb() -> str | None:
+    """Find libusb-1.0 binary path across Windows, macOS, and Linux."""
+    if sys.platform.startswith("darwin"):
+        return paths.find_libusb_dylib() or "libusb-1.0.dylib"
+    elif sys.platform.startswith("win") or os.name == "nt":
+        candidates = [
+            Path("libusb-1.0.dll"),
+            Path(paths.MTKCLIENT_DIR) / "mtkclient" / "Windows" / "libusb-1.0.dll",
+            Path(paths.BUNDLE_DIR) / "libusb-1.0.dll",
+            Path(paths.BUNDLE_DIR) / "mtkclient" / "Windows" / "libusb-1.0.dll",
+        ]
+        for c in candidates:
+            if c.is_file():
+                return str(c.resolve())
+        return "libusb-1.0.dll"
+    else:
+        # Linux: check AppImage bundled libraries, multiarch paths, and sonames
+        appdir = os.environ.get("APPDIR")
+        candidates = []
+        if appdir:
+            candidates.extend([
+                os.path.join(appdir, "usr", "lib", "libusb-1.0.so.0"),
+                os.path.join(appdir, "usr", "lib", "x86_64-linux-gnu", "libusb-1.0.so.0"),
+                os.path.join(appdir, "usr", "lib", "libusb-1.0.so"),
+            ])
+        candidates.extend([
+            "/usr/lib/x86_64-linux-gnu/libusb-1.0.so.0",
+            "/usr/lib/aarch64-linux-gnu/libusb-1.0.so.0",
+            "/usr/lib64/libusb-1.0.so.0",
+            "/lib64/libusb-1.0.so.0",
+            "/usr/lib/libusb-1.0.so.0",
+            "libusb-1.0.so.0",
+            "libusb-1.0.so",
+        ])
+        for c in candidates:
+            if os.path.exists(c):
+                return c
+        try:
+            import ctypes.util
+
+            found = ctypes.util.find_library("usb-1.0")
+            if found:
+                return found
+        except Exception:
+            pass
+        return "libusb-1.0.so.0"
+
+
+def get_cross_platform_libusb_backend():
+    """Create a pyusb libusb-1 backend with robust cross-platform path resolution."""
+    try:
+        import usb.backend.libusb1
+
+        lib_path = find_cross_platform_libusb()
+        if lib_path:
+            try:
+                backend = usb.backend.libusb1.get_backend(find_library=lambda x: lib_path)
+                if backend is not None:
+                    return backend
+            except Exception as e:
+                logger.debug("Failed loading libusb with %s: %s", lib_path, e)
+        return usb.backend.libusb1.get_backend()
+    except Exception as e:
+        logger.warning("Could not instantiate libusb backend: %s", e)
+        return None
+
+
+def _apply_runtime_patches():
+    """Apply runtime USB and platform adaptations without modifying upstream mtkclient."""
+    try:
+        from mtkclient.config import usb_ids
+
+        # Register additional MediaTek preloader USB PIDs if not already defined
+        if 0x0E8D in usb_ids.default_ids:
+            for pid in (0x2002, 0x2004, 0x2005, 0x2006, 0x2007, 0x2008, 0x200A):
+                usb_ids.default_ids[0x0E8D].setdefault(pid, -1)
+    except Exception as e:
+        logger.debug("Could not extend usb_ids: %s", e)
+
+    try:
+        from mtkclient.Library.Connection import usblib
+
+        orig_init = usblib.UsbClass.__init__
+
+        def patched_init(self, *args, **kwargs):
+            orig_init(self, *args, **kwargs)
+            backend = get_cross_platform_libusb_backend()
+            if backend is not None:
+                self.backend = backend
+
+        usblib.UsbClass.__init__ = patched_init
+
+        def patched_usbread(self, resplen=None, maxtimeout=100, w_max_packet_size=None):
+            endearly = False
+            if resplen is None:
+                endearly = True
+                resplen = self.maxsize
+            if resplen <= 0:
+                self.info("Warning !")
+            res = bytearray()
+            timeout = 0
+            loglevel = self.loglevel
+            epr = self.EP_IN.read
+            q = self.queue
+            b = self.buffer
+            if w_max_packet_size is None:
+                w_max_packet_size = getattr(self.EP_IN, "wMaxPacketSize", 64)
+            extend = res.extend
+            fast = self.fast
+            buffer = None
+            buflen = min(resplen, w_max_packet_size)
+            if self.fast:
+                buffer = b[:buflen]
+            bytestoread = resplen
+            import usb.core  # type: ignore
+
+            while bytestoread > 0:
+                bytestoread = resplen - len(res) if len(res) < resplen else 0
+                if not q.empty():
+                    extend(q.get(bytestoread))
+                if bytestoread <= 0:
+                    break
+                sz = min(buflen, bytestoread)
+                try:
+                    if fast:
+                        rlen = epr(buffer, timeout)
+                        if rlen > sz:
+                            self.warning("Buffer overflow")
+                            q.put(buffer[rlen:])
+                            if self.loglevel == logging.DEBUG:
+                                import traceback
+                                self.warning(traceback.format_exc())
+                                self.warning(f"{rlen} vs {sz}")
+                                self.warning(buffer[sz:].hex())
+                                sys.stdout.flush()
+                        extend(buffer[:rlen])
+                        if rlen < sz and maxtimeout == -1:
+                            break
+                        if rlen == 0 and maxtimeout != -1:
+                            timeout += 1
+                            if timeout >= maxtimeout:
+                                return b""
+                    else:
+                        # On macOS, AppleUSBHost requires reading at least wMaxPacketSize
+                        # to avoid USB Overflow errors when reading small chunk sizes.
+                        if sys.platform.startswith("darwin"):
+                            read_sz = max(sz, w_max_packet_size)
+                        else:
+                            read_sz = sz
+                        dt = epr(read_sz)
+                        rlen = len(dt)
+                        if rlen > sz:
+                            extend(dt[:sz])
+                            q.put(dt[sz:])
+                        else:
+                            extend(dt)
+                        if endearly and rlen != 0:
+                            break
+                        if rlen < sz and maxtimeout == -1:
+                            break
+                        if rlen == 0 and maxtimeout != -1:
+                            # A zero-byte read with no USBError is a stalled endpoint.
+                            # Upstream re-reads immediately, spinning indefinitely.
+                            timeout += 1
+                            if timeout >= maxtimeout:
+                                return b""
+                except usb.core.USBError as e:
+                    error = str(getattr(e, "strerror", "") or str(e))
+                    if "timed out" in error.lower() or getattr(e, "backend_error_code", None) == -7:
+                        self.debug("Timed out")
+                        if timeout >= maxtimeout:
+                            return b""
+                        timeout += 1
+                    elif "overflow" in error.lower():
+                        self.error("USB Overflow")
+                        return b""
+                    elif "no such device" in error.lower():
+                        self.error("Device disconnected")
+                        sys.exit(1)
+                    elif "pipe" in error.lower():
+                        try:
+                            if hasattr(self, "device"):
+                                self.device.clear_halt(self.EP_IN)
+                        except Exception:
+                            pass
+                        if timeout >= maxtimeout:
+                            return b""
+                        timeout += 1
+                    else:
+                        self.info(repr(e))
+                        return b""
+
+            if loglevel == logging.DEBUG:
+                import inspect
+                self.debug("USB " + inspect.currentframe().f_back.f_code.co_name + ": length(" + hex(resplen) + ")")
+                self.verify_data(res[:resplen], "RX:")
+            return bytes(res[:resplen])
+
+        usblib.UsbClass.usbread = patched_usbread
+    except Exception as e:
+        logger.debug("Could not patch usblib: %s", e)
+
+    try:
+        from mtkclient.Library import Port
+
+        orig_run_handshake = Port.Port.run_handshake
+
+        def patched_run_handshake(self, retries=5):
+            ep_out = self.cdc.EP_OUT.write
+            ep_in = self.cdc.EP_IN.read
+            maxinsize = getattr(self.cdc.EP_IN, "wMaxPacketSize", 64)
+
+            self.cdc.set_line_coding(921600, 0, 8, 1)
+            self.cdc.setcontrollinestate(rts=True)
+
+            startcmd = b"\xa0\x0a\x50\x05"
+            expected_echo = bytes(~b & 0xFF for b in startcmd)
+
+            brom_pids = [0x3, 0xF200, 0xD1E9, 0xD1E2, 0xD1EC, 0xD1DD]
+            if self.cdc.pid not in brom_pids:
+                try:
+                    ep_out(b"\xa0")
+                except Exception:
+                    pass
+
+            leftovers = bytearray()
+
+            def safe_read(size, timeout_ms=500):
+                nonlocal leftovers
+                if len(leftovers) >= size:
+                    out = leftovers[:size]
+                    leftovers = leftovers[size:]
+                    return bytes(out)
+                needed = size - len(leftovers)
+                read_sz = max(needed, maxinsize) if sys.platform.startswith("darwin") else needed
+                raw = ep_in(read_sz, timeout=timeout_ms)
+                leftovers.extend(raw)
+                if len(leftovers) >= size:
+                    out = leftovers[:size]
+                    leftovers = leftovers[size:]
+                    return bytes(out)
+                out = bytes(leftovers)
+                leftovers = bytearray()
+                return out
+
+            for attempt in range(retries):
+                leftovers.clear()
+                received = b""
+                try:
+                    for byte in startcmd:
+                        written = ep_out(bytes([byte]), timeout=500)
+                        if written != 1:
+                            raise ValueError("Write failed")
+
+                        echo = safe_read(1, timeout_ms=500)
+                        if len(echo) != 1 or echo[0] != (~byte & 0xFF):
+                            raise ValueError(f"Echo mismatch: got {echo!r}, expected {~byte & 0xFF:02x}")
+
+                        received += echo
+
+                    if received == expected_echo:
+                        self.info("Device detected :)")
+                        return True
+
+                except Exception as e:
+                    self.debug(f"Handshake attempt {attempt + 1} failed: {e}")
+                    time.sleep(0.01)
+
+                try:
+                    ep_in(maxinsize, timeout=50)
+                except Exception:
+                    pass
+
+            self.info("Handshake failed after retries")
+            return False
+
+        Port.Port.run_handshake = patched_run_handshake
+
+        def patched_handshake(self, maxtries=None, loop=0):
+            counter = 0
+            while not self.cdc.connected:
+                try:
+                    if maxtries is not None and counter == maxtries:
+                        break
+                    counter += 1
+                    if self.cdc.connect():
+                        if self.run_handshake():
+                            return True
+                        self.cdc.connected = False
+
+                    if loop == 5:
+                        sys.stdout.write('\n')
+                        self.info("Hint:\n\nPower off the phone before connecting.\n" +
+                                  "For brom mode, press and hold vol up, vol dwn, or all hw buttons and " +
+                                  "connect usb.\n" +
+                                  "For preloader mode, don't press any hw button and connect usb.\n"
+                                  "If it is already connected and on, hold power for 10 seconds to reset.\n")
+                        sys.stdout.write('\n')
+                    if loop >= 10:
+                        sys.stdout.write('.')
+                    if loop >= 20:
+                        sys.stdout.write('\n')
+                        loop = 0
+                    loop += 1
+                    time.sleep(0.3)
+                    sys.stdout.flush()
+
+                except Exception as serr:
+                    if "access denied" in str(serr):
+                        self.warning(str(serr))
+                    self.debug(str(serr))
+                    pass
+            return False
+
+        Port.Port.handshake = patched_handshake
+    except Exception as e:
+        logger.debug("Could not patch Port: %s", e)
+
+
+class _DetachShield:
+    def __init__(self, stream):
+        self._stream = stream
+
+    def detach(self):
+        raise io.UnsupportedOperation("detach disabled to protect stream buffer")
+
+    def write(self, s):
+        if self._stream and hasattr(self._stream, "write"):
+            return self._stream.write(s)
+
+    def flush(self):
+        if self._stream and hasattr(self._stream, "flush"):
+            return self._stream.flush()
+
+    def __getattr__(self, name):
+        if self._stream is not None:
+            return getattr(self._stream, name)
+        raise AttributeError(name)
 
 
 def _ensure_imports():
@@ -35,22 +379,29 @@ def _ensure_imports():
         return
 
     # Frozen GUI builds (console=False) start with sys.stdout / sys.stderr
-    # set to None; mtkclient's Library/utils.py re-wraps them at import time
-    # (io.TextIOWrapper(sys.stdout.detach(), ...)) and crashes on None.
-    # Provide no-op streams BEFORE any mtkclient import.
-    if sys.stdout is None:
-        sys.stdout = open(os.devnull, "w", encoding="utf-8")
-    if sys.stderr is None:
-        sys.stderr = open(os.devnull, "w", encoding="utf-8")
+    # set to None or wrapped objects lacking detach(); mtkclient's Library/utils.py
+    # re-wraps them at import time (io.TextIOWrapper(sys.stdout.detach(), ...)) and crashes.
+    # Furthermore, in pytest or redirected streams, detach() breaks the parent capture.
+    # Shield stdout/stderr with a dummy detach() during import and restore them afterwards.
+    orig_stdout = sys.stdout
+    orig_stderr = sys.stderr
+    sys.stdout = _DetachShield(orig_stdout)
+    sys.stderr = _DetachShield(orig_stderr)
 
-    from mtkclient.Library.DA.mtk_da_handler import DaHandler  # type: ignore
-    from mtkclient.Library.mtk_class import Mtk  # type: ignore
-    from mtkclient.config.mtk_config import MtkConfig  # type: ignore
+    try:
+        _apply_runtime_patches()
 
-    _DaHandler = DaHandler
-    _Mtk = Mtk
-    _MtkConfig = MtkConfig
-    _imports_done = True
+        from mtkclient.Library.DA.mtk_da_handler import DaHandler  # type: ignore
+        from mtkclient.Library.mtk_class import Mtk  # type: ignore
+        from mtkclient.config.mtk_config import MtkConfig  # type: ignore
+
+        _DaHandler = DaHandler
+        _Mtk = Mtk
+        _MtkConfig = MtkConfig
+        _imports_done = True
+    finally:
+        sys.stdout = orig_stdout
+        sys.stderr = orig_stderr
 
 
 def init(loader=None, preloader=None, serialport=None, loglevel=logging.INFO, auth=None):

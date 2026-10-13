@@ -219,7 +219,7 @@ def test_default_size_is_wide_but_clamped_to_the_screen():
     from src.ui.main_window import MAXIMUM_WINDOW_WIDTH
 
     assert DEFAULT_WINDOW_WIDTH == MINIMUM_WINDOW_WIDTH
-    assert DEFAULT_WINDOW_HEIGHT == MINIMUM_WINDOW_HEIGHT
+    assert DEFAULT_WINDOW_HEIGHT >= MINIMUM_WINDOW_HEIGHT
     assert MAXIMUM_WINDOW_WIDTH > DEFAULT_WINDOW_WIDTH
 
     # On a screen that can hold it, the caller gets it unclamped.
@@ -234,7 +234,7 @@ def test_default_size_is_wide_but_clamped_to_the_screen():
         def availableGeometry(self):
             return QRect(0, 0, 700, 400)
 
-    assert default_window_size(_Small()) == (DEFAULT_WINDOW_WIDTH, MINIMUM_WINDOW_HEIGHT)
+    assert default_window_size(_Small()) == (DEFAULT_WINDOW_WIDTH, 400)
     class _Tiny:
         def availableGeometry(self):
             return QRect(0, 0, 500, 320)
@@ -352,3 +352,60 @@ def test_fit_skipped_while_install_owns_window():
         restore_workers()
     w.close()
     app.processEvents()
+
+
+def test_release_notes_hug_contents_and_shrink_gap():
+    """Release notes shrink to fit short notes and translation link stays directly underneath."""
+    from PySide6.QtWidgets import QApplication
+    from src.i18n import translator
+
+    app = QApplication.instance() or QApplication(["--platform", "offscreen"])
+    page = SelectPackagePage()
+    page.resize(900, 700)
+    page.show()
+    app.processEvents()
+
+    # Short 1-line note
+    rel_short = {
+        "tag_name": "v1",
+        "name": "v1",
+        "body": "Ubwekeshapo BELENI INE.md",
+        "download_url": "https://example.com/rom.zip",
+        "rom_variants": [],
+    }
+    page._on_releases_loaded([rel_short], "")
+    app.processEvents()
+    page._release_list.setCurrentRow(0)
+    app.processEvents()
+
+    assert page._notes.sizeHint().height() <= 60
+    assert page._notes.height() <= 70
+
+    # Ensure translate link is visible and adjacent
+    page._translate_label.setVisible(True)
+    page._notes_group.layout().activate()
+    app.processEvents()
+    gap = page._translate_label.geometry().top() - page._notes.geometry().bottom()
+    assert 0 <= gap <= 10, f"Translation link should hug release notes, got gap={gap}"
+
+    # Long release notes
+    rel_long = {
+        "tag_name": "v2",
+        "name": "v2",
+        "body": "\n\n".join(f"Paragraph {i}: detailed notes about change" for i in range(20)),
+        "download_url": "https://example.com/rom.zip",
+        "rom_variants": [],
+    }
+    from PySide6.QtCore import Qt
+    page._on_releases_loaded([rel_short, rel_long], "")
+    app.processEvents()
+    for r in range(page._release_list.count()):
+        if page._release_list.item(r).data(Qt.UserRole).get("tag_name") == "v2":
+            page._release_list.setCurrentRow(r)
+            break
+    app.processEvents()
+
+    assert page._notes.sizeHint().height() >= 150
+    page.close()
+    app.processEvents()
+

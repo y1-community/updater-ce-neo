@@ -60,3 +60,9 @@
   (e.g. `printf 'O PYZ.pyz\nl\nQ\nQ\n' | ...`), never run it bare (it hangs the tool call).
 - `mental_model/` is gitignored scratch for per-model reverse-engineering notes;
   suffix files with your model name and reuse `/tmp/cn_raw/*.marshal` dumps instead of re-extracting.
+
+## Upstream `mtkclient` Purity & Cross-Platform libusb
+- `vendor/mtkclient` must strictly match upstream `bkerler/mtkclient` (v2.1.4.1 base). Never modify vendored files directly; apply all progress hooks, stdout shields, and macOS/Linux USB adaptations via runtime wrapping in `src/mtk_api.py`.
+- On Linux, never hardcode `libusb-1.0.so` in PyUSB loaders; end-user distros only ship `libusb-1.0.so.0`. Always search `libusb-1.0.so.0` first.
+- On macOS, `libusb-1.0.dylib` in `Contents/Frameworks/` must remain Universal 2 (`x86_64` + `arm64`).
+

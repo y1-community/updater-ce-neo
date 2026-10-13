@@ -539,17 +539,38 @@ def mtk_reset_to_normal(mtk, da_handler=None) -> bool:
     Best effort by design: a player that fell off the bus or was already
     power-cycled returns False and the (already successful) install stands.
     """
+    rebooted = False
     loader = getattr(mtk, "daloader", None)
     if loader is None or not hasattr(loader, "shutdown"):
         loader = getattr(da_handler, "daloader", None)
-    if loader is None or not hasattr(loader, "shutdown"):
-        return False
+    if loader is not None and hasattr(loader, "shutdown"):
+        try:
+            loader.shutdown(bootmode=0)
+            rebooted = True
+        except BaseException as e:  # mtkclient may sys.exit() on a dead session
+            logger.debug("Post-install reboot could not be sent: %s", e)
+
+    # If loader.shutdown wasn't reachable, try direct DA finish/shutdown
+    if not rebooted:
+        da = getattr(loader, "da", None) or getattr(da_handler, "da", None)
+        if da is not None:
+            try:
+                if hasattr(da, "finish"):
+                    da.finish(0)
+                    rebooted = True
+                elif hasattr(da, "shutdown"):
+                    da.shutdown(bootmode=0)
+                    rebooted = True
+            except BaseException as e:
+                logger.debug("Direct DA reboot failed: %s", e)
+
     try:
-        loader.shutdown(bootmode=0)
-    except BaseException as e:  # mtkclient may sys.exit() on a dead session
-        logger.debug("Post-install reboot could not be sent: %s", e)
-        return False
-    return True
+        if mtk is not None and hasattr(mtk, "port") and mtk.port is not None:
+            mtk.port.close(reset=True)
+            rebooted = True
+    except Exception as e:
+        logger.debug("Port reset failed: %s", e)
+    return rebooted
 
 
 def classify_backend_line(line):
@@ -989,14 +1010,12 @@ def compute_extract_dir(package_path):
     from .downloads import downloads_dir
     dd = downloads_dir()
     if package.is_file() and (package.suffix.lower() == ".txt" or "scatter" in package.name.lower()):
-        return dd / f".{package.parent.name}_extracted"
+        return package.parent
     if package.is_dir():
-        try:
-            if package.resolve() == dd.resolve() or package.resolve().is_relative_to(dd.resolve()):
-                return package
-        except Exception:
-            pass
-        return dd / f".{package.name}_extracted"
+        sc = _find_scatter(package, allow_raise=False)
+        if sc:
+            return sc.parent
+        return package
     return dd / f".{package.stem}_extracted"
 
 
@@ -1007,8 +1026,11 @@ def completed_extract_dir(package_path):
     if not package_path:
         return ""
     p = Path(package_path)
+    if p.is_file() and (p.suffix.lower() == ".txt" or "scatter" in p.name.lower()):
+        return str(p.parent)
     if p.is_dir():
-        return str(p)
+        sc = _find_scatter(p, allow_raise=False)
+        return str(sc.parent if sc else p)
     d = compute_extract_dir(package_path)
     return str(d) if _is_extract_complete(d) else ""
 
@@ -1107,49 +1129,11 @@ class ExtractWorker(QThread):
         is_scatter_file = p.is_file() and (p.suffix.lower() == ".txt" or "scatter" in p.name.lower())
         if is_scatter_file or p.is_dir():
             source_dir = p.parent if is_scatter_file else p
-            from .downloads import downloads_dir
             from .sp_flash_gui import discard_firmware_history
-            dd = downloads_dir()
-            work_dir = compute_extract_dir(package_path)
-
-            try:
-                is_in_work_dir = source_dir.resolve() == work_dir.resolve()
-            except Exception:
-                is_in_work_dir = False
-
-            if not is_in_work_dir:
-                work_dir.mkdir(parents=True, exist_ok=True)
-                # Local scatter / folder installs do not need extraction: they only
-                # need the files copied or moved into the app's working directory so
-                # SP Flash Tool and MTKClient both see a populated scatter + images.
-                # Show real progress through the copy so a folder of images does not
-                # look stalled the moment the spinner starts.
-                total = sum(1 for _ in source_dir.iterdir())
-                if total <= 0:
-                    self.progress.emit(100)
-                for idx, item in enumerate(source_dir.iterdir(), start=1):
-                    if self._cancelled:
-                        return work_dir
-                    target = work_dir / item.name
-                    try:
-                        if item.is_file():
-                            shutil.copy2(item, target)
-                        elif item.is_dir() and not item.name.startswith("."):
-                            shutil.copytree(item, target, dirs_exist_ok=True)
-                    except Exception as err:
-                        logger.debug("Copying rom item %s failed: %s", item, err)
-                    if self._cancelled:
-                        return work_dir
-                    if self._last_copy_pct == -1:
-                        self._last_copy_pct = 0
-                    if total > 0:
-                        pct = min(100, int(idx * 100 / total))
-                        if pct != self._last_copy_pct:
-                            self._last_copy_pct = pct
-                            self.progress.emit(pct)
+            sc = _find_scatter(source_dir, allow_raise=True)
+            work_dir = sc.parent if sc else source_dir
             discard_firmware_history(work_dir)
-            _mark_extract_complete(work_dir)
-            self._last_copy_pct = -1
+            self.progress.emit(100)
             return work_dir
 
         extract_dir = compute_extract_dir(package_path)
@@ -1293,6 +1277,13 @@ def _find_scatter(directory, allow_raise=True):
 
 def _parse_scatter_platform(scatter_path):
     try:
+        from . import catalog
+        plat, _ = catalog.parse_scatter_header(scatter_path)
+        if plat:
+            return plat
+    except Exception:
+        pass
+    try:
         for line in Path(scatter_path).read_text(encoding="utf-8", errors="ignore").splitlines():
             m = re.match(r"\s*-?\s*platform\s*:\s*(MT\w+)", line, re.IGNORECASE)
             if m:
@@ -1343,15 +1334,89 @@ def sp_flash_tool_console_args(scatter_arg, da_arg, auth_file="", log=None):
 
 
 def _resolve_image_file(scatter_dir, fname):
-    exact = scatter_dir / fname
+    scatter_dir = Path(scatter_dir).resolve()
+    exact = (scatter_dir / fname).resolve()
     if exact.exists():
         return exact
     stem, ext = os.path.splitext(fname)
-    for suffix in ("-verified", "-sign"):
-        variant = scatter_dir / f"{stem}{suffix}{ext}"
+    base_stem = re.sub(r"-(?:verified|sign)$", "", stem, flags=re.IGNORECASE)
+    candidate_stems = [stem, base_stem, f"{base_stem}-verified", f"{base_stem}-sign"]
+    for c_stem in candidate_stems:
+        variant = (scatter_dir / f"{c_stem}{ext}").resolve()
         if variant.exists():
             return variant
+    fname_lower = fname.lower()
+    candidate_stems_lower = {s.lower() for s in candidate_stems}
+    ext_lower = ext.lower()
+    try:
+        for f in scatter_dir.iterdir():
+            if f.name.lower() == fname_lower:
+                return f.resolve()
+            if f.stem.lower() in candidate_stems_lower and f.suffix.lower() == ext_lower:
+                return f.resolve()
+    except Exception:
+        pass
     return exact
+
+
+def align_scatter_disk_images(scatter_path, log=None):
+    """Ensure all declared partition image files in the scatter exist on disk.
+
+    If an image is declared in the scatter as e.g. 'lk.bin', but only 'lk-sign.bin'
+    exists on disk (or vice versa), creates a link/symlink or copy so SP Flash Tool
+    and disk writers can resolve the declared filename without S_FILE_NOT_FOUND.
+    """
+    scatter_path = Path(scatter_path).resolve()
+    scatter_dir = scatter_path.parent
+    try:
+        content = scatter_path.read_text(encoding="utf-8", errors="ignore")
+    except Exception as e:
+        if log:
+            log(f"Warning: could not read scatter file {scatter_path.name}: {e}")
+        return
+
+    declared_files = set()
+    current = {}
+    for raw in content.split("\n"):
+        line = raw.strip()
+        if line.startswith("- partition_index:"):
+            if current.get("is_download", "").lower() == "true":
+                fname = current.get("file_name", "NONE")
+                if fname and fname != "NONE":
+                    declared_files.add(fname)
+            current = {}
+            continue
+        if ":" in line and not line.startswith("#"):
+            k, _, v = line.partition(":")
+            current[k.strip().lstrip("- ")] = v.strip()
+    if current.get("is_download", "").lower() == "true":
+        fname = current.get("file_name", "NONE")
+        if fname and fname != "NONE":
+            declared_files.add(fname)
+
+    for fname in declared_files:
+        target_path = scatter_dir / fname
+        if target_path.exists():
+            continue
+        resolved = _resolve_image_file(scatter_dir, fname)
+        if resolved and resolved.exists() and resolved != target_path:
+            try:
+                target_path.symlink_to(resolved.name)
+                if log:
+                    log(f"Aliased {resolved.name} -> {fname}")
+            except OSError:
+                try:
+                    os.link(str(resolved), str(target_path))
+                    if log:
+                        log(f"Linked {resolved.name} -> {fname}")
+                except OSError:
+                    try:
+                        shutil.copy2(str(resolved), str(target_path))
+                        if log:
+                            log(f"Copied {resolved.name} -> {fname}")
+                    except Exception as e:
+                        if log:
+                            log(f"Warning: could not alias {resolved.name} -> {fname}: {e}")
 
 
 def _list_expected_images(scatter_path):
@@ -1642,11 +1707,13 @@ class FlashWorker(QThread):
     reboot_after_success = True
 
     def __init__(self, package_path, pre_extracted_dir="", method="auto", model="",
-                 parent=None, device_loss_hold=None, da_file="", auth_file="", is_rockbox=False):
+                 parent=None, device_loss_hold=None, da_file="", auth_file="", is_rockbox=False,
+                 primed_mtk=None):
         super().__init__(parent)
         self.package_path = package_path
         self.pre_extracted_dir = pre_extracted_dir
         self.model = (model or "").strip()
+        self._primed_mtk = primed_mtk
         pkg_low = (Path(package_path).name if package_path else "").lower()
         self._is_rockbox_flow = bool(is_rockbox or "rockbox" in pkg_low)
         # User-chosen Download Agent and authentication file. Updater CE leaves
@@ -1719,6 +1786,12 @@ class FlashWorker(QThread):
         them in ``FlashService.cancel_flash``).
         """
         self._cancelled = True
+        if getattr(self, "_primed_mtk", None) is not None:
+            try:
+                self._primed_mtk.port.close(reset=True)
+            except Exception:
+                pass
+            self._primed_mtk = None
         if self._process is not None:
             try:
                 self._process.terminate()
@@ -1928,6 +2001,12 @@ class FlashWorker(QThread):
             self._touch_attempt()
             self.step_changed.emit(STEP_WRITE)
             return
+        if "didn't receive dram config status" in low:
+            self._log(
+                "DRAM configuration failed in BROM mode. Please reconnect in Preloader mode: "
+                "power off the device completely, then connect USB without holding any buttons or pinhole reset."
+            )
+            return
 
     def _log(self, msg):
         for line in str(msg).splitlines() or [str(msg)]:
@@ -2003,13 +2082,22 @@ class FlashWorker(QThread):
                 self._flush_log()
 
     def _do_flash(self):
+        p = Path(self.package_path) if self.package_path else None
+        is_scatter = p and p.is_file() and (p.suffix.lower() == ".txt" or "scatter" in p.name.lower())
+        is_folder = p and p.is_dir()
         pre = Path(self.pre_extracted_dir) if self.pre_extracted_dir else None
-        reused = bool(pre) and _is_extract_complete(pre)
+        reused = (bool(pre) and _is_extract_complete(pre)) or is_scatter or is_folder
         if reused:
             # The package is already extracted (e.g. from the SP Flash Tool
-            # phase before a backend switch); skip re-extraction entirely.
-            self._log(f"Reusing extracted directory: {pre}")
-            extract_dir = pre
+            # phase before a backend switch, or a local scatter folder); skip re-extraction entirely.
+            if pre and _is_extract_complete(pre):
+                extract_dir = pre
+            elif is_scatter:
+                extract_dir = p.parent
+            elif is_folder:
+                sc = _find_scatter(p, allow_raise=False)
+                extract_dir = sc.parent if sc else p
+            self._log(f"Reusing extracted directory: {extract_dir}")
             # Ready on disk. The connect sentence waits for a real search line.
             self._announce_please_wait()
         else:
@@ -2067,16 +2155,26 @@ class FlashWorker(QThread):
             self._log(f"Package platform: {platform}")
 
         try:
-            from . import device_tracking
+            from . import catalog, device_tracking
             from .config import detect_model_and_type_from_name
             from .sp_flash_gui import update_sp_history_ini
 
-            det_m, _ = detect_model_and_type_from_name(self.package_path)
+            mfr_info = catalog.parse_manufacturer_rom_info(self.package_path)
+            det_m = mfr_info["model"] if mfr_info else None
+            if not det_m:
+                det_m, _ = detect_model_and_type_from_name(self.package_path)
+
+            plat, proj = catalog.parse_scatter_header(scatter_file)
+            scatter_inferred = catalog.infer_model_from_scatter(plat, proj)
             detected_model = (
                 self.model
                 or det_m
+                or scatter_inferred
                 or ("A5" if "a5" in str(self.package_path).lower() else ("Y2" if "6582" in (platform or "") else ("Y1" if "6572" in (platform or "") else "")))
             )
+            self.package_model = detected_model
+            if plat:
+                self.package_platform = plat
             device_tracking.record_latest_package(
                 model=detected_model,
                 software_name=Path(self.package_path).stem if self.package_path else "",
@@ -2172,6 +2270,12 @@ class FlashWorker(QThread):
 
     # -- extraction ----------------------------------------------------------
     def _extract_package(self):
+        p = Path(self.package_path) if self.package_path else None
+        if p and p.is_file() and (p.suffix.lower() == ".txt" or "scatter" in p.name.lower()):
+            return p.parent
+        if p and p.is_dir():
+            sc = _find_scatter(p, allow_raise=False)
+            return sc.parent if sc else p
         worker = ExtractWorker(self.package_path)
         # The helper emits on its own signal. Forward that onto this worker so
         # the progress card moves during unzip instead of sitting at 5%.
@@ -2269,6 +2373,7 @@ class FlashWorker(QThread):
             scatter_arg = str(scatter_file)
             da_arg = str(da_file)
 
+        align_scatter_disk_images(scatter_file, log=self._log)
         try:
             scatter_images = _parse_scatter(scatter_file)
             self._sp_total_bytes = sum(fp.stat().st_size for _, fp in scatter_images if fp.exists())
@@ -2961,6 +3066,7 @@ class FlashWorker(QThread):
         the tool-error check in the run loop returns before this, so a failed
         install never restarts the player into half-written firmware.
         """
+        self._flush_log()
         self.step_changed.emit(STEP_DONE)
         if not getattr(self, "_is_rockbox_flow", False):
             self.progress.emit(100.0)
@@ -3015,6 +3121,7 @@ class FlashWorker(QThread):
             self.finished.emit(False, "MTK_IMPORT_FAILED")
             return
 
+        align_scatter_disk_images(scatter_file, log=self._log)
         image_files = _parse_scatter(scatter_file)
         if not image_files:
             self._log("Error: no downloadable partitions in scatter file")
@@ -3096,6 +3203,8 @@ class FlashWorker(QThread):
             # the difference is what the user has to act on.
             if mtk_api.is_brom(mtk):
                 msg = tr("action_detected_brom")
+                if "6572" in str(getattr(self, "package_platform", "")) or getattr(self, "package_model", "") == "Y1":
+                    self._log("Notice: Device connected in BROM mode. For MT6572 (Y1), if DRAM initialization stalls, reconnect in Preloader mode (power off and connect USB without holding buttons or pinhole reset).")
             else:
                 msg = tr("action_detected_preloader")
             self.action_changed.emit(msg)
@@ -3178,34 +3287,75 @@ class FlashWorker(QThread):
             def __call__(self, pos):
                 self._cb(pos)
 
+        def _attach_primed_mtk(primed_session):
+            import logging as _logging
+            from mtkclient.Library.DA.mtk_da_handler import DaHandler
+
+            primed_session.config.hwparam_path = str(extract_dir)
+            if getattr(primed_session.config, "target_config", None) is None:
+                self._log("⚠️ Primed session target_config is missing; reconnect the device and try again.")
+                try:
+                    primed_session.port.close(reset=True)
+                except Exception:
+                    pass
+                return None, None
+
+            self._leave_usb_search()
+            self.step_changed.emit(STEP_DETECT)
+            self.progress.emit(12)
+            self.step_changed.emit(STEP_DOWNLOAD_DA)
+            self.action_changed.emit(tr("step_download_da"))
+            self.progress.emit(14)
+
+            def _on_da_progress(pos):
+                if self._cancelled:
+                    return
+                val = pos if pos <= 1.0 else (pos / 100.0)
+                mapped = 14 + int(min(1.0, max(0.0, val)) * 4)
+                self.progress.emit(min(18, max(14, mapped)))
+
+            if hasattr(primed_session, "config"):
+                primed_session.config.guiprogress = _ProgressEmitter(_on_da_progress)
+            da_handler = DaHandler(primed_session, _logging.INFO)
+            res_mtk = da_handler.configure_da(primed_session)
+            if res_mtk is None:
+                self._log("DA upload failed")
+                return None, None
+            return res_mtk, da_handler
+
         watcher.start()
         attempt = 0
         try:
             while True:
                 attempt += 1
-                mtk = _open_session()
                 da_handler = None
-                if mtk is not None:
-                    try:
-                        self.step_changed.emit(STEP_DOWNLOAD_DA)
-                        self.action_changed.emit(tr("step_download_da"))
-                        self.progress.emit(14)
+                if getattr(self, "_primed_mtk", None) is not None:
+                    self._log("Reusing the device session primed during monitoring")
+                    mtk, da_handler = _attach_primed_mtk(self._primed_mtk)
+                    self._primed_mtk = None
+                else:
+                    mtk = _open_session()
+                    if mtk is not None:
+                        try:
+                            self.step_changed.emit(STEP_DOWNLOAD_DA)
+                            self.action_changed.emit(tr("step_download_da"))
+                            self.progress.emit(14)
 
-                        def _on_da_progress(pos):
-                            if self._cancelled:
-                                return
-                            val = pos if pos <= 1.0 else (pos / 100.0)
-                            mapped = 14 + int(min(1.0, max(0.0, val)) * 4)
-                            self.progress.emit(min(18, max(14, mapped)))
+                            def _on_da_progress(pos):
+                                if self._cancelled:
+                                    return
+                                val = pos if pos <= 1.0 else (pos / 100.0)
+                                mapped = 14 + int(min(1.0, max(0.0, val)) * 4)
+                                self.progress.emit(min(18, max(14, mapped)))
 
-                        if hasattr(mtk, "config"):
-                            mtk.config.guiprogress = _ProgressEmitter(_on_da_progress)
-                        mtk, da_handler = mtk_api.attach(mtk, directory=str(extract_dir))
-                    except BaseException as e:
-                        # BaseException: mtkclient raises SystemExit on DA
-                        # upload failure.
-                        self._log(f"Device connection failed: {e}\n{traceback.format_exc()}")
-                        mtk, da_handler = None, None
+                            if hasattr(mtk, "config"):
+                                mtk.config.guiprogress = _ProgressEmitter(_on_da_progress)
+                            mtk, da_handler = mtk_api.attach(mtk, directory=str(extract_dir))
+                        except BaseException as e:
+                            # BaseException: mtkclient raises SystemExit on DA
+                            # upload failure.
+                            self._log(f"Device connection failed: {e}\n{traceback.format_exc()}")
+                            mtk, da_handler = None, None
                 if mtk is not None and da_handler is not None:
                     break
                 max_attempts = 120 if is_mtk_method(self.method) else MTK_DA_ATTEMPTS
@@ -3265,13 +3415,33 @@ class FlashWorker(QThread):
             return 50
 
         ordered_images = sorted(image_files, key=_partition_sort_key)
-        # Preloader partition is omitted for MTKClient flashing: the player is already
-        # booted into preloader mode and running the preloader from memory. Rewriting
-        # EMMC boot1 via legacy DA is unsupported on MT6582/MT6572 and risks bricking the device.
-        filtered_images = [img for img in ordered_images if img[0].lower() != "preloader"]
-        if filtered_images and len(filtered_images) < len(ordered_images):
-            self._log("Skipping preloader partition write in MTKClient (device is active in preloader mode; preserving working bootloader).")
-            ordered_images = filtered_images
+        write_names = {img[0].lower() for img in ordered_images}
+
+        # Reset unwritten runtime partitions before flashing (never after writing images)
+        _RUNTIME_RESET_PARTITIONS = frozenset(
+            {"odm", "super", "vendor", "android", "product", "system", "cache", "usrdata", "userdata"}
+        )
+        for p_name, p_entry in scatter_entries_map.items():
+            if p_name in _RUNTIME_RESET_PARTITIONS and p_name not in write_names:
+                offset = p_entry.get("offset")
+                size = p_entry.get("partition_size")
+                if offset is not None and size and size > 0:
+                    self._log(f"Resetting unwritten runtime partition before flash: {p_name}")
+                    try:
+                        daloader = getattr(mtk, "daloader", None)
+                        if daloader is not None and hasattr(daloader, "formatflash"):
+                            daloader.formatflash(
+                                addr=offset,
+                                length=size,
+                                partitionname=p_name,
+                                parttype="user",
+                                display=False,
+                            )
+                        elif hasattr(da_handler, "da_erase"):
+                            da_handler.da_erase([p_name], parttype="user")
+                    except Exception as e:
+                        self._log(f"Notice: pre-flash reset of {p_name} non-fatal: {e}")
+                    self._tool_error = ""
 
         total_bytes = sum(file_path.stat().st_size for _, file_path in ordered_images if file_path.exists())
         completed_bytes = 0
@@ -3459,24 +3629,6 @@ class FlashWorker(QThread):
                         self._emit_progress(percent_of(completed_bytes, total_bytes, 20, 75))
                         self._emit_eta(completed_bytes, total_bytes)
 
-            # 3. Format/wipe userdata and cache to ensure clean boot without encryption/stale data bootloops
-            self._log("Formatting userdata and cache...")
-            self.action_changed.emit(tr("action_formatting"))
-            try:
-                if hasattr(da_handler, "da_erase"):
-                    da_handler.da_erase(["userdata", "cache"], parttype="user")
-                elif hasattr(mtk, "daloader") and hasattr(mtk.daloader, "formatflash"):
-                    for clean_part in ("userdata", "cache"):
-                        p_entry = scatter_entries_map.get(clean_part)
-                        if p_entry and p_entry.get("offset") is not None and p_entry.get("partition_size"):
-                            mtk.daloader.formatflash(
-                                addr=p_entry["offset"],
-                                length=p_entry["partition_size"],
-                                partitionname=clean_part,
-                                parttype="user",
-                            )
-            except Exception as e:
-                self._log(f"Notice: userdata format non-fatal: {e}")
 
             if self._tool_error:
                 # The tool said a command failed and then stopped; the player
@@ -3487,6 +3639,7 @@ class FlashWorker(QThread):
                 return
             self._end_mtk_run_successfully(mtk, da_handler)
         finally:
+            self._flush_log()
             watcher.stop()
             # Hand mtkclient's messages back to its own logging so nothing is
             # left holding the worker after the session ends.
@@ -3681,57 +3834,33 @@ _MTK_FLASH_IDS = {
 
 
 def _load_libusb_backend():
-    """Create a pyusb libusb-1 backend the same way mtkclient does.
+    """Create a pyusb libusb-1 backend with full cross-platform support.
 
-    On Windows the bundled ``libusb-1.0.dll`` (vendor/mtkclient/mtkclient/
-    Windows/) is added to the DLL search path and loaded explicitly, because
-    plain ``usb.core.find()`` without a backend fails with "No backend
-    available" on Windows. Returns ``(usb_core, backend)`` or ``(None, None)``.
+    Uses mtk_api's unified cross-platform libusb resolution chain covering macOS
+    (Universal 2 dylib), Windows (bundled dll), and Linux (AppImage & libusb-1.0.so.0).
+    Returns (usb_core, backend) or (None, None).
     """
+    try:
+        import usb.core  # type: ignore
+        from . import mtk_api
+
+        backend = mtk_api.get_cross_platform_libusb_backend()
+        if backend is not None:
+            return usb.core, backend
+    except Exception:
+        pass
+
     try:
         import usb.backend.libusb1  # type: ignore
         import usb.core  # type: ignore
-    except Exception:
-        return None, None
 
-    if IS_WINDOWS:
-        try:
-            windows_dir = str(paths.MTKCLIENT_DIR / "mtkclient" / "Windows")
-            if os.path.isdir(windows_dir):
-                try:
-                    os.add_dll_directory(windows_dir)
-                except Exception:
-                    pass
-                os.environ["PATH"] = windows_dir + os.pathsep + os.environ.get("PATH", "")
-        except Exception:
-            pass
-        backend = usb.backend.libusb1.get_backend(
-            find_library=lambda name: "libusb-1.0.dll"
-        )
-    elif IS_MAC:
-        # Real macOS: the vendored universal dylib; simulated macOS (Linux
-        # host, paths.SIMULATE_MACOS): the host ELF .so — never the dylib.
-        if paths.SIMULATE_MACOS:
-            backend = usb.backend.libusb1.get_backend(
-                find_library=lambda name: "libusb-1.0.so"
-            )
-        else:
-            dylib_path = paths.find_libusb_dylib()
-            if dylib_path:
-                backend = usb.backend.libusb1.get_backend(
-                    find_library=lambda name: dylib_path
-                )
-            else:
-                backend = usb.backend.libusb1.get_backend(
-                    find_library=lambda name: "libusb-1.0.dylib"
-                )
-    else:
-        backend = usb.backend.libusb1.get_backend(
-            find_library=lambda name: "libusb-1.0.so"
-        )
-    if backend is None:
-        return None, None
-    return usb.core, backend
+        backend = usb.backend.libusb1.get_backend()
+        if backend is not None:
+            return usb.core, backend
+    except Exception:
+        pass
+
+    return None, None
 
 
 class DeviceMonitor(QThread):
@@ -3755,6 +3884,57 @@ class DeviceMonitor(QThread):
         self._failed = False
         self._lost_grace_until = 0.0
         self._grace_lock = threading.Lock()
+        self.primed_mtk = None
+        self._primed_lock = threading.Lock()
+
+    def take_primed_mtk(self):
+        with self._primed_lock:
+            mtk = self.primed_mtk
+            self.primed_mtk = None
+            return mtk
+
+    def _close_primed_mtk(self):
+        with self._primed_lock:
+            mtk = self.primed_mtk
+            self.primed_mtk = None
+        if mtk is not None:
+            try:
+                mtk.port.close(reset=True)
+            except Exception:
+                pass
+
+    def _try_prime_brom(self):
+        """Immediately handshake with a newly detected device and disable watchdog.
+
+        MediaTek Preloader on MT6572/MT6582 has a ~1-3s watchdog timer. Priming
+        the session upon USB connection disables the watchdog timer, holding
+        the device safely in flash mode until FlashWorker takes over.
+        """
+        try:
+            from . import mtk_api
+            from mtkclient.Library.Partitions.gpt import GptSettings
+        except Exception as e:
+            logger.warning("DeviceMonitor: mtkclient unavailable: %s", e)
+            return None
+        try:
+            mtk = mtk_api.init(preloader=None, loader=None)
+            if getattr(mtk.config, "gpt_settings", None) is None:
+                mtk.config.gpt_settings = GptSettings(0, 0, 0)
+        except Exception as e:
+            logger.warning("DeviceMonitor: mtk_init failed: %s", e)
+            return None
+        try:
+            ok = mtk.preloader.init(display=False)
+        except Exception as e:
+            logger.warning("DeviceMonitor: preloader.init exception: %s", e)
+            ok = False
+        if ok and getattr(mtk.config, "target_config", None) is not None:
+            return mtk
+        try:
+            mtk.port.close(reset=True)
+        except Exception:
+            pass
+        return None
 
     def stop(self):
         self._stop.set()
@@ -3814,6 +3994,10 @@ class DeviceMonitor(QThread):
                 if present and not self._present:
                     self._present = True
                     self._misses = 0
+                    primed = self._try_prime_brom()
+                    if primed is not None:
+                        with self._primed_lock:
+                            self.primed_mtk = primed
                     self.device_found.emit(port_label)
                 elif not present and self._present:
                     # Debounce: the device re-enumerates (BROM -> preloader ->
@@ -3823,6 +4007,7 @@ class DeviceMonitor(QThread):
                     if self._misses >= 3:
                         self._present = False
                         self._misses = 0
+                        self._close_primed_mtk()
                         if not self._lost_is_held():
                             self.device_lost.emit()
                         # else: the flash worker is restarting the target on
@@ -3937,6 +4122,12 @@ class FlashService(QObject):
             self._retire_extractor(self._extract_worker)
             self._extract_worker = None
 
+    def take_primed_mtk(self):
+        """Retrieve the primed MTK session from device monitor, if any."""
+        if self._device_monitor is not None and hasattr(self._device_monitor, "take_primed_mtk"):
+            return self._device_monitor.take_primed_mtk()
+        return None
+
     # -- flashing -----------------------------------------------------------
     def start_flash(self, package_path, pre_extracted_dir="", method="auto", model="",
                     da_file="", auth_file="", is_rockbox=False):
@@ -3944,6 +4135,7 @@ class FlashService(QObject):
         # then start the new one. The cancelled worker's late terminal signals
         # are detached so they cannot reach the UI or clobber the new run.
         retired = self.cancel_flash()
+        primed = self.take_primed_mtk()
         worker = FlashWorker(
             package_path,
             pre_extracted_dir,
@@ -3953,6 +4145,7 @@ class FlashService(QObject):
             da_file=da_file,
             auth_file=auth_file,
             is_rockbox=is_rockbox,
+            primed_mtk=primed,
         )
         worker._wait_for = retired
         self._flash_worker = worker

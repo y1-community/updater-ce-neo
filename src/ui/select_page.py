@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import QPoint, Qt, QThread, QTimer, Signal
+from PySide6.QtCore import QPoint, QSize, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QPixmap, QTextDocument
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -197,6 +197,36 @@ class _TypeInfoMark(QLabel):
             self.rect(),
             TYPE_TIP_VISIBLE_MS,
         )
+
+
+class _ReleaseNotesBrowser(QTextBrowser):
+    """Release notes view that dynamically sizes vertically to its document content."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+
+    def sizeHint(self) -> QSize:
+        doc = self.document()
+        if doc is None:
+            return super().sizeHint()
+        vp = self.viewport()
+        w = vp.width() if vp and vp.width() > 0 else self.width()
+        if w > 0:
+            doc.setTextWidth(w)
+        doc_h = int(doc.documentLayout().documentSize().height())
+        target_h = max(28, doc_h + 8)
+        target_h = min(target_h, 360)
+        from PySide6.QtCore import QSize
+        return QSize(super().sizeHint().width(), target_h)
+
+    def minimumSizeHint(self) -> QSize:
+        from PySide6.QtCore import QSize
+        return QSize(50, 28)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.updateGeometry()
 
 
 class SelectPackagePage(QWidget):
@@ -641,7 +671,7 @@ class SelectPackagePage(QWidget):
         clear_glass_plate(self._details_icon)
         notes_l.addWidget(self._details_header)
 
-        self._notes = QTextBrowser()
+        self._notes = _ReleaseNotesBrowser()
         self._notes.setObjectName("releaseNotes")
         self._notes.setReadOnly(True)
         self._notes.setOpenLinks(False)
@@ -683,6 +713,7 @@ class SelectPackagePage(QWidget):
         self._translate_label.linkActivated.connect(self._on_translate_link_clicked)
         self._translate_label.setVisible(False)
         notes_l.addWidget(self._translate_label)
+        notes_l.addStretch(1)
 
         self._notes_group.set_layout(notes_l)
         self._notes_group.set_glass_clear(True)
@@ -696,10 +727,13 @@ class SelectPackagePage(QWidget):
         self._notes.setHtml(html_text)
         from .surfaces import clear_glass_plate
         clear_glass_plate(self._notes)
+        self._notes.updateGeometry()
         if hasattr(self, "_notes_group") and self._notes_group:
+            self._notes_group.updateGeometry()
             self._notes_group.repaint()
         if hasattr(self, "_notes") and self._notes and self._notes.viewport():
             self._notes.viewport().repaint()
+        self.content_size_changed.emit()
 
     def _build_local_tab(self):
         t = T()
@@ -998,13 +1032,25 @@ class SelectPackagePage(QWidget):
         self._details_package = None
         self._raw_release_pixmap = None
         self._auto_detect_auth_file(package_target)
-        det_m, det_t = detect_model_and_type_from_name(p.name)
-        self._current_package_model = det_m or ""
-        if det_m:
+        mfr_info = catalog.parse_manufacturer_rom_info(p.parent.name) or catalog.parse_manufacturer_rom_info(p.name)
+        if mfr_info:
+            det_m = mfr_info["model"]
+            self._current_package_model = det_m
             self._select_model_for_manual(det_m)
-        self._selected_type = det_t or None
-        self._current_package_name = p.stem
-        self._remember_gui_local(package_target, self._current_package_model, p.stem)
+            self._selected_type = None
+            self._current_package_name = mfr_info["title"]
+        else:
+            det_m, det_t = detect_model_and_type_from_name(p.parent.name)
+            if not det_m:
+                det_m, det_t = detect_model_and_type_from_name(p.name)
+            self._current_package_model = det_m or ""
+            if det_m:
+                self._select_model_for_manual(det_m)
+                self._current_package_name = f"Installing software on {det_m}"
+            else:
+                self._current_package_name = "Installing software"
+            self._selected_type = det_t or None
+        self._remember_gui_local(package_target, self._current_package_model, self._current_package_name)
         self._set_local_banner("sel_current_pkg", p.name)
         self._details_package = catalog.FirmwarePackage(
             slug="local-" + str(Path(package_target).name),
@@ -1014,8 +1060,7 @@ class SelectPackagePage(QWidget):
             package_name="",
         )
         self._set_details_header(None, self._details_package)
-        self._start_btn.setEnabled(False)
-        self._prepare_package(package_target, self._on_local_prep_done)
+        self._on_local_prep_done(True, str(p.parent), "")
 
     def installer_da_file(self) -> str:
         """The Download Agent chosen for a MediaTek Installer flash (or "")."""
@@ -1801,8 +1846,10 @@ class SelectPackagePage(QWidget):
             self._is_translated = False
             self._is_translating = False
             self._notes.clear()
+            self._notes.updateGeometry()
             self._set_details_header(None, None)
             self._update_translate_link()
+            self.content_size_changed.emit()
             return
         rel = current.data(Qt.UserRole)
         if rel:
@@ -1929,6 +1976,8 @@ class SelectPackagePage(QWidget):
         if not rel or lang == "en":
             self._translate_label.setVisible(False)
             self._translate_label.setText("")
+            self._translate_label.updateGeometry()
+            self.content_size_changed.emit()
             return
 
         t = T()
@@ -1964,6 +2013,8 @@ class SelectPackagePage(QWidget):
                 f'{globe_html}<a href="action:translate_in_app" style="color:{t.fg}; text-decoration:none; font-weight:700;">{trans_txt}</a> &nbsp;·&nbsp; '
                 f'<a href="{url}" style="color:{t.fg}; text-decoration:none; font-weight:700;">{open_txt} ↗</a>'
             )
+        self._translate_label.updateGeometry()
+        self.content_size_changed.emit()
 
     def _on_translate_link_clicked(self, link: str):
         if link == "action:translate_in_app":
@@ -2272,6 +2323,19 @@ class SelectPackagePage(QWidget):
         scatter_abs = scatter_file.resolve() if scatter_file else None
         extract_abs = Path(extract_dir).resolve() if extract_dir else None
         eff_model = getattr(self, "_current_package_model", "")
+        if not eff_model and scatter_abs:
+            plat, proj = catalog.parse_scatter_header(scatter_abs)
+            inferred = catalog.infer_model_from_scatter(plat, proj)
+            if inferred:
+                eff_model = inferred
+                self._current_package_model = eff_model
+                self._select_model_for_manual(eff_model)
+                if not self._current_package_name or self._current_package_name == "Installing software":
+                    self._current_package_name = f"Installing software on {eff_model}"
+                if self._details_package:
+                    self._details_package.model = eff_model
+                    self._details_package.name = self._current_package_name
+                    self._set_details_header(self._current_selected_rel, self._details_package)
         device_tracking.record_latest_package(
             model=eff_model,
             software_name=self._current_package_name,
@@ -2294,7 +2358,8 @@ class SelectPackagePage(QWidget):
         if not path:
             return
         p = Path(path)
-        if p.is_file() and (p.suffix.lower() == ".txt" or "scatter" in p.name.lower()):
+        is_scatter = p.is_file() and (p.suffix.lower() == ".txt" or "scatter" in p.name.lower())
+        if is_scatter:
             package_target = str(p.parent)
             display_name = p.parent.name
         else:
@@ -2311,25 +2376,32 @@ class SelectPackagePage(QWidget):
         # Auto-detect .auth file in the same folder as the chosen file
         self._auto_detect_auth_file(package_target)
 
-        # Detect model and variant type from original browsed filename:
-        det_m, det_t = detect_model_and_type_from_name(display_name)
-        if det_m:
+        mfr_info = catalog.parse_manufacturer_rom_info(display_name)
+        if mfr_info:
+            det_m = mfr_info["model"]
             self._current_package_model = det_m
             self._select_model_for_manual(det_m)
-        else:
-            self._current_package_model = ""
-
-        if det_t:
-            self._selected_type = det_t
-            idx_t = self._type_combo.findData(det_t)
-            if idx_t >= 0:
-                self._type_combo.setCurrentIndex(idx_t)
-        else:
             self._selected_type = None
+            self._current_package_name = mfr_info["title"]
+        else:
+            # Detect model and variant type from original browsed filename:
+            det_m, det_t = detect_model_and_type_from_name(display_name)
+            if det_m:
+                self._current_package_model = det_m
+                self._select_model_for_manual(det_m)
+                self._current_package_name = f"Installing software on {det_m}"
+            else:
+                self._current_package_model = ""
+                self._current_package_name = "Installing software"
 
-        self._current_package_name = self._install_card_title(
-            Path(display_name).stem, None, self._current_package_model
-        )
+            if det_t:
+                self._selected_type = det_t
+                idx_t = self._type_combo.findData(det_t)
+                if idx_t >= 0:
+                    self._type_combo.setCurrentIndex(idx_t)
+            else:
+                self._selected_type = None
+
         self._details_package = catalog.FirmwarePackage(
             slug="local-" + str(Path(package_target).name),
             name=self._current_package_name or Path(package_target).name,
@@ -2342,6 +2414,9 @@ class SelectPackagePage(QWidget):
         )
         self._set_local_banner("sel_current_pkg", display_name)
         self._set_details_header(None, self._details_package)
+        if is_scatter:
+            self._on_local_prep_done(True, str(p.parent), "")
+            return
         self._start_btn.setEnabled(False)
         self._prepare_package(package_target, self._on_local_prep_done)
 
@@ -2366,24 +2441,31 @@ class SelectPackagePage(QWidget):
         # Auto-detect .auth file in the selected folder
         self._auto_detect_auth_file(folder)
 
-        det_m, det_t = detect_model_and_type_from_name(display_name)
-        if det_m:
+        mfr_info = catalog.parse_manufacturer_rom_info(display_name)
+        if mfr_info:
+            det_m = mfr_info["model"]
             self._current_package_model = det_m
             self._select_model_for_manual(det_m)
-        else:
-            self._current_package_model = ""
-
-        if det_t:
-            self._selected_type = det_t
-            idx_t = self._type_combo.findData(det_t)
-            if idx_t >= 0:
-                self._type_combo.setCurrentIndex(idx_t)
-        else:
             self._selected_type = None
+            self._current_package_name = mfr_info["title"]
+        else:
+            det_m, det_t = detect_model_and_type_from_name(display_name)
+            if det_m:
+                self._current_package_model = det_m
+                self._select_model_for_manual(det_m)
+                self._current_package_name = f"Installing software on {det_m}"
+            else:
+                self._current_package_model = ""
+                self._current_package_name = "Installing software"
 
-        self._current_package_name = self._install_card_title(
-            display_name, None, self._current_package_model
-        )
+            if det_t:
+                self._selected_type = det_t
+                idx_t = self._type_combo.findData(det_t)
+                if idx_t >= 0:
+                    self._type_combo.setCurrentIndex(idx_t)
+            else:
+                self._selected_type = None
+
         self._remember_gui_local(folder, self._current_package_model, self._current_package_name)
         self._set_local_banner("sel_current_pkg", display_name)
         self._details_package = catalog.FirmwarePackage(
@@ -2394,8 +2476,25 @@ class SelectPackagePage(QWidget):
             package_name="",
         )
         self._set_details_header(None, self._details_package)
+        try:
+            scatter_file = _find_scatter(p, allow_raise=True)
+        except ScatterDiscoveryError:
+            self._local_status_key = ""
+            self._local_status.setText(tr("sel_multiple_scatters_title"))
+            QMessageBox.warning(
+                self,
+                tr("sel_multiple_scatters_title"),
+                tr("sel_multiple_scatters_error"),
+            )
+            self._start_btn.setEnabled(False)
+            return
+
+        if scatter_file is not None:
+            self._on_local_prep_done(True, str(scatter_file.parent), "")
+            return
+
         self._start_btn.setEnabled(False)
-        self._prepare_package(folder, self._on_local_prep_done)
+        self._on_local_prep_done(False, "", "NO_SCATTER_FILE")
 
     def _on_start_flash(self):
         if self._installer_mode and not self._installer_da:
@@ -2545,6 +2644,16 @@ class SelectPackagePage(QWidget):
             self._current_package_path = path
             self._current_package_model = target.get("model") or ""
             self._current_package_name = target.get("name") or Path(path).name
+            p = Path(path)
+            is_scatter = p.is_file() and (p.suffix.lower() == ".txt" or "scatter" in p.name.lower())
+            sc = p if is_scatter else (_find_scatter(p, allow_raise=False) if p.is_dir() else None)
+            if sc:
+                cb = self._external_tool_callback
+                self._external_tool_callback = None
+                self._gui_handoff_worker = False
+                if cb:
+                    cb(True, str(sc.parent), "")
+                return True
             self._prepare_package(path, self._on_external_prep_done)
             return True
         if kind != "online":

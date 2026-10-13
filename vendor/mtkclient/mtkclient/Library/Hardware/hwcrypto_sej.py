@@ -95,7 +95,7 @@ regval = {
     "HACC_SECINIT1": 0x0084,
     "HACC_SECINIT2": 0x0088,
     "HACC_MKJ": 0x00a0,
-    "HACC_UNK": 0x00bc
+    "HACC_SECINIT0_new": 0x00bc
 }
 
 
@@ -653,11 +653,11 @@ class Sej(metaclass=LogBase):
                     self.reg.HACC_ACFG3 = iv[3]
                 return 0
             if sejparam & 8 != 0:
-                self.reg.HACC_UNK &= 0xFFFFFFFD
+                self.reg.HACC_SECINIT0_new &= 0xFFFFFFFD
             else:
-                self.reg.HACC_UNK |= 2
+                self.reg.HACC_SECINIT0_new |= 2
             if sejparam & 4 == 0:
-                self.reg.HACC_UNK |= 1
+                self.reg.HACC_SECINIT0_new |= 1
                 if m_sst_type & 2 == 0:
                     self.reg.HACC_ACONK = self.HACC_AES_BK2C
                 if attr & 2 != 0:
@@ -671,7 +671,7 @@ class Sej(metaclass=LogBase):
             current_clock = self.get_world_clock_value()
             while True:
                 if self.reg.HACC_ACON2 < 0:
-                    self.reg.HACC_UNK &= 0xFFFFFFFE
+                    self.reg.HACC_SECINIT0_new &= 0xFFFFFFFE
                 if self.check_timeout(current_clock, 200):
                     return -1
         return 0
@@ -801,8 +801,7 @@ class Sej(metaclass=LogBase):
         # 0x335 = MT6737M/MT6735G
         # 0x321 = MT6735/T,MT8735A
         # 0x337 = MT6753
-        # 0x279 = MT6797/MT6767
-        if self.hwcode in [0x6795, 0x335, 0x321, 0x337, 0x279]:
+        if self.hwcode in [0x6795, 0x335, 0x321, 0x337, 0x279, 0x1375]:
             legacy = False
         acon_setting = self.HACC_AES_CHG_BO_OFF | self.HACC_AES_128
         if iv is not None:
@@ -839,7 +838,7 @@ class Sej(metaclass=LogBase):
         self.reg.HACC_ACFG3 = iv[3]
 
         if legacy:
-            self.reg.HACC_UNK |= 2
+            self.reg.HACC_SECINIT0_new |= 2
             # clear HACC_ASRC/HACC_ACFG/HACC_AOUT
             self.reg.HACC_ACON2 |= 0x40000000
             i = 0
@@ -849,12 +848,12 @@ class Sej(metaclass=LogBase):
                 i += 1
             if i == 20:
                 self.error("SEJ Legacy Hardware seems not to be configured correctly. Results may be wrong.")
-            self.reg.HACC_UNK &= 0xFFFFFFFE
+            self.reg.HACC_SECINIT0_new &= 0xFFFFFFFE
             self.reg.HACC_ACONK = self.HACC_AES_BK2C
             self.reg.HACC_ACON = acon_setting
         else:
             # The reg below needed for mtee ?
-            self.reg.HACC_UNK = 1
+            self.reg.HACC_SECINIT0_new = 1
 
             # encrypt fix pattern 3 rounds to generate a pattern from HUID/HUK
             for i in range(0, 3):

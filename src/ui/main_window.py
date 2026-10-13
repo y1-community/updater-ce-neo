@@ -134,7 +134,7 @@ _PAGE_SUPPORT = 7
 DEFAULT_WINDOW_WIDTH = 640
 DEFAULT_WINDOW_HEIGHT = 440
 MINIMUM_WINDOW_WIDTH = 640
-MINIMUM_WINDOW_HEIGHT = 440
+MINIMUM_WINDOW_HEIGHT = 340
 MAXIMUM_WINDOW_WIDTH = 1240
 
 # Slack added to a page's own content height when the window hugs it, so the
@@ -1474,7 +1474,7 @@ class MainWindow(QMainWindow):
 
     def _on_prep_started(self, name, model):
         """Zip or archive extraction belongs on the install card, not the catalogue."""
-        self._download_active = True
+        self._download_active = False
         if name:
             self._package_name = name
         if model:
@@ -1862,16 +1862,7 @@ class MainWindow(QMainWindow):
         # only backend, mac-centric prompts) can be tested without a Mac.
         # NB: PySide6 6.11 returns a Flag here, so int(modifiers()) raises.
         if event.key() == Qt.Key_D and event.modifiers() == Qt.NoModifier:
-            self._unlock_diagnostics()
-            self._settings_page.reveal_advanced_methods()
-            try:
-                from ..device_tracking import set_hidden_mtk_options
-
-                set_hidden_mtk_options(True)
-            except Exception:
-                pass
-            self._nav_to_page(_PAGE_SETTINGS)
-            self._append_log("Advanced install methods and diagnostics revealed (D).")
+            self.toggle_diagnostics_and_advanced()
             event.accept()
             return
         if event.key() == Qt.Key_M and event.modifiers() == Qt.NoModifier:
@@ -1887,7 +1878,96 @@ class MainWindow(QMainWindow):
                 self._append_log("Advanced install methods revealed (M).")
             event.accept()
             return
+        if event.key() == Qt.Key_R and event.modifiers() == Qt.NoModifier:
+            self.reset_all_configuration_and_caches()
+            event.accept()
+            return
         super().keyPressEvent(event)
+
+    def reset_all_configuration_and_caches(self):
+        """Completely reset app config back to default, opt credits/donations back in, and clear caches."""
+        from .. import device_tracking, downloads, config
+        from ..i18n import translator
+
+        # 1. Clear QSettings
+        s = QSettings("innioasis", "updater")
+        s.clear()
+        s_caps = QSettings("Innioasis", "UpdaterCE")
+        s_caps.clear()
+
+        # 2. Reset device_tracking and ensure credits/donations are opted in
+        device_tracking.set_donation_ui_disabled(False, s)
+        device_tracking.set_donation_install_prompt_disabled(False, s)
+        device_tracking.set_settings_donations_section_dismissed(False, s)
+        device_tracking.set_donation_ui_disabled(False, s_caps)
+        device_tracking.set_donation_install_prompt_disabled(False, s_caps)
+        device_tracking.set_settings_donations_section_dismissed(False, s_caps)
+
+        device_tracking.set_hidden_mtk_options(False, s)
+        device_tracking.set_terminal_install_enabled(False, s)
+        device_tracking.set_sp_gui_install_enabled(False, s)
+        device_tracking.set_sp_auth_file("", s)
+        for name in getattr(device_tracking, "FILTER_NAMES", ()):
+            device_tracking.set_rockbox_release_filter(name, False, s)
+
+        # 3. Clear firmware downloads cache
+        try:
+            downloads.clear_firmware_cache()
+        except Exception as e:
+            logger.debug("clear_firmware_cache error during reset: %s", e)
+
+        # 4. Clear application cache directory
+        try:
+            from ..catalog import _app_cache_dir
+            app_cache = _app_cache_dir()
+            if app_cache.exists():
+                import shutil
+                for item in app_cache.iterdir():
+                    try:
+                        if item.is_file():
+                            item.unlink()
+                        elif item.is_dir():
+                            shutil.rmtree(item, ignore_errors=True)
+                    except Exception:
+                        pass
+        except Exception as e:
+            logger.debug("app_cache_dir clearing error during reset: %s", e)
+
+        # 5. Clear manifest cache directory
+        try:
+            from ..manifest import _cache_root
+            manifest_cache = _cache_root()
+            if manifest_cache.exists():
+                import shutil
+                for item in manifest_cache.iterdir():
+                    try:
+                        if item.is_file():
+                            item.unlink()
+                        elif item.is_dir():
+                            shutil.rmtree(item, ignore_errors=True)
+                    except Exception:
+                        pass
+        except Exception as e:
+            logger.debug("manifest cache clearing error during reset: %s", e)
+
+        # 6. Reset in-memory state
+        self._diagnostics_unlocked = False
+        from ..flash_service import default_flash_method
+        self._flash_method = default_flash_method()
+        if hasattr(self, "_settings_page"):
+            self._settings_page._advanced_revealed = False
+            if hasattr(self._settings_page, "_cb_advanced_settings"):
+                self._settings_page._cb_advanced_settings.blockSignals(True)
+                self._settings_page._cb_advanced_settings.setChecked(False)
+                self._settings_page._cb_advanced_settings.blockSignals(False)
+            self._settings_page.refresh_settings()
+
+        self._apply_donation_visibility(False)
+        if hasattr(self, "_select_page") and hasattr(self._select_page, "_check_and_load_cached_firmware"):
+            self._select_page._check_and_load_cached_firmware()
+
+        self.statusBar().showMessage(tr("settings_cache_cleared_msg").format(count=0, size="0 MB") if hasattr(self, "tr") else "Configuration reset to default and caches cleared.", 4000)
+        self._append_log("App configuration reset to default and caches cleared (R).")
 
     def _install_run_active(self) -> bool:
         """True while a flash run or download run is in progress."""
@@ -2173,12 +2253,21 @@ class MainWindow(QMainWindow):
             if scr is not None:
                 target_w = min(target_w, int(scr.availableGeometry().width()))
             if curr_idx == _PAGE_FLASH:
-                target_h = compact_install_height(
-                    page_h=page_h,
-                    prompt_h=prompt_h,
-                    status_h=status_h,
-                    inline_header=getattr(self, "_title_bar", None) is not None,
-                    donations_disabled=donations_disabled,
+                if hasattr(page, "content_height_hint"):
+                    page_h = max(page_h, page.content_height_hint(content_w))
+                actual_chrome = max(
+                    self._window_chrome()[1],
+                    status_h + (int(HEADER_CONTENT_HEIGHT) if getattr(self, "_title_bar", None) is not None else 0),
+                )
+                target_h = max(
+                    compact_install_height(
+                        page_h=page_h,
+                        prompt_h=prompt_h,
+                        status_h=status_h,
+                        inline_header=getattr(self, "_title_bar", None) is not None,
+                        donations_disabled=donations_disabled,
+                    ),
+                    page_h + prompt_h + actual_chrome + 8,
                 )
             else:
                 # The catalogue is still showing. The short install size is
@@ -2564,6 +2653,7 @@ class MainWindow(QMainWindow):
         self._package_path = path
         self._package_name = name
         self._package_model = model or ""
+        self._pre_install_guided = False
 
         self._sync_sp_history()
 
@@ -2835,9 +2925,25 @@ class MainWindow(QMainWindow):
         self._install_failed = False
         self._install_complete = False
         self._power_off_prompt = True
+        self.service.stop_device_monitor()
+        try:
+            self.service.take_primed_mtk()
+        except Exception:
+            pass
         self._flash_page.set_package_name(self._package_name)
         self._flash_page.set_model(self._package_model)
         self._flash_page.set_method(self._flash_method)
+        try:
+            from ..flash_service import completed_extract_dir, _find_scatter, _parse_scatter_platform
+            ed = completed_extract_dir(self._package_path)
+            if ed:
+                sc = _find_scatter(Path(ed))
+                if sc:
+                    platform = _parse_scatter_platform(sc) or ""
+                    if hasattr(self._flash_page, "set_platform"):
+                        self._flash_page.set_platform(platform)
+        except Exception:
+            pass
         # This screen shows the release's own image, not only the settings
         # stand-in: it is the first thing the user sees when the install starts,
         # and the catalogue already has the image by then.
@@ -2992,11 +3098,15 @@ class MainWindow(QMainWindow):
             f"(method: {_method_label(self._flash_method)})"
         )
         try:
-            from ..flash_service import compute_extract_dir, _find_scatter
+            from ..flash_service import compute_extract_dir, _find_scatter, _parse_scatter_platform
             from ..sp_flash_gui import update_sp_history_ini
 
             ed = pre_extracted or compute_extract_dir(self._package_path)
             sc = _find_scatter(Path(ed)) if Path(ed).is_dir() else None
+            if sc and hasattr(self._flash_page, "set_platform"):
+                platform = _parse_scatter_platform(sc) or ""
+                if platform:
+                    self._flash_page.set_platform(platform)
             update_sp_history_ini(
                 scatter_path=sc,
                 extract_dir=Path(ed) if Path(ed).is_dir() else None,
@@ -3814,6 +3924,38 @@ class MainWindow(QMainWindow):
         self._diagnostics_session = True
         self._sync_diagnostics_button()
 
+    def _lock_diagnostics(self) -> None:
+        """Hide Diagnostics button and leave the page if open."""
+        self._diagnostics_session = False
+        self._sync_diagnostics_button()
+        if hasattr(self, "_stack") and self._stack.currentIndex() == _PAGE_DIAGNOSTICS:
+            self._leave_diagnostics()
+
+    def toggle_diagnostics_and_advanced(self) -> None:
+        """Toggle advanced settings and diagnostics view on or off (shortcut D)."""
+        is_active = self._diagnostics_unlocked() or self._settings_page.advanced_methods_revealed()
+        if is_active:
+            self._lock_diagnostics()
+            self._settings_page.hide_advanced_methods()
+            try:
+                from ..device_tracking import set_hidden_mtk_options
+
+                set_hidden_mtk_options(False)
+            except Exception:
+                pass
+            self._append_log("Advanced install methods and diagnostics hidden (D).")
+        else:
+            self._unlock_diagnostics()
+            self._settings_page.reveal_advanced_methods()
+            try:
+                from ..device_tracking import set_hidden_mtk_options
+
+                set_hidden_mtk_options(True)
+            except Exception:
+                pass
+            self._nav_to_page(_PAGE_SETTINGS)
+            self._append_log("Advanced install methods and diagnostics revealed (D).")
+
     def _ensure_diagnostics_page(self):
         page = getattr(self, "_diagnostics_page", None)
         if page is not None:
@@ -4027,12 +4169,13 @@ class MainWindow(QMainWindow):
         if not started:
             self._gui_handoff_prepare = False
             return False
-        if self._gui_handoff_prepare and not getattr(self, "_download_active", False):
-            self._download_active = True
+        if self._gui_handoff_prepare:
+            self._download_active = (target.get("kind") == "online")
             self._flash_page.show_preparing()
             self._nav_to_page(_PAGE_FLASH)
             if hasattr(self, "_select_page") and hasattr(self._select_page, "_title"):
-                self._select_page._title.setText(tr("flash_download_in_progress"))
+                title_key = "flash_download_in_progress" if self._download_active else "flash_install_in_progress"
+                self._select_page._title.setText(tr(title_key))
         self._reveal_sp_gui_button()
         return True
 
