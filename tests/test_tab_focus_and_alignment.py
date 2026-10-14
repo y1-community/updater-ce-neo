@@ -100,6 +100,13 @@ def test_round_button_paints_circular_focus_when_tab_active():
 
 
 def test_all_install_cards_continual_alignment():
+    """All four cards are one shape: chips on the head row, copy under it.
+
+    The chips used to be centred on the card as a whole, which put them level
+    with the guidance copy on a tall (failed) card. They belong to the software
+    title and its progress band, so the row they are added to is the head row
+    and they are centred on that, not on the card.
+    """
     app = _app()
     page = FlashPage()
     page.set_package_name("Original Software 3.1.2 for Y1")
@@ -110,16 +117,22 @@ def test_all_install_cards_continual_alignment():
     # 1. Preparing view
     page.show_preparing()
     app.processEvents()
-    assert page._prep_row.alignment() == Qt.AlignmentFlag.AlignVCenter
-    assert page._prep_icon.y() > 0
+    assert page._prep_row is page._prep_head.box
+    assert page._prep_head.box.indexOf(page._prep_cancel_btn) >= 0
+    assert page._prep_head.icon is page._prep_icon
+    assert page._prep_icon.width() == 40
     assert page._prep_cancel_btn.y() > 0
 
     # 2. Waiting view (power off prompt)
     page.show_power_off_prompt()
     app.processEvents()
-    assert page._wait_row.alignment() == Qt.AlignmentFlag.AlignVCenter
+    assert page._wait_row is page._wait_head.box
+    assert page._wait_head.box.indexOf(page._wait_continue_btn) >= 0
+    assert page._wait_head.box.indexOf(page._wait_cancel_btn) >= 0
     assert page._wait_continue_btn.isVisible()
     assert page._wait_cancel_btn.isVisible()
+    top, bottom = page._wait_head.band_span()
+    assert top <= page._wait_continue_btn.geometry().center().y() <= bottom
     # Inside-card mode hint is hidden
     assert not page._wait_mode_hint.isVisible()
     # Under-card paperclip hint is visible for Y1
@@ -129,15 +142,17 @@ def test_all_install_cards_continual_alignment():
     # 3. Flashing view
     page.show_flashing()
     app.processEvents()
-    assert page._flash_row.alignment() == Qt.AlignmentFlag.AlignVCenter
-    assert page._flash_icon.y() > 0
+    assert page._flash_row is page._flash_head.box
+    assert page._flash_head.box.indexOf(page._cancel_btn) >= 0
+    assert page._flash_head.icon is page._flash_icon
     assert page._cancel_btn.y() > 0
 
     # 4. Downloading view
     page.show_downloading()
     app.processEvents()
-    assert page._download_row.alignment() == Qt.AlignmentFlag.AlignVCenter
-    assert page._download_icon.y() > 0
+    assert page._download_row is page._download_head.box
+    assert page._download_head.box.indexOf(page._download_cancel_btn) >= 0
+    assert page._download_head.icon is page._download_icon
     assert page._download_cancel_btn.y() > 0
 
     page.close()

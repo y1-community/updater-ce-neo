@@ -54,16 +54,33 @@ INSTALL_TEXT_WIDTH = 220
 
 
 def install_horizontal_chrome(sidebar: int) -> int:
-    """Pixels beside the wrapping column: sidebar, pads, icon, and the cancel chip."""
+    """Pixels beside the wrapping column: sidebar, pads, icon, and the chips.
+
+    The head row is the widest line on a progress card — icon, the software
+    title with its progress band, and the round chips — so it is what decides
+    how wide the window has to be for the copy to keep wrapping at
+    ``INSTALL_TEXT_WIDTH``. The chips sit on that row rather than centred on the
+    card, so they are counted here beside the column, not inside it.
+    """
     page_pad = 32
     wrap_pad = 8
     card_outer = 28
     card_inner = 32
-    icon = 40
-    gaps = 28
-    cancel = 24
-    slack = 24
-    return int(sidebar) + page_pad + wrap_pad + card_outer + card_inner + icon + gaps + cancel + slack
+    icon = _CARD_ICON_PX
+    gaps = 2 * _CARD_HEAD_GAP
+    chips = 2 * ROUND_NEXT_BUTTON_PX + 10
+    slack = 16
+    return (
+        int(sidebar)
+        + page_pad
+        + wrap_pad
+        + card_outer
+        + card_inner
+        + icon
+        + gaps
+        + chips
+        + slack
+    )
 
 
 _STEP_KEY = {
@@ -314,13 +331,78 @@ def _status_label(text: str, *, strong: bool = False) -> _FitLabel:
     return label
 
 
-ROUND_NEXT_BUTTON_PX = 30
+# One card shape, four screens: the software icon, the software title with its
+# progress band, and the round action chips, on one row. The copy for the
+# screen sits under that row, lined up with the title.
+_CARD_ICON_PX = 40
+_CARD_HEAD_GAP = 14
+# The chip is a disc with a little room around it. What makes it read as raised
+# is the drop shadow that room holds, not a heavier disc: the disc itself stays
+# translucent so the card's material keeps showing through it.
+_CHIP_DISC_PX = 30
+_CHIP_SHADOW_PX = 3
+ROUND_NEXT_BUTTON_PX = _CHIP_DISC_PX + _CHIP_SHADOW_PX * 2
 _ROUND_NEXT_ARROW_PX = 15
+_CHIP_SHADOW_ALPHA = 72
+# Where a chip row's copy starts, so the icon reads as the card's leading edge.
+_CARD_COPY_INDENT = _CARD_ICON_PX + _CARD_HEAD_GAP
 # Round chips sit on a glass card, so their discs are translucent too. The
 # accent (the step that moves the install on) stays nearly opaque; a neutral
 # cancel/back chip reads as a wash over whatever is behind it.
 _ACCENT_DISC_ALPHA = 235
 _NEUTRAL_DISC_ALPHA = 150
+
+
+class _CardHead(QWidget):
+    """Icon, software title, progress band and the round chips, on one row.
+
+    Every progress card — preparing, waiting, installing, downloading — is this
+    row with a different middle. The chips belong here, to the right of and
+    inline with the software title and its progress band, and they stay there
+    on all four screens: a chip that drifts to the middle of a taller card (on
+    the failure copy, say) stops reading as the next step of the title it
+    belongs to.
+
+    One widget for all four screens on purpose. Aqua, WinUI, Breeze or Adwaita
+    paint the controls inside it, but the layout is decided here, so the same
+    card is laid out the same way whichever host look the app is running under.
+    """
+
+    def __init__(self, icon: QWidget, title: QWidget, parent=None):
+        super().__init__(parent)
+        self.box = QHBoxLayout(self)
+        self.box.setContentsMargins(0, 0, 0, 0)
+        self.box.setSpacing(_CARD_HEAD_GAP)
+        self.icon = icon
+        self.box.addWidget(icon, 0, Qt.AlignTop)
+        self.identity = QWidget()
+        self.identity_box = QVBoxLayout(self.identity)
+        self.identity_box.setContentsMargins(0, 0, 0, 0)
+        self.identity_box.setSpacing(6)
+        self.title = title
+        self.title.setWordWrap(False)
+        self.identity_box.addWidget(title)
+        self.box.addWidget(self.identity, 1)
+        self.band = None
+
+    def set_band(self, band: QWidget) -> None:
+        """The progress band, directly under the title it reports on."""
+        self.band = band
+        self.identity_box.addWidget(band)
+
+    def add_chip(self, chip: QWidget) -> None:
+        """A round action chip, right of the title and the band.
+
+        Centred on the title-plus-band block rather than on the whole card, so
+        adding a line of guidance copy below never moves the chip.
+        """
+        self.box.addWidget(chip, 0, Qt.AlignVCenter)
+
+    def band_span(self) -> tuple[int, int]:
+        """Vertical extent of title + band in this row's coordinates."""
+        top = self.title.geometry().top()
+        bottom = self.band.geometry().bottom() if self.band is not None else self.title.geometry().bottom()
+        return top, bottom
 
 
 class _GlyphActions(QWidget):
@@ -461,6 +543,7 @@ class _RoundNextButton(QPushButton):
         self._accent = bool(accent)
         self.setObjectName("roundNextButton" if accent else "roundGlyphButton")
         self.setCursor(Qt.PointingHandCursor)
+        # The widget keeps a few pixels of room around the disc for its shadow.
         self.setFixedSize(ROUND_NEXT_BUTTON_PX, ROUND_NEXT_BUTTON_PX)
         self.setFlat(True)
         self.setAutoDefault(False)
@@ -525,7 +608,48 @@ class _RoundNextButton(QPushButton):
         self._arrow = get_symbol_pixmap(self._symbol, _ROUND_NEXT_ARROW_PX, text)
         self.update()
 
-    def paintEvent(self, event):  # noqa: N802 (Qt naming)
+    def _disc_rect(self) -> QRect:
+        """The disc itself: the widget minus the room its shadow needs."""
+        return self.rect().adjusted(
+            _CHIP_SHADOW_PX, _CHIP_SHADOW_PX, -_CHIP_SHADOW_PX, -_CHIP_SHADOW_PX
+        )
+
+    def _shadow_strength(self) -> float:
+        """How heavy the seat of the shadow is right now."""
+        if not self.isEnabled():
+            return 0.4
+        if self._pressed:
+            return 0.55
+        if self._hovered:
+            return 1.2
+        return 1.0
+
+    def _paint_shadow(self, painter: QPainter, disc: QRect) -> None:
+        """Soft shade under the disc, the lightest ring outermost.
+
+        Concentric ellipses, each drawn a little larger than the last; the disc
+        is painted over them, so what is left is the soft edge around it that
+        reads as the chip sitting above the card. Light comes from above, so the
+        rings grow a pixel more at the bottom than at the top.
+        """
+        strength = self._shadow_strength()
+        steps = _CHIP_SHADOW_PX
+        budget = max(1.0, steps * steps)
+        for step in range(steps, 0, -1):
+            alpha = int(_CHIP_SHADOW_ALPHA * strength * (steps - step + 1) / budget)
+            if alpha <= 0:
+                continue
+            painter.setBrush(QColor(0, 0, 0, min(alpha, 255)))
+            painter.drawEllipse(disc.adjusted(-step, -step + 1, step, step + 1))
+
+    def paint_into(self, painter: QPainter) -> None:
+        """Draw the chip — shadow, disc, glyph — into ``painter``.
+
+        ``paintEvent`` is only a wrapper around this, so a test can paint the
+        chip onto a canvas of its own and read the pixels. ``QWidget.render()``
+        would not do: it fills an opaque background first, which hides both the
+        translucency and the shadow.
+        """
         if self._arrow.isNull():
             self.rebuild_arrow()
         disc, _text = self._colors()
@@ -535,17 +659,25 @@ class _RoundNextButton(QPushButton):
             disc = disc.darker(118)
         elif self._hovered:
             disc = disc.lighter(112)
-        painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setPen(Qt.PenStyle.NoPen)
+        self._paint_shadow(painter, self._disc_rect())
+        disc_rect = self._disc_rect()
         painter.setBrush(disc)
-        painter.drawEllipse(self.rect())
+        painter.drawEllipse(disc_rect)
+        # A raised chip catches the light along its top edge.
+        highlight = disc.lighter(150)
+        highlight.setAlpha(min(110, max(35, int(disc.alpha() * 0.45))))
+        painter.setPen(QPen(highlight, 1))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawArc(disc_rect.adjusted(1, 1, -1, -1), 45 * 16, 90 * 16)
+        painter.setPen(Qt.PenStyle.NoPen)
         if not self._arrow.isNull():
             size = _ROUND_NEXT_ARROW_PX
             painter.drawPixmap(
                 QRect(
-                    (self.width() - size) // 2,
-                    (self.height() - size) // 2,
+                    disc_rect.x() + (disc_rect.width() - size) // 2,
+                    disc_rect.y() + (disc_rect.height() - size) // 2,
                     size,
                     size,
                 ),
@@ -557,11 +689,17 @@ class _RoundNextButton(QPushButton):
 
             accent_col, _ = get_native_accent_color()
             focus_col = QColor(accent_col or "#007aff")
-            pen = QPen(focus_col, 2)
-            painter.setPen(pen)
+            focus_pen = QPen(focus_col, 2)
+            painter.setPen(focus_pen)
             painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawEllipse(self.rect().adjusted(1, 1, -1, -1))
-        painter.end()
+            painter.drawEllipse(disc_rect.adjusted(1, 1, -1, -1))
+
+    def paintEvent(self, event):  # noqa: N802 (Qt naming)
+        painter = QPainter(self)
+        try:
+            self.paint_into(painter)
+        finally:
+            painter.end()
 
     def enterEvent(self, event):  # noqa: N802 (Qt naming)
         self._hovered = True
@@ -697,45 +835,57 @@ class FlashPage(QWidget):
         v.addStretch(1)
         return container
 
+    def _new_progress_card(self, icon, title, band, chips):
+        """The one skeleton the four progress cards are built from.
+
+        Returns ``(card, head, copy)``. ``head`` carries the icon, the software
+        title, the progress band and the round chips on a single row; ``copy``
+        is where that screen's own words go — below the row, indented to line up
+        with the title, so the icon stays the card's leading edge. Building all
+        four here is what keeps them the same card on every host: Aqua, WinUI,
+        Breeze and Adwaita paint the controls, this decides their places.
+        """
+        card = Card()
+        card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
+        body = QVBoxLayout()
+        body.setContentsMargins(16, 14, 16, 14)
+        body.setSpacing(8)
+        head = _CardHead(icon, title)
+        head.set_band(band)
+        for chip in chips:
+            head.add_chip(chip)
+        body.addWidget(head)
+        copy = QVBoxLayout()
+        copy.setContentsMargins(_CARD_COPY_INDENT, 0, 0, 0)
+        copy.setSpacing(6)
+        body.addLayout(copy)
+        card.set_layout(body)
+        return card, head, copy
+
     def _build_preparing_view(self):
-        self._prep_card = Card()
-        self._prep_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
-        card_layout = QHBoxLayout()
-        card_layout.setContentsMargins(16, 14, 16, 14)
-        card_layout.setSpacing(14)
-        card_layout.setAlignment(Qt.AlignVCenter)
-
         self._prep_icon = _make_squircle_icon("📦", "icon.png")
-        card_layout.addWidget(self._prep_icon, 0, Qt.AlignVCenter)
-
-        col = QVBoxLayout()
-        col.setContentsMargins(0, 0, 0, 0)
-        col.setSpacing(6)
-
         self._prep_pkg_label = _status_label(self._package_name or "\u2014", strong=True)
-        col.addWidget(self._prep_pkg_label)
-
         self._prep_banner = Banner()
         self._prep_banner.setVisible(False)
-
         self._prep_progress = InstallProgress()
         _configure_progress(self._prep_progress)
-        col.addWidget(self._prep_progress)
-
-        self._prep_step = _status_label(tr("step_extract"))
-        col.addWidget(self._prep_step)
-
-        card_layout.addLayout(col, 1)
-        self._prep_col = col
 
         self._prep_cancel_btn = _RoundNextButton(symbol="cancel", accent=False)
         self._prep_cancel_btn.setObjectName("softwareUpdateCancelBtn")
         self._prep_cancel_btn.setToolTip(tr("flash_btn_cancel_wait"))
         self._prep_cancel_btn.clicked.connect(self._on_cancel_wait)
-        card_layout.addWidget(self._prep_cancel_btn, 0, Qt.AlignVCenter)
 
-        self._prep_card.set_layout(card_layout)
-        self._prep_row = card_layout
+        self._prep_card, self._prep_head, copy = self._new_progress_card(
+            self._prep_icon,
+            self._prep_pkg_label,
+            self._prep_progress,
+            [self._prep_cancel_btn],
+        )
+        self._prep_row = self._prep_head.box
+
+        self._prep_step = _status_label(tr("step_extract"))
+        copy.addWidget(self._prep_step)
+        self._prep_col = copy
 
         # Guidance images are removed; keep dummy attribute for backward compatibility
         self._prep_img = QLabel()
@@ -744,40 +894,38 @@ class FlashPage(QWidget):
         return self._wrap_centered(self._prep_card)
 
     def _build_waiting_view(self):
-        self._wait_card = Card()
-        self._wait_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
-        card_layout = QHBoxLayout()
-        card_layout.setContentsMargins(16, 14, 16, 14)
-        card_layout.setSpacing(14)
-        card_layout.setAlignment(Qt.AlignVCenter)
-
         self._wait_icon = _make_squircle_icon("🔌", "icon.png")
-        card_layout.addWidget(self._wait_icon, 0, Qt.AlignVCenter)
-
-        col = QVBoxLayout()
-        col.setContentsMargins(0, 0, 0, 0)
-        col.setSpacing(6)
-
         self._wait_pkg_label = _status_label(self._package_name or "\u2014", strong=True)
-        col.addWidget(self._wait_pkg_label)
-
         self._wait_progress_bar = InstallProgress()
         _configure_progress(self._wait_progress_bar)
-        col.addWidget(self._wait_progress_bar)
 
-        self._wait_prompt_label = _status_label(
-            tr("flash_connect_device_prompt").format(model=self._connect_model_text())
-        )
-        self._wait_prompt_label.setWordWrap(True)
-        col.addWidget(self._wait_prompt_label)
-
-        # The next step is one round arrow in the card's own row, not a wide
+        # The next step is one round arrow on the card's head row, not a wide
         # button on a row of its own.
         self._wait_continue_btn = _RoundNextButton()
         self._wait_continue_btn.setVisible(False)
         self._wait_continue_btn.setToolTip(tr("btn_next"))
         self._wait_continue_btn.setAccessibleName(tr("btn_next"))
         self._wait_continue_btn.clicked.connect(self._on_power_off_continue)
+
+        self._wait_cancel_btn = _RoundNextButton(symbol="cancel", accent=False)
+        self._wait_cancel_btn.setObjectName("softwareUpdateCancelBtn")
+        self._wait_cancel_btn.setToolTip(tr("flash_btn_cancel_wait"))
+        self._wait_cancel_btn.clicked.connect(self._on_cancel_wait)
+
+        self._wait_card, self._wait_head, copy = self._new_progress_card(
+            self._wait_icon,
+            self._wait_pkg_label,
+            self._wait_progress_bar,
+            [self._wait_continue_btn, self._wait_cancel_btn],
+        )
+        self._wait_row = self._wait_head.box
+
+        self._wait_prompt_label = _status_label(
+            tr("flash_connect_device_prompt").format(model=self._connect_model_text())
+        )
+        self._wait_prompt_label.setWordWrap(True)
+        copy.addWidget(self._wait_prompt_label)
+        self._wait_col = copy
 
         # Retained for attribute compatibility, but kept hidden and not added to layout
         self._attempt_lbl = QLabel("")
@@ -791,19 +939,6 @@ class FlashPage(QWidget):
         self._wait_banner.setVisible(False)
         self._wait_status = StatusTag("idle")
         self._wait_status.setVisible(False)
-
-        card_layout.addLayout(col, 1)
-        self._wait_col = col
-        card_layout.addWidget(self._wait_continue_btn, 0, Qt.AlignVCenter)
-
-        self._wait_cancel_btn = _RoundNextButton(symbol="cancel", accent=False)
-        self._wait_cancel_btn.setObjectName("softwareUpdateCancelBtn")
-        self._wait_cancel_btn.setToolTip(tr("flash_btn_cancel_wait"))
-        self._wait_cancel_btn.clicked.connect(self._on_cancel_wait)
-        card_layout.addWidget(self._wait_cancel_btn, 0, Qt.AlignVCenter)
-
-        self._wait_card.set_layout(card_layout)
-        self._wait_row = card_layout
 
         # SP Flash Tool GUI is a sidebar action. This page does not grow a second launcher.
 
@@ -835,35 +970,57 @@ class FlashPage(QWidget):
         return self._wrap_centered(self._wait_card, self._paperclip_hint_host)
 
     def _build_flashing_view(self):
-        self._progress_card = Card()
-        self._progress_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
-        card_layout = QHBoxLayout()
-        card_layout.setContentsMargins(16, 14, 16, 14)
-        card_layout.setSpacing(14)
-        card_layout.setAlignment(Qt.AlignVCenter)
-
         self._flash_icon = _make_squircle_icon("⚙️", "icon.png")
-        card_layout.addWidget(self._flash_icon, 0, Qt.AlignVCenter)
-
-        col = QVBoxLayout()
-        col.setContentsMargins(0, 0, 0, 0)
-        col.setSpacing(6)
-
         self._flash_pkg_label = _status_label(self._package_name or "\u2014", strong=True)
-        col.addWidget(self._flash_pkg_label)
-
         self._flash_banner = Banner()
         self._flash_banner.setVisible(False)
-
         self._progress_bar = InstallProgress()
         _configure_progress(self._progress_bar)
-        col.addWidget(self._progress_bar)
+
+        # Action chips stay on the head row — right of the title and the progress
+        # band — while this card is running, has failed, or has finished. A chip
+        # in the middle of a taller card reads as belonging to the guidance copy
+        # under it instead of to the software it is installing.
+        self._flash_retry_btn = _RoundNextButton(symbol="next", accent=True)
+        self._flash_retry_btn.setObjectName("flashRetryBtn")
+        self._flash_retry_btn.setToolTip(tr("flash_btn_retry"))
+        self._flash_retry_btn.setVisible(False)
+        self._flash_retry_btn.clicked.connect(self._on_install_retry)
+
+        self._cancel_btn = _RoundNextButton(symbol="cancel", accent=False)
+        self._cancel_btn.setObjectName("softwareUpdateCancelBtn")
+        self._cancel_btn.setToolTip(tr("flash_btn_cancel"))
+        self._cancel_btn.clicked.connect(self._on_cancel)
+
+        self._done_mark = QPushButton()
+        self._done_mark.setObjectName("installDoneButton")
+        self._done_mark.setAttribute(Qt.WidgetAttribute.WA_MacShowFocusRect, False)
+        self._done_mark.setFixedSize(28, 28)
+        self._done_mark.setCursor(Qt.ArrowCursor)
+        self._done_mark.setIcon(get_symbol_icon("complete", 18))
+        self._done_mark.setIconSize(QSize(18, 18))
+        self._done_mark.setFocusPolicy(Qt.StrongFocus)
+        self._done_mark.setAutoDefault(False)
+        self._done_mark.setFlat(False)
+        self._style_done_button()
+        self._done_mark.setVisible(False)
+        self._done_mark.clicked.connect(self._on_install_done)
+        self._install_done_cb = None
+
+        self._progress_card, self._flash_head, copy = self._new_progress_card(
+            self._flash_icon,
+            self._flash_pkg_label,
+            self._progress_bar,
+            [self._flash_retry_btn, self._cancel_btn, self._done_mark],
+        )
+        # The chips' row, for the stop check to slot in beside them.
+        self._actions_row = self._flash_row = self._flash_head.box
 
         self._step_label = _status_label(tr("step_write"))
         self._eta_label = _status_label("")
         # Step and ETA share one row on a wide card, stack on a narrow one.
         self._status_flow = _FlowRow(self._step_label, self._eta_label)
-        col.addWidget(self._status_flow)
+        copy.addWidget(self._status_flow)
 
         self._theme_row = QWidget()
         theme_vbox = QVBoxLayout(self._theme_row)
@@ -920,45 +1077,8 @@ class FlashPage(QWidget):
         theme_vbox.addWidget(self._theme_trouble_widget)
 
         self._theme_row.setVisible(False)
-        col.addWidget(self._theme_row)
-
-        card_layout.addLayout(col, 1)
-        self._flash_col = col
-
-        # Action buttons sit to the right of the progress indication (or left in RTL)
-        self._flash_retry_btn = _RoundNextButton(symbol="next", accent=True)
-        self._flash_retry_btn.setObjectName("flashRetryBtn")
-        self._flash_retry_btn.setToolTip(tr("flash_btn_retry"))
-        self._flash_retry_btn.setVisible(False)
-        self._flash_retry_btn.clicked.connect(self._on_install_retry)
-        card_layout.addWidget(self._flash_retry_btn, 0, Qt.AlignVCenter)
-
-        self._cancel_btn = _RoundNextButton(symbol="cancel", accent=False)
-        self._cancel_btn.setObjectName("softwareUpdateCancelBtn")
-        self._cancel_btn.setToolTip(tr("flash_btn_cancel"))
-        self._cancel_btn.clicked.connect(self._on_cancel)
-        card_layout.addWidget(self._cancel_btn, 0, Qt.AlignVCenter)
-
-        self._actions_row = card_layout
-
-        self._done_mark = QPushButton()
-        self._done_mark.setObjectName("installDoneButton")
-        self._done_mark.setAttribute(Qt.WidgetAttribute.WA_MacShowFocusRect, False)
-        self._done_mark.setFixedSize(28, 28)
-        self._done_mark.setCursor(Qt.ArrowCursor)
-        self._done_mark.setIcon(get_symbol_icon("complete", 18))
-        self._done_mark.setIconSize(QSize(18, 18))
-        self._done_mark.setFocusPolicy(Qt.StrongFocus)
-        self._done_mark.setAutoDefault(False)
-        self._done_mark.setFlat(False)
-        self._style_done_button()
-        self._done_mark.setVisible(False)
-        self._done_mark.clicked.connect(self._on_install_done)
-        self._install_done_cb = None
-        card_layout.addWidget(self._done_mark, 0, Qt.AlignVCenter)
-
-        self._progress_card.set_layout(card_layout)
-        self._flash_row = card_layout
+        copy.addWidget(self._theme_row)
+        self._flash_col = copy
 
         # Warning below the update card
         warning_container = QWidget()
@@ -1040,41 +1160,27 @@ class FlashPage(QWidget):
         return self._wrap_centered(self._progress_card, warning_container)
 
     def _build_downloading_view(self):
-        self._download_card = Card()
-        self._download_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
-        card_layout = QHBoxLayout()
-        card_layout.setContentsMargins(16, 14, 16, 14)
-        card_layout.setSpacing(14)
-        card_layout.setAlignment(Qt.AlignVCenter)
-
         self._download_icon = _make_squircle_icon("📥", "icon.png")
-        card_layout.addWidget(self._download_icon, 0, Qt.AlignVCenter)
-
-        col = QVBoxLayout()
-        col.setContentsMargins(0, 0, 0, 0)
-        col.setSpacing(6)
-
         self._download_pkg_label = _status_label(self._package_name or "\u2014", strong=True)
-        col.addWidget(self._download_pkg_label)
-
         self._download_progress = InstallProgress()
         _configure_progress(self._download_progress)
-        col.addWidget(self._download_progress)
-
-        self._download_status_label = _status_label(tr("sel_download_start"))
-        col.addWidget(self._download_status_label)
-
-        card_layout.addLayout(col, 1)
-        self._download_col = col
 
         self._download_cancel_btn = _RoundNextButton(symbol="cancel", accent=False)
         self._download_cancel_btn.setObjectName("softwareUpdateCancelBtn")
         self._download_cancel_btn.setToolTip(tr("flash_btn_cancel"))
         self._download_cancel_btn.clicked.connect(self._on_cancel_download)
-        card_layout.addWidget(self._download_cancel_btn, 0, Qt.AlignVCenter)
 
-        self._download_card.set_layout(card_layout)
-        self._download_row = card_layout
+        self._download_card, self._download_head, copy = self._new_progress_card(
+            self._download_icon,
+            self._download_pkg_label,
+            self._download_progress,
+            [self._download_cancel_btn],
+        )
+        self._download_row = self._download_head.box
+
+        self._download_status_label = _status_label(tr("sel_download_start"))
+        copy.addWidget(self._download_status_label)
+        self._download_col = copy
 
         # Same wrapper as the install screens: the download card used to sit in
         # a narrow centred column of its own, so its padding, width and spacing

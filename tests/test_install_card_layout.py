@@ -1,10 +1,12 @@
-"""Progress-card fit: status row reflow, chip centring, translucent discs.
+"""Progress-card fit: status row reflow, chip placement, raised translucent discs.
 
 The install card's copy is one wrapped block inside a fixed column. These
 tests pin the behaviour a wide window is supposed to buy: the step and its
-ETA share a row instead of holding two lines, the round chips sit centred
-on the card rather than floating above the progress band, and the chip discs
-let the card's glass through instead of painting an opaque blob.
+ETA share a row instead of holding two lines, and the round chips sit to the
+right of and inline with the software title and the progress band — on every
+progress screen, under every host look — instead of drifting to the middle of
+a taller card. The discs stay translucent and now sit above a soft shadow, so
+the card's glass shows through a chip that reads as raised.
 """
 
 import os
@@ -15,14 +17,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QRect, Qt  # noqa: E402
-from PySide6.QtGui import QColor, QPixmap  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
+from PySide6.QtGui import QColor, QImage, QPainter, QPixmap  # noqa: E402
+from PySide6.QtWidgets import QApplication, QStyleFactory  # noqa: E402
 
 from src.ui.flash_page import (  # noqa: E402
     _ACCENT_DISC_ALPHA,
+    _CARD_COPY_INDENT,
+    _CHIP_DISC_PX,
     _NEUTRAL_DISC_ALPHA,
+    INSTALL_TEXT_WIDTH,
     FlashPage,
     _RoundNextButton,
+    install_horizontal_chrome,
 )
 
 
@@ -79,12 +85,28 @@ def test_stop_prompt_keeps_the_status_line_wrapping():
         page.close()
 
 
-def test_round_chips_are_centred_on_the_card():
+def test_round_chips_are_inline_with_the_title_and_progress_band():
+    """The chips belong to the title and its band, not to the middle of the card.
+
+    Centred on a card that is tall because of its guidance copy, the chips read
+    as part of that copy. Anchored to the head row they stay the next step of
+    the software named above them, which is what the mockup asks for.
+    """
     page = _flashing_page(900)
     try:
+        page.show_install_failure("USB connection was lost")
+        _app().processEvents()
+        head = page._flash_head
         row = getattr(page, "_actions_row", page._flash_row)
-        index = row.indexOf(page._cancel_btn)
-        assert index >= 0
+        assert row is head.box
+        ident_right = head.identity.geometry().right()
+        top, bottom = head.band_span()
+        for chip in (page._flash_retry_btn, page._cancel_btn):
+            assert row.indexOf(chip) >= 0, "the chip is not on the head row"
+            assert chip.geometry().left() >= ident_right, chip
+            centre = chip.geometry().center().y()
+            assert top <= centre <= bottom, (centre, top, bottom)
+            assert centre < page._progress_card.height() // 2, "chip drifted to the card centre"
     finally:
         page.close()
 
@@ -132,14 +154,121 @@ def test_round_discs_are_translucent():
 def test_cancel_and_action_buttons_are_to_the_right_of_progress():
     page = _flashing_page(700)
     try:
-        col_right = page._flash_col.geometry().x() + page._flash_col.geometry().width()
-        assert page._cancel_btn.x() >= col_right - 40
-        # When failure occurs, retry and cancel buttons are visible to the right
         page.show_install_failure("Test error")
         _app().processEvents()
         assert page._cancel_btn.isVisible()
         assert page._flash_retry_btn.isVisible()
-        assert page._cancel_btn.x() >= col_right - 40
-        assert page._flash_retry_btn.x() >= col_right - 80
+        # The band lives inside the title column, so measure it from there: the
+        # pair of chips has to start past the right edge of the progress band.
+        ident = page._flash_head.identity
+        band_right = ident.geometry().left() + page._progress_bar.geometry().right()
+        assert page._cancel_btn.x() > page._flash_retry_btn.x()
+        assert page._flash_retry_btn.x() >= band_right, (page._flash_retry_btn.x(), band_right)
     finally:
         page.close()
+
+
+def _paint_chip(button, background) -> QImage:
+    """Paint a chip onto its own canvas the way its paintEvent does."""
+    image = QImage(button.width(), button.height(), QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(background)
+    painter = QPainter(image)
+    try:
+        button.paint_into(painter)
+    finally:
+        painter.end()
+    return image
+
+
+def test_round_chip_reads_as_raised_above_the_card():
+    _app()  # the chip reads the live palette before it paints
+    button = _RoundNextButton(symbol="next")
+    button.rebuild_arrow()
+    disc = button._disc_rect()
+    assert disc.width() == _CHIP_DISC_PX, disc
+    assert button.width() > disc.width(), "no room kept around the disc for a shadow"
+
+    image = _paint_chip(button, QColor(0, 0, 0, 0))
+    centre_x = button.width() // 2
+    under = image.pixelColor(centre_x, disc.bottom() + 2).alpha()
+    far = image.pixelColor(centre_x, button.height() - 1).alpha()
+    above = image.pixelColor(centre_x, disc.top() - 2).alpha()
+    assert under > 0, "the chip paints no shadow, so it cannot read as raised"
+    assert far < under, (far, under)
+    # Light from above: the shade gathers under the disc, not over it.
+    assert above <= under, (above, under)
+
+    # Raised is not opaque: the card still shows through the disc.
+    over_white = _paint_chip(button, QColor("#ffffff")).pixelColor(disc.center())
+    over_black = _paint_chip(button, QColor("#000000")).pixelColor(disc.center())
+    assert over_white.getRgb() != over_black.getRgb()
+    assert over_black.lightness() < over_white.lightness()
+
+
+def test_every_progress_screen_puts_the_chips_on_the_same_head_row():
+    """One card shape for all four screens, whichever host look is in charge.
+
+    Aqua, WinUI, Breeze and Adwaita only paint the controls inside the card; the
+    places are decided in one builder. Forcing each style Qt can offer is how
+    that promise is checked here, since the layout must not depend on the style.
+    """
+    app = _app()
+    screens = (
+        ("show_preparing", "_prep_head", "_prep_col"),
+        ("show_power_off_prompt", "_wait_head", "_wait_col"),
+        ("show_flashing", "_flash_head", "_flash_col"),
+        ("show_downloading", "_download_head", "_download_col"),
+    )
+    styles = ["Fusion"] + [name for name in QStyleFactory.keys() if name != "Fusion"]
+    for style_name in styles:
+        style = QStyleFactory.create(style_name)
+        if style is None:
+            continue
+        app.setStyle(style)
+        page = FlashPage()
+        page.set_package_name("Original Software 3.1.2 for Y1")
+        page.resize(install_horizontal_chrome(0) + INSTALL_TEXT_WIDTH, 460)
+        page.show()
+        try:
+            for screen, head_name, copy_name in screens:
+                getattr(page, screen)()
+                app.processEvents()
+                head = getattr(page, head_name)
+                assert head.box.itemAt(0).widget() is head.icon
+                assert head.box.itemAt(1).widget() is head.identity
+                # Only the chips this screen actually shows: a hidden chip has
+                # no geometry to check (the retry arrow, the done mark).
+                chips = [head.box.itemAt(i).widget() for i in range(2, head.box.count())]
+                chips = [chip for chip in chips if chip.isVisible()]
+                assert chips, (style_name, head_name)
+                ident_right = head.identity.geometry().right()
+                top, bottom = head.band_span()
+                for chip in chips:
+                    assert chip.geometry().left() >= ident_right, (style_name, head_name)
+                    centre = chip.geometry().center().y()
+                    assert top <= centre <= bottom, (style_name, head_name, centre, top, bottom)
+                # The copy sits under the row, lined up with the software title.
+                copy_left = getattr(page, copy_name).geometry().left() + _CARD_COPY_INDENT
+                title_left = head.geometry().left() + head.identity.geometry().left()
+                assert abs(copy_left - title_left) <= 2, (style_name, head_name, copy_left, title_left)
+        finally:
+            page.close()
+            app.processEvents()
+
+
+def test_the_copy_keeps_its_wrap_width_at_the_recommended_window_size():
+    """The head row must not squeeze the copy below the width it wraps into."""
+    app = _app()
+    page = FlashPage()
+    page.set_package_name("Original Software 3.1.2 for Y1")
+    page.resize(install_horizontal_chrome(0) + INSTALL_TEXT_WIDTH, 470)
+    page.show()
+    try:
+        page.show_flashing()
+        app.processEvents()
+        copy_width = page._flash_col.geometry().width() - _CARD_COPY_INDENT
+        assert copy_width >= INSTALL_TEXT_WIDTH, copy_width
+        assert page._flash_head.identity.width() >= INSTALL_TEXT_WIDTH, page._flash_head.identity.width()
+    finally:
+        page.close()
+        app.processEvents()

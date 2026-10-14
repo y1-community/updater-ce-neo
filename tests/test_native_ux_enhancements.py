@@ -531,9 +531,13 @@ def test_flash_page_compact_card_and_heading():
     assert [key for _h, key in fp._headings].count("flash_install_in_progress") == 3
     assert fp._headings[-1][1] == "flash_download_in_progress"
     assert fp._download_card.width() == fp._progress_card.width()
-    # Cancel button
-    assert fp._cancel_btn.width() <= 30
-    assert fp._cancel_btn.height() <= 30
+    # Cancel button: the disc stays a 30px chip. The widget is a few pixels
+    # larger on each side because that is where the raised shadow goes.
+    disc = fp._cancel_btn._disc_rect()
+    assert disc.width() == 30, disc
+    assert disc.height() == 30, disc
+    assert fp._cancel_btn.width() <= 36
+    assert fp._cancel_btn.height() <= 36
 
 
 def test_os_standard_iconography():
