@@ -4,11 +4,7 @@ import os
 import sys
 import json
 from struct import unpack, pack
-from typing import Optional
-
 from Cryptodome.Cipher import AES
-
-from mtkclient.Library.Exploit.exptools.arm_tools import ArmTools
 # from keystone.keystone import Ks
 # from keystone.keystone_const import KS_ARCH_ARM64, KS_MODE_LITTLE_ENDIAN
 
@@ -36,19 +32,8 @@ rpmb_error = [
 ]
 
 
-def rpmb_error_msg(resp: int) -> str:
-    """Maps an RPMB result code to its message. Codes outside the JEDEC set are
-    reported as-is instead of being silently dropped."""
-    if 0 < resp < len(rpmb_error):
-        return rpmb_error[resp]
-    return f"Unknown RPMB error: {hex(resp)}"
-
-
-RET_32_R0 = b"\x00\x00\xA0\xE3\x1E\xFF\x2F\xE1"
-
 class XmlFlashExt(metaclass=LogBase):
     def __init__(self, _mtk, _xmlflash, loglevel):
-        self.archtools = None
         self.pathconfig = PathConfig()
         self.__logger, self.info, self.debug, self.warning, self.error = logsetup(self, self.__logger,
                                                                                   loglevel, _mtk.config.gui)
@@ -74,7 +59,6 @@ class XmlFlashExt(metaclass=LogBase):
         data = bytearray(_da2)
         idx = data.find(b"\x00CMD:SET-HOST-INFO\x00")
         if idx == -1:
-            self.error("Error finding CMD:SET-HOST-INFO")
             return None
         base = self.da2address
         entry = int.from_bytes(_da2[4:8], byteorder='little')
@@ -82,21 +66,20 @@ class XmlFlashExt(metaclass=LogBase):
             self.is_arm64 = True
         else:
             self.is_arm64 = False
-        self.archtools = Aarch64Tools(_da2, self.da2address) if self.is_arm64 \
-            else ArmTools(_da2, self.da2address)
+
         if self.is_arm64:
             at = Aarch64Tools(_da2, self.da2address)
             ref_offset = at.find_string_xref("CMD:SET-HOST-INFO")
             if ref_offset is None:
-                self.error("Error finding CMD:SET-HOST-INFO")
+                print("Error finding CMD:SET-HOST-INFO")
                 return None
             bl_offset = at.get_next_bl_from_off(ref_offset)
             if bl_offset is None:
-                self.error("Error finding xml_register_cmd")
+                print("Error finding xml_register_cmd")
                 return None
             cmd_set_host = at.resolve_register_value_back(bl_offset, reg=2, lookback=5)
             if cmd_set_host is None:
-                self.error("Error finding cmd_set_host_info")
+                print("Error finding cmd_set_host_info")
                 return None
             cmd_set_host_offset = cmd_set_host - self.da2address
             # Patch CMD:SET-HOST-INFO to point to our loader
@@ -105,50 +88,48 @@ class XmlFlashExt(metaclass=LogBase):
             # Now patch the existing SET-HOST-INFO command
             # ks = Ks(KS_ARCH_ARM64, KS_MODE_LITTLE_ENDIAN)
             content = """
-                STP             X29, X30, [SP,#-0x30]!
-                MOV             X29, SP
-                ADD             X1, SP, #0x28
-                STP             X19, X20, [SP,#0x10]
-                MOV             X20, X0
-                MOV             W0, #4
-                STR             W0, [SP,#0x28]
-                MOV             X19, #0xF000
-                LDR             X2, [X20]
-                MOVK            X19, #0x6800,LSL#16
-                MOV             X0, X19
-                BLR             X2
-                LDR             X2, [X20]
-                ADD             X1, SP, #0x2C
-                LDR             W0, [X19]
-                STR             W0, [SP,#0x2C]
-                SUB             X0, X19, #0xF,LSL#12
-                SUB             X19, X19, #0xF,LSL#12
-                BLR             X2
-                BLR             X19
-                LDP             X19, X20, [SP,#0x10]
-                LDP             X29, X30, [SP],#0x30
-                RET
+            STP             X29, X30, [SP,#-0x30]!
+            STR             X21, [SP,#0x10]
+            MOV             X29, SP
+            STP             X20, X19, [SP,#0x20]
+            MOV             X19, X0
+            LDR             X21, [X19]
+            # Receive length 4 bytes
+            ADRP            X0, #0x68000000
+            ADD             X0, X0, #0xF000
+            MOV             X1, #4
+            BLR             X21
+            # Receive data
+            ADRP            X0, #0x68000000
+            MOV             X1, X0
+            ADD             X1, X1, #0xF000
+            LDR             X1, [X1]
+            BLR             X21
+            # Jump to payload
+            ADRP            X0, #0x68000000
+            BLR             X0
+
+            MOV             W0, WZR
+            LDP             X20, X19, [SP,#0x20]
+            LDR             X21, [SP,#0x10]
+            LDP             X29, X30, [SP],#0x30
+            RET
             """
             _ = content
             # encoding, length = ks.asm(content, addr=cmd_set_host)
             # newdata = b"".join(int.to_bytes(val, 1, 'little') for val in encoding)
             # print(newdata.hex())
             newdata = bytes.fromhex(
-                "fd7bbda9fd030091e1a30091f35301a9f40300aa80008052e02b00b913009ed2820240f91300adf2e00313aa40003fd6820240f9e1b30091600240b9e02f00b9603e40d1733e40d140003fd660023fd6f35341a9fd7bc3a8c0035fd6")
-            # sys.stdout.flush()
+                "fd7bbda9f50b00f9fd030091f44f02a9f30300aa750240f9e0ff13b0003c4091810080d2a0023fd6e0ff13b0e10300aa213c4091210040f9a0023fd6e0ff13b000003fd6e0031f2af44f42a9f50b40f9fd7bc3a8c0035fd6")
+            sys.stdout.flush()
             data[cmd_set_host_offset:cmd_set_host_offset + len(newdata)] = newdata
             return data
         else:
-            # ARM 32-bit
             first_op, second_op = offset_to_op_mov(idx + 1, 0, base)
             first_op = int.to_bytes(first_op, 4, 'little')
             second_op = int.to_bytes(second_op, 4, 'little')
             midx = data.find(first_op)
-            if midx == -1:
-                return None
             midx2 = data.find(second_op, midx)
-            if midx2 == -1:
-                return None
             if midx + 8 == midx2:
                 instr1 = int.from_bytes(data[midx + 4:midx + 8], 'little')
                 instr2 = int.from_bytes(data[midx2 + 4:midx2 + 8], 'little')
@@ -194,6 +175,7 @@ class XmlFlashExt(metaclass=LogBase):
             newcmd = b"CMD:CUSTOM\x00"
             data[idx + 1:idx + 1 + len(newcmd)] = newcmd
             return data
+        return _da2
 
     def ack(self):
         xmlcmd = self.xflash.cmd.create_cmd("CUSTOMACK")
@@ -215,24 +197,15 @@ class XmlFlashExt(metaclass=LogBase):
                 return True
         return False
 
-    def find_register_xml_cmd_func(self) -> Optional[int]:
-        register_xml_off = self.archtools.find_string_xref("CMD:REBOOT")
-        bl_off = self.archtools.get_next_bl_from_off(register_xml_off)
-        reg_cmd_addr = self.archtools.get_bl_target(bl_off)
-        return reg_cmd_addr
-
     def patch(self):
         self.da2 = self.xflash.daconfig.da2
         self.da2address = self.xflash.daconfig.da_loader.region[2].m_start_addr  # at_address
-
+        base = self.da2address
         entry = int.from_bytes(self.da2[4:8], byteorder='little')
         if entry & 0xF0 == 0xC0:
             self.is_arm64 = True
         else:
             self.is_arm64 = False
-
-        self.archtools = Aarch64Tools(self.da2, self.da2address) if self.is_arm64 \
-            else ArmTools(self.da2, self.da2address)
 
         if self.is_arm64:
             daextensions = os.path.join(self.pathconfig.get_payloads_path(), "da_xml_64.bin")
@@ -252,53 +225,41 @@ class XmlFlashExt(metaclass=LogBase):
                 ptr_g_ufs_hba_ptr = daextdata.find(b"\x77\x77\x77\x77\x77\x77\x77\x77")
                 efuse_addr_ptr = daextdata.find(b"\x88\x88\x88\x88")
 
-                register_xml_cmd = self.find_register_xml_cmd_func()
-
+                register_xml_cmd = find_binary(self.da2,
+                                               b"\xFD\x7B\xBD\xA9\xF5\x0B\x00\xF9\xFD\x03\x00\x91\xF4\x4F\x02\xA9\xF5\x03\x00\xAA\x00\x05\x80\x52")
                 # UFS
-                ufs_controller_enable_offset = self.archtools.find_function_from_string("Controller enable failed\n")
+                ar = Aarch64Tools(self.da2, self.da2address)
+                ufs_controller_enable_offset = ar.find_function_from_string("Controller enable failed\n")
                 instr = int.from_bytes(self.da2[ufs_controller_enable_offset + 0xC:ufs_controller_enable_offset + 0x10],
                                        'little')
-                if (instr & 0x9F000000) == 0x90000000:
-                    g_ufs_hba = self.archtools.decode_adrp(instr, ufs_controller_enable_offset + 0xC + self.da2address)
-                    if g_ufs_hba is not None:
-                        g_ufs_hba = g_ufs_hba[0]
+                g_ufs_hba = ar.decode_adrp(instr, ufs_controller_enable_offset + 0xC + self.da2address)[0]
+                ufshcd_queuecommand = 0
+                ufshcd_get_free_tag = 0
+                ufshcd_queuecommand = find_binary(self.da2,
+                                                  b"\xFD\x7B\xBC\xA9\xF7\x0B\x00\xF9\xFD\x03\x00\x91\xF6\x57\x02\xA9\xF4\x4F\x03\xA9\x14\x34\x40\xF9\xF5\x03\x01\xAA")
+                if ufshcd_queuecommand is None:
+                    ufshcd_queuecommand = 0
                 else:
-                    instr = int.from_bytes(
-                        self.da2[ufs_controller_enable_offset + 0x14:ufs_controller_enable_offset + 0x14 + 4],
-                        'little')
-                    if (instr & 0x9F000000) == 0x90000000:
-                        g_ufs_hba = self.archtools.decode_adrp(instr,
-                                                               ufs_controller_enable_offset + 0x14 + self.da2address)
-                        if g_ufs_hba is not None:
-                            g_ufs_hba = g_ufs_hba[0] + 0x8C0
-                assert g_ufs_hba is not None, "No g_ufs_hba found"
+                    ufshcd_queuecommand = ufshcd_queuecommand + self.da2address
 
-                ufshcd_queuecommand_str = self.archtools.find_string_xref("[UFS] err: ufshcd_queuecommand err\n")
-                if ufshcd_queuecommand_str is not None:
-                    first = self.archtools.get_previous_bl_from_off(ufshcd_queuecommand_str)
-                    ufshcd_queuecommand_ptr2 = self.archtools.get_previous_bl_from_off(first)
-                    ufshcd_queuecommand = self.archtools.get_bl_target(ufshcd_queuecommand_ptr2)
-
-                assert ufshcd_queuecommand is not None, "No ufshcd_queuecommand found"
-                ufshcd_get_free_tag = self.archtools.find_function_from_string("[UFS] ufshcd_get_free_tag fail\n")
+                ufshcd_get_free_tag = ar.find_function_from_string("[UFS] ufshcd_get_free_tag fail\n")
                 if ufshcd_get_free_tag is None:
                     ufshcd_get_free_tag = 0
                 else:
                     ufshcd_get_free_tag = ufshcd_get_free_tag + self.da2address
 
                 # EMMC
-                mmc_switch_part_offset = self.archtools.find_function_from_string("mmc_switch_part")
-                mmc_get_card_ptr2 = self.archtools.get_next_bl_from_off(mmc_switch_part_offset)
-                mmc_get_card = self.archtools.get_bl_target(mmc_get_card_ptr2)
+                mmc_switch_part_offset = ar.find_function_from_string("mmc_switch_part")
+                mmc_get_card_ptr2 = ar.get_next_bl_from_off(mmc_switch_part_offset)
+                mmc_get_card = ar.get_bl_target(mmc_get_card_ptr2)
+                mmc_set_part_config = find_binary(self.da2, b"\x08\x80\x40\x39\x88\x00\x08\x37\x08\xB4\x49\x39")
+                if mmc_set_part_config is None:
+                    mmc_set_part_config = 0
 
-                mmc_set_part_config = self.archtools.find_function_from_string("%sset_part_config fail %x\n")
-                if mmc_set_part_config is not None:
-                    mmc_set_part_config = mmc_set_part_config + self.da2address
-
-                mmc_rpmb_offs = self.archtools.find_function_from_string("%sreq/1 fail %d\n")
-                logl = self.archtools.get_next_bl_from_off(mmc_rpmb_offs)
-                mmc_rpmb_send_command_ptr2 = self.archtools.get_next_bl_from_off(logl + 0x8)
-                mmc_rpmb_send_command = self.archtools.get_bl_target(mmc_rpmb_send_command_ptr2)
+                mmc_rpmb_offs = ar.find_function_from_string("%sreq/1 fail %d\n")
+                logl = ar.get_next_bl_from_off(mmc_rpmb_offs)
+                mmc_rpmb_send_command_ptr2 = ar.get_next_bl_from_off(logl + 0x8)
+                mmc_rpmb_send_command = ar.get_bl_target(mmc_rpmb_send_command_ptr2)
                 if mmc_rpmb_send_command is None:
                     mmc_rpmb_send_command = 0
             else:
@@ -315,53 +276,60 @@ class XmlFlashExt(metaclass=LogBase):
                 # register_xml_cmd("CMD:GET-SYS-PROPERTY", & a1, cmd_get_sys_property);
 
                 # open("out" + hex(self.da2address) + ".da", "wb").write(da2)
-                register_xml_cmd = self.find_register_xml_cmd_func()
+                register_xml_cmd = find_binary(self.da2,
+                                               b"\x70\x4C\x2D\xE9\x10\xB0\x8D\xE2\x00\x50\xA0\xE1\x14\x00\xA0\xE3")
 
                 # UFS
-                ufshcd_queuecommand_str = self.archtools.find_string_xref("[UFS] err: ufshcd_queuecommand err\n")
-                if ufshcd_queuecommand_str is not None:
-                    first = self.archtools.get_previous_bl_from_off(ufshcd_queuecommand_str)
-                    ufshcd_queuecommand_ptr2 = self.archtools.get_previous_bl_from_off(first)
-                    ufshcd_queuecommand = self.archtools.get_bl_target(ufshcd_queuecommand_ptr2)
-                assert ufshcd_queuecommand is not None, "No ufshcd_queuecommand found"
+                idx = self.da2.find(b"\x00\x00\x94\xE5\x34\x10\x90\xE5\x01\x00\x11\xE3\x03\x00\x00\x0A")
+                g_ufs_hba = 0
+                ufshcd_queuecommand = 0
+                ufshcd_get_free_tag = 0
+                if idx != -1:
+                    instr1 = int.from_bytes(self.da2[idx - 0x8:idx - 0x4], 'little')
+                    instr2 = int.from_bytes(self.da2[idx - 0x4:idx], 'little')
+                    g_ufs_hba = op_mov_to_offset(instr1, instr2, 4)
+                    ufshcd_queuecommand = find_binary(self.da2,
+                                                      b"\xF0\x4D\x2D\xE9\x18\xB0\x8D\xE2\x08\xD0\x4D\xE2\x48\x40\x90\xE5")
+                    if ufshcd_queuecommand is None:
+                        ufshcd_queuecommand = find_binary(self.da2,
+                                                          b"\xF0\x4F\x2D\xE9\x1C\xB0\x8D\xE2\x0C\xD0\x4D\xE2\x48\xA0\x90\xE5\x00\x80\xA0\xE1")
+                        if ufshcd_queuecommand is None:
+                            ufshcd_queuecommand = 0
+                        else:
+                            ufshcd_queuecommand = ufshcd_queuecommand + self.da2address
+                    else:
+                        ufshcd_queuecommand = ufshcd_queuecommand + self.da2address
 
-                ufs_controller_enable_offset = self.archtools.find_function_from_string("Controller enable failed\n")
-                if ufs_controller_enable_offset is not None:
-                    instr = int.from_bytes(
-                        self.da2[ufs_controller_enable_offset + 0x8:ufs_controller_enable_offset + 0x8 + 4],
-                        'little')
-                    g_ufs_hba1 = self.archtools.decode_movw(instr)
-                    instr2 = int.from_bytes(
-                        self.da2[ufs_controller_enable_offset + 0xC:ufs_controller_enable_offset + 0xC + 4],
-                        'little')
-                    g_ufs_hba2 = self.archtools.decode_movt(instr2)
-                    if g_ufs_hba1 is not None and g_ufs_hba2 is not None:
-                        g_ufs_hba = g_ufs_hba2[1] << 16 | g_ufs_hba1[1]
-
-                ufshcd_get_free_tag = self.archtools.find_function_from_string("[UFS] ufshcd_get_free_tag fail\n")
-                if ufshcd_get_free_tag is None:
-                    ufshcd_get_free_tag = 0
-                else:
-                    ufshcd_get_free_tag = ufshcd_get_free_tag + self.da2address
+                    ufshcd_get_free_tag = find_binary(self.da2,
+                                                      b"\x10\x4C\x2D\xE9\x08\xB0\x8D\xE2\x00\x40\xA0\xE3\x00\x00\x51\xE3")
+                    if ufshcd_get_free_tag is None:
+                        ufshcd_get_free_tag = 0
+                    else:
+                        ufshcd_get_free_tag = ufshcd_get_free_tag + self.da2address
 
                 # EMMC
-                mmc_switch_part_offset = self.archtools.find_function_from_string("mmc_switch_part")
-                mmc_get_card_ptr2 = self.archtools.get_next_bl_from_off(mmc_switch_part_offset)
-                mmc_get_card = self.archtools.get_bl_target(mmc_get_card_ptr2)
+                mmc_get_card = find_binary(self.da2, b"\x90\x12\x20\xE0\x1E\xFF\x2F\xE1")
+                if mmc_get_card is not None:
+                    mmc_get_card -= 0xC
+                else:
+                    mmc_get_card = 0
 
-                mmc_set_part_config = self.archtools.find_function_from_string("%sset_part_config fail %x\n")
-                if mmc_set_part_config is not None:
-                    mmc_set_part_config = mmc_set_part_config + self.da2address
+                mmc_set_part_config = find_binary(self.da2, b"\xF0\x4B\x2D\xE9\x18\xB0\x8D\xE2\x23\xDE\x4D\xE2")
+                if mmc_set_part_config is None:
+                    mmc_set_part_config = find_binary(self.da2, b"\xF0\x4B\x2D\xE9\x18\xB0\x8D\xE2\x8E\xDF\x4D\xE2")
+                    if mmc_set_part_config is None:
+                        mmc_set_part_config = 0
 
-                mmc_rpmb_offs = self.archtools.find_function_from_string("%sreq/1 fail %d\n")
-                logl = self.archtools.get_next_bl_from_off(mmc_rpmb_offs)
-                mmc_rpmb_send_command_ptr2 = self.archtools.get_next_bl_from_off(logl + 0x8)
-                mmc_rpmb_send_command = self.archtools.get_bl_target(mmc_rpmb_send_command_ptr2)
+                mmc_rpmb_send_command = find_binary(self.da2, b"\xF0\x48\x2D\xE9\x10\xB0\x8D\xE2\x08\x70\x9B\xE5")
                 if mmc_rpmb_send_command is None:
                     mmc_rpmb_send_command = 0
 
             efuse_addr = self.config.chipconfig.efuse_addr
             if register_ptr != -1:
+                if register_xml_cmd:
+                    register_xml_cmd = register_xml_cmd + self.da2address
+                else:
+                    register_xml_cmd = 0
 
                 length = 4
                 if self.is_arm64:
@@ -403,205 +371,151 @@ class XmlFlashExt(metaclass=LogBase):
     def patch_da1(self, _da1):
         return _da1
 
-    def mem_patch(self, da2: bytearray, idx: int, data: bytes) -> bytearray:
-        da2[idx:idx + len(data)] = data
-        return da2
-
     def patch_da2(self, _da2):
         self.info("Patching da2 ...")
-        self.da2address = self.mtk.daloader.daconfig.da_loader.region[2].m_start_addr
-        entry = int.from_bytes(_da2[4:8], byteorder='little')
-        if entry & 0xF0 == 0xC0:
-            self.is_arm64 = True
-        else:
-            self.is_arm64 = False
-        self.archtools = Aarch64Tools(_da2, self.da2address) if self.is_arm64 \
-            else ArmTools(_da2, self.da2address)
         patched = False
         da2patched = bytearray(_da2)
-        if self.config.chipconfig.has64bit:
-            print("DA2 64-Bit detected.")
-            mov_w0_wzr = b"\xE0\x03\x1F\x2A\xC0\x03\x5F\xD6"
-            erase_write_func = self.archtools.find_function_from_string("%s: partial_protect is enabled, start...")
-            if erase_write_func:
-                is_partitial_protect_enabled_ptr = self.archtools.get_next_bl_from_off(erase_write_func)
-                is_partitial_protect_enabled = self.archtools.get_bl_target(is_partitial_protect_enabled_ptr) - self.da2address
-                if is_partitial_protect_enabled:
-                    # MOV             W0, WZR;  RET
-                    da2patched = self.mem_patch(da2patched, is_partitial_protect_enabled, mov_w0_wzr)
-                    self.info("Patched partial_protect for erase/write storage.")
-
-            flash_policy = self.archtools.find_function_from_string("hash_binding = %d\n")
-            if flash_policy:
-                get_policy_entry_idx = self.archtools.get_next_bl_from_off(flash_policy)
-                hash_binding = self.archtools.get_next_bl_from_off(get_policy_entry_idx + 4)
-                img_auth = self.archtools.get_next_bl_from_off(hash_binding+4)
-                dl_forbidden = self.archtools.get_next_bl_from_off(img_auth+4)
-                vfy_pol = self.archtools.get_next_bl_from_off(dl_forbidden+4)
-                dl_pol = self.archtools.get_next_bl_from_off(vfy_pol+4)
-
-                da2patched = self.mem_patch(da2patched, self.archtools.va_to_offset(
-                    self.archtools.get_bl_target(hash_binding)), mov_w0_wzr)
-                da2patched = self.mem_patch(da2patched, self.archtools.va_to_offset(
-                    self.archtools.get_bl_target(img_auth)), mov_w0_wzr)
-                da2patched = self.mem_patch(da2patched, self.archtools.va_to_offset(
-                    self.archtools.get_bl_target(dl_forbidden)), mov_w0_wzr)
-                da2patched = self.mem_patch(da2patched, self.archtools.va_to_offset(
-                    self.archtools.get_bl_target(vfy_pol)), mov_w0_wzr)
-                da2patched = self.mem_patch(da2patched, self.archtools.va_to_offset(
-                    self.archtools.get_bl_target(dl_pol)), mov_w0_wzr)
-                self.info("Patched hash binding/img_auth/vfy_pol/dl_pol.")
-
-            da_version = self.archtools.find_function_from_string("[%s] da version check, status(0x%x), CFI(0x%x)\n")
-            if da_version:
-                da2patched = self.mem_patch(da2patched, da_version, mov_w0_wzr)
-                self.info("Patched da2 version check.")
-
-            read_write_ptr = self.archtools.find_function_from_string("R/W on this address is forbidden.")
-            if read_write_ptr:
-                idx = da2patched.find(b"\xE8\x7E\x40\x92",read_write_ptr)
-                if idx != -1:
-                    allow_read_register_ptr = self.archtools.get_previous_bl_from_off(idx)
-                    if allow_read_register_ptr:
-                        allow_read_register = self.archtools.get_bl_target(allow_read_register_ptr) - self.da2address
-                        mov_w0_1 = b"\x20\x00\x80\x52\xC0\x03\x5F\xD6\x20\x00\x80\x52\xC0\x03\x5F\xD6"
-                        da2patched = self.mem_patch(da2patched, allow_read_register, mov_w0_1)
-                        self.info("Patched read_register / write_register")
-                        patched = True
-            else:
+        pos = 0
+        idx = 0
+        while idx is not None:
+            idx = find_binary(_da2, b"\x00\x00\xA0\xE3\x04\x10\xA0\xE1\x00\x20\xA0\xE3..\x00\xEB\x01\x40\x00\xE3",
+                              pos)
+            if idx is not None:
+                offset = int.from_bytes(da2patched[idx + 0xC:idx + 0xE], 'little') - 1
+                da2patched[idx:idx + 0x14] = (b"\x00\x00\xA0\xE3\x04\x10\xA0\xE1\x2C\x22\x0E\xE3\x00\x20\x44\xE3" +
+                                              offset.to_bytes(2, 'little') + b"\x00\xEB")
+                patched = True
+                pos += idx
+            pos += 0x14
+        if not patched:
+            idx = find_binary(_da2,
+                              b"\x20\x00\x80\x52\xC0\x03\x5F\xD6\xE0\x03\x1F\x2A\xC0\x03\x5F\xD6\xE0\x03\x1F\x2A\xC0\x03\x5F\xD6")
+            if idx is not None:
+                da2patched[idx:idx + 0x18] = (
+                    b"\x20\x00\x80\x52\xC0\x03\x5F\xD6\x20\x00\x80\x52\xC0\x03\x5F\xD6\x20\x00\x80\x52\xC0\x03\x5F\xD6")
+                patched = True
+        if not patched:
+            # TCL 50 5G
+            idx = find_binary(_da2,
+                              b"\x01\x00\xA0\xE3\x1E\xFF\x2F\xE1\x00\x00\xA0\xE3\x1E\xFF\x2F\xE1\x00\x00\xA0\xE3\x1E\xFF\x2F\xE1")
+            if idx is not None:
+                da2patched[idx:idx + 0x18] = (
+                    b"\x01\x00\xA0\xE3\x1E\xFF\x2F\xE1\x01\x00\xA0\xE3\x1E\xFF\x2F\xE1\x01\x00\xA0\xE3\x1E\xFF\x2F\xE1")
                 patched = True
 
-            if patched:
-                patch_custom = self.patch_custom_command(da2patched)
-                if patch_custom is not None:
-                    self.info("Patched CUSTOM command")
-                    da2patched = patch_custom
-            # open("/tmp/da.patched.bin", "wb").write(da2patched)
-            return da2patched
+        if patched:
+            self.info("Patched read_register / write_register")
+            patch_custom = self.patch_custom_command(_da2)
+            if patch_custom is not None:
+                self.info("Patched CUSTOM command")
+                da2patched = patch_custom
+
+        idx = find_binary(da2patched,
+                          b"\x00\xA0\xE3\x1E\xFF\x2F\xE1.\x00\xA0\xE3\x1E\xFF\x2F\xE1." +
+                          b"\x00\xA0\xE3\x1E\xFF\x2F\xE1\x70\x4C")
+        if idx is not None:
+            da2patched[idx - 1:idx - 1 + (3 * 8)] = (b"\x01\x00\xA0\xE3\x1E\xFF\x2F\xE1\x01\x00\xA0" +
+                                                     b"\xE3\x1E\xFF\x2F\xE1\x01\x00\xA0\xE3\x1E\xFF\x2F\xE1")
+            patched = True
+            self.info("Patched write partitions / allow_read / allow_write")
+        if not patched:
+            self.warning("Write not allowed not patched.")
+
+        idx = find_binary(da2patched, b"\x01\x10\xA0\xE3\x00\x10\x80\xE5")
+        if idx is not None:
+            da2patched[idx:idx + 8] = b"\x00\x10\xA0\xE3\x00\x10\x80\xE5"
+            patched = True
+            self.info("Patched hash binding")
+        if not patched:
+            self.warning("Hash binding not patched.")
+
+        idx = find_binary(da2patched, b"\xC4\x08\x04\xE3\x05\x00\x44\xE3")
+        if idx is not None:
+            da2patched[idx + 8:idx + 8 + 4] = b"\x00\x00\xA0\xE3"
+        """idx = find_binary(da2patched,b"\xA4\x43\x00\xEB\x66\x18\x00\xEB")
+        if idx is not None:
+            da2patched[idx:idx+8] = b"\xA4\x43\x00\xEB\x08\x00\x00\xEB"
+            patched = True
+            self.info("Bypass SEC policy")
+        if not patched:
+            self.warning("SEC policy bypass not patched.")
+        """
+
+        idx = da2patched.find(
+            b"\x30\x48\x2D\xE9\x08\xB0\x8D\xE2\x08\xD0\x4D\xE2\x00\x40\xA0\xE1\x04\x00\x8D\xE2\x00\x50\xA0\xE3")
+        if idx != -1:
+            patch = b"\x00\x00\xA0\xE3\x1E\xFF\x2F\xE1"
+            da2patched[idx:idx + len(patch)] = patch
+            self.info("Patched generic Partition sgpt verification.")
+
+        idx3 = find_binary(da2patched, b"\x32\x00\x00\xE3\x02\x00\x4C\xE3")
+        if idx3 is not None:
+            da2patched[idx3:idx3 + 12] = b"\x00\x00\xA0\xE3\x00\x00\xA0\xE3\x00\x40\xA0\xE3"
+            self.info("Patched SLA signature check 1")
+            idx4 = find_binary(da2patched, b"\x32\x40\x00\xE3\x02\x40\x4C\xE3")
+            if idx4 is not None:
+                da2patched[idx4:idx4 + 8] = b"\x00\x40\xA0\xE3\x00\x40\xA0\xE3"
+                self.info("Patched SLA signature check 2")
         else:
-            print("DA2 32-Bit detected.")
-            read_write_ptr = self.archtools.find_function_from_string("R/W on this address is forbidden.")
-            if read_write_ptr:
-                # Search for LDR R0, [R9]
-                idx2 = find_binary(da2patched, b"\x00\x00\x99\xE5", read_write_ptr)
-                if idx2 != -1:
-                    check_allow_ptr = self.archtools.get_previous_bl_from_off(idx2)
-                    allow_write_func = self.archtools.get_bl_target(check_allow_ptr)
-                    if allow_write_func:
-                        # MOV R0, #0 => MOV R0, #1
-                        offs = allow_write_func - self.da2address
-                        if da2patched[offs:offs+4] == b"\x00\x00\xA0\xE3":
-                            self.info("Patched allow_read_register")
-                            da2patched[offs:offs + 4] = b"\x01\x00\xA0\xE3"
-                            patched = True
-                        elif da2patched[offs:offs+4] == b"\x01\x00\xA0\xE3":
-                            patched = True
-                        if da2patched[offs-8:offs-8+4] == b"\x00\x00\xA0\xE3":
-                            self.info("Patched allow_storage")
-                            da2patched[offs-8:offs-8+4] = b"\x01\x00\xA0\xE3"
-                            patched = True
-                        if da2patched[offs+8:offs+8+4] == b"\x00\x00\xA0\xE3":
-                            self.info("Patched allow_write_register")
-                            da2patched[offs+8:offs+8+4] = b"\x01\x00\xA0\xE3"
-                            patched = True
-            if not patched:
-                self.warning("Write not allowed not patched.")
-            if patched:
-                self.info("Patching CUSTOM command")
-                patch_custom = self.patch_custom_command(da2patched)
-                if patch_custom is not None:
-                    self.info("Patched CUSTOM command")
-                    da2patched = patch_custom
-                else:
-                    self.warning("CUSTOM command not patched :(")
-
-            hash_bind_str = self.archtools.find_string_xref("hash_binding:%d, img_auth_required:%d\n")
-            if hash_bind_str is not None:
-                get_log_level_ptr=self.archtools.get_previous_bl_from_off(hash_bind_str)
-                branch_ptr = self.archtools.get_previous_bl_from_off(get_log_level_ptr-4)
-                hash_bind_ptr = self.archtools.get_previous_bl_from_off(branch_ptr - 4)
-                hash_bind_func = self.archtools.get_bl_target(hash_bind_ptr) - self.da2address
-                # MOV   R1, #1 => MOV   R1, #0
-                da2patched[hash_bind_func:hash_bind_func + 4] = b"\x00\x10\xA0\xE3"
-                self.info("Patched hash binding")
-                patched = True
-            else:
-                self.warning("Hash binding not patched.")
-
-            cust_sec_ptr = self.archtools.find_function_from_string("cust_security_verify_sec_policy")
-            if cust_sec_ptr:
-                da2patched[cust_sec_ptr:cust_sec_ptr + 8] = RET_32_R0
-                self.info("Patched Oppo Remote SLA authentification.")
-
-            oppo_allowance_xref = self.archtools.find_string_xref("[oplus] do not get oplus permission\n")
-            if oppo_allowance_xref:
-                flag_offset = oppo_allowance_xref - 0x28
-                rd, imm16 = self.archtools.decode_movw(self.archtools.read_u32(flag_offset))
-                if imm16 is not None:
-                    rd, imm32 = self.archtools.decode_movt(self.archtools.read_u32(flag_offset+4))
-                    if imm32 is not None:
-                        addr = (imm32<<16) + imm16
-                        offset =  addr - self.da2address
-                        da2patched[offset:offset + 4] = b"\xFF\x00\x00\x00"
-                        self.info("Patched Oppo Allowance flag.")
-
-            oppo_auth = self.archtools.find_string_xref("[OPLUS] Download authorization Ok in oplus")
-            if oppo_auth:
-                # MOV R1, #3
-                if da2patched[oppo_auth-0x24:oppo_auth-0x20] == b"\x03\x10\xA0\xE3":
-                    da2patched[oppo_auth - 0x24:oppo_auth - 0x20] = b"\x05\x10\xA0\xE3"
-                    self.info("Patched oppo cust_security_get_dev_fw_info.")
-
-            sec_pol = self.archtools.find_function_from_string("[SEC_POLICY] sboot_state = 0x%x\n")
-            if sec_pol:
-                patch = RET_32_R0
-                da2patched[sec_pol:sec_pol + len(patch)] = patch
-
-            # MOV R0, #0xC0020032
-            has_sla_patch = False
-            idx3 = find_binary(da2patched, b"\x32\x00\x00\xE3\x02\x00\x4C\xE3")
-            if idx3 is not None:
-                da2patched[idx3:idx3 + 12] = b"\x00\x00\xA0\xE3\x00\x00\xA0\xE3\x00\x40\xA0\xE3"
-                self.info("Patched SLA signature check 1")
-                has_sla_patch = True
-                # MOV   R4, #0xC0020032
-                idx4 = find_binary(da2patched, b"\x32\x40\x00\xE3\x02\x40\x4C\xE3")
-                if idx4 is not None:
-                    da2patched[idx4:idx4 + 8] = b"\x00\x40\xA0\xE3\x00\x40\xA0\xE3"
-                    self.info("Patched SLA RND signature check")
-            if has_sla_patch:
-                idx = da2patched.find(b"DA.SLA\x00ENABLED")
-                if idx != -1:
-                    patch = b"DA.SLA\x00DISABLE"
-                    da2patched[idx:idx + len(patch)] = patch
-                    self.info("Patched generic Remote SLA authentification.")
-                    """
-                    n = "9BB734774443D77557A76E24B10733787750D90D09C869CD606D54F28978EA6220DC9948B3C9E89284F8551D6166F3754B6A3B890AC9CDA9E37DFAA0C1317E351CE5107C4273795949C6CCE638314AB1A345385D7642CB8D055A1F410C7D7E24A6F0A2AAB8184E773D21B3754A947541680F2C1A8D6BA5BEFD3B6E1FC28EC0B61D55B1454383F2C3E8BD27170A25978608F6788B90A2FC34F0CE35056BF7520795C8C60232CBBC0B0399367AF937869CA45CF737A8A066127893E93166C433298DD6FD009E6790E743B3392ACA8EA99F61DFC77BD99416DDA4B8A9D7E4DA24217427F3584119A4932016F1735CC63B12650FDDDA73C8FCFBC79E058F36219D3D"
-                    pubkey = bytes.fromhex(n)
-                    # Generic SLA patch, just replace the public key with a known one
-                    idx2 = da2patched.rfind(b"\x01\x00\x01\x00")
-                    # Infinix / Tecno
-                    if idx2 is not None:
-                        da2patched[idx2 - 0x100:idx2] = pubkey
-                    else:
-                        # Oppo / Oneplus
-                        idx2 = find_binary(da2patched, b"0123456789ABCDEF0123456789abcdef")
-                        if idx2 is not None:
-                            da2patched[idx2 - 0x100:idx2] = pubkey
-                        self.warning("SLA authentification not patched.")
-                    """
-
             idx2 = find_binary(da2patched, b"\xF0\x4D\x2D\xE9\x18\xB0\x8D\xE2\xF0\xD0\x4D\xE2\x01\x50\xA0\xE1")
             if idx2 is not None:
                 self.info("Patched Infinix Remote SLA v3 authentification.")
-                da2patched[idx2:idx2 + 0x8] = RET_32_R0
+                da2patched[idx2:idx2 + 0x8] = b"\x00\x00\xA0\xE3\x1E\xFF\x2F\xE1"
+            else:
+                idx2 = find_binary(da2patched, b"\x70\x4C\x2D\xE9\x10\xB0\x8D\xE2\x00\x60\xA0\xE1\x02\x06\xA0\xE3")
+                if idx2 is None:
+                    idx2 = find_binary(da2patched,
+                                       b"\x70\x4C\x2D\xE9\x10\xB0\x8D\xE2\x01\x40\xA0\xE1\x00\x50\xA0\xE1\x7F\x00\x00\xEB")
+                if idx2 is not None:
+                    da2patched[idx2:idx2 + 8] = b"\x00\x00\xA0\xE3\x1E\xFF\x2F\xE1"
+                    self.info("Patched Oppo Remote SLA authentification.")
+                    idx3 = find_binary(da2patched, b"\x03\x00\x00\x00\xFF\xFF\xFF\xFF\x00\x00\x00\x00\x01\x00\x00\x00")
+                    if idx3 is not None:
+                        da2patched[idx3:idx3 + 4] = b"\xFF\x00\x00\x00"
+                        self.info("Patched Oppo Allowance flag.")
+                    idx4 = find_binary(da2patched, b"\x4C\x08\x04\xE3\x03\x10\xA0\xE3\x05\x00\x44\xE3\x2E\x62\xA0\xE3")
+                    if idx4 is not None:
+                        da2patched[idx4:idx4 + 16] = b"\x4C\x08\x04\xE3\x05\x10\xA0\xE3\x05\x00\x44\xE3\x00\x60\xA0\xE3"
+                        self.info("Patched cust_security_get_dev_fw_info.")
+                else:
+                    idx2 = find_binary(da2patched,
+                                       b"\xFD\x7B\xBD\xA9\xF6\x57\x01\xA9\xF4\x4F\x02\xA9\xFD\x03\x00\x91\xF5\x03\x02\xAA\xF3\x03\x01\x2A")
+                    if idx2 is not None:
+                        da2patched[idx2:idx2 + 8] = b"\x20\x00\x80\x52\xC0\x03\x5F\xD6"
+                        idx3 = find_binary(da2patched,
+                                           b"\x03\x00\x00\x00\xFF\xFF\xFF\xFF\x01\x00\x00\x00\x08\x00\x00\x00")
+                        if idx3 is not None:
+                            da2patched[idx3:idx3 + 4] = b"\xFF\x00\x00\x00"
+                            self.info("Patched Oppo Allowance V2 flag.")
+                    else:
+                        idx2 = find_binary(da2patched,
+                                           b"\xF0\x4D\x2D\xE9\x18\xB0\x8D\xE2\x82\xDF\x4D\xE2\x01\x60\xA0\xE1\x38\x19\x0F\xE3\x00\x70\xA0\xE1\x42\x0F\x8D\xE2")
+                        if idx2 is not None:
+                            da2patched[idx2:idx2 + 8] = b"\x00\x00\xA0\xE3\x1E\xFF\x2F\xE1"
+                            self.info("Patched Vivo Remote SLA authentification.")
 
-            vivo_remote_sla = self.archtools.find_function_from_string("vivo_infobak SIG Verify Fail! ret:%d")
-            if vivo_remote_sla is not None:
-                da2patched[vivo_remote_sla:vivo_remote_sla + 8] = RET_32_R0
-                self.info("Patched Vivo Remote SLA authentification.")
-
-        # open("/tmp/da.patched.bin", "wb").write(da2patched)
+        idx = da2patched.find(b"DA.SLA\x00ENABLED")
+        if idx != -1:
+            patch = b"DA.SLA\x00DISABLE"
+            da2patched[idx:idx + len(patch)] = patch
+            self.info("Patched generic Remote SLA authentification.")
+            """
+            n = "9BB734774443D77557A76E24B10733787750D90D09C869CD606D54F28978EA6220DC9948B3C9E89284F8551D6166F3754B6A3B890AC9CDA9E37DFAA0C1317E351CE5107C4273795949C6CCE638314AB1A345385D7642CB8D055A1F410C7D7E24A6F0A2AAB8184E773D21B3754A947541680F2C1A8D6BA5BEFD3B6E1FC28EC0B61D55B1454383F2C3E8BD27170A25978608F6788B90A2FC34F0CE35056BF7520795C8C60232CBBC0B0399367AF937869CA45CF737A8A066127893E93166C433298DD6FD009E6790E743B3392ACA8EA99F61DFC77BD99416DDA4B8A9D7E4DA24217427F3584119A4932016F1735CC63B12650FDDDA73C8FCFBC79E058F36219D3D"
+            pubkey = bytes.fromhex(n)
+            # Generic SLA patch, just replace the public key with a known one
+            idx2 = da2patched.rfind(b"\x01\x00\x01\x00")
+            # Infinix / Tecno
+            if idx2 is not None:
+                da2patched[idx2 - 0x100:idx2] = pubkey
+            else:
+                # Oppo / Oneplus
+                idx2 = find_binary(da2patched, b"0123456789ABCDEF0123456789abcdef")
+                if idx2 is not None:
+                    da2patched[idx2 - 0x100:idx2] = pubkey
+                self.warning("SLA authentification not patched.")
+            """
+        # open("da.patched.bin",
+        # "wb").write(da2patched)
         return da2patched
 
     def custom_set_storage(self, ufs: bool = False):
@@ -635,7 +549,10 @@ class XmlFlashExt(metaclass=LogBase):
                     tmp = self.xflash.get_response(raw=True)
                     if len(tmp) != 0x100:
                         resp = int.from_bytes(tmp, 'little')
-                        msg = rpmb_error_msg(resp)
+                        if resp in rpmb_error:
+                            msg = rpmb_error[resp]
+                        else:
+                            msg = f"Error: {hex(resp)}"
                         self.error(f"Error on sector {hex(sector)}: {msg})")
                         return b""
                     else:
@@ -662,7 +579,8 @@ class XmlFlashExt(metaclass=LogBase):
                     self.xsend(data[i * 0x100:(i * 0x100) + 0x100])
                     resp = unpack("<H", self.xflash.get_response(raw=True))[0]
                     if resp != 0:
-                        self.error(f"Error on sector {hex(sector + i)}: {rpmb_error_msg(resp)}")
+                        if resp in rpmb_error:
+                            self.error(rpmb_error[resp])
                         result = self.xflash.get_response()
                         self.xflash.ack()
                         # CMD:START
@@ -928,7 +846,7 @@ class XmlFlashExt(metaclass=LogBase):
         return None
 
     def custom_write(self, addr, data) -> bool:
-        xmlcmd = self.xflash.cmd.create_cmd("CUSTOMMEMW")
+        xmlcmd = self.xflash.cmd.create_cmd("CUSTOMMEMR")
         if self.xsend(xmlcmd):
             result = self.xflash.get_response()
             if result == "OK":
@@ -1006,9 +924,6 @@ class XmlFlashExt(metaclass=LogBase):
         setup.efuse_base = self.config.chipconfig.efuse_addr
         setup.da_payload_addr = self.config.chipconfig.da_payload_addr
         setup.sej_base = self.config.chipconfig.sej_base
-        setup.ssr_clk_base = self.config.chipconfig.ssr_clk_base
-        setup.cc_clk_base = self.config.chipconfig.cc_clk_base
-        setup.ssr_base = self.config.chipconfig.ssr_base
         setup.read32 = self.readmem
         setup.write32 = self.writeregister
         setup.writemem = self.writemem
@@ -1052,7 +967,7 @@ class XmlFlashExt(metaclass=LogBase):
                 return status, data
         return -1, b""
 
-    def seccfg(self, lockflag, critical=False):
+    def seccfg(self, lockflag):
         if lockflag not in ["unlock", "lock"]:
             return False, "Valid flags are: unlock, lock"
         data, guid_gpt = self.xflash.partition.get_gpt(self.mtk.config.gpt_settings, "user")
@@ -1095,10 +1010,7 @@ class XmlFlashExt(metaclass=LogBase):
                 sc_org = SecCfgV4(hwc, self.mtk, self.custom_sej_hw)
             else:
                 return False, "Unknown lockstate or no lockstate"
-        if isinstance(sc_org, SecCfgV4):
-            ret, writedata = sc_org.create(lockflag=lockflag, critical=critical)
-        else:
-            ret, writedata = sc_org.create(lockflag=lockflag)
+        ret, writedata = sc_org.create(lockflag=lockflag)
         if ret is False:
             return False, writedata
         if self.xflash.writeflash(addr=partition.sector * self.mtk.daloader.daconfig.pagesize,
@@ -1311,50 +1223,6 @@ class XmlFlashExt(metaclass=LogBase):
         if cid is not None:
             self.info(f"CID         : {cid}")
             retval["cid"] = cid
-        if self.config.chipconfig.ssr_base is not None:
-            self.info("Generating ssr rpmbkey...")
-            rpmbkey = hwc.aes_hwcrypt(btype="ssr", mode="rpmb")
-            if rpmbkey is not None:
-                self.info(f"RPMB_SSR    : {rpmbkey.hex()}")
-                self.config.hwparam.writesetting("rpmbkey", rpmbkey.hex())
-                retval["rpmbkey"] = rpmbkey.hex()
-            self.info("Generating ssr fde key...")
-            fdekey = hwc.aes_hwcrypt(btype="ssr", mode="fde")
-            if fdekey is not None:
-                self.info(f"FDE_SSR     : {fdekey.hex()}")
-                self.config.hwparam.writesetting("fdekey", fdekey.hex())
-                retval["fdekey"] = fdekey.hex()
-            self.info("Generating ssr rot / base key...")
-            rotkey = hwc.aes_hwcrypt(btype="ssr", mode="rot")
-            if rotkey is not None:
-                self.info(f"ROT_SSR     : {rotkey.hex()}")
-                self.config.hwparam.writesetting("rotkey_ssr", rotkey.hex())
-                retval["rotkey"] = rotkey.hex()
-            self.info("Generating ssr motorola key...")
-            motorolakey = hwc.aes_hwcrypt(btype="ssr", mode="motorola")
-            if motorolakey is not None:
-                self.info(f"MOTO_SSR    : {motorolakey.hex()}")
-                self.config.hwparam.writesetting("motokey_ssr", motorolakey.hex())
-                retval["motokey"] = motorolakey.hex()
-            self.info("Generating custom1 key...")
-            custom1key = hwc.aes_hwcrypt(btype="ssr", mode="custom1")
-            if custom1key is not None:
-                self.info(f"CUSTOM1_SSR : {custom1key.hex()}")
-                self.config.hwparam.writesetting("custom1key_ssr", custom1key.hex())
-                retval["custom1key"] = custom1key.hex()
-            self.info("Generating custom2 key...")
-            custom2key = hwc.aes_hwcrypt(btype="ssr", mode="custom2")
-            if custom2key is not None:
-                self.info(f"CUSTOM2_SSR : {custom2key.hex()}")
-                self.config.hwparam.writesetting("custom2key_ssr", custom2key.hex())
-                retval["custom2key"] = custom2key.hex()
-            self.info("Generating fw enc key...")
-            fwkey = hwc.aes_hwcrypt(btype="ssr", mode="fw")
-            if fwkey is not None:
-                self.info(f"FW_CC       : {fwkey.hex()}")
-                self.config.hwparam.writesetting("fwkey_cc", fwkey.hex())
-                retval["fwkey"] = fwkey.hex()
-            return retval
         if self.config.chipconfig.dxcc_base is not None:
             # self.info("Generating provision key...")
             # platkey, provkey = hwc.aes_hwcrypt(btype="dxcc", mode="prov")

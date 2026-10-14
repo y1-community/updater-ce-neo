@@ -5,7 +5,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from PySide6.QtCore import QEventLoop, QRect, QSize, Qt, QTimer
-from PySide6.QtGui import QColor, QFont, QPainter, QPixmap
+from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QBoxLayout,
     QFrame,
@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from .. import paths
+from .tab_focus import TabFocusManager
 from ..flash_service import (
     METHOD_MTK,
     METHOD_MTK_MAC,
@@ -464,12 +465,43 @@ class _RoundNextButton(QPushButton):
         self.setFlat(True)
         self.setAutoDefault(False)
         self.setDefault(False)
+        self.setAttribute(Qt.WidgetAttribute.WA_MacShowFocusRect, False)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self._keyboard_focused = False
+        TabFocusManager.ensure_installed()
         self._hovered = False
         self._pressed = False
         self._arrow = QPixmap()
         if symbol == "next":
             self.setToolTip(tr("btn_next"))
             self.setAccessibleName(tr("btn_next"))
+
+    def dismiss_keyboard_focus(self) -> None:
+        self._keyboard_focused = False
+        self.update()
+
+    def focusInEvent(self, event):  # noqa: N802 (Qt naming)
+        reason = event.reason()
+        if TabFocusManager.is_tab_active() and reason in (
+            Qt.FocusReason.TabFocusReason,
+            Qt.FocusReason.BacktabFocusReason,
+            Qt.FocusReason.ShortcutFocusReason,
+        ):
+            self._keyboard_focused = True
+            TabFocusManager.register_focused_widget(self)
+        else:
+            self._keyboard_focused = False
+            TabFocusManager.unregister_focused_widget(self)
+            if reason == Qt.FocusReason.MouseFocusReason:
+                self.clearFocus()
+        self.update()
+        super().focusInEvent(event)
+
+    def focusOutEvent(self, event):  # noqa: N802 (Qt naming)
+        self._keyboard_focused = False
+        TabFocusManager.unregister_focused_widget(self)
+        self.update()
+        super().focusOutEvent(event)
 
     def _colors(self) -> tuple[QColor, str]:
         """Disc and the glyph's contrast colour, from the live theme."""
@@ -520,6 +552,15 @@ class _RoundNextButton(QPushButton):
                 self._arrow,
                 self._arrow.rect(),
             )
+        if self.hasFocus() and self._keyboard_focused and TabFocusManager.is_tab_active():
+            from .dark import get_native_accent_color
+
+            accent_col, _ = get_native_accent_color()
+            focus_col = QColor(accent_col or "#007aff")
+            pen = QPen(focus_col, 2)
+            painter.setPen(pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawEllipse(self.rect().adjusted(1, 1, -1, -1))
         painter.end()
 
     def enterEvent(self, event):  # noqa: N802 (Qt naming)
@@ -534,6 +575,9 @@ class _RoundNextButton(QPushButton):
         super().leaveEvent(event)
 
     def mousePressEvent(self, event):  # noqa: N802 (Qt naming)
+        self._keyboard_focused = False
+        TabFocusManager.dismiss_all()
+        self.clearFocus()
         self._pressed = True
         self.update()
         super().mousePressEvent(event)
@@ -659,6 +703,7 @@ class FlashPage(QWidget):
         card_layout = QHBoxLayout()
         card_layout.setContentsMargins(16, 14, 16, 14)
         card_layout.setSpacing(14)
+        card_layout.setAlignment(Qt.AlignVCenter)
 
         self._prep_icon = _make_squircle_icon("📦", "icon.png")
         card_layout.addWidget(self._prep_icon, 0, Qt.AlignVCenter)
@@ -682,10 +727,6 @@ class FlashPage(QWidget):
 
         card_layout.addLayout(col, 1)
         self._prep_col = col
-        # The card can be taller than its copy (a taller window). The slack
-        # belongs under the last row, so the title, the prompt and the progress
-        # bar stay packed together the way a system updater shows them.
-        col.addStretch(1)
 
         self._prep_cancel_btn = _RoundNextButton(symbol="cancel", accent=False)
         self._prep_cancel_btn.setObjectName("softwareUpdateCancelBtn")
@@ -708,6 +749,7 @@ class FlashPage(QWidget):
         card_layout = QHBoxLayout()
         card_layout.setContentsMargins(16, 14, 16, 14)
         card_layout.setSpacing(14)
+        card_layout.setAlignment(Qt.AlignVCenter)
 
         self._wait_icon = _make_squircle_icon("🔌", "icon.png")
         card_layout.addWidget(self._wait_icon, 0, Qt.AlignVCenter)
@@ -727,6 +769,7 @@ class FlashPage(QWidget):
             tr("flash_connect_device_prompt").format(model=self._connect_model_text())
         )
         self._wait_prompt_label.setWordWrap(True)
+        col.addWidget(self._wait_prompt_label)
 
         # The next step is one round arrow in the card's own row, not a wide
         # button on a row of its own.
@@ -735,24 +778,14 @@ class FlashPage(QWidget):
         self._wait_continue_btn.setToolTip(tr("btn_next"))
         self._wait_continue_btn.setAccessibleName(tr("btn_next"))
         self._wait_continue_btn.clicked.connect(self._on_power_off_continue)
-        # The prompt owns the text column; the arrow is a sibling of that
-        # column, so it centres on the card — and on the release icon — however
-        # many lines the prompt wraps to.
-        col.addWidget(self._wait_prompt_label)
 
         # Retained for attribute compatibility, but kept hidden and not added to layout
-        # since countdown is shown alongside the connect prompt.
         self._attempt_lbl = QLabel("")
         self._attempt_lbl.setVisible(False)
         self._attempt_remaining = 0
 
-        self._wait_mode_hint = _status_label("")
-        self._wait_mode_hint.setWordWrap(True)
-        hint_font = self._wait_mode_hint.font()
-        hint_font.setPixelSize(11)
-        self._wait_mode_hint.setFont(hint_font)
+        self._wait_mode_hint = QLabel("")
         self._wait_mode_hint.setVisible(False)
-        col.addWidget(self._wait_mode_hint)
 
         self._wait_banner = Banner()
         self._wait_banner.setVisible(False)
@@ -762,10 +795,6 @@ class FlashPage(QWidget):
         card_layout.addLayout(col, 1)
         self._wait_col = col
         card_layout.addWidget(self._wait_continue_btn, 0, Qt.AlignVCenter)
-        # The card can be taller than its copy (a taller window). The slack
-        # belongs under the last row, so the title, the prompt and the progress
-        # bar stay packed together the way a system updater shows them.
-        col.addStretch(1)
 
         self._wait_cancel_btn = _RoundNextButton(symbol="cancel", accent=False)
         self._wait_cancel_btn.setObjectName("softwareUpdateCancelBtn")
@@ -811,6 +840,7 @@ class FlashPage(QWidget):
         card_layout = QHBoxLayout()
         card_layout.setContentsMargins(16, 14, 16, 14)
         card_layout.setSpacing(14)
+        card_layout.setAlignment(Qt.AlignVCenter)
 
         self._flash_icon = _make_squircle_icon("⚙️", "icon.png")
         card_layout.addWidget(self._flash_icon, 0, Qt.AlignVCenter)
@@ -834,18 +864,6 @@ class FlashPage(QWidget):
         # Step and ETA share one row on a wide card, stack on a narrow one.
         self._status_flow = _FlowRow(self._step_label, self._eta_label)
         col.addWidget(self._status_flow)
-
-        self._flash_retry_btn = _RoundNextButton(symbol="next", accent=True)
-        self._flash_retry_btn.setObjectName("flashRetryBtn")
-        self._flash_retry_btn.setToolTip(tr("flash_btn_retry"))
-        self._flash_retry_btn.setVisible(False)
-        self._flash_retry_btn.clicked.connect(self._on_install_retry)
-        retry_row = QHBoxLayout()
-        retry_row.setContentsMargins(0, 0, 0, 0)
-        retry_row.setSpacing(8)
-        retry_row.addWidget(self._flash_retry_btn)
-        retry_row.addStretch(1)
-        col.addLayout(retry_row)
 
         self._theme_row = QWidget()
         theme_vbox = QVBoxLayout(self._theme_row)
@@ -906,21 +924,26 @@ class FlashPage(QWidget):
 
         card_layout.addLayout(col, 1)
         self._flash_col = col
-        # The card can be taller than its copy (a taller window). The slack
-        # belongs under the last row, so the title, the prompt and the progress
-        # bar stay packed together the way a system updater shows them.
-        col.addStretch(1)
+
+        # Action buttons sit to the right of the progress indication (or left in RTL)
+        self._flash_retry_btn = _RoundNextButton(symbol="next", accent=True)
+        self._flash_retry_btn.setObjectName("flashRetryBtn")
+        self._flash_retry_btn.setToolTip(tr("flash_btn_retry"))
+        self._flash_retry_btn.setVisible(False)
+        self._flash_retry_btn.clicked.connect(self._on_install_retry)
+        card_layout.addWidget(self._flash_retry_btn, 0, Qt.AlignVCenter)
 
         self._cancel_btn = _RoundNextButton(symbol="cancel", accent=False)
         self._cancel_btn.setObjectName("softwareUpdateCancelBtn")
         self._cancel_btn.setToolTip(tr("flash_btn_cancel"))
         self._cancel_btn.clicked.connect(self._on_cancel)
-        # Vertically centred on the card: the chip lines up with the progress
-        # band and the copy beside it instead of floating above them.
         card_layout.addWidget(self._cancel_btn, 0, Qt.AlignVCenter)
+
+        self._actions_row = card_layout
 
         self._done_mark = QPushButton()
         self._done_mark.setObjectName("installDoneButton")
+        self._done_mark.setAttribute(Qt.WidgetAttribute.WA_MacShowFocusRect, False)
         self._done_mark.setFixedSize(28, 28)
         self._done_mark.setCursor(Qt.ArrowCursor)
         self._done_mark.setIcon(get_symbol_icon("complete", 18))
@@ -1022,6 +1045,7 @@ class FlashPage(QWidget):
         card_layout = QHBoxLayout()
         card_layout.setContentsMargins(16, 14, 16, 14)
         card_layout.setSpacing(14)
+        card_layout.setAlignment(Qt.AlignVCenter)
 
         self._download_icon = _make_squircle_icon("📥", "icon.png")
         card_layout.addWidget(self._download_icon, 0, Qt.AlignVCenter)
@@ -1042,10 +1066,6 @@ class FlashPage(QWidget):
 
         card_layout.addLayout(col, 1)
         self._download_col = col
-        # The card can be taller than its copy (a taller window). The slack
-        # belongs under the last row, so the title, the prompt and the progress
-        # bar stay packed together the way a system updater shows them.
-        col.addStretch(1)
 
         self._download_cancel_btn = _RoundNextButton(symbol="cancel", accent=False)
         self._download_cancel_btn.setObjectName("softwareUpdateCancelBtn")
@@ -1088,10 +1108,17 @@ class FlashPage(QWidget):
         if host is None or label is None:
             return
         model = (self._model or "").strip()
+        if not model:
+            pkg = (getattr(self, "_package_name", "") or "").upper()
+            if "A5" in pkg:
+                model = "A5"
+            elif any(k in pkg for k in ("Y1", "Y2", "G1", "G3", "G5", "Q5", "Q3")):
+                model = "Y1"
         copy = getattr(self, "_wait_copy", "")
         wanted = (
             bool(model)
             and copy == "power_off"
+            and getattr(self, "_show_pin_tip", True)
             and not getattr(self, "_stop_open", False)
         )
         if not wanted:
@@ -1173,7 +1200,7 @@ class FlashPage(QWidget):
         bar.setRange(0, 0)
         bar.setTextVisible(False)
 
-    def show_please_wait(self) -> None:
+    def show_please_wait(self, connecting: bool = False) -> None:
         """Indeterminate bar and "Please wait", never the connect sentence.
 
         Used before the tool prints a USB search line, and again after a later
@@ -1182,9 +1209,12 @@ class FlashPage(QWidget):
         self._failed = False
         self._complete = False
         self._prompt_only = False
-        self._wait_copy = "please_wait"
+        self._wait_copy = "please_wait_connecting" if connecting else "please_wait"
         self._switch_view(self._waiting_view)
-        self._wait_prompt_label.setText(tr("flash_please_wait"))
+        if connecting:
+            self._wait_prompt_label.setText(self._wait_connecting_prompt_text())
+        else:
+            self._wait_prompt_label.setText(tr("flash_please_wait"))
         self._set_indeterminate(self._wait_progress_bar)
         self._wait_banner.set_type("info")
         self._wait_banner_key = "please_wait"
@@ -1233,6 +1263,13 @@ class FlashPage(QWidget):
             return f"{prompt} ({remaining}s)"
         return prompt
 
+    def _wait_connecting_prompt_text(self) -> str:
+        prompt = tr("flash_wait_connecting_prompt").format(model=self._connect_model_text())
+        remaining = getattr(self, "_attempt_remaining", 0)
+        if remaining > 0 and not getattr(self, "_prompt_only", False):
+            return f"{prompt} ({remaining}s)"
+        return prompt
+
     def set_attempt_timeout(self, seconds) -> None:
         """Show the app's own no-progress countdown alongside the connect prompt.
 
@@ -1251,10 +1288,13 @@ class FlashPage(QWidget):
         if hasattr(self, "_wait_prompt_label"):
             copy = getattr(self, "_wait_copy", "")
             if not getattr(self, "_prompt_only", False) and copy not in ("power_off", "stage"):
-                if remaining > 0:
-                    self._wait_copy = "connect"
-                if self._wait_copy == "connect":
-                    self._wait_prompt_label.setText(self._connect_device_prompt_text())
+                if copy == "please_wait_connecting":
+                    self._wait_prompt_label.setText(self._wait_connecting_prompt_text())
+                else:
+                    if remaining > 0:
+                        self._wait_copy = "connect"
+                    if self._wait_copy == "connect":
+                        self._wait_prompt_label.setText(self._connect_device_prompt_text())
 
     def show_real_stage(self, text: str) -> None:
         """Drop the connect sentence and the throbber once the tool moves on."""
@@ -1268,7 +1308,7 @@ class FlashPage(QWidget):
         self._apply_stop_hold()
 
     def show_flashing(self):
-        if getattr(self, "_wait_copy", "") in ("connect", "please_wait"):
+        if getattr(self, "_wait_copy", "") in ("connect", "please_wait", "please_wait_connecting"):
             self._wait_copy = "stage"
             if hasattr(self, "_wait_prompt_label"):
                 self._wait_prompt_label.setText(self._step_label.text())
@@ -1278,7 +1318,9 @@ class FlashPage(QWidget):
         self._warning.setVisible(not failed and not done)
         if hasattr(self, "_flash_retry_btn"):
             self._flash_retry_btn.setVisible(failed)
-            self._cancel_btn.setVisible(not failed and not done)
+        if hasattr(self, "_cancel_btn"):
+            self._cancel_btn.setVisible(not done)
+            self._cancel_btn.setEnabled(True)
         if hasattr(self, "_done_mark"):
             self._done_mark.setVisible(done)
         self._apply_stop_hold()
@@ -1290,23 +1332,49 @@ class FlashPage(QWidget):
         bar.setValue(percent)
         bar.setTextVisible(True)
 
-    def show_install_failure(self, message: str, percent: int = 0) -> None:
-        """Keep the failure on the install progress card, with Retry in the cancel slot."""
+    def show_install_failure(self, message: str, explanation: str = "", percent: int = 0) -> None:
+        """Keep the failure on the install progress card, with Retry and Cancel beneath."""
         self._failed = True
         self._prompt_only = False
         self.show_flashing()
         self._warning.setVisible(False)
         if hasattr(self, "_appeal"):
             self._appeal.setVisible(False)
-        self._set_determinate(self._progress_bar, percent)
-        self._step_label.setText(message)
-        self._eta_label.setText("")
+        if hasattr(self._progress_bar, "set_failed"):
+            self._progress_bar.set_failed(True, tr("install_failed"))
+        else:
+            self._progress_bar.setFormat(tr("install_failed"))
+
+        if not explanation:
+            from ..flash_service import parse_flash_error
+            title_text, explanation_text = parse_flash_error(message, self._model)
+            step_text = title_text
+            if message and message not in step_text and len(message) < 40:
+                step_text = f"{step_text} ({message})"
+            exp_text = explanation_text
+        else:
+            step_text = message
+            exp_text = explanation
+
+        from .dark import T
+        t = T()
+        self._step_label.setText(step_text)
+        self._step_label.setStyleSheet(
+            f"color: {t.danger_fg}; font-weight: 700; font-size: 13px;"
+        )
+        self._eta_label.setText(exp_text)
+        self._eta_label.setWordWrap(True)
+        if hasattr(self, "_status_flow") and hasattr(self._status_flow, "set_forced_stacked"):
+            self._status_flow.set_forced_stacked(True)
+
         if hasattr(self, "_wait_continue_btn"):
             self._wait_continue_btn.setVisible(False)
-        if hasattr(self, "_cancel_btn"):
-            self._cancel_btn.setVisible(False)
         if hasattr(self, "_flash_retry_btn"):
             self._flash_retry_btn.setVisible(True)
+        if hasattr(self, "_cancel_btn"):
+            self._cancel_btn.setVisible(True)
+            self._cancel_btn.setEnabled(True)
+        self._notify_geometry_change()
 
     def stop_theme_workers(self) -> None:
         """Cancel and clean up any in-progress Rockbox theme background tasks."""
@@ -1335,6 +1403,20 @@ class FlashPage(QWidget):
         self._failed = False
         self._complete = False
         self.stop_theme_workers()
+        if hasattr(self._progress_bar, "set_failed"):
+            self._progress_bar.set_failed(False)
+        else:
+            self._progress_bar.setFormat("%p%")
+        if hasattr(self._wait_progress_bar, "set_failed"):
+            self._wait_progress_bar.set_failed(False)
+        else:
+            self._wait_progress_bar.setFormat("%p%")
+        if hasattr(self, "_step_label"):
+            self._step_label.setStyleSheet("")
+        if hasattr(self, "_eta_label"):
+            self._eta_label.setText("")
+        if hasattr(self, "_status_flow") and hasattr(self._status_flow, "set_forced_stacked"):
+            self._status_flow.set_forced_stacked(False)
         if hasattr(self, "_done_mark"):
             self._done_mark.setVisible(False)
         if hasattr(self, "_flash_retry_btn"):
@@ -1345,26 +1427,45 @@ class FlashPage(QWidget):
             self._theme_row.setVisible(False)
 
     def show_usb_disconnected(self, on_retry=None, on_cancel=None) -> None:
-        """Prompt in the install card when USB drops mid-flash, with circular glyph buttons."""
+        """Prompt in the install card when USB drops, asking user to reset and press Next."""
         self._failed = True
-        self._prompt_only = False
-        self.show_flashing()
-        self._warning.setVisible(False)
-        if hasattr(self, "_appeal"):
-            self._appeal.setVisible(False)
-        if hasattr(self, "_theme_row"):
-            self._theme_row.setVisible(False)
-        self._step_label.setText(tr("err_usb_lost_title"))
-        self._eta_label.setText(tr("err_usb_lost_subtitle"))
+        self._prompt_only = True
+        self._wait_copy = "usb_disconnected"
+        self._show_pin_tip = False
+        self.clear_install_failure()
+        self.show_waiting()
+        model_str = self._connect_model_text()
+        msg = tr("err_usb_disconnected_recovery").format(model=model_str)
+        self._wait_prompt_label.setText(msg)
+        if hasattr(self._wait_progress_bar, "set_failed"):
+            self._wait_progress_bar.set_failed(True, tr("install_failed"))
+        else:
+            self._wait_progress_bar.setFormat(tr("install_failed"))
+        self._wait_cancel_btn.setVisible(True)
+        self._wait_continue_btn.setVisible(True)
         if on_retry is not None:
+            self._power_off_continue_cb = on_retry
             self._install_retry_cb = on_retry
         if on_cancel is not None:
             self._cancel_cb = on_cancel
+        self._step_label.setText(tr("err_usb_lost_title"))
+        from .dark import T
+        t = T()
+        self._step_label.setStyleSheet(
+            f"color: {t.danger_fg}; font-weight: 700; font-size: 13px;"
+        )
+        self._eta_label.setText(msg)
+        self._eta_label.setWordWrap(True)
+        if hasattr(self, "_status_flow") and hasattr(self._status_flow, "set_forced_stacked"):
+            self._status_flow.set_forced_stacked(True)
         if hasattr(self, "_flash_retry_btn"):
             self._flash_retry_btn.setVisible(True)
         if hasattr(self, "_cancel_btn"):
             self._cancel_btn.setVisible(True)
             self._cancel_btn.setEnabled(True)
+        self._update_paperclip_hint()
+        self._apply_stop_hold()
+        self._notify_geometry_change()
 
     # ------------------------------------------------------------------
     # Rockbox 360p themes & fonts post-install flow
@@ -1654,18 +1755,8 @@ class FlashPage(QWidget):
         self._wait_cancel_btn.setVisible(True)
         self._wait_continue_btn.setVisible(True)
         if hasattr(self, "_wait_mode_hint"):
-            if show_pin_tip:
-                model_str = (getattr(self, "_model", "") or "").upper()
-                if "Y1" in model_str or "Y2" in model_str or "6572" in str(getattr(self, "_platform", "")) or "6582" in str(getattr(self, "_platform", "")):
-                    tip_key = "flash_y1_preloader_hint"
-                elif "A5" in model_str:
-                    tip_key = "flash_paperclip_hint_a5"
-                else:
-                    tip_key = "flash_paperclip_hint"
-                self._wait_mode_hint.setText(tr(tip_key))
-                self._wait_mode_hint.setVisible(True)
-            else:
-                self._wait_mode_hint.setVisible(False)
+            self._wait_mode_hint.setVisible(False)
+        self._update_paperclip_hint()
         self._apply_stop_hold()
 
     def show_gui_handoff_prompt(self, hint: str) -> None:
@@ -1673,7 +1764,7 @@ class FlashPage(QWidget):
         self.show_power_off_prompt()
         if hasattr(self, "_wait_mode_hint"):
             self._wait_mode_hint.setText(hint or "")
-            self._wait_mode_hint.setVisible(bool(hint))
+            self._wait_mode_hint.setVisible(False)
 
     def leave_power_off_prompt(self) -> None:
         self._prompt_only = False
@@ -1787,14 +1878,17 @@ class FlashPage(QWidget):
             self._intro.set_keys(COMPLETION_KEYS)
         self._render_appeal_copy()
         self._appeal.setVisible(bool(visible))
+        self._notify_geometry_change()
 
     def _on_not_now(self) -> None:
+        self._notify_geometry_change()
         callback = getattr(self, "_appeal_not_now", None)
         if callable(callback):
             callback()
 
     def _on_appeal_dont_ask(self) -> None:
         """Turn donations off. The caller returns to the compact completion screen."""
+        self._notify_geometry_change()
         callback = getattr(self, "_appeal_callback", None)
         if callable(callback):
             callback()
@@ -1972,29 +2066,17 @@ class FlashPage(QWidget):
             self._wait_prompt_label.setText(
                 tr(self._power_off_prompt_key()).format(model=self._connect_model_text())
             )
+        elif hasattr(self, "_wait_prompt_label") and copy == "please_wait_connecting":
+            self._wait_prompt_label.setText(self._wait_connecting_prompt_text())
         elif hasattr(self, "_wait_prompt_label") and copy == "please_wait":
             self._wait_prompt_label.setText(tr("flash_please_wait"))
         elif hasattr(self, "_wait_prompt_label") and copy in ("connect", ""):
             self._wait_prompt_label.setText(self._connect_device_prompt_text())
         elif hasattr(self, "_wait_prompt_label") and copy == "stage" and self._step_key:
             self._wait_prompt_label.setText(tr(self._step_key))
-        if (
-            hasattr(self, "_wait_mode_hint")
-            and self._wait_mode_hint.isVisible()
-        ):
-            if getattr(self, "_show_pin_tip", False):
-                model_str = (getattr(self, "_model", "") or "").upper()
-                if "Y1" in model_str or "Y2" in model_str or "6572" in str(getattr(self, "_platform", "")) or "6582" in str(getattr(self, "_platform", "")):
-                    tip_key = "flash_y1_preloader_hint"
-                elif "A5" in model_str:
-                    tip_key = "flash_paperclip_hint_a5"
-                else:
-                    tip_key = "flash_paperclip_hint"
-                self._wait_mode_hint.setText(tr(tip_key))
-            else:
-                from ..config import download_mode_hint
-
-                self._wait_mode_hint.setText(download_mode_hint(self._model))
+        if hasattr(self, "_wait_mode_hint"):
+            self._wait_mode_hint.setVisible(False)
+        self._update_paperclip_hint()
         if hasattr(self, "_flash_retry_btn"):
             self._flash_retry_btn.setText(tr("flash_btn_retry"))
         if hasattr(self, "_wait_continue_btn"):
@@ -2129,6 +2211,11 @@ class FlashPage(QWidget):
         self._cancel_wait_callback = callback
 
     def _on_cancel(self):
+        if getattr(self, "_failed", False) or getattr(self, "_prompt_only", False):
+            callback = getattr(self, "_cancel_callback", None) or getattr(self, "_cancel_wait_callback", None)
+            if callable(callback):
+                callback()
+            return
         self.prompt_stop(tr_brand("install_stop_check"), on_continue=self._cancel_callback)
 
     def _on_cancel_wait(self):

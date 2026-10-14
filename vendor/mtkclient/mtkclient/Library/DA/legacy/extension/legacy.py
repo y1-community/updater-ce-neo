@@ -226,7 +226,7 @@ class LegacyExt(metaclass=LogBase):
         setup.writemem = self.writemem
         return HwCrypto(setup, self.loglevel, self.config.gui)
 
-    def seccfg(self, lockflag, critical=False):
+    def seccfg(self, lockflag):
         if lockflag not in ["unlock", "lock"]:
             return False, "Valid flags are: unlock, lock"
         data, guid_gpt = self.legacy.partition.get_gpt(self.mtk.config.gpt_settings, "user")
@@ -263,10 +263,7 @@ class LegacyExt(metaclass=LogBase):
                 sc_org = SecCfgV4(hwc, self.mtk)
             else:
                 return False, "Unknown lockstate or no lockstate"
-        if isinstance(sc_org, SecCfgV4):
-            ret, writedata = sc_org.create(lockflag=lockflag, critical=critical)
-        else:
-            ret, writedata = sc_org.create(lockflag=lockflag)
+        ret, writedata = sc_org.create(lockflag=lockflag)
         if ret is False:
             return False, writedata
         if self.legacy.writeflash(addr=partition.sector * self.mtk.daloader.daconfig.pagesize,

@@ -36,7 +36,7 @@
   #endif
 #endif
 #ifndef MyAppVersion
-  #define MyAppVersion "3.0.0"
+  #define MyAppVersion "2.5.0"
 #endif
 #ifndef MyAppPublisher
   #define MyAppPublisher "Innioasis Community"

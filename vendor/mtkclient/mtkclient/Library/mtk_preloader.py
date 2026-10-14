@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
-# (c) B.Kerler 2018-2026 GPLv3 License
+# (c) B.Kerler 2018-2024 GPLv3 License
 import os
 import logging
 import sys
@@ -157,7 +157,7 @@ class Preloader(metaclass=LogBase):
         res = False
         maxtries = 100
         tries = 0
-        while not res and tries < 1000:
+        while not res and tries < 1200:
             if self.mtk.serialportname:
                 res = self.mtk.port.serial_handshake(maxtries=maxtries)
             else:
@@ -168,7 +168,7 @@ class Preloader(metaclass=LogBase):
                     self.config.set_gui_status(self.config.tr("Status: Handshake failed, retrying..."))
                 self.mtk.port.close()
                 tries += 1
-        if tries == 1000:
+        if tries >= 1200:
             return False
 
         if not self.echo(self.Cmd.GET_HW_CODE.value):  # 0xFD
@@ -176,9 +176,7 @@ class Preloader(metaclass=LogBase):
                 self.error("Sync error. Please power off the device and retry.")
                 self.config.set_gui_status(self.config.tr("Sync error. Please power off the device and retry."))
             return False
-        val = None
-        if not self.config.iot:
-            val = self.rdword()
+        val = self.rdword()
         if val is None or self.config.iot:
             self.config.hwver = self.read_a2(0x80000000)
             self.config.hwcode = self.read_a2(0x80000008)
@@ -205,7 +203,7 @@ class Preloader(metaclass=LogBase):
                 self.info("\tCQ_DMA addr:\t\t" + hex(self.config.chipconfig.cqdma_base))
             self.info("\tVar1:\t\t\t" + hex(self.config.chipconfig.var1))
 
-        if not skipwdt and not self.config.chipconfig.has64bit:
+        if not skipwdt:
             if self.display:
                 self.info("Disabling Watchdog...")
             self.setreg_disablewatchdogtimer(self.config.hwcode, self.config.hwver)  # D4
@@ -244,7 +242,7 @@ class Preloader(metaclass=LogBase):
             self.config.set_meid(meid)
             if self.display:
                 self.info("ME_ID:\t\t\t" + hexlify(meid).decode('utf-8').upper())
-            if readsocid or self.config.chipconfig.socid_addr or self.config.chipconfig.has64bit:
+            if readsocid or self.config.chipconfig.socid_addr:
                 socid = self.get_socid()
                 if len(socid) >= 16:
                     self.config.set_socid(socid)
@@ -286,6 +284,9 @@ class Preloader(metaclass=LogBase):
                     self.write16(RGU_BASE, 0x2200)  # disable system wdg
                     self.write16(PMU_BASE + 0xa28, 0x8000)  # enter USB download
                     self.write16(PMU_BASE + 0xa24, 2)  # disable battery wdg
+                    self.write32(EMI_REMAP,
+                                 self.read32(
+                                     EMI_REMAP) | MR_FB0RB1)  # Set MB0 to Bank0 and MB1 to Bank1, map rom to ram
                 elif self.config.hw_sub_code == 0x8000:
                     if self.config.swver == 0x3600:
                         self.info("MTK 2503 detected :)")
@@ -333,19 +334,15 @@ class Preloader(metaclass=LogBase):
                     self.write16(0xA0700F00, 0x0051)
                     self.write16(0xA0700F00, 0x0041)
                     """
+                    self.write32(EMI_REMAP,
+                                 self.read32(
+                                     EMI_REMAP) | MR_FB0RB1)  # Set MB0 to Bank0 and MB1 to Bank1, map rom to ram
         if self.config.target_config["sla"] and self.config.chipconfig.damode == DAmodes.XML:
             self.handle_sla(func=None, isbrom=self.config.is_brom)
         return True
 
     def dump_internal_flash(self, offset: int = 0, length: int = 0, step: int = 0,
-                            filename: str = "internal_flash.bin", dump_flash:bool=True):
-        if self.config.hwcode == 0x6261 and dump_flash:
-            EMI_REMAP = 0xA0510000
-            MR_FB0RB1 = 2  # Flash - Bank0, RAM - Bank1
-            MR_FB1RB0 = 3  # Flash - Bank1, RAM - Bank0
-            self.write32(EMI_REMAP,
-                         self.read32(
-                             EMI_REMAP) | MR_FB0RB1)  # Set MB0 to Bank0 and MB1 to Bank1, map rom to ram
+                            filename: str = "internal_flash.bin"):
         flash = bytearray()
         pg = progress(pagesize=1, total=length, prefix="Dumping internal flash..", offset=offset)
         try:

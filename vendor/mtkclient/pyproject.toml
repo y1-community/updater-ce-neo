@@ -20,7 +20,7 @@ dependencies = [
     "shiboken6", 
     "pyside6",
     "pyserial",
-    "mfusepy"
+    "fusepy"
 ]
 classifiers = [
   "Development Status :: 4 - Beta",

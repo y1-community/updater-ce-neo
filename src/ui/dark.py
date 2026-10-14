@@ -1319,6 +1319,13 @@ QLabel[cssClass="separator"], QFrame[cssClass="separator"] {{
    wiring and tests; nothing here paints them, so a statically styled button
    can never disagree with the desktop's accessibility settings (high
    contrast, accent colour, "reduce motion" pressed states). */
+
+QPushButton#roundNextButton, QPushButton#roundGlyphButton, QPushButton#softwareUpdateCancelBtn, QPushButton#flashRetryBtn {{
+    outline: none;
+}}
+QPushButton#roundNextButton:focus, QPushButton#roundGlyphButton:focus, QPushButton#softwareUpdateCancelBtn:focus, QPushButton#flashRetryBtn:focus {{
+    outline: none;
+}}
 """
 
 

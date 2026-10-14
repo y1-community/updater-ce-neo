@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
-# (c) B.Kerler 2018-2026
+# (c) B.Kerler 2018-2025
 import codecs
 import io
 import json
@@ -22,11 +22,8 @@ try:
 except ImportError:
     pass
 
-try:
-    sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding='utf-8')
-    sys.stderr = io.TextIOWrapper(sys.stderr.detach(), encoding='utf-8')
-except (io.UnsupportedOperation, AttributeError):
-    pass
+sys.stdout = io.TextIOWrapper(sys.stdout.detach(), encoding='utf-8')
+sys.stderr = io.TextIOWrapper(sys.stderr.detach(), encoding='utf-8')
 
 
 class MTKTee:

@@ -141,9 +141,10 @@ def test_firmware_history_ini_is_not_the_one_the_tool_opens(tmp_path):
 def test_connect_sentence_and_please_wait_bar():
     from PySide6.QtWidgets import QApplication
 
-    from src.i18n import tr
+    from src.i18n import tr, translator
     from src.ui.flash_page import FlashPage
 
+    translator().set_language("en")
     app = QApplication.instance() or QApplication(sys.argv)
     page = FlashPage()
     page.set_model("Y1")

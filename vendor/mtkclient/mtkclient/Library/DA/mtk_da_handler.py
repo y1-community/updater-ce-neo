@@ -15,7 +15,7 @@ from mtkclient.config.brom_config import Efuse, DAmodes
 from mtkclient.Library.Filesystem.mtkdafs import MtkDaFS
 
 try:
-    from mfusepy import FUSE
+    from fuse import FUSE
 except ImportError:
     FUSE = None
 
@@ -114,7 +114,7 @@ class DaHandler(metaclass=LogBase):
         mtk.port.cdc.connected = mtk.port.cdc.connect()
         if mtk.port.cdc.connected is None or not mtk.port.cdc.connected or mtk.serialportname is not None:
             mtk.preloader.init(directory=directory)
-            if self.config.internal_flash and self.mtk.config.iot:
+            if self.config.internal_flash:
                 offset = self.mtk.offset
                 length = self.mtk.length
                 step = self.mtk.step
@@ -205,7 +205,7 @@ class DaHandler(metaclass=LogBase):
 
         if not mtk.daloader.upload_da(preloader=mtk.config.preloader):
             self.error("Failed to upload da.")
-            sys.exit(1)
+            return None
         else:
             mtk.daloader.writestate()
         return mtk
@@ -347,13 +347,11 @@ class DaHandler(metaclass=LogBase):
                             break
                     if rpartition is not None:
                         if length is None:
-                            readlength = rpartition.sectors * self.config.pagesize
-                        else:
-                            readlength = length
+                            length = rpartition.sectors * self.config.pagesize
                         if display:
                             self.info(f'Dumping partition "{rpartition.name}"')
                         if self.mtk.daloader.readflash(addr=(rpartition.sector * self.config.pagesize) + offset,
-                                                       length=readlength,
+                                                       length=length,
                                                        filename=partfilename, parttype=parttype, display=display):
                             if display:
                                 self.info(f"Dumped sector {str(rpartition.sector)} with sector count " +
@@ -1452,7 +1450,7 @@ class DaHandler(metaclass=LogBase):
             elif subcmd == "efuse":
                 self.da_efuse()
             elif subcmd == "seccfg":
-                v = mtk.daloader.seccfg(args.flag, critical=args.critical)
+                v = mtk.daloader.seccfg(args.flag)
                 if v[0]:
                     self.info(v[1])
                 else:

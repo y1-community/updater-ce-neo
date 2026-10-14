@@ -351,8 +351,6 @@ class Chipconfig:
     ap_dma_mem = None
     sej_base = None
     dxcc_base = None
-    ssr_base = None
-    ssr_clk_base = None
     name = ""
     description = ""
     dacode = None
@@ -375,8 +373,7 @@ class Chipconfig:
     iot = False
 
     def __init__(self, var1=None, watchdog=None, uart=None, brom_payload_addr=None,
-                 da_payload_addr=None, pl_payload_addr=None, cqdma_base=None, sej_base=None,
-                 dxcc_base=None, ssr_base = None, ssr_clk_base = None, cc_clk_base = 0x10000000,
+                 da_payload_addr=None, pl_payload_addr=None, cqdma_base=None, sej_base=None, dxcc_base=None,
                  gcpu_base=None, ap_dma_mem=None, name="", description="", dacode=None,
                  meid_addr=None, socid_addr=None, blacklist=(), blacklist_count=None,
                  send_ptr=None, ctrl_buffer=(), cmd_handler=None, brom_register_access=None,
@@ -393,9 +390,6 @@ class Chipconfig:
         self.ap_dma_mem = ap_dma_mem
         self.sej_base = sej_base
         self.dxcc_base = dxcc_base
-        self.ssr_clk_base = ssr_clk_base
-        self.ssr_base = ssr_base
-        self.cc_clk_base = cc_clk_base
         self.name = name
         self.description = description
         self.dacode = dacode
@@ -751,7 +745,7 @@ hwconfig = {
         # brom_payload_addr
         # da_payload_addr
         # gcpu_base
-        # sej_base=0x80140000,
+        #sej_base=0x80140000,
         # no dxcc
         # cqdma_base
         # ap_dma_mem
@@ -969,7 +963,7 @@ hwconfig = {
         # cqdma_base
         ap_dma_mem=0xC100119C,
         # blacklist
-        send_ptr=(0xf00025fc, 0xffffa0a0),
+        send_ptr=(0xf00025fc,0xffffa0a0),
         cmd_handler=0xffffad5c,
         brom_register_access=(0xffffa3aa, 0xffffa4c4),
         meid_addr=0xf0002af4,
@@ -1916,7 +1910,6 @@ hwconfig = {
         # loader="mt6893_payload.bin"
     ),
     0x1203: Chipconfig(
-        # new crypto hw, Xiaomi 14T (degas) / Redmi K70E / Poco X6 Pro 5G (duchamp)
         var1=0xA,
         watchdog=0x1c007000,
         uart=0x11002000,
@@ -1924,8 +1917,7 @@ hwconfig = {
         da_payload_addr=0x201000,
         pl_payload_addr=0x40200000,
         gcpu_base=0x1000D000,
-        ssr_base=0x10400000,
-        ssr_clk_base=0x10400000,
+        dxcc_base=0x10403000,
         sej_base=0x1040E000,
         # cqdma_base=0x10212000,
         # ap_dma_mem=0x11300800 + 0x1a0,
@@ -2032,16 +2024,15 @@ hwconfig = {
         # loader="mt7200_payload.bin"
     ),
     0x1236: Chipconfig(
-        # new crypto hw, Xiaomi 14T Pro
-        # var1=0xA,
+        # toDo: new crypto hw, Xiaomi 14T Pro
+        #var1=0xA,
         watchdog=0x1C00B000,
-        # uart=0x11002000,
+        #uart=0x11002000,
         brom_payload_addr=0x100A00,
         da_payload_addr=0x2001000,
         pl_payload_addr=0x40200000,
-        # gcpu_base=0x1000D000,
-        ssr_base=0x10400000,
-        ssr_clk_base=0x10400000,
+        #gcpu_base=0x1000D000,
+        dxcc_base=0x10403000,
         sej_base=0x1040E000,
         # cqdma_base=0x10212000,
         # ap_dma_mem=0x11300800 + 0x1a0,
@@ -2092,17 +2083,15 @@ hwconfig = {
         # loader="mt6985_payload.bin"
     ),
     0x1375: Chipconfig(
-        # new hw crypto Xiaomi Redmi Note 14 Pro
+        # toDo: new hw crypto Xiaomi Redmi Note 14 Pro
         var1=0xA,
         watchdog=0x1C00A000,
-        uart=0x11001000,
+        # uart=0x1C011000,
         brom_payload_addr=0x100A00,
         da_payload_addr=0x2010000,
         pl_payload_addr=0x40200000,
         # gcpu_base=0x10050000,
-        ssr_base=0x10400000,
-        ssr_clk_base=0x10400000,
-        dxcc_base=0x1040C000,
+        dxcc_base=0x10400000,
         sej_base=0x1040E000,
         # cqdma_base=0x10212000,
         # ap_dma_mem=0x11300800 + 0x1a0,
@@ -2124,17 +2113,16 @@ hwconfig = {
         # loader="mt6878_payload.bin"
     ),
     0x6899: Chipconfig(
-        # new crypto hw, Xiaomi 15T
+        # toDo: new crypto hw, Xiaomi 15T
         var1=0xA,
-        watchdog=0x1C00B000,
-        uart=0x11001000,
+        watchdog=0x1C010000,
+        uart=0x16010000,
         brom_payload_addr=0x100A00,
         da_payload_addr=0x201000,
         pl_payload_addr=0x40200000,
         # gcpu_base=0x10050000,
-        ssr_base=0x10400000,
-        ssr_clk_base=0x10000000,
-        sej_base=0x1040E000,
+        dxcc_base=0x18005000,
+        sej_base=0x1800E000,
         # cqdma_base=0x10212000,
         # ap_dma_mem=0x11300800 + 0x1a0,
         # blacklist=[(0x102d5c, 0x0)],
@@ -2146,44 +2134,15 @@ hwconfig = {
         # meid_addr=0x1008EC,
         # socid_addr=0x100934,
         # prov_addr=0x1066C0,
-        efuse_addr=0x11F10000,
-        damode=DAmodes.XML,
-        dacode=0x6899,
-        has64bit=True,
-        name="MT6899",
-        description="Dimensity 8400 Turbo/Ultra"
-        # loader="mt6899_payload.bin"
-    ),
-    0x1357: Chipconfig(
-        # Mediatek Dimensity 9400 (MT6991) Samsung Galaxy Tab S11 Ultra SM-X930, Xiaomi Mi 15T Pro
-        var1=0xA,
-        watchdog=0x1c010000,
-        uart=0x16000000,
-        brom_payload_addr=0x100A00,
-        da_payload_addr=0x201000,
-        pl_payload_addr=0x40200000,
-        # gcpu_base=0x1000D000,
-        ssr_base=0x18003000,
-        ssr_clk_base=0x18000000,
-        sej_base=0x1800E000,
-        # cqdma_base=0x10212000,
-        # ap_dma_mem=0x11300800 + 0x1a0,
-        # blacklist=[(0x102848, 0x0), (0x00106B60, 0x0)],
-        # blacklist_count=0x0000000A,
-        # send_ptr=(0x102888, 0xE79C),
-        # ctrl_buffer=0x00102A9C,
-        # cmd_handler=0x0000F569,
-        # brom_register_access=(0xeba4, 0xec5c),
-        # meid_addr=0x1008EC,
-        # socid_addr=0x20E7090,
-        # prov_addr=0x1066C0,
+        efuse_addr=0x13260000,
         damode=DAmodes.XML,
         dacode=0x1357,
-        name="MT6991",
-        description="Dimensity 9400 Ultra"
+        has64bit=True,
+        name="MT6899",
+        description="Dimensity 8400 Turbo"
+        # loader="mt6899_payload.bin"
     ),
     0x1471: Chipconfig(
-        # new crypto hw Poco X8 Pro Max
         var1=0xA,
         watchdog=0x1c010000,
         uart=0x16010000,
@@ -2191,8 +2150,7 @@ hwconfig = {
         da_payload_addr=0x201000,
         pl_payload_addr=0x40200000,
         # gcpu_base=0x10050000,
-        ssr_base=0x18003000,
-        ssr_clk_base=0x18000000,
+        dxcc_base=0x18005000,
         sej_base=0x1800E000,
         # cqdma_base=0x10212000,
         # ap_dma_mem=0x11300800 + 0x1a0,

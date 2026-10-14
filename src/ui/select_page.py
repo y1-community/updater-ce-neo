@@ -57,7 +57,7 @@ from ..translate import (
     get_google_translate_release_url,
     ReleaseTranslateWorker,
 )
-from .widgets import Banner, Card, CurrentPageStack, InstallProgress, UpdateToast
+from .widgets import Banner, BatteryToast, Card, CurrentPageStack, InstallProgress, UpdateToast
 from .dark import T, link_html, page_margins
 from .scrollbars import configure_scroll_area, make_transparent
 from .icons import HELP_ICON_PX, get_help_pixmap, get_symbol_icon, help_icon_source
@@ -390,6 +390,16 @@ class SelectPackagePage(QWidget):
                 "font-size: 13px; font-weight: 600; color: palette(window-text); letter-spacing: normal; background: transparent; border: none;"
             )
         layout.addWidget(self._title)
+
+        # First-run reminder to charge the player/device battery before use
+        self._toast_container = QWidget(self)
+        toast_layout = QHBoxLayout(self._toast_container)
+        toast_layout.setContentsMargins(4, 0, 4, 0)
+        self._battery_toast = BatteryToast(self._toast_container)
+        self._battery_toast.dismissed.connect(self._on_dismiss_battery_toast)
+        toast_layout.addWidget(self._battery_toast)
+        layout.addWidget(self._toast_container)
+        self._check_battery_toast_visibility()
 
         # No tabs: the catalogue *is* the Select Software screen, and the
         # local-file picker is reached from the "Install from File" link below
@@ -739,7 +749,7 @@ class SelectPackagePage(QWidget):
         t = T()
         page = QWidget()
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(10)
 
         self._hint = QLabel(tr("sel_only_local"))
@@ -1272,8 +1282,52 @@ class SelectPackagePage(QWidget):
         else:
             self._local_banner.setText("")
 
+    def _check_battery_toast_visibility(self) -> None:
+        from PySide6.QtCore import QSettings
+
+        settings = self.settings or QSettings("innioasis", "updater")
+        dismissed = bool(settings.value("battery_hint_dismissed", False, type=bool))
+        self._battery_toast.setVisible(not dismissed)
+        if hasattr(self, "_toast_container"):
+            self._toast_container.setVisible(not dismissed)
+
+    def _on_dismiss_battery_toast(self) -> None:
+        from PySide6.QtCore import QSettings
+
+        settings = self.settings or QSettings("innioasis", "updater")
+        settings.setValue("battery_hint_dismissed", True)
+        self._battery_toast.setVisible(False)
+        if hasattr(self, "_toast_container"):
+            self._toast_container.setVisible(False)
+    def reset_selection_and_filters(self) -> None:
+        """Reset filters, selections, cached firmware display, and battery reminder toast back to initial defaults."""
+        from PySide6.QtCore import QSettings
+
+        settings = self.settings or QSettings("innioasis", "updater")
+        settings.remove("battery_hint_dismissed")
+        self._check_battery_toast_visibility()
+        if hasattr(self, "_model_combo") and self._model_combo.count() > 0:
+            self._model_combo.blockSignals(True)
+            self._model_combo.setCurrentIndex(0)
+            self._model_combo.blockSignals(False)
+        if hasattr(self, "_type_combo") and self._type_combo.count() > 0:
+            self._type_combo.blockSignals(True)
+            self._type_combo.setCurrentIndex(0)
+            self._type_combo.blockSignals(False)
+        if hasattr(self, "_software_combo") and self._software_combo.count() > 0:
+            self._software_combo.blockSignals(True)
+            self._software_combo.setCurrentIndex(0)
+            self._software_combo.blockSignals(False)
+        if hasattr(self, "_show_online_view"):
+            self._show_online_view()
+        if hasattr(self, "_check_and_load_cached_firmware"):
+            self._check_and_load_cached_firmware()
+        self.content_size_changed.emit()
+
     def retranslate(self):
         self._title.setText(tr("sel_title"))
+        if hasattr(self, "_battery_toast"):
+            self._battery_toast.retranslate()
         self._install_from_file_link.setText(
             self._link_html("sel_install_from_file", bold=False)
         )

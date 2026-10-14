@@ -17,9 +17,35 @@ from __future__ import annotations
 
 import sys
 
-from PySide6.QtCore import QEvent, QRect, QSize, Qt
+import weakref
+
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, QPoint, QRect, QSize, Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPalette, QPixmap
 from PySide6.QtWidgets import QPushButton
+
+
+from .tab_focus import TabFocusManager
+
+
+class _FocusDismissFilter:
+    """Compatibility shim delegating to TabFocusManager."""
+
+    @classmethod
+    def ensure_installed(cls) -> None:
+        TabFocusManager.ensure_installed()
+
+    @classmethod
+    def mark_keyboard_focused(cls, btn: SidebarButton) -> None:
+        TabFocusManager.register_focused_widget(btn)
+
+    @classmethod
+    def unmark_keyboard_focused(cls, btn: SidebarButton) -> None:
+        TabFocusManager.unregister_focused_widget(btn)
+
+    @classmethod
+    def dismiss_all(cls) -> None:
+        TabFocusManager.dismiss_all()
+
 
 
 def sidebar_row_spacing(platform_name: str | None = None) -> int:
@@ -152,16 +178,73 @@ class SidebarButton(QPushButton):
         super().__init__(text, parent)
         self._preview_hover = False
         self._force_platform_row = False
+        self._keyboard_focused = False
         self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_MacShowFocusRect, False)
         self.setAutoDefault(False)
         self.setFlat(True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setCursor(Qt.CursorShape.ArrowCursor)
         self.setStyleSheet("")
+        TabFocusManager.ensure_installed()
+
+    def dismiss_keyboard_focus(self) -> None:
+        self._keyboard_focused = False
+        self.update()
+
+    @classmethod
+    def dismiss_focus_rings(cls) -> None:
+        """Dismiss active keyboard focus outlines across all sidebar rows."""
+        TabFocusManager.dismiss_all()
+
+    def focusInEvent(self, event):
+        reason = event.reason()
+        if TabFocusManager.is_tab_active() and reason in (
+            Qt.FocusReason.TabFocusReason,
+            Qt.FocusReason.BacktabFocusReason,
+            Qt.FocusReason.ShortcutFocusReason,
+        ):
+            self._keyboard_focused = True
+            TabFocusManager.register_focused_widget(self)
+        else:
+            self._keyboard_focused = False
+            TabFocusManager.unregister_focused_widget(self)
+        self.update()
+        super().focusInEvent(event)
+
+    def focusOutEvent(self, event):
+        self._keyboard_focused = False
+        _FocusDismissFilter.unmark_keyboard_focused(self)
+        self.update()
+        super().focusOutEvent(event)
+
+    def mousePressEvent(self, event):
+        self._keyboard_focused = False
+        _FocusDismissFilter.unmark_keyboard_focused(self)
+        _FocusDismissFilter.dismiss_all()
+        self.update()
+        super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        self._keyboard_focused = False
+        _FocusDismissFilter.unmark_keyboard_focused(self)
+        self.update()
+        super().mouseReleaseEvent(event)
 
     def enterEvent(self, event):
+        if self._keyboard_focused:
+            self._keyboard_focused = False
+            _FocusDismissFilter.unmark_keyboard_focused(self)
+        _FocusDismissFilter.dismiss_all()
         self.update()
         super().enterEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._keyboard_focused:
+            self._keyboard_focused = False
+            _FocusDismissFilter.unmark_keyboard_focused(self)
+            self.update()
+        super().mouseMoveEvent(event)
 
     def leaveEvent(self, event):
         self.update()
@@ -237,7 +320,7 @@ class SidebarButton(QPushButton):
                     painter.setBrush(accent)
                     painter.drawRoundedRect(bar, 1, 1)
 
-            if self.hasFocus() and not selected:
+            if self.hasFocus() and self._keyboard_focused and TabFocusManager.is_tab_active() and not selected:
                 painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
                 pen_color = self.palette().color(QPalette.ColorRole.Highlight)
                 painter.setPen(pen_color)

@@ -276,8 +276,16 @@ class _ToolStreamTee(io.TextIOBase):
 
     def _emit(self, line: str) -> None:
         line = line.rstrip("\r")
-        if not line.strip():
+        raw = line.strip()
+        if not raw or set(raw) <= {'.'}:
             return
+        if any(w in raw for w in ("RuntimeWarning", "UserWarning", "DeprecationWarning", "innioasis.startup", "main_window.py", "qt.qpa")):
+            return
+        if raw.startswith("."):
+            stripped = raw.lstrip(". ")
+            if not stripped or stripped == "Preloader":
+                return
+            line = stripped
         # The logging tree already wrote this record to Diagnostics; do not
         # store its console echo as well.
         if _is_console_echo(line):

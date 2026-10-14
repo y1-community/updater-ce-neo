@@ -465,11 +465,94 @@ def describe_backend_error(value) -> str:
     """
     if not value:
         return ""
-    if is_wrong_model_error(value):
-        return tr("err_sp_wrong_model")
-    name = sp_error_name(value) or SP_ERROR_CODE_NAMES.get(sp_error_code(value), "")
-    key = SP_ERROR_GUIDANCE.get(name)
-    return tr(key) if key else ""
+    _title, exp = parse_flash_error(value)
+    return exp
+
+
+def _format_error_token(raw: str, default: str = "") -> str:
+    name = sp_error_name(raw)
+    code = sp_error_code(raw)
+    if name and code:
+        return f"{name} {code}"
+    return name or code or default
+
+
+def parse_flash_error(value, model: str = "") -> tuple[str, str]:
+    """Parse a flash failure message or error code into a (title, explanation) pair.
+
+    Returns localized, human-friendly guidance explaining *why* the flash failed
+    and what action to take, while preserving technical error codes for diagnostics.
+    """
+    raw = str(value or "").strip()
+    if not raw:
+        return tr("install_failed_title"), tr("err_generic_flash_failed_desc").format(detail="")
+
+    # 1. USB Disconnected / lost connection
+    if is_disconnection_error(raw) or "USB_DISCONNECTED" in raw.upper() or "DEVICE_DISCONNECTED" in raw.upper():
+        model_name = model or tr("device_default_name")
+        return tr("err_usb_lost_title"), tr("err_usb_disconnected_recovery").format(model=model_name)
+
+    # 2. Wrong Model / Chip mismatch
+    if is_wrong_model_error(raw):
+        code_token = _format_error_token(raw, "MISMATCH")
+        title = f"{tr('err_sp_wrong_model_title')} ({code_token})" if code_token else tr("err_sp_wrong_model_title")
+        return title, tr("err_sp_wrong_model")
+
+    # 3. Timeout / device not responding
+    if (
+        raw == ERR_ATTEMPT_TIMEOUT
+        or "TIMEOUT" in raw.upper()
+        or sp_error_name(raw) == "S_TIMEOUT"
+        or sp_error_code(raw) == "1042"
+    ):
+        code_token = _format_error_token(raw, "TIMEOUT")
+        return f"{tr('err_attempt_timeout_title')} ({code_token})", tr("err_sp_timeout")
+
+    # 4. Device powered on too early / BROM handshake
+    if is_brom_handshake_error(raw):
+        code_token = _format_error_token(raw, "2005")
+        return f"{tr('err_connection_failed_title')} ({code_token})", tr("err_sp_brom_startcmd")
+
+    # 5. Connection / Handshake failure
+    if any(k in raw.upper() for k in ("CONNECTION_FAILED", "MTK_INIT_FAILED", "CLI_START_FAILED", "S_COM_PORT_OPEN_FAIL", "HANDSHAKE")):
+        code_token = _format_error_token(raw, raw.split()[0] if raw else "CONNECTION_FAILED")
+        return f"{tr('err_connection_failed_title')} ({code_token})", tr("err_connection_failed_desc")
+
+    # 6. Download Agent sync / transmission failure
+    if any(k in raw.upper() for k in ("S_DA_INIT_SYNC_ERROR", "S_BROM_DOWNLOAD_DA_FAIL", "DA_SYNC", "1093", "2004")):
+        code_token = _format_error_token(raw, "DA_ERROR")
+        return f"{tr('install_failed_title')} ({code_token})", tr("err_sp_da_init_sync")
+
+    # 7. Memory / DRAM initialization failure
+    if any(k in raw.upper() for k in ("S_FT_ENABLE_DRAM_FAIL", "DRAM_FAIL", "4032")):
+        code_token = _format_error_token(raw, "4032")
+        return f"{tr('install_failed_title')} ({code_token})", tr("err_sp_enable_dram")
+
+    # 8. Write Interrupted / Flash write failed
+    if any(k in raw.upper() for k in ("WRITE_FAILED", "S_FT_DOWNLOAD_FAIL", "WRITEFLASH", "SEGMENTED WRITE FAILED", "DA_WO", "4008", "STORAGE_READ")):
+        code_token = _format_error_token(raw, "WRITE_FAIL")
+        return f"{tr('err_flash_write_failed_title')} ({code_token})", tr("err_flash_write_failed_desc")
+
+    # 9. Package files missing
+    if any(k in raw.upper() for k in ("NO_SCATTER_FILE", "MISSING_IMAGES", "NO_IMAGE_FILES")):
+        return tr("err_missing_package_files_title"), tr("err_missing_package_files_desc")
+
+    # 10. Flashing tool / import failure
+    if any(k in raw.upper() for k in ("SP_FLASH_TOOL_NOT_FOUND", "MTK_IMPORT_FAILED")):
+        return tr("err_tool_unavailable_title"), tr("err_tool_unavailable_desc")
+
+    # 11. Known SP error guidance fallback
+    name = sp_error_name(raw) or SP_ERROR_CODE_NAMES.get(sp_error_code(raw), "")
+    if name and name in SP_ERROR_GUIDANCE:
+        guidance = tr(SP_ERROR_GUIDANCE[name])
+        code_token = _format_error_token(raw, name)
+        return f"{tr('install_failed_title')} ({code_token})", guidance
+
+    # 12. Generic fallback
+    detail = raw
+    if len(detail) > 40:
+        detail = detail[:37] + "..."
+    return f"{tr('install_failed_title')} ({detail})" if detail else tr("install_failed_title"), tr("err_generic_flash_failed_desc").format(detail=raw)
 
 
 # The BROM handshake failures. The console tool found the USB port but could
@@ -621,7 +704,7 @@ MTK_DA_ATTEMPTS = 2
 # the images start moving. SP Flash Tool's own connection window is set to the
 # same value through its console configuration file.
 ATTEMPT_PROGRESS_TIMEOUT = 30.0
-ATTEMPT_PROGRESS_TIMEOUT_MTK = 480.0
+ATTEMPT_PROGRESS_TIMEOUT_MTK = 180.0
 # The target re-enumerates while being restarted into BROM; the USB monitor
 # must not read that as the player being unplugged mid-flash.
 MTK_DEVICE_LOSS_GRACE_SECONDS = 90.0
@@ -734,6 +817,27 @@ SIGNED_IMAGE_OVERHEAD_SIZE = 300
 _LEGACY_MBR_BIAS_PLATFORMS = frozenset({"MT8382", "MT6572", "MT6574", "MT6582", "MT6580"})
 LEGACY_MBR_USER_ADDR_BIAS = 8388608  # 8MB (0x800000)
 LEGACY_SEGMENTED_WRITE_BYTES = 52428800  # 50MB per USB transfer chunk
+# Per-transfer chunk size handed to the bundled (Chinese-fork) legacy DA. Its
+# ``sdmmc_write_data`` reads ``config.write_chunk_size`` for every USB transfer
+# and defaults to 1 MiB when unset; the reference build drives the same DA with
+# 512 KiB, and 256 KiB when an image is 1.5 GB or larger so a big transfer still
+# leaves room for the device to answer between chunks.
+LEGACY_WRITE_CHUNK_BYTES = 524288  # 512 KiB
+LEGACY_WRITE_CHUNK_BYTES_LARGE = 262144  # 256 KiB, images >= 1536 MB
+LEGACY_WRITE_CHUNK_LARGE_IMAGE_BYTES = 1536 * 1024 * 1024
+
+
+def legacy_write_chunk_size(image_paths) -> int:
+    """Chunk size the reference build writes legacy-DA images with."""
+    largest = 0
+    for path in image_paths:
+        try:
+            largest = max(largest, Path(path).stat().st_size)
+        except OSError:
+            continue
+    if largest >= LEGACY_WRITE_CHUNK_LARGE_IMAGE_BYTES:
+        return LEGACY_WRITE_CHUNK_BYTES_LARGE
+    return LEGACY_WRITE_CHUNK_BYTES
 
 
 def layman_task_name(part_name: str) -> str:
@@ -1640,6 +1744,10 @@ class _AttemptWatchdog(threading.Thread):
             if not self._armed:
                 return
             self._deadline = time.time() + self._timeout
+        try:
+            self._on_tick(int(math.ceil(self._timeout)))
+        except Exception:
+            pass
 
     def disarm(self):
         """Real progress began; the window no longer applies."""
@@ -1775,6 +1883,9 @@ class FlashWorker(QThread):
         self._search_started = False
         self._search_timed_out = False
         self._device_seen = False
+        self._is_disconnected = False
+        self._finished = False
+        self._device_loss_held_until = 0.0
 
     # -- lifecycle ----------------------------------------------------------
     def cancel(self):
@@ -1797,11 +1908,15 @@ class FlashWorker(QThread):
                 self._process.terminate()
             except Exception:
                 pass
+            try:
+                self._process.kill()
+            except Exception:
+                pass
             if IS_WINDOWS:
                 # TerminateProcess is async; give it a moment then force-kill
                 # the process tree so no child of flash_tool survives the switch.
                 try:
-                    self._process.wait(timeout=2.0)
+                    self._process.wait(timeout=1.0)
                 except Exception:
                     try:
                         subprocess.run(
@@ -1810,6 +1925,42 @@ class FlashWorker(QThread):
                         )
                     except Exception:
                         pass
+
+    def _hold_device_loss(self, seconds: float):
+        self._device_loss_held_until = max(self._device_loss_held_until, time.time() + float(seconds))
+        if callable(self._device_loss_hold):
+            try:
+                self._device_loss_hold(seconds)
+            except Exception:
+                pass
+
+    def _device_loss_is_held(self) -> bool:
+        return time.time() < getattr(self, "_device_loss_held_until", 0.0)
+
+    def _start_usb_watchdog(self):
+        """Monitor USB presence in background while flashing once device is detected."""
+        def _watch():
+            misses = 0
+            while not self._cancelled and not getattr(self, "_finished", False):
+                time.sleep(1.0)
+                if not getattr(self, "_device_seen", False):
+                    continue
+                if self._device_loss_is_held():
+                    continue
+                if getattr(self, "_past_usb_search", False):
+                    if not is_mtk_device_connected():
+                        misses += 1
+                        if misses >= 2:  # ~2 seconds missing from USB
+                            self._log("Notice: Device disconnected from USB mid-flash.")
+                            self._is_disconnected = True
+                            self.cancel()
+                            self.usb_disconnected.emit()
+                            break
+                    else:
+                        misses = 0
+
+        t = threading.Thread(target=_watch, daemon=True, name="FlashUsbWatchdog")
+        t.start()
 
     def _announce_please_wait(self):
         """Before any search line: do not show the connect sentence."""
@@ -1873,6 +2024,10 @@ class FlashWorker(QThread):
         watchdog = getattr(self, "_attempt_watchdog", None)
         if watchdog is not None:
             watchdog.disarm()
+        try:
+            self.attempt_timeout.emit(0)
+        except Exception:
+            pass
 
     def _expire_attempt(self):
         """End a backend command that showed nothing inside the window."""
@@ -1942,14 +2097,22 @@ class FlashWorker(QThread):
         low = text.lower()
         if not text:
             return
+        if is_disconnection_error(text):
+            self._log(f"Notice: Disconnection detected in MTKClient output: {text}")
+            self._is_disconnected = True
+            self.cancel()
+            self.usb_disconnected.emit()
+            return
         if (
             low.startswith("port - device detected")
             or "port - device detected" in low
             or "usb port detected" in low
             or "brom connected" in low
+            or "detected" in low
         ):
             self._leave_usb_search()
             self._tool_error = ""
+            self._touch_attempt()
             self.step_changed.emit(STEP_DETECT)
             self.progress.emit(12)
             return
@@ -2065,6 +2228,7 @@ class FlashWorker(QThread):
         # the diagnostics log for as long as the install runs.
         with capture_tool_output(self._log, tag=lambda: self._tool_tag):
             try:
+                self._start_usb_watchdog()
                 self._do_flash()
             except BaseException as e:
                 # BaseException (not just Exception): the in-process mtkclient
@@ -2077,8 +2241,15 @@ class FlashWorker(QThread):
                     self._log(f"Internal error: {type(e).__name__}: {e}")
                 except Exception:
                     pass
-                self.finished.emit(False, "INTERNAL_ERROR")
+                if is_disconnection_error(str(e), e) or not is_mtk_device_connected():
+                    self._is_disconnected = True
+                    self.cancel()
+                    self.usb_disconnected.emit()
+                    self.finished.emit(False, "USB_DISCONNECTED")
+                else:
+                    self.finished.emit(False, "INTERNAL_ERROR")
             finally:
+                self._finished = True
                 self._flush_log()
 
     def _do_flash(self):
@@ -2482,6 +2653,17 @@ class FlashWorker(QThread):
         string, so :func:`sp_error_name` / :func:`sp_error_code` and the error
         page's explanation keep working.
         """
+        if (
+            self._is_disconnected
+            or is_disconnection_error(detail)
+            or (getattr(self, "_past_usb_search", False) and not is_mtk_device_connected())
+        ):
+            self._log(f"Notice: SP Flash Tool failed due to USB disconnection: {detail}")
+            self._is_disconnected = True
+            self.cancel()
+            self.usb_disconnected.emit()
+            self.finished.emit(False, "USB_DISCONNECTED")
+            return
         hint = sp_brom_handshake_hint(detail)
         self.error_hint = hint
         if hint:
@@ -2613,6 +2795,12 @@ class FlashWorker(QThread):
     def _classify_sp_stdout(self, line):
         if is_sp_usb_search_line(line):
             self._enter_usb_search()
+            return
+        if is_disconnection_error(line):
+            self._log(f"Notice: Disconnection detected in SP Flash Tool output: {line}")
+            self._is_disconnected = True
+            self.cancel()
+            self.usb_disconnected.emit()
             return
         low = line.lower()
         if "searchusbportpool failed" in low or "failed to find usb port" in low:
@@ -2947,6 +3135,19 @@ class FlashWorker(QThread):
             return
 
         self._tool_tag = "MTK"
+        if sys.platform.startswith("linux") or (os.name == "posix" and not sys.platform.startswith("darwin")):
+            try:
+                from . import linux_sp_flash
+                readiness = linux_sp_flash.verify_linux_flashing_readiness()
+                if not readiness.get("udev_ok"):
+                    self._log(
+                        f"Warning: {readiness.get('udev_msg')}. "
+                        f"If device is not detected, run: sudo bash {readiness.get('setup_script_path')}"
+                    )
+                for conf in readiness.get("service_conflicts", []):
+                    self._log(f"Notice: {conf.get('message')}")
+            except Exception as e:
+                logger.debug("Linux readiness check skipped: %s", e)
         self._announce_please_wait()
         self.action_changed.emit(tr("action_init_mtkclient"))
         self._log(tr("action_init_mtkclient"))
@@ -3033,16 +3234,34 @@ class FlashWorker(QThread):
 
             self._stop_attempt_watchdog()
             self._process.wait()
-            if self._attempt_expired:
-                self.finished.emit(False, ERR_ATTEMPT_TIMEOUT)
+            if self._is_disconnected or is_disconnection_error(self._tool_error) or is_disconnection_error(final_msg):
+                self._log("MTKClient flash terminated due to device disconnection.")
+                self.cancel()
+                self.usb_disconnected.emit()
+                self.finished.emit(False, "USB_DISCONNECTED")
                 return
             if self._cancelled:
                 self.finished.emit(False, "USER_CANCELLED")
+                return
+            if self._process.returncode != 0 and getattr(self, "_past_usb_search", False) and not is_mtk_device_connected():
+                self._log("Install ended with error and device is no longer connected to USB.")
+                self._is_disconnected = True
+                self.cancel()
+                self.usb_disconnected.emit()
+                self.finished.emit(False, "USB_DISCONNECTED")
+                return
+            if self._attempt_expired:
+                self.finished.emit(False, ERR_ATTEMPT_TIMEOUT)
                 return
             if self._tool_error:
                 self._log(f"Install failed: {self._tool_error}")
                 self.finished.emit(False, "TOOL_ERROR")
             elif self._process.returncode == 0:
+                try:
+                    from . import mtk_api
+                    mtk_api.fire_mtk_reset(timeout=2.0)
+                except Exception:
+                    pass
                 self.finished.emit(True, "")
             else:
                 self.finished.emit(final_ok, final_msg or f"MTK_FLASH_FAILED ({self._process.returncode})")
@@ -3091,8 +3310,14 @@ class FlashWorker(QThread):
         if not self.reboot_after_success:
             self._log("Flash complete! Disconnect USB and reboot the device.")
             return False
-        if mtk_reset_to_normal(mtk, da_handler):
-            self._log("Flash complete! Rebooting the player into the installed firmware...")
+        self._log("Flash complete! Firing mtk reset to boot the device...")
+        from . import mtk_api
+        rebooted = mtk_reset_to_normal(mtk, da_handler)
+        if rebooted:
+            self._log("Device reset command sent successfully. Rebooting into installed firmware...")
+            return True
+        if mtk_api.fire_mtk_reset(timeout=4.0):
+            self._log("Device rebooted via mtk reset.")
             return True
         self._log("Flash complete! Disconnect USB and reboot the device.")
         return False
@@ -3386,6 +3611,7 @@ class FlashWorker(QThread):
         self.step_changed.emit(STEP_DOWNLOAD_BL)
         self.progress.emit(18)
         self.action_changed.emit(tr("action_device_connected"))
+        self._apply_mtk_write_strategy(mtk, image_files)
 
         total = len(image_files)
 
@@ -3604,6 +3830,13 @@ class FlashWorker(QThread):
                 except BaseException as e:
                     # BaseException: mtkclient may sys.exit() on DA errors; keep it
                     # a clean per-partition failure, never an app crash.
+                    if is_disconnection_error(str(e), e) or not is_mtk_device_connected():
+                        self._log(f"USB disconnection detected during partition write: {e}")
+                        self._is_disconnected = True
+                        self.cancel()
+                        self.usb_disconnected.emit()
+                        self.finished.emit(False, "USB_DISCONNECTED")
+                        return
                     if is_preloader:
                         self._log(f"Warning: Non-fatal preloader write issue ignored: {e}")
                     else:
@@ -3629,7 +3862,12 @@ class FlashWorker(QThread):
                         self._emit_progress(percent_of(completed_bytes, total_bytes, 20, 75))
                         self._emit_eta(completed_bytes, total_bytes)
 
-
+            if self._is_disconnected or is_disconnection_error(self._tool_error):
+                self._log("Install stopped due to USB disconnection.")
+                self.cancel()
+                self.usb_disconnected.emit()
+                self.finished.emit(False, "USB_DISCONNECTED")
+                return
             if self._tool_error:
                 # The tool said a command failed and then stopped; the player
                 # is very likely half written. Say so instead of "complete".
@@ -3658,6 +3896,28 @@ class FlashWorker(QThread):
     def _is_legacy_mode(self, mtk):
         mode = getattr(getattr(mtk, "daloader", None), "flashmode", None)
         return mode == 3 or mode == "LEGACY"
+
+    def _apply_mtk_write_strategy(self, mtk, image_files) -> int:
+        """Drive the legacy DA with the same transfer size the reference build uses.
+
+        The bundled DA takes the chunk size from ``config.write_chunk_size``; left
+        unset it writes 1 MiB per USB transfer, which is not what the Chinese
+        build does for MT6572/MT6582. Returns the size it applied (0 when the
+        session is not a legacy DA, so nothing is claimed in the log).
+        """
+        if not self._is_legacy_mode(mtk):
+            return 0
+        chunk = legacy_write_chunk_size([path for _name, path in image_files])
+        try:
+            mtk.config.write_chunk_size = chunk
+        except Exception as e:
+            logger.debug("Could not set the legacy write chunk size: %s", e)
+            return 0
+        self._log(
+            f"Legacy DA write chunk size: {chunk // 1024} KiB "
+            "(matches the reference build)"
+        )
+        return chunk
 
     def _resolve_preloader_target_parts(self, mtk, normalized_region: str = ""):
         norm = normalized_region.upper() if normalized_region else ""
@@ -3861,6 +4121,57 @@ def _load_libusb_backend():
         pass
 
     return None, None
+
+
+def is_mtk_device_connected() -> bool:
+    """Check if any MediaTek device is currently attached to USB."""
+    try:
+        usb_core, backend = _load_libusb_backend()
+        if usb_core is None:
+            return False
+        devices = usb_core.find(find_all=True, backend=backend)
+        for dev in devices:
+            try:
+                vid = dev.idVendor
+                pid = dev.idProduct
+                if vid in _MTK_FLASH_IDS and pid in _MTK_FLASH_IDS[vid]:
+                    return True
+                if vid in _MTK_VENDOR_IDS:
+                    return True
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return False
+
+
+_DISCONNECTION_PATTERNS = (
+    "device disconnected",
+    "device lost",
+    "usb disconnected",
+    "disconnection",
+    "libusb_error_no_device",
+    "libusb_error_io",
+    "libusb_error_pipe",
+    "no such device",
+    "broken pipe",
+    "connection reset",
+    "connection aborted",
+    "err_usb_lost",
+    "status_device_disconnected",
+    "device_disconnected",
+)
+
+
+def is_disconnection_error(error_code_or_msg: str = "", exc: BaseException | None = None) -> bool:
+    """Detect whether a failure string or exception corresponds to an abrupt USB disconnect."""
+    text = str(error_code_or_msg or "").lower()
+    if exc is not None:
+        text += f" {str(exc).lower()} {type(exc).__name__.lower()}"
+    for pat in _DISCONNECTION_PATTERNS:
+        if pat in text:
+            return True
+    return False
 
 
 class DeviceMonitor(QThread):
@@ -4135,6 +4446,14 @@ class FlashService(QObject):
         # then start the new one. The cancelled worker's late terminal signals
         # are detached so they cannot reach the UI or clobber the new run.
         retired = self.cancel_flash()
+        # The previous window is over, so anything it left behind (including a
+        # tool orphaned by a crash) goes now, and this run opens a fresh one:
+        # the port has to be free before a new device search begins.
+        from . import process_guard
+
+        process_guard.end_install_session(reason="restart", sweep=False)
+        process_guard.sweep_async(reason="before install")
+        process_guard.begin_install_session(reason="install")
         primed = self.take_primed_mtk()
         worker = FlashWorker(
             package_path,
@@ -4252,6 +4571,12 @@ class FlashService(QObject):
             except Exception:
                 logger.debug("Waiting for the install worker failed", exc_info=True)
         killed = terminate_sp_sessions()
+        # The hand-over (or shutdown) ends the install window, so every tool
+        # process goes — including one this app did not start itself.
+        from . import process_guard
+
+        for item in process_guard.end_install_session(reason="session hand-over"):
+            killed.append(item.get("pid"))
         if worker is None and not killed:
             return "No install session was running."
         if waited:
@@ -4265,3 +4590,6 @@ class FlashService(QObject):
         self.cancel_flash()
         self.cancel_extract()
         self.stop_device_monitor()
+        from . import process_guard
+
+        process_guard.end_install_session(reason="shutdown")

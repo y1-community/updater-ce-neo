@@ -12,8 +12,8 @@ The build pipeline generates two distribution forms per brand:
 
 | Branding | Setup Installer | Portable Application Folder & Binary |
 | :--- | :--- | :--- |
-| **Updater CE** | `dist/UpdaterCE-Setup-3.0.0.exe` | `dist/InnioasisUpdater/InnioasisUpdater.exe` |
-| **MediaTek Installer** | `dist/MediaTekInstaller-Setup-3.0.0.exe` | `dist/MediaTekInstaller/MediaTekInstaller.exe` |
+| **Updater CE** | `dist/UpdaterCE-Setup-2.5.0.exe` | `dist/InnioasisUpdater/InnioasisUpdater.exe` |
+| **MediaTek Installer** | `dist/MediaTekInstaller-Setup-2.5.0.exe` | `dist/MediaTekInstaller/MediaTekInstaller.exe` |
 
 ---
 
@@ -114,8 +114,8 @@ chmod +x build_appimage.sh
 ```
 
 **Linux Outputs (`dist/`):**
-- `dist/UpdaterCE-3.0.0-x86_64.AppImage`
-- `dist/MediaTekInstaller-3.0.0-x86_64.AppImage`
+- `dist/UpdaterCE-2.5.0-x86_64.AppImage`
+- `dist/MediaTekInstaller-2.5.0-x86_64.AppImage`
 
 ---
 

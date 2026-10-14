@@ -14,6 +14,7 @@ from PySide6.QtCore import (
     QEventLoop,
     QPropertyAnimation,
     QRectF,
+    QSize,
     Qt,
     QTimer,
     QVariantAnimation,
@@ -872,6 +873,112 @@ class UpdateToast(QWidget):
         painter.end()
 
 
+class BatteryToast(QFrame):
+    """Toast hint shown on first run reminding user to charge player/device battery before use.
+
+    Features a card panel texture matching settings cards and firmware filters, with a circular checkmark (dismiss) button.
+    """
+
+    dismissed = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("batteryToastHint")
+        self.setProperty("cssClass", "card")
+        self.setAutoFillBackground(False)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.setMinimumHeight(38)
+        row = QHBoxLayout(self)
+        row.setContentsMargins(14, 8, 12, 8)
+        row.setSpacing(10)
+
+        self._icon = QLabel("🔋", self)
+        self._icon.setStyleSheet("font-size: 14px; background: transparent; border: none;")
+        row.addWidget(self._icon, 0, Qt.AlignVCenter)
+
+        self._label = QLabel(self._get_battery_text(), self)
+        self._label.setWordWrap(True)
+        self._label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        font = self._label.font()
+        font.setPixelSize(12)
+        font.setWeight(QFont.Weight.Medium)
+        self._label.setFont(font)
+        _apply_banner_text(self._label)
+        row.addWidget(self._label, 1, Qt.AlignVCenter)
+
+        from .icons import get_symbol_icon
+
+        self._dismiss_btn = QPushButton(self)
+        self._dismiss_btn.setObjectName("batteryToastDismissBtn")
+        self._dismiss_btn.setFixedSize(24, 24)
+        self._dismiss_btn.setCursor(Qt.PointingHandCursor)
+        self._dismiss_btn.setIcon(get_symbol_icon("check", 12))
+        self._dismiss_btn.setIconSize(QSize(12, 12))
+        self._dismiss_btn.setToolTip(tr("toast_dismiss"))
+        self._dismiss_btn.setStyleSheet(
+            "QPushButton#batteryToastDismissBtn {"
+            "  border-radius: 12px;"
+            "  background: rgba(37, 99, 235, 0.18);"
+            "  border: none;"
+            "}"
+            "QPushButton#batteryToastDismissBtn:hover {"
+            "  background: rgba(37, 99, 235, 0.32);"
+            "}"
+            "QPushButton#batteryToastDismissBtn:pressed {"
+            "  background: rgba(37, 99, 235, 0.45);"
+            "}"
+        )
+        self._dismiss_btn.clicked.connect(self.dismissed.emit)
+        row.addWidget(self._dismiss_btn, 0, Qt.AlignVCenter)
+
+    def _get_battery_text(self) -> str:
+        from ..branding import is_generic_mtk_brand
+
+        key = "toast_battery_charged_device" if is_generic_mtk_brand() else "toast_battery_charged"
+        return tr(key)
+
+    def retranslate(self) -> None:
+        from .icons import get_symbol_icon
+
+        self._label.setText(self._get_battery_text())
+        _apply_banner_text(self._label)
+        self._dismiss_btn.setToolTip(tr("toast_dismiss"))
+        self._dismiss_btn.setIcon(get_symbol_icon("check", 12))
+
+    def refresh_theme(self) -> None:
+        _apply_banner_text(self._label)
+        self.update()
+
+    def paintEvent(self, event):  # noqa: N802 (Qt naming)
+        """Frost the toast card consistent with settings cards and filter group."""
+        from .surfaces import glass_surfaces_enabled
+
+        if not glass_surfaces_enabled():
+            super().paintEvent(event)
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setClipRect(event.rect())
+        from .dark import is_dark
+
+        rect = self.rect().adjusted(0, 0, -1, -1)
+        path = QPainterPath()
+        path.addRoundedRect(rect, 8, 8)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(0, 0, 0, 0))
+        painter.fillPath(path, QColor(0, 0, 0, 0))
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+        fill = QColor(255, 255, 255, 18 if is_dark() else 32)
+        painter.setBrush(fill)
+        painter.fillPath(path, fill)
+        edge = QColor(255, 255, 255, 40) if is_dark() else QColor(0, 0, 0, 36)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.setPen(QPen(edge))
+        painter.drawPath(path)
+        painter.end()
+
+
 # ---------------------------------------------------------------------------
 # Progress bars
 # ---------------------------------------------------------------------------
@@ -1006,12 +1113,22 @@ class InstallProgress(QProgressBar):
         if self.is_busy():
             self._sync_animation()
 
+    def set_failed(self, failed: bool = True, text: str = "") -> None:
+        """Switch the progress bar to the failed state: percent replaced by 'Install Failed'."""
+        self._failed = bool(failed)
+        self._failed_text = text or tr("install_failed")
+        self._sync_animation()
+        self.update()
+
+    def is_failed(self) -> bool:
+        return getattr(self, "_failed", False)
+
     def _sync_animation(self) -> None:
         """Sweep only while a busy bar is on screen and motion is allowed."""
         timer = getattr(self, "_timer", None)
         if timer is None:
             return
-        wanted = self.is_busy() and self.isVisible() and not prefers_reduced_motion()
+        wanted = self.is_busy() and not self.is_failed() and self.isVisible() and not prefers_reduced_motion()
         if wanted and not timer.isActive():
             self._sweep = 0.0
             timer.start()
@@ -1024,6 +1141,8 @@ class InstallProgress(QProgressBar):
         self.update()
 
     def text(self) -> str:
+        if self.is_failed():
+            return getattr(self, "_failed_text", "") or tr("install_failed")
         pv = getattr(self, "_precise_value", None)
         if pv is not None and not self.is_busy():
             return f"{pv:.1f}%"
@@ -1031,6 +1150,8 @@ class InstallProgress(QProgressBar):
 
     def fraction(self) -> float:
         """How much of the track the chunk covers, 0.0 to 1.0."""
+        if self.is_failed():
+            return 0.0
         pv = getattr(self, "_precise_value", None)
         if pv is not None and not self.is_busy():
             return max(0.0, min(1.0, pv / 100.0))
@@ -1041,8 +1162,12 @@ class InstallProgress(QProgressBar):
 
     # -- paint ---------------------------------------------------------
     def paintEvent(self, event):  # noqa: N802 (Qt naming)
-        busy = self.is_busy()
+        busy = self.is_busy() and not self.is_failed()
         track, fill, label_color = progress_bar_colors(self)
+        if self.is_failed():
+            from .dark import T
+            t = T()
+            label_color = QColor(t.danger_fg)
         text = "" if busy or not self.isTextVisible() else (self.text() or "")
         painter = QPainter(self)
         paint_progress_bar(

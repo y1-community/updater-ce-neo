@@ -428,12 +428,9 @@ def compact_install_height(
     exactly one header short and clipped the bottom status line.
     """
     header_h = int(HEADER_CONTENT_HEIGHT) if inline_header else 0
-    height = max(COMPACT_INSTALL_MIN_HEIGHT, page_h + prompt_h + status_h + header_h)
     if donations_disabled:
-        # Without the appeal under the card the status bar is the only extra
-        # row, so the window can give its height back.
-        height = max(COMPACT_INSTALL_MIN_HEIGHT_NO_DONATIONS, height - status_h)
-    return height
+        return max(COMPACT_INSTALL_MIN_HEIGHT_NO_DONATIONS, page_h + prompt_h + header_h)
+    return max(COMPACT_INSTALL_MIN_HEIGHT, page_h + prompt_h + status_h + header_h)
 
 
 def page_title_alignment() -> Qt.AlignmentFlag:
@@ -534,6 +531,9 @@ class _DropOverlay(QWidget):
 
 
 class MainWindow(QMainWindow):
+    # Report from a background flash-tool sweep; ``list`` of what it stopped.
+    sweep_report = Signal(list)
+
     log_line_added = Signal(str)
 
     def __init__(self):
@@ -578,6 +578,7 @@ class MainWindow(QMainWindow):
         self._install_ui_active = False
         self._download_active = False
         self._install_failed = False
+        self._failure_title = ""
         # True once this install has already fallen back to the other backend:
         # one automatic switch per run, so a bad cable cannot ping-pong.
         self._fallback_attempted = False
@@ -1380,10 +1381,7 @@ class MainWindow(QMainWindow):
             )
 
         self._update_author_label()
-        if is_mac and hasattr(self, "_select_page") and hasattr(self._select_page, "_title"):
-            self._select_page._title.setStyleSheet(
-                "font-size: 13px; font-weight: 600; color: palette(window-text); letter-spacing: normal; background: transparent; border: none;"
-            )
+        self._update_header_title()
 
         if hasattr(self, "_lang_label"):
             self._lang_label.setStyleSheet(
@@ -1416,6 +1414,7 @@ class MainWindow(QMainWindow):
 
 
     def _connect_signals(self):
+        self.sweep_report.connect(self._on_sweep_report)
         self._select_page.package_selected.connect(self._on_package_selected)
         self._select_page.gui_release_clicked.connect(self._on_gui_release_clicked)
         self._select_page.release_icon_ready.connect(self._on_release_icon_ready)
@@ -1889,11 +1888,16 @@ class MainWindow(QMainWindow):
         from .. import device_tracking, downloads, config
         from ..i18n import translator
 
-        # 1. Clear QSettings
+        # 1. Clear QSettings across all namespaces
         s = QSettings("innioasis", "updater")
         s.clear()
+        s.remove("battery_hint_dismissed")
         s_caps = QSettings("Innioasis", "UpdaterCE")
         s_caps.clear()
+        s_caps.remove("battery_hint_dismissed")
+        s_ref = QSettings("Innioasis", "Innioasis Updater")
+        s_ref.clear()
+        s_ref.remove("battery_hint_dismissed")
 
         # 2. Reset device_tracking and ensure credits/donations are opted in
         device_tracking.set_donation_ui_disabled(False, s)
@@ -1910,9 +1914,20 @@ class MainWindow(QMainWindow):
         for name in getattr(device_tracking, "FILTER_NAMES", ()):
             device_tracking.set_rockbox_release_filter(name, False, s)
 
-        # 3. Clear firmware downloads cache
+        # 3. Clear firmware downloads cache and completely wipe downloads folder
         try:
             downloads.clear_firmware_cache()
+            d = downloads.downloads_dir()
+            if d.is_dir():
+                import shutil
+                for item in list(d.iterdir()):
+                    try:
+                        if item.is_file() or item.is_symlink():
+                            item.unlink()
+                        elif item.is_dir():
+                            shutil.rmtree(item, ignore_errors=True)
+                    except Exception as e:
+                        logger.debug("Failed removing %s during reset: %s", item, e)
         except Exception as e:
             logger.debug("clear_firmware_cache error during reset: %s", e)
 
@@ -1924,7 +1939,7 @@ class MainWindow(QMainWindow):
                 import shutil
                 for item in app_cache.iterdir():
                     try:
-                        if item.is_file():
+                        if item.is_file() or item.is_symlink():
                             item.unlink()
                         elif item.is_dir():
                             shutil.rmtree(item, ignore_errors=True)
@@ -1941,7 +1956,7 @@ class MainWindow(QMainWindow):
                 import shutil
                 for item in manifest_cache.iterdir():
                     try:
-                        if item.is_file():
+                        if item.is_file() or item.is_symlink():
                             item.unlink()
                         elif item.is_dir():
                             shutil.rmtree(item, ignore_errors=True)
@@ -1963,11 +1978,15 @@ class MainWindow(QMainWindow):
             self._settings_page.refresh_settings()
 
         self._apply_donation_visibility(False)
-        if hasattr(self, "_select_page") and hasattr(self._select_page, "_check_and_load_cached_firmware"):
-            self._select_page._check_and_load_cached_firmware()
+        if hasattr(self, "_select_page"):
+            if hasattr(self._select_page, "reset_selection_and_filters"):
+                self._select_page.reset_selection_and_filters()
+            elif hasattr(self._select_page, "_check_battery_toast_visibility"):
+                self._select_page._check_battery_toast_visibility()
 
-        self.statusBar().showMessage(tr("settings_cache_cleared_msg").format(count=0, size="0 MB") if hasattr(self, "tr") else "Configuration reset to default and caches cleared.", 4000)
-        self._append_log("App configuration reset to default and caches cleared (R).")
+        self._nav_to_page(_PAGE_SELECT)
+        self.statusBar().showMessage("App completely reset to defaults, download cache cleared, and battery reminder restored.", 4000)
+        self._append_log("App configuration completely reset to defaults, download cache cleared, and battery reminder restored (R).")
 
     def _install_run_active(self) -> bool:
         """True while a flash run or download run is in progress."""
@@ -2255,9 +2274,8 @@ class MainWindow(QMainWindow):
             if curr_idx == _PAGE_FLASH:
                 if hasattr(page, "content_height_hint"):
                     page_h = max(page_h, page.content_height_hint(content_w))
-                actual_chrome = max(
-                    self._window_chrome()[1],
-                    status_h + (int(HEADER_CONTENT_HEIGHT) if getattr(self, "_title_bar", None) is not None else 0),
+                actual_chrome = (
+                    status_h + (int(HEADER_CONTENT_HEIGHT) if getattr(self, "_title_bar", None) is not None else 0)
                 )
                 target_h = max(
                     compact_install_height(
@@ -2371,8 +2389,9 @@ class MainWindow(QMainWindow):
         height = int(height)
         anim = getattr(self, "_size_anim", None)
         if anim is not None:
+            self._size_anim = None
             try:
-                anim.finished.disconnect(self._finish_size_anim)
+                anim.finished.disconnect()
             except Exception:
                 pass
             anim.stop()
@@ -2409,6 +2428,7 @@ class MainWindow(QMainWindow):
         anim.start()
 
     def _finish_size_anim(self) -> None:
+        self._size_anim = None
         self._size_animating = False
         floor = getattr(self, "_size_anim_minimum", None)
         self._size_anim_minimum = None
@@ -2546,8 +2566,10 @@ class MainWindow(QMainWindow):
         if page_idx == _PAGE_DIAGNOSTICS:
             return tr("log_center")
         if page_idx == _PAGE_FLASH:
-            if getattr(self, "_install_failed", False):
-                return tr("flash_failed_title")
+            if getattr(self, "_install_failed", False) or (
+                hasattr(self, "sm") and self.sm.state in (FlashState.S5_FAILED, FlashState.S5_USB_DISCONNECTED)
+            ):
+                return getattr(self, "_failure_title", None) or tr("install_failed_title")
             if getattr(self, "_power_off_prompt", False):
                 return tr("dialog_pre_install_title")
             if getattr(self, "_install_complete", False):
@@ -2556,7 +2578,7 @@ class MainWindow(QMainWindow):
                 return tr("flash_download_in_progress")
             return tr("flash_install_in_progress") if install_active else tr("flash_ready_title")
         if page_idx == _PAGE_ERROR:
-            return tr("flash_failed_title")
+            return getattr(self, "_failure_title", None) or tr("install_failed_title")
         if page_idx == _PAGE_RETRY:
             return tr("flash_retry_title")
         if page_idx == _PAGE_NOTICE:
@@ -2565,7 +2587,41 @@ class MainWindow(QMainWindow):
             return tr("nav_donate")
         return tr("sel_title")
 
+    def _update_header_title(self):
+        """Update header page title text and visual style in the unified title bar."""
+        if not (hasattr(self, "_select_page") and hasattr(self._select_page, "_title")):
+            return
+        title = self._select_page._title
+        curr_idx = self._stack.currentIndex() if hasattr(self, "_stack") else _PAGE_SELECT
+        install_active = self._install_run_active() or getattr(self, "_compact_install_screen", False)
+        failed = getattr(self, "_install_failed", False) or (
+            hasattr(self, "sm") and self.sm.state in (FlashState.S5_FAILED, FlashState.S5_USB_DISCONNECTED)
+        )
+        text = self._page_title(curr_idx, install_active)
+        title.setText(text)
+        self._align_page_title()
+
+        is_mac = sys.platform == "darwin"
+        font_size = "13px" if is_mac else "14px"
+        from .dark import T
+        t = T()
+        if failed and curr_idx in (_PAGE_FLASH, _PAGE_ERROR):
+            title.setStyleSheet(
+                f"font-size: {font_size}; font-weight: 700; color: {t.danger_fg}; background: transparent; border: none;"
+            )
+        else:
+            title.setStyleSheet(
+                f"font-size: {font_size}; font-weight: 600; color: palette(window-text); letter-spacing: normal; background: transparent; border: none;"
+            )
+        from .surfaces import seal_updating_text
+        seal_updating_text(title)
+        title_host = getattr(self, "_title_container", None)
+        if title_host is not None:
+            self._paint_opaque(title_host)
+            title_host.update()
+
     def _highlight_nav(self, page_idx, install_active: bool):
+        SidebarButton.dismiss_focus_rings()
         if page_idx == _PAGE_DIAGNOSTICS and hasattr(self, "_log_btn"):
             checked = self._log_btn
         elif page_idx == _PAGE_SUPPORT:
@@ -2593,6 +2649,7 @@ class MainWindow(QMainWindow):
                 btn.update()
 
     def _nav_to_page(self, page_idx):
+        SidebarButton.dismiss_focus_rings()
         if self._install_run_active() and page_idx not in (
             _PAGE_FLASH, _PAGE_DIAGNOSTICS, _PAGE_NOTICE, _PAGE_RETRY,
         ):
@@ -2607,16 +2664,7 @@ class MainWindow(QMainWindow):
         self._highlight_nav(page_idx, install_active)
 
         # Update header page title in the unified title bar
-        if hasattr(self, "_select_page") and hasattr(self._select_page, "_title"):
-            title = self._select_page._title
-            title.setText(self._page_title(page_idx, install_active))
-            self._align_page_title()
-            from .surfaces import seal_updating_text
-            seal_updating_text(title)
-            title_host = getattr(self, "_title_container", None)
-            if title_host is not None:
-                self._paint_opaque(title_host)
-                title_host.update()
+        self._update_header_title()
 
         self._adjust_window_geometry()
         QTimer.singleShot(0, self._verify_native_chrome)
@@ -3034,6 +3082,12 @@ class MainWindow(QMainWindow):
             return
         self._install_failed = False
         self._power_off_prompt = False
+        # The window in which a flash backend may run starts here, with the
+        # guidance that asks for the device, and nothing may sweep the tools
+        # away until the run reports its result.
+        from .. import process_guard
+
+        process_guard.begin_install_session(reason="guided install")
         if self._needs_device_prep() and not getattr(self, "_pre_install_guided", False):
             self._show_device_prep()
             return
@@ -3124,7 +3178,7 @@ class MainWindow(QMainWindow):
             auth_file=auth_file,
             is_rockbox=self._is_360p_rockbox,
         )
-        self.service.start_device_monitor()
+        self.service.stop_device_monitor()
 
     def _on_step_changed(self, step):
         if step in (STEP_DETECT, STEP_DONE) or step in _WRITE_STEPS:
@@ -3137,6 +3191,8 @@ class MainWindow(QMainWindow):
         self._on_progress(self._last_progress)
         if step == STEP_EXTRACTING:
             self._flash_page.show_preparing()
+        elif step == STEP_DETECT:
+            self._flash_page.show_please_wait(connecting=True)
         elif step == STEP_PLEASE_WAIT:
             self._usb_search_active = False
             self._last_progress = 0
@@ -3217,6 +3273,16 @@ class MainWindow(QMainWindow):
                 self._append_log_line(line, dedupe=dedupe)
 
     def _append_log_line(self, msg, dedupe=False):
+        raw = str(msg or "").strip()
+        if not raw or set(raw) <= {'.'}:
+            return
+        if any(w in raw for w in ("RuntimeWarning", "UserWarning", "DeprecationWarning", "innioasis.startup")):
+            return
+        if raw.startswith("."):
+            stripped = raw.lstrip(". ")
+            if not stripped or stripped == "Preloader":
+                return
+            msg = stripped
         self._log_lines.append(msg)
         if getattr(self, "_run_output_open", False):
             self._run_output.append(msg)
@@ -3293,32 +3359,40 @@ class MainWindow(QMainWindow):
         self._append_log(f"Device detected: {port}")
         self._flash_page.set_detected()
 
+    def _on_flash_disconnected(self):
+        """Handle abrupt USB disconnection during flash, kill tasks and show recovery prompt."""
+        try:
+            self.sm.transition_to(FlashState.S5_USB_DISCONNECTED)
+        except ValueError:
+            self.sm.force_state(FlashState.S5_USB_DISCONNECTED)
+        self._elapsed_timer.stop()
+        self.service.stop_device_monitor()
+        self.service.cancel_flash()
+        from .. import process_guard
+        process_guard.end_install_session(reason="usb disconnected", sweep=False)
+        process_guard.sweep_async(reason="usb disconnected", on_done=self.sweep_report.emit)
+        try:
+            from ..sleep_inhibit import release_sleep_inhibition
+            release_sleep_inhibition()
+        except Exception:
+            pass
+        self._install_failed = True
+        self._power_off_prompt = False
+        self._install_complete = False
+        self._failure_title = tr("err_usb_lost_title")
+        if hasattr(self, "_package_model") and self._package_model:
+            self._flash_page.set_model(self._package_model)
+        self._flash_page.show_usb_disconnected(
+            on_retry=self._on_power_off_continue,
+            on_cancel=self._on_cancel_flash,
+        )
+        self._nav_to_page(_PAGE_FLASH)
+        self._update_header_title()
+        self._adjust_window_geometry()
+
     def _on_device_lost(self):
-        if self.sm.state is FlashState.S4_FLASHING:
-            try:
-                self.sm.transition_to(FlashState.S5_USB_DISCONNECTED)
-            except ValueError:
-                return
-            self._elapsed_timer.stop()
-            # The run is over (the target is gone), so the USB monitor has
-            # nothing left to watch and must not keep polling in the
-            # background; a retry starts a fresh one.
-            self.service.stop_device_monitor()
-            self.service.cancel_flash()
-            try:
-                from ..sleep_inhibit import release_sleep_inhibition
-                release_sleep_inhibition()
-            except Exception:
-                pass
-            self._install_failed = True
-            self._power_off_prompt = False
-            self._install_complete = False
-            self._flash_page.show_usb_disconnected(
-                on_retry=self._on_progress_retry,
-                on_cancel=self._on_cancel_flash,
-            )
-            self._nav_to_page(_PAGE_FLASH)
-            self._adjust_window_geometry()
+        if self.sm.state is FlashState.S4_FLASHING or getattr(self, "_past_usb_search", False):
+            self._on_flash_disconnected()
         elif self.sm.state in (FlashState.S2_WAIT_CONNECTION, FlashState.S3_DEVICE_DETECTED):
             try:
                 self.sm.transition_to(FlashState.S2_WAIT_CONNECTION)
@@ -3332,6 +3406,19 @@ class MainWindow(QMainWindow):
 
     def _on_flash_finished(self, ok, error_code):
         self._elapsed_timer.stop()
+        # Success and failure end the install window the same way: every
+        # backend this app started goes now, in the background so the result
+        # (or a retry) is never held up by process cleanup.
+        from .. import process_guard
+
+        process_guard.end_install_session(reason="run finished", sweep=False)
+        # The sweep runs on its own thread, so its report comes back through a
+        # signal: appending to the log touches widgets and belongs on the GUI
+        # thread.
+        process_guard.sweep_async(
+            reason="install finished" if ok else "install failed",
+            on_done=self.sweep_report.emit,
+        )
         # Device monitoring belongs to a run in progress and stops with it, on
         # success and failure alike: otherwise a failed attempt (the common
         # case when the device is not powered off properly) left a USB polling
@@ -3511,8 +3598,12 @@ class MainWindow(QMainWindow):
         self._install_failed = True
         self._power_off_prompt = False
         self._install_complete = False
-        self._flash_page.show_install_failure(message, self._last_progress or 0)
+        from ..flash_service import parse_flash_error
+        parsed_title, explanation = parse_flash_error(message, getattr(self, "_package_model", ""))
+        self._failure_title = parsed_title
+        self._flash_page.show_install_failure(parsed_title, explanation, self._last_progress or 0)
         self._nav_to_page(_PAGE_FLASH)
+        self._update_header_title()
 
     def _handle_flash_failure(self, error_code):
         try:
@@ -3521,6 +3612,15 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
         self._download_active = False
+        from ..flash_service import is_disconnection_error, is_mtk_device_connected
+        if (
+            error_code == "USB_DISCONNECTED"
+            or is_disconnection_error(error_code)
+            or (getattr(self, "_past_usb_search", False) and not is_mtk_device_connected())
+        ):
+            self._append_log(f"Flash failed due to device disconnection ({error_code}).")
+            self._on_flash_disconnected()
+            return
         # A backend that never got going is not the end of the install on a
         # host that has the other engine: hand the user back to the power-off
         # step and start the other one from there.
@@ -3530,7 +3630,7 @@ class MainWindow(QMainWindow):
             self.sm.transition_to(FlashState.S5_FAILED)
         except ValueError:
             self.sm.force_state(FlashState.S5_FAILED)
-        self._show_install_failure(str(error_code or tr("flash_failed")))
+        self._show_install_failure(str(error_code or tr("install_failed")))
 
     # ------------------------------------------------------------------
     # Backend failover
@@ -3616,6 +3716,8 @@ class MainWindow(QMainWindow):
         self.service.stop_device_monitor()
         self._elapsed_timer.stop()
         self._install_failed = False
+        self._failure_title = ""
+        self._flash_page.clear_install_failure()
         self._power_off_prompt = True
         self._pre_install_guided = False
         if self.sm.state in (
@@ -3635,6 +3737,16 @@ class MainWindow(QMainWindow):
         if getattr(self, "_gui_handoff_ready", False):
             self._complete_gui_handoff()
             return
+        if self.sm.state in (
+            FlashState.S5_FAILED,
+            FlashState.S5_USB_DISCONNECTED,
+            FlashState.S4_FLASHING,
+            FlashState.S5_COMPLETE,
+        ):
+            self.sm.reset_for_retry()
+        self._install_failed = False
+        self._failure_title = ""
+        self._flash_page.clear_install_failure()
         self._power_off_prompt = False
         self._pre_install_guided = True
         self._flash_page.leave_power_off_prompt()
@@ -4407,11 +4519,7 @@ class MainWindow(QMainWindow):
             self._lang_label.setText(tr("nav_language"))
         if hasattr(self, "_select_page"):
             self._select_page.retranslate()
-            if hasattr(self._select_page, "_title"):
-                curr_idx = self._stack.currentIndex() if hasattr(self, "_stack") else _PAGE_SELECT
-                self._select_page._title.setText(
-                    self._page_title(curr_idx, self._install_run_active())
-                )
+            self._update_header_title()
         self._flash_page.retranslate()
         if hasattr(self, "_support_page"):
             self._support_page.retranslate()
@@ -4573,6 +4681,14 @@ class MainWindow(QMainWindow):
             or getattr(self, "_install_failed", False)
         )
 
+    def _on_sweep_report(self, killed) -> None:
+        """Log what a background flash-tool sweep cleaned up."""
+        from .. import process_guard
+
+        text = process_guard.describe(killed)
+        if text:
+            self._append_log(text)
+
     def _release_status_to_donors(self) -> None:
         sb = self.statusBar()
         if sb is not None:
@@ -4635,7 +4751,7 @@ class MainWindow(QMainWindow):
         mediatek = is_mediatek_installer()
         self.setWindowTitle(f"{get_app_name()} v{APP_VERSION}")
         if hasattr(self, "_brand_label"):
-            # Reads as "Installer 3.0" beside the version badge.
+            # Reads as "Installer 2.5" beside the version badge.
             self._brand_label.setText(get_brand_name())
         # Update checks require an internet connection, so offline/generic hides them.
         # Credits and author attribution remain visible in offline mode for Updater CE,
@@ -4749,6 +4865,13 @@ class MainWindow(QMainWindow):
                 release_sleep_inhibition()
             except Exception:
                 pass
+
+        # Closing the window ends any install window: a backend left behind
+        # would hold the USB port after the app is gone.
+        from .. import process_guard
+
+        for item in process_guard.end_install_session(reason="app closed"):
+            logger.info("Stopped leftover %s (pid %s) on close", item.get("tool"), item.get("pid"))
 
         if hasattr(self, "_theme_watcher") and self._theme_watcher:
             try:

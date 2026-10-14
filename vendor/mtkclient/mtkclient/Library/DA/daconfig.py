@@ -89,7 +89,6 @@ class DAconfig(metaclass=LogBase):
         self.legacy_storage = Legacy_Storage(mtk, self, loglevel)
         self.reconnect = self.config.reconnect
         self.uartloglevel = self.config.uartloglevel
-        self.logchannel = self.config.logchannel
         self.sparesize = 0
         self.readsize = 0
         self.pagesize = 512

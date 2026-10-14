@@ -1,9 +1,11 @@
 """App update checking.
 
 Compares the latest release of the app's GitHub repo against the installed
-``APP_VERSION`` and, when a newer version exists, picks the right download
-asset for the current OS (Windows / macOS / Linux) so the UI can walk the user
-through download and installation.
+``APP_VERSION`` and, when a newer version exists *for this OS*, picks the right
+download asset so the UI can walk the user through download and installation.
+A release with no asset for the running platform is not offered at all: the
+rewrite goes out one platform at a time (see ``config.RELEASE_TARGETS``), so a
+Windows-only release must be invisible to a macOS or Linux build.
 
 The GitHub fetch reuses ``catalog.ReleasesClient`` (token + rate-limit aware,
 24 h per-user cache) and never raises: any failure simply reports \"no update\".
@@ -126,13 +128,26 @@ class UpdateChecker:
             return UpdateInfo()
         if not is_newer(data["tag_name"], self.current):
             return UpdateInfo()
+        assets = data.get("assets") or []
+        # Releases are staggered by platform: a release only exists for an OS
+        # once it carries an asset for it. Without one there is nothing this
+        # build could install, so offering the update would only produce a
+        # notice with no download behind it.
+        if not pick_platform_asset(assets):
+            logger.info(
+                "Release %s is not published for %s; staying on %s",
+                data["tag_name"],
+                asset_hint(),
+                self.current,
+            )
+            return UpdateInfo()
         return UpdateInfo(
             tag=data.get("tag_name", ""),
             name=data.get("name", ""),
             body=data.get("body", ""),
             published_at=data.get("published_at", ""),
             html_url=data.get("html_url", ""),
-            assets=data.get("assets") or [],
+            assets=assets,
         )
 
 

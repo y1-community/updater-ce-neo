@@ -6,7 +6,6 @@ max_xml_data_length = 0x200000
 class DataType:
     DT_PROTOCOL_FLOW = 1
     DT_MESSAGE = 2
-    DT_NONE = -1
 
 
 class ChecksumAlgorithm:
@@ -27,7 +26,6 @@ class LogLevel:
 class LogChannel:
     USB = "USB"
     UART = "UART"
-    BOTH = "BOTH"
 
 
 class BatterySetting:

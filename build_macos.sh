@@ -22,7 +22,7 @@ APP_ID="com.innioasis.updater"
 # generic cross-platform MediaTek Installer instead: its own name and bundle
 # id, and an app that knows it is offline-only.
 BRAND="$(printf '%s' "${BUILD_BRAND:-updater_ce}" | tr '[:upper:]-' '[:lower:]_')"
-VERSION=$(grep -oP 'APP_VERSION\s*=\s*"\K[^"]+' src/config.py 2>/dev/null || echo "3.0")
+VERSION=$(grep -oP 'APP_VERSION\s*=\s*"\K[^"]+' src/config.py 2>/dev/null || echo "2.5")
 DIST_DIR="dist"
 BUILD_DIR="build"
 SPEC_FILE="macos.spec"

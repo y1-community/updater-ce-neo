@@ -341,8 +341,6 @@ class DAloader(metaclass=LogBase):
             return 512
 
     def peek(self, addr: int, length: int, registers: bool = True):
-        if registers:
-            return self.peek_reg(addr=addr, length=length)
         if self.flashmode == DAmodes.XFLASH:
             return self.xft.custom_read(addr=addr, length=length, registers=registers)
         elif self.flashmode == DAmodes.LEGACY:
@@ -351,20 +349,12 @@ class DAloader(metaclass=LogBase):
             return self.xmlft.custom_read(addr=addr, length=length, registers=registers)
 
     def peek_reg(self, addr: int, length: int):
-        if length <= 0:
-            return b""
-        aligned_addr = addr & ~0x3
-        addr_offset = addr - aligned_addr
-        aligned_length = (addr_offset + length + 3) & ~0x3
         if self.flashmode == DAmodes.XFLASH:
-            data = self.xft.custom_read_reg(addr=aligned_addr, length=aligned_length)
+            return self.xft.custom_read_reg(addr=addr, length=length)
         elif self.flashmode == DAmodes.LEGACY:
-            data = self.lft.custom_read_reg(addr=aligned_addr, length=aligned_length)
+            return self.lft.custom_read_reg(addr=addr, length=length)
         elif self.flashmode == DAmodes.XML:
-            data = self.xmlft.custom_read_reg(addr=aligned_addr, length=aligned_length)
-        else:
-            return None
-        return data[addr_offset:addr_offset + length]
+            return self.xmlft.custom_read_reg(addr=addr, length=length)
 
     def dump_brom(self, filename):
         rm = None
@@ -392,18 +382,12 @@ class DAloader(metaclass=LogBase):
         #    return self.xft.get_partition_table_category()
         return "GPT"
 
-    def poke(self, addr: int, data: bytes or bytearray, registers:bool=False):
+    def poke(self, addr: int, data: bytes or bytearray):
         if self.flashmode == DAmodes.XFLASH:
-            if registers:
-                return self.xft.custom_writeregister(addr=addr, data=data)
             return self.xft.custom_write(addr=addr, data=data)
         elif self.flashmode == DAmodes.LEGACY:
-            if registers:
-                return self.lft.custom_writeregister(addr=addr, data=data)
             return self.lft.custom_write(addr=addr, data=data)
         elif self.flashmode == DAmodes.XML:
-            if registers:
-                return self.xmlft.custom_writeregister(addr=addr, data=data)
             return self.xmlft.custom_write(addr=addr, data=data)
 
     def keys(self):
@@ -433,13 +417,13 @@ class DAloader(metaclass=LogBase):
     def is_patched(self):
         return self.da.patch
 
-    def seccfg(self, lockflag, critical=False):
+    def seccfg(self, lockflag):
         if self.flashmode == DAmodes.XFLASH:
-            return self.xft.seccfg(lockflag, critical=critical)
+            return self.xft.seccfg(lockflag)
         elif self.flashmode == DAmodes.LEGACY:
-            return self.lft.seccfg(lockflag, critical=critical)
+            return self.lft.seccfg(lockflag)
         elif self.flashmode == DAmodes.XML:
-            return self.xmlft.seccfg(lockflag, critical=critical)
+            return self.xmlft.seccfg(lockflag)
 
     def nvitem(self, data=None, filename=None, encrypt=False, otp=None, seed=None, aeskey=None, display: bool = True):
         if data:

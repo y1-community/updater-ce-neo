@@ -62,12 +62,54 @@ def main():
     # from (and confirms the packaging baked the right one).
     from . import config
 
-    logging.getLogger("innioasis.startup").info(
-        "Starting %s v%s (brand: %s)",
-        config.get_app_name(),
-        config.APP_VERSION,
-        config.build_brand() or "updater_ce",
-    )
+    is_cli = len(sys.argv) >= 2 and sys.argv[1] in ("--flash-cli", "--mtk-reset", "--reset")
+    if not is_cli:
+        logging.getLogger("innioasis.startup").info(
+            "Starting %s v%s (brand: %s)",
+            config.get_app_name(),
+            config.APP_VERSION,
+            config.build_brand() or "updater_ce",
+        )
+
+    if len(sys.argv) >= 2 and sys.argv[1] in ("--reset", "--mtk-reset"):
+        from . import mtk_api
+        mtk_api._ensure_imports()
+        from mtkclient.Library.mtk_main import Main
+        from argparse import ArgumentParser, Namespace
+        args = Namespace(
+            cmd="reset",
+            debugmode=False,
+            loglevel=logging.INFO,
+            loader=None,
+            preloader=None,
+            auth=None,
+            cert=None,
+            is_brom=False,
+            ptype=None,
+            socid=None,
+            crash=None,
+            gpt_num_part_entries=None,
+            gpt_part_entry_size=None,
+            gpt_part_entry_start_lba=None,
+            offset=None,
+            length=None,
+            step=None,
+            sectors=None,
+            filename=None,
+            parttype=None,
+            subcmd=None,
+            metamode=None,
+        )
+        try:
+            m = Main(args)
+            p = ArgumentParser()
+            m.run(p)
+            sys.exit(0)
+        except SystemExit as se:
+            sys.exit(se.code)
+        except Exception as e:
+            logging.getLogger(__name__).debug("mtk reset error: %s", e)
+            sys.exit(1)
 
     if len(sys.argv) >= 4 and sys.argv[1] == "--flash-cli":
         import os
@@ -102,14 +144,23 @@ def main():
         worker.action_changed.connect(lambda x: print(f"[ACTION] {x}", flush=True))
         worker.eta_changed.connect(lambda x: print(f"[ETA] {x}", flush=True))
 
+        from . import process_guard
+
+        # The headless installer owns the same window as the guided one: no
+        # tool may be left searching for a device after it exits.
+        process_guard.sweep_stray_tools(reason="before headless install")
+        process_guard.begin_install_session(reason="headless install")
+
         def on_finished(ok, msg):
             print(f"[RESULT] {int(ok)} {msg}", flush=True)
+            process_guard.end_install_session(reason="headless install finished")
             sys.exit(0 if ok else 1)
 
         worker.finished.connect(on_finished)
 
         def handle_sigterm(signum=None, frame=None):
             worker.cancel()
+            process_guard.end_install_session(reason="headless install interrupted")
             time.sleep(0.5)
             os._exit(1)
 
@@ -181,6 +232,19 @@ def main():
     apply_glass(window, dark=is_dark())
     configure_traffic_lights(window, x_offset=18)
     apply_windows_dark_titlebar(window, is_dark())
+
+    # A previous run that crashed (or a tool the user started by hand) may still
+    # be holding the USB port and SP Flash Tool's own settings files. Nothing is
+    # installing at this point, so clear it once, off the GUI thread.
+    from PySide6.QtCore import QTimer
+    from . import process_guard
+
+    def _sweep_on_startup():
+        # The report travels back on the window's own signal: the sweep runs on
+        # a worker thread and the log is a widget.
+        process_guard.sweep_async(reason="startup", on_done=window.sweep_report.emit)
+
+    QTimer.singleShot(1500, _sweep_on_startup)
 
     # Match host appearance live: light/dark switches, desktop accent colours,
     # system font changes — the same way native apps follow the OS. The window

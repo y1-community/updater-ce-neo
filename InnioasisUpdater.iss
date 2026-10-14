@@ -3,7 +3,7 @@
 ; Compassionate usage only — see README.md.
 
 #define MyAppName "Updater CE"
-#define MyAppVersion "3.0.0"
+#define MyAppVersion "2.5.0"
 #define MyAppPublisher "Innioasis Updater CE"
 #define MyAppURL "https://github.com/y1-community/updater-ce-neo"
 #define MyAppExeName "InnioasisUpdater.exe"
@@ -22,18 +22,18 @@ DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 LicenseFile=assets/LICENSE.txt
 OutputDir=dist
-OutputBaseFilename=UpdaterCE-Setup-3.0.0
+OutputBaseFilename=UpdaterCE-Setup-2.5.0
 SetupIconFile=assets/icon.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
 PrivilegesRequired=admin
 ArchitecturesAllowed=x64
 ArchitecturesInstallIn64BitMode=x64
-VersionInfoVersion=3.0.0
+VersionInfoVersion=2.5.0
 VersionInfoCompany=Innioasis Updater CE
 VersionInfoDescription=Updater CE installer
 VersionInfoProductName=Updater CE
-VersionInfoProductVersion=3.0.0
+VersionInfoProductVersion=2.5.0
 
 [Tasks]
 Name: desktopicon; Description: Create a &desktop shortcut; Flags: unchecked

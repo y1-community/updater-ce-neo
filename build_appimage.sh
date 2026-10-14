@@ -42,7 +42,7 @@ case "$BRAND" in
         ;;
 esac
 export BUILD_BRAND="$BRAND"
-VERSION=$(grep -oP 'APP_VERSION\s*=\s*"\K[^"]+' src/config.py 2>/dev/null || echo "3.0.0")
+VERSION=$(grep -oP 'APP_VERSION\s*=\s*"\K[^"]+' src/config.py 2>/dev/null || echo "2.5.0")
 ARCH="${ARCH:-x86_64}"
 
 DIST_DIR="dist"

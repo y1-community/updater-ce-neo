@@ -4,9 +4,37 @@ Values mirror the InniUpdaterChin app (APP_VERSION 1.1.2, contact email) and
 the online catalogue / donation endpoints used by Updater CE and innioasis.app.
 """
 
-APP_VERSION = "3.0"
+APP_VERSION = "2.5"
 APP_NAME = "Updater CE"
 CONTACT_EMAIL = "updater-feedback@innioasis.com"
+
+# --- Staggered releases -----------------------------------------------------
+# The Updater CE rewrite goes out one platform at a time, because a platform is
+# only released once its flashing path has been verified on real hardware. 2.5
+# is the Windows run; macOS and Linux keep the build they have until their turn
+# comes. Changing this tuple is the whole switch: the update checker only offers
+# a release that carries an asset for the running platform, so a build on a
+# platform that is not listed simply never sees 2.5.
+RELEASE_TARGETS = ("windows",)
+
+
+def release_target_for(platform: str = "") -> str:
+    """The release-target name for a ``sys.platform`` value (``""`` when unknown)."""
+    import sys
+
+    platform = platform or sys.platform
+    if platform.startswith("win"):
+        return "windows"
+    if platform.startswith("darwin"):
+        return "macos"
+    if platform.startswith("linux"):
+        return "linux"
+    return ""
+
+
+def is_release_platform(platform: str = "") -> bool:
+    """True when this platform is part of the release currently going out."""
+    return release_target_for(platform) in RELEASE_TARGETS
 
 # --- Offline mode / MediaTek Installer branding -----------------------------
 # Two independent switches, deliberately kept apart:
@@ -81,7 +109,7 @@ def get_app_name() -> str:
 
 
 def get_brand_name() -> str:
-    """Short brand shown beside the version badge ("Installer 3.0")."""
+    """Short brand shown beside the version badge ("Installer 2.5")."""
     from .i18n import tr
     if is_mediatek_installer():
         return tr("app_name_mediatek_installer_short")

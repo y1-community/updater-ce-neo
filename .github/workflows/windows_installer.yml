@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version string (e.g. 3.0.3)'
+        description: 'Version string (e.g. 2.5)'
         required: false
-        default: '3.0.3'
+        default: '2.5'
       publish_release:
         description: 'Publish release asset if tag or release exists'
         required: false
@@ -53,7 +53,7 @@ jobs:
       - name: Compile Inno Setup Installer
         run: |
           $ver = "${{ github.event.inputs.version }}"
-          if (-not $ver) { $ver = "3.0.3" }
+          if (-not $ver) { $ver = "2.5" }
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion="$ver" scripts\build_windows_installer.iss
 
       - name: Upload Installer Artifact

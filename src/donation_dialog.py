@@ -100,6 +100,11 @@ class _Ticker(QWidget):
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self._label = _LineLabel(self)
         label = self._label
+        # The host is a bare widget with no layout, so a QVBoxLayout would give
+        # it no height at all and the line would sit in a zero-height row. Ask
+        # for exactly the label's height instead: the middle slot then owns its
+        # row on every style, Windows and Fusion included.
+        self.setMinimumHeight(max(1, label.sizeHint().height()))
         orig_set_text = label.setText
         orig_set_visible = label.setVisible
 
@@ -170,6 +175,20 @@ class _LinkButton(QPushButton):
         self.setFlat(True)
         self.setCursor(Qt.PointingHandCursor)
         self.setAutoDefault(False)
+
+
+def get_appeal_messages() -> list[str]:
+    """Heartfelt community appeals rotating in place of or alongside the goal bar."""
+    from .config import is_mediatek_installer
+    from .i18n import tr
+
+    msgs = [
+        tr("donate_appeal_always_free"),
+        tr("donate_appeal_community_archive"),
+    ]
+    if not is_mediatek_installer():
+        msgs.append(tr("donate_appeal_what_innioasis_dont"))
+    return msgs
 
 
 class DonationStatusBar(QStatusBar):
@@ -320,7 +339,11 @@ class DonationStatusBar(QStatusBar):
     def _clear_bar_plates(self) -> None:
         """Keep goal, status, and link hosts on the same surface as the bar."""
         from PySide6.QtGui import QColor, QPalette
-        from .ui.surfaces import glass_surfaces_enabled, show_glass_backdrop
+        from .ui.surfaces import (
+            glass_surfaces_enabled,
+            paint_window_surface,
+            show_glass_backdrop,
+        )
 
         glass = glass_surfaces_enabled()
         clear = QColor(0, 0, 0, 0)
@@ -334,6 +357,13 @@ class DonationStatusBar(QStatusBar):
         ):
             host = getattr(self, name, None)
             if host is None:
+                continue
+            if not glass:
+                # Windows and Linux have no backdrop behind the bar: a host left
+                # with no background of its own never erases, so the goal line
+                # and its bar are the first things to go missing on a repaint.
+                host.setStyleSheet("")
+                paint_window_surface(host)
                 continue
             host.setAutoFillBackground(False)
             host.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
@@ -392,15 +422,6 @@ class DonationStatusBar(QStatusBar):
         self._seal_ticker(self._goal_label)
         goal_row.addWidget(self._goal_ticker, 1, Qt.AlignVCenter)
 
-        self._goal_bar = QProgressBar()
-        self._goal_bar.setObjectName("softwareUpdateProgress")
-        self._goal_bar.setRange(0, 1000)
-        self._goal_bar.setTextVisible(False)
-        self._goal_bar.setFixedHeight(8)
-        self._goal_bar.setMinimumWidth(48)
-        self._goal_bar.setMaximumWidth(120)
-        goal_row.addWidget(self._goal_bar, 0, Qt.AlignVCenter)
-
         self._donor_ticker = _Ticker(self._goal_group)
         self._donor_label = self._donor_ticker.label
         self._donor_label.setTextFormat(Qt.RichText)
@@ -410,9 +431,22 @@ class DonationStatusBar(QStatusBar):
         self._donor_label.setVisible(False)
         goal_row.addWidget(self._donor_ticker, 1, Qt.AlignVCenter)
 
+        self._goal_bar = QProgressBar()
+        self._goal_bar.setObjectName("softwareUpdateProgress")
+        self._goal_bar.setRange(0, 1000)
+        self._goal_bar.setTextVisible(False)
+        self._goal_bar.setFixedHeight(8)
+        self._goal_bar.setMinimumWidth(48)
+        self._goal_bar.setMaximumWidth(120)
+        goal_row.addWidget(self._goal_bar, 0, Qt.AlignVCenter)
+
         self._goal_group.setMinimumWidth(0)
         self._goal_group.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         row.addWidget(self._goal_group, 1)
+
+        self._right_balance = QWidget(self._donation_container)
+        self._right_balance.setFixedHeight(1)
+        row.addWidget(self._right_balance, 0, Qt.AlignVCenter)
 
         self._support_btn = _LinkButton(tr("nav_donate"))
         self._support_btn.setToolTip(tr_brand("donate_title"))
@@ -450,16 +484,13 @@ class DonationStatusBar(QStatusBar):
         return btn.fontMetrics().horizontalAdvance(btn.text()) + 16
 
     def _balance_links(self):
-        """Keep both corner links fully on screen.
-
-        When the bar is wide enough, the two links share one width so the goal
-        line stays centred. When it is not, each link keeps just its own text
-        and the middle line marquees in whatever is left.
-        """
-        if not (hasattr(self, "_credits_link") and hasattr(self, "_support_btn")):
+        """Keep both corner links balanced so the middle line stays centred."""
+        if not hasattr(self, "_credits_link"):
             return
         credits_w = self._link_text_width(self._credits_link)
         self._credits_link.setFixedWidth(credits_w)
+        if hasattr(self, "_right_balance"):
+            self._right_balance.setFixedWidth(credits_w)
         if hasattr(self, "_support_btn"):
             self._support_btn.setVisible(False)
             self._support_btn.setFixedWidth(0)
@@ -536,13 +567,16 @@ class DonationStatusBar(QStatusBar):
     def _refresh_goal(self):
         raised, _remaining, percent, target = get_monthly_goal_stats(self.donations)
         raised = float(raised)
+        self._goal_suppressed = (raised <= 0.0 or raised >= 200.0)
         self._goal_reached = raised >= float(target)
         raised_text = str(int(raised)) if raised.is_integer() else f"{raised:.2f}"
-        if self._goal_reached:
+        if self._goal_suppressed or self._goal_reached:
             self._showing_goal = False
             self._goal_label.setVisible(False)
             self._goal_bar.setVisible(False)
             self._donor_label.setVisible(True)
+            if not self._donor_label.text():
+                self._donor_label.setText(self._next_ticker_message())
         else:
             self._showing_goal = True
             self._goal_label.setVisible(True)
@@ -553,32 +587,60 @@ class DonationStatusBar(QStatusBar):
             )
             self._goal_bar.setValue(int(round(percent * 10)))
 
+    def _next_ticker_message(self) -> str:
+        """Pick the next message for the ticker: rotating donor lines and community appeals."""
+        import random
+        # 1. "If everyone using this today donated, it would cover our costs for a year" (Shown very occasionally, ~12%)
+        if random.random() < 0.12:
+            return tr("donate_appeal_costs_for_year")
+
+        has_real_donors = bool(self._donor_lines and any(d.get("amount", 0) > 0 for d in self.donations))
+        if not hasattr(self, "_ticker_turn"):
+            self._ticker_turn = 0
+        self._ticker_turn += 1
+
+        if has_real_donors and (self._ticker_turn % 2 == 1):
+            if self._donor_lines:
+                msg = self._donor_lines[0]
+                self._donor_lines = self._donor_lines[1:] + self._donor_lines[:1]
+                return msg
+
+        appeals = get_appeal_messages()
+        if not hasattr(self, "_appeal_index"):
+            self._appeal_index = 0
+        msg = appeals[self._appeal_index % len(appeals)]
+        self._appeal_index += 1
+        return msg
+
     def _rotate(self):
         if not getattr(self, "_donations_enabled", True) or self._status_container.isVisible():
             return
         if not decorative_updates_needed(self):
             return
-        if getattr(self, "_goal_reached", False):
+        if getattr(self, "_goal_suppressed", False) or getattr(self, "_goal_reached", False):
             self._showing_goal = False
             self._goal_label.setVisible(False)
             self._goal_bar.setVisible(False)
             self._donor_label.setVisible(True)
-            if self._donor_lines:
-                self._donor_label.setText(self._donor_lines[0])
-                self._donor_lines = self._donor_lines[1:] + self._donor_lines[:1]
+            self._donor_label.setText(self._next_ticker_message())
             self.repaint()
             self._donor_label.repaint()
+            if hasattr(self, "_donor_ticker"):
+                self._donor_ticker.sync()
             return
         self._showing_goal = not self._showing_goal
         self._goal_label.setVisible(self._showing_goal)
         self._goal_bar.setVisible(self._showing_goal)
         self._donor_label.setVisible(not self._showing_goal)
-        if not self._showing_goal and self._donor_lines:
-            self._donor_label.setText(self._donor_lines[0])
-            self._donor_lines = self._donor_lines[1:] + self._donor_lines[:1]
+        if not self._showing_goal:
+            self._donor_label.setText(self._next_ticker_message())
         self.repaint()
         if not self._showing_goal:
             self._donor_label.repaint()
+        if hasattr(self, "_goal_ticker"):
+            self._goal_ticker.sync()
+        if hasattr(self, "_donor_ticker"):
+            self._donor_ticker.sync()
 
     def showMessage(self, message: str, timeout: int = 0):
         text = str(message or "").strip()
@@ -902,14 +964,46 @@ class DonationDialog(QDialog):
         raised, _, pct, target = get_monthly_goal_stats(self.donations)
         raised = float(raised)
         r_s = f"{int(raised)}" if raised.is_integer() else f"{raised:.2f}"
+        self._goal_suppressed = (raised <= 0.0 or raised >= 200.0)
         self._goal_reached = raised >= float(target)
-        if self._goal_reached:
+        if self._goal_suppressed:
+            self._showing_goal = False
+            self._goal_target = 0
+            self._goal_view.setVisible(False)
+            self._donor_view.setVisible(True)
+        elif self._goal_reached:
+            self._showing_goal = False
             self._goal_label.setText(tr("donate_rely_on_you"))
             self._goal_target = 1000
+            self._goal_bar.setValue(self._goal_target)
         else:
             self._goal_label.setText(tr("donate_goal_fmt").format(raised=r_s, target=target))
             self._goal_target = int(round(pct * 10))
-        self._goal_bar.setValue(self._goal_target)
+            self._goal_bar.setValue(self._goal_target)
+
+    def _next_ticker_message(self) -> str:
+        import random
+        # 1. "If everyone using this today donated, it would cover our costs for a year" (~12% chance)
+        if random.random() < 0.12:
+            return tr("donate_appeal_costs_for_year")
+
+        has_real_donors = bool(self._ticker_lines and any(d.get("amount", 0) > 0 for d in self.donations))
+        if not hasattr(self, "_ticker_turn"):
+            self._ticker_turn = 0
+        self._ticker_turn += 1
+
+        if has_real_donors and (self._ticker_turn % 2 == 1):
+            if self._ticker_lines:
+                msg = self._ticker_lines[self._ticker_idx % len(self._ticker_lines)]
+                self._ticker_idx += 1
+                return msg
+
+        appeals = get_appeal_messages()
+        if not hasattr(self, "_appeal_index"):
+            self._appeal_index = 0
+        msg = appeals[self._appeal_index % len(appeals)]
+        self._appeal_index += 1
+        return msg
 
     def _trigger_goal_anim(self):
         self._goal_bar.setValue(0)
@@ -923,13 +1017,11 @@ class DonationDialog(QDialog):
         self._ticker_idx = 0
         self._since_goal = 0
 
-        if getattr(self, "_goal_reached", False):
+        if getattr(self, "_goal_suppressed", False) or getattr(self, "_goal_reached", False):
             self._showing_goal = False
             self._goal_view.setVisible(False)
             self._donor_view.setVisible(True)
-            if self._ticker_lines:
-                self._donor_label.setText(self._ticker_lines[0])
-                self._ticker_idx = 1
+            self._donor_label.setText(self._next_ticker_message())
         else:
             self._showing_goal = True
             self._goal_view.setVisible(True)
@@ -953,7 +1045,7 @@ class DonationDialog(QDialog):
         self._ticker_timer.timeout.connect(self._tick)
         self._ticker_timer.start(6500)
 
-        if not getattr(self, "_goal_reached", False):
+        if not (getattr(self, "_goal_suppressed", False) or getattr(self, "_goal_reached", False)):
             QTimer.singleShot(150, self._trigger_goal_anim)
 
     def _tick(self):
@@ -963,27 +1055,23 @@ class DonationDialog(QDialog):
         self._fade_out.start()
 
     def _next_ticker_step(self):
-        if getattr(self, "_goal_reached", False):
+        if getattr(self, "_goal_suppressed", False) or getattr(self, "_goal_reached", False):
             self._showing_goal = False
             self._goal_view.setVisible(False)
             self._donor_view.setVisible(True)
-            if self._ticker_lines:
-                self._donor_label.setText(self._ticker_lines[self._ticker_idx % len(self._ticker_lines)])
-                self._ticker_idx += 1
+            self._donor_label.setText(self._next_ticker_message())
             self._fade_in.start()
             return
 
         if self._showing_goal:
             self._showing_goal = False
             self._since_goal = 1
-            self._donor_label.setText(self._ticker_lines[self._ticker_idx % len(self._ticker_lines)])
-            self._ticker_idx += 1
+            self._donor_label.setText(self._next_ticker_message())
             self._goal_view.setVisible(False)
             self._donor_view.setVisible(True)
         elif self._since_goal < 3:
             self._since_goal += 1
-            self._donor_label.setText(self._ticker_lines[self._ticker_idx % len(self._ticker_lines)])
-            self._ticker_idx += 1
+            self._donor_label.setText(self._next_ticker_message())
         else:
             self._showing_goal = True
             self._since_goal = 0

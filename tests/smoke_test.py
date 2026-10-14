@@ -3,6 +3,7 @@
 Run:  python tests/smoke_test.py    (from the project root, with deps installed)
 """
 
+import contextlib
 import os
 import shutil
 import sys
@@ -398,8 +399,9 @@ def test_update_version_and_assets():
     assert updates.pick_platform_asset(arch_assets, "linux")["name"] == "InnioasisUpdater-x86_64.AppImage"
 
 
-def test_update_checker():
-    """UpdateChecker honors newer/older releases and failure states."""
+def test_update_checker(monkeypatch=None):
+    """UpdateChecker honors newer/older releases, platform staggering, failures."""
+    import sys as _sys
     from src import updates
 
     class Fake:
@@ -409,8 +411,19 @@ def test_update_checker():
         def get_latest_release_info(self, repo):
             return self.data
 
-    info = updates.UpdateChecker("a/b", client=Fake({"tag_name": "2.0.4", "assets": []}), current="1.1.2").check()
-    assert info.tag == "2.0.4" and not info.failed
+    windows_only = {
+        "tag_name": "2.5",
+        "assets": [{"name": "UpdaterCE-Setup-2.5.exe", "browser_download_url": "u", "size": 10}],
+    }
+    # 2.5 is the Windows run of a staggered release: a macOS or Linux build has
+    # no asset to install, so it must not be told an update exists.
+    with _platform(_sys, "darwin"):
+        assert updates.UpdateChecker("a/b", client=Fake(windows_only), current="2.4").check().tag == ""
+    with _platform(_sys, "win32"):
+        info = updates.UpdateChecker("a/b", client=Fake(windows_only), current="2.4").check()
+        assert info.tag == "2.5" and not info.failed
+    # A release with no asset at all is never offered, on any platform.
+    assert updates.UpdateChecker("a/b", client=Fake({"tag_name": "2.0.4", "assets": []}), current="1.1.2").check().tag == ""
     assert updates.UpdateChecker("a/b", client=Fake({"tag_name": "1.0.0"}), current="1.1.2").check().tag == ""
     assert updates.UpdateChecker("a/b", client=Fake({}), current="1.1.2").check().tag == ""
 
@@ -420,6 +433,17 @@ def test_update_checker():
 
     failed = updates.UpdateChecker("a/b", client=Boom(), current="1.1.2").check()
     assert failed.failed
+
+
+@contextlib.contextmanager
+def _platform(sys_module, value):
+    """Run with ``sys.platform`` set to ``value`` (asset picking follows it)."""
+    original = sys_module.platform
+    sys_module.platform = value
+    try:
+        yield
+    finally:
+        sys_module.platform = original
 
 
 def test_update_dialog_and_wiring():
@@ -832,7 +856,8 @@ def test_ui_construction():
     assert page.current_package() is not None
     # Select Package is the start page (no separate Home tab).
     assert w._stack.currentIndex() == 0
-    assert w.windowTitle().startswith("Updater CE v3.0")
+    # Follows config.APP_VERSION: the title must not hardcode a release number.
+    assert w.windowTitle() == f"Updater CE v{APP_VERSION}", w.windowTitle()
     assert w._brand_label.text() == "Updater CE"
     assert w._icon_label.pixmap() is not None and not w._icon_label.pixmap().isNull()
     # Version badge sits beside the brand with no "v" prefix.

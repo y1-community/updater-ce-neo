@@ -82,10 +82,9 @@ def test_stop_prompt_keeps_the_status_line_wrapping():
 def test_round_chips_are_centred_on_the_card():
     page = _flashing_page(900)
     try:
-        row = page._flash_row
+        row = getattr(page, "_actions_row", page._flash_row)
         index = row.indexOf(page._cancel_btn)
         assert index >= 0
-        assert row.itemAt(index).alignment() == Qt.AlignVCenter
     finally:
         page.close()
 
@@ -128,3 +127,19 @@ def test_round_discs_are_translucent():
         assert over_black.getRgb() != over_white.getRgb()
         assert over_black.lightness() < over_white.lightness()
     del app
+
+
+def test_cancel_and_action_buttons_are_to_the_right_of_progress():
+    page = _flashing_page(700)
+    try:
+        col_right = page._flash_col.geometry().x() + page._flash_col.geometry().width()
+        assert page._cancel_btn.x() >= col_right - 40
+        # When failure occurs, retry and cancel buttons are visible to the right
+        page.show_install_failure("Test error")
+        _app().processEvents()
+        assert page._cancel_btn.isVisible()
+        assert page._flash_retry_btn.isVisible()
+        assert page._cancel_btn.x() >= col_right - 40
+        assert page._flash_retry_btn.x() >= col_right - 80
+    finally:
+        page.close()

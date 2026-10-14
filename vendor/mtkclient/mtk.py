@@ -60,7 +60,6 @@ def add_connection_group(parser):
     g.add_argument('--noreconnect', action='store_true')
     g.add_argument('--stock', action='store_true', help='use stock da')
     g.add_argument('--uartloglevel', help='Set uart log level (0=Trace, 2=Normal)')
-    g.add_argument('--logchannel', help='Set log channel ("UART","USB", "BOTH")', default="UART")
     g.add_argument('--loglevel', help='Set log level (0=Trace, 2=Normal)')
     g.add_argument('--write_preloader_to_file', action='store_true', help='Dump preloader to file')
     g.add_argument('--generatekeys', action='store_true', help='Derive HW keys')
@@ -313,8 +312,6 @@ def main():
 
     da_unlock = da_subs.add_parser("seccfg", parents=[base], help="Unlock device / Configure seccfg")
     da_unlock.add_argument('flag', type=str, help="Needed flag (unlock,lock)")
-    da_unlock.add_argument('--critical', action="store_true", default=False,
-                           help="Retain legacy V4 behavior by updating the dm-verity state")
 
     # Minimal commands
     subparsers.add_parser("devices", help=CMDS_HELP["devices"])\

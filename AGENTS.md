@@ -61,8 +61,24 @@
 - `mental_model/` is gitignored scratch for per-model reverse-engineering notes;
   suffix files with your model name and reuse `/tmp/cn_raw/*.marshal` dumps instead of re-extracting.
 
-## Upstream `mtkclient` Purity & Cross-Platform libusb
-- `vendor/mtkclient` must strictly match upstream `bkerler/mtkclient` (v2.1.4.1 base). Never modify vendored files directly; apply all progress hooks, stdout shields, and macOS/Linux USB adaptations via runtime wrapping in `src/mtk_api.py`.
+## Bundled `mtkclient`: the Chinese build's fork
+- `vendor/mtkclient` is **the mtkclient exactly as the Chinese 1.1.7 app ships it** (Copied from
+  `/Volumes/InnioasisUpdater/InnioasisUpdater.app/Contents/Resources/mtkclient`, the real tree behind the
+  `Contents/Frameworks/mtkclient` symlink). Its legacy DA write path, DRAM bring-up, USB read loop, error
+  strings and `config.last_error` reporting are what make an install behave like the Chinese build at the
+  flash stage, so **do not “fix up” those files towards upstream `bkerler/mtkclient`**: re-diff against the
+  mounted bundle and take its version (`diff -rq --exclude='__pycache__' --exclude='*.pyc' $CN vendor/mtkclient`).
+- Two files are deliberately *not* the bundle's copy:
+  `mtkclient/Library/Hardware/__init__.py` (the bundle ships it empty, which would break the
+  `hwcrypto_ssr.py` we also ship) and anything only this repo has (`mtkclient/Darwin/libusb-1.0.dylib`,
+  `mtk_tcpip_*.py`, `Setup/`, `Tools/`, the READMEs) — keep those.
+- Everything else the app needs is **additive runtime wrapping in `src/mtk_api.py`**: the cross-platform
+  libusb backend, the config fields mtkclient's own argparse would have created, the stdout/stderr detach
+  shield (the fork's `Library/utils.py` calls `sys.stdout.detach()` unguarded at import time), and the
+  USB-stall guard in `usbread`. Never replace fork behaviour we can use as-is.
+- The fork reads `config.write_chunk_size` for every legacy-DA transfer (1 MiB when unset).
+  `flash_service.legacy_write_chunk_size()` supplies the reference build's 512 KiB / 256 KiB table — keep the
+  two in step, and keep `config.last_error` surfaced in the guided failure copy.
 - On Linux, never hardcode `libusb-1.0.so` in PyUSB loaders; end-user distros only ship `libusb-1.0.so.0`. Always search `libusb-1.0.so.0` first.
 - On macOS, `libusb-1.0.dylib` in `Contents/Frameworks/` must remain Universal 2 (`x86_64` + `arm64`).
 

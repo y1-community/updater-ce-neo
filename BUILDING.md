@@ -64,7 +64,7 @@ cd updater-ce-neo
 
 **Output** (both front ends — see section 5):
 - `dist\InnioasisUpdater\InnioasisUpdater.exe` and `dist\MediaTekInstaller\MediaTekInstaller.exe` (standalone portable directories with bundled SP Flash Tool)
-- `dist\UpdaterCE-Setup-3.0.0.exe` and `dist\MediaTekInstaller-Setup-3.0.0.exe` (full Windows installer wizards, each with its own identity so both can be installed side by side)
+- `dist\UpdaterCE-Setup-2.5.0.exe` and `dist\MediaTekInstaller-Setup-2.5.0.exe` (full Windows installer wizards, each with its own identity so both can be installed side by side)
 
 > **Note**: On Windows, the app runs 100% SP Flash Tool by default. Press the `M` key on the keyboard to unlock the MTKClient advanced backend option.
 
@@ -111,7 +111,7 @@ Updater CE supports 100% offline usage:
 The same engine can be packaged as **MediaTek Installer** — a generic MediaTek
 firmware installer with no Updater CE identity and no online firmware at all:
 
-- the app is named `MediaTek Installer` and shown in-app as `Installer 3.0`
+- the app is named `MediaTek Installer` and shown in-app as `Installer 2.5`
 - the offline switch is not shown: this build is offline-only by definition
 - donations remain (buttons, goal, donor info), worded for MediaTek Installer
   rather than Updater CE, the Community Firmware Archive and the Themes Gallery

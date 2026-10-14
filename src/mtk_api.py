@@ -1,4 +1,13 @@
-"""Thin wrapper over the bundled mtkclient (port of InniUpdaterChin's ``mtk_api``).
+"""Thin wrapper over the bundled mtkclient (the Chinese build's fork).
+
+``vendor/mtkclient`` is the mtkclient **as shipped inside InnioasisUpdater 1.1.7**
+(its legacy DA write path, DRAM bring-up, USB read loop and error strings), so a
+guided install writes the flash the same way the Chinese app does. The wrappers
+here stay additive: they add the cross-platform libusb backend, the config
+fields mtkclient's own argparse would have created, and one USB-stall guard the
+fork is missing, and they never replace fork behaviour we can use as-is.
+
+Originally a port of InniUpdaterChin's ``mtk_api``.
 
 ``handshake``/``attach`` split the session bring-up so the flash service can
 inspect the mode the target answered in before the download agent is
@@ -104,7 +113,8 @@ def _apply_runtime_patches():
     try:
         from mtkclient.config import usb_ids
 
-        # Register additional MediaTek preloader USB PIDs if not already defined
+        # The bundled Chinese fork already lists these preloader PIDs; setdefault
+        # keeps them if a future sync ever drops one.
         if 0x0E8D in usb_ids.default_ids:
             for pid in (0x2002, 0x2004, 0x2005, 0x2006, 0x2007, 0x2008, 0x200A):
                 usb_ids.default_ids[0x0E8D].setdefault(pid, -1)
@@ -151,7 +161,17 @@ def _apply_runtime_patches():
             while bytestoread > 0:
                 bytestoread = resplen - len(res) if len(res) < resplen else 0
                 if not q.empty():
-                    extend(q.get(bytestoread))
+                    # The queue holds whole USB reads. A chunk bigger than this
+                    # request leaves the remainder queued, exactly like the
+                    # bundled (Chinese-fork) usbread does — dropping it would
+                    # lose bytes the caller is waiting for.
+                    chunk = q.get(bytestoread)
+                    if len(chunk) > bytestoread:
+                        q.put(chunk[bytestoread:])
+                        extend(chunk[:bytestoread])
+                    else:
+                        extend(chunk)
+                    bytestoread = resplen - len(res) if len(res) < resplen else 0
                 if bytestoread <= 0:
                     break
                 sz = min(buflen, bytestoread)
@@ -350,13 +370,56 @@ def _apply_runtime_patches():
     except Exception as e:
         logger.debug("Could not patch Port: %s", e)
 
+    try:
+        from struct import pack
+        from mtkclient.Library.DA.legacy import dalegacy_lib
+
+        def patched_finish(self, value):
+            self.usbwrite(self.Cmd.FINISH_CMD)  # 0xD9
+            ack = self.usbread(1)
+            ack_val = ack[0] if ack else None
+            expected = self.Rsp.ACK[0] if isinstance(self.Rsp.ACK, (bytes, bytearray)) else self.Rsp.ACK
+            if ack_val in (expected, 0x5A):
+                self.usbwrite(pack(">I", value))
+                ack2 = self.usbread(1)
+                ack2_val = ack2[0] if ack2 else None
+                if ack2_val in (expected, 0x5A):
+                    return True
+            return False
+
+        dalegacy_lib.DALegacy.finish = patched_finish
+
+        def patched_legacy_shutdown(self, async_mode: int = 0, dl_bit: int = 0, bootmode: int = 0):
+            res = self.finish(bootmode)
+            try:
+                self.mtk.port.close(reset=True)
+            except Exception:
+                pass
+            return res
+
+        dalegacy_lib.DALegacy.shutdown = patched_legacy_shutdown
+    except Exception as e:
+        logger.debug("Could not patch DALegacy finish/shutdown: %s", e)
+
 
 class _DetachShield:
+    """Stand-in stream used only while mtkclient is imported.
+
+    The bundled (Chinese-fork) ``Library/utils.py`` re-wraps the real streams at
+    import time — ``io.TextIOWrapper(sys.stdout.detach())`` — with no guard. In a
+    frozen build (``console=False``) ``sys.stdout`` is None and under pytest it
+    is a capture object, so that call raises and takes the whole import with it.
+    Detaching therefore hands back a throwaway binary sink: the wrapper
+    mtkclient builds writes nowhere for the few milliseconds the import takes,
+    and the real streams are put back immediately afterwards, so nothing
+    downstream ever sees it.
+    """
+
     def __init__(self, stream):
         self._stream = stream
 
     def detach(self):
-        raise io.UnsupportedOperation("detach disabled to protect stream buffer")
+        return io.BytesIO()
 
     def write(self, s):
         if self._stream and hasattr(self._stream, "write"):
@@ -379,10 +442,10 @@ def _ensure_imports():
         return
 
     # Frozen GUI builds (console=False) start with sys.stdout / sys.stderr
-    # set to None or wrapped objects lacking detach(); mtkclient's Library/utils.py
-    # re-wraps them at import time (io.TextIOWrapper(sys.stdout.detach(), ...)) and crashes.
-    # Furthermore, in pytest or redirected streams, detach() breaks the parent capture.
-    # Shield stdout/stderr with a dummy detach() during import and restore them afterwards.
+    # set to None, and in pytest or redirected streams detach() breaks the parent
+    # capture; mtkclient's Library/utils.py re-wraps both streams at import time
+    # (io.TextIOWrapper(sys.stdout.detach(), ...)). Shield them with a stream
+    # whose detach() is a throwaway sink, then restore them afterwards.
     orig_stdout = sys.stdout
     orig_stderr = sys.stderr
     sys.stdout = _DetachShield(orig_stdout)
@@ -553,6 +616,46 @@ def trigger_reset(mtk):
     """Reset the target by enabling its watchdog (mtkclient's meta recipe)."""
     wdg_addr, _value = mtk.config.get_watchdog_addr()
     return bool(mtk.preloader.write32(wdg_addr + 0x14, 0x00001209))
+
+
+def fire_mtk_reset(directory=".", timeout: float = 3.0) -> bool:
+    """Fire the mtk reset (mtk.py reset) command to reboot the device into the installed firmware.
+
+    Spawns mtk.py reset (or --mtk-reset in frozen binaries) so the device
+    boots automatically after an mtkclient install.
+    """
+    try:
+        import subprocess
+        cmd = [sys.executable]
+        repo_root = str(getattr(paths, "REPO_ROOT", Path(__file__).resolve().parent.parent))
+        env = dict(os.environ)
+        if not getattr(sys, "frozen", False):
+            mtk_script = str(getattr(paths, "MTKCLIENT_DIR", Path(repo_root) / "vendor" / "mtkclient") / "mtk.py")
+            if os.path.exists(mtk_script):
+                cmd.extend([mtk_script, "reset"])
+            else:
+                cmd.extend(["-m", "src.app", "--mtk-reset"])
+        else:
+            cmd.extend(["--mtk-reset"])
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            cwd=repo_root,
+            env=env,
+        )
+        try:
+            stdout, _ = proc.communicate(timeout=timeout)
+            logger.info("mtk reset output: %s", (stdout or "").strip())
+            return proc.returncode == 0
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            logger.debug("mtk reset process timed out after %ss (device may already be booting)", timeout)
+            return True
+    except BaseException as e:
+        logger.debug("Could not spawn mtk reset: %s", e)
+        return False
 
 
 def main():

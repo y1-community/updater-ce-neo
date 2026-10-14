@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import QEvent, QObject, Qt
 from PySide6.QtGui import QBrush, QColor, QPainter, QPalette
-from PySide6.QtWidgets import QTextEdit, QWidget
+from PySide6.QtWidgets import QAbstractScrollArea, QApplication, QTextEdit, QWidget
 
 
 def glass_surfaces_enabled() -> bool:
@@ -66,13 +66,79 @@ def show_glass_backdrop(widget: QWidget) -> None:
         _install_erase(widget)
 
 
-def clear_glass_plate(widget: QWidget) -> None:
-    """Drop a solid Base/Window fill so this region shows the system material.
+def _clear_document_background(view: QTextEdit) -> None:
+    """Let the widget's own surface show through a text view's document."""
+    frame = view.document().rootFrame()
+    fmt = frame.frameFormat()
+    fmt.setBackground(QBrush(Qt.BrushStyle.NoBrush))
+    frame.setFrameFormat(fmt)
 
-    On Linux the palette is left alone: those desktops have no glass backdrop,
-    and the solid window color is the background.
+
+def paint_window_surface(widget: QWidget) -> None:
+    """Make a widget *be* the window's surface, with no plate of its own.
+
+    Windows and Linux have no glass backdrop: the window is painted in the
+    theme's Window role, so a child that fills itself with Base — a shade
+    apart from Window — reads as a rectangle sitting behind the notes or the
+    release list. Copying Window onto Base as well removes the box and still
+    erases the widget on every repaint, so nothing is left half-painted.
     """
-    if widget is None or not glass_surfaces_enabled():
+    if widget is None:
+        return
+    app = QApplication.instance()
+    surface = QColor()
+    if app is not None:
+        surface = app.palette().color(QPalette.ColorRole.Window)
+    if not surface.isValid() or surface.alpha() == 0:
+        try:
+            from .dark import T
+
+            surface = QColor(T().bg)
+        except Exception:
+            surface = QColor("#f8fafc")
+    surface = QColor(surface)
+    surface.setAlpha(255)
+    text = QColor()
+    if app is not None:
+        text = app.palette().color(QPalette.ColorRole.WindowText)
+    if not text.isValid():
+        text = QColor("#1a1a1a")
+    widget.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
+    widget.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, False)
+    widget.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
+    widget.setAutoFillBackground(True)
+    pal = widget.palette()
+    for group in (
+        QPalette.ColorGroup.Active,
+        QPalette.ColorGroup.Inactive,
+        QPalette.ColorGroup.Disabled,
+    ):
+        pal.setColor(group, QPalette.ColorRole.Window, surface)
+        # Base is the plate colour on every desktop that has no glass: keeping
+        # it here is the visible box this function exists to remove.
+        pal.setColor(group, QPalette.ColorRole.Base, surface)
+        pal.setColor(group, QPalette.ColorRole.WindowText, text)
+    widget.setPalette(pal)
+
+
+def clear_glass_plate(widget: QWidget) -> None:
+    """Drop a solid Base/Window fill so this region shows the window surface.
+
+    With a glass backdrop (macOS) that surface is the system material. Without
+    one (Windows, Linux) it is the flat window colour — and the plate has to go
+    the same way, or the notes and the release list keep a rectangle of their
+    own behind them.
+    """
+    if widget is None:
+        return
+    if not glass_surfaces_enabled():
+        paint_window_surface(widget)
+        if isinstance(widget, QAbstractScrollArea):
+            view = widget.viewport()
+            if view is not None:
+                paint_window_surface(view)
+        if isinstance(widget, QTextEdit):
+            _clear_document_background(widget)
         return
     show_glass_backdrop(widget)
     # Zero-alpha black is what Windows stores for "transparent", then paints
@@ -82,10 +148,7 @@ def clear_glass_plate(widget: QWidget) -> None:
     _paint_theme_surface(widget)
     widget.setAutoFillBackground(True)
     if isinstance(widget, QTextEdit):
-        frame = widget.document().rootFrame()
-        fmt = frame.frameFormat()
-        fmt.setBackground(QBrush(Qt.BrushStyle.NoBrush))
-        frame.setFrameFormat(fmt)
+        _clear_document_background(widget)
         view = widget.viewport()
         if view is not None:
             clear_glass_plate(view)

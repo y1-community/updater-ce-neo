@@ -148,8 +148,12 @@ jobs:
             dist/*.sha256
           retention-days: 14
 
+      # Releases are staggered by platform: 2.5 is the Windows run, so a v* tag
+      # no longer publishes Linux assets on its own. Builds still upload as
+      # artifacts; the Linux release is published deliberately, by hand, with
+      # publish_release=true once this platform's turn comes.
       - name: Release to GitHub Releases
-        if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.publish_release == 'true'
+        if: github.event.inputs.publish_release == 'true'
         uses: softprops/action-gh-release@v2
         with:
           files: |

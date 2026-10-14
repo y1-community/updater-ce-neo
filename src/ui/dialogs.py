@@ -1798,13 +1798,36 @@ class InstallConsoleDialog(QDialog):
         self._log.verticalScrollBar().valueChanged.connect(self._on_scroll)
 
     def set_lines(self, lines) -> None:
-        self._log.setPlainText("\n".join(lines or []))
+        filtered = []
+        for ln in lines or []:
+            raw = str(ln or "").strip()
+            if not raw or set(raw) <= {'.'}:
+                continue
+            if any(w in raw for w in ("RuntimeWarning", "innioasis.startup")):
+                continue
+            if raw.startswith("."):
+                stripped = raw.lstrip(". ")
+                if not stripped or stripped == "Preloader":
+                    continue
+                ln = stripped
+            filtered.append(str(ln))
+        self._log.setPlainText("\n".join(filtered))
         if self._stick:
             self._log.moveCursor(QTextCursor.MoveOperation.End)
 
     def append_line(self, line) -> None:
         if not self.isVisible():
             return
+        raw = str(line or "").strip()
+        if not raw or set(raw) <= {'.'}:
+            return
+        if any(w in raw for w in ("RuntimeWarning", "innioasis.startup")):
+            return
+        if raw.startswith("."):
+            stripped = raw.lstrip(". ")
+            if not stripped or stripped == "Preloader":
+                return
+            line = stripped
         self._log.append(str(line))
         if self._stick:
             self._log.moveCursor(QTextCursor.MoveOperation.End)

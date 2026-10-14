@@ -104,6 +104,9 @@ _SVG_TEMPLATES = {
         <circle cx="12" cy="12" r="9" fill="{color}" stroke="none"/>
         <polyline points="8 12.5 11 15.5 16.5 9" stroke="#ffffff"/>
     </svg>""",
+    "check": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="5 12.5 9.5 17 19 7"/>
+    </svg>""",
 }
 
 # Platform mappings
@@ -121,6 +124,7 @@ _SF_SYMBOL_MAP = {
     "file": "doc",
     "folder": "folder",
     "complete": "checkmark.circle.fill",
+    "check": "checkmark",
 }
 
 _SEGOE_SYMBOL_MAP = {
@@ -137,6 +141,7 @@ _SEGOE_SYMBOL_MAP = {
     "file": 0xE8A5,        # Document
     "folder": 0xED25,      # FolderOpen
     "complete": 0xE73E,    # CheckMark
+    "check": 0xE73E,       # CheckMark
 }
 
 _FREEDESKTOP_MAP = {
@@ -160,6 +165,7 @@ _FREEDESKTOP_MAP = {
     "file": ["text-x-generic-symbolic", "text-x-generic", "document-symbolic", "document"],
     "folder": ["folder-open-symbolic", "folder-open", "folder-symbolic", "folder"],
     "complete": ["emblem-ok-symbolic", "emblem-ok", "object-select-symbolic", "dialog-ok"],
+    "check": ["object-select-symbolic", "emblem-ok-symbolic", "dialog-ok", "check"],
     # Circle with an i. dialog-question is only used when the information icons are missing.
     "help": ["dialog-information", "help-about", "dialog-question"],
 }

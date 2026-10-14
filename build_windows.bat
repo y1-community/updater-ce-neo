@@ -82,14 +82,14 @@ if errorlevel 1 (
 if "%NOINSTALLER%"=="0" (
     if not "%BRAND%"=="mediatek_installer" (
         echo Building Updater CE setup installer with Inno Setup...
-        iscc.exe "InnioasisUpdater.iss" /O"dist" /F"UpdaterCE-Setup-3.0.0.exe"
+        iscc.exe "InnioasisUpdater.iss" /O"dist" /F"UpdaterCE-Setup-2.5.0.exe"
         if errorlevel 1 (
             echo Inno Setup build failed; continuing with portable exe.
         )
     )
     if not "%BRAND%"=="updater_ce" (
         echo Building MediaTek Installer setup installer with Inno Setup...
-        iscc.exe "MediaTekInstaller.iss" /O"dist" /F"MediaTekInstaller-Setup-3.0.0.exe"
+        iscc.exe "MediaTekInstaller.iss" /O"dist" /F"MediaTekInstaller-Setup-2.5.0.exe"
         if errorlevel 1 (
             echo Inno Setup build failed; continuing with portable exe.
         )
@@ -101,8 +101,8 @@ echo Build complete.
 echo Portable exe: dist\InnioasisUpdater\InnioasisUpdater.exe
 echo Portable exe: dist\MediaTekInstaller\MediaTekInstaller.exe
 if "%NOINSTALLER%"=="0" (
-    echo Installers: dist\UpdaterCE-Setup-3.0.0.exe
-    echo Installers: dist\MediaTekInstaller-Setup-3.0.0.exe
+    echo Installers: dist\UpdaterCE-Setup-2.5.0.exe
+    echo Installers: dist\MediaTekInstaller-Setup-2.5.0.exe
 )
 endlocal
 exit /b 0

@@ -273,11 +273,11 @@ def compile_universal_launcher(out_path: Path):
 
         linker = "ld64.lld" if shutil.which("ld64.lld") else "lld"
         subprocess.run([
-            linker, "-arch", "x86_64", "-platform_version", "macos", "13.0.0", "13.0.0",
+            linker, "-arch", "x86_64", "-platform_version", "macos", "12.5.0", "12.5.0",
             str(x86_obj), str(tbd_file), "-o", str(x86_bin)
         ], check=True)
         subprocess.run([
-            linker, "-arch", "arm64", "-platform_version", "macos", "13.0.0", "13.0.0",
+            linker, "-arch", "arm64", "-platform_version", "macos", "12.5.0", "12.5.0",
             str(arm_obj), str(tbd_file), "-o", str(arm_bin)
         ], check=True)
 
@@ -434,8 +434,8 @@ def build():
         "CFBundleInfoDictionaryVersion": "6.0",
         "CFBundleName": "Updater CE",
         "CFBundlePackageType": "APPL",
-        "CFBundleShortVersionString": "3.0.0",
-        "CFBundleVersion": "3.0.0",
+        "CFBundleShortVersionString": "2.5.0",
+        "CFBundleVersion": "2.5.0",
         "LSApplicationCategoryType": "public.app-category.utilities",
         "LSMinimumSystemVersion": "13.0",
         "NSHighResolutionCapable": True,
