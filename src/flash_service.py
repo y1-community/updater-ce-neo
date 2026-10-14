@@ -487,6 +487,12 @@ def parse_flash_error(value, model: str = "") -> tuple[str, str]:
     if not raw:
         return tr("install_failed_title"), tr("err_generic_flash_failed_desc").format(detail="")
 
+    if raw == "CACHE_FILE_MISSING" or any(
+        marker in raw.lower()
+        for marker in ("filenotfounderror", "no such file or directory", "cannot find the file")
+    ):
+        return tr("install_failed_title"), tr("err_cache_file_missing_desc")
+
     # 1. USB Disconnected / lost connection
     if is_disconnection_error(raw) or "USB_DISCONNECTED" in raw.upper() or "DEVICE_DISCONNECTED" in raw.upper():
         model_name = model or tr("device_default_name")
@@ -3415,6 +3421,14 @@ class FlashWorker(QThread):
             self._log(
                 f"No response from the device for {seconds}s while configuring the DA."
             )
+            platform = str(getattr(self, "package_platform", "") or "").upper()
+            model = str(getattr(self, "package_model", self.model) or "").upper()
+            if "6572" in platform or model == "Y1":
+                self._log(
+                    "Stage-2 DA setup is waiting for a response after RAM initialization. "
+                    "If this repeats on a Y1, power the player off and reconnect without "
+                    "holding buttons or pressing the reset pinhole, to enter Preloader mode."
+                )
             self.action_changed.emit(tr("action_da_stall"))
 
         watcher = _StallWatcher(_on_mtk_stall)

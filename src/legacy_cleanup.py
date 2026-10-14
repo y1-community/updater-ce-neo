@@ -17,7 +17,7 @@ SAFETY INVARIANTS:
    ``sys.executable`` and both detection and removal refuse it. The current
    product names ('Updater CE.app', 'UpdaterCE.app', 'MediaTek Installer.app')
    are refused by name as well.
-3. Updater CE stores its own data in 'Updater CE' application support / cache.
+3. Updater CE stores data under 'Updater CE'; legacy application-support folders are copied only after app-owned markers are found, and the source is retained.
 """
 
 import os
@@ -46,6 +46,110 @@ LEGACY_APP_DIRS = (
     Path("/Applications"),
     Path.home() / "Applications",
 )
+
+LEGACY_SUPPORT_DIR = Path.home() / "Library" / "Application Support" / "Innioasis Updater"
+LEGACY_DOWNLOADS_DIR = Path.home() / "Library" / "Application Support" / "innioasis-updater" / "downloads"
+CURRENT_SUPPORT_DIR = Path.home() / "Library" / "Application Support" / "Updater CE"
+LEGACY_DATA_MARKERS = ("firmware_downloader.py", "run_mac.sh", "run_linux.sh")
+MIGRATION_MARKER = ".updater-ce-legacy-migration-v1"
+
+
+def legacy_folder_is_app_owned(path: Path) -> bool:
+    """Require a recognizable legacy app marker before offering folder cleanup."""
+    folder = Path(path)
+    if folder == LEGACY_DOWNLOADS_DIR:
+        return folder.is_dir()
+    return folder.is_dir() and (
+        any((folder / marker).is_file() for marker in LEGACY_DATA_MARKERS)
+        or any((folder / name).exists() for name in ("downloads", ".cache", "SP_Flash_Tool"))
+    )
+
+
+def _copy_missing_tree(source: Path, destination: Path, copied: list[str], prefix: str = "") -> None:
+    """Copy regular files/directories that are absent; preserve target data and skip symlinks."""
+    destination.mkdir(parents=True, exist_ok=True)
+    with os.scandir(source) as entries:
+        for entry in entries:
+            if entry.is_symlink():
+                continue
+            src = Path(entry.path)
+            dst = destination / entry.name
+            relative = f"{prefix}{entry.name}"
+            if entry.is_dir(follow_symlinks=False):
+                if dst.exists() and not dst.is_dir():
+                    continue
+                _copy_missing_tree(src, dst, copied, relative + "/")
+            elif entry.is_file(follow_symlinks=False):
+                if dst.exists():
+                    continue
+                shutil.copy2(src, dst)
+                copied.append(relative)
+
+
+def migrate_legacy_download_cache(source: Path = None, destination: Path = None) -> tuple[bool, str]:
+    """Copy the app's old downloads directory once; retain it and preserve existing target files."""
+    import json
+
+    source = Path(source or LEGACY_DOWNLOADS_DIR)
+    destination = Path(destination or (CURRENT_SUPPORT_DIR / "downloads"))
+    marker = destination / MIGRATION_MARKER
+    if marker.is_file():
+        return True, "already migrated"
+    if not source.is_dir():
+        return False, "legacy downloads not found"
+    copied = []
+    try:
+        _copy_missing_tree(source, destination, copied)
+        marker.write_text(json.dumps({"source": str(source), "copied": copied}), encoding="utf-8")
+    except OSError as exc:
+        return False, f"could not copy legacy downloads: {exc}"
+    return True, ", ".join(copied) if copied else "no files to copy"
+
+
+def migrate_legacy_application_support(source: Path = None, destination: Path = None) -> tuple[bool, str]:
+    """One-time, non-destructive migration of known app-owned legacy data.
+
+    Data is copied first, existing destination entries win, and the legacy tree
+    is retained for the user/explicit cleanup prompt. Unknown adjacent user
+    files are never moved or removed.
+    """
+    import json
+
+    source = Path(source or LEGACY_SUPPORT_DIR)
+    destination = Path(destination or CURRENT_SUPPORT_DIR)
+    marker = destination / MIGRATION_MARKER
+    if marker.is_file():
+        return True, "already migrated"
+    owns_support = legacy_folder_is_app_owned(source)
+    owns_downloads = LEGACY_DOWNLOADS_DIR.is_dir()
+    if not owns_support and not owns_downloads:
+        return False, "legacy app marker not found"
+
+    destination.mkdir(parents=True, exist_ok=True)
+    copied = []
+    # Only known app subdirectories are migrated; the old tree is never removed.
+    if owns_support:
+        for name in ("downloads", ".cache", "SP_Flash_Tool", "tools"):
+            src = source / name
+            if not src.is_dir():
+                continue
+            try:
+                _copy_missing_tree(src, destination / name, copied, name + "/")
+            except OSError as exc:
+                return False, f"could not copy {name}: {exc}"
+    download_note = ""
+    if owns_downloads:
+        ok, download_note = migrate_legacy_download_cache(
+            LEGACY_DOWNLOADS_DIR, destination / "downloads"
+        )
+        if not ok:
+            return False, download_note
+    try:
+        marker.write_text(json.dumps({"source": str(source), "copied": copied}), encoding="utf-8")
+    except OSError as exc:
+        return False, f"could not write migration marker: {exc}"
+    details = [note for note in (", ".join(copied), download_note) if note]
+    return True, "; ".join(details) if details else "no known data to copy"
 
 
 def _calc_dir_size(path: Path) -> int:
@@ -155,8 +259,8 @@ def detect_legacy_installations() -> dict:
                 result["estimated_bytes"] += sz
                 result["items_summary"].append(f"{c.name} ({format_bytes(sz)})")
 
-        legacy_support = Path.home() / "Library" / "Application Support" / "Innioasis Updater"
-        if legacy_support.is_dir():
+        legacy_support = LEGACY_SUPPORT_DIR if legacy_folder_is_app_owned(LEGACY_SUPPORT_DIR) else None
+        if legacy_support is not None and legacy_support.is_dir():
             result["macos_app_support"] = legacy_support
             sz = _calc_dir_size(legacy_support)
             result["estimated_bytes"] += sz
@@ -279,7 +383,7 @@ def remove_macos_legacy(
 
     if remove_app_support:
         supp_path = info.get("macos_app_support")
-        if supp_path and supp_path.is_dir():
+        if supp_path and legacy_folder_is_app_owned(supp_path):
             try:
                 shutil.rmtree(supp_path)
                 removed.append(str(supp_path))

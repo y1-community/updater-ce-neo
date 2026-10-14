@@ -84,6 +84,57 @@ def _configure_logging():
         pass
 
 
+def _running_threads() -> list:
+    """Every live Python QThread, whichever module created it."""
+    import gc
+
+    from PySide6.QtCore import QThread
+
+    found = []
+    for obj in gc.get_objects():
+        if isinstance(obj, type):
+            continue
+        try:
+            if isinstance(obj, QThread) and obj.isRunning():
+                found.append(obj)
+        except RuntimeError:
+            # Wrapper already deleted; nothing left to report.
+            continue
+    return found
+
+
+def _leave_cleanly(window, exit_code) -> None:
+    """Retire workers, then leave without waking interpreter finalisation.
+
+    Closing the window cancels and waits for the workers it knows about, but a
+    worker blocked in a socket read can outlive that wait. Python finalisation
+    then pulls the interpreter out from under its ``run()`` — PySide reports
+    ``Error calling Python override of QThread::run()`` — and Qt aborts the
+    process for a QThread destroyed while its thread is still running, which is
+    the SIGABRT ("Abort trap: 6") in this app's crash reports. When something is
+    still running, sync the user's settings first and leave the rest of the
+    teardown to the OS.
+    """
+    try:
+        settings = getattr(window, "settings", None)
+        if settings is not None:
+            settings.sync()
+    except Exception:
+        pass
+
+    try:
+        if not _running_threads():
+            return
+        import os
+
+        logging.shutdown()
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(exit_code if isinstance(exit_code, int) else 0)
+    except Exception:
+        pass
+
+
 def main():
     _configure_logging()
 
@@ -293,7 +344,9 @@ def main():
         # and an event filter on the QApplication itself.
         app._theme_watcher = theme_watcher
 
-    sys.exit(app.exec())
+    exit_code = app.exec()
+    _leave_cleanly(window, exit_code)
+    sys.exit(exit_code)
 
 
 if __name__ == "__main__":

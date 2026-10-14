@@ -110,7 +110,12 @@ def get_user_tools_dir() -> Path:
         base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
         d = base / "Updater CE" / "tools"
     elif platform.system() == "Darwin":
-        d = Path.home() / "Library" / "Application Support" / "Innioasis" / "tools"
+        base = Path.home() / "Library" / "Application Support"
+        target = base / "Updater CE" / "tools"
+        legacy = base / "Innioasis" / "tools"
+        if not target.exists() and legacy.exists():
+            return legacy
+        d = target
     else:
         base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
         d = base / "innioasis-updater" / "tools"

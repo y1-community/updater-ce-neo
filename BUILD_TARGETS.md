@@ -51,7 +51,7 @@ python3 scripts/audit_universal2.py "dist/Updater CE.app"
 ```
 
 The audit exits non-zero if any Mach-O is missing an `x86_64` or `arm64` slice
-or asks for a newer minimum macOS than 13.0 (Ventura). Override with
+or asks for a newer minimum macOS than 12.0 (Monterey). Override with
 `--max-minos 12.0`.
 
 The macOS flash backend is MTKClient, which needs

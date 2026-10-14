@@ -2,10 +2,10 @@
 """Audit Mach-O binaries for Universal2 slices and macOS deployment target.
 
 Usage:
-    python3 scripts/audit_universal2.py <dir> [--max-minos 13.0]
+    python3 scripts/audit_universal2.py <dir> [--max-minos 12.0]
 
 Exits non-zero if any Mach-O is missing an x86_64 or arm64 slice, or declares
-a minimum macOS version newer than --max-minos (default 13.0 = Ventura).
+a minimum macOS version newer than --max-minos (default 12.0 = Monterey).
 """
 
 import argparse
@@ -41,7 +41,7 @@ def vtuple(v: str) -> tuple:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("root")
-    ap.add_argument("--max-minos", default="13.0")
+    ap.add_argument("--max-minos", default="12.0")
     args = ap.parse_args()
     limit = vtuple(args.max_minos)
 
@@ -65,7 +65,7 @@ def main() -> int:
     print(f"Scanned {total} Mach-O files; highest minos = {'.'.join(map(str, highest))}")
     for line in bad:
         print(line)
-    print("RESULT:", "FAIL" if bad else "OK (all universal2, Ventura-compatible)")
+    print("RESULT:", "FAIL" if bad else "OK (all universal2, Monterey-compatible)")
     return 1 if bad else 0
 
 

@@ -75,6 +75,7 @@ from ..config import (
     get_brand_name,
 )
 from ..manifest import ManifestWorker
+from ..worker_lifecycle import retire_worker
 from ..updates import UpdateCheckWorker, UpdateInfo
 from ..donation_dialog import DonationStatusBar
 from ..donors import cached_donors_path, load_donors_file, parse_donors_csv_text
@@ -148,6 +149,7 @@ DEFAULT_WINDOW_HEIGHT = 440
 MINIMUM_WINDOW_WIDTH = 640
 MINIMUM_WINDOW_HEIGHT = 340
 MAXIMUM_WINDOW_WIDTH = 1240
+MAXIMUM_SELECT_WINDOW_HEIGHT = 720
 
 # Slack added to a page's own content height when the window hugs it, so the
 # last card's shadow and the status bar are never clipped.
@@ -219,9 +221,10 @@ _STEP_KEY = {
 
 _WRITE_STEPS = (STEP_DOWNLOAD_DA, STEP_DOWNLOAD_BL, STEP_WRITE)
 
-# Failure codes whose only real fix is the hardware reset described by
-# RetryGuidanceDialog: the device stopped answering the handshake.
+# Failure codes whose only real fix is a hardware reset. Filesystem/package
+# failures must stay in the ordinary install card, not this device guidance.
 _RETRY_GUIDANCE_CODES = ("CONNECTION_FAILED", "MTK_INIT_FAILED")
+_CACHE_MISSING_MARKERS = ("filenotfounderror", "no such file or directory", "cannot find the file")
 
 # States in which a flash run is under way: the sidebar's first entry becomes
 # "Install Software" and holds the accent highlight until the run finishes.
@@ -567,6 +570,10 @@ class MainWindow(QMainWindow):
         self._package_path = ""
         self._package_name = ""
         self._package_model = ""
+        # Workers whose cancellation is still being observed, so Qt cannot
+        # destroy a running QThread when the window goes away (see
+        # _retire_worker).
+        self._retired_workers = set()
         self._log_lines = []
         self._run_output = []
         self._run_output_open = False
@@ -591,6 +598,8 @@ class MainWindow(QMainWindow):
         self._download_active = False
         self._install_failed = False
         self._failure_title = ""
+        self._cache_recovery_needed = False
+        self._legacy_migration_checked = False
         # True once this install has already fallen back to the other backend:
         # one automatic switch per run, so a bad cable cannot ping-pong.
         self._fallback_attempted = False
@@ -1432,6 +1441,7 @@ class MainWindow(QMainWindow):
         self._select_page.release_icon_ready.connect(self._on_release_icon_ready)
         self._select_page.gui_handoff_abandoned.connect(self._on_gui_handoff_abandoned)
         self._select_page.content_size_changed.connect(self._on_select_content_changed)
+        self._flash_page.on_install_retry(self._on_progress_retry)
         self._select_page.download_started.connect(self._on_download_started)
         self._select_page.download_progress.connect(self._on_download_progress)
         self._select_page.download_finished.connect(self._on_download_finished)
@@ -1471,6 +1481,7 @@ class MainWindow(QMainWindow):
         self.service.monitor_error.connect(self._on_monitor_error)
 
     def _on_download_started(self, name, model):
+        self._cache_recovery_needed = False
         self._remember_catalogue_section()
         self._begin_run_output()
         self._download_active = True
@@ -2148,6 +2159,8 @@ class MainWindow(QMainWindow):
                 max_h = int(available.height())
             else:
                 max_h = max(MINIMUM_WINDOW_HEIGHT, min(max_h, int(available.height())))
+        if stack is not None and stack.currentIndex() == _PAGE_SELECT and not fill_height:
+            max_h = min(max_h, MAXIMUM_SELECT_WINDOW_HEIGHT)
         if (max_w, max_h) != (self.maximumWidth(), self.maximumHeight()):
             self.setMaximumSize(max_w, max_h)
 
@@ -2178,6 +2191,8 @@ class MainWindow(QMainWindow):
         chrome_w, chrome_h = self._window_chrome()
         content_h = self._page_content_height(page)
         target_h = int(content_h) + chrome_h + CONTENT_FIT_SLACK
+        if stack.currentIndex() == _PAGE_SELECT:
+            target_h = min(target_h, MAXIMUM_SELECT_WINDOW_HEIGHT)
         try:
             target_h = max(target_h, int(page.minimumSizeHint().height()) + chrome_h)
             need_w = int(page.minimumSizeHint().width()) + chrome_w
@@ -2714,6 +2729,7 @@ class MainWindow(QMainWindow):
         self._package_name = name
         self._package_model = model or ""
         self._pre_install_guided = False
+        self._cache_recovery_needed = False
 
         self._sync_sp_history()
 
@@ -3325,15 +3341,44 @@ class MainWindow(QMainWindow):
         Everything else stays Diagnostics-only, which is where the raw output
         belongs.
         """
-        kind = classify_backend_line(line)
+        text = str(line or "")
+        low = text.lower()
+        if any(marker in low for marker in _CACHE_MISSING_MARKERS):
+            # A file disappearing from the extracted cache is not a player
+            # connection problem. Keep it on the install card so the recovery
+            # can re-download/re-extract firmware rather than resetting USB.
+            self._set_cache_recovery_package(text)
+            return
+        kind = classify_backend_line(text)
         if not kind or not self._package_path:
             return  # No run in progress — log only.
         if kind == LINE_CONNECT_HINT:
             self._show_connect_guide_stage_one()
         elif kind == LINE_RETRY:
             self._show_retry_guidance(
-                tr("retry_guidance_detail_errno").format(code=str(line).strip())
+                tr("retry_guidance_detail_errno").format(code=text.strip())
             )
+
+    def _set_cache_recovery_package(self, detail=""):
+        """Keep the selected release and route the user to local cache recovery."""
+        package = Path(getattr(self, "_package_path", "") or "")
+        self._cache_recovery_needed = True
+        if package.is_dir():
+            self._append_log(
+                "Selected local firmware directory is incomplete; choose Select Software and "
+                "select it again after restoring the missing file."
+            )
+        else:
+            self._append_log("Cached firmware archive is missing; download the firmware again from Select Software.")
+        if self._stack.currentIndex() == _PAGE_FLASH:
+            self._install_failed = True
+            self._power_off_prompt = False
+            self._install_complete = False
+            from ..flash_service import parse_flash_error
+            title, explanation = parse_flash_error("CACHE_FILE_MISSING", self._package_model)
+            self._failure_title = title
+            self._flash_page.show_install_failure("CACHE_FILE_MISSING", explanation, self._last_progress or 0)
+            self._nav_to_page(_PAGE_FLASH)
 
     def _show_connect_guide_stage_one(self):
         """Return the UI to "power off the device and connect USB".
@@ -3607,13 +3652,18 @@ class MainWindow(QMainWindow):
 
     def _show_install_failure(self, message: str):
         """Failure stays on the install progress card. Retry is where Cancel was."""
+        raw = str(message or "")
+        low = raw.lower()
+        if message == "CACHE_FILE_MISSING" or any(marker in low for marker in _CACHE_MISSING_MARKERS):
+            self._set_cache_recovery_package(raw)
+            message = "CACHE_FILE_MISSING"
         self._install_failed = True
         self._power_off_prompt = False
         self._install_complete = False
         from ..flash_service import parse_flash_error
         parsed_title, explanation = parse_flash_error(message, getattr(self, "_package_model", ""))
         self._failure_title = parsed_title
-        self._flash_page.show_install_failure(parsed_title, explanation, self._last_progress or 0)
+        self._flash_page.show_install_failure(message, explanation, self._last_progress or 0)
         self._nav_to_page(_PAGE_FLASH)
         self._update_header_title()
 
@@ -3625,7 +3675,10 @@ class MainWindow(QMainWindow):
             pass
         self._download_active = False
         from ..flash_service import is_disconnection_error, is_mtk_device_connected
-        if (
+        cache_failure = bool(getattr(self, "_cache_recovery_needed", False)) or any(
+            marker in str(error_code or "").lower() for marker in _CACHE_MISSING_MARKERS
+        ) or str(error_code or "") == "CACHE_FILE_MISSING"
+        if not cache_failure and (
             error_code == "USB_DISCONNECTED"
             or is_disconnection_error(error_code)
             or (getattr(self, "_past_usb_search", False) and not is_mtk_device_connected())
@@ -3636,13 +3689,15 @@ class MainWindow(QMainWindow):
         # A backend that never got going is not the end of the install on a
         # host that has the other engine: hand the user back to the power-off
         # step and start the other one from there.
-        if self._offer_backend_failover(error_code):
+        if not cache_failure and self._offer_backend_failover(error_code):
             return
         try:
             self.sm.transition_to(FlashState.S5_FAILED)
         except ValueError:
             self.sm.force_state(FlashState.S5_FAILED)
-        self._show_install_failure(str(error_code or tr("install_failed")))
+        self._show_install_failure(
+            "CACHE_FILE_MISSING" if cache_failure else str(error_code or tr("install_failed"))
+        )
 
     # ------------------------------------------------------------------
     # Backend failover
@@ -3723,7 +3778,41 @@ class MainWindow(QMainWindow):
         return True
 
     def _on_progress_retry(self):
-        """Back to the power-off / unplug prompt. Does not start a flash."""
+        """Retry an install failure, using firmware recovery rather than USB reset when needed."""
+        if getattr(self, "_cache_recovery_needed", False):
+            self.service.cancel_flash()
+            self.service.stop_device_monitor()
+            self._elapsed_timer.stop()
+            self._install_failed = False
+            self._failure_title = ""
+            self._flash_page.clear_install_failure()
+            self._power_off_prompt = False
+            self._pre_install_guided = False
+            if self.sm.state in (
+                FlashState.S5_FAILED,
+                FlashState.S5_USB_DISCONNECTED,
+                FlashState.S4_FLASHING,
+                FlashState.S5_COMPLETE,
+            ):
+                self.sm.reset_for_retry()
+            package = Path(getattr(self._select_page, "_current_package_path", "") or "")
+            if package.is_file() and package.suffix.lower() in (".zip", ".rar"):
+                from ..flash_service import compute_extract_dir
+                from ..downloads import downloads_dir
+                extract_dir = Path(compute_extract_dir(str(package)))
+                try:
+                    extract_dir.relative_to(downloads_dir())
+                    if extract_dir.is_dir() and extract_dir.name.startswith(".") and extract_dir.name.endswith("_extracted"):
+                        import shutil
+                        shutil.rmtree(extract_dir)
+                except (OSError, ValueError):
+                    logger.info("Could not invalidate incomplete firmware cache %s", extract_dir, exc_info=True)
+            self._cache_recovery_needed = False
+            if getattr(self._select_page, "_current_selected_rel", None) is None:
+                self._return_to_select_software()
+            else:
+                self._select_page.retry_missing_cached_firmware()
+            return
         self.service.cancel_flash()
         self.service.stop_device_monitor()
         self._elapsed_timer.stop()
@@ -3859,12 +3948,19 @@ class MainWindow(QMainWindow):
             self._flash_page.stop_theme_workers()
         page = getattr(self, "_select_page", None)
         if page is not None:
+            # Hand the worker to the page's retirement set rather than clearing
+            # the reference: cancellation is asynchronous, and a QThread object
+            # destroyed while its thread still runs aborts the process.
+            cancel = getattr(page, "cancel_download", None)
+            if callable(cancel):
+                cancel()
             worker = getattr(page, "_download_worker", None)
             if worker is not None:
                 try:
                     worker.cancel()
                 except Exception:
                     pass
+                self._retire_worker(worker)
                 page._download_worker = None
             bar = getattr(page, "_download_bar", None)
             if bar is not None:
@@ -3990,6 +4086,7 @@ class MainWindow(QMainWindow):
         self._power_off_prompt = False
         self._compact_install_screen = False
         self._download_active = False
+        self._cache_recovery_needed = False
         self._flash_page.set_release_icon(QPixmap(), complete=False)
         self.sm.reset_full()
         self._package_path = ""
@@ -4667,10 +4764,18 @@ class MainWindow(QMainWindow):
 
     def _check_legacy_installations(self):
         try:
+            from ..legacy_cleanup import (
+                detect_legacy_installations,
+                migrate_legacy_application_support,
+            )
+            if not getattr(self, "_legacy_migration_checked", False):
+                self._legacy_migration_checked = True
+                migration_ok, migration_note = migrate_legacy_application_support()
+                if migration_ok and migration_note not in ("already migrated", "legacy app marker not found"):
+                    logger.info("Legacy application data migration: %s", migration_note)
             prompted = self.settings.value("legacy_cleanup_prompted", False, type=bool)
             if prompted:
                 return
-            from ..legacy_cleanup import detect_legacy_installations
             info = detect_legacy_installations()
             if info.get("has_legacy") or info.get("has_platform_tools"):
                 from .dialogs import LegacyMigrationDialog
@@ -4678,7 +4783,7 @@ class MainWindow(QMainWindow):
                 dlg.exec()
                 self.settings.setValue("legacy_cleanup_prompted", True)
         except Exception:
-            pass
+            logger.debug("Legacy installation migration/check failed", exc_info=True)
 
     def _progress_owns_status(self) -> bool:
         """The progress card already shows download and install text."""
@@ -4818,6 +4923,16 @@ class MainWindow(QMainWindow):
         if hasattr(self, "_settings_page"):
             self._settings_page.refresh_settings()
 
+    def _retire_worker(self, worker):
+        """Keep a worker alive until its thread has stopped.
+
+        The window owns workers parented to itself, so quitting while one is
+        still running used to destroy a live QThread — Qt aborts the process for
+        that (``QThread: Destroyed while thread is still running``), which is
+        what the crash reports for this app showed.
+        """
+        return retire_worker(worker, self._retired_workers)
+
     def cleanup_workers(self):
         """Cleanly terminate and wait for any background workers."""
         self.service.cleanup()
@@ -4827,10 +4942,12 @@ class MainWindow(QMainWindow):
             if rw is not None and rw.isRunning():
                 rw.requestInterruption()
                 rw.wait(1500)
+                self._retire_worker(rw)
             dw = getattr(select_page, "_download_worker", None)
             if dw is not None and dw.isRunning():
                 dw.cancel()
                 dw.wait(1500)
+                self._retire_worker(dw)
             mon = getattr(select_page, "_monitor", None)
             if mon is not None:
                 mon.stop_monitoring()
@@ -4839,10 +4956,13 @@ class MainWindow(QMainWindow):
             getattr(self, "_update_worker", None),
             getattr(self, "_device_update_worker", None),
             getattr(select_page, "_manifest_worker", None) if select_page else None,
+            getattr(select_page, "_prep_worker", None) if select_page else None,
+            getattr(select_page, "_translate_worker", None) if select_page else None,
         ):
             if w is not None and w.isRunning():
                 w.requestInterruption()
                 w.wait(1500)
+                self._retire_worker(w)
 
     def close(self):
         return super().close()

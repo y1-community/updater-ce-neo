@@ -11,7 +11,7 @@
 # Requirements:
 #   - Python 3.11+ in a virtualenv (.venv)
 #   - pip install pyinstaller pyside6 requests pyqt-liquidglass pyobjc-framework-cocoa pyobjc-framework-quartz
-#   - macOS 13+ (Ventura through Golden Gate compatible, Intel & Apple Silicon)
+#   - macOS 12+ (Monterey through Golden Gate compatible, Intel & Apple Silicon)
 #
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -200,7 +200,7 @@ if [ ! -f "$BUNDLE_ICON" ]; then
 fi
 
 echo "=== Building $APP_NAME for macOS (v$VERSION) [$BRAND] ==="
-echo "Target: macOS 13 (Ventura) through macOS 26 (Golden Gate)"
+echo "Target: macOS 12 (Monterey) through macOS 26 (Golden Gate)"
 [ -n "$TARGET_ARCH" ] && echo "Architecture: $TARGET_ARCH" || echo "Architecture: Host default (Intel/Apple Silicon)"
 
 # dist/ was cleaned once by the brand plan above, before any child build, so

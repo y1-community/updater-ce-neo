@@ -984,6 +984,7 @@ class FlashPage(QWidget):
         self._flash_retry_btn = _RoundNextButton(symbol="next", accent=True)
         self._flash_retry_btn.setObjectName("flashRetryBtn")
         self._flash_retry_btn.setToolTip(tr("flash_btn_retry"))
+        self._flash_retry_btn.setAccessibleName(tr("flash_btn_retry"))
         self._flash_retry_btn.setVisible(False)
         self._flash_retry_btn.clicked.connect(self._on_install_retry)
 
@@ -1480,6 +1481,9 @@ class FlashPage(QWidget):
         if hasattr(self, "_cancel_btn"):
             self._cancel_btn.setVisible(True)
             self._cancel_btn.setEnabled(True)
+        if message == "CACHE_FILE_MISSING":
+            self._flash_retry_btn.setToolTip(tr("sel_cache_retry_tooltip"))
+            self._flash_retry_btn.setAccessibleName(tr("sel_cache_retry_button"))
         self._notify_geometry_change()
 
     def stop_theme_workers(self) -> None:
@@ -1527,6 +1531,8 @@ class FlashPage(QWidget):
             self._done_mark.setVisible(False)
         if hasattr(self, "_flash_retry_btn"):
             self._flash_retry_btn.setVisible(False)
+            self._flash_retry_btn.setToolTip(tr("flash_btn_retry"))
+            self._flash_retry_btn.setAccessibleName(tr("flash_btn_retry"))
             self._cancel_btn.setVisible(True)
             self._cancel_btn.setEnabled(True)
         if hasattr(self, "_theme_row"):

@@ -24,11 +24,14 @@ def downloads_dir():
     """Per-user directory where downloaded firmware packages are stored."""
     if os.name == "nt":
         base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
+        app_dir = "Updater CE"
     elif sys.platform == "darwin":
         base = Path.home() / "Library" / "Application Support"
+        app_dir = "Updater CE"
     else:
         base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
-    d = base / "innioasis-updater" / "downloads"
+        app_dir = "updater-ce"
+    d = base / app_dir / "downloads"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -107,9 +110,21 @@ class DownloadWorker(QThread):
         self.destination = Path(destination)
         self.token = token
         self._cancelled = False
+        self._response = None
 
     def cancel(self):
         self._cancelled = True
+        # Closing the response unblocks a read that is already waiting on the
+        # socket, so iter_content() raises at once. Without this the flag was
+        # only seen after READ_TIMEOUT, which is what made a cancelled or
+        # closing download look stalled for up to 25 seconds.
+        response = self._response
+        self._response = None
+        if response is not None:
+            try:
+                response.close()
+            except Exception:
+                pass
 
     def run(self):
         part_file = Path(f"{self.destination}.part")
@@ -129,8 +144,8 @@ class DownloadWorker(QThread):
                     expected_size = int(r_head.headers.get("content-length", 0))
                     if expected_size > 0 and self.destination.stat().st_size == expected_size:
                         logger.info("Destination file %s already complete (%d bytes)", self.destination, expected_size)
-                        self.progress.emit(100)
                         self.status.emit(tr("dl_complete"))
+                        self.progress.emit(100)
                         self.finished.emit(True, str(self.destination))
                         return
                 except Exception:
@@ -204,6 +219,7 @@ class DownloadWorker(QThread):
                         file_mode = "wb"
                         total_size = int(response.headers.get("content-length", 0))
 
+                    self._response = response
                     logger.info("Streaming download: downloaded=%d, total=%d, mode=%s", downloaded, total_size, file_mode)
 
                     speed_bytes_sec = 0.0
@@ -251,6 +267,7 @@ class DownloadWorker(QThread):
                                     )
                                 self.status.emit(status_str)
 
+                    self._response = None
                     if total_size > 0 and downloaded < total_size:
                         raise requests_module().exceptions.RequestException(
                             f"Connection closed prematurely ({downloaded}/{total_size} bytes received)"
@@ -267,7 +284,14 @@ class DownloadWorker(QThread):
                     logger.warning("Download error on attempt %d/%d: %s", attempt, MAX_RETRIES, exc)
                     if attempt < MAX_RETRIES:
                         self.status.emit(tr("dl_retry_fmt").format(attempt=attempt, max=MAX_RETRIES))
-                        time.sleep(RETRY_BACKOFF)
+                        # Interruptible backoff: a cancel during the pause must
+                        # not have to wait it out.
+                        resume_at = time.time() + RETRY_BACKOFF
+                        while time.time() < resume_at:
+                            if self._cancelled:
+                                self.finished.emit(False, "USER_CANCELLED")
+                                return
+                            time.sleep(0.1)
                         if part_file.is_file():
                             downloaded = part_file.stat().st_size
                     else:
@@ -278,8 +302,12 @@ class DownloadWorker(QThread):
                 self.destination.unlink()
             part_file.replace(self.destination)
 
-            self.progress.emit(100)
+            # Status first: the card paints the bar on progress and the byte
+            # line on status, so the final status must not arrive after the bar
+            # has already been filled to 100% (which reads as "stalled at "
+            # whatever the last percentage line said).
             self.status.emit(tr("dl_complete"))
+            self.progress.emit(100)
             self.finished.emit(True, str(self.destination))
 
         except Exception as e:

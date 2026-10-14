@@ -199,10 +199,10 @@ def get_appeal_messages() -> list[str]:
 class DonationStatusBar(QStatusBar):
     """Compact, always-visible version of the Support dialog's goal display.
 
-    One bar, three parts: the Credits / Thanks link on the left, the goal or
-    donor display centred in the middle, and the Support Us link in the right
-    corner. All of it belongs to the donation UI, so it appears and disappears
-    together with the "show donations" setting.
+    The center copy is deliberately abbreviated to fit between Credits / Thanks
+    and the right edge at the minimum window width; long donor names are clipped
+    to a short display name and the ticker remains a fallback for other locales.
+    All of it belongs to the donation UI, so it follows the "show donations" setting.
     """
 
     def __init__(self, parent=None, donations=None, on_support=None,
@@ -556,7 +556,6 @@ class DonationStatusBar(QStatusBar):
             name = donation.get("name", tr("donate_supporter"))
             amount = float(donation.get("amount", 0))
             amount_text = str(int(amount)) if amount.is_integer() else f"{amount:.2f}"
-            method = donation.get("method", tr("donate_method_generic"))
             url = donation.get("url", "")
             when = relative_date(donation.get("dt"))
             t = T()
@@ -564,10 +563,18 @@ class DonationStatusBar(QStatusBar):
                 f'<a href="{url}" style="color:{t.fg}; font-weight:bold;">{name}</a>'
                 if url else name
             )
-            lines.append(tr("donate_ticker_fmt").format(
-                anchor=anchor, amount=amount_text, method=method, when=when
+            # The status bar has a fixed space between Credits / Thanks and
+            # the right edge. Keep the line intentionally compact so it reads
+            # without scrolling even at the app's minimum window width.
+            short_name = name if len(name) <= 16 else name[:15].rstrip() + "…"
+            anchor = (
+                f'<a href="{url}" style="color:{t.fg}; font-weight:bold;">{short_name}</a>'
+                if url else short_name
+            )
+            lines.append(tr("donate_ticker_status_fmt").format(
+                anchor=anchor, amount=amount_text
             ))
-        return lines or [tr("donate_thanks")]
+        return lines or [tr("donate_thanks_status")]
 
     def _refresh_goal(self):
         raised, _remaining, percent, target = get_monthly_goal_stats(self.donations)
@@ -588,7 +595,7 @@ class DonationStatusBar(QStatusBar):
             self._goal_bar.setVisible(True)
             self._donor_label.setVisible(False)
             self._goal_label.setText(
-                tr("donate_goal_fmt").format(raised=raised_text, target=target)
+                tr("donate_goal_status_fmt").format(raised=raised_text, target=target)
             )
             self._goal_bar.setValue(int(round(percent * 10)))
 

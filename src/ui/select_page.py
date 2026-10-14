@@ -34,6 +34,7 @@ from PySide6.QtWidgets import (
 
 from .. import catalog, downloads, device_tracking
 from ..network import get_connectivity_monitor
+from ..worker_lifecycle import retire_worker
 from ..flash_service import (
     ExtractWorker,
     compute_extract_dir,
@@ -204,7 +205,9 @@ class _ReleaseNotesBrowser(QTextBrowser):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.setMinimumHeight(80)
+        self.setMaximumHeight(260)
 
     def sizeHint(self) -> QSize:
         doc = self.document()
@@ -216,7 +219,9 @@ class _ReleaseNotesBrowser(QTextBrowser):
             doc.setTextWidth(w)
         doc_h = int(doc.documentLayout().documentSize().height())
         target_h = max(28, doc_h + 8)
-        target_h = min(target_h, 360)
+        # Notes scroll inside their card; they must not drive the app window
+        # taller just because a release has unusually long copy.
+        target_h = min(target_h, 260)
         from PySide6.QtCore import QSize
         return QSize(super().sizeHint().width(), target_h)
 
@@ -1892,6 +1897,8 @@ class SelectPackagePage(QWidget):
 
     def _on_release_selected(self, current, _prev):
         self._install_btn.setEnabled(current is not None)
+        if current is None:
+            self._current_selected_rel = None
         if current is not None:
             self._install_btn.setDefault(True)
         if current is None:
@@ -2133,6 +2140,9 @@ class SelectPackagePage(QWidget):
         self._update_translate_link()
         if self._translate_worker is not None and self._translate_worker.isRunning():
             self._translate_worker.wait(500)
+            # A wait that times out leaves the thread running; keeping the
+            # reference stops Qt destroying it (which aborts the process).
+            retire_worker(self._translate_worker, self._active_workers)
         self._translate_worker = ReleaseTranslateWorker(rel, lang, self)
         self._translate_worker.translation_ready.connect(self._on_translation_ready)
         self._translate_worker.translation_failed.connect(self._on_translation_failed)
@@ -2219,20 +2229,41 @@ class SelectPackagePage(QWidget):
             return
 
         # 3. Otherwise, start download worker. Package progress is on the install card.
+        self._current_package_path = str(dest)
+        self._current_package_name = self._install_card_title(pkg.name, rel, eff_model)
+        self._current_package_model = eff_model
+        self._current_installed_release_info = self._pending_install_release_info
+        self._current_selected_rel = rel
         self._download_status_key = "sel_download_start"
         self._install_btn.setEnabled(False)
         display_name = self._install_card_title(pkg.name, rel, eff_model)
         self.download_started.emit(display_name, eff_model)
         self._gui_handoff_worker = False
+        if self._download_worker is not None and self._download_worker.isRunning():
+            self._download_worker.cancel()
+            retire_worker(self._download_worker, self._active_workers)
         self._download_worker = downloads.DownloadWorker(rel["download_url"], str(dest))
         self._download_worker.progress.connect(self._on_download_progress)
         self._download_worker.status.connect(self._on_download_status)
         self._download_worker.finished.connect(self._on_download_done)
         self._download_worker.start()
 
+    def retry_missing_cached_firmware(self):
+        """Retry the selected release after its archive or extracted cache vanished."""
+        rel = getattr(self, "_current_selected_rel", None)
+        if rel is None:
+            self._say(tr("sel_cache_retry_select_release"), 12000)
+            return
+        self._trigger_release_install(rel, package=getattr(self, "_details_package", None))
+
     def cancel_download(self):
-        if self._download_worker is not None:
-            self._download_worker.cancel()
+        worker = self._download_worker
+        if worker is not None:
+            worker.cancel()
+            # The thread only notices between chunks, so it outlives this call:
+            # dropping the last reference here destroyed a running QThread and
+            # aborted the app.
+            retire_worker(worker, self._active_workers)
             self._download_worker = None
         self._download_bar.setVisible(False)
         self._install_btn.setEnabled(True)
@@ -2281,6 +2312,7 @@ class SelectPackagePage(QWidget):
     def _prepare_package(self, path, done_cb):
         if self._prep_worker is not None:
             self._prep_worker.cancel()
+            retire_worker(self._prep_worker, self._active_workers)
         self._download_status_key = "sel_preparing"
         self._local_status_key = "sel_preparing"
         self._download_bar.setVisible(False)
@@ -2624,10 +2656,12 @@ class SelectPackagePage(QWidget):
             except Exception:
                 pass
             worker.cancel()
+            retire_worker(worker, self._active_workers)
             self._download_worker = None
         prep = self._prep_worker
         if prep is not None:
             prep.cancel()
+            retire_worker(prep, self._active_workers)
         self._gui_handoff_worker = False
 
     def explicit_firmware(self) -> Optional[dict]:
@@ -2738,6 +2772,9 @@ class SelectPackagePage(QWidget):
             self._prepare_package(str(dest), self._on_external_prep_done)
             return True
         self.download_started.emit(self._current_package_name, self._current_package_model)
+        if self._download_worker is not None and self._download_worker.isRunning():
+            self._download_worker.cancel()
+            retire_worker(self._download_worker, self._active_workers)
         self._download_worker = downloads.DownloadWorker(target["url"], str(dest))
         self._download_worker.progress.connect(self._on_download_progress)
         self._download_worker.status.connect(self._on_download_status)

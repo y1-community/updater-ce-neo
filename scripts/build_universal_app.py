@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""build_universal_app.py — Build a 100% self-contained macOS 13+ Universal 2 (Intel + Apple Silicon) .app bundle.
+"""build_universal_app.py — Build a 100% self-contained macOS 12+ Universal 2 (Intel + Apple Silicon) .app bundle.
 
 Bundles:
 1. Standalone Universal 2 Python 3.11 runtime (merged x86_64 + aarch64 via llvm-lipo).
@@ -7,7 +7,7 @@ Bundles:
 3. Universal 2 libusb-1.0.dylib.
 4. Pure Python dependencies (requests, pyusb, pyserial, colorama, certifi, urllib3, idna, charset_normalizer).
 5. All application sources, MTKClient, and assets.
-6. Compiled Universal 2 Mach-O launcher targeting macOS 13+.
+6. Compiled Universal 2 Mach-O launcher targeting macOS 12+.
 7. Apple codesignature with entitlements.plist.
 """
 
@@ -288,7 +288,7 @@ def compile_universal_launcher(out_path: Path):
         if sys.platform == "darwin":
             subprocess.run([
                 "clang", "-arch", "x86_64", "-arch", "arm64",
-                "-mmacosx-version-min=13.0",
+                "-mmacosx-version-min=12.0",
                 str(c_file), "-o", str(out_path)
             ], check=True)
             os.chmod(out_path, 0o755)
@@ -303,21 +303,21 @@ def compile_universal_launcher(out_path: Path):
         arm_bin = tdp / "arm_bin"
 
         subprocess.run([
-            "clang", "-target", "x86_64-apple-macos13", "-fno-stack-protector",
+            "clang", "-target", "x86_64-apple-macos12", "-fno-stack-protector",
             "-c", str(c_file), "-o", str(x86_obj)
         ], check=True)
         subprocess.run([
-            "clang", "-target", "arm64-apple-macos13", "-fno-stack-protector",
+            "clang", "-target", "arm64-apple-macos12", "-fno-stack-protector",
             "-c", str(c_file), "-o", str(arm_obj)
         ], check=True)
 
         linker = "ld64.lld" if shutil.which("ld64.lld") else "lld"
         subprocess.run([
-            linker, "-arch", "x86_64", "-platform_version", "macos", "12.5.0", "12.5.0",
+            linker, "-arch", "x86_64", "-platform_version", "macos", "12.0.0", "12.0.0",
             str(x86_obj), str(tbd_file), "-o", str(x86_bin)
         ], check=True)
         subprocess.run([
-            linker, "-arch", "arm64", "-platform_version", "macos", "12.5.0", "12.5.0",
+            linker, "-arch", "arm64", "-platform_version", "macos", "12.0.0", "12.0.0",
             str(arm_obj), str(tbd_file), "-o", str(arm_bin)
         ], check=True)
 
@@ -503,7 +503,7 @@ def build():
         "CFBundleShortVersionString": "2.5.0",
         "CFBundleVersion": "2.5.0",
         "LSApplicationCategoryType": "public.app-category.utilities",
-        "LSMinimumSystemVersion": "13.0",
+        "LSMinimumSystemVersion": "12.0",
         "NSHighResolutionCapable": True,
         "NSRequiresAquaSystemAppearance": False,
         "NSPrincipalClass": "NSApplication",
