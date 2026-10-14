@@ -47,6 +47,40 @@ if not (BUNDLE_DIR / "assets").exists() and (REPO_ROOT / "assets").exists():
 COMPAT_DIR = RESOURCES_DIR / "compat"
 
 
+def _is_package_dir(path: Path) -> bool:
+    """True when ``path`` is an importable package directory.
+
+    Both source and bytecode count: the bundled builds ship mtkclient
+    precompiled (``__init__.pyc``, no ``.py`` — see
+    ``scripts/precompile_tree.py``), and a bundle that only recognised
+    ``__init__.py`` would stop finding its own mtkclient.
+    """
+    if (path / "__init__.py").is_file() or (path / "__init__.pyc").is_file():
+        return True
+    cache = path / "__pycache__"
+    if cache.is_dir():
+        try:
+            return any(
+                p.name.startswith("__init__.") and p.suffix == ".pyc" for p in cache.iterdir()
+            )
+        except OSError:
+            return False
+    return False
+
+
+def _mtkclient_path_entry(cand: Path) -> str | None:
+    """The ``sys.path`` entry that makes ``mtkclient`` importable from ``cand``.
+
+    Two layouts exist in the wild: ``cand/mtkclient/`` (the vendored tree) and
+    ``cand`` itself being the package (a PyInstaller bundle).
+    """
+    if _is_package_dir(cand / "mtkclient"):
+        return str(cand)
+    if _is_package_dir(cand):
+        return str(cand.parent)
+    return None
+
+
 def ensure_mtkclient_importable():
     """Make the bundled mtkclient importable (idempotent).
 
@@ -73,15 +107,10 @@ def ensure_mtkclient_importable():
     for cand in candidates:
         if not cand or not cand.exists():
             continue
-        if (cand / "mtkclient" / "__init__.py").exists():
-            p = str(cand)
-            if p not in sys.path:
-                sys.path.insert(0, p)
-            return
-        if (cand / "__init__.py").exists():
-            p = str(cand.parent)
-            if p not in sys.path:
-                sys.path.insert(0, p)
+        entry = _mtkclient_path_entry(Path(cand))
+        if entry:
+            if entry not in sys.path:
+                sys.path.insert(0, entry)
             return
 
     if str(MTKCLIENT_DIR) not in sys.path:

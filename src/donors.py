@@ -11,9 +11,8 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
-import requests
-
 from .config import DONORS_CSV_URL, MONTHLY_GOAL_USD
+from .network import requests_module
 
 logger = logging.getLogger(__name__)
 
@@ -169,7 +168,7 @@ def fetch_remote_donors_async(on_result):
         reason = ""
         try:
             url = f"{DONORS_CSV_URL}?_t={int(time.time())}"
-            resp = requests.get(
+            resp = requests_module().get(
                 url,
                 headers={
                     "User-Agent": "InnioasisUpdater/1.0",

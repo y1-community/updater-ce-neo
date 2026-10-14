@@ -6,10 +6,10 @@ import sys
 import time
 from pathlib import Path
 
-import requests
 from PySide6.QtCore import QThread, Signal
 
 from .i18n import tr
+from .network import requests_module
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +125,7 @@ class DownloadWorker(QThread):
                     }
                     if self.token:
                         head_headers["Authorization"] = f"token {self.token}"
-                    r_head = requests.head(self.url, allow_redirects=True, timeout=10, headers=head_headers)
+                    r_head = requests_module().head(self.url, allow_redirects=True, timeout=10, headers=head_headers)
                     expected_size = int(r_head.headers.get("content-length", 0))
                     if expected_size > 0 and self.destination.stat().st_size == expected_size:
                         logger.info("Destination file %s already complete (%d bytes)", self.destination, expected_size)
@@ -148,7 +148,7 @@ class DownloadWorker(QThread):
             total_size = 0
             last_percent = -1
             last_status_time = 0.0
-            session = requests.Session()
+            session = requests_module().Session()
 
             for attempt in range(1, MAX_RETRIES + 1):
                 if self._cancelled:
@@ -252,7 +252,7 @@ class DownloadWorker(QThread):
                                 self.status.emit(status_str)
 
                     if total_size > 0 and downloaded < total_size:
-                        raise requests.exceptions.RequestException(
+                        raise requests_module().exceptions.RequestException(
                             f"Connection closed prematurely ({downloaded}/{total_size} bytes received)"
                         )
 

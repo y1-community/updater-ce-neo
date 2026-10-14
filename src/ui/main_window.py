@@ -10,6 +10,18 @@ Tool's console-mode XML flow; macOS has MTKClient only) and can be switched
 while waiting for a device, which restarts the run with the new backend.
 """
 
+# PEP 810 (Python 3.15+): module-level imports listed here are resolved on first
+# use instead of at import time. The interpreter consults this *as each import
+# executes*, so it has to be assigned before the import block below -- placed
+# after it, the same list is inert (verified on 3.15.0). Interpreters before
+# 3.15 read nothing from it, so nothing changes on 3.11-3.14; there, deferrals
+# are the function-local imports instead (see src/network.py).
+# Listed: modules nothing touches until the window has been up for a while
+# (the update check and the donor fetch run seconds later). Every module that
+# imports one of them carries the same list -- one eager importer anywhere
+# defeats the deferral (verified on 3.15.0).
+__lazy_modules__ = ["src.updates", "src.donors"]
+
 import logging
 import os
 import platform

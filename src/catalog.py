@@ -24,8 +24,6 @@ from datetime import datetime, timedelta
 from fnmatch import fnmatch
 from pathlib import Path
 
-import requests
-
 from .config import (
     GITHUB_API,
     GITHUB_RELEASES_PER_PAGE,
@@ -34,6 +32,8 @@ from .config import (
     UPDATE_CACHE_TTL_SECONDS,
     resolve_firmware_repo,
 )
+
+from .network import requests_module  # noqa: E402  (kept below the config import)
 
 logger = logging.getLogger(__name__)
 
@@ -985,7 +985,7 @@ class ReleasesClient:
         self.cache_dir = Path(cache_root) / "releases"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.token = os.environ.get("GITHUB_TOKEN") or ""
-        self.session = requests.Session()
+        self.session = requests_module().Session()
         self.session.headers.update({"Accept": "application/vnd.github+json"})
         self.unauth_calls = []
         self.unauth_hourly_limit = 55
@@ -1044,7 +1044,7 @@ class ReleasesClient:
                     break
                 last_err = resp.status_code
                 break
-            except requests.RequestException as e:
+            except requests_module().RequestException as e:
                 last_err = e
                 if attempt < 2:
                     time.sleep(1.0)

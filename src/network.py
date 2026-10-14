@@ -43,6 +43,23 @@ def _get_ssl_context() -> ssl.SSLContext:
             return ssl._create_unverified_context()
 
 
+def requests_module():
+    """Return the ``requests`` package, imported on first use.
+
+    Importing ``requests`` drags in urllib3, certifi, charset-normaliser and
+    idna -- around 100 ms measured on a warm cache -- and nothing on the
+    first-window path needs it: the startup update check runs on a worker
+    thread seconds later and downloads start only when the user asks for one.
+    Bringing it in where a request is actually made keeps that cost off the
+    launch. PyInstaller still collects the package (its analysis walks function
+    bodies too), and on Python 3.15 a module-level ``__lazy_modules__`` marker
+    hands the same decision to the interpreter.
+    """
+    import requests
+
+    return requests
+
+
 def check_socket_connectivity(host: str = "1.1.1.1", port: int = 53, timeout: float = 1.0) -> bool:
     """Quickly check if internet routing is alive via raw TCP socket."""
     try:

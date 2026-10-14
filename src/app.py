@@ -21,6 +21,36 @@ from PySide6.QtWidgets import QApplication
 
 from . import paths
 
+logger = logging.getLogger(__name__)
+
+
+def _startup_step(label, fn, /, *args, **kwargs):
+    """Run one host-integration step, keeping a failure out of the launch.
+
+    Window glass, the dark title bar and the host theme all reach into the OS
+    (pyobjc on macOS, the DWM on Windows) and are already no-ops where the
+    host lacks them. A step that still raises -- an OS build that changed, a
+    half-installed bridge, a sandbox that denies the call -- must not cost the
+    user the window it was decorating, so each is isolated and logged.
+    """
+    try:
+        return fn(*args, **kwargs)
+    except Exception:
+        logger.warning("Host integration step failed: %s", label, exc_info=True)
+        return None
+
+
+def _apply_native_chrome(window, *, dark=None):
+    """Apply the post-show host chrome (glass, traffic lights, title bar)."""
+    from .ui import glass
+    from .ui.dark import is_dark as _is_dark
+
+    if dark is None:
+        dark = _is_dark()
+    _startup_step("apply_glass", glass.apply_glass, window, dark=dark)
+    _startup_step("configure_traffic_lights", glass.configure_traffic_lights, window, x_offset=18)
+    _startup_step("apply_windows_dark_titlebar", glass.apply_windows_dark_titlebar, window, dark)
+
 
 def _configure_logging():
     logging.basicConfig(
@@ -214,7 +244,7 @@ def main():
 
     # Follow the host appearance. Older macOS uses vibrant light or vibrant
     # dark to match; Tahoe and Golden Gate stay on the Liquid Glass path.
-    apply_theme(app, force_dark=None)
+    _startup_step("apply_theme", apply_theme, app, force_dark=None)
 
     # Default language: the reader's saved choice, else the system's own
     # language when the app ships a catalog for it, else English.
@@ -227,11 +257,11 @@ def main():
     translator().set_language(initial_language(stored))
 
     window = MainWindow()
-    prepare_window_for_glass(window)
+    # Before show(): the window must exist to be prepared for glass. After it:
+    # every other piece of host chrome, each one guarded.
+    _startup_step("prepare_window_for_glass", prepare_window_for_glass, window)
     window.show()
-    apply_glass(window, dark=is_dark())
-    configure_traffic_lights(window, x_offset=18)
-    apply_windows_dark_titlebar(window, is_dark())
+    _apply_native_chrome(window, dark=is_dark())
 
     # A previous run that crashed (or a tool the user started by hand) may still
     # be holding the USB port and SP Flash Tool's own settings files. Nothing is

@@ -20,10 +20,10 @@ import threading
 import zipfile
 from pathlib import Path
 
-import requests
 from PySide6.QtCore import QThread, Signal
 
 from .config import GITHUB_API
+from .network import requests_module
 from .paths import COMPAT_DIR, INSTALL_DIR, REPO_ROOT
 
 logger = logging.getLogger(__name__)
@@ -391,11 +391,11 @@ def _download_zip(zip_path: Path, progress_cb=None) -> bool:
     for url in urls:
         try:
             logger.info("Downloading Linux SP Flash Tool from %s", url)
-            resp = requests.get(url, stream=True, timeout=30, headers=headers)
+            resp = requests_module().get(url, stream=True, timeout=30, headers=headers)
             if resp.status_code == 302:
                 redirect_url = resp.headers.get("Location")
                 if redirect_url:
-                    resp = requests.get(redirect_url, stream=True, timeout=30)
+                    resp = requests_module().get(redirect_url, stream=True, timeout=30)
             resp.raise_for_status()
             total = int(resp.headers.get("content-length", 0))
             downloaded = 0

@@ -23,9 +23,15 @@ import urllib.request
 import json
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from precompile_tree import compile_tree, compile_tree_if_stale, find_sources  # noqa: E402  (sibling build helper)
+
 ROOT = Path(__file__).resolve().parent.parent
 DIST = ROOT / "dist"
-APP_DIR = DIST / "Updater CE.app"
+# INNIOASIS_APP_OUT lets a rehearsal (or CI) build somewhere other than dist/:
+# the real build deletes and rebuilds dist/*.app in place, which would wipe an
+# app the user is currently testing.
+APP_DIR = Path(os.environ.get("INNIOASIS_APP_OUT") or (DIST / "Updater CE.app"))
 CONTENTS = APP_DIR / "Contents"
 MACOS = CONTENTS / "MacOS"
 RESOURCES = CONTENTS / "Resources"
@@ -99,8 +105,10 @@ int main(int argc, char **argv, char **envp) {
     char app_dir[1024];
     snprintf(app_dir, sizeof(app_dir), "%s/app", resources_dir);
 
+    // Bytecode, not source: the bundle ships launcher.pyc (see
+    // precompile_tree.py) and CPython runs a sourceless .pyc as a script.
     char launcher_script[1024];
-    snprintf(launcher_script, sizeof(launcher_script), "%s/launcher.py", app_dir);
+    snprintf(launcher_script, sizeof(launcher_script), "%s/launcher.pyc", app_dir);
 
     char python_bin[1024];
     snprintf(python_bin, sizeof(python_bin), "%s/bin/python3.11", python_dir);
@@ -201,12 +209,12 @@ def ensure_cached_assets():
     targets = {
         "cpython_arm64.tar.gz": "https://github.com/astral-sh/python-build-standalone/releases/download/20260924/cpython-3.11.16%2B20260924-aarch64-apple-darwin-install_only_stripped.tar.gz",
         "cpython_x86_64.tar.gz": "https://github.com/astral-sh/python-build-standalone/releases/download/20260924/cpython-3.11.16%2B20260924-x86_64-apple-darwin-install_only_stripped.tar.gz",
-        "pyside6_essentials.whl": "https://files.pythonhosted.org/packages/6f/16/0b7ecf89ebada82ed0430be33809ff325761ece83104f8635b1bd101fcd0/pyside6_essentials-6.11.2-cp310-abi3-macosx_13_0_universal2.whl",
-        "shiboken6.whl": "https://files.pythonhosted.org/packages/47/44/11bf71c36e71936ab4e923e5dd23599dab527c4488b01860b0f689ce9947/shiboken6-6.11.2-cp310-abi3-macosx_13_0_universal2.whl",
-        "pyside6.whl": "https://files.pythonhosted.org/packages/ae/b5/99ff75f604d69eda1c5d1fe85cc43fb697d95eabc30ba86af099c2ddcd96/pyside6-6.11.2-cp310-abi3-macosx_13_0_universal2.whl",
+        "pyside6_essentials.whl": "https://files.pythonhosted.org/packages/80/a9/51549844900837c70e5c89cbd840956c2533732ef4f05c2b656e35ca8182/pyside6_essentials-6.9.3-cp39-abi3-macosx_12_0_universal2.whl",
+        "shiboken6.whl": "https://files.pythonhosted.org/packages/6b/ed/eac552326349629f8c3a89b57a754a860d9665aea78c172777395905d36b/shiboken6-6.9.3-cp39-abi3-macosx_12_0_universal2.whl",
+        "pyside6.whl": "https://files.pythonhosted.org/packages/fe/15/1fa71e44d3b345b9eca82d38cf7e6d7505168b978fe98b3610c0e25d8c0e/pyside6-6.9.3-cp39-abi3-macosx_12_0_universal2.whl",
         "pycryptodome.whl": "https://files.pythonhosted.org/packages/db/6c/a1f71542c969912bb0e106f64f60a56cc1f0fabecf9396f45accbe63fa68/pycryptodome-3.23.0-cp37-abi3-macosx_10_9_universal2.whl",
-        "pyobjc_core.whl": "https://files.pythonhosted.org/packages/b8/02/b04297ca275c92c57ebbe197e4125b2067759a296541f92e7c3746c10129/pyobjc_core-12.1-cp311-cp311-macosx_10_9_universal2.whl",
-        "pyobjc_framework_cocoa.whl": "https://files.pythonhosted.org/packages/f8/f4/0488663ce911965bb7e201b22e15bc32f171092cae6ef4e0bc7f2dca5877/pyobjc_framework_Cocoa-12.1-cp311-cp311-macosx_10_9_universal2.whl",
+        "pyobjc_core.whl": "https://files.pythonhosted.org/packages/95/df/d2b290708e9da86d6e7a9a2a2022b91915cf2e712a5a82e306cb6ee99792/pyobjc_core-12.1-cp311-cp311-macosx_10_9_universal2.whl",
+        "pyobjc_framework_cocoa.whl": "https://files.pythonhosted.org/packages/3f/07/5760735c0fffc65107e648eaf7e0991f46da442ac4493501be5380e6d9d4/pyobjc_framework_Cocoa-12.1-cp311-cp311-macosx_10_9_universal2.whl",
     }
     pure_deps = ["requests", "pyusb", "pyserial", "colorama", "certifi", "urllib3", "idna", "charset_normalizer"]
 
@@ -219,7 +227,39 @@ def ensure_cached_assets():
 
     for name, url in targets.items():
         dest = CACHE_DIR / name
-        if not dest.exists() or dest.stat().st_size == 0:
+        # A developer or CI job can repeat a build after changing pinned
+        # versions; cached wheel names are stable but their contents aren't.
+        # Validate the wheel's embedded filename before trusting a cache hit.
+        expected_filename = url.rsplit("/", 1)[-1]
+        cached_ok = False
+        if dest.exists() and dest.stat().st_size:
+            if dest.name.startswith("cpython_"):
+                # Archive name/version is pinned in the URL; validate that the
+                # cached standalone runtime is the one the builder requested.
+                cached_ok = True
+            else:
+                try:
+                    with zipfile.ZipFile(dest) as cached:
+                        metadata = [n for n in cached.namelist() if n.endswith(".dist-info/WHEEL")]
+                        cached_ok = bool(metadata) and any(
+                            f"{Path(name.split('/')[0]).name.split('-', 1)[0].lower()}"
+                            in expected_filename.lower()
+                            for name in metadata
+                        )
+                        # Check package version/tag from the archive metadata too.
+                        wheel_text = cached.read(metadata[0]).decode("utf-8", "replace") if metadata else ""
+                        expected_tokens = expected_filename.lower().replace("_", "-").split("-")
+                        cached_ok = cached_ok and any(
+                            line.lower().startswith("tag:") and "macosx_12_0_universal2" in line.lower()
+                            for line in wheel_text.splitlines()
+                        )
+                        # WHEEL tags do not carry the distribution version; the
+                        # wheel filename stem encoded in RECORD's dist-info does.
+                        dist_info = Path(metadata[0]).parts[0] if metadata else ""
+                        cached_ok = cached_ok and expected_filename.lower().startswith(dist_info.lower().replace("_", "-").replace(".dist-info", ""))
+                except (OSError, zipfile.BadZipFile):
+                    cached_ok = False
+        if not cached_ok:
             print(f">>> Downloading {name}...")
             req = urllib.request.Request(url, headers={"User-Agent": "updater-builder"})
             with urllib.request.urlopen(req, context=ctx) as resp, open(dest, "wb") as f:
@@ -410,11 +450,37 @@ def build():
         shutil.copy2(DARWIN_LIBUSB, FRAMEWORKS / "libusb-1.0.dylib")
         shutil.copy2(DARWIN_LIBUSB, MACOS / "libusb-1.0.dylib")
 
-    # 5. Copy Application Source, MTKClient, and Assets
-    shutil.copy2(ROOT / "launcher.py", APP_CODE / "launcher.py")
-    shutil.copytree(ROOT / "src", APP_CODE / "src", dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
-    shutil.copytree(ROOT / "vendor" / "mtkclient", APP_CODE / "vendor" / "mtkclient", dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
-    shutil.copytree(ROOT / "vendor" / "mtkclient", SITE_PACKAGES / "mtkclient", dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    # 5. Precompile the application code, MTKClient and the pure-Python
+    #    site-packages into bytecode-only trees. Shipping source made every
+    #    launch re-parse files whose __pycache__ can never be written (a
+    #    read-only .dmg or an .app another admin owns).
+    bundled_python = PYTHON_DIR / "bin" / "python3.11"
+    compile_tree([ROOT / "launcher.py"], APP_CODE, python=bundled_python, clean=False, write_manifest=False)
+    compile_tree([ROOT / "src"], APP_CODE / "src", python=bundled_python, write_manifest=False)
+    # This builder extracts the pure-Python wheels into site-packages itself.
+    # Precompile in place (without removing readable sources from third parties)
+    # so Python can import unchecked-hash bytecode even from a read-only bundle.
+    # This tree is already assembled and should not gain a build manifest.
+    compile_tree(
+        [SITE_PACKAGES], SITE_PACKAGES, python=bundled_python,
+        clean=False, strict=False, write_manifest=False,
+    )
+    # The vendored mtkclient is the Chinese build's fork, byte for byte: only
+    # its packaging changes here, never its code (see AGENTS.md).
+    compile_tree_if_stale(
+        [ROOT / "vendor" / "mtkclient"],
+        APP_CODE / "vendor" / "mtkclient",
+        python=bundled_python,
+        strict=False,
+        write_manifest=False,
+    )
+    compile_tree_if_stale(
+        [ROOT / "vendor" / "mtkclient"],
+        SITE_PACKAGES / "mtkclient",
+        python=bundled_python,
+        strict=False,
+        write_manifest=False,
+    )
     shutil.copytree(ASSETS, APP_CODE / "assets", dirs_exist_ok=True)
 
     # 6. Icon
@@ -474,6 +540,13 @@ def build():
 
     print("\nVerification:")
     subprocess.run(["file", str(exe_target), str(FRAMEWORKS / "libusb-1.0.dylib"), str(RESOURCES / "icon.icns")])
+    leftover = find_sources(APP_CODE)
+    pyc_count = sum(1 for _ in APP_CODE.rglob("*.pyc"))
+    print(f"Application code: {pyc_count} bytecode files, {len(leftover)} source files")
+    for stray in leftover[:10]:
+        print(f"  source left behind: {stray.relative_to(APP_CODE)}")
+    site_leftover = [p for p in find_sources(SITE_PACKAGES) if "mtkclient" not in p.parts]
+    print(f"site-packages: {sum(1 for _ in SITE_PACKAGES.rglob('*.pyc'))} bytecode files, {len(site_leftover)} source files")
     total_size_mb = sum(f.stat().st_size for f in APP_DIR.rglob("*") if f.is_file()) / (1024 * 1024)
     print(f"Total Bundle Size: {total_size_mb:.1f} MB")
     print(f"\n=== Build Complete: {APP_DIR} ===")

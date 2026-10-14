@@ -26,6 +26,16 @@ if str(VENDOR_MTK) not in sys.path:
 
 from PyInstaller.utils.hooks import collect_submodules  # noqa: E402
 
+sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
+from precompile_tree import compile_tree_if_stale  # noqa: E402  (build helper)
+
+# mtkclient ships as *data*, never in the PYZ: it is imported at runtime from a
+# directory added to sys.path (see excludes= below). Compile it to bytecode
+# first, because a frozen app cannot write __pycache__ beside the data (Program
+# Files, a read-only install dir) and would otherwise re-parse the whole tree on
+# every launch. Bytecode-only trees import normally: see scripts/precompile_tree.py.
+MTK_PRECOMPILED = PROJECT_ROOT / ".cache" / "precompiled-mtkclient"
+
 # ---------------------------------------------------------------------------
 # Runtime brand selection (optional).
 # Set BUILD_BRAND=mediatek_installer to package the generic MediaTek
@@ -49,7 +59,8 @@ datas = []
 if ASSETS.exists():
     datas.append((str(ASSETS), "assets"))
 if VENDOR_MTK.exists():
-    datas.append((str(VENDOR_MTK), "mtkclient"))
+    compile_tree_if_stale([VENDOR_MTK], MTK_PRECOMPILED, strict=False)
+    datas.append((str(MTK_PRECOMPILED), "mtkclient"))
 if ADB_TOOLS.exists():
     datas.append((str(ADB_TOOLS), "tools/adb"))
 

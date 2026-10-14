@@ -1,5 +1,10 @@
 """Modal dialogs — flash complete / failed / diagnostics / update available."""
 
+# PEP 810 (Python 3.15+): see src/ui/main_window.py for the convention. The
+# update helpers are used to describe an available update, long after the
+# window is up, and this is the other module that imports them.
+__lazy_modules__ = ["src.updates"]
+
 import re
 import sys
 from datetime import datetime, timedelta

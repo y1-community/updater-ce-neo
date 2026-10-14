@@ -21,8 +21,9 @@ import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-import requests
 from PySide6.QtCore import QThread, Signal
+
+from .network import requests_module
 
 from .catalog import FirmwarePackage
 from .config import (
@@ -139,7 +140,7 @@ def catalogue_repos() -> list[str]:
 
 
 def _fetch_xml(url: str) -> str:
-    resp = requests.get(url, timeout=REQUEST_TIMEOUT)
+    resp = requests_module().get(url, timeout=REQUEST_TIMEOUT)
     resp.raise_for_status()
     return resp.text
 
