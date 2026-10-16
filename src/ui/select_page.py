@@ -237,6 +237,7 @@ class _ReleaseNotesBrowser(QTextBrowser):
 class SelectPackagePage(QWidget):
     package_selected = Signal(str, str, str)
     gui_release_clicked = Signal(object)
+    gui_firmware_changed = Signal()
     release_icon_ready = Signal(object)
     gui_handoff_abandoned = Signal()
     download_started = Signal(str, str)
@@ -317,13 +318,20 @@ class SelectPackagePage(QWidget):
         self._check_and_load_cached_firmware()
 
     def _check_and_load_cached_firmware(self):
-        """Restore last installed/attempted firmware from downloads_dir cache if still on disk."""
+        """Restore last attempted firmware as a GUI choice only when complete."""
         from .. import device_tracking
-        from ..sp_flash_gui import cached_install_firmware
+        from ..sp_flash_gui import cached_install_firmware, check_cached_firmware_readiness
 
         latest = device_tracking.get_latest_package(getattr(self, "settings", None))
         scatter, extract = cached_install_firmware(latest)
         if scatter and extract and extract.is_dir():
+            ready, scatter, extract, _reason = check_cached_firmware_readiness(
+                scatter_path=scatter,
+                extract_dir=extract,
+                model=(latest or {}).get("model") or "",
+            )
+            if not ready:
+                return
             target_path = str(extract)
             self._path_edit.setText(target_path)
             self._current_package_path = target_path
@@ -333,6 +341,113 @@ class SelectPackagePage(QWidget):
             self._set_local_banner("sel_current_pkg", extract.name)
             self._start_btn.setEnabled(True)
             self._auto_detect_auth_file(target_path)
+
+    def _gui_target_if_ready(self, target: Optional[dict]) -> Optional[dict]:
+        """Return a target only when its extracted scatter and images are usable."""
+        if not target:
+            return None
+        from ..sp_flash_gui import check_cached_firmware_readiness
+
+        kind = target.get("kind")
+        if kind == "online":
+            archive = Path(target.get("dest") or target.get("path") or "")
+            if not archive.is_file() or archive.stat().st_size <= 0:
+                return None
+            from ..flash_service import completed_extract_dir, compute_extract_dir
+
+            extract = completed_extract_dir(archive) or compute_extract_dir(archive)
+            ready, scatter, extract_dir, _reason = check_cached_firmware_readiness(
+                scatter_path=None,
+                extract_dir=extract,
+                model=target.get("model") or "",
+            )
+            if not ready:
+                return None
+            return {**target, "kind": "cache", "scatter": scatter, "extract": extract_dir}
+        if kind == "local":
+            path = Path(target.get("path") or "")
+            if not path.exists():
+                return None
+            from ..flash_service import compute_extract_dir, completed_extract_dir
+
+            if path.is_dir():
+                extract = path
+            elif path.suffix.lower() in (".zip", ".rar"):
+                extract = completed_extract_dir(path) or compute_extract_dir(path)
+            else:
+                extract = path.parent
+            ready, scatter, extract_dir, _reason = check_cached_firmware_readiness(
+                scatter_path=None,
+                extract_dir=extract,
+                model=target.get("model") or "",
+            )
+            if not ready:
+                return None
+            return {**target, "kind": "cache", "scatter": scatter, "extract": extract_dir}
+        if kind == "cache":
+            ready, scatter, extract_dir, _reason = check_cached_firmware_readiness(
+                scatter_path=target.get("scatter"),
+                extract_dir=target.get("extract"),
+                model=target.get("model") or "",
+            )
+            if ready:
+                return {**target, "scatter": scatter, "extract": extract_dir}
+        return None
+
+    def gui_firmware_target(self) -> Optional[dict]:
+        """Selected package to prepare, or retained extract when nothing is selected."""
+        explicit = self.explicit_firmware()
+        focused = self.focused_firmware()
+        for target in (explicit, focused):
+            ready = self._gui_target_if_ready(target)
+            if ready:
+                return ready
+            if target and target.get("kind") == "online":
+                # The selected catalogue release can be downloaded and
+                # extracted by the handoff worker even before it is cached.
+                return target
+            if target and target.get("kind") == "local":
+                path = Path(target.get("path") or "")
+                if path.is_file() and path.suffix.lower() in (".zip", ".rar"):
+                    # A partial extract is repaired by extracting its original
+                    # archive again; a folder with missing images is not.
+                    return target
+            if target:
+                return None
+        # A browsed local path takes precedence over the previous-install
+        # cache, even when it is not a valid SP package. Never launch the old
+        # firmware just because the new local selection cannot be used.
+        if self.catalogue_section() == "local" and getattr(self, "_current_package_path", ""):
+            return None
+        from .. import device_tracking
+        from ..sp_flash_gui import cached_install_firmware, check_cached_firmware_readiness
+
+        latest = device_tracking.get_latest_package(getattr(self, "settings", None))
+        scatter, extract = cached_install_firmware(latest)
+        if not scatter or not extract:
+            return None
+        ok, scatter, extract, _reason = check_cached_firmware_readiness(
+            scatter_path=scatter,
+            extract_dir=extract,
+            model=(latest or {}).get("model") or "",
+        )
+        if not ok:
+            return None
+        return {
+            "kind": "cache",
+            "scatter": scatter,
+            "extract": extract,
+            "model": (latest or {}).get("model") or "",
+            "name": (latest or {}).get("software_name") or "",
+        }
+
+    def _emit_gui_firmware_changed(self) -> None:
+        self.gui_firmware_changed.emit()
+        self.content_size_changed.emit()
+
+    def _invalidate_online_gui_target(self) -> None:
+        if getattr(self, "_gui_explicit", None) and self._gui_explicit.get("kind") != "local":
+            self._gui_explicit = None
 
     def _connectivity_monitor_applicable(self) -> bool:
         """True only when an online catalogue is actually on offer.
@@ -513,6 +628,7 @@ class SelectPackagePage(QWidget):
         filter_layout.addWidget(self._model_label, 0, 0)
 
         self._model_combo = QComboBox()
+        self._model_combo.setObjectName("softwareModelFilter")
         self._model_combo.setMinimumWidth(80)
         self.refresh_models()
         self._model_combo.currentTextChanged.connect(self._on_model_changed)
@@ -523,6 +639,7 @@ class SelectPackagePage(QWidget):
         filter_layout.addWidget(self._type_label, 0, 2)
 
         self._type_combo = QComboBox()
+        self._type_combo.setObjectName("softwareTypeFilter")
         self._type_combo.addItem(tr("sel_type_a"), "A")
         self._type_combo.addItem(tr("sel_type_b"), "B")
         self._type_combo.currentIndexChanged.connect(self._on_type_changed)
@@ -549,6 +666,7 @@ class SelectPackagePage(QWidget):
         filter_layout.addWidget(self._software_label, 1, 0)
 
         self._software_combo = QComboBox()
+        self._software_combo.setObjectName("softwareReleaseFilter")
         self._software_combo.setMinimumWidth(120)
         self._software_combo.currentTextChanged.connect(self._on_software_changed)
         filter_layout.addWidget(self._software_combo, 1, 1, 1, 2)
@@ -561,6 +679,7 @@ class SelectPackagePage(QWidget):
         filter_layout.setColumnStretch(1, 1)
         filter_layout.setColumnStretch(3, 1)
         self._filter_group.set_layout(filter_layout)
+        self._filter_group.set_glass_clear(True)
 
         layout.addWidget(self._filter_group)
 
@@ -589,6 +708,7 @@ class SelectPackagePage(QWidget):
 
         self._release_list = QListWidget()
         self._release_list.setObjectName("releaseList")
+        self._release_list.setAttribute(Qt.WA_TranslucentBackground, False)
         self._release_list.setFrameShape(QFrame.NoFrame)
         self._release_list.viewport().setAutoFillBackground(False)
         configure_scroll_area(
@@ -597,6 +717,11 @@ class SelectPackagePage(QWidget):
             vertical=Qt.ScrollBarAsNeeded,
             transparent=True,
         )
+        self._release_list.setAutoFillBackground(False)
+        self._release_list.setAttribute(Qt.WA_NoSystemBackground, True)
+        self._release_list.viewport().setAutoFillBackground(False)
+        self._release_list.viewport().setAttribute(Qt.WA_TranslucentBackground, False)
+        self._release_list.viewport().setAttribute(Qt.WA_NoSystemBackground, True)
         self._release_list.currentItemChanged.connect(self._on_release_selected)
         self._release_list.itemClicked.connect(self._on_release_clicked)
         self._release_list.itemActivated.connect(self._on_install)
@@ -678,6 +803,14 @@ class SelectPackagePage(QWidget):
         self._details_header = QWidget()
         self._details_header.setLayout(details_row)
         self._details_header.setAutoFillBackground(False)
+        self._details_header.setAttribute(Qt.WA_TranslucentBackground, False)
+        self._details_header.setAttribute(Qt.WA_NoSystemBackground, True)
+        self._details_name.setAutoFillBackground(False)
+        self._details_name.setAttribute(Qt.WA_TranslucentBackground, False)
+        self._details_name.setAttribute(Qt.WA_NoSystemBackground, True)
+        self._details_version.setAutoFillBackground(False)
+        self._details_version.setAttribute(Qt.WA_TranslucentBackground, False)
+        self._details_version.setAttribute(Qt.WA_NoSystemBackground, True)
         self._details_header.setVisible(False)
         from .surfaces import clear_glass_plate
         clear_glass_plate(self._details_header)
@@ -688,10 +821,12 @@ class SelectPackagePage(QWidget):
 
         self._notes = _ReleaseNotesBrowser()
         self._notes.setObjectName("releaseNotes")
+        self._notes.setAttribute(Qt.WA_TranslucentBackground, False)
         self._notes.setReadOnly(True)
         self._notes.setOpenLinks(False)
         self._notes.setOpenExternalLinks(False)
         self._notes.viewport().setAutoFillBackground(False)
+        self._notes.viewport().setAttribute(Qt.WA_TranslucentBackground, False)
         self._notes.setFrameShape(QFrame.NoFrame)
         self._notes.setLineWrapMode(QTextBrowser.WidgetWidth)
         self._notes.setPlaceholderText(tr("sel_notes_hint"))
@@ -710,6 +845,10 @@ class SelectPackagePage(QWidget):
             vertical=Qt.ScrollBarAsNeeded,
             transparent=True,
         )
+        self._notes.setAutoFillBackground(False)
+        self._notes.setAttribute(Qt.WA_NoSystemBackground, True)
+        self._notes.viewport().setAutoFillBackground(False)
+        self._notes.viewport().setAttribute(Qt.WA_NoSystemBackground, True)
         from .surfaces import clear_glass_plate
         clear_glass_plate(self._release_list)
         clear_glass_plate(self._notes)
@@ -1042,7 +1181,10 @@ class SelectPackagePage(QWidget):
         package_target = str(p.parent)
         self._path_edit.setText(package_target)
         self._current_package_path = package_target
+        self._gui_explicit = None
+        self._emit_gui_firmware_changed()
         self._current_installed_release_info = None
+
         self._current_selected_rel = None
         self._details_package = None
         self._raw_release_pixmap = None
@@ -1128,27 +1270,15 @@ class SelectPackagePage(QWidget):
             self._refresh_type_help_icon()
 
     def _should_prompt_pre_install(self) -> bool:
-        """On Linux with SP Flash Tool methods, step 1 (ensuring USB cable is removed
-        and device powered off) is naturally presented after silent system prep and privilege
-        escalation, when flash_tool fires the line beginning with 'search usb'.
-        On Windows or with MTKClient, prompt upfront before starting.
+        """Whether the run asks the user to prepare the player before starting.
+
+        Every method is gated on this, on every platform: the install must not
+        start hunting for the player until the user has confirmed their model
+        is powered off and disconnected. The Linux SP Flash Tool flow used to
+        defer the question to the tool's own "search usb" line, which meant an
+        install could already be running before the user had been asked at all.
         """
-        import sys
-        from PySide6.QtCore import QSettings
-        from ..flash_service import METHOD_MTK, backend_method
-        from ..paths import IS_MAC, IS_WINDOWS
-        if IS_WINDOWS or IS_MAC:
-            return True
-        if not sys.platform.startswith("linux"):
-            return True
-        # On Linux the SP Flash Tool flow defers step 1 until the tool prints
-        # its "search usb" line (the app escalates and sets up udev first).
-        # MTKClient has no such line to hang it on, so its run is gated on the
-        # power-off screen. NB: the same settings handle the rest of the app
-        # uses — reading a differently-cased QSettings path silently returned
-        # the default, so an MTKClient run on Linux never prompted at all.
-        settings = QSettings("innioasis", "updater")
-        return backend_method(settings.value("flash_method", "")) == METHOD_MTK
+        return True
 
     def _prompt_pre_install(self, model="", type_variant=None):
         """Device preparation is a page in the install flow, not a dialog."""
@@ -1910,10 +2040,12 @@ class SelectPackagePage(QWidget):
             self._notes.updateGeometry()
             self._set_details_header(None, None)
             self._update_translate_link()
-            self.content_size_changed.emit()
+            self._emit_gui_firmware_changed()
             return
         rel = current.data(Qt.UserRole)
         if rel:
+            if getattr(self, "_gui_explicit", None) and self._gui_explicit.get("kind") != "local":
+                self._gui_explicit = None
             self._current_selected_rel = rel
             self._details_package = self._package_for_selection()
             self._is_translated = False
@@ -1924,6 +2056,7 @@ class SelectPackagePage(QWidget):
             if self._auto_translate_notes and (translator().lang or "en").strip() != "en":
                 self._translate_current_release_in_app()
             self._update_translate_link()
+            self._emit_gui_firmware_changed()
 
     def _render_release_notes(self, rel, translated_body=None, translated_name=None, as_html: bool = False) -> str:
         body = translated_body or (rel.get("body") or "").strip() or tr("update_no_notes")
@@ -2454,7 +2587,10 @@ class SelectPackagePage(QWidget):
 
         self._path_edit.setText(package_target)
         self._current_package_path = package_target
+        self._gui_explicit = None
+        self._emit_gui_firmware_changed()
         self._current_installed_release_info = None
+
         self._current_selected_rel = None
         self._details_package = None
         self._raw_release_pixmap = None
@@ -2519,7 +2655,10 @@ class SelectPackagePage(QWidget):
 
         self._path_edit.setText(folder)
         self._current_package_path = folder
+        self._gui_explicit = None
+        self._emit_gui_firmware_changed()
         self._current_installed_release_info = None
+
         self._current_selected_rel = None
         self._details_package = None
         self._raw_release_pixmap = None
@@ -2616,6 +2755,7 @@ class SelectPackagePage(QWidget):
         if not target:
             return
         self._gui_explicit = target
+        self._emit_gui_firmware_changed()
 
     def _on_release_double_clicked(self, _item):
         from ..sp_flash_gui import is_sp_flash_gui_supported
@@ -2635,6 +2775,7 @@ class SelectPackagePage(QWidget):
             "model": model or "",
             "name": name or Path(path).name,
         }
+        self._emit_gui_firmware_changed()
 
     def _stop_gui_handoff_workers(self) -> None:
         """Drop a handoff download so Install / Restore can run on its own."""
@@ -2674,7 +2815,15 @@ class SelectPackagePage(QWidget):
 
             if not is_gui_local_package(target.get("path") or ""):
                 return None
-        return target
+            return target
+        if target.get("kind") == "online":
+            rel = getattr(self, "_current_selected_rel", None)
+            if not rel or rel.get("tag_name") != (target.get("release") or {}).get("tag_name"):
+                return None
+            return target
+        if target.get("kind") == "cache":
+            return target if self._gui_target_if_ready(target) else None
+        return None
 
     def _firmware_target_for_release(self, rel) -> Optional[dict]:
         if not rel or not rel.get("download_url"):
@@ -2702,15 +2851,11 @@ class SelectPackagePage(QWidget):
         }
 
     def focused_firmware(self) -> Optional[dict]:
-        """The catalogue release highlighted on screen.
-
-        That is the default row (usually the latest Original Software) until
-        the user moves the highlight. A clicked release and a browsed local
-        package are tracked separately.
-        """
+        """The catalogue release currently highlighted on screen."""
         if is_generic_mtk() or self.catalogue_section() == "local":
             return None
-        return self._firmware_target_for_release(getattr(self, "_current_selected_rel", None))
+        target = self._firmware_target_for_release(getattr(self, "_current_selected_rel", None))
+        return self._gui_target_if_ready(target) or target
 
     def begin_external_prepare(self, target: dict, callback) -> bool:
         """Download or extract ``target``, then ``callback(ok, extract_dir, err)``.
@@ -2833,20 +2978,36 @@ class SelectPackagePage(QWidget):
         seal_updating_text(self._details_version)
         from .dark import is_dark
         from .release_icon import cached_icon_pixmap
-        from ..release_icons import release_asset_urls, software_icon_urls
+        from ..release_icons import (
+            icon_candidate_urls,
+            release_image_fallback_urls,
+            software_icon_urls,
+        )
 
         dark = bool(is_dark())
-        release_pm = cached_icon_pixmap(release_asset_urls(rel, package, dark=dark))
+        release_urls = icon_candidate_urls(rel, package, dark=dark)
+        release_pm = cached_icon_pixmap(
+            release_urls,
+            release=rel,
+            package=package,
+        )
         if not release_pm.isNull():
             self._present_details_icon(release_pm, immediate=not getattr(self, "_icon_presented", False))
             self._icon_phase = "release"
         else:
-            software_pm = cached_icon_pixmap(software_icon_urls(package, dark=dark))
+            software_pm = cached_icon_pixmap(
+                release_image_fallback_urls(rel, package, dark=dark)
+                or software_icon_urls(package, dark=dark)
+            )
             self._present_details_icon(
                 software_pm, immediate=not getattr(self, "_icon_presented", False),
             )
             self._icon_phase = "software" if not software_pm.isNull() else "placeholder"
-            if software_pm.isNull() and software_icon_urls(package, dark=dark):
+            if (
+                software_pm.isNull()
+                and not release_image_fallback_urls(rel, package, dark=dark)
+                and software_icon_urls(package, dark=dark)
+            ):
                 self._fetch_software_icon(package, dark)
         self._details_header.setVisible(True)
         self._ensure_release_icon(rel)
@@ -2952,8 +3113,8 @@ class SelectPackagePage(QWidget):
         repo = getattr(package, "repo", "") or ""
         if repo:
             for rel in releases or []:
-                if isinstance(rel, dict) and not rel.get("source_repo"):
-                    rel["source_repo"] = repo
+                if isinstance(rel, dict):
+                    rel.setdefault("source_repo", repo)
         job = ReleaseIconJob(
             releases,
             package,

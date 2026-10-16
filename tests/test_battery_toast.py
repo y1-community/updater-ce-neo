@@ -57,4 +57,5 @@ def test_battery_toast_generic_mtk_device_wording(monkeypatch):
     assert "device" in toast._label.text().lower()
     assert "player" not in toast._label.text().lower()
     assert toast.property("cssClass") == "card"
+    assert toast.minimumHeight() >= 38
 

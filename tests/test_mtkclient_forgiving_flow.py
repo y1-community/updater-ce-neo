@@ -150,8 +150,8 @@ def test_mtkclient_forgiving_handshake_and_progress_detection():
 
 
 def test_rockbox_themes_stage_power_on_and_fallback():
-    """Rockbox post-flash flow prompts user to power on Y1/Y2 with 90s countdown,
-    and falls back to asking if Rockbox is running if ADB is unavailable or times out."""
+    """Rockbox post-flash flow begins with model-specific power-button guidance,
+    then falls back to asking if Rockbox is running if ADB is unavailable or times out."""
     from src.ui.flash_page import FlashPage
 
     app = _app()
@@ -213,7 +213,8 @@ def test_rockbox_themes_stage_with_adb_countdown():
         # For Y2
         page.start_rockbox_themes_stage(model="Y2")
         eta_text_y2 = page._eta_label.text()
-        assert "disconnect and power on your y2" in eta_text_y2.lower()
+        assert "power button" in eta_text_y2.lower()
+        assert "your y2" in eta_text_y2.lower()
 
 
 def test_mtkclient_watchdog_8min_and_touch_reset():
@@ -295,13 +296,65 @@ def test_rockbox_y2_triggers_themes_stage_and_logs():
     with patch("src.adb.find_adb_binary", return_value="/fake/adb"):
         with patch("src.theme_pack.AdbWatchWorker") as mock_worker_cls:
             page.start_rockbox_themes_stage(model="Y2", log_cb=logs.append)
-            assert any("Rockbox Themes" in l for l in logs)
-            assert any("Y2" in l for l in logs)
-            assert page._themes_stage_active
-            assert page._status_flow._forced_stacked
+
+    assert any("Rockbox Themes" in l for l in logs)
+    assert any("Y2" in l for l in logs)
+    assert page._themes_stage_active
+    assert page._status_flow._forced_stacked
+
+
+def test_rockbox_post_flash_power_prompt_uses_model_specific_button_and_hides_nav(tmp_path):
+    """MTK success keeps the guided install chrome until the player has booted."""
+    from PySide6.QtCore import QSettings
+
+    from src import paths
+    from src.ui.main_window import MainWindow, _PAGE_FLASH
+
+    app = _app()
+    settings = QSettings(str(tmp_path / "rockbox-flow.ini"), QSettings.Format.IniFormat)
+    old_mac = paths.IS_MAC
+    try:
+        paths.IS_MAC = False
+        window = MainWindow()
+        window.settings = settings
+        window._package_model = "Y2"
+        window._package_name = "Rockbox Y2"
+        window._package_path = "/tmp/rockbox_y2.zip"
+        window._flash_method = "mtk"
+        window._flash_page.set_model("Y2")
+        window._create_themes_wizard = lambda _model: None
+        window.show()
+        window._handle_flash_success()
+        app.processEvents()
+
+        assert window._stack.currentIndex() == _PAGE_FLASH
+        assert window._rockbox_power_on_pending
+        assert window._install_run_active()
+        assert window._settings_btn.isHidden()
+        assert window._support_btn.isHidden()
+        assert window._linux_setup_btn.isHidden()
+        assert window._check_updates_btn.isHidden()
+        assert window._sp_flash_tool_btn.isHidden()
+        assert "power button" in window._flash_page._eta_label.text().lower()
+        assert "y2" in window._flash_page._eta_label.text().lower()
+
+        window._flash_page._theme_step1_next_btn.click()
+        app.processEvents()
+        assert not window._rockbox_power_on_pending
+        assert window._flash_page._themes_stage_active
+        assert "connect your y2 by usb" in window._flash_page._eta_label.text().lower()
+        assert "usb" not in window._flash_page._theme_row.accessibleName().lower()
+    finally:
+        paths.IS_MAC = old_mac
+        try:
+            window.close()
+            app.processEvents()
+        except UnboundLocalError:
+            pass
 
 
 def test_device_prep_confirmation_before_watch_and_flash():
+
     """Users are always prompted to power off and disconnect their model/device first.
     The flash worker and device monitor are NOT triggered until the user confirms (presses Next)."""
     from src.ui.main_window import MainWindow, _PAGE_FLASH

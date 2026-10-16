@@ -10,7 +10,15 @@ from PySide6.QtWidgets import QApplication
 
 from src.catalog import FirmwarePackage
 from src.manifest import parse_manifest_xml
-from src.release_icons import LIGHT_ICON_NAMES, icon_candidate_urls
+from src.release_icons import (
+    DARK_ICON_NAMES,
+    LIGHT_ICON_NAMES,
+    icon_candidate_urls,
+    release_asset_requires_square,
+    release_asset_urls,
+    release_image_fallback_urls,
+    software_icon_urls,
+)
 from src.ui.dark import apply_theme, get_native_accent_color
 from src.ui.flash_page import FlashPage
 from src.ui.release_icon import glyph_box, placeholder_settings_pixmap, squircle_pixmap
@@ -40,7 +48,9 @@ def test_icon_url_is_built_from_the_tag_without_the_api():
     assert urls[0] == (
         "https://github.com/y1-community/y1-stock-rom/releases/download/v3.0.7/updater.jpg"
     )
-    assert [url.rsplit("/", 1)[-1] for url in urls[:3]] == list(LIGHT_ICON_NAMES)
+    assert [url.rsplit("/", 1)[-1] for url in urls[:3]] == [
+        "updater.jpg", "updater.png", "updater.jpeg",
+    ]
     assert all("api.github.com" not in url for url in urls)
     assert urls[0].endswith("/updater.jpg")
     assert urls.index(urls[0]) < next(i for i, url in enumerate(urls) if url.endswith("/updater.png"))
@@ -52,14 +62,70 @@ def test_dark_names_then_light_then_manifest_icon():
         icon_dark="https://example.com/logo-dark.jpeg",
     )
     dark_names = [url.rsplit("/", 1)[-1] for url in icon_candidate_urls(_release(), package, dark=True)]
-    assert dark_names[:6] == [
-        "updater_dark.jpg", "updater_dark.jpeg", "updater_dark.png",
-        "updater.jpg", "updater.jpeg", "updater.png",
+    assert dark_names == [
+        *DARK_ICON_NAMES,
+        *LIGHT_ICON_NAMES,
     ]
-    assert dark_names[-2:] == ["logo-dark.jpeg", "logo.jpg"]
+    assert [url.rsplit("/", 1)[-1] for url in release_image_fallback_urls(
+        _release(), package, dark=True,
+    )] == ["logo-dark.jpeg", "logo.jpg"]
     light_names = [url.rsplit("/", 1)[-1] for url in icon_candidate_urls(_release(), package, dark=False)]
     assert light_names[-1] == "logo.jpg"
     assert "logo-dark.jpeg" not in light_names
+
+
+def test_release_art_uses_conventional_names_then_generic_png_jpg():
+    from src.release_icons import release_download_icon_url
+
+    release = _release()
+    release["assets"] = [
+        {"name": "banner.png", "browser_download_url": "https://cdn.example/banner.png"},
+        {"name": "updater.png", "browser_download_url": "https://cdn.example/updater.png"},
+        {"name": "cover.JPG", "browser_download_url": "https://cdn.example/cover.JPG"},
+        {"name": "portrait.jpg", "browser_download_url": "https://cdn.example/portrait.jpg"},
+        {"name": "cover.gif", "browser_download_url": "https://cdn.example/cover.gif"},
+        {"name": "updater_dark.png", "browser_download_url": "https://cdn.example/updater_dark.png"},
+    ]
+    urls = release_asset_urls(release, _package(), dark=False)
+    preferred_urls = [
+        release_download_icon_url("y1-community/y1-stock-rom", "v3.0.7", filename)
+        for filename in LIGHT_ICON_NAMES
+    ]
+    assert urls[:3] == preferred_urls
+    assert urls[3:] == [
+        "https://cdn.example/banner.png",
+        "https://cdn.example/cover.JPG",
+        "https://cdn.example/portrait.jpg",
+    ]
+    assert not release_asset_requires_square(urls[0], release, _package())
+    assert release_asset_requires_square(urls[3], release, _package())
+    assert release_asset_requires_square(urls[4], release, _package())
+    assert not release_asset_requires_square(
+        "https://example.com/manifest-image.jpg",
+        release,
+        _package(image="https://example.com/manifest-image.jpg"),
+    )
+
+
+def test_manifest_icon_urls_are_fallback_after_release_art():
+    from src.release_icons import release_image_fallback_urls
+
+    package = _package(
+        icon="https://example.com/manifest-icon.png",
+        image="https://example.com/manifest-image.jpg",
+    )
+    urls = icon_candidate_urls(_release(), package, dark=False)
+    assert urls == [
+        "https://github.com/y1-community/y1-stock-rom/releases/download/v3.0.7/" + name
+        for name in LIGHT_ICON_NAMES
+    ]
+    assert [url.rsplit("/", 1)[-1] for url in release_image_fallback_urls(
+        _release(), package, dark=False,
+    )] == ["manifest-icon.png", "manifest-image.jpg"]
+    assert release_image_fallback_urls(_release(), package, dark=False) == [
+        "https://example.com/manifest-icon.png",
+        "https://example.com/manifest-image.jpg",
+    ]
 
 
 def test_manifest_icon_key_accepts_jpg_and_image_dark():
@@ -67,26 +133,151 @@ def test_manifest_icon_key_accepts_jpg_and_image_dark():
         <package name="Original Software" repo="y1-community/y1-stock-rom" device="Y1"
                  type="img" handler="Custom Firmware"
                  icon="https://example.com/logo.jpg"
+                 image="https://example.com/legacy-logo.png"
                  image_dark="https://example.com/logo-dark.jpg" />
         <package name="Rockbox" repo="rockbox-y1/rockbox" device="Y1"
                  type="img" handler="Custom Firmware"
                  icon="https://example.com/rock.png"
                  icon_dark="https://example.com/rock-dark.png"
+                 image="https://example.com/legacy-rock.jpg"
                  image_dark="https://example.com/ignored.jpg" />
     </slidia_manifest>"""
     parsed = parse_manifest_xml(xml)
     assert parsed[0].icon == "https://example.com/logo.jpg"
+    assert parsed[0].image == "https://example.com/legacy-logo.png"
+    assert software_icon_urls(parsed[0], dark=False) == [
+        "https://example.com/logo.jpg",
+        "https://example.com/legacy-logo.png",
+    ]
     assert parsed[0].icon_dark == "https://example.com/logo-dark.jpg"
+    assert parsed[1].icon == "https://example.com/rock.png"
+    assert parsed[1].image == "https://example.com/legacy-rock.jpg"
+    assert software_icon_urls(parsed[1], dark=False) == [
+        "https://example.com/rock.png",
+        "https://example.com/legacy-rock.jpg",
+    ]
     assert parsed[1].icon_dark == "https://example.com/rock-dark.png"
 
 
-def test_missing_file_falls_through_to_the_squircle(tmp_path=None):
+def test_manifest_cache_preserves_image_field(tmp_path, monkeypatch):
+    from src import manifest
+
+    cache_root = tmp_path / "catalog"
+    cache_root.mkdir()
+    monkeypatch.setattr(manifest, "_cache_root", lambda: cache_root)
+    package = _package(
+        icon="https://example.com/icon.png",
+        icon_dark="https://example.com/icon-dark.png",
+        image="https://example.com/image.jpg",
+    )
+    manifest.cache_manifest([package])
+    restored = manifest.load_cached_manifest()
+    assert restored[0].icon == package.icon
+    assert restored[0].icon_dark == package.icon_dark
+    assert restored[0].image == package.image
+
+
+def test_generic_release_images_must_decode_as_square():
+    from PySide6.QtCore import QBuffer, QIODevice
+    from PySide6.QtGui import QImage
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    from src.release_icons import image_bytes_ok
+
+    def png_bytes(width, height):
+        image = QImage(width, height, QImage.Format.Format_ARGB32)
+        image.fill(QColor("#32a852"))
+        buffer = QBuffer()
+        buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+        assert image.save(buffer, "PNG")
+        return bytes(buffer.data())
+
+    square = png_bytes(24, 24)
+    rectangle = png_bytes(24, 12)
+    assert image_bytes_ok(square)
+    assert image_bytes_ok(rectangle)
+    assert image_bytes_ok(square, square_only=True)
+    assert not image_bytes_ok(rectangle, square_only=True)
+    del app
+
+
+def test_manifest_image_is_used_when_icon_is_absent():
+    xml = """<slidia_manifest>
+        <package name="Image Only" repo="y1-community/y1-stock-rom" device="Y1"
+                 type="img" handler="Custom Firmware"
+                 image="https://example.com/image-only.png" />
+    </slidia_manifest>"""
+    package = parse_manifest_xml(xml)[0]
+    assert package.icon == ""
+    assert software_icon_urls(package, dark=False) == ["https://example.com/image-only.png"]
+
+
+def test_release_lookup_falls_back_to_manifest_icon_then_image(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication(sys.argv)
+    from PySide6.QtCore import QBuffer, QIODevice
+    from PySide6.QtGui import QImage
+
+    import src.ui.release_icon as ui_icons
+    from src.ui.release_icon import load_release_pixmap
+
+    package = _package(
+        icon="https://example.com/manifest-icon.png",
+        image="https://example.com/manifest-image.png",
+    )
+    urls = icon_candidate_urls(_release(), package, dark=False)
+    manifest_urls = release_image_fallback_urls(_release(), package, dark=False)
+    requested = []
+
+    def png_bytes(color):
+        image = QImage(8, 8, QImage.Format.Format_ARGB32)
+        image.fill(QColor(color))
+        buffer = QBuffer()
+        buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+        assert image.save(buffer, "PNG")
+        return bytes(buffer.data())
+
+    icon_data = png_bytes("#e11d48")
+    image_data = png_bytes("#2563eb")
+    monkeypatch.setattr(ui_icons, "read_cached_icon", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(ui_icons, "write_cached_icon", lambda *_args, **_kwargs: None)
+
+    def fetch_icon_first(url, **_kwargs):
+        requested.append(url)
+        if url == manifest_urls[0]:
+            return icon_data
+        return None
+
+    monkeypatch.setattr(ui_icons, "fetch_icon_bytes", fetch_icon_first)
+    first = load_release_pixmap(
+        _release(), package, allow_network=True, cache_dir=tmp_path, dark=False,
+    )
+    assert not first.isNull()
+    assert requested == urls + [manifest_urls[0]]
+
+    requested.clear()
+
+    def fetch_image_only(url, **_kwargs):
+        requested.append(url)
+        if url == manifest_urls[1]:
+            return image_data
+        return None
+
+    monkeypatch.setattr(ui_icons, "fetch_icon_bytes", fetch_image_only)
+    second = load_release_pixmap(
+        _release(), package, allow_network=True, cache_dir=tmp_path, dark=False,
+    )
+    assert not second.isNull()
+    assert requested == urls + manifest_urls
+    del app
+
+
+def test_missing_file_falls_through_to_the_squircle(tmp_path):
     import src.release_icons as icons
     import src.ui.release_icon as ui_icons
 
     calls = []
 
-    def miss(url, timeout=8):
+    def miss(url, timeout=8, **_kwargs):
         calls.append(url)
         return None
 
@@ -95,10 +286,7 @@ def test_missing_file_falls_through_to_the_squircle(tmp_path=None):
     ui_icons.fetch_icon_bytes = miss
     try:
         app = QApplication.instance() or QApplication(sys.argv)
-        cache = Path(__file__).resolve().parent / "_icon_cache"
-        cache.mkdir(exist_ok=True)
-        for child in cache.glob("*"):
-            child.unlink()
+        cache = tmp_path / "icons"
         from src.ui.release_icon import load_release_pixmap
 
         pixmap = load_release_pixmap(
@@ -295,7 +483,7 @@ def test_update_toast_is_a_translucent_row():
         apply_theme(app)
 
 
-def test_downloaded_release_keeps_its_own_icon(tmp_path=None):
+def test_downloaded_release_keeps_its_own_icon(tmp_path):
     """An unpacked online release is not a local browse: keep its updater.jpg.
 
     A downloaded release is extracted into the working folder, scatter file and
@@ -311,7 +499,7 @@ def test_downloaded_release_keeps_its_own_icon(tmp_path=None):
     from src.ui.main_window import MainWindow
 
     app = QApplication.instance() or QApplication(sys.argv)
-    work = Path(__file__).resolve().parent / "_icon_work"
+    work = tmp_path / "work"
     extract = work / "original-software-y1_Latest-3.1.2_rom_extracted"
     extract.mkdir(parents=True, exist_ok=True)
     extract.joinpath("MT6572_Android_scatter.txt").write_text("fake scatter")
@@ -345,9 +533,10 @@ def test_downloaded_release_keeps_its_own_icon(tmp_path=None):
         _install_complete=False,
     )
     original = icons.icon_candidate_urls
-    # Short-circuit the background fetch: this test is about the decision, not
-    # the download.
+    original_fallback = icons.release_image_fallback_urls
+    # Short-circuit background work: this test checks release/local icon choice.
     icons.icon_candidate_urls = lambda *a, **k: []
+    icons.release_image_fallback_urls = lambda *a, **k: []
     try:
         MainWindow._apply_release_icon(stub)
         assert stub._flash_page.calls, "no icon was applied"
@@ -367,10 +556,7 @@ def test_downloaded_release_keeps_its_own_icon(tmp_path=None):
         assert stub._flash_page.calls[0][0].isNull()
     finally:
         icons.icon_candidate_urls = original
-        for child in extract.glob("*"):
-            child.unlink()
-        extract.rmdir()
-        work.rmdir()
+        icons.release_image_fallback_urls = original_fallback
         del app
 
 
@@ -396,6 +582,7 @@ if __name__ == "__main__":
     test_icon_url_is_built_from_the_tag_without_the_api()
     test_dark_names_then_light_then_manifest_icon()
     test_manifest_icon_key_accepts_jpg_and_image_dark()
+    test_release_lookup_falls_back_to_manifest_icon_then_image()
     test_missing_file_falls_through_to_the_squircle()
     test_settings_glyph_is_centered_on_the_accent()
     test_dark_progress_text_has_no_backdrop()

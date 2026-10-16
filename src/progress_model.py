@@ -26,6 +26,8 @@ from __future__ import annotations
 
 import time
 
+from .i18n import tr
+
 # Long enough to smooth bursty USB writes, short enough to follow a real
 # change in speed (a 3 GB userdata after eight small partitions).
 WINDOW_SECONDS = 25.0
@@ -196,3 +198,35 @@ def format_size_bytes(bytes_count: float) -> str:
             return f"{val} {unit}"
         b /= 1024.0
     return f"{b:.2f} TB"
+
+
+def format_eta_minutes(seconds: float) -> str:
+    """Format seconds as a localized whole-minute estimate."""
+    total = max(0, int(round(seconds)))
+    if total <= 0:
+        return ""
+    minutes = max(1, round(total / 60))
+    key = "flash_eta_minute_one" if minutes == 1 else "flash_eta_minutes_many"
+    return tr(key).format(n=minutes)
+
+
+def format_eta_seconds(seconds: float) -> str:
+    """Format seconds as a localized remaining-time estimate."""
+    try:
+        total = max(0, int(round(float(seconds))))
+    except (TypeError, ValueError):
+        return ""
+    if total <= 0:
+        return ""
+    if total < 60:
+        key = "flash_eta_second_one" if total == 1 else "flash_eta_seconds_many"
+        return tr(key).format(n=total)
+    return format_eta_minutes(total)
+
+
+# How long a *measureable* theme push has to last before the app trusts its
+# own rate. A theme pack is a handful of files over USB or ADB, so a single
+# sample is enough; anything shorter is treated as a warm-up line rather than
+# an estimate.
+_THEME_ETA_MIN_SECONDS = 2.0
+

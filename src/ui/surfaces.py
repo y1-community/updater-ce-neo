@@ -122,36 +122,48 @@ def paint_window_surface(widget: QWidget) -> None:
 
 
 def clear_glass_plate(widget: QWidget) -> None:
-    """Drop a solid Base/Window fill so this region shows the window surface.
+    """Remove a child plate while keeping scroll views on their card surface.
 
-    With a glass backdrop (macOS) that surface is the system material. Without
-    one (Windows, Linux) it is the flat window colour — and the plate has to go
-    the same way, or the notes and the release list keep a rectangle of their
-    own behind them.
+    Plain labels inherit the card/window surface and should not paint their
+    own rectangle. A scroll area's viewport is the exception: native item/text
+    painting uses its Base role to erase old content, so match that role to the
+    surrounding bento card rather than Window (which creates a visible box).
     """
     if widget is None:
         return
-    if not glass_surfaces_enabled():
-        paint_window_surface(widget)
-        if isinstance(widget, QAbstractScrollArea):
-            view = widget.viewport()
-            if view is not None:
-                paint_window_surface(view)
-        if isinstance(widget, QTextEdit):
-            _clear_document_background(widget)
-        return
-    show_glass_backdrop(widget)
-    # Zero-alpha black is what Windows stores for "transparent", then paints
-    # as a solid black rectangle once the theme turns light. Use the live
-    # theme surface instead so the list and notes stay readable.
-    from .scrollbars import _paint_theme_surface
-    _paint_theme_surface(widget)
-    widget.setAutoFillBackground(True)
-    if isinstance(widget, QTextEdit):
-        _clear_document_background(widget)
+    if glass_surfaces_enabled():
+        show_glass_backdrop(widget)
+    else:
+        widget.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
+        widget.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, False)
+        widget.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
+        widget.setAutoFillBackground(False)
+    if isinstance(widget, QAbstractScrollArea):
         view = widget.viewport()
         if view is not None:
-            clear_glass_plate(view)
+            if glass_surfaces_enabled():
+                show_glass_backdrop(view)
+            else:
+                from .dark import T
+
+                card_surface = QColor(T().bg_card)
+                card_surface.setAlpha(255)
+                palette = view.palette()
+                for group in (
+                    QPalette.ColorGroup.Active,
+                    QPalette.ColorGroup.Inactive,
+                    QPalette.ColorGroup.Disabled,
+                ):
+                    palette.setColor(group, QPalette.ColorRole.Base, card_surface)
+                    palette.setColor(group, QPalette.ColorRole.Window, card_surface)
+                view.setPalette(palette)
+                view.setBackgroundRole(QPalette.ColorRole.Base)
+                view.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
+                view.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, False)
+                view.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
+                view.setAutoFillBackground(True)
+    if isinstance(widget, QTextEdit):
+        _clear_document_background(widget)
 
 
 def seal_updating_text(widget: QWidget, **_unused) -> None:

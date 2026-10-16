@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 # (check_user_permissions is Linux-only and already handles its absence).
 if sys.platform != "win32":
     import grp
+    import pwd
 
 FLASH_TOOL_LINUX_URL = (
     "https://github.com/y1-community/updater-ce-neo/releases/download/flash_tool/flash_tool_linux.zip"
@@ -524,54 +525,32 @@ def check_ldd_dependencies(stage: Path) -> tuple:
 # --- Udev Rules & System Configuration ----------------------------------------
 
 def generate_udev_rule_content() -> str:
-    """Generate comprehensive udev rules for MediaTek flashing.
+    """Generate scoped MediaTek access and device-conflict rules.
 
-    Grants standard desktop user access to Boot ROM (0e8d:0003) and Preloader
-    (0e8d:2000, /dev/ttyACM*), forces immediate 0666 permissions via RUN+,
-    disables USB power autosuspend, and prevents ModemManager and brltty from
-    interrupting BROM/DA handshakes.
+    ``uaccess`` supplies per-seat ACLs where systemd-logind is present;
+    distro-native groups remain the fallback. Never grant world access to the
+    USB or tty nodes. Conflict-ignore properties apply only to MediaTek.
     """
+    distro = detect_linux_distro()
+    group = distro.get("serial_group", "dialout")
     return (
-        "# Updater CE - MediaTek Flashing Rules\n"
-        "# Ensures full permissions for Boot ROM (BROM) and Preloader serial interfaces.\n"
-        "\n"
-        "# MediaTek Boot ROM (BROM) - USB devices\n"
-        'SUBSYSTEM=="usb", ATTRS{idVendor}=="0e8d", MODE="0666", TAG+="uaccess", '
-        'ENV{ID_MM_DEVICE_IGNORE}="1", ENV{ID_MM_PORT_IGNORE}="1", ENV{MTP_NO_PROBE}="1", '
-        'ENV{BRLTTY_DEVICE_IGNORE}="1", TEST=="power/control", ATTR{power/control}="on"\n'
-        'SUBSYSTEM=="usb", ATTRS{idVendor}=="0e8d", ATTRS{idProduct}=="0003", MODE="0666", TAG+="uaccess", '
-        'ENV{ID_MM_DEVICE_IGNORE}="1", ENV{ID_MM_PORT_IGNORE}="1", ENV{MTP_NO_PROBE}="1", '
-        'ENV{BRLTTY_DEVICE_IGNORE}="1", TEST=="power/control", ATTR{power/control}="on"\n'
-        "\n"
-        "# MediaTek Preloader and DA - Serial TTY devices (/dev/ttyACM*)\n"
-        'SUBSYSTEM=="usb", ATTRS{idVendor}=="0e8d", ATTRS{idProduct}=="2000", MODE="0666", TAG+="uaccess", '
+        "# Updater CE - MediaTek flash-mode access\n"
+        f'SUBSYSTEM=="usb", ATTR{{idVendor}}=="0e8d", ATTR{{idProduct}}=="0003", MODE="0660", GROUP="{group}", TAG+="uaccess", '
+        'ENV{MTP_NO_PROBE}="1", ENV{BRLTTY_DEVICE_IGNORE}="1"\n'
+        f'SUBSYSTEM=="usb", ATTR{{idVendor}}=="0e8d", ATTR{{idProduct}}=="2000", MODE="0660", GROUP="{group}", TAG+="uaccess", '
+        'ENV{MTP_NO_PROBE}="1", ENV{ID_MM_DEVICE_IGNORE}="1", ENV{ID_MM_PORT_IGNORE}="1"\n'
+        f'SUBSYSTEM=="tty", ATTRS{{idVendor}}=="0e8d", MODE="0660", GROUP="{group}", TAG+="uaccess", '
         'ENV{ID_MM_DEVICE_IGNORE}="1", ENV{ID_MM_PORT_IGNORE}="1"\n'
-        'SUBSYSTEM=="tty", ATTRS{idVendor}=="0e8d", MODE="0666", TAG+="uaccess", '
-        'ENV{ID_MM_DEVICE_IGNORE}="1", ENV{ID_MM_PORT_IGNORE}="1", RUN+="/bin/chmod 0666 /dev/%k"\n'
-        'KERNEL=="ttyACM[0-9]*", ATTRS{idVendor}=="0e8d", MODE="0666", TAG+="uaccess", '
-        'ENV{ID_MM_DEVICE_IGNORE}="1", ENV{ID_MM_PORT_IGNORE}="1", RUN+="/bin/chmod 0666 /dev/%k"\n'
-        'KERNEL=="ttyUSB[0-9]*", ATTRS{idVendor}=="0e8d", MODE="0666", TAG+="uaccess", '
-        'ENV{ID_MM_DEVICE_IGNORE}="1", ENV{ID_MM_PORT_IGNORE}="1", RUN+="/bin/chmod 0666 /dev/%k"\n'
     )
 
 
 def generate_ttyacms_rule_content() -> str:
-    """Generate universal unprivileged /dev/ttyACM* and /dev/ttyUSB* access rule.
-
-    Standard community fix for MediaTek preloader serial access without udev race conditions.
-    """
-    return (
-        "# Updater CE - Unprivileged Serial Port Access\n"
-        'ACTION=="add|change", SUBSYSTEM=="tty", KERNEL=="ttyACM[0-9]*", MODE="0666", TAG+="uaccess", RUN+="/bin/chmod 0666 /dev/%k"\n'
-        'ACTION=="add|change", SUBSYSTEM=="tty", KERNEL=="ttyUSB[0-9]*", MODE="0666", TAG+="uaccess", RUN+="/bin/chmod 0666 /dev/%k"\n'
-    )
+    """Keep the old companion filename useful without broad tty permissions."""
+    return generate_udev_rule_content()
 
 
 def check_udev_rules() -> tuple:
-    """Check whether udev rules granting access to MediaTek devices are installed.
-
-    Returns (installed: bool, description: str).
-    """
+    """Check for scoped access to MTK USB and tty devices in system rule dirs."""
     rule_dirs = [Path("/etc/udev/rules.d"), Path("/usr/lib/udev/rules.d"), Path("/lib/udev/rules.d")]
     matching_rules = []
     has_0e8d_access = False
@@ -585,7 +564,7 @@ def check_udev_rules() -> tuple:
                     content = rule_file.read_text(encoding="utf-8", errors="replace")
                     if "0e8d" in content.lower():
                         matching_rules.append(rule_file.name)
-                        if "0666" in content or "uaccess" in content:
+                        if "0660" in content and "uaccess" in content:
                             has_0e8d_access = True
                 except OSError:
                     pass
@@ -595,7 +574,7 @@ def check_udev_rules() -> tuple:
     if has_0e8d_access:
         return True, f"MediaTek udev rules detected ({', '.join(matching_rules[:3])})"
     if matching_rules:
-        return False, f"Rules found ({', '.join(matching_rules)}), but without user access permissions (0666/uaccess)."
+        return False, f"Rules found ({', '.join(matching_rules)}), but without scoped session access (MODE=0660 and TAG+=uaccess)."
     return False, "No MediaTek udev rules found in /etc/udev/rules.d/."
 
 
@@ -648,24 +627,25 @@ def check_service_conflicts() -> list:
 
 
 def check_user_permissions(serial_group: str) -> tuple:
-    """Check if the current user belongs to the required serial dialout/uucp group."""
+    """Check configured group membership; uaccess handles active desktop ACLs."""
     try:
-        user_groups = [grp.getgrgid(g).gr_name for g in os.getgroups()]
-    except Exception:
-        user_groups = []
-
-    in_group = serial_group in user_groups
-    in_plugdev = "plugdev" in user_groups
-
-    # Note: With TAG+="uaccess" in udev, an active systemd-logind session grants
-    # direct ACL access to the device node even if the user isn't in dialout/uucp.
-    if in_group:
+        user = pwd.getpwuid(os.getuid())
+        group_ids = set(os.getgroups()) | {user.pw_gid}
+        user_groups = {grp.getgrgid(gid).gr_name for gid in group_ids}
+        # NSS group membership may include groups that the current process has
+        # not inherited yet (e.g. just after usermod). uaccess grants the live
+        # graphical session access; membership is retained for later logins.
+        if user.pw_name in grp.getgrnam(serial_group).gr_mem:
+            user_groups.add(serial_group)
+    except (KeyError, OSError):
+        user_groups = set()
+    if serial_group in user_groups:
         return True, f"User is member of group '{serial_group}'."
-    if in_plugdev:
-        return True, f"User is member of group 'plugdev' (and uaccess grants session access)."
+    if "plugdev" in user_groups:
+        return True, "User is a member of 'plugdev'."
     return False, (
-        f"User is not in group '{serial_group}'. Add via `sudo usermod -aG {serial_group} $USER` "
-        f"(udev 'uaccess' also grants access during active desktop sessions)."
+        f"User is not in '{serial_group}'. The MediaTek udev rule grants active-seat access; "
+        "group membership is retained as a fallback for sessions without logind ACLs."
     )
 
 
@@ -780,38 +760,31 @@ def check_connected_mtk_device() -> tuple:
                         pass
     except Exception:
         pass
-    return False, "No MediaTek device detected on USB (device should be connected turned off)"
+    return False, "No MediaTek device is currently connected; you can connect it when prompted."
 
 
-class TtyAccessGuardian(threading.Thread):
-    """Userspace guardian thread that continuously chmods newly appeared ttyACM* nodes.
+def refresh_connected_mtk_device() -> bool:
+    """Reapply scoped udev rules to an already-present MediaTek device.
 
-    Compensates for the 50-100ms latency between kernel devnode creation and
-    systemd-logind uaccess ACL application, preventing SP Flash Tool from failing
-    with 'Permission denied' upon connection.
+    This helps when the user connected it before preparing permissions. Normal
+    hotplug remains udev/logind's responsibility; no polling chmod or system
+    service shutdown is required.
     """
-
-    def __init__(self, interval: float = 0.015):
-        super().__init__(daemon=True, name="tty-access-guardian")
-        self._stop_event = threading.Event()
-        self.interval = interval
-
-    def stop(self):
-        self._stop_event.set()
-
-    def run(self):
-        while not self._stop_event.is_set():
-            for path in Path("/dev").glob("ttyACM*"):
-                try:
-                    os.chmod(path, 0o666)
-                except Exception:
-                    pass
-            for path in Path("/dev").glob("ttyUSB*"):
-                try:
-                    os.chmod(path, 0o666)
-                except Exception:
-                    pass
-            self._stop_event.wait(self.interval)
+    try:
+        connected, _detail = check_connected_mtk_device()
+        if not connected:
+            return False
+        subprocess.run(["udevadm", "control", "--reload-rules"], check=False, timeout=5)
+        subprocess.run(
+            ["udevadm", "trigger", "--action=change", "--subsystem-match=usb", "--attr-match=idVendor=0e8d"],
+            check=False,
+            timeout=10,
+        )
+        subprocess.run(["udevadm", "settle", "--timeout=5"], check=False, timeout=7)
+        return True
+    except Exception:
+        logger.debug("Could not refresh connected MediaTek udev state", exc_info=True)
+        return False
 
 
 def write_setup_script(cache_dir: Path = None) -> Path:
@@ -858,7 +831,20 @@ cat << 'EOF' > "$TTY_RULE_FILE"
 {tty_rules_content}EOF
 chmod 644 "$TTY_RULE_FILE"
 
-# 3. Reload udev
+# 3. Add the launching desktop user to the distro's serial-device group.
+# uaccess grants active-seat access immediately; this group is the fallback
+# for systems without logind ACL support and applies fully at the next login.
+TARGET_USER="${{SUDO_USER:-}}"
+if [ -z "$TARGET_USER" ] && [ -n "${{PKEXEC_UID:-}}" ]; then
+    TARGET_USER="$(getent passwd "$PKEXEC_UID" | cut -d: -f1)"
+fi
+if [ -n "$TARGET_USER" ] && [ "$TARGET_USER" != "root" ] && command -v usermod >/dev/null 2>&1; then
+    if getent group "{group}" >/dev/null 2>&1; then
+        usermod -aG "{group}" "$TARGET_USER" || true
+    fi
+fi
+
+# 4. Reload udev
 echo "Reloading udev rules..."
 if command -v udevadm >/dev/null 2>&1; then
     udevadm control --reload-rules || true
@@ -866,36 +852,22 @@ if command -v udevadm >/dev/null 2>&1; then
     echo "udev reloaded successfully."
 fi
 
-# 4. User groups
-TARGET_USER="${{SUDO_USER:-$USER}}"
-if [ -n "$TARGET_USER" ] && [ "$TARGET_USER" != "root" ]; then
-    for grp in {group} plugdev dialout uucp lock; do
-        if getent group "$grp" >/dev/null 2>&1; then
-            echo "Adding $TARGET_USER to group $grp..."
-            usermod -aG "$grp" "$TARGET_USER" 2>/dev/null || true
-        fi
-    done
-fi
-
-# 5. Kernel module cdc_acm
+# 5. Kernel module cdc_acm (loads on demand on most systems)
 if command -v modprobe >/dev/null 2>&1; then
     echo "Ensuring kernel module cdc_acm is loaded..."
     modprobe cdc_acm 2>/dev/null || true
 fi
 
-# 6. Mitigation for brltty if active
-if command -v systemctl >/dev/null 2>&1; then
-    if systemctl is-active --quiet brltty 2>/dev/null; then
-        echo "Stopping brltty to prevent MediaTek BROM hijacking..."
-        systemctl stop brltty 2>/dev/null || true
-        systemctl mask brltty 2>/dev/null || true
-    fi
-fi
+# BRLTTY and ModemManager are not disabled globally: scoped udev tags above
+# prevent interference with MediaTek interfaces without affecting accessibility
+# devices or unrelated modems.
 
-# 7. Apply immediate permissions on existing tty nodes
-for p in /dev/ttyACM* /dev/ttyUSB*; do
-    [ -e "$p" ] && chmod 0666 "$p" 2>/dev/null || true
-done
+# Refresh attached MediaTek USB interfaces; future hotplug uses these rules.
+# These matches are vendor-scoped and do not reset unrelated serial devices.
+if command -v udevadm >/dev/null 2>&1; then
+    udevadm trigger --action=change --subsystem-match=usb --attr-match=idVendor=0e8d || true
+    udevadm settle --timeout=5 || true
+fi
 
 echo ""
 echo "=== System Staging Complete ==="

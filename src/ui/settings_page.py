@@ -28,7 +28,6 @@ from ..config import (
 )
 from ..flash_service import (
     METHOD_MTK,
-    METHOD_MTK_MAC,
     METHOD_SP,
     default_flash_method,
     normalise_method,
@@ -50,9 +49,8 @@ logger = logging.getLogger(__name__)
 # Where Windows users get the MediaTek USB driver before their first flash.
 MEDIATEK_DRIVERS_URL = "https://innioasis.app/guide.html"
 
-# Install-method identifiers are owned by flash_service ("mtk_mac" is the
-# hidden simulated-macOS flow: MTKClient as the only backend with mac-centric
-# prompts, revealed by reveal_advanced_methods()).
+# Install-method identifiers are owned by flash_service; platform routing
+# chooses the available flash engine without exposing platform-specific aliases.
 
 
 class SettingsPage(QWidget):
@@ -61,14 +59,17 @@ class SettingsPage(QWidget):
     donation_visibility_changed = Signal(bool)  # is_disabled
     check_updates_requested = Signal()
     flash_method_changed = Signal(str)
-    simulated_mac_requested = Signal()
     offline_mode_changed = Signal(bool)
     release_filters_changed = Signal()
+    # A card that was shown on its own has finished its journey; the window
+    # can give the Settings column back. Linux staging has a separate signal
+    # because its first-run entry returns to Select Software on success.
+    card_focus_finished = Signal()
+    linux_prep_completed = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._advanced_revealed = False
-        self._dev_mac_revealed = False
         self._method_before = ""
         # Guards the filter checkboxes while they are synced from settings, so
         # syncing never re-enters a handler or reopens a confirmation dialog.
@@ -78,6 +79,10 @@ class SettingsPage(QWidget):
         self._switch_rows = {}
         # model id -> install-status QLabel, filled in by _build_ui.
         self._install_status_labels = {}
+        # The card the page is focused on, or None. While one is focused every
+        # other card stays hidden whatever its own rule says.
+        self._solo_card = None
+        self._sp_gui_available = False
         self._build_ui()
         self.refresh_settings()
 
@@ -137,6 +142,63 @@ class SettingsPage(QWidget):
             row[0].setVisible(visible)
         else:
             switch.setVisible(visible)
+
+    def _cards_in_column(self):
+        """Every card that shares the Settings column, in no particular order."""
+        cards = []
+        for name in (
+            "_method_card", "_terminal_card", "_reminders_card", "_rockbox_card",
+            "_donations_card", "_cache_card", "_prep_card", "_offline_mode_card",
+            "_legacy_cleanup_card", "_advanced_card",
+        ):
+            card = getattr(self, name, None)
+            if card is not None and card not in cards:
+                cards.append(card)
+        return cards
+
+    def _may_show_card(self, card) -> bool:
+        """False for every card but the focused one, while one is focused."""
+        return self._solo_card is None or self._solo_card is card
+
+    def show_card_alone(self, card) -> None:
+        """Put one card on screen by itself and hide the rest.
+
+        The Linux entry point and the removal offer both want the user's whole
+        attention, and neither is a pop-out window: focusing the page is what
+        lets the main window size itself to the single card.
+        """
+        self._solo_card = card
+        for other in self._cards_in_column():
+            other.setVisible(other is card)
+        if card is getattr(self, "_checker_card", None):
+            self._sync_linux_prep_copy()
+        win = self.window()
+        if win is not None and hasattr(win, "_highlight_nav"):
+            from .main_window import _PAGE_SETTINGS
+
+            if win._stack.currentIndex() == _PAGE_SETTINGS:
+                win._highlight_nav(_PAGE_SETTINGS, win._install_run_active())
+
+    def clear_card_focus(self) -> None:
+        """Give the column back to the ordinary per-card visibility rules."""
+        self._solo_card = None
+        self.refresh_settings()
+        self._sync_linux_prep_copy()
+
+    def _finish_card_focus(self) -> None:
+        """Leave focus mode and tell the window the card's journey is over.
+
+        Does nothing when no card is focused, so the same exit points can be
+        used whether the journey started from the card on its own or from the
+        ordinary Settings column.
+        """
+        if self._solo_card is None:
+            return
+        self.clear_card_focus()
+        self.card_focus_finished.emit()
+
+    def focused_card(self):
+        return self._solo_card
 
     def _build_ui(self):
         root_layout = QVBoxLayout(self)
@@ -442,7 +504,9 @@ class SettingsPage(QWidget):
         off_layout.addWidget(self._offline_mode_desc)
 
         self._offline_mode_card.set_layout(off_layout)
-        self._offline_mode_card.setVisible(not is_mediatek_installer())
+        self._offline_mode_card.setVisible(
+            self._may_show_card(self._offline_mode_card) and not is_mediatek_installer()
+        )
         layout.addWidget(self._offline_mode_card)
 
         # --- Card 6: Remove old app (shown only for a pre-3.0 install) ---
@@ -494,7 +558,7 @@ class SettingsPage(QWidget):
         self._card_layout = layout
 
         self._sync_advanced_visibility()
-        self._prep_card.setVisible(not paths.IS_MAC)
+        self._prep_card.setVisible(self._may_show_card(self._prep_card) and not paths.IS_MAC)
 
         layout.addStretch()
         scroll.setWidget(container)
@@ -590,6 +654,7 @@ class SettingsPage(QWidget):
 
         self._btn_launch_sp = QPushButton(tr("system_checker_launch_gui_btn"))
         self._btn_launch_sp.clicked.connect(self._on_launch_sp)
+        self._btn_launch_sp.setVisible(False)
         btn_row.addWidget(self._btn_launch_sp)
         btn_row.addStretch()
         layout.addLayout(btn_row)
@@ -644,17 +709,13 @@ class SettingsPage(QWidget):
         methods = [METHOD_SP]
         if self._advanced_revealed or not paths.IS_WINDOWS:
             methods.append(METHOD_MTK)
-        # The (mac) simulated option strictly requires an M or D keypress
-        if getattr(self, "_dev_mac_revealed", False):
-            methods.append(METHOD_MTK_MAC)
         return tuple(methods)
 
     def _on_advanced_settings_toggled(self, checked: bool) -> None:
         self._advanced_revealed = bool(checked)
-        if not checked:
-            self._dev_mac_revealed = False
         QSettings("innioasis", "updater").setValue("advanced_settings", bool(checked))
         self._sync_advanced_visibility()
+        self._sync_linux_prep_copy()
         if not paths.IS_MAC:
             self._reload_method_options()
         win = self.window()
@@ -668,19 +729,16 @@ class SettingsPage(QWidget):
             or is_mediatek_installer()
         )
         if hasattr(self, "_terminal_card"):
-            self._terminal_card.setVisible(show_adv)
+            self._terminal_card.setVisible(show_adv and self._may_show_card(self._terminal_card))
         if hasattr(self, "_method_card"):
-            self._method_card.setVisible(show_adv and not paths.IS_MAC)
+            self._method_card.setVisible(
+                show_adv and not paths.IS_MAC and self._may_show_card(self._method_card)
+            )
         if hasattr(self, "_rockbox_card"):
             self._update_rockbox_visibility()
 
     def reveal_advanced_methods(self):
-        """Reveal advanced install methods and cards (M or D while running).
-
-        Used to exercise the macOS flow — MTKClient as the only backend, with
-        mac-centric prompts — without Mac hardware.
-        """
-        self._dev_mac_revealed = True
+        """Reveal advanced install methods and cards (M or D while running)."""
         self._advanced_revealed = True
         QSettings("innioasis", "updater").setValue("advanced_settings", True)
         if hasattr(self, "_cb_advanced_settings"):
@@ -688,6 +746,7 @@ class SettingsPage(QWidget):
             self._cb_advanced_settings.setChecked(True)
             self._cb_advanced_settings.blockSignals(False)
         self._sync_advanced_visibility()
+        self._sync_linux_prep_copy()
         if not paths.IS_MAC:
             self._reload_method_options()
         win = self.window()
@@ -696,7 +755,6 @@ class SettingsPage(QWidget):
 
     def hide_advanced_methods(self):
         """Hide advanced install methods and cards (D toggle off)."""
-        self._dev_mac_revealed = False
         self._advanced_revealed = False
         QSettings("innioasis", "updater").setValue("advanced_settings", False)
         if hasattr(self, "_cb_advanced_settings"):
@@ -704,6 +762,7 @@ class SettingsPage(QWidget):
             self._cb_advanced_settings.setChecked(False)
             self._cb_advanced_settings.blockSignals(False)
         self._sync_advanced_visibility()
+        self._sync_linux_prep_copy()
         if not paths.IS_MAC:
             self._reload_method_options()
         win = self.window()
@@ -738,7 +797,6 @@ class SettingsPage(QWidget):
         labels = {
             METHOD_SP: tr("flash_method_sp"),
             METHOD_MTK: tr("flash_method_mtk"),
-            METHOD_MTK_MAC: tr("flash_method_mtk_mac"),
         }
         current = self._method_combo.currentData() or self._persisted_method()
         self._method_combo.blockSignals(True)
@@ -759,10 +817,7 @@ class SettingsPage(QWidget):
     def set_method(self, method):
         """Reflect a method chosen elsewhere (or persisted) in the selector."""
         method = normalise_method(method)
-        if method == METHOD_MTK_MAC and not paths.IS_MAC:
-            self._dev_mac_revealed = True
-            self._advanced_revealed = True
-        elif method == METHOD_MTK and not paths.IS_MAC:
+        if method == METHOD_MTK and not paths.IS_MAC:
             self._advanced_revealed = True
         self._reload_method_options()
         idx = self._method_combo.findData(method)
@@ -781,24 +836,6 @@ class SettingsPage(QWidget):
     def _on_method_changed(self):
         method = self.current_method()
         previous = getattr(self, "_method_before", "") or self._persisted_method()
-        if method == METHOD_MTK_MAC and previous != METHOD_MTK_MAC:
-            # The restart question replaces this card. Later puts the previous
-            # method back. Restart Now is what actually relaunches.
-            accepted = self._method_card.run_confirmation(
-                tr_brand("simulated_mac_body"),
-                tr("simulated_mac_restart_now"),
-                tr("simulated_mac_later"),
-                note=tr("flash_method_note_mtk_mac"),
-            )
-            if not accepted:
-                self.set_method(previous)
-                return
-            self._method_before = method
-            self._update_method_note()
-            self._update_sp_auth_visibility()
-            self.flash_method_changed.emit(method)
-            self.simulated_mac_requested.emit()
-            return
         self._method_before = method
         self._update_method_note()
         self._update_sp_auth_visibility()
@@ -820,7 +857,9 @@ class SettingsPage(QWidget):
             or (hasattr(self, "_cb_advanced_settings") and self._cb_advanced_settings.isChecked())
             or device_tracking.advanced_settings_enabled()
         )
-        self._rockbox_card.setVisible(show_adv and not is_offline_mode())
+        self._rockbox_card.setVisible(
+            show_adv and not is_offline_mode() and self._may_show_card(self._rockbox_card)
+        )
 
     def _update_legacy_cleanup_visibility(self):
         """Show the removal card only while a pre-3.0 install is on disk.
@@ -840,7 +879,9 @@ class SettingsPage(QWidget):
             visible = bool(info.get("has_legacy"))
         except Exception:
             visible = False
-        self._legacy_cleanup_card.setVisible(visible)
+        self._legacy_cleanup_card.setVisible(
+            visible and self._may_show_card(self._legacy_cleanup_card)
+        )
         if not visible and hasattr(self, "_legacy_status_lbl"):
             self._legacy_status_lbl.clear()
             self._legacy_status_lbl.setVisible(False)
@@ -884,9 +925,7 @@ class SettingsPage(QWidget):
 
     def _update_method_note(self):
         method = self.current_method()
-        if method == METHOD_MTK_MAC:
-            note = tr("flash_method_note_mtk_mac")
-        elif method == METHOD_SP:
+        if method == METHOD_SP:
             note = tr("flash_method_note_sp")
         else:
             # MTKClient needs no sales pitch; the prep card covers drivers.
@@ -935,7 +974,8 @@ class SettingsPage(QWidget):
                 self._cb_advanced_settings.setChecked(True)
                 self._cb_advanced_settings.blockSignals(False)
         self._sync_advanced_visibility()
-        self._prep_card.setVisible(not paths.IS_MAC)
+        self._sync_linux_prep_copy()
+        self._prep_card.setVisible(self._may_show_card(self._prep_card) and not paths.IS_MAC)
         self._update_rockbox_visibility()
         self._update_legacy_cleanup_visibility()
 
@@ -994,7 +1034,9 @@ class SettingsPage(QWidget):
 
     def apply_brand_mode(self, mediatek_installer: bool):
         """Show or hide the pieces that only make sense for one brand."""
-        self._offline_mode_card.setVisible(not mediatek_installer)
+        self._offline_mode_card.setVisible(
+            self._may_show_card(self._offline_mode_card) and not mediatek_installer
+        )
         self._update_rockbox_visibility()
         self._update_sp_auth_visibility()
 
@@ -1153,7 +1195,9 @@ class SettingsPage(QWidget):
             self._donations_card.setMaximumHeight((1 << 24) - 1)
             self._donations_card.setMinimumHeight(0)
             self._donations_card.clearMask()
-        self._donations_card.setVisible(not dismissed)
+        self._donations_card.setVisible(
+            self._may_show_card(self._donations_card) and not dismissed
+        )
 
     def _on_dismiss_donations_section(self) -> None:
         """Permanently disable credits/donations functionality and hide the settings card."""
@@ -1221,7 +1265,9 @@ class SettingsPage(QWidget):
             self._show_checker_status(str(exc), warn=True)
             return
         self._btn_run_checker.setEnabled(False)
-        self._show_checker_status(tr("linux_prep_starting"))
+        self._show_checker_status(
+            tr("linux_prep_starting_friendly" if is_mediatek_installer() else "linux_prep_starting")
+        )
         worker = linux_sp_flash.LinuxStagingWorker(self)
         self._sp_prep_worker = worker
         worker.progress.connect(self._on_sp_prep_progress)
@@ -1229,21 +1275,26 @@ class SettingsPage(QWidget):
         worker.finished.connect(worker.deleteLater)
         worker.start()
 
-    def start_sp_flash_prep(self):
+    def start_sp_flash_prep(self) -> bool:
         """Prepare SP Flash Tool on this card, for the Linux entry points.
 
         The Linux preparation used to be a window of its own opened from the
         navigation rail and on first run. Both now land here, so there is one
         place that prepares the engine and says how it went.
+
+        Returns whether this card is the one to show; ``False`` where the
+        preparation does not apply, so the caller does not focus a card that
+        stays hidden.
         """
         if paths.IS_MAC or is_mediatek_installer() or not hasattr(self, "_checker_status_lbl"):
             # macOS has no SP Flash Tool, and the Windows card is the driver
             # card rather than the preparation one.
-            return
-        self._checker_card.setVisible(True)
+            return False
+        self._checker_card.setVisible(self._may_show_card(self._checker_card))
         self._reveal_checker_card()
         if getattr(self, "_sp_prep_worker", None) is None:
             self._on_run_checker()
+        return True
 
     def _on_sp_prep_progress(self, percent: int, message: str):
         line = f"{int(percent)}%"
@@ -1259,11 +1310,23 @@ class SettingsPage(QWidget):
                 tr("linux_setup_issue_fmt").format(msg=message), warn=True
             )
             return
-        self._render_sp_report(report or {})
+        report = report or {}
+        self._render_sp_report(report)
+        issues = [
+            item for item in report.get("items", [])
+            if item.get("status") != "ok" and item.get("key") != "connected_device"
+        ]
+        if report.get("overall_ready") or not issues:
+            self.linux_prep_completed.emit()
 
     def _render_sp_report(self, report: dict, *, ask_again: bool = True):
         """Say the verdict in one line, and offer the fix on the card."""
-        items = [it for it in report.get("items", []) if it.get("status") != "ok"]
+        # Device presence is informational: the user may prepare the computer
+        # before connecting their player, and absence never blocks flashing.
+        items = [
+            it for it in report.get("items", [])
+            if it.get("status") != "ok" and it.get("key") != "connected_device"
+        ]
         blocking = [it for it in items if not it.get("can_fix")]
         if blocking:
             first = blocking[0]
@@ -1272,11 +1335,18 @@ class SettingsPage(QWidget):
                 warn=True,
             )
             return
+        # Tool names only appear once Advanced Settings is on.
+        advanced = bool(
+            getattr(self, "_advanced_revealed", False)
+            or (hasattr(self, "_cb_advanced_settings") and self._cb_advanced_settings.isChecked())
+            or device_tracking.advanced_settings_enabled()
+        )
+        ready_key = "linux_prep_ready" if advanced else "linux_prep_ready_friendly"
         if not items:
-            self._show_checker_status(tr("linux_prep_ready"))
+            self._show_checker_status(tr(ready_key))
             return
         if not report.get("can_auto_fix", True):
-            self._show_checker_status(tr("linux_prep_ready"))
+            self._show_checker_status(tr(ready_key))
             return
         if not ask_again:
             # One root attempt per press: asking for the same password twice
@@ -1307,7 +1377,10 @@ class SettingsPage(QWidget):
             self._show_checker_status(str(exc), warn=True)
             return
         if verdict.get("overall_ready"):
-            self._show_checker_status(tr("linux_prep_fixed"))
+            self._show_checker_status(
+                tr("linux_prep_fixed_friendly" if is_mediatek_installer() else "linux_prep_fixed")
+            )
+            self.linux_prep_completed.emit()
         else:
             self._render_sp_report(verdict, ask_again=False)
 
@@ -1330,12 +1403,51 @@ class SettingsPage(QWidget):
         card.adjustSize()
         QTimer.singleShot(0, card, lambda: scroll.ensureWidgetVisible(card, 0, 12))
 
-    def _on_launch_sp(self):
-        from .. import sp_flash_gui
+    def set_sp_gui_available(self, available: bool) -> None:
+        """The Settings shortcut requires a focused or retained full package."""
+        self._sp_gui_available = bool(available)
+        self._sync_linux_prep_copy()
 
-        ok, msg = sp_flash_gui.open_sp_flash_tool_gui()
-        if not ok:
-            self._show_checker_status(msg, warn=True)
+    def _sync_linux_prep_copy(self) -> None:
+        """Keep technical tool names behind Advanced Settings."""
+        if not hasattr(self, "_checker_card"):
+            return
+        installer = is_mediatek_installer()
+        advanced = bool(
+            getattr(self, "_advanced_revealed", False)
+            or (hasattr(self, "_cb_advanced_settings") and self._cb_advanced_settings.isChecked())
+            or installer
+        )
+        if installer:
+            title_key = "settings_checker_group_installer"
+            desc_key = "settings_checker_desc_installer"
+            button_key = "system_checker_run_btn_installer"
+        else:
+            title_key = "settings_checker_group_advanced" if advanced else "settings_checker_group"
+            desc_key = "settings_checker_desc_advanced" if advanced else "settings_checker_desc_friendly"
+            button_key = "system_checker_run_btn_advanced" if advanced else "system_checker_run_btn"
+        self._checker_card.setTitle(tr(title_key))
+        self._checker_desc.setText(tr(desc_key))
+        self._btn_run_checker.setText(tr(button_key))
+        from ..sp_flash_gui import is_sp_flash_gui_supported
+        self._btn_launch_sp.setText(tr("system_checker_launch_gui_btn"))
+        self._btn_launch_sp.setEnabled(
+            self._sp_gui_available and is_sp_flash_gui_supported()
+        )
+        setup_flow = self._solo_card is self._checker_card
+        self._btn_launch_sp.setVisible(
+            self._btn_launch_sp.isEnabled()
+            and (advanced or is_mediatek_installer())
+            and not setup_flow
+        )
+        if is_mediatek_installer() and not hasattr(self, "_install_tools_enabled"):
+            self._btn_launch_sp.setVisible(False)
+
+    def _on_launch_sp(self):
+        """Hand the selected firmware to the main window's validated route."""
+        win = self.window()
+        if win is not None and hasattr(win, "_open_sp_flash_tool_gui"):
+            win._open_sp_flash_tool_gui()
 
     def retranslate(self):
         """Retranslate UI elements upon language switch."""
@@ -1396,12 +1508,11 @@ class SettingsPage(QWidget):
             self._clear_cache_btn.setText(tr("settings_clear_cache_btn"))
         if hasattr(self, "_checker_card"):
             self._checker_card.retranslate()
+            self._sync_linux_prep_copy()
         if hasattr(self, "_driver_card"):
             self._driver_card.retranslate()
         if hasattr(self, "_checker_desc"):
-            self._checker_desc.setText(tr("settings_checker_desc"))
-            self._btn_run_checker.setText(tr("system_checker_run_btn"))
-            self._btn_launch_sp.setText(tr("system_checker_launch_gui_btn"))
+            self._sync_linux_prep_copy()
         if hasattr(self, "_driver_desc"):
             self._driver_desc.setText(tr("settings_driver_desc"))
             self._btn_download_drivers.setText(tr("settings_download_drivers_btn"))
@@ -1440,8 +1551,11 @@ class SettingsPage(QWidget):
         from ..legacy_cleanup import detect_legacy_installations, format_bytes
 
         info = detect_legacy_installations()
-        if not (info.get("has_legacy") or info.get("has_platform_tools")):
+        if not info.get("has_legacy"):
+            # Nothing to remove: there is no pre-3.0 install, so there is no
+            # offer. Android platform tools alone never raise this card.
             self._show_legacy_status(tr("legacy_cleanup_none_found"))
+            self._finish_card_focus()
             return
 
         reclaim = format_bytes(int(info.get("estimated_bytes", 0) or 0))
@@ -1453,6 +1567,7 @@ class SettingsPage(QWidget):
         )
         if not agreed:
             self._reveal_legacy_card()
+            self._finish_card_focus()
             return
 
         # Android platform tools are the app's own ADB backend, but they are
@@ -1471,11 +1586,15 @@ class SettingsPage(QWidget):
         errors = self._run_legacy_removal(uninstall_platform_tools=remove_tools)
         if errors:
             self._show_legacy_status("\n".join(errors), warn=True)
+            self._finish_card_focus()
             return
         self._show_legacy_status(
             tr("legacy_cleanup_done_inline").format(size=reclaim),
             hide_after_ms=4000,
         )
+        # The removal is done, so the card has nothing left to ask: the offer
+        # ends here and the column comes back.
+        self._finish_card_focus()
 
     def _run_legacy_removal(self, *, uninstall_platform_tools: bool = False):
         """Delete the pre-3.0 leftovers. Returns the errors, if any.

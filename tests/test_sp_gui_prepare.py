@@ -81,8 +81,28 @@ def test_a_half_written_cache_is_not_offered(window, monkeypatch):
         assert Path(cached["scatter"]).is_file()
 
 
-def test_an_incomplete_package_is_prepared_instead_of_refused(window, monkeypatch, tmp_path):
-    """The SP GUI install method re-prepares the selected package, no dialog."""
+def test_a_selected_unready_online_release_is_offered_for_preparation(window, monkeypatch, tmp_path):
+    """The focused release remains eligible before its download is cached."""
+    page = window._select_page
+    rel = {
+        "tag_name": "v2.0",
+        "download_url": "https://example.invalid/release.zip",
+        "asset_name": "release.zip",
+    }
+    page._current_selected_rel = rel
+    page._current_package_path = ""
+    page._gui_explicit = page._firmware_target_for_release(rel)
+    monkeypatch.setattr(page, "_gui_target_if_ready", lambda target: None)
+    monkeypatch.setattr(page, "focused_firmware", lambda: page._gui_explicit)
+    target = page.gui_firmware_target()
+    assert target is not None
+    assert target["kind"] == "online"
+    assert target["release"]["tag_name"] == "v2.0"
+
+
+def test_an_incomplete_local_package_is_refused_not_prepared(window, monkeypatch, tmp_path):
+    """A local package with missing scatter images is never flashed or repaired."""
+    from src.ui import main_window as mw_mod
     from src import sp_flash_gui
 
     package = tmp_path / "rom_y2.zip"
@@ -108,16 +128,30 @@ def test_an_incomplete_package_is_prepared_instead_of_refused(window, monkeypatc
     window._package_path = str(package)
     window._package_model = "Y2"
     window._package_name = "Original Software 3.2.1 for Y2"
+    window._select_page._gui_explicit = {
+        "kind": "local",
+        "path": str(package),
+        "model": "Y2",
+        "name": window._package_name,
+    }
 
+    warnings = []
+    monkeypatch.setattr(mw_mod.QMessageBox, "warning", lambda *a, **k: warnings.append(a))
+    monkeypatch.setattr(window, "_ensure_elevated_for_install", lambda: True)
     window._begin_sp_gui_install()
 
-    assert prepared and prepared[0]["kind"] == "local"
-    assert prepared[0]["path"] == str(package)
-    assert window._gui_after_prepare == "launch"
-    assert window._gui_launch_when_ready is True
-    # The progress screen is up: the download replaced the old error dialog.
-    assert window._download_active is True
-    assert window._gui_handoff_prepare is True
+    assert prepared == []
+    assert warnings, "the user must be told the package cannot be used"
+    assert window._gui_handoff_prepare is False
+    assert window._gui_launch_when_ready is False
+
+
+def test_settings_shortcut_routes_selected_firmware_through_main_handoff(window, monkeypatch):
+    """Settings uses the same release validation and history path as the rail."""
+    invoked = []
+    monkeypatch.setattr(window, "_open_sp_flash_tool_gui", lambda: invoked.append(True))
+    window._settings_page._on_launch_sp()
+    assert invoked == [True]
 
 
 def test_the_desktop_tool_is_opened_only_after_the_sessions_stop(window, monkeypatch, tmp_path):

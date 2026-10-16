@@ -78,6 +78,32 @@ def test_flash_page_usb_disconnected_generic_device(qapp):
     assert not fp._wait_continue_btn.isHidden()
 
 
+def test_flash_page_connect_failure_copy_survives_retranslate(qapp):
+    """The engine-switch wording is a prompt of its own: a language change
+    re-renders it, and the ordinary power-off step clears it."""
+    from src.i18n import tr
+
+    fp = FlashPage()
+    fp.set_model("Y1")
+    fp.show_usb_disconnected(
+        prompt_key="err_connect_failover_recovery",
+        prompt_kwargs={"failed": "SP Flash Tool", "next": "MTKClient"},
+    )
+    expected = tr("err_connect_failover_recovery").format(
+        model="Y1", failed="SP Flash Tool", next="MTKClient"
+    )
+    assert fp._wait_prompt_label.text() == expected
+    assert len(expected.splitlines()) == 3
+
+    fp.retranslate()
+    assert fp._wait_prompt_label.text() == expected
+
+    # Back to the ordinary step: the plain power-off line, no engine names.
+    fp.show_power_off_prompt()
+    assert fp._wait_prompt_label.text() == tr("flash_connect_prompt").format(model="Y1")
+    assert "MTKClient" not in fp._wait_prompt_label.text()
+
+
 def test_main_window_handles_disconnection_and_kills_task(qapp):
     win = MainWindow()
     try:

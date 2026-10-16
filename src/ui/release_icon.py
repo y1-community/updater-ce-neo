@@ -19,7 +19,8 @@ from ..release_icons import (
     icon_known_miss,
     load_first_icon_bytes,
     read_cached_icon,
-    release_asset_urls,
+    release_asset_requires_square,
+    release_image_fallback_urls,
     software_icon_urls,
     write_cached_icon,
 )
@@ -179,11 +180,24 @@ def _paint_complete_badge(painter: QPainter, side: int) -> None:
     painter.drawPath(mark)
 
 
-def cached_icon_pixmap(urls, cache_dir: Path | None = None) -> QPixmap:
-    """First image already on disk for these URLs. Does not use the network."""
+def cached_icon_pixmap(
+    urls,
+    cache_dir: Path | None = None,
+    *,
+    release=None,
+    package=None,
+) -> QPixmap:
+    """First valid cached image for these URLs. Does not use the network."""
     directory = cache_dir or default_icon_cache_dir()
+    release_urls = set(icon_candidate_urls(release, package)) if release is not None else set()
     for url in urls or []:
-        pixmap = pixmap_from_icon_bytes(read_cached_icon(url, directory) or b"")
+        square_only = (
+            url in release_urls
+            and release_asset_requires_square(url, release, package)
+        )
+        pixmap = pixmap_from_icon_bytes(
+            read_cached_icon(url, directory, square_only=square_only) or b""
+        )
         if not pixmap.isNull():
             return pixmap
     return QPixmap()
@@ -253,12 +267,18 @@ def load_release_pixmap(
                 return pixmap
 
     directory = cache_dir or default_icon_cache_dir()
-    for url in icon_candidate_urls(release, package, dark=dark):
-        data = read_cached_icon(url, directory)
+    release_urls = icon_candidate_urls(release, package, dark=dark)
+    candidates = release_urls + release_image_fallback_urls(release, package, dark=dark)
+    for url in candidates:
+        square_only = (
+            url in release_urls
+            and release_asset_requires_square(url, release, package)
+        )
+        data = read_cached_icon(url, directory, square_only=square_only)
         if data is None and allow_network:
-            data = fetch_icon_bytes(url)
+            data = fetch_icon_bytes(url, square_only=square_only)
             if data:
-                write_cached_icon(url, data, directory)
+                write_cached_icon(url, data, directory, square_only=square_only)
         pixmap = pixmap_from_icon_bytes(data or b"")
         if not pixmap.isNull():
             return pixmap
@@ -418,10 +438,24 @@ class ReleaseIconJob(QThread):
                 )
             rel = pending.pop(0)
             tag = str((rel or {}).get("tag_name") or "")
-            urls = icons.release_asset_urls(rel, self._package, dark=self._dark)
+            release_urls = icons.icon_candidate_urls(
+                rel,
+                self._package,
+                dark=self._dark,
+            )
+            urls = release_urls + icons.release_image_fallback_urls(
+                rel,
+                self._package,
+                dark=self._dark,
+            )
+            generic_release_urls = set(release_urls)
             data = b""
             for url in urls:
-                cached = icons.read_cached_icon(url, directory)
+                square_only = (
+                    url in generic_release_urls
+                    and icons.release_asset_requires_square(url, rel, self._package)
+                )
+                cached = icons.read_cached_icon(url, directory, square_only=square_only)
                 if cached:
                     data = cached
                     break
@@ -445,9 +479,9 @@ class ReleaseIconJob(QThread):
                         jumped = True
                         break
                 network_started = True
-                fetched, code = icons.fetch_icon_status(url)
+                fetched, code = icons.fetch_icon_status(url, square_only=square_only)
                 if fetched:
-                    icons.write_cached_icon(url, fetched, directory)
+                    icons.write_cached_icon(url, fetched, directory, square_only=square_only)
                     data = fetched
                     break
                 if code == 404:

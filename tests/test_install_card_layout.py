@@ -72,6 +72,25 @@ def test_step_and_eta_stack_again_when_the_card_is_narrow():
         page.close()
 
 
+def test_eta_uses_measured_install_time_and_optional_prep_time():
+    page = FlashPage()
+    try:
+        page.update_time("00:10", "01:05")
+        install = page._format_friendly_eta("01:05")
+        assert page._eta_label.text() == f"— {install}"
+
+        page.set_prep_eta_seconds(17)
+        assert page._eta_label.text().splitlines() == [
+            f"— {install}",
+            page._format_friendly_eta("00:17"),
+        ]
+
+        page.set_prep_eta_seconds(0)
+        assert page._eta_label.text() == f"— {install}"
+    finally:
+        page.close()
+
+
 def test_stop_prompt_keeps_the_status_line_wrapping():
     """The sanity check borrows the step line, so it must wrap, not run off."""
     page = _flashing_page(900)

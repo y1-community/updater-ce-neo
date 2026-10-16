@@ -3,13 +3,14 @@
 The icon URL is built from the release the app already has (owner, repo, tag).
 Nothing here calls the GitHub releases API.
 
-Light image, first name that actually downloads:
-1. ``updater.jpg``
-2. ``updater.jpeg``
-3. ``updater.png``
+Preferred release image names are ``updater.jpg`` and ``updater.png``,
+followed by the legacy ``updater.jpeg``. Dark mode tries ``updater_dark`` first.
+If none are present, square PNG/JPG release assets are considered in release
+asset order. ``icon`` and then ``image`` manifest URLs are tried only after
+release images fail.
 
-Dark mode tries ``updater_dark.jpg``, ``updater_dark.jpeg``, ``updater_dark.png``
-first, then the light names above.
+Dark mode prefers ``updater_dark.jpg`` and ``updater_dark.png``, then the
+legacy ``updater_dark.jpeg`` before trying the light names above.
 
 The software logo from ``slidia_manifest.xml`` is attribute ``icon`` (jpg, jpeg,
 or png). Dark mode also reads ``icon_dark``, then ``image_dark``, before that
@@ -35,9 +36,9 @@ from urllib.parse import quote
 
 logger = logging.getLogger(__name__)
 
-# Compressed names first. ``updater.png`` remains a valid light icon.
-LIGHT_ICON_NAMES = ("updater.jpg", "updater.jpeg", "updater.png")
-DARK_ICON_NAMES = ("updater_dark.jpg", "updater_dark.jpeg", "updater_dark.png")
+# Preserve conventional .jpg/.png precedence and retain the legacy .jpeg alias.
+LIGHT_ICON_NAMES = ("updater.jpg", "updater.png", "updater.jpeg")
+DARK_ICON_NAMES = ("updater_dark.jpg", "updater_dark.png", "updater_dark.jpeg")
 UPDATER_ASSET_NAME = "updater.png"
 ICON_URL = "https://github.com/{owner}/{repo}/releases/download/{tag}/{filename}"
 # One download in flight. A second overlapping fetch is the most this pacing allows.
@@ -76,7 +77,7 @@ def release_download_icon_url(repo: str, tag: str, filename: str) -> str:
         owner=quote(owner, safe=""),
         repo=quote(name, safe=""),
         tag=quote(str(tag), safe=""),
-        filename=filename,
+        filename=quote(str(filename), safe=""),
     )
 
 
@@ -102,43 +103,100 @@ def _deduped(urls) -> list[str]:
     return ordered
 
 
+def _generic_release_image_assets(release, repo: str, tag: str) -> list[tuple[str, str]]:
+    """Return (filename, URL) for arbitrary PNG/JPG assets, preserving API order."""
+    preferred = {name.lower() for name in (*DARK_ICON_NAMES, *LIGHT_ICON_NAMES)}
+    result: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for asset in (release or {}).get("assets") or []:
+        if not isinstance(asset, dict):
+            continue
+        filename = str(asset.get("name") or "").strip()
+        lowered = filename.lower()
+        if not lowered.endswith((".png", ".jpg")) or lowered in preferred:
+            continue
+        url = str(asset.get("browser_download_url") or "").strip()
+        if not url:
+            url = release_download_icon_url(repo, tag, filename)
+        if url and url not in seen:
+            seen.add(url)
+            result.append((filename, url))
+    return result
+
+
 def release_asset_urls(release, package=None, *, dark: bool | None = None) -> list[str]:
-    """Release-file URLs only. Built from owner, repo, and tag. No GitHub API."""
+    """Preferred updater names, then arbitrary release image assets. No API call."""
     dark = _dark_flag(dark)
     repo, tag = _repo_and_tag(release, package)
     if not repo or not tag or "/" not in repo:
         return []
     names = list(DARK_ICON_NAMES) + list(LIGHT_ICON_NAMES) if dark else list(LIGHT_ICON_NAMES)
-    return [release_download_icon_url(repo, tag, filename) for filename in names]
+    preferred_urls = [release_download_icon_url(repo, tag, filename) for filename in names]
+    has_release_metadata = bool(
+        release
+        and (
+            release.get("source_repo")
+            or (release.get("html_url") or "").startswith("https://github.com/")
+        )
+    )
+    generic_urls = (
+        [url for _filename, url in _generic_release_image_assets(release, repo, tag)]
+        if has_release_metadata
+        else []
+    )
+    return _deduped(preferred_urls + generic_urls)
+
+
+def release_asset_requires_square(url: str, release, package=None) -> bool:
+    """Only non-conventional PNG/JPG release artwork requires square dimensions."""
+    repo, tag = _repo_and_tag(release, package)
+    if not repo or not tag:
+        return False
+    has_release_metadata = bool(
+        release
+        and (
+            release.get("source_repo")
+            or (release.get("html_url") or "").startswith("https://github.com/")
+        )
+    )
+    if not has_release_metadata:
+        return False
+    return str(url) in {
+        candidate for _filename, candidate in _generic_release_image_assets(release, repo, tag)
+    }
 
 
 def software_icon_urls(package, *, dark: bool | None = None) -> list[str]:
-    """Software logo from ``slidia_manifest.xml``. ``icon`` is the existing key.
+    """Manifest logo URLs: prefer ``icon`` over legacy ``image`` fields.
 
-    Dark mode tries ``icon_dark`` (which also accepts ``image_dark``) first.
+    Dark mode tries ``icon_dark`` (which may contain ``image_dark``) first.
     """
     dark = _dark_flag(dark)
     urls = []
     if dark:
         urls.append(getattr(package, "icon_dark", "") or "")
     urls.append(getattr(package, "icon", "") or "")
+    urls.append(getattr(package, "image", "") or "")
     return _deduped(urls)
 
 
 def icon_candidate_urls(release, package=None, *, dark: bool | None = None) -> list[str]:
-    """Release files, then the software logo. Built without the GitHub API.
+    """Release artwork candidates; no GitHub API call is made here."""
+    return release_asset_urls(release, package, dark=dark)
 
-    When the current install is a locally browsed package (no release/source_repo),
-    the software-logo path is intentionally skipped: offline zips do not carry a
-    release-page icon, and the card should fall back to the settings-gear squircle
-    rather than reuse a remote software logo (e.g. the original-software icon).
-    """
-    if not release or not (release.get("source_repo") or (release.get("html_url") or "").startswith("https://github.com/")):
-        return _deduped(list(release_asset_urls(release, package, dark=dark)))
-    return _deduped(
-        list(release_asset_urls(release, package, dark=dark))
-        + list(software_icon_urls(package, dark=dark))
+
+def release_image_fallback_urls(release, package=None, *, dark: bool | None = None) -> list[str]:
+    """Manifest candidates used after the release's preferred and generic images."""
+    is_catalogue_release = bool(
+        release
+        and (
+            release.get("source_repo")
+            or (release.get("html_url") or "").startswith("https://github.com/")
+        )
     )
+    if not is_catalogue_release:
+        return []
+    return software_icon_urls(package, dark=dark)
 
 
 def next_preload_gap(rng: random.Random | None = None) -> float:
@@ -165,25 +223,42 @@ def preload_start_times(count: int, rng: random.Random | None = None) -> list[fl
 
 
 def resolve_icon_bytes(release, package=None, *, dark: bool = False, cache_dir: Path | None = None, allow_network: bool = True) -> bytes | None:
-    """First cached or downloaded icon. 404 and bad files fall through. None keeps the squircle."""
+    """First cached or downloaded image; manifest icon/image follows release art."""
     directory = cache_dir or default_icon_cache_dir()
-    for url in icon_candidate_urls(release, package, dark=dark):
-        data = read_cached_icon(url, directory)
+    release_urls = icon_candidate_urls(release, package, dark=dark)
+    candidates = release_urls + release_image_fallback_urls(release, package, dark=dark)
+    for url in candidates:
+        square_only = (
+            url in release_urls
+            and release_asset_requires_square(url, release, package)
+        )
+        data = read_cached_icon(url, directory, square_only=square_only)
         if data is None and allow_network:
-            data = fetch_icon_bytes(url)
+            data = fetch_icon_bytes(url, square_only=square_only)
             if data:
-                write_cached_icon(url, data, directory)
+                write_cached_icon(url, data, directory, square_only=square_only)
         if data:
             return data
     return None
 
 
-def image_bytes_ok(data: bytes) -> bool:
+def image_bytes_ok(data: bytes, *, square_only: bool = False) -> bool:
+    """Validate supported image bytes, optionally requiring square dimensions."""
     if not data or len(data) < 16:
         return False
     if data.startswith(b"RIFF") and b"WEBP" not in data[:16]:
         return False
-    return data.startswith(_IMAGE_MAGIC)
+    if not data.startswith(_IMAGE_MAGIC):
+        return False
+    if not square_only:
+        return True
+    try:
+        from PySide6.QtGui import QImage
+
+        image = QImage.fromData(data)
+        return not image.isNull() and image.width() == image.height()
+    except Exception:
+        return False
 
 
 def icon_cache_file(url: str, cache_dir: Path) -> Path:
@@ -191,7 +266,7 @@ def icon_cache_file(url: str, cache_dir: Path) -> Path:
     return Path(cache_dir) / f"{digest}.img"
 
 
-def read_cached_icon(url: str, cache_dir: Path) -> bytes | None:
+def read_cached_icon(url: str, cache_dir: Path, *, square_only: bool = False) -> bytes | None:
     path = icon_cache_file(url, cache_dir)
     try:
         if not path.is_file() or path.stat().st_size < 16:
@@ -199,13 +274,13 @@ def read_cached_icon(url: str, cache_dir: Path) -> bytes | None:
         data = path.read_bytes()
     except Exception:
         return None
-    if not image_bytes_ok(data):
+    if not image_bytes_ok(data, square_only=square_only):
         return None
     return data
 
 
-def write_cached_icon(url: str, data: bytes, cache_dir: Path) -> Path | None:
-    if not image_bytes_ok(data):
+def write_cached_icon(url: str, data: bytes, cache_dir: Path, *, square_only: bool = False) -> Path | None:
+    if not image_bytes_ok(data, square_only=square_only):
         return None
     path = icon_cache_file(url, cache_dir)
     try:
@@ -249,13 +324,18 @@ def default_icon_cache_dir() -> Path:
     return directory
 
 
-def fetch_icon_bytes(url: str, timeout: float = 8) -> bytes | None:
-    """Download an icon. Failures (404, offline, not an image) return None."""
-    data, _code = fetch_icon_status(url, timeout=timeout)
+def fetch_icon_bytes(url: str, timeout: float = 8, *, square_only: bool = False) -> bytes | None:
+    """Download an icon. Failures (404, offline, or invalid image) return None."""
+    data, _code = fetch_icon_status(url, timeout=timeout, square_only=square_only)
     return data
 
 
-def fetch_icon_status(url: str, timeout: float = 8) -> tuple[bytes | None, int]:
+def fetch_icon_status(
+    url: str,
+    timeout: float = 8,
+    *,
+    square_only: bool = False,
+) -> tuple[bytes | None, int]:
     """Download an icon. The status is 404 when that name is absent, 0 when the request failed."""
     code = 0
     try:
@@ -269,7 +349,7 @@ def fetch_icon_status(url: str, timeout: float = 8) -> tuple[bytes | None, int]:
     except Exception as exc:
         logger.debug("Icon fetch failed for %s: %s", url, exc)
         return None, 0
-    if not image_bytes_ok(data):
+    if not image_bytes_ok(data, square_only=square_only):
         return None, code
     return data, 200
 
@@ -294,7 +374,8 @@ def load_first_icon_bytes(urls, cache_dir: Path, *, allow_network: bool = True) 
 def load_local_package_icon_bytes(package_path: str | Path | None, *, dark: bool | None = None) -> bytes | None:
     """Inspect a local package (zip file or folder) for an embedded updater image.
 
-    Checks updater_dark.* first when dark is True, then updater.jpg, updater.jpeg, updater.png.
+    Checks updater_dark.* first when dark is True, then updater.jpg, updater.png, updater.jpeg.
+
     Returns the raw image bytes if found and valid, otherwise None.
     """
     if not package_path:

@@ -87,8 +87,11 @@ def parse_manifest_xml(xml_text: str):
             device = (node.get("device") or "").strip().upper()
             handler = (node.get("handler") or "").strip()
             ptype = (node.get("type") or "").strip()
+            # The manifest historically used both names; prefer ``icon`` when
+            # both are present, while retaining ``image`` as a fallback.
             icon = (node.get("icon") or "").strip()
-            # ``icon`` is the software logo. Dark mode may set either name.
+            image = (node.get("image") or "").strip()
+            # Dark mode may set either name, preferring the explicit icon key.
             icon_dark = (node.get("icon_dark") or node.get("image_dark") or "").strip()
         except Exception:
             continue
@@ -110,6 +113,7 @@ def parse_manifest_xml(xml_text: str):
                 description="",
                 icon=icon,
                 icon_dark=icon_dark,
+                image=image,
             )
         )
     return entries
@@ -171,7 +175,8 @@ def cache_manifest(entries):
             {"name": e.name, "repo": e.repo, "device": e.model,
              "package_name": e.package_name, "slug": e.slug,
              "icon": getattr(e, "icon", "") or "",
-             "icon_dark": getattr(e, "icon_dark", "") or ""}
+             "icon_dark": getattr(e, "icon_dark", "") or "",
+             "image": getattr(e, "image", "") or ""}
             for e in entries
         ]
         _cache_root().joinpath("packages.json").write_text(
@@ -197,6 +202,7 @@ def load_cached_manifest():
                 package_name=e.get("package_name", "rom.zip"),
                 icon=e.get("icon", "") or "",
                 icon_dark=e.get("icon_dark", "") or "",
+                image=e.get("image", "") or "",
             )
             for e in data
             if e.get("name") and e.get("repo")

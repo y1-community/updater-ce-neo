@@ -755,6 +755,53 @@ def test_native_style_candidates_follow_the_desktop():
     assert hover != QColor("#000000")
 
 
+def test_linux_palette_preserves_desktop_colors():
+    """Linux surfaces and controls retain the palette supplied by the desktop."""
+    from PySide6.QtGui import QColor, QPalette
+
+    from src.ui import dark as dark_mod
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    palette = QPalette()
+    roles = {
+        QPalette.ColorRole.Window: "#333b2d",
+        QPalette.ColorRole.WindowText: "#e2e7d8",
+        QPalette.ColorRole.Base: "#252b22",
+        QPalette.ColorRole.AlternateBase: "#3c4434",
+        QPalette.ColorRole.Text: "#e2e7d8",
+        QPalette.ColorRole.Button: "#414a37",
+        QPalette.ColorRole.ButtonText: "#e2e7d8",
+        QPalette.ColorRole.Highlight: "#9aab62",
+        QPalette.ColorRole.HighlightedText: "#1b2116",
+        QPalette.ColorRole.ToolTipBase: "#414a37",
+        QPalette.ColorRole.Mid: "#657052",
+        QPalette.ColorRole.Dark: "#20261d",
+        QPalette.ColorRole.Midlight: "#4b553e",
+        QPalette.ColorRole.PlaceholderText: "#b2b99f",
+    }
+    for role, value in roles.items():
+        palette.setColor(role, QColor(value))
+
+    was_linux = dark_mod.IS_LINUX
+    dark_mod.IS_LINUX = True
+    try:
+        tokens = dark_mod._Tokens(
+            True,
+            palette=palette,
+            use_native_linux_colors=True,
+        )
+        assert tokens.bg == "#333b2d"
+        assert tokens.bg_card == "#414a37"
+        assert tokens.bg_input == "#252b22"
+        assert tokens.fg == "#e2e7d8"
+        assert tokens.accent == "#9aab62"
+        assert tokens.progress_track == "#3c4434"
+        assert tokens.bg_tooltip == "#414a37"
+        assert dark_mod._make_palette(True, native_palette=palette) == palette
+    finally:
+        dark_mod.IS_LINUX = was_linux
+
+
 def test_pre_liquid_glass_light_fields_are_not_white_plates():
     """Older macOS light mode uses Aqua's light control colors, not #ffffff plates."""
     from PySide6.QtGui import QColor, QPalette
@@ -1514,54 +1561,61 @@ def test_windows_scrollbar_uses_winui_when_it_exists():
     apply_theme(app)
 
 
-def test_install_method_confirmation_stays_in_the_card():
-    """MTKClient (Mac) asks inside the Install Method card, then restores it."""
-    from PySide6.QtCore import QTimer
-
-    from src.flash_service import METHOD_MTK_MAC, METHOD_SP
-    from src.i18n import translator
+def test_advanced_install_methods_offer_one_shared_mtkclient():
+    """Advanced methods expose MTKClient once, not a separate Mac alias."""
+    from src import paths
+    from src.flash_service import METHOD_MTK, METHOD_SP
     from src.ui.main_window import _PAGE_SETTINGS
 
-    translator().set_language("en")
     app = QApplication.instance() or QApplication(sys.argv)
+    real_mac = paths.IS_MAC
+    real_windows = paths.IS_WINDOWS
+    paths.IS_MAC = False
+    paths.IS_WINDOWS = False
     window = MainWindow()
-    window.show()
-    window._nav_to_page(_PAGE_SETTINGS)
-    app.processEvents()
-    page = window._settings_page
-    page.reveal_advanced_methods()
-    page.set_method(METHOD_SP)
     try:
-        page.simulated_mac_requested.disconnect(window._restart_in_simulated_macos)
-    except Exception:
-        pass
-    restarted = []
-    page.simulated_mac_requested.connect(lambda: restarted.append(1))
-    idx = page._method_combo.findData(METHOD_MTK_MAC)
-    assert idx >= 0
+        window.show()
+        window._nav_to_page(_PAGE_SETTINGS)
+        app.processEvents()
+        page = window._settings_page
+        page.reveal_advanced_methods()
+        page.set_method(METHOD_SP)
+        methods = page._available_methods()
+        assert methods == (METHOD_SP, METHOD_MTK)
+        assert page._method_combo.findData("mtk_mac") == -1
+        assert page.current_method() == METHOD_SP
 
-    def choose_later():
-        assert not page._method_combo.isVisible()
-        labels = page._method_card.findChildren(type(page._method_desc))
-        assert any("Simulated macOS mode" in label.text() for label in labels)
-        page._method_card._confirm_reject.click()
+        paths.IS_MAC = True
+        page.refresh_settings()
+        assert page._available_methods() == (METHOD_MTK,)
+        assert page.current_method() == METHOD_MTK
+    finally:
+        paths.IS_MAC = real_mac
+        paths.IS_WINDOWS = real_windows
+        window.close()
+        app.processEvents()
 
-    QTimer.singleShot(0, choose_later)
-    page._method_combo.setCurrentIndex(idx)
-    assert page.current_method() == METHOD_SP
-    assert page._method_combo.isVisible()
-    assert restarted == []
 
-    def choose_restart():
-        page._method_card._confirm_accept.click()
+def test_settings_checkboxes_keep_the_host_native_style():
+    """Settings toggles are native QCheckBoxes, not custom-painted switches."""
+    from PySide6.QtWidgets import QCheckBox
 
-    QTimer.singleShot(0, choose_restart)
-    page._method_combo.setCurrentIndex(idx)
-    assert page.current_method() == METHOD_MTK_MAC
-    assert restarted == [1]
-    assert page._method_combo.isVisible()
-    window.close()
-    app.processEvents()
+    from src.ui.dark import _ClassicWindowsHoverStyle
+    from src.ui.settings_page import SettingsPage
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    page = SettingsPage()
+    try:
+        switches = page.findChildren(QCheckBox)
+        assert switches
+        assert all(not switch.styleSheet() for switch in switches)
+        # Windows may wrap its native delegate for the button hover wash, but
+        # it no longer overrides checkbox primitives with a custom switch.
+        if isinstance(app.style(), _ClassicWindowsHoverStyle):
+            assert app.style().baseStyle() is not None
+    finally:
+        page.deleteLater()
+        app.processEvents()
 
 
 def test_title_row_switches_when_the_title_says_it_all():

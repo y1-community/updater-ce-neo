@@ -2,8 +2,8 @@
 
 Covers the regressions that made SP Flash Tool look broken on Windows/Linux:
 
-* a ``mtk_mac`` value left behind by the M/D debug keys must not pin the app
-  to MTKClient (it used to make SP Flash Tool unreachable entirely);
+* a legacy ``mtk_mac`` setting must not pin the app to MTKClient (it used
+  to make SP Flash Tool unreachable entirely);
 * a backend command must not start until the user has confirmed the player is
   unplugged and powered off (SP Flash Tool's own search window expired
   otherwise and reported S_TIMEOUT while nothing was wrong);
@@ -38,7 +38,7 @@ def _app():
 
 
 # --------------------------------------------------------------------------
-# The simulated-macOS debug entry is not a sticky backend
+# Legacy platform-specific method aliases
 # --------------------------------------------------------------------------
 def test_simulated_macos_entry_does_not_pin_mtkclient():
     from src import paths
@@ -62,15 +62,26 @@ def test_simulated_macos_entry_does_not_pin_mtkclient():
         paths.IS_MAC = real_mac
 
 
-def test_settings_selector_reflects_a_stale_mtk_mac_value():
-    """A stale value resolves to SP, so the selector and the run agree."""
-    from src.ui.settings_page import METHOD_SP, SettingsPage
+def test_settings_selector_has_one_platform_neutral_mtkclient_entry(monkeypatch):
+    """Legacy aliases normalize away; only one MTKClient method is selectable."""
+    from src import paths
+    from src.ui.settings_page import SettingsPage
 
     app = _app()
     page = SettingsPage()
+    monkeypatch.setattr(paths, "IS_MAC", False)
     try:
+        page.reveal_advanced_methods()
+        methods = page._available_methods()
+        assert methods == (fs.METHOD_SP, fs.METHOD_MTK)
+        assert page._method_combo.findData("mtk_mac") == -1
         page.set_method("mtk_mac")
-        assert page.current_method() == METHOD_SP
+        assert page.current_method() == fs.METHOD_SP
+
+        monkeypatch.setattr(paths, "IS_MAC", True)
+        assert page._available_methods() == (fs.METHOD_MTK,)
+        page.set_method("mtk_mac")
+        assert page.current_method() == fs.METHOD_MTK
     finally:
         page.deleteLater()
         app.processEvents()
@@ -86,6 +97,55 @@ def test_sp_error_names_and_codes_are_extracted():
     # Every code the numeric-only fallback can report has a name.
     for code, name in fs.SP_ERROR_CODE_NAMES.items():
         assert name in fs.SP_ERROR_GUIDANCE, code
+
+
+def test_connect_failures_are_recognised_by_name_and_by_number():
+    """"It never got as far as the player" is a distinct failure kind.
+
+    SP Flash Tool reports error 1013 (``S_COM_PORT_OPEN_FAIL``) by name in its
+    log and by number alone from ``err_code[1013]``, and the engines have their
+    own connect-failed codes. None of them is a player that dropped out of a
+    running flash.
+    """
+    for value in (
+        "S_COM_PORT_OPEN_FAIL (1013)",
+        "SP_ERR_1013",
+        "Exception: err_code[1013]",
+        "CONNECTION_FAILED",
+        "MTK_INIT_FAILED",
+        "CLI_START_FAILED",
+    ):
+        assert fs.is_connect_failure(value), value
+    for value in (
+        "",
+        "S_FT_DOWNLOAD_FAIL (4008)",
+        "S_TIMEOUT (1042)",
+        "S_CHIP_TYPE_NOT_MATCH (3184)",
+        "S_BROM_CMD_STARTCMD_FAIL (2005)",
+        "ERR_ATTEMPT_TIMEOUT",
+    ):
+        assert not fs.is_connect_failure(value), value
+    # The bare number is named, so the failure keeps its explanation.
+    assert fs.SP_ERROR_CODE_NAMES["1013"] == "S_COM_PORT_OPEN_FAIL"
+    assert fs.describe_backend_error("S_COM_PORT_OPEN_FAIL (1013)")
+
+
+def test_connect_failover_copy_names_both_engines_and_breaks_lines():
+    """The recovery line splits into failure / next engine / reset steps."""
+    from src import i18n
+
+    table = i18n._STRINGS["err_connect_failover_recovery"]
+    assert set(table) >= {"zh-CN", "en", "fr", "es", "de", "ja"}
+    lines = table["en"].split("\n")
+    assert len(lines) == 3, lines
+    assert lines[0] == "{failed} couldn't connect to your {model}."
+    assert lines[1] == "Updater will now try {next} instead."
+    assert lines[2].startswith("Please disconnect the USB and use a paperclip")
+    assert lines[2].endswith("then press next.")
+    # A real disconnect keeps its own wording.
+    assert i18n._STRINGS["err_usb_disconnected_recovery"]["en"].startswith(
+        "Your {model} got disconnected."
+    )
 
 
 def test_wrong_model_errors_are_recognised():
@@ -390,6 +450,126 @@ def test_switching_method_is_silent_and_waits_for_the_confirmation():
             settings.remove("flash_method")
         else:
             settings.setValue("flash_method", previous)
+        window.close()
+        app.processEvents()
+
+
+@pytest.mark.skipif(sys.platform == "darwin", reason="macOS has no SP Flash Tool")
+def test_power_off_copy_after_an_automatic_method_switch():
+    """Only the automatic engine switch shows the recovery card.
+
+    That attempt left the player mid-download, so the card keeps saying the
+    install failed and the line spells out the hidden button that puts the
+    player back into flash mode. Switching engine by hand in Settings is the
+    user's own choice and keeps the plain power-off step.
+    """
+    from PySide6.QtCore import QSettings
+
+    from src.i18n import tr
+    from src.state import FlashState
+    from src.ui.main_window import MainWindow
+
+    app = _app()
+    settings = QSettings("innioasis", "updater")
+    previous = settings.value("flash_method")
+    window = MainWindow()
+    window.service.start_flash = lambda pkg, pre="", method="auto", **kw: None
+    window.service.start_device_monitor = lambda: None
+    window.service.cancel_flash = lambda: None
+    window.service.stop_device_monitor = lambda: None
+    window._ensure_elevated_for_install = lambda: True
+    try:
+        window.show()
+        window._package_path = "C:/fake/rom.zip"
+        window._package_name = "Rockbox (Y1)"
+        window._package_model = "Y1"
+        window._flash_method = "sp"
+        window._flash_page.set_method("sp")
+        window._settings_page.set_method("sp")
+
+        # A backend that never got going hands over to the other engine, and
+        # the step now says how to bring the player back into flash mode.
+        window._handle_flash_failure("S_FT_DOWNLOAD_FAIL (4008)")
+        assert window._flash_method == "mtk"
+        assert window._flash_page._wait_prompt_label.text() == tr(
+            "err_usb_disconnected_recovery"
+        ).format(model="Y1")
+        # The band still reads "Install Failed", and that line already names the
+        # hidden button, so the separate pin tip stays off.
+        assert window._flash_page._wait_progress_bar.is_failed() is True
+        assert window._flash_page._show_pin_tip is False
+
+        # Choosing the other engine in Settings is not a recovery: the user is
+        # not mid-failure, so the plain power-off line is right.
+        window.sm.force_state(FlashState.S2_WAIT_CONNECTION)
+        window._on_method_changed("sp")
+        assert window._flash_page._wait_prompt_label.text() == tr(
+            "flash_connect_prompt"
+        ).format(model="Y1")
+        # The ordinary step is not a failure: the bar is live again and the pin
+        # tip returns, which is the only place that copy appears.
+        assert window._flash_page._wait_progress_bar.is_failed() is False
+        assert window._flash_page._show_pin_tip is True
+    finally:
+        if previous is None:
+            settings.remove("flash_method")
+        else:
+            settings.setValue("flash_method", previous)
+        window.close()
+        app.processEvents()
+
+
+@pytest.mark.skipif(sys.platform == "darwin", reason="macOS has no SP Flash Tool")
+def test_com_port_failure_fails_over_with_the_engine_names():
+    """A 1013 COM-port error says the tool could not connect, not that the
+    player dropped out, and names the engine taking over."""
+    from src.i18n import tr
+    from src.ui.main_window import MainWindow
+
+    app = _app()
+    window = MainWindow()
+    window.service.start_flash = lambda pkg, pre="", method="auto", **kw: None
+    window.service.start_device_monitor = lambda: None
+    window.service.cancel_flash = lambda: None
+    window.service.stop_device_monitor = lambda: None
+    window._ensure_elevated_for_install = lambda: True
+    try:
+        window.show()
+        window._package_path = "C:/fake/rom.zip"
+        window._package_name = "Original Software 3.1.2 for Y1"
+        window._package_model = "Y1"
+        window._flash_method = "sp"
+        window._flash_page.set_method("sp")
+        # SP Flash Tool can print its USB-search phase before discovering the
+        # port cannot be opened (e.g. kernel TIOCCBRK not supported). A device
+        # absent from USB afterward must not turn this pre-connection failure
+        # into a disconnect and bypass the safe MTKClient fallback.
+        window._past_usb_search = True
+        with patch("src.flash_service.is_mtk_device_connected", return_value=False):
+            window._handle_flash_failure("S_COM_PORT_OPEN_FAIL (1013)")
+
+        assert window._flash_method == "mtk"
+        text = window._flash_page._wait_prompt_label.text()
+        assert text == tr("err_connect_failover_recovery").format(
+            model="Y1", failed="SP Flash Tool", next="MTKClient"
+        )
+        # Failure, engine taking over, reset steps: one line each.
+        assert len(text.splitlines()) == 3
+        # The band keeps saying the install failed.
+        assert window._flash_page._wait_progress_bar.is_failed() is True
+        assert window._power_off_prompt is True
+
+        # A failure mid-download is a different story: the player really did
+        # drop out, and that line is still the one shown.
+        window._fallback_attempted = False
+        window._flash_method = "sp"
+        window._flash_page.set_method("sp")
+        window._past_usb_search = False
+        window._handle_flash_failure("S_FT_DOWNLOAD_FAIL (4008)")
+        assert window._flash_page._wait_prompt_label.text() == tr(
+            "err_usb_disconnected_recovery"
+        ).format(model="Y1")
+    finally:
         window.close()
         app.processEvents()
 

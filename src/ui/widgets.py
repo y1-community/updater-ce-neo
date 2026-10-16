@@ -455,6 +455,48 @@ def _layout_widgets(layout):
     return found
 
 
+def _paint_bento_surface(widget: QWidget, event, *, clear: bool = False) -> None:
+    """Paint the app's rounded pane, or erase it back to the window surface."""
+    from .surfaces import glass_surfaces_enabled
+
+    glass = glass_surfaces_enabled()
+    painter = QPainter(widget)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    painter.setClipRect(event.rect())
+    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
+    if glass:
+        painter.fillRect(widget.rect(), QColor(0, 0, 0, 0))
+    else:
+        window = widget.palette().color(QPalette.ColorRole.Window)
+        if not window.isValid() or window.alpha() == 0:
+            window = QColor(T().bg)
+        window.setAlpha(255)
+        painter.fillRect(widget.rect(), window)
+    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+    if clear:
+        painter.end()
+        return
+
+    rect = widget.rect().adjusted(0, 0, -1, -1)
+    path = QPainterPath()
+    path.addRoundedRect(rect, 8, 8)
+    if glass:
+        from .dark import is_dark
+
+        fill = QColor(255, 255, 255, 18 if is_dark() else 32)
+        edge = QColor(255, 255, 255, 40) if is_dark() else QColor(0, 0, 0, 36)
+    else:
+        fill = QColor(T().bg_card)
+        edge = QColor(T().border)
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(fill)
+    painter.drawPath(path)
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+    painter.setPen(QPen(edge))
+    painter.drawPath(path)
+    painter.end()
+
+
 class Card(QFrame):
     """Native desktop card panel matching human interface guidelines."""
 
@@ -465,7 +507,9 @@ class Card(QFrame):
         self._title = None
         self._glass_clear = False
         self.setAutoFillBackground(False)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        # Child cards paint a rounded surface over their parent; they are not
+        # top-level translucent windows and must not request a native surface.
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
         self._outer = QVBoxLayout(self)
         self._outer.setContentsMargins(14, 12, 14, 12)
         self._outer.setSpacing(10)
@@ -517,14 +561,13 @@ class Card(QFrame):
             self.setTitle(tr(self._title_key))
 
     def set_glass_clear(self, clear: bool = True) -> None:
-        """Show the system material through this card.
+        """Let native glass show through; keep a normal card on solid desktops."""
+        from .surfaces import glass_surfaces_enabled
 
-        A frosted fill on an opaque widget buffer becomes a dark rectangle.
-        The version list and the notes sit on the same texture as the window.
-        """
-        self._glass_clear = bool(clear)
+        self._glass_clear = bool(clear and glass_surfaces_enabled())
         if self._glass_clear:
             from .surfaces import clear_glass_plate
+
             clear_glass_plate(self)
         self.update()
 
@@ -604,36 +647,8 @@ class Card(QFrame):
         return bool(result["ok"])
 
     def paintEvent(self, event):  # noqa: N802 (Qt naming)
-        """Frost the card in place. Source replaces the rect, so it does not
-        stack on the previous frame and does not clear the rest of the window."""
-        from .surfaces import glass_surfaces_enabled
-
-        if not glass_surfaces_enabled():
-            super().paintEvent(event)
-            return
-        if self._glass_clear:
-            return
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing, True)
-        painter.setClipRect(event.rect())
-        from .dark import is_dark
-        # Clear first. A Source fill of a pale color on an opaque child buffer
-        # composites against black and leaves a blotch behind the card text.
-        rect = self.rect().adjusted(0, 0, -1, -1)
-        path = self._rounded(rect)
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor(0, 0, 0, 0))
-        painter.fillPath(path, QColor(0, 0, 0, 0))
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
-        fill = QColor(255, 255, 255, 18 if is_dark() else 32)
-        painter.setBrush(fill)
-        painter.fillPath(path, fill)
-        edge = QColor(255, 255, 255, 40) if is_dark() else QColor(0, 0, 0, 36)
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.setPen(QPen(edge))
-        painter.drawPath(path)
-        painter.end()
+        """Paint a rounded bento card on every desktop."""
+        _paint_bento_surface(self, event, clear=self._glass_clear)
 
     @staticmethod
     def _rounded(rect):
@@ -950,33 +965,8 @@ class BatteryToast(QFrame):
         self.update()
 
     def paintEvent(self, event):  # noqa: N802 (Qt naming)
-        """Frost the toast card consistent with settings cards and filter group."""
-        from .surfaces import glass_surfaces_enabled
-
-        if not glass_surfaces_enabled():
-            super().paintEvent(event)
-            return
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing, True)
-        painter.setClipRect(event.rect())
-        from .dark import is_dark
-
-        rect = self.rect().adjusted(0, 0, -1, -1)
-        path = QPainterPath()
-        path.addRoundedRect(rect, 8, 8)
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor(0, 0, 0, 0))
-        painter.fillPath(path, QColor(0, 0, 0, 0))
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
-        fill = QColor(255, 255, 255, 18 if is_dark() else 32)
-        painter.setBrush(fill)
-        painter.fillPath(path, fill)
-        edge = QColor(255, 255, 255, 40) if is_dark() else QColor(0, 0, 0, 36)
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.setPen(QPen(edge))
-        painter.drawPath(path)
-        painter.end()
+        """Paint the battery hint as a rounded card on every desktop."""
+        _paint_bento_surface(self, event)
 
 
 # ---------------------------------------------------------------------------

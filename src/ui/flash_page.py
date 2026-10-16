@@ -22,7 +22,6 @@ from .. import paths
 from .tab_focus import TabFocusManager
 from ..flash_service import (
     METHOD_MTK,
-    METHOD_MTK_MAC,
     METHOD_SP,
     STEP_DETECT,
     STEP_DONE,
@@ -35,6 +34,7 @@ from ..flash_service import (
     normalise_method,
 )
 from ..i18n import tr, tr_brand
+from ..progress_model import format_eta_seconds
 from .support_appeal import COMPLETION_KEYS, SupportIntro
 from .widgets import (
     Banner,
@@ -781,6 +781,16 @@ class FlashPage(QWidget):
         self._complete = False
         self._prompt_only = False
         self._wait_copy = ""
+        # True while the card is asking the user to bring a player that just
+        # dropped out of the run back into flash mode (a USB disconnect, or the
+        # automated switch away from a failed install method). It selects the
+        # recovery wording instead of the plain power-off line.
+        self._power_off_recovery = False
+        # Which recovery wording, and the fields it is formatted with: a tool
+        # that never reached the player gets its own line (naming the engine
+        # taking over) rather than the "got disconnected" one.
+        self._power_off_recovery_key = ""
+        self._power_off_recovery_kwargs = {}
         self._install_retry_cb = None
         self._power_off_continue_cb = None
         self._build_ui()
@@ -1157,6 +1167,8 @@ class FlashPage(QWidget):
         self._pkg_row = InfoRow("flash_current_pkg")
         self._elapsed_row = InfoRow("flash_elapsed")
         self._eta_row = InfoRow("flash_eta")
+        self._prep_eta_seconds = 0
+        self._eta_label.setText("")
 
         return self._wrap_centered(self._progress_card, warning_container)
 
@@ -1538,16 +1550,28 @@ class FlashPage(QWidget):
         if hasattr(self, "_theme_row"):
             self._theme_row.setVisible(False)
 
-    def show_usb_disconnected(self, on_retry=None, on_cancel=None) -> None:
-        """Prompt in the install card when USB drops, asking user to reset and press Next."""
+    def show_usb_disconnected(
+        self, on_retry=None, on_cancel=None, prompt_key="", prompt_kwargs=None
+    ) -> None:
+        """Prompt in the install card when USB drops, asking user to reset and press Next.
+
+        ``prompt_key`` swaps the recovery line for another wording of the same
+        step (today: a backend that could not connect at all, which names the
+        engine taking over), and ``prompt_kwargs`` carries that line's fields.
+        """
         self._failed = True
         self._prompt_only = True
         self._wait_copy = "usb_disconnected"
         self._show_pin_tip = False
+        # The retranslate path re-renders this line through
+        # ``_power_off_prompt_key``; it has to keep the recovery wording.
+        self._power_off_recovery = True
+        self._permission_prompt = False
+        self._power_off_recovery_key = str(prompt_key or "")
+        self._power_off_recovery_kwargs = dict(prompt_kwargs or {})
         self.clear_install_failure()
         self.show_waiting()
-        model_str = self._connect_model_text()
-        msg = tr("err_usb_disconnected_recovery").format(model=model_str)
+        msg = self._power_off_prompt_text()
         self._wait_prompt_label.setText(msg)
         if hasattr(self._wait_progress_bar, "set_failed"):
             self._wait_progress_bar.set_failed(True, tr("install_failed"))
@@ -1589,6 +1613,44 @@ class FlashPage(QWidget):
         else:
             logger.info("%s", msg)
 
+    def show_rockbox_power_on_prompt(self, prompt: str, on_continue=None) -> None:
+        """Keep the install card active while the user boots the flashed player."""
+        self._failed = False
+        self._complete = False
+        self._themes_stage_active = False
+        self._rockbox_power_on_continue_cb = on_continue
+        self._warning.setVisible(False)
+        if hasattr(self, "_appeal"):
+            self._appeal.setVisible(False)
+        if hasattr(self, "_cancel_btn"):
+            self._cancel_btn.setVisible(False)
+        if hasattr(self, "_flash_retry_btn"):
+            self._flash_retry_btn.setVisible(False)
+        if hasattr(self, "_theme_row"):
+            self._theme_row.setVisible(False)
+        self.show_flashing()
+        self.set_step(tr("rockbox_stage_installing"))
+        self._progress_bar.set_precise_value(90.0)
+        self._eta_label.setText(prompt)
+        self._eta_label.setWordWrap(True)
+        if hasattr(self, "_status_flow"):
+            self._status_flow.set_forced_stacked(True)
+        self._theme_step1_next_btn.setText(tr("dialog_pre_install_continue"))
+        self._theme_step1_widget.setVisible(True)
+        self._theme_fallback_widget.setVisible(False)
+        self._theme_trouble_widget.setVisible(False)
+        self._theme_row.setVisible(True)
+        self._notify_geometry_change()
+
+    def _on_theme_step1_next_clicked(self) -> None:
+        callback = getattr(self, "_rockbox_power_on_continue_cb", None)
+        if callable(callback):
+            self._rockbox_power_on_continue_cb = None
+            callback()
+            return
+        self._log_theme("[Rockbox Themes] User clicked Next on Step 1 (device powered on). Advancing to Step 2 (connect USB).")
+        self._start_theme_step2_connect_usb()
+
     def start_rockbox_themes_stage(
         self,
         model="Y1",
@@ -1596,11 +1658,13 @@ class FlashPage(QWidget):
         on_recover=None,
         log_cb=None,
         on_troubleshoot=None,
+        already_powered_on=False,
     ) -> None:
         """Seamless in-card Rockbox 360p themes & fonts post-install flow."""
         self._theme_stage_model = model
         self._theme_stage_done_cb = on_done
         self._theme_stage_recover_cb = on_troubleshoot or on_recover
+        self._rockbox_power_on_continue_cb = None
         self._theme_log_cb = log_cb
         self._themes_stage_active = True
         self._failed = False
@@ -1625,6 +1689,7 @@ class FlashPage(QWidget):
         self._progress_bar.set_precise_value(90.0)
 
         model_str = (model or "Y1").upper()
+        self._rockbox_already_powered_on = bool(already_powered_on)
         self._log_theme(f"[Rockbox Themes] Starting 360p themes & fonts stage for {model_str}...")
 
         from ..adb import find_adb_binary, adb_devices
@@ -1644,12 +1709,21 @@ class FlashPage(QWidget):
             self._on_adb_device_found(serial)
             return
 
-        # Not yet connected: start Step 1
-        self._show_theme_step1_disconnect_power_on()
+        # If MTKClient's post-flash handoff already asked the user to boot the
+        # player, go straight to the USB/ADB reconnect step instead of asking
+        # them to power it on a second time.
+        if already_powered_on:
+            self._start_theme_step2_connect_usb()
+        else:
+            self._show_theme_step1_disconnect_power_on()
 
     def _show_theme_step1_disconnect_power_on(self) -> None:
         model_str = getattr(self, "_theme_stage_model", "Y1").upper()
-        step1_text = tr("rockbox_step1_disconnect_power_on").format(model=model_str)
+        button = tr("button_centre" if model_str == "Y1" else "button_power")
+        step1_text = tr("rockbox_step1_power_on_button").format(
+            model=model_str,
+            button=button,
+        )
         self._eta_label.setText(step1_text)
         self._log_theme(f"[Rockbox Themes] Step 1: Prompting user to disconnect and power on {model_str}.")
         if hasattr(self, "_theme_row"):
@@ -1846,20 +1920,99 @@ class FlashPage(QWidget):
         if callable(cb):
             cb()
 
+    def show_rockbox_power_on_prompt(self, prompt: str, on_continue=None) -> None:
+        """Keep the install card active while the user boots the flashed player."""
+        self._failed = False
+        self._complete = False
+        self._themes_stage_active = False
+        self._theme_stage_done_cb = None
+        self._theme_stage_recover_cb = None
+        self.stop_theme_workers()
+        if hasattr(self, "_theme_row"):
+            self._theme_row.setVisible(False)
+        if hasattr(self, "_appeal"):
+            self._appeal.setVisible(False)
+        if hasattr(self, "_cancel_btn"):
+            self._cancel_btn.setVisible(False)
+        if hasattr(self, "_flash_retry_btn"):
+            self._flash_retry_btn.setVisible(False)
+        self.show_flashing()
+        self.set_step(tr("rockbox_stage_installing"))
+        self._progress_bar.set_precise_value(90.0)
+        self._eta_label.setText(prompt)
+        self._eta_label.setWordWrap(True)
+        if hasattr(self, "_status_flow"):
+            self._status_flow.set_forced_stacked(True)
+        self._rockbox_power_on_continue_cb = on_continue
+        if hasattr(self, "_theme_step1_widget"):
+            self._theme_step1_widget.setVisible(True)
+        self._theme_step1_next_btn.setText(tr("dialog_pre_install_continue"))
+        try:
+            self._theme_step1_next_btn.clicked.disconnect(self._on_theme_step1_next_clicked)
+        except (RuntimeError, TypeError):
+            pass
+        try:
+            self._theme_step1_next_btn.clicked.disconnect(self._on_rockbox_power_on_continue)
+        except (RuntimeError, TypeError):
+            pass
+        self._theme_step1_next_btn.clicked.connect(self._on_rockbox_power_on_continue)
+        if hasattr(self, "_theme_row"):
+            self._theme_row.setVisible(True)
+        if hasattr(self, "_theme_fallback_widget"):
+            self._theme_fallback_widget.setVisible(False)
+        if hasattr(self, "_theme_trouble_widget"):
+            self._theme_trouble_widget.setVisible(False)
+        self._notify_geometry_change()
+
+    def _on_rockbox_power_on_continue(self) -> None:
+        callback = getattr(self, "_rockbox_power_on_continue_cb", None)
+        if callable(callback):
+            callback()
+
     def _power_off_prompt_key(self) -> str:
-        """Prompt to prepare device before flashing."""
+        """Prompt to prepare device before flashing.
+
+        A player that dropped out of a run (disconnected, or left behind by the
+        method that failed) needs its own line: it says how to get back into
+        flash mode -- disconnect USB, press the hidden button -- rather than
+        only asking for a power-off and unplug. Keeping this here is what makes
+        a language change re-render that same line instead of the plain one.
+        """
+        if self._power_off_recovery:
+            return self._power_off_recovery_key or "err_usb_disconnected_recovery"
+        if getattr(self, "_permission_prompt", False):
+            return "install_linux_permission_prompt"
         return "flash_connect_prompt"
 
-    def show_power_off_prompt(self, show_pin_tip: bool = True) -> None:
-        """Prompt to power off and unplug. Does not start a flash by itself."""
+    def _power_off_prompt_text(self) -> str:
+        """The power-off / recovery line, with its own fields applied.
+
+        Both the recovery wording and the plain one take ``{model}``; the
+        connect-failure wording also names the engine that failed and the one
+        taking over, which only its own call site supplies.
+        """
+        kwargs = dict(self._power_off_recovery_kwargs or {})
+        kwargs.setdefault("model", self._connect_model_text())
+        return tr(self._power_off_prompt_key()).format(**kwargs)
+
+    def show_power_off_prompt(self, show_pin_tip: bool = True, permission: bool = False) -> None:
+        """Prompt to power off and unplug. Does not start a flash by itself.
+
+        ``permission`` shows the one-time Linux access step instead; its Next
+        button runs the password prompt, and the connect guidance follows it.
+        """
         self._failed = False
         self._prompt_only = True
         self._wait_copy = "power_off"
+        self._power_off_recovery = False
+        self._permission_prompt = bool(permission)
+        self._power_off_recovery_key = ""
+        self._power_off_recovery_kwargs = {}
         self._show_pin_tip = show_pin_tip
         self.set_attempt_timeout(0)
         self.clear_install_failure()
         self.show_waiting()
-        prompt = tr(self._power_off_prompt_key()).format(model=self._connect_model_text())
+        prompt = self._power_off_prompt_text()
         self._wait_prompt_label.setText(prompt)
         self._set_determinate(self._wait_progress_bar, 0)
         # Nothing has been flashed yet, so stepping back needs no question:
@@ -1880,6 +2033,7 @@ class FlashPage(QWidget):
 
     def leave_power_off_prompt(self) -> None:
         self._prompt_only = False
+        self._permission_prompt = False
         if hasattr(self, "_wait_continue_btn"):
             self._wait_continue_btn.setVisible(False)
         if hasattr(self, "_wait_cancel_btn"):
@@ -2136,12 +2290,56 @@ class FlashPage(QWidget):
     def update_time(self, elapsed, eta):
         self._elapsed_row.set_value(elapsed)
         self._eta_row.set_value(eta)
-        friendly = self._format_friendly_eta(eta)
+        self._refresh_eta_label(eta)
+        flow = getattr(self, "_status_flow", None)
+        if flow is not None:
+            flow.refresh()
+        self._notify_geometry_change()
+
+    def set_prep_eta_seconds(self, seconds: int) -> None:
+        """The Device Prep stage's own remaining time, in whole seconds.
+
+        The install half is already published to the card as ``eta`` through
+        ``update_time``; this hands the prep half to the same label without
+        wiping it. ``0`` means the prep stage has not produced a number yet,
+        which is the honest state until it does.
+        """
+        try:
+            self._prep_eta_seconds = max(0, int(seconds))
+        except (TypeError, ValueError):
+            self._prep_eta_seconds = 0
+        self._refresh_eta_label(self._eta_row.value())
+
+    def _refresh_eta_label(self, eta_str: str) -> None:
+        friendly = self._format_eta_with_prep(eta_str)
         self._eta_label.setText(f"— {friendly}" if friendly else "")
         flow = getattr(self, "_status_flow", None)
         if flow is not None:
             flow.refresh()
         self._notify_geometry_change()
+
+    def _format_eta_with_prep(self, eta_str: str) -> str:
+        install_eta = self._parse_eta_seconds(eta_str)
+        prep_eta = getattr(self, "_prep_eta_seconds", 0)
+        if install_eta is None and prep_eta <= 0:
+            return ""
+        parts = []
+        if install_eta is not None:
+            parts.append(format_eta_seconds(install_eta))
+        if prep_eta > 0:
+            parts.append(format_eta_seconds(prep_eta))
+        return "\n".join(part for part in parts if part)
+
+    @staticmethod
+    def _parse_eta_seconds(eta_str: str):
+        if not eta_str or eta_str in ("--:--", "-"):
+            return None
+        try:
+            minutes, seconds = (int(part) for part in eta_str.split(":", 1))
+        except (TypeError, ValueError):
+            return None
+        total = minutes * 60 + seconds
+        return total if total > 0 else None
 
     @staticmethod
     def _format_friendly_eta(eta_str: str) -> str:
@@ -2175,9 +2373,7 @@ class FlashPage(QWidget):
             self._download_cancel_btn.setToolTip(tr("flash_btn_cancel"))
         copy = getattr(self, "_wait_copy", "")
         if hasattr(self, "_wait_prompt_label") and (self._prompt_only or copy == "power_off"):
-            self._wait_prompt_label.setText(
-                tr(self._power_off_prompt_key()).format(model=self._connect_model_text())
-            )
+            self._wait_prompt_label.setText(self._power_off_prompt_text())
         elif hasattr(self, "_wait_prompt_label") and copy == "please_wait_connecting":
             self._wait_prompt_label.setText(self._wait_connecting_prompt_text())
         elif hasattr(self, "_wait_prompt_label") and copy == "please_wait":
@@ -2251,6 +2447,8 @@ class FlashPage(QWidget):
         self._pkg_row.retranslate()
         self._elapsed_row.retranslate()
         self._eta_row.retranslate()
+        if hasattr(self, "_eta_label") and hasattr(self, "_eta_row"):
+            self._refresh_eta_label(self._eta_row.value())
 
     def _seal_status_labels(self):
         """Repaint status lines from the live theme. No opaque backdrop."""

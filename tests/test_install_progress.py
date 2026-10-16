@@ -27,7 +27,7 @@ if str(ROOT) not in sys.path:
 import pytest  # noqa: E402
 
 from src import flash_service as fs  # noqa: E402
-from src.progress_model import ThroughputEta, percent_of  # noqa: E402
+from src.progress_model import ThroughputEta, format_eta_seconds, percent_of  # noqa: E402
 
 # --------------------------------------------------------------------------
 # The transcript of a real install, as the console printed it
@@ -253,6 +253,32 @@ def test_resetting_forgets_the_previous_run():
     eta.reset()
     assert eta.rate == 0.0
     assert eta.note(90, 100) is None
+
+
+def test_eta_formatter_is_single_and_localized_for_seconds_and_minutes():
+    from src.i18n import tr
+
+    assert format_eta_seconds(0) == ""
+    assert format_eta_seconds(1) == tr("flash_eta_second_one")
+    assert format_eta_seconds(17) == tr("flash_eta_seconds_many").format(n=17)
+    assert format_eta_seconds(60) == tr("flash_eta_minute_one").format(n=1)
+    assert format_eta_seconds(125) == tr("flash_eta_minutes_many").format(n=2)
+    assert format_eta_seconds("not a time") == ""
+
+
+def test_combinable_eta_returns_and_retains_the_latest_window_value():
+    clock = _Clock()
+    window = fs._InstallWindowRecord()
+    window._eta = ThroughputEta(clock=clock)
+    assert window.note(0, 100) == 0
+    clock.now += 1
+    assert window.note(10, 100) == 0
+    clock.now += 1
+    remaining = window.note(20, 100)
+    assert remaining == 8
+    assert window.remaining == remaining
+    assert window.note(20, 100) == remaining
+    assert len(window._eta._samples) == 3, "repeated byte positions must not bias the sample window"
 
 
 if __name__ == "__main__":

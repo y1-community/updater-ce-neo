@@ -53,6 +53,7 @@ class FirmwarePackage:
     description: str = ""
     icon: str = ""
     icon_dark: str = ""
+    image: str = ""
 
 
 # Live manifest entries (see ``manifest.py``) replace the static table once

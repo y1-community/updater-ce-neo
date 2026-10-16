@@ -91,6 +91,9 @@ def test_360p_success_opens_themes_stage_before_appeal():
     try:
         tracking.set_donation_install_prompt_disabled(False, w.settings)
         tracking.set_donation_ui_disabled(False, w.settings)
+        from src import paths
+        old_mac = paths.IS_MAC
+        paths.IS_MAC = True  # Exercise SP success path: it boots before this stage.
 
         shown = []
 
@@ -125,6 +128,7 @@ def test_360p_success_opens_themes_stage_before_appeal():
         app.processEvents()
         assert w._flash_page._appeal.isVisible()
     finally:
+        paths.IS_MAC = old_mac
         w.close()
         app.processEvents()
 

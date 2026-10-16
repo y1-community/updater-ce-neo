@@ -53,6 +53,35 @@ CURRENT_SUPPORT_DIR = Path.home() / "Library" / "Application Support" / "Updater
 LEGACY_DATA_MARKERS = ("firmware_downloader.py", "run_mac.sh", "run_linux.sh")
 MIGRATION_MARKER = ".updater-ce-legacy-migration-v1"
 
+LEGACY_LINUX_INSTALL_DIR = Path.home() / ".local" / "share" / "innioasis-updater"
+# These three are shared with the running app (see install.sh): they belong to
+# whatever is installed, so on their own they never raise the removal offer.
+LEGACY_LINUX_DESKTOP_FILE = (
+    Path.home() / ".local" / "share" / "applications" / "innioasis-updater.desktop"
+)
+LEGACY_LINUX_BIN_LAUNCHER = Path.home() / ".local" / "bin" / "innioasis-updater"
+LEGACY_LINUX_CACHE_DIR = Path.home() / ".cache" / "innioasis-updater"
+# The only thing that makes a folder an uninstallable pre-3.0 install. The
+# current release installs into the same directory (see install.sh), so
+# something inside it has to still belong to the old app.
+PRE_3_0_LINUX_MARKER = "firmware_downloader.py"
+
+
+def looks_like_pre_3_0_linux_install(path: Path = None) -> bool:
+    """True when ``path`` is a pre-3.0 install the app may offer to remove.
+
+    The install directory alone proves nothing: the current release reuses
+    ``~/.local/share/innioasis-updater``, so its mere existence is not an old
+    install. Only a folder that still holds the old ``firmware_downloader.py``
+    is one -- and with no such file there is nothing to help remove, so the
+    offer is never made.
+    """
+    folder = Path(path) if path is not None else LEGACY_LINUX_INSTALL_DIR
+    try:
+        return (folder / PRE_3_0_LINUX_MARKER).is_file()
+    except OSError:
+        return False
+
 
 def legacy_folder_is_app_owned(path: Path) -> bool:
     """Require a recognizable legacy app marker before offering folder cleanup."""
@@ -284,24 +313,24 @@ def detect_legacy_installations() -> dict:
 
     # 2. Linux Detection
     if sys.platform.startswith("linux") or not (sys.platform == "darwin" or os.environ.get("INNIOASIS_SIMULATE_MACOS")):
-        linux_install = Path.home() / ".local" / "share" / "innioasis-updater"
-        if linux_install.is_dir():
+        linux_install = LEGACY_LINUX_INSTALL_DIR
+        if looks_like_pre_3_0_linux_install(linux_install):
             result["linux_install_dir"] = linux_install
             sz = _calc_dir_size(linux_install)
             result["estimated_bytes"] += sz
             result["items_summary"].append(f"~/.local/share/innioasis-updater ({format_bytes(sz)})")
 
-        desktop_file = Path.home() / ".local" / "share" / "applications" / "innioasis-updater.desktop"
+        desktop_file = LEGACY_LINUX_DESKTOP_FILE
         if desktop_file.is_file():
             result["linux_desktop_file"] = desktop_file
             result["items_summary"].append("innioasis-updater.desktop")
 
-        bin_launcher = Path.home() / ".local" / "bin" / "innioasis-updater"
+        bin_launcher = LEGACY_LINUX_BIN_LAUNCHER
         if bin_launcher.is_file():
             result["linux_bin_launcher"] = bin_launcher
             result["items_summary"].append("~/.local/bin/innioasis-updater")
 
-        linux_cache = Path.home() / ".cache" / "innioasis-updater"
+        linux_cache = LEGACY_LINUX_CACHE_DIR
         if linux_cache.is_dir():
             result["linux_cache_dir"] = linux_cache
             sz = _calc_dir_size(linux_cache)

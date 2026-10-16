@@ -800,6 +800,79 @@ def update_sp_history_ini(
         return False
 
 
+def _linux_gui_environment_args(env: dict) -> list[str]:
+    """Pass only the desktop/runtime variables needed by a root-owned Qt GUI."""
+    keys = (
+        "DISPLAY",
+        "XAUTHORITY",
+        "WAYLAND_DISPLAY",
+        "XDG_RUNTIME_DIR",
+        "QT_QPA_PLATFORM",
+        "QT_PLUGIN_PATH",
+        "LD_LIBRARY_PATH",
+        "LANG",
+        "LC_ALL",
+    )
+    args = []
+    for key in keys:
+        value = str(env.get(key) or "")
+        if value:
+            args.append(f"{key}={value}")
+    return args
+
+
+def launch_linux_sp_flash_tool_gui(binary: Path, cwd: Path, env: dict) -> Tuple[bool, str]:
+    """Ask a system privilege agent to open the Linux GUI as root.
+
+    The tool must inherit the active desktop connection and its bundled Qt
+    libraries. Starting it through pkexec/sudo avoids restarting Updater CE
+    with root, and keeps all package/history files owned by the user.
+    """
+    env_args = _linux_gui_environment_args(env)
+    env_bin = shutil.which("env") or "/usr/bin/env"
+    launch_args = [env_bin, *env_args, str(binary)]
+    commands = []
+    pkexec = shutil.which("pkexec")
+    if pkexec:
+        commands.append(([pkexec, *launch_args], os.environ.copy()))
+    sudo = shutil.which("sudo")
+    if sudo:
+        sudo_env = os.environ.copy()
+        askpass = None
+        try:
+            from . import linux_sp_flash
+
+            askpass = linux_sp_flash.get_askpass_helper()
+        except Exception:
+            askpass = None
+        if askpass:
+            sudo_env["SUDO_ASKPASS"] = str(askpass)
+            commands.append(([sudo, "-A", *launch_args], sudo_env))
+        commands.append(([sudo, "-n", *launch_args], os.environ.copy()))
+    run0 = shutil.which("run0")
+    if run0:
+        commands.append(([run0, "--pipe", *launch_args], os.environ.copy()))
+
+    errors = []
+    for command, command_env in commands:
+        try:
+            subprocess.Popen(
+                command,
+                cwd=str(cwd),
+                env=command_env,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+            return True, "SP Flash Tool GUI launch requested with administrator privileges."
+        except OSError as exc:
+            errors.append(str(exc))
+    if not commands:
+        return False, "A graphical administrator permission tool (pkexec, sudo, or run0) is not available."
+    return False, errors[-1] if errors else "Could not request administrator permission for SP Flash Tool."
+
+
 def launch_sp_flash_tool_gui(
     model: str = "",
     scatter_path: Optional[Path] = None,
@@ -876,9 +949,10 @@ def launch_sp_flash_tool_gui(
         chosen_dir = ensure_launch_dir(chosen_dir)
         bin_path = chosen_dir / linux_sp_flash.FLASH_TOOL_LINUX_BIN
 
-        # Update history.ini in ALL candidate directories
+        # Update history.ini in the selected tool directory, then verify it
+        # before privilege escalation or process launch.
         update_sp_history_ini(
-            sp_dir=None,
+            sp_dir=chosen_dir,
             scatter_path=scatter_path,
             extract_dir=extract_dir,
             model=model,
@@ -896,13 +970,7 @@ def launch_sp_flash_tool_gui(
         if not ready_history:
             return False, history_msg
         try:
-            subprocess.Popen(
-                [str(bin_path)],
-                cwd=str(chosen_dir),
-                env=env,
-                start_new_session=True,
-            )
-            return True, "SP Flash Tool GUI launched successfully."
+            return launch_linux_sp_flash_tool_gui(bin_path, chosen_dir, env)
         except Exception as e:
             logger.exception("Failed to launch SP Flash Tool GUI on Linux")
             return False, str(e)

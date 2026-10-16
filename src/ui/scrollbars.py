@@ -62,46 +62,59 @@ def _paint_theme_surface(widget: QWidget) -> None:
 
 
 def make_transparent(area: QAbstractScrollArea) -> None:
-    """Blend a scroll area with the current theme without a stylesheet.
+    """Leave the scroll area on its native style and erase to the parent card.
 
-    The palette/attribute equivalent of ``setStyleSheet("background:
-    transparent;")``, which would cost the platform's scrollbars. The fill is
-    the live theme color, never ``QColor(0, 0, 0, 0)``: Windows paints that
-    stored black as an opaque slab after a dark-to-light switch.
+    No stylesheet is used, so host scrollbars stay native. On solid desktops
+    the viewport Base is made equal to the surrounding card fill; on glass it
+    is left transparent for the system material.
     """
     area.setFrameShape(QFrame.NoFrame)
     area.setFrameShadow(QFrame.Plain)
     area.setBackgroundRole(QPalette.ColorRole.Base)
     area.setAutoFillBackground(False)
-    # The window is the only translucent surface. A translucent child skips
-    # its erase and the next paint leaves the previous text behind.
     area.setAttribute(Qt.WA_TranslucentBackground, False)
     area.setAttribute(Qt.WA_NoSystemBackground, False)
-    _paint_theme_surface(area)
     viewport = area.viewport()
     if viewport is not None:
-        viewport.setAutoFillBackground(True)
         viewport.setBackgroundRole(QPalette.ColorRole.Base)
         viewport.setAttribute(Qt.WA_TranslucentBackground, False)
         viewport.setAttribute(Qt.WA_NoSystemBackground, False)
-        _paint_theme_surface(viewport)
-    inner = area.widget() if hasattr(area, "widget") else None
-    if isinstance(inner, QWidget):
-        inner.setAutoFillBackground(False)
-        inner.setAttribute(Qt.WA_TranslucentBackground, False)
     try:
         from .surfaces import glass_surfaces_enabled, show_glass_backdrop
-        # The content column is part of the page it sits on, not a list. Left
-        # unfilled, the gaps between its cards stay on the window surface
-        # instead of showing a second, darker plate behind the whole column.
-        if isinstance(inner, QWidget):
-            show_glass_backdrop(inner)
+
         if glass_surfaces_enabled():
             show_glass_backdrop(area)
             if viewport is not None:
                 show_glass_backdrop(viewport)
+            area.setAutoFillBackground(False)
+            if viewport is not None:
+                viewport.setAutoFillBackground(False)
+        else:
+            from .dark import T
+
+            card_surface = QColor(T().bg_card)
+            card_surface.setAlpha(255)
+            for widget in (area, viewport):
+                if widget is None:
+                    continue
+                palette = widget.palette()
+                for group in (
+                    QPalette.ColorGroup.Active,
+                    QPalette.ColorGroup.Inactive,
+                    QPalette.ColorGroup.Disabled,
+                ):
+                    palette.setColor(group, QPalette.ColorRole.Base, card_surface)
+                    palette.setColor(group, QPalette.ColorRole.Window, card_surface)
+                widget.setPalette(palette)
+            if viewport is not None:
+                viewport.setAutoFillBackground(True)
+            area.setAutoFillBackground(False)
     except Exception:
         pass
+    inner = area.widget() if hasattr(area, "widget") else None
+    if isinstance(inner, QWidget):
+        inner.setAutoFillBackground(False)
+        inner.setAttribute(Qt.WA_TranslucentBackground, False)
 
 
 def _windows_hides_scrollbars() -> bool:

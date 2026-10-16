@@ -408,6 +408,52 @@ def test_removal_journey_stays_in_the_card():
             app.processEvents()
 
 
+def test_linux_offer_needs_the_old_downloader():
+    """A bare install directory is not an old install.
+
+    The current release installs into the same folder, so the directory
+existing proves nothing. Without the pre-3.0 downloader inside it there is
+    nothing for the app to help remove, so the offer is never made.
+    """
+    from src import legacy_cleanup
+
+    with tempfile.TemporaryDirectory() as tmp:
+        folder = Path(tmp) / "innioasis-updater"
+        folder.mkdir()
+        assert legacy_cleanup.looks_like_pre_3_0_linux_install(folder) is False
+        (folder / legacy_cleanup.PRE_3_0_LINUX_MARKER).write_text("")
+        assert legacy_cleanup.looks_like_pre_3_0_linux_install(folder) is True
+
+
+def test_detection_follows_the_old_downloader_marker(monkeypatch):
+    """The Linux half of the detection follows the marker, not the directory.
+
+    The card is an offer to uninstall a pre-3.0 install, and a folder with no
+    downloader in it is not one -- which is also what makes the card disappear
+    again once the removal has taken the downloader away.
+    """
+    from src import legacy_cleanup
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        folder = root / "innioasis-updater"
+        folder.mkdir()
+        monkeypatch.setattr(legacy_cleanup, "LEGACY_LINUX_INSTALL_DIR", folder)
+        # The shared paths belong to whatever is installed; keep them out of it.
+        monkeypatch.setattr(legacy_cleanup, "LEGACY_LINUX_DESKTOP_FILE", root / "none.desktop")
+        monkeypatch.setattr(legacy_cleanup, "LEGACY_LINUX_BIN_LAUNCHER", root / "no-bin")
+        monkeypatch.setattr(legacy_cleanup, "LEGACY_LINUX_CACHE_DIR", root / "no-cache")
+
+        info = detect_legacy_installations()
+        assert info["linux_install_dir"] is None
+        assert info["has_legacy"] is False
+
+        (folder / legacy_cleanup.PRE_3_0_LINUX_MARKER).write_text("")
+        info = detect_legacy_installations()
+        assert info["linux_install_dir"] == folder
+        assert info["has_legacy"] is True
+
+
 if __name__ == "__main__":
     test_protected_app_invariants()
     test_format_bytes()

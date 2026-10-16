@@ -6,6 +6,7 @@ Run:  python tests/smoke_test.py    (from the project root, with deps installed)
 import contextlib
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -3538,7 +3539,9 @@ def test_linux_sp_flash_rules_and_readiness():
     rules = lsf.generate_udev_rule_content()
     assert "0e8d" in rules
     assert "0003" in rules
-    assert "0666" in rules
+    assert 'MODE="0660"' in rules
+    assert "GROUP=" in rules
+    assert "0666" not in rules
     assert "uaccess" in rules
     assert "ID_MM_DEVICE_IGNORE" in rules
     assert "BRLTTY_DEVICE_IGNORE" in rules
@@ -3550,6 +3553,19 @@ def test_linux_sp_flash_rules_and_readiness():
         content = script.read_text(encoding="utf-8")
         assert "UDEV_RULE_FILENAME" not in content
         assert "99-innioasis-mediatek.rules" in content
+        assert "usermod -aG" in content
+        assert 'TARGET_USER="${SUDO_USER:-}"' in content
+        assert '"${PKEXEC_UID:-}"' in content
+        # The script is executed through Bash, so Python's f-string expansion
+        # must not consume the shell's parameter expansions at generation time.
+        result = subprocess.run(
+            ["bash", "-n", str(script)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        assert "udevadm trigger --action=change --subsystem-match=usb --attr-match=idVendor=0e8d" in content
 
     readiness = lsf.verify_linux_flashing_readiness()
     assert "overall_ready" in readiness
@@ -3611,14 +3627,17 @@ def test_linux_sp_flash_askpass_and_step1_deferral():
     lines = list(stream)
     assert lines == ["header_line\n", "second_line\n", "third_line\n"]
 
-    # SelectPackagePage: Step 1 modal is skipped on Linux for SP Flash Tool (deferred until "search usb")
+    # SelectPackagePage: the power-off / disconnected confirmation gates every
+    # method on every platform. The Linux SP Flash Tool flow used to defer it to
+    # the tool's own "search usb" line, which let an install start before the
+    # user had been asked to prepare the player.
     settings = QSettings("Innioasis", "UpdaterCE")
     settings.setValue("flash_method", "sp")
     page = SelectPackagePage()
     with patch("sys.platform", "linux"):
         with patch("src.paths.IS_WINDOWS", False):
             with patch("src.paths.IS_MAC", False):
-                assert page._should_prompt_pre_install() is False, "Linux SP flow must not prompt upfront"
+                assert page._should_prompt_pre_install() is True, "Linux SP flow must prompt upfront"
 
         with patch("src.paths.IS_WINDOWS", True):
             assert page._should_prompt_pre_install() is True, "Windows must prompt upfront"
@@ -4783,7 +4802,7 @@ def test_prune_extracted_cache_and_reusing_download():
 
 
 def test_sp_flash_system_checker_and_diagnostics():
-    """Verify run_system_checker, option.ini normalization, TtyAccessGuardian, and Settings checker card."""
+    """Verify run_system_checker, scoped udev rules, option.ini, and Settings card."""
     from src import linux_sp_flash as lsf
     from src.ui.dialogs import SystemCheckerDialog, LinuxSetupDialog
     from src.ui.settings_page import SettingsPage
@@ -4810,11 +4829,14 @@ def test_sp_flash_system_checker_and_diagnostics():
     assert "cdc_acm_ok" in report
     assert "mount_ok" in report
 
-    # 2. Companion ttyACMs rule content
+    # 2. The retained companion rule filename stays scoped to MTK serial
+    # devices; it should not grant broad ttyACM access or use RUN+ chmod.
     tty_rules = lsf.generate_ttyacms_rule_content()
-    assert "ttyACM" in tty_rules
-    assert "0666" in tty_rules
-    assert "RUN+=" in tty_rules
+    assert "SUBSYSTEM==\"tty\"" in tty_rules
+    assert "ATTRS{idVendor}==\"0e8d\"" in tty_rules
+    assert 'MODE="0660"' in tty_rules
+    assert "0666" not in tty_rules
+    assert "RUN+=" not in tty_rules
 
     # 3. Option.ini fixing
     with tempfile.TemporaryDirectory() as td:
@@ -4827,15 +4849,7 @@ def test_sp_flash_system_checker_and_diagnostics():
         assert "C:\\ProgramData" not in content
         assert str(tdp / lsf.LOG_DIR_NAME) in content
 
-    # 4. TtyAccessGuardian
-    guardian = lsf.TtyAccessGuardian(interval=0.01)
-    guardian.start()
-    assert guardian.is_alive()
-    guardian.stop()
-    guardian.join(timeout=1.0)
-    assert not guardian.is_alive()
-
-    # 5. SystemCheckerDialog alias and controls
+    # 4. SystemCheckerDialog alias and controls
     assert SystemCheckerDialog is LinuxSetupDialog
     dlg = SystemCheckerDialog()
     assert dlg._sp_gui_btn is not None
@@ -4864,7 +4878,7 @@ def test_settings_platform_prep_cards():
     MTKClient sales blurb is gone from the method notes."""
     from PySide6.QtWidgets import QApplication
     from src import browser, i18n, paths
-    from src.flash_service import METHOD_MTK, METHOD_MTK_MAC, METHOD_SP
+    from src.flash_service import METHOD_MTK, METHOD_SP
     from src.i18n import tr
     from src.ui.flash_page import FlashPage
     from src.ui.settings_page import MEDIATEK_DRIVERS_URL, SettingsPage
@@ -4924,13 +4938,13 @@ def test_settings_platform_prep_cards():
         page.set_method(METHOD_MTK)
         assert page._method_note.text() == "", page._method_note.text()
         assert page._method_note.isHidden()
-        # "MTKClient (Mac)" is the simulated-macOS debug entry, not a sticky
-        # backend: outside the macOS flow it resolves to the platform default,
-        # so the card shows the SP note for it.
-        page.set_method(METHOD_MTK_MAC)
+        # A legacy platform-specific alias falls back to the platform default
+        # instead of adding a second MTKClient choice.
+        page.set_method("mtk_mac")
+        assert page.current_method() == METHOD_SP
         assert page._method_note.text() == tr("flash_method_note_sp")
         assert not page._method_note.isHidden()
-        assert tr("flash_method_note_mtk_mac"), "the mac note string must exist"
+        assert page._method_combo.findData("mtk_mac") == -1
         page.set_method(METHOD_SP)
         assert page._method_note.text() == tr("flash_method_note_sp")
         assert not page._method_note.isHidden()

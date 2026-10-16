@@ -95,11 +95,11 @@ def test_advanced_settings_gating_and_md_shortcut(monkeypatch):
     assert page._method_card.isHidden()
     assert "mtk_mac" not in page._available_methods()
 
-    # Toggle on -> revealed, but simulated mac strictly not included
+    # Toggle on -> reveal the shared advanced MTKClient method
     page._cb_advanced_settings.setChecked(True)
     assert not page._terminal_card.isHidden()
     assert not page._method_card.isHidden()
-    assert "mtk_mac" not in page._available_methods(), "(mac) option must require M or D keypress, not just Advanced Settings"
+    assert "mtk_mac" not in page._available_methods()
     assert "mtk" in page._available_methods()
     assert "sp" in page._available_methods()
 
@@ -109,17 +109,19 @@ def test_advanced_settings_gating_and_md_shortcut(monkeypatch):
     assert page._method_card.isHidden()
     assert "mtk_mac" not in page._available_methods()
 
-    # reveal_advanced_methods (M/D shortcut) -> revealed, checked, AND mtk_mac included
+    # M/D reveals the same platform-neutral advanced method list.
     page.reveal_advanced_methods()
     assert page._cb_advanced_settings.isChecked()
     assert not page._terminal_card.isHidden()
     assert not page._method_card.isHidden()
-    assert "mtk_mac" in page._available_methods(), "M or D shortcut must reveal the (mac) simulated option"
+    assert "mtk" in page._available_methods()
+    assert "mtk_mac" not in page._available_methods()
 
-    # Turning Advanced Settings off and back on clears the developer (mac) option
+    # Turning Advanced Settings off and back on keeps the method list unified.
     page._cb_advanced_settings.setChecked(False)
     page._cb_advanced_settings.setChecked(True)
-    assert "mtk_mac" not in page._available_methods(), "Toggling Advanced Settings alone must not resurrect the (mac) option"
+    assert "mtk" in page._available_methods()
+    assert "mtk_mac" not in page._available_methods()
 
 
 def test_extract_worker_emits_100_percent():

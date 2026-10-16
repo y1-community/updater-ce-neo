@@ -128,72 +128,6 @@ class _ThinWindowsScrollStyle(QProxyStyle):
         painter.restore()
 
 
-def _draw_settings_switch(painter, option, *, kind: str) -> None:
-    """Pill switch. Windows uses the user accent; macOS and Linux use Highlight too.
-
-    The shape is the platform switch (track and knob), not a checkbox tick and
-    not the Windows navigation accent bar.
-    """
-    state = option.state
-    checked = bool(state & (QStyle.StateFlag.State_On | QStyle.StateFlag.State_NoChange))
-    enabled = bool(state & QStyle.StateFlag.State_Enabled)
-    rect = option.rect
-    track_h = max(16, min(22, rect.height()))
-    track_w = max(32, min(40, rect.width() if rect.width() > 24 else 40))
-    track = QRect(
-        rect.center().x() - track_w // 2,
-        rect.center().y() - track_h // 2,
-        track_w,
-        track_h,
-    )
-    accent = option.palette.color(QPalette.ColorRole.Highlight)
-    if not accent.isValid() or accent.alpha() == 0:
-        accent = QColor("#0078d4" if kind == "windows" else "#0a84ff")
-    window = option.palette.color(QPalette.ColorRole.Window)
-    if window.lightness() > 140:
-        off = QColor("#c5c7cc") if kind == "windows" else QColor("#c9c9ce")
-    else:
-        off = QColor("#5b5f66") if kind == "windows" else QColor("#48484a")
-    if not enabled:
-        accent.setAlpha(120)
-        off.setAlpha(120)
-    knob = QColor("#ffffff")
-    painter.save()
-    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-    painter.setPen(Qt.PenStyle.NoPen)
-    painter.setBrush(accent if checked else off)
-    radius = track_h / 2
-    painter.drawRoundedRect(track, radius, radius)
-    knob_d = max(10, track_h - 6)
-    knob_x = track.right() - knob_d - 3 if checked else track.left() + 3
-    # The knob is a raised white disc on both desktop switches: a soft shadow
-    # is what separates it from the track instead of blending into it.
-    shadow = QColor(0, 0, 0, 46)
-    painter.setBrush(shadow)
-    painter.drawEllipse(knob_x, track.center().y() - knob_d // 2 + 1, knob_d, knob_d)
-    painter.setBrush(knob)
-    painter.drawEllipse(knob_x, track.center().y() - knob_d // 2, knob_d, knob_d)
-    painter.restore()
-
-
-class _SwitchIndicatorStyle(QProxyStyle):
-    """Replace the checkbox glyph with the desktop's switch. Everything else stays native."""
-
-    def pixelMetric(self, metric, option=None, widget=None):  # noqa: ANN001
-        if metric == QStyle.PixelMetric.PM_IndicatorWidth:
-            return 40
-        if metric == QStyle.PixelMetric.PM_IndicatorHeight:
-            return 22
-        return super().pixelMetric(metric, option, widget)
-
-    def drawPrimitive(self, element, option, painter, widget=None):  # noqa: ANN001
-        if element != QStyle.PrimitiveElement.PE_IndicatorCheckBox:
-            super().drawPrimitive(element, option, painter, widget)
-            return
-        kind = "macos" if IS_MACOS else "linux"
-        _draw_settings_switch(painter, option, kind=kind)
-
-
 class _ClassicWindowsHoverStyle(QProxyStyle):
     """Hover wash drawn after the native Windows button.
 
@@ -205,13 +139,6 @@ class _ClassicWindowsHoverStyle(QProxyStyle):
     checked buttons keep the base style's own look. Sidebar rows paint
     themselves and never reach here.
     """
-
-    def pixelMetric(self, metric, option=None, widget=None):  # noqa: ANN001
-        if metric == QStyle.PixelMetric.PM_IndicatorWidth:
-            return 40
-        if metric == QStyle.PixelMetric.PM_IndicatorHeight:
-            return 22
-        return super().pixelMetric(metric, option, widget)
 
     def drawControl(self, element, option, painter, widget=None):  # noqa: ANN001
         super().drawControl(element, option, painter, widget)
@@ -250,13 +177,6 @@ class _ClassicWindowsHoverStyle(QProxyStyle):
         painter.setBrush(wash)
         painter.drawRoundedRect(option.rect.adjusted(2, 2, -2, -2), 4, 4)
         painter.restore()
-
-    def drawPrimitive(self, element, option, painter, widget=None):  # noqa: ANN001
-        """Settings toggles are WinUI switches. The track uses the live accent."""
-        if element != QStyle.PrimitiveElement.PE_IndicatorCheckBox:
-            super().drawPrimitive(element, option, painter, widget)
-            return
-        _draw_settings_switch(painter, option, kind="windows")
 
 
 def setup_native_app_style(app: QApplication) -> str:
@@ -308,7 +228,9 @@ def setup_native_app_style(app: QApplication) -> str:
                 style = _ThinWindowsScrollStyle(style)
             app.setStyle(style)
         else:
-            app.setStyle(_SwitchIndicatorStyle(key))
+            # Leave checkboxes and any native switch indicators to the host
+            # style; do not replace them with a hand-painted approximation.
+            app.setStyle(key)
         return key
     return app.style().objectName() or "fusion"
 
@@ -533,7 +455,14 @@ class _Tokens:
       against dark surfaces and dark smoked Liquid Glass.
     """
 
-    def __init__(self, dark: bool, pure_black: bool = False, palette: QPalette | None = None):
+    def __init__(
+        self,
+        dark: bool,
+        pure_black: bool = False,
+        palette: QPalette | None = None,
+        *,
+        use_native_linux_colors: bool = False,
+    ):
         d = dark
         b = dark and pure_black
         os_accent, os_accent_text = get_native_accent_color(palette)
@@ -713,6 +642,63 @@ class _Tokens:
             self.btn_primary_border_bottom = "rgba(0, 0, 0, 0.30)"
             self.btn_disabled_border = "rgba(0, 0, 0, 0.15)"
 
+        if IS_LINUX and use_native_linux_colors and palette is not None:
+            self._apply_linux_palette(palette, dark=d)
+
+    def _apply_linux_palette(self, palette: QPalette, *, dark: bool) -> None:
+        """Use the desktop's palette roles for app surfaces and foregrounds."""
+        def color(role: QPalette.ColorRole, fallback: str) -> QColor:
+            candidate = palette.color(role)
+            if not candidate.isValid() or candidate.alpha() == 0:
+                candidate = QColor(fallback)
+            candidate = QColor(candidate)
+            candidate.setAlpha(255)
+            return candidate
+
+        window = color(QPalette.ColorRole.Window, self.bg)
+        window_text = color(QPalette.ColorRole.WindowText, self.fg)
+        base = color(QPalette.ColorRole.Base, self.bg_input)
+        alternate = color(QPalette.ColorRole.AlternateBase, self.bg_elev)
+        button = color(QPalette.ColorRole.Button, self.bg_card)
+        highlight = color(QPalette.ColorRole.Highlight, self.accent)
+        highlighted_text = color(QPalette.ColorRole.HighlightedText, self.accent_text)
+
+        self.bg = window.name()
+        self.bg_card = button.name()
+        self.bg_elev = alternate.name()
+        self.bg_input = base.name()
+        self.bg_nav = window.name()
+        self.bg_status = button.name()
+        self.bg_tooltip = color(QPalette.ColorRole.ToolTipBase, self.bg_card).name()
+        self.fg = window_text.name()
+        self.fg_dim = color(QPalette.ColorRole.Text, self.fg).name()
+        self.fg_muted = color(QPalette.ColorRole.PlaceholderText, self.fg_dim).name()
+        self.subtext = self.fg_muted
+        self.border = color(QPalette.ColorRole.Mid, self.border).name()
+        self.border_strong = color(QPalette.ColorRole.Dark, self.border_strong).name()
+        self.border_focus = highlight.name()
+        self.accent = highlight.name()
+        self.accent_hover = highlight.lighter(115).name() if dark else highlight.darker(115).name()
+        self.accent_active = highlight.darker(130 if not dark else 115).name()
+        self.accent_bg = palette_color(_hex_rgba(highlight.name(), 0.18), over=window.name()).name()
+        self.accent_text = highlighted_text.name()
+        self.nav_active = highlight.name()
+        self.nav_active_text = highlighted_text.name()
+        self.progress_track = alternate.name()
+        self.progress_fill = highlight.name()
+        self.log_bg = base.name()
+        self.log_fg = color(QPalette.ColorRole.Text, self.fg).name()
+        disabled_text = palette.color(QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText)
+        self.disabled_fg = disabled_text.name() if disabled_text.isValid() else self.fg_muted
+        self.disabled = color(QPalette.ColorRole.Midlight, alternate.name()).name()
+        self.status_idle = (window_text.name(), alternate.name())
+        self.status_idle_fg = self.status_idle
+        self.status_selected = (highlighted_text.name(), highlight.name())
+        self.status_sel_fg = self.status_selected
+        self.btn_primary_border = _hex_rgba(window_text.name(), 0.25)
+        self.btn_primary_border_bottom = _hex_rgba(window_text.name(), 0.35)
+        self.btn_disabled_border = _hex_rgba(window_text.name(), 0.15)
+
 
 class _ThemeState:
     """Singleton holding the current palette and tokens."""
@@ -720,12 +706,20 @@ class _ThemeState:
     def __init__(self):
         self._dark: bool | None = None
         self._pure_black: bool = False
+        self.native_palette: QPalette | None = None
         self.tokens: _Tokens = _Tokens(False)
 
-    def detect(self) -> bool:
+    def detect(self, native_palette: QPalette | None = None) -> bool:
         self._dark = is_system_dark_mode()
         self._pure_black = False
-        self.tokens = _Tokens(self._dark, pure_black=self._pure_black)
+        if IS_LINUX and native_palette is not None:
+            self.native_palette = QPalette(native_palette)
+        self.tokens = _Tokens(
+            self._dark,
+            pure_black=self._pure_black,
+            palette=self.native_palette,
+            use_native_linux_colors=self.native_palette is not None,
+        )
         return self._dark
 
     def set_dark(self, value: bool, pure_black: bool = False, palette: QPalette | None = None) -> None:
@@ -830,7 +824,13 @@ def _legacy_light_palette_color(role: QPalette.ColorRole) -> QColor | None:
     return legacy_light_role_color(role, standard)
 
 
-def _make_palette(dark: bool, pure_black: bool = False) -> QPalette:
+def _make_palette(
+    dark: bool,
+    pure_black: bool = False,
+    native_palette: QPalette | None = None,
+) -> QPalette:
+    if IS_LINUX and native_palette is not None:
+        return QPalette(native_palette)
     p = QPalette()
     t = _Tokens(dark, pure_black=pure_black)
     if dark:
@@ -1168,8 +1168,6 @@ def _build_qss() -> str:
     window_bg = t.bg
     dialog_bg = t.bg_card
     dialog_border = f"1px solid {t.border}"
-    card_bg = t.bg_card
-    card_border = t.border
     title_bg = "transparent"
     title_color = "palette(window-text)"
     text_color = "palette(window-text)"
@@ -1178,8 +1176,6 @@ def _build_qss() -> str:
         dialog_border = "1px solid rgba(255, 255, 255, 0.12)" if _state.is_dark else "1px solid rgba(0, 0, 0, 0.10)"
         # The card's own paint supplies a faint frost. A stylesheet fill here
         # would stack into a solid plate.
-        card_bg = "transparent"
-        card_border = "transparent"
         title_bg = "transparent"
 
     tab_bar_bg = "rgba(255, 255, 255, 0.08)" if _state.is_dark else "rgba(0, 0, 0, 0.06)"
@@ -1214,12 +1210,9 @@ QMessageBox QLabel {{
     color: {text_color};
 }}
 
-/* ── Native Cards & Section Panels ───────────────────── */
-QFrame[cssClass="card"] {{
-    background-color: {card_bg};
-    border: 1px solid {card_border};
-    border-radius: 8px;
-}}
+/* Cards paint their rounded surface in Card.paintEvent. Do not give the
+   frame a stylesheet background: it fills the entire rectangle behind the
+   rounded frost and produces the square plates seen at the card edges. */
 
 /* ── Navigation sidebar ─────────────────────────────────
    The rail itself is not styled here. A stylesheet that matches the
@@ -1476,13 +1469,27 @@ def apply_theme(
     If *force_dark* is ``None`` the host system's native dark/light appearance is detected.
     Call ``apply_theme(app, force_dark=True)`` to lock dark mode.
     """
+    native_palette = None
+    if IS_LINUX:
+        # Capture the QPA/platform theme before installing our palette. A
+        # forced test appearance must not discard the desktop palette needed
+        # when the normal host theme is restored later.
+        source_palette = _state.native_palette if _state.native_palette is not None else app.palette()
+        native_palette = QPalette(source_palette)
+        _state.native_palette = QPalette(native_palette)
     setup_native_app_style(app)
     _apply_native_font(app)
     if force_dark is not None:
         _state.set_dark(force_dark, pure_black=bool(pure_black))
     else:
-        _state.detect()
-    app.setPalette(_make_palette(_state.is_dark, pure_black=_state.is_pure_black))
+        _state.detect(native_palette=native_palette)
+    app.setPalette(
+        _make_palette(
+            _state.is_dark,
+            pure_black=_state.is_pure_black,
+            native_palette=_state.native_palette if force_dark is None else None,
+        )
+    )
     app.setStyleSheet(_build_qss())
     # QToolTip keeps the host theme's palette: tooltips are the platform's.
     _restyle_existing_widgets(app)
@@ -1520,13 +1527,28 @@ def theme_fingerprint(app: QApplication | None = None, *, platform_dark: bool = 
         icon_style = macos_icon_style()
     except Exception:
         icon_style = ("", "")
+    palette_fingerprint = tuple(
+        system_palette.color(role).rgba()
+        for role in (
+            QPalette.ColorRole.Window,
+            QPalette.ColorRole.WindowText,
+            QPalette.ColorRole.Base,
+            QPalette.ColorRole.AlternateBase,
+            QPalette.ColorRole.Text,
+            QPalette.ColorRole.Button,
+            QPalette.ColorRole.ButtonText,
+            QPalette.ColorRole.Highlight,
+            QPalette.ColorRole.HighlightedText,
+            QPalette.ColorRole.ToolTipBase,
+            QPalette.ColorRole.ToolTipText,
+        )
+    )
     return (
         scheme,
         is_system_dark_mode() if platform_dark else None,
         accent,
         accent_text,
-        system_palette.color(QPalette.ColorRole.Window).name(),
-        system_palette.color(QPalette.ColorRole.WindowText).name(),
+        palette_fingerprint,
         icon_style,
     )
 
@@ -1573,11 +1595,23 @@ def refresh_theme(app: QApplication | None = None) -> None:
     inline styling to restyle itself.
     """
     app = app or QApplication.instance()
-    _state.detect()
     if not app:
         return
+    native_palette = None
+    if IS_LINUX:
+        try:
+            native_palette = QPalette(app.style().standardPalette())
+        except Exception:
+            native_palette = QPalette(app.palette())
+    _state.detect(native_palette=native_palette)
     _apply_native_font(app)
-    app.setPalette(_make_palette(_state.is_dark, pure_black=_state.is_pure_black))
+    app.setPalette(
+        _make_palette(
+            _state.is_dark,
+            pure_black=_state.is_pure_black,
+            native_palette=_state.native_palette,
+        )
+    )
     app.setStyleSheet(_build_qss())
     # QToolTip keeps the host theme's palette: tooltips are the platform's.
     _restyle_existing_widgets(app)

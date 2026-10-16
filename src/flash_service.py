@@ -35,6 +35,96 @@ from pathlib import Path
 from struct import pack, unpack
 from typing import Optional
 
+# Combined ETA used by the install card and the Device Prep stage. The install
+# card already shows a measured write ETA, and the Device Prep stage is a
+# second, independent clock on the same card, so a single ``int`` needs a
+# fixed, unambiguous shape:
+#
+#     0                ... no honest answer yet (the card shows elapsed time)
+#     N > 0            ... remaining seconds, whole seconds, for the install
+#
+# The Device Prep stage keeps its own directly measured clock and reports it to
+# the card through the same signal, so the card can render both halves itself.
+# Keeping them as separate numbers avoids inventing a two-part seconds value
+# that would go stale the moment either half changes its rate.
+COMBINED_ETA_INITIAL = 0
+
+
+class _InstallWindowRecord:
+    """One pass through a flash's write phase.
+
+    Holds the measurement window the app uses to turn the bytes already
+    written into a *remaining* number. ``FlashWorker`` owns one of these for
+    the SP Flash Tool branch and one for the MTKClient branch: the two engines
+    are separate processes with separate USB stacks, and combining their
+    windows would cross the fault boundary of the run.
+    """
+
+    def __init__(self):
+        self._done = 0
+        self._total = 0
+        self._eta = ThroughputEta()
+        self._remaining = 0
+        self._last_eta_note = 0.0
+
+    @property
+    def done(self) -> int:
+        return self._done
+
+    @property
+    def total(self) -> int:
+        return self._total
+
+    @property
+    def remaining(self) -> int:
+        """Seconds left, or 0 while the rate is not yet honest."""
+        return self._remaining
+
+    def note(self, done: int, total: int) -> int:
+        self._done = max(0, int(done))
+        self._total = max(0, int(total))
+        now = time.monotonic()
+        if self._total > 0 and (
+            (self._done, self._total) != getattr(self, "_last_position", None)
+            or now - self._last_eta_note >= 1.0
+        ):
+            estimate = self._eta.note(self._done, self._total)
+            self._remaining = int(estimate) if estimate is not None else 0
+            self._last_eta_note = now
+            self._last_position = (self._done, self._total)
+        elif self._total <= 0:
+            self._remaining = 0
+        return self._remaining
+
+
+class _CombinableEta:
+    """Install ETA plus Device Prep ETA, as the install card consumes them.
+
+    The flash worker reports *install remaining* through the normal
+    ``eta_changed`` signal, and the Device Prep stage reports *prep remaining*
+    the same way. Both halves are turned into seconds at the card, which owns
+    the layout that wants two lines, so this class only answers "how many
+    seconds of install are left right now, measured from this run's own write
+    rate":
+
+    * 0 while nothing has been written or the rate is not yet honest;
+    * > 0 the whole number of seconds left, the card adds the prep half on top.
+    """
+
+    def __init__(self):
+        self._window = _InstallWindowRecord()
+
+    def reset(self) -> None:
+        self._window = _InstallWindowRecord()
+
+    def note(self, done: int, total: int) -> int:
+        """Record the tool's position and return install seconds left, or 0."""
+        return self._window.note(done, total)
+
+    @property
+    def rate(self) -> float:
+        return self._window._eta.rate
+
 from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal
 
 from . import linux_sp_flash, paths
@@ -326,11 +416,8 @@ LINE_RETRY = "retry"
 LINE_CONNECT_HINT = "connect_hint"
 
 # --- install methods ----------------------------------------------------------
-# METHOD_MTK_MAC is the simulated-macOS flow: it runs the Mac code path
-# (MTKClient as the only backend, mac-centric prompts) on Linux/Windows so the
-# Mac experience can be exercised without Mac hardware. It maps to the same
-# backend as METHOD_MTK; the difference is the platform behaviour the rest of
-# the app shows for paths.SIMULATE_MACOS.
+# Flash engines are platform-routed. ``mtk_mac`` is retained only as a
+# legacy persisted alias; it is never presented as a distinct install method.
 METHOD_SP = "sp"
 METHOD_MTK = "mtk"
 METHOD_MTK_MAC = "mtk_mac"
@@ -357,13 +444,10 @@ def normalise_method(method):
     Flash Tool rather than an ambiguous automatic choice; on macOS every
     value collapses to MTKClient, the only backend that exists there.
 
-    ``METHOD_MTK_MAC`` is the hidden *simulated-macOS* debug entry, not a
-    backend in its own right: it runs MTKClient together with the mac flow,
-    and the launch flag that turns that flow on (``--simulate-macos`` /
-    ``INNIOASIS_SIMULATE_MACOS``) is scoped to one session. Outside that
-    session the value means nothing, so it must not pin the app to
-    MTKClient. Left sticky, it made SP Flash Tool unreachable on Windows and
-    Linux after the M/D debug keys had been used once.
+    The legacy ``mtk_mac`` setting is normalized to the platform default. The
+    simulated macOS environment remains available to developers through the
+    explicit ``--simulate-macos`` / ``INNIOASIS_SIMULATE_MACOS`` launch option,
+    not as a second MTKClient selector.
     """
     value = str(method or "").strip().lower()
     if value not in (METHOD_SP, METHOD_MTK, METHOD_MTK_MAC, "auto"):
@@ -378,10 +462,8 @@ def normalise_method(method):
 def backend_method(method):
     """Map an install method onto the backend id FlashWorker dispatches on.
 
-    ``normalise_method`` has already folded the simulated-macOS entry into a
-    real backend (MTKClient while the simulation is running, the platform
-    default otherwise), so this is a thin alias kept for the call sites and
-    tests that name the concept.
+    ``normalise_method`` has already folded the legacy simulated-macOS setting
+    into the platform's supported user-selectable method.
     """
     return normalise_method(method)
 
@@ -393,7 +475,7 @@ def is_mtk_method(method) -> bool:
         return False
     if paths.IS_MAC:
         return True
-    return val in (METHOD_MTK, METHOD_MTK_MAC) or backend_method(val) == METHOD_MTK
+    return val == METHOD_MTK or backend_method(val) == METHOD_MTK
 
 
 # --- MediaTek / SP Flash Tool error knowledge --------------------------------
@@ -416,6 +498,7 @@ SP_ERROR_GUIDANCE = {
 # Numeric-only fallback for the tail of a run that only carries
 # ``Exception: err_code[4008]``.
 SP_ERROR_CODE_NAMES = {
+    "1013": "S_COM_PORT_OPEN_FAIL",
     "1042": "S_TIMEOUT",
     "2005": "S_BROM_CMD_STARTCMD_FAIL",
     "3184": "S_CHIP_TYPE_NOT_MATCH",
@@ -455,6 +538,38 @@ def is_wrong_model_error(value) -> bool:
     if any(token in text for token in WRONG_MODEL_ERRORS):
         return True
     return sp_error_name(text) in WRONG_MODEL_ERRORS
+
+
+# "It never got as far as talking to the player": the tool could not open its
+# port (SP Flash Tool reports error 1013 / ``S_COM_PORT_OPEN_FAIL``) or the
+# engine could not claim the device at all. Nothing was written, so trying the
+# other engine is a real option — and the step that follows should say the
+# tool could not *connect*, not that the player dropped out of a running flash.
+CONNECT_FAILURE_ERRORS = frozenset(
+    {"S_COM_PORT_OPEN_FAIL", "CONNECTION_FAILED", "MTK_INIT_FAILED", "CLI_START_FAILED"}
+)
+
+# The same 1013 reported by number alone (``SP_ERR_1013``, ``err_code[1013]``).
+_BARE_CONNECT_CODE_RE = re.compile(r"(?<!\d)1013(?!\d)")
+
+
+def is_connect_failure(value) -> bool:
+    """True when a failure means the tool could not reach the player.
+
+    Accepts the console tool's ``S_COM_PORT_OPEN_FAIL (1013)``, that code
+    carried by number alone, and the equivalent engine-side connect failures.
+    """
+    text = str(value or "").upper()
+    if not text:
+        return False
+    if sp_error_name(text) in CONNECT_FAILURE_ERRORS:
+        return True
+    if any(
+        token in text
+        for token in ("CONNECTION_FAILED", "MTK_INIT_FAILED", "CLI_START_FAILED")
+    ):
+        return True
+    return bool(_BARE_CONNECT_CODE_RE.search(text))
 
 
 def describe_backend_error(value) -> str:
@@ -826,10 +941,11 @@ LEGACY_SEGMENTED_WRITE_BYTES = 52428800  # 50MB per USB transfer chunk
 # Per-transfer chunk size handed to the bundled (Chinese-fork) legacy DA. Its
 # ``sdmmc_write_data`` reads ``config.write_chunk_size`` for every USB transfer
 # and defaults to 1 MiB when unset; the reference build drives the same DA with
+# 1 MiB when unset; the reference build drives the same DA with
 # 512 KiB, and 256 KiB when an image is 1.5 GB or larger so a big transfer still
 # leaves room for the device to answer between chunks.
-LEGACY_WRITE_CHUNK_BYTES = 524288  # 512 KiB
-LEGACY_WRITE_CHUNK_BYTES_LARGE = 262144  # 256 KiB, images >= 1536 MB
+LEGACY_WRITE_CHUNK_BYTES = 1048576  # 1 MiB (increased from 512 KiB)
+LEGACY_WRITE_CHUNK_BYTES_LARGE = 524288  # 512 KiB, images >= 1536 MB
 LEGACY_WRITE_CHUNK_LARGE_IMAGE_BYTES = 1536 * 1024 * 1024
 
 
@@ -1854,6 +1970,9 @@ class FlashWorker(QThread):
         # Measured write rate for the ETA. Reset when the write phase begins:
         # the handshake and the format are not the transfer being timed.
         self._eta = ThroughputEta()
+        # Measured write window: the install card turns this into remaining
+        # seconds, and the Device Prep stage adds its own half on top of it.
+        self._total_eta = _CombinableEta()
         self._sp_total_bytes = 0
         self._sp_completed_bytes = 0
         self._sp_last_part_total = 0
@@ -2378,8 +2497,6 @@ class FlashWorker(QThread):
         InniUpdaterChin default) with MTKClient as the fallback; macOS has no
         SP Flash Tool build, so MTKClient is the only backend there.
         """
-        # "mtk_mac" (simulated macOS) is the same backend as "mtk"; only the
-        # platform-level behaviour shown to the user differs.
         method = backend_method(self.method)
         if method == "mtk":
             self._log("Using MTKClient method (user selected).")
@@ -2723,14 +2840,6 @@ class FlashWorker(QThread):
         ``None`` means the user cancelled: ``USER_CANCELLED`` has been emitted.
         """
         self._search_timed_out = False
-        guardian = None
-        if os.name != "nt" and sys.platform.startswith("linux"):
-            try:
-                guardian = linux_sp_flash.TtyAccessGuardian()
-                guardian.start()
-            except Exception:
-                guardian = None
-
         if launch_time is None:
             launch_time = time.time()
 
@@ -2763,8 +2872,6 @@ class FlashWorker(QThread):
                     except Exception:
                         pass
                     stop_monitor.set()
-                    if guardian:
-                        guardian.stop()
                     self.finished.emit(False, "USER_CANCELLED")
                     return None
                 self._classify_sp_stdout(line)
@@ -2777,8 +2884,6 @@ class FlashWorker(QThread):
                     break
         finally:
             stop_monitor.set()
-            if guardian:
-                guardian.stop()
             if hasattr(self._process, "_pty_master_fd"):
                 try:
                     os.close(self._process._pty_master_fd)
@@ -2877,7 +2982,7 @@ class FlashWorker(QThread):
     def _emit_eta(self, done, total):
         """Publish the measured time remaining (``-1`` while it is unknown)."""
         eta = self._eta.note(done, total)
-        self.eta_changed.emit(-1 if eta is None else int(eta))
+        self.eta_changed.emit(-1 if eta is None or eta <= 0 else int(eta))
 
     def _update_sp_image_progress(self, line):
         """Overall progress and ETA from the tool's own byte counts.
@@ -2908,8 +3013,15 @@ class FlashWorker(QThread):
             total = self._sp_total_bytes
         if total > 0:
             self._sp_total_bytes = total
+            self._sp_completed_bytes = sent
             self._emit_progress(float_percent_of(sent, total, 20, 75))
-            self._emit_eta(sent, total)
+            # The whole install left, measured from the write window the tool
+            # has actually been flying through: sent is how many bytes of
+            # the declared set have landed, and the remaining bytes are the
+            # install portion the card scores before it hands the last few
+            # seconds to the Device Prep stage.
+            remaining = self._total_eta.note(self._sp_completed_bytes, self._sp_total_bytes)
+            self.eta_changed.emit(remaining if remaining > 0 else -1)
         else:
             self._emit_progress(float_percent_of(pct, 100, 20, 75))
 
@@ -3340,6 +3452,9 @@ class FlashWorker(QThread):
         self._announce_please_wait()
         self.action_changed.emit(tr("action_init_mtkclient"))
         self._log(tr("action_init_mtkclient"))
+        # Measured write window: the install card turns this into remaining
+        # seconds, and the Device Prep stage adds its own half on top of it.
+        self._total_eta = _CombinableEta()
         try:
             from . import mtk_api
         except BaseException as e:
@@ -3708,7 +3823,11 @@ class FlashWorker(QThread):
             current_part_done = part_completed_bytes + pos
             if total_bytes > 0:
                 self._emit_progress(percent_of(current_done, total_bytes, 20, 75))
-                self._emit_eta(current_done, total_bytes)
+                # Install remaining, measured from this run's own write rate:
+                # the card scores it first and the Device Prep stage adds its
+                # half on top of the same number.
+                remaining = self._total_eta.note(current_done, total_bytes)
+                self.eta_changed.emit(remaining if remaining > 0 else -1)
 
             now = time.monotonic()
             part_pct = (current_part_done / max(1, cur_part_len)) * 100.0 if cur_part_len > 0 else 0.0
@@ -3765,9 +3884,11 @@ class FlashWorker(QThread):
                     watcher.stop()
                     self.step_changed.emit(STEP_WRITE)
                     self.progress.emit(20)
+                if i == 0:
                     self._eta.reset()
-                    self.action_changed.emit(tr("action_install_in_progress"))
-                    self._log(tr("log_install_writing"))
+                    self._total_eta.reset()
+                self.action_changed.emit(tr("action_install_in_progress"))
+                self._log(tr("log_install_writing"))
                 self._log(tr("action_writing_part_fmt").format(
                     part=part_name, i=i + 1, total=total, file=file_path.name,
                 ))
@@ -3874,7 +3995,8 @@ class FlashWorker(QThread):
                             completed_bytes += (actual_len - part_completed_bytes)
                     if total_bytes > 0:
                         self._emit_progress(percent_of(completed_bytes, total_bytes, 20, 75))
-                        self._emit_eta(completed_bytes, total_bytes)
+                        remaining = self._total_eta.note(completed_bytes, total_bytes)
+                        self.eta_changed.emit(remaining if remaining > 0 else -1)
 
             if self._is_disconnected or is_disconnection_error(self._tool_error):
                 self._log("Install stopped due to USB disconnection.")
