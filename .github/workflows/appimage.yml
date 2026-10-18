@@ -14,6 +14,7 @@ on:
       - 'launcher.py'
       - 'InnioasisUpdater.spec'
       - 'build_appimage.sh'
+      - 'scripts/install_linux_release.sh'
       - 'requirements.txt'
       - 'pyproject.toml'
       - '.github/workflows/appimage.yml'
@@ -28,6 +29,7 @@ on:
       - 'launcher.py'
       - 'InnioasisUpdater.spec'
       - 'build_appimage.sh'
+      - 'scripts/install_linux_release.sh'
       - 'requirements.txt'
       - 'pyproject.toml'
       - '.github/workflows/appimage.yml'
@@ -139,13 +141,41 @@ jobs:
             echo "::warning::AppImage does not bundle SP Flash Tool; runtime download fallback applies"
           fi
 
-      - name: Upload AppImage Artifacts
+      - name: Verify tar.gz Portable Build (Headless)
+        run: |
+          set -o pipefail
+          tarball="$(ls -t dist/InnioasisUpdater-*.tar.gz | head -n 1)"
+          echo "Checking $tarball"
+          tar -tzf "$tarball" | grep -qx 'InnioasisUpdater/InnioasisUpdater'
+          tar -tzf "$tarball" | grep -qx 'InnioasisUpdater/innioasis-updater.png'
+          (cd dist && sha256sum -c "$(basename "$tarball").sha256")
+
+      - name: Install With Linux Release Installer (Isolated HOME)
+        run: |
+          set -o pipefail
+          export HOME="$RUNNER_TEMP/home"
+          mkdir -p "$HOME"
+          # Installs the newest local build (the AppImage) into a throwaway HOME.
+          bash scripts/install_linux_release.sh
+          test -x "$HOME/.local/bin/innioasis-updater"
+          test -f "$HOME/.local/share/applications/innioasis-updater.desktop"
+          # Reinstall from the tar.gz to check the second path, then launch it.
+          bash scripts/install_linux_release.sh --file "$(ls -t dist/InnioasisUpdater-*.tar.gz | head -n 1)"
+          test -x "$HOME/.local/opt/innioasis-updater/app/InnioasisUpdater"
+          QT_QPA_PLATFORM=offscreen timeout 5 "$HOME/.local/bin/innioasis-updater" || [ $? -eq 124 ]
+          bash scripts/install_linux_release.sh --uninstall
+          test ! -e "$HOME/.local/bin/innioasis-updater"
+
+      - name: Upload Linux Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: InnioasisUpdater-Linux-AppImage
           path: |
             dist/*.AppImage
-            dist/*.sha256
+            dist/*.AppImage.sha256
+            dist/*.tar.gz
+            dist/*.tar.gz.sha256
+            scripts/install_linux_release.sh
           retention-days: 14
 
       # Releases are staggered by platform: 2.5 is the Windows run, so a v* tag

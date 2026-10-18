@@ -399,9 +399,36 @@ echo ">>> Generating checksums..."
     sha256sum "$(basename "$OUTPUT_LATEST")" > "$(basename "$OUTPUT_LATEST").sha256"
 )
 
+# --- Step 5: Portable tar.gz of the PyInstaller onedir folder -----------------
+# The same frozen folder, compressed. It unpacks to one directory holding the
+# launchable binary plus the desktop entry and icon, so scripts/install_linux_release.sh
+# can install it on any distro without FUSE or AppImage support.
+TARBALL_VERSIONED="$DIST_DIR/${BRAND_SLUG}-${VERSION}-${ARCH}.tar.gz"
+TARBALL_LATEST="$DIST_DIR/${BRAND_SLUG}-${ARCH}.tar.gz"
+TAR_STAGE="$BUILD_DIR/tarball/$APP_NAME"
+
+echo ">>> Packaging portable folder: $TARBALL_VERSIONED..."
+rm -rf "$BUILD_DIR/tarball"
+mkdir -p "$TAR_STAGE"
+cp -a "$DIST_DIR/$APP_NAME"/. "$TAR_STAGE/"
+cp "$APPDIR/innioasis-updater.png" "$TAR_STAGE/innioasis-updater.png"
+cp "$APPDIR/innioasis-updater.desktop" "$TAR_STAGE/innioasis-updater.desktop"
+if [ ! -x "$TAR_STAGE/$APP_NAME" ]; then
+    echo "ERROR: $TAR_STAGE/$APP_NAME is not executable"
+    exit 1
+fi
+tar -C "$BUILD_DIR/tarball" -czf "$TARBALL_VERSIONED" "$APP_NAME"
+cp -f "$TARBALL_VERSIONED" "$TARBALL_LATEST"
+(
+    cd "$DIST_DIR"
+    sha256sum "$(basename "$TARBALL_VERSIONED")" > "$(basename "$TARBALL_VERSIONED").sha256"
+    sha256sum "$(basename "$TARBALL_LATEST")" > "$(basename "$TARBALL_LATEST").sha256"
+)
+
 echo "======================================================================"
 echo " Build successful!"
 echo " AppImage created: $OUTPUT_VERSIONED ($(du -h "$OUTPUT_VERSIONED" | cut -f1))"
+echo " Portable tar.gz:   $TARBALL_VERSIONED ($(du -h "$TARBALL_VERSIONED" | cut -f1))"
 echo " Latest symlink:   $OUTPUT_LATEST"
 echo " Checksum:         $OUTPUT_VERSIONED.sha256"
 echo "======================================================================"
