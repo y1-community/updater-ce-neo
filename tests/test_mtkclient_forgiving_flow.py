@@ -73,7 +73,7 @@ def test_mtkclient_paperclip_prompt_and_120s_timeout():
     page.show_power_off_prompt(show_pin_tip=True)
     paperclip_visible = getattr(page, "_paperclip_hint_host", None)
     assert paperclip_visible is not None and not paperclip_visible.isHidden()
-    assert "headphone jack" in page._paperclip_hint.text().lower()
+    assert "headphone" in page._paperclip_hint.text().lower()
 
     # A5 uses the power button to power on
     page.set_model("A5")
@@ -85,7 +85,7 @@ def test_mtkclient_paperclip_prompt_and_120s_timeout():
     page.set_model("Y2")
     page.show_power_off_prompt(show_pin_tip=True)
     assert not page._paperclip_hint_host.isHidden()
-    assert "headphone jack" in page._paperclip_hint.text().lower()
+    assert "headphone" in page._paperclip_hint.text().lower()
     assert "paperclip or pin" in page._paperclip_hint.text().lower()
     page.leave_power_off_prompt()
     assert page._attempt_remaining == 120
@@ -383,6 +383,9 @@ def test_device_prep_confirmation_before_watch_and_flash():
         return None
 
     w.service.take_primed_mtk = _take_primed_mtk
+    from unittest.mock import patch
+    patcher = patch("src.linux_sp_flash.verify_linux_flashing_readiness", return_value=(True, []))
+    patcher.start()
 
     # 1. Package selected triggers device prep
     w._package_path = "/fake/rom.zip"

@@ -965,22 +965,27 @@ class FlashPage(QWidget):
             text.setWordWrap(True)
             self._guide_texts.append((key, text))
 
-        # Paperclip hint, under the card that carries the progress and install
-        # information: the hidden button is the only way these players power on
-        # once they are off. It names where to find it, which differs by model.
+        # Paperclip hint with diagram image and model-specific wording
         self._paperclip_hint = _status_label("")
         hint_font = self._paperclip_hint.font()
-        hint_font.setPixelSize(11)
+        hint_font.setPixelSize(12)
         self._paperclip_hint.setFont(hint_font)
+        self._paperclip_hint.setWordWrap(True)
+
+        self._paperclip_img = QLabel()
+        self._paperclip_img.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
         self._paperclip_hint_host = QWidget()
-        hint_layout = QVBoxLayout(self._paperclip_hint_host)
-        hint_layout.setContentsMargins(16, 0, 16, 0)
-        hint_layout.setSpacing(0)
-        hint_layout.addWidget(self._paperclip_hint)
+        hint_layout = QHBoxLayout(self._paperclip_hint_host)
+        hint_layout.setContentsMargins(0, 10, 0, 0)
+        hint_layout.setSpacing(14)
+        hint_layout.addWidget(self._paperclip_img, 0, Qt.AlignmentFlag.AlignVCenter)
+        hint_layout.addWidget(self._paperclip_hint, 1, Qt.AlignmentFlag.AlignVCenter)
         self._paperclip_hint_host.setVisible(False)
+        copy.addWidget(self._paperclip_hint_host)
         self._update_paperclip_hint()
 
-        return self._wrap_centered(self._wait_card, self._paperclip_hint_host)
+        return self._wrap_centered(self._wait_card)
 
     def _build_flashing_view(self):
         self._flash_icon = _make_squircle_icon("⚙️", "icon.png")
@@ -1217,16 +1222,12 @@ class FlashPage(QWidget):
     def _update_paperclip_hint(self) -> None:
         """Show how to press the hidden button, at the power-off step only.
 
-        The card that asks the user to disconnect and power off their player is
-        the one place this helps: once it is asking them to *connect*, the
-        player is already on its way. The words only make sense when the model
-        is known — every model hides that button beside the headphone jack
-        except the A5, where it is by the power button — so the generic
-        "device" wording (an offline package with no model in its name, or
-        MediaTek Installer branding) shows nothing at all.
+        Displays model-specific wording and the corresponding paperclip
+        hardware illustration (A5, Y2, or generic/all) matching the active theme.
         """
         host = getattr(self, "_paperclip_hint_host", None)
         label = getattr(self, "_paperclip_hint", None)
+        img_label = getattr(self, "_paperclip_img", None)
         if host is None or label is None:
             return
         model = (self._model or "").strip()
@@ -1234,8 +1235,11 @@ class FlashPage(QWidget):
             pkg = (getattr(self, "_package_name", "") or "").upper()
             if "A5" in pkg:
                 model = "A5"
-            elif any(k in pkg for k in ("Y1", "Y2", "G1", "G3", "G5", "Q5", "Q3")):
-                model = "Y1"
+            else:
+                for k in ("Y2", "Y1", "G5", "G3", "G1", "Q5", "Q3"):
+                    if k in pkg:
+                        model = k
+                        break
         copy = getattr(self, "_wait_copy", "")
         wanted = (
             bool(model)
@@ -1246,10 +1250,40 @@ class FlashPage(QWidget):
         if not wanted:
             host.setVisible(False)
             return
-        key = "flash_paperclip_hint_a5" if model.upper() == "A5" else "flash_paperclip_hint"
-        label.setText(tr(key))
-        # Not during construction (the waiting view does not exist yet) and not
-        # while another card is on screen.
+
+        from ..config import device_label_for_model
+        model_name = device_label_for_model(model) if model else tr("device_fallback_word")
+        is_a5 = model.upper() == "A5"
+        key = "flash_paperclip_hint_a5" if is_a5 else "flash_paperclip_hint"
+        label.setText(tr(key).format(model=model_name))
+
+        if img_label is not None:
+            from .dark import is_dark
+            from ..paths import RESOURCES_DIR
+            theme_suffix = "light_fonts" if is_dark() else "dark_fonts"
+            model_upper = model.upper()
+            if model_upper == "A5":
+                asset_name = f"paperclip_a5_{theme_suffix}.png"
+            elif model_upper == "Y2":
+                asset_name = f"paperclip_y2_{theme_suffix}.png"
+            else:
+                asset_name = f"paperclip_all_{theme_suffix}.png"
+
+            img_path = RESOURCES_DIR / asset_name
+            if not img_path.exists():
+                img_path = Path(__file__).resolve().parent.parent.parent / "assets" / asset_name
+
+            if img_path.exists():
+                pix = QPixmap(str(img_path))
+                if not pix.isNull():
+                    scaled = pix.scaledToHeight(60, Qt.TransformationMode.SmoothTransformation)
+                    img_label.setPixmap(scaled)
+                    img_label.setVisible(True)
+                else:
+                    img_label.setVisible(False)
+            else:
+                img_label.setVisible(False)
+
         waiting = getattr(self, "_waiting_view", None)
         host.setVisible(waiting is not None and self._stack.currentWidget() is waiting)
 
@@ -2115,10 +2149,16 @@ class FlashPage(QWidget):
 
     def set_model(self, model):
         self._model = (model or "").strip() or ""
+        if hasattr(self, "_wait_prompt_label") and getattr(self, "_wait_copy", "") == "power_off":
+            self._wait_prompt_label.setText(self._power_off_prompt_text())
         self._update_paperclip_hint()
 
     def set_platform(self, platform):
         self._platform = (platform or "").strip() or ""
+        self._update_paperclip_hint()
+
+    def refresh_theme(self):
+        """Called when system theme or accent changes."""
         self._update_paperclip_hint()
 
     def _dont_ask_html(self) -> str:
@@ -2653,7 +2693,11 @@ class FlashPage(QWidget):
         elif cur_view is self._waiting_view:
             card_h = self._wait_card.sizeHint().height()
             hint_h = 0
-            if hasattr(self, "_paperclip_hint_host") and self._paperclip_hint_host.isVisible():
+            if (
+                hasattr(self, "_paperclip_hint_host")
+                and self._paperclip_hint_host.isVisible()
+                and not self._wait_card.isAncestorOf(self._paperclip_hint_host)
+            ):
                 hint_h = self._paperclip_hint_host.sizeHint().height() + 6
             h = card_h + hint_h
         elif cur_view is self._preparing_view:

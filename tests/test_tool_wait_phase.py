@@ -237,17 +237,20 @@ def test_paperclip_hint_names_the_hidden_button_per_model():
             page.set_model(model)
             page.show_power_off_prompt()
             assert not page._paperclip_hint_host.isHidden(), model
-            assert page._paperclip_hint.text() == tr("flash_paperclip_hint"), model
-            assert "headphone jack" in page._paperclip_hint.text(), model
+            assert page._paperclip_hint.text() == tr("flash_paperclip_hint").format(model=model), model
+            assert "headphone" in page._paperclip_hint.text(), model
             assert "paperclip or pin" in page._paperclip_hint.text(), model
-            assert page._paperclip_hint.text().startswith("Tip: Power off the device"), model
+            assert page._paperclip_hint.text().startswith("Completely power off your"), model
+            assert page._paperclip_img.pixmap() is not None and not page._paperclip_img.pixmap().isNull(), model
 
         page.set_model("A5")
         page.show_power_off_prompt()
-        assert page._paperclip_hint.text() == tr("flash_paperclip_hint_a5")
+        assert page._paperclip_hint.text() == tr("flash_paperclip_hint_a5").format(model="A5")
         assert "power button" in page._paperclip_hint.text()
         assert "headphone" not in page._paperclip_hint.text()
         assert "paperclip or pin" in page._paperclip_hint.text()
+        assert page._paperclip_hint.text().startswith("Completely power off your A5")
+        assert page._paperclip_img.pixmap() is not None and not page._paperclip_img.pixmap().isNull()
 
         # Not at the connect step: the player is already powered off by then.
         page.set_model("Y1")

@@ -595,6 +595,27 @@ def is_connect_failure(value) -> bool:
     return bool(_BARE_CONNECT_CODE_RE.search(text))
 
 
+def is_com_port_error(value) -> bool:
+    """True when the failure means SP Flash Tool failed to open the COM port (1013)."""
+    text = str(value or "").upper()
+    if not text:
+        return False
+    if sp_error_name(text) == "S_COM_PORT_OPEN_FAIL":
+        return True
+    if any(
+        m in text
+        for m in (
+            "S_COM_PORT_OPEN_FAIL",
+            "COM_PORT_OPEN_FAIL",
+            "FAILED TO OPEN COM PORT",
+        )
+    ):
+        return True
+    if sp_error_code(text) == "1013":
+        return True
+    return bool(_BARE_CONNECT_CODE_RE.search(text))
+
+
 def describe_backend_error(value) -> str:
     """Translated explanation of a backend failure, or "" when unknown.
 
@@ -603,8 +624,11 @@ def describe_backend_error(value) -> str:
     """
     if not value:
         return ""
-    _title, exp = parse_flash_error(value)
-    return exp
+    if is_wrong_model_error(value):
+        return tr("err_sp_wrong_model")
+    name = sp_error_name(value) or SP_ERROR_CODE_NAMES.get(sp_error_code(value), "")
+    key = SP_ERROR_GUIDANCE.get(name)
+    return tr(key) if key else ""
 
 
 def _format_error_token(raw: str, default: str = "") -> str:
@@ -657,8 +681,13 @@ def parse_flash_error(value, model: str = "") -> tuple[str, str]:
         code_token = _format_error_token(raw, "2005")
         return f"{tr('err_connection_failed_title')} ({code_token})", tr("err_sp_brom_startcmd")
 
-    # 5. Connection / Handshake failure
-    if any(k in raw.upper() for k in ("CONNECTION_FAILED", "MTK_INIT_FAILED", "CLI_START_FAILED", "S_COM_PORT_OPEN_FAIL", "HANDSHAKE")):
+    # 5. COM port failure (error 1013)
+    if is_com_port_error(raw):
+        code_token = _format_error_token(raw, "1013")
+        return f"{tr('err_connection_failed_title')} ({code_token})", tr("err_com_port_reboot_suggestion")
+
+    # 6. Connection / Handshake failure
+    if any(k in raw.upper() for k in ("CONNECTION_FAILED", "MTK_INIT_FAILED", "CLI_START_FAILED", "HANDSHAKE")):
         code_token = _format_error_token(raw, raw.split()[0] if raw else "CONNECTION_FAILED")
         return f"{tr('err_connection_failed_title')} ({code_token})", tr("err_connection_failed_desc")
 
@@ -1289,6 +1318,8 @@ def completed_extract_dir(package_path):
     if not package_path:
         return ""
     p = Path(package_path)
+    if not p.exists():
+        return ""
     if p.is_file() and (p.suffix.lower() == ".txt" or "scatter" in p.name.lower()):
         return str(p.parent)
     if p.is_dir():

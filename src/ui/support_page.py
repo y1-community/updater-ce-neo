@@ -103,7 +103,7 @@ class SupportPage(QWidget):
         for key, link_id in primary_methods:
             url = DONATION_LINKS.get(link_id, "")
             btn = QPushButton(tr(key))
-            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setCursor(Qt.CursorShape.ArrowCursor)
             btn.setMinimumHeight(28)
             btn.clicked.connect(lambda _=False, u=url: open_browser(u))
             btn_row.addWidget(btn, 1)

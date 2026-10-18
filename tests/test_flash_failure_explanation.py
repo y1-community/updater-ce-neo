@@ -120,6 +120,7 @@ def test_main_window_heading_visibility_on_failure(app):
         assert t.danger_fg not in title.styleSheet()
 
         # Trigger failure on flash page
+        win._fallback_attempted = True
         win._handle_flash_failure("WRITE_FAILED")
         app.processEvents()
 

@@ -262,6 +262,20 @@ def main():
             sys.exit(1)
         return
 
+    import sys as _sys
+    if _sys.platform.startswith("linux"):
+        import os as _os
+        from PySide6.QtCore import QCoreApplication
+        for _plugin_dir in (
+            "/usr/lib/qt6/plugins",
+            "/usr/lib64/qt6/plugins",
+            "/usr/lib/x86_64-linux-gnu/qt6/plugins",
+            "/usr/lib/aarch64-linux-gnu/qt6/plugins",
+            "/usr/local/lib/qt6/plugins",
+        ):
+            if _os.path.isdir(_plugin_dir):
+                QCoreApplication.addLibraryPath(_plugin_dir)
+
     app = QApplication(sys.argv)
     app.setAttribute(Qt.ApplicationAttribute.AA_DontUseNativeDialogs, False)
     # Names the app to the desktop (menu entry matching, WM_CLASS, macOS Dock):

@@ -94,6 +94,7 @@ from ..flash_service import (
     backend_method,
     classify_backend_line,
     completed_extract_dir,
+    is_com_port_error,
     is_connect_failure,
     is_wrong_model_error,
     normalise_method,
@@ -601,6 +602,8 @@ class MainWindow(QMainWindow):
         # True once this install has already fallen back to the other backend:
         # one automatic switch per run, so a bad cable cannot ping-pong.
         self._fallback_attempted = False
+        self._sp_1013_seen = False
+        self._reboot_suggestion_shown = False
         self._power_off_prompt = False
         self._rockbox_themes_flow_active = False
         self._gui_handoff_prepare = False
@@ -2859,6 +2862,11 @@ class MainWindow(QMainWindow):
         self._package_model = model or ""
         self._pre_install_guided = False
         self._cache_recovery_needed = False
+        self._fallback_attempted = False
+        self._sp_1013_seen = False
+        self._flash_method = self._preferred_flash_method()
+        if hasattr(self, "_flash_page"):
+            self._flash_page.set_method(self._flash_method)
 
         self._sync_sp_history()
 
@@ -3334,6 +3342,10 @@ class MainWindow(QMainWindow):
         if self._needs_linux_device_prep():
             if not self._start_linux_install_prep():
                 return
+        if not getattr(self, "_fallback_attempted", False):
+            self._flash_method = self._preferred_flash_method()
+            self._flash_page.set_method(self._flash_method)
+            self._sp_1013_seen = False
         self._install_failed = False
         self._power_off_prompt = False
         # The window in which a flash backend may run starts here, with the
@@ -3960,6 +3972,15 @@ class MainWindow(QMainWindow):
         if not cache_failure and getattr(self.service, "_mtk_stall_prompt_text", lambda: None)():
             self._show_mtk_stall_restart_prompt()
             return
+
+        need_reboot_suggestion = not cache_failure and (
+            getattr(self, "_sp_1013_seen", False)
+            or (getattr(self, "_fallback_attempted", False) and is_com_port_error(error_code))
+        )
+        if need_reboot_suggestion:
+            self._show_com_port_reboot_suggestion(error_code)
+            return
+
         try:
             self.sm.transition_to(FlashState.S5_FAILED)
         except ValueError:
@@ -3971,6 +3992,11 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
     # Backend failover
     # ------------------------------------------------------------------
+    def _preferred_flash_method(self) -> str:
+        """The user's preferred flash method from settings, or default."""
+        pref = normalise_method(self.settings.value("flash_method", ""))
+        return backend_method(pref)
+
     def _other_method(self, method) -> str:
         """The other backend for ``method``, or "" when there is not one.
 
@@ -4056,6 +4082,8 @@ class MainWindow(QMainWindow):
         if not candidate:
             return False
         self._fallback_attempted = True
+        if is_com_port_error(error_code):
+            self._sp_1013_seen = True
         # Diagnostics only: the user should not have to read backend names.
         logger.info(
             "Install attempt with %s did not start (%s); offering %s",
@@ -4160,6 +4188,10 @@ class MainWindow(QMainWindow):
 
     def _on_retry_flash(self):
         self.sm.reset_for_retry()
+        self._fallback_attempted = False
+        self._sp_1013_seen = False
+        self._flash_method = self._preferred_flash_method()
+        self._flash_page.set_method(self._flash_method)
         try:
             from ..sp_flash_gui import update_sp_history_ini
             update_sp_history_ini(model=self._package_model)
@@ -4209,6 +4241,53 @@ class MainWindow(QMainWindow):
                 pass
             try:
                 from ..sleep_inhibit import release_sleep_inhibition
+                release_sleep_inhibition()
+            except Exception:
+                pass
+            QApplication.quit()
+
+    def _show_com_port_reboot_suggestion(self, error_code):
+        """Ask the user to restart their computer after a COM port (1013) failure."""
+        self._reboot_suggestion_shown = True
+        try:
+            self.sm.transition_to(FlashState.S5_FAILED)
+        except ValueError:
+            self.sm.force_state(FlashState.S5_FAILED)
+        display_code = (
+            "S_COM_PORT_OPEN_FAIL (1013)"
+            if (is_com_port_error(error_code) or getattr(self, "_sp_1013_seen", False))
+            else str(error_code or tr("install_failed"))
+        )
+        self._show_install_failure(display_code)
+        if os.environ.get("QT_QPA_PLATFORM") == "offscreen" or os.environ.get("INNIOASIS_HEADLESS"):
+            return
+        title = tr("prompt_restart_and_quit_title")
+        desc = tr("err_com_port_reboot_suggestion")
+        from PySide6.QtWidgets import QMessageBox
+
+        dialog = QMessageBox(
+            QMessageBox.Icon.Information,
+            title,
+            desc,
+            QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel,
+            self,
+        )
+        dialog.setWindowTitle(title)
+        dialog.setText(desc)
+        dialog.setInformativeText("")
+        dialog.setButtonText(QMessageBox.StandardButton.Ok, tr("prompt_restart_and_quit_ok"))
+        dialog.setButtonText(QMessageBox.StandardButton.Cancel, tr("cancel"))
+        dialog.setDefaultButton(QMessageBox.StandardButton.Ok)
+        if dialog.exec() == QMessageBox.StandardButton.Ok:
+            self.service.cancel_flash()
+            self.service.stop_device_monitor()
+            from .. import process_guard
+
+            for _ in process_guard.end_install_session(reason="restart computer suggestion accepted"):
+                pass
+            try:
+                from ..sleep_inhibit import release_sleep_inhibition
+
                 release_sleep_inhibition()
             except Exception:
                 pass
@@ -4395,6 +4474,10 @@ class MainWindow(QMainWindow):
         self._compact_install_screen = False
         self._download_active = False
         self._cache_recovery_needed = False
+        self._fallback_attempted = False
+        self._sp_1013_seen = False
+        self._flash_method = self._preferred_flash_method()
+        self._flash_page.set_method(self._flash_method)
         self._flash_page.set_release_icon(QPixmap(), complete=False)
         self.sm.reset_full()
         self._package_path = ""

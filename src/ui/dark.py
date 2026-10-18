@@ -210,6 +210,17 @@ def setup_native_app_style(app: QApplication) -> str:
     # desktop's own QT_STYLE_OVERRIDE so Kvantum and similar styles still win.
     override = ""
     if system == "linux":
+        from PySide6.QtCore import QCoreApplication
+        existing = set(QCoreApplication.libraryPaths())
+        for path in (
+            "/usr/lib/qt6/plugins",
+            "/usr/lib64/qt6/plugins",
+            "/usr/lib/x86_64-linux-gnu/qt6/plugins",
+            "/usr/lib/aarch64-linux-gnu/qt6/plugins",
+            "/usr/local/lib/qt6/plugins",
+        ):
+            if path not in existing and os.path.isdir(path):
+                QCoreApplication.addLibraryPath(path)
         override = os.environ.get("QT_STYLE_OVERRIDE", "")
     candidates = native_style_candidates(
         system=system,
@@ -1448,7 +1459,7 @@ def native_font_families() -> list[str]:
     as tofu boxes. Qt resolves these families in order, per glyph.
     """
     sys_font = QFontDatabase.systemFont(QFontDatabase.SystemFont.GeneralFont)
-    sys_family = sys_font.family() if sys_font else ""
+    sys_family = (sys_font.family() if sys_font else "").strip()
     families = []
     if sys_family and sys_family not in families:
         families.append(sys_family)
@@ -1459,23 +1470,25 @@ def native_font_families() -> list[str]:
         ]:
             if f not in families:
                 families.append(f)
-        return families
+        return [f for f in families if f and f.strip()]
     if IS_WINDOWS:
         for f in ["Segoe UI", "Segoe UI Variable Text", "Microsoft YaHei"]:
             if f not in families:
                 families.append(f)
-        return families
+        return [f for f in families if f and f.strip()]
     for f in ["Noto Sans", "Cantarell", "Ubuntu", "WenQuanYi Micro Hei"]:
         if f not in families:
             families.append(f)
-    return families
+    return [f for f in families if f and f.strip()]
 
 
 def _apply_native_font(app: QApplication) -> None:
     """Set the platform UI font (and CJK fallbacks) on the application."""
     sys_font = QFontDatabase.systemFont(QFontDatabase.SystemFont.GeneralFont)
     font = QFont(sys_font) if sys_font and sys_font.family() else QFont()
-    font.setFamilies(native_font_families())
+    fams = [f for f in native_font_families() if f and f.strip()]
+    if fams:
+        font.setFamilies(fams)
     sys_size = sys_font.pointSizeF() if sys_font else 0.0
     if sys_size > 0:
         font.setPointSizeF(sys_size)
@@ -1518,13 +1531,25 @@ def apply_theme(
     """
     native_palette = None
     if IS_LINUX:
-        # Capture the QPA/platform theme before installing our palette. A
-        # forced test appearance must not discard the desktop palette needed
-        # when the normal host theme is restored later.
-        source_palette = _state.native_palette if _state.native_palette is not None else app.palette()
+        from PySide6.QtGui import QGuiApplication
+        source_palette = (
+            _state.native_palette
+            if _state.native_palette is not None
+            else (QGuiApplication.palette() if hasattr(QGuiApplication, "palette") else app.palette())
+        )
         native_palette = QPalette(source_palette)
         _state.native_palette = QPalette(native_palette)
     setup_native_app_style(app)
+    if IS_LINUX:
+        style_name = (app.style().objectName() or "").lower()
+        if style_name in ("breeze", "oxygen", "kvantum", "adwaita"):
+            try:
+                std_pal = app.style().standardPalette()
+                if std_pal.color(QPalette.ColorRole.Window).isValid():
+                    native_palette = QPalette(std_pal)
+                    _state.native_palette = QPalette(native_palette)
+            except Exception:
+                pass
     _apply_native_font(app)
     if force_dark is not None:
         _state.set_dark(force_dark, pure_black=bool(pure_black))
@@ -1564,7 +1589,16 @@ def theme_fingerprint(app: QApplication | None = None, *, platform_dark: bool = 
     except Exception:
         scheme = ""
     try:
-        system_palette = app.style().standardPalette()
+        from PySide6.QtGui import QGuiApplication
+        style_name = (app.style().objectName() or "").lower()
+        if style_name in ("breeze", "oxygen", "kvantum", "adwaita"):
+            system_palette = app.style().standardPalette()
+        else:
+            system_palette = (
+                _state.native_palette
+                if _state.native_palette is not None
+                else (QGuiApplication.palette() if hasattr(QGuiApplication, "palette") else app.palette())
+            )
     except Exception:
         system_palette = app.palette()
     accent, accent_text = get_native_accent_color(system_palette)
@@ -1646,10 +1680,22 @@ def refresh_theme(app: QApplication | None = None) -> None:
         return
     native_palette = None
     if IS_LINUX:
-        try:
-            native_palette = QPalette(app.style().standardPalette())
-        except Exception:
-            native_palette = QPalette(app.palette())
+        from PySide6.QtGui import QGuiApplication
+        style_name = (app.style().objectName() or "").lower()
+        if style_name in ("breeze", "oxygen", "kvantum", "adwaita"):
+            try:
+                native_palette = QPalette(app.style().standardPalette())
+            except Exception:
+                native_palette = QPalette(
+                    _state.native_palette
+                    or (QGuiApplication.palette() if hasattr(QGuiApplication, "palette") else app.palette())
+                )
+        else:
+            native_palette = QPalette(
+                _state.native_palette
+                if _state.native_palette is not None
+                else (QGuiApplication.palette() if hasattr(QGuiApplication, "palette") else app.palette())
+            )
     _state.detect(native_palette=native_palette)
     _apply_native_font(app)
     app.setPalette(
