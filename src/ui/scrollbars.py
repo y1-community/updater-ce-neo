@@ -92,7 +92,8 @@ def make_transparent(area: QAbstractScrollArea) -> None:
         else:
             from .dark import T
 
-            card_surface = QColor(T().bg_card)
+            # Window surface, not a card plate: scroll content blends with the window.
+            card_surface = QColor(T().bg)
             card_surface.setAlpha(255)
             for widget in (area, viewport):
                 if widget is None:

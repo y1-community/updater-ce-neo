@@ -467,9 +467,9 @@ def _paint_bento_surface(widget: QWidget, event, *, clear: bool = False) -> None
     if glass:
         painter.fillRect(widget.rect(), QColor(0, 0, 0, 0))
     else:
-        window = widget.palette().color(QPalette.ColorRole.Window)
-        if not window.isValid() or window.alpha() == 0:
-            window = QColor(T().bg)
+        # Erase to the theme's window surface. A widget's own palette can still
+        # hold Qt's native default grey, which showed as a plate on the page.
+        window = QColor(T().bg)
         window.setAlpha(255)
         painter.fillRect(widget.rect(), window)
     painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)

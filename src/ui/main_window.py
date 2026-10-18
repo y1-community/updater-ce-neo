@@ -412,8 +412,8 @@ def can_inline_title_with_window_controls() -> bool:
         return True
     if os.environ.get("UPDATER_TRADITIONAL_TITLE") == "1":
         return False
-    desktop = (os.environ.get("XDG_CURRENT_DESKTOP") or "").lower()
-    return any(d in desktop for d in ("gnome", "unity", "pantheon"))
+    # Linux uses the desktop's own window frame so GTK/Plasma decorations apply.
+    return False
 
 
 # Floor for the install window's height: the progress card plus whatever
@@ -619,6 +619,8 @@ class MainWindow(QMainWindow):
         self._drop_check_active = False
         self._connect_signals()
         self._nav_to_page(_PAGE_SELECT)
+        from .surfaces import harmonise_window_plates
+        harmonise_window_plates(self)
 
         self._manifest_worker = ManifestWorker(self)
         self._active_workers.add(self._manifest_worker)
@@ -1439,6 +1441,9 @@ class MainWindow(QMainWindow):
         controls = getattr(self, "_window_controls", None)
         if controls is not None and hasattr(controls, "refresh_theme"):
             controls.refresh_theme()
+        # A theme switch re-derives the palette, so the plates have to follow it.
+        from .surfaces import harmonise_window_plates
+        harmonise_window_plates(self)
 
 
     def _connect_signals(self):
@@ -1459,6 +1464,7 @@ class MainWindow(QMainWindow):
         self._select_page.download_cancelled.connect(self._on_download_cancelled)
         self._select_page.prep_progress.connect(self._flash_page.update_prep_progress)
         self._select_page.prep_started.connect(self._on_prep_started)
+        self._select_page.prep_finished.connect(self._on_prep_finished)
         self._flash_page.set_cancel_download_callback(self._on_cancel_download)
         self._settings_page.flash_method_changed.connect(self._on_method_changed)
         self._settings_page.card_focus_finished.connect(self._on_card_focus_finished)
@@ -1503,6 +1509,13 @@ class MainWindow(QMainWindow):
         self._apply_release_icon(complete=False)
         self._nav_to_page(_PAGE_FLASH)
         self._release_status_to_donors()
+
+    def _on_prep_finished(self, ok):
+        """A local archive finished extracting: return to Select so Start is reachable."""
+        if getattr(self, "_download_active", False) or self._install_run_active():
+            return
+        self._apply_install_ui_state(False)
+        self._nav_to_page(_PAGE_SELECT)
 
     def _on_prep_started(self, name, model):
         """Zip or archive extraction belongs on the install card, not the catalogue."""
@@ -1643,6 +1656,11 @@ class MainWindow(QMainWindow):
 
     def changeEvent(self, event):
         super().changeEvent(event)
+        if event.type() == QEvent.ApplicationPaletteChange:
+            # A theme refresh re-derives the app palette; the page plates must
+            # follow it, or they keep the native grey it leaves behind.
+            from .surfaces import harmonise_window_plates
+            harmonise_window_plates(self)
         if event.type() in (QEvent.WindowStateChange, QEvent.ActivationChange):
             self._verify_native_chrome()
             self._schedule_caption_button_refresh()
@@ -2774,6 +2792,8 @@ class MainWindow(QMainWindow):
             self._highlight_nav(self._stack.currentIndex(), True)
             return
         self._stack.setCurrentIndex(page_idx)
+        from .surfaces import harmonise_window_plates
+        harmonise_window_plates(self)
         # A card shown on its own owns the Settings page only while that page is
         # the one on screen; leaving hands the column back.
         settings_page = getattr(self, "_settings_page", None)
@@ -3759,7 +3779,8 @@ class MainWindow(QMainWindow):
                 self._rockbox_themes_flow_active = True
                 self._show_rockbox_power_on_prompt(eff_model)
             else:
-                self._start_themes_stage(eff_model, donation_disabled)
+                # SP Flash: no manual power-on prompt, watch for ADB silently.
+                self._start_themes_stage(eff_model, donation_disabled, automatic=True)
         elif is_target_rockbox and backend_method(self._flash_method) == METHOD_MTK:
             self._rockbox_themes_flow_active = True
             self._show_rockbox_power_on_prompt(eff_model)
@@ -3792,7 +3813,12 @@ class MainWindow(QMainWindow):
         return Rockbox360pSetupWizard(parent=self, model=model)
 
     def _start_themes_stage(
-        self, model: str, donation_disabled: bool, *, already_powered_on: bool = False
+        self,
+        model: str,
+        donation_disabled: bool,
+        *,
+        already_powered_on: bool = False,
+        automatic: bool = False,
     ) -> None:
         """Open the themes install stage after a 360p Rockbox install."""
         self._themes_stage_done = False
@@ -3829,6 +3855,7 @@ class MainWindow(QMainWindow):
             on_recover=self._on_progress_retry,
             log_cb=self._append_log,
             already_powered_on=already_powered_on,
+            automatic=automatic,
         )
         self._adjust_window_geometry()
 

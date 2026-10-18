@@ -12,7 +12,16 @@ from __future__ import annotations
 
 from PySide6.QtCore import QEvent, QObject, Qt
 from PySide6.QtGui import QBrush, QColor, QPainter, QPalette
-from PySide6.QtWidgets import QAbstractScrollArea, QApplication, QTextEdit, QWidget
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QAbstractScrollArea,
+    QAbstractSpinBox,
+    QApplication,
+    QComboBox,
+    QLineEdit,
+    QTextEdit,
+    QWidget,
+)
 
 
 def glass_surfaces_enabled() -> bool:
@@ -121,6 +130,47 @@ def paint_window_surface(widget: QWidget) -> None:
     widget.setPalette(pal)
 
 
+def harmonise_window_plates(root: QWidget) -> None:
+    """On solid desktops, give every self-filling child the window surface.
+
+    Pages and bars that never received the app palette keep Qt's native
+    default Window role, which paints as a grey plate on the themed window.
+    Input widgets keep their own Base role; only the fill colour is moved.
+    """
+    if root is None or glass_surfaces_enabled():
+        return
+    # The window paints the application palette's Window role; match that,
+    # not the card token, or the page plates would be skipped as already equal.
+    app = QApplication.instance()
+    surface = QColor(app.palette().color(QPalette.ColorRole.Window)) if app is not None else QColor()
+    if not surface.isValid():
+        from .dark import T
+
+        surface = QColor(T().bg)
+    surface.setAlpha(255)
+    # Scroll views take the window surface on their Base too, so their
+    # contents blend in; real text entry widgets keep their own Base.
+    input_like = (QLineEdit, QComboBox, QAbstractSpinBox, QTextEdit)
+    for widget in [root, *root.findChildren(QWidget)]:
+        scroll = isinstance(widget, QAbstractScrollArea)
+        if not widget.autoFillBackground() and not scroll:
+            continue
+        pal = widget.palette()
+        if pal.color(QPalette.ColorRole.Window) == surface and (
+            not scroll or pal.color(QPalette.ColorRole.Base) == surface
+        ):
+            continue
+        for group in (
+            QPalette.ColorGroup.Active,
+            QPalette.ColorGroup.Inactive,
+            QPalette.ColorGroup.Disabled,
+        ):
+            pal.setColor(group, QPalette.ColorRole.Window, surface)
+            if scroll or not isinstance(widget, input_like):
+                pal.setColor(group, QPalette.ColorRole.Base, surface)
+        widget.setPalette(pal)
+
+
 def clear_glass_plate(widget: QWidget) -> None:
     """Remove a child plate while keeping scroll views on their card surface.
 
@@ -146,7 +196,9 @@ def clear_glass_plate(widget: QWidget) -> None:
             else:
                 from .dark import T
 
-                card_surface = QColor(T().bg_card)
+                # The viewport is the window surface, not a card plate, so lists
+                # and notes blend with the window the same way the glass path does.
+                card_surface = QColor(T().bg)
                 card_surface.setAlpha(255)
                 palette = view.palette()
                 for group in (
