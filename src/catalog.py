@@ -547,6 +547,7 @@ def release_version_ok(repo, tag_name, model=None, show_old_rockbox=False, show_
 # Y1 units sold with Innioasis OS 3.0.7 pre-installed will not boot older
 # Original Software builds, so those are hidden for Y1 Type A by default.
 ORIGINAL_Y1_TYPE_A_MIN_VERSION = (3, 0, 7)
+ORIGINAL_Y1_SLUGS = ("original-y1", "original-software-y1")
 
 
 def original_y1_typea_pre_307_hidden(package, model, selected_type, tag_name, show_pre_307=False):
@@ -558,7 +559,9 @@ def original_y1_typea_pre_307_hidden(package, model, selected_type, tag_name, sh
     """
     if show_pre_307 or package is None:
         return False
-    if getattr(package, "slug", "") != "original-y1":
+    # Manifest-built packages use ``original-software-y1``; the static catalogue
+    # uses ``original-y1``. Both are the same Y1 Original Software package.
+    if getattr(package, "slug", "") not in ORIGINAL_Y1_SLUGS:
         return False
     if str(model or "").upper() != "Y1" or selected_type != "A":
         return False
