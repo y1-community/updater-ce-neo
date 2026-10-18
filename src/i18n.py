@@ -1173,7 +1173,7 @@ _STRINGS: dict = {
     },
     "sel_only_local": {
         "zh-CN": "选择本地的 .zip 或 .rar 刷机包即可离线刷机——无需联网，支持所有 Innioasis 和 Timmkoo 音频播放器。",
-        "en": "Pick a local .zip or .rar firmware package for offline installation — no internet needed. Works with every Innioasis and Timmkoo audio player.",
+        "en": "Pick a local .zip or .rar firmware package, or a folder / scatter .txt file, for offline installation — no internet needed. Works with every Innioasis and Timmkoo audio player.",
         "fr": "Choisissez un paquet firmware local .zip ou .rar pour une installation hors ligne — aucune connexion requise. Compatible avec tous les lecteurs audio Innioasis et Timmkoo.",
         "es": "Elige un paquete de firmware local .zip o .rar para instalar sin conexión: no hace falta Internet. Funciona con todos los reproductores de audio Innioasis y Timmkoo.",
     },
@@ -2843,7 +2843,7 @@ _STRINGS: dict = {
         "es": "Dirección de {label} copiada",
     },
     "donate_appeal_costs_for_year": {
-        "en": "If everyone using this today donated, it would cover our costs for a year",
+        "en": "If everyone using this today donated, it would keep this project going for a year",
         "zh-CN": "如果今天使用本工具的每个人都捐赠一点，就足以支付我们一整年的费用",
         "fr": "Si chaque personne utilisant l'application aujourd'hui donnait, nos frais seraient couverts pour un an",
         "es": "Si todos los que usan esto hoy donaran, cubriría nuestros gastos durante un año",
@@ -3011,11 +3011,11 @@ _STRINGS: dict = {
         "ja": "いつでも頼れる、高速で検証済みのコミュニティ配信ネットワーク。",
     },
     "support_story_2_body": {
-        "en": "Tracking down official Innioasis software usually means scouring forums for expired Google Drive links, dead Baidu cloud shares, and mystery zip files with no flashing tools. We built a reliable, independent download network with verified SHA-256 integrity, update notifications, and step-by-step guided installs. Your donations directly cover the gigabytes of fast CDN bandwidth and server hosting that make this possible 24 hours a day, 365 days a year.",
+        "en": "Tracking down official Innioasis software usually means scouring forums for expired Google Drive links, dead Baidu cloud shares, and mystery zip files with no flashing tools. We built a reliable, independent download network with verified SHA-256 integrity, update notifications, and step-by-step guided installs. Your donations directly keep the downloads and hosting that make this possible 24 hours a day, 365 days a year.",
         "zh-CN": "以往寻找 Innioasis 官方固件往往意味着在论坛里翻找失效的 Google Drive 链接、过期的百度网盘分享以及没有任何刷机教程的神秘压缩包。我们构建了高可用独立分发网络，具备 SHA-256 完整性校验、更新提醒与向导式刷机指引。您的捐赠将直接支持高速 CDN 流量与服务器运维，确保所有人全年无休享受极速下载。",
         "fr": "Trouver un logiciel officiel Innioasis implique souvent de chercher des liens Google Drive expirés et des archives douteuses. Nous avons créé un réseau de téléchargement indépendant et fiable avec vérification SHA-256, notifications de mise à jour et installation guidée. Vos dons financent directement la bande passante CDN et les serveurs pour maintenir ce service 24h/24.",
         "es": "Buscar software oficial de Innioasis suele significar toparse con enlaces caducados de Google Drive y archivos sospechosos. Hemos creado una red de descarga independiente con comprobación SHA-256, notificaciones de actualización e instalaciones guiadas. Tus donaciones cubren directamente el ancho de banda CDN y los servidores necesarios para que funcione todo el año.",
-        "de": "Offizielle Innioasis-Firmwares zu finden bedeutete bisher, tote Google-Drive-Links und zweifelhafte ZIPs ohne Anleitung zu durchsuchen. Wir haben ein verlässliches Download-Netzwerk mit SHA-256-Prüfsummen, Update-Benachrichtigungen und geführten Schritt-für-Schritt-Installationen aufgebaut. Deine Spenden finanzieren direkt die CDN-Bandbreite und Server, die dies ermöglichen.",
+        "de": "Offizielle Innioasis-Firmwares zu finden bedeutete bisher, tote Google-Drive-Links und zweifelhafte ZIPs ohne Anleitung zu durchsuchen. Wir haben ein verlässliches Download-Netzwerk mit SHA-256-Prüfsummen, Update-Benachrichtigungen und geführten Schritt-für-Schritt-Installationen aufgebaut. Deine Spenden finanzieren direkt die Downloads und Server, die dies ermöglichen.",
         "ja": "メーカーの公式ファームウェアを探そうとすると、リンク切れの Google ドライブや怪しい掲示板に行き着きがちでした。私たちは SHA-256 検証済みで安心な高速 CDN 配信網、更新通知、親切な導入ガイドを整備しました。いただいた支援金は、24時間365日の高速ダウンロードとサーバー維持費に直接活用されています。",
     },
     "support_story_2_item_1": {
@@ -3123,11 +3123,11 @@ _STRINGS: dict = {
         "ja": "愛用の音楽プレイヤーを電子ゴミにさせない、草の根の維持・保存活動。",
     },
     "support_story_4_body": {
-        "en": "When a hardware company moves on to their next gadget, older models get abandoned. Innioasis provides no Linux support, no transparent changelogs, and no easy way to recover when an install fails. Updater CE exists because passionate users shouldn't have to throw away a perfectly good music player. 100% of community contributions go directly into server bills, bandwidth, and keeping this tool open for everyone.",
-        "zh-CN": "当硬件厂商转向新产品线时，老款设备往往被彻底遗忘。Innioasis 原厂不提供 Linux 支持、不公开详细变更日志，设备刷坏后也无简易救砖途径。Updater CE 的存在就是为了让音乐爱好者不必丢弃性能完好的播放器。每一笔社区捐赠都 100% 用于支付服务器账单和下载带宽，让这项服务始终对所有人开放。",
+        "en": "When a hardware company moves on to their next gadget, older models get abandoned. Innioasis provides no Linux support, no transparent changelogs, and no easy way to recover when an install fails. Updater CE exists because passionate users shouldn't have to throw away a perfectly good music player. 100% of community contributions go directly into keeping this tool open for everyone.",
+        "zh-CN": "当硬件厂商转向新产品线时，老款设备往往被彻底遗忘。Innioasis 原厂不提供 Linux 支持、不公开详细变更日志，设备刷坏后也无简易救砖途径。Updater CE 的存在就是为了让音乐爱好者不必丢弃性能完好的播放器。每一笔社区捐赠都 100% 用于维持这项服务，让它始终对所有人开放。",
         "fr": "Quand un fabricant passe au produit suivant, les anciens modèles sont délaissés. Innioasis n'offre aucun support Linux, pas de journal des modifications transparent ni de solution simple en cas de panne. Updater CE existe pour que personne n'ait à jeter un excellent lecteur. 100% des dons financent les serveurs et la gratuité pour tous.",
         "es": "Cuando una empresa pasa al siguiente producto, los modelos antiguos quedan abandonados. Innioasis no ofrece soporte en Linux, ni registros de cambios transparentes ni soluciones fáciles de recuperación. Updater CE existe para que no tires un reproductor perfectamente funcional. El 100% de las aportaciones financia servidores y mantiene todo libre.",
-        "de": "Wenn Hersteller neue Produkte auf den Markt bringen, werden Vorgänger oft vergessen. Innioasis bietet keinen Linux-Support, keine transparenten Changelogs und keine einfache Rettung bei Fehlern. Updater CE existiert, damit du funktionierende Hardware nicht wegwerfen musst. 100% der Spenden fließen in Server und Bandbreite.",
+        "de": "Wenn Hersteller neue Produkte auf den Markt bringen, werden Vorgänger oft vergessen. Innioasis bietet keinen Linux-Support, keine transparenten Changelogs und keine einfache Rettung bei Fehlern. Updater CE existiert, damit du funktionierende Hardware nicht wegwerfen musst. 100% der Spenden fließen in den Betrieb des Projekts.",
         "ja": "メーカーが新型機へ移行すると、旧機種のサポートは打ち切られがちです。Innioasis は Linux をサポートせず、更新履歴も不透明で、書き込み失敗時の救済策もありません。まだ十分に使えるプレイヤーを無駄にしないために Updater CE は生まれました。支援金は全額、インフラ費用とツールの無償提供維持に使われます。",
     },
     "support_story_4_item_1": {
@@ -3171,11 +3171,11 @@ _STRINGS: dict = {
         "ja": "ご支援方法",
     },
     "support_methods_subtitle": {
-        "en": "Choose your preferred contribution method. Every donation directly funds download bandwidth, server hosting, and test hardware.",
-        "zh-CN": "请选择您方便的支持方式。每一笔捐赠都将直接用于服务器托管、下载带宽及测试硬件采购。",
+        "en": "Choose your preferred contribution method. Every donation directly funds downloads, hosting, and test hardware.",
+        "zh-CN": "请选择您方便的支持方式。每一笔捐赠都将直接用于下载服务、托管及测试硬件采购。",
         "fr": "Choisissez votre méthode préférée. Chaque don finance directement la bande passante, l'hébergement et le matériel de test.",
         "es": "Elige tu método preferido. Cada donación financia el ancho de banda, el alojamiento y el hardware de pruebas.",
-        "de": "Wähle deine bevorzugte Methode. Jede Spende fließt direkt in Bandbreite, Hosting und Test-Hardware.",
+        "de": "Wähle deine bevorzugte Methode. Jede Spende fließt direkt in Downloads, Hosting und Test-Hardware.",
         "ja": "ご都合の良い方法をお選びください。いただいたご支援は、サーバー維持費、回線費用、テスト機材費に直接活用されます。",
     },
     "support_crypto_title": {
@@ -3358,7 +3358,7 @@ _STRINGS: dict = {
     },
     "settings_donations_group": {
         "zh-CN": "社区致谢与捐赠",
-        "en": "Community Credits and Donations",
+        "en": "Show Credits and Donations",
         "fr": "Crédits communautaires et dons",
         "es": "Créditos comunitarios y donaciones",
         "de": "Community-Credits und Spenden",
@@ -3368,7 +3368,7 @@ _STRINGS: dict = {
     # prompts are enabled by default.
     "settings_show_donations": {
         "zh-CN": "启用社区致谢与捐赠",
-        "en": "Enable Community Credits and Donations",
+        "en": "Show Credits and Donations",
         "fr": "Activer les crédits communautaires et les dons",
         "es": "Habilitar créditos comunitarios y donaciones",
         "de": "Community-Credits und Spenden aktivieren",

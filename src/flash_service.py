@@ -1297,11 +1297,24 @@ def _mark_extract_complete(extract_dir):
         pass
 
 
+def _retire_old_firmware(package_path) -> None:
+    """After a package is extracted, keep only its files: drop the archive
+    itself and every older extraction, so the work folder is the single copy."""
+    try:
+        prune_extracted_cache(keep_package_path=str(package_path))
+        p = Path(package_path)
+        if p.is_file() and p.suffix.lower() in (".zip", ".rar"):
+            p.unlink()
+    except Exception as e:
+        logger.warning("Could not retire firmware archive %s: %s", package_path, e)
+
+
 def prune_extracted_cache(keep_package_path: Optional[str] = None) -> list:
     """Retain only the most recently downloaded software package extracted directory,
-    removing older extracted directories in downloads_dir() to save disk space.
+    removing older extracted directories and leftover archives in downloads_dir()
+    to save disk space.
 
-    Returns a list of directory paths that were removed.
+    Returns a list of paths that were removed.
     """
     removed = []
     try:
@@ -1311,9 +1324,17 @@ def prune_extracted_cache(keep_package_path: Optional[str] = None) -> list:
             return removed
         keep_stem = Path(keep_package_path).stem if keep_package_path else ""
         keep_dir_name = f".{keep_stem}_extracted" if keep_stem else ""
+        keep_archive = Path(keep_package_path).name if keep_package_path else ""
 
         for item in list(dd.iterdir()):
-            if item.is_dir() and item.name.startswith(".") and item.name.endswith("_extracted"):
+            if item.is_file() and item.suffix.lower() in (".zip", ".rar") and item.name != keep_archive:
+                logger.info("Removing leftover firmware archive: %s", item.name)
+                try:
+                    item.unlink()
+                    removed.append(str(item))
+                except Exception as e:
+                    logger.warning("Could not remove archive %s: %s", item, e)
+            elif item.is_dir() and item.name.startswith(".") and item.name.endswith("_extracted"):
                 if item.name != keep_dir_name:
                     logger.info("Pruning old cached firmware extraction: %s", item.name)
                     try:
@@ -1389,6 +1410,7 @@ class ExtractWorker(QThread):
         if _is_extract_complete(extract_dir):
             self.progress.emit(100)
             discard_firmware_history(extract_dir)
+            _retire_old_firmware(package_path)
             return extract_dir
         shutil.rmtree(extract_dir, ignore_errors=True)
         extract_dir.mkdir(parents=True, exist_ok=True)
@@ -1399,6 +1421,7 @@ class ExtractWorker(QThread):
             self._extract_rar(package_path, extract_dir)
         discard_firmware_history(extract_dir)
         _mark_extract_complete(extract_dir)
+        _retire_old_firmware(package_path)
         return extract_dir
 
     def _extract_zip(self, package, extract_dir):
@@ -2596,21 +2619,9 @@ class FlashWorker(QThread):
         # The helper emits on its own signal. Forward that onto this worker so
         # the progress card moves during unzip instead of sitting at 5%.
         worker.progress.connect(lambda p: self.progress.emit(p))
-        # Reuse the extraction helpers synchronously inside the flash worker.
-        extract_dir = compute_extract_dir(self.package_path)
-        if _is_extract_complete(extract_dir):
-            return extract_dir
-        shutil.rmtree(extract_dir, ignore_errors=True)
-        extract_dir.mkdir(parents=True, exist_ok=True)
-        suffix = Path(self.package_path).suffix.lower()
-        if suffix == ".zip":
-            worker._extract_zip(self.package_path, extract_dir)
-        else:
-            worker._extract_rar(self.package_path, extract_dir)
-        self.progress.emit(100)
-        from .sp_flash_gui import discard_firmware_history
-        discard_firmware_history(extract_dir)
-        _mark_extract_complete(extract_dir)
+        # Same extraction as ExtractWorker: reuses a completed extract, marks
+        # a new one complete, and retires older firmware and archives.
+        extract_dir = worker._extract(self.package_path)
         return extract_dir
 
     def _validate_extract(self, directory):

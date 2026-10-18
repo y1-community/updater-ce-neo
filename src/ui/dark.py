@@ -445,6 +445,16 @@ def is_system_dark_mode() -> bool:
     return False
 
 
+def _palette_is_dark(palette: QPalette) -> bool:
+    """True when the desktop's window colour is dark.
+
+    Plasma and other desktops theme any material colour, so the window
+    colour decides the token set, not a light or dark setting.
+    """
+    window = palette.color(QPalette.ColorRole.Window)
+    return window.isValid() and window.lightness() < 128
+
+
 class _Tokens:
     """Flat namespace of colour strings for a single theme (light or dark).
 
@@ -659,13 +669,19 @@ class _Tokens:
         window_text = color(QPalette.ColorRole.WindowText, self.fg)
         base = color(QPalette.ColorRole.Base, self.bg_input)
         alternate = color(QPalette.ColorRole.AlternateBase, self.bg_elev)
-        button = color(QPalette.ColorRole.Button, self.bg_card)
+        # Cards sit on the window as a translucent tint of its own text colour,
+        # so the desktop's Button/AlternateBase shades never show as plates.
+        # Cards are a shade of the desktop window colour, so a green desktop
+        # gives green cards rather than a neutral grey overlay.
+        card_tint = QColor(window).lighter(112 if dark else 104)
+        elev_tint = QColor(window).lighter(124 if dark else 110)
+        button = QColor(card_tint)
         highlight = color(QPalette.ColorRole.Highlight, self.accent)
         highlighted_text = color(QPalette.ColorRole.HighlightedText, self.accent_text)
 
         self.bg = window.name()
         self.bg_card = button.name()
-        self.bg_elev = alternate.name()
+        self.bg_elev = elev_tint.name()
         self.bg_input = base.name()
         self.bg_nav = window.name()
         self.bg_status = button.name()
@@ -684,7 +700,7 @@ class _Tokens:
         self.accent_text = highlighted_text.name()
         self.nav_active = highlight.name()
         self.nav_active_text = highlighted_text.name()
-        self.progress_track = alternate.name()
+        self.progress_track = elev_tint.name()
         self.progress_fill = highlight.name()
         self.log_bg = base.name()
         self.log_fg = color(QPalette.ColorRole.Text, self.fg).name()
@@ -698,6 +714,36 @@ class _Tokens:
         self.btn_primary_border = _hex_rgba(window_text.name(), 0.25)
         self.btn_primary_border_bottom = _hex_rgba(window_text.name(), 0.35)
         self.btn_disabled_border = _hex_rgba(window_text.name(), 0.15)
+
+        # Status, banner and progress hues are fixed in the token sets. Mix each
+        # hue into the desktop's window colour so it fits any theme colour.
+        def mix(hue: str, amount: float) -> str:
+            h = QColor(hue)
+            return QColor(
+                round(h.red() * amount + window.red() * (1 - amount)),
+                round(h.green() * amount + window.green() * (1 - amount)),
+                round(h.blue() * amount + window.blue() * (1 - amount)),
+            ).name()
+
+        def readable(hue: str) -> str:
+            color = QColor(hue)
+            return color.lighter(150).name() if dark else color.darker(160).name()
+
+        ok, warn, danger = "#10b981", "#f59e0b", "#ef4444"
+        ok_bg, warn_bg, danger_bg = mix(ok, 0.22), mix(warn, 0.22), mix(danger, 0.22)
+        self.ok_bg, self.ok_fg = ok_bg, readable(ok)
+        self.warn_bg, self.warn_fg = warn_bg, readable(warn)
+        self.danger_bg, self.danger_fg = danger_bg, readable(danger)
+        self.info_bg = mix(highlight.name(), 0.22)
+        self.info_fg = readable(highlight.name())
+        self.status_connected = self.status_complete = (self.ok_fg, ok_bg)
+        self.status_conn_fg = self.status_comp_fg = self.status_connected
+        self.status_disconn = self.status_failed = (self.danger_fg, danger_bg)
+        self.status_disconn_fg = self.status_fail_fg = self.status_disconn
+        self.status_flashing = self.status_retry = (self.warn_fg, warn_bg)
+        self.status_flash_fg = self.status_retry_fg = self.status_flashing
+        self.progress_ok = ok
+        self.progress_err = danger
 
 
 class _ThemeState:
@@ -714,6 +760,7 @@ class _ThemeState:
         self._pure_black = False
         if IS_LINUX and native_palette is not None:
             self.native_palette = QPalette(native_palette)
+            self._dark = _palette_is_dark(native_palette)
         self.tokens = _Tokens(
             self._dark,
             pure_black=self._pure_black,

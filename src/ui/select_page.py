@@ -249,6 +249,9 @@ class SelectPackagePage(QWidget):
     download_cancelled = Signal()
     prep_progress = Signal(int)
     prep_started = Signal(str, str)
+    # Local archive preparation finished (ok). Start stays on this page, so the
+    # main window must hand the screen back to it.
+    prep_finished = Signal(bool)
     # (message, timeout_ms) -> shown in the main window's status bar.
     status_message = Signal(str, int)
     # Emitted whenever the release list is (re)filled, so the window can
@@ -475,11 +478,9 @@ class SelectPackagePage(QWidget):
         if generic:
             self._views.setCurrentWidget(self._local_tab)
             self._hint.setText(tr("sel_only_local_generic"))
-            self._offline_banner.setText(tr("sel_offline_install_generic"))
         else:
             self._show_online_view()
             self._hint.setText(tr("sel_only_local"))
-            self._offline_banner.setText(tr("sel_offline_install"))
         self._update_view_links()
 
     def _on_connectivity_changed(self, is_online: bool):
@@ -903,11 +904,6 @@ class SelectPackagePage(QWidget):
         self._hint.setWordWrap(True)
         self._hint.setProperty("cssClass", "hint")
         layout.addWidget(self._hint)
-
-        self._offline_banner = Banner()
-        self._offline_banner.set_type("info")
-        self._offline_banner.set_key("sel_offline_install")
-        layout.addWidget(self._offline_banner)
 
         self._local_group = local_group = Card("sel_choose_firmware_pkg")
         grp_l = QVBoxLayout()
@@ -1484,10 +1480,8 @@ class SelectPackagePage(QWidget):
             self._install_btn.setToolTip(tr("sel_install_tooltip_generic"))
         if is_generic_mtk():
             self._hint.setText(tr("sel_only_local_generic"))
-            self._offline_banner.setText(tr("sel_offline_install_generic"))
         else:
             self._hint.setText(tr("sel_only_local"))
-            self._offline_banner.retranslate()
         self._path_edit.setPlaceholderText(tr("sel_placeholder"))
         self._notes.setPlaceholderText(tr("sel_notes_hint"))
         # Anchors inside the notes are the text colour and bold, never the
@@ -2521,6 +2515,7 @@ class SelectPackagePage(QWidget):
 
     def _on_local_prep_done(self, ok, extract_dir, err):
         self._local_bar.setVisible(False)
+        self.prep_finished.emit(bool(ok))
         if not ok:
             self._local_status_key = ""
             if "MULTIPLE_SCATTERS" in str(err):

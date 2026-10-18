@@ -2605,10 +2605,11 @@ def test_offline_banner_and_generic_model():
     app = QApplication.instance() or QApplication(sys.argv)
     w = MainWindow()
     w.show()
-    banner = w._select_page._offline_banner.text()
-    assert "Innioasis" in banner and "Timmkoo" in banner, banner
-    # The offline-install note belongs on the Local file tab, not the Online tab.
-    assert w._select_page._offline_banner.parent() is w._select_page._local_tab
+    hint = w._select_page._hint.text()
+    assert "Innioasis" in hint and "Timmkoo" in hint, hint
+    assert "folder" in hint and "scatter" in hint, hint
+    # The offline-install hint belongs on the Local file tab, not the Online tab.
+    assert w._select_page._hint.parent() is w._select_page._local_tab
 
     calls = []
     w.service.start_flash = lambda pkg, pre="", method="auto", **kw: calls.append(pkg)
