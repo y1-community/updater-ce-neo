@@ -82,7 +82,9 @@ def is_sp_flash_gui_supported() -> bool:
     if paths.IS_MAC:
         return False
     if paths.IS_WINDOWS:
-        return True
+        # SP Flash Tool is an x86/x86-64 build only; ARM64 Windows uses MTKClient.
+        from .flash_service import windows_only_method, METHOD_SP
+        return windows_only_method() == METHOD_SP
     if platform.system() == "Linux":
         from . import linux_sp_flash
         return linux_sp_flash.arch_supported()

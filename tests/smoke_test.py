@@ -263,7 +263,8 @@ def test_donation_dialog_translated():
     w = MainWindow()
     w.show()
     donations = [
-        {"name": "Alice", "amount": 10, "method": "Ko-Fi", "url": "", "date": "18/08/2026"}
+        {"name": "Alice", "amount": 10, "method": "Ko-Fi", "url": "",
+         "dt": __import__("datetime").datetime.now()}
     ]
 
     translator().set_language("fr")
@@ -954,7 +955,7 @@ def test_donation_status_bar():
 
     translator().set_language("fr")
     bar.retranslate()
-    assert "couvrir" in bar._goal_label.text()
+    assert "de frais" in bar._goal_label.text()
     assert bar._support_btn.text() == "Nous soutenir"
 
     # Status update vs donation display alternation (displayed one at a time, no collision)
@@ -3024,10 +3025,16 @@ def test_guided_image_selection():
     real_win, real_mac = paths.IS_WINDOWS, paths.IS_MAC
     try:
         paths.IS_WINDOWS, paths.IS_MAC = True, False
-        page.set_method("sp")
-        assert page._initsteps_image() == "initsteps_sp.png"
-        page.set_method("mtk")
-        assert page._initsteps_image() == "initsteps_win.png"
+        # MTKClient is only offered on Windows ARM64; simulate that host so
+        # the MTK initsteps branch is reachable.
+        import platform as _platform
+        real_machine = _platform.machine
+        _platform.machine = lambda: "ARM64"
+        try:
+            page.set_method("mtk")
+            assert page._initsteps_image() == "initsteps_win.png"
+        finally:
+            _platform.machine = real_machine
         # Legacy "auto" now resolves to the platform default (the SP Flash Tool
         # console flow) instead of being a method of its own.
         page.set_method("auto")

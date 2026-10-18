@@ -544,6 +544,28 @@ def release_version_ok(repo, tag_name, model=None, show_old_rockbox=False, show_
     return version >= minimum
 
 
+# Y1 units sold with Innioasis OS 3.0.7 pre-installed will not boot older
+# Original Software builds, so those are hidden for Y1 Type A by default.
+ORIGINAL_Y1_TYPE_A_MIN_VERSION = (3, 0, 7)
+
+
+def original_y1_typea_pre_307_hidden(package, model, selected_type, tag_name, show_pre_307=False):
+    """True when an Original Software release must be hidden for Y1 Type A.
+
+    Only the Y1 Original Software package, Type A, and a tag whose dotted
+    version is below 3.0.7 are affected. Untagged/nightly releases are left to
+    the existing rules, and ``show_pre_307`` (the Settings opt-in) lifts it.
+    """
+    if show_pre_307 or package is None:
+        return False
+    if getattr(package, "slug", "") != "original-y1":
+        return False
+    if str(model or "").upper() != "Y1" or selected_type != "A":
+        return False
+    version = release_version_tuple(tag_name)
+    return version is not None and version < ORIGINAL_Y1_TYPE_A_MIN_VERSION
+
+
 def format_datestamp_version(match_or_str, now_dt=None):
     """Format a YYYYMMDD-HHMM datestamp as a human-readable date with time."""
     val = match_or_str.group(0) if hasattr(match_or_str, "group") else str(match_or_str)
@@ -1341,6 +1363,7 @@ class ReleasesClient:
         show_old_rockbox=False,
         prefer_240p=False,
         force_refresh=False,
+        show_original_pre_307=False,
     ):
         """Fetch releases for a catalogue package, filtered for the device model.
 
@@ -1359,6 +1382,10 @@ class ReleasesClient:
                 model=model,
                 show_old_rockbox=show_old_rockbox,
                 show_nightly=show_nightly,
+            ):
+                continue
+            if original_y1_typea_pre_307_hidden(
+                package, model, selected_type, tag_name, show_original_pre_307
             ):
                 continue
             if not _release_matches_model(model, rel, package, selected_type):

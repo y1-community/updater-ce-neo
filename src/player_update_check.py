@@ -300,26 +300,31 @@ def set_hidden_mtk_options(enabled: bool, settings: Optional[QSettings] = None) 
 _KEY_SHOW_OLD_ROCKBOX = "show_old_rockbox_builds"
 _KEY_SHOW_NIGHTLY = "show_nightly_dev_releases"
 _KEY_SHOW_240P_ROCKBOX = "show_240p_rockbox"
+# Original Software (Innioasis OS) releases tagged older than 3.0.7 for Y1 Type A.
+_KEY_SHOW_ORIGINAL_PRE_307 = "show_original_y1_typea_pre_307"
 
 FILTER_OLD_ROCKBOX = "old_rockbox"
 FILTER_NIGHTLY = "nightly"
 FILTER_240P = "rockbox_240p"
-FILTER_NAMES = (FILTER_OLD_ROCKBOX, FILTER_NIGHTLY, FILTER_240P)
+FILTER_ORIGINAL_PRE_307 = "original_pre_307"
+FILTER_NAMES = (FILTER_OLD_ROCKBOX, FILTER_NIGHTLY, FILTER_240P, FILTER_ORIGINAL_PRE_307)
 
 
 @dataclass
 class RockboxReleaseFilters:
-    """The three Rockbox release-listing filters."""
+    """The release-listing filters (Rockbox gates plus the Original Software gate)."""
 
     old_rockbox: bool = False
     nightly: bool = False
     rockbox_240p: bool = False
+    original_pre_307: bool = False
 
     def as_dict(self) -> dict:
         return {
             FILTER_OLD_ROCKBOX: bool(self.old_rockbox),
             FILTER_NIGHTLY: bool(self.nightly),
             FILTER_240P: bool(self.rockbox_240p),
+            FILTER_ORIGINAL_PRE_307: bool(self.original_pre_307),
         }
 
 
@@ -340,6 +345,7 @@ def rockbox_release_filters(settings: Optional[QSettings] = None) -> RockboxRele
         old_rockbox=bool(old),
         nightly=s.value(_KEY_SHOW_NIGHTLY, False, type=bool),
         rockbox_240p=bool(show_240p),
+        original_pre_307=bool(s.value(_KEY_SHOW_ORIGINAL_PRE_307, False, type=bool)),
     )
 
 
@@ -362,6 +368,8 @@ def set_rockbox_release_filter(
         s.setValue(_KEY_SHOW_240P_ROCKBOX, bool(enabled))
         if enabled:
             s.setValue(_KEY_SHOW_OLD_ROCKBOX, True)
+    elif name == FILTER_ORIGINAL_PRE_307:
+        s.setValue(_KEY_SHOW_ORIGINAL_PRE_307, bool(enabled))
     else:
         s.setValue(_KEY_SHOW_NIGHTLY, bool(enabled))
     return rockbox_release_filters(s)

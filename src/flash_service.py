@@ -127,6 +127,8 @@ class _CombinableEta:
 
 from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal
 
+import platform
+
 from . import linux_sp_flash, paths
 from .i18n import tr
 from .progress_model import ThroughputEta, percent_of
@@ -423,17 +425,37 @@ METHOD_MTK = "mtk"
 METHOD_MTK_MAC = "mtk_mac"
 
 
+_WINDOWS_INTEL_MACHINES = ("x86_64", "amd64", "x64", "i386", "i486", "i586", "i686", "x86")
+
+
+def windows_only_method():
+    """The one install method Windows may use, decided by the CPU.
+
+    SP Flash Tool ships only as an x86/x86-64 Windows build, so Intel/AMD
+    Windows gets SP Flash Tool and no route to MTKClient. Any other Windows CPU
+    (ARM64) gets MTKClient only. Returns ``None`` off Windows, where the
+    per-platform rules below apply instead.
+    """
+    if paths.IS_MAC or not paths.IS_WINDOWS:
+        return None
+    machine = (platform.machine() or "").lower()
+    return METHOD_SP if machine in _WINDOWS_INTEL_MACHINES else METHOD_MTK
+
+
 def default_flash_method():
     """Method used until the user picks one.
 
     Windows/Linux users are steered to SP Flash Tool's console-mode XML flow,
     the most reliable path on those platforms. macOS has no SP Flash Tool
-    build, so MTKClient is the only option there.
+    build, so MTKClient is the only option there. Windows follows its CPU.
 
     ``paths.IS_MAC`` is read live rather than the module-level ``IS_MAC``
     snapshot so simulated macOS mode (and the tests that toggle it) is
     honoured.
     """
+    locked = windows_only_method()
+    if locked:
+        return locked
     return METHOD_MTK if paths.IS_MAC else METHOD_SP
 
 
@@ -454,6 +476,9 @@ def normalise_method(method):
         return default_flash_method()
     if paths.IS_MAC:
         return METHOD_MTK
+    locked = windows_only_method()
+    if locked:
+        return locked
     if value in ("auto", METHOD_MTK_MAC):
         return default_flash_method()
     return value
@@ -470,12 +495,9 @@ def backend_method(method):
 
 def is_mtk_method(method) -> bool:
     """True when the method uses the MTKClient engine."""
-    val = str(method or "").strip().lower()
-    if val == METHOD_SP:
-        return False
     if paths.IS_MAC:
         return True
-    return val == METHOD_MTK or backend_method(val) == METHOD_MTK
+    return backend_method(method) == METHOD_MTK
 
 
 # --- MediaTek / SP Flash Tool error knowledge --------------------------------

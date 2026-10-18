@@ -17,29 +17,29 @@
   #endif
 #endif
 #ifndef MyAppName
-  #define MyAppName "Updater CE"
-#endif
-; Where the app lives / which Start Menu folder it lands in. The generic
-; MediaTek Installer is not an Innioasis product, so it stands alone.
-#ifndef MyAppDirParent
   #ifdef MyIsMediaTek
-    #define MyAppDirParent ""
+    #define MyAppName "MediaTek Installer"
   #else
-    #define MyAppDirParent "Innioasis Community"
+    #define MyAppName "Innioasis Updater CE"
+  #endif
+#endif
+; Install folder under Program Files (or x86) / the per-user Programs folder.
+; Updater CE lives in UpdaterCE; the generic MediaTek Installer keeps its own.
+#ifndef MyAppDirName
+  #ifdef MyIsMediaTek
+    #define MyAppDirName "MediaTek Installer"
+  #else
+    #define MyAppDirName "UpdaterCE"
   #endif
 #endif
 #ifndef MyAppGroup
-  #ifdef MyIsMediaTek
-    #define MyAppGroup MyAppName
-  #else
-    #define MyAppGroup "Innioasis Community"
-  #endif
+  #define MyAppGroup MyAppName
 #endif
 #ifndef MyAppVersion
   #define MyAppVersion "2.5.0"
 #endif
 #ifndef MyAppPublisher
-  #define MyAppPublisher "Innioasis Community"
+  #define MyAppPublisher "Ryan Specter"
 #endif
 #ifndef MyAppURL
   #define MyAppURL "https://github.com/y1-community/updater-ce-neo"
@@ -65,7 +65,7 @@ AppUpdatesURL={#MyAppURL}/releases
 ; {autopf} is Program Files for an all-users install and the per-user
 ; Programs folder when the person chooses "just for me". Either way it is
 ; not the old %LocalAppData%\Innioasis Updater directory.
-DefaultDirName={autopf}\{#MyAppDirParent}\{#MyAppName}
+DefaultDirName={autopf}\{#MyAppDirName}
 DefaultGroupName={#MyAppGroup}
 DisableProgramGroupPage=yes
 ; Same AppId updates an existing install in place. A previous directory is
@@ -150,10 +150,16 @@ begin
     RegQueryStringValue(HKCU, SubKey, ValueName, Value);
 end;
 
-function IsLegacyLocalInstall(const Dir: String): Boolean;
+function IsLegacyInstallDir(const Dir: String): Boolean;
+var
+  L: String;
 begin
-  { The pre-3.x tree, and any 3.x copy that was still living there. }
-  Result := Pos('\appdata\local\innioasis updater', Lowercase(Dir)) > 0;
+  { The pre-3.x LocalAppData tree, any 3.x copy still living there, and the
+    Program Files "Innioasis Community\Updater CE" (and " 2.5") folders. }
+  L := Lowercase(Dir);
+  Result :=
+    (Pos('\appdata\local\innioasis updater', L) > 0) or
+    (Pos('\innioasis community\updater ce', L) > 0);
 end;
 
 function UninstallerExe(const Uninst: String): String;
@@ -204,6 +210,13 @@ begin
     NameContains(Name, 'Updater CE');
 end;
 
+function IsRetiredFolder(const Name: String): Boolean;
+begin
+  Result :=
+    NameContains(Name, 'Innioasis') or
+    NameContains(Name, 'SP Flash Tool');
+end;
+
 { Drop Start Menu folders named *Innioasis*, and shortcuts for the old
   app or SP Flash Tool, on this user's menus and desktops and on the
   system-wide ones. The new shortcuts are created afterwards from the
@@ -224,7 +237,7 @@ begin
       Path := Root + '\' + FindRec.Name;
       if (FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0 then
       begin
-        if NameContains(FindRec.Name, 'Innioasis') then
+        if IsRetiredFolder(FindRec.Name) then
           DelTree(Path, True, True, True)
         else
           PurgeShortcutTree(Path);
@@ -274,8 +287,39 @@ end;
 
 procedure RemoveLegacyDataDir(const Dir: String);
 begin
-  if (Dir <> '') and DirExists(Dir) and IsLegacyLocalInstall(Dir) then
+  if (Dir <> '') and DirExists(Dir) and IsLegacyInstallDir(Dir) then
     DelTree(Dir, True, True, True);
+end;
+
+{ A retired Program Files install: run its own uninstaller quietly when it
+  has one, then remove the folder. Never touches the folder being installed to. }
+procedure RemoveLegacyProgramDir(const Dir: String);
+var
+  ResultCode: Integer;
+begin
+  if (not DirExists(Dir)) or
+     (CompareText(RemoveBackslashUnlessRoot(Dir), RemoveBackslashUnlessRoot(ExpandConstant('{app}'))) = 0) then
+    Exit;
+  if FileExists(Dir + '\unins000.exe') then
+    Exec(Dir + '\unins000.exe', '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  DelTree(Dir, True, True, True);
+end;
+
+procedure RemoveLegacyProgramFilesUnder(const Root: String);
+begin
+  if Root = '' then
+    Exit;
+  RemoveLegacyProgramDir(Root + '\Innioasis Community\Updater CE');
+  RemoveLegacyProgramDir(Root + '\Innioasis Community\Updater CE 2.5');
+  { Only removed if nothing else is left in it. }
+  RemoveDir(Root + '\Innioasis Community');
+end;
+
+{ Program Files and Program Files (x86) variants of the retired folders. }
+procedure RemoveLegacyProgramFiles;
+begin
+  RemoveLegacyProgramFilesUnder(ExpandConstant('{commonpf64}'));
+  RemoveLegacyProgramFilesUnder(ExpandConstant('{commonpf32}'));
 end;
 
 { %LocalAppData%\Innioasis Updater for this account, and for every
@@ -335,8 +379,8 @@ begin
   if IsUpdaterCeBrand then
   begin
     Prev := WizardForm.DirEdit.Text;
-    if IsLegacyLocalInstall(Prev) then
-      WizardForm.DirEdit.Text := ExpandConstant('{autopf}\{#MyAppDirParent}\{#MyAppName}');
+    if IsLegacyInstallDir(Prev) then
+      WizardForm.DirEdit.Text := ExpandConstant('{autopf}\{#MyAppDirName}');
   end;
   if IsUpdaterCeBrand and (not TasksWereRecorded) and PriorDesktopShortcut then
   begin
@@ -362,12 +406,13 @@ begin
   if QueryUninstallValue(CurrentUninstallKey, 'InstallLocation', Prev) then
   begin
     Dest := ExpandConstant('{app}');
-    if IsLegacyLocalInstall(Prev) and
+    if IsLegacyInstallDir(Prev) and
        (CompareText(RemoveBackslashUnlessRoot(Prev), RemoveBackslashUnlessRoot(Dest)) <> 0) then
       RunSilentUninstall(CurrentUninstallKey);
   end;
 
   PurgeRetiredShortcuts;
   RemoveLegacyLocalAppData;
+  RemoveLegacyProgramFiles;
 end;
 

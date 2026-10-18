@@ -119,7 +119,8 @@ def test_donation_status_bar_rotation_and_centering(qapp):
     # Initial state: showing goal
     assert bar._showing_goal is True
     assert bar._goal_bar.isVisible()
-    assert bar._right_balance.width() == bar._credits_link.width()
+    # The goal line sits flush in the right corner (no mirror spacer on the right).
+    assert bar._goal_group.x() + bar._goal_group.width() >= bar.width() - 16
 
     # Rotate to donor line: goal bar must be hidden so no space is wasted
     bar._rotate()

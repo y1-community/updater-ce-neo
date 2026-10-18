@@ -422,7 +422,7 @@ class DonationStatusBar(QStatusBar):
 
         self._goal_ticker = _Ticker(self._goal_group)
         self._goal_label = self._goal_ticker.label
-        self._goal_label.setAlignment(Qt.AlignCenter)
+        self._goal_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self._style_bar_label(self._goal_label, weight=600)
         self._seal_ticker(self._goal_label)
         goal_row.addWidget(self._goal_ticker, 1, Qt.AlignVCenter)
@@ -430,7 +430,7 @@ class DonationStatusBar(QStatusBar):
         self._donor_ticker = _Ticker(self._goal_group)
         self._donor_label = self._donor_ticker.label
         self._donor_label.setTextFormat(Qt.RichText)
-        self._donor_label.setAlignment(Qt.AlignCenter)
+        self._donor_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self._style_bar_label(self._donor_label, weight=500)
         self._seal_ticker(self._donor_label)
         self._donor_label.setVisible(False)
@@ -448,10 +448,6 @@ class DonationStatusBar(QStatusBar):
         self._goal_group.setMinimumWidth(0)
         self._goal_group.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         row.addWidget(self._goal_group, 1)
-
-        self._right_balance = QWidget(self._donation_container)
-        self._right_balance.setFixedHeight(1)
-        row.addWidget(self._right_balance, 0, Qt.AlignVCenter)
 
         self._support_btn = _LinkButton(tr("nav_donate"))
         self._support_btn.setToolTip(tr_brand("donate_title"))
@@ -494,8 +490,6 @@ class DonationStatusBar(QStatusBar):
             return
         credits_w = self._link_text_width(self._credits_link)
         self._credits_link.setFixedWidth(credits_w)
-        if hasattr(self, "_right_balance"):
-            self._right_balance.setFixedWidth(credits_w)
         if hasattr(self, "_support_btn"):
             self._support_btn.setVisible(False)
             self._support_btn.setFixedWidth(0)
@@ -571,8 +565,10 @@ class DonationStatusBar(QStatusBar):
                 f'<a href="{url}" style="color:{t.fg}; font-weight:bold;">{short_name}</a>'
                 if url else short_name
             )
+            # "donated $5 · Yesterday": the time period follows the amount.
+            when_text = f" · {when}" if when else ""
             lines.append(tr("donate_ticker_status_fmt").format(
-                anchor=anchor, amount=amount_text
+                anchor=anchor, amount=amount_text, when=when_text
             ))
         return lines or [tr("donate_thanks_status")]
 

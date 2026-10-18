@@ -29,3 +29,12 @@ mental_model/
 
 # debug harness run output
 debug/work/
+/.tmp-agent
+*.log
+
+# Machine-specific SP Flash Tool state (paths, history, UI prefs)
+tools/linux/SP_Flash_Tool_v5.1904_Linux/history.ini
+tools/linux/SP_Flash_Tool_v5.1904_Linux/option.ini
+
+# Local SP Flash Tool source checkout (large, not referenced by the build)
+tools/sp-flash-tool-src/

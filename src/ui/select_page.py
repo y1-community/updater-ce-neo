@@ -101,6 +101,7 @@ class ReleasesWorker(QThread):
         prefer_240p=False,
         force_refresh=False,
         parent=None,
+        show_original_pre_307=False,
     ):
         super().__init__(parent)
         self.client = client
@@ -111,6 +112,7 @@ class ReleasesWorker(QThread):
         self.show_old_rockbox = show_old_rockbox
         self.prefer_240p = prefer_240p
         self.force_refresh = force_refresh
+        self.show_original_pre_307 = show_original_pre_307
 
     def run(self):
         try:
@@ -124,6 +126,7 @@ class ReleasesWorker(QThread):
                 show_old_rockbox=self.show_old_rockbox,
                 prefer_240p=self.prefer_240p,
                 force_refresh=self.force_refresh,
+                show_original_pre_307=self.show_original_pre_307,
             )
             if self.isInterruptionRequested():
                 return
@@ -1730,6 +1733,16 @@ class SelectPackagePage(QWidget):
         software = (self.current_software() or "").lower()
         return self.current_model().upper() == "Y2" and "rockbox" in software
 
+    def original_pre_307_listing(self) -> bool:
+        """Whether Original Software releases older than 3.0.7 may be listed.
+
+        Unlike the Rockbox filters this is not gated by Advanced Settings: the
+        pre-3.0.7 hide is the default, and only the explicit opt-in lifts it.
+        """
+        if not device_tracking.advanced_settings_enabled():
+            return False
+        return bool(device_tracking.rockbox_release_filters().original_pre_307)
+
     def release_listing_filters(self) -> tuple:
         """``(show_old, show_nightly, prefer_240p)`` for the current browse.
 
@@ -1785,6 +1798,7 @@ class SelectPackagePage(QWidget):
             show_nightly=show_nightly,
             selected_type=self._selected_type,
             show_old_rockbox=show_old,
+            show_original_pre_307=self.original_pre_307_listing(),
             prefer_240p=prefer_240p,
             force_refresh=force_refresh,
             parent=self,

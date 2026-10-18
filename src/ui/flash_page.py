@@ -1809,6 +1809,8 @@ class FlashPage(QWidget):
 
     def _on_theme_push_progress(self, curr: int, total: int) -> None:
         from ..progress_model import scale_theme_progress
+        if total <= 0:
+            return
         pct = (float(curr) / max(1.0, float(total))) * 100.0
         scaled = scale_theme_progress(pct)
         self._progress_bar.set_precise_value(scaled)
@@ -1874,8 +1876,19 @@ class FlashPage(QWidget):
 
         self._dir_merge_worker = DirMergeWorker(src_dir, dest_dir, parent=self)
         self._dir_merge_worker.progress.connect(self._on_theme_push_progress)
-        self._dir_merge_worker.finished.connect(lambda count: self._finish_rockbox_themes_stage(manual_count=count, dest=str(dest_dir)))
+        self._dir_merge_worker.finished.connect(
+            lambda ok, err, count: self._on_dir_merge_finished(ok, err, count, str(dest_dir))
+        )
         self._dir_merge_worker.start()
+
+    def _on_dir_merge_finished(self, ok: bool, err: str, count: int, dest: str) -> None:
+        """Only declare the theme stage complete once files were really copied."""
+        if ok and count > 0:
+            self._finish_rockbox_themes_stage(manual_count=count, dest=dest)
+            return
+        reason = err or "no theme files were copied"
+        self._log_theme(f"[Rockbox Themes] Merge into {dest} did not complete: {reason}. Showing USB storage guidance again.")
+        self._show_theme_fallback_usb_mode()
 
     def _on_theme_yes_clicked(self) -> None:
         self._on_theme_fallback_next_clicked()

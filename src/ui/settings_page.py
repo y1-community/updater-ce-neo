@@ -31,6 +31,7 @@ from ..flash_service import (
     METHOD_SP,
     default_flash_method,
     normalise_method,
+    windows_only_method,
 )
 from ..i18n import tr, tr_brand
 from .dark import page_margins
@@ -388,6 +389,12 @@ class SettingsPage(QWidget):
         self._cb_240p.setToolTip(tr("settings_240p_tip"))
         self._cb_240p.toggled.connect(self._on_240p_toggled)
 
+        self._cb_original_pre307 = self._add_switch(
+            rock_layout, tr("settings_filter_original_pre307")
+        )
+        self._cb_original_pre307.setToolTip(tr("settings_original_pre307_warn_body"))
+        self._cb_original_pre307.toggled.connect(self._on_original_pre307_toggled)
+
         self._rockbox_card.set_layout(rock_layout)
 
         # --- Card 3: Show App Supporter Credits and Donations ---
@@ -589,6 +596,9 @@ class SettingsPage(QWidget):
             self._cb_old_rockbox.setChecked(flags[device_tracking.FILTER_OLD_ROCKBOX])
             self._cb_nightly.setChecked(flags[device_tracking.FILTER_NIGHTLY])
             self._cb_240p.setChecked(flags[device_tracking.FILTER_240P])
+            self._cb_original_pre307.setChecked(
+                flags[device_tracking.FILTER_ORIGINAL_PRE_307]
+            )
         finally:
             self._filters_loading = False
 
@@ -613,6 +623,26 @@ class SettingsPage(QWidget):
             return
         filters = device_tracking.set_rockbox_release_filter(
             device_tracking.FILTER_NIGHTLY, bool(checked)
+        )
+        self._apply_filter_flags(filters)
+        self.release_filters_changed.emit()
+
+    def _confirm_original_pre307(self) -> bool:
+        """Ask before showing Original Software builds older than 3.0.7 for Y1 Type A."""
+        return self._rockbox_card.run_confirmation(
+            tr("settings_original_pre307_warn_body"),
+            tr("dialog_pre_install_continue"),
+            tr("flash_btn_cancel"),
+        )
+
+    def _on_original_pre307_toggled(self, checked: bool):
+        if self._filters_loading:
+            return
+        if checked and not self._confirm_original_pre307():
+            self._apply_filter_flags()
+            return
+        filters = device_tracking.set_rockbox_release_filter(
+            device_tracking.FILTER_ORIGINAL_PRE_307, bool(checked)
         )
         self._apply_filter_flags(filters)
         self.release_filters_changed.emit()
@@ -706,6 +736,10 @@ class SettingsPage(QWidget):
         if paths.IS_MAC:
             # No SP Flash Tool build exists for macOS.
             return (METHOD_MTK,)
+        locked = windows_only_method()
+        if locked:
+            # Windows is fixed by CPU: x86/x64 gets SP Flash Tool only, ARM64 MTKClient only.
+            return (locked,)
         methods = [METHOD_SP]
         if self._advanced_revealed or not paths.IS_WINDOWS:
             methods.append(METHOD_MTK)
@@ -1489,6 +1523,10 @@ class SettingsPage(QWidget):
         self._cb_old_rockbox.setToolTip(tr("settings_old_rockbox_warn_body"))
         self._set_switch_caption(self._cb_nightly, tr("settings_filter_nightly"))
         self._set_switch_caption(self._cb_240p, tr("settings_filter_240p"))
+        self._set_switch_caption(
+            self._cb_original_pre307, tr("settings_filter_original_pre307")
+        )
+        self._cb_original_pre307.setToolTip(tr("settings_original_pre307_warn_body"))
         self._cb_240p.setToolTip(tr("settings_240p_tip"))
         self._donations_card.retranslate()
         self._set_switch_caption(self._cb_hide_donations, tr("settings_show_donations"))
