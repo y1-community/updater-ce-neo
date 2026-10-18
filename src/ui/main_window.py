@@ -840,6 +840,7 @@ class MainWindow(QMainWindow):
         self._stack = CurrentPageStack()
         self._paint_opaque(self._stack)
         self._select_page = SelectPackagePage()
+        QTimer.singleShot(0, self._prefill_fw_package)
         self._flash_page = FlashPage()
         self._error_page = ErrorPage()
         self._retry_page = RetryPage()
@@ -3392,7 +3393,9 @@ class MainWindow(QMainWindow):
         self._last_progress = 0
         pre_extracted = completed_extract_dir(self._package_path)
         if pre_extracted:
-            self._flash_page.show_connect_search()
+            # The connect sentence waits for the tool's own search line (see
+            # _on_step_changed STEP_WAITING); until then it is only "please wait".
+            self._flash_page.show_please_wait()
         else:
             self._flash_page.show_preparing()
             self._flash_page.set_attempt_timeout(0)
@@ -3418,6 +3421,10 @@ class MainWindow(QMainWindow):
             )
         except Exception as e:
             logger.debug("Could not pre-update SP history.ini in _begin_flash_flow: %s", e)
+        # A new install replaces the saved firmware set: the installed package's
+        # archive and extracted files are kept, older ones are removed.
+        from ..flash_service import prune_extracted_cache
+        prune_extracted_cache(keep_package_path=self._package_path)
         da_file, auth_file = self._flash_inputs()
         self.service.start_flash(
             self._package_path,
@@ -3950,6 +3957,9 @@ class MainWindow(QMainWindow):
         # step and start the other one from there.
         if not cache_failure and self._offer_backend_failover(error_code):
             return
+        if not cache_failure and getattr(self.service, "_mtk_stall_prompt_text", lambda: None)():
+            self._show_mtk_stall_restart_prompt()
+            return
         try:
             self.sm.transition_to(FlashState.S5_FAILED)
         except ValueError:
@@ -4169,6 +4179,40 @@ class MainWindow(QMainWindow):
 
     def _on_cancel_wait(self):
         self._return_to_select_software()
+
+    def _show_mtk_stall_restart_prompt(self):
+        """Show the restart-and-quit prompt after an MTKClient output stall and quit on OK."""
+        text = getattr(self.service, "_mtk_stall_prompt_text", lambda: None)()
+        if not text:
+            return
+        title = text.get("title", tr("prompt_restart_and_quit_title"))
+        desc = text.get("desc", tr("prompt_restart_and_quit_desc"))
+        prompt = tr("prompt_restart_and_quit_ok")
+        from PySide6.QtWidgets import QMessageBox
+        dialog = QMessageBox(
+            QMessageBox.Information,
+            title,
+            desc,
+            QMessageBox.Ok,
+            self,
+        )
+        dialog.setWindowTitle(title)
+        dialog.setText(desc)
+        dialog.setInformativeText("")
+        dialog.addButton(prompt, QMessageBox.AcceptRole)
+        dialog.setDefaultButton(QMessageBox.Ok)
+        if dialog.exec() == QMessageBox.Ok:
+            self.service.cancel_flash()
+            self.service.stop_device_monitor()
+            from .. import process_guard
+            for _ in process_guard.end_install_session(reason="restart prompt accepted"):
+                pass
+            try:
+                from ..sleep_inhibit import release_sleep_inhibition
+                release_sleep_inhibition()
+            except Exception:
+                pass
+            QApplication.quit()
 
     def _on_method_changed(self, method):
         """Apply an install method chosen in Settings.
@@ -4866,6 +4910,18 @@ class MainWindow(QMainWindow):
             logger.debug("Could not stop the previous install session", exc_info=True)
             return
         self._append_log(report)
+
+    def _prefill_fw_package(self):
+        """If this app sits beside (or in a subfolder of) a firmware package, open install-from-file on it."""
+        from ..fw_package import find_installed_package
+
+        try:
+            pkg = find_installed_package()
+        except Exception as e:
+            logging.getLogger(__name__).warning("fw_package check failed: %s", e)
+            return
+        if pkg is not None:
+            self._select_page.prefill_fw_package(pkg)
 
     def _launch_sp_gui(self, scatter, extract_dir, model):
         from ..sp_flash_gui import launch_sp_flash_tool_gui

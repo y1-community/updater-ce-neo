@@ -40,9 +40,9 @@ from ..flash_service import (
     compute_extract_dir,
     _is_extract_complete,
     _find_scatter,
-    prune_extracted_cache,
 )
 from ..sp_flash_gui import update_sp_history_ini
+from ..fw_package import locate_package as locate_fw_package, read_package as read_fw_package
 from ..config import (
     DEVICE_MODELS,
     detect_model_and_type_from_name,
@@ -102,6 +102,7 @@ class ReleasesWorker(QThread):
         force_refresh=False,
         parent=None,
         show_original_pre_307=False,
+        show_safety_blocked=False,
     ):
         super().__init__(parent)
         self.client = client
@@ -113,6 +114,7 @@ class ReleasesWorker(QThread):
         self.prefer_240p = prefer_240p
         self.force_refresh = force_refresh
         self.show_original_pre_307 = show_original_pre_307
+        self.show_safety_blocked = show_safety_blocked
 
     def run(self):
         try:
@@ -127,6 +129,7 @@ class ReleasesWorker(QThread):
                 prefer_240p=self.prefer_240p,
                 force_refresh=self.force_refresh,
                 show_original_pre_307=self.show_original_pre_307,
+                show_safety_blocked=self.show_safety_blocked,
             )
             if self.isInterruptionRequested():
                 return
@@ -267,6 +270,7 @@ class SelectPackagePage(QWidget):
         self._download_worker = None
         self._current_package_path = ""
         self._current_package_name = ""
+        self._fw_package = None
         self._current_package_model = ""
         # MediaTek Installer inputs (Download Agent + scatter are required, the
         # auth file optional). Updater CE leaves the DA empty so the bundled
@@ -1793,6 +1797,9 @@ class SelectPackagePage(QWidget):
             selected_type=self._selected_type,
             show_old_rockbox=show_old,
             show_original_pre_307=self.original_pre_307_listing(),
+            # Selecting old Rockbox or the pre-3.0.7 Original build turns on the
+            # listing of safety-blocked releases for that choice.
+            show_safety_blocked=bool(show_old or self.original_pre_307_listing()),
             prefer_240p=prefer_240p,
             force_refresh=force_refresh,
             parent=self,
@@ -2488,9 +2495,6 @@ class SelectPackagePage(QWidget):
             return
         self._download_status_key = "sel_prepare_done"
 
-        # Retain only the most recently downloaded software package!
-        prune_extracted_cache(keep_package_path=self._current_package_path)
-
         # Track latest package in device_tracking and prepopulate SP history.ini
         scatter_file = _find_scatter(Path(extract_dir))
         scatter_abs = scatter_file.resolve() if scatter_file else None
@@ -2514,6 +2518,11 @@ class SelectPackagePage(QWidget):
         self._emit_ready()
 
     def _on_local_prep_done(self, ok, extract_dir, err):
+        if ok and self._fw_package is None and extract_dir:
+            # A browsed zip or folder that carries fw_package.ini fills in its model, type, name and header.
+            self._fw_package = locate_fw_package(extract_dir)
+            if self._fw_package is not None:
+                self._apply_fw_package(self._fw_package)
         self._local_bar.setVisible(False)
         self.prep_finished.emit(bool(ok))
         if not ok:
@@ -2530,9 +2539,6 @@ class SelectPackagePage(QWidget):
             return
         self._local_status_key = "sel_prepare_done"
         self._local_status.setText(tr("sel_prepare_done"))
-
-        # Retain only this package's extracted files
-        prune_extracted_cache(keep_package_path=self._current_package_path)
 
         # Show the browsed package in the details header and start its icon path.
         self._details_package = self._details_package or catalog.FirmwarePackage(
@@ -2581,6 +2587,7 @@ class SelectPackagePage(QWidget):
         self._start_btn.setEnabled(True)
 
     def _on_choose_file(self):
+        self._fw_package = None
         filter_str = tr("sel_dialog_filter")
         path, _ = QFileDialog.getOpenFileName(self, tr("sel_dialog_title"), "", filter_str)
         if not path:
@@ -2659,8 +2666,67 @@ class SelectPackagePage(QWidget):
         )
         if not folder:
             return
+        self.load_local_folder(folder)
+
+    def prefill_fw_package(self, pkg) -> None:
+        """Open the install-from-file view on a firmware package's folder (fw_package.ini)."""
+        self._show_local_view()
+        self.load_local_folder(str(pkg.folder))
+
+    def _apply_fw_package(self, pkg) -> None:
+        """Fill model, type, name and the header from fw_package.ini."""
+        if pkg.model:
+            self._current_package_model = pkg.model
+            self._select_model_for_manual(pkg.model)
+        if pkg.type:
+            idx = self._fw_type_index(pkg.type)
+            if idx >= 0:
+                self._type_combo.setCurrentIndex(idx)
+                self._selected_type = self._type_combo.itemData(idx)
+        if pkg.display_name:
+            self._current_package_name = pkg.display_name
+        self._details_package = catalog.FirmwarePackage(
+            slug="local-" + pkg.folder.name,
+            name=self._current_package_name or pkg.folder.name,
+            model=self._current_package_model or "",
+            repo="",
+            package_name="",
+        )
+        self._set_details_header(None, self._details_package)
+
+    def _fw_type_index(self, wanted: str) -> int:
+        """Index of the software-type entry matching the ini's ``type`` (by data or label, any case)."""
+        want = wanted.strip().lower()
+        for i in range(self._type_combo.count()):
+            data = self._type_combo.itemData(i)
+            if (data and str(data).lower() == want) or self._type_combo.itemText(i).lower() == want:
+                return i
+        return -1
+
+    def _show_fw_package_header(self, pkg) -> None:
+        """Name, version and the package's updater image, shown like an online firmware header."""
+        from PySide6.QtGui import QPixmap
+        from .surfaces import seal_updating_text
+        from .dark import is_dark
+        from .release_icon import pixmap_from_icon_bytes
+        from ..release_icons import load_local_package_icon_bytes
+
+        self._details_name.setText(pkg.name or pkg.folder.name)
+        self._details_version.setText(pkg.version or "")
+        seal_updating_text(self._details_name)
+        seal_updating_text(self._details_version)
+        pix = QPixmap()
+        data = load_local_package_icon_bytes(self._current_package_path, dark=bool(is_dark()))
+        if data:
+            pix = pixmap_from_icon_bytes(data)
+        self._present_details_icon(pix, immediate=True)
+        self._icon_phase = "release" if not pix.isNull() else "placeholder"
+        self._details_header.setVisible(True)
+
+    def load_local_folder(self, folder: str) -> None:
         p = Path(folder)
         display_name = p.name
+        self._fw_package = read_fw_package(p)
 
         self._path_edit.setText(folder)
         self._current_package_path = folder
@@ -2700,6 +2766,8 @@ class SelectPackagePage(QWidget):
             else:
                 self._selected_type = None
 
+        if self._fw_package is not None:
+            self._apply_fw_package(self._fw_package)
         self._remember_gui_local(folder, self._current_package_model, self._current_package_name)
         self._set_local_banner("sel_current_pkg", display_name)
         self._details_package = catalog.FirmwarePackage(
@@ -2968,6 +3036,9 @@ class SelectPackagePage(QWidget):
     def _set_details_header(self, rel, package) -> None:
         """Icon, software name, and the same version string as the release list."""
         self._details_package = package
+        if not rel and package is not None and self._fw_package is not None:
+            self._show_fw_package_header(self._fw_package)
+            return
         if not rel:
             self._details_header.setVisible(False)
             self._details_name.setText("")

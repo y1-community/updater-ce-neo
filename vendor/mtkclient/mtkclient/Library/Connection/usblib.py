@@ -540,13 +540,38 @@ class UsbClass(DeviceClass):
                         return b""
                     timeout += 1
                     pass
-                elif "Overflow" in error:
-                    # Overflow：buffer 仍然不够大，尝试更大的 buffer（4KB）
-                    # 注意：fast=True 时 read_sz 未赋值，统一用 sz 记录当前请求大小
-                    import sys as _sys
-                    print(f"[usbread] Overflow with sz={sz}, retrying with 4096",
-                          file=_sys.stderr, flush=True)
-                    try:
+                except usb.core.USBError as e:
+                    error = str(e.strerror)
+                    if "timed out" in error:
+                        self.debug("Timed out")
+                        if timeout == maxtimeout:
+                            return b""
+                        timeout += 1
+                        pass
+                    elif "Overflow" in error:
+                        # Overflow：buffer 仍然不够大，尝试更大的 buffer（4KB）
+                        # 注意：fast=True 时 read_sz 未赋值，统一用 sz 记录当前请求大小
+                        import sys as _sys
+                        print(f"[usbread] Overflow with sz={sz}, retrying with 4096",
+                              file=_sys.stderr, flush=True)
+                        try:
+                            rlen = epr(4096, timeout)
+                            if rlen > 0:
+                                if rlen > sz:
+                                    q.put(buffer[rlen - sz:])
+                                    extend(buffer[:sz])
+                                else:
+                                    extend(buffer[:rlen])
+                                if rlen < sz and maxtimeout == -1:
+                                    break
+                        except usb.core.USBError:
+                            self.debug("Retry also failed")
+                            return b""
+                    else:
+                        # Catch all other USB errors to return empty
+                        # rather than crashing the caller (e.g., struct.unpack on short data)
+                        self.debug(f"USB read error: {e}")
+                        return b""
                         dt = bytes(epr(4096))
                         rlen = len(dt)
                         print(f"[usbread] Overflow retry got {rlen} bytes", file=_sys.stderr, flush=True)

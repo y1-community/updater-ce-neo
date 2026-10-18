@@ -544,6 +544,22 @@ def release_version_ok(repo, tag_name, model=None, show_old_rockbox=False, show_
     return version >= minimum
 
 
+def _release_safety_blocked(package, model, selected_type, rel):
+    """True when the remote release blocklist hides this release."""
+    from . import release_blocklist
+
+    tag = rel.get("tag_name", "") or ""
+    is_nightly = release_version_tuple(tag) is None or bool(rel.get("prerelease"))
+    return release_blocklist.is_blocked(
+        release_blocklist.current_rules(),
+        getattr(package, "name", ""),
+        model,
+        selected_type or "",
+        tag,
+        is_nightly,
+    )
+
+
 # Y1 units sold with Innioasis OS 3.0.7 pre-installed will not boot older
 # Original Software builds, so those are hidden for Y1 Type A by default.
 ORIGINAL_Y1_TYPE_A_MIN_VERSION = (3, 0, 7)
@@ -1367,6 +1383,7 @@ class ReleasesClient:
         prefer_240p=False,
         force_refresh=False,
         show_original_pre_307=False,
+        show_safety_blocked=False,
     ):
         """Fetch releases for a catalogue package, filtered for the device model.
 
@@ -1392,6 +1409,8 @@ class ReleasesClient:
             ):
                 continue
             if not _release_matches_model(model, rel, package, selected_type):
+                continue
+            if not show_safety_blocked and _release_safety_blocked(package, model, selected_type, rel):
                 continue
             if rel.get("prerelease") and not show_nightly:
                 if not (package.slug == "rockbox-y2" or package.repo == "spycemagic/y2-rockbox" or (str(model or "").upper() == "Y2" and "rockbox" in package.slug)):

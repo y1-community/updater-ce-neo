@@ -1407,7 +1407,7 @@ _STRINGS: dict = {
     },
     "flash_please_wait": {
         "zh-CN": "请稍候",
-        "en": "Please wait",
+        "en": "Click Next, then enter your password when asked.",
         "fr": "Veuillez patienter",
         "es": "Espera un momento",
         "de": "Bitte warten",
@@ -1453,31 +1453,27 @@ _STRINGS: dict = {
     },
     "flash_connect_paperclip_prompt": {
         "zh-CN": "请用卡针/回形针按下耳机插孔旁边的按钮（若未开始请再次按下，直到安装进度开始）。",
-        "en": "Insert a paperclip/pin in the button next to headphone jack (press again until install progress begins).",
-        "fr": "Insérez un trombone/une aiguille dans le bouton à côté de la prise casque (appuyez à nouveau jusqu'à ce que la progression commence).",
-        "es": "Inserta un clip/aguja en el botón junto a la toma de auriculares (pulsa de nuevo hasta que comience el progreso).",
-        "de": "Drücken Sie mit einer Büroklammer/Nadel die Taste neben der Kopfhörerbuchse (erneut drücken, bis der Installationsfortschritt beginnt).",
-        "ja": "イヤホンジャック横のボタンにピンまたはクリップを差し込んでください（進捗が始まるまで再度押してください）。",
+        "en": "Tip: Power off the device by pressing the hidden button beside the headphone jack with a paperclip or pin.",
+        "fr": "Astuce : éteignez l'appareil en appuyant avec un trombone ou une aiguille sur le bouton caché à côté de la prise casque.",
+        "es": "Consejo: apague el dispositivo pulsando con un clip o una aguja el botón oculto junto a la toma de auriculares.",
     },
     "flash_connect_paperclip_prompt_a5": {
         "zh-CN": "请用卡针/回形针按下电源键附近的隐藏按钮（若未开始请再次按下，直到安装进度开始）。",
-        "en": "Insert a paperclip/pin in the button near the power button (press again until install progress begins).",
-        "fr": "Insérez un trombone/une aiguille dans le bouton près du bouton d'alimentation (appuyez à nouveau jusqu'à ce que la progression commence).",
-        "es": "Inserta un clip/aguja en el botón cerca del botón de encendido (pulsa de nuevo hasta que comience el progreso).",
-        "de": "Drücken Sie mit einer Büroklammer/Nadel die Taste nahe der Ein-/Aus-Taste (erneut drücken, bis der Installationsfortschritt beginnt).",
-        "ja": "電源ボタン近くのボタンにピンまたはクリップを差し込んでください（進捗が始まるまで再度押してください）。",
+        "en": "Tip: Power off your A5 by pressing the hidden button beside the power button with a clip using a paperclip or pin..",
+        "fr": "Astuce : éteignez votre A5 en appuyant avec un trombone ou une aiguille sur le bouton caché à côté du bouton d'alimentation en utilisant un trombone ou un épingle.",
+        "es": "Consejo: apague su A5 pulsando con un clip o una aguja el botón oculto junto al botón de encendido usando un clip o una aguja..",
     },
     "flash_paperclip_hint": {
         "zh-CN": "提示：用回形针或卡针按下耳机插孔旁边的隐藏按钮即可关机。",
-        "en": "Tip: Power off the device by pressing the hidden button beside the headphone jack with a paperclip or pin.",
+        "en": "Tip: Power off the device by pressing the hidden button beside the headphone jack using a paperclip or pin.",
         "fr": "Astuce : éteignez l'appareil en appuyant avec un trombone ou une aiguille sur le bouton caché à côté de la prise casque.",
         "es": "Consejo: apague el dispositivo pulsando con un clip o una aguja el botón oculto junto a la toma de auriculares.",
     },
     "flash_paperclip_hint_a5": {
         "zh-CN": "提示：用回形针或卡针按下电源键附近的隐藏按钮即可关机。",
-        "en": "Tip: Power off the device by pressing the hidden button near the power button with a paperclip or pin.",
-        "fr": "Astuce : éteignez l'appareil en appuyant avec un trombone ou une aiguille sur le bouton caché près du bouton d'alimentation.",
-        "es": "Consejo: apague el dispositivo pulsando con un clip o una aguja el botón oculto junto al botón de encendido.",
+        "en": "Tip: Power off your A5 by pressing the hidden button beside the power button with a clip using a paperclip or pin..",
+        "fr": "Astuce : éteignez votre A5 en appuyant avec un trombone ou une aiguille sur le bouton caché à côté du bouton d'alimentation en utilisant un trombone ou un épingle.",
+        "es": "Consejo: apague su A5 pulsando con un clip o una aguja el botón oculto junto al botón de encendido usando un clip o una aguja..",
     },
     "flash_y1_preloader_hint": {
         "zh-CN": "提示：用回形针或卡针按下耳机插孔旁边的隐藏按钮关机，关机后直接连接 USB 即可（无需长按按键）。",
@@ -4442,6 +4438,70 @@ _STRINGS: dict = {
         "de": "Der Flashvorgang wurde unterbrochen oder das Schreiben ist fehlgeschlagen. Prüfen Sie das USB-Kabel und den Akkustand, und versuchen Sie es erneut.",
         "ja": "フラッシュが中断されたか、書き込み操作に失敗しました。USBケーブルがしっかり接続され、バッテリー残量が十分であることを確認して、再試行してください。",
     },
+    "err_mtk_output_stall_title": {
+        "zh-CN": "刷机卡住了",
+        "en": "The flash appears to be stuck",
+        "fr": "Le flash semble bloqué",
+        "es": "El flasheo parece atascado",
+        "de": "Das Flashen scheint hängen geblieben",
+        "ja": "フラッシュが停滞しているようです",
+    },
+    "err_mtk_output_stall_desc": {
+        "zh-CN": "刷机工具在最近的 {seconds} 秒内仍在显示相同内容，好像没有继续写入固件。刷机可能失败了。如果这是最后一次尝试（包括所有安装方式），或此设备只能使用 MTKClient，请重启电脑后再试。",
+        "en": "The flashing tool has shown the same line for the last {seconds} seconds and does not appear to be continuing to write the firmware. The flash may have failed. If this was the last of two attempts with each method on a system that can fall back between them, or if only MTKClient is available on this machine, restart the computer and try again.",
+        "fr": "L'outil de flashage affiche la même ligne depuis les dernières {seconds} secondes et ne semble pas continuer à écrire le firmware. Le flash a peut-être échoué. Si c'était le dernier de deux essais avec chaque méthode sur un système qui peut basculer entre elles, ou si seul MTKClient est disponible sur cette machine, redémarrez l'ordinateur et réessayez.",
+        "es": "La herramienta de flasheo ha mostrado la misma línea durante los últimos {seconds} segundos y no parece seguir escribiendo el firmware. El flasheo puede haber fallado. Si fue el último de dos intentos con cada método en un sistema que puede cambiar entre ellos, o si solo está disponible MTKClient en esta máquina, reinicia el equipo e inténtalo de nuevo.",
+        "de": "Das Flashtool hat in den letzten {seconds} Sekunden dieselbe Zeile angezeigt und scheint nicht weiter das Firmware zu schreiben. Ein Flashen ist möglicherweise fehlgeschlagen. Wenn dies der letzte von zwei Versuchen mit jeder Methode auf einem System war, das zwischen ihnen ausweichen kann, oder wenn nur MTKClient auf dieser Maschine verfügbar ist, starte den Computer neu und versuche es erneut.",
+        "ja": "フラッシュツールは直近の {seconds} 秒間同じ行を表示しており、ファームウェアの書き込みを継続していないようです。フラッシュに失敗した可能性があります。これは、バックエンド間で切り替えできるシステムで各バックエンドの2回の試行の最後の1回だった場合、またはこのマシンでMTKClientしか利用できない場合は、コンピューターを再起動して再試行してください。",
+    },
+    "err_only_mtkclient_title": {
+        "zh-CN": "只有 MTKClient 可用",
+        "en": "Only MTKClient is available",
+        "fr": "Seul MTKClient est disponible",
+        "es": "Solo MTKClient está disponible",
+        "de": "Nur MTKClient verfügbar",
+        "ja": "MTKClientのみ利用できます",
+    },
+    "err_only_mtkclient_desc": {
+        "zh-CN": "此设备只能使用 MTKClient 安装。刷机可能失败了。请重启电脑后再试。",
+        "en": "Only MTKClient is available for this install. The flash may have failed. Please restart the computer and try again.",
+        "fr": "Seul MTKClient est disponible pour cette installation. Le flash a peut-être échoué. Veuillez redémarrer l'ordinateur et réessayer.",
+        "es": "Solo MTKClient está disponible para esta instalación. El flasheo puede haber fallado. Reinicia el equipo e inténtalo de nuevo.",
+        "de": "Für diese Installation ist nur MTKClient verfügbar. Ein Flashen ist möglicherweise fehlgeschlagen. Bitte den Computer neu starten und erneut versuchen.",
+        "ja": "このインストールにはMTKClientしか利用できません。フラッシュに失敗した可能性があります。コンピューターを再起動して再試行してください。",
+    },
+    "err_mtk_output_stall_fallback_available": {
+        "zh-CN": "此电脑也可以使用 SP Flash Tool 安装。如果可以，请切换到 SP Flash Tool 重试。",
+        "en": "This computer can also install using SP Flash Tool. If you can, switch to SP Flash Tool and try again.",
+        "fr": "Cet ordinateur peut aussi installer avec SP Flash Tool. Si vous le pouvez, basculez sur SP Flash Tool et réessayez.",
+        "es": "Esta computadora también puede instalar con SP Flash Tool. Si puedes, cambia a SP Flash Tool e inténtalo de nuevo.",
+        "de": "Dieser Computer kann auch mit SP Flash Tool installieren. Wenn möglich, wechsle zu SP Flash Tool und versuche es erneut.",
+        "ja": "このコンピューターはSP Flash Toolでもインストールできます。可能であればSP Flash Toolに切り替えて再試行してください。",
+    },
+    "prompt_restart_and_quit_title": {
+        "zh-CN": "请重启电脑",
+        "en": "Restart your computer",
+        "fr": "Redémarrez votre ordinateur",
+        "es": "Reinicia tu equipo",
+        "de": "Starte den Computer neu",
+        "ja": "コンピューターを再起動してください",
+    },
+    "prompt_restart_and_quit_desc": {
+        "zh-CN": "刷机可能失败了。请阅读上述信息，重启电脑后再试。如果你点击确定，应用将退出以便你重启。",
+        "en": "The flash may have failed. Please read the message above and restart the computer before trying again. If you click OK, the app will quit so you can restart.",
+        "fr": "Le flash a peut-être échoué. Lisez le message ci-dessus et redémarrez l'ordinateur avant de réessayer. Si vous cliquez sur OK, l'application se fermera pour vous permettre de redémarrer.",
+        "es": "El flasheo puede haber fallado. Lee el mensaje de arriba y reinicia el equipo antes de intentarlo de nuevo. Si haces clic en Aceptar, la aplicación se cerrará para que puedas reiniciar.",
+        "de": "Das Flashen ist möglicherweise fehlgeschlagen. Lies die obige Meldung und starte den Computer neu, bevor du es erneut versuchst. Wenn du auf OK klickst, wird die Anwendung beendet, damit du neu starten kannst.",
+        "ja": "フラッシュに失敗した可能性があります。上記のメッセージを読んでから再試行する前にコンピューターを再起動してください。[OK] をクリックすると、アプリケーションが終了して再起動できるようになります。",
+    },
+    "prompt_restart_and_quit_ok": {
+        "zh-CN": "确定",
+        "en": "OK",
+        "fr": "OK",
+        "es": "Aceptar",
+        "de": "OK",
+        "ja": "OK",
+    },
     "err_missing_package_files_title": {
         "zh-CN": "固件包无效或不完整",
         "en": "Invalid Firmware Package",
@@ -5338,6 +5398,11 @@ def translator() -> _Translator:
 
 def tr(key: str) -> str:
     return _global_translator.t(key)
+
+
+def current_language() -> str:
+    """The active UI language code (``en`` unless the user chose another)."""
+    return _global_translator.lang
 
 
 def tr_brand(key: str) -> str:

@@ -193,7 +193,7 @@ Expected output contains translated Markdown headers and bullet lists without HT
 
 ### 4. Windows Inno Setup Migration Rules
 - Inno Setup installer detects legacy versions (<3.0) via registry/uninstall keys and automatically removes them before installing Updater CE 3.0+.
-- The same installer is a clean install and an update of any earlier Updater CE release (same AppId, no version floor). It removes `%LocalAppData%\Innioasis Updater` and retired Innioasis / SP Flash Tool shortcuts, then installs under Program Files for all users or the per-user Programs folder when setup is told "just for me".
+- The same installer is a clean install and an update of any earlier Updater CE release (same AppId, no version floor). It removes `%LocalAppData%\Innioasis Updater` and retired Innioasis / SP Flash Tool shortcuts, then installs under Program Files. All users (admin) is the only install mode, so the installer always runs elevated, shows its step text on the Installing page, and stops running `InnioasisUpdater.exe`, `flash_tool.exe`, `adb.exe`, `python.exe` and `pythonw.exe` before files are copied.
 - GitHub Actions workflow `windows_installer.yml` runs on `workflow_dispatch` (manual release trigger).
 
 ## 11. Windows SP Flash Tool Integration & UI Verification

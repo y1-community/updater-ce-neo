@@ -3,6 +3,7 @@
 # (c) B.Kerler 2018-2025 GPLv3 License
 import logging
 import os
+import struct
 import sys
 import time
 from struct import pack, unpack
@@ -325,11 +326,19 @@ class DALegacy(metaclass=LogBase):
                 self.error(self.eh.status(errorval))
                 return False
             else:
-                nand_id_count = unpack(">H", self.usbread(2))[0]
+                nand_id_count_bytes = self._short_read(2)
+                if len(nand_id_count_bytes) != 2:
+                    self.error("Failed to read DRAM nand id count (USB reply too short)")
+                    return False
+                nand_id_count = unpack(">H", nand_id_count_bytes)[0]
                 self.info("Reading dram nand info ...")
                 nand_ids = []
                 for i in range(0, nand_id_count):
-                    nand_ids.append(unpack(">H", self.usbread(2))[0])
+                    nand_id_bytes = self._short_read(2)
+                    if len(nand_id_bytes) != 2:
+                        self.error("Failed to read DRAM nand id (USB reply too short)")
+                        return False
+                    nand_ids.append(unpack(">H", nand_id_bytes)[0])
                 if self.daconfig.emi is not None:  # toDo
                     self.usbwrite(self.Cmd.ENABLE_DRAM)  # E8
                     if self.daconfig.emiver == 0:
@@ -343,7 +352,11 @@ class DALegacy(metaclass=LogBase):
                     if ret == self.Rsp.ACK:
                         self.info(f"Sending dram info ... EMI-Version {hex(self.daconfig.emiver)}")
                         if self.daconfig.emiver in [0xF, 0x10, 0x11, 0x14, 0x15]:
-                            dramlength = unpack(">I", self.usbread(0x4))[0]  # 0x000000BC
+                            dramlength_val = self._safe_unpack(">I", self.usbread(0x4))
+                            if dramlength_val is None:
+                                self.error("Failed to read RAM length (USB reply too short)")
+                                return False
+                            dramlength = dramlength_val  # 0x000000BC
                             self.info(f"RAM-Length: {hex(dramlength)}")
                             self.usbwrite(self.Rsp.ACK)
                             lendram = len(self.daconfig.emi)
@@ -355,7 +368,11 @@ class DALegacy(metaclass=LogBase):
                             dramlength = unpack(">I", self.usbread(0x4))[0]
                             self.usbwrite(self.Rsp.ACK)
                         elif self.daconfig.emiver in [0x0C, 0x0D]:
-                            dramlength = unpack(">I", self.usbread(0x4))[0]
+                            dramlength_val = self._safe_unpack(">I", self.usbread(0x4))
+                            if dramlength_val is None:
+                                self.error("Failed to read RAM length (USB reply too short)")
+                                return False
+                            dramlength = dramlength_val
                             self.info(f"RAM-Length: {hex(dramlength)}")
                             self.usbwrite(self.Rsp.ACK)
                             self.daconfig.emi = self.daconfig.emi[:dramlength]
@@ -370,11 +387,24 @@ class DALegacy(metaclass=LogBase):
                         else:
                             self.warning("Unknown emi version: %d" % self.daconfig.emiver)
                         self.usbwrite(self.daconfig.emi)
-                        checksum = unpack(">H", self.usbread(2))[0]  # 0x440C
+
+                        checksum_bytes = self._short_read(2)
+                        if len(checksum_bytes) != 2:
+                            self.error("Failed to read stage-2 config checksum (USB reply too short)")
+                            return False
+                        checksum_val = self._safe_unpack(">H", checksum_bytes)
+                        if checksum_val is None:
+                            self.error("Failed to parse stage-2 config checksum (invalid data)")
+                            return False
+                        checksum = checksum_val  # 0x440C
                         self.info("Checksum: %04X" % checksum)
                         self.usbwrite(self.Rsp.ACK)
                         self.usbwrite(pack(">I", 0x80000001))  # Send DRAM config
-                        m_ext_ram_ret = unpack(">I", self.usbread(4))[0]  # 0x00000000 S_DONE
+                        m_ext_ram_ret = self._safe_unpack(">I", self._short_read(4))
+                        if m_ext_ram_ret is None:
+                            self.error("Failed to read M_EXT_RAM_RET (USB reply too short)")
+                            return False
+                        m_ext_ram_ret = m_ext_ram_ret  # 0x00000000 S_DONE
                         self.info(f"M_EXT_RAM_RET : {m_ext_ram_ret}")
                         if m_ext_ram_ret != 0:
                             self.error("Preloader error: 0x%X => %s" % (m_ext_ram_ret, self.eh.status(m_ext_ram_ret)))
@@ -401,6 +431,38 @@ class DALegacy(metaclass=LogBase):
                     self.mtk.port.close(reset=True)
                     return False
         return True
+
+    def _short_read(self, length):
+        """Read exactly ``length`` bytes for small protocol fields.
+
+        Legacy DA code sometimes does ``unpack(\">H\", self.usbread(2))`` against
+        a port that has gone silent or wedged. That turns a USB-level stall into
+        an unhandled ``struct.error`` (e.g. ``unpack requires a buffer of 2 bytes``)
+        that bubbles all the way to the app as a traceback. This helper is the
+        smallest local fix: keep the existing behaviour for good replies, but turn
+        short or empty replies into a clean ``b\"\"`` so the caller can report a
+        stage-2 config / handshake failure instead of crashing.
+        """
+        try:
+            data = self.usbread(length)
+        except Exception:
+            return b""
+        if not isinstance(data, (bytes, bytearray)):
+            return b""
+        if len(data) < length:
+            return b""
+        return bytes(data[:length])
+
+    def _safe_unpack(self, fmt, data):
+        """Safely unpack data, returning None on failure.
+
+        Provides a clean way to handle short or malformed USB responses
+        without raising struct.error exceptions.
+        """
+        try:
+            return unpack(fmt, data)[0]
+        except (struct.error, TypeError, ValueError):
+            return None
 
     def set_speed_iot(self):
         self.usbwrite(b"\x59")
@@ -605,19 +667,38 @@ class DALegacy(metaclass=LogBase):
                     return False
 
             self.info("Reading nand info")
-            nandinfo = unpack(">I", self.usbread(4))[0]  # 0xBC4
-            self.debug(f"NAND_INFO: {hex(nandinfo)}")
-            ids = unpack(">H", self.usbread(2))[0]
+            nandinfo_val = self._safe_unpack(">I", self._short_read(4))
+            if nandinfo_val is None:
+                self.error("Failed to read NAND info (USB reply too short)")
+                return False
+            nandinfo = nandinfo_val  # 0xBC4            self.debug(f"NAND_INFO: {hex(nandinfo)}")
+            ids_val = self._safe_unpack(">H", self._short_read(2))
+            if ids_val is None:
+                self.error("Failed to read NAND ID count (USB reply too short)")
+                return False
+            ids = ids_val
             nandids = []
             for i in range(0, ids):
-                tmp = unpack(">H", self.usbread(2))[0]
+                tmp_val = self._safe_unpack(">H", self._short_read(2))
+                if tmp_val is None:
+                    self.error("Failed to read NAND ID (USB reply too short)")
+                    return False
+                tmp = tmp_val
                 nandids.append(tmp)
             self.info("Reading emmc info")
-            emmcinfolegacy = unpack(">I", self.usbread(4))[0]
+            emmcinfolegacy_val = self._safe_unpack(">I", self._short_read(4))
+            if emmcinfolegacy_val is None:
+                self.error("Failed to read eMMC info (USB reply too short)")
+                return False
+            emmcinfolegacy = emmcinfolegacy_val
             self.debug(f"EMMC_INFO: {hex(emmcinfolegacy)}")
             emmcids = []
             for i in range(0, 4):
-                tmp = unpack(">I", self.usbread(4))[0]
+                tmp_val = self._safe_unpack(">I", self._short_read(4))
+                if tmp_val is None:
+                    self.error("Failed to read eMMC ID (USB reply too short)")
+                    return False
+                tmp = tmp_val
                 emmcids.append(tmp)
 
             if len(nandids) > 0 and nandids[0] != 0:

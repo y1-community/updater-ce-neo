@@ -52,6 +52,9 @@ from .icons import get_symbol_icon, get_symbol_pixmap
 # card reports a one-line size hint unless it is given this width.
 INSTALL_TEXT_WIDTH = 220
 
+#: Settle time after ADB detection so org.rockbox can populate .rockbox.
+ROCKBOX_BOOT_WAIT_MS = 20_000
+
 
 def install_horizontal_chrome(sidebar: int) -> int:
     """Pixels beside the wrapping column: sidebar, pads, icon, and the chips.
@@ -1434,7 +1437,7 @@ class FlashPage(QWidget):
         self._switch_view(self._flashing_view)
         failed = self._failed
         done = bool(getattr(self, "_complete", False)) and not failed
-        self._warning.setVisible(not failed and not done)
+        self._warning.setVisible(self._flash_warning_wanted())
         if hasattr(self, "_flash_retry_btn"):
             self._flash_retry_btn.setVisible(failed)
         if hasattr(self, "_cancel_btn"):
@@ -1659,6 +1662,7 @@ class FlashPage(QWidget):
         log_cb=None,
         on_troubleshoot=None,
         already_powered_on=False,
+        automatic=False,
     ) -> None:
         """Seamless in-card Rockbox 360p themes & fonts post-install flow."""
         self._theme_stage_model = model
@@ -1690,6 +1694,7 @@ class FlashPage(QWidget):
 
         model_str = (model or "Y1").upper()
         self._rockbox_already_powered_on = bool(already_powered_on)
+        self._theme_automatic = bool(automatic)
         self._log_theme(f"[Rockbox Themes] Starting 360p themes & fonts stage for {model_str}...")
 
         from ..adb import find_adb_binary, adb_devices
@@ -1712,7 +1717,9 @@ class FlashPage(QWidget):
         # If MTKClient's post-flash handoff already asked the user to boot the
         # player, go straight to the USB/ADB reconnect step instead of asking
         # them to power it on a second time.
-        if already_powered_on:
+        # SP Flash installs never need the manual disconnect/power-on steps:
+        # go straight to the silent ADB watch. MTKClient installs still do.
+        if automatic or already_powered_on:
             self._start_theme_step2_connect_usb()
         else:
             self._show_theme_step1_disconnect_power_on()
@@ -1754,10 +1761,10 @@ class FlashPage(QWidget):
             win._adjust_window_geometry()
 
         model_str = getattr(self, "_theme_stage_model", "Y1").upper()
-        self._adb_watch_seconds = 60
+        self._adb_watch_seconds = 90
         usb_prompt = tr("rockbox_step2_connect_usb").format(model=model_str)
         adb_status = tr("rockbox_stage_waiting_adb_fmt").format(remaining=self._adb_watch_seconds)
-        self._eta_label.setText(f"{usb_prompt}\n{adb_status}")
+        self._eta_label.setText(tr("rockbox_stage_installing") if getattr(self, "_theme_automatic", False) else f"{usb_prompt}\n{adb_status}")
         self._log_theme(f"[Rockbox Themes] Step 2: Waiting for USB connection and ADB handshake ({self._adb_watch_seconds}s timeout)...")
 
         from ..adb import find_adb_binary
@@ -1783,7 +1790,7 @@ class FlashPage(QWidget):
             model_str = getattr(self, "_theme_stage_model", "Y1").upper()
             usb_prompt = tr("rockbox_step2_connect_usb").format(model=model_str)
             adb_status = tr("rockbox_stage_waiting_adb_fmt").format(remaining=self._adb_watch_seconds)
-            self._eta_label.setText(f"{usb_prompt}\n{adb_status}")
+            self._eta_label.setText(tr("rockbox_stage_installing") if getattr(self, "_theme_automatic", False) else f"{usb_prompt}\n{adb_status}")
             if self._adb_watch_seconds in (50, 40, 30, 20, 10, 5):
                 self._log_theme(f"[Rockbox Themes] Waiting for ADB device... ({self._adb_watch_seconds}s remaining)")
         else:
@@ -1795,7 +1802,12 @@ class FlashPage(QWidget):
             self._adb_watch_timer.stop()
         if hasattr(self, "_theme_row"):
             self._theme_row.setVisible(False)
-        self._log_theme(f"[Rockbox Themes] Player detected via ADB (serial: {serial})! Pushing 360p themes & fonts...")
+        self._log_theme(f"[Rockbox Themes] Player detected via ADB (serial: {serial}). Waiting {ROCKBOX_BOOT_WAIT_MS // 1000}s for Rockbox to populate .rockbox...")
+        self._eta_label.setText(tr("rockbox_stage_installing"))
+        QTimer.singleShot(ROCKBOX_BOOT_WAIT_MS, lambda: self._start_adb_theme_push(serial))
+
+    def _start_adb_theme_push(self, serial: str) -> None:
+        self._log_theme("[Rockbox Themes] Pushing 360p themes & fonts over ADB...")
         self._eta_label.setText(tr("rockbox_stage_pushing"))
         from ..adb import find_adb_binary
         from ..theme_pack import AdbPushWorker, bundled_rockbox_dir
@@ -2239,7 +2251,17 @@ class FlashPage(QWidget):
         self._dev_value_key = "status_connected"
         self._conn_row.set_value(tr("flash_conn_connected"))
         self._dev_row.set_value(tr("status_connected"))
-        self._warning.setVisible(True)
+        self._warning.setVisible(self._flash_warning_wanted())
+
+    def _flash_warning_wanted(self) -> bool:
+        """'Do not unplug' applies only while the write is running.
+
+        Not once the install has completed, and not during the Rockbox themes
+        and fonts stage, which runs after the flash has finished.
+        """
+        if getattr(self, "_failed", False) or getattr(self, "_complete", False):
+            return False
+        return not getattr(self, "_themes_stage_active", False)
 
     def set_device_done(self):
         self._complete = True

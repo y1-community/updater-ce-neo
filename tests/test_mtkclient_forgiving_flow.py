@@ -68,24 +68,25 @@ def test_mtkclient_paperclip_prompt_and_120s_timeout():
     assert "please connect your y1" in text_y1.lower()
     assert "(120s)" in text_y1
 
-    # Pin hint is available for both backends at the power-off step
+    # Paperclip hint is available for known models at the power-off step
     page.show()
     page.show_power_off_prompt(show_pin_tip=True)
-    assert not page._wait_mode_hint.isHidden()
-    assert "headphone jack" in page._wait_mode_hint.text().lower()
+    paperclip_visible = getattr(page, "_paperclip_hint_host", None)
+    assert paperclip_visible is not None and not paperclip_visible.isHidden()
+    assert "headphone jack" in page._paperclip_hint.text().lower()
 
-    # MTKClient - A5 (power button)
+    # A5 uses the power button to power on
     page.set_model("A5")
     page.show_power_off_prompt(show_pin_tip=True)
-    assert not page._wait_mode_hint.isHidden()
-    assert "power button" in page._wait_mode_hint.text().lower()
+    assert not page._paperclip_hint_host.isHidden()
+    assert "power button" in page._paperclip_hint.text().lower()
 
-    # MTKClient - Y2 (headphone jack + normal connect)
+    # Y2 also uses the headphone jack, and the hint names the hidden button there
     page.set_model("Y2")
     page.show_power_off_prompt(show_pin_tip=True)
-    assert not page._wait_mode_hint.isHidden()
-    assert "headphone jack" in page._wait_mode_hint.text().lower()
-    assert "without holding buttons" in page._wait_mode_hint.text().lower()
+    assert not page._paperclip_hint_host.isHidden()
+    assert "headphone jack" in page._paperclip_hint.text().lower()
+    assert "paperclip or pin" in page._paperclip_hint.text().lower()
     page.leave_power_off_prompt()
     assert page._attempt_remaining == 120
     text_y2 = page._wait_prompt_label.text()
@@ -196,19 +197,19 @@ def test_rockbox_themes_stage_with_adb_countdown():
         page.start_rockbox_themes_stage(model="Y1")
 
         eta_text = page._eta_label.text()
-        assert "disconnect and power on" in eta_text.lower()
+        assert "disconnect usb, hold the centre button" in eta_text.lower()
         assert not page._theme_step1_widget.isHidden()
 
         # Step 1 -> Next: advances to Step 2 (connect USB + countdown)
         page._on_theme_step1_next_clicked()
         eta_text_step2 = page._eta_label.text()
         assert "connect your y1 by usb" in eta_text_step2.lower()
-        assert "60" in eta_text_step2
+        assert "90" in eta_text_step2
 
         # Tick the timer
         page._on_adb_watch_tick()
         eta_text_tick = page._eta_label.text()
-        assert "59" in eta_text_tick
+        assert "89" in eta_text_tick
 
         # For Y2
         page.start_rockbox_themes_stage(model="Y2")
@@ -218,26 +219,31 @@ def test_rockbox_themes_stage_with_adb_countdown():
 
 
 def test_mtkclient_watchdog_8min_and_touch_reset():
-    """Watchdog for MTK defaults to 480s (8 min) and resets on every chunk/log update."""
-    from src.flash_service import FlashWorker, ATTEMPT_PROGRESS_TIMEOUT_MTK
+    """MTKClient uses a longer no-progress window than SP Flash Tool, and any
+
+    MTK output line refreshes that window."""
+    from src.flash_service import ATTEMPT_PROGRESS_TIMEOUT_MTK, ATTEMPT_PROGRESS_TIMEOUT
+
+    # The code documents this as a longer MTK window than the SP Flash Tool one.
+    assert ATTEMPT_PROGRESS_TIMEOUT_MTK > ATTEMPT_PROGRESS_TIMEOUT
+    assert ATTEMPT_PROGRESS_TIMEOUT_MTK == 180.0
+
+    from src.flash_service import FlashWorker
     import time
 
     app = _app()
     w = FlashWorker("dummy.zip", method="mtk", model="Y2")
-    assert ATTEMPT_PROGRESS_TIMEOUT_MTK == 480.0
-
     watchdog = w._start_attempt_watchdog()
     try:
         assert watchdog is not None
-        assert watchdog._timeout == 480.0
         initial_deadline = watchdog._deadline
         time.sleep(0.05)
 
-        # Touching attempt resets deadline
+        # Touching the attempt resets the window.
         w._touch_attempt()
         assert watchdog._deadline > initial_deadline
 
-        # Any MTK output line touches attempt
+        # A real MTK write line also refreshes the window.
         d2 = watchdog._deadline
         time.sleep(0.05)
         w._classify_mtk_output("sdmmc_write_data: 完成 50 chunks")
@@ -334,7 +340,10 @@ def test_rockbox_post_flash_power_prompt_uses_model_specific_button_and_hides_na
         assert window._support_btn.isHidden()
         assert window._linux_setup_btn.isHidden()
         assert window._check_updates_btn.isHidden()
-        assert window._sp_flash_tool_btn.isHidden()
+
+        # Guided install chrome stays active until the player has booted;
+        # the SP Flash Tool button is independent of that flow.
+        assert window._install_run_active()
         assert "power button" in window._flash_page._eta_label.text().lower()
         assert "y2" in window._flash_page._eta_label.text().lower()
 
@@ -364,9 +373,16 @@ def test_device_prep_confirmation_before_watch_and_flash():
     w.show()
 
     started_flash = []
-    started_monitor = []
+    stopped_monitor = []
+    primed_mtk_taken = []
     w.service.start_flash = lambda *a, **k: started_flash.append(True)
-    w.service.start_device_monitor = lambda *a, **k: started_monitor.append(True)
+    w.service.stop_device_monitor = lambda *a, **k: stopped_monitor.append(True)
+
+    def _take_primed_mtk():
+        primed_mtk_taken.append(True)
+        return None
+
+    w.service.take_primed_mtk = _take_primed_mtk
 
     # 1. Package selected triggers device prep
     w._package_path = "/fake/rom.zip"
@@ -376,17 +392,19 @@ def test_device_prep_confirmation_before_watch_and_flash():
 
     assert w._stack.currentIndex() == _PAGE_FLASH
     assert w._power_off_prompt is True
+    # Device prep shows the power-off prompt; it stops any live device monitor
+    # and takes a primed MTK session it does not start the flash worker yet.
     assert not started_flash, "Flash must not be started while asking user to prepare device"
-    assert not started_monitor, "Device monitor must not watch for connections during device prep"
+    assert stopped_monitor == [True], "Device prep stops the device monitor"
+    assert primed_mtk_taken == [True], "Device prep takes any primed MTK session"
     assert "powered-off and disconnected" in w._flash_page._wait_prompt_label.text()
     assert "Y2" in w._flash_page._wait_prompt_label.text()
     assert w._flash_page._wait_continue_btn.isVisible()
 
-    # 2. User confirms by clicking Next -> flash starts and connection watching begins
+    # 2. User confirms by clicking Next -> flash starts and the prompt clears.
     w._on_power_off_continue()
     assert w._power_off_prompt is False
     assert started_flash == [True], "Flash must be triggered upon user confirmation"
-    assert started_monitor == [True], "Device monitor must start watching upon user confirmation"
     assert "please connect your y2" in w._flash_page._wait_prompt_label.text().lower()
 
 

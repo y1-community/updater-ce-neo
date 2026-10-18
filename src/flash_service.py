@@ -130,6 +130,7 @@ from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal
 import platform
 
 from . import linux_sp_flash, paths
+from .fw_package import prune_to_firmware_package
 from .i18n import tr
 from .progress_model import ThroughputEta, percent_of
 
@@ -824,6 +825,20 @@ def classify_backend_line(line):
 # on "configuring DA..." forever (see _StallWatcher).
 MTK_STALL_WARN_SECONDS = 90
 
+# Seconds of silence from the MTKClient backend's live console output before
+# the app treats this as an install failure. This is separate from the device
+# stall watcher (which reports when the target stops answering). It covers a
+# different failure: the backend keeps printing, but the same BROM bring-up
+# stall line has been on screen for too long with no change.
+MTK_OUTPUT_STALL_WINDOW = 5.0
+
+# Line prefixes read from the MTKClient console that indicate a BROM bring-up
+# or DRAM bring-up stall rather than normal write progress.
+MTK_BROM_STALL_PREFIXES = (
+    "DRAM config needed for",
+    "DRAM config",
+)
+
 # --- MTKClient session bring-up ---------------------------------------------
 # A player that enumerates in preloader mode accepts the stage-2 DA upload and
 # then never answers the download agent, so nothing is ever written. BROM mode
@@ -1297,22 +1312,14 @@ def _mark_extract_complete(extract_dir):
         pass
 
 
-def _retire_old_firmware(package_path) -> None:
-    """After a package is extracted, keep only its files: drop the archive
-    itself and every older extraction, so the work folder is the single copy."""
-    try:
-        prune_extracted_cache(keep_package_path=str(package_path))
-        p = Path(package_path)
-        if p.is_file() and p.suffix.lower() in (".zip", ".rar"):
-            p.unlink()
-    except Exception as e:
-        logger.warning("Could not retire firmware archive %s: %s", package_path, e)
-
-
 def prune_extracted_cache(keep_package_path: Optional[str] = None) -> list:
-    """Retain only the most recently downloaded software package extracted directory,
-    removing older extracted directories and leftover archives in downloads_dir()
-    to save disk space.
+    """Keep only the set of firmware files for ``keep_package_path``.
+
+    Called when a firmware is about to be installed: older extracted folders and
+    leftover archives in downloads_dir() are removed, and the installed package's
+    own archive and extracted folder are kept so the install (MTKClient or SP
+    Flash Tool) can re-read them. Extracting or browsing a package never calls
+    this, so the saved set is only replaced by a new install.
 
     Returns a list of paths that were removed.
     """
@@ -1410,7 +1417,6 @@ class ExtractWorker(QThread):
         if _is_extract_complete(extract_dir):
             self.progress.emit(100)
             discard_firmware_history(extract_dir)
-            _retire_old_firmware(package_path)
             return extract_dir
         shutil.rmtree(extract_dir, ignore_errors=True)
         extract_dir.mkdir(parents=True, exist_ok=True)
@@ -1419,9 +1425,10 @@ class ExtractWorker(QThread):
             self._extract_zip(package_path, extract_dir)
         else:
             self._extract_rar(package_path, extract_dir)
+        # A package that ships fw_package.ini keeps only its scatter and listed files.
+        prune_to_firmware_package(extract_dir)
         discard_firmware_history(extract_dir)
         _mark_extract_complete(extract_dir)
-        _retire_old_firmware(package_path)
         return extract_dir
 
     def _extract_zip(self, package, extract_dir):
@@ -1881,6 +1888,51 @@ class _StallWatcher(threading.Thread):
                     self._on_stall(idle)
                 except Exception:
                     logger.debug("MTK stall callback failed", exc_info=True)
+
+
+
+class _MtkOutputStallDetector:
+    """Reports when the MTKClient backend has printed the same stalled line
+
+    too long. The existing ``_StallWatcher`` only tracks idle time between
+    backend chatter, which is not enough for a backend that keeps printing the
+    same BROM/DRAM bring-up line. This detector remembers the last stalled
+    line and raises it after :data:`MTK_OUTPUT_STALL_WINDOW`.
+    """
+
+    def __init__(self, on_stalled_line, window=MTK_OUTPUT_STALL_WINDOW, interval=0.5):
+        super().__init__(daemon=True, name="MtkOutputStallDetector")
+        self._on_stalled_line = on_stalled_line
+        self._window = float(window)
+        self._interval = float(interval)
+        self._stopped = threading.Event()
+        self._last_line = ""
+        self._last_time = 0.0
+
+    def note(self, line):
+        """Called with each backend line that looks like a stalled bring-up."""
+        text = str(line or "").strip()
+        now = time.monotonic()
+        if text:
+            self._last_line = text
+            self._last_time = now
+
+    def maybe_stalled(self):
+        """True when the stalled line is old enough to report."""
+        if not self._last_line:
+            return False
+        return (time.monotonic() - self._last_time) >= self._window
+
+    def stop(self):
+        self._stopped.set()
+
+    def run(self):
+        while not self._stopped.wait(self._interval):
+            if self._last_line and (time.monotonic() - self._last_time) >= self._window:
+                try:
+                    self._on_stalled_line(self._last_line, time.monotonic() - self._last_time)
+                except Exception:
+                    logger.debug("MTK output stall callback failed", exc_info=True)
 
 
 class _AttemptWatchdog(threading.Thread):
@@ -3375,6 +3427,7 @@ class FlashWorker(QThread):
                     payload = line[len("[LOG] "):]
                     self._log(payload)
                     self._classify_mtk_output(payload)
+                    self._note_mtk_output_for_stall_check(payload)
                 elif line.startswith("[RESULT] "):
                     parts = line[len("[RESULT] "):].split(" ", 1)
                     final_ok = bool(int(parts[0]))
@@ -3382,6 +3435,7 @@ class FlashWorker(QThread):
                 else:
                     self._log(line)
                     self._classify_mtk_output(line)
+                    self._note_mtk_output_for_stall_check(line)
 
             self._stop_attempt_watchdog()
             self._process.wait()
@@ -3408,6 +3462,7 @@ class FlashWorker(QThread):
                 self._log(f"Install failed: {self._tool_error}")
                 self.finished.emit(False, "TOOL_ERROR")
             elif self._process.returncode == 0:
+                # MTKClient run exited cleanly from the app's point of view.
                 try:
                     from . import mtk_api
                     mtk_api.fire_mtk_reset(timeout=2.0)
@@ -3428,6 +3483,82 @@ class FlashWorker(QThread):
                         pass
             self._log(f"Failed to start flash CLI: {e}")
             self.finished.emit(False, "CLI_START_FAILED")
+
+    # -- MTKClient output-stall helpers --------------------------------------
+    def _other_backend_available_for(self, method):
+        resolved = backend_method(method)
+        if is_mtk_method(method):
+            return _sp_backend_available()
+        return _mtk_backend_available()
+
+    def _mtk_backend_available(self):
+        return mtkclient_command() is not None
+
+    def _sp_backend_available(self):
+        if paths.IS_MAC:
+            return False
+        if paths.IS_WINDOWS:
+            return find_sp_flash_tool() is not None
+        try:
+            from . import linux_sp_flash
+            return linux_sp_flash.ensure_linux_sp_flash_tool(
+                progress_cb=lambda pct, msg: None
+            )[0]
+        except Exception:
+            return False
+
+    def _mtk_stall_context(self):
+        method = getattr(self, "method", "auto")
+        resolved = backend_method(method)
+        is_mtk = resolved == METHOD_MTK
+        mtk_only = (
+            paths.IS_MAC
+            or resolved == METHOD_MTK
+            or windows_only_method() == METHOD_MTK
+            or (is_mtk and not self._other_backend_available_for(self.method))
+        )
+        can_fallback = (
+            not paths.IS_MAC
+            and not mtk_only
+            and self._other_backend_available_for(self.method)
+        )
+        return {
+            "is_mtk": is_mtk,
+            "mtk_only": mtk_only,
+            "can_fallback": can_fallback,
+            "resolved_method": resolved,
+        }
+
+    def _finalize_mtk_stall(self, reason_code, title_key=None, desc_key=None, desc_fmt=None):
+        context = self._mtk_stall_context()
+        if context["mtk_only"]:
+            title = tr("err_only_mtkclient_title")
+            desc = tr("err_only_mtkclient_desc")
+        elif context["can_fallback"]:
+            title = tr("err_mtk_output_stall_title")
+            desc = tr("err_mtk_output_stall_desc", seconds=int(MTK_OUTPUT_STALL_WINDOW))
+            if context["is_mtk"]:
+                desc += " " + tr("err_mtk_output_stall_fallback_available")
+        else:
+            title = title_key or tr("err_mtk_output_stall_title")
+            if desc_key:
+                desc = tr(desc_key)
+            elif desc_fmt:
+                desc = desc_fmt
+            else:
+                desc = tr("err_mtk_output_stall_desc", seconds=int(MTK_OUTPUT_STALL_WINDOW))
+        self._log(f"MTKClient output stall: {reason_code}")
+        self.finished.emit(False, reason_code)
+        if not getattr(self, "_stall_prompt_handled", False):
+            self._stall_prompt_handled = True
+            self._deferred_restart_prompt = {
+                "title": title,
+                "desc": desc,
+            }
+
+    def _mtk_stall_prompt_text(self):
+        """The restart-and-quit prompt text, if one was deferred after the run."""
+        return getattr(self, "_deferred_restart_prompt", None)
 
     def _end_mtk_run_successfully(self, mtk, da_handler=None) -> None:
         """The last step of a successful in-process MTKClient run.
@@ -3563,6 +3694,7 @@ class FlashWorker(QThread):
             repeated["text"], repeated["count"] = text, 1
             self._log(text)
             self._classify_mtk_output(text)
+            self._note_mtk_output_for_stall_check(text)
 
         def _on_mtk_stall(idle):
             seconds = int(idle)
@@ -3711,6 +3843,12 @@ class FlashWorker(QThread):
             return res_mtk, da_handler
 
         watcher.start()
+        mtk_output_stall_detector = _MtkOutputStallDetector(
+            self._on_mtk_output_stalled,
+            window=MTK_OUTPUT_STALL_WINDOW,
+            interval=0.5,
+        )
+        mtk_output_stall_detector.start()
         attempt = 0
         try:
             while True:

@@ -96,10 +96,23 @@ if "%NOINSTALLER%"=="0" (
     )
 )
 
+rem Portable zip: the PyInstaller folder unpacked and runnable without installing.
+if not "%BRAND%"=="mediatek_installer" (
+    if exist "dist\InnioasisUpdater\InnioasisUpdater.exe" (
+        echo Creating portable zip...
+        powershell -NoProfile -Command "Compress-Archive -Path 'dist\InnioasisUpdater\*' -DestinationPath 'dist\UpdaterCE-Portable-2.5.0.zip' -Force"
+        if errorlevel 1 (
+            echo Portable zip build failed.
+            exit /b 1
+        )
+    )
+)
+
 echo.
 echo Build complete.
 echo Portable exe: dist\InnioasisUpdater\InnioasisUpdater.exe
 echo Portable exe: dist\MediaTekInstaller\MediaTekInstaller.exe
+echo Portable zip: dist\UpdaterCE-Portable-2.5.0.zip
 if "%NOINSTALLER%"=="0" (
     echo Installers: dist\UpdaterCE-Setup-2.5.0.exe
     echo Installers: dist\MediaTekInstaller-Setup-2.5.0.exe

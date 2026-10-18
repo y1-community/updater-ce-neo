@@ -82,7 +82,7 @@ class SupportPage(QWidget):
             "font-size: 12px; line-height: 1.4; color: palette(window-text); background: transparent; border: none;"
         )
         self._appeal_body.setText(
-            "<b>Donations directly help me support my family, cover our household costs, and fund the test devices and server bandwidth</b> "
+            "<b>Donations directly help me support my family and fund the test devices</b> "
             "that make this free service possible for everyone. If this tool saved you time or rescued your player today, "
             "please consider a small donation — it truly means the world to us."
         )

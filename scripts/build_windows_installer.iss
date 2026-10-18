@@ -62,9 +62,7 @@ AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}/issues
 AppUpdatesURL={#MyAppURL}/releases
-; {autopf} is Program Files for an all-users install and the per-user
-; Programs folder when the person chooses "just for me". Either way it is
-; not the old %LocalAppData%\Innioasis Updater directory.
+; The install is always all users, so {autopf} is Program Files.
 DefaultDirName={autopf}\{#MyAppDirName}
 DefaultGroupName={#MyAppGroup}
 DisableProgramGroupPage=yes
@@ -73,9 +71,10 @@ DisableProgramGroupPage=yes
 ; [Code] section sends to {autopf} instead.
 UsePreviousAppDir=yes
 UsePreviousTasks=yes
+; All users (admin) is the only install mode. Running processes are stopped
+; explicitly in CurStepChanged(ssInstall), so the Restart Manager prompt is off.
 PrivilegesRequired=admin
-PrivilegesRequiredOverridesAllowed=dialog
-CloseApplications=yes
+CloseApplications=no
 RestartApplications=no
 LicenseFile=..\LICENSE
 OutputDir=..\dist
@@ -101,10 +100,20 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Dirs]
 ; The tool writes history.ini and logs beside flash_tool.exe. A standard
-; account cannot modify Program Files, so an all-users install grants Users
-; modify on this folder only. A per-user install is already writable.
-Name: "{app}\SP_Flash_Tool"; Permissions: users-modify; Check: IsAdminInstallMode
-Name: "{commonappdata}\SP_FT_Logs"; Permissions: users-modify; Check: IsAdminInstallMode
+; account cannot modify Program Files, so the install grants Users modify
+; on this folder only.
+Name: "{app}\SP_Flash_Tool"; Permissions: users-modify
+Name: "{commonappdata}\SP_FT_Logs"; Permissions: users-modify
+
+[CustomMessages]
+english.StepStopping=Stopping running Updater CE, Python, SP Flash Tool and ADB processes...
+chinesesimplified.StepStopping=正在停止正在运行的 Updater CE、Python、SP Flash Tool 和 ADB 进程...
+english.StepRemovingOld=Removing previous versions...
+chinesesimplified.StepRemovingOld=正在删除旧版本...
+english.StepShortcuts=Removing old shortcuts...
+chinesesimplified.StepShortcuts=正在删除旧快捷方式...
+english.StepLegacy=Cleaning up old data and install folders...
+chinesesimplified.StepLegacy=正在清理旧数据和安装文件夹...
 
 [Files]
 ; Main application binaries, _internal runtime, and bundled SP Flash Tool 5.1904
@@ -324,30 +333,65 @@ end;
 
 { %LocalAppData%\Innioasis Updater for this account, and for every
   profile when the install is allowed to touch the machine. }
+{ Every account profile under {sd}\Users. Only the folder names are needed. }
+function ProfileRoots: TStringList;
+var
+  UsersRoot: String;
+  FindRec: TFindRec;
+begin
+  Result := TStringList.Create;
+  UsersRoot := ExpandConstant('{sd}\Users');
+  if FindFirst(UsersRoot + '\*', FindRec) then
+  begin
+    try
+      repeat
+        if ((FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0) and
+           (FindRec.Name <> '.') and (FindRec.Name <> '..') then
+          Result.Add(UsersRoot + '\' + FindRec.Name);
+      until not FindNext(FindRec);
+    finally
+      FindClose(FindRec);
+    end;
+  end;
+end;
+
+{ A per-user copy from a "just for me" install of the old Inno build. Its own
+  uninstaller runs quietly first when present. Skipped if it is the target. }
+procedure RemovePerUserInstallDir(const Dir: String);
+var
+  ResultCode: Integer;
+begin
+  if (not DirExists(Dir)) or
+     (CompareText(RemoveBackslashUnlessRoot(Dir), RemoveBackslashUnlessRoot(ExpandConstant('{app}'))) = 0) then
+    Exit;
+  if FileExists(Dir + '\unins000.exe') then
+    Exec(Dir + '\unins000.exe', '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  DelTree(Dir, True, True, True);
+end;
+
+{ Every profile's leftovers: the retired LocalAppData data folder, a per-user
+  Programs copy, and its Start Menu and Desktop shortcuts. A locked or
+  missing folder is skipped rather than stopping the install. }
 procedure RemoveLegacyLocalAppData;
 var
-  UsersRoot, ProfileDir: String;
-  FindRec: TFindRec;
+  Profiles: TStringList;
+  I: Integer;
+  P: String;
 begin
   if not IsUpdaterCeBrand then
     Exit;
-  RemoveLegacyDataDir(ExpandConstant('{localappdata}\Innioasis Updater'));
-  if not IsAdminInstallMode then
-    Exit;
-  UsersRoot := ExpandConstant('{sd}\Users');
-  if not FindFirst(UsersRoot + '\*', FindRec) then
-    Exit;
+  Profiles := ProfileRoots;
   try
-    repeat
-      if ((FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0) and
-         (FindRec.Name <> '.') and (FindRec.Name <> '..') then
-      begin
-        ProfileDir := UsersRoot + '\' + FindRec.Name + '\AppData\Local\Innioasis Updater';
-        RemoveLegacyDataDir(ProfileDir);
-      end;
-    until not FindNext(FindRec);
+    for I := 0 to Profiles.Count - 1 do
+    begin
+      P := Profiles[I];
+      RemoveLegacyDataDir(P + '\AppData\Local\Innioasis Updater');
+      RemovePerUserInstallDir(P + '\AppData\Local\Programs\UpdaterCE');
+      PurgeShortcutTree(P + '\AppData\Roaming\Microsoft\Windows\Start Menu\Programs');
+      PurgeShortcutTree(P + '\Desktop');
+    end;
   finally
-    FindClose(FindRec);
+    Profiles.Free;
   end;
 end;
 
@@ -388,21 +432,33 @@ begin
   end;
 end;
 
-function PrepareToInstall(var NeedsRestart: Boolean): String;
+{ Force-stops a process and its children. A process that is not running is
+  not an error, so the result is ignored and the install carries on. }
+procedure StopProcess(const ImageName: String);
+var
+  ResultCode: Integer;
+begin
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /T /IM ' + ImageName, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
+{ Shows what the installer is doing on the Installing page, so the wait is
+  never a blank window. }
+procedure ShowStep(const Key: String);
+begin
+  WizardForm.StatusLabel.Caption := ExpandConstant('{cm:' + Key + '}');
+  WizardForm.Update;
+end;
+
+procedure RemoveOldInstalls;
 var
   Prev, Dest: String;
 begin
-  Result := '';
-  NeedsRestart := False;
-  if not IsUpdaterCeBrand then
-    Exit;
-
   { Pre-3.x registered itself under a different uninstall key. }
   RunSilentUninstall(LegacyUninstallKey);
 
   { A 3.x copy that still lives in LocalAppData is removed so the new
-    files and shortcuts are the Program Files (or per-user Programs) ones.
-    An install that is already in the destination folder is updated in place. }
+    files and shortcuts are the Program Files ones. An install already in
+    the destination folder is updated in place. }
   if QueryUninstallValue(CurrentUninstallKey, 'InstallLocation', Prev) then
   begin
     Dest := ExpandConstant('{app}');
@@ -410,8 +466,29 @@ begin
        (CompareText(RemoveBackslashUnlessRoot(Prev), RemoveBackslashUnlessRoot(Dest)) <> 0) then
       RunSilentUninstall(CurrentUninstallKey);
   end;
+end;
 
+{ Runs on the Installing page, just before files are copied. Each step
+  reports what it is doing and skips anything that fails. }
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if (CurStep <> ssInstall) or (not IsUpdaterCeBrand) then
+    Exit;
+
+  ShowStep('StepStopping');
+  StopProcess('InnioasisUpdater.exe');
+  StopProcess('flash_tool.exe');
+  StopProcess('adb.exe');
+  StopProcess('python.exe');
+  StopProcess('pythonw.exe');
+
+  ShowStep('StepRemovingOld');
+  RemoveOldInstalls;
+
+  ShowStep('StepShortcuts');
   PurgeRetiredShortcuts;
+
+  ShowStep('StepLegacy');
   RemoveLegacyLocalAppData;
   RemoveLegacyProgramFiles;
 end;
