@@ -319,12 +319,22 @@ class DonationStatusBar(QStatusBar):
             show_glass_backdrop(self)
         else:
             self.setStyleSheet(
-                f"QStatusBar#donation_status_bar {{ background-color: {t.bg};"
-                f" color: {t.fg}; border-top: 1px solid {t.border}; min-height: 30px; }}"
+                "QStatusBar#donation_status_bar { background: transparent;"
+                f" color: {t.fg}; border: none; min-height: 30px; }}"
             )
-            self.setAutoFillBackground(True)
+            self.setAutoFillBackground(False)
             self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, False)
-            self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+            self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
+            clear = QColor(0, 0, 0, 0)
+            pal = self.palette()
+            for group in (
+                QPalette.ColorGroup.Active,
+                QPalette.ColorGroup.Inactive,
+                QPalette.ColorGroup.Disabled,
+            ):
+                pal.setColor(group, QPalette.ColorRole.Window, clear)
+                pal.setColor(group, QPalette.ColorRole.Base, clear)
+            self.setPalette(pal)
             from .ui.dark import apply_readable_palette
             apply_readable_palette(self)
 
@@ -346,7 +356,6 @@ class DonationStatusBar(QStatusBar):
         from PySide6.QtGui import QColor, QPalette
         from .ui.surfaces import (
             glass_surfaces_enabled,
-            paint_window_surface,
             show_glass_backdrop,
         )
 
@@ -363,17 +372,10 @@ class DonationStatusBar(QStatusBar):
             host = getattr(self, name, None)
             if host is None:
                 continue
-            if not glass:
-                # Windows and Linux have no backdrop behind the bar: a host left
-                # with no background of its own never erases, so the goal line
-                # and its bar are the first things to go missing on a repaint.
-                host.setStyleSheet("")
-                paint_window_surface(host)
-                continue
             host.setAutoFillBackground(False)
             host.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
-            host.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
-            host.setStyleSheet("")
+            host.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True if glass else False)
+            host.setStyleSheet("background: transparent; border: none;")
             pal = host.palette()
             for group in (
                 QPalette.ColorGroup.Active,

@@ -93,7 +93,8 @@ def test_360p_success_opens_themes_stage_before_appeal():
         tracking.set_donation_ui_disabled(False, w.settings)
         from src import paths
         old_mac = paths.IS_MAC
-        paths.IS_MAC = True  # Exercise SP success path: it boots before this stage.
+        paths.IS_MAC = False  # Exercise SP success path: it boots before this stage.
+        w._flash_method = "sp"
 
         shown = []
 

@@ -28,17 +28,15 @@ class SupportPage(QWidget):
         super().__init__(parent)
         self.setObjectName("supportPage")
         self.setAutoFillBackground(False)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
         self.setStyleSheet("")
-        show_glass_backdrop(self)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(*page_margins())
         layout.setSpacing(10)
 
-        # 1. Main Card with glass clear backdrop (no weird opaque plate)
+        # 1. Main Card matching native bento card style across all pages
         self._card = Card()
-        self._card.set_glass_clear(True)
 
         card_layout = QVBoxLayout()
         card_layout.setContentsMargins(14, 12, 14, 12)
@@ -50,6 +48,8 @@ class SupportPage(QWidget):
 
         portrait_lbl = QLabel()
         portrait_lbl.setFixedSize(48, 48)
+        portrait_lbl.setAutoFillBackground(False)
+        portrait_lbl.setStyleSheet("background: transparent; border: none;")
         shipped = bundled_portrait_path()
         if shipped.exists():
             pix = circle_pixmap(QPixmap(str(shipped)), 48)
@@ -145,7 +145,7 @@ class SupportPage(QWidget):
         # Collapsible Crypto Drawer
         self._crypto_drawer = QWidget()
         self._crypto_drawer.setAutoFillBackground(False)
-        self._crypto_drawer.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self._crypto_drawer.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
         drawer_layout = QVBoxLayout(self._crypto_drawer)
         drawer_layout.setContentsMargins(2, 6, 2, 2)
         drawer_layout.setSpacing(4)
@@ -220,5 +220,4 @@ class SupportPage(QWidget):
             btn.setText(tr(key))
 
     def refresh_theme(self) -> None:
-        self._card.set_glass_clear(True)
         self.update()

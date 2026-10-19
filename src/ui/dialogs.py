@@ -1212,6 +1212,11 @@ class LinuxSetupDialog(QDialog):
 
         self._sp_gui_btn = QPushButton(tr("system_checker_launch_gui_btn"))
         self._sp_gui_btn.clicked.connect(self._on_launch_sp_gui)
+        advanced = bool(QSettings("innioasis", "updater").value("advanced_settings", False))
+        parent = self.parent()
+        if parent is not None and hasattr(parent, "_settings_page"):
+            advanced = parent._settings_page.advanced_methods_revealed()
+        self._sp_gui_btn.setVisible(advanced)
 
         self._continue_btn = QPushButton(tr("linux_setup_done_btn"))
         self._continue_btn.setDefault(True)

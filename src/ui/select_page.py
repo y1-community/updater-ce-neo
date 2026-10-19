@@ -730,6 +730,11 @@ class SelectPackagePage(QWidget):
         self._release_list.viewport().setAutoFillBackground(False)
         self._release_list.viewport().setAttribute(Qt.WA_TranslucentBackground, False)
         self._release_list.viewport().setAttribute(Qt.WA_NoSystemBackground, True)
+        self._release_list.setStyleSheet(
+            "QListWidget#releaseList { background: transparent; border: none; outline: none; }"
+            " QListWidget#releaseList::item { border: none; }"
+        )
+        self._release_list.viewport().setStyleSheet("background: transparent; border: none;")
         self._release_list.currentItemChanged.connect(self._on_release_selected)
         self._release_list.itemClicked.connect(self._on_release_clicked)
         self._release_list.itemActivated.connect(self._on_install)
@@ -842,7 +847,7 @@ class SelectPackagePage(QWidget):
         # document default blue-with-underline (document stylesheet, not a
         # widget stylesheet: the platform keeps the scrollbars).
         self._notes.document().setDefaultStyleSheet(
-            f"a {{ color: {T().fg}; font-weight: 700; text-decoration: none; }}"
+            f"body {{ background: transparent; }} a {{ color: {T().fg}; font-weight: 700; text-decoration: none; }}"
         )
         # Host policies plus the live palette. No stylesheet on this view:
         # a matching rule would cost the host's overlay scrollbars
@@ -998,8 +1003,9 @@ class SelectPackagePage(QWidget):
         self._auth_row_widget.setVisible(False)
         self._sync_auth_file_ui()
 
+        # Retained as hidden attribute for API compatibility; dark banner card is omitted from UI per native design
         self._local_banner = Banner()
-        grp_l.addWidget(self._local_banner)
+        self._local_banner.setVisible(False)
 
         self._local_bar = InstallProgress()
         self._local_bar.setTextVisible(True)
@@ -1419,6 +1425,7 @@ class SelectPackagePage(QWidget):
             self._local_banner.setText(tr(self._local_banner_key))
         else:
             self._local_banner.setText("")
+        self._local_banner.setVisible(False)
 
     def _check_battery_toast_visibility(self) -> None:
         from PySide6.QtCore import QSettings
@@ -1492,7 +1499,7 @@ class SelectPackagePage(QWidget):
         # document default blue-with-underline (document stylesheet, not a
         # widget stylesheet: the platform keeps the scrollbars).
         self._notes.document().setDefaultStyleSheet(
-            f"a {{ color: {T().fg}; font-weight: 700; text-decoration: none; }}"
+            f"body {{ background: transparent; }} a {{ color: {T().fg}; font-weight: 700; text-decoration: none; }}"
         )
         self._browse_btn.setText(tr("sel_browse"))
         if hasattr(self, "_browse_folder_btn"):
@@ -1557,7 +1564,7 @@ class SelectPackagePage(QWidget):
         self._apply_type_help_hint()
         if hasattr(self, "_notes"):
             self._notes.document().setDefaultStyleSheet(
-                f"a {{ color: {T().fg}; font-weight: 700; text-decoration: none; }}"
+                f"body {{ background: transparent; }} a {{ color: {T().fg}; font-weight: 700; text-decoration: none; }}"
             )
         if hasattr(self, "_notes") and self._current_selected_rel:
             self._set_notes_content(self._render_release_notes(self._current_selected_rel, as_html=True))
@@ -1788,6 +1795,13 @@ class SelectPackagePage(QWidget):
             old.wait(100)
 
         self._set_online_banner("sel_loading")
+        loading_item = QListWidgetItem(tr("sel_loading"))
+        loading_item.setFlags(loading_item.flags() & ~Qt.ItemIsEnabled)
+        self._release_list.addItem(loading_item)
+        self._fit_release_list_height()
+        self._notes.setHtml(
+            f"<p style='color: palette(window-text); opacity: 0.7;'><i>{tr('release_notes_loading')}</i></p>"
+        )
         show_old, show_nightly, prefer_240p = self.release_listing_filters()
         worker = ReleasesWorker(
             self.client,
@@ -1934,6 +1948,8 @@ class SelectPackagePage(QWidget):
         if error:
             self._set_online_banner("sel_offline")
             self._set_update_prompt(self.current_software(), self.current_model(), None)
+            self._release_list.clear()
+            self._notes.clear()
             self._fit_release_list_height()
             self.content_size_changed.emit()
             return
@@ -2003,6 +2019,7 @@ class SelectPackagePage(QWidget):
             self._release_list.addItem(item)
         if not releases:
             self._set_online_banner("sel_no_release")
+            self._notes.clear()
         else:
             self._set_online_banner("releases", len(releases))
             target_tag = getattr(self, "_target_tag_to_select", None)
@@ -2074,10 +2091,12 @@ class SelectPackagePage(QWidget):
             self._emit_gui_firmware_changed()
 
     def _render_release_notes(self, rel, translated_body=None, translated_name=None, as_html: bool = False) -> str:
-        body = translated_body or (rel.get("body") or "").strip() or tr("update_no_notes")
-        # The badge is not repeated here: the line under the notes already says
-        # the copy was translated, and the reader should see the release notes
-        # themselves, not the provenance twice.
+        from ..translate import strip_changes_header
+        raw_body = translated_body or (rel.get("body") or "").strip()
+        body = strip_changes_header(raw_body) or tr("update_no_notes")
+        if translated_body:
+            badge = tr("translated_with_google")
+            body = f"{badge}\n\n{body}"
 
         # 1. Normalise markdown: turn any markdown headings #{1,6} into bold text
         # so all text is rendered at uniform body text size.
@@ -2413,6 +2432,11 @@ class SelectPackagePage(QWidget):
             # aborted the app.
             retire_worker(worker, self._active_workers)
             self._download_worker = None
+        prep = self._prep_worker
+        if prep is not None:
+            prep.cancel()
+            retire_worker(prep, self._active_workers)
+            self._prep_worker = None
         self._download_bar.setVisible(False)
         self._install_btn.setEnabled(True)
         self.download_cancelled.emit()
@@ -2470,13 +2494,16 @@ class SelectPackagePage(QWidget):
             getattr(self, "_current_package_model", "") or "",
         )
         self._prep_worker = ExtractWorker(path)
+        self._active_workers.add(self._prep_worker)
         self._prep_worker.progress.connect(self.prep_progress)
         self._prep_worker.finished.connect(done_cb)
         self._prep_worker.finished.connect(self._on_prep_finished)
         self._prep_worker.start()
 
     def _on_prep_finished(self, *_args):
-        self._prep_worker = None
+        if self._prep_worker is not None:
+            retire_worker(self._prep_worker, self._active_workers)
+            self._prep_worker = None
 
     def _on_online_prep_done(self, ok, extract_dir, err):
         self._download_bar.setVisible(False)
@@ -2492,6 +2519,7 @@ class SelectPackagePage(QWidget):
             else:
                 self._say(f"{tr('sel_prepare_failed')} \u2014 {err}", 15000)
             self._install_btn.setEnabled(True)
+            self.prep_finished.emit(False)
             return
         self._download_status_key = "sel_prepare_done"
 
@@ -2567,8 +2595,12 @@ class SelectPackagePage(QWidget):
                 if not self._current_package_name or self._current_package_name == "Installing software":
                     self._current_package_name = f"Installing software on {eff_model}"
                 if self._details_package:
-                    self._details_package.model = eff_model
-                    self._details_package.name = self._current_package_name
+                    import dataclasses
+                    self._details_package = dataclasses.replace(
+                        self._details_package,
+                        model=eff_model,
+                        name=self._current_package_name,
+                    )
                     self._set_details_header(self._current_selected_rel, self._details_package)
         device_tracking.record_latest_package(
             model=eff_model,
@@ -2683,8 +2715,18 @@ class SelectPackagePage(QWidget):
             if idx >= 0:
                 self._type_combo.setCurrentIndex(idx)
                 self._selected_type = self._type_combo.itemData(idx)
-        if pkg.display_name:
-            self._current_package_name = pkg.display_name
+        name = pkg.name
+        lang = (translator().lang or "en").strip()
+        if lang != "en" and name:
+            try:
+                from ..translate import fetch_google_translation
+                trans = fetch_google_translation(name, lang)
+                if trans:
+                    name = trans
+            except Exception:
+                pass
+        if name or pkg.version:
+            self._current_package_name = f"{name} {pkg.version}".strip()
         self._details_package = catalog.FirmwarePackage(
             slug="local-" + pkg.folder.name,
             name=self._current_package_name or pkg.folder.name,
@@ -2711,7 +2753,17 @@ class SelectPackagePage(QWidget):
         from .release_icon import pixmap_from_icon_bytes
         from ..release_icons import load_local_package_icon_bytes
 
-        self._details_name.setText(pkg.name or pkg.folder.name)
+        name = pkg.name or pkg.folder.name
+        lang = (translator().lang or "en").strip()
+        if lang != "en" and pkg.name:
+            try:
+                from ..translate import fetch_google_translation
+                trans = fetch_google_translation(pkg.name, lang)
+                if trans:
+                    name = trans
+            except Exception:
+                pass
+        self._details_name.setText(name)
         self._details_version.setText(pkg.version or "")
         seal_updating_text(self._details_name)
         seal_updating_text(self._details_version)
@@ -2997,7 +3049,9 @@ class SelectPackagePage(QWidget):
         if self._download_worker is not None and self._download_worker.isRunning():
             self._download_worker.cancel()
             retire_worker(self._download_worker, self._active_workers)
+            self._download_worker = None
         self._download_worker = downloads.DownloadWorker(target["url"], str(dest))
+        self._active_workers.add(self._download_worker)
         self._download_worker.progress.connect(self._on_download_progress)
         self._download_worker.status.connect(self._on_download_status)
         self._download_worker.finished.connect(self._on_external_download_done)
@@ -3005,6 +3059,9 @@ class SelectPackagePage(QWidget):
         return True
 
     def _on_external_download_done(self, ok, result):
+        if self._download_worker is not None:
+            retire_worker(self._download_worker, self._active_workers)
+            self._download_worker = None
         self._download_bar.setVisible(False)
         self.download_finished.emit(ok, str(result))
         if not ok:

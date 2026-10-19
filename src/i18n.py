@@ -1897,6 +1897,14 @@ _STRINGS: dict = {
         "fr": "Votre ordinateur a besoin d'une autorisation unique pour communiquer avec le lecteur. Cliquez sur Suivant, puis saisissez votre mot de passe.",
         "es": "El equipo necesita un permiso único para comunicarse con el reproductor. Haga clic en Siguiente e introduzca su contraseña cuando se le pida.",
     },
+    "install_linux_entering_password": {
+        "en": "Please enter your password in the prompt to allow access to your device…",
+        "zh-CN": "请在提示框中输入密码以允许访问您的设备…",
+        "fr": "Veuillez saisir votre mot de passe dans l'invite pour autoriser l'accès à votre appareil…",
+        "es": "Por favor, introduzca su contraseña para permitir el acceso a su dispositivo…",
+        "de": "Bitte geben Sie Ihr Passwort ein, um den Zugriff auf Ihr Gerät zu erlauben…",
+        "ja": "デバイスへのアクセスを許可するためにプロンプトにパスワードを入力してください…",
+    },
     "install_linux_prep_pending": {
         "en": "Getting your computer ready to connect to your player…",
         "zh-CN": "正在准备电脑以可靠连接播放器…",
@@ -2558,12 +2566,12 @@ _STRINGS: dict = {
     # switching engines: the failure, the engine taking over, and the reset
     # steps each stand on their own line.
     "err_connect_failover_recovery": {
-        "en": "{failed} couldn't connect to your {model}.\nUpdater will now try {next} instead.\nPlease disconnect the USB and use a paperclip / pin to press the button between headphone jack and USB Port, then press next.",
-        "zh-CN": "{failed} 无法连接到您的 {model}。\nUpdater 将改用 {next}。\n请断开 USB，并用卡针 / 回形针按下耳机孔与 USB 接口之间的按钮，然后点击下一步。",
-        "fr": "{failed} n'a pas pu se connecter à votre {model}.\nUpdater va maintenant essayer {next} à la place.\nVeuillez débrancher l'USB et utiliser un trombone / une aiguille pour appuyer sur le bouton situé entre la prise casque et le port USB, puis appuyez sur Suivant.",
-        "es": "{failed} no pudo conectarse a tu {model}.\nUpdater ahora usará {next}.\nDesconecta el USB y usa un clip / alfiler para presionar el botón entre la toma de auriculares y el puerto USB, luego pulsa Siguiente.",
-        "de": "{failed} konnte sich nicht mit Ihrem {model} verbinden.\nUpdater versucht jetzt stattdessen {next}.\nBitte trennen Sie das USB und drücken Sie mit einer Büroklammer / Nadel die Taste zwischen Kopfhörerbuchse und USB-Anschluss, dann drücken Sie auf Weiter.",
-        "ja": "{failed} は{model}に接続できませんでした。\n次に Updater は代わりに {next} を使用します。\nUSB を外し、クリップまたはピンでイヤホンジャックとUSBポートの間にあるボタンを押してから、「次へ」を押してください。",
+        "en": "{failed} couldn't connect to your {model}.\n\nUpdater will now try {next} instead.\n\nPlease disconnect the USB and use a paperclip / pin to press the button between headphone jack and USB Port, then press next.",
+        "zh-CN": "{failed} 无法连接到您的 {model}。\n\nUpdater 将改用 {next}。\n\n请断开 USB，并用卡针 / 回形针按下耳机孔与 USB 接口之间的按钮，然后点击下一步。",
+        "fr": "{failed} n'a pas pu se connecter à votre {model}.\n\nUpdater va maintenant essayer {next} à la place.\n\nVeuillez débrancher l'USB et utiliser un trombone / une aiguille pour appuyer sur le bouton situé entre la prise casque et le port USB, puis appuyez sur Suivant.",
+        "es": "{failed} no pudo conectarse a tu {model}.\n\nUpdater ahora usará {next}.\n\nDesconecta el USB y usa un clip / alfiler para presionar el botón entre la toma de auriculares y el puerto USB, luego pulsa Siguiente.",
+        "de": "{failed} konnte sich nicht mit Ihrem {model} verbinden.\n\nUpdater versucht jetzt stattdessen {next}.\n\nBitte trennen Sie das USB und drücken Sie mit einer Büroklammer / Nadel die Taste zwischen Kopfhörerbuchse und USB-Anschluss, dann drücken Sie auf Weiter.",
+        "ja": "{failed} は{model}に接続できませんでした。\n\n次に Updater は代わりに {next} を使用します。\n\nUSB を外し、クリップまたはピンでイヤホンジャックとUSBポートの間にあるボタンを押してから、「次へ」を押してください。",
     },
     "donate_headline": {
         "zh-CN": "它需要 <span style='color:#ff5252; text-decoration:underline;'>你</span>。",

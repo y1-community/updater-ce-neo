@@ -159,10 +159,25 @@ def fetch_google_translation(text: str, target_lang: str, timeout: float = 6.0) 
     return text
 
 
+def strip_changes_header(text: str) -> str:
+    """Parse original release notes for lines beginning with Changes (formatted or not)
+    and ensure that anything including or above the line beginning with Changes is not shown.
+    """
+    if not text:
+        return ""
+    import re
+    match = re.search(r"(?im)^\s*(?:[#*_\->\s]*)\bchanges\b.*(?:\n|$)", text)
+    if match:
+        remainder = text[match.end():].lstrip("\r\n").strip()
+        return remainder if remainder else text.strip()
+    return text.strip()
+
+
 def translate_release_notes(rel: dict, target_lang: str) -> Tuple[str, str]:
     """Translate release name and body to the target language."""
     name = (rel or {}).get("name", "")
     body = (rel or {}).get("body", "")
+    body = strip_changes_header(body)
 
     translated_name = fetch_google_translation(name, target_lang) if name else ""
     translated_body = fetch_google_translation(body, target_lang) if body else ""

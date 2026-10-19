@@ -687,8 +687,8 @@ class _Tokens:
         card_tint = QColor(window).lighter(112 if dark else 104)
         elev_tint = QColor(window).lighter(124 if dark else 110)
         button = QColor(card_tint)
-        highlight = color(QPalette.ColorRole.Highlight, self.accent)
-        highlighted_text = color(QPalette.ColorRole.HighlightedText, self.accent_text)
+        highlight = QColor(self.accent)
+        highlighted_text = QColor(self.accent_text)
 
         self.bg = window.name()
         self.bg_card = button.name()
@@ -771,19 +771,35 @@ class _ThemeState:
         self._pure_black = False
         if IS_LINUX and native_palette is not None:
             self.native_palette = QPalette(native_palette)
-            self._dark = _palette_is_dark(native_palette)
+        use_native = (
+            IS_LINUX
+            and self.native_palette is not None
+            and _palette_is_dark(self.native_palette) == self._dark
+        )
         self.tokens = _Tokens(
             self._dark,
             pure_black=self._pure_black,
             palette=self.native_palette,
-            use_native_linux_colors=self.native_palette is not None,
+            use_native_linux_colors=use_native,
         )
         return self._dark
 
     def set_dark(self, value: bool, pure_black: bool = False, palette: QPalette | None = None) -> None:
         self._dark = value
         self._pure_black = pure_black
-        self.tokens = _Tokens(value, pure_black=pure_black, palette=palette)
+        if IS_LINUX and palette is not None:
+            self.native_palette = QPalette(palette)
+        use_native = (
+            IS_LINUX
+            and self.native_palette is not None
+            and _palette_is_dark(self.native_palette) == value
+        )
+        self.tokens = _Tokens(
+            value,
+            pure_black=pure_black,
+            palette=self.native_palette,
+            use_native_linux_colors=use_native,
+        )
 
     @property
     def is_dark(self) -> bool:
@@ -887,7 +903,7 @@ def _make_palette(
     pure_black: bool = False,
     native_palette: QPalette | None = None,
 ) -> QPalette:
-    if IS_LINUX and native_palette is not None:
+    if IS_LINUX and native_palette is not None and _palette_is_dark(native_palette) == dark:
         return QPalette(native_palette)
     p = QPalette()
     t = _Tokens(dark, pure_black=pure_black)
@@ -1246,6 +1262,7 @@ def _build_qss() -> str:
    are deliberately left to the native QStyle so they paint and behave
    like every other app on the host desktop. */
 /* Surface: {t.bg} */
+/* Accent: {t.accent} */
 QMainWindow {{
     background-color: {window_bg};
     color: {text_color};
@@ -1552,14 +1569,14 @@ def apply_theme(
                 pass
     _apply_native_font(app)
     if force_dark is not None:
-        _state.set_dark(force_dark, pure_black=bool(pure_black))
+        _state.set_dark(force_dark, pure_black=bool(pure_black), palette=native_palette)
     else:
         _state.detect(native_palette=native_palette)
     app.setPalette(
         _make_palette(
             _state.is_dark,
             pure_black=_state.is_pure_black,
-            native_palette=_state.native_palette if force_dark is None else None,
+            native_palette=_state.native_palette,
         )
     )
     app.setStyleSheet(_build_qss())

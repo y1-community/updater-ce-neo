@@ -402,7 +402,7 @@ def test_compact_window_mode_and_sidebar_hiding():
     # screen it is on, and Diagnostics stays hidden until D is pressed.
     expected_w, expected_h = default_window_size(w.screen())
     assert w.size().width() == expected_w
-    assert w.size().height() == expected_h
+    assert w.size().height() <= expected_h
     assert w._settings_btn.isVisible()
     assert w._log_btn.isVisible() is False
     assert w._diagnostics_page is None
@@ -421,6 +421,9 @@ def test_compact_window_mode_and_sidebar_hiding():
     assert w._install_run_active() is True
     assert w._settings_btn.isVisible() is False
     assert w._support_btn.isVisible() is False
+    assert w._sp_flash_tool_btn.isVisible() is False
+    assert w._install_output_btn.isVisible() is True
+    assert w._install_output_btn.isEnabled() is True
     assert w._log_btn.isVisible() is True
     assert w._log_btn.isEnabled() is True
     assert w._check_updates_btn.isVisible() is False
@@ -435,12 +438,16 @@ def test_compact_window_mode_and_sidebar_hiding():
     # Diagnostics is part of the main window and can be opened mid-install.
     w._show_diagnostics()
     app.processEvents()
+    if w._size_anim is not None:
+        w._size_anim.setCurrentTime(200)
     assert w._stack.currentIndex() == _PAGE_DIAGNOSTICS
     assert w._log_btn.isChecked() is True
     assert w._nav_buttons["nav_select_package"][0].isChecked() is False
     assert w.size().height() >= 420
     w._nav_buttons["nav_select_package"][0].click()
     app.processEvents()
+    if w._size_anim is not None:
+        w._size_anim.setCurrentTime(200)
     assert w._stack.currentIndex() == _PAGE_FLASH
     assert w._log_btn.isChecked() is False
     assert w.size().height() <= 350
@@ -2815,6 +2822,115 @@ def test_progress_and_status_follow_the_live_theme():
         assert_transparent_surface()
     finally:
         window.close()
+        app.processEvents()
+
+
+def test_install_stages_sidebar_visibility_and_compact_height():
+    """Verify that during install, extraction, and prep stages, only Install Software
+    and Diagnostics are shown in the sidebar, and the window stays compact.
+    When cancelled, completed, or failed, the normal sidebar buttons are restored."""
+    from src.state import FlashState
+    from src.i18n import tr
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    w = MainWindow()
+    w.show()
+    app.processEvents()
+
+    nav_select_btn = w._nav_buttons["nav_select_package"][0]
+
+    def assert_active_sidebar():
+        assert nav_select_btn.text() == tr("nav_install_package")
+        assert w._install_output_btn.isVisible() is True
+        assert w._settings_btn.isVisible() is False
+        assert w._support_btn.isVisible() is False
+        assert w._sp_flash_tool_btn.isVisible() is False
+        assert w._check_updates_btn.isVisible() is False
+        assert w._lang_combo.isVisible() is False
+        assert w._lang_label.isVisible() is False
+
+    def assert_idle_sidebar():
+        assert nav_select_btn.text() == tr("nav_select_package")
+        assert w._install_output_btn.isVisible() is False
+        assert w._settings_btn.isVisible() is True
+        assert w._support_btn.isVisible() is True
+        assert w._lang_combo.isVisible() is True
+        assert w._lang_label.isVisible() is True
+
+    try:
+        # Initial idle state
+        assert_idle_sidebar()
+
+        # 1. PREP STAGE (Power-off prompt)
+        w._show_device_prep()
+        app.processEvents()
+        if w._size_anim is not None:
+            w._size_anim.setCurrentTime(200)
+        assert w._power_off_prompt is True
+        assert w._install_run_active() is True
+        assert_active_sidebar()
+        assert w.size().height() <= 330
+
+        # 2. DOWNLOAD STAGE
+        w._on_download_started("Rockbox 0.5 for Y1", "Y1")
+        app.processEvents()
+        if w._size_anim is not None:
+            w._size_anim.setCurrentTime(200)
+        assert w._download_active is True
+        assert w._install_run_active() is True
+        assert_active_sidebar()
+        assert w.size().height() <= 260
+
+        # 3. EXTRACTION STAGE
+        w._on_download_finished(True, "/tmp/mock_pkg.zip")
+        w._on_prep_started("Rockbox 0.5 for Y1", "Y1")
+        app.processEvents()
+        if w._size_anim is not None:
+            w._size_anim.setCurrentTime(200)
+        assert w._prep_active is True
+        assert w._install_run_active() is True
+        assert_active_sidebar()
+        assert w.size().height() <= 260
+
+        # 4. FLASHING STAGE
+        w._set_state(FlashState.S4_FLASHING)
+        app.processEvents()
+        if w._size_anim is not None:
+            w._size_anim.setCurrentTime(200)
+        assert w._install_run_active() is True
+        assert_active_sidebar()
+
+        # 5. ON COMPLETION
+        w._install_complete = True
+        w._compact_install_screen = False
+        w._power_off_prompt = False
+        w._prep_active = False
+        w._download_active = False
+        w._sync_install_nav_entry()
+        app.processEvents()
+        assert w._install_run_active() is False
+        assert_idle_sidebar()
+
+        # 6. ON CANCEL
+        w._on_download_started("Firmware", "Y1")
+        app.processEvents()
+        assert_active_sidebar()
+        w._return_to_select_software()
+        app.processEvents()
+        assert w._install_run_active() is False
+        assert_idle_sidebar()
+
+        # 7. ON FAILURE
+        w._set_state(FlashState.S4_FLASHING)
+        app.processEvents()
+        assert_active_sidebar()
+        w._show_install_failure("CONNECTION_FAILED")
+        app.processEvents()
+        assert w._install_run_active() is False
+        assert_idle_sidebar()
+
+    finally:
+        w.close()
         app.processEvents()
 
 

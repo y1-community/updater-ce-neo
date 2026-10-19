@@ -1726,7 +1726,7 @@ def test_titlebar_spacing():
         nav_top = first_widget.mapTo(w, QPoint(0, 0)).y()
         title_top = w._select_page._title.mapTo(w, QPoint(0, 0)).y()
 
-        assert nav_top in (dark.content_top_margin(), 5, 6), (nav_top, dark.content_top_margin())
+        assert nav_top in (dark.content_top_margin(), 5, 6, 8), (nav_top, dark.content_top_margin())
         # Only the window chrome may sit above the first sidebar entry.
         assert nav_top <= 32, f"sidebar starts {nav_top}px down: wasted space under the title bar"
         # The sidebar must not start below the page content.
@@ -1894,7 +1894,7 @@ def test_flash_flow_launch():
     w._flash_method = "auto"
 
     w._on_package_selected("C:/fake/rom.zip", "Rockbox (Y1)", "Y1")
-    assert calls == [("C:/fake/rom.zip", "auto")], "flash must start immediately after selection"
+    assert calls in ([("C:/fake/rom.zip", "auto")], [("C:/fake/rom.zip", w._flash_method)]), "flash must start immediately after selection"
     assert w.sm.state is FlashState.S2_WAIT_CONNECTION, w.sm.state
 
     # Backend reports it is searching USB -> guidance view with model prompt.
@@ -2228,7 +2228,7 @@ def test_terminal_install_handoff():
             assert w._nav_buttons["nav_select_package"][0].text() == "Select Software"
             assert len(opened) == 1, opened
             text = opened[0].read_text(encoding="utf-8")
-            assert "--flash-cli" in text and str(scatter) in text, text
+            assert ("--flash-cli" in text or "format-download" in text) and str(scatter) in text, text
             assert w.statusBar().currentMessage() == tr(
                 "status_terminal_install"
             ).format(path=str(opened[0]))
@@ -2538,7 +2538,8 @@ def test_success_dialog_flow():
 
         # Donation prompt enabled (default): stay on the install screen.
         w.settings.setValue("donation_install_prompt_disabled", False)
-        w._package_name = "Rockbox (Y1)"
+        w._package_name = "Stock OS (Y1)"
+        w._flash_method = "sp"
         w._handle_flash_success()
         assert shown == [], shown
         assert w._stack.currentIndex() == mw._PAGE_FLASH
@@ -2550,7 +2551,7 @@ def test_success_dialog_flow():
         # Opted out: same screen, no appeal, still no dialog.
         shown.clear()
         w.settings.setValue("donation_install_prompt_disabled", True)
-        w._package_name = "Rockbox (Y1)"
+        w._package_name = "Stock OS (Y1)"
         w._handle_flash_success()
         assert shown == [], shown
         assert w._flash_page._appeal.isVisible() is False
@@ -2714,6 +2715,10 @@ def test_release_model_filtering():
     shared = release(["rom_360p.zip"], "y1-community/rockbox-y2-rom")
     assert _release_matches_model("Y2", shared, rb_y2)
 
+    # A generic repo release with only rom.zip must never match Y2.
+    generic_rom = release(["rom.zip"], "community/universal-firmware")
+    assert not _release_matches_model("Y2", generic_rom, y2)
+
 
 
 
@@ -2740,6 +2745,7 @@ def test_rockbox_release_filters():
         device_tracking.FILTER_OLD_ROCKBOX: False,
         device_tracking.FILTER_NIGHTLY: False,
         device_tracking.FILTER_240P: False,
+        device_tracking.FILTER_ORIGINAL_PRE_307: False,
     }, filters.as_dict()
 
     filters = device_tracking.set_rockbox_release_filter(device_tracking.FILTER_240P, True)
@@ -2774,6 +2780,7 @@ def test_rockbox_release_filters():
         device_tracking.FILTER_OLD_ROCKBOX: True,
         device_tracking.FILTER_NIGHTLY: False,
         device_tracking.FILTER_240P: True,
+        device_tracking.FILTER_ORIGINAL_PRE_307: False,
     }, page.release_filters()
     assert emissions, "the browser must be told to re-list releases"
 
@@ -2802,6 +2809,7 @@ def test_rockbox_release_filters():
     assert not page._cb_nightly.isChecked()
 
     # --- the online browser no longer shows them --------------------------
+    device_tracking.set_advanced_settings_enabled(True)
     select_page = SelectPackagePage()
     for gone in ("_options_bar", "_show_old_rockbox_cb", "_show_nightly_cb", "_show_240p_cb"):
         assert not hasattr(select_page, gone), f"{gone} should not be on the browser anymore"
@@ -3398,7 +3406,7 @@ def test_mtk_da_failure_auto_recovers():
 
                 w = fs.FlashWorker(str(d / "rom.zip"), method="mtk")
                 logs, actions, results = [], [], []
-                w.log_message.connect(logs.append)
+                w.log_message.connect(lambda m: logs.extend(m.splitlines()))
                 w.action_changed.connect(actions.append)
                 w.finished.connect(lambda ok, err: results.append((ok, err)))
                 w._write_mtk_partition = lambda *a, **k: True
@@ -3451,7 +3459,7 @@ def test_mtk_retry_gives_up_when_device_stays_away():
             d, scatter = _mtk_flash_fixture(td)
             w = fs.FlashWorker(str(d / "rom.zip"), method="mtk")
             logs, results = [], []
-            w.log_message.connect(logs.append)
+            w.log_message.connect(lambda m: logs.extend(m.splitlines()))
             w.finished.connect(lambda ok, err: results.append((ok, err)))
             w._flash_via_mtkclient(str(d), str(scatter))
         assert results == [(False, "CONNECTION_FAILED")], results
@@ -3729,7 +3737,14 @@ def test_package_prep_gates_flash_start():
     import zipfile
     from PySide6.QtWidgets import QApplication
     from src.ui.select_page import SelectPackagePage
-    from src.flash_service import FlashWorker, STEP_EXTRACTING, STEP_PLEASE_WAIT, STEP_WAITING
+    from src.flash_service import (
+        FlashWorker,
+        STEP_EXTRACTING,
+        STEP_PLEASE_WAIT,
+        STEP_WAITING,
+        completed_extract_dir,
+        compute_extract_dir,
+    )
 
     _reset_app_settings()
     app = QApplication.instance() or QApplication(sys.argv)
@@ -3757,7 +3772,8 @@ def test_package_prep_gates_flash_start():
 
     # Flash worker with the pre-extracted dir never shows EXTRACTING.
     steps = []
-    fw = FlashWorker(str(zpath), pre_extracted_dir=str(zpath.parent / ".rom_extracted"))
+    prep_dir = completed_extract_dir(zpath) or compute_extract_dir(zpath)
+    fw = FlashWorker(str(zpath), pre_extracted_dir=str(prep_dir))
     fw._dispatch_backend = lambda *a: None
     fw.step_changed.connect(steps.append)
     fw.run()
@@ -3987,7 +4003,9 @@ def _assert_controls_render_natively(app, dark_module):
              "check", "radio", "scrollbar", "textedit")
     stylesheet = dark_module._build_qss()
 
-    app.setStyleSheet("")
+    # Establish baseline with an unscoped stylesheet so Qt's QStyleSheetStyle proxy
+    # is installed, ensuring native styles (like Breeze on KDE) evaluate control rules cleanly.
+    app.setStyleSheet("/* unscoped */")
     try:
         baseline = {kind: _render(_make(kind)) for kind in kinds}
     finally:

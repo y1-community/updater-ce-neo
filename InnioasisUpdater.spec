@@ -73,6 +73,9 @@ sp_candidates = [
     PROJECT_ROOT / "tools" / "windows" / "SP_Flash_Tool_v5.1904_Win"
     if sys.platform.startswith("win")
     else None,
+    PROJECT_ROOT / "tools" / "linux" / "SP_Flash_Tool_v5.1904_Linux"
+    if sys.platform.startswith("linux")
+    else None,
 ]
 SP_FLASH_SRC = next((p for p in sp_candidates if p and p.exists()), None)
 

@@ -393,6 +393,8 @@ def test_linux_setup_completion_returns_to_select_and_hides_shortcut(monkeypatch
     window.settings = QSettings(str(tmp_path / "linux-first-run.ini"), QSettings.Format.IniFormat)
     window._select_page.gui_firmware_target = lambda: {"kind": "cache"}
     window._settings_page.reveal_advanced_methods()
+    window._linux_setup_btn.setVisible(True)
+    window._linux_setup_btn.setEnabled(True)
     window._sync_sp_gui_button_visibility()
     try:
         assert not window._sp_flash_tool_btn.isHidden()

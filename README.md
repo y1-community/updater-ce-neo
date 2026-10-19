@@ -148,3 +148,42 @@ python scripts/set_build_brand.py --reset
 | **Windows** | **SP Flash Tool** | **MTKClient** (press `M` to unlock) | `tools/windows/SP_Flash_Tool_v5.1904_Win` |
 | **macOS** | **MTKClient** (in-process) | None | `vendor/mtkclient` + `libusb-1.0.dylib` |
 | **Linux** | **SP Flash Tool** | **MTKClient** | `tools/linux/SP_Flash_Tool_v5.1904_Linux` |
+
+---
+
+## 5. Combined Windows / Linux Portable Distribution (`fw_package.ini`)
+
+Firmware developers and community creators can distribute a single, combined portable package that boots natively on both Windows and Linux without requiring installation.
+
+### Folder Structure
+Place the Windows portable build, the Linux `.AppImage`, the MediaTek firmware files, and `fw_package.ini` in the same directory:
+
+```text
+MyCustomFirmware_Portable/
+├── fw_package.ini             # Portable package manifest
+├── updater.png                # Header branding icon (64x64 or 128x128 PNG)
+├── MT6572_Android_scatter.txt # MediaTek scatter file
+├── preloader.bin              # Declared partition images...
+├── boot.img
+├── recovery.img
+├── system.img
+├── UpdaterCE.exe              # Windows portable binary
+├── _internal/                 # Windows dependencies
+└── UpdaterCE-x86_64.AppImage  # Linux standalone executable (chmod +x)
+```
+
+### Manifest Format (`fw_package.ini`)
+```ini
+[fw_package]
+enabled = true
+name = Rockbox
+version = 3.0.7
+model = Y1
+type = Type A
+```
+
+### Self-Installing Behavior & Working Directory Isolation
+1. **Automatic Folder Pre-Selection**: When launched from this folder, Updater CE automatically detects `fw_package.ini`, switches to the folder install flow, and fills in the software name, version, model, hardware type, and header icon. The software name is automatically translated into the user's desktop language via Google Translate.
+2. **Directory Isolation Staging**: Before SP Flash Tool or MTKClient executes, Updater CE stages the scatter file and only the declared partition images into an isolated cache working directory (`stage_firmware_for_flashing`). This protects the application's executable, `_internal/` runtime libraries, and scripts from being overwritten, polluted with temporary logs, or modified during flashing.
+3. **Archive Pruning**: When extracting a portable zip archive, Updater CE automatically retains only the scatter file, the partition images declared in the scatter, `fw_package.ini`, any `*.auth` file, and `updater.png`, purging unnecessary archive overhead.
+

@@ -188,32 +188,29 @@ def clear_glass_plate(widget: QWidget) -> None:
         widget.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, False)
         widget.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
         widget.setAutoFillBackground(False)
+        widget.setStyleSheet("background: transparent; border: none;")
     if isinstance(widget, QAbstractScrollArea):
         view = widget.viewport()
         if view is not None:
             if glass_surfaces_enabled():
                 show_glass_backdrop(view)
             else:
-                from .dark import T
-
-                # The viewport is the window surface, not a card plate, so lists
-                # and notes blend with the window the same way the glass path does.
-                card_surface = QColor(T().bg)
-                card_surface.setAlpha(255)
+                clear = QColor(0, 0, 0, 0)
                 palette = view.palette()
                 for group in (
                     QPalette.ColorGroup.Active,
                     QPalette.ColorGroup.Inactive,
                     QPalette.ColorGroup.Disabled,
                 ):
-                    palette.setColor(group, QPalette.ColorRole.Base, card_surface)
-                    palette.setColor(group, QPalette.ColorRole.Window, card_surface)
+                    palette.setColor(group, QPalette.ColorRole.Base, clear)
+                    palette.setColor(group, QPalette.ColorRole.Window, clear)
                 view.setPalette(palette)
                 view.setBackgroundRole(QPalette.ColorRole.Base)
                 view.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
                 view.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, False)
                 view.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
-                view.setAutoFillBackground(True)
+                view.setAutoFillBackground(False)
+                view.setStyleSheet("background: transparent; border: none;")
     if isinstance(widget, QTextEdit):
         _clear_document_background(widget)
 

@@ -844,7 +844,29 @@ if [ -n "$TARGET_USER" ] && [ "$TARGET_USER" != "root" ] && command -v usermod >
     fi
 fi
 
-# 4. Reload udev
+# 4. Clean up competing processes and free COM ports
+echo "Cleaning up conflicting flash tool processes..."
+pkill -9 -f flash_tool 2>/dev/null || true
+pkill -9 -f mtk.py 2>/dev/null || true
+pkill -9 -f adb 2>/dev/null || true
+
+echo "Releasing COM / serial ports..."
+if command -v fuser >/dev/null 2>&1; then
+    fuser -k -9 /dev/ttyACM* /dev/ttyUSB* 2>/dev/null || true
+fi
+chmod 666 /dev/ttyACM* /dev/ttyUSB* 2>/dev/null || true
+
+# 5. Ensure ModemManager / brltty do not interfere
+if command -v systemctl >/dev/null 2>&1; then
+    if systemctl is-active --quiet ModemManager 2>/dev/null; then
+        systemctl stop ModemManager 2>/dev/null || true
+    fi
+    if systemctl is-active --quiet brltty 2>/dev/null; then
+        systemctl stop brltty 2>/dev/null || true
+    fi
+fi
+
+# 6. Reload udev
 echo "Reloading udev rules..."
 if command -v udevadm >/dev/null 2>&1; then
     udevadm control --reload-rules || true
@@ -852,7 +874,7 @@ if command -v udevadm >/dev/null 2>&1; then
     echo "udev reloaded successfully."
 fi
 
-# 5. Kernel module cdc_acm (loads on demand on most systems)
+# 7. Kernel module cdc_acm (loads on demand on most systems)
 if command -v modprobe >/dev/null 2>&1; then
     echo "Ensuring kernel module cdc_acm is loaded..."
     modprobe cdc_acm 2>/dev/null || true
@@ -1024,6 +1046,10 @@ def create_flash_tool_runner(stage: Path = None) -> Path:
         'export LD_LIBRARY_PATH="$STAGE_DIR:$STAGE_DIR/lib:${LD_LIBRARY_PATH:-}"\n'
         'export QT_PLUGIN_PATH="$STAGE_DIR/plugins"\n'
         'export QT_QPA_PLATFORM="xcb"\n'
+        'if command -v fuser >/dev/null 2>&1; then\n'
+        '    fuser -k -9 /dev/ttyACM* /dev/ttyUSB* 2>/dev/null || true\n'
+        'fi\n'
+        'chmod 666 /dev/ttyACM* /dev/ttyUSB* 2>/dev/null || true\n'
         'cd "$STAGE_DIR"\n'
         f'exec "$STAGE_DIR/{FLASH_TOOL_LINUX_BIN}" "$@"\n'
     )
@@ -1101,6 +1127,12 @@ def silent_system_prep(stage: Path = None) -> bool:
         make_executable(stage)
         create_flash_tool_runner(stage)
         check_cdc_acm()
+        try:
+            from . import process_guard
+            process_guard.free_com_ports()
+            process_guard.sweep_stray_tools(force=True, reason="silent prep")
+        except Exception:
+            pass
         log_dir = stage / LOG_DIR_NAME
         log_dir.mkdir(parents=True, exist_ok=True)
         try:

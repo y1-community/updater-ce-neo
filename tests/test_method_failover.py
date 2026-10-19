@@ -136,12 +136,12 @@ def test_connect_failover_copy_names_both_engines_and_breaks_lines():
 
     table = i18n._STRINGS["err_connect_failover_recovery"]
     assert set(table) >= {"zh-CN", "en", "fr", "es", "de", "ja"}
-    lines = table["en"].split("\n")
-    assert len(lines) == 3, lines
-    assert lines[0] == "{failed} couldn't connect to your {model}."
-    assert lines[1] == "Updater will now try {next} instead."
-    assert lines[2].startswith("Please disconnect the USB and use a paperclip")
-    assert lines[2].endswith("then press next.")
+    paragraphs = table["en"].split("\n\n")
+    assert len(paragraphs) == 3, paragraphs
+    assert paragraphs[0] == "{failed} couldn't connect to your {model}."
+    assert paragraphs[1] == "Updater will now try {next} instead."
+    assert paragraphs[2].startswith("Please disconnect the USB and use a paperclip")
+    assert paragraphs[2].endswith("then press next.")
     # A real disconnect keeps its own wording.
     assert i18n._STRINGS["err_usb_disconnected_recovery"]["en"].startswith(
         "Your {model} got disconnected."
@@ -553,8 +553,8 @@ def test_com_port_failure_fails_over_with_the_engine_names():
         assert text == tr("err_connect_failover_recovery").format(
             model="Y1", failed="SP Flash Tool", next="MTKClient"
         )
-        # Failure, engine taking over, reset steps: one line each.
-        assert len(text.splitlines()) == 3
+        # Failure, engine taking over, reset steps: three paragraphs separated by gaps.
+        assert len([p for p in text.split("\n\n") if p.strip()]) == 3
         # The band keeps saying the install failed.
         assert window._flash_page._wait_progress_bar.is_failed() is True
         assert window._power_off_prompt is True

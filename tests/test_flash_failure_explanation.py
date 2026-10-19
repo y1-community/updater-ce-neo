@@ -2,10 +2,14 @@
 and visible danger styling on the app heading in all locales.
 """
 
+import os
 import sys
 import pytest
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QColor
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+os.environ.setdefault("INNIOASIS_HEADLESS", "1")
 
 from src.flash_service import parse_flash_error, describe_backend_error
 from src.i18n import tr, translator

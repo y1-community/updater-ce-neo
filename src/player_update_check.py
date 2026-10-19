@@ -333,6 +333,13 @@ def advanced_settings_enabled(settings: Optional[QSettings] = None) -> bool:
     return bool(_get_settings(settings).value("advanced_settings", False, type=bool))
 
 
+def set_advanced_settings_enabled(enabled: bool, settings: Optional[QSettings] = None) -> bool:
+    """Set whether advanced settings and options are enabled."""
+    s = _get_settings(settings)
+    s.setValue("advanced_settings", bool(enabled))
+    return bool(enabled)
+
+
 def rockbox_release_filters(settings: Optional[QSettings] = None) -> RockboxReleaseFilters:
     """Current Rockbox listing filters, with the 240p/older-builds invariant applied."""
     s = _get_settings(settings)

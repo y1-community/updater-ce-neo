@@ -33,7 +33,9 @@ import traceback
 import zipfile
 from pathlib import Path
 from struct import pack, unpack
-from typing import Optional
+from typing import Optional, Union
+
+from .downloads import downloads_dir
 
 # Combined ETA used by the install card and the Device Prep stage. The install
 # card already shows a measured write ETA, and the Device Prep stage is a
@@ -649,10 +651,7 @@ def parse_flash_error(value, model: str = "") -> tuple[str, str]:
     if not raw:
         return tr("install_failed_title"), tr("err_generic_flash_failed_desc").format(detail="")
 
-    if raw == "CACHE_FILE_MISSING" or any(
-        marker in raw.lower()
-        for marker in ("filenotfounderror", "no such file or directory", "cannot find the file")
-    ):
+    if raw == "CACHE_FILE_MISSING":
         return tr("install_failed_title"), tr("err_cache_file_missing_desc")
 
     # 1. USB Disconnected / lost connection
@@ -708,6 +707,10 @@ def parse_flash_error(value, model: str = "") -> tuple[str, str]:
 
     # 9. Package files missing
     if any(k in raw.upper() for k in ("NO_SCATTER_FILE", "MISSING_IMAGES", "NO_IMAGE_FILES")):
+        if ":" in raw:
+            parts = raw.split(":", 1)[1].strip()
+            if parts:
+                return tr("err_missing_package_files_title"), f"{tr('err_missing_package_files_desc')}\n\n{parts}"
         return tr("err_missing_package_files_title"), tr("err_missing_package_files_desc")
 
     # 10. Flashing tool / import failure
@@ -1331,9 +1334,13 @@ def completed_extract_dir(package_path):
 
 def _is_extract_complete(extract_dir):
     d = Path(extract_dir)
-    if d.is_dir() and not d.name.endswith("_extracted"):
+    if not d.exists() or not d.is_dir():
+        return False
+    if not d.name.endswith("_extracted"):
         return True
-    return d.exists() and (d / EXTRACT_COMPLETE_MARKER).exists()
+    if (d / EXTRACT_COMPLETE_MARKER).exists():
+        return True
+    return _find_scatter(d, allow_raise=False) is not None
 
 
 def _mark_extract_complete(extract_dir):
@@ -1644,27 +1651,52 @@ def sp_flash_tool_console_args(scatter_arg, da_arg, auth_file="", log=None):
 
 def _resolve_image_file(scatter_dir, fname):
     scatter_dir = Path(scatter_dir).resolve()
+    clean_fname = Path(str(fname).replace("\\", "/")).name
     exact = (scatter_dir / fname).resolve()
-    if exact.exists():
+    if exact.is_file():
         return exact
-    stem, ext = os.path.splitext(fname)
+    exact_clean = (scatter_dir / clean_fname).resolve()
+    if exact_clean.is_file():
+        return exact_clean
+
+    stem, ext = os.path.splitext(clean_fname)
     base_stem = re.sub(r"-(?:verified|sign)$", "", stem, flags=re.IGNORECASE)
     candidate_stems = [stem, base_stem, f"{base_stem}-verified", f"{base_stem}-sign"]
     for c_stem in candidate_stems:
         variant = (scatter_dir / f"{c_stem}{ext}").resolve()
-        if variant.exists():
+        if variant.is_file():
             return variant
-    fname_lower = fname.lower()
+
+    fname_lower = clean_fname.lower()
     candidate_stems_lower = {s.lower() for s in candidate_stems}
     ext_lower = ext.lower()
+
+    # Direct scan in scatter_dir (case-insensitive)
     try:
         for f in scatter_dir.iterdir():
-            if f.name.lower() == fname_lower:
-                return f.resolve()
-            if f.stem.lower() in candidate_stems_lower and f.suffix.lower() == ext_lower:
-                return f.resolve()
+            if f.is_file():
+                if f.name.lower() == fname_lower:
+                    return f.resolve()
+                if f.stem.lower() in candidate_stems_lower and f.suffix.lower() == ext_lower:
+                    return f.resolve()
     except Exception:
         pass
+
+    # Recursive scan in scatter_dir and parent directory (arbitrary firmware layouts)
+    search_dirs = [scatter_dir]
+    if scatter_dir.parent.is_dir() and scatter_dir.parent != scatter_dir:
+        search_dirs.append(scatter_dir.parent)
+    for s_dir in search_dirs:
+        try:
+            for f in s_dir.rglob("*"):
+                if f.is_file():
+                    if f.name.lower() == fname_lower:
+                        return f.resolve()
+                    if f.stem.lower() in candidate_stems_lower and f.suffix.lower() == ext_lower:
+                        return f.resolve()
+        except Exception:
+            pass
+
     return exact
 
 
@@ -1704,28 +1736,29 @@ def align_scatter_disk_images(scatter_path, log=None):
             declared_files.add(fname)
 
     for fname in declared_files:
-        target_path = scatter_dir / fname
+        clean_fname = Path(str(fname).replace("\\", "/")).name
+        target_path = scatter_dir / clean_fname
         if target_path.exists():
             continue
         resolved = _resolve_image_file(scatter_dir, fname)
         if resolved and resolved.exists() and resolved != target_path:
             try:
-                target_path.symlink_to(resolved.name)
+                target_path.symlink_to(resolved)
                 if log:
-                    log(f"Aliased {resolved.name} -> {fname}")
+                    log(f"Aliased {resolved.name} -> {clean_fname}")
             except OSError:
                 try:
                     os.link(str(resolved), str(target_path))
                     if log:
-                        log(f"Linked {resolved.name} -> {fname}")
+                        log(f"Linked {resolved.name} -> {clean_fname}")
                 except OSError:
                     try:
                         shutil.copy2(str(resolved), str(target_path))
                         if log:
-                            log(f"Copied {resolved.name} -> {fname}")
+                            log(f"Copied {resolved.name} -> {clean_fname}")
                     except Exception as e:
                         if log:
-                            log(f"Warning: could not alias {resolved.name} -> {fname}: {e}")
+                            log(f"Warning: could not alias {resolved.name} -> {clean_fname}: {e}")
 
 
 def _list_expected_images(scatter_path):
@@ -1761,6 +1794,63 @@ def _list_expected_images(scatter_path):
     if current:
         flush(current)
     return expected
+
+
+def stage_firmware_for_flashing(
+    scatter_path: Union[str, Path],
+    target_dir: Optional[Union[str, Path]] = None,
+) -> Path:
+    """Stage firmware files into an isolated working directory under cache/downloads
+    before SP Flash Tool / MTKClient work on them, protecting the app's own directory
+    (_internal, binaries) from being overwritten or modified when extracting/flashing.
+
+    Only the scatter file, the declared partition image files, any *.auth file, and
+    fw_package.ini / icon are staged. Returns the path to the staged scatter file.
+    """
+    scatter_p = Path(scatter_path).resolve()
+    src_folder = scatter_p.parent
+    if target_dir is None:
+        import hashlib
+        h = hashlib.sha256(str(src_folder).encode("utf-8")).hexdigest()[:12]
+        dest_folder = downloads_dir() / "staged_firmware" / f"stage_{h}_{scatter_p.stem}"
+    else:
+        dest_folder = Path(target_dir).resolve()
+
+    if src_folder == dest_folder:
+        return scatter_p
+
+    dest_folder.mkdir(parents=True, exist_ok=True)
+    dest_scatter = dest_folder / scatter_p.name
+
+    # Always stage the scatter file if not already present or if modified
+    if not dest_scatter.exists() or dest_scatter.stat().st_size != scatter_p.stat().st_size:
+        shutil.copy2(scatter_p, dest_scatter)
+
+    # Collect declared images to stage
+    for _name, img_path in _list_expected_images(scatter_p):
+        if img_path.is_file():
+            dest_img = dest_folder / img_path.name
+            if not dest_img.exists() or dest_img.stat().st_size != img_path.stat().st_size:
+                try:
+                    shutil.copy2(img_path, dest_img)
+                except Exception as e:
+                    logger.warning("Could not stage image %s: %s", img_path.name, e)
+
+    # Stage any .auth or DA files present in source folder
+    for p in src_folder.glob("*.auth"):
+        dest_auth = dest_folder / p.name
+        if not dest_auth.exists() or dest_auth.stat().st_size != p.stat().st_size:
+            shutil.copy2(p, dest_auth)
+
+    for ini_name in ("fw_package.ini", "updater.png", "updater.jpg", "updater.jpeg"):
+        f = src_folder / ini_name
+        if f.is_file():
+            dest_f = dest_folder / ini_name
+            if not dest_f.exists() or dest_f.stat().st_size != f.stat().st_size:
+                shutil.copy2(f, dest_f)
+
+    return dest_scatter
+
 
 
 def _parse_scatter(scatter_path):
@@ -1922,7 +2012,7 @@ class _StallWatcher(threading.Thread):
 
 
 
-class _MtkOutputStallDetector:
+class _MtkOutputStallDetector(threading.Thread):
     """Reports when the MTKClient backend has printed the same stalled line
 
     too long. The existing ``_StallWatcher`` only tracks idle time between
@@ -2494,7 +2584,9 @@ class FlashWorker(QThread):
                     self._log(f"Internal error: {type(e).__name__}: {e}")
                 except Exception:
                     pass
-                if is_disconnection_error(str(e), e) or not is_mtk_device_connected():
+                if is_disconnection_error(str(e), e) or (
+                    getattr(self, "_past_usb_search", False) and not is_mtk_device_connected()
+                ):
                     self._is_disconnected = True
                     self.cancel()
                     self.usb_disconnected.emit()
@@ -2543,7 +2635,12 @@ class FlashWorker(QThread):
             self.finished.emit(False, str(e))
             return
 
-        if (scatter_file is None or missing) and reused and not Path(self.package_path).is_dir():
+        can_reextract = bool(
+            self.package_path
+            and Path(self.package_path).is_file()
+            and Path(self.package_path).suffix.lower() in (".zip", ".tar", ".gz", ".tgz", ".bz2", ".xz")
+        )
+        if (scatter_file is None or missing) and reused and can_reextract and not Path(self.package_path).is_dir():
             self._log(
                 "Scatter file missing from reused directory; re-extracting..."
                 if scatter_file is None
@@ -2570,8 +2667,15 @@ class FlashWorker(QThread):
             return
         if missing:
             self._log(f"Error: missing image files: {', '.join(missing)}")
-            self.finished.emit(False, "MISSING_IMAGES")
+            self.finished.emit(False, f"MISSING_IMAGES: {', '.join(missing)}")
             return
+
+        scatter_parent = scatter_file.parent
+        if (scatter_parent / "fw_package.ini").is_file() or (scatter_parent / "_internal").is_dir() or (scatter_parent / "tools").is_dir():
+            self._log("Staging firmware into isolated working directory...")
+            scatter_file = stage_firmware_for_flashing(scatter_file)
+            extract_dir = scatter_file.parent
+            self._log(f"Staged scatter file: {scatter_file}")
 
         self._log(f"Scatter file: {scatter_file}")
         platform = _parse_scatter_platform(scatter_file)
@@ -2692,6 +2796,12 @@ class FlashWorker(QThread):
 
     # -- extraction ----------------------------------------------------------
     def _extract_package(self):
+        pre = Path(self.pre_extracted_dir) if self.pre_extracted_dir else None
+        if pre and pre.is_dir():
+            sc = _find_scatter(pre, allow_raise=False)
+            if sc:
+                return sc.parent
+            return pre
         p = Path(self.package_path) if self.package_path else None
         if p and p.is_file() and (p.suffix.lower() == ".txt" or "scatter" in p.name.lower()):
             return p.parent
@@ -3591,6 +3701,15 @@ class FlashWorker(QThread):
         """The restart-and-quit prompt text, if one was deferred after the run."""
         return getattr(self, "_deferred_restart_prompt", None)
 
+    def _note_mtk_output_for_stall_check(self, text):
+        detector = getattr(self, "_mtk_output_stall_detector", None)
+        if detector is not None:
+            detector.note(text)
+
+    def _on_mtk_output_stalled(self, line="", elapsed=0.0):
+        self._log(f"MTKClient stalled on line: {line} ({int(elapsed)}s)")
+        self._finalize_mtk_stall("MTK_OUTPUT_STALLED")
+
     def _end_mtk_run_successfully(self, mtk, da_handler=None) -> None:
         """The last step of a successful in-process MTKClient run.
 
@@ -3879,6 +3998,7 @@ class FlashWorker(QThread):
             window=MTK_OUTPUT_STALL_WINDOW,
             interval=0.5,
         )
+        self._mtk_output_stall_detector = mtk_output_stall_detector
         mtk_output_stall_detector.start()
         attempt = 0
         try:
@@ -3914,12 +4034,9 @@ class FlashWorker(QThread):
                             mtk, da_handler = None, None
                 if mtk is not None and da_handler is not None:
                     break
-                max_attempts = 120 if is_mtk_method(self.method) else MTK_DA_ATTEMPTS
+                max_attempts = MTK_DA_ATTEMPTS
                 if attempt >= max_attempts or getattr(self, "_attempt_expired", False) or self._cancelled:
                     break
-                if mtk is None:
-                    time.sleep(0.5)
-                    continue
                 self._log("The download agent did not come up.")
                 self.action_changed.emit(tr("action_da_wait_back"))
                 if not self._wait_for_retry(attempt):
@@ -3927,15 +4044,17 @@ class FlashWorker(QThread):
         except BaseException as e:
             self._log(f"Device connection failed: {e}\n{traceback.format_exc()}")
             watcher.stop()
+            mtk_output_stall_detector.stop()
+            self._mtk_output_stall_detector = None
+            self._flush_log()
             self.finished.emit(False, "CONNECTION_FAILED")
             return
         if mtk is None or da_handler is None:
             self._log("Device connection returned None")
-            self._log(
-                "The download agent did not come up. Power the device off "
-                "completely (hold power ~10s), reconnect in flash mode, and retry."
-            )
             watcher.stop()
+            mtk_output_stall_detector.stop()
+            self._mtk_output_stall_detector = None
+            self._flush_log()
             self.finished.emit(False, "CONNECTION_FAILED")
             return
 
@@ -4165,9 +4284,7 @@ class FlashWorker(QThread):
                             bytes_progress_cb=on_segment_done,
                         )
                 except BaseException as e:
-                    # BaseException: mtkclient may sys.exit() on DA errors; keep it
-                    # a clean per-partition failure, never an app crash.
-                    if is_disconnection_error(str(e), e) or not is_mtk_device_connected():
+                    if is_disconnection_error(str(e), e):
                         self._log(f"USB disconnection detected during partition write: {e}")
                         self._is_disconnected = True
                         self.cancel()
@@ -4217,6 +4334,9 @@ class FlashWorker(QThread):
         finally:
             self._flush_log()
             watcher.stop()
+            if mtk_output_stall_detector is not None:
+                mtk_output_stall_detector.stop()
+            self._mtk_output_stall_detector = None
             # Hand mtkclient's messages back to its own logging so nothing is
             # left holding the worker after the session ends.
             try:

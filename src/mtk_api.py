@@ -177,7 +177,7 @@ def _apply_runtime_patches():
                 sz = min(buflen, bytestoread)
                 try:
                     if fast:
-                        rlen = epr(buffer, timeout)
+                        rlen = epr(buffer, self.timeout)
                         if rlen > sz:
                             self.warning("Buffer overflow")
                             q.put(buffer[rlen:])
@@ -201,7 +201,7 @@ def _apply_runtime_patches():
                             read_sz = max(sz, w_max_packet_size)
                         else:
                             read_sz = sz
-                        dt = epr(read_sz)
+                        dt = bytes(epr(read_sz, self.timeout))
                         rlen = len(dt)
                         if rlen > sz:
                             extend(dt[:sz])

@@ -109,11 +109,17 @@ class ErrorPage(QWidget):
         if is_sp_flash_gui_supported():
             self._sp_gui_btn = QPushButton(tr("flash_btn_open_sp_gui"))
             self._sp_gui_btn.clicked.connect(lambda: self._sp_gui_cb and self._sp_gui_cb())
+            self._sp_gui_btn.setVisible(False)
             btn_row.addWidget(self._sp_gui_btn)
 
         btn_row.addStretch()
         layout.addLayout(btn_row)
         layout.addStretch()
+
+    def set_advanced_mode(self, enabled: bool) -> None:
+        """Gate SP GUI button on Advanced Settings."""
+        if hasattr(self, "_sp_gui_btn"):
+            self._sp_gui_btn.setVisible(bool(enabled))
 
     def on_retry(self, cb):
         self._retry_cb = cb

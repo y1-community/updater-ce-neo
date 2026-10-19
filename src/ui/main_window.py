@@ -98,6 +98,7 @@ from ..flash_service import (
     is_connect_failure,
     is_wrong_model_error,
     normalise_method,
+    sp_error_code,
 )
 from ..i18n import initial_language, tr, tr_brand, translator
 from ..state import FlashState, StateMachine
@@ -552,7 +553,17 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
+        self.settings = QSettings("innioasis", "updater")
+        translator().set_language(
+            initial_language(str(self.settings.value("language", "") or ""))
+        )
+        if sys.platform != "darwin":
+            icon = paths.RESOURCES_DIR / "icon.ico"
+            if not icon.exists():
+                icon = paths.RESOURCES_DIR / "icon.png"
+            if icon.exists():
+                self.setWindowIcon(QIcon(str(icon)))
+        self.setWindowTitle(self._window_title_for_activity(tr("sel_title")))
         flags = self.windowFlags() | Qt.WindowCloseButtonHint | Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint
         self.setWindowFlags(flags)
         ensure_window_maximize_enabled(self)
@@ -561,10 +572,6 @@ class MainWindow(QMainWindow):
 
         self.sm = StateMachine(self)
         self.service = FlashService(self)
-        self.settings = QSettings("innioasis", "updater")
-        translator().set_language(
-            initial_language(str(self.settings.value("language", "") or ""))
-        )
 
         self._package_path = ""
         self._package_name = ""
@@ -1502,6 +1509,8 @@ class MainWindow(QMainWindow):
 
     def _on_download_started(self, name, model):
         self._cache_recovery_needed = False
+        self._install_complete = False
+        self._install_failed = False
         self._remember_catalogue_section()
         self._begin_run_output()
         self._download_active = True
@@ -1511,19 +1520,22 @@ class MainWindow(QMainWindow):
         self._flash_page.set_model(model or "")
         self._flash_page.show_downloading()
         self._apply_release_icon(complete=False)
+        self._sync_install_nav_entry()
         self._nav_to_page(_PAGE_FLASH)
         self._release_status_to_donors()
 
     def _on_prep_finished(self, ok):
         """A local archive finished extracting: return to Select so Start is reachable."""
+        self._prep_active = False
         if getattr(self, "_download_active", False) or self._install_run_active():
             return
-        self._apply_install_ui_state(False)
+        self._sync_install_nav_entry()
         self._nav_to_page(_PAGE_SELECT)
 
     def _on_prep_started(self, name, model):
         """Zip or archive extraction belongs on the install card, not the catalogue."""
         self._download_active = False
+        self._prep_active = True
         if name:
             self._package_name = name
         if model:
@@ -1534,6 +1546,7 @@ class MainWindow(QMainWindow):
         self._flash_page.set_prep_eta_seconds(0)
         self._flash_page.show_preparing()
         self._apply_release_icon(complete=False)
+        self._sync_install_nav_entry()
         self._nav_to_page(_PAGE_FLASH)
         self._release_status_to_donors()
 
@@ -1551,11 +1564,14 @@ class MainWindow(QMainWindow):
             return
         if not ok:
             self._download_active = False
-            self._apply_install_ui_state(False)
+            self._prep_active = False
+            self._sync_install_nav_entry()
             self._nav_to_page(_PAGE_SELECT)
             self._show_status(f"{tr('sel_download_failed')} \u2014 {result}", 15000)
         else:
             self._download_active = False
+            self._prep_active = True
+            self._sync_install_nav_entry()
             self._flash_page.show_preparing()
             if hasattr(self, "_select_page") and hasattr(self._select_page, "_title"):
                 self._select_page._title.setText(tr("flash_install_in_progress"))
@@ -2106,18 +2122,21 @@ class MainWindow(QMainWindow):
 
     def _install_run_active(self) -> bool:
         """True while an install flow owns the window, including prompts."""
+        if getattr(self, "_install_complete", False) or getattr(self, "_install_failed", False):
+            return False
         if getattr(self, "_download_active", False):
+            return True
+        if getattr(self, "_prep_active", False):
+            return True
+        if getattr(self, "_gui_handoff_prepare", False):
             return True
         if getattr(self, "_rockbox_themes_flow_active", False):
             return True
         if getattr(self, "_rockbox_power_on_pending", False):
             return True
-        if (
-            getattr(self, "_power_off_prompt", False)
-            and not getattr(self, "_gui_handoff_ready", False)
-        ):
+        if getattr(self, "_power_off_prompt", False):
             return True
-        return self.sm.state in _INSTALL_RUN_STATES
+        return hasattr(self, "sm") and self.sm.state in _INSTALL_RUN_STATES
 
     def _build_inline_prompt(self) -> QWidget:
         """Install prompts live under the page, in the content column.
@@ -2252,7 +2271,11 @@ class MainWindow(QMainWindow):
             content_height = self._page_content_height(page) if page is not None else 0
         _, chrome_h = self._window_chrome()
         max_w = MAXIMUM_WINDOW_WIDTH
-        max_h = max(MINIMUM_WINDOW_HEIGHT, int(content_height) + chrome_h + CONTENT_FIT_SLACK)
+        is_hugging = getattr(self, "_hugging_install", False) or (
+            stack is not None and stack.currentIndex() == _PAGE_FLASH
+        )
+        min_floor = COMPACT_INSTALL_MIN_HEIGHT_NO_DONATIONS if is_hugging else MINIMUM_WINDOW_HEIGHT
+        max_h = max(min_floor, int(content_height) + chrome_h + CONTENT_FIT_SLACK)
         screen = self.screen()
         if screen is not None:
             available = screen.availableGeometry()
@@ -2260,7 +2283,7 @@ class MainWindow(QMainWindow):
             if fill_height:
                 max_h = int(available.height())
             else:
-                max_h = max(MINIMUM_WINDOW_HEIGHT, min(max_h, int(available.height())))
+                max_h = max(min_floor, min(max_h, int(available.height())))
         if stack is not None and stack.currentIndex() == _PAGE_SELECT and not fill_height:
             max_h = min(max_h, MAXIMUM_SELECT_WINDOW_HEIGHT)
         if (max_w, max_h) != (self.maximumWidth(), self.maximumHeight()):
@@ -2369,18 +2392,21 @@ class MainWindow(QMainWindow):
             if page.layout() is not None:
                 page.layout().activate()
             self._stack.updateGeometry()
-            page.updateGeometry()
-            page_h = page.sizeHint().height()
             nav = getattr(self, "_nav_panel", None)
             sidebar = nav.width() if nav is not None and nav.width() > 0 else 175
             from .flash_page import install_horizontal_chrome
 
             text_w = page.text_column_width() if hasattr(page, "text_column_width") else 260
             content_w = max(1, int(text_w) + install_horizontal_chrome(0))
-            if page.hasHeightForWidth():
-                fitted = page.heightForWidth(content_w)
-                if 0 < fitted < 1600:
-                    page_h = max(page_h, fitted)
+
+            if curr_idx == _PAGE_FLASH and hasattr(page, "content_height_hint"):
+                page_h = page.content_height_hint(content_w)
+            else:
+                page_h = page.sizeHint().height()
+                if page.hasHeightForWidth():
+                    fitted = page.heightForWidth(content_w)
+                    if 0 < fitted < 1600:
+                        page_h = max(page_h, fitted)
             prompt = getattr(self, "_inline_prompt", None)
             prompt_h = 0
             if prompt is not None and not prompt.isHidden():
@@ -2401,8 +2427,6 @@ class MainWindow(QMainWindow):
             if scr is not None:
                 target_w = min(target_w, int(scr.availableGeometry().width()))
             if curr_idx == _PAGE_FLASH:
-                if hasattr(page, "content_height_hint"):
-                    page_h = max(page_h, page.content_height_hint(content_w))
                 actual_chrome = (
                     status_h + (int(HEADER_CONTENT_HEIGHT) if getattr(self, "_title_bar", None) is not None else 0)
                 )
@@ -2416,6 +2440,8 @@ class MainWindow(QMainWindow):
                     ),
                     page_h + prompt_h + actual_chrome + 8,
                 )
+                if not is_install and nav is not None:
+                    target_h = max(target_h, nav.sizeHint().height() + actual_chrome)
             else:
                 # The catalogue is still showing. The short install size is
                 # applied once the progress card is the page on screen.
@@ -2518,6 +2544,8 @@ class MainWindow(QMainWindow):
         height = int(height)
         anim = getattr(self, "_size_anim", None)
         if anim is not None:
+            if anim.state() == QPropertyAnimation.State.Running and anim.endValue() == QSize(width, height):
+                return
             self._size_anim = None
             try:
                 anim.finished.disconnect()
@@ -2583,7 +2611,8 @@ class MainWindow(QMainWindow):
             bool(handoff),
         )
         if getattr(self, "_install_ui_key", None) == key:
-            self._reveal_sp_gui_button()
+            if not active:
+                self._reveal_sp_gui_button()
             return
         self._install_ui_key = key
         self._install_ui_active = active
@@ -2595,10 +2624,9 @@ class MainWindow(QMainWindow):
         if controls is not None:
             controls.set_close_enabled(not active)
 
-        quiet = active or handoff
-        if quiet:
-            # Settings and Check for Updates stay off the short install window.
-            # Support Us yields so Select Software / Install Software still fit.
+        if active:
+            # During install / extraction / prep stages: only show "Install Software"
+            # and Diagnostics (simplified user facing install output).
             if hasattr(self, "_settings_btn"):
                 self._settings_btn.setVisible(False)
                 self._settings_btn.setEnabled(False)
@@ -2611,16 +2639,11 @@ class MainWindow(QMainWindow):
             if hasattr(self, "_linux_setup_btn"):
                 self._linux_setup_btn.setVisible(False)
             if hasattr(self, "_sp_flash_tool_btn"):
-                show_tool = bool(
-                    getattr(self, "_gui_handoff_prepare", False)
-                    or getattr(self, "_gui_handoff_ready", False)
-                )
-                self._sp_flash_tool_btn.setVisible(show_tool)
-                self._sp_flash_tool_btn.setEnabled(show_tool)
+                self._sp_flash_tool_btn.setVisible(False)
+                self._sp_flash_tool_btn.setEnabled(False)
             if hasattr(self, "_install_output_btn"):
-                show_output = active and not handoff
-                self._install_output_btn.setVisible(show_output)
-                self._install_output_btn.setEnabled(show_output)
+                self._install_output_btn.setVisible(True)
+                self._install_output_btn.setEnabled(True)
             if hasattr(self, "_lang_label"):
                 self._lang_label.setVisible(False)
             if hasattr(self, "_lang_combo"):
@@ -2650,8 +2673,8 @@ class MainWindow(QMainWindow):
             if hasattr(self, "_lang_combo"):
                 self._lang_combo.setVisible(True)
             self._apply_donation_visibility()
+            self._reveal_sp_gui_button()
 
-        self._reveal_sp_gui_button()
         nav = getattr(self, "_nav_panel", None)
         if nav is not None:
             nav.update()
@@ -2667,7 +2690,7 @@ class MainWindow(QMainWindow):
         if not entry:
             return False
         btn, _idx = entry
-        active = self._install_run_active() or getattr(self, "_compact_install_screen", False)
+        active = self._install_run_active()
         btn.setText(tr("nav_install_package" if active else "nav_select_package"))
         self._apply_install_ui_state(active)
         return active
@@ -2857,6 +2880,8 @@ class MainWindow(QMainWindow):
 
     def _on_package_selected(self, path, name, model):
         self._remember_catalogue_section()
+        self._download_active = False
+        self._prep_active = False
         self._package_path = path
         self._package_name = name
         self._package_model = model or ""
@@ -3251,6 +3276,7 @@ class MainWindow(QMainWindow):
         # and the catalogue already has the image by then.
         self._apply_release_icon(complete=False)
         self._flash_page.show_power_off_prompt(permission=permission)
+        self._sync_install_nav_entry()
         self._nav_to_page(_PAGE_FLASH)
 
     def _on_install_done(self) -> None:
@@ -3810,7 +3836,11 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
             self._install_complete = True
-            self._compact_install_screen = True
+            self._compact_install_screen = False
+            self._power_off_prompt = False
+            self._prep_active = False
+            self._download_active = False
+            self._sync_install_nav_entry()
             self._flash_page.show_flashing()
             self._flash_page.set_device_done()
             self._flash_page.show_completion_appeal(False)
@@ -3892,7 +3922,11 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
         self._install_complete = True
-        self._compact_install_screen = True
+        self._compact_install_screen = False
+        self._power_off_prompt = False
+        self._prep_active = False
+        self._download_active = False
+        self._sync_install_nav_entry()
         self._flash_page.show_flashing()
         self._flash_page.set_device_done()
         self._apply_release_icon(complete=True)
@@ -3934,10 +3968,14 @@ class MainWindow(QMainWindow):
         self._install_failed = True
         self._power_off_prompt = False
         self._install_complete = False
+        self._prep_active = False
+        self._download_active = False
+        self._compact_install_screen = False
         from ..flash_service import parse_flash_error
         parsed_title, explanation = parse_flash_error(message, getattr(self, "_package_model", ""))
         self._failure_title = parsed_title
         self._flash_page.show_install_failure(message, explanation, self._last_progress or 0)
+        self._sync_install_nav_entry()
         self._nav_to_page(_PAGE_FLASH)
         self._update_header_title()
 
@@ -4473,6 +4511,7 @@ class MainWindow(QMainWindow):
         self._power_off_prompt = False
         self._compact_install_screen = False
         self._download_active = False
+        self._prep_active = False
         self._cache_recovery_needed = False
         self._fallback_attempted = False
         self._sp_1013_seen = False
@@ -4675,6 +4714,10 @@ class MainWindow(QMainWindow):
         btn = getattr(self, "_sp_flash_tool_btn", None)
         if btn is None:
             return False
+        if self._install_run_active():
+            btn.setVisible(False)
+            btn.setEnabled(False)
+            return False
         handoff = bool(
             getattr(self, "_gui_handoff_prepare", False)
             or getattr(self, "_gui_handoff_ready", False)
@@ -4704,6 +4747,8 @@ class MainWindow(QMainWindow):
 
     def _reveal_sp_gui_button(self) -> None:
         """Keep the sidebar launcher available only for a ready handoff."""
+        if self._install_run_active():
+            return
         if self._sync_sp_gui_button_visibility() and (
             getattr(self, "_gui_handoff_prepare", False)
             or getattr(self, "_gui_handoff_ready", False)

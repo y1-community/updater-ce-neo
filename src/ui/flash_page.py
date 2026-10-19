@@ -971,16 +971,18 @@ class FlashPage(QWidget):
         hint_font.setPixelSize(12)
         self._paperclip_hint.setFont(hint_font)
         self._paperclip_hint.setWordWrap(True)
+        self._paperclip_hint.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
 
         self._paperclip_img = QLabel()
-        self._paperclip_img.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._paperclip_img.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
+        self._paperclip_img.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
         self._paperclip_hint_host = QWidget()
         hint_layout = QHBoxLayout(self._paperclip_hint_host)
-        hint_layout.setContentsMargins(0, 10, 0, 0)
+        hint_layout.setContentsMargins(0, 10, 0, 8)
         hint_layout.setSpacing(14)
-        hint_layout.addWidget(self._paperclip_img, 0, Qt.AlignmentFlag.AlignVCenter)
-        hint_layout.addWidget(self._paperclip_hint, 1, Qt.AlignmentFlag.AlignVCenter)
+        hint_layout.addWidget(self._paperclip_img, 0, Qt.AlignmentFlag.AlignTop)
+        hint_layout.addWidget(self._paperclip_hint, 1, Qt.AlignmentFlag.AlignTop)
         self._paperclip_hint_host.setVisible(False)
         copy.addWidget(self._paperclip_hint_host)
         self._update_paperclip_hint()
@@ -1220,10 +1222,13 @@ class FlashPage(QWidget):
         self._notify_geometry_change()
 
     def _update_paperclip_hint(self) -> None:
-        """Show how to press the hidden button, at the power-off step only.
+        """Show how to press the hidden button at power-off or disconnect recovery.
 
         Displays model-specific wording and the corresponding paperclip
         hardware illustration (A5, Y2, or generic/all) matching the active theme.
+        In Updater CE branding, the generic all models paperclip hint image (or model-
+        specific image if model is known) is displayed in the disconnect recovery scenario.
+        In MediaTek Installer branding, paperclip hints are excluded in disconnect recovery.
         """
         host = getattr(self, "_paperclip_hint_host", None)
         label = getattr(self, "_paperclip_hint", None)
@@ -1241,26 +1246,62 @@ class FlashPage(QWidget):
                         model = k
                         break
         copy = getattr(self, "_wait_copy", "")
-        wanted = (
+        from ..branding import is_generic_mtk_brand
+        is_mtk = is_generic_mtk_brand()
+
+        is_power_off = (
             bool(model)
             and copy == "power_off"
             and getattr(self, "_show_pin_tip", True)
             and not getattr(self, "_stop_open", False)
         )
+        is_usb_disconnected = (
+            copy == "usb_disconnected"
+            and not is_mtk
+            and not getattr(self, "_stop_open", False)
+        )
+        wanted = is_power_off or is_usb_disconnected
         if not wanted:
             host.setVisible(False)
+            if img_label is not None:
+                img_label.setFixedSize(0, 0)
+            host.setMinimumHeight(0)
             return
 
-        from ..config import device_label_for_model
-        model_name = device_label_for_model(model) if model else tr("device_fallback_word")
-        is_a5 = model.upper() == "A5"
-        key = "flash_paperclip_hint_a5" if is_a5 else "flash_paperclip_hint"
-        label.setText(tr(key).format(model=model_name))
+        if is_power_off:
+            from ..config import device_label_for_model
+            model_name = device_label_for_model(model) if model else tr("device_fallback_word")
+            is_a5 = model.upper() == "A5"
+            key = "flash_paperclip_hint_a5" if is_a5 else "flash_paperclip_hint"
+            label.setText(tr(key).format(model=model_name))
+            label.setVisible(True)
+        else:
+            # In disconnect recovery / failover, prompt label already carries the
+            # instructions; show only the paperclip diagram image without duplicate text.
+            label.setText("")
+            label.setVisible(False)
 
         if img_label is not None:
             from .dark import is_dark
             from ..paths import RESOURCES_DIR
-            theme_suffix = "light_fonts" if is_dark() else "dark_fonts"
+
+            dark_theme = is_dark()
+            try:
+                pal = self.palette()
+                bg = pal.color(QPalette.ColorRole.Window)
+                txt = pal.color(QPalette.ColorRole.WindowText)
+                if bg.isValid() and bg.lightness() < 128:
+                    dark_theme = True
+                elif txt.isValid() and txt.lightness() > 160:
+                    dark_theme = True
+                elif bg.isValid() and bg.lightness() >= 128:
+                    dark_theme = False
+                elif txt.isValid() and txt.lightness() <= 160:
+                    dark_theme = False
+            except Exception:
+                pass
+
+            theme_suffix = "light_fonts" if dark_theme else "dark_fonts"
             model_upper = model.upper()
             if model_upper == "A5":
                 asset_name = f"paperclip_a5_{theme_suffix}.png"
@@ -1278,11 +1319,21 @@ class FlashPage(QWidget):
                 if not pix.isNull():
                     scaled = pix.scaledToHeight(60, Qt.TransformationMode.SmoothTransformation)
                     img_label.setPixmap(scaled)
+                    img_label.setFixedSize(scaled.size())
+                    img_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
                     img_label.setVisible(True)
+                    if host is not None:
+                        host.setMinimumHeight(scaled.height() + 18)
                 else:
                     img_label.setVisible(False)
+                    img_label.setFixedSize(0, 0)
+                    if host is not None:
+                        host.setMinimumHeight(0)
             else:
                 img_label.setVisible(False)
+                img_label.setFixedSize(0, 0)
+                if host is not None:
+                    host.setMinimumHeight(0)
 
         waiting = getattr(self, "_waiting_view", None)
         host.setVisible(waiting is not None and self._stack.currentWidget() is waiting)
@@ -1375,6 +1426,26 @@ class FlashPage(QWidget):
         self._wait_banner.set_type("info")
         self._wait_banner_key = "please_wait"
         self._wait_banner.set_key("flash_please_wait")
+        if hasattr(self, "_wait_continue_btn"):
+            self._wait_continue_btn.setVisible(False)
+        if hasattr(self, "_wait_cancel_btn"):
+            self._wait_cancel_btn.setVisible(True)
+        if hasattr(self, "_wait_mode_hint"):
+            self._wait_mode_hint.setVisible(False)
+        self._apply_stop_hold()
+
+    def show_entering_password(self) -> None:
+        """Display clear password prompt message while system auth dialog is open."""
+        self._failed = False
+        self._complete = False
+        self._prompt_only = False
+        self._wait_copy = "entering_password"
+        self._switch_view(self._waiting_view)
+        self._wait_prompt_label.setText(tr("install_linux_entering_password"))
+        self._set_indeterminate(self._wait_progress_bar)
+        self._wait_banner.set_type("info")
+        self._wait_banner_key = "entering_password"
+        self._wait_banner.set_key("install_linux_entering_password")
         if hasattr(self, "_wait_continue_btn"):
             self._wait_continue_btn.setVisible(False)
         if hasattr(self, "_wait_cancel_btn"):
@@ -2052,7 +2123,16 @@ class FlashPage(QWidget):
         """
         kwargs = dict(self._power_off_recovery_kwargs or {})
         kwargs.setdefault("model", self._connect_model_text())
-        return tr(self._power_off_prompt_key()).format(**kwargs)
+        text = tr(self._power_off_prompt_key()).format(**kwargs)
+        if self._power_off_recovery_key == "err_connect_failover_recovery":
+            code = kwargs.get("error_code")
+            if code:
+                parts = text.split("\n\n", 1)
+                if len(parts) == 2:
+                    text = f"{parts[0]} (Error:{code})\n\n{parts[1]}"
+                else:
+                    text = f"{text} (Error:{code})"
+        return text
 
     def show_power_off_prompt(self, show_pin_tip: bool = True, permission: bool = False) -> None:
         """Prompt to power off and unplug. Does not start a flash by itself.
@@ -2453,6 +2533,8 @@ class FlashPage(QWidget):
             self._wait_prompt_label.setText(self._wait_connecting_prompt_text())
         elif hasattr(self, "_wait_prompt_label") and copy == "please_wait":
             self._wait_prompt_label.setText(tr("flash_please_wait"))
+        elif hasattr(self, "_wait_prompt_label") and copy == "entering_password":
+            self._wait_prompt_label.setText(tr("install_linux_entering_password"))
         elif hasattr(self, "_wait_prompt_label") and copy in ("connect", ""):
             self._wait_prompt_label.setText(self._connect_device_prompt_text())
         elif hasattr(self, "_wait_prompt_label") and copy == "stage" and self._step_key:
@@ -2568,6 +2650,7 @@ class FlashPage(QWidget):
         ):
             if btn is not None and hasattr(btn, "rebuild_arrow"):
                 btn.rebuild_arrow()
+        self._update_paperclip_hint()
         self.sync_text_fit()
 
     def _style_done_button(self) -> None:
@@ -2696,9 +2779,14 @@ class FlashPage(QWidget):
             if (
                 hasattr(self, "_paperclip_hint_host")
                 and self._paperclip_hint_host.isVisible()
-                and not self._wait_card.isAncestorOf(self._paperclip_hint_host)
             ):
-                hint_h = self._paperclip_hint_host.sizeHint().height() + 6
+                if not self._wait_card.isAncestorOf(self._paperclip_hint_host):
+                    hint_h = self._paperclip_hint_host.sizeHint().height() + 6
+                else:
+                    head_h = self._wait_head.sizeHint().height() if hasattr(self, "_wait_head") else 48
+                    prompt_h = self._wait_prompt_label.sizeHint().height() if hasattr(self, "_wait_prompt_label") else 40
+                    min_needed = head_h + prompt_h + self._paperclip_hint_host.minimumHeight() + 48
+                    card_h = max(card_h, min_needed)
             h = card_h + hint_h
         elif cur_view is self._preparing_view:
             h = self._prep_card.sizeHint().height()

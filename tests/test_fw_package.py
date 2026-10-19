@@ -286,3 +286,27 @@ def test_prune_does_nothing_without_a_valid_package(tmp_path):
     (root / "extra.bin").write_bytes(b"x")
     assert prune_to_firmware_package(root) == []
     assert (root / "extra.bin").exists()
+
+
+def test_stage_firmware_for_flashing(tmp_path, monkeypatch):
+    from src.flash_service import stage_firmware_for_flashing
+    from src import downloads
+
+    dl = tmp_path / "downloads"
+    dl.mkdir()
+    monkeypatch.setattr(downloads, "downloads_dir", lambda: dl)
+
+    fw = _firmware(tmp_path / "app_folder", files=("preloader.bin", "boot.img"))
+    (fw / "_internal").mkdir()
+    (fw / "extra_file.log").write_text("temporary stuff")
+    scatter = fw / "MT6572_Android_scatter.txt"
+
+    staged_scatter = stage_firmware_for_flashing(scatter)
+    assert staged_scatter.is_file()
+    assert staged_scatter.parent != fw
+    assert (staged_scatter.parent / "preloader.bin").is_file()
+    assert (staged_scatter.parent / "boot.img").is_file()
+    assert (staged_scatter.parent / "fw_package.ini").is_file()
+    assert not (staged_scatter.parent / "extra_file.log").exists()
+    assert not (staged_scatter.parent / "_internal").exists()
+

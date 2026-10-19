@@ -59,8 +59,9 @@ def test_flash_page_usb_disconnected_recovery_prompt(qapp):
     assert not fp._wait_cancel_btn.isHidden()
     assert fp._wait_continue_btn.toolTip().lower() == "next"
 
-    # Paperclip hint under the card must be visible
+    # In Updater CE branding, the paperclip image hint is displayed
     assert not fp._paperclip_hint_host.isHidden()
+    assert fp._paperclip_img.pixmap() is not None and not fp._paperclip_img.pixmap().isNull()
 
     # Pressing Next fires the recovery retry callback
     fp._wait_continue_btn.click()
@@ -76,6 +77,36 @@ def test_flash_page_usb_disconnected_generic_device(qapp):
     assert "Your device got disconnected" in prompt_text
     assert "press next" in prompt_text
     assert not fp._wait_continue_btn.isHidden()
+    # Generic all models paperclip hint image is shown
+    assert not fp._paperclip_hint_host.isHidden()
+    assert fp._paperclip_img.pixmap() is not None and not fp._paperclip_img.pixmap().isNull()
+
+
+def test_flash_page_usb_disconnected_branding_and_models(qapp, monkeypatch):
+    import src.branding as branding
+    fp = FlashPage()
+
+    # 1. MediaTek Installer brand -> paperclip hint image must NOT be shown
+    monkeypatch.setattr(branding, "is_generic_mtk_brand", lambda: True)
+    fp.set_model("Y1")
+    fp.show_usb_disconnected()
+    assert fp._paperclip_hint_host.isHidden()
+
+    # 2. Updater CE brand -> paperclip hint image IS shown
+    monkeypatch.setattr(branding, "is_generic_mtk_brand", lambda: False)
+    fp.show_usb_disconnected()
+    assert not fp._paperclip_hint_host.isHidden()
+    assert fp._paperclip_img.pixmap() is not None and not fp._paperclip_img.pixmap().isNull()
+
+    # Model A5
+    fp.set_model("A5")
+    fp.show_usb_disconnected()
+    assert not fp._paperclip_hint_host.isHidden()
+
+    # Model Y2
+    fp.set_model("Y2")
+    fp.show_usb_disconnected()
+    assert not fp._paperclip_hint_host.isHidden()
 
 
 def test_flash_page_connect_failure_copy_survives_retranslate(qapp):
@@ -93,7 +124,8 @@ def test_flash_page_connect_failure_copy_survives_retranslate(qapp):
         model="Y1", failed="SP Flash Tool", next="MTKClient"
     )
     assert fp._wait_prompt_label.text() == expected
-    assert len(expected.splitlines()) == 3
+    paragraphs = [p for p in expected.split("\n\n") if p.strip()]
+    assert len(paragraphs) == 3
 
     fp.retranslate()
     assert fp._wait_prompt_label.text() == expected

@@ -245,10 +245,13 @@ def select_preferred_rom_asset(variants, selected_type=None, model=None, prefer_
         return None
     # First narrow by model so we never hand a Y1 ROM to a Y2 user.
     if model:
-        model_matched = [
-            v for v in variants
-            if v.get("model") == model or v.get("model") == "dual"
-        ]
+        if str(model).upper() == "Y2":
+            model_matched = [v for v in variants if (v.get("model") or "").upper() == "Y2"]
+        else:
+            model_matched = [
+                v for v in variants
+                if v.get("model") == model or v.get("model") == "dual"
+            ]
         if model_matched:
             variants = model_matched
     if selected_type:
@@ -292,16 +295,7 @@ def _model_ok_for_package(variant_model, package_model, repo, model):
         return False
 
     if selecting_y2:
-        if variant_model == "Y2":
-            return True
-        if pd in ("Y1", "A5"):
-            return False
-        if variant_model == "DUAL":
-            # Legacy rom.zip on a Y1-named repo (no y2 marker) is not for a Y2 device.
-            if pd == "Y2" and "y2" not in repo_name:
-                return False
-            return True
-        return False
+        return variant_model == "Y2"
 
     # Y1 / generic selection
     if pd in ("Y2", "A5"):
@@ -334,12 +328,10 @@ def filter_rom_variants_for_model(variants, model, package_model=None, repo=""):
     ]
     if not kept:
         return []
-    # When Y2 is selected, prefer explicit Y2 variants over dual rom.zip;
+    # When Y2 is selected, strictly require explicit Y2 variants;
     # when Y1 is selected, exclude anything Y2-specific.
     if selecting_y2:
-        y2_explicit = [v for v in kept if (v.get("model") or "").upper() == "Y2"]
-        if y2_explicit:
-            return y2_explicit
+        return [v for v in kept if (v.get("model") or "").upper() == "Y2"]
     else:
         non_y2 = [v for v in kept if (v.get("model") or "").upper() != "Y2"]
         if non_y2:

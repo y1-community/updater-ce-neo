@@ -67,6 +67,7 @@ class SettingsPage(QWidget):
     # because its first-run entry returns to Select Software on success.
     card_focus_finished = Signal()
     linux_prep_completed = Signal()
+    advanced_settings_changed = Signal(bool)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -737,7 +738,7 @@ class SettingsPage(QWidget):
             # No SP Flash Tool build exists for macOS.
             return (METHOD_MTK,)
         locked = windows_only_method()
-        if locked:
+        if locked and not self._advanced_revealed:
             # Windows is fixed by CPU: x86/x64 gets SP Flash Tool only, ARM64 MTKClient only.
             return (locked,)
         methods = [METHOD_SP]
@@ -752,6 +753,7 @@ class SettingsPage(QWidget):
         self._sync_linux_prep_copy()
         if not paths.IS_MAC:
             self._reload_method_options()
+        self.advanced_settings_changed.emit(self._advanced_revealed)
         win = self.window()
         if win and hasattr(win, "_adjust_window_geometry"):
             win._adjust_window_geometry()
@@ -783,6 +785,7 @@ class SettingsPage(QWidget):
         self._sync_linux_prep_copy()
         if not paths.IS_MAC:
             self._reload_method_options()
+        self.advanced_settings_changed.emit(self._advanced_revealed)
         win = self.window()
         if win and hasattr(win, "_adjust_window_geometry"):
             win._adjust_window_geometry()
@@ -799,6 +802,7 @@ class SettingsPage(QWidget):
         self._sync_linux_prep_copy()
         if not paths.IS_MAC:
             self._reload_method_options()
+        self.advanced_settings_changed.emit(self._advanced_revealed)
         win = self.window()
         if win and hasattr(win, "_adjust_window_geometry"):
             win._adjust_window_geometry()
@@ -884,15 +888,9 @@ class SettingsPage(QWidget):
         They filter the online Y1/Y2 Rockbox release list, so with no online
         catalogue — offline mode, or a build of the generic MediaTek Installer,
         which is offline by definition — there is nothing for them to act on.
-        Also gated behind Advanced Settings so general users aren't confused.
         """
-        show_adv = bool(
-            getattr(self, "_advanced_revealed", False)
-            or (hasattr(self, "_cb_advanced_settings") and self._cb_advanced_settings.isChecked())
-            or device_tracking.advanced_settings_enabled()
-        )
         self._rockbox_card.setVisible(
-            show_adv and not is_offline_mode() and self._may_show_card(self._rockbox_card)
+            not is_offline_mode() and self._may_show_card(self._rockbox_card)
         )
 
     def _update_legacy_cleanup_visibility(self):
@@ -1444,7 +1442,7 @@ class SettingsPage(QWidget):
 
     def _sync_linux_prep_copy(self) -> None:
         """Keep technical tool names behind Advanced Settings."""
-        if not hasattr(self, "_checker_card"):
+        if not hasattr(self, "_checker_card") or not hasattr(self, "_checker_desc"):
             return
         installer = is_mediatek_installer()
         advanced = bool(
@@ -1471,11 +1469,9 @@ class SettingsPage(QWidget):
         setup_flow = self._solo_card is self._checker_card
         self._btn_launch_sp.setVisible(
             self._btn_launch_sp.isEnabled()
-            and (advanced or is_mediatek_installer())
+            and bool(advanced)
             and not setup_flow
         )
-        if is_mediatek_installer() and not hasattr(self, "_install_tools_enabled"):
-            self._btn_launch_sp.setVisible(False)
 
     def _on_launch_sp(self):
         """Hand the selected firmware to the main window's validated route."""

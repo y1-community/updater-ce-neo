@@ -38,6 +38,15 @@ _FLASH_TOOL_EXECUTABLES = {"flash_tool", "flash_tool.exe", "flash_tool.sh"}
 # installed, so the ``mtk.py`` inside a python invocation is what to look for.
 _MTK_CONSOLE_SCRIPTS = {"mtkclient", "mtkclient.exe", "mtk", "mtk.exe"}
 _MTK_SCRIPT_NAMES = {"mtk.py", "mtk.pyw"}
+_ADB_EXECUTABLES = {"adb", "adb.exe"}
+_UPDATER_BIN_NAMES = {
+    "innioasisupdater",
+    "innioasisupdater.exe",
+    "updater-ce",
+    "updater-ce.exe",
+    "installfirmware",
+    "installfirmware.exe",
+}
 # ``python``, ``python3``, ``python3.10``, ``pythonw.exe``, …
 _PYTHON_PREFIX = "python"
 # The Linux payload ships ``flash_tool.sh`` beside the binary and is normally
@@ -100,6 +109,10 @@ def _tool_invocation(command: str) -> str:
         return first
     if first in _MTK_CONSOLE_SCRIPTS:
         return first
+    if first in _ADB_EXECUTABLES:
+        return first
+    if any(name in first for name in _UPDATER_BIN_NAMES):
+        return first
     if "--flash-cli" in tokens:
         return "flash-cli"
     runner = first.startswith(_PYTHON_PREFIX) or first in _SHELL_EXECUTABLES
@@ -107,6 +120,8 @@ def _tool_invocation(command: str) -> str:
         for token in tokens[1:]:
             name = _basename(token)
             if name in _MTK_SCRIPT_NAMES or name in _FLASH_TOOL_EXECUTABLES:
+                return name
+            if name in _ADB_EXECUTABLES:
                 return name
     return ""
 
@@ -354,6 +369,83 @@ def sweep_async(reason: str = "", on_done=None, force: bool = False) -> threadin
     return thread
 
 
+def free_com_ports(log_cb=None) -> list[str]:
+    """Free COM / serial ports (such as /dev/ttyACM* and /dev/ttyUSB*) held by processes or services.
+
+    On Linux, checks for ModemManager, brltty, and any processes holding open
+    /dev/ttyACM* or /dev/ttyUSB* ports, releasing them so SP Flash Tool and MTKClient
+    can open the COM port cleanly without S_COM_PORT_OPEN_FAIL (1013).
+    """
+    released = []
+    if sys.platform.startswith("win") or os.name == "nt":
+        return released
+
+    import glob
+    import shutil
+
+    tty_ports = glob.glob("/dev/ttyACM*") + glob.glob("/dev/ttyUSB*")
+    safe = _own_ancestry()
+
+    # 1. Kill any processes holding /dev/ttyACM* or /dev/ttyUSB*
+    for port in tty_ports:
+        pids_holding = set()
+        try:
+            for pid_dir in glob.glob("/proc/[0-9]*"):
+                try:
+                    pid = int(os.path.basename(pid_dir))
+                    if pid in safe or pid <= 1:
+                        continue
+                    fd_dir = os.path.join(pid_dir, "fd")
+                    if os.path.isdir(fd_dir):
+                        for fd in os.listdir(fd_dir):
+                            target = os.path.realpath(os.path.join(fd_dir, fd))
+                            if target == port:
+                                pids_holding.add(pid)
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+        if shutil.which("fuser"):
+            try:
+                res = subprocess.run(
+                    ["fuser", "-k", "-9", port],
+                    capture_output=True,
+                    timeout=2,
+                )
+                if res.returncode == 0:
+                    released.append(f"{port} (fuser)")
+            except Exception:
+                pass
+
+        for pid in pids_holding:
+            try:
+                os.kill(pid, signal.SIGKILL)
+                released.append(f"{port} (pid {pid})")
+                if log_cb:
+                    log_cb(f"Terminated process {pid} locking {port}")
+            except Exception:
+                pass
+
+    # 2. Check ModemManager / brltty
+    for svc in ("ModemManager", "brltty"):
+        try:
+            chk = subprocess.run(
+                ["systemctl", "is-active", "--quiet", svc],
+                capture_output=True,
+                timeout=1,
+            )
+            if chk.returncode == 0:
+                subprocess.run(["systemctl", "stop", svc], capture_output=True, timeout=2)
+                released.append(f"stopped {svc}")
+                if log_cb:
+                    log_cb(f"Temporarily stopped {svc} to prevent serial port lock")
+        except Exception:
+            pass
+
+    return released
+
+
 def sweep_stray_tools(force: bool = False, reason: str = "") -> list:
     """Terminate every flash tool that is not part of the running install.
 
@@ -377,7 +469,12 @@ def sweep_stray_tools(force: bool = False, reason: str = "") -> list:
                 item["tool"],
                 item["pid"],
             )
+    try:
+        free_com_ports()
+    except Exception:
+        pass
     _LAST_SWEEP = killed
     if killed:
         logger.info(describe(killed))
     return killed
+

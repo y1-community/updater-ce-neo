@@ -14,6 +14,7 @@ from pathlib import Path
 from .config import DONORS_CSV_URL, MONTHLY_GOAL_USD
 from .network import requests_module
 
+requests = requests_module()
 logger = logging.getLogger(__name__)
 
 # Host of the supporters feed, named in connectivity logs instead of the URL.
@@ -168,7 +169,7 @@ def fetch_remote_donors_async(on_result):
         reason = ""
         try:
             url = f"{DONORS_CSV_URL}?_t={int(time.time())}"
-            resp = requests_module().get(
+            resp = requests.get(
                 url,
                 headers={
                     "User-Agent": "InnioasisUpdater/1.0",
