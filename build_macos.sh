@@ -23,8 +23,8 @@ APP_ID="com.innioasis.updater"
 # id, and an app that knows it is offline-only.
 BRAND="$(printf '%s' "${BUILD_BRAND:-updater_ce}" | tr '[:upper:]-' '[:lower:]_')"
 VERSION=$(grep -oP 'APP_VERSION\s*=\s*"\K[^"]+' src/config.py 2>/dev/null || echo "2.5")
-DIST_DIR="dist"
-BUILD_DIR="build"
+DIST_DIR="dist/macos"
+BUILD_DIR="build/macos"
 SPEC_FILE="macos.spec"
 BUNDLE_ICON="assets/icon.icns"
 CREATE_DMG=0
@@ -218,6 +218,8 @@ if [ "$(uname -s)" = "Darwin" ]; then
     "$PYTHON" -m PyInstaller \
         --noconfirm \
         --clean \
+        --distpath "$DIST_DIR" \
+        --workpath "$BUILD_DIR" \
         "$SPEC_FILE"
 
     # Remove intermediate COLLECT directory so dist/ contains ONLY the self-contained .app
@@ -234,7 +236,7 @@ if [ "$(uname -s)" = "Darwin" ]; then
 else
     # --- Universal 2 (Intel + Apple Silicon) Mach-O build via LLVM/clang/rcodesign ---
     echo ">>> Building Universal 2 Mach-O .app bundle..."
-    "$PYTHON" scripts/build_universal_app.py
+    INNIOASIS_APP_OUT="$DIST_DIR/$APP_NAME.app" BUILD_BRAND="$BRAND" "$PYTHON" scripts/build_universal_app.py
     rm -rf "$DIST_DIR/$APP_NAME"
 fi
 

@@ -27,11 +27,22 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from precompile_tree import compile_tree, compile_tree_if_stale, find_sources  # noqa: E402  (sibling build helper)
 
 ROOT = Path(__file__).resolve().parent.parent
-DIST = ROOT / "dist"
+DIST = ROOT / "dist" / "macos"
+_BUILD_BRAND = (os.environ.get("BUILD_BRAND") or "").strip().lower().replace("-", "_")
+if not _BUILD_BRAND and (ROOT / "src" / "_build_brand.py").exists():
+    for _line in (ROOT / "src" / "_build_brand.py").read_text(encoding="utf-8").splitlines():
+        if _line.startswith("BUILD_BRAND"):
+            _BUILD_BRAND = _line.split("=")[-1].strip().strip('"\'')
+            break
+IS_MEDIATEK_INSTALLER_BUILD = _BUILD_BRAND in ("mediatek_installer", "generic_mtk")
+APP_DISPLAY_NAME = "MediaTek Installer" if IS_MEDIATEK_INSTALLER_BUILD else "Updater CE"
+BUNDLE_ID = (
+    "com.innioasis.mediatekinstaller" if IS_MEDIATEK_INSTALLER_BUILD else "com.innioasis.updater"
+)
 # INNIOASIS_APP_OUT lets a rehearsal (or CI) build somewhere other than dist/:
 # the real build deletes and rebuilds dist/*.app in place, which would wipe an
 # app the user is currently testing.
-APP_DIR = Path(os.environ.get("INNIOASIS_APP_OUT") or (DIST / "Updater CE.app"))
+APP_DIR = Path(os.environ.get("INNIOASIS_APP_OUT") or (DIST / f"{APP_DISPLAY_NAME}.app"))
 CONTENTS = APP_DIR / "Contents"
 MACOS = CONTENTS / "MacOS"
 RESOURCES = CONTENTS / "Resources"
@@ -436,7 +447,7 @@ def build():
     APP_CODE.mkdir(parents=True, exist_ok=True)
 
     # 1. Compile Universal 2 Launcher Executable
-    exe_target = MACOS / "Updater CE"
+    exe_target = MACOS / APP_DISPLAY_NAME
     compile_universal_launcher(exe_target)
 
     # 2. Build Universal 2 Python Runtime
@@ -454,7 +465,9 @@ def build():
     #    site-packages into bytecode-only trees. Shipping source made every
     #    launch re-parse files whose __pycache__ can never be written (a
     #    read-only .dmg or an .app another admin owns).
-    bundled_python = PYTHON_DIR / "bin" / "python3.11"
+    bundled_python = (
+        (PYTHON_DIR / "bin" / "python3.11") if sys.platform == "darwin" else Path(sys.executable)
+    )
     compile_tree([ROOT / "launcher.py"], APP_CODE, python=bundled_python, clean=False, write_manifest=False)
     compile_tree([ROOT / "src"], APP_CODE / "src", python=bundled_python, write_manifest=False)
     # This builder extracts the pure-Python wheels into site-packages itself.
@@ -493,12 +506,12 @@ def build():
 
     # 8. Info.plist
     info_plist = {
-        "CFBundleDisplayName": "Updater CE",
-        "CFBundleExecutable": "Updater CE",
+        "CFBundleDisplayName": APP_DISPLAY_NAME,
+        "CFBundleExecutable": APP_DISPLAY_NAME,
         "CFBundleIconFile": "icon.icns",
-        "CFBundleIdentifier": "com.innioasis.updater",
+        "CFBundleIdentifier": BUNDLE_ID,
         "CFBundleInfoDictionaryVersion": "6.0",
-        "CFBundleName": "Updater CE",
+        "CFBundleName": APP_DISPLAY_NAME,
         "CFBundlePackageType": "APPL",
         "CFBundleShortVersionString": "2.5.0",
         "CFBundleVersion": "2.5.0",
@@ -539,7 +552,8 @@ def build():
         ], check=True)
 
     print("\nVerification:")
-    subprocess.run(["file", str(exe_target), str(FRAMEWORKS / "libusb-1.0.dylib"), str(RESOURCES / "icon.icns")])
+    if shutil.which("file"):
+        subprocess.run(["file", str(exe_target), str(FRAMEWORKS / "libusb-1.0.dylib"), str(RESOURCES / "icon.icns")])
     leftover = find_sources(APP_CODE)
     pyc_count = sum(1 for _ in APP_CODE.rglob("*.pyc"))
     print(f"Application code: {pyc_count} bytecode files, {len(leftover)} source files")

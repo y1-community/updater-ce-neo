@@ -340,7 +340,14 @@ def app_bundle_path() -> str:
         from ..config import get_app_name
 
         name = get_app_name().lower()
-        for candidate in sorted((paths.REPO_ROOT / "dist").glob("*.app")):
+        dist_dirs = [paths.REPO_ROOT / "dist" / "macos", paths.REPO_ROOT / "dist"]
+        candidates = [
+            cand
+            for d in dist_dirs
+            if d.is_dir()
+            for cand in sorted(d.glob("*.app"))
+        ]
+        for candidate in candidates:
             plist = candidate / "Contents" / "Info.plist"
             if not plist.is_file():
                 continue

@@ -4554,6 +4554,22 @@ _STRINGS: dict = {
         "de": "Das Flash-Tool oder erforderliche Treiber konnten nicht initialisiert werden. Bitte Berechtigungen prüfen oder Anwendung neu installieren.",
         "ja": "フラッシュツールまたは必要なドライバを初期化できませんでした。システムの権限を確認するかアプリケーションを再インストールしてください。",
     },
+    "err_driver_missing_title": {
+        "zh-CN": "需要安装联发科 USB 驱动",
+        "en": "MediaTek USB Driver Required",
+        "fr": "Pilote USB MediaTek requis",
+        "es": "Se requiere el controlador USB MediaTek",
+        "de": "MediaTek-USB-Treiber erforderlich",
+        "ja": "MediaTek USBドライバーが必要です",
+    },
+    "err_driver_missing_desc": {
+        "zh-CN": "未安装联发科 USB 驱动时可能会出现此错误。请点击“下载驱动”安装联发科 USB 驱动，重启电脑后再试。",
+        "en": "This error can occur when the MediaTek USB driver is not installed. Click Download Drivers to install the MediaTek USB driver, restart your computer, and try again.",
+        "fr": "Cette erreur peut se produire lorsque le pilote USB MediaTek n'est pas installé. Cliquez sur Télécharger les pilotes pour installer le pilote USB MediaTek, redémarrez votre ordinateur, puis réessayez.",
+        "es": "Este error puede ocurrir cuando el controlador USB de MediaTek no está instalado. Haga clic en Descargar controladores para instalar el controlador USB de MediaTek, reinicie el ordenador e inténtelo de nuevo.",
+        "de": "Dieser Fehler kann auftreten, wenn der MediaTek-USB-Treiber nicht installiert ist. Klicken Sie auf Treiber herunterladen, installieren Sie den MediaTek-USB-Treiber, starten Sie den Computer neu und versuchen Sie es erneut.",
+        "ja": "このエラーは、MediaTek USBドライバーがインストールされていない場合に発生することがあります。「ドライバーをダウンロード」をクリックしてMediaTek USBドライバーをインストールし、コンピューターを再起動してから再試行してください。",
+    },
     "err_cache_file_missing_desc": {
         "en": "A cached firmware file is missing. Choose Select Software to rebuild the extracted files or download the firmware archive again. This is a local file problem, not a USB connection issue.",
         "zh-CN": "缓存固件文件缺失。请在“选择软件”中重新提取固件文件或下载固件压缩包。这是本地文件问题，与 USB 连接无关。",

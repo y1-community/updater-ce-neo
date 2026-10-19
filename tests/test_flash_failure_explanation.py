@@ -41,6 +41,7 @@ def test_parse_flash_error_all_locales(app):
         ("NO_SCATTER_FILE", "", "scatter file"),
         ("MISSING_IMAGES", "", "missing"),
         ("SP_FLASH_TOOL_NOT_FOUND", "", "tool"),
+        ("SP_EXIT_1", "", "driver"),
         ("Unknown hardware glitch 0xdeadbeef", "0xdeadbeef", "unexpected error"),
     ]
 
@@ -101,12 +102,70 @@ def test_flash_page_failure_card_display(app):
     assert page._status_flow._forced_stacked
     assert not page._flash_retry_btn.isHidden()
     assert not page._cancel_btn.isHidden()
+    assert page._driver_action_row.isHidden()
 
     # Clear failure resets labels and styling
     page.clear_install_failure()
     assert not page._failed
     assert not page._progress_bar.is_failed()
     assert page._eta_label.text() == ""
+
+
+def test_sp_exit_1_driver_error_handling(app):
+    """SP_EXIT_1 is handled as a potential missing MediaTek USB Driver error with a Download Drivers action."""
+    from src.flash_service import is_sp_driver_error
+    from src.ui.error_page import ErrorPage
+
+    assert is_sp_driver_error("SP_EXIT_1")
+    assert is_sp_driver_error("SP_EXIT_2")
+    assert not is_sp_driver_error("S_BROM_CMD_STARTCMD_FAIL (2005)")
+    assert not is_sp_driver_error("WRITE_FAILED")
+
+    title, explanation = parse_flash_error("SP_EXIT_1", model="Y1")
+    assert "MediaTek USB Driver" in title
+    assert "driver" in explanation.lower()
+    assert "download drivers" in explanation.lower()
+
+    desc = describe_backend_error("SP_EXIT_1")
+    assert "driver" in desc.lower()
+
+    # FlashPage displays driver title, explanation, and Download Drivers button
+    page = FlashPage()
+    page.set_model("Y1")
+    page.show_install_failure("SP_EXIT_1", explanation)
+    assert "MediaTek USB Driver" in page._step_label.text()
+    assert "SP_EXIT_1" in page._step_label.text()
+    assert "driver" in page._eta_label.text().lower()
+    assert not page._driver_action_row.isHidden()
+    assert not page._download_drivers_btn.isHidden()
+
+    page.clear_install_failure()
+    assert page._driver_action_row.isHidden()
+
+    # ErrorPage displays driver title, explanation, and Download Drivers button
+    err_page = ErrorPage()
+    err_page.show_flash_failed(0, "step_wait", "SP_EXIT_1", "Original Software 3.1.2 for Y1", 0)
+    assert "MediaTek USB Driver" in err_page._title.text()
+    assert "SP_EXIT_1" in err_page._error_row.value()
+    assert not err_page._driver_btn.isHidden()
+
+    # MainWindow goes straight to the driver error card on SP_EXIT_1 without offering a disconnect failover
+    win = MainWindow()
+    try:
+        app.processEvents()
+        win._package_model = "Y1"
+        win._fallback_attempted = False
+        win._handle_flash_failure("SP_EXIT_1")
+        app.processEvents()
+
+        assert win._install_failed
+        assert not win._power_off_prompt
+        assert "MediaTek USB Driver" in win._flash_page._step_label.text()
+        assert not win._flash_page._driver_action_row.isHidden()
+    finally:
+        win.close()
+        win.deleteLater()
+        app.processEvents()
 
 
 def test_main_window_heading_visibility_on_failure(app):

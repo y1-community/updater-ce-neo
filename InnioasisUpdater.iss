@@ -2,10 +2,10 @@
 ; Run from the project root after building the portable exe.
 ; Compassionate usage only — see README.md.
 
-#define MyAppName "Updater CE"
+#define MyAppName "Innioasis Updater CE"
 #define MyAppVersion "2.5.0"
-#define MyAppPublisher "Innioasis Updater CE"
-#define MyAppURL "https://github.com/y1-community/updater-ce-neo"
+#define MyAppPublisher "Ryan Specter"
+#define MyAppURL "https://innioasis.app"
 #define MyAppExeName "InnioasisUpdater.exe"
 
 [Setup]
@@ -21,7 +21,7 @@ DefaultDirName={autopf}\{#MyAppPublisher}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 LicenseFile=assets/LICENSE.txt
-OutputDir=dist
+OutputDir=dist\windows
 OutputBaseFilename=UpdaterCE-Setup-2.5.0
 SetupIconFile=assets/icon.ico
 Compression=lzma2/ultra64
@@ -39,10 +39,10 @@ VersionInfoProductVersion=2.5.0
 Name: desktopicon; Description: Create a &desktop shortcut; Flags: unchecked
 
 [Files]
-Source: "dist\InnioasisUpdater\InnioasisUpdater.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "dist\InnioasisUpdater\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "dist\windows\InnioasisUpdater\InnioasisUpdater.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "dist\windows\InnioasisUpdater\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; SP Flash Tool payload sits next to the exe in the portable folder.
-Source: "dist\InnioasisUpdater\SP_Flash_Tool\*"; DestDir: "{app}\SP_Flash_Tool"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "dist\windows\InnioasisUpdater\SP_Flash_Tool\*"; DestDir: "{app}\SP_Flash_Tool"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: {group}\{#MyAppName}; Filename: "{app}\{#MyAppExeName}"

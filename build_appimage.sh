@@ -45,8 +45,8 @@ export BUILD_BRAND="$BRAND"
 VERSION=$(grep -oP 'APP_VERSION\s*=\s*"\K[^"]+' src/config.py 2>/dev/null || echo "2.5.0")
 ARCH="${ARCH:-x86_64}"
 
-DIST_DIR="dist"
-BUILD_DIR="build"
+DIST_DIR="dist/linux"
+BUILD_DIR="build/linux"
 APPDIR="$BUILD_DIR/AppDir"
 SPEC_FILE="InnioasisUpdater.spec"
 
@@ -198,6 +198,8 @@ if [ "$SKIP_PYINSTALLER" -eq 0 ]; then
     "$PYTHON" -m PyInstaller \
         --clean \
         --noconfirm \
+        --distpath "$DIST_DIR" \
+        --workpath "$BUILD_DIR" \
         "$SPEC_FILE"
 fi
 

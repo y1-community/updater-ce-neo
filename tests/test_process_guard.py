@@ -102,3 +102,39 @@ def test_a_process_that_survives_is_reported_as_kept(monkeypatch, caplog):
     monkeypatch.setattr(process_guard, "process_snapshot", lambda: [(21, 1, "flash_tool")])
     monkeypatch.setattr(process_guard, "_terminate", lambda pid, tool: False)
     assert process_guard.sweep_stray_tools() == []
+
+
+def test_sweep_aborts_when_install_session_begins_during_snapshot(monkeypatch):
+    """Regression test for SP_EXIT_1: a slow process snapshot that finishes after
+    a new install session has started must not kill the newly launched flash_tool.exe.
+    """
+    killed = []
+
+    def slow_snapshot():
+        # Simulate an install session starting while Get-CimInstance is running
+        process_guard.begin_install_session(reason="install started mid-snapshot")
+        return [(5940, 1, r'"C:\SP_Flash_Tool\flash_tool.exe" -i "C:\download.xml"')]
+
+    monkeypatch.setattr(process_guard, "process_snapshot", slow_snapshot)
+    monkeypatch.setattr(process_guard, "_terminate", lambda pid, tool: killed.append(pid) or True)
+
+    assert process_guard.sweep_stray_tools() == []
+    assert killed == []
+
+
+def test_sweep_never_kills_registered_active_sp_session(monkeypatch):
+    """Active SP Flash Tool Popen processes registered in flash_service are never killed by non-force sweeps."""
+    from src import flash_service
+
+    killed = []
+    monkeypatch.setattr(process_guard, "process_snapshot", lambda: [(7788, 1, "flash_tool.exe -i download.xml")])
+    monkeypatch.setattr(process_guard, "_terminate", lambda pid, tool: killed.append(pid) or True)
+
+    flash_service.register_sp_session(7788)
+    try:
+        assert process_guard.sweep_stray_tools() == []
+        assert killed == []
+    finally:
+        flash_service.unregister_sp_session(7788)
+
+

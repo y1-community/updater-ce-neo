@@ -209,6 +209,7 @@ def find_sp_flash_tool():
         INSTALL_DIR,
         REPO_ROOT / "SP_Flash_Tool",
         REPO_ROOT / "tools" / "SP_Flash_Tool",
+        REPO_ROOT / "tools" / "windows" / "SP_Flash_Tool_v5.1904_Win",
         Path.cwd() / "SP_Flash_Tool",
         Path.cwd(),
     ]

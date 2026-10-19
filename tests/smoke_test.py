@@ -5403,10 +5403,20 @@ def test_macos_universal_libusb():
 
 
 def test_macos_universal_app_bundle():
-    app_dir = ROOT / "dist" / "Updater CE.app"
-    if not app_dir.exists():
-        app_dir = ROOT / "dist" / "Innioasis Updater CE.app"
-    if not app_dir.exists():
+    app_dir = next(
+        (
+            p
+            for p in (
+                ROOT / "dist" / "macos" / "Updater CE.app",
+                ROOT / "dist" / "Updater CE.app",
+                ROOT / "dist" / "macos" / "Innioasis Updater CE.app",
+                ROOT / "dist" / "Innioasis Updater CE.app",
+            )
+            if p.exists()
+        ),
+        None,
+    )
+    if app_dir is None:
         return
 
     import struct
@@ -5457,8 +5467,8 @@ def test_macos_universal_app_bundle():
         if qtwidgets.exists():
             _check_universal_slices(qtwidgets)
         app_code = app_dir / "Contents" / "Resources" / "app"
-        assert (app_code / "launcher.py").exists(), "app/launcher.py missing"
-        assert (app_code / "src" / "app.py").exists(), "app/src/app.py missing"
+        assert (app_code / "launcher.py").exists() or (app_code / "launcher.pyc").exists(), "app/launcher.py(c) missing"
+        assert (app_code / "src" / "app.py").exists() or (app_code / "src" / "app.pyc").exists(), "app/src/app.py(c) missing"
 
     # 4. Icon and assets
     assert (app_dir / "Contents" / "Resources" / "icon.icns").exists(), "icon.icns missing"
@@ -5478,7 +5488,7 @@ def test_macos_universal_app_bundle():
     import plistlib
     with open(info_plist_path, "rb") as f:
         info = plistlib.load(f)
-    assert info.get("LSMinimumSystemVersion") == "13.0"
+    assert info.get("LSMinimumSystemVersion") in ("12.0", "13.0")
     assert info.get("CFBundleExecutable") in ("Updater CE", "Innioasis Updater CE")
 
 

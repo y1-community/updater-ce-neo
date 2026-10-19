@@ -45,13 +45,25 @@
   #define MyAppURL "https://github.com/y1-community/updater-ce-neo"
 #endif
 #ifndef MyAppExeName
-  #define MyAppExeName "InnioasisUpdater.exe"
+  #ifdef MyIsMediaTek
+    #define MyAppExeName "MediaTekInstaller.exe"
+  #else
+    #define MyAppExeName "InnioasisUpdater.exe"
+  #endif
 #endif
 #ifndef MyDistDir
-  #define MyDistDir "..\dist\InnioasisUpdater"
+  #ifdef MyIsMediaTek
+    #define MyDistDir "..\dist\windows\MediaTekInstaller"
+  #else
+    #define MyDistDir "..\dist\windows\InnioasisUpdater"
+  #endif
 #endif
 #ifndef MyOutputBase
-  #define MyOutputBase "UpdaterCE-Setup"
+  #ifdef MyIsMediaTek
+    #define MyOutputBase "MediaTekInstaller-Setup"
+  #else
+    #define MyOutputBase "UpdaterCE-Setup"
+  #endif
 #endif
 
 [Setup]
@@ -77,7 +89,7 @@ PrivilegesRequired=admin
 CloseApplications=no
 RestartApplications=no
 LicenseFile=..\LICENSE
-OutputDir=..\dist
+OutputDir=..\dist\windows
 OutputBaseFilename={#MyOutputBase}-{#MyAppVersion}
 SetupIconFile=..\assets\icon.ico
 Compression=lzma2/ultra64
@@ -93,7 +105,9 @@ VersionInfoCopyright=Copyright (C) 2024-2026 Innioasis Community
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
+#if FileExists(AddBackslash(CompilerPath) + "Languages\ChineseSimplified.isl")
 Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+#endif
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
@@ -107,13 +121,15 @@ Name: "{commonappdata}\SP_FT_Logs"; Permissions: users-modify
 
 [CustomMessages]
 english.StepStopping=Stopping running Updater CE, Python, SP Flash Tool and ADB processes...
-chinesesimplified.StepStopping=正在停止正在运行的 Updater CE、Python、SP Flash Tool 和 ADB 进程...
 english.StepRemovingOld=Removing previous versions...
-chinesesimplified.StepRemovingOld=正在删除旧版本...
 english.StepShortcuts=Removing old shortcuts...
-chinesesimplified.StepShortcuts=正在删除旧快捷方式...
 english.StepLegacy=Cleaning up old data and install folders...
+#if FileExists(AddBackslash(CompilerPath) + "Languages\ChineseSimplified.isl")
+chinesesimplified.StepStopping=正在停止正在运行的 Updater CE、Python、SP Flash Tool 和 ADB 进程...
+chinesesimplified.StepRemovingOld=正在删除旧版本...
+chinesesimplified.StepShortcuts=正在删除旧快捷方式...
 chinesesimplified.StepLegacy=正在清理旧数据和安装文件夹...
+#endif
 
 [Files]
 ; Main application binaries, _internal runtime, and bundled SP Flash Tool 5.1904
@@ -121,7 +137,7 @@ chinesesimplified.StepLegacy=正在清理旧数据和安装文件夹...
 Source: "{#MyDistDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\assets\icon.ico"
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
@@ -333,7 +349,7 @@ end;
 
 { %LocalAppData%\Innioasis Updater for this account, and for every
   profile when the install is allowed to touch the machine. }
-{ Every account profile under {sd}\Users. Only the folder names are needed. }
+(* Every account profile under {sd}\Users. Only the folder names are needed. *)
 function ProfileRoots: TStringList;
 var
   UsersRoot: String;

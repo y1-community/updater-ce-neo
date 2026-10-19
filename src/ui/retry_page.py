@@ -41,18 +41,26 @@ class RetryPage(QWidget):
         self._card.add_widget(self._conn_row)
         layout.addWidget(self._card)
 
+        from PySide6.QtWidgets import QHBoxLayout
+        from .flash_page import _RoundNextButton
+
+        prog_row = QHBoxLayout()
+        prog_row.setContentsMargins(0, 0, 0, 0)
+        prog_row.setSpacing(14)
         self._progress = InstallProgress()
         self._progress.setFixedHeight(18)
-        layout.addWidget(self._progress)
+        prog_row.addWidget(self._progress, 1, Qt.AlignVCenter)
+
+        self._cancel_btn = _RoundNextButton(symbol="cancel", accent=False)
+        self._cancel_btn.setText(tr("retry_btn_cancel"))
+        self._cancel_btn.clicked.connect(lambda: self._cancel_cb and self._cancel_cb())
+        prog_row.addWidget(self._cancel_btn, 0, Qt.AlignVCenter)
+        layout.addLayout(prog_row)
 
         self._step_label = QLabel("")
         self._step_label.setAlignment(Qt.AlignCenter)
         self._step_label.setProperty("cssClass", "field-label")
         layout.addWidget(self._step_label)
-
-        self._cancel_btn = QPushButton(tr("retry_btn_cancel"))
-        self._cancel_btn.clicked.connect(lambda: self._cancel_cb and self._cancel_cb())
-        layout.addWidget(self._cancel_btn)
         layout.addStretch()
 
     def update_info(self, package_name, retry_count, conn_status_key):

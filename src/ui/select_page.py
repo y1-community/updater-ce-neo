@@ -798,7 +798,7 @@ class SelectPackagePage(QWidget):
         from .release_icon import FadingIcon
 
         self._details_icon = FadingIcon(40)
-        details_row.addWidget(self._details_icon, 0, Qt.AlignTop)
+        details_row.addWidget(self._details_icon, 0, Qt.AlignVCenter)
         details_text = QVBoxLayout()
         details_text.setContentsMargins(0, 0, 0, 0)
         details_text.setSpacing(0)

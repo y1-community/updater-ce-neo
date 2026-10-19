@@ -111,8 +111,6 @@ def _tool_invocation(command: str) -> str:
         return first
     if first in _ADB_EXECUTABLES:
         return first
-    if any(name in first for name in _UPDATER_BIN_NAMES):
-        return first
     if "--flash-cli" in tokens:
         return "flash-cli"
     runner = first.startswith(_PYTHON_PREFIX) or first in _SHELL_EXECUTABLES
@@ -201,7 +199,7 @@ def process_snapshot() -> list:
     return _ps_snapshot()
 
 
-def _own_ancestry() -> set:
+def _own_ancestry(snapshot=None) -> set:
     """This process and every parent of it, so we never terminate ourselves."""
     safe = {os.getpid()}
     try:
@@ -209,7 +207,7 @@ def _own_ancestry() -> set:
     except Exception:
         pass
     try:
-        rows = _ps_snapshot()
+        rows = _ps_snapshot() if snapshot is None else snapshot
         by_pid = {pid: ppid for pid, ppid, _cmd in rows}
     except Exception:
         by_pid = {}
@@ -226,7 +224,7 @@ def _own_ancestry() -> set:
 def stray_tool_processes(snapshot=None) -> list:
     """Running flash-backend processes as ``[{"pid", "tool", "command"}]``."""
     rows = process_snapshot() if snapshot is None else snapshot
-    safe = _own_ancestry()
+    safe = _own_ancestry(rows)
     found = []
     for pid, _ppid, command in rows:
         if pid in safe or pid <= 1:
@@ -459,8 +457,26 @@ def sweep_stray_tools(force: bool = False, reason: str = "") -> list:
             f" ({reason})" if reason else "",
         )
         return []
+    candidates = stray_tool_processes()
+    if install_session_active() and not force:
+        logger.debug(
+            "Sweep aborted after snapshot%s: an install session opened while enumerating",
+            f" ({reason})" if reason else "",
+        )
+        return []
+    active_pids: set = set()
+    if not force:
+        try:
+            from .flash_service import active_sp_sessions
+            active_pids.update(active_sp_sessions())
+        except Exception:
+            pass
     killed = []
-    for item in stray_tool_processes():
+    for item in candidates:
+        if install_session_active() and not force:
+            break
+        if not force and item["pid"] in active_pids:
+            continue
         if _terminate(item["pid"], item["tool"]):
             killed.append(item)
         else:

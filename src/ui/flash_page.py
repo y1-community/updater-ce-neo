@@ -4,7 +4,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-from PySide6.QtCore import QEventLoop, QRect, QSize, Qt, QTimer
+from PySide6.QtCore import QEvent, QEventLoop, QRect, QSize, Qt, QTimer
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QBoxLayout,
@@ -373,14 +373,15 @@ class _CardHead(QWidget):
 
     def __init__(self, icon: QWidget, title: QWidget, parent=None):
         super().__init__(parent)
+        self._aligning = False
         self.box = QHBoxLayout(self)
         self.box.setContentsMargins(0, 0, 0, 0)
         self.box.setSpacing(_CARD_HEAD_GAP)
         self.icon = icon
-        self.box.addWidget(icon, 0, Qt.AlignTop)
+        self.box.addWidget(icon, 0, Qt.AlignVCenter)
         self.identity = QWidget()
         self.identity_box = QVBoxLayout(self.identity)
-        self.identity_box.setContentsMargins(0, 0, 0, 0)
+        self.identity_box.setContentsMargins(0, 2, 0, 9)
         self.identity_box.setSpacing(6)
         self.title = title
         self.title.setWordWrap(False)
@@ -396,15 +397,68 @@ class _CardHead(QWidget):
     def add_chip(self, chip: QWidget) -> None:
         """A round action chip, right of the title and the band.
 
-        Centred on the title-plus-band block rather than on the whole card, so
-        adding a line of guidance copy below never moves the chip.
+        Centred on the progress band so the release icon, progress bar and
+        round action buttons share one horizontal axis.
         """
         self.box.addWidget(chip, 0, Qt.AlignVCenter)
 
+    def _sync_to_band(self) -> None:
+        """Vertically centre the release icon and action chips on the progress band."""
+        if getattr(self, "_aligning", False) or not hasattr(self, "identity_box") or not hasattr(self, "band"):
+            return
+        self._aligning = True
+        try:
+            band_visible = self.band is not None and not self.band.isHidden()
+            target_top = 2 if band_visible else 0
+            band_h = max(0, self.band.height() if band_visible else 0)
+            target_bottom = max(10, (_CARD_ICON_PX // 2) - (band_h // 2) + 1) if band_visible else 0
+            margins = self.identity_box.contentsMargins()
+            if margins.top() != target_top or margins.bottom() != target_bottom:
+                self.identity_box.setContentsMargins(0, target_top, 0, target_bottom)
+            self.box.activate()
+            self.identity_box.activate()
+            if band_visible:
+                band_rect = self.band.geometry()
+                if band_rect.height() <= 0:
+                    return
+                centre_y = self.identity.y() + band_rect.center().y()
+            else:
+                if self.height() <= 0:
+                    return
+                centre_y = (self.height() - 1) // 2
+            if self.icon is not None and not self.icon.isHidden():
+                icon_y = max(0, centre_y - (self.icon.height() - 1) // 2)
+                if self.icon.y() != icon_y:
+                    self.icon.move(self.icon.x(), icon_y)
+            for i in range(2, self.box.count()):
+                item = self.box.itemAt(i)
+                chip = item.widget() if item is not None else None
+                if chip is not None and not chip.isHidden():
+                    chip_y = max(0, centre_y - (chip.height() - 1) // 2)
+                    if chip.y() != chip_y:
+                        chip.move(chip.x(), chip_y)
+        finally:
+            self._aligning = False
+
+    def event(self, ev):  # noqa: N802 (Qt naming)
+        res = super().event(ev)
+        if ev.type() in (
+            QEvent.Type.LayoutRequest,
+            QEvent.Type.Resize,
+            QEvent.Type.Show,
+            QEvent.Type.Paint,
+        ):
+            self._sync_to_band()
+        return res
+
     def band_span(self) -> tuple[int, int]:
         """Vertical extent of title + band in this row's coordinates."""
-        top = self.title.geometry().top()
-        bottom = self.band.geometry().bottom() if self.band is not None else self.title.geometry().bottom()
+        self._sync_to_band()
+        top = self.identity.y() + self.title.geometry().top()
+        if self.band is not None and not self.band.isHidden():
+            bottom = self.identity.y() + self.band.geometry().bottom()
+        else:
+            bottom = self.identity.y() + self.title.geometry().bottom()
         return top, bottom
 
 
@@ -561,6 +615,18 @@ class _RoundNextButton(QPushButton):
         if symbol == "next":
             self.setToolTip(tr("btn_next"))
             self.setAccessibleName(tr("btn_next"))
+
+    def setText(self, text: str) -> None:  # noqa: N802 (Qt naming)
+        super().setText(text)
+        if text:
+            self.setToolTip(text)
+            self.setAccessibleName(text)
+
+    def sizeHint(self) -> QSize:  # noqa: N802 (Qt naming)
+        return QSize(ROUND_NEXT_BUTTON_PX, ROUND_NEXT_BUTTON_PX)
+
+    def minimumSizeHint(self) -> QSize:  # noqa: N802 (Qt naming)
+        return QSize(ROUND_NEXT_BUTTON_PX, ROUND_NEXT_BUTTON_PX)
 
     def dismiss_keyboard_focus(self) -> None:
         self._keyboard_focused = False
@@ -862,7 +928,7 @@ class FlashPage(QWidget):
         card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
         body = QVBoxLayout()
         body.setContentsMargins(16, 14, 16, 14)
-        body.setSpacing(8)
+        body.setSpacing(0)
         head = _CardHead(icon, title)
         head.set_band(band)
         for chip in chips:
@@ -970,6 +1036,7 @@ class FlashPage(QWidget):
         hint_font = self._paperclip_hint.font()
         hint_font.setPixelSize(12)
         self._paperclip_hint.setFont(hint_font)
+        self._paperclip_hint.set_column_width(196)
         self._paperclip_hint.setWordWrap(True)
         self._paperclip_hint.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
 
@@ -1013,26 +1080,48 @@ class FlashPage(QWidget):
         self._cancel_btn.setToolTip(tr("flash_btn_cancel"))
         self._cancel_btn.clicked.connect(self._on_cancel)
 
-        self._done_mark = QPushButton()
+        self._done_mark = _RoundNextButton(symbol="complete", accent=True)
         self._done_mark.setObjectName("installDoneButton")
-        self._done_mark.setAttribute(Qt.WidgetAttribute.WA_MacShowFocusRect, False)
-        self._done_mark.setFixedSize(28, 28)
         self._done_mark.setCursor(Qt.ArrowCursor)
-        self._done_mark.setIcon(get_symbol_icon("complete", 18))
-        self._done_mark.setIconSize(QSize(18, 18))
-        self._done_mark.setFocusPolicy(Qt.StrongFocus)
-        self._done_mark.setAutoDefault(False)
-        self._done_mark.setFlat(False)
         self._style_done_button()
         self._done_mark.setVisible(False)
         self._done_mark.clicked.connect(self._on_install_done)
         self._install_done_cb = None
 
+        # Round wizard navigation chips for the Rockbox post-install steps.
+        self._theme_step1_next_btn = _RoundNextButton(symbol="next", accent=True)
+        self._theme_step1_next_btn.setText(tr("dialog_pre_install_continue"))
+        self._theme_step1_next_btn.setVisible(False)
+        self._theme_step1_next_btn.clicked.connect(self._on_theme_step1_next_clicked)
+
+        self._theme_fallback_next_btn = _RoundNextButton(symbol="next", accent=True)
+        self._theme_fallback_next_btn.setText(tr("dialog_pre_install_continue"))
+        self._theme_fallback_next_btn.setVisible(False)
+        self._theme_fallback_next_btn.clicked.connect(self._on_theme_fallback_next_clicked)
+
+        self._theme_trouble_recover_btn = _RoundNextButton(symbol="next", accent=True)
+        self._theme_trouble_recover_btn.setText(tr("rockbox_recover_troubleshoot"))
+        self._theme_trouble_recover_btn.setVisible(False)
+        self._theme_trouble_recover_btn.clicked.connect(self._on_theme_recover_clicked)
+
+        self._theme_back_btn = _RoundNextButton(symbol="back", accent=False)
+        self._theme_back_btn.setText(tr("rockbox_wizard_back"))
+        self._theme_back_btn.setVisible(False)
+        self._theme_back_btn.clicked.connect(self._show_theme_fallback_usb_mode)
+
         self._progress_card, self._flash_head, copy = self._new_progress_card(
             self._flash_icon,
             self._flash_pkg_label,
             self._progress_bar,
-            [self._flash_retry_btn, self._cancel_btn, self._done_mark],
+            [
+                self._flash_retry_btn,
+                self._cancel_btn,
+                self._done_mark,
+                self._theme_step1_next_btn,
+                self._theme_fallback_next_btn,
+                self._theme_trouble_recover_btn,
+                self._theme_back_btn,
+            ],
         )
         # The chips' row, for the stop check to slot in beside them.
         self._actions_row = self._flash_row = self._flash_head.box
@@ -1046,27 +1135,21 @@ class FlashPage(QWidget):
         self._theme_row = QWidget()
         theme_vbox = QVBoxLayout(self._theme_row)
         theme_vbox.setContentsMargins(0, 4, 0, 0)
-        theme_vbox.setSpacing(8)
+        theme_vbox.setSpacing(6)
 
-        # Step 1: Disconnect and power on -> Next
+        # Step 1: Disconnect and power on -> Next chip on the head row
         self._theme_step1_widget = QWidget()
+        self._theme_step1_widget.setFixedHeight(0)
         step1_box = QHBoxLayout(self._theme_step1_widget)
         step1_box.setContentsMargins(0, 0, 0, 0)
-        step1_box.setSpacing(10)
-        self._theme_step1_next_btn = QPushButton(tr("dialog_pre_install_continue"))
-        self._theme_step1_next_btn.clicked.connect(self._on_theme_step1_next_clicked)
-        step1_box.addWidget(self._theme_step1_next_btn)
-        step1_box.addStretch(1)
+        step1_box.setSpacing(0)
         theme_vbox.addWidget(self._theme_step1_widget)
 
-        # Fallback: USB storage mode -> Next
+        # Fallback: USB storage mode -> Next chip on the head row + recover link below
         self._theme_fallback_widget = QWidget()
         fallback_box = QHBoxLayout(self._theme_fallback_widget)
         fallback_box.setContentsMargins(0, 0, 0, 0)
         fallback_box.setSpacing(10)
-        self._theme_fallback_next_btn = QPushButton(tr("dialog_pre_install_continue"))
-        self._theme_fallback_next_btn.clicked.connect(self._on_theme_fallback_next_clicked)
-        fallback_box.addWidget(self._theme_fallback_next_btn)
 
         self._theme_recover_link = QLabel(f'<a href="recover">{tr("rockbox_recover_troubleshoot")}</a>')
         self._theme_recover_link.setTextFormat(Qt.TextFormat.RichText)
@@ -1083,22 +1166,29 @@ class FlashPage(QWidget):
         self._theme_manual_widget = self._theme_fallback_widget
         self._theme_browse_btn = self._theme_fallback_next_btn
 
-        # Trouble recovery section
+        # Trouble recovery section -> chips on the head row
         self._theme_trouble_widget = QWidget()
+        self._theme_trouble_widget.setFixedHeight(0)
         trouble_box = QHBoxLayout(self._theme_trouble_widget)
         trouble_box.setContentsMargins(0, 0, 0, 0)
-        trouble_box.setSpacing(10)
-        self._theme_trouble_recover_btn = QPushButton(tr("rockbox_recover_troubleshoot"))
-        self._theme_trouble_recover_btn.clicked.connect(self._on_theme_recover_clicked)
-        trouble_box.addWidget(self._theme_trouble_recover_btn)
-        self._theme_back_btn = QPushButton(tr("rockbox_wizard_back"))
-        self._theme_back_btn.clicked.connect(self._show_theme_fallback_usb_mode)
-        trouble_box.addWidget(self._theme_back_btn)
-        trouble_box.addStretch(1)
+        trouble_box.setSpacing(0)
         theme_vbox.addWidget(self._theme_trouble_widget)
 
         self._theme_row.setVisible(False)
         copy.addWidget(self._theme_row)
+
+        self._driver_action_row = QWidget()
+        driver_box = QHBoxLayout(self._driver_action_row)
+        driver_box.setContentsMargins(0, 6, 0, 2)
+        driver_box.setSpacing(8)
+        self._download_drivers_btn = QPushButton(tr("settings_download_drivers_btn"))
+        self._download_drivers_btn.setObjectName("flashDownloadDriversBtn")
+        self._download_drivers_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._download_drivers_btn.clicked.connect(self._open_mediatek_drivers)
+        driver_box.addWidget(self._download_drivers_btn)
+        driver_box.addStretch(1)
+        self._driver_action_row.setVisible(False)
+        copy.addWidget(self._driver_action_row)
         self._flash_col = copy
 
         # Warning below the update card
@@ -1534,6 +1624,17 @@ class FlashPage(QWidget):
             self._set_determinate(self._wait_progress_bar, 0)
         self._apply_stop_hold()
 
+    def _hide_theme_wizard_chips(self) -> None:
+        for attr in (
+            "_theme_step1_next_btn",
+            "_theme_fallback_next_btn",
+            "_theme_trouble_recover_btn",
+            "_theme_back_btn",
+        ):
+            btn = getattr(self, attr, None)
+            if btn is not None:
+                btn.setVisible(False)
+
     def show_flashing(self):
         if getattr(self, "_wait_copy", "") in ("connect", "please_wait", "please_wait_connecting"):
             self._wait_copy = "stage"
@@ -1550,7 +1651,18 @@ class FlashPage(QWidget):
             self._cancel_btn.setEnabled(True)
         if hasattr(self, "_done_mark"):
             self._done_mark.setVisible(done)
+        if not failed and hasattr(self, "_driver_action_row"):
+            self._driver_action_row.setVisible(False)
+        self._hide_theme_wizard_chips()
+        if hasattr(self, "_flash_head"):
+            self._flash_head._sync_to_band()
         self._apply_stop_hold()
+
+    def _open_mediatek_drivers(self) -> None:
+        from ..browser import open_browser
+        from ..config import MEDIATEK_DRIVERS_URL
+
+        open_browser(MEDIATEK_DRIVERS_URL)
 
     def _set_determinate(self, bar: QProgressBar, percent) -> None:
         percent = max(0, min(100, int(percent)))
@@ -1572,13 +1684,18 @@ class FlashPage(QWidget):
         else:
             self._progress_bar.setFormat(tr("install_failed"))
 
+        from ..flash_service import is_sp_driver_error, parse_flash_error
+        driver_missing = is_sp_driver_error(message)
         if not explanation:
-            from ..flash_service import parse_flash_error
             title_text, explanation_text = parse_flash_error(message, self._model)
             step_text = title_text
             if message and message not in step_text and len(message) < 40:
                 step_text = f"{step_text} ({message})"
             exp_text = explanation_text
+        elif driver_missing:
+            title_text, _ = parse_flash_error(message, self._model)
+            step_text = f"{title_text} ({message})" if message and message not in title_text else title_text
+            exp_text = explanation
         else:
             step_text = message
             exp_text = explanation
@@ -1593,6 +1710,8 @@ class FlashPage(QWidget):
         self._eta_label.setWordWrap(True)
         if hasattr(self, "_status_flow") and hasattr(self._status_flow, "set_forced_stacked"):
             self._status_flow.set_forced_stacked(True)
+        if hasattr(self, "_driver_action_row"):
+            self._driver_action_row.setVisible(driver_missing)
 
         if hasattr(self, "_wait_continue_btn"):
             self._wait_continue_btn.setVisible(False)
@@ -1604,6 +1723,8 @@ class FlashPage(QWidget):
         if message == "CACHE_FILE_MISSING":
             self._flash_retry_btn.setToolTip(tr("sel_cache_retry_tooltip"))
             self._flash_retry_btn.setAccessibleName(tr("sel_cache_retry_button"))
+        if hasattr(self, "_flash_head"):
+            self._flash_head._sync_to_band()
         self._notify_geometry_change()
 
     def stop_theme_workers(self) -> None:
@@ -1655,8 +1776,13 @@ class FlashPage(QWidget):
             self._flash_retry_btn.setAccessibleName(tr("flash_btn_retry"))
             self._cancel_btn.setVisible(True)
             self._cancel_btn.setEnabled(True)
+        self._hide_theme_wizard_chips()
         if hasattr(self, "_theme_row"):
             self._theme_row.setVisible(False)
+        if hasattr(self, "_driver_action_row"):
+            self._driver_action_row.setVisible(False)
+        if hasattr(self, "_flash_head"):
+            self._flash_head._sync_to_band()
 
     def show_usb_disconnected(
         self, on_retry=None, on_cancel=None, prompt_key="", prompt_kwargs=None
@@ -1721,35 +1847,6 @@ class FlashPage(QWidget):
         else:
             logger.info("%s", msg)
 
-    def show_rockbox_power_on_prompt(self, prompt: str, on_continue=None) -> None:
-        """Keep the install card active while the user boots the flashed player."""
-        self._failed = False
-        self._complete = False
-        self._themes_stage_active = False
-        self._rockbox_power_on_continue_cb = on_continue
-        self._warning.setVisible(False)
-        if hasattr(self, "_appeal"):
-            self._appeal.setVisible(False)
-        if hasattr(self, "_cancel_btn"):
-            self._cancel_btn.setVisible(False)
-        if hasattr(self, "_flash_retry_btn"):
-            self._flash_retry_btn.setVisible(False)
-        if hasattr(self, "_theme_row"):
-            self._theme_row.setVisible(False)
-        self.show_flashing()
-        self.set_step(tr("rockbox_stage_installing"))
-        self._progress_bar.set_precise_value(90.0)
-        self._eta_label.setText(prompt)
-        self._eta_label.setWordWrap(True)
-        if hasattr(self, "_status_flow"):
-            self._status_flow.set_forced_stacked(True)
-        self._theme_step1_next_btn.setText(tr("dialog_pre_install_continue"))
-        self._theme_step1_widget.setVisible(True)
-        self._theme_fallback_widget.setVisible(False)
-        self._theme_trouble_widget.setVisible(False)
-        self._theme_row.setVisible(True)
-        self._notify_geometry_change()
-
     def _on_theme_step1_next_clicked(self) -> None:
         callback = getattr(self, "_rockbox_power_on_continue_cb", None)
         if callable(callback):
@@ -1790,6 +1887,7 @@ class FlashPage(QWidget):
             self._flash_retry_btn.setVisible(False)
         if hasattr(self, "_done_mark"):
             self._done_mark.setVisible(False)
+        self._hide_theme_wizard_chips()
 
         if hasattr(self, "_status_flow"):
             self._status_flow.set_forced_stacked(True)
@@ -1846,13 +1944,14 @@ class FlashPage(QWidget):
             self._theme_fallback_widget.setVisible(False)
         if hasattr(self, "_theme_trouble_widget"):
             self._theme_trouble_widget.setVisible(False)
+        self._hide_theme_wizard_chips()
+        if hasattr(self, "_theme_step1_next_btn"):
+            self._theme_step1_next_btn.setVisible(True)
+        if hasattr(self, "_flash_head"):
+            self._flash_head._sync_to_band()
         win = self.window()
         if win and hasattr(win, "_adjust_window_geometry"):
             win._adjust_window_geometry()
-
-    def _on_theme_step1_next_clicked(self) -> None:
-        self._log_theme("[Rockbox Themes] User clicked Next on Step 1 (device powered on). Advancing to Step 2 (connect USB).")
-        self._start_theme_step2_connect_usb()
 
     def _start_theme_step2_connect_usb(self) -> None:
         if hasattr(self, "_theme_step1_widget"):
@@ -1861,6 +1960,9 @@ class FlashPage(QWidget):
             self._theme_fallback_widget.setVisible(False)
         if hasattr(self, "_theme_trouble_widget"):
             self._theme_trouble_widget.setVisible(False)
+        self._hide_theme_wizard_chips()
+        if hasattr(self, "_flash_head"):
+            self._flash_head._sync_to_band()
         win = self.window()
         if win and hasattr(win, "_adjust_window_geometry"):
             win._adjust_window_geometry()
@@ -1907,6 +2009,7 @@ class FlashPage(QWidget):
             self._adb_watch_timer.stop()
         if hasattr(self, "_theme_row"):
             self._theme_row.setVisible(False)
+        self._hide_theme_wizard_chips()
         self._log_theme(f"[Rockbox Themes] Player detected via ADB (serial: {serial}). Waiting {ROCKBOX_BOOT_WAIT_MS // 1000}s for Rockbox to populate .rockbox...")
         self._eta_label.setText(tr("rockbox_stage_installing"))
         QTimer.singleShot(ROCKBOX_BOOT_WAIT_MS, lambda: self._start_adb_theme_push(serial))
@@ -1961,6 +2064,11 @@ class FlashPage(QWidget):
             self._theme_fallback_widget.setVisible(True)
         if hasattr(self, "_theme_trouble_widget"):
             self._theme_trouble_widget.setVisible(False)
+        self._hide_theme_wizard_chips()
+        if hasattr(self, "_theme_fallback_next_btn"):
+            self._theme_fallback_next_btn.setVisible(True)
+        if hasattr(self, "_flash_head"):
+            self._flash_head._sync_to_band()
         win = self.window()
         if win and hasattr(win, "_adjust_window_geometry"):
             win._adjust_window_geometry()
@@ -1989,6 +2097,7 @@ class FlashPage(QWidget):
         self._log_theme(f"[Rockbox Themes] Merging bundled themes & fonts from {src_dir} into {dest_dir}...")
         if hasattr(self, "_theme_fallback_widget"):
             self._theme_fallback_widget.setVisible(False)
+        self._hide_theme_wizard_chips()
         self._eta_label.setText(tr("rockbox_stage_pushing"))
 
         self._dir_merge_worker = DirMergeWorker(src_dir, dest_dir, parent=self)
@@ -2020,6 +2129,13 @@ class FlashPage(QWidget):
             self._theme_fallback_widget.setVisible(False)
         if hasattr(self, "_theme_trouble_widget"):
             self._theme_trouble_widget.setVisible(True)
+        self._hide_theme_wizard_chips()
+        if hasattr(self, "_theme_trouble_recover_btn"):
+            self._theme_trouble_recover_btn.setVisible(True)
+        if hasattr(self, "_theme_back_btn"):
+            self._theme_back_btn.setVisible(True)
+        if hasattr(self, "_flash_head"):
+            self._flash_head._sync_to_band()
         win = self.window()
         if win and hasattr(win, "_adjust_window_geometry"):
             win._adjust_window_geometry()
@@ -2044,6 +2160,7 @@ class FlashPage(QWidget):
             self._status_flow.set_forced_stacked(False)
         if hasattr(self, "_theme_row"):
             self._theme_row.setVisible(False)
+        self._hide_theme_wizard_chips()
         self._progress_bar.set_precise_value(100.0)
         self.set_device_done()
         cb = getattr(self, "_theme_stage_done_cb", None)
@@ -2067,6 +2184,8 @@ class FlashPage(QWidget):
         if hasattr(self, "_flash_retry_btn"):
             self._flash_retry_btn.setVisible(False)
         self.show_flashing()
+        if hasattr(self, "_cancel_btn"):
+            self._cancel_btn.setVisible(False)
         self.set_step(tr("rockbox_stage_installing"))
         self._progress_bar.set_precise_value(90.0)
         self._eta_label.setText(prompt)
@@ -2077,21 +2196,16 @@ class FlashPage(QWidget):
         if hasattr(self, "_theme_step1_widget"):
             self._theme_step1_widget.setVisible(True)
         self._theme_step1_next_btn.setText(tr("dialog_pre_install_continue"))
-        try:
-            self._theme_step1_next_btn.clicked.disconnect(self._on_theme_step1_next_clicked)
-        except (RuntimeError, TypeError):
-            pass
-        try:
-            self._theme_step1_next_btn.clicked.disconnect(self._on_rockbox_power_on_continue)
-        except (RuntimeError, TypeError):
-            pass
-        self._theme_step1_next_btn.clicked.connect(self._on_rockbox_power_on_continue)
+        self._hide_theme_wizard_chips()
+        self._theme_step1_next_btn.setVisible(True)
         if hasattr(self, "_theme_row"):
             self._theme_row.setVisible(True)
         if hasattr(self, "_theme_fallback_widget"):
             self._theme_fallback_widget.setVisible(False)
         if hasattr(self, "_theme_trouble_widget"):
             self._theme_trouble_widget.setVisible(False)
+        if hasattr(self, "_flash_head"):
+            self._flash_head._sync_to_band()
         self._notify_geometry_change()
 
     def _on_rockbox_power_on_continue(self) -> None:
@@ -2568,6 +2682,8 @@ class FlashPage(QWidget):
             self._theme_trouble_recover_btn.setText(tr("rockbox_recover_troubleshoot"))
         if hasattr(self, "_theme_back_btn"):
             self._theme_back_btn.setText(tr("rockbox_wizard_back"))
+        if hasattr(self, "_download_drivers_btn"):
+            self._download_drivers_btn.setText(tr("settings_download_drivers_btn"))
         self._flash_banner.retranslate()
         self._guide_title.setText(tr("flash_guide_title"))
         for key, lbl in self._guide_texts:
@@ -2645,6 +2761,12 @@ class FlashPage(QWidget):
             getattr(self, "_prep_cancel_btn", None),
             getattr(self, "_download_cancel_btn", None),
             getattr(self, "_wait_continue_btn", None),
+            getattr(self, "_flash_retry_btn", None),
+            getattr(self, "_done_mark", None),
+            getattr(self, "_theme_step1_next_btn", None),
+            getattr(self, "_theme_fallback_next_btn", None),
+            getattr(self, "_theme_trouble_recover_btn", None),
+            getattr(self, "_theme_back_btn", None),
             getattr(self, "_stop_continue", None),
             getattr(self, "_stop_back", None),
         ):
@@ -2657,10 +2779,8 @@ class FlashPage(QWidget):
         button = getattr(self, "_done_mark", None)
         if not isinstance(button, QPushButton):
             return
-        from .icons import get_symbol_icon, get_symbol_pixmap
-
-        button.setIcon(get_symbol_icon("complete", 18))
-        button.setText("")
+        if hasattr(button, "rebuild_arrow"):
+            button.rebuild_arrow()
         button.setToolTip(tr("install_done_dismiss"))
         button.setAccessibleName(tr("install_done_dismiss"))
         button.setCursor(Qt.ArrowCursor)

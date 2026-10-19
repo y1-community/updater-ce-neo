@@ -134,8 +134,8 @@ jobs:
 
       - name: Verify AppImage Execution (Headless)
         run: |
-          QT_QPA_PLATFORM=offscreen timeout 5 ./dist/InnioasisUpdater-x86_64.AppImage --appimage-extract-and-run || [ $? -eq 124 ]
-          if ./dist/InnioasisUpdater-x86_64.AppImage --appimage-extract-and-run test -x usr/bin/SP_Flash_Tool/flash_tool; then
+          QT_QPA_PLATFORM=offscreen timeout 5 ./dist/linux/InnioasisUpdater-x86_64.AppImage --appimage-extract-and-run || [ $? -eq 124 ]
+          if ./dist/linux/InnioasisUpdater-x86_64.AppImage --appimage-extract-and-run test -x usr/bin/SP_Flash_Tool/flash_tool; then
             echo "AppImage bundles the SP Flash Tool payload (offline-ready)"
           else
             echo "::warning::AppImage does not bundle SP Flash Tool; runtime download fallback applies"
@@ -144,11 +144,11 @@ jobs:
       - name: Verify tar.gz Portable Build (Headless)
         run: |
           set -o pipefail
-          tarball="$(ls -t dist/InnioasisUpdater-*.tar.gz | head -n 1)"
+          tarball="$(ls -t dist/linux/InnioasisUpdater-*.tar.gz | head -n 1)"
           echo "Checking $tarball"
           tar -tzf "$tarball" | grep -qx 'InnioasisUpdater/InnioasisUpdater'
           tar -tzf "$tarball" | grep -qx 'InnioasisUpdater/innioasis-updater.png'
-          (cd dist && sha256sum -c "$(basename "$tarball").sha256")
+          (cd dist/linux && sha256sum -c "$(basename "$tarball").sha256")
 
       - name: Install With Linux Release Installer (Isolated HOME)
         run: |
@@ -160,7 +160,7 @@ jobs:
           test -x "$HOME/.local/bin/innioasis-updater"
           test -f "$HOME/.local/share/applications/innioasis-updater.desktop"
           # Reinstall from the tar.gz to check the second path, then launch it.
-          bash scripts/install_linux_release.sh --file "$(ls -t dist/InnioasisUpdater-*.tar.gz | head -n 1)"
+          bash scripts/install_linux_release.sh --file "$(ls -t dist/linux/InnioasisUpdater-*.tar.gz | head -n 1)"
           test -x "$HOME/.local/opt/innioasis-updater/app/InnioasisUpdater"
           QT_QPA_PLATFORM=offscreen timeout 5 "$HOME/.local/bin/innioasis-updater" || [ $? -eq 124 ]
           bash scripts/install_linux_release.sh --uninstall
@@ -171,10 +171,10 @@ jobs:
         with:
           name: InnioasisUpdater-Linux-AppImage
           path: |
-            dist/*.AppImage
-            dist/*.AppImage.sha256
-            dist/*.tar.gz
-            dist/*.tar.gz.sha256
+            dist/linux/*.AppImage
+            dist/linux/*.AppImage.sha256
+            dist/linux/*.tar.gz
+            dist/linux/*.tar.gz.sha256
             scripts/install_linux_release.sh
           retention-days: 14
 
@@ -187,8 +187,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/*.AppImage
-            dist/*.sha256
+            dist/linux/*.AppImage
+            dist/linux/*.sha256
           generate_release_notes: true
           draft: false
           prerelease: false
+

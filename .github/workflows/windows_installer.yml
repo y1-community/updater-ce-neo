@@ -44,7 +44,7 @@ jobs:
 
       - name: Build Standalone Executable with PyInstaller
         run: |
-          pyinstaller --noconfirm InnioasisUpdater.spec
+          pyinstaller --distpath dist/windows --workpath build/windows --noconfirm InnioasisUpdater.spec
 
       - name: Install Inno Setup
         run: |
@@ -60,13 +60,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: UpdaterCE-Windows-Installer
-          path: dist/UpdaterCE-Setup-*.exe
+          path: dist/windows/UpdaterCE-Setup-*.exe
           if-no-files-found: error
 
       - name: Attach to Release (Optional)
         if: ${{ github.event.inputs.publish_release == 'true' }}
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/UpdaterCE-Setup-*.exe
+          files: dist/windows/UpdaterCE-Setup-*.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

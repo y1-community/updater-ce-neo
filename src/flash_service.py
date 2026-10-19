@@ -479,9 +479,8 @@ def normalise_method(method):
         return default_flash_method()
     if paths.IS_MAC:
         return METHOD_MTK
-    locked = windows_only_method()
-    if locked:
-        return locked
+    if windows_only_method() == METHOD_MTK:
+        return METHOD_MTK
     if value in ("auto", METHOD_MTK_MAC):
         return default_flash_method()
     return value
@@ -543,6 +542,26 @@ WRONG_MODEL_ERRORS = frozenset(
 ERR_ATTEMPT_TIMEOUT = "ERR_ATTEMPT_TIMEOUT"
 
 _SP_ERROR_NAME_RE = re.compile(r"(S_[A-Z0-9_]+)")
+_SP_EXIT_ERROR_RE = re.compile(r"\bSP_EXIT_-?\d+\b", re.IGNORECASE)
+
+
+def is_sp_driver_error(value) -> bool:
+    """True when an SP Flash Tool exit or driver error indicates missing MediaTek USB drivers."""
+    text = str(value or "").strip()
+    if not text:
+        return False
+    upper = text.upper()
+    if _SP_EXIT_ERROR_RE.search(upper):
+        return True
+    return any(
+        token in upper
+        for token in (
+            "DRIVER_NOT_INSTALLED",
+            "USB_DRIVER_MISSING",
+            "DRIVER_REQUIRED",
+            "MEDIATEK_DRIVER",
+        )
+    )
 
 
 def sp_error_name(value) -> str:
@@ -628,6 +647,8 @@ def describe_backend_error(value) -> str:
         return ""
     if is_wrong_model_error(value):
         return tr("err_sp_wrong_model")
+    if is_sp_driver_error(value):
+        return tr("err_driver_missing_desc")
     name = sp_error_name(value) or SP_ERROR_CODE_NAMES.get(sp_error_code(value), "")
     key = SP_ERROR_GUIDANCE.get(name)
     return tr(key) if key else ""
@@ -664,6 +685,17 @@ def parse_flash_error(value, model: str = "") -> tuple[str, str]:
         code_token = _format_error_token(raw, "MISMATCH")
         title = f"{tr('err_sp_wrong_model_title')} ({code_token})" if code_token else tr("err_sp_wrong_model_title")
         return title, tr("err_sp_wrong_model")
+
+    # 2b. SP Flash Tool exit / missing MediaTek USB Driver
+    if is_sp_driver_error(raw):
+        match = _SP_EXIT_ERROR_RE.search(raw.upper())
+        code_token = match.group(0) if match else _format_error_token(raw, raw[:32])
+        title = (
+            f"{tr('err_driver_missing_title')} ({code_token})"
+            if code_token
+            else tr("err_driver_missing_title")
+        )
+        return title, tr("err_driver_missing_desc")
 
     # 3. Timeout / device not responding
     if (
@@ -4909,8 +4941,7 @@ class FlashService(QObject):
         # the port has to be free before a new device search begins.
         from . import process_guard
 
-        process_guard.end_install_session(reason="restart", sweep=False)
-        process_guard.sweep_async(reason="before install")
+        terminate_sp_sessions()
         process_guard.begin_install_session(reason="install")
         primed = self.take_primed_mtk()
         worker = FlashWorker(

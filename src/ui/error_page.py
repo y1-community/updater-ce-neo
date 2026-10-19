@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..flash_service import describe_backend_error, is_wrong_model_error
+from ..flash_service import describe_backend_error, is_sp_driver_error, is_wrong_model_error
 from ..i18n import tr
 from .flash_page import _STEP_KEY
 from .widgets import Banner, Card, InfoRow
@@ -39,6 +39,8 @@ def _format_error_code(code) -> str:
     # the wrong player, not a bad cable, and no retry can fix it.
     if is_wrong_model_error(code):
         return f"{tr('err_sp_wrong_model_title')} ({code})"
+    if is_sp_driver_error(code):
+        return f"{tr('err_driver_missing_title')} ({code})"
     key = _ERROR_CODE_KEYS.get(code)
     if key:
         return f"{tr(key)} ({code})"
@@ -96,6 +98,9 @@ class ErrorPage(QWidget):
         self._reconnect_btn.setDefault(True)
         self._reselect_btn = QPushButton(tr("err_btn_reselect"))
         self._log_btn = QPushButton(tr("err_view_log"))
+        self._driver_btn = QPushButton(tr("settings_download_drivers_btn"))
+        self._driver_btn.setVisible(False)
+        self._driver_btn.clicked.connect(self._open_mediatek_drivers)
         self._retry_btn.clicked.connect(lambda: self._retry_cb and self._retry_cb())
         self._reconnect_btn.clicked.connect(lambda: self._reconnect_cb and self._reconnect_cb())
         self._reselect_btn.clicked.connect(lambda: self._reselect_cb and self._reselect_cb())
@@ -104,6 +109,7 @@ class ErrorPage(QWidget):
         btn_row.addWidget(self._reconnect_btn)
         btn_row.addWidget(self._reselect_btn)
         btn_row.addWidget(self._log_btn)
+        btn_row.addWidget(self._driver_btn)
 
         from ..sp_flash_gui import is_sp_flash_gui_supported
         if is_sp_flash_gui_supported():
@@ -115,6 +121,12 @@ class ErrorPage(QWidget):
         btn_row.addStretch()
         layout.addLayout(btn_row)
         layout.addStretch()
+
+    def _open_mediatek_drivers(self) -> None:
+        from ..browser import open_browser
+        from ..config import MEDIATEK_DRIVERS_URL
+
+        open_browser(MEDIATEK_DRIVERS_URL)
 
     def set_advanced_mode(self, enabled: bool) -> None:
         """Gate SP GUI button on Advanced Settings."""
@@ -140,6 +152,8 @@ class ErrorPage(QWidget):
         mode = self._mode
         if hasattr(self, "_cause"):
             self._cause.setVisible(False)
+        if hasattr(self, "_driver_btn"):
+            self._driver_btn.setVisible(False)
         if mode == "device":
             self._banner.set_type("danger")
             self._banner.set_key("err_device_title")
@@ -157,18 +171,25 @@ class ErrorPage(QWidget):
             self._retry_row.set_value("\u2014")
             self._hint.setText(tr("flash_warning"))
         elif mode == "failed":
+            error_code = self._mode_args.get("error_code")
             self._banner.set_type("danger")
             self._banner.set_key("flash_failed")
-            self._title.setText(tr("err_flash_title"))
-            self._error_row.set_value(_format_error_code(self._mode_args.get("error_code")))
+            self._title.setText(
+                tr("err_driver_missing_title")
+                if is_sp_driver_error(error_code)
+                else tr("err_flash_title")
+            )
+            self._error_row.set_value(_format_error_code(error_code))
             step = self._mode_args.get("step") or "\u2014"
             percent = self._mode_args.get("percent", 0)
             step_label = tr(_STEP_KEY[step]) if step in _STEP_KEY else str(step)
             self._step_row.set_value(f"{step_label} @ {percent}%")
             self._retry_row.set_value(str(self._mode_args.get("retry_count", 0)))
-            guidance = describe_backend_error(self._mode_args.get("error_code"))
+            guidance = describe_backend_error(error_code)
             self._cause.setText(guidance)
             self._cause.setVisible(bool(guidance))
+            if hasattr(self, "_driver_btn"):
+                self._driver_btn.setVisible(is_sp_driver_error(error_code))
             ndash = '\u2014'
             self._hint.setText(
                 f"{tr('flash_current_pkg')}: {self._mode_args.get('package_name') or ndash}"
@@ -189,6 +210,8 @@ class ErrorPage(QWidget):
         self._reconnect_btn.setText(tr("err_btn_reconnect"))
         self._reselect_btn.setText(tr("err_btn_reselect"))
         self._log_btn.setText(tr("err_view_log"))
+        if hasattr(self, "_driver_btn"):
+            self._driver_btn.setText(tr("settings_download_drivers_btn"))
         if hasattr(self, "_sp_gui_btn"):
             self._sp_gui_btn.setText(tr("flash_btn_open_sp_gui"))
         self._error_row.retranslate()

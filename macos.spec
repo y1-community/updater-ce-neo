@@ -17,6 +17,11 @@ LIBUSB_DYLIB = VENDOR_MTK / "mtkclient" / "Darwin" / "libusb-1.0.dylib"
 # cross-platform MediaTek Installer: its own bundle name and identifier.
 # Anything else (default) builds Updater CE.
 _BUILD_BRAND = (os.environ.get("BUILD_BRAND") or "").strip().lower().replace("-", "_")
+if not _BUILD_BRAND and (PROJECT_ROOT / "src" / "_build_brand.py").exists():
+    for _line in (PROJECT_ROOT / "src" / "_build_brand.py").read_text(encoding="utf-8").splitlines():
+        if _line.startswith("BUILD_BRAND"):
+            _BUILD_BRAND = _line.split("=")[-1].strip().strip('"\'')
+            break
 IS_MEDIATEK_INSTALLER_BUILD = _BUILD_BRAND in ("mediatek_installer", "generic_mtk")
 APP_DISPLAY_NAME = "MediaTek Installer" if IS_MEDIATEK_INSTALLER_BUILD else "Updater CE"
 BUNDLE_ID = (
@@ -223,7 +228,7 @@ app = BUNDLE(
 try:
     import shutil
     import plistlib
-    dist_dir = PROJECT_ROOT / "dist"
+    dist_dir = Path(DISTPATH) if "DISTPATH" in globals() else (PROJECT_ROOT / "dist" / "macos")  # noqa: F821
     app_dir = dist_dir / f"{APP_DISPLAY_NAME}.app"
     coll_dir = dist_dir / APP_DISPLAY_NAME
     if not app_dir.exists() and coll_dir.exists():

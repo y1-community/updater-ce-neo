@@ -583,31 +583,35 @@ class Card(QFrame):
         The swap uses the same short fade as a page change. Reduced motion
         skips it. ``True`` means the accept button was chosen.
         """
+        from .flash_page import _RoundNextButton
+
         panel = QWidget()
-        layout = QVBoxLayout(panel)
+        layout = QHBoxLayout(panel)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
+        layout.setSpacing(12)
+        copy_col = QVBoxLayout()
+        copy_col.setContentsMargins(0, 0, 0, 0)
+        copy_col.setSpacing(6)
         if note:
             note_lbl = QLabel(note)
             note_lbl.setWordWrap(True)
             note_lbl.setProperty("cssClass", "subtitle")
-            layout.addWidget(note_lbl)
+            copy_col.addWidget(note_lbl)
         if body:
             body_lbl = QLabel(body)
             body_lbl.setWordWrap(True)
             body_lbl.setProperty("cssClass", "subtitle")
-            layout.addWidget(body_lbl)
+            copy_col.addWidget(body_lbl)
+        layout.addLayout(copy_col, 1)
         row = QHBoxLayout()
-        row.setSpacing(8)
-        accept_btn = QPushButton(accept)
-        reject_btn = QPushButton(reject)
-        accept_btn.setCursor(Qt.ArrowCursor)
-        reject_btn.setCursor(Qt.ArrowCursor)
-        accept_btn.setMinimumHeight(28)
-        reject_btn.setMinimumHeight(28)
-        row.addWidget(accept_btn)
-        row.addWidget(reject_btn)
-        row.addStretch(1)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(10)
+        accept_btn = _RoundNextButton(symbol="next", accent=True)
+        accept_btn.setText(accept)
+        reject_btn = _RoundNextButton(symbol="cancel", accent=False)
+        reject_btn.setText(reject)
+        row.addWidget(accept_btn, 0, Qt.AlignVCenter)
+        row.addWidget(reject_btn, 0, Qt.AlignVCenter)
         layout.addLayout(row)
         self._confirm_accept = accept_btn
         self._confirm_reject = reject_btn

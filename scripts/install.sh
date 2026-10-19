@@ -89,7 +89,10 @@ if [ "${OS}" = "Darwin" ]; then
     log "Preparing Updater CE 3.0 for macOS..."
     # If running from local clone and dist/Updater CE.app exists, offer to run it
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    LOCAL_APP="${SCRIPT_DIR}/../dist/Updater CE.app"
+    LOCAL_APP="${SCRIPT_DIR}/../dist/macos/Updater CE.app"
+    if [ ! -d "${LOCAL_APP}" ]; then
+        LOCAL_APP="${SCRIPT_DIR}/../dist/Updater CE.app"
+    fi
     
     if [ -d "${LOCAL_APP}" ]; then
         success "Found local built bundle: ${LOCAL_APP}"
@@ -108,9 +111,9 @@ elif [ "${OS}" = "Linux" ]; then
     log "Preparing Updater CE 3.0 for Linux..."
     mkdir -p "${HOME}/.local/bin" "${HOME}/.local/share/applications"
     
-    # Check for local AppImage in dist/
+    # Check for local AppImage in dist/linux or dist/
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    LOCAL_APPIMAGE=$(ls "${SCRIPT_DIR}/../dist/"*".AppImage" 2>/dev/null | head -n 1 || true)
+    LOCAL_APPIMAGE=$(ls "${SCRIPT_DIR}/../dist/linux/"*".AppImage" "${SCRIPT_DIR}/../dist/"*".AppImage" 2>/dev/null | head -n 1 || true)
     
     if [ -n "${LOCAL_APPIMAGE}" ] && [ -f "${LOCAL_APPIMAGE}" ]; then
         success "Found local AppImage: ${LOCAL_APPIMAGE}"

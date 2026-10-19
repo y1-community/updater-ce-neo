@@ -53,7 +53,8 @@ IS_MEDIATEK_INSTALLER_BUILD = (_BUILD_BRAND == "mediatek_installer")
 APP_DISPLAY_NAME = "MediaTek Installer" if IS_MEDIATEK_INSTALLER_BUILD else "Updater CE"
 APP_SLUG = "MediaTekInstaller" if IS_MEDIATEK_INSTALLER_BUILD else "InnioasisUpdater"
 
-print(f"[spec] packaging brand: {APP_DISPLAY_NAME} -> dist/{APP_SLUG}")
+_dist_root = Path(DISTPATH) if "DISTPATH" in globals() else (PROJECT_ROOT / "dist")  # noqa: F821
+print(f"[spec] packaging brand: {APP_DISPLAY_NAME} -> {_dist_root / APP_SLUG}")
 
 datas = []
 if ASSETS.exists():
@@ -79,11 +80,62 @@ sp_candidates = [
 ]
 SP_FLASH_SRC = next((p for p in sp_candidates if p and p.exists()), None)
 
+
+def _mtkclient_runtime_imports():
+    """Return importable modules referenced by the vendored mtkclient sources."""
+    import ast
+    import importlib.util
+
+    names = set()
+    pkg_root = VENDOR_MTK / "mtkclient"
+    if not pkg_root.exists():
+        return []
+    for py in pkg_root.rglob("*.py"):
+        try:
+            tree = ast.parse(py.read_text(encoding="utf-8", errors="ignore"))
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                names.update(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+                names.add(node.module)
+                names.update(
+                    f"{node.module}.{alias.name}" for alias in node.names if alias.name != "*"
+                )
+
+    found = set()
+    for name in names:
+        if name.split(".")[0] in ("mtkclient", "__future__"):
+            continue
+        try:
+            if importlib.util.find_spec(name) is not None:
+                found.add(name)
+        except (ImportError, ValueError, AttributeError):
+            pass
+    return sorted(found)
+
+
+binaries = []
+WIN_LIBUSB_DLL = VENDOR_MTK / "mtkclient" / "Windows" / "libusb-1.0.dll"
+if sys.platform.startswith("win") and WIN_LIBUSB_DLL.exists():
+    binaries.append((str(WIN_LIBUSB_DLL), "."))
+
 hiddenimports = (
     collect_submodules("Cryptodome")
+    + collect_submodules("usb")
+    + collect_submodules("serial")
+    + collect_submodules("src")
+    + _mtkclient_runtime_imports()
     + [
+        "PySide6.QtSvg",
+        "PySide6.QtNetwork",
+        "shiboken6",
+        "capstone",
         "usb",
+        "usb.core",
         "usb.backend.libusb1",
+        "usb.backend.libusb0",
         "serial",
         "serial.tools.list_ports",
         "Cryptodome",
@@ -97,13 +149,15 @@ hiddenimports = (
         "win32api",
         "tkinter",
         "ttk",
+        "src.mtk_api",
+        "src.flash_service",
     ]
 )
 
 a = Analysis(
     [str(PROJECT_ROOT / "launcher.py")],
-    pathex=[str(PROJECT_ROOT / "src")],
-    binaries=[],
+    pathex=[str(PROJECT_ROOT), str(PROJECT_ROOT / "src")],
+    binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
@@ -139,13 +193,22 @@ coll = COLLECT(
 )
 
 try:
-    _dist_root = Path(DISTPATH)  # noqa: F821
     _app_dir = _dist_root / APP_SLUG
     _sp_target = _app_dir / "SP_Flash_Tool"
     if SP_FLASH_SRC and SP_FLASH_SRC.exists():
         if _sp_target.exists():
             shutil.rmtree(_sp_target, ignore_errors=True)
         shutil.copytree(SP_FLASH_SRC, _sp_target)
+        # Ensure packaged SP_Flash_Tool has clean history.ini and no developer logs
+        _hist = _sp_target / "history.ini"
+        if _hist.exists():
+            _hist.write_text(
+                "[RecentOpenFile]\nscatterHistory=@Invalid()\nauthHistory=@Invalid()\n",
+                encoding="utf-8",
+            )
+        for _log_dir in ("SP_FT_Logs", "log", "logs"):
+            if (_sp_target / _log_dir).is_dir():
+                shutil.rmtree(_sp_target / _log_dir, ignore_errors=True)
         print(f"[spec] copied SP_Flash_Tool payload from {SP_FLASH_SRC} -> {_sp_target}")
 except Exception as exc:  # noqa: BLE001
     print(f"[spec] WARNING: could not place SP_Flash_Tool payload: {exc}")

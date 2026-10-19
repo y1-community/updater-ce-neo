@@ -505,7 +505,7 @@ class _Tokens:
                 self.bg_elev    = "#2b303c"
                 self.bg_input   = "#181b20"
                 self.bg_hover   = "rgba(255, 255, 255, 0.08)"
-                self.bg_nav     = "#181b20"
+                self.bg_nav     = "#1e2227"
                 self.bg_status  = "#181b20"
                 self.bg_tooltip = "#252932"
 
@@ -1388,10 +1388,10 @@ QLabel[cssClass="separator"], QFrame[cssClass="separator"] {{
    can never disagree with the desktop's accessibility settings (high
    contrast, accent colour, "reduce motion" pressed states). */
 
-QPushButton#roundNextButton, QPushButton#roundGlyphButton, QPushButton#softwareUpdateCancelBtn, QPushButton#flashRetryBtn {{
+QPushButton#roundNextButton, QPushButton#roundGlyphButton, QPushButton#softwareUpdateCancelBtn, QPushButton#flashRetryBtn, QPushButton#installDoneButton {{
     outline: none;
 }}
-QPushButton#roundNextButton:focus, QPushButton#roundGlyphButton:focus, QPushButton#softwareUpdateCancelBtn:focus, QPushButton#flashRetryBtn:focus {{
+QPushButton#roundNextButton:focus, QPushButton#roundGlyphButton:focus, QPushButton#softwareUpdateCancelBtn:focus, QPushButton#flashRetryBtn:focus, QPushButton#installDoneButton:focus {{
     outline: none;
 }}
 """
@@ -1499,8 +1499,44 @@ def native_font_families() -> list[str]:
     return [f for f in families if f and f.strip()]
 
 
+_windows_font_subs_applied = False
+
+
+def _ensure_windows_font_substitutions() -> None:
+    """Register Windows 10 font substitutions when Windows 11 fonts are absent.
+
+    Windows 10 ships ``Segoe UI``, ``Segoe MDL2 Assets``, and ``Consolas`` rather
+    than ``Segoe UI Variable*``, ``Segoe Fluent Icons``, and ``Cascadia Mono``.
+    Without substitutions, direct ``QFont`` lookups for the Windows 11 family
+    names fall back to ``Tahoma`` on Windows 10.
+    """
+    global _windows_font_subs_applied
+    if _windows_font_subs_applied or not IS_WINDOWS:
+        return
+    try:
+        installed = {f.lower() for f in QFontDatabase.families()}
+        substitutions = (
+            ("Segoe Fluent Icons", "Segoe MDL2 Assets"),
+            ("Segoe UI Variable Text", "Segoe UI"),
+            ("Segoe UI Variable Display", "Segoe UI"),
+            ("Segoe UI Variable Small", "Segoe UI"),
+            ("Segoe UI Variable", "Segoe UI"),
+            ("Cascadia Mono", "Consolas"),
+            ("Cascadia Code", "Consolas"),
+        )
+        for target, fallback in substitutions:
+            if target.lower() not in installed and fallback.lower() in installed:
+                existing = [s.lower() for s in QFont.substitutes(target)]
+                if fallback.lower() not in existing:
+                    QFont.insertSubstitution(target, fallback)
+        _windows_font_subs_applied = True
+    except Exception:
+        pass
+
+
 def _apply_native_font(app: QApplication) -> None:
     """Set the platform UI font (and CJK fallbacks) on the application."""
+    _ensure_windows_font_substitutions()
     sys_font = QFontDatabase.systemFont(QFontDatabase.SystemFont.GeneralFont)
     font = QFont(sys_font) if sys_font and sys_font.family() else QFont()
     fams = [f for f in native_font_families() if f and f.strip()]
@@ -1546,42 +1582,58 @@ def apply_theme(
     If *force_dark* is ``None`` the host system's native dark/light appearance is detected.
     Call ``apply_theme(app, force_dark=True)`` to lock dark mode.
     """
-    native_palette = None
-    if IS_LINUX:
-        from PySide6.QtGui import QGuiApplication
-        source_palette = (
-            _state.native_palette
-            if _state.native_palette is not None
-            else (QGuiApplication.palette() if hasattr(QGuiApplication, "palette") else app.palette())
+    watcher = getattr(app, "_theme_watcher", None) if app is not None else None
+    prev_applying = getattr(watcher, "_applying", False) if watcher is not None else False
+    if watcher is not None:
+        watcher._applying = True
+    try:
+        native_palette = None
+        if IS_LINUX:
+            from PySide6.QtGui import QGuiApplication
+            source_palette = (
+                _state.native_palette
+                if _state.native_palette is not None
+                else (QGuiApplication.palette() if hasattr(QGuiApplication, "palette") else app.palette())
+            )
+            native_palette = QPalette(source_palette)
+            _state.native_palette = QPalette(native_palette)
+        setup_native_app_style(app)
+        if IS_LINUX:
+            style_name = (app.style().objectName() or "").lower()
+            if style_name in ("breeze", "oxygen", "kvantum", "adwaita"):
+                try:
+                    std_pal = app.style().standardPalette()
+                    if std_pal.color(QPalette.ColorRole.Window).isValid():
+                        native_palette = QPalette(std_pal)
+                        _state.native_palette = QPalette(native_palette)
+                except Exception:
+                    pass
+        _apply_native_font(app)
+        if force_dark is not None:
+            _state.set_dark(force_dark, pure_black=bool(pure_black), palette=native_palette)
+        else:
+            _state.detect(native_palette=native_palette)
+        app.setPalette(
+            _make_palette(
+                _state.is_dark,
+                pure_black=_state.is_pure_black,
+                native_palette=_state.native_palette,
+            )
         )
-        native_palette = QPalette(source_palette)
-        _state.native_palette = QPalette(native_palette)
-    setup_native_app_style(app)
-    if IS_LINUX:
-        style_name = (app.style().objectName() or "").lower()
-        if style_name in ("breeze", "oxygen", "kvantum", "adwaita"):
+        app.setStyleSheet(_build_qss())
+        # QToolTip keeps the host theme's palette: tooltips are the platform's.
+        _restyle_existing_widgets(app)
+        if watcher is not None:
             try:
-                std_pal = app.style().standardPalette()
-                if std_pal.color(QPalette.ColorRole.Window).isValid():
-                    native_palette = QPalette(std_pal)
-                    _state.native_palette = QPalette(native_palette)
+                watcher._debounce.stop()
+                watcher._last = theme_fingerprint(app, platform_dark=False)
+                watcher._last_full = theme_fingerprint(app)
+                watcher._cooldown.start()
             except Exception:
                 pass
-    _apply_native_font(app)
-    if force_dark is not None:
-        _state.set_dark(force_dark, pure_black=bool(pure_black), palette=native_palette)
-    else:
-        _state.detect(native_palette=native_palette)
-    app.setPalette(
-        _make_palette(
-            _state.is_dark,
-            pure_black=_state.is_pure_black,
-            native_palette=_state.native_palette,
-        )
-    )
-    app.setStyleSheet(_build_qss())
-    # QToolTip keeps the host theme's palette: tooltips are the platform's.
-    _restyle_existing_widgets(app)
+    finally:
+        if watcher is not None:
+            watcher._applying = prev_applying
 
 
 def theme_fingerprint(app: QApplication | None = None, *, platform_dark: bool = True) -> tuple:

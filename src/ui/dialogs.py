@@ -226,18 +226,21 @@ class PreInstallGuidanceDialog(QDialog):
 
         layout.addStretch()
 
+        from .flash_page import _RoundNextButton
+
         btn_row = QHBoxLayout()
         btn_row.setSpacing(10)
         btn_row.addStretch()
 
-        cancel_btn = QPushButton(tr("cancel"))
+        cancel_btn = _RoundNextButton(symbol="cancel", accent=False)
+        cancel_btn.setText(tr("cancel"))
         cancel_btn.clicked.connect(self.reject)
-        btn_row.addWidget(cancel_btn)
+        btn_row.addWidget(cancel_btn, 0, Qt.AlignVCenter)
 
-        continue_btn = QPushButton(tr("dialog_pre_install_continue"))
-        continue_btn.setDefault(True)
+        continue_btn = _RoundNextButton(symbol="next", accent=True)
+        continue_btn.setText(tr("dialog_pre_install_continue"))
         continue_btn.clicked.connect(self.accept)
-        btn_row.addWidget(continue_btn)
+        btn_row.addWidget(continue_btn, 0, Qt.AlignVCenter)
 
         layout.addLayout(btn_row)
 
@@ -289,15 +292,19 @@ class RetryGuidanceDialog(QDialog):
             detail_label.setProperty("cssClass", "dimmed")
             layout.addWidget(detail_label)
 
+        from .flash_page import _RoundNextButton
+
         row = QHBoxLayout()
-        retry_btn = QPushButton(tr("retry_guidance_btn_retry"))
-        retry_btn.setDefault(True)
-        retry_btn.clicked.connect(self._on_retry)
-        close_btn = QPushButton(tr("close"))
-        close_btn.clicked.connect(self.reject)
-        row.addWidget(retry_btn)
-        row.addWidget(close_btn)
+        row.setSpacing(10)
         row.addStretch()
+        retry_btn = _RoundNextButton(symbol="next", accent=True)
+        retry_btn.setText(tr("retry_guidance_btn_retry"))
+        retry_btn.clicked.connect(self._on_retry)
+        close_btn = _RoundNextButton(symbol="cancel", accent=False)
+        close_btn.setText(tr("close"))
+        close_btn.clicked.connect(self.reject)
+        row.addWidget(retry_btn, 0, Qt.AlignVCenter)
+        row.addWidget(close_btn, 0, Qt.AlignVCenter)
         layout.addLayout(row)
 
     def _on_retry(self):
@@ -397,34 +404,39 @@ class DiagnosticsView(QWidget):
         self._session_combo.currentIndexChanged.connect(self._on_session_changed)
         filter_row.addWidget(self._session_combo, 1)
 
-        self._from_lbl = QLabel(tr("log_range_from"))
-        self._from_lbl.setStyleSheet(f"color: {t.fg};")
-        filter_row.addWidget(self._from_lbl)
-
-        self._from_edit = QDateTimeEdit()
-        self._from_edit.setCalendarPopup(True)
-        self._from_edit.setDisplayFormat("yyyy-MM-dd HH:mm:ss")
-        self._from_edit.setToolTip(tr("log_range_from_tip"))
-        self._from_edit.dateTimeChanged.connect(self._on_filter_changed)
-        filter_row.addWidget(self._from_edit)
-
-        self._to_lbl = QLabel(tr("log_range_to"))
-        self._to_lbl.setStyleSheet(f"color: {t.fg};")
-        filter_row.addWidget(self._to_lbl)
-
-        self._to_edit = QDateTimeEdit()
-        self._to_edit.setCalendarPopup(True)
-        self._to_edit.setDisplayFormat("yyyy-MM-dd HH:mm:ss")
-        self._to_edit.setToolTip(tr("log_range_to_tip"))
-        self._to_edit.dateTimeChanged.connect(self._on_filter_changed)
-        filter_row.addWidget(self._to_edit)
-
         self._problems_check = QCheckBox(tr("log_problems_only"))
         self._problems_check.setToolTip(tr("log_problems_tip"))
         self._problems_check.toggled.connect(self._on_filter_changed)
         filter_row.addWidget(self._problems_check)
 
         layout.addLayout(filter_row)
+
+        range_row = QHBoxLayout()
+        range_row.setSpacing(8)
+
+        self._from_lbl = QLabel(tr("log_range_from"))
+        self._from_lbl.setStyleSheet(f"color: {t.fg};")
+        range_row.addWidget(self._from_lbl)
+
+        self._from_edit = QDateTimeEdit()
+        self._from_edit.setCalendarPopup(True)
+        self._from_edit.setDisplayFormat("yyyy-MM-dd HH:mm:ss")
+        self._from_edit.setToolTip(tr("log_range_from_tip"))
+        self._from_edit.dateTimeChanged.connect(self._on_filter_changed)
+        range_row.addWidget(self._from_edit, 1)
+
+        self._to_lbl = QLabel(tr("log_range_to"))
+        self._to_lbl.setStyleSheet(f"color: {t.fg};")
+        range_row.addWidget(self._to_lbl)
+
+        self._to_edit = QDateTimeEdit()
+        self._to_edit.setCalendarPopup(True)
+        self._to_edit.setDisplayFormat("yyyy-MM-dd HH:mm:ss")
+        self._to_edit.setToolTip(tr("log_range_to_tip"))
+        self._to_edit.dateTimeChanged.connect(self._on_filter_changed)
+        range_row.addWidget(self._to_edit, 1)
+
+        layout.addLayout(range_row)
 
         # ── Log View Area ──
         self._view = QTextEdit()

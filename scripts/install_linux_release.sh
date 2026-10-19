@@ -120,7 +120,7 @@ latest_local() {
 
 find_local_build() {
     local dir found
-    for dir in "$PWD" "$PWD/dist" "$SCRIPT_DIR/../dist"; do
+    for dir in "$PWD" "$PWD/dist/linux" "$SCRIPT_DIR/../dist/linux" "$PWD/dist" "$SCRIPT_DIR/../dist"; do
         [ -d "$dir" ] || continue
         found="$(latest_local "$dir" "${APP_NAME}*${ARCH}*.AppImage" || true)"
         [ -n "$found" ] && { echo "$found"; return 0; }

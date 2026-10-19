@@ -291,3 +291,91 @@ def test_the_copy_keeps_its_wrap_width_at_the_recommended_window_size():
     finally:
         page.close()
         app.processEvents()
+
+
+def test_icon_progress_band_and_round_wizard_buttons_are_vertically_centered():
+    """Release icon, progress bar, and round wizard action chips share the same vertical center."""
+    from src.ui.retry_page import RetryPage
+    from src.ui.widgets import Card
+
+    app = _app()
+    page = FlashPage()
+    page.set_package_name("Rockbox")
+    page.resize(install_horizontal_chrome(0) + INSTALL_TEXT_WIDTH, 470)
+    page.show()
+    try:
+        screens = (
+            ("show_preparing", "_prep_head"),
+            ("show_power_off_prompt", "_wait_head"),
+            ("show_flashing", "_flash_head"),
+            ("show_downloading", "_download_head"),
+        )
+        for screen, head_name in screens:
+            getattr(page, screen)()
+            app.processEvents()
+            head = getattr(page, head_name)
+            band_center_y = head.identity.y() + head.band.geometry().center().y()
+            icon_center_y = head.icon.geometry().center().y()
+            assert abs(icon_center_y - band_center_y) <= 1, (
+                screen, head_name, icon_center_y, band_center_y
+            )
+            assert head.icon.geometry().bottom() < head.height(), (
+                screen, head_name, head.icon.geometry().bottom(), head.height()
+            )
+            chips = [
+                head.box.itemAt(i).widget()
+                for i in range(2, head.box.count())
+                if head.box.itemAt(i).widget().isVisible()
+            ]
+            assert chips, screen
+            for chip in chips:
+                assert isinstance(chip, _RoundNextButton), (screen, type(chip))
+                chip_center_y = chip.geometry().center().y()
+                assert abs(chip_center_y - band_center_y) <= 1, (
+                    screen, head_name, chip.objectName(), chip_center_y, band_center_y
+                )
+
+        # Also check Rockbox post-install wizard chips and done mark
+        page.show_rockbox_power_on_prompt("Press the power button.")
+        app.processEvents()
+        band_center_y = page._flash_head.identity.y() + page._flash_head.band.geometry().center().y()
+        assert isinstance(page._theme_step1_next_btn, _RoundNextButton)
+        assert page._theme_step1_next_btn.isVisible()
+        assert abs(page._theme_step1_next_btn.geometry().center().y() - band_center_y) <= 1
+
+        page.set_device_done()
+        app.processEvents()
+        assert isinstance(page._done_mark, _RoundNextButton)
+        assert page._done_mark.isVisible()
+        top, bottom = page._flash_head.band_span()
+        assert top <= page._done_mark.geometry().center().y() <= bottom
+    finally:
+        page.close()
+        app.processEvents()
+
+    # RetryPage and Card inline confirmation also use _RoundNextButton
+    retry = RetryPage()
+    try:
+        assert isinstance(retry._cancel_btn, _RoundNextButton)
+    finally:
+        retry.close()
+
+    from PySide6.QtCore import QTimer
+
+    card = Card("Title")
+    observed_buttons = []
+    try:
+        def _accept():
+            observed_buttons.extend((card._confirm_accept, card._confirm_reject))
+            card._confirm_accept.click()
+
+        QTimer.singleShot(0, _accept)
+        assert card.run_confirmation("Confirm?", "Yes", "No") is True
+        assert len(observed_buttons) == 2
+        assert all(isinstance(b, _RoundNextButton) for b in observed_buttons)
+    finally:
+        card.close()
+
+
+
+

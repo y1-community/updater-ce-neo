@@ -96,6 +96,7 @@ from ..flash_service import (
     completed_extract_dir,
     is_com_port_error,
     is_connect_failure,
+    is_sp_driver_error,
     is_wrong_model_error,
     normalise_method,
     sp_error_code,
@@ -550,6 +551,9 @@ class MainWindow(QMainWindow):
     sweep_report = Signal(list)
 
     log_line_added = Signal(str)
+
+    def _window_title_for_activity(self, _activity: str = "") -> str:
+        return f"{get_app_name()} v{APP_VERSION}"
 
     def __init__(self):
         super().__init__()
@@ -1154,13 +1158,13 @@ class MainWindow(QMainWindow):
             bar_layout.addWidget(brand, 0, Qt.AlignVCenter)
             bar_layout.addStretch(1)
             title_cont_layout.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            bar_layout.addWidget(self._title_container, 0, Qt.AlignRight | Qt.AlignVCenter)
+            bar_layout.addWidget(self._title_container, 1)
         else:
             # Windows / right-handed DEs: Brand on left, page headings beside brand, controls margin on right
             bar_layout.addWidget(brand, 0, Qt.AlignVCenter)
             bar_layout.addSpacing(28)
-            bar_layout.addWidget(self._title_container, 0, Qt.AlignVCenter)
-            bar_layout.addStretch(1)
+            title_cont_layout.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            bar_layout.addWidget(self._title_container, 1)
             if self._window_controls is not None:
                 bar_layout.addWidget(self._window_controls, 0, Qt.AlignVCenter)
 
@@ -2143,11 +2147,16 @@ class MainWindow(QMainWindow):
 
         The window grows to fit the prompt and shrinks again when it closes.
         """
+        from .flash_page import _RoundNextButton
+
         host = QWidget()
         host.setObjectName("installPrompt")
-        layout = QVBoxLayout(host)
+        layout = QHBoxLayout(host)
         layout.setContentsMargins(24, 4, 24, 12)
-        layout.setSpacing(8)
+        layout.setSpacing(12)
+        copy_col = QVBoxLayout()
+        copy_col.setContentsMargins(0, 0, 0, 0)
+        copy_col.setSpacing(4)
         self._prompt_title = QLabel("")
         self._prompt_title.setWordWrap(True)
         self._prompt_title.setStyleSheet(
@@ -2158,15 +2167,16 @@ class MainWindow(QMainWindow):
         self._prompt_body.setStyleSheet(
             "font-size: 13px; color: palette(window-text); background: transparent;"
         )
-        layout.addWidget(self._prompt_title)
-        layout.addWidget(self._prompt_body)
+        copy_col.addWidget(self._prompt_title)
+        copy_col.addWidget(self._prompt_body)
+        layout.addLayout(copy_col, 1)
         row = QHBoxLayout()
-        row.setSpacing(8)
-        self._prompt_accept = QPushButton("")
-        self._prompt_reject = QPushButton("")
-        row.addWidget(self._prompt_accept)
-        row.addWidget(self._prompt_reject)
-        row.addStretch(1)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(10)
+        self._prompt_accept = _RoundNextButton(symbol="next", accent=True)
+        self._prompt_reject = _RoundNextButton(symbol="cancel", accent=False)
+        row.addWidget(self._prompt_accept, 0, Qt.AlignVCenter)
+        row.addWidget(self._prompt_reject, 0, Qt.AlignVCenter)
         layout.addLayout(row)
         host.hide()
         self._prompt_loop = None
@@ -2776,8 +2786,14 @@ class MainWindow(QMainWindow):
             )
         from .surfaces import seal_updating_text
         seal_updating_text(title)
+        title.updateGeometry()
         title_host = getattr(self, "_title_container", None)
         if title_host is not None:
+            if title_host.layout() is not None:
+                title_host.layout().activate()
+            bar = getattr(self, "_title_bar", None)
+            if bar is not None and bar.layout() is not None:
+                bar.layout().activate()
             self._paint_opaque(title_host)
             title_host.update()
 
@@ -4114,7 +4130,7 @@ class MainWindow(QMainWindow):
         """
         if getattr(self, "_fallback_attempted", False):
             return False
-        if is_wrong_model_error(error_code):
+        if is_wrong_model_error(error_code) or is_sp_driver_error(error_code):
             return False
         candidate = self._other_method(self._flash_method)
         if not candidate:
