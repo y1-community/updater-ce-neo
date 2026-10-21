@@ -95,7 +95,8 @@ SetupIconFile=..\assets\icon.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
-ArchitecturesAllowed=x64compatible arm64
+; Support both 32-bit (x86) and 64-bit (x64, arm64) Windows installations.
+; When running on 64-bit Windows, install in native 64-bit mode. On 32-bit Windows, install in 32-bit mode.
 ArchitecturesInstallIn64BitMode=x64compatible arm64
 UninstallDisplayIcon={app}\{#MyAppExeName}
 VersionInfoVersion={#MyAppVersion}
@@ -119,22 +120,30 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Name: "{app}\SP_Flash_Tool"; Permissions: users-modify
 Name: "{commonappdata}\SP_FT_Logs"; Permissions: users-modify
 
+[Messages]
+FinishedRestartLabel=Setup has finished installing MediaTek SP Driver on your computer. You will need to restart your computer before you can install software on your device.%n%nWould you like to restart now?
+FinishedRestartMessage=Setup has finished installing MediaTek SP Driver on your computer. You will need to restart your computer before you can install software on your device.%n%nWould you like to restart now?
+
 [CustomMessages]
 english.StepStopping=Stopping running Updater CE, Python, SP Flash Tool and ADB processes...
 english.StepRemovingOld=Removing previous versions...
 english.StepShortcuts=Removing old shortcuts...
 english.StepLegacy=Cleaning up old data and install folders...
+english.StepDriverInstall=Installing MediaTek SP Driver...
 #if FileExists(AddBackslash(CompilerPath) + "Languages\ChineseSimplified.isl")
 chinesesimplified.StepStopping=正在停止正在运行的 Updater CE、Python、SP Flash Tool 和 ADB 进程...
 chinesesimplified.StepRemovingOld=正在删除旧版本...
 chinesesimplified.StepShortcuts=正在删除旧快捷方式...
 chinesesimplified.StepLegacy=正在清理旧数据和安装文件夹...
+chinesesimplified.StepDriverInstall=正在安装联发科 (MediaTek) SP 驱动程序...
 #endif
 
 [Files]
 ; Main application binaries, _internal runtime, and bundled SP Flash Tool 5.1904
 ; ignoreversion replaces older files, so this same installer updates in place.
 Source: "{#MyDistDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; Bundled MediaTek Driver Installer executed during post-install
+Source: "..\tools\DriverInstall.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall ignoreversion
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"
@@ -157,6 +166,7 @@ const
 
 var
   PriorDesktopShortcut: Boolean;
+  DriverInstalled: Boolean;
 
 function IsUpdaterCeBrand: Boolean;
 begin
@@ -423,6 +433,7 @@ begin
   { Any earlier release of this AppId is updated by installing over it.
     There is no version floor: the same file is a clean install and an update. }
   Result := True;
+  DriverInstalled := False;
   PriorDesktopShortcut := False;
   if IsUpdaterCeBrand then
   begin
@@ -484,28 +495,74 @@ begin
   end;
 end;
 
-{ Runs on the Installing page, just before files are copied. Each step
-  reports what it is doing and skips anything that fails. }
-procedure CurStepChanged(CurStep: TSetupStep);
+procedure RegisterRunOnceStartup;
+var
+  ExePath: String;
 begin
-  if (CurStep <> ssInstall) or (not IsUpdaterCeBrand) then
+  ExePath := '"' + ExpandConstant('{app}\{#MyAppExeName}') + '"';
+  { Register one-time launch on next reboot in both 64-bit and 32-bit registry views }
+  RegWriteStringValue(HKLM, 'Software\Microsoft\Windows\CurrentVersion\RunOnce', '{#MyAppName}', ExePath);
+  if IsWin64 then
+    RegWriteStringValue(HKLM64, 'Software\Microsoft\Windows\CurrentVersion\RunOnce', '{#MyAppName}', ExePath);
+end;
+
+procedure InstallBundledDriver;
+var
+  DriverExe: String;
+  ResultCode: Integer;
+begin
+  DriverExe := ExpandConstant('{tmp}\DriverInstall.exe');
+  if not FileExists(DriverExe) then
     Exit;
 
-  ShowStep('StepStopping');
-  StopProcess('InnioasisUpdater.exe');
-  StopProcess('flash_tool.exe');
-  StopProcess('adb.exe');
-  StopProcess('python.exe');
-  StopProcess('pythonw.exe');
+  ShowStep('StepDriverInstall');
+  { Execute DriverInstall.exe silently or with standard installer arguments without rebooting immediately }
+  if Exec(DriverExe, '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART', '', SW_SHOW, ewWaitUntilTerminated, ResultCode) then
+  begin
+    DriverInstalled := True;
+  end;
+end;
 
-  ShowStep('StepRemovingOld');
-  RemoveOldInstalls;
+function NeedRestart(): Boolean;
+begin
+  { Prompts the user to restart PC at the end of setup after driver installation }
+  Result := DriverInstalled;
+end;
 
-  ShowStep('StepShortcuts');
-  PurgeRetiredShortcuts;
+{ Runs at various stages of setup execution. }
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssInstall then
+  begin
+    if not IsUpdaterCeBrand then
+      Exit;
 
-  ShowStep('StepLegacy');
-  RemoveLegacyLocalAppData;
-  RemoveLegacyProgramFiles;
+    ShowStep('StepStopping');
+    StopProcess('InnioasisUpdater.exe');
+    StopProcess('flash_tool.exe');
+    StopProcess('adb.exe');
+    StopProcess('python.exe');
+    StopProcess('pythonw.exe');
+
+    ShowStep('StepRemovingOld');
+    RemoveOldInstalls;
+
+    ShowStep('StepShortcuts');
+    PurgeRetiredShortcuts;
+
+    ShowStep('StepLegacy');
+    RemoveLegacyLocalAppData;
+    RemoveLegacyProgramFiles;
+  end
+  else if CurStep = ssPostInstall then
+  begin
+    InstallBundledDriver;
+  end
+  else if CurStep = ssDone then
+  begin
+    { If driver was installed, register RunOnce so the app launches on the next reboot }
+    if DriverInstalled then
+      RegisterRunOnceStartup;
+  end;
 end;
 

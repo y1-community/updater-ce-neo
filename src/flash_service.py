@@ -481,6 +481,8 @@ def normalise_method(method):
         return METHOD_MTK
     if windows_only_method() == METHOD_MTK:
         return METHOD_MTK
+    if windows_only_method() == METHOD_SP:
+        return METHOD_SP
     if value in ("auto", METHOD_MTK_MAC):
         return default_flash_method()
     return value
@@ -3037,7 +3039,6 @@ class FlashWorker(QThread):
         if (
             self._is_disconnected
             or is_disconnection_error(detail)
-            or (getattr(self, "_past_usb_search", False) and not is_mtk_device_connected())
         ):
             self._log(f"Notice: SP Flash Tool failed due to USB disconnection: {detail}")
             self._is_disconnected = True

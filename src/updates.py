@@ -23,6 +23,7 @@ from .config import (
     UPDATE_ASSET_ARCH_PRIORITY,
     UPDATE_ASSET_EXTENSIONS,
     UPDATE_REPO,
+    UPDATE_TARGET_ASSETS,
 )
 from .catalog import ReleasesClient
 
@@ -60,13 +61,29 @@ def _match_ext(name: str, exts) -> str:
 def pick_platform_asset(assets, platform=None):
     """Best download asset for ``platform`` (sys.platform when omitted).
 
-    Scores by: matching extension (per UPDATE_ASSET_EXTENSIONS) → architecture
-    token rank (universal/x86_64/amd64 > arm64/aarch64 > unmarked) → size.
-    Returns the asset dict or None.
+    Target release asset names per platform:
+    - macOS (darwin): Innioasis.Updater.for.Mac.dmg
+    - Windows (win32): installer.exe
+    - Linux (linux): UpdaterCE.appimage
+
+    If these specific target files exist, returns that asset. If not found, falls back
+    to matching extensions/architecture priority. If no suitable asset exists for the
+    platform in the release, returns None (assuming the user is running the latest build).
     """
     platform = platform or sys.platform
+    if not assets:
+        return None
+
+    target_name = UPDATE_TARGET_ASSETS.get(platform)
+    if target_name:
+        target_lower = target_name.lower()
+        for a in assets:
+            if (a.get("name") or "").lower() == target_lower:
+                return a
+
+    # Fallback to extension & arch scoring if target name not found or for legacy/test assets
     exts = UPDATE_ASSET_EXTENSIONS.get(platform)
-    if not exts or not assets:
+    if not exts:
         return None
     scored = []
     for a in assets:
@@ -89,9 +106,9 @@ def asset_hint(platform=None) -> str:
     """Human label for the expected asset on this platform (for guidance)."""
     platform = platform or sys.platform
     return {
-        "win32": "Windows installer (.exe)",
-        "darwin": "macOS disk image (.dmg)",
-        "linux": "AppImage / run script (.AppImage, .sh)",
+        "win32": "Windows installer (installer.exe)",
+        "darwin": "macOS disk image (Innioasis.Updater.for.Mac.dmg)",
+        "linux": "Linux AppImage (UpdaterCE.appimage)",
     }.get(platform, "release asset")
 
 
@@ -120,7 +137,10 @@ class UpdateChecker:
         """Latest newer release for this app, or ``UpdateInfo`` with tag=\"\"
         when up to date / unreachable (never raises)."""
         try:
-            data = self.client.get_latest_release_info(self.repo)
+            try:
+                data = self.client.get_latest_release_info(self.repo, force=force)
+            except TypeError:
+                data = self.client.get_latest_release_info(self.repo)
         except Exception as e:
             logger.debug("Update check failed for %s: %s", self.repo, e)
             return UpdateInfo(failed=True)
@@ -156,16 +176,17 @@ class UpdateCheckWorker(QThread):
 
     finished = Signal(object)  # UpdateInfo (tag="" when up to date/failed)
 
-    def __init__(self, repo=UPDATE_REPO, current=APP_VERSION, parent=None):
+    def __init__(self, repo=UPDATE_REPO, current=APP_VERSION, parent=None, force: bool = False):
         super().__init__(parent)
         self.repo = repo
         self.current = current
+        self.force = force
 
     def run(self):
         try:
             if self.isInterruptionRequested():
                 return
-            info = UpdateChecker(self.repo, current=self.current).check()
+            info = UpdateChecker(self.repo, current=self.current).check(force=self.force)
             if self.isInterruptionRequested():
                 return
         except Exception:

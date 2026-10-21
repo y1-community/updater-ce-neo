@@ -117,9 +117,11 @@ def _mtkclient_runtime_imports():
 
 
 binaries = []
-WIN_LIBUSB_DLL = VENDOR_MTK / "mtkclient" / "Windows" / "libusb-1.0.dll"
-if sys.platform.startswith("win") and WIN_LIBUSB_DLL.exists():
-    binaries.append((str(WIN_LIBUSB_DLL), "."))
+if sys.platform.startswith("win"):
+    for dll_name in ("libusb-1.0.dll", "libusb32-1.0.dll"):
+        dll_path = VENDOR_MTK / "mtkclient" / "Windows" / dll_name
+        if dll_path.exists():
+            binaries.append((str(dll_path), "."))
 
 hiddenimports = (
     collect_submodules("Cryptodome")

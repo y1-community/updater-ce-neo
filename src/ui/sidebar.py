@@ -121,10 +121,14 @@ def sidebar_selected_fill(base: QColor) -> QColor:
 
 
 def sidebar_selected_text_color(base: QColor) -> QColor:
-    """Light glyphs on a dark selection, dark glyphs on a light one."""
-    if sidebar_selected_fill(base).lightness() < 140:
-        return QColor("#f8fafc")
-    return QColor("#111827")
+    """Matches the unselected item font color so text colors stay consistent."""
+    try:
+        from .dark import T
+        return QColor(T().fg)
+    except Exception:
+        if not base.isValid():
+            base = QColor("#2b303c")
+        return QColor("#f8fafc") if base.lightness() < 140 else QColor("#111827")
 
 
 def _tint_pixmap(pixmap: QPixmap, color: QColor) -> QPixmap:
@@ -342,17 +346,19 @@ class SidebarButton(QPushButton):
         icon_rect = QRect(row.left() + 8, row.top(), size.width(), row.height())
         if not self.isEnabled():
             mode = QIcon.Mode.Disabled
+            color = self.palette().color(QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText)
         else:
             mode = QIcon.Mode.Normal
+            from .dark import T
+            color = QColor(T().fg)
         state = QIcon.State.On if selected else QIcon.State.Off
-        if selected and self.isEnabled():
-            pixmap = icon.pixmap(size, mode, state)
-            if not pixmap.isNull():
-                tinted = _tint_pixmap(pixmap, sidebar_selected_text_color(sidebar_base_color()))
-                target = QRect(0, 0, size.width(), size.height())
-                target.moveCenter(icon_rect.center())
-                painter.drawPixmap(target, tinted)
-                return
+        pixmap = icon.pixmap(size, mode, state)
+        if not pixmap.isNull():
+            tinted = _tint_pixmap(pixmap, color)
+            target = QRect(0, 0, size.width(), size.height())
+            target.moveCenter(icon_rect.center())
+            painter.drawPixmap(target, tinted)
+            return
         icon.paint(
             painter,
             icon_rect,
@@ -368,9 +374,7 @@ class SidebarButton(QPushButton):
         left = row.left() + (8 + icon_w + 8 if icon_w else 8)
         text_rect = QRect(left, row.top(), max(0, row.right() - left - 6), row.height())
         pal = QPalette(self.palette())
-        if self.isEnabled() and selected:
-            color = sidebar_selected_text_color(sidebar_base_color())
-        elif self.isEnabled():
+        if self.isEnabled():
             color = QColor(T().fg)
         else:
             color = pal.color(QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText)

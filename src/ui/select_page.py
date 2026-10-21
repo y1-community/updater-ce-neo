@@ -58,7 +58,15 @@ from ..translate import (
     get_google_translate_release_url,
     ReleaseTranslateWorker,
 )
-from .widgets import Banner, BatteryToast, Card, CurrentPageStack, InstallProgress, UpdateToast
+from .widgets import (
+    AppUpdateToast,
+    Banner,
+    BatteryToast,
+    Card,
+    CurrentPageStack,
+    InstallProgress,
+    UpdateToast,
+)
 from .dark import T, link_html, page_margins
 from .scrollbars import configure_scroll_area, make_transparent
 from .icons import HELP_ICON_PX, get_help_pixmap, get_symbol_icon, help_icon_source
@@ -260,6 +268,8 @@ class SelectPackagePage(QWidget):
     # Emitted whenever the release list is (re)filled, so the window can
     # grow or shrink its height to fit the items.
     content_size_changed = Signal()
+    # Emitted when user clicks 'Update' on the app update toast
+    app_update_clicked = Signal(object)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -696,6 +706,12 @@ class SelectPackagePage(QWidget):
         self._online_banner = Banner()
         self._online_banner.setVisible(False)
         layout.addWidget(self._online_banner)
+        self._app_update_prompt = AppUpdateToast()
+        self._app_update_prompt.action_clicked.connect(self._on_app_update_action)
+        self._app_update_prompt.close_clicked.connect(self._on_app_update_dismiss)
+        self._app_update_info = None
+        layout.addWidget(self._app_update_prompt)
+
         self._update_prompt = UpdateToast()
         self._update_prompt.install_clicked.connect(self._on_toast_install)
         self._update_prompt.close_clicked.connect(self._on_toast_close)
@@ -1023,6 +1039,7 @@ class SelectPackagePage(QWidget):
 
         self._local_rockbox_themes_cb = QCheckBox(tr("sel_local_rockbox_themes_option"))
         self._local_rockbox_themes_cb.setChecked(False)
+        self._local_rockbox_themes_cb.setVisible(not is_mediatek_installer())
         grp_l.addWidget(self._local_rockbox_themes_cb)
 
         self._start_btn = QPushButton(tr("sel_btn_start"))
@@ -1126,6 +1143,8 @@ class SelectPackagePage(QWidget):
             widget = getattr(self, name, None)
             if widget is not None:
                 widget.setVisible(not enabled)
+        if hasattr(self, "_local_rockbox_themes_cb"):
+            self._local_rockbox_themes_cb.setVisible(not enabled)
         if enabled:
             self._prefill_da()
         self._sync_auth_file_ui()
@@ -1334,10 +1353,45 @@ class SelectPackagePage(QWidget):
         self._update_offers = offers
         self._present_update_offers()
 
+    def show_app_update(self, info) -> None:
+        """Display an application update toast in the toast spot.
+
+        Takes precedence over device firmware updates until dismissed.
+        """
+        self._app_update_info = info
+        prompt = getattr(self, "_app_update_prompt", None)
+        if prompt is not None:
+            prompt.set_update(info)
+        self._present_update_offers()
+
+    def _on_app_update_action(self) -> None:
+        """User clicked Update on the app update toast."""
+        if self._app_update_info is not None:
+            self.app_update_clicked.emit(self._app_update_info)
+
+    def _on_app_update_dismiss(self) -> None:
+        """User dismissed the app update toast.
+
+        Reveals device firmware update reminder if any are waiting.
+        """
+        self._app_update_info = None
+        prompt = getattr(self, "_app_update_prompt", None)
+        if prompt is not None:
+            prompt.setVisible(False)
+        self._present_update_offers()
+
     def _present_update_offers(self) -> None:
+        # Precedence: if app update toast is currently visible, hide device update prompt
+        app_prompt = getattr(self, "_app_update_prompt", None)
+        app_active = bool(app_prompt and app_prompt.isVisible() and self._app_update_info and getattr(self._app_update_info, "tag", None))
+
         prompt = getattr(self, "_update_prompt", None)
         if prompt is None:
             return
+        if app_active:
+            prompt.setVisible(False)
+            return
+
         muted = getattr(self, "_toast_session_mute", set())
         visible = [
             offer for offer in (getattr(self, "_update_offers", None) or [])
@@ -1729,8 +1783,10 @@ class SelectPackagePage(QWidget):
 
     def is_local_rockbox_themes_checked(self) -> bool:
         """True if the user chose to install Rockbox 360p themes & fonts for local file."""
+        if is_mediatek_installer():
+            return False
         if hasattr(self, "_local_rockbox_themes_cb"):
-            return self._local_rockbox_themes_cb.isChecked()
+            return self._local_rockbox_themes_cb.isVisible() and self._local_rockbox_themes_cb.isChecked()
         return False
 
     def is_rockbox_y2_browsing(self) -> bool:

@@ -162,7 +162,7 @@ _FREEDESKTOP_MAP = {
     "update": ["view-refresh-symbolic", "view-refresh", "system-software-update-symbolic", "system-software-update"],
     "support": ["emblem-favorite-symbolic", "emblem-favorite", "love"],
     "tools": ["applications-utilities-symbolic", "applications-utilities", "system-run-symbolic", "system-run"],
-    "file": ["text-x-generic-symbolic", "text-x-generic", "document-symbolic", "document"],
+    "file": ["document-symbolic", "text-x-generic-symbolic", "text-x-generic", "document"],
     "folder": ["folder-open-symbolic", "folder-open", "folder-symbolic", "folder"],
     "complete": ["emblem-ok-symbolic", "emblem-ok", "object-select-symbolic", "dialog-ok"],
     "check": ["object-select-symbolic", "emblem-ok-symbolic", "dialog-ok", "check"],
@@ -606,13 +606,16 @@ def _get_freedesktop_pixmap(symbol_name: str, size: int, color: str = "#FFFFFF")
     if IS_MAC or IS_WINDOWS:
         return None
     names = _FREEDESKTOP_MAP.get(symbol_name, [])
+    target_px = max(int(size), 1) * 2
     for name in names:
         icon = QIcon.fromTheme(name)
         if not icon.isNull():
             # Ask for a 2x pixmap and mark it hi-DPI: requesting `size` alone
             # gave a blurry, partly-clipped icon on scaled desktops.
-            pix = icon.pixmap(QSize(max(int(size), 1) * 2, max(int(size), 1) * 2))
+            pix = icon.pixmap(QSize(target_px, target_px))
             if not pix.isNull():
+                if pix.width() > target_px or pix.height() > target_px:
+                    pix = pix.scaled(target_px, target_px, Qt.KeepAspectRatio, Qt.SmoothTransformation)
                 pix.setDevicePixelRatio(2.0)
                 if symbol_name == "help":
                     _remember_help_source(f"theme:{name}")
@@ -647,7 +650,7 @@ def resolve_symbol_colors(
     Normal state:
     - If color provided: uses color.
     - Otherwise if match_accent: colour-matched to accent color (e.g. green or OS accent).
-    - Otherwise: white (#FFFFFF) in dark mode, dark (#111827) in light mode.
+    - Otherwise: white (#FFFFFF) in dark mode, font color (T().fg or #000000) in light mode.
 
     Focused / active state:
     - If focused_color provided: uses focused_color.
@@ -660,24 +663,26 @@ def resolve_symbol_colors(
         dark = is_dark()
         accent = getattr(t, "accent", "#52b036")
         active_text = getattr(t, "nav_active_text", "#FFFFFF" if dark else "#000000")
+        default_fg = getattr(t, "fg", "#000000")
     except Exception:
         dark = True
         accent = "#52b036"
         active_text = "#FFFFFF"
+        default_fg = "#FFFFFF" if dark else "#000000"
 
     if color is not None:
         norm = color
     elif match_accent and accent:
         norm = accent
     else:
-        norm = "#FFFFFF" if dark else "#111827"
+        norm = "#FFFFFF" if dark else (default_fg or "#000000")
 
     if focused_color is not None:
         foc = focused_color
     elif color is not None:
         foc = color
     else:
-        foc = "#FFFFFF" if dark else "#111827"
+        foc = "#FFFFFF" if dark else (default_fg or "#000000")
 
     return norm, foc
 

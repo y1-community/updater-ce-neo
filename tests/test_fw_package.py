@@ -310,3 +310,128 @@ def test_stage_firmware_for_flashing(tmp_path, monkeypatch):
     assert not (staged_scatter.parent / "extra_file.log").exists()
     assert not (staged_scatter.parent / "_internal").exists()
 
+
+def test_fw_package_example_ini_exists_and_valid():
+    from src.paths import REPO_ROOT
+    from src.fw_package import read_fw_package_ini
+
+    example_ini = REPO_ROOT / "docs" / "fw_package_example.ini"
+    assert example_ini.is_file(), f"Example INI missing at {example_ini}"
+    meta = read_fw_package_ini(example_ini)
+    assert meta.enabled is True
+    assert meta.name == "Rockbox"
+    assert meta.version == "2.5"
+    assert meta.model == "Y1"
+    assert meta.type == "Type A"
+    assert "Rockbox build" in meta.description
+
+
+def test_read_package_optional_ini(tmp_path):
+    fw = _firmware(tmp_path / "plain_fw", ini=None)
+    pkg = fw_package.read_package(fw, require_ini=False)
+    assert pkg is not None
+    assert pkg.scatter.name == "MT6572_Android_scatter.txt"
+    assert pkg.has_ini is False
+    assert "Installing software" in pkg.display_name
+
+
+def test_find_bundled_firmware_in_sp_flash_tool(tmp_path, monkeypatch):
+    sp_dir = tmp_path / "tools" / "SP_Flash_Tool"
+    _firmware(sp_dir, ini="[Firmware]\nsoftware_name = Rockbox\nversion = 2.5\ntarget_model = Y1\n")
+    (sp_dir / "rockbox_themes.txt").write_text("rockbox marker")
+
+    monkeypatch.setattr(fw_package, "find_sp_flash_tool", lambda: sp_dir)
+    pkg = fw_package.find_bundled_firmware(app_dir=tmp_path)
+    assert pkg is not None
+    assert pkg.folder == sp_dir.resolve()
+    assert pkg.display_name == "Rockbox 2.5"
+    assert pkg.model == "Y1"
+    assert pkg.has_rockbox is True
+
+
+def test_find_bundled_firmware_macos_app_folder(tmp_path, monkeypatch):
+    monkeypatch.setattr(fw_package, "IS_MAC", True)
+    root = tmp_path / "macos_bundle"
+    _firmware(root, ini="[Firmware]\nsoftware_name = Solar\nversion = 1.0\ntarget_model = Y2\n")
+
+    app_dir = root / "Updater CE.app" / "Contents" / "MacOS"
+    app_dir.mkdir(parents=True)
+    exe = app_dir / "Updater CE"
+    exe.write_bytes(b"dummy")
+
+    monkeypatch.setattr(fw_package.sys, "executable", str(exe))
+    pkg = fw_package.find_bundled_firmware(app_dir=app_dir)
+    assert pkg is not None
+    assert pkg.folder == root.resolve()
+    assert pkg.display_name == "Solar 1.0"
+    assert pkg.model == "Y2"
+
+
+def test_find_bundled_firmware_rejects_multiple_scatters(tmp_path, monkeypatch):
+    sp_dir = tmp_path / "tools" / "SP_Flash_Tool"
+    _firmware(sp_dir)
+    (sp_dir / "second_scatter.txt").write_text(SCATTER, encoding="utf-8")
+
+    monkeypatch.setattr(fw_package, "find_sp_flash_tool", lambda: sp_dir)
+    pkg = fw_package.find_bundled_firmware(app_dir=tmp_path)
+    assert pkg is None
+
+
+def test_prime_sp_tool_history_ini(tmp_path):
+    sp_dir = tmp_path / "SP_Flash_Tool"
+    sp_dir.mkdir()
+    scatter = sp_dir / "MT6572_Android_scatter.txt"
+    scatter.write_text("scatter")
+
+    fw_package.prime_sp_tool_history_ini(sp_dir, scatter)
+    hist = sp_dir / "history.ini"
+    assert hist.is_file()
+    text = hist.read_text(encoding="utf-8")
+    assert "scatterHistory=MT6572_Android_scatter.txt" in text
+    assert "downloadAgentHistory=MTK_AllInOne_DA.bin" in text
+    assert "lastDir=" in text
+
+
+def test_stage_bundled_firmware(tmp_path, monkeypatch):
+    from src import downloads
+
+    dl = tmp_path / "downloads"
+    dl.mkdir()
+    monkeypatch.setattr(downloads, "downloads_dir", lambda: dl)
+
+    fw = _firmware(tmp_path / "sp_dir", ini="[Firmware]\nname=Custom\n")
+    (fw / "install_rockbox.txt").write_text("rockbox marker")
+
+    pkg = fw_package.read_package(fw, require_ini=False)
+    assert pkg is not None
+    staged = fw_package.stage_bundled_firmware(pkg)
+    assert staged.is_file()
+    assert staged.parent != fw
+    assert (staged.parent / "boot.img").is_file()
+    assert (staged.parent / "install_rockbox.txt").is_file()
+    assert (fw / "history.ini").is_file()
+
+
+def test_auto_start_bundled_firmware_navigates_to_flash_page(tmp_path, monkeypatch):
+    from src.ui.main_window import MainWindow, _PAGE_FLASH
+
+    fw = _firmware(tmp_path / "sp_tool_fw", ini="[Firmware]\nsoftware_name = Solar\nversion = 2.0\ntarget_model = Y1\n")
+    (fw / "rockbox_pack.txt").write_text("marker")
+
+    monkeypatch.setattr(fw_package, "find_bundled_firmware", lambda *a, **k: fw_package.read_package(fw, require_ini=False))
+
+    app = _app()
+    w = MainWindow()
+    try:
+        w._prefill_fw_package()
+        app.processEvents()
+
+        assert w._stack.currentIndex() == _PAGE_FLASH
+        assert w._package_name == "Solar 2.0"
+        assert w._package_model == "Y1"
+        assert w._is_360p_rockbox is True
+    finally:
+        w.close()
+        app.processEvents()
+
+

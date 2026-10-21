@@ -58,6 +58,8 @@ def test_detection_finds_both_old_apps(tmp_path=None):
     from src import legacy_cleanup
 
     original_dirs = legacy_cleanup.LEGACY_APP_DIRS
+    old_sim = os.environ.get("INNIOASIS_SIMULATE_MACOS")
+    os.environ["INNIOASIS_SIMULATE_MACOS"] = "1"
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         (root / "Innioasis Updater.app").mkdir()
@@ -71,6 +73,10 @@ def test_detection_finds_both_old_apps(tmp_path=None):
             assert info["has_legacy"] is True
         finally:
             legacy_cleanup.LEGACY_APP_DIRS = original_dirs
+            if old_sim is None:
+                os.environ.pop("INNIOASIS_SIMULATE_MACOS", None)
+            else:
+                os.environ["INNIOASIS_SIMULATE_MACOS"] = old_sim
 
 
 def test_removal_takes_both_old_apps():
@@ -80,6 +86,8 @@ def test_removal_takes_both_old_apps():
     from src import legacy_cleanup
 
     original_dirs = legacy_cleanup.LEGACY_APP_DIRS
+    old_sim = os.environ.get("INNIOASIS_SIMULATE_MACOS")
+    os.environ["INNIOASIS_SIMULATE_MACOS"] = "1"
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         spaced = root / "Innioasis Updater.app"
@@ -105,6 +113,10 @@ def test_removal_takes_both_old_apps():
             assert current.is_dir(), "a current product bundle must never be removed"
         finally:
             legacy_cleanup.LEGACY_APP_DIRS = original_dirs
+            if old_sim is None:
+                os.environ.pop("INNIOASIS_SIMULATE_MACOS", None)
+            else:
+                os.environ["INNIOASIS_SIMULATE_MACOS"] = old_sim
 
 
 def test_format_bytes():

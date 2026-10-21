@@ -131,6 +131,20 @@ esac
 export TARGET_ARCH
 export BUILD_BRAND="$BRAND"
 
+log_step() {
+    local num="$1"
+    local total="$2"
+    local title="$3"
+    local desc="${4:-}"
+    echo ""
+    echo "================================================================================"
+    echo "  [Step ${num}/${total}] ${title}"
+    if [ -n "$desc" ]; then
+        echo "  ${desc}"
+    fi
+    echo "================================================================================"
+}
+
 if [ -z "${PYTHON:-}" ]; then
     if [ -x ".venv-build/bin/python3" ]; then
         PYTHON=".venv-build/bin/python3"
@@ -145,7 +159,9 @@ if [ -z "${PYTHON:-}" ]; then
     fi
 fi
 
-# --- Preflight -----------------------------------------------------------
+TOTAL_STEPS=$([ "$CREATE_DMG" -eq 1 ] && echo 5 || echo 4)
+
+log_step 1 "$TOTAL_STEPS" "Validating Environment & Dependencies" "Checking Python runtime, PySide6, and MediaTek communication libraries..."
 CHECK_MODS="usb serial Cryptodome colorama"
 if [ "$(uname -s)" = "Darwin" ]; then
     CHECK_MODS="PyInstaller PySide6 $CHECK_MODS"
@@ -157,10 +173,12 @@ for mod in $CHECK_MODS; do
         exit 1
     fi
 done
+echo "  -> Environment verified: $("$PYTHON" --version 2>&1)"
 
+log_step 2 "$TOTAL_STEPS" "Preparing Native Assets & Dynamic Libraries" "Ensuring universal libusb-1.0.dylib and macOS application icon (.icns)..."
 DARWIN_LIBUSB="vendor/mtkclient/mtkclient/Darwin/libusb-1.0.dylib"
 if [ ! -f "$DARWIN_LIBUSB" ]; then
-    echo ">>> Ensuring universal libusb-1.0.dylib for macOS..."
+    echo "  -> Preparing universal libusb-1.0.dylib for macOS..."
     mkdir -p "vendor/mtkclient/mtkclient/Darwin"
     "$PYTHON" -c "
 import urllib.request, zipfile, io, os, subprocess
@@ -178,11 +196,13 @@ try:
 except Exception as e:
     print('Notice: Failed auto-downloading universal dylib:', e)
 " 2>/dev/null || true
+else
+    echo "  -> Universal libusb-1.0.dylib verified at $DARWIN_LIBUSB"
 fi
 
 # Convert .ico to .icns if needed (macOS uses .icns, not .ico)
 if [ ! -f "$BUNDLE_ICON" ]; then
-    echo ">>> Generating macOS .icns from icon.png ..."
+    echo "  -> Generating macOS .icns from icon.png..."
     if [ -f "assets/icon.png" ]; then
         TMP_ICNS_DIR=$(mktemp -d)
         ICONSET="$TMP_ICNS_DIR/icon.iconset"
@@ -199,22 +219,15 @@ if [ ! -f "$BUNDLE_ICON" ]; then
     fi
 fi
 
-echo "=== Building $APP_NAME for macOS (v$VERSION) [$BRAND] ==="
-echo "Target: macOS 12 (Monterey) through macOS 26 (Golden Gate)"
-[ -n "$TARGET_ARCH" ] && echo "Architecture: $TARGET_ARCH" || echo "Architecture: Host default (Intel/Apple Silicon)"
-
-# dist/ was cleaned once by the brand plan above, before any child build, so
-# the two apps can sit side by side.
+echo "  -> Target OS: macOS 12 (Monterey) through macOS 26 (Golden Gate)"
+[ -n "$TARGET_ARCH" ] && echo "  -> Architecture: $TARGET_ARCH" || echo "  -> Architecture: Host default (Intel/Apple Silicon)"
 
 # --- Bake the packaging brand -----------------------------------------
-# The frozen app must know its own brand without an environment: this writes
-# src/_build_brand.py (gitignored) for PyInstaller to freeze, and removes it
-# again however the build ends.
 "$PYTHON" scripts/set_build_brand.py "$BRAND"
 trap 'rm -f src/_build_brand.py' EXIT
 
+log_step 3 "$TOTAL_STEPS" "Building Standalone macOS Application Bundle" "Compiling $APP_NAME into self-contained .app bundle..."
 if [ "$(uname -s)" = "Darwin" ]; then
-    # --- Native macOS build with PyInstaller ------------------------------
     "$PYTHON" -m PyInstaller \
         --noconfirm \
         --clean \
@@ -222,10 +235,10 @@ if [ "$(uname -s)" = "Darwin" ]; then
         --workpath "$BUILD_DIR" \
         "$SPEC_FILE"
 
-    # Remove intermediate COLLECT directory so dist/ contains ONLY the self-contained .app
     rm -rf "$DIST_DIR/$APP_NAME"
+    echo "  -> PyInstaller completed standalone application bundle."
 
-    echo ">>> Signing bundle..."
+    log_step 4 "$TOTAL_STEPS" "Applying Code Signatures & Entitlements" "Signing internal dynamic libraries, frameworks, and .app bundle..."
     ENTITLEMENTS_FILE="assets/entitlements.plist"
     if [ -f "$ENTITLEMENTS_FILE" ]; then
         find "$DIST_DIR/$APP_NAME.app" -type f \( -name "*.dylib" -o -name "*.so" \) -exec codesign --force -s - {} + 2>/dev/null || true
@@ -233,17 +246,23 @@ if [ "$(uname -s)" = "Darwin" ]; then
     else
         codesign --force --deep -s - "$DIST_DIR/$APP_NAME.app"
     fi
+    echo "  -> Code signing completed successfully."
 else
     # --- Universal 2 (Intel + Apple Silicon) Mach-O build via LLVM/clang/rcodesign ---
-    echo ">>> Building Universal 2 Mach-O .app bundle..."
+    echo "  -> Building Universal 2 Mach-O .app bundle via LLVM cross-compiler..."
     INNIOASIS_APP_OUT="$DIST_DIR/$APP_NAME.app" BUILD_BRAND="$BRAND" "$PYTHON" scripts/build_universal_app.py
     rm -rf "$DIST_DIR/$APP_NAME"
+
+    log_step 4 "$TOTAL_STEPS" "Applying Mach-O Code Signatures" "Applying ad-hoc code signatures to universal application bundle..."
+    echo "  -> Universal bundle signatures applied."
 fi
 
-echo "=== Build complete: $DIST_DIR/$APP_NAME.app ==="
+APP_SIZE=$(du -sh "$DIST_DIR/$APP_NAME.app" 2>/dev/null | cut -f1 || echo "unknown")
+echo "  -> Bundle created: $DIST_DIR/$APP_NAME.app ($APP_SIZE)"
 
 # --- Optional DMG creation -----------------------------------------------
 if [ "$CREATE_DMG" -eq 1 ]; then
+    log_step 5 "$TOTAL_STEPS" "Creating Disk Image (.dmg)" "Packaging application into mountable .dmg installer..."
     ARCH_SUFFIX="${TARGET_ARCH:+-$TARGET_ARCH}"
     if [ "$BRAND" = "mediatek_installer" ]; then
         BRAND_SLUG="MediaTekInstaller"
@@ -251,7 +270,7 @@ if [ "$CREATE_DMG" -eq 1 ]; then
         BRAND_SLUG="UpdaterCE"
     fi
     DMG_NAME="${BRAND_SLUG}-${VERSION}${ARCH_SUFFIX}-macOS.dmg"
-    echo ">>> Creating DMG: $DIST_DIR/$DMG_NAME"
+    echo "  -> Generating DMG: $DIST_DIR/$DMG_NAME..."
 
     DMG_TEMP=$(mktemp -d)
     cp -R "$DIST_DIR/$APP_NAME.app" "$DMG_TEMP/"
@@ -261,11 +280,21 @@ if [ "$CREATE_DMG" -eq 1 ]; then
         -volname "$APP_NAME" \
         -srcfolder "$DMG_TEMP" \
         -ov -format UDZO \
-        "$DIST_DIR/$DMG_NAME"
+        "$DIST_DIR/$DMG_NAME" >/dev/null 2>&1
 
     rm -rf "$DMG_TEMP"
-    echo "=== DMG ready: $DIST_DIR/$DMG_NAME ==="
+    DMG_SIZE=$(du -sh "$DIST_DIR/$DMG_NAME" 2>/dev/null | cut -f1 || echo "unknown")
+    echo "  -> DMG created: $DIST_DIR/$DMG_NAME ($DMG_SIZE)"
 fi
 
 echo ""
-echo "Done. Drag '$APP_NAME.app' from $DIST_DIR to your Applications folder."
+echo "================================================================================"
+echo "  MACOS BUILD COMPLETE - Output Summary"
+echo "================================================================================"
+echo "  App Bundle:  $DIST_DIR/$APP_NAME.app ($APP_SIZE)"
+if [ "$CREATE_DMG" -eq 1 ]; then
+    echo "  Disk Image:  $DIST_DIR/$DMG_NAME ($DMG_SIZE)"
+fi
+echo "================================================================================"
+echo "  Ready to use: drag '$APP_NAME.app' to your Applications folder."
+echo "================================================================================"

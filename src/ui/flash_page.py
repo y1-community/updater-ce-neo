@@ -137,7 +137,10 @@ class _FitLabel(_StatusLabel):
         self._refresh_mode()
 
     def set_column_width(self, width: int) -> None:
-        self._wrap_width = max(160, int(width))
+        target_w = max(160, int(width))
+        if getattr(self, "_wrap_width", None) == target_w:
+            return
+        self._wrap_width = target_w
         if not self._single_line:
             self.setMinimumWidth(self._wrap_width)
         self._refresh_mode()
@@ -1816,9 +1819,10 @@ class FlashPage(QWidget):
         if on_retry is not None:
             self._power_off_continue_cb = on_retry
             self._install_retry_cb = on_retry
-        if on_cancel is not None:
-            self._cancel_cb = on_cancel
-        self._step_label.setText(tr("err_usb_lost_title"))
+        if prompt_key == "err_connect_failover_recovery":
+            self._step_label.setText(tr("install_failed"))
+        else:
+            self._step_label.setText(tr("err_usb_lost_title"))
         from .dark import T
         t = T()
         self._step_label.setStyleSheet(
@@ -2864,9 +2868,11 @@ class FlashPage(QWidget):
         warning = getattr(self, "_warning", None)
         if isinstance(warning, QLabel):
             warning.setWordWrap(True)
-            warning.setMinimumWidth(min(width, INSTALL_TEXT_WIDTH))
+            target_min_w = min(width, INSTALL_TEXT_WIDTH)
+            if warning.minimumWidth() != target_min_w:
+                warning.setMinimumWidth(target_min_w)
             wrapped = warning.heightForWidth(width)
-            if wrapped > 0:
+            if wrapped > 0 and warning.minimumHeight() != wrapped:
                 warning.setMinimumHeight(wrapped)
 
     def content_height_hint(self, width: int | None = None) -> int:

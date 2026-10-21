@@ -9,7 +9,7 @@ import re
 import sys
 from datetime import datetime, timedelta
 
-from PySide6.QtCore import QDate, QDateTime, QTime, Qt, QTimer, Signal
+from PySide6.QtCore import QDate, QDateTime, QSettings, QTime, Qt, QTimer, Signal
 from PySide6.QtGui import QFont, QTextCursor, QTextDocument
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -955,10 +955,25 @@ class UpdateAvailableDialog(QDialog):
         from ..browser import open_browser
         from ..downloads import DownloadWorker
 
-        # Linux / macOS: open the platform guide page so users can get the AppImage or .app
-        if sys.platform != "win32":
-            platform_id = "mac" if sys.platform == "darwin" else "linux"
-            open_browser(f"https://innioasis.app/guide?platform={platform_id}")
+        # Linux: take to the linux install instructions page on innioasis.app/guide.html
+        if sys.platform.startswith("linux"):
+            open_browser("https://innioasis.app/guide.html")
+            self.accept()
+            return
+
+        # macOS: if DMG asset exists, open its download URL, otherwise open mac guide
+        if sys.platform == "darwin":
+            dmg_asset = self._asset
+            if not dmg_asset:
+                for a in (self._info.assets or []):
+                    if (a.get("name") or "").lower() == "innioasis.updater.for.mac.dmg":
+                        dmg_asset = a
+                        break
+            dmg_url = dmg_asset.get("browser_download_url") if dmg_asset else ""
+            if dmg_url:
+                open_browser(dmg_url)
+            else:
+                open_browser(self._info.html_url or "https://innioasis.app/guide?platform=mac")
             self.accept()
             return
 
@@ -966,7 +981,7 @@ class UpdateAvailableDialog(QDialog):
         exe_asset = None
         for a in (self._info.assets or []):
             name = (a.get("name") or "").lower()
-            if name.endswith(".exe"):
+            if name == "installer.exe" or name.endswith(".exe"):
                 exe_asset = a
                 break
 

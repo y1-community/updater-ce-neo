@@ -364,6 +364,9 @@ class SettingsPage(QWidget):
         self._cb_reminders.toggled.connect(self._on_reminders_toggled)
 
         self._reminders_card.set_layout(rem_layout)
+        self._reminders_card.setVisible(
+            self._may_show_card(self._reminders_card) and not is_mediatek_installer()
+        )
         layout.addWidget(self._reminders_card)
 
         # --- Rockbox release filters ---
@@ -737,6 +740,10 @@ class SettingsPage(QWidget):
         if paths.IS_MAC:
             # No SP Flash Tool build exists for macOS.
             return (METHOD_MTK,)
+        if paths.IS_WINDOWS and windows_only_method() == METHOD_SP and not self._advanced_revealed:
+            # Flashing method dropdown shouldn't be available to x86/x64 windows users
+            # by default because we intend to only use flash_tool on Windows.
+            return (METHOD_SP,)
         locked = windows_only_method()
         if locked and not self._advanced_revealed:
             # Windows is fixed by CPU: x86/x64 gets SP Flash Tool only, ARM64 MTKClient only.
@@ -764,12 +771,16 @@ class SettingsPage(QWidget):
             or (hasattr(self, "_cb_advanced_settings") and self._cb_advanced_settings.isChecked())
             or is_mediatek_installer()
         )
+        is_win_x86 = bool(paths.IS_WINDOWS and windows_only_method() == METHOD_SP and not self._advanced_revealed)
         if hasattr(self, "_terminal_card"):
             self._terminal_card.setVisible(show_adv and self._may_show_card(self._terminal_card))
         if hasattr(self, "_method_card"):
             self._method_card.setVisible(
-                show_adv and not paths.IS_MAC and self._may_show_card(self._method_card)
+                show_adv and not paths.IS_MAC and not is_win_x86 and self._may_show_card(self._method_card)
             )
+        if hasattr(self, "_method_combo"):
+            self._method_combo.setEnabled(not is_win_x86)
+            self._method_combo.setVisible(not is_win_x86)
         if hasattr(self, "_rockbox_card"):
             self._update_rockbox_visibility()
 
@@ -1008,6 +1019,12 @@ class SettingsPage(QWidget):
         self._sync_advanced_visibility()
         self._sync_linux_prep_copy()
         self._prep_card.setVisible(self._may_show_card(self._prep_card) and not paths.IS_MAC)
+        self._reminders_card.setVisible(
+            self._may_show_card(self._reminders_card) and not is_mediatek_installer()
+        )
+        self._offline_mode_card.setVisible(
+            self._may_show_card(self._offline_mode_card) and not is_mediatek_installer()
+        )
         self._update_rockbox_visibility()
         self._update_legacy_cleanup_visibility()
 
@@ -1068,6 +1085,9 @@ class SettingsPage(QWidget):
         """Show or hide the pieces that only make sense for one brand."""
         self._offline_mode_card.setVisible(
             self._may_show_card(self._offline_mode_card) and not mediatek_installer
+        )
+        self._reminders_card.setVisible(
+            self._may_show_card(self._reminders_card) and not mediatek_installer
         )
         self._update_rockbox_visibility()
         self._update_sp_auth_visibility()

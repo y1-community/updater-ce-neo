@@ -568,6 +568,9 @@ def check_device_updates(
         "latest_label": str,
     }, ...]
     """
+    from . import config
+    if config.is_generic_mtk() or config.is_mediatek_installer():
+        return []
     client = releases_client or catalog.ReleasesClient()
     updates = []
 

@@ -187,8 +187,12 @@ def fetch_remote_donors_async(on_result):
                     except Exception as ce:
                         logger.debug("Could not cache donors.csv to disk: %s", ce)
                     _log_connectivity(True, f"{_DONORS_HOST} responded ({len(text)} bytes)")
+                try:
                     on_result(parsed)
-                    return
+                except RuntimeError:
+                    pass
+                return
+            elif resp.status_code == 200:
                 reason = f"{_DONORS_HOST} returned an unusable feed (HTTP {resp.status_code})"
             else:
                 reason = f"{_DONORS_HOST} returned HTTP {resp.status_code}"
@@ -200,6 +204,9 @@ def fetch_remote_donors_async(on_result):
         cached = _cached()
         if cached:
             logger.info("Using the most recent locally cached feed instead")
-        on_result(cached)
+        try:
+            on_result(cached)
+        except RuntimeError:
+            pass
 
     threading.Thread(target=_worker, daemon=True).start()

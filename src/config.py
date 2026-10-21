@@ -134,13 +134,19 @@ UPDATE_REPO = "y1-community/updater-ce-neo"
 UPDATE_CACHE_TTL_SECONDS = 24 * 60 * 60
 UPDATE_CHECK_STARTUP_DELAY_MS = 3000  # silent auto-check shortly after launch
 
-# Asset-extension preference per OS, used to pick the right download from a
-# release's assets (order = preference). Matches the asset names the CE repo
-# publishes today (installer.exe, *.dmg, run_linux.sh).
+# Specific target release asset filename per operating system for updater-ce-neo releases.
+# If these files don't exist in a newer release, it is assumed the user is running the latest build.
+UPDATE_TARGET_ASSETS = {
+    "win32": "installer.exe",
+    "darwin": "Innioasis.Updater.for.Mac.dmg",
+    "linux": "UpdaterCE.appimage",
+}
+
+# Asset-extension preference per OS fallback
 UPDATE_ASSET_EXTENSIONS = {
     "win32": (".exe", ".msi", ".zip"),
     "darwin": (".dmg", ".pkg", ".zip"),
-    "linux": (".AppImage", ".tar.gz", ".sh", ".deb", ".rpm"),
+    "linux": (".AppImage", ".appimage", ".tar.gz", ".sh", ".deb", ".rpm"),
 }
 # Architecture tokens that rank an asset above an unmarked one (best first).
 UPDATE_ASSET_ARCH_PRIORITY = ("universal", "x86_64", "amd64", "arm64", "aarch64")

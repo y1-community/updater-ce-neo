@@ -209,7 +209,7 @@ def setup_native_app_style(app: QApplication) -> str:
     # Aqua cannot be forced under the offscreen plugin. On Linux, honor the
     # desktop's own QT_STYLE_OVERRIDE so Kvantum and similar styles still win.
     override = ""
-    if system == "linux":
+    if system == "linux" and not getattr(sys, "frozen", False) and "APPDIR" not in os.environ:
         from PySide6.QtCore import QCoreApplication
         existing = set(QCoreApplication.libraryPaths())
         for path in (
@@ -697,8 +697,15 @@ class _Tokens:
         self.bg_nav = window.name()
         self.bg_status = button.name()
         self.bg_tooltip = color(QPalette.ColorRole.ToolTipBase, self.bg_card).name()
+        # Text roles: preserve desktop colors but ensure minimum contrast floor for WCAG AAA
+        if dark and window_text.lightness() < 200:
+            window_text = QColor("#ffffff")
+        text_col = color(QPalette.ColorRole.Text, self.fg)
+        if dark and text_col.lightness() < 200:
+            text_col = QColor("#f9fafb")
+
         self.fg = window_text.name()
-        self.fg_dim = color(QPalette.ColorRole.Text, self.fg).name()
+        self.fg_dim = text_col.name()
         self.fg_muted = color(QPalette.ColorRole.PlaceholderText, self.fg_dim).name()
         self.subtext = self.fg_muted
         self.border = color(QPalette.ColorRole.Mid, self.border).name()
@@ -904,7 +911,16 @@ def _make_palette(
     native_palette: QPalette | None = None,
 ) -> QPalette:
     if IS_LINUX and native_palette is not None and _palette_is_dark(native_palette) == dark:
-        return QPalette(native_palette)
+        pal = QPalette(native_palette)
+        if dark:
+            # Enforce WCAG AAA contrast floor on dark surfaces
+            wt = pal.color(QPalette.WindowText)
+            if wt.lightness() < 200:
+                pal.setColor(QPalette.WindowText, QColor("#ffffff"))
+            txt = pal.color(QPalette.Text)
+            if txt.lightness() < 200:
+                pal.setColor(QPalette.Text, QColor("#f9fafb"))
+        return pal
     p = QPalette()
     t = _Tokens(dark, pure_black=pure_black)
     if dark:
@@ -1703,6 +1719,58 @@ def theme_fingerprint(app: QApplication | None = None, *, platform_dark: bool = 
     )
 
 
+def configure_native_combobox(combo, max_visible_items: int = 12) -> None:
+    """Configure a QComboBox to match the desktop system font, use native popup widgets,
+    and remain scrollable and constrained to an appropriate screen height when holding many items."""
+    if combo is None:
+        return
+
+    # Windows and macOS handle dropdown fonts and native rendering natively.
+    if IS_WINDOWS or IS_MACOS:
+        combo.setMaxVisibleItems(max_visible_items)
+        return
+
+    # On Linux: match the application font and text colors
+    app = QApplication.instance()
+    target_font = app.font() if app else QFontDatabase.systemFont(QFontDatabase.SystemFont.GeneralFont)
+    if target_font and (not target_font.family() or target_font.pointSize() <= 0):
+        target_font = QFontDatabase.systemFont(QFontDatabase.SystemFont.GeneralFont)
+    if target_font:
+        combo.setFont(target_font)
+
+    # Ensure palette text and window text match T().fg
+    try:
+        from .dark import T
+        t = T()
+        fg_color = QColor(getattr(t, "fg", "#000000"))
+        pal = combo.palette()
+        pal.setColor(QPalette.ColorRole.Text, fg_color)
+        pal.setColor(QPalette.ColorRole.WindowText, fg_color)
+        pal.setColor(QPalette.ColorRole.ButtonText, fg_color)
+        combo.setPalette(pal)
+    except Exception:
+        pass
+
+    combo.setMaxVisibleItems(max_visible_items)
+    view = combo.view()
+    if view is not None:
+        if target_font:
+            view.setFont(target_font)
+        try:
+            from .dark import T
+            t = T()
+            fg_color = QColor(getattr(t, "fg", "#000000"))
+            vpal = view.palette()
+            vpal.setColor(QPalette.ColorRole.Text, fg_color)
+            vpal.setColor(QPalette.ColorRole.WindowText, fg_color)
+            view.setPalette(vpal)
+        except Exception:
+            pass
+        view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        view.setMaximumHeight(360)
+
+
 def sync_cached_palettes(app: QApplication) -> None:
     """Rewrite brushes that a widget cached from the previous theme.
 
@@ -1714,6 +1782,7 @@ def sync_cached_palettes(app: QApplication) -> None:
 
     for widget in app.allWidgets():
         if isinstance(widget, QComboBox):
+            configure_native_combobox(widget)
             apply_readable_palette(widget)
             view = widget.view()
             if view is not None:

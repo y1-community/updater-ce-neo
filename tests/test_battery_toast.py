@@ -1,5 +1,6 @@
 """Test for the first-run battery charge toast hint on Select Package page."""
 
+import os
 import sys
 from pathlib import Path
 
@@ -12,7 +13,8 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 
 pytest.importorskip("PySide6")
 
-_app = QApplication.instance() or QApplication(sys.argv)
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+_app = QApplication.instance() or QApplication(["--platform", "offscreen"])
 
 from src.ui.select_page import SelectPackagePage  # noqa: E402
 from src.ui.widgets import BatteryToast  # noqa: E402

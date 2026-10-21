@@ -101,6 +101,10 @@ CATALOG = [
                     "A classic-style Y1 software."),
     FirmwarePackage("y2player-y2", "Y2Player", "Y2", "schulzcode/Y2Player", "rom_y2.zip",
                     "A Y2 custom software."),
+    FirmwarePackage("android-4-2-y1", "Android 4.2", "Y1", "y1-community/y1-ata-rom", "rom.zip",
+                    "Android 4.2 Jelly Bean ATA firmware for Innioasis Y1."),
+    FirmwarePackage("android-4-4-y2", "Android 4.4", "Y2", "y1-community/y2-ata-rom", "rom_y2.zip",
+                    "Android 4.4 KitKat engineering firmware for Innioasis Y2."),
     FirmwarePackage("koensayr-y1", "Koensayr", "Y1", "ryan-specter/koensayr-auto", "rom.zip",
                     "A Y1 custom software maintained by the community."),
 ]
@@ -400,23 +404,26 @@ def parse_version_designations(version_name: str) -> dict:
         extracted_version = f"{timestamp_match.group(1)}-{timestamp_match.group(2)}"
 
     if not extracted_version:
-        version_pattern = re.search(r'\bv([\d.]+)\b', clean_version, re.IGNORECASE)
+        m_rel = re.search(r'\b(?:release|realease)\s*v?(\d+(?:\.\d+)*)\b', clean_version, re.IGNORECASE)
+        if m_rel:
+            extracted_version = m_rel.group(1)
+
+    if not extracted_version:
+        version_pattern = re.search(r'\bv(\d+(?:\.\d+)*)\b', clean_version, re.IGNORECASE)
         if version_pattern:
             extracted_version = version_pattern.group(1)
 
+    if not extracted_version:
+        m_dot = re.search(r'\b(\d+\.\d+(?:\.\d+)*)\b', clean_version)
+        if m_dot:
+            extracted_version = m_dot.group(1)
+
     if not extracted_version and '-' in clean_version:
-        # Check if any dash-delimited segment looks like a dotted version (e.g. "3.2.0-fm", "type-b-1.7.6")
         for part in clean_version.split('-'):
             part_clean = part.lstrip('vV')
             if re.match(r'^\d+(?:\.\d+)+$', part_clean):
                 extracted_version = part_clean
                 break
-        if not extracted_version:
-            last_part = clean_version.split('-')[-1]
-            if last_part.lower().startswith('v'):
-                last_part = last_part[1:]
-            if re.match(r'^[\d.]+$', last_part):
-                extracted_version = last_part
 
     if extracted_version:
         clean_version = extracted_version
@@ -485,17 +492,17 @@ def release_version_ok(repo, tag_name, model=None, show_old_rockbox=False, show_
     for model == "Y1", releases before 0.5 are hidden unless show_old_rockbox
     is True.
 
-    The legacy < 0.5 gate historically applied to rockbox-y1/rockbox. The Y2
-    Rockbox repo is a separate codebase (SPYMAGIC/Y2-Rockbox / v0.2.5-beta etc.)
-    and is not slot-compatible with that gate, so the Y2 Rockbox package is
-    treated as unrestricted. Only the Y1 Rockbox path keeps the pre-0.5 gate,
-    and only the Settings toggle can restore pre-0.5 rows there.
-
     For Y2, A5, and other non-Y1 models, this gating is NEVER applied.
 
-    Tags that carry no semantic version (e.g. nightly-<sha>) are hidden unless
+    Tags that carry no semantic version and are nightlies (e.g. nightly-<sha>) are hidden unless
     show_nightly is True. Repos without a pinned minimum are unrestricted.
     """
+    if not tag_name:
+        return False
+    is_nightly = "nightly" in str(tag_name or "").lower()
+    if is_nightly and not show_nightly:
+        return False
+
     model_str = str(model or "").upper()
     slug = (repo or "").strip()
     if "github.com/" in slug:  # tolerate a full URL where a slug is expected
@@ -505,21 +512,10 @@ def release_version_ok(repo, tag_name, model=None, show_old_rockbox=False, show_
     is_non_y1 = bool(model) and model_str != "Y1" and "Y1" not in model_str
     if is_non_y1:
         # Y2, A5, and non-Y1 models are completely exempt from the < 0.5 restriction
-        version = release_version_tuple(tag_name)
-        if version is None and not show_nightly:
-            return False
         return True
 
-    # The legacy < 0.5 gate historically applied to rockbox-y1/rockbox. The Y2
-    # Rockbox repo is a separate codebase (SPYMAGIC/Y2-Rockbox / v0.2.5-beta etc.)
-    # and is not slot-compatible with that gate. Treat the Y2 Rockbox package as
-    # unrestricted the same way as Y1 >= 0.5, and only let the Settings toggle
-    # restore pre-0.5 rows for Y1.
     minimum_str = REPO_MIN_RELEASE_VERSION.get(resolved_repo)
     if not minimum_str or show_old_rockbox:
-        version = release_version_tuple(tag_name)
-        if version is None and not show_nightly:
-            return False
         return True
 
     minimum = _parse_semver(str(minimum_str).lstrip('vV'))
@@ -528,7 +524,7 @@ def release_version_ok(repo, tag_name, model=None, show_old_rockbox=False, show_
         return True
     version = release_version_tuple(tag_name)
     if version is None:
-        return bool(show_nightly)
+        return False
     # Pad so 0.5 and 0.5.0 compare equal, and (0, 4, 9) < (0, 5).
     width = max(len(version), len(minimum))
     version = version + (0,) * (width - len(version))
@@ -1257,13 +1253,13 @@ class ReleasesClient:
             logger.debug("Update cache read failed for %s: %s", repo, e)
         return None
 
-    def get_latest_release_info(self, repo):
+    def get_latest_release_info(self, repo, force: bool = False):
         """Latest release of an app repo (not a firmware repo) as a plain dict:
         tag_name, name, body, published_at, html_url, assets[]. Falls back to
         the cache and never raises; returns None when nothing is available."""
         repo = resolve_firmware_repo(repo)
         cached = self.get_cached_update(repo)
-        if cached:
+        if cached and not force:
             return cached
 
         url = f"{GITHUB_API}/repos/{repo}/releases/latest"
@@ -1312,7 +1308,7 @@ class ReleasesClient:
     # -- normalization ------------------------------------------------------
     def _normalize_release(self, release, repo):
         tag_name = release.get("tag_name", "")
-        if not release_version_ok(repo, tag_name):
+        if not release_version_ok(repo, tag_name, show_nightly=True):
             return None
         assets = release.get("assets", [])
         rom_variants = [_parse_rom_asset_variant(a, tag_name, repo) for a in assets]
@@ -1338,7 +1334,7 @@ class ReleasesClient:
         releases = []
         for release in releases_data or []:
             tag_name = release.get("tag_name", "")
-            if not release_version_ok(repo, tag_name):
+            if not release_version_ok(repo, tag_name, show_nightly=True):
                 continue
             is_prerelease = bool(release.get("prerelease"))
             if "stable" in tag_name.lower():

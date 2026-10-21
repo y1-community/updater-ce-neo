@@ -765,7 +765,7 @@ class Banner(QLabel):
         super().paintEvent(event)
 
 
-class UpdateToast(QWidget):
+class UpdateToast(QFrame):
     """One-line update note on Select Software.
 
     One device shows Install and a session-only close. Several devices show a
@@ -779,8 +779,9 @@ class UpdateToast(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("releaseUpdatePrompt")
+        self.setProperty("cssClass", "card")
         self.setAutoFillBackground(False)
-        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setMinimumHeight(44)
         self._offers = []
         row = QHBoxLayout(self)
@@ -882,14 +883,95 @@ class UpdateToast(QWidget):
         self.update()
 
     def paintEvent(self, event):  # noqa: N802 (Qt naming)
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing, True)
-        painter.setClipRect(event.rect())
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(banner_material_color("info"))
-        painter.drawRoundedRect(self.rect().adjusted(0, 0, -1, -1), 8, 8)
-        painter.end()
+        """Paint the update notification with the same background material as the battery hint."""
+        _paint_bento_surface(self, event)
+
+
+class AppUpdateToast(QFrame):
+    """One-line notification for application updates.
+
+    Matches the bento surface and styling of UpdateToast and BatteryToast.
+    Has an action button ('Update' / 'View') and a dismiss ('×') button.
+    """
+
+    action_clicked = Signal()
+    close_clicked = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("appUpdateToast")
+        self.setProperty("cssClass", "card")
+        self.setAutoFillBackground(False)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.setMinimumHeight(44)
+        self._info = None
+
+        row = QHBoxLayout(self)
+        row.setContentsMargins(14, 6, 8, 6)
+        row.setSpacing(8)
+
+        self._label = QLabel("")
+        self._label.setWordWrap(False)
+        self._label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        font = self._label.font()
+        font.setPixelSize(13)
+        font.setWeight(QFont.Weight.Medium)
+        self._label.setFont(font)
+        _apply_banner_text(self._label)
+        row.addWidget(self._label, 1)
+
+        self._action = QPushButton(tr("toast_install"))
+        self._action.setObjectName("appUpdateToastAction")
+        self._action.setCursor(Qt.CursorShape.ArrowCursor)
+        self._action.setStyleSheet("")
+        self._action.clicked.connect(self.action_clicked.emit)
+        row.addWidget(self._action, 0)
+
+        self._close = QPushButton("\u00d7")
+        self._close.setObjectName("appUpdateToastClose")
+        self._close.setFlat(True)
+        self._close.setCursor(Qt.CursorShape.ArrowCursor)
+        self._close.setStyleSheet("")
+        self._close.setFixedWidth(28)
+        self._close.setToolTip(tr("toast_dismiss"))
+        self._close.clicked.connect(self.close_clicked.emit)
+        row.addWidget(self._close, 0)
+
+        self.setVisible(False)
+
+    def set_update(self, info) -> None:
+        self._info = info
+        self._apply_copy()
+        self.setVisible(bool(info and getattr(info, "tag", None)))
+
+    def update_info(self):
+        return self._info
+
+    def text(self) -> str:
+        return self._label.text()
+
+    def _apply_copy(self) -> None:
+        from ..branding import get_app_name
+        app_name = get_app_name()
+        version = getattr(self._info, "version", "") if self._info else ""
+        if version:
+            self._label.setText(f"{app_name} v{version} is available.")
+        else:
+            self._label.setText(f"An update to {app_name} is available.")
+        _apply_banner_text(self._label)
+        self._close.setToolTip(tr("toast_dismiss"))
+        self._action.setText(tr("toast_install"))
+
+    def retranslate(self) -> None:
+        self._apply_copy()
+
+    def refresh_theme(self) -> None:
+        _apply_banner_text(self._label)
+        self.update()
+
+    def paintEvent(self, event):  # noqa: N802 (Qt naming)
+        """Paint the update notification with the same background material as the battery hint."""
+        _paint_bento_surface(self, event)
 
 
 class BatteryToast(QFrame):

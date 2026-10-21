@@ -70,8 +70,10 @@ def test_dark_names_then_light_then_manifest_icon():
         _release(), package, dark=True,
     )] == ["logo-dark.jpeg", "logo.jpg"]
     light_names = [url.rsplit("/", 1)[-1] for url in icon_candidate_urls(_release(), package, dark=False)]
-    assert light_names[-1] == "logo.jpg"
-    assert "logo-dark.jpeg" not in light_names
+    assert light_names == list(LIGHT_ICON_NAMES)
+    fallback_light = [url.rsplit("/", 1)[-1] for url in release_image_fallback_urls(_release(), package, dark=False)]
+    assert fallback_light[-1] == "logo.jpg"
+    assert "logo-dark.jpeg" not in fallback_light
 
 
 def test_release_art_uses_conventional_names_then_generic_png_jpg():

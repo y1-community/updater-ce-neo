@@ -362,6 +362,54 @@ def test_rockbox_post_flash_power_prompt_uses_model_specific_button_and_hides_na
             pass
 
 
+def test_sp_flash_rockbox_power_on_prompt(tmp_path):
+    """SP Flash Tool also asks Y1/Y2 users to disconnect & power on, then connect USB, rather than bypassing with automatic=True."""
+    from PyQt6.QtCore import QSettings
+    from src import paths
+    from src.ui.main_window import MainWindow, _PAGE_FLASH
+
+    app = _app()
+    settings = QSettings(str(tmp_path / "sp-rockbox-flow.ini"), QSettings.Format.IniFormat)
+    old_mac = paths.IS_MAC
+    try:
+        paths.IS_MAC = False
+        window = MainWindow()
+        window.settings = settings
+        window._package_model = "Y1"
+        window._package_name = "Rockbox Y1"
+        window._package_path = "/tmp/rockbox_y1.zip"
+        window._flash_method = "sp"
+        window._flash_page.set_model("Y1")
+        window._create_themes_wizard = lambda _model: None
+        window.show()
+        window._handle_flash_success()
+        app.processEvents()
+
+        assert window._stack.currentIndex() == _PAGE_FLASH
+        assert window._rockbox_power_on_pending
+        assert window._install_run_active()
+
+        # Step 1: Disconnect & power on prompt for Y1 (centre button)
+        assert "center button" in window._flash_page._eta_label.text().lower() or "centre button" in window._flash_page._eta_label.text().lower()
+        assert "y1" in window._flash_page._eta_label.text().lower()
+
+        # User presses the round Next button to confirm disconnect and power on
+        window._flash_page._theme_step1_next_btn.click()
+        app.processEvents()
+        assert not window._rockbox_power_on_pending
+        assert window._flash_page._themes_stage_active
+
+        # Step 2: Connect USB prompt
+        assert "connect your y1 by usb" in window._flash_page._eta_label.text().lower()
+    finally:
+        paths.IS_MAC = old_mac
+        try:
+            window.close()
+            app.processEvents()
+        except UnboundLocalError:
+            pass
+
+
 def test_device_prep_confirmation_before_watch_and_flash():
 
     """Users are always prompted to power off and disconnect their model/device first.

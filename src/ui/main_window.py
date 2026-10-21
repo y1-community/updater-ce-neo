@@ -1280,6 +1280,8 @@ class MainWindow(QMainWindow):
         )
         layout.addWidget(self._lang_label)
         self._lang_combo = QComboBox()
+        from .dark import configure_native_combobox
+        configure_native_combobox(self._lang_combo, max_visible_items=12)
         self._lang_combo.setObjectName("langCombo")
         self._populate_languages()
         idx = self._lang_combo.findData(translator().lang)
@@ -1472,6 +1474,7 @@ class MainWindow(QMainWindow):
         self._select_page.release_icon_ready.connect(self._on_release_icon_ready)
         self._select_page.gui_handoff_abandoned.connect(self._on_gui_handoff_abandoned)
         self._select_page.content_size_changed.connect(self._on_select_content_changed)
+        self._select_page.app_update_clicked.connect(self._on_app_update_toast_action)
         self._flash_page.on_install_retry(self._on_progress_retry)
         self._select_page.download_started.connect(self._on_download_started)
         self._select_page.download_progress.connect(self._on_download_progress)
@@ -2095,7 +2098,15 @@ class MainWindow(QMainWindow):
         local_checked = bool(
             getattr(page, "is_local_rockbox_themes_checked", lambda: False)()
         )
-        return bool((is_rockbox and not is_240p) or (local_checked and model == "Y1")), model
+        bundled_rockbox = bool(getattr(self, "_bundled_rockbox_themes", False))
+        if not bundled_rockbox and getattr(self, "_package_path", None):
+            try:
+                from ..fw_package import has_rockbox_marker
+                p = Path(self._package_path)
+                bundled_rockbox = has_rockbox_marker(p.parent)
+            except Exception:
+                bundled_rockbox = False
+        return bool(bundled_rockbox or (is_rockbox and not is_240p) or (local_checked and model == "Y1")), model
 
     @staticmethod
     def _rockbox_power_on_prompt_key(model: str) -> str:
@@ -3834,15 +3845,8 @@ class MainWindow(QMainWindow):
         self._rockbox_power_on_model = ""
         self._download_active = False
 
-        if is_360p_rockbox:
+        if is_360p_rockbox or (is_target_rockbox and eff_model in ("Y1", "Y2")):
             self._nav_to_page(_PAGE_FLASH)
-            if backend_method(self._flash_method) == METHOD_MTK:
-                self._rockbox_themes_flow_active = True
-                self._show_rockbox_power_on_prompt(eff_model)
-            else:
-                # SP Flash: no manual power-on prompt, watch for ADB silently.
-                self._start_themes_stage(eff_model, donation_disabled, automatic=True)
-        elif is_target_rockbox and backend_method(self._flash_method) == METHOD_MTK:
             self._rockbox_themes_flow_active = True
             self._show_rockbox_power_on_prompt(eff_model)
         else:
@@ -4006,7 +4010,8 @@ class MainWindow(QMainWindow):
         cache_failure = bool(getattr(self, "_cache_recovery_needed", False)) or any(
             marker in str(error_code or "").lower() for marker in _CACHE_MISSING_MARKERS
         ) or str(error_code or "") == "CACHE_FILE_MISSING"
-        if not cache_failure and (
+        is_sp_tool_error = str(error_code or "").startswith("SP_") or "S_" in str(error_code or "")
+        if not cache_failure and not is_sp_tool_error and (
             error_code == "USB_DISCONNECTED"
             or is_disconnection_error(error_code)
             or (
@@ -4060,6 +4065,9 @@ class MainWindow(QMainWindow):
         run the tool themselves.
         """
         if paths.IS_MAC:
+            return ""
+        if paths.IS_WINDOWS and windows_only_method() == METHOD_SP:
+            # x86/x64 Windows uses SP Flash Tool exclusively; no failover to MTKClient.
             return ""
         current = backend_method(method)
         if current == METHOD_SP:
@@ -4145,17 +4153,12 @@ class MainWindow(QMainWindow):
             error_code,
             candidate,
         )
-        prompt_key, prompt_kwargs = "", None
-        if is_connect_failure(error_code):
-            # The tool never reached the player (SP Flash Tool's 1013 /
-            # COM-port error among them), so the step says it could not
-            # connect and names both engines, rather than claiming the player
-            # dropped out of a run that never started writing.
-            prompt_key = "err_connect_failover_recovery"
-            prompt_kwargs = {
-                "failed": _method_label(backend_method(self._flash_method)),
-                "next": _method_label(candidate),
-            }
+        prompt_key = "err_connect_failover_recovery"
+        prompt_kwargs = {
+            "failed": _method_label(backend_method(self._flash_method)),
+            "next": _method_label(candidate),
+            "error_code": str(error_code or ""),
+        }
         self._return_to_power_off_stage(
             candidate, recovery=True, prompt_key=prompt_key, prompt_kwargs=prompt_kwargs
         )
@@ -5056,16 +5059,63 @@ class MainWindow(QMainWindow):
         self._append_log(report)
 
     def _prefill_fw_package(self):
-        """If this app sits beside (or in a subfolder of) a firmware package, open install-from-file on it."""
-        from ..fw_package import find_installed_package
+        """When a bundled firmware package (scatter in SP_Flash_Tool or next to macOS .app)
+        is detected, stage files to the app's working directory, prime SP Flash Tool history.ini,
+        and automatically transition into the Install Software screen."""
+        from ..fw_package import find_bundled_firmware, stage_bundled_firmware
 
         try:
-            pkg = find_installed_package()
+            pkg = find_bundled_firmware()
         except Exception as e:
-            logging.getLogger(__name__).warning("fw_package check failed: %s", e)
+            logger.warning("Bundled firmware check failed: %s", e)
             return
-        if pkg is not None:
-            self._select_page.prefill_fw_package(pkg)
+
+        if pkg is None:
+            return
+
+        try:
+            # 1. Parse scatter, stage firmware files into working directory
+            staged_scatter = stage_bundled_firmware(pkg)
+
+            # 2. Configure package details in Select page and Main window
+            package_path = str(staged_scatter)
+            package_name = pkg.display_name or pkg.name or "Firmware"
+            package_model = pkg.model or ""
+
+            if hasattr(self, "_select_page") and self._select_page is not None:
+                self._select_page._current_installed_release_info = None
+                self._select_page._current_package_path = package_path
+                self._select_page._current_package_name = package_name
+                self._select_page._current_package_model = package_model
+                if pkg.type:
+                    self._select_page._selected_type = pkg.type
+                if pkg.has_rockbox and hasattr(self._select_page, "_local_rockbox_themes_cb"):
+                    self._select_page._local_rockbox_themes_cb.setChecked(True)
+                if hasattr(self._select_page, "_path_edit"):
+                    self._select_page._path_edit.setText(str(pkg.folder))
+                if hasattr(self._select_page, "_details_package"):
+                    from .. import catalog
+                    self._select_page._details_package = catalog.FirmwarePackage(
+                        slug="local-" + pkg.folder.name,
+                        name=package_name,
+                        model=package_model,
+                        repo="",
+                        package_name="",
+                    )
+                    self._select_page._set_details_header(None, self._select_page._details_package)
+
+            if pkg.has_rockbox:
+                self._bundled_rockbox_themes = True
+                self._is_360p_rockbox = True
+                self._rockbox_themes_flow_active = True
+            else:
+                self._bundled_rockbox_themes = False
+
+            # 3. Automatically launch into the Install Software screen (_PAGE_FLASH)
+            logger.info("Auto-triggering install for bundled firmware: %s (%s)", package_name, package_model)
+            self._on_package_selected(package_path, package_name, package_model)
+        except Exception as e:
+            logger.error("Failed to auto-start bundled firmware: %s", e, exc_info=True)
 
     def _launch_sp_gui(self, scatter, extract_dir, model):
         from ..sp_flash_gui import launch_sp_flash_tool_gui
@@ -5225,7 +5275,9 @@ class MainWindow(QMainWindow):
                 pass
             old.requestInterruption()
             old.wait(100)
-        worker = UpdateCheckWorker(UPDATE_REPO, APP_VERSION, self)
+        worker = UpdateCheckWorker(
+            UPDATE_REPO, APP_VERSION, self, force=bool(self._update_manual_pending)
+        )
         self._update_worker = worker
         self._active_workers.add(worker)
         worker.finished.connect(
@@ -5238,6 +5290,24 @@ class MainWindow(QMainWindow):
         if worker is getattr(self, "_update_worker", None):
             self._on_update_check_done(info, manual)
 
+    def _on_app_update_toast_action(self, info):
+        """User clicked action button on app update toast."""
+        if self._install_run_active():
+            # If an install/download is currently running, don't interrupt with modal
+            # Instead, open release page in browser
+            from ..browser import open_browser
+            release_url = getattr(info, "html_url", "") or f"https://github.com/{UPDATE_REPO}/releases"
+            open_browser(release_url)
+            return
+
+        dlg = UpdateAvailableDialog(
+            self,
+            info=info,
+            current_version=APP_VERSION,
+            on_skip=lambda v: self.settings.setValue("update_skipped_version", v),
+        )
+        self._present_inline(dlg, tr("nav_check_updates"))
+
     def _on_update_check_done(self, info, manual):
         if not isinstance(info, UpdateInfo):
             info = UpdateInfo()
@@ -5248,6 +5318,13 @@ class MainWindow(QMainWindow):
             if info.version == skipped and not manual:
                 return
             self._update_offered_once = True
+
+            # If user has started a firmware download/install, do not interrupt with a
+            # full window view! Present a toast in the Select Software view instead.
+            if self._install_run_active():
+                self._select_page.show_app_update(info)
+                return
+
             dlg = UpdateAvailableDialog(
                 self,
                 info=info,

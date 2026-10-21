@@ -67,11 +67,21 @@ goto :help
 :args_done
 cd /d "%~dp0"
 
-rem Delegate to build_windows.ps1 which handles both brands, PyInstaller, Inno Setup, and portable zips cleanly.
-set "PS_ARGS="
-if not "%BRAND%"=="both" set "PS_ARGS=!PS_ARGS! -Brand %BRAND%"
-if "%CLEAN%"=="1" set "PS_ARGS=!PS_ARGS! -Clean"
-if "%NOINSTALLER%"=="1" set "PS_ARGS=!PS_ARGS! -NoInstaller"
+set "PS_ARGS=-Brand %BRAND%"
+if "%CLEAN%"=="1" set "PS_ARGS=%PS_ARGS% -Clean"
+if "%NOINSTALLER%"=="1" set "PS_ARGS=%PS_ARGS% -NoInstaller"
+
+echo ================================================================================
+echo   Innioasis Updater CE / MediaTek Installer - Windows Build
+echo ================================================================================
+echo   Brand:           %BRAND%
+echo   Clean previous:  %CLEAN%
+echo   Skip installer:  %NOINSTALLER%
+echo   Working folder:  %~dp0
+echo.
+echo   Launching PowerShell build engine (build_windows.ps1)...
+echo ================================================================================
+echo.
 
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0build_windows.ps1" %PS_ARGS%
 exit /b %ERRORLEVEL%
