@@ -63,9 +63,21 @@ def ensure_launch_dir(source: Path) -> Path:
     except OSError:
         logger.warning("Could not copy SP Flash Tool to %s", dest, exc_info=True)
         return source
+    # copytree carries the source's directory modes over, and a read-only
+    # AppImage or system-wide install hands over read-only directories. The
+    # copy has to be made writable or history.ini cannot be written beside it
+    # and the launch refuses ("Could not write history.ini with the extracted
+    # scatter"), which is exactly the case this copy exists for.
+    try:
+        from . import linux_sp_flash
+
+        linux_sp_flash.make_tree_writable(dest)
+    except Exception:
+        logger.debug("Could not make the SP Flash Tool copy writable", exc_info=True)
     if _dir_is_writable(dest):
         logger.info("Using writable SP Flash Tool copy at %s", dest)
         return dest
+    logger.warning("The SP Flash Tool copy at %s is not writable", dest)
     return source
 
 

@@ -151,6 +151,33 @@ def test_select_page_scroll_views_keep_native_styles_and_card_surfaces(no_glass)
         page.close()
 
 
+def test_transparent_scroll_area_keeps_its_scrollbars_painted(no_glass):
+    """A bar must not inherit the alpha-0 roles the viewport needs.
+
+    The bar paints its track and groove from its own palette. Breeze draws that
+    track from ``Window``/``Base``, so a bar inheriting the scroll area's
+    transparent roles paints nothing at all: the strip became a hole in the
+    window and the Plasma window behind the app showed through next to the
+    settings list as a gradient band.
+    """
+    from PySide6.QtWidgets import QScrollArea
+
+    from src.ui.scrollbars import configure_scroll_area
+
+    area = QScrollArea()
+    area.setWidget(QWidget())
+    configure_scroll_area(area, transparent=True)
+    try:
+        # The viewport still erases to the card behind it...
+        assert area.viewport().palette().color(QPalette.ColorRole.Window).alpha() == 0
+        # ...while both bars keep colours they can actually draw with.
+        for bar in (area.verticalScrollBar(), area.horizontalScrollBar()):
+            for role in (QPalette.ColorRole.Window, QPalette.ColorRole.Base):
+                assert bar.palette().color(role).alpha() == 255, role
+    finally:
+        area.deleteLater()
+
+
 def test_donation_bar_hosts_can_erase_without_glass(no_glass):
 
     from src.donation_dialog import DonationStatusBar

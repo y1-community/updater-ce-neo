@@ -707,6 +707,10 @@ class MainWindow(QMainWindow):
         self._gui_launch_when_ready = False
         self._gui_after_prepare = ""
         self._gui_ready = None
+        # True from the moment the desktop tool is asked to open until its
+        # process is up (or the poll gives up). A second request in that window
+        # would start a second SP Flash Tool fighting for the same device.
+        self._gui_launch_in_flight = False
         self._linux_setup_flow_active = False
         self._diagnostics_session = False
         # A stalled connection makes the backend repeat the same errno line
@@ -1613,9 +1617,11 @@ class MainWindow(QMainWindow):
             if page is not None and hasattr(page, "refresh_theme") and callable(page.refresh_theme):
                 page.refresh_theme()
 
-        # The caption controls are painted from the live palette, so a theme
-        # switch has to repaint them: their hover wash and glyph colour follow
-        # a light or dark surface and would otherwise keep the old theme's.
+        # The caption controls are painted from the live palette, and on Linux
+        # the symbols themselves come from the desktop's icon theme, so a theme
+        # switch has to re-read and repaint them: their hover wash and glyph
+        # colour follow a light or dark surface and would otherwise keep the
+        # old theme's.
         controls = getattr(self, "_window_controls", None)
         if controls is not None and hasattr(controls, "refresh_theme"):
             controls.refresh_theme()
@@ -1818,6 +1824,8 @@ class MainWindow(QMainWindow):
     def _connect_signals(self):
         self.sweep_report.connect(self._on_sweep_report)
         self._select_page.package_selected.connect(self._on_package_selected)
+        if hasattr(self._settings_page, "content_size_changed"):
+            self._settings_page.content_size_changed.connect(self._on_settings_content_changed)
         self._select_page.gui_release_clicked.connect(self._on_gui_release_clicked)
         if hasattr(self._select_page, "gui_firmware_changed"):
             self._select_page.gui_firmware_changed.connect(self._sync_sp_gui_button_visibility)
@@ -2733,6 +2741,20 @@ class MainWindow(QMainWindow):
             need_w = int(page.minimumSizeHint().width()) + chrome_w
         except Exception:
             need_w = MINIMUM_WINDOW_WIDTH
+        # A page whose column cannot be squeezed (the Settings cards, measured
+        # inside their scroll area) says how much room it really needs. The
+        # page's own minimum is the scroll area's, which is tiny, so without
+        # this the cards were cut off at the right edge in a narrow window.
+        floor_w = MINIMUM_WINDOW_WIDTH
+        width_hint = getattr(page, "content_width_hint", None)
+        if callable(width_hint):
+            try:
+                hinted = int(width_hint()) + chrome_w
+            except Exception:
+                hinted = 0
+            if hinted > 0:
+                need_w = max(need_w, hinted)
+                floor_w = hinted
         target_h = max(MINIMUM_WINDOW_HEIGHT, target_h)
         # The width the user chose is kept: only a page that cannot be drawn in
         # it (long translated words, a wide form) makes the window wider.
@@ -2742,14 +2764,20 @@ class MainWindow(QMainWindow):
             available = screen.availableGeometry()
             target_w = min(target_w, int(available.width()), MAXIMUM_WINDOW_WIDTH)
             target_h = min(target_h, int(available.height()))
+            floor_w = min(floor_w, int(available.width()), MAXIMUM_WINDOW_WIDTH)
         if stack.currentIndex() == _PAGE_SETTINGS:
             max_settings_h = min(int(available.height()) - 60, 560) if screen is not None else 560
             target_h = min(target_h, max(DEFAULT_WINDOW_HEIGHT, max_settings_h))
         self._apply_window_size_limits(target_h)
+        floor_w = max(MINIMUM_WINDOW_WIDTH, min(floor_w, target_w))
         if target_w != self.width() or target_h != self.height():
             self._animate_window_size(
-                target_w, target_h, minimum=(MINIMUM_WINDOW_WIDTH, MINIMUM_WINDOW_HEIGHT)
+                target_w, target_h, minimum=(floor_w, MINIMUM_WINDOW_HEIGHT)
             )
+        elif floor_w > self.minimumWidth():
+            # Nothing to resize, but the page still must not be dragged
+            # narrower than its cards.
+            self.setMinimumWidth(floor_w)
 
     def _adjust_window_geometry(self):
         """Adjust window size to fit the content of the active page without wasted space."""
@@ -2867,6 +2895,48 @@ class MainWindow(QMainWindow):
             # Whatever page is on screen now owns the window size: leaving the
             # install card grows it back, a short page gives the room up.
             self._fit_window_to_page()
+
+    def _on_settings_content_changed(self):
+        """A Settings card changed size: keep the window wide enough for it.
+
+        The freed-space line under Clear Firmware Cache appears after the page
+        is already on screen, and it widens that card. The window takes the new
+        width instead of the scroll area clipping it.
+        """
+        stack = getattr(self, "_stack", None)
+        if stack is None or stack.currentIndex() != _PAGE_SETTINGS:
+            return
+        if self.isMinimized() or self.isMaximized() or self.isFullScreen():
+            return
+        if getattr(self, "_settings_fit_queued", False):
+            return
+        self._settings_fit_queued = True
+        # One event-loop turn later: a label that has just been given a longer
+        # text only reports its new minimum after the relayout pass, so
+        # measuring now still reads the previous width.
+        QTimer.singleShot(0, self._fit_settings_page_width)
+
+    def _fit_settings_page_width(self):
+        """Deferred half of _on_settings_content_changed: measure, then grow."""
+        self._settings_fit_queued = False
+        stack = getattr(self, "_stack", None)
+        page = getattr(self, "_settings_page", None)
+        if stack is None or page is None or stack.currentIndex() != _PAGE_SETTINGS:
+            return
+        if self.isMinimized() or self.isMaximized() or self.isFullScreen():
+            return
+        scroll = getattr(page, "_settings_scroll", None)
+        for _ in range(3):
+            QApplication.sendPostedEvents()
+            layout = page.layout()
+            if layout is not None:
+                layout.activate()
+            if scroll is not None:
+                inner = scroll.widget()
+                if inner is not None:
+                    inner.updateGeometry()
+                scroll.viewport().updateGeometry()
+        self._fit_window_to_page()
 
     def _on_select_content_changed(self):
         """Resize the window for the software list contents.
@@ -3466,6 +3536,11 @@ class MainWindow(QMainWindow):
         from .. import sp_flash_gui
         from ..flash_service import completed_extract_dir, compute_extract_dir, _find_scatter
 
+        if getattr(self, "_gui_launch_in_flight", False):
+            # The tool is already opening (the privilege prompt on Linux can
+            # stay up for minutes). Selecting another package now must not start
+            # a second copy against the same device.
+            return
         page = getattr(self, "_select_page", None)
         target = page.gui_firmware_target() if page is not None else None
         if target is None:
@@ -4941,12 +5016,15 @@ class MainWindow(QMainWindow):
                 ))
 
         previous = getattr(self, "_icon_loader", None)
-        try:
-            still_running = previous is not None and previous.isRunning()
-        except RuntimeError:
-            still_running = False
-        if still_running:
+        if self._worker_running(previous):
             previous.requestInterruption()
+            # The loader cannot stop until its network fetch returns, and
+            # replacing the reference below used to drop the last one while the
+            # thread was still running. Qt aborts the process for that
+            # ("QThread: Destroyed while thread is still running"), which is
+            # what a click that repaints the icon twice in a row — the SP Flash
+            # Tool launcher, an install start — crashed on.
+            self._retire_worker(previous)
         loader = _Loader(release, package, dark)
         loader.loaded.connect(lambda pix, done=complete: self._flash_page.set_release_icon(pix, complete=done or getattr(self, "_install_complete", False)))
         loader.finished.connect(loader.deleteLater)
@@ -5191,6 +5269,13 @@ class MainWindow(QMainWindow):
         page = getattr(self, "_select_page", None)
         target = page.gui_firmware_target() if page is not None and hasattr(page, "gui_firmware_target") else None
         available = bool(handoff or target)
+        if getattr(self, "_gui_launch_in_flight", False):
+            # One request is already in flight: nothing to offer until the tool
+            # is running, and re-offering it here would launch it twice.
+            btn.setVisible(False)
+            btn.setEnabled(False)
+            self._sync_settings_sp_gui_visibility(available=False)
+            return False
         if target and not handoff:
             page._gui_previous_identity = page._release_identity(target)
             self._gui_current_identity = page._gui_previous_identity
@@ -5298,6 +5383,11 @@ class MainWindow(QMainWindow):
                 tr("sp_gui_title"),
                 tr("sp_gui_not_supported"),
             )
+            return
+        if getattr(self, "_gui_launch_in_flight", False):
+            # The tool is already being opened (on Linux it waits behind the
+            # privilege prompt). Opening it again would run a second copy that
+            # competes for the same USB port and the same history.ini.
             return
         if not self._sync_sp_gui_button_visibility():
             return
@@ -5491,6 +5581,9 @@ class MainWindow(QMainWindow):
         self._gui_handoff_prepare = False
         self._gui_launch_when_ready = False
         self._gui_after_prepare = ""
+        # Consumed: the tool is opened from this tuple once, and a second
+        # request must go through the hand-off again rather than reuse it.
+        self._gui_ready = None
         self._download_active = False
         self._power_off_prompt = False
         self._compact_install_screen = False
@@ -5610,6 +5703,7 @@ class MainWindow(QMainWindow):
             )
             self._nav_to_page(_PAGE_SELECT)
             return
+        self._gui_launch_in_flight = True
         self._append_log(msg or tr("sp_gui_launched_status"))
         if paths.IS_LINUX:
             # The launch goes through pkexec/sudo, whose password prompt belongs
@@ -5654,6 +5748,9 @@ class MainWindow(QMainWindow):
             if time.monotonic() - start >= timeout_seconds:
                 timer.stop()
                 logger.warning("SP Flash Tool never started; keeping the updater open")
+                # The request went nowhere (refused or dismissed prompt): the
+                # launch is offered again instead of staying hidden forever.
+                self._gui_launch_in_flight = False
                 self._sync_sp_gui_button_visibility()
 
         timer.timeout.connect(_check)
@@ -6242,6 +6339,17 @@ class MainWindow(QMainWindow):
         if hasattr(self, "_settings_page"):
             self._settings_page.refresh_settings()
 
+    def _worker_running(self, worker) -> bool:
+        """True while ``worker``'s thread runs; a deleted worker is not running."""
+        if worker is None:
+            return False
+        try:
+            return bool(worker.isRunning())
+        except RuntimeError:
+            # The C++ object is gone (finished, then deleteLater): nothing to
+            # keep alive, and asking again would raise.
+            return False
+
     def _retire_worker(self, worker):
         """Keep a worker alive until its thread has stopped.
 
@@ -6270,6 +6378,13 @@ class MainWindow(QMainWindow):
             mon = getattr(select_page, "_monitor", None)
             if mon is not None:
                 mon.stop_monitoring()
+        icon_loader = getattr(self, "_icon_loader", None)
+        if self._worker_running(icon_loader):
+            # The icon fetch has its own network timeout, so it is retired
+            # rather than waited for: dropping the reference here destroyed a
+            # running QThread, which aborts the process on the way out.
+            icon_loader.requestInterruption()
+            self._retire_worker(icon_loader)
         for w in (
             getattr(self, "_manifest_worker", None),
             getattr(self, "_update_worker", None),

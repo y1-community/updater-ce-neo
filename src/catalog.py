@@ -477,6 +477,21 @@ def parse_version_designations(version_name: str) -> dict:
     }
 
 
+def is_base_release_tag(tag_name) -> bool:
+    """True for base ROM tags, such as ``type-a-base``.
+
+    A base tag is the firmware tree the next builds are produced from, not a
+    build anyone installs or updates to, so it is kept out of every release
+    list: the catalogue rows, the latest-release lookup, cache files written
+    before this rule existed, and the app-update checks.
+
+    Only the whole word counts: ``database-3.1`` and ``baseband-2.0`` are not
+    base ROMs.
+    """
+    words = [word for word in re.split(r"[^a-z0-9]+", str(tag_name or "").lower()) if word]
+    return "base" in words
+
+
 def release_version_tuple(tag_name):
     """Dotted version a tag carries (``stable-v0.5`` → ``(0, 5)``), or ``None``
     when the tag has no dotted version to read (nightlies, branch names)."""
@@ -1048,7 +1063,11 @@ class ReleasesClient:
                 if isinstance(data, list):
                     return [
                         r for r in data
-                        if isinstance(r, dict) and release_version_ok(repo, r.get("tag_name", ""))
+                        if isinstance(r, dict)
+                        and release_version_ok(repo, r.get("tag_name", ""))
+                        # A cache written before base tags were filtered out
+                        # still holds them; they must never reach a list.
+                        and not is_base_release_tag(r.get("tag_name", ""))
                     ]
         except Exception as e:
             logger.debug("Cache read failed for %s: %s", repo, e)
@@ -1283,7 +1302,9 @@ class ReleasesClient:
         try:
             if path.exists() and (time.time() - path.stat().st_mtime) < UPDATE_CACHE_TTL_SECONDS:
                 data = json.loads(path.read_text(encoding="utf-8"))
-                if isinstance(data, dict):
+                # A cached "latest" written before base tags were filtered
+                # must not be handed to the update check either.
+                if isinstance(data, dict) and not is_base_release_tag(data.get("tag_name", "")):
                     return data
         except Exception as e:
             logger.debug("Update cache read failed for %s: %s", repo, e)
@@ -1302,6 +1323,8 @@ class ReleasesClient:
         releases = []
         if isinstance(data, list) and data:
             for r in data:
+                if is_base_release_tag(r.get("tag_name", "")):
+                    continue
                 releases.append({
                     "tag_name": r.get("tag_name", ""),
                     "name": r.get("name", ""),
@@ -1323,6 +1346,8 @@ class ReleasesClient:
         atom_raw = self._fetch_releases_atom(repo)
         if atom_raw:
             for item in atom_raw:
+                if is_base_release_tag(item.get("tag_name", "")):
+                    continue
                 releases.append({
                     "tag_name": item.get("tag_name", ""),
                     "name": item.get("name", ""),
@@ -1358,6 +1383,8 @@ class ReleasesClient:
     # -- normalization ------------------------------------------------------
     def _normalize_release(self, release, repo):
         tag_name = release.get("tag_name", "")
+        if is_base_release_tag(tag_name):
+            return None
         if not release_version_ok(repo, tag_name, show_nightly=True):
             return None
         assets = release.get("assets", [])
@@ -1384,6 +1411,8 @@ class ReleasesClient:
         releases = []
         for release in releases_data or []:
             tag_name = release.get("tag_name", "")
+            if is_base_release_tag(tag_name):
+                continue
             if not release_version_ok(repo, tag_name, show_nightly=True):
                 continue
             is_prerelease = bool(release.get("prerelease"))
@@ -1434,6 +1463,9 @@ class ReleasesClient:
         out = []
         for rel in releases:
             tag_name = rel.get("tag_name", "")
+            if is_base_release_tag(tag_name):
+                # Base ROMs are build inputs, never installable firmware.
+                continue
             if not release_version_ok(
                 package.repo,
                 tag_name,

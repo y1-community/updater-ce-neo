@@ -8,17 +8,23 @@ custom title bar — the header was reserving room for buttons that never appear
 The header therefore draws the three controls itself, with the 46x32 metrics
 Windows 11 uses, so the caption still looks and behaves like the desktop's.
 
-macOS keeps its native traffic lights (Cocoa draws them over the content view);
-on Windows and modern Linux desktops (KDE Plasma, GNOME, etc.), the header
-draws these integrated controls itself so the caption still looks and behaves
-like the desktop's.
+macOS keeps its native traffic lights (Cocoa draws them over the content view).
+On Linux the header keeps the app's own title and icon, but the *symbols* are
+the desktop's: the freedesktop icon names every decoration theme ships
+(``window-minimize``, ``window-maximize``, ``window-restore``, ``window-close``,
+including the ``-symbolic`` variants) are read from the session's icon theme
+and painted in its place, so the controls match KDE, GNOME, XFCE or whatever
+theme is active — not a Windows imitation of them. The hand-painted glyphs are
+only the last resort, for a session with no theme icons and no style glyphs.
 """
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QPainter, QPalette, QPen
-from PySide6.QtWidgets import QHBoxLayout, QPushButton, QWidget
+import sys
+
+from PySide6.QtCore import QSize, Qt
+from PySide6.QtGui import QColor, QIcon, QPainter, QPalette, QPen, QPixmap
+from PySide6.QtWidgets import QApplication, QHBoxLayout, QPushButton, QStyle, QWidget
 
 # Windows 11 caption metrics: three 46x32 buttons, flush with the window edge.
 CONTROL_WIDTH = 46
@@ -27,9 +33,121 @@ GLYPH_SIZE = 10
 # The close button's hot state is the system red, with a white glyph.
 CLOSE_HOT = QColor("#c42b1c")
 
+# Size the host's own caption symbol is drawn at. Decoration themes draw a
+# 16px icon in a wider button on every desktop that ships one.
+HOST_SYMBOL_SIZE = 16
+
 ROLE_MINIMIZE = "minimize"
 ROLE_MAXIMIZE = "maximize"
 ROLE_CLOSE = "close"
+
+# Freedesktop Icon Naming Specification entries for a window's decoration
+# buttons. KDE, GNOME, XFCE, Cinnamon and the icon themes they install all
+# provide them, under the plain name for a colour theme and ``-symbolic`` for
+# a monochrome one that follows the interface's own foreground colour.
+CAPTION_ICON_NAMES = {
+    ROLE_MINIMIZE: ("window-minimize", "window-minimize-symbolic"),
+    ROLE_MAXIMIZE: ("window-maximize", "window-maximize-symbolic"),
+    ROLE_CLOSE: ("window-close", "window-close-symbolic"),
+}
+RESTORE_ICON_NAMES = ("window-restore", "window-restore-symbolic")
+
+# Searched when the session names no icon theme of its own (a bare Qt platform
+# theme, a minimal session), so the desktop's symbols are still found. The
+# session's own theme is always tried first.
+FALLBACK_ICON_THEMES = (
+    "breeze-dark",
+    "breeze",
+    "Adwaita",
+    "Adwaita-dark",
+    "Yaru",
+    "Yaru-dark",
+    "Papirus",
+    "Papirus-Dark",
+    "elementary",
+    "hicolor",
+)
+
+
+def host_caption_symbols_apply() -> bool:
+    """True where the header borrows the desktop's own decoration symbols."""
+    return sys.platform.startswith("linux")
+
+
+def host_caption_icon(role: str, *, maximized: bool = False) -> tuple[QIcon, bool]:
+    """The symbol the host's own title bar shows for ``role``.
+
+    Returns ``(icon, symbolic)``; an empty icon when the desktop offers none.
+    A symbolic icon is one flat colour that the caller tints with the live
+    palette, exactly as the toolkit would.
+    """
+    names = RESTORE_ICON_NAMES if (role == ROLE_MAXIMIZE and maximized) else CAPTION_ICON_NAMES.get(role, ())
+    if not names:
+        return QIcon(), False
+
+    previous = QIcon.themeName()
+    themes = [previous] if previous else []
+    themes.extend(theme for theme in FALLBACK_ICON_THEMES if theme not in themes)
+    try:
+        for theme in themes:
+            QIcon.setThemeName(theme)
+            for name in names:
+                icon = QIcon.fromTheme(name)
+                if not icon.isNull():
+                    return icon, name.endswith("-symbolic")
+    finally:
+        # The icon theme name is process-wide state.
+        QIcon.setThemeName(previous)
+
+    # Nothing in the icon themes: the active Qt style still draws the host
+    # toolkit's caption glyphs, which beats an imitation of them.
+    standard = {
+        ROLE_MINIMIZE: QStyle.StandardPixmap.SP_TitleBarMinButton,
+        ROLE_MAXIMIZE: (
+            QStyle.StandardPixmap.SP_TitleBarNormalButton
+            if maximized
+            else QStyle.StandardPixmap.SP_TitleBarMaxButton
+        ),
+        ROLE_CLOSE: QStyle.StandardPixmap.SP_TitleBarCloseButton,
+    }.get(role)
+    app = QApplication.instance()
+    if standard is not None and app is not None:
+        try:
+            icon = app.style().standardIcon(standard)
+        except Exception:
+            icon = QIcon()
+        if not icon.isNull():
+            return icon, False
+    return QIcon(), False
+
+
+def tinted_pixmap(pixmap: QPixmap, colour: QColor) -> QPixmap:
+    """Recolour a symbolic icon to one flat colour, as the toolkit does."""
+    tinted = QPixmap(pixmap.size())
+    tinted.setDevicePixelRatio(pixmap.devicePixelRatio())
+    tinted.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(tinted)
+    try:
+        painter.drawPixmap(0, 0, pixmap)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+        painter.fillRect(tinted.rect(), colour)
+    finally:
+        painter.end()
+    return tinted
+
+
+def caption_hot_fill(role: str, *, dark: bool, pressed: bool, host_symbols: bool) -> QColor:
+    """The wash under a caption button on hover or press.
+
+    The Windows red belongs to the Windows glyphs: a desktop's own symbols are
+    highlighted the way its title bar highlights them, with the same neutral
+    wash the other buttons use.
+    """
+    if role == ROLE_CLOSE and not host_symbols:
+        fill = QColor(CLOSE_HOT)
+        return fill.darker(112) if pressed else fill
+    alpha = 34 if pressed else (26 if dark else 20)
+    return QColor(255, 255, 255, alpha) if dark else QColor(0, 0, 0, alpha)
 
 
 def _dark_surface(widget) -> bool:
@@ -62,6 +180,11 @@ class CaptionControlButton(QPushButton):
         super().__init__(parent)
         self.role = role
         self._maximized = False
+        # The desktop's own symbol for this role, resolved from the icon theme
+        # (and again after a theme switch). Empty when the session has none.
+        self._host_icon = QIcon()
+        self._host_icon_symbolic = False
+        self._host_icon_resolved = False
         self.setObjectName(f"captionControl{role.capitalize()}")
         self.setProperty("cssClass", f"caption{role.capitalize()}")
         self.setFixedSize(CONTROL_WIDTH, CONTROL_HEIGHT)
@@ -83,33 +206,81 @@ class CaptionControlButton(QPushButton):
         if maximized == self._maximized:
             return
         self._maximized = maximized
+        # Maximise and restore are different symbols in the desktop's theme.
+        self._host_icon_resolved = False
         self.update()
 
     def refresh_theme(self) -> None:
-        """Live theme switch: the wash and the glyph are palette colours."""
+        """Live theme switch: re-read the desktop's symbols and repaint.
+
+        The palette carries the wash and the tint; the icon theme can have
+        changed on its own (a user switching their decoration theme), so the
+        symbol is resolved again.
+        """
+        self._host_icon_resolved = False
         self.update()
+
+    def _ensure_host_icon(self) -> None:
+        if self._host_icon_resolved:
+            return
+        self._host_icon_resolved = True
+        if not host_caption_symbols_apply():
+            self._host_icon, self._host_icon_symbolic = QIcon(), False
+            return
+        self._host_icon, self._host_icon_symbolic = host_caption_icon(
+            self.role, maximized=self._maximized
+        )
+
+    def _paint_host_symbol(self, painter: QPainter, colour: QColor) -> bool:
+        """Paint the desktop's own symbol if there is one; False when there is not."""
+        self._ensure_host_icon()
+        icon = self._host_icon
+        if icon is None or icon.isNull():
+            return False
+        size = HOST_SYMBOL_SIZE
+        mode = QIcon.Mode.Normal if self.isEnabled() else QIcon.Mode.Disabled
+        dpr = float(self.devicePixelRatioF() or 1.0)
+        try:
+            pixmap = icon.pixmap(QSize(size, size), dpr, mode, QIcon.State.Off)
+        except Exception:
+            return False
+        if pixmap.isNull():
+            return False
+        if self._host_icon_symbolic:
+            # A symbolic icon is one colour: give it the live foreground, which
+            # is what a themed title bar does with it.
+            pixmap = tinted_pixmap(pixmap, colour)
+        pixmap.setDevicePixelRatio(dpr)
+        painter.drawPixmap(
+            (self.width() - size) // 2,
+            (self.height() - size) // 2,
+            pixmap,
+        )
+        return True
 
     # -- painting ----------------------------------------------------------
     def paintEvent(self, event):  # noqa: N802 (Qt naming)
         painter = QPainter(self)
         try:
+            host_symbols = host_caption_symbols_apply()
             hot = self.isEnabled() and (self.underMouse() or self.isDown())
             if hot:
-                if self.role == ROLE_CLOSE:
-                    fill = QColor(CLOSE_HOT)
-                    if self.isDown():
-                        fill = fill.darker(112)
-                else:
-                    dark = _dark_surface(self)
-                    alpha = 34 if self.isDown() else (26 if dark else 20)
-                    fill = QColor(255, 255, 255, alpha) if dark else QColor(0, 0, 0, alpha)
-                painter.fillRect(self.rect(), fill)
+                painter.fillRect(
+                    self.rect(),
+                    caption_hot_fill(
+                        self.role,
+                        dark=_dark_surface(self),
+                        pressed=self.isDown(),
+                        host_symbols=host_symbols,
+                    ),
+                )
             colour = QColor(self.palette().color(QPalette.ColorRole.WindowText))
-            if self.role == ROLE_CLOSE and hot:
+            if self.role == ROLE_CLOSE and hot and not host_symbols:
                 colour = QColor("#ffffff")
             if not self.isEnabled():
                 colour.setAlpha(110)
-            self._paint_glyph(painter, colour)
+            if not (host_symbols and self._paint_host_symbol(painter, colour)):
+                self._paint_glyph(painter, colour)
         finally:
             painter.end()
 
@@ -206,7 +377,7 @@ class WindowControls(QWidget):
 
     def refresh_theme(self) -> None:
         for button in (self.min_button, self.max_button, self.close_button):
-            button.update()
+            button.refresh_theme()
 
     # -- actions -----------------------------------------------------------
     def _window(self):

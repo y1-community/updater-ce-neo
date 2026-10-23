@@ -20,7 +20,11 @@ def _get_qapp():
 
 
 def test_rockbox_y2_prereleases_bypassed():
-    """Verify that Rockbox Y2 prereleases are NOT filtered out when show_nightly is False."""
+    """Rockbox Y2 prereleases stay listed, while the base ROM does not.
+
+    ``v0.1.0-base`` is the tree the builds are produced from, not a build to
+    install, so it is hidden even though it is a normal (non-prerelease) tag.
+    """
     pkg = catalog.FirmwarePackage("rockbox-y2", "Rockbox", "Y2", "spycemagic/y2-rockbox", "rom_y2.zip", "")
     assert config.resolve_firmware_repo("y1-community/rockbox-y2-rom") == "spycemagic/y2-rockbox"
 
@@ -33,10 +37,11 @@ def test_rockbox_y2_prereleases_bypassed():
     client.get_all_releases = lambda repo, **kwargs: mock_releases
 
     out = client.releases_for_package(pkg, "Y2", show_nightly=False)
-    assert len(out) == 3, f"Expected 3 releases including prereleases, got {len(out)}"
+    assert len(out) == 2, f"Expected the two prereleases only, got {len(out)}"
     tags = [r["tag_name"] for r in out]
     assert "v0.2.5-beta" in tags
     assert "v0.2.0-beta" in tags
+    assert "v0.1.0-base" not in tags
 
 
 def test_offline_package_icon_detection():

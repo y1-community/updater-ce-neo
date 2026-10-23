@@ -14,6 +14,7 @@ import os
 import platform
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import threading
@@ -159,6 +160,51 @@ def _dir_is_writable(directory: Path) -> bool:
         return False
 
 
+def make_tree_writable(root) -> bool:
+    """Give this account write access to a copied tool tree.
+
+    ``shutil.copytree`` copies directory modes as well as files, and the tree
+    it is copied from is read-only whenever it is a mounted AppImage
+    (squashfs), a system-wide install, or a directory someone chmod'ed. The
+    copy then inherits that mode, ``history.ini`` cannot be written beside the
+    binary, and every launch ends in "Could not write history.ini with the
+    extracted scatter". Fixing the copy is what makes the per-user staging
+    directory usable.
+
+    Returns False when some entry could not be made writable.
+    """
+    ok = True
+    try:
+        root = Path(root)
+    except TypeError:
+        return False
+    pending = [root]
+    while pending:
+        current = pending.pop()
+        try:
+            # Directories also need the search bit to be re-entered for writes.
+            current.chmod(stat.S_IMODE(current.stat().st_mode) | stat.S_IWUSR | stat.S_IXUSR)
+        except OSError:
+            ok = False
+        try:
+            entries = list(os.scandir(current))
+        except OSError:
+            ok = False
+            continue
+        for entry in entries:
+            try:
+                if entry.is_dir(follow_symlinks=False):
+                    pending.append(Path(entry.path))
+                elif entry.is_file(follow_symlinks=False):
+                    mode = entry.stat().st_mode
+                    wanted = stat.S_IMODE(mode) | stat.S_IWUSR
+                    if stat.S_IMODE(mode) != wanted:
+                        os.chmod(entry.path, wanted)
+            except OSError:
+                ok = False
+    return ok
+
+
 def stage_dir() -> Path:
     """Active SP Flash Tool directory on Linux.
 
@@ -180,6 +226,11 @@ def stage_dir() -> Path:
             except OSError:
                 logger.warning("Could not copy bundled SP Flash Tool into %s", staged, exc_info=True)
                 return bundled
+        # The bundled payload is read-only inside an AppImage, and copytree
+        # brought that mode along: without this the staged copy cannot hold
+        # history.ini either.
+        if not make_tree_writable(staged):
+            logger.warning("Staged SP Flash Tool at %s is not writable", staged)
         return staged
     return _user_stage_dir()
 

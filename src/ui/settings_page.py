@@ -62,6 +62,10 @@ class SettingsPage(QWidget):
     flash_method_changed = Signal(str)
     offline_mode_changed = Signal(bool)
     release_filters_changed = Signal()
+    # A card grew or shrank; the window sizes itself to the column, so a line
+    # that appears at runtime (the space a cache clear freed) can widen the
+    # window instead of being cut off at the right edge.
+    content_size_changed = Signal()
     # A card that was shown on its own has finished its journey; the window
     # can give the Settings column back. Linux staging has a separate signal
     # because its first-run entry returns to Select Software on success.
@@ -87,6 +91,32 @@ class SettingsPage(QWidget):
         self._sp_gui_available = False
         self._build_ui()
         self.refresh_settings()
+
+    def content_width_hint(self) -> int:
+        """The narrowest this column can be drawn without clipping a card.
+
+        A widget-resizable ``QScrollArea`` answers the layout with its own
+        (tiny) minimum, so the window could be dragged narrow until the cards
+        ran off the right edge and the scroll area hid the overflow behind a
+        horizontal scroll — the Settings column was cut off in exactly that
+        state. The container's minimum is what the cards actually need.
+        """
+        width = int(self.minimumSizeHint().width())
+        scroll = getattr(self, "_settings_scroll", None)
+        if scroll is not None:
+            inner = scroll.widget()
+            if inner is not None:
+                width = max(width, int(inner.minimumSizeHint().width()) + 2 * scroll.frameWidth())
+            bar = scroll.verticalScrollBar()
+            if bar is not None:
+                # The bar sits inside the scroll area, so it takes from the
+                # viewport the cards are laid out in.
+                width += bar.sizeHint().width()
+        layout = self.layout()
+        if layout is not None:
+            margins = layout.contentsMargins()
+            width += margins.left() + margins.right()
+        return width
 
     def _add_switch(self, layout, text: str) -> QCheckBox:
         """Label on the left, switch on the right, as on macOS and Windows."""
@@ -1223,6 +1253,7 @@ class SettingsPage(QWidget):
         # SP Flash Tool authentication file
         self._refresh_sp_auth_value()
         self._update_sp_auth_visibility()
+        self.content_size_changed.emit()
 
     def apply_brand_mode(self, mediatek_installer: bool):
         """Show or hide the pieces that only make sense for one brand."""
@@ -1486,6 +1517,7 @@ class SettingsPage(QWidget):
             freed_str = f"{freed} B"
         msg = tr("settings_cache_cleared_msg").format(count=count, size=freed_str)
         self._cache_status_lbl.setText(msg)
+        self.content_size_changed.emit()
 
     def _on_run_checker(self):
         """Prepare SP Flash Tool from this card, not from a window of its own.

@@ -61,6 +61,56 @@ def _paint_theme_surface(widget: QWidget) -> None:
     widget.setPalette(palette)
 
 
+def _keep_scrollbars_opaque(area: QAbstractScrollArea) -> None:
+    """Give the bars the theme's solid roles after the viewport went transparent.
+
+    A scrollbar is a child of the scroll area, so it inherits the transparent
+    Base/Window the viewport needs. The style then has no colour to paint the
+    groove, track and thumb bevel with, and that strip of the window is left
+    unpainted: on a solid window it showed the desktop behind the app (in the
+    report, the Plasma window under the settings list) as a gradient band.
+    """
+    app = QApplication.instance()
+    if app is None:
+        return
+    # Roles are copied one by one: ``app.palette()`` carries no resolve bits of
+    # its own, and a bare ``setPalette`` copy would leave the bar inheriting the
+    # transparent roles from the scroll area.
+    theme = QPalette(app.palette())
+    roles = (
+        QPalette.ColorRole.Window,
+        QPalette.ColorRole.WindowText,
+        QPalette.ColorRole.Base,
+        QPalette.ColorRole.Text,
+        QPalette.ColorRole.Button,
+        QPalette.ColorRole.ButtonText,
+        QPalette.ColorRole.Light,
+        QPalette.ColorRole.Midlight,
+        QPalette.ColorRole.Mid,
+        QPalette.ColorRole.Dark,
+        QPalette.ColorRole.Shadow,
+        QPalette.ColorRole.Highlight,
+        QPalette.ColorRole.HighlightedText,
+    )
+    for group in (
+        QPalette.ColorGroup.Active,
+        QPalette.ColorGroup.Inactive,
+        QPalette.ColorGroup.Disabled,
+    ):
+        for role in roles:
+            color = theme.color(group, role)
+            if not color.isValid() or color.alpha() == 0:
+                color = _theme_role(role, "#ffffff")
+            color = QColor(color)
+            color.setAlpha(255)
+            theme.setColor(group, role, color)
+    for bar in (area.verticalScrollBar(), area.horizontalScrollBar()):
+        if bar is None:
+            continue
+        bar.setPalette(theme)
+        bar.setAutoFillBackground(False)
+
+
 def make_transparent(area: QAbstractScrollArea) -> None:
     """Leave the scroll area on its native style and erase to the parent card.
 
@@ -106,6 +156,7 @@ def make_transparent(area: QAbstractScrollArea) -> None:
             if viewport is not None:
                 viewport.setAutoFillBackground(False)
             area.setAutoFillBackground(False)
+            _keep_scrollbars_opaque(area)
     except Exception:
         pass
     inner = area.widget() if hasattr(area, "widget") else None
