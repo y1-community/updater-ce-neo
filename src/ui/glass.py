@@ -1264,7 +1264,13 @@ def menu_palette(host, *, frost: bool = False):
     pal = QPalette(host)
     light = host_palette_is_light(host)
     base = QColor(host.color(QPalette.ColorRole.Base))
-    text = QColor(host.color(QPalette.ColorRole.Text))
+    # Rows carry the theme's font colour. ``Text`` is the colour for text
+    # inside Base surfaces, and some desktop schemes leave it at a plain
+    # white/black; the window foreground is the colour every label in the app
+    # (and the closed combo) is painted with, so it wins when it exists.
+    text = QColor(host.color(QPalette.ColorRole.WindowText))
+    if (not text.isValid()) or text.alpha() == 0:
+        text = QColor(host.color(QPalette.ColorRole.Text))
     window = QColor(host.color(QPalette.ColorRole.Window))
     alternate = QColor(host.color(QPalette.ColorRole.AlternateBase))
     highlight = QColor(host.color(QPalette.ColorRole.Highlight))
@@ -1273,8 +1279,6 @@ def menu_palette(host, *, frost: bool = False):
     if light:
         if (not base.isValid()) or base.lightness() < 160 or base.alpha() < 240:
             base = QColor(window) if window.isValid() and window.lightness() >= 160 else QColor("#f8fafc")
-        if text.lightness() > 80:
-            text = QColor("#111827")
         if (not alternate.isValid()) or alternate.lightness() < 140 or alternate.alpha() < 240:
             alternate = QColor(base)
         window = QColor(base)
@@ -1285,8 +1289,6 @@ def menu_palette(host, *, frost: bool = False):
     else:
         if (not base.isValid()) or base.lightness() > 80:
             base = QColor("#181b20")
-        if text.lightness() < 160:
-            text = QColor("#f8fafc")
         if (not alternate.isValid()) or alternate.lightness() > 100:
             alternate = QColor(base)
         window = QColor(base)
@@ -1297,6 +1299,11 @@ def menu_palette(host, *, frost: bool = False):
         alternate.setAlpha(alpha)
 
     field = QColor(base.red(), base.green(), base.blue())
+    text.setAlpha(255)
+    # Keep the theme's own colour whenever it clears the field; only a scheme
+    # that would paint the menu on its own foreground falls back.
+    if (not text.isValid()) or contrast_ratio(text, field) < 4.5:
+        text = _readable_on(field)
     if (not highlight.isValid()) or highlight.alpha() == 0 or contrast_ratio(highlight, field) < 1.5:
         highlight = QColor("#1e293b") if light else QColor("#334155")
     highlight.setAlpha(255)

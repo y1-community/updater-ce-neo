@@ -379,7 +379,6 @@ def free_com_ports(log_cb=None) -> list[str]:
         return released
 
     import glob
-    import shutil
 
     tty_ports = glob.glob("/dev/ttyACM*") + glob.glob("/dev/ttyUSB*")
     safe = _own_ancestry()
@@ -404,18 +403,12 @@ def free_com_ports(log_cb=None) -> list[str]:
         except Exception:
             pass
 
-        if shutil.which("fuser"):
-            try:
-                res = subprocess.run(
-                    ["fuser", "-k", "-9", port],
-                    capture_output=True,
-                    timeout=2,
-                )
-                if res.returncode == 0:
-                    released.append(f"{port} (fuser)")
-            except Exception:
-                pass
-
+        # Only the holders found above are stopped, and the list above never
+        # contains this process or a parent of it. ``fuser -k -9`` was used
+        # here too, which kills every process with the port open — the app
+        # included while it still has the previous run's handle, and the user's
+        # own serial programs. A hand-over that SIGKILLs the updater looks
+        # exactly like the app crashing, with nothing in its log.
         for pid in pids_holding:
             try:
                 os.kill(pid, signal.SIGKILL)

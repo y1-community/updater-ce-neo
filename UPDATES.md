@@ -1,6 +1,6 @@
 # Update Delivery Plan — Windows / macOS / Linux
 
-How the Neo app checks for, downloads, and installs its own updates, and how we
+How Updater CE checks for, downloads, and installs its own updates, and how we
 will deliver updates on the three desktop platforms. The in-app **checker** is
 implemented today; the **delivery mechanics** below are the roadmap.
 

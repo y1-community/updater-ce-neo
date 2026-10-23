@@ -82,9 +82,8 @@ class SupportPage(QWidget):
             "font-size: 12px; line-height: 1.4; color: palette(window-text); background: transparent; border: none;"
         )
         self._appeal_body.setText(
-            "<b>Donations directly help me support my family and fund the test devices</b> "
-            "that make this free service possible for everyone. If this tool saved you time or rescued your player today, "
-            "please consider a small donation — it truly means the world to us."
+            f"<b>{tr('donate_support_appeal_lead')}</b> "
+            f"{tr('donate_support_appeal_followup')}"
         )
         card_layout.addWidget(self._appeal_body)
 
@@ -212,6 +211,10 @@ class SupportPage(QWidget):
         QTimer.singleShot(1500, lambda: (button.setText(orig_text), button.setEnabled(True)))
 
     def retranslate(self) -> None:
+        self._appeal_body.setText(
+            f"<b>{tr('donate_support_appeal_lead')}</b> "
+            f"{tr('donate_support_appeal_followup')}"
+        )
         self._honeygain_link.setText(tr("donate_honeygain"))
         self._crypto_toggle_link.setText(
             tr("donate_crypto_hide") if self._crypto_drawer.isVisible() else tr("donate_crypto_toggle")

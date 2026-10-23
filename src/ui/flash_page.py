@@ -1,8 +1,7 @@
 """Flash page — modern OS software update in-progress display (macOS / iOS / Windows Fluent style)."""
 
 import logging
-import platform
-import sys
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -990,7 +989,7 @@ class FlashPage(QWidget):
         self._prep_progress = InstallProgress()
         _configure_progress(self._prep_progress)
 
-        self._prep_cancel_btn = _RoundNextButton(symbol="cancel", accent=False)
+        self._prep_cancel_btn = _RoundNextButton(symbol="back", accent=False)
         self._prep_cancel_btn.setObjectName("softwareUpdateCancelBtn")
         self._prep_cancel_btn.setToolTip(tr("flash_btn_cancel_wait"))
         self._prep_cancel_btn.clicked.connect(self._on_cancel_wait)
@@ -1027,7 +1026,7 @@ class FlashPage(QWidget):
         self._wait_continue_btn.setAccessibleName(tr("btn_next"))
         self._wait_continue_btn.clicked.connect(self._on_power_off_continue)
 
-        self._wait_cancel_btn = _RoundNextButton(symbol="cancel", accent=False)
+        self._wait_cancel_btn = _RoundNextButton(symbol="back", accent=False)
         self._wait_cancel_btn.setObjectName("softwareUpdateCancelBtn")
         self._wait_cancel_btn.setToolTip(tr("flash_btn_cancel_wait"))
         self._wait_cancel_btn.clicked.connect(self._on_cancel_wait)
@@ -1319,7 +1318,7 @@ class FlashPage(QWidget):
         self._download_progress = InstallProgress()
         _configure_progress(self._download_progress)
 
-        self._download_cancel_btn = _RoundNextButton(symbol="cancel", accent=False)
+        self._download_cancel_btn = _RoundNextButton(symbol="back", accent=False)
         self._download_cancel_btn.setObjectName("softwareUpdateCancelBtn")
         self._download_cancel_btn.setToolTip(tr("flash_btn_cancel"))
         self._download_cancel_btn.clicked.connect(self._on_cancel_download)
@@ -1378,9 +1377,7 @@ class FlashPage(QWidget):
                         break
         copy = getattr(self, "_wait_copy", "")
         from ..branding import is_generic_mtk_brand
-        from .. import paths
         is_mtk = is_generic_mtk_brand()
-        is_linux_host = sys.platform.startswith("linux") or platform.system() == "Linux"
 
         is_power_off = (
             bool(model)
@@ -1415,84 +1412,71 @@ class FlashPage(QWidget):
             label.setVisible(False)
 
         if img_label is not None:
-            from .dark import is_dark
+            from .icons import recolor_bright_pixels, render_svg_asset
+            from .dark import T
             from ..paths import RESOURCES_DIR
 
-            dark_theme = is_dark()
+            # The illustration is drawn in the live text colour: the vector
+            # artwork is white (for a dark card), so on a light desktop it is
+            # repainted to the foreground role before it is shown.
             txt = QColor()
             try:
-                pal = self.palette()
-                bg = pal.color(QPalette.ColorRole.Window)
-                txt = pal.color(QPalette.ColorRole.WindowText)
-                if is_linux_host:
-                    # Distros may set an explicit Qt scheme that disagrees with
-                    # perceived window brightness; keep illustration polarity
-                    # aligned with the foreground role used to tint it.
-                    dark_theme = txt.isValid() and txt.lightness() > 160
-                elif bg.isValid() and bg.lightness() < 128:
-                    dark_theme = True
-                elif txt.isValid() and txt.lightness() > 160:
-                    dark_theme = True
-                elif bg.isValid() and bg.lightness() >= 128:
-                    dark_theme = False
-                elif txt.isValid() and txt.lightness() <= 160:
-                    dark_theme = False
+                txt = self.palette().color(QPalette.ColorRole.WindowText)
             except Exception:
                 pass
+            if not txt.isValid():
+                txt = QColor(T().fg)
+            if not txt.isValid():
+                txt = QApplication.style().standardPalette().color(QPalette.ColorRole.Text)
 
-            theme_suffix = "light_fonts" if dark_theme else "dark_fonts"
-            model_upper = model.upper()
-            if model_upper == "A5":
-                asset_name = f"paperclip_a5_{theme_suffix}.png"
-            elif model_upper == "Y2":
-                asset_name = f"paperclip_y2_{theme_suffix}.png"
+            # A model's own diagram is any ``paperclip_<model>.svg`` on disk;
+            # every other model — and the unknown model — gets the generic
+            # paperclip, which shows the same hidden button without pretending
+            # to know which revision is in the user's hands.
+            assets = Path(__file__).resolve().parent.parent.parent / "assets"
+            stems = []
+            model_upper = (model or "").strip().upper()
+            if model_upper:
+                stems.append(f"paperclip_{model_upper.lower()}")
+            stems.append("paperclip")
+
+            img_path = None
+            for stem in stems:
+                for candidate in (
+                    RESOURCES_DIR / f"{stem}.svg",
+                    assets / f"{stem}.svg",
+                ):
+                    if candidate.is_file():
+                        img_path = candidate
+                        break
+                if img_path is not None:
+                    break
+            if img_path is None:
+                img_path = assets / "paperclip.svg"
+
+            dpr = float(self.devicePixelRatioF() or 1.0)
+            # Keep an untinted copy to reapply the desktop text colour after a
+            # palette switch; the visible pixmap is the tinted one.
+            source = render_svg_asset(img_path, 60, device_pixel_ratio=dpr)
+            if not source.isNull():
+                img_label.setProperty("_hint_source", source)
+                pal = img_label.palette()
+                pal.setBrush(QPalette.ColorRole.Window, QColor(Qt.GlobalColor.transparent))
+                img_label.setPalette(pal)
+                img_label.setPixmap(recolor_bright_pixels(source, txt))
+                img_label.setFixedSize(source.deviceIndependentSize().toSize())
+                img_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+                img_label.setVisible(True)
+                if host is not None:
+                    host.setMinimumHeight(int(source.deviceIndependentSize().height()) + 18)
             else:
-                asset_name = f"paperclip_all_{theme_suffix}.png"
-
-            img_path = RESOURCES_DIR / asset_name
-            if not img_path.exists():
-                img_path = Path(__file__).resolve().parent.parent.parent / "assets" / asset_name
-
-            if img_path.exists():
-                pix = QPixmap(str(img_path))
-                if not pix.isNull():
-                    scaled = pix.scaledToHeight(60, Qt.TransformationMode.SmoothTransformation)
-
-                    # Keep the source to reapply the desktop text colour after
-                    # a palette switch; recoloring stays in the renderer below.
-                    img_label.setProperty("_hint_source", scaled)
-
-                    pal = img_label.palette()
-                    pal.setBrush(QPalette.ColorRole.Window, QColor(Qt.GlobalColor.transparent))
-                    img_label.setPalette(pal)
-                    img_label.setPixmap(scaled)
-                    img_label.setFixedSize(scaled.size())
-                    img_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-                    img_label.setVisible(True)
-                    if host is not None:
-                        host.setMinimumHeight(scaled.height() + 18)
-                else:
-                    img_label.setVisible(False)
-                    img_label.setFixedSize(0, 0)
-                    if host is not None:
-                        host.setMinimumHeight(0)
+                img_label.setVisible(False)
+                img_label.setFixedSize(0, 0)
+                if host is not None:
+                    host.setMinimumHeight(0)
 
         waiting = getattr(self, "_waiting_view", None)
         host.setVisible(waiting is not None and self._stack.currentWidget() is waiting)
-
-        # The palette can change while the same hint is visible. Keep the
-        # source artwork cached and recompute against the live Linux foreground.
-        if is_linux_host and wanted and img_label is not None and not img_label.pixmap().isNull():
-            from .icons import recolor_bright_pixels
-
-            target_colour = txt if txt.isValid() else QColor()
-            if not target_colour.isValid():
-                target_colour = QApplication.style().standardPalette().color(
-                    QPalette.ColorRole.Text
-                )
-            source = img_label.property("_hint_source")
-            if isinstance(source, QPixmap) and not source.isNull():
-                img_label.setPixmap(recolor_bright_pixels(source, target_colour))
 
     def show_downloading(self):
         val = self._package_name or "\u2014"
@@ -3028,18 +3012,20 @@ class FlashPage(QWidget):
     def _ensure_stop_buttons(self) -> None:
         if hasattr(self, "_stop_continue"):
             return
-        # Circular glyphs, not words: a cross for "stop the install" and a
-        # left arrow for "back to it". Both carry the wording as the hover tip
-        # and as the accessible name.
-        self._stop_continue = _RoundNextButton(symbol="cancel", accent=False)
+        # Circular glyphs, not words: a left arrow for "back to it" and a cross
+        # for "stop the install". The accent chip comes first, so the coloured
+        # one sits on the left and the two arrows point away from each other
+        # instead of at each other. Both carry the wording as the hover tip and
+        # as the accessible name.
         self._stop_back = _RoundNextButton(symbol="back", accent=True)
+        self._stop_continue = _RoundNextButton(symbol="cancel", accent=False)
         for button, key in (
             (self._stop_continue, "install_interrupt_cancel"),
             (self._stop_back, "install_interrupt_back"),
         ):
             button.setToolTip(tr(key))
             button.setAccessibleName(tr(key))
-        self._stop_actions = _GlyphActions([self._stop_continue, self._stop_back])
+        self._stop_actions = _GlyphActions([self._stop_back, self._stop_continue])
         self._stop_actions.hide()
         self._stop_host = None
         self._stop_continue.clicked.connect(self._accept_stop)

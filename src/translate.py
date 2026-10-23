@@ -15,6 +15,8 @@ from typing import Optional, Tuple
 
 from PySide6.QtCore import QThread, Signal
 
+from .i18n import is_english_language
+
 logger = logging.getLogger(__name__)
 
 # Cache for in-memory translated text: (text_hash_or_key, target_lang) -> translated_text
@@ -95,7 +97,7 @@ def fetch_google_translation(text: str, target_lang: str, timeout: float = 6.0) 
     with unverified fallback, and parses both clients5 and translate.googleapis.com.
     Returns original text if offline or on network failure.
     """
-    if not text or not text.strip() or target_lang in ("en", ""):
+    if not text or not text.strip() or is_english_language(target_lang):
         return text
 
     cache_key = (text.strip(), target_lang)

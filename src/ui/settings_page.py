@@ -3,7 +3,7 @@
 import logging
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, Qt, QTimer, Signal
+from PySide6.QtCore import QSettings, QSize, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -34,7 +34,7 @@ from ..flash_service import (
     windows_only_method,
 )
 from ..i18n import tr, tr_brand
-from .dark import page_margins
+from .dark import T, page_margins
 from .icons import get_symbol_icon
 from .scrollbars import configure_scroll_area
 from .widgets import Card, close_layout_gap, layout_gap_closing
@@ -173,6 +173,9 @@ class SettingsPage(QWidget):
         """
         self._solo_card = card
         for other in self._cards_in_column():
+            # One card, nothing else: a focused journey (Linux setup, removal
+            # offer) hides the rest of Settings — including the Advanced
+            # Settings toggle — until the user leaves it.
             other.setVisible(other is card)
         if card is getattr(self, "_checker_card", None):
             self._sync_linux_prep_copy()
@@ -354,20 +357,36 @@ class SettingsPage(QWidget):
 
         self._terminal_card.set_layout(term_layout)
 
-        # --- Card 2: Firmware Release Reminders ---
+        # --- Card 2: Update reminders ---
         self._reminders_card = Card("settings_reminders_group")
         rem_layout = QVBoxLayout()
         rem_layout.setSpacing(8)
 
-        # The card title already names the setting, so the switch rides on that
-        # line instead of a second, identical caption under it.
+        # The title describes the opt-in action; explanatory copy below is
+        # specific to any device/software pair already being tracked.
         self._cb_reminders = self._add_title_row_switch(
             self._reminders_card, "settings_reminders_enable",
         )
         self._cb_reminders.setStyleSheet("")  # no host style override
         self._cb_reminders.toggled.connect(self._on_reminders_toggled)
+        self._reminders_desc = QLabel("")
+        self._reminders_desc.setWordWrap(True)
+        self._reminders_desc.setProperty("cssClass", "subtitle")
+        rem_layout.addWidget(self._reminders_desc)
+
+        # One switch per model once software has been installed on more than
+        # one player: releases are tracked per model, but only one unit of a
+        # model, so the reminder can be switched off for a single device
+        # without silencing the others.
+        self._reminders_list = QWidget()
+        self._reminders_list_layout = QVBoxLayout(self._reminders_list)
+        self._reminders_list_layout.setContentsMargins(0, 0, 0, 0)
+        self._reminders_list_layout.setSpacing(4)
+        self._reminder_switches: dict[str, QCheckBox] = {}
+        rem_layout.addWidget(self._reminders_list)
 
         self._reminders_card.set_layout(rem_layout)
+        self._update_reminders_copy()
         self._reminders_card.setVisible(
             self._may_show_card(self._reminders_card) and not is_mediatek_installer()
         )
@@ -444,7 +463,20 @@ class SettingsPage(QWidget):
         self._settings_coffee_btn.setCursor(Qt.ArrowCursor)
         self._settings_coffee_btn.setStyleSheet("")
         self._settings_coffee_btn.clicked.connect(self._open_settings_coffee)
+        self._settings_discord_btn = QPushButton(tr("community_discord"))
+        self._settings_discord_btn.setCursor(Qt.ArrowCursor)
+        self._settings_discord_btn.setStyleSheet("")
+        self._settings_discord_btn.setIcon(self._community_icon("discord"))
+        self._settings_discord_btn.setIconSize(QSize(10, 10))
+        self._settings_discord_btn.clicked.connect(lambda: self._open_community_link("discord"))
+        self._settings_reddit_btn = QPushButton(tr("community_reddit"))
+        self._settings_reddit_btn.setCursor(Qt.ArrowCursor)
+        self._settings_reddit_btn.setStyleSheet("")
+        self._settings_reddit_btn.setIcon(self._community_icon("reddit"))
+        self._settings_reddit_btn.setIconSize(QSize(10, 10))
+        self._settings_reddit_btn.clicked.connect(lambda: self._open_community_link("reddit"))
         self._dismiss_donations_link = QLabel(self._donations_dismiss_html())
+        self._dismiss_donations_link.setWordWrap(True)
         self._dismiss_donations_link.setTextFormat(Qt.TextFormat.RichText)
         self._dismiss_donations_link.setTextInteractionFlags(
             Qt.TextInteractionFlag.LinksAccessibleByMouse
@@ -459,9 +491,14 @@ class SettingsPage(QWidget):
             lambda _href: self._on_dismiss_donations_section()
         )
         actions.addWidget(self._settings_coffee_btn, 0, Qt.AlignVCenter)
-        actions.addWidget(self._dismiss_donations_link, 0, Qt.AlignVCenter)
+        actions.addWidget(self._settings_discord_btn, 0, Qt.AlignVCenter)
+        actions.addWidget(self._settings_reddit_btn, 0, Qt.AlignVCenter)
         actions.addStretch(1)
         don_layout.addWidget(self._donations_actions, alignment=Qt.AlignLeft)
+        # This opt-out link only appears after donations are disabled. Keep it
+        # on its own row so it cannot widen the entire Settings scroll area
+        # when its (usually longer) localized text becomes visible.
+        don_layout.addWidget(self._dismiss_donations_link, alignment=Qt.AlignLeft)
 
         self._donations_card.set_layout(don_layout)
         layout.addWidget(self._donations_card)
@@ -479,7 +516,9 @@ class SettingsPage(QWidget):
         cache_btn_row = QHBoxLayout()
         cache_btn_row.setSpacing(10)
         self._clear_cache_btn = QPushButton(tr("settings_clear_cache_btn"))
-        self._clear_cache_btn.setIcon(get_symbol_icon("cancel", 12))
+        # Follow the interface text colour: the icon provider defaults to plain
+        # white in dark mode, which does not match the theme's foreground.
+        self._clear_cache_btn.setIcon(get_symbol_icon("trash", 14, color=T().fg))
         self._clear_cache_btn.clicked.connect(self._on_clear_firmware_cache)
         cache_btn_row.addWidget(self._clear_cache_btn)
 
@@ -556,6 +595,7 @@ class SettingsPage(QWidget):
 
         # --- Card: Advanced Settings ---
         self._advanced_card = Card("settings_advanced_group")
+        layout.addWidget(self._advanced_card)
         adv_layout = QVBoxLayout()
         adv_layout.setSpacing(8)
 
@@ -570,10 +610,10 @@ class SettingsPage(QWidget):
         adv_layout.addWidget(self._advanced_desc)
 
         self._advanced_card.set_layout(adv_layout)
-        layout.addWidget(self._advanced_card)
 
-        # Settings hidden by Advanced Settings are placed below the Advanced
-        # Settings card itself so there is no layout shifting above it.
+        # The Advanced Settings card is a detail switch, not a headline: it
+        # sits below the everyday cards (below Offline Mode), after the
+        # settings it reveals rather than above them.
         layout.addWidget(self._rockbox_card)
         layout.addWidget(self._terminal_card)
         layout.addWidget(self._method_card)
@@ -748,25 +788,26 @@ class SettingsPage(QWidget):
     # ------------------------------------------------------------------
     def _available_methods(self):
         """Method ids selectable on this platform, in display order."""
+        advanced = bool(getattr(self, "_advanced_revealed", False))
         if paths.IS_MAC:
             # No SP Flash Tool build exists for macOS.
             return (METHOD_MTK,)
-        if paths.IS_WINDOWS and windows_only_method() == METHOD_SP and not self._advanced_revealed:
+        if paths.IS_WINDOWS and windows_only_method() == METHOD_SP and not advanced:
             # Flashing method dropdown shouldn't be available to x86/x64 windows users
             # by default because we intend to only use flash_tool on Windows.
             return (METHOD_SP,)
         locked = windows_only_method()
-        if locked and not self._advanced_revealed:
+        if locked and not advanced:
             # Windows is fixed by CPU: x86/x64 gets SP Flash Tool only, ARM64 MTKClient only.
             return (locked,)
         methods = [METHOD_SP]
-        if self._advanced_revealed or not paths.IS_WINDOWS:
+        if advanced or not paths.IS_WINDOWS:
             methods.append(METHOD_MTK)
         return tuple(methods)
 
     def _on_advanced_settings_toggled(self, checked: bool) -> None:
         self._advanced_revealed = bool(checked)
-        QSettings("innioasis", "updater").setValue("advanced_settings", bool(checked))
+        device_tracking.set_advanced_settings_enabled(bool(checked))
         self._sync_advanced_visibility()
         self._sync_linux_prep_copy()
         if not paths.IS_MAC:
@@ -777,16 +818,16 @@ class SettingsPage(QWidget):
             win._adjust_window_geometry()
 
     def _advanced_shown(self) -> bool:
-        """True while Show Advanced Settings is on (or the MediaTek build forces it)."""
+        """True while Show Advanced Settings is on."""
         if hasattr(self, "_cb_advanced_settings"):
             checked = self._cb_advanced_settings.isChecked()
         else:
             checked = self._advanced_revealed
-        return bool(checked or is_mediatek_installer())
+        return bool(checked)
 
     def _sync_advanced_visibility(self) -> None:
         show_adv = self._advanced_shown()
-        is_win_x86 = bool(paths.IS_WINDOWS and windows_only_method() == METHOD_SP and not self._advanced_revealed)
+        is_win_x86 = bool(paths.IS_WINDOWS and windows_only_method() == METHOD_SP and not show_adv)
         if hasattr(self, "_terminal_card"):
             self._terminal_card.setVisible(show_adv and self._may_show_card(self._terminal_card))
         if hasattr(self, "_method_card"):
@@ -802,7 +843,7 @@ class SettingsPage(QWidget):
     def reveal_advanced_methods(self):
         """Reveal advanced install methods and cards (M or D while running)."""
         self._advanced_revealed = True
-        QSettings("innioasis", "updater").setValue("advanced_settings", True)
+        device_tracking.set_advanced_settings_enabled(True)
         if hasattr(self, "_cb_advanced_settings"):
             self._cb_advanced_settings.blockSignals(True)
             self._cb_advanced_settings.setChecked(True)
@@ -819,7 +860,7 @@ class SettingsPage(QWidget):
     def hide_advanced_methods(self):
         """Hide advanced install methods and cards (D toggle off)."""
         self._advanced_revealed = False
-        QSettings("innioasis", "updater").setValue("advanced_settings", False)
+        device_tracking.set_advanced_settings_enabled(False)
         if hasattr(self, "_cb_advanced_settings"):
             self._cb_advanced_settings.blockSignals(True)
             self._cb_advanced_settings.setChecked(False)
@@ -881,8 +922,6 @@ class SettingsPage(QWidget):
     def set_method(self, method):
         """Reflect a method chosen elsewhere (or persisted) in the selector."""
         method = normalise_method(method)
-        if method == METHOD_MTK and not paths.IS_MAC:
-            self._advanced_revealed = True
         self._reload_method_options()
         idx = self._method_combo.findData(method)
         if idx >= 0 and idx != self._method_combo.currentIndex():
@@ -916,9 +955,7 @@ class SettingsPage(QWidget):
         which is offline by definition — there is nothing for them to act on.
         """
         self._rockbox_card.setVisible(
-            self._advanced_shown()
-            and not is_offline_mode()
-            and self._may_show_card(self._rockbox_card)
+            not is_offline_mode() and self._may_show_card(self._rockbox_card)
         )
 
     def _update_legacy_cleanup_visibility(self):
@@ -997,20 +1034,108 @@ class SettingsPage(QWidget):
     # Release reminders
     # ------------------------------------------------------------------
     def tracked_software_summary(self) -> str:
-        """Name the software releases watched per device, e.g. "Y1: Rockbox"."""
+        """Name only installed releases that the reminder checker tracks."""
         parts = []
         for model in DEVICE_MODELS:
+            record = device_tracking.get_device_install(model)
+            if not record:
+                continue
             label = device_label_for_model(model)
-            try:
-                names = catalog.software_names_for_model(model)
-            except Exception:
-                logger.debug("Catalogue lookup failed for %s", model, exc_info=True)
-                names = []
-            parts.append(f"{label}: {', '.join(names)}" if names else label)
-        return " \u00b7 ".join(parts)
+            software = str(record.get("software_name") or "").strip()
+            parts.append(f"{software} on {label}" if software else label)
+        return " · ".join(parts)
 
     def _tracked_devices_summary(self) -> str:
-        return ", ".join(device_label_for_model(m) for m in DEVICE_MODELS)
+        models = [
+            model for model in DEVICE_MODELS
+            if device_tracking.get_device_install(model)
+        ]
+        return ", ".join(device_label_for_model(model) for model in models)
+
+    @staticmethod
+    def _is_original_software(software: str) -> bool:
+        """The player's own firmware, which the copy calls "the software"."""
+        return "original" in (software or "").strip().lower()
+
+    def _tracked_installs(self) -> list[tuple[str, dict]]:
+        """``(model, install record)`` for every model still tracked."""
+        tracked = []
+        for model in DEVICE_MODELS:
+            record = device_tracking.get_device_install(model)
+            if record:
+                tracked.append((model, record))
+        return tracked
+
+    def _rebuild_reminder_switches(self, tracked: list[tuple[str, dict]]) -> None:
+        """One reminder switch per tracked model, once there is more than one."""
+        if not hasattr(self, "_reminders_list_layout"):
+            return
+        for switch in self._reminder_switches.values():
+            switch.setParent(None)
+            switch.deleteLater()
+        self._reminder_switches = {}
+        show = len(tracked) > 1
+        self._reminders_list.setVisible(show)
+        if not show:
+            return
+        for model, record in tracked:
+            label = device_label_for_model(model)
+            software = str(record.get("software_name") or "").strip()
+            caption = (
+                tr("settings_reminders_model_fmt").format(software=software, model=label)
+                if software
+                else label
+            )
+            row = QWidget()
+            box = QHBoxLayout(row)
+            box.setContentsMargins(0, 0, 0, 0)
+            box.setSpacing(12)
+            caption_label = QLabel(caption)
+            caption_label.setWordWrap(True)
+            switch = QCheckBox()
+            switch.setCursor(Qt.ArrowCursor)
+            switch.setStyleSheet("")
+            switch.setChecked(device_tracking.is_device_reminder_enabled(model))
+            switch.toggled.connect(
+                lambda checked, m=model: self._on_model_reminder_toggled(m, checked)
+            )
+            box.addWidget(caption_label, 1)
+            box.addWidget(switch, 0, Qt.AlignRight | Qt.AlignVCenter)
+            self._reminders_list_layout.addWidget(row)
+            self._reminder_switches[model] = switch
+            self._switch_rows[switch] = (row, caption_label)
+            switch.text = caption
+
+    def _on_model_reminder_toggled(self, model: str, checked: bool) -> None:
+        device_tracking.set_device_reminder_enabled(model, bool(checked))
+        any_enabled = any(
+            device_tracking.is_device_reminder_enabled(m) for m in DEVICE_MODELS
+        )
+        self._cb_reminders.blockSignals(True)
+        self._cb_reminders.setChecked(any_enabled)
+        self._cb_reminders.blockSignals(False)
+
+    def _update_reminders_copy(self) -> None:
+        """Describe reminder coverage from the installs actually tracked."""
+        if not hasattr(self, "_reminders_desc"):
+            return
+        tracked = self._tracked_installs()
+        if not tracked:
+            text = tr("settings_reminders_desc")
+        elif len(tracked) == 1:
+            model, record = tracked[0]
+            label = device_label_for_model(model)
+            software = str(record.get("software_name") or "").strip()
+            if not software or self._is_original_software(software):
+                text = tr("settings_reminders_tracked_original").format(model=label)
+            else:
+                text = tr("settings_reminders_tracked_named").format(
+                    software=software, model=label
+                )
+        else:
+            text = tr("settings_reminders_tracked_multi")
+        self._reminders_desc.setText(text)
+        self._rebuild_reminder_switches(tracked)
 
     def _on_reminders_toggled(self, checked: bool):
         for model in DEVICE_MODELS:
@@ -1027,12 +1152,12 @@ class SettingsPage(QWidget):
     def refresh_settings(self):
         """Reload and update all controls to reflect current settings."""
         persisted_adv = QSettings("innioasis", "updater").value("advanced_settings", False, type=bool)
-        if self._advanced_revealed or persisted_adv:
-            self._advanced_revealed = True
-            if hasattr(self, "_cb_advanced_settings"):
-                self._cb_advanced_settings.blockSignals(True)
-                self._cb_advanced_settings.setChecked(True)
-                self._cb_advanced_settings.blockSignals(False)
+        self._advanced_revealed = bool(persisted_adv)
+        if hasattr(self, "_cb_advanced_settings"):
+            self._cb_advanced_settings.blockSignals(True)
+            self._cb_advanced_settings.setChecked(self._advanced_revealed)
+            self._cb_advanced_settings.blockSignals(False)
+        device_tracking.set_advanced_settings_enabled(self._advanced_revealed)
         self._sync_advanced_visibility()
         self._sync_linux_prep_copy()
         self._prep_card.setVisible(self._may_show_card(self._prep_card) and not paths.IS_MAC)
@@ -1055,6 +1180,7 @@ class SettingsPage(QWidget):
         self._cb_reminders.blockSignals(True)
         self._cb_reminders.setChecked(any_enabled)
         self._cb_reminders.blockSignals(False)
+        self._update_reminders_copy()
 
         # Single donation opt-out switch
         opted_out = (
@@ -1243,6 +1369,49 @@ class SettingsPage(QWidget):
         from ..browser import open_browser
         open_browser("https://ko-fi.com/teamslide")
 
+    def _community_icon(self, name: str):
+        """Render a bundled community SVG in the current interface foreground color."""
+        from PySide6.QtCore import QByteArray, QRectF
+        from PySide6.QtGui import QIcon, QPainter, QPixmap
+        from PySide6.QtSvg import QSvgRenderer
+        import re
+
+        icon_size = 10
+        path = paths.RESOURCES_DIR / f"{name}.svg"
+        color = T().fg
+        if not path.is_file():
+            return get_symbol_icon("support", icon_size, color=color)
+        try:
+            source = re.sub(r"fill=([\"'])[^\"']+\1", f'fill="{color}"', path.read_text(encoding="utf-8"))
+            source = source.replace("currentColor", color)
+            renderer = QSvgRenderer(QByteArray(source.encode("utf-8")))
+            if renderer.isValid():
+                pixmap = QPixmap(icon_size * 2, icon_size * 2)
+                pixmap.setDevicePixelRatio(2.0)
+                pixmap.fill(Qt.transparent)
+                view_box = renderer.viewBoxF()
+                if view_box.width() <= 0 or view_box.height() <= 0:
+                    raise ValueError(f"Invalid {name} icon viewBox")
+                scale = min(icon_size / view_box.width(), icon_size / view_box.height())
+                width = view_box.width() * scale
+                height = view_box.height() * scale
+                target = QRectF((icon_size - width) / 2, (icon_size - height) / 2, width, height)
+                painter = QPainter(pixmap)
+                renderer.render(painter, target)
+                painter.end()
+                return QIcon(pixmap)
+        except Exception:
+            logger.debug("Could not load %s community icon", name, exc_info=True)
+        return get_symbol_icon("support", icon_size, color=color)
+
+    def _open_community_link(self, community: str) -> None:
+        from ..browser import open_browser
+        from ..config import DONATION_LINKS
+
+        url = DONATION_LINKS.get(community)
+        if url:
+            open_browser(url)
+
     def _sync_donation_opt_out(self) -> None:
         """The dismiss link appears only when Community Credits/Donations has been disabled."""
         disabled = (
@@ -1250,8 +1419,10 @@ class SettingsPage(QWidget):
             or device_tracking.is_donation_ui_disabled()
             or device_tracking.is_donation_install_prompt_disabled()
         )
-        if hasattr(self, "_settings_coffee_btn"):
-            self._settings_coffee_btn.setVisible(True)
+        for name in ("_settings_coffee_btn", "_settings_discord_btn", "_settings_reddit_btn"):
+            button = getattr(self, name, None)
+            if button is not None:
+                button.setVisible(True)
         if hasattr(self, "_dismiss_donations_link"):
             self._dismiss_donations_link.setVisible(disabled)
 
@@ -1550,6 +1721,7 @@ class SettingsPage(QWidget):
             self._advanced_desc.setText(tr("settings_advanced_desc"))
         self._reminders_card.retranslate()
         self._set_switch_caption(self._cb_reminders, tr("settings_reminders_enable"))
+        self._update_reminders_copy()
         self._rockbox_card.retranslate()
         self._rockbox_desc.setText(tr("settings_rockbox_desc"))
         self._set_switch_caption(self._cb_old_rockbox, tr("settings_filter_old_rockbox"))
@@ -1568,6 +1740,10 @@ class SettingsPage(QWidget):
             self._lbl_hide_tip.setText(tr("settings_hide_donations_tip"))
         if hasattr(self, "_settings_coffee_btn"):
             self._settings_coffee_btn.setText(tr("donate_coffee_btn"))
+        if hasattr(self, "_settings_discord_btn"):
+            self._settings_discord_btn.setText(tr("community_discord"))
+        if hasattr(self, "_settings_reddit_btn"):
+            self._settings_reddit_btn.setText(tr("community_reddit"))
         if hasattr(self, "_dismiss_donations_link"):
             self._dismiss_donations_link.setText(self._donations_dismiss_html())
         self._sync_donation_opt_out()
@@ -1607,7 +1783,12 @@ class SettingsPage(QWidget):
     def refresh_theme(self):
         """Re-fetch theme-colored icons after a system appearance change."""
         if hasattr(self, "_clear_cache_btn"):
-            self._clear_cache_btn.setIcon(get_symbol_icon("cancel", 12))
+            self._clear_cache_btn.setIcon(get_symbol_icon("trash", 14, color=T().fg))
+        for name in ("discord", "reddit"):
+            button = getattr(self, f"_settings_{name}_btn", None)
+            if button is not None:
+                button.setIcon(self._community_icon(name))
+                button.setIconSize(QSize(10, 10))
         self.update()
 
     def _on_scan_legacy_installations(self):

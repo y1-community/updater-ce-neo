@@ -1,4 +1,4 @@
-"""Smoke test for the Neo updater prototype.
+"""Smoke test for Updater CE.
 
 Run:  python tests/smoke_test.py    (from the project root, with deps installed)
 """
@@ -1780,6 +1780,22 @@ def test_theme_refresh_live():
     original_dark_probe = dark.is_system_dark_mode
     original_accent_probe = dark.get_native_accent_color
     original_fingerprint = dark.theme_fingerprint
+    original_system_palette = dark._linux_system_palette
+
+    def _desktop_palette(window: str, text: str, base: str) -> QPalette:
+        """The palette a Linux desktop hands the app with a new scheme."""
+        palette = QPalette(app.palette())
+        for role, colour in (
+            (QPalette.ColorRole.Window, window),
+            (QPalette.ColorRole.WindowText, text),
+            (QPalette.ColorRole.Base, base),
+            (QPalette.ColorRole.AlternateBase, base),
+            (QPalette.ColorRole.Text, text),
+            (QPalette.ColorRole.Button, base),
+            (QPalette.ColorRole.ButtonText, text),
+        ):
+            palette.setColor(role, colour)
+        return palette
     applied = []
     watcher = None
     hostile = None
@@ -1809,6 +1825,9 @@ def test_theme_refresh_live():
         # palette signal is emitted in this synthetic change, so this exercises
         # the fingerprint poll — the catch-all path.
         dark.is_system_dark_mode = lambda: True
+        # A Linux desktop signals the switch by handing over a new palette; the
+        # palette is what decides, so the probe moves with the hint.
+        dark._linux_system_palette = lambda _app: _desktop_palette("#1e2227", "#ffffff", "#181b20")
         dark.get_native_accent_color = lambda palette=None: ("#ff375f", "#ffffff")
         dark.theme_fingerprint = lambda app=None, **kw: ("dark", True, "#ff375f")
         watcher.poll()
@@ -1856,6 +1875,7 @@ def test_theme_refresh_live():
         # widget's broken hook must be swallowed, not propagated).
         applied.clear()
         dark.is_system_dark_mode = lambda: False
+        dark._linux_system_palette = lambda _app: _desktop_palette("#f8fafc", "#111827", "#ffffff")
         dark.refresh_theme(app)
         assert not dark.is_dark()
         assert light_bg in app.styleSheet()
@@ -1864,6 +1884,7 @@ def test_theme_refresh_live():
         dark.is_system_dark_mode = original_dark_probe
         dark.get_native_accent_color = original_accent_probe
         dark.theme_fingerprint = original_fingerprint
+        dark._linux_system_palette = original_system_palette
         if watcher is not None:
             watcher.stop()
             assert not watcher._poll_timer.isActive()
@@ -2488,7 +2509,7 @@ def test_language_switch_keeps_screen():
     assert w._flash_page._progress_bar.value() == 57, "progress must survive"
     assert w._flash_page._step_label.text() == "Escribiendo imagen"
     # New Settings strings translate in place too.
-    assert w._settings_page.switch_caption(w._settings_page._cb_reminders) == "Envíame recordatorios de nuevas versiones"
+    assert w._settings_page.switch_caption(w._settings_page._cb_reminders) == "Avísame de las nuevas actualizaciones de mi reproductor"
     exp_method_text = "SP Flash Tool" if not paths.IS_MAC else "MTKClient"
     assert w._settings_page._method_combo.itemText(0) == exp_method_text
 
@@ -4307,7 +4328,7 @@ def test_install_power_on_steps():
 
     y1_steps = install_power_on_steps("Y1")
     assert "Unplug your Y1" in y1_steps
-    assert "center (OK) button" in y1_steps
+    assert "centre (OK) button" in y1_steps
 
     y2_steps = install_power_on_steps("Y2")
     assert "Unplug your Y2" in y2_steps
@@ -4348,7 +4369,7 @@ def test_donation_dialog_install_completion():
         assert "We've installed" in joined
         assert "Rockbox (Y1)" in joined
         assert "Unplug your Y1" in joined
-        assert "center (OK) button" in joined
+        assert "centre (OK) button" in joined
         dlg.close()
 
         dlg_gen = DonationDialog(
@@ -5821,7 +5842,10 @@ def test_release_notes_translation():
             # Now test in-app translation applied
             page._on_translation_ready(rel_sample, "es", "3.2.1", "Mejoras generales de rendimiento")
             assert "Mejoras generales" in page._notes.toPlainText()
-            assert "Google" in page._notes.toPlainText()
+            # The badge lives under the notes, not inside them: the translated
+            # text is the release's own copy, once.
+            assert "Google" not in page._notes.toPlainText()
+            assert "Mejoras generales" in page._notes.toPlainText()
 
             # Clicking Show original reverts to English notes
             page._on_translate_link_clicked("action:show_original")
@@ -5987,6 +6011,37 @@ def test_rockbox_360p_theme_pack():
     app.processEvents()
 
 
+def test_catalogs_do_not_carry_the_neo_codename():
+    """The catalog copy names the product, and it is Updater CE.
+
+    The catalogs were generated from an older English string that still called
+    the app "Updater Neo", which surfaced in the settings reminder sentence of
+    every language. The name in a translation follows the catalog's own
+    spelling of the app, so no value may keep the codename.
+    """
+    import json
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    codename = re.compile(r"(?<!\w)Neo(?!\w)")
+    offenders = []
+    for path in sorted((root / "assets" / "i18n").glob("*.json")):
+        if path.stem == "languages":
+            continue
+        data = json.loads(path.read_text(encoding="utf-8"))
+        for key, value in data.items():
+            if isinstance(value, str) and codename.search(value):
+                offenders.append(f"{path.name}:{key}")
+    assert not offenders, offenders[:5]
+
+    # "CE" is Community Edition: the name is translated, not spelled out letter
+    # by letter (never the old シーイー transliteration).
+    ja = json.loads((root / "assets" / "i18n" / "ja.json").read_text(encoding="utf-8"))
+    assert ja["app_name"] == "アップデーター", ja["app_name"]
+    assert "シーイー" not in json.dumps(ja, ensure_ascii=False)
+
+
 def test_updater_ce_branding():
     from PySide6.QtWidgets import QApplication
     from src.config import APP_NAME, APP_VERSION
@@ -5995,12 +6050,21 @@ def test_updater_ce_branding():
 
     assert APP_NAME == "Updater CE"
 
-    # Verify translations across all supported languages
+    # "CE" is Community Edition, so the name is translated into each language
+    # rather than transliterated; only English keeps the bare abbreviation.
     t = translator()
     for lang in ("zh-CN", "en", "fr", "es"):
         t.set_language(lang)
-        assert tr("app_name") == "Updater CE", f"app_name in {lang} should be 'Updater CE', got {tr('app_name')}"
-        assert "Updater CE" in tr("donate_title"), f"donate_title in {lang} should mention 'Updater CE'"
+        name = tr("app_name")
+        assert name, lang
+        assert (name == "Updater CE") == (lang == "en"), (lang, name)
+        assert name in tr("donate_title"), (
+            f"donate_title in {lang} should mention {name}, got {tr('donate_title')}"
+        )
+    t.set_language("ja")
+    assert tr("app_name") == "アップデーター", tr("app_name")
+    t.set_language("zh-CN")
+    assert tr("app_name") == "更新程序", tr("app_name")
     t.set_language("en")
 
     # Verify MainWindow sidebar and window title
@@ -6267,9 +6331,15 @@ def test_mediatek_installer_mode():
         app.processEvents()
         assert w._support_btn.isVisible()
 
-        # Terminal install remains available.
+        # Terminal install is one of the advanced options, so it follows that
+        # switch here exactly as it does in the CE build.
+        assert w._settings_page._terminal_card.isHidden()
+        w._settings_page._cb_advanced_settings.setChecked(True)
+        app.processEvents()
         assert not w._settings_page._terminal_card.isHidden()
         assert not w._settings_page._cb_terminal_install.isHidden()
+        w._settings_page._cb_advanced_settings.setChecked(False)
+        app.processEvents()
 
         # Flipping the brand off switches the whole identity back.
         config.IS_MEDIATEK_INSTALLER = False
@@ -6616,7 +6686,7 @@ def test_os_standard_iconography():
 
 
 def main():
-    print("== Neo updater smoke test ==")
+    print("== Updater CE smoke test ==")
     check("updater ce branding and navigation header", test_updater_ce_branding)
     check("rockbox 360p theme pack workflow", test_rockbox_360p_theme_pack)
     check("catalog", test_catalog)

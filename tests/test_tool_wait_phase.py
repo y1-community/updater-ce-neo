@@ -336,3 +336,69 @@ def test_next_arrow_centres_on_the_card_not_the_wrapped_prompt():
     finally:
         page.close()
         app.processEvents()
+
+
+def test_paperclip_hint_is_drawn_from_the_bundled_vector_asset(monkeypatch):
+    """The power-off illustration comes from paperclip*.svg, not a PNG.
+
+    The bitmaps were replaced by the vector artwork so the diagram stays sharp
+    at any window scale and follows the desktop foreground colour. This pins
+    the asset the card actually renders — six PNGs could stay on disk and still
+    be what the page opened.
+    """
+    from PySide6.QtGui import QColor
+    from PySide6.QtWidgets import QApplication
+
+    from src.ui import icons as icons_module
+    from src.ui.dark import T, apply_theme
+    from src.ui.flash_page import FlashPage
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    apply_theme(app, force_dark=True)
+
+    rendered = []
+    real_render = icons_module.render_svg_asset
+
+    def spy(path, height, color=None, device_pixel_ratio=2.0):
+        rendered.append((Path(path), int(height)))
+        return real_render(path, height, color=color, device_pixel_ratio=device_pixel_ratio)
+
+    monkeypatch.setattr(icons_module, "render_svg_asset", spy)
+
+    page = FlashPage()
+    try:
+        for model, stem in (("Y1", "paperclip"), ("Y2", "paperclip_y2"), ("A5", "paperclip_a5")):
+            rendered.clear()
+            page.set_model(model)
+            page.show_power_off_prompt()
+            app.processEvents()
+            assert rendered, model
+            asset, height = rendered[-1]
+            assert asset.name == f"{stem}.svg", (model, asset)
+            assert height == 60
+            source = page._paperclip_img.property("_hint_source")
+            assert source is not None and not source.isNull()
+            logical = source.deviceIndependentSize()
+            assert round(logical.height()) == 60, logical
+            # The drawing keeps the asset's own proportions.
+            assert 1.45 < logical.width() / logical.height() < 1.62, logical
+            visible = page._paperclip_img.pixmap()
+            assert not visible.isNull()
+            # Every stroke is the live foreground colour, never the white
+            # artwork that would be invisible on a light card.
+            coloured = [
+                visible.toImage().pixelColor(x, y)
+                for y in range(visible.toImage().height())
+                for x in range(0, visible.toImage().width(), 3)
+                if visible.toImage().pixelColor(x, y).alpha() > 200
+            ]
+            assert coloured, model
+            # The ink is the colour the card's own text is drawn in, so the
+            # diagram never turns into invisible white artwork.
+            foreground = page._paperclip_hint.palette().color(
+                page._paperclip_hint.palette().ColorRole.WindowText
+            )
+            assert max(abs(c.lightness() - foreground.lightness()) for c in coloured) <= 24, model
+    finally:
+        page.close()
+        app.processEvents()

@@ -84,15 +84,32 @@ def test_author_localization():
 def test_advanced_settings_gating_and_md_shortcut(monkeypatch):
     """Verify Advanced Settings hides terminal/method cards by default and reveals on M/D or toggle."""
     import src.paths as paths
+    from PySide6.QtCore import QSettings
+    from src import device_tracking
+
     monkeypatch.setattr(paths, "IS_MAC", False)
     _app = _get_qapp()
+    settings = QSettings("innioasis", "updater")
+    previous = settings.value("advanced_settings", None)
+    device_tracking.set_advanced_settings_enabled(False)
     page = SettingsPage()
+    page.show()
+    _app.processEvents()
 
-    # Initial state: unchecked -> hidden
-    page._cb_advanced_settings.setChecked(False)
-    page._sync_advanced_visibility()
+    # Advanced Settings is always available at the top, but opt-in controls
+    # (installation mode/method and release filters) begin hidden.
+    assert page._advanced_card.isVisible()
+    # The switch sits below the everyday cards, below Offline Mode.
+    assert (
+        page._card_layout.indexOf(page._advanced_card)
+        > page._card_layout.indexOf(page._offline_mode_card)
+    )
+    assert page._cb_advanced_settings.isVisible()
+    assert page.switch_caption(page._cb_advanced_settings) == "Show Advanced Settings"
+    assert page._cb_advanced_settings.isChecked() is False
     assert page._terminal_card.isHidden()
     assert page._method_card.isHidden()
+    assert page._rockbox_card.isHidden()
     assert "mtk_mac" not in page._available_methods()
 
     # Toggle on -> reveal the shared advanced MTKClient method
@@ -119,9 +136,19 @@ def test_advanced_settings_gating_and_md_shortcut(monkeypatch):
 
     # Turning Advanced Settings off and back on keeps the method list unified.
     page._cb_advanced_settings.setChecked(False)
+    assert page._terminal_card.isHidden()
+    assert page._method_card.isHidden()
+    assert page._rockbox_card.isHidden()
     page._cb_advanced_settings.setChecked(True)
+    assert not page._terminal_card.isHidden()
+    assert not page._rockbox_card.isHidden()
     assert "mtk" in page._available_methods()
     assert "mtk_mac" not in page._available_methods()
+    page.close()
+    if previous is None:
+        settings.remove("advanced_settings")
+    else:
+        device_tracking.set_advanced_settings_enabled(bool(previous))
 
 
 def test_extract_worker_emits_100_percent():

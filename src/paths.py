@@ -189,6 +189,7 @@ IS_WINDOWS = os.name == "nt" or sys.platform.startswith("win")
 # Every macOS conditional in the app must read IS_MAC (not raw sys.platform)
 # so the simulated mode is indistinguishable from the real thing.
 IS_MAC = sys.platform == "darwin" or SIMULATE_MACOS
+IS_LINUX = sys.platform.startswith("linux") and not IS_MAC
 
 
 def find_sp_flash_tool():

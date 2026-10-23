@@ -232,7 +232,7 @@ class PreInstallGuidanceDialog(QDialog):
         btn_row.setSpacing(10)
         btn_row.addStretch()
 
-        cancel_btn = _RoundNextButton(symbol="cancel", accent=False)
+        cancel_btn = _RoundNextButton(symbol="back", accent=False)
         cancel_btn.setText(tr("cancel"))
         cancel_btn.clicked.connect(self.reject)
         btn_row.addWidget(cancel_btn, 0, Qt.AlignVCenter)
@@ -300,7 +300,7 @@ class RetryGuidanceDialog(QDialog):
         retry_btn = _RoundNextButton(symbol="next", accent=True)
         retry_btn.setText(tr("retry_guidance_btn_retry"))
         retry_btn.clicked.connect(self._on_retry)
-        close_btn = _RoundNextButton(symbol="cancel", accent=False)
+        close_btn = _RoundNextButton(symbol="back", accent=False)
         close_btn.setText(tr("close"))
         close_btn.clicked.connect(self.reject)
         row.addWidget(retry_btn, 0, Qt.AlignVCenter)

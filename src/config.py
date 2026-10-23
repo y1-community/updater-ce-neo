@@ -1,4 +1,4 @@
-"""Application-wide constants for the Neo updater.
+"""Application-wide constants for Updater CE.
 
 Values mirror the InniUpdaterChin app (APP_VERSION 1.1.2, contact email) and
 the online catalogue / donation endpoints used by Updater CE and innioasis.app.
@@ -127,7 +127,7 @@ GITHUB_RELEASES_PER_PAGE = 100
 RELEASE_CACHE_TTL_SECONDS = 24 * 60 * 60  # 24 h, same as CE
 
 # --- App update checking ----------------------------------------------------
-# Where this app publishes its releases — Updater Neo lives in this repo, so
+# Where this app publishes its releases — Updater CE lives in this repo, so
 # Check for Updates reads its release channel here.
 UPDATE_REPO = "y1-community/updater-ce-neo"
 UPDATE_CACHE_TTL_SECONDS = 24 * 60 * 60
@@ -182,10 +182,14 @@ MONTHLY_GOAL_USD = 200.0
 
 DONATION_LINKS = {
     "kofi": "https://ko-fi.com/teamslide",
-    "paypal": "https://paypal.me/respectyarn",
+    "paypal": "https://paypal.me/ryanspecter282",
     "revolut": "https://revolut.me/rspecter",
     "patreon": "https://www.patreon.com/ryanspecter",
     "honeygain": "https://join.honeygain.com/ITSRY2B5D7",
+    "discord": "https://discord.gg/zHrT2zrcek",
+    "reddit": "https://reddit.com/r/innioasismodders",
+    # Help questions go to the project's discussions, not an issue tracker.
+    "github": "https://github.com/y1-community/updater-ce-neo/discussions",
 }
 DONATION_CRYPTO = {
     "Bitcoin (BTC)": "bc1qv4gjkqczqy4wdl297k7ak5swtkusgaz5au6c6g",

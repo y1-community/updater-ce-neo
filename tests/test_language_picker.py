@@ -107,3 +107,47 @@ def test_a_stored_choice_wins_else_the_system_language_is_used():
     assert initial_language("fr") == "fr"
     assert initial_language("") in codes
     assert initial_language("not-a-language") == system_language()
+
+
+def test_english_keeps_the_dialect_the_system_asks_for(monkeypatch):
+    """en-GB and en-US are their own entries; other English locales are not.
+
+    The flag follows the dialect, so a reader in the United States is shown a
+    USA flag rather than the UK one, and international English claims neither.
+    """
+    from src.i18n import (
+        flag,
+        is_english_language,
+        language_for_locale,
+        tr,
+        translator,
+    )
+
+    monkeypatch.setenv("UPDATER_LANGUAGE_FLAGS", "1")
+    assert language_for_locale("en_US") == "en-US"
+    assert language_for_locale("en_GB") == "en-GB"
+    # An English locale with no table of its own stays international rather
+    # than borrowing either dialect's spelling.
+    assert language_for_locale("en_AU") == "en"
+    assert flag("en-US") == "\U0001f1fa\U0001f1f8"
+    assert flag("en-GB") == "\U0001f1ec\U0001f1e7"
+    assert flag("en") == ""
+
+    # English of any region is still English: the app must not translate its
+    # release notes into English.
+    for code in ("en", "en-GB", "en-US"):
+        assert is_english_language(code) is True
+    assert is_english_language("de") is False
+
+    old = translator().lang
+    try:
+        translator().set_language("en-US")
+        assert tr("button_centre") == "center button"
+        assert tr("app_name") == "Updater CE"
+        translator().set_language("en-GB")
+        assert tr("button_centre") == "centre button"
+        assert tr("settings_offline_mode_desc").startswith(
+            "Hide the online community catalogue"
+        )
+    finally:
+        translator().set_language(old)

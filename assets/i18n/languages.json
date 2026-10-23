@@ -248,8 +248,16 @@
   "native": "ελληνικά"
  },
  "en": {
-  "english": "English",
-  "native": "English"
+  "english": "English (International)",
+  "native": "English (International)"
+ },
+ "en-GB": {
+  "english": "English (United Kingdom)",
+  "native": "English (UK)"
+ },
+ "en-US": {
+  "english": "English (United States)",
+  "native": "English (US)"
  },
  "eo": {
   "english": "Esperanto",

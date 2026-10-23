@@ -359,6 +359,8 @@ class DonationStatusBar(QStatusBar):
             show_glass_backdrop,
         )
 
+        from .ui.surfaces import paint_window_surface
+
         glass = glass_surfaces_enabled()
         clear = QColor(0, 0, 0, 0)
         for name in (
@@ -371,6 +373,14 @@ class DonationStatusBar(QStatusBar):
         ):
             host = getattr(self, name, None)
             if host is None:
+                continue
+            if not glass:
+                # Without a backdrop there is nothing to show through: the host
+                # must paint the window surface itself. A transparent host left
+                # the previous, longer donor line behind the new one, because
+                # nothing underneath was asked to repaint it.
+                host.setStyleSheet("")
+                paint_window_surface(host)
                 continue
             host.setAutoFillBackground(False)
             host.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)

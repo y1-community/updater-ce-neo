@@ -343,7 +343,16 @@ class SidebarButton(QPushButton):
         size = self.iconSize()
         if not size.isValid() or size.isEmpty():
             size = QSize(16, 16)
-        icon_rect = QRect(row.left() + 8, row.top(), size.width(), row.height())
+        rtl = self.layoutDirection() == Qt.LayoutDirection.RightToLeft
+        if not self.text():
+            # An icon-only row (the community marks) centres its glyph.
+            icon_rect = QRect(row.left(), row.top(), row.width(), row.height())
+        elif rtl:
+            icon_rect = QRect(
+                row.right() - 8 - size.width(), row.top(), size.width(), row.height()
+            )
+        else:
+            icon_rect = QRect(row.left() + 8, row.top(), size.width(), row.height())
         if not self.isEnabled():
             mode = QIcon.Mode.Disabled
             color = self.palette().color(QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText)
@@ -371,8 +380,14 @@ class SidebarButton(QPushButton):
         from .dark import T
 
         icon_w = self.iconSize().width() if not self.icon().isNull() else 0
-        left = row.left() + (8 + icon_w + 8 if icon_w else 8)
-        text_rect = QRect(left, row.top(), max(0, row.right() - left - 6), row.height())
+        rtl = self.layoutDirection() == Qt.LayoutDirection.RightToLeft
+        if rtl:
+            left = row.left() + 6
+            right = row.right() - (8 + icon_w + 8 if icon_w else 8)
+        else:
+            left = row.left() + (8 + icon_w + 8 if icon_w else 8)
+            right = row.right() - 6
+        text_rect = QRect(left, row.top(), max(0, right - left), row.height())
         pal = QPalette(self.palette())
         if self.isEnabled():
             color = QColor(T().fg)
@@ -393,7 +408,10 @@ class SidebarButton(QPushButton):
         self.style().drawItemText(
             painter,
             text_rect,
-            int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
+            int(
+                (Qt.AlignmentFlag.AlignRight if rtl else Qt.AlignmentFlag.AlignLeft)
+                | Qt.AlignmentFlag.AlignVCenter
+            ),
             pal,
             self.isEnabled(),
             elided,

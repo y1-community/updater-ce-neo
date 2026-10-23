@@ -239,9 +239,11 @@ def localize_text(text: str, lang: str) -> str:
     """
     import os
 
+    from .i18n import is_english_language
+
     text = (text or "").strip()
     lang = (lang or "en").strip()
-    if not text or lang.lower() in ("", "en"):
+    if not text or is_english_language(lang):
         return text
     cache_key = (text, lang)
     if cache_key in _TRANSLATION_CACHE:

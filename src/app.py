@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Neo updater entry point — InniUpdaterChin interface + online catalogue +
+"""Updater CE entry point — InniUpdaterChin interface + online catalogue +
 donations modal (see ASSESSMENT.md for the port map)."""
 
 import logging
@@ -320,6 +320,11 @@ def main():
     except Exception:
         stored = ""
     translator().set_language(initial_language(stored))
+    # The interface mirrors for a right-to-left language (sidebar on the right,
+    # controls aligned right), before the first widget is built.
+    from .ui.main_window import apply_interface_direction
+
+    apply_interface_direction(app)
 
     window = MainWindow()
     # Before show(): the window must exist to be prepared for glass. After it:

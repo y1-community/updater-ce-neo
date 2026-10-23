@@ -102,7 +102,7 @@ from ..flash_service import (
     normalise_method,
     sp_error_code,
 )
-from ..i18n import initial_language, tr, tr_brand, translator
+from ..i18n import initial_language, is_english_language, tr, tr_brand, translator
 from ..state import FlashState, StateMachine
 from .dialogs import (
     DiagnosticsView,
@@ -484,9 +484,44 @@ def page_title_alignment() -> Qt.AlignmentFlag:
     lines up with that edge. Controls on the right keep the title at the start,
     beside the app name.
     """
+    if interface_is_rtl():
+        # A mirrored interface starts at the right edge.
+        return Qt.AlignRight | Qt.AlignVCenter
     if are_window_controls_on_left():
         return Qt.AlignRight | Qt.AlignVCenter
     return Qt.AlignLeft | Qt.AlignVCenter
+
+
+def interface_is_rtl() -> bool:
+    """True when the active language reads right to left."""
+    try:
+        from ..i18n import is_rtl_language
+
+        return is_rtl_language()
+    except Exception:
+        return False
+
+
+def apply_interface_direction(app=None) -> None:
+    """Mirror the whole interface for right-to-left languages.
+
+    Qt mirrors widget layouts with ``RightToLeft``: the navigation rail moves
+    to the right, rows, buttons and dialogs re-order themselves, and text
+    aligns to the right. Images are not flipped — the artwork keeps its own
+    pixels, only its position in the mirrored layout changes.
+    """
+    from PySide6.QtWidgets import QApplication
+
+    app = app or QApplication.instance()
+    if app is None:
+        return
+    direction = (
+        Qt.LayoutDirection.RightToLeft
+        if interface_is_rtl()
+        else Qt.LayoutDirection.LeftToRight
+    )
+    if app.layoutDirection() != direction:
+        app.setLayoutDirection(direction)
 
 
 def are_window_controls_on_left() -> bool:
@@ -653,6 +688,9 @@ class MainWindow(QMainWindow):
         self._past_usb_search = False
         self._install_ui_active = False
         self._download_active = False
+        # The build a finished update check is offering, if any: the rail row
+        # only exists while this is set (see _sync_update_button).
+        self._pending_app_update = None
         self._install_failed = False
         self._failure_title = ""
         self._cache_recovery_needed = False
@@ -970,6 +1008,9 @@ class MainWindow(QMainWindow):
         self._settings_page.release_filters_changed.connect(
             self._select_page.refresh_release_filters
         )
+        self._settings_page.advanced_settings_changed.connect(
+            lambda _enabled: self._select_page.refresh_release_filters()
+        )
         self._settings_page.check_updates_requested.connect(
             lambda: self._check_device_firmware_updates(manual=True)
         )
@@ -1200,6 +1241,12 @@ class MainWindow(QMainWindow):
         right_margin = 24 if controls_left else (120 if is_win else (0 if self._window_controls is not None else 90))
         if self._window_controls is not None:
             right_margin = 0
+        if interface_is_rtl() and self._window_controls is not None:
+            # The mirrored row puts our own caption buttons on the left and the
+            # app icon on the right, where the margin reserved for the buttons
+            # was zero: the icon was pushed against (and past) the rounded
+            # corner. The trailing edge gets the same inset the leading one had.
+            left_margin, right_margin = right_margin, max(left_margin, 18)
 
         bar_layout = QHBoxLayout(bar)
         bar_layout.setContentsMargins(left_margin, 0, right_margin, 0)
@@ -1249,7 +1296,9 @@ class MainWindow(QMainWindow):
         painted blank plates and left the previous label behind.
         """
         btn = SidebarButton(text)
-        btn.setIcon(get_symbol_icon(icon_name, 16))
+        # Every row is 16px, and the glyphs are fitted so a theme's chunky
+        # application icon and its thin symbolic marks read as one set.
+        btn.setIcon(get_symbol_icon(icon_name, 16, fit_box=True))
         btn.setIconSize(QSize(16, 16))
         btn.setCheckable(checkable)
         btn.setMinimumHeight(max(btn.sizeHint().height(), sidebar_row_min_height()))
@@ -1333,10 +1382,44 @@ class MainWindow(QMainWindow):
         self._nav_btn_group.addButton(self._log_btn, _PAGE_DIAGNOSTICS)
         self._aux_nav_buttons.append(self._log_btn)
 
+        # Only shown while a newer build is actually waiting: a permanent "App
+        # Updates" row is a dead end for someone who is already up to date.
         self._check_updates_btn = self._make_nav_button(tr("nav_check_updates"), "update")
         self._check_updates_btn.clicked.connect(self._on_check_updates_clicked)
+        self._check_updates_btn.setVisible(False)
         layout.addWidget(self._check_updates_btn)
         self._aux_nav_buttons.append(self._check_updates_btn)
+
+        # Community and help: three marks, no label. They sit under the last
+        # navigation row and above the language picker, which keeps the rail a
+        # list of words with one quiet row of icons at the end. Each mark is its
+        # own button with the wording in its tooltip and accessible name, and
+        # the row mirrors with the interface direction.
+        self._help_row = QWidget()
+        self._help_row.setObjectName("helpRow")
+        help_layout = QHBoxLayout(self._help_row)
+        help_layout.setContentsMargins(8, 4, 8, 0)
+        help_layout.setSpacing(2)
+        self._help_icon_buttons = {}
+        for name, key, tip_key in (
+            ("discord", "_discord_btn", "help_discord_tip"),
+            ("reddit", "_reddit_btn", "help_reddit_tip"),
+            ("github", "_github_btn", "help_github_tip"),
+        ):
+            button = SidebarButton("")
+            button.setIconSize(QSize(16, 16))
+            button.setFixedSize(QSize(26, sidebar_row_min_height()))
+            button.setCursor(Qt.ArrowCursor)
+            button.setToolTip(tr(tip_key))
+            button.setAccessibleName(tr(tip_key))
+            button.clicked.connect(lambda _checked=False, n=name: self._open_community_link(n))
+            help_layout.addWidget(button, 0, Qt.AlignVCenter)
+            self._help_icon_buttons[name] = button
+            setattr(self, key, button)
+            self._aux_nav_buttons.append(button)
+        help_layout.addStretch(1)
+        layout.addWidget(self._help_row)
+        self._aux_nav_buttons.append(self._help_row)
 
         self._lang_label = QLabel(tr("nav_language"))
         self._lang_label.setStyleSheet(
@@ -1417,25 +1500,36 @@ class MainWindow(QMainWindow):
         if hasattr(self, "_nav_buttons"):
             for key, (btn, _) in self._nav_buttons.items():
                 if key == "nav_select_package":
-                    btn.setIcon(get_symbol_icon("install", 16))
+                    btn.setIcon(get_symbol_icon("install", 16, fit_box=True))
                 elif key == "nav_settings":
-                    btn.setIcon(get_symbol_icon("settings", 16))
+                    btn.setIcon(get_symbol_icon("settings", 16, fit_box=True))
         if hasattr(self, "_support_btn"):
-            self._support_btn.setIcon(get_symbol_icon("support", 16))
+            self._support_btn.setIcon(get_symbol_icon("support", 16, fit_box=True))
+        for attr, name in (
+            ("_discord_btn", "discord"),
+            ("_reddit_btn", "reddit"),
+            ("_github_btn", "github"),
+        ):
+            button = getattr(self, attr, None)
+            if button is not None:
+                button.setIcon(self._community_icon(name))
+                button.setIconSize(QSize(16, 16))
         if hasattr(self, "_log_btn"):
-            self._log_btn.setIcon(get_symbol_icon("diagnostics", 16))
+            self._log_btn.setIcon(get_symbol_icon("diagnostics", 16, fit_box=True))
         if hasattr(self, "_check_updates_btn"):
-            self._check_updates_btn.setIcon(get_symbol_icon("update", 16))
+            self._check_updates_btn.setIcon(get_symbol_icon("update", 16, fit_box=True))
         if hasattr(self, "_linux_setup_btn"):
-            self._linux_setup_btn.setIcon(get_symbol_icon("tools", 16))
+            self._linux_setup_btn.setIcon(get_symbol_icon("tools", 16, fit_box=True))
         if hasattr(self, "_sp_flash_tool_btn"):
-            self._sp_flash_tool_btn.setIcon(get_symbol_icon("tools", 16))
+            self._sp_flash_tool_btn.setIcon(get_symbol_icon("tools", 16, fit_box=True))
         if hasattr(self, "_install_output_btn"):
-            self._install_output_btn.setIcon(get_symbol_icon("diagnostics", 16))
+            self._install_output_btn.setIcon(get_symbol_icon("diagnostics", 16, fit_box=True))
         if hasattr(self, "_lang_combo"):
             from PySide6.QtGui import QIcon
 
-            lang_icon = get_symbol_icon("translate", 14)
+            # Same live foreground as the rest of the sidebar; the provider's
+            # default is plain white in dark mode.
+            lang_icon = get_symbol_icon("translate", 14, color=T().fg)
             for i in range(self._lang_combo.count()):
                 # A row that carries its language's flag needs no second mark;
                 # the ones without a flag keep the translate glyph.
@@ -1504,6 +1598,9 @@ class MainWindow(QMainWindow):
             sb.refresh_theme()
 
         self._refresh_icons()
+        from .dark import configure_native_combobox
+        for combo in self.findChildren(QComboBox):
+            configure_native_combobox(combo)
 
         for page in (
             self._select_page,
@@ -1819,10 +1916,11 @@ class MainWindow(QMainWindow):
     def _on_download_finished(self, ok, result):
         if getattr(self, "_gui_handoff_prepare", False):
             if ok:
-                self._download_active = True
-                self._flash_page.show_preparing()
+                # The archive is on disk; extraction starts next. The prep
+                # view and its title come from the extractor (prep_started).
+                self._download_active = False
                 if hasattr(self, "_select_page") and hasattr(self._select_page, "_title"):
-                    self._select_page._title.setText(tr("flash_download_in_progress"))
+                    self._select_page._title.setText(tr("flash_install_in_progress"))
             return
         if not ok:
             self._download_active = False
@@ -2476,7 +2574,7 @@ class MainWindow(QMainWindow):
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(10)
         self._prompt_accept = _RoundNextButton(symbol="next", accent=True)
-        self._prompt_reject = _RoundNextButton(symbol="cancel", accent=False)
+        self._prompt_reject = _RoundNextButton(symbol="back", accent=False)
         row.addWidget(self._prompt_accept, 0, Qt.AlignVCenter)
         row.addWidget(self._prompt_reject, 0, Qt.AlignVCenter)
         layout.addLayout(row)
@@ -2944,10 +3042,10 @@ class MainWindow(QMainWindow):
                 self._settings_btn.setEnabled(False)
             if hasattr(self, "_support_btn"):
                 self._support_btn.setVisible(False)
+            self._set_help_row_visible(False)
             if hasattr(self, "_log_btn"):
                 self._sync_diagnostics_button()
-            if hasattr(self, "_check_updates_btn"):
-                self._check_updates_btn.setVisible(False)
+            self._sync_update_button()
             if hasattr(self, "_linux_setup_btn"):
                 self._linux_setup_btn.setVisible(False)
             if hasattr(self, "_sp_flash_tool_btn"):
@@ -2966,10 +3064,10 @@ class MainWindow(QMainWindow):
                 self._settings_btn.setEnabled(True)
             if hasattr(self, "_support_btn"):
                 self._support_btn.setVisible(True)
+            self._set_help_row_visible(True)
             if hasattr(self, "_log_btn"):
                 self._sync_diagnostics_button()
-            if hasattr(self, "_check_updates_btn"):
-                self._check_updates_btn.setVisible(not is_generic_mtk() and not is_offline_mode())
+            self._sync_update_button()
             if hasattr(self, "_linux_setup_btn"):
                 setup_done = self.settings.value(
                     "linux_setup_completed", False, type=bool
@@ -5016,10 +5114,22 @@ class MainWindow(QMainWindow):
             prev = _PAGE_SELECT
         self._nav_to_page(prev)
 
+    def _sync_settings_nav_label(self) -> None:
+        """The Settings row names the setup stage while that stage is open."""
+        button = getattr(self, "_settings_btn", None)
+        if button is None:
+            return
+        button.setText(
+            tr("nav_linux_setup")
+            if getattr(self, "_linux_setup_flow_active", False)
+            else tr("nav_settings")
+        )
+
     def _show_full_settings(self):
         """Open the complete Settings column and highlight its navigation row."""
         page = getattr(self, "_settings_page", None)
         self._linux_setup_flow_active = False
+        self._sync_settings_nav_label()
         if page is not None and page.focused_card() is not None:
             page.clear_card_focus()
         self._nav_to_page(_PAGE_SETTINGS)
@@ -5036,6 +5146,7 @@ class MainWindow(QMainWindow):
         if page is None or not hasattr(page, "start_sp_flash_prep"):
             return
         self._linux_setup_flow_active = True
+        self._sync_settings_nav_label()
         page.show_card_alone(page._checker_card)
         self._sync_sp_gui_button_visibility()
         if not page.start_sp_flash_prep():
@@ -5054,6 +5165,7 @@ class MainWindow(QMainWindow):
         if not getattr(self, "_linux_setup_flow_active", False) or self._install_run_active():
             return
         self._linux_setup_flow_active = False
+        self._sync_settings_nav_label()
         self.settings.setValue("linux_setup_completed", True)
         setup_btn = getattr(self, "_linux_setup_btn", None)
         if setup_btn is not None:
@@ -5196,6 +5308,22 @@ class MainWindow(QMainWindow):
         if getattr(self, "_gui_handoff_prepare", False):
             return
 
+        # Read the choice *before* anything is cancelled. Stopping the install
+        # service and the device monitor resets the flash state, and the page
+        # drops the explicit release selection when its catalogue refreshes —
+        # reading the target afterwards found nothing and the button did
+        # nothing at all for a focused release that was not cached yet.
+        page = getattr(self, "_select_page", None)
+        chosen = page.gui_firmware_target() if page is not None and hasattr(page, "gui_firmware_target") else None
+        target = None
+        if chosen and chosen.get("kind") != "cache":
+            if chosen.get("kind") == "online" and not Path(chosen.get("dest") or "").is_file():
+                target = chosen
+            else:
+                target = page.explicit_firmware() if page is not None else None
+                target = target or (page.focused_firmware() if page is not None else None)
+                target = target or chosen
+
         if hasattr(self, "service") and self.service:
             self.service.cancel_flash()
             self.service.stop_device_monitor()
@@ -5205,21 +5333,12 @@ class MainWindow(QMainWindow):
         if getattr(self, "_elapsed_timer", None) is not None:
             self._elapsed_timer.stop()
 
-        page = getattr(self, "_select_page", None)
-        chosen = page.gui_firmware_target() if page is not None and hasattr(page, "gui_firmware_target") else None
         if chosen and chosen.get("kind") == "cache":
             self._package_model = chosen.get("model") or self._package_model or ""
             self._gui_ready = (chosen["scatter"], chosen["extract"], self._package_model)
             self._complete_gui_handoff()
             return
-        if not chosen:
-            return
-        if chosen.get("kind") == "online" and not Path(chosen.get("dest") or "").is_file():
-            target = chosen
-        else:
-            target = self._select_page.explicit_firmware() if page is not None else None
-            target = target or self._select_page.focused_firmware()
-        if not target:
+        if not chosen or not target:
             return
         # A clicked but not-yet-downloaded release is prepared in the usual
         # progress view; it becomes eligible only after its extract is complete.
@@ -5243,8 +5362,12 @@ class MainWindow(QMainWindow):
             self._gui_handoff_prepare = False
             return False
         if self._gui_handoff_prepare:
+            # The card follows what the worker is doing, not the hand-off as a
+            # whole: the download signals switch to the download view, and the
+            # extractor's own prep_started switches to the extraction view.
+            # Showing "Extracting" up front used to hide a multi-hundred
+            # megabyte download behind a 0% extraction card.
             self._download_active = (target.get("kind") == "online")
-            self._flash_page.show_preparing()
             self._nav_to_page(_PAGE_FLASH)
             if hasattr(self, "_select_page") and hasattr(self._select_page, "_title"):
                 title_key = "flash_download_in_progress" if self._download_active else "flash_install_in_progress"
@@ -5487,6 +5610,72 @@ class MainWindow(QMainWindow):
             )
             self._nav_to_page(_PAGE_SELECT)
             return
+        self._append_log(msg or tr("sp_gui_launched_status"))
+        if paths.IS_LINUX:
+            # The launch goes through pkexec/sudo, whose password prompt belongs
+            # to the desktop and outlives this window. Leaving now closed the app
+            # under the prompt and the authorisation died with it, so the tool
+            # never started. Wait for the tool's own process, then go.
+            self._quit_when_tool_runs()
+            return
+        # The desktop tool owns the device from here: this app is only holding
+        # history.ini and a window open, so it leaves.
+        self._quit_after_gui_handoff()
+
+    def _quit_when_tool_runs(self, timeout_seconds: float = 180.0) -> None:
+        """Leave once SP Flash Tool is actually running, not when it was asked.
+
+        On Linux the tool starts behind a privilege prompt, so the request
+        returning only means the prompt is up. Polling for the tool's process
+        keeps the updater (and the prompt) alive until the password is accepted,
+        and leaves it open — with the launch still offered — if it never is.
+        """
+        from .. import process_guard
+
+        timer = getattr(self, "_tool_launch_timer", None)
+        if timer is not None:
+            timer.stop()
+        timer = QTimer(self)
+        self._tool_launch_timer = timer
+        start = time.monotonic()
+
+        def _check() -> None:
+            if getattr(self, "_gui_quit_started", False):
+                timer.stop()
+                return
+            running = any(
+                "flash_tool" in (row[2] or "")
+                for row in process_guard.process_snapshot()
+            )
+            if running:
+                timer.stop()
+                self._quit_after_gui_handoff()
+                return
+            if time.monotonic() - start >= timeout_seconds:
+                timer.stop()
+                logger.warning("SP Flash Tool never started; keeping the updater open")
+                self._sync_sp_gui_button_visibility()
+
+        timer.timeout.connect(_check)
+        timer.start(700)
+        # The prompt may already be answered, or the tool may start at once.
+        QTimer.singleShot(1200, _check)
+
+    def _quit_after_gui_handoff(self) -> None:
+        """Leave the app once SP Flash Tool's own window is up.
+
+        Not ``close()``: closing the window ends the install window and
+        sweeps stray flash tools, which would kill the very tool this run just
+        handed over to. Quitting the event loop instead leaves every process
+        alone; ``app._leave_cleanly`` keeps the interpreter from tearing down a
+        worker thread that is still finishing.
+        """
+        if getattr(self, "_gui_quit_started", False):
+            return
+        self._gui_quit_started = True
+        self._force_quit = True
+        logger.info("SP Flash Tool GUI is running; closing the updater")
+        QApplication.quit()
 
     def _check_linux_first_run(self):
         """First run on Linux: prepare on the Settings card, not in a window.
@@ -5515,6 +5704,11 @@ class MainWindow(QMainWindow):
         lang = self._lang_combo.itemData(index)
         translator().set_language(lang)
         self.settings.setValue("language", lang)
+        # A right-to-left language mirrors the interface. This runs before the
+        # retranslation so the re-laid-out copy is measured in the direction it
+        # is finally drawn in.
+        apply_interface_direction(QApplication.instance())
+        self._align_page_title()
         self._retranslate_all()
         self._sync_notes_language()
         # German labels are longer than English ones: refit the window to the
@@ -5530,7 +5724,7 @@ class MainWindow(QMainWindow):
         """
         if not hasattr(self, "_select_page"):
             return
-        if (translator().lang or "en").strip() == "en":
+        if is_english_language():
             return
         stored = self.settings.value("translate_release_notes", None)
         if stored is None or str(stored).strip().lower() not in ("false", "0", "no", "off"):
@@ -5546,7 +5740,7 @@ class MainWindow(QMainWindow):
         """
         if not hasattr(self, "_select_page"):
             return
-        wanted = (translator().lang or "en").strip() != "en"
+        wanted = not is_english_language()
         self.settings.setValue("translate_release_notes", wanted)
         self._select_page.set_auto_translate_notes(wanted)
 
@@ -5556,10 +5750,20 @@ class MainWindow(QMainWindow):
         self._update_author_label()
         for key, (btn, _idx) in self._nav_buttons.items():
             btn.setText(tr(key))
+        self._sync_settings_nav_label()
         self._sync_install_nav_entry()
         self._support_btn.setText(tr("nav_donate"))
+        for attr, tip_key in (
+            ("_discord_btn", "help_discord_tip"),
+            ("_reddit_btn", "help_reddit_tip"),
+            ("_github_btn", "help_github_tip"),
+        ):
+            button = getattr(self, attr, None)
+            if button is not None:
+                button.setToolTip(tr(tip_key))
+                button.setAccessibleName(tr(tip_key))
         self._log_btn.setText(tr("nav_log"))
-        self._check_updates_btn.setText(tr("nav_check_updates"))
+        self._sync_update_button()
         if hasattr(self, "_linux_setup_btn"):
             self._linux_setup_btn.setText(tr("nav_linux_setup"))
         if hasattr(self, "_sp_flash_tool_btn"):
@@ -5601,9 +5805,39 @@ class MainWindow(QMainWindow):
         self._run_update_check()
 
     def _on_check_updates_clicked(self):
+        info = getattr(self, "_pending_app_update", None)
+        if info is not None and getattr(info, "tag", ""):
+            # The rail row names the waiting build; opening it is the update.
+            self._offer_app_update(info)
+            return
         self._update_manual_pending = True
         self._show_update_check_busy()
         self._run_update_check()
+
+    def _sync_update_button(self) -> None:
+        """Show the update row only for a build that is waiting to be installed.
+
+        The label carries the action and the version ("Get 2.7", "Obtenir 3.0"),
+        so the row reads as what the click does rather than as a place.
+        """
+        button = getattr(self, "_check_updates_btn", None)
+        if button is None:
+            return
+        info = getattr(self, "_pending_app_update", None)
+        version = str(getattr(info, "version", "") or "")
+        waiting = bool(version) and bool(getattr(info, "tag", ""))
+        if waiting:
+            button.setText(tr("nav_get_update").format(version=version))
+        else:
+            button.setText(tr("nav_check_updates"))
+        available = (
+            waiting
+            and not is_generic_mtk()
+            and not is_offline_mode()
+            and not self._install_run_active()
+        )
+        button.setVisible(available)
+        button.setEnabled(available)
 
     def _show_update_check_busy(self):
         """Native indeterminate bar while the app-update check runs off-thread."""
@@ -5653,13 +5887,7 @@ class MainWindow(QMainWindow):
             open_browser(release_url)
             return
 
-        dlg = UpdateAvailableDialog(
-            self,
-            info=info,
-            current_version=APP_VERSION,
-            on_skip=lambda v: self.settings.setValue("update_skipped_version", v),
-        )
-        self._present_inline(dlg, tr("nav_check_updates"))
+        self._offer_app_update(info)
 
     def _on_update_check_done(self, info, manual):
         if not isinstance(info, UpdateInfo):
@@ -5669,29 +5897,40 @@ class MainWindow(QMainWindow):
         if info.tag:
             skipped = str(self.settings.value("update_skipped_version", ""))
             if info.version == skipped and not manual:
+                self._pending_app_update = None
+                self._sync_update_button()
                 return
             self._update_offered_once = True
+            self._pending_app_update = info
+            self._sync_update_button()
+            self._offer_app_update(info)
+        else:
+            self._pending_app_update = None
+            self._sync_update_button()
+            if manual:
+                self._present_message(
+                    tr("nav_check_updates"),
+                    tr("update_check_failed")
+                    if info.failed
+                    else tr("update_up_to_date").format(version=APP_VERSION),
+                )
 
-            # If user has started a firmware download/install, do not interrupt with a
-            # full window view! Present a toast in the Select Software view instead.
-            if self._install_run_active():
-                self._select_page.show_app_update(info)
-                return
-
-            dlg = UpdateAvailableDialog(
-                self,
-                info=info,
-                current_version=APP_VERSION,
-                on_skip=lambda v: self.settings.setValue("update_skipped_version", v),
-            )
-            self._present_inline(dlg, tr("nav_check_updates"))
-        elif manual:
-            self._present_message(
-                tr("nav_check_updates"),
-                tr("update_check_failed")
-                if info.failed
-                else tr("update_up_to_date").format(version=APP_VERSION),
-            )
+    def _offer_app_update(self, info) -> None:
+        """Present the waiting build: a toast while a firmware run owns the window."""
+        self._pending_app_update = info
+        self._sync_update_button()
+        # If user has started a firmware download/install, do not interrupt with a
+        # full window view! Present a toast in the Select Software view instead.
+        if self._install_run_active():
+            self._select_page.show_app_update(info)
+            return
+        dlg = UpdateAvailableDialog(
+            self,
+            info=info,
+            current_version=APP_VERSION,
+            on_skip=lambda v: self.settings.setValue("update_skipped_version", v),
+        )
+        self._present_inline(dlg, tr("nav_check_updates"))
 
     def _check_device_firmware_updates(self, manual=False):
         old = getattr(self, "_device_update_worker", None)
@@ -5832,6 +6071,21 @@ class MainWindow(QMainWindow):
         if not text:
             self._apply_donation_visibility()
 
+    def _set_help_row_visible(self, visible: bool) -> None:
+        """Show or hide the community marks as one row.
+
+        Each mark is its own focusable button, so hiding only the row would
+        leave the buttons reachable by Tab; they hide with it.
+        """
+        row = getattr(self, "_help_row", None)
+        if row is not None:
+            row.setVisible(bool(visible))
+        for attr in ("_discord_btn", "_reddit_btn", "_github_btn"):
+            button = getattr(self, attr, None)
+            if button is not None:
+                button.setVisible(bool(visible))
+                button.setEnabled(bool(visible))
+
     def _apply_donation_visibility(self, is_disabled=None):
         if is_disabled is None:
             is_disabled = device_tracking.is_donation_ui_disabled(self.settings)
@@ -5844,6 +6098,7 @@ class MainWindow(QMainWindow):
         quiet = self._install_run_active() or self._handoff_chrome()
         if hasattr(self, "_support_btn") and self._support_btn is not None:
             self._support_btn.setVisible((not is_disabled) and not quiet)
+        self._set_help_row_visible((not is_disabled) and not quiet)
         if hasattr(self, "_version_label") and self._version_label is not None:
             self._version_label.setVisible(not is_disabled and not is_mediatek_installer())
         if hasattr(self, "_credits_btn") and self._credits_btn is not None:
@@ -5868,8 +6123,7 @@ class MainWindow(QMainWindow):
         # but hidden in generic MediaTek Installer builds.
         if hasattr(self, "_credits_btn"):
             self._credits_btn.setVisible(not mediatek)
-        if hasattr(self, "_check_updates_btn"):
-            self._check_updates_btn.setVisible(not offline and not is_offline_mode())
+        self._sync_update_button()
         if hasattr(self, "_settings_page"):
             self._settings_page.apply_brand_mode(mediatek)
         if hasattr(self, "_select_page"):
@@ -5879,6 +6133,51 @@ class MainWindow(QMainWindow):
             if hasattr(self._select_page, "apply_installer_mode"):
                 self._select_page.apply_installer_mode(mediatek)
         self._apply_donation_visibility()
+
+    def _community_icon(self, name: str, icon_size: int = 16) -> QIcon:
+        """Load a community brand SVG and tint it with the live sidebar foreground."""
+        from PySide6.QtCore import QByteArray, QRectF
+        from PySide6.QtSvg import QSvgRenderer
+
+        path = paths.RESOURCES_DIR / f"{name}.svg"
+        color = T().fg
+        if not path.is_file():
+            return get_symbol_icon("support", icon_size, color=color)
+        try:
+            source = path.read_text(encoding="utf-8")
+            import re
+
+            source = re.sub(r"fill=([\"'])[^\"']+\1", f'fill="{color}"', source)
+            source = source.replace("currentColor", color)
+            renderer = QSvgRenderer(QByteArray(source.encode("utf-8")))
+            if renderer.isValid():
+                from PySide6.QtGui import QPixmap, QPainter
+
+                pixmap = QPixmap(icon_size * 2, icon_size * 2)
+                pixmap.setDevicePixelRatio(2.0)
+                pixmap.fill(Qt.transparent)
+                view_box = renderer.viewBoxF()
+                if view_box.width() <= 0 or view_box.height() <= 0:
+                    raise ValueError(f"Invalid {name} icon viewBox")
+                scale = min(icon_size / view_box.width(), icon_size / view_box.height())
+                width = view_box.width() * scale
+                height = view_box.height() * scale
+                target = QRectF((icon_size - width) / 2, (icon_size - height) / 2, width, height)
+                painter = QPainter(pixmap)
+                renderer.render(painter, target)
+                painter.end()
+                return QIcon(pixmap)
+        except Exception:
+            logger.debug("Could not load %s community icon", name, exc_info=True)
+        return get_symbol_icon("support", icon_size, color=color)
+
+    def _open_community_link(self, community: str) -> None:
+        from ..browser import open_browser
+        from ..config import DONATION_LINKS
+
+        url = DONATION_LINKS.get(community)
+        if url:
+            open_browser(url)
 
     def _on_offline_mode_changed(self, enabled: bool):
         # Offline mode hides the online catalogue and its affordances, but it

@@ -697,7 +697,7 @@ def update_sp_history_ini(
 
     Prepopulates scatterHistory, lastDir, and LastDAFilePath with absolute paths
     of the scatter file and partition images for the most recently attempted or
-    downloaded firmware package in Updater Neo.
+    downloaded firmware package in Updater CE.
 
     If sp_dir is None, updates all detected SP Flash Tool binary directories.
     """

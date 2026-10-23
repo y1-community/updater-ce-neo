@@ -589,6 +589,8 @@ def test_os_standard_iconography():
     w = MainWindow()
     assert not w._settings_btn.icon().isNull(), "Settings button must have an icon"
     assert not w._support_btn.icon().isNull(), "Support button must have an icon"
+    assert not w._discord_btn.icon().isNull(), "Discord button must have an icon"
+    assert not w._reddit_btn.icon().isNull(), "Reddit button must have an icon"
     assert not w._log_btn.icon().isNull(), "Diagnostics button must have an icon"
     assert not w._check_updates_btn.icon().isNull(), "Update button must have an icon"
     assert not w._lang_combo.itemIcon(0).isNull(), "Language combo items must have translate icon"
@@ -596,6 +598,19 @@ def test_os_standard_iconography():
     sp = SelectPackagePage()
     assert not sp._install_btn.icon().isNull(), "Install button must have an icon"
     assert not sp._start_btn.icon().isNull(), "Start button must have an icon"
+    from PySide6.QtGui import QColor
+    for button in (sp._install_btn, sp._start_btn):
+        pixmap = button.icon().pixmap(16, 16)
+        image = pixmap.toImage()
+        visible = [
+            image.pixelColor(x, y)
+            for y in range(image.height())
+            for x in range(image.width())
+            if image.pixelColor(x, y).alpha() > 0
+        ]
+        assert visible
+        foreground = QColor(T().fg)
+        assert all(color.rgb() == foreground.rgb() for color in visible)
     assert not sp._browse_btn.icon().isNull(), "Browse file button must have an icon"
     assert not sp._browse_folder_btn.icon().isNull(), "Browse folder button must have an icon"
 
@@ -1793,6 +1808,11 @@ def test_progress_cancel_stays_in_the_card():
 
         assert page._stop_continue.width() == ROUND_NEXT_BUTTON_PX
         assert page._stop_continue.height() == ROUND_NEXT_BUTTON_PX
+        # The accent chip leads: "back to the install" on the left, "stop it"
+        # on the right, so the two arrows point away from each other.
+        assert list(page._stop_actions._buttons) == [page._stop_back, page._stop_continue]
+        assert page._stop_back._accent is True
+        assert page._stop_continue._accent is False
         # They sit beside the copy, so they no longer add a row to the card:
         # the height is the wrapped copy plus the card's own padding.
         assert card_h >= prompt.minimumSizeHint().height() + package.minimumSizeHint().height() - 8
@@ -2433,6 +2453,11 @@ def test_settings_donations_dismiss_link():
     had_key = key in store.allKeys() or grouped in store.allKeys()
     previous = device_tracking.is_settings_donations_section_dismissed()
     donations_were_off = device_tracking.is_donation_ui_disabled()
+    install_prompts_were_off = device_tracking.is_donation_install_prompt_disabled()
+    # This test covers a permanent section dismissal rather than the global UI
+    # switch; pin that switch off so the dismissal cannot change its state.
+    device_tracking.set_donation_ui_disabled(True)
+    device_tracking.set_donation_install_prompt_disabled(True)
     device_tracking.set_settings_donations_section_dismissed(False)
 
     page = SettingsPage()
@@ -2444,24 +2469,35 @@ def test_settings_donations_dismiss_link():
         page.show()
         app.processEvents()
         coffee = page._settings_coffee_btn
+        discord = page._settings_discord_btn
+        reddit = page._settings_reddit_btn
         link = page._dismiss_donations_link
         assert isinstance(link, QLabel)
         assert coffee.parentWidget() is link.parentWidget()
         row = coffee.parentWidget().layout()
-        assert row.indexOf(link) > row.indexOf(coffee)
+        assert row.indexOf(discord) > row.indexOf(coffee)
+        assert row.indexOf(reddit) > row.indexOf(discord)
+        assert row.indexOf(link) > row.indexOf(reddit)
+        assert discord.text() == "Discord"
+        assert reddit.text() == "Reddit"
+        assert not discord.icon().isNull()
+        assert not reddit.icon().isNull()
+        assert discord.iconSize().width() == 10
+        assert reddit.iconSize().width() == 10
         assert link.cursor().shape() == Qt.PointingHandCursor
         assert coffee.cursor().shape() == Qt.ArrowCursor
         assert "Never show me this again" in link.text()
         assert 'href="dismiss"' in link.text()
         assert coffee.width() > 0 and link.width() > 0
-        assert link.x() >= coffee.x() + coffee.width() - 2
+        assert page._settings_discord_btn.isVisible()
+        assert page._settings_reddit_btn.isVisible()
         assert page._donations_card.isVisible()
         assert page._card_layout.isEnabled()
 
         link.linkActivated.emit("dismiss")
         app.processEvents()
         assert device_tracking.is_settings_donations_section_dismissed()
-        assert device_tracking.is_donation_ui_disabled() is donations_were_off
+        assert device_tracking.is_donation_ui_disabled() is True
         if widgets_mod.prefers_reduced_motion():
             assert page._donations_card.isHidden()
             assert page._card_layout.isEnabled()
@@ -2469,6 +2505,8 @@ def test_settings_donations_dismiss_link():
             QTest.qWait(widgets_mod.COLLAPSE_MS + 80)
             assert page._donations_card.isHidden()
         assert not page._settings_coffee_btn.isVisible()
+        assert not page._settings_discord_btn.isVisible()
+        assert not page._settings_reddit_btn.isVisible()
         assert not page._cb_hide_donations.isVisible()
         assert not page._lbl_hide_tip.isVisible()
 
@@ -2481,6 +2519,8 @@ def test_settings_donations_dismiss_link():
         assert page2._donations_card.isHidden()
         assert not page2._donations_card.isVisible()
         assert not page2._settings_coffee_btn.isVisible()
+        assert not page2._settings_discord_btn.isVisible()
+        assert not page2._settings_reddit_btn.isVisible()
         assert not page2._dismiss_donations_link.isVisible()
         assert "Never show me this again" not in _visible_text(page2)
         _assert_no_hole_where_the_card_was(page2)
@@ -2536,6 +2576,8 @@ def test_settings_donations_dismiss_link():
         else:
             store.remove(key)
             store.remove(grouped)
+        device_tracking.set_donation_ui_disabled(donations_were_off)
+        device_tracking.set_donation_install_prompt_disabled(install_prompts_were_off)
         store.sync()
         page.close()
         page.deleteLater()
@@ -2856,6 +2898,8 @@ def test_install_stages_sidebar_visibility_and_compact_height():
         assert w._install_output_btn.isVisible() is True
         assert w._settings_btn.isVisible() is False
         assert w._support_btn.isVisible() is False
+        assert w._discord_btn.isVisible() is False
+        assert w._reddit_btn.isVisible() is False
         assert w._sp_flash_tool_btn.isVisible() is False
         assert w._check_updates_btn.isVisible() is False
         assert w._lang_combo.isVisible() is False
@@ -2866,6 +2910,8 @@ def test_install_stages_sidebar_visibility_and_compact_height():
         assert w._install_output_btn.isVisible() is False
         assert w._settings_btn.isVisible() is True
         assert w._support_btn.isVisible() is True
+        assert w._discord_btn.isVisible() is True
+        assert w._reddit_btn.isVisible() is True
         assert w._lang_combo.isVisible() is True
         assert w._lang_label.isVisible() is True
 
@@ -2993,3 +3039,150 @@ if __name__ == "__main__":
     test_progress_and_status_follow_the_live_theme()
 
     print("All native UX enhancement tests passed!")
+
+
+def _ink_box(pixmap):
+    """Bounding box of the drawn pixels of ``pixmap``, in physical pixels."""
+    image = pixmap.toImage()
+    xs, ys = [], []
+    for y in range(image.height()):
+        for x in range(image.width()):
+            if image.pixelColor(x, y).alpha() > 20:
+                xs.append(x)
+                ys.append(y)
+    assert xs, "the glyph drew nothing"
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def test_vector_fallback_glyphs_fill_their_pixmap_box():
+    """A bundled SVG glyph is drawn once, at scale, inside its own pixmap.
+
+    ``QSvgRenderer.render()`` without bounds fills the paint device, and a
+    device marked 2x has half the painter coordinates, so the fallback glyphs
+    were drawn doubled and clipped into one quadrant: a magnified fragment in
+    some sidebar rows and a full glyph in others. Every glyph must cover its
+    own box, which is what makes the icons read as one set.
+    """
+    from src.ui.icons import get_symbol_pixmap
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    assert app is not None
+    for sym in ("install", "cancel", "next", "back", "settings", "diagnostics", "support", "tools"):
+        pix = get_symbol_pixmap(sym, 16)
+        width, height = pix.width(), pix.height()
+        left, top, right, bottom = _ink_box(pix)
+        assert (right - left + 1) >= width * 0.6, (sym, (left, right), width)
+        assert (bottom - top + 1) >= height * 0.6, (sym, (top, bottom), height)
+        # Centred in the canvas, not pushed into a corner.
+        assert abs((left + right) - (width - 1)) <= width * 0.25, (sym, (left, right), width)
+        assert abs((top + bottom) - (height - 1)) <= height * 0.25, (sym, (top, bottom), height)
+
+
+def test_a_theme_icon_that_ships_one_small_raster_keeps_the_row_size(monkeypatch):
+    """Theme icons come back at the logical size the row asked for.
+
+    Icon themes without a scalable or 32px version return their best raster
+    (often 16px) even when 32 is requested. Marking that as 2x made it a
+    logical 8px glyph, so one sidebar row's icon was half the size — and half
+    the resolution — of its neighbours.
+    """
+    from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
+
+    from src.ui import icons
+
+    class _SmallRasterIcon:
+        def __init__(self):
+            self._source = QPixmap(16, 16)
+            self._source.fill(Qt.transparent)
+            painter = QPainter(self._source)
+            painter.fillRect(2, 2, 12, 12, QColor("#ffffff"))
+            painter.end()
+
+        def isNull(self):
+            return False
+
+        def pixmap(self, _size):
+            # What Qt's icon loader engine does: never upscales a raster it
+            # only has at a smaller size.
+            return QPixmap(self._source)
+
+    class _FakeIcon:
+        @staticmethod
+        def fromTheme(_name):
+            return _SmallRasterIcon()
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    assert app is not None
+    monkeypatch.setattr(icons, "QIcon", _FakeIcon)
+
+    pix = icons._get_freedesktop_pixmap("install", 16)
+    assert pix is not None and not pix.isNull()
+    assert pix.devicePixelRatio() > 1.0
+    assert pix.deviceIndependentSize().width() == 16
+    assert pix.deviceIndependentSize().height() == 16
+    row_pixmap = QIcon(icons.get_symbol_pixmap("install", 16)).pixmap(16, 16)
+    assert row_pixmap.deviceIndependentSize().width() == 16
+
+
+def test_browse_and_clear_glyphs_follow_the_interface_text_colour():
+    """Small button glyphs are the text colour, not the provider's white default.
+
+    ``get_symbol_icon`` defaults to plain white in dark mode, which left the
+    Browse Files / Browse Folder / Clear buttons pale against the theme's own
+    foreground on every label around them.
+    """
+    from PySide6.QtGui import QColor
+
+    from src.ui.dark import T, apply_theme
+    from src.ui.select_page import SelectPackagePage
+    from src.ui.settings_page import SettingsPage
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    apply_theme(app, force_dark=True)
+    foreground = QColor(T().fg)
+
+    def ink(button):
+        pixmap = button.icon().pixmap(button.iconSize())
+        image = pixmap.toImage()
+        return [
+            image.pixelColor(x, y)
+            for y in range(image.height())
+            for x in range(image.width())
+            if image.pixelColor(x, y).alpha() > 200
+        ]
+
+    page = SelectPackagePage()
+    try:
+        for name in (
+            "_browse_btn",
+            "_browse_folder_btn",
+            "_browse_da_btn",
+            "_clear_da_btn",
+            "_browse_scatter_btn",
+            "_browse_auth_btn",
+            "_clear_auth_btn",
+        ):
+            button = getattr(page, name)
+            pixels = ink(button)
+            assert pixels, name
+            for colour in pixels:
+                assert abs(colour.red() - foreground.red()) <= 12, (name, colour.name())
+                assert abs(colour.green() - foreground.green()) <= 12, (name, colour.name())
+                assert abs(colour.blue() - foreground.blue()) <= 12, (name, colour.name())
+    finally:
+        page.deleteLater()
+        app.processEvents()
+
+    settings = SettingsPage()
+    try:
+        pixels = ink(settings._clear_cache_btn)
+        assert pixels
+        assert all(
+            abs(colour.red() - foreground.red()) <= 12
+            and abs(colour.green() - foreground.green()) <= 12
+            and abs(colour.blue() - foreground.blue()) <= 12
+            for colour in pixels
+        )
+    finally:
+        settings.deleteLater()
+        app.processEvents()

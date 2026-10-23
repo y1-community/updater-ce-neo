@@ -105,8 +105,18 @@ def test_mac_cancel_symbol_resolves_to_xmark_or_fallback():
     assert "xmark" in names
 
 
-def test_linux_cancel_symbol_fallback_is_cross():
+def test_linux_cancel_symbol_is_the_apps_own_cross():
+    """A cancel is the app's cross, never the desktop's media-stop mark.
+
+    process-stop-symbolic reads as "stop playback" in a theme, and the Linux
+    lookup used to resolve to it. Cancelling is drawn by the app instead so the
+    same cross appears on every desktop; cancellations that only leave a screen
+    use the back arrow.
+    """
     _app()
-    names = _FREEDESKTOP_MAP.get("cancel", [])
-    assert names
-    assert "process-stop-symbolic" in names
+    assert _FREEDESKTOP_MAP.get("cancel", []) == []
+    from src.ui.icons import _SVG_TEMPLATES
+
+    assert "cancel" in _SVG_TEMPLATES
+    # Two crossing strokes: the app's own cross, whatever the desktop ships.
+    assert _SVG_TEMPLATES["cancel"].count("<line") == 2

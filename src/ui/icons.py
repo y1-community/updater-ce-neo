@@ -15,7 +15,7 @@ import platform
 import sys
 from typing import Optional
 
-from PySide6.QtCore import QByteArray, QRect, QSize, Qt
+from PySide6.QtCore import QByteArray, QRect, QRectF, QSize, Qt
 from PySide6.QtGui import (
     QColor,
     QFont,
@@ -138,6 +138,13 @@ _SVG_TEMPLATES = {
     "check": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="5 12.5 9.5 17 19 7"/>
     </svg>""",
+    # A bin, for deleting things that take space (the firmware cache).
+    "trash": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="3 6 5 6 21 6"/>
+        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+        <path d="M10 11v6M14 11v6"/>
+        <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>
+    </svg>""",
 }
 
 # Platform mappings
@@ -156,6 +163,7 @@ _SF_SYMBOL_MAP = {
     "folder": "folder",
     "complete": "checkmark.circle.fill",
     "check": "checkmark",
+    "trash": "trash",
 }
 
 _SEGOE_SYMBOL_MAP = {
@@ -173,11 +181,19 @@ _SEGOE_SYMBOL_MAP = {
     "folder": 0xED25,      # FolderOpen
     "complete": 0xE73E,    # CheckMark
     "check": 0xE73E,       # CheckMark
+    "trash": 0xE74D,       # Delete
 }
 
 _FREEDESKTOP_MAP = {
-    "install": ["system-software-install-symbolic", "system-software-install", "document-save-symbolic", "document-save"],
-    "cancel": ["process-stop-symbolic", "process-stop", "dialog-cancel-symbolic", "dialog-cancel"],
+    # The monochrome (symbolic) mark is the one a sidebar row can use: rows are
+    # painted in a single colour, so a full-colour application icon would be
+    # flattened into a blob. Names stay semantically tight — substituting a
+    # document-save or system-run glyph just to have one is a different icon.
+    "install": ["system-software-install-symbolic"],
+    # Cancelling is always the app's own cross: the desktop's process-stop mark
+    # reads as a media stop button, not as "cancel this". Back arrows cover the
+    # cancellations that only leave a screen.
+    "cancel": [],
     "next": ["go-next-symbolic", "go-next", "arrow-right-symbolic", "arrow-right"],
     "back": ["go-previous-symbolic", "go-previous", "arrow-left-symbolic", "arrow-left"],
     "settings": [
@@ -189,7 +205,7 @@ _FREEDESKTOP_MAP = {
         "settings-configure",
     ],
     "translate": ["preferences-desktop-locale-symbolic", "preferences-desktop-locale", "locale-symbolic", "locale"],
-    "diagnostics": ["utilities-system-monitor-symbolic", "utilities-system-monitor", "system-run-symbolic", "system-run"],
+    "diagnostics": ["utilities-system-monitor-symbolic"],
     "update": ["view-refresh-symbolic", "view-refresh", "system-software-update-symbolic", "system-software-update"],
     "support": ["emblem-favorite-symbolic", "emblem-favorite", "love"],
     "tools": ["applications-utilities-symbolic", "applications-utilities", "system-run-symbolic", "system-run"],
@@ -197,6 +213,7 @@ _FREEDESKTOP_MAP = {
     "folder": ["folder-open-symbolic", "folder-open", "folder-symbolic", "folder"],
     "complete": ["emblem-ok-symbolic", "emblem-ok", "object-select-symbolic", "dialog-ok"],
     "check": ["object-select-symbolic", "emblem-ok-symbolic", "dialog-ok", "check"],
+    "trash": ["user-trash-symbolic", "user-trash", "edit-delete-symbolic", "edit-delete"],
     # Circle with an i. dialog-question is only used when the information icons are missing.
     "help": ["dialog-information", "help-about", "dialog-question"],
 }
@@ -368,9 +385,16 @@ def app_bundle_path() -> str:
     from .. import paths
 
     try:
-        from ..config import get_app_name
+        from ..config import APP_NAME, is_mediatek_installer
 
-        name = get_app_name().lower()
+        # Bundles are named in English whatever language the window title is
+        # drawn in (the display name is transliterated per catalog), so the
+        # match uses the canonical name rather than the translated one.
+        names = (
+            ["mediatek installer", "mediatekinstaller"]
+            if is_mediatek_installer()
+            else [APP_NAME.lower()]
+        )
         dist_dirs = [paths.REPO_ROOT / "dist" / "macos", paths.REPO_ROOT / "dist"]
         candidates = [
             cand
@@ -387,7 +411,10 @@ def app_bundle_path() -> str:
             with plist.open("rb") as handle:
                 data = plistlib.load(handle)
             bundle_name = str(data.get("CFBundleName") or data.get("CFBundleDisplayName") or "")
-            if bundle_name and (name.startswith(bundle_name.lower()) or bundle_name.lower().startswith(name)):
+            lowered = bundle_name.lower()
+            if lowered and any(
+                name.startswith(lowered) or lowered.startswith(name) for name in names
+            ):
                 return str(candidate)
     except Exception as e:
         logger.debug("No built app bundle to read the icon of: %s", e)
@@ -639,13 +666,25 @@ def _get_freedesktop_pixmap(symbol_name: str, size: int, color: str = "#FFFFFF")
     names = _FREEDESKTOP_MAP.get(symbol_name, [])
     target_px = max(int(size), 1) * 2
     for name in names:
+        # A row glyph is painted in one colour, so only the theme's monochrome
+        # (symbolic) marks survive the tint. A full-colour application icon
+        # tinted flat loses its interior — Breeze's install icon becomes a
+        # solid blob — so those fall through to the stroke SVG set, which is
+        # the same weight as the symbolic marks. The information badge keeps
+        # its own icon: it is a filled badge by design.
+        if symbol_name != "help" and "symbolic" not in name:
+            continue
         icon = QIcon.fromTheme(name)
         if not icon.isNull():
             # Ask for a 2x pixmap and mark it hi-DPI: requesting `size` alone
             # gave a blurry, partly-clipped icon on scaled desktops.
             pix = icon.pixmap(QSize(target_px, target_px))
             if not pix.isNull():
-                if pix.width() > target_px or pix.height() > target_px:
+                # Themes without a scalable or 32px version hand back the best
+                # raster they have (often 16px). Marking that as 2x would make
+                # it a logical 8px glyph, so one row icon sat at half the size
+                # of the next. Fit every result into the same pixel box first.
+                if pix.width() != target_px or pix.height() != target_px:
                     pix = pix.scaled(target_px, target_px, Qt.KeepAspectRatio, Qt.SmoothTransformation)
                 pix.setDevicePixelRatio(2.0)
                 if symbol_name == "help":
@@ -657,18 +696,121 @@ def _get_freedesktop_pixmap(symbol_name: str, size: int, color: str = "#FFFFFF")
 
 
 def _get_svg_pixmap(symbol_name: str, size: int, color: str = "#FFFFFF") -> QPixmap:
-    """Render bundled vector SVG fallback in target color at 2x high-DPI."""
+    """Render bundled vector SVG fallback in target color at 2x high-DPI.
+
+    The artwork is drawn into the full pixel box: ``QSvgRenderer.render()`` with
+    no bounds fills the paint device, and a device marked 2x has half the
+    painter coordinates, so the untargeted call drew a doubled, clipped glyph
+    in one quarter of the canvas. The device pixel ratio is set afterwards,
+    when the pixels are already in place.
+    """
     template = _SVG_TEMPLATES.get(symbol_name, _SVG_TEMPLATES["settings"])
     svg_code = template.format(color=color).encode("utf-8")
     renderer = QSvgRenderer(QByteArray(svg_code))
-    px_size = size * 2
+    px_size = max(int(size), 1) * 2
     pix = QPixmap(px_size, px_size)
-    pix.setDevicePixelRatio(2.0)
     pix.fill(Qt.transparent)
     painter = QPainter(pix)
-    renderer.render(painter)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    renderer.render(painter, QRectF(0, 0, px_size, px_size))
     painter.end()
+    pix.setDevicePixelRatio(2.0)
     return pix
+
+
+def render_svg_asset(
+    path,
+    height: int,
+    color: Optional[str] = None,
+    device_pixel_ratio: float = 2.0,
+) -> QPixmap:
+    """Render a bundled illustration SVG at ``height`` logical pixels.
+
+    Used for the install hints (``assets/paperclip*.svg``). The artwork is
+    drawn at the desktop's pixel density, so it stays sharp instead of being
+    a bitmap scaled to the card. ``color`` repaints the bright strokes: those
+    illustrations are drawn for a dark surface, and a white drawing is
+    invisible on the light theme.
+
+    An empty pixmap means the file is missing or is not valid SVG.
+    """
+    try:
+        renderer = QSvgRenderer(str(path))
+        if not renderer.isValid():
+            return QPixmap()
+        box = renderer.viewBoxF()
+        if box.width() <= 0 or box.height() <= 0:
+            return QPixmap()
+        height = max(int(height), 1)
+        width = max(1, int(round(height * box.width() / box.height())))
+        dpr = max(float(device_pixel_ratio), 1.0)
+        pix = QPixmap(int(round(width * dpr)), int(round(height * dpr)))
+        pix.fill(Qt.transparent)
+        painter = QPainter(pix)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+        renderer.render(painter, QRectF(0, 0, pix.width(), pix.height()))
+        painter.end()
+        pix.setDevicePixelRatio(dpr)
+        if color:
+            pix = recolor_bright_pixels(pix, color)
+        return pix
+    except Exception as exc:  # pragma: no cover - malformed asset
+        logger.debug("Could not render %s: %s", path, exc)
+        return QPixmap()
+
+
+def fit_glyph_to_box(pixmap: QPixmap, margin: float = 0.09) -> QPixmap:
+    """Scale a glyph so its ink fills the same optical box as its neighbours.
+
+    One icon theme mixes families: a 48px coloured application icon is drawn
+    edge to edge, while a 16px symbolic glyph keeps a pixel or two of air
+    around it. Painted into the same 16px row slot they do not read as one
+    set — one looks large, the next small. Fitting the drawn pixels (not the
+    canvas) into an equal box with the same margin fixes that, without
+    replacing the platform's own artwork.
+    """
+    if pixmap is None or pixmap.isNull():
+        return pixmap
+    image = pixmap.toImage().convertToFormat(QImage.Format.Format_ARGB32)
+    left, top, right, bottom = image.width(), image.height(), -1, -1
+    for y in range(image.height()):
+        for x in range(image.width()):
+            if image.pixelColor(x, y).alpha() > 20:
+                left = min(left, x)
+                right = max(right, x)
+                top = min(top, y)
+                bottom = max(bottom, y)
+    if right < left or bottom < top:
+        return pixmap
+    ink_w = right - left + 1
+    ink_h = bottom - top + 1
+    dpr = max(float(pixmap.devicePixelRatio()), 1.0)
+    box = int(round(min(image.width(), image.height()) * (1.0 - 2.0 * margin)))
+    if box <= 0 or (ink_w == box and ink_h == box):
+        return pixmap
+    # Keep the glyph's proportions; the larger side fills the box.
+    scale = box / float(max(ink_w, ink_h))
+    draw_w = max(1, int(round(ink_w * scale)))
+    draw_h = max(1, int(round(ink_h * scale)))
+    out = QPixmap(image.width(), image.height())
+    out.fill(Qt.transparent)
+    painter = QPainter(out)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+    painter.drawImage(
+        QRectF(
+            (image.width() - draw_w) / 2.0,
+            (image.height() - draw_h) / 2.0,
+            draw_w,
+            draw_h,
+        ),
+        image,
+        QRectF(left, top, ink_w, ink_h),
+    )
+    painter.end()
+    out.setDevicePixelRatio(dpr)
+    return out
 
 
 def resolve_symbol_colors(
@@ -769,30 +911,36 @@ def get_symbol_pixmap(
     size: int = 16,
     color: Optional[str] = None,
     match_accent: bool = False,
+    fit_box: bool = False,
 ) -> QPixmap:
-    """Return a crisp QPixmap for the requested symbol adapting to host OS and theme color."""
+    """Return a crisp QPixmap for the requested symbol adapting to host OS and theme color.
+
+    ``fit_box`` normalises the drawn size across a mixed icon set, for rows
+    where several symbols sit side by side (the sidebar).
+    """
     norm_color, _ = resolve_symbol_colors(color=color, match_accent=match_accent)
 
     # 1. macOS: Apple SF Symbols
     if IS_MAC:
         mac_pix = _get_sf_symbol_pixmap(symbol_name, size, norm_color)
         if mac_pix and not mac_pix.isNull():
-            return mac_pix
+            return fit_glyph_to_box(mac_pix) if fit_box else mac_pix
 
     # 2. Windows: MS Segoe Symbols
     if IS_WINDOWS:
         win_pix = _get_segoe_pixmap(symbol_name, size, norm_color)
         if win_pix and not win_pix.isNull():
-            return win_pix
+            return fit_glyph_to_box(win_pix) if fit_box else win_pix
 
     # 3. Linux: FreeDesktop theme
     if not IS_MAC and not IS_WINDOWS:
         linux_pix = _get_freedesktop_pixmap(symbol_name, size, norm_color)
         if linux_pix and not linux_pix.isNull():
-            return linux_pix
+            return fit_glyph_to_box(linux_pix) if fit_box else linux_pix
 
     # 4. Universal high-DPI vector SVG fallback
-    return _get_svg_pixmap(symbol_name, size, norm_color)
+    svg_pix = _get_svg_pixmap(symbol_name, size, norm_color)
+    return fit_glyph_to_box(svg_pix) if fit_box else svg_pix
 
 
 def get_symbol_icon(
@@ -801,12 +949,16 @@ def get_symbol_icon(
     color: Optional[str] = None,
     focused_color: Optional[str] = None,
     match_accent: bool = False,
+    fit_box: bool = False,
 ) -> QIcon:
     """Return a multi-state QIcon adapting to host OS, dark/light mode, and focus/checked states.
 
     - Unfocused / normal: colour-matched to accent colour (or white in dark mode, dark in light mode).
     - Focused / checked: displayed in white (dark mode) or black/white (light mode depending on accent contrast).
     - Disabled: muted disabled tone.
+
+    ``fit_box`` gives every glyph the same drawn size, for rows that line up
+    several symbols (see :func:`fit_glyph_to_box`).
     """
     norm_color, foc_color = resolve_symbol_colors(
         color=color,
@@ -815,10 +967,14 @@ def get_symbol_icon(
     )
 
     # 1. Normal pixmap (unfocused / unchecked)
-    pix_norm = get_symbol_pixmap(symbol_name, size=size, color=norm_color, match_accent=False)
+    pix_norm = get_symbol_pixmap(
+        symbol_name, size=size, color=norm_color, match_accent=False, fit_box=fit_box
+    )
 
     # 2. Focused pixmap (checked / highlighted / focused)
-    pix_foc = get_symbol_pixmap(symbol_name, size=size, color=foc_color, match_accent=False)
+    pix_foc = get_symbol_pixmap(
+        symbol_name, size=size, color=foc_color, match_accent=False, fit_box=fit_box
+    )
 
     # 3. Disabled pixmap
     try:
@@ -826,7 +982,9 @@ def get_symbol_icon(
         disabled_col = getattr(T(), "disabled_fg", "#64748b")
     except Exception:
         disabled_col = "#64748b"
-    pix_dis = get_symbol_pixmap(symbol_name, size=size, color=disabled_col, match_accent=False)
+    pix_dis = get_symbol_pixmap(
+        symbol_name, size=size, color=disabled_col, match_accent=False, fit_box=fit_box
+    )
 
     icon = QIcon()
     # 1. Normal state (unfocused, unchecked, unhighlighted) -> norm_color

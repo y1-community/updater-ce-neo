@@ -466,6 +466,55 @@ def _palette_is_dark(palette: QPalette) -> bool:
     return window.isValid() and window.lightness() < 128
 
 
+# Styles that expose the desktop's own colour scheme through
+# ``standardPalette()`` rather than only through their palette instance.
+_LIVE_PALETTE_STYLES = ("breeze", "oxygen", "kvantum", "adwaita")
+
+
+def _linux_system_palette(app: QApplication) -> QPalette:
+    """Read the Linux desktop palette without trusting an app-owned palette.
+
+    The palette the platform theme installed before the app set one of its own
+    is what the window is drawn on, so it outranks ``QStyle.standardPalette()``.
+    Breeze's standard palette is built from its own scheme, which is not always
+    the scheme the platform theme applied to this app (Plasma hands over the
+    current scheme, including per-app overrides): when the two disagreed the
+    app painted Breeze's dark tokens on a white window, with dark cards, dark
+    sidebar rows and white combo text in white fields.
+    """
+    style_name = (app.style().objectName() or "").lower()
+    if getattr(_state, "linux_palette_from_event", False) and _state.native_palette is not None:
+        return QPalette(_state.native_palette)
+    if _state.platform_palette is not None:
+        candidate = QPalette(_state.platform_palette)
+        if candidate.color(QPalette.ColorRole.Window).isValid():
+            return candidate
+    if style_name in _LIVE_PALETTE_STYLES:
+        try:
+            palette = QPalette(app.style().standardPalette())
+            if palette.color(QPalette.ColorRole.Window).isValid():
+                return palette
+        except Exception:
+            pass
+    if _state.native_palette is not None:
+        return QPalette(_state.native_palette)
+    try:
+        from PySide6.QtGui import QGuiApplication
+
+        palette = QPalette(QGuiApplication.palette())
+        if palette.color(QPalette.ColorRole.Window).isValid():
+            return palette
+    except Exception:
+        pass
+    try:
+        return QPalette(app.style().standardPalette())
+    except Exception:
+        return QPalette(app.palette())
+
+
+
+
+
 class _Tokens:
     """Flat namespace of colour strings for a single theme (light or dark).
 
@@ -787,6 +836,10 @@ class _ThemeState:
         self._dark: bool | None = None
         self._pure_black: bool = False
         self.native_palette: QPalette | None = None
+        # The host palette as the platform theme handed it over, before the app
+        # replaced it with a derived one. Refreshed by host palette events.
+        self.platform_palette: QPalette | None = None
+        self.linux_palette_from_event = False
         self.tokens: _Tokens = _Tokens(False)
 
     def detect(self, native_palette: QPalette | None = None) -> bool:
@@ -794,10 +847,18 @@ class _ThemeState:
         self._pure_black = False
         if IS_LINUX and native_palette is not None:
             self.native_palette = QPalette(native_palette)
-            # On Linux the desktop palette drives foregrounds and controls,
-            # while the color-scheme hint still selects the corresponding app
-            # surfaces (including KDE custom surfaces with unusual lightness).
-            self._dark = is_system_dark_mode()
+            # The palette decides, never the colour-scheme hint. Qt reports the
+            # hint from a different source than the palette (Plasma's
+            # integration, the Qt app style and the theme's own colours can each
+            # disagree), and when the hint said "dark" over a white palette the
+            # app painted black sidebar rows, dark cards and dark-on-dark titles
+            # on a white window, with white combo text in white fields. There is
+            # one decision here so tokens, the app palette and every painted
+            # surface cannot disagree; a Linux desktop announces a scheme switch
+            # by handing the app a new palette, which arrives through this path.
+            window = self.native_palette.color(QPalette.ColorRole.Window)
+            if window.isValid() and window.alpha() > 0:
+                self._dark = _palette_is_dark(self.native_palette)
         use_native = (
             IS_LINUX
             and self.native_palette is not None
@@ -1652,6 +1713,25 @@ def tooltip_surface_colors() -> tuple[QColor, QColor]:
     return background, foreground
 
 
+def _capture_platform_palette(app: QApplication) -> None:
+    """Remember the host palette the first time, before the app sets its own.
+
+    After the first ``apply_theme`` the application palette is ours, so the
+    desktop's own colours are only readable here — and it is those colours the
+    platform theme paints the window frame, native controls and scrollbars with.
+    """
+    if not IS_LINUX or _state.platform_palette is not None:
+        return
+    try:
+        from PySide6.QtGui import QGuiApplication
+
+        candidate = QPalette(QGuiApplication.palette())
+        if candidate.color(QPalette.ColorRole.Window).isValid():
+            _state.platform_palette = candidate
+    except Exception:
+        logger.debug("could not snapshot the platform palette", exc_info=True)
+
+
 def apply_theme(
     app: QApplication,
     force_dark: bool | None = None,
@@ -1669,26 +1749,11 @@ def apply_theme(
         watcher._applying = True
     try:
         native_palette = None
-        if IS_LINUX:
-            from PySide6.QtGui import QGuiApplication
-            source_palette = (
-                _state.native_palette
-                if _state.native_palette is not None
-                else (QGuiApplication.palette() if hasattr(QGuiApplication, "palette") else app.palette())
-            )
-            native_palette = QPalette(source_palette)
-            _state.native_palette = QPalette(native_palette)
+        _capture_platform_palette(app)
         setup_native_app_style(app)
         if IS_LINUX:
-            style_name = (app.style().objectName() or "").lower()
-            if style_name in ("breeze", "oxygen", "kvantum", "adwaita"):
-                try:
-                    std_pal = app.style().standardPalette()
-                    if std_pal.color(QPalette.ColorRole.Window).isValid():
-                        native_palette = QPalette(std_pal)
-                        _state.native_palette = QPalette(native_palette)
-                except Exception:
-                    pass
+            native_palette = _linux_system_palette(app)
+            _state.native_palette = QPalette(native_palette)
         _apply_native_font(app)
         if force_dark is not None:
             _state.set_dark(force_dark, pure_black=bool(pure_black), palette=native_palette)
@@ -1707,6 +1772,8 @@ def apply_theme(
         if watcher is not None:
             try:
                 watcher._debounce.stop()
+                if IS_LINUX:
+                    _state.linux_palette_from_event = False
                 watcher._last = theme_fingerprint(app, platform_dark=False)
                 watcher._last_full = theme_fingerprint(app)
                 watcher._cooldown.start()
@@ -1739,16 +1806,7 @@ def theme_fingerprint(app: QApplication | None = None, *, platform_dark: bool = 
     except Exception:
         scheme = ""
     try:
-        from PySide6.QtGui import QGuiApplication
-        style_name = (app.style().objectName() or "").lower()
-        if style_name in ("breeze", "oxygen", "kvantum", "adwaita"):
-            system_palette = app.style().standardPalette()
-        else:
-            system_palette = (
-                _state.native_palette
-                if _state.native_palette is not None
-                else (QGuiApplication.palette() if hasattr(QGuiApplication, "palette") else app.palette())
-            )
+        system_palette = _linux_system_palette(app) if IS_LINUX else app.style().standardPalette()
     except Exception:
         system_palette = app.palette()
     accent, accent_text = get_native_accent_color(system_palette)
@@ -1758,21 +1816,37 @@ def theme_fingerprint(app: QApplication | None = None, *, platform_dark: bool = 
         icon_style = macos_icon_style()
     except Exception:
         icon_style = ("", "")
+    palette_roles = (
+        QPalette.ColorRole.Window,
+        QPalette.ColorRole.WindowText,
+        QPalette.ColorRole.Base,
+        QPalette.ColorRole.AlternateBase,
+        QPalette.ColorRole.Text,
+        QPalette.ColorRole.Button,
+        QPalette.ColorRole.ButtonText,
+        QPalette.ColorRole.Highlight,
+        QPalette.ColorRole.HighlightedText,
+        QPalette.ColorRole.ToolTipBase,
+        QPalette.ColorRole.ToolTipText,
+        QPalette.ColorRole.Light,
+        QPalette.ColorRole.Midlight,
+        QPalette.ColorRole.Mid,
+        QPalette.ColorRole.Dark,
+        QPalette.ColorRole.Shadow,
+        QPalette.ColorRole.Link,
+        QPalette.ColorRole.LinkVisited,
+        QPalette.ColorRole.PlaceholderText,
+    )
+    if hasattr(QPalette.ColorRole, "Accent"):
+        palette_roles += (QPalette.ColorRole.Accent,)
     palette_fingerprint = tuple(
-        system_palette.color(role).rgba()
-        for role in (
-            QPalette.ColorRole.Window,
-            QPalette.ColorRole.WindowText,
-            QPalette.ColorRole.Base,
-            QPalette.ColorRole.AlternateBase,
-            QPalette.ColorRole.Text,
-            QPalette.ColorRole.Button,
-            QPalette.ColorRole.ButtonText,
-            QPalette.ColorRole.Highlight,
-            QPalette.ColorRole.HighlightedText,
-            QPalette.ColorRole.ToolTipBase,
-            QPalette.ColorRole.ToolTipText,
+        system_palette.color(group, role).rgba()
+        for group in (
+            QPalette.ColorGroup.Active,
+            QPalette.ColorGroup.Inactive,
+            QPalette.ColorGroup.Disabled,
         )
+        for role in palette_roles
     )
     return (
         scheme,
@@ -1845,7 +1919,12 @@ def configure_combo_view_palette(view):
     # Prefer the host desktop base / text / selection roles on Linux.
     if IS_LINUX and getattr(t, "_linux_combo_base", None):
         base = QColor(t._linux_combo_view_base)
-        text = QColor(t._linux_combo_text)
+        # Rows read the same colour as the closed combo and every label. Some
+        # desktop schemes give QPalette::Text (the colour for text inside Base
+        # surfaces) a plain white/black value while WindowText/ButtonText carry
+        # the theme's font colour, which left the open menu at odds with the
+        # combo it dropped out of.
+        text = QColor(t._linux_combo_window_text)
         highlight = QColor(t._linux_combo_highlight)
         highlighted = QColor(t._linux_combo_highlight_text)
     else:
@@ -1858,26 +1937,18 @@ def configure_combo_view_palette(view):
         QPalette.ColorGroup.Inactive,
         QPalette.ColorGroup.Disabled,
     ):
-        for role in (
-            QPalette.ColorRole.Window,
-            QPalette.ColorRole.WindowText,
-            QPalette.ColorRole.Base,
-            QPalette.ColorRole.Text,
-            QPalette.ColorRole.Highlight,
-            QPalette.ColorRole.HighlightedText,
+        for role, value in (
+            # The list surface itself: a view that falls back to its Window
+            # brush must get the list background, never the text colour.
+            (QPalette.ColorRole.Window, base),
+            (QPalette.ColorRole.Base, base),
+            (QPalette.ColorRole.WindowText, text),
+            (QPalette.ColorRole.Text, text),
+            (QPalette.ColorRole.ButtonText, text),
+            (QPalette.ColorRole.Highlight, highlight),
+            (QPalette.ColorRole.HighlightedText, highlighted),
         ):
-            if role == QPalette.ColorRole.Base:
-                vpal.setColor(group, role, base)
-            elif role == QPalette.ColorRole.WindowText:
-                vpal.setColor(group, role, text)
-            elif role == QPalette.ColorRole.Text:
-                vpal.setColor(group, role, text)
-            elif role == QPalette.ColorRole.Highlight:
-                vpal.setColor(group, role, highlight)
-            elif role == QPalette.ColorRole.HighlightedText:
-                vpal.setColor(group, role, highlighted)
-            else:
-                vpal.setColor(group, role, text)
+            vpal.setColor(group, role, value)
     view.setPalette(vpal)
 
 def configure_native_combobox(combo, max_visible_items: int = 12) -> None:
@@ -1933,7 +2004,11 @@ def sync_cached_palettes(app: QApplication) -> None:
                 configure_combo_view_palette(view)
                 viewport = view.viewport()
                 if viewport is not None:
-                    apply_readable_palette(viewport)
+                    # The popup list paints rows from the viewport's palette, so
+                    # it gets the same theme roles as the view. Left to the
+                    # desktop's raw Text role, a scheme that reserves white for
+                    # text-inside-Base would repaint the open menu in white.
+                    configure_combo_view_palette(viewport)
                     viewport.setAutoFillBackground(True)
         elif isinstance(widget, QAbstractScrollArea):
             if widget.styleSheet():
@@ -1967,36 +2042,29 @@ def refresh_theme(app: QApplication | None = None) -> None:
     app = app or QApplication.instance()
     if not app:
         return
-    native_palette = None
-    if IS_LINUX:
-        from PySide6.QtGui import QGuiApplication
-        style_name = (app.style().objectName() or "").lower()
-        if style_name in ("breeze", "oxygen", "kvantum", "adwaita"):
-            try:
-                native_palette = QPalette(app.style().standardPalette())
-            except Exception:
-                native_palette = QPalette(
-                    _state.native_palette
-                    or (QGuiApplication.palette() if hasattr(QGuiApplication, "palette") else app.palette())
-                )
-        else:
-            native_palette = QPalette(
-                _state.native_palette
-                if _state.native_palette is not None
-                else (QGuiApplication.palette() if hasattr(QGuiApplication, "palette") else app.palette())
+    watcher = getattr(app, "_theme_watcher", None)
+    prev_applying = getattr(watcher, "_applying", False) if watcher is not None else False
+    if watcher is not None:
+        watcher._applying = True
+    try:
+        native_palette = _linux_system_palette(app) if IS_LINUX else None
+        _state.detect(native_palette=native_palette)
+        if IS_LINUX:
+            _state.linux_palette_from_event = False
+        _apply_native_font(app)
+        app.setPalette(
+            _make_palette(
+                _state.is_dark,
+                pure_black=_state.is_pure_black,
+                native_palette=_state.native_palette,
             )
-    _state.detect(native_palette=native_palette)
-    _apply_native_font(app)
-    app.setPalette(
-        _make_palette(
-            _state.is_dark,
-            pure_black=_state.is_pure_black,
-            native_palette=_state.native_palette,
         )
-    )
-    app.setStyleSheet(_build_qss())
-    # QToolTip keeps the host theme's palette: tooltips are the platform's.
-    _restyle_existing_widgets(app)
+        app.setStyleSheet(_build_qss())
+        # QToolTip keeps the host theme's palette: tooltips are the platform's.
+        _restyle_existing_widgets(app)
+    finally:
+        if watcher is not None:
+            watcher._applying = prev_applying
 
 
 def _restyle_existing_widgets(app: QApplication) -> None:
@@ -2084,7 +2152,9 @@ class ThemeWatcher(QObject):
             pass
         try:
             if hasattr(self._app, "paletteChanged"):
-                self._app.paletteChanged.connect(self.schedule)
+                self._app.paletteChanged.connect(
+                    self._on_palette_changed if IS_LINUX else self.schedule
+                )
         except Exception:
             pass
         try:
@@ -2110,6 +2180,20 @@ class ThemeWatcher(QObject):
             self._app.removeEventFilter(self)
         except Exception:
             pass
+
+    def _on_palette_changed(self, palette=None) -> None:
+        if not self._installed or self._applying:
+            return
+        if IS_LINUX:
+            try:
+                candidate = QPalette(palette) if isinstance(palette, QPalette) else QPalette(self._app.palette())
+                if candidate.color(QPalette.ColorRole.Window).isValid():
+                    _state.native_palette = candidate
+                    _state.platform_palette = QPalette(candidate)
+                    _state.linux_palette_from_event = True
+            except Exception:
+                logger.debug("could not snapshot Linux desktop palette", exc_info=True)
+        self.schedule()
 
     def eventFilter(self, obj, event):  # noqa: N802 (Qt naming)
         if self._installed and event.type() in (

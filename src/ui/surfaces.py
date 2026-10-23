@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QAbstractSpinBox,
     QApplication,
     QComboBox,
+    QFrame,
     QLineEdit,
     QTextEdit,
     QWidget,
@@ -160,6 +161,12 @@ def harmonise_window_plates(root: QWidget) -> None:
             not scroll or pal.color(QPalette.ColorRole.Base) == surface
         ):
             continue
+        widget_surface = surface
+        if _inside_card(widget):
+            from .dark import T
+
+            widget_surface = QColor(T().bg_card)
+            widget_surface.setAlpha(255)
         for group in (
             QPalette.ColorGroup.Active,
             QPalette.ColorGroup.Inactive,
@@ -167,8 +174,18 @@ def harmonise_window_plates(root: QWidget) -> None:
         ):
             pal.setColor(group, QPalette.ColorRole.Window, surface)
             if scroll or not isinstance(widget, input_like):
-                pal.setColor(group, QPalette.ColorRole.Base, surface)
+                pal.setColor(group, QPalette.ColorRole.Base, widget_surface)
         widget.setPalette(pal)
+
+
+def _inside_card(widget: QWidget) -> bool:
+    """Whether the scroll area is nested inside a painted Card surface."""
+    parent = widget.parentWidget()
+    while parent is not None:
+        if isinstance(parent, QFrame) and parent.property("cssClass") == "card":
+            return True
+        parent = parent.parentWidget()
+    return False
 
 
 def clear_glass_plate(widget: QWidget) -> None:
@@ -203,22 +220,15 @@ def clear_glass_plate(widget: QWidget) -> None:
             else:
                 from .dark import T
 
-                surface = QColor(T().bg_card)
-                surface.setAlpha(255)
-                palette = view.palette()
-                for group in (
-                    QPalette.ColorGroup.Active,
-                    QPalette.ColorGroup.Inactive,
-                    QPalette.ColorGroup.Disabled,
-                ):
-                    palette.setColor(group, QPalette.ColorRole.Base, surface)
-                    palette.setColor(group, QPalette.ColorRole.Window, surface)
-                view.setPalette(palette)
+                # The view is a child of the painted card. Do not fill the
+                # viewport from Base: that creates a square plate around the
+                # release list / notes. Let the card paint show through and
+                # erase stale text or rows against that same surface.
                 view.setBackgroundRole(QPalette.ColorRole.Base)
                 view.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
-                view.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, False)
+                view.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
                 view.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
-                view.setAutoFillBackground(True)
+                view.setAutoFillBackground(False)
                 view.setStyleSheet("")
     if isinstance(widget, QTextEdit):
         _clear_document_background(widget)

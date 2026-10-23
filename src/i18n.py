@@ -23,14 +23,26 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 # The languages whose copy is reviewed by hand (see the module docstring).
-_SUPPORTED = ("zh-CN", "en", "de", "fr", "es", "ja")
+# English comes in three: the international table, which claims no country, and
+# the two written dialects that differ in spelling; each of the latter is the
+# international table plus its own overrides, so a new string only has to be
+# written once.
+_SUPPORTED = ("zh-CN", "en", "en-GB", "en-US", "de", "fr", "es", "ja")
 
 _STRINGS: dict = {
+    # The name is the language's own word for "Updater" (アップデーター,
+    # 更新程序, Programa de actualización); "CE" stays in English only, because
+    # a translated "Community Edition" appended to a translated "Updater" turns
+    # the title into a mouthful. Copy that would rather not repeat a long name
+    # says "this app" in that language instead. Catalogs carry their own
+    # spelling under the same key.
     "app_name": {
-        "zh-CN": "Updater CE",
+        "zh-CN": "更新程序",
         "en": "Updater CE",
-        "fr": "Updater CE",
-        "es": "Updater CE",
+        "fr": "Programme de mise à jour",
+        "es": "Actualizador",
+        "de": "Updater",
+        "ja": "アップデーター",
     },
     "app_title": {
         "zh-CN": "刷机升级",
@@ -161,11 +173,23 @@ _STRINGS: dict = {
         "fr": "Configuration Linux",
         "es": "Configuración de Linux",
     },
+    # The tool's own name, in every language: the rail row has to stay short,
+    # and translating "GUI" made it long enough to elide.
     "nav_sp_flash_tool_gui": {
-        "zh-CN": "SP Flash Tool 界面",
-        "en": "SP Flash Tool GUI",
-        "fr": "SP Flash Tool GUI",
-        "es": "SP Flash Tool GUI",
+        "zh-CN": "SP Flash Tool",
+        "en": "SP Flash Tool",
+        "fr": "SP Flash Tool",
+        "es": "SP Flash Tool",
+        "de": "SP Flash Tool",
+        "ja": "SP Flash Tool",
+    },
+    "nav_get_update": {
+        "zh-CN": "获取 {version}",
+        "en": "Get {version}",
+        "fr": "Obtenir {version}",
+        "es": "Obtener {version}",
+        "de": "{version} holen",
+        "ja": "{version} を取得",
     },
     "nav_settings": {
         "zh-CN": "设置",
@@ -678,10 +702,10 @@ _STRINGS: dict = {
         "es": "Instalar en la interfaz gráfica de SP Flash Tool",
     },
     "settings_sp_gui_desc": {
-        "zh-CN": "关闭 Updater CE 并打开 SP Flash Tool 图形界面，自动加载所选固件的 scatter 文件和镜像。",
+        "zh-CN": "关闭 更新程序 并打开 SP Flash Tool 图形界面，自动加载所选固件的 scatter 文件和镜像。",
         "en": "Closes Updater CE and opens SP Flash Tool GUI with the selected firmware scatter file and partition images preloaded.",
-        "fr": "Ferme Updater CE et ouvre l'interface SP Flash Tool avec le fichier scatter et les images préchargés.",
-        "es": "Cierra Updater CE y abre la GUI de SP Flash Tool con el archivo scatter y las imágenes precargadas.",
+        "fr": "Ferme Programme de mise à jour et ouvre l'interface SP Flash Tool avec le fichier scatter et les images préchargés.",
+        "es": "Cierra Actualizador y abre la GUI de SP Flash Tool con el archivo scatter y las imágenes precargadas.",
     },
     "settings_terminal_desc": {
         "zh-CN": "在终端中运行软件安装，让您可以看到安装进度的技术信息。",
@@ -774,10 +798,10 @@ _STRINGS: dict = {
         "es": "Instalar mediante {terminal_name}",
     },
     "terminal_install_prompt_body": {
-        "zh-CN": "即将打开{terminal_name}运行 {method}。\n\n• 如果设备尚未关机，请关闭您的{device}。\n• 如果已连接 USB，请先断开连接。\n{hint}\n• {terminal_name}窗口打开后，将设备连接到电脑。\n\n点击“确定”将打开窗口并退出 Updater CE。",
+        "zh-CN": "即将打开{terminal_name}运行 {method}。\n\n• 如果设备尚未关机，请关闭您的{device}。\n• 如果已连接 USB，请先断开连接。\n{hint}\n• {terminal_name}窗口打开后，将设备连接到电脑。\n\n点击“确定”将打开窗口并退出 更新程序。",
         "en": "{terminal_name} will now open running {method}.\n\n• If it isn't already off, power off your {device}.\n• If it is connected to USB, disconnect it first.\n{hint}\n• Connect your device to your computer when the {terminal_name} window has opened.\n\nClick OK to launch and exit Updater CE.",
-        "fr": "{terminal_name} va s'ouvrir pour exécuter {method}.\n\n• Si l'appareil n'est pas déjà éteint, éteignez votre {device}.\n• S'il est connecté en USB, débranchez-le d'abord.\n{hint}\n• Connectez votre appareil à l'ordinateur lorsque la fenêtre {terminal_name} s'ouvrira.\n\nCliquez sur OK pour lancer et quitter Updater CE.",
-        "es": "Se abrirá {terminal_name} ejecutando {method}.\n\n• Si no está apagado, apaga tu {device}.\n• Si está conectado al USB, desconéctalo primero.\n{hint}\n• Conecta tu dispositivo al ordenador cuando la ventana de {terminal_name} se haya abierto.\n\nHaz clic en Aceptar para iniciar y salir de Updater CE.",
+        "fr": "{terminal_name} va s'ouvrir pour exécuter {method}.\n\n• Si l'appareil n'est pas déjà éteint, éteignez votre {device}.\n• S'il est connecté en USB, débranchez-le d'abord.\n{hint}\n• Connectez votre appareil à l'ordinateur lorsque la fenêtre {terminal_name} s'ouvrira.\n\nCliquez sur OK pour lancer et quitter Programme de mise à jour.",
+        "es": "Se abrirá {terminal_name} ejecutando {method}.\n\n• Si no está apagado, apaga tu {device}.\n• Si está conectado al USB, desconéctalo primero.\n{hint}\n• Conecta tu dispositivo al ordenador cuando la ventana de {terminal_name} se haya abierto.\n\nHaz clic en Aceptar para iniciar y salir de Actualizador.",
     },
     "terminal_hint_innioasis": {
         "zh-CN": "• 提示：如果设备无法自动连接，请在插入 USB 线的同时，用回形针轻按复位孔中的重置按钮。",
@@ -798,10 +822,10 @@ _STRINGS: dict = {
         "es": "Instalar mediante SP Flash Tool GUI",
     },
     "sp_gui_install_prompt_body": {
-        "zh-CN": "SP Flash Tool 图形界面即将打开，并已预载固件。\n\n• 在 SP Flash Tool 下拉菜单中选择“Format All + Download”。\n• 点击“Download”按钮。\n• 请确保您的{device}已关机并断开 USB 连接。\n{hint}\n• 点击 Download 后，将 USB 线连接到电脑开始刷机。\n\n点击“确定”将启动 SP Flash Tool 并退出 Updater CE。",
+        "zh-CN": "SP Flash Tool 图形界面即将打开，并已预载固件。\n\n• 在 SP Flash Tool 下拉菜单中选择“Format All + Download”。\n• 点击“Download”按钮。\n• 请确保您的{device}已关机并断开 USB 连接。\n{hint}\n• 点击 Download 后，将 USB 线连接到电脑开始刷机。\n\n点击“确定”将启动 SP Flash Tool 并退出 更新程序。",
         "en": "SP Flash Tool GUI will now open with your firmware preloaded.\n\n• In SP Flash Tool, select \"Format All + Download\" from the dropdown box.\n• Click the \"Download\" button.\n• Make sure your {device} is powered off and disconnected.\n{hint}\n• Connect the USB cable to your computer after clicking Download.\n\nClick OK to launch SP Flash Tool and exit Updater CE.",
-        "fr": "L'interface SP Flash Tool va s'ouvrir avec votre micrologiciel préchargé.\n\n• Dans SP Flash Tool, sélectionnez « Format All + Download » dans la liste déroulante.\n• Cliquez sur le bouton « Download ».\n• Assurez-vous que votre {device} est éteint et débranché.\n{hint}\n• Connectez le câble USB à l'ordinateur après avoir cliqué sur Download.\n\nCliquez sur OK pour lancer SP Flash Tool et quitter Updater CE.",
-        "es": "La interfaz de SP Flash Tool se abrirá con el firmware precargado.\n\n• En SP Flash Tool, selecciona \"Format All + Download\" en el menú desplegable.\n• Haz clic en el botón \"Download\".\n• Asegúrate de que tu {device} esté apagado y desconectado.\n{hint}\n• Conecta el cable USB al ordenador después de hacer clic en Download.\n\nHaz clic en Aceptar para iniciar SP Flash Tool y salir de Updater CE.",
+        "fr": "L'interface SP Flash Tool va s'ouvrir avec votre micrologiciel préchargé.\n\n• Dans SP Flash Tool, sélectionnez « Format All + Download » dans la liste déroulante.\n• Cliquez sur le bouton « Download ».\n• Assurez-vous que votre {device} est éteint et débranché.\n{hint}\n• Connectez le câble USB à l'ordinateur après avoir cliqué sur Download.\n\nCliquez sur OK pour lancer SP Flash Tool et quitter Programme de mise à jour.",
+        "es": "La interfaz de SP Flash Tool se abrirá con el firmware precargado.\n\n• En SP Flash Tool, selecciona \"Format All + Download\" en el menú desplegable.\n• Haz clic en el botón \"Download\".\n• Asegúrate de que tu {device} esté apagado y desconectado.\n{hint}\n• Conecta el cable USB al ordenador después de hacer clic en Download.\n\nHaz clic en Aceptar para iniciar SP Flash Tool y salir de Actualizador.",
     },
     "settings_rockbox_group": {
         "zh-CN": "固件版本筛选",
@@ -1119,7 +1143,8 @@ _STRINGS: dict = {
     },
     "settings_offline_mode_desc": {
         "zh-CN": "隐藏在线社区固件目录，仅使用本地固件文件进行安装。",
-        "en": "Hide the online community catalog and install firmware from local files only.",
+        "en": "Hide the online community catalogue and install firmware from local files only.",
+        "en-US": "Hide the online community catalog and install firmware from local files only.",
         "fr": "Masque le catalogue communautaire en ligne et n'installe qu'à partir de fichiers locaux.",
         "es": "Oculta el catálogo comunitario en línea e instala solo desde archivos locales.",
     },
@@ -1586,10 +1611,10 @@ _STRINGS: dict = {
         "es": "Ejecutar las instalaciones con permisos de root mediante pkexec. Úsalo cuando un error de permisos bloquee la herramienta de flasheo.",
     },
     "settings_run_as_admin_restart_needed": {
-        "zh-CN": "Updater CE 需要重启，安装才能获得这些权限。",
+        "zh-CN": "更新程序 需要重启，安装才能获得这些权限。",
         "en": "Updater CE must restart for installs to run with these rights.",
-        "fr": "Updater CE doit redémarrer pour que les installations disposent de ces droits.",
-        "es": "Updater CE debe reiniciarse para que las instalaciones tengan estos permisos.",
+        "fr": "Programme de mise à jour doit redémarrer pour que les installations disposent de ces droits.",
+        "es": "Actualizador debe reiniciarse para que las instalaciones tengan estos permisos.",
     },
     "settings_run_as_admin_restart": {
         "zh-CN": "以管理员身份重启",
@@ -1933,9 +1958,9 @@ _STRINGS: dict = {
     },
     "install_restarting_as_admin": {
         "en": "Restarting Updater CE with administrator rights…",
-        "zh-CN": "正在以管理员权限重启 Updater CE…",
-        "fr": "Redémarrage d'Updater CE avec les droits d'administrateur…",
-        "es": "Reiniciando Updater CE con permisos de administrador…",
+        "zh-CN": "正在以管理员权限重启 更新程序…",
+        "fr": "Redémarrage d'Programme de mise à jour avec les droits d'administrateur…",
+        "es": "Reiniciando Actualizador con permisos de administrador…",
     },
     "sp_gui_no_cached_firmware": {
         "zh-CN": "未找到上次安装尝试缓存的固件包，或缺少所需的分区镜像。请在打开 SP Flash Tool 之前，先选择或下载一个固件版本。",
@@ -2300,10 +2325,10 @@ _STRINGS: dict = {
         "es": "Instalador MediaTek (Aplicación)",
     },
     "log_filter_gui": {
-        "zh-CN": "Updater CE (应用日志)",
+        "zh-CN": "更新程序 (应用日志)",
         "en": "Updater CE (App)",
-        "fr": "Updater CE (Application)",
-        "es": "Updater CE (Aplicación)",
+        "fr": "Programme de mise à jour (Application)",
+        "es": "Actualizador (Aplicación)",
     },
     "log_session_label": {
         "zh-CN": "安装记录：",
@@ -2540,10 +2565,10 @@ _STRINGS: dict = {
 
     # Donation dialog
     "donate_title": {
-        "zh-CN": "支持 Updater CE",
+        "zh-CN": "支持 更新程序",
         "en": "Support Updater CE",
-        "fr": "Soutenir Updater CE",
-        "es": "Apoya a Updater CE",
+        "fr": "Soutenir Programme de mise à jour",
+        "es": "Apoya a Actualizador",
     },
     "donate_title_mediatek": {
         "zh-CN": "支持 MediaTek 安装工具",
@@ -2585,7 +2610,7 @@ _STRINGS: dict = {
         "fr": "{failed} n'a pas pu se connecter à votre {model}.\n\nUpdater va maintenant essayer {next} à la place.\n\nVeuillez débrancher l'USB et utiliser un trombone / une aiguille pour appuyer sur le bouton situé entre la prise casque et le port USB, puis appuyez sur Suivant.",
         "es": "{failed} no pudo conectarse a tu {model}.\n\nUpdater ahora usará {next}.\n\nDesconecta el USB y usa un clip / alfiler para presionar el botón entre la toma de auriculares y el puerto USB, luego pulsa Siguiente.",
         "de": "{failed} konnte sich nicht mit Ihrem {model} verbinden.\n\nUpdater versucht jetzt stattdessen {next}.\n\nBitte trennen Sie das USB und drücken Sie mit einer Büroklammer / Nadel die Taste zwischen Kopfhörerbuchse und USB-Anschluss, dann drücken Sie auf Weiter.",
-        "ja": "{failed} は{model}に接続できませんでした。\n\n次に Updater は代わりに {next} を使用します。\n\nUSB を外し、クリップまたはピンでイヤホンジャックとUSBポートの間にあるボタンを押してから、「次へ」を押してください。",
+        "ja": "{failed} は{model}に接続できませんでした。\n\n次にアップデーターは代わりに {next} を使用します。\n\nUSB を外し、クリップまたはピンでイヤホンジャックとUSBポートの間にあるボタンを押してから、「次へ」を押してください。",
     },
     "donate_headline": {
         "zh-CN": "它需要 <span style='color:#ff5252; text-decoration:underline;'>你</span>。",
@@ -2629,12 +2654,12 @@ _STRINGS: dict = {
         "ja": "{model} に {software} をインストールしました。",
     },
     "donate_completion_body": {
-        "zh-CN": "Updater CE 完全免费，没有广告，也不追踪你——它靠大家的小额捐助运行。如果它今天帮到了你，请我喝杯咖啡，就能让下载和服务器继续跑下去。",
+        "zh-CN": "更新程序 完全免费，没有广告，也不追踪你——它靠大家的小额捐助运行。如果它今天帮到了你，请我喝杯咖啡，就能让下载和服务器继续跑下去。",
         "en": "Updater CE is free, has no ads and no tracking — it runs on small donations from people like you. If it saved you a job today, buying me a coffee keeps the downloads and the servers running.",
-        "fr": "Updater CE est gratuit, sans publicité ni suivi — il fonctionne grâce aux petits dons de gens comme vous. S'il vous a épargné du travail aujourd'hui, un café permet de payer les téléchargements et les serveurs.",
-        "es": "Updater CE es gratis, sin anuncios ni rastreo: funciona con pequeñas donaciones de gente como tú. Si hoy te ahorró trabajo, un café mantiene las descargas y los servidores en marcha.",
-        "de": "Updater CE ist kostenlos, ohne Werbung und ohne Tracking — es lebt von kleinen Spenden von Leuten wie dir. Wenn es dir heute Arbeit erspart hat, hält ein Kaffee die Downloads und Server am Laufen.",
-        "ja": "Updater CE は無料で、広告も追跡もありません。皆さんの少額の寄付で動いています。今日、手間が省けたなら、コーヒー一杯がダウンロードとサーバーを支えます。",
+        "fr": "Programme de mise à jour est gratuit, sans publicité ni suivi — il fonctionne grâce aux petits dons de gens comme vous. S'il vous a épargné du travail aujourd'hui, un café permet de payer les téléchargements et les serveurs.",
+        "es": "Actualizador es gratis, sin anuncios ni rastreo: funciona con pequeñas donaciones de gente como tú. Si hoy te ahorró trabajo, un café mantiene las descargas y los servidores en marcha.",
+        "de": "Updater ist kostenlos, ohne Werbung und ohne Tracking — es lebt von kleinen Spenden von Leuten wie dir. Wenn es dir heute Arbeit erspart hat, hält ein Kaffee die Downloads und Server am Laufen.",
+        "ja": "アップデーターは無料で、広告も追跡もありません。皆さんの少額の寄付で動いています。今日、手間が省けたなら、コーヒー一杯がダウンロードとサーバーを支えます。",
     },
     "donate_completion_coffee": {
         "zh-CN": "请我喝杯咖啡",
@@ -2657,16 +2682,16 @@ _STRINGS: dict = {
         "es": "¡Hola! Soy Ryan, el desarrollador detrás del Instalador MediaTek. Pago el alojamiento, las herramientas y el almacenamiento de mi bolsillo para mantener este instalador gratis. El mantenimiento mensual ronda los 200 $; cualquier apoyo ayuda a mantenerlo vivo para el próximo usuario.",
     },
     "donate_intro_success": {
-        "zh-CN": "我们已将 <b>{software}</b> 安装到您的 <b>{model}</b>。<br><br>你好！我是 Ryan，Updater CE、社区固件档案和主题画廊的开发者。我自掏腰包承担每月约 200 美元的服务器和存储费用，以保持一切免费和开放。如果这个工具帮助了您，请考虑捐赠——这能让这些资源持续为大家服务。",
+        "zh-CN": "我们已将 <b>{software}</b> 安装到您的 <b>{model}</b>。<br><br>你好！我是 Ryan，更新程序、社区固件档案和主题画廊的开发者。我自掏腰包承担每月约 200 美元的服务器和存储费用，以保持一切免费和开放。如果这个工具帮助了您，请考虑捐赠——这能让这些资源持续为大家服务。",
         "en": "We've installed <b>{software}</b> on your <b>{model}</b>.<br><br>Hey! I'm Ryan, the developer behind Updater CE, the Community Firmware Archive, and the Themes Gallery. I cover our ~$200 monthly server and storage costs out of pocket to keep everything free and open. If this tool helped you, please consider donating — it keeps these resources alive for everyone.",
-        "fr": "Nous avons installé <b>{software}</b> sur votre <b>{model}</b>.<br><br>Salut ! Je suis Ryan, le développeur derrière Updater CE, l'Archive Communautaire de Firmwares et la Galerie de Thèmes. Je couvre nos ~200 $ mensuels de serveur et de stockage de ma poche pour que tout reste gratuit et ouvert. Si cet outil vous a aidé, pensez à faire un don — cela maintient ces ressources en vie pour tout le monde.",
-        "es": "Hemos instalado <b>{software}</b> en tu <b>{model}</b>.<br><br>¡Hola! Soy Ryan, el desarrollador detrás de Updater CE, el Archivo Comunitario de Firmwares y la Galería de Temas. Cubro nuestros ~200 $ mensuales de servidor y almacenamiento de mi propio bolsillo para mantener todo gratis y abierto. Si esta herramienta te ha ayudado, considera hacer una donación: mantiene estos recursos vivos para todos.",
+        "fr": "Nous avons installé <b>{software}</b> sur votre <b>{model}</b>.<br><br>Salut ! Je suis Ryan, le développeur derrière Programme de mise à jour, l'Archive Communautaire de Firmwares et la Galerie de Thèmes. Je couvre nos ~200 $ mensuels de serveur et de stockage de ma poche pour que tout reste gratuit et ouvert. Si cet outil vous a aidé, pensez à faire un don — cela maintient ces ressources en vie pour tout le monde.",
+        "es": "Hemos instalado <b>{software}</b> en tu <b>{model}</b>.<br><br>¡Hola! Soy Ryan, el desarrollador detrás de Actualizador, el Archivo Comunitario de Firmwares y la Galería de Temas. Cubro nuestros ~200 $ mensuales de servidor y almacenamiento de mi propio bolsillo para mantener todo gratis y abierto. Si esta herramienta te ha ayudado, considera hacer una donación: mantiene estos recursos vivos para todos.",
     },
     "donate_intro_general": {
-        "zh-CN": "你好！我是 Ryan，Updater CE、社区固件档案和主题画廊的开发者。我自掏腰包支付服务器托管、固件档案存储和域名续费，以保持一切免费。每月维护费用约 200 美元——您的任何支持都能帮助这些工具继续为下一位用户服务。",
+        "zh-CN": "你好！我是 Ryan，更新程序、社区固件档案和主题画廊的开发者。我自掏腰包支付服务器托管、固件档案存储和域名续费，以保持一切免费。每月维护费用约 200 美元——您的任何支持都能帮助这些工具继续为下一位用户服务。",
         "en": "Hey! I'm Ryan, the developer behind Updater CE, the Community Firmware Archive, and the Themes Gallery. I pay for server hosting, firmware archive storage, and domain renewals out of my own pocket to keep everything free. Monthly upkeep comes to around $200 — any support you give helps keep these tools alive for the next owner.",
-        "fr": "Salut ! Je suis Ryan, le développeur derrière Updater CE, l'Archive Communautaire de Firmwares et la Galerie de Thèmes. Je paie l'hébergement du serveur, le stockage des firmwares et les renouvellements de domaine de ma poche pour que tout reste gratuit. L'entretien mensuel s'élève à environ 200 $ — toute aide que vous apportez contribue à garder ces outils en vie pour le prochain utilisateur.",
-        "es": "¡Hola! Soy Ryan, el desarrollador detrás de Updater CE, el Archivo Comunitario de Firmwares y la Galería de Temas. Pago el alojamiento del servidor, el almacenamiento del archivo de firmwares y las renovaciones de dominio de mi bolsillo para mantener todo gratis. El mantenimiento mensual ronda los 200 $; cualquier apoyo que des ayuda a mantener estas herramientas vivas para el próximo usuario.",
+        "fr": "Salut ! Je suis Ryan, le développeur derrière Programme de mise à jour, l'Archive Communautaire de Firmwares et la Galerie de Thèmes. Je paie l'hébergement du serveur, le stockage des firmwares et les renouvellements de domaine de ma poche pour que tout reste gratuit. L'entretien mensuel s'élève à environ 200 $ — toute aide que vous apportez contribue à garder ces outils en vie pour le prochain utilisateur.",
+        "es": "¡Hola! Soy Ryan, el desarrollador detrás de Actualizador, el Archivo Comunitario de Firmwares y la Galería de Temas. Pago el alojamiento del servidor, el almacenamiento del archivo de firmwares y las renovaciones de dominio de mi bolsillo para mantener todo gratis. El mantenimiento mensual ronda los 200 $; cualquier apoyo que des ayuda a mantener estas herramientas vivas para el próximo usuario.",
     },
     "donate_supporter": {
         "zh-CN": "支持者",
@@ -2872,6 +2897,70 @@ _STRINGS: dict = {
         "de": "Wenn jeder, der dies heute nutzt, spenden würde, wären unsere Kosten für ein ganzes Jahr gedeckt",
         "ja": "今日これを使っている全員が寄付してくだされば、1年分の運用費が賄えます",
     },
+    "donate_support_appeal_lead": {
+        "en": "Donations directly help me support my family and fund the test devices",
+        "zh-CN": "您的捐赠直接帮助我养家糊口，并为测试设备提供资金",
+        "fr": "Les dons m'aident directement à subvenir aux besoins de ma famille et à financer les appareils de test",
+        "es": "Las donaciones me ayudan directamente a mantener a mi familia y a financiar los dispositivos de prueba",
+        "de": "Spenden helfen mir direkt, meine Familie zu unterstützen und die Testgeräte zu finanzieren",
+        "ja": "皆様の寄付は、家族を支え、テスト用機器を購入するための大切な支援になります",
+    },
+    "donate_support_appeal_followup": {
+        "en": "that make this free service possible for everyone. If this tool saved you time or rescued your player today, please consider a small donation — it truly means the world to us.",
+        "zh-CN": "这些设备让这项免费服务得以惠及所有人。如果这个工具今天为您节省了时间或挽救了您的播放器，请考虑小额捐赠——这对我们意义重大。",
+        "fr": "qui rendent ce service gratuit possible pour tous. Si cet outil vous a fait gagner du temps ou a sauvé votre lecteur aujourd'hui, pensez à faire un petit don — cela compte énormément pour nous.",
+        "es": "que hacen posible este servicio gratuito para todos. Si esta herramienta te ahorró tiempo o salvó tu reproductor hoy, considera hacer una pequeña donación: significa muchísimo para nosotros.",
+        "de": "die diesen kostenlosen Dienst für alle ermöglichen. Wenn dir dieses Tool heute Zeit gespart oder deinen Player gerettet hat, erwäge bitte eine kleine Spende — sie bedeutet uns sehr viel.",
+        "ja": "それらが、誰もが利用できる無料サービスを支えています。このツールが今日、時間の節約やプレーヤーの復旧に役立ったなら、少額でもご寄付をご検討ください。皆様のご支援は私たちにとって何より大切です。",
+    },
+    "nav_help": {
+        "en": "Help",
+        "zh-CN": "帮助",
+        "fr": "Aide",
+        "es": "Ayuda",
+        "de": "Hilfe",
+        "ja": "ヘルプ",
+    },
+    "help_discord_tip": {
+        "en": "Join our Discord",
+        "zh-CN": "加入我们的 Discord",
+        "fr": "Rejoignez notre Discord",
+        "es": "Únete a nuestro Discord",
+        "de": "Tritt unserem Discord bei",
+        "ja": "Discord に参加する",
+    },
+    "help_reddit_tip": {
+        "en": "Join our Reddit community",
+        "zh-CN": "加入我们的 Reddit 社区",
+        "fr": "Rejoignez notre communauté Reddit",
+        "es": "Únete a nuestra comunidad de Reddit",
+        "de": "Tritt unserer Reddit-Community bei",
+        "ja": "Reddit コミュニティに参加する",
+    },
+    "help_github_tip": {
+        "en": "Get help on GitHub",
+        "zh-CN": "在 GitHub 上获取帮助",
+        "fr": "Obtenir de l'aide sur GitHub",
+        "es": "Obtén ayuda en GitHub",
+        "de": "Hilfe auf GitHub erhalten",
+        "ja": "GitHub でヘルプを見る",
+    },
+    "community_discord": {
+        "en": "Discord",
+        "zh-CN": "Discord",
+        "fr": "Discord",
+        "es": "Discord",
+        "de": "Discord",
+        "ja": "Discord",
+    },
+    "community_reddit": {
+        "en": "Reddit",
+        "zh-CN": "Reddit",
+        "fr": "Reddit",
+        "es": "Reddit",
+        "de": "Reddit",
+        "ja": "Reddit",
+    },
     "donate_appeal_family_and_time": {
         "en": "Your donation directly helps me support my family and fund the countless hours put into this project",
         "zh-CN": "您的捐赠直接帮助我养家糊口，并支持我为本项目倾注的大量心血与时间",
@@ -2891,10 +2980,10 @@ _STRINGS: dict = {
     "donate_appeal_keep_going": {
         "en": "If Updater CE saved your player today, consider donating — it pays for servers, test hardware, and puts food on our table",
         "zh-CN": "如果本工具今天成功救回了您的播放器，请考虑支持一下——这能帮助支付服务器费用并维持全家生计",
-        "fr": "Si Updater CE a sauvé votre appareil aujourd'hui, pensez à donner : cela paie les serveurs, le matériel et nourrit notre famille",
-        "es": "Si Updater CE revivió tu reproductor hoy, considera apoyarnos: financia servidores, hardware de prueba y comida en nuestra mesa",
-        "de": "Wenn Updater CE deinen Player heute gerettet hat, denke über eine Spende nach — sie bezahlt Server, Hardware und unser Essen",
-        "ja": "今日 Updater CE がお役に立てたなら、ぜひ温かいご支援を。サーバー代、検証機器代、そして日々の暮らしを支えます",
+        "fr": "Si Programme de mise à jour a sauvé votre appareil aujourd'hui, pensez à donner : cela paie les serveurs, le matériel et nourrit notre famille",
+        "es": "Si Actualizador revivió tu reproductor hoy, considera apoyarnos: financia servidores, hardware de prueba y comida en nuestra mesa",
+        "de": "Wenn Updater deinen Player heute gerettet hat, denke über eine Spende nach — sie bezahlt Server, Hardware und unser Essen",
+        "ja": "今日 アップデーターがお役に立てたなら、ぜひ温かいご支援を。サーバー代、検証機器代、そして日々の暮らしを支えます",
     },
     "donate_appeal_always_free": {
         "en": "This app will always be free, donations are appreciated",
@@ -2978,11 +3067,11 @@ _STRINGS: dict = {
     },
     "support_story_1_body": {
         "en": "Innioasis regularly rolls out newer firmwares for players like the Y1 (targeting hidden board revisions like 6.0, 7.0, and 8.0) that silently break older devices. Worse, their website provides zero warnings and zero access to previous working firmwares to recover from a bricked state. Updater CE and the Community Firmware project pick up the pieces: we archive every legacy stock ROM, automatically verify your hardware revision, and keep your player running safely.",
-        "zh-CN": "Innioasis 经常为 Y1 等播放器推出针对隐藏主板版本（如 6.0、7.0、8.0）的新固件，这些固件刷入较旧机器时可能导致异常甚至变砖。更糟糕的是，原厂官网既不提供硬件版本警示，也不提供历史旧固件供用户救砖回退。Updater CE 与社区固件归档项目应运而生：我们归档了所有已知的原厂历史 ROM，自动校验硬件适配，让您的播放器长久安全运行。",
-        "fr": "Innioasis publie régulièrement de nouveaux micrologiciels pour des modèles comme le Y1 (pour des révisions internes 6.0, 7.0, 8.0) qui rendent les anciens appareils inutilisables. Pire encore, aucun avertissement ni archive des anciennes versions ne figure sur leur site. Updater CE et l'archive communautaire prennent le relais : nous conservons chaque ROM officielle, vérifions votre matériel et assurons la pérennité de votre lecteur.",
-        "es": "Innioasis lanza periódicamente firmwares para reproductores como el Y1 (para revisiones como 6.0, 7.0 u 8.0) que rompen los modelos anteriores. Peor aún, no ofrecen advertencias ni copias de firmwares anteriores para recuperar el equipo. Updater CE y el archivo comunitario rescatan tu dispositivo: archivamos cada ROM de fábrica, comprobamos tu hardware y mantenemos tu reproductor funcionando con seguridad.",
-        "de": "Innioasis veröffentlicht regelmäßig neue Firmwares für Geräte wie den Y1 (für verdeckte Revisionen wie 6.0, 7.0, 8.0), die ältere Modelle unbrauchbar machen. Es gibt keinerlei Warnungen oder alte ROMs auf deren Website zum Wiederherstellen. Updater CE und das Community-Archiv fangen dies auf: Wir sichern alle Legacy-ROMs, prüfen Hardware-Revisionen automatisch und halten deinen Player am Leben.",
-        "ja": "Innioasis は Y1 などのプレイヤーに対し、隠れた基板リビジョン（rev 6.0、7.0、8.0 など）向けの更新を告知なしで配信し、旧モデルで不具合や文鎮化を引き起こすことがあります。メーカー公式サイトには警告も過去のファームウェアも一切ありません。Updater CE とコミュニティアーカイブは、全バージョンの ROM を保存し、基板を自動判定して安全な復旧環境を提供しています。",
+        "zh-CN": "Innioasis 经常为 Y1 等播放器推出针对隐藏主板版本（如 6.0、7.0、8.0）的新固件，这些固件刷入较旧机器时可能导致异常甚至变砖。更糟糕的是，原厂官网既不提供硬件版本警示，也不提供历史旧固件供用户救砖回退。更新程序 与社区固件归档项目应运而生：我们归档了所有已知的原厂历史 ROM，自动校验硬件适配，让您的播放器长久安全运行。",
+        "fr": "Innioasis publie régulièrement de nouveaux micrologiciels pour des modèles comme le Y1 (pour des révisions internes 6.0, 7.0, 8.0) qui rendent les anciens appareils inutilisables. Pire encore, aucun avertissement ni archive des anciennes versions ne figure sur leur site. Programme de mise à jour et l'archive communautaire prennent le relais : nous conservons chaque ROM officielle, vérifions votre matériel et assurons la pérennité de votre lecteur.",
+        "es": "Innioasis lanza periódicamente firmwares para reproductores como el Y1 (para revisiones como 6.0, 7.0 u 8.0) que rompen los modelos anteriores. Peor aún, no ofrecen advertencias ni copias de firmwares anteriores para recuperar el equipo. Actualizador y el archivo comunitario rescatan tu dispositivo: archivamos cada ROM de fábrica, comprobamos tu hardware y mantenemos tu reproductor funcionando con seguridad.",
+        "de": "Innioasis veröffentlicht regelmäßig neue Firmwares für Geräte wie den Y1 (für verdeckte Revisionen wie 6.0, 7.0, 8.0), die ältere Modelle unbrauchbar machen. Es gibt keinerlei Warnungen oder alte ROMs auf deren Website zum Wiederherstellen. Updater und das Community-Archiv fangen dies auf: Wir sichern alle Legacy-ROMs, prüfen Hardware-Revisionen automatisch und halten deinen Player am Leben.",
+        "ja": "Innioasis は Y1 などのプレイヤーに対し、隠れた基板リビジョン（rev 6.0、7.0、8.0 など）向けの更新を告知なしで配信し、旧モデルで不具合や文鎮化を引き起こすことがあります。メーカー公式サイトには警告も過去のファームウェアも一切ありません。アップデーターとコミュニティアーカイブは、全バージョンの ROM を保存し、基板を自動判定して安全な復旧環境を提供しています。",
     },
     "support_story_1_item_1": {
         "en": "Rescuing Broken Players: Safety checks ensure newer updates never brick older hardware.",
@@ -3065,7 +3154,9 @@ _STRINGS: dict = {
         "ja": "分かりやすいステップガイド：画面の指示通りに操作するだけで迷わず完了。",
     },
     "support_story_2_item_4": {
-        "en": "Multilingual Community: Fully localized in English, Chinese, German, Spanish, French & Japanese.",
+        "en": "Multilingual Community: Fully localised in English, Chinese, German, Spanish, French & Japanese.",
+        "en-GB": "Multilingual Community: Fully localised in English, Chinese, German, Spanish, French & Japanese.",
+        "en-US": "Multilingual Community: Fully localized in English, Chinese, German, Spanish, French & Japanese.",
         "zh-CN": "全方位多语言界面：完整本地化支持中、英、德、西、法、日等多国语言。",
         "fr": "Communauté multilingue : Entièrement traduit en anglais, chinois, allemand, espagnol, français et japonais.",
         "es": "Comunidad multilingüe: Totalmente traducido a inglés, chino, alemán, español, francés y japonés.",
@@ -3146,11 +3237,11 @@ _STRINGS: dict = {
     },
     "support_story_4_body": {
         "en": "When a hardware company moves on to their next gadget, older models get abandoned. Innioasis provides no Linux support, no transparent changelogs, and no easy way to recover when an install fails. Updater CE exists because passionate users shouldn't have to throw away a perfectly good music player. 100% of community contributions go directly into keeping this tool open for everyone.",
-        "zh-CN": "当硬件厂商转向新产品线时，老款设备往往被彻底遗忘。Innioasis 原厂不提供 Linux 支持、不公开详细变更日志，设备刷坏后也无简易救砖途径。Updater CE 的存在就是为了让音乐爱好者不必丢弃性能完好的播放器。每一笔社区捐赠都 100% 用于维持这项服务，让它始终对所有人开放。",
-        "fr": "Quand un fabricant passe au produit suivant, les anciens modèles sont délaissés. Innioasis n'offre aucun support Linux, pas de journal des modifications transparent ni de solution simple en cas de panne. Updater CE existe pour que personne n'ait à jeter un excellent lecteur. 100% des dons financent les serveurs et la gratuité pour tous.",
-        "es": "Cuando una empresa pasa al siguiente producto, los modelos antiguos quedan abandonados. Innioasis no ofrece soporte en Linux, ni registros de cambios transparentes ni soluciones fáciles de recuperación. Updater CE existe para que no tires un reproductor perfectamente funcional. El 100% de las aportaciones financia servidores y mantiene todo libre.",
-        "de": "Wenn Hersteller neue Produkte auf den Markt bringen, werden Vorgänger oft vergessen. Innioasis bietet keinen Linux-Support, keine transparenten Changelogs und keine einfache Rettung bei Fehlern. Updater CE existiert, damit du funktionierende Hardware nicht wegwerfen musst. 100% der Spenden fließen in den Betrieb des Projekts.",
-        "ja": "メーカーが新型機へ移行すると、旧機種のサポートは打ち切られがちです。Innioasis は Linux をサポートせず、更新履歴も不透明で、書き込み失敗時の救済策もありません。まだ十分に使えるプレイヤーを無駄にしないために Updater CE は生まれました。支援金は全額、インフラ費用とツールの無償提供維持に使われます。",
+        "zh-CN": "当硬件厂商转向新产品线时，老款设备往往被彻底遗忘。Innioasis 原厂不提供 Linux 支持、不公开详细变更日志，设备刷坏后也无简易救砖途径。更新程序 的存在就是为了让音乐爱好者不必丢弃性能完好的播放器。每一笔社区捐赠都 100% 用于维持这项服务，让它始终对所有人开放。",
+        "fr": "Quand un fabricant passe au produit suivant, les anciens modèles sont délaissés. Innioasis n'offre aucun support Linux, pas de journal des modifications transparent ni de solution simple en cas de panne. Programme de mise à jour existe pour que personne n'ait à jeter un excellent lecteur. 100% des dons financent les serveurs et la gratuité pour tous.",
+        "es": "Cuando una empresa pasa al siguiente producto, los modelos antiguos quedan abandonados. Innioasis no ofrece soporte en Linux, ni registros de cambios transparentes ni soluciones fáciles de recuperación. Actualizador existe para que no tires un reproductor perfectamente funcional. El 100% de las aportaciones financia servidores y mantiene todo libre.",
+        "de": "Wenn Hersteller neue Produkte auf den Markt bringen, werden Vorgänger oft vergessen. Innioasis bietet keinen Linux-Support, keine transparenten Changelogs und keine einfache Rettung bei Fehlern. Updater existiert, damit du funktionierende Hardware nicht wegwerfen musst. 100% der Spenden fließen in den Betrieb des Projekts.",
+        "ja": "メーカーが新型機へ移行すると、旧機種のサポートは打ち切られがちです。Innioasis は Linux をサポートせず、更新履歴も不透明で、書き込み失敗時の救済策もありません。まだ十分に使えるプレイヤーを無駄にしないためにアップデーターは生まれました。支援金は全額、インフラ費用とツールの無償提供維持に使われます。",
     },
     "support_story_4_item_1": {
         "en": "Rescue & Unbrick: Proven recovery flows even when devices refuse to boot.",
@@ -3313,16 +3404,18 @@ _STRINGS: dict = {
         "es": "Ajustes y preferencias",
     },
     "settings_reminders_group": {
-        "zh-CN": "设备固件更新提醒",
-        "en": "Device Firmware Release Reminders",
-        "fr": "Rappels de mises à jour du firmware",
-        "es": "Recordatorios de actualización de firmware",
+        "zh-CN": "播放器更新提醒",
+        "en": "Player Update Reminders",
+        "fr": "Rappels de mise à jour du lecteur",
+        "es": "Recordatorios de actualización del reproductor",
+        "de": "Update-Erinnerungen für Player",
+        "ja": "プレーヤーのアップデート通知",
     },
     "settings_reminders_desc": {
-        "zh-CN": "Updater Neo 可记住各机型上次安装的固件版本，并在发布新版本时提醒您更新。",
-        "en": "Updater Neo remembers what firmware version was installed on your Innioasis players, alerting you when newer releases become available.",
-        "fr": "Updater Neo mémorise la version installée sur vos lecteurs Innioasis et vous avertit lorsque de nouvelles versions sont disponibles.",
-        "es": "Updater Neo recuerda qué versión de firmware se instaló en sus reproductores Innioasis, avisándole cuando haya nuevas versiones disponibles.",
+        "zh-CN": "当播放器有新软件版本发布时，我们会通知您。",
+        "en": "We'll let you know when a new version of the software for your player is released.",
+        "fr": "Nous vous informerons lorsqu'une nouvelle version du logiciel de votre lecteur sera publiée.",
+        "es": "Te avisaremos cuando se publique una nueva versión del software de tu reproductor.",
     },
     "settings_enable_y1": {
         "zh-CN": "启用 Innioasis Y1 固件更新提醒",
@@ -3379,22 +3472,22 @@ _STRINGS: dict = {
         "es": "Aún no se ha registrado ninguna instalación de dispositivo. Flashee un dispositivo para habilitar el seguimiento.",
     },
     "settings_donations_group": {
-        "zh-CN": "社区致谢与捐赠",
-        "en": "Show Credits and Donations",
-        "fr": "Crédits communautaires et dons",
-        "es": "Créditos comunitarios y donaciones",
-        "de": "Community-Credits und Spenden",
-        "ja": "コミュニティクレジットと寄付",
+        "zh-CN": "捐赠、致谢与社区",
+        "en": "Donations, Credits and Community",
+        "fr": "Dons, crédits et communauté",
+        "es": "Donaciones, créditos y comunidad",
+        "de": "Spenden, Credits und Community",
+        "ja": "寄付・クレジット・コミュニティ",
     },
     # The switch on that card's own title line: on = credits and donation
     # prompts are enabled by default.
     "settings_show_donations": {
-        "zh-CN": "启用社区致谢与捐赠",
-        "en": "Show Credits and Donations",
-        "fr": "Activer les crédits communautaires et les dons",
-        "es": "Habilitar créditos comunitarios y donaciones",
-        "de": "Community-Credits und Spenden aktivieren",
-        "ja": "コミュニティクレジットと寄付を有効にする",
+        "zh-CN": "捐赠、致谢与社区",
+        "en": "Donations, Credits and Community",
+        "fr": "Dons, crédits et communauté",
+        "es": "Donaciones, créditos y comunidad",
+        "de": "Spenden, Credits und Community",
+        "ja": "寄付・クレジット・コミュニティ",
     },
     "settings_hide_donations": {
         "zh-CN": "关闭捐赠 / 致谢",
@@ -3587,16 +3680,52 @@ _STRINGS: dict = {
 
     # Settings — single release-reminder opt-in
     "settings_reminders_enable": {
-        "zh-CN": "给我发送新版本提醒",
-        "en": "Give me release reminders",
-        "fr": "Recevoir les rappels de nouvelles versions",
-        "es": "Envíame recordatorios de nuevas versiones",
+        "zh-CN": "有新更新时通知我",
+        "en": "Tell me about new updates to my player",
+        "fr": "Informez-moi des nouvelles mises à jour de mon lecteur",
+        "es": "Avísame de las nuevas actualizaciones de mi reproductor",
     },
     "settings_reminders_tracked": {
-        "zh-CN": "安装在 {devices} 上的软件发布新版本时会通知您。当前跟踪：{software}",
-        "en": "You'll be alerted when a newer release appears for the software you install on {devices}. Tracked now: {software}",
-        "fr": "Vous serez averti lorsqu'une nouvelle version des logiciels installés sur {devices} sera disponible. Suivi actuellement : {software}",
-        "es": "Se te avisará cuando aparezca una versión más reciente del software que instales en {devices}. En seguimiento: {software}",
+        "zh-CN": "当 {devices} 上的 {software} 有更新时，我们会通知您。",
+        "en": "We'll let you know when there's an update to {software} on your {devices}.",
+        "fr": "Nous vous informerons lorsqu'une mise à jour de {software} sera disponible sur votre {devices}.",
+        "es": "Te avisaremos cuando haya una actualización de {software} en tu {devices}.",
+    },
+    # Reminder copy reads from the software actually tracked. Original Software
+    # is the player's own firmware, so naming it twice reads worse than "the
+    # software"; another launcher (Rockbox, Innioasis Music...) is named.
+    "settings_reminders_tracked_original": {
+        "zh-CN": "当您的 {model} 有新版本软件发布时，我们会通知您。",
+        "en": "We'll let you know when a new version of the software for your {model} is released.",
+        "fr": "Nous vous préviendrons lorsqu'une nouvelle version du logiciel de votre {model} sera disponible.",
+        "es": "Te avisaremos cuando se publique una nueva versión del software de tu {model}.",
+        "de": "Wir sagen dir Bescheid, wenn eine neue Version der Software für deinen {model} erscheint.",
+        "ja": "{model} 用ソフトウェアの新しいバージョンが公開されたらお知らせします。",
+    },
+    "settings_reminders_tracked_named": {
+        "zh-CN": "当 {software} 为您的 {model} 发布新版本时，我们会通知您。",
+        "en": "We'll let you know when a new version of {software} is released for your {model}.",
+        "fr": "Nous vous préviendrons lorsqu'une nouvelle version de {software} sortira pour votre {model}.",
+        "es": "Te avisaremos cuando se publique una nueva versión de {software} para tu {model}.",
+        "de": "Wir sagen dir Bescheid, wenn eine neue Version von {software} für deinen {model} erscheint.",
+        "ja": "{model} 用の {software} の新しいバージョンが公開されたらお知らせします。",
+    },
+    "settings_reminders_tracked_multi": {
+        "zh-CN": "以下项目有新版本时，我们会通知您。",
+        "en": "We'll let you know when new versions of these are released.",
+        "fr": "Nous vous préviendrons lorsque de nouvelles versions de ces logiciels seront publiées.",
+        "es": "Te avisaremos cuando se publiquen nuevas versiones de estos.",
+        "de": "Wir sagen dir Bescheid, wenn neue Versionen davon erscheinen.",
+        "ja": "これらの新しいバージョンが公開されたらお知らせします。",
+    },
+    # One reminder switch per model that has software tracked on it.
+    "settings_reminders_model_fmt": {
+        "zh-CN": "{software}（{model}）",
+        "en": "{software} on {model}",
+        "fr": "{software} sur {model}",
+        "es": "{software} en {model}",
+        "de": "{software} auf {model}",
+        "ja": "{model} の {software}",
     },
 
     # Settings — install method
@@ -3637,10 +3766,10 @@ _STRINGS: dict = {
         "es": "MTKClient pasa a ser el único método de instalación y se muestran los avisos de macOS. El Instalador MediaTek debe reiniciarse para aplicarlo.",
     },
     "simulated_mac_body": {
-        "zh-CN": "MTKClient 将成为唯一的安装方式，并显示 macOS 专属提示。Updater CE 需要重启才能应用。",
+        "zh-CN": "MTKClient 将成为唯一的安装方式，并显示 macOS 专属提示。更新程序 需要重启才能应用。",
         "en": "MTKClient becomes the only install method and macOS-specific prompts are shown. Updater CE needs to restart to apply this.",
-        "fr": "MTKClient devient la seule méthode d'installation et les invites macOS sont affichées. Updater CE doit redémarrer pour appliquer ce réglage.",
-        "es": "MTKClient pasa a ser el único método de instalación y se muestran los avisos de macOS. Updater CE debe reiniciarse para aplicarlo.",
+        "fr": "MTKClient devient la seule méthode d'installation et les invites macOS sont affichées. Programme de mise à jour doit redémarrer pour appliquer ce réglage.",
+        "es": "MTKClient pasa a ser el único método de instalación y se muestran los avisos de macOS. Actualizador debe reiniciarse para aplicarlo.",
     },
     "simulated_mac_restart_now": {
         "zh-CN": "立即重启",
@@ -3760,6 +3889,7 @@ _STRINGS: dict = {
     "sel_refresh_tooltip": {
         "zh-CN": "刷新可用软件目录",
         "en": "Refresh available software catalogue",
+        "en-US": "Refresh available software catalog",
         "fr": "Actualiser le catalogue des logiciels disponibles",
         "es": "Actualizar el catálogo de software disponible",
     },
@@ -3790,6 +3920,7 @@ _STRINGS: dict = {
     "button_centre": {
         "zh-CN": "中间按钮",
         "en": "centre button",
+        "en-US": "center button",
         "fr": "bouton central",
         "es": "botón central",
     },
@@ -3878,12 +4009,6 @@ _STRINGS: dict = {
         "en": "Device Type Help",
         "fr": "Aide sur le type d'appareil",
         "es": "Ayuda sobre el tipo de dispositivo",
-    },
-    "sel_refresh_tooltip": {
-        "zh-CN": "刷新可用软件目录",
-        "en": "Refresh available software catalogue",
-        "fr": "Actualiser le catalogue des logiciels disponibles",
-        "es": "Actualizar el catálogo de software disponible",
     },
     "sel_install_tooltip_generic": {
         "zh-CN": "将所选系统软件安装或恢复到您的设备",
@@ -4037,7 +4162,8 @@ _STRINGS: dict = {
     },
     "btn_centre": {
         "zh-CN": "中心 (OK) 键",
-        "en": "center (OK) button",
+        "en": "centre (OK) button",
+        "en-US": "center (OK) button",
         "fr": "bouton central (OK)",
         "es": "botón central (OK)",
         "de": "Mittel-Taste (OK)",
@@ -4102,6 +4228,7 @@ _STRINGS: dict = {
     "flash_watch_timeout_hint": {
         "zh-CN": "请检查是否已连接并开机。若仍然黑屏，请用针按住复位孔，并按住中心按钮（Y1）或电源键（其他机型）重新启动。若仍无法启动，说明固件未成功刷入，请安装其他固件。",
         "en": "Check that it is plugged in and switched on. If it stays dark, press a pin into the reset hole and hold the centre button (Y1) or the power button (other players) to restart it. If it still will not start, the firmware did not take — install another one.",
+        "en-US": "Check that it is plugged in and turned on. If it stays dark, press a pin into the reset hole and hold the center button (Y1) or the power button (other players) to restart it. If it still will not start, the firmware did not take — install another one.",
         "fr": "Vérifiez qu'il est branché et allumé. S'il reste éteint, enfoncez une aiguille dans le trou de réinitialisation et maintenez le bouton central (Y1) ou le bouton d'alimentation (autres lecteurs) pour le redémarrer. S'il ne démarre toujours pas, le firmware n'a pas pris — installez-en un autre.",
         "es": "Comprueba que está conectado y encendido. Si sigue apagado, introduce un alfiler en el orificio de reinicio y mantén pulsado el botón central (Y1) o el botón de encendido (otros reproductores) para reiniciarlo. Si aún no arranca, el firmware no se aplicó: instala otro.",
         "de": "Prüfe, ob es angesteckt und eingeschaltet ist. Bleibt es dunkel, stecke eine Nadel in das Reset-Loch und halte die mittlere Taste (Y1) bzw. die Power-Taste (andere Player) gedrückt, um es neu zu starten. Startet es weiterhin nicht, hat die Firmware nicht gegriffen — installiere eine andere.",
@@ -4883,7 +5010,8 @@ _STRINGS: dict = {
         "ja": "テーマファイルを転送中（{curr} / {total}）…",
     },
     "rockbox_wizard_reboot_desc_y1": {
-        "en": "Hold the center button to power on your Y1, reconnect USB, and select USB Storage Mode.",
+        "en": "Hold the centre button to power on your Y1, reconnect USB, and select USB Storage Mode.",
+        "en-US": "Hold the center button to power on your Y1, reconnect USB, and select USB Storage Mode.",
         "zh-CN": "请长按中心按键开启 Y1，重新连接 USB，并在播放器上选择“USB 存储模式”。",
         "de": "Halten Sie die mittlere Taste gedrückt, um das Y1 einzuschalten, verbinden Sie USB erneut und wählen Sie den USB-Speichermodus.",
         "fr": "Maintenez le bouton central pour allumer votre Y1, reconnectez l'USB et sélectionnez le mode Stockage USB.",
@@ -4947,7 +5075,8 @@ _STRINGS: dict = {
         "ja": "プレイヤー本体またはその中のいずれかのフォルダーを選択してください",
     },
     "rockbox_power_on_prompt_y1": {
-        "en": "Hold the center button to power on your Y1 and connect USB.",
+        "en": "Hold the centre button to power on your Y1 and connect USB.",
+        "en-US": "Hold the center button to power on your Y1 and connect USB.",
         "zh-CN": "请长按中心按键开启 Y1 并连接 USB。",
         "de": "Halten Sie die mittlere Taste gedrückt, um das Y1 einzuschalten, und verbinden Sie USB.",
         "fr": "Maintenez le bouton central pour allumer votre Y1 et connectez l'USB.",
@@ -5081,10 +5210,10 @@ _STRINGS: dict = {
         "es": "Mantener instaladas las herramientas de plataforma Android (ADB / Fastboot)",
     },
     "legacy_cleanup_platform_tools_hint": {
-        "zh-CN": "如果您在 Updater CE 之外不需要使用 ADB 或 Fastboot，可取消勾选以卸载并释放更多空间。",
+        "zh-CN": "如果您在 更新程序 之外不需要使用 ADB 或 Fastboot，可取消勾选以卸载并释放更多空间。",
         "en": "If you do not use ADB or Fastboot outside Updater CE, uncheck to uninstall and reclaim additional storage.",
-        "fr": "Si vous n'utilisez pas ADB ou Fastboot en dehors d'Updater CE, décochez pour désinstaller et libérer de l'espace.",
-        "es": "Si no utiliza ADB o Fastboot fuera de Updater CE, desmárquelo para desinstalar y liberar espacio.",
+        "fr": "Si vous n'utilisez pas ADB ou Fastboot en dehors d'Programme de mise à jour, décochez pour désinstaller et libérer de l'espace.",
+        "es": "Si no utiliza ADB o Fastboot fuera de Actualizador, desmárquelo para desinstalar y liberar espacio.",
     },
     "legacy_cleanup_btn_clean": {
         "zh-CN": "卸载",
@@ -5176,11 +5305,13 @@ _CATALOGS: dict = {}
 # Language code -> the country whose flag stands for it. Google's list is
 # language-based, so a representative country is chosen where the code carries
 # no region of its own; a code like pt-BR, fr-CA or zh-TW already names one.
+# English carries no region on purpose: the international table claims no
+# country, while en-GB and en-US get their own flag from the code's suffix.
 _FLAG_REGIONS = {
     "af": "ZA", "am": "ET", "ar": "SA", "as": "IN", "az": "AZ", "be": "BY",
     "bg": "BG", "bho": "IN", "bm": "ML", "bn": "BD", "bs": "BA", "ca": "ES",
     "ceb": "PH", "co": "FR", "cs": "CZ", "cy": "GB", "da": "DK", "de": "DE",
-    "doi": "IN", "dv": "MV", "ee": "GH", "el": "GR", "en": "GB", "eo": "EU",
+    "doi": "IN", "dv": "MV", "ee": "GH", "el": "GR", "eo": "EU",
     "es": "ES", "et": "EE", "eu": "ES", "fa": "IR", "fi": "FI", "fil": "PH",
     "fr": "FR", "fy": "NL", "ga": "IE", "gd": "GB", "gl": "ES", "gn": "PY",
     "gu": "IN", "ha": "NG", "haw": "US", "he": "IL", "hi": "IN", "hmn": "LA",
@@ -5365,6 +5496,36 @@ def system_language() -> str:
     except Exception:
         name = ""
     return language_for_locale(name)
+
+
+# Languages written right to left. The interface mirrors for these: the
+# sidebar moves to the right and controls align to the right, while images are
+# shown as-is (repositioned, never flipped).
+RTL_LANGUAGES = frozenset({
+    "ar", "arc", "ckb", "dv", "fa", "fa-AF", "he", "iw", "ks", "ku-Arab",
+    "nqo", "ps", "sd", "syr", "ug", "ur", "yi",
+})
+
+
+def is_rtl_language(code: str | None = None) -> bool:
+    """True when ``code`` (or the active language) reads right to left."""
+    lang = (code if code is not None else translator().lang) or ""
+    lang = lang.strip()
+    if not lang:
+        return False
+    return lang in RTL_LANGUAGES or lang.split("-")[0] in RTL_LANGUAGES
+
+
+def is_english_language(code: str | None = None) -> bool:
+    """True when ``code`` (or the active language) is English of any region.
+
+    ``en``, ``en-GB`` and ``en-US`` all show English copy, so the places that
+    translate text — release notes in particular — have to treat a regional
+    variant as English too instead of asking Google to translate English into
+    English.
+    """
+    lang = (code if code is not None else translator().lang) or ""
+    return lang.strip().split("-")[0].lower() == "en"
 
 
 def initial_language(stored: str = "") -> str:

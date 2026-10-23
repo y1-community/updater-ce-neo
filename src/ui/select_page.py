@@ -57,7 +57,7 @@ from ..config import (
     is_mediatek_installer,
     is_offline_mode,
 )
-from ..i18n import tr, translator
+from ..i18n import is_english_language, tr, translator
 from ..browser import open_browser
 from ..translate import (
     get_google_translate_release_url,
@@ -74,7 +74,7 @@ from .widgets import (
 )
 from .dark import T, link_html, page_margins
 from .scrollbars import configure_scroll_area, make_transparent
-from .icons import HELP_ICON_PX, get_help_pixmap, get_symbol_icon, help_icon_source
+from .icons import HELP_ICON_PX, get_help_pixmap, get_symbol_icon, get_symbol_pixmap, help_icon_source, tint_pixmap
 
 logger = logging.getLogger(__name__)
 
@@ -640,6 +640,23 @@ class SelectPackagePage(QWidget):
         """Show a status message in the main status bar (0 = until replaced)."""
         self.status_message.emit(text, timeout_ms)
 
+    def _install_restore_icon(self):
+        """Tint the install glyph like sidebar icons, including full-color theme icons."""
+        from PySide6.QtGui import QIcon
+
+        color = T().fg
+        pixmap = get_symbol_pixmap("install", 16, color=color)
+        return QIcon(tint_pixmap(pixmap, color))
+
+    def _button_icon(self, symbol: str, size: int = 16):
+        """A small button glyph in the live text colour.
+
+        The icon provider's default is plain white in dark mode, which sat
+        next to the theme's own foreground on every label and button. These
+        glyphs follow the interface text colour, like the sidebar rows.
+        """
+        return get_symbol_icon(symbol, size, color=T().fg)
+
     def _build_online_tab(self):
         t = T()
         page = QWidget()
@@ -790,7 +807,7 @@ class SelectPackagePage(QWidget):
         pkg_layout.addWidget(self._download_bar)
 
         self._install_btn = QPushButton(tr("sel_install"))
-        self._install_btn.setIcon(get_symbol_icon("install", 16))
+        self._install_btn.setIcon(self._install_restore_icon())
         self._install_btn.setDefault(True)
         self._install_btn.setAutoDefault(True)
         self._install_btn.setMinimumHeight(32)
@@ -816,6 +833,9 @@ class SelectPackagePage(QWidget):
 
         self._pkg_group.set_layout(pkg_layout)
         self._pkg_group.set_glass_clear(True)
+        # A scroll viewport erases its contents with Base; keep that palette
+        # synchronized with the painted card instead of the generic window.
+        self._pkg_group.refresh_theme = lambda: clear_glass_plate(self._release_list)
         split.addWidget(self._pkg_group, 5)
 
         # Right panel: Status and Notes
@@ -967,10 +987,10 @@ class SelectPackagePage(QWidget):
         self._path_edit.setReadOnly(True)
         self._path_edit.setPlaceholderText(tr("sel_placeholder"))
         self._browse_btn = QPushButton(tr("sel_browse"))
-        self._browse_btn.setIcon(get_symbol_icon("file", 16))
+        self._browse_btn.setIcon(self._button_icon("file", 16))
         self._browse_btn.clicked.connect(self._on_choose_file)
         self._browse_folder_btn = QPushButton(tr("sel_browse_folder"))
-        self._browse_folder_btn.setIcon(get_symbol_icon("folder", 16))
+        self._browse_folder_btn.setIcon(self._button_icon("folder", 16))
         self._browse_folder_btn.clicked.connect(self._on_choose_folder)
         row.addWidget(self._path_edit, 1)
         row.addWidget(self._browse_btn)
@@ -991,10 +1011,10 @@ class SelectPackagePage(QWidget):
         self._da_edit.setReadOnly(True)
         self._da_edit.setPlaceholderText(tr("mtk_da_placeholder"))
         self._browse_da_btn = QPushButton(tr("sel_browse"))
-        self._browse_da_btn.setIcon(get_symbol_icon("file", 16))
+        self._browse_da_btn.setIcon(self._button_icon("file", 16))
         self._browse_da_btn.clicked.connect(self._on_choose_da_file)
         self._clear_da_btn = QPushButton(tr("settings_sp_auth_clear"))
-        self._clear_da_btn.setIcon(get_symbol_icon("cancel", 12))
+        self._clear_da_btn.setIcon(self._button_icon("cancel", 12))
         self._clear_da_btn.clicked.connect(self._on_clear_da_file)
         da_row.addWidget(self._da_label)
         da_row.addWidget(self._da_edit, 1)
@@ -1012,7 +1032,7 @@ class SelectPackagePage(QWidget):
         self._scatter_edit.setReadOnly(True)
         self._scatter_edit.setPlaceholderText(tr("mtk_scatter_placeholder"))
         self._browse_scatter_btn = QPushButton(tr("sel_browse"))
-        self._browse_scatter_btn.setIcon(get_symbol_icon("file", 16))
+        self._browse_scatter_btn.setIcon(self._button_icon("file", 16))
         self._browse_scatter_btn.clicked.connect(self._on_choose_scatter_file)
         scatter_row.addWidget(self._scatter_label)
         scatter_row.addWidget(self._scatter_edit, 1)
@@ -1033,10 +1053,10 @@ class SelectPackagePage(QWidget):
         self._auth_edit.setReadOnly(True)
         self._auth_edit.setPlaceholderText(tr("settings_sp_auth_none"))
         self._browse_auth_btn = QPushButton(tr("settings_sp_auth_browse"))
-        self._browse_auth_btn.setIcon(get_symbol_icon("file", 16))
+        self._browse_auth_btn.setIcon(self._button_icon("file", 16))
         self._browse_auth_btn.clicked.connect(self._on_choose_auth_file)
         self._clear_auth_btn = QPushButton(tr("settings_sp_auth_clear"))
-        self._clear_auth_btn.setIcon(get_symbol_icon("cancel", 12))
+        self._clear_auth_btn.setIcon(self._button_icon("cancel", 12))
         self._clear_auth_btn.clicked.connect(self._on_clear_auth_file)
         self._auth_row.addWidget(self._auth_label)
         self._auth_row.addWidget(self._auth_edit, 1)
@@ -1070,7 +1090,7 @@ class SelectPackagePage(QWidget):
         grp_l.addWidget(self._local_rockbox_themes_cb)
 
         self._start_btn = QPushButton(tr("sel_btn_start"))
-        self._start_btn.setIcon(get_symbol_icon("install", 16))
+        self._start_btn.setIcon(self._install_restore_icon())
         self._start_btn.setDefault(True)
         self._start_btn.setAutoDefault(True)
         self._start_btn.setMinimumHeight(32)
@@ -1625,7 +1645,7 @@ class SelectPackagePage(QWidget):
             self._local_status.setText(tr(self._local_status_key))
         if self._current_selected_rel:
             if self._is_translated or (
-                self._auto_translate_notes and (translator().lang or "en").strip() != "en"
+                self._auto_translate_notes and not is_english_language()
             ):
                 self._translate_current_release_in_app()
             else:
@@ -1666,7 +1686,7 @@ class SelectPackagePage(QWidget):
             for label, key, bold in self._registered_links:
                 label.setText(self._link_html(key, bold=bold))
         if hasattr(self, "_install_btn"):
-            self._install_btn.setIcon(get_symbol_icon("install", 16))
+            self._install_btn.setIcon(self._install_restore_icon())
         if hasattr(self, "_update_prompt") and hasattr(self._update_prompt, "refresh_theme"):
             self._update_prompt.refresh_theme()
         rel = getattr(self, "_current_selected_rel", None)
@@ -1678,11 +1698,11 @@ class SelectPackagePage(QWidget):
         elif rel:
             self._ensure_release_icon(rel)
         if hasattr(self, "_browse_btn"):
-            self._browse_btn.setIcon(get_symbol_icon("file", 16))
+            self._browse_btn.setIcon(self._button_icon("file", 16))
         if hasattr(self, "_browse_folder_btn"):
-            self._browse_folder_btn.setIcon(get_symbol_icon("folder", 16))
+            self._browse_folder_btn.setIcon(self._button_icon("folder", 16))
         if hasattr(self, "_start_btn"):
-            self._start_btn.setIcon(get_symbol_icon("install", 16))
+            self._start_btn.setIcon(self._install_restore_icon())
         for attr, symbol, size in (
             ("_browse_da_btn", "file", 16),
             ("_clear_da_btn", "cancel", 12),
@@ -1692,7 +1712,7 @@ class SelectPackagePage(QWidget):
         ):
             btn = getattr(self, attr, None)
             if btn is not None:
-                btn.setIcon(get_symbol_icon(symbol, size))
+                btn.setIcon(self._button_icon(symbol, size))
         from .dark import apply_explicit_foreground, install_progress_readability
         status = getattr(self, "_local_status", None)
         if status is not None:
@@ -2167,8 +2187,9 @@ class SelectPackagePage(QWidget):
             self._is_translating = False
             self._set_notes_content(self._render_release_notes(rel, as_html=True))
             self._set_details_header(rel, self._details_package)
-            self._start_icon_job(self._listed_releases or [rel], priority_tag=str(rel.get("tag_name") or ""))
-            if self._auto_translate_notes and (translator().lang or "en").strip() != "en":
+            listed = getattr(self, "_listed_releases", None) or [rel]
+            self._start_icon_job(listed, priority_tag=str(rel.get("tag_name") or ""))
+            if self._auto_translate_notes and not is_english_language():
                 self._translate_current_release_in_app()
             self._update_translate_link()
             self._emit_gui_firmware_changed()
@@ -2177,9 +2198,8 @@ class SelectPackagePage(QWidget):
         from ..translate import strip_changes_header
         raw_body = translated_body or (rel.get("body") or "").strip()
         body = strip_changes_header(raw_body) or tr("update_no_notes")
-        if translated_body:
-            badge = tr("translated_with_google")
-            body = f"{badge}\n\n{body}"
+        # No translation badge inside the notes: the control under them already
+        # says the text was translated, and where to show the original.
 
         # 1. Normalise markdown: turn any markdown headings #{1,6} into bold text
         # so all text is rendered at uniform body text size.
@@ -2208,6 +2228,12 @@ class SelectPackagePage(QWidget):
             html,
             flags=re.IGNORECASE,
         )
+        # ...and it writes the document default foreground into every span
+        # (``color: #000000``). Inline declarations beat the stylesheet below,
+        # which is why the notes looked black in a dark theme and never
+        # followed a live theme change. The theme colour is applied by the CSS
+        # that is injected next, so the stale inline colours go.
+        html = re.sub(r"color:\s*[^;\"']+;?", "", html, flags=re.IGNORECASE)
 
         t = T()
         # 2. Re-style links: clickable, bold, same color as text (not blue #0000ff):
@@ -2284,7 +2310,7 @@ class SelectPackagePage(QWidget):
     def _update_translate_link(self):
         rel = self._current_selected_rel
         lang = (translator().lang or "en").strip()
-        if not rel or lang == "en":
+        if not rel or is_english_language(lang):
             self._translate_label.setVisible(False)
             self._translate_label.setText("")
             self._translate_label.updateGeometry()
@@ -2358,7 +2384,7 @@ class SelectPackagePage(QWidget):
         """
         self._auto_translate_notes = bool(enabled)
         lang = (translator().lang or "en").strip()
-        if not enabled or lang == "en":
+        if not enabled or is_english_language(lang):
             # Switching back to English (or turning translation off) puts the
             # published notes back, so the very same change that turned it on
             # can turn it off.
@@ -2372,7 +2398,7 @@ class SelectPackagePage(QWidget):
         if not rel:
             return
         lang = (translator().lang or "en").strip()
-        if lang == "en":
+        if is_english_language(lang):
             return
         tag = rel.get("tag_name", "")
         cached = self._translated_notes_cache.get((tag, lang))
@@ -2805,7 +2831,7 @@ class SelectPackagePage(QWidget):
         if pkg.has_release_name:
             name = pkg.name
             lang = (translator().lang or "en").strip()
-            if lang != "en" and name:
+            if not is_english_language(lang) and name:
                 try:
                     from ..translate import fetch_google_translation
                     trans = fetch_google_translation(name, lang)
@@ -2845,7 +2871,7 @@ class SelectPackagePage(QWidget):
 
         name = pkg.name or pkg.folder.name
         lang = (translator().lang or "en").strip()
-        if lang != "en" and pkg.name:
+        if not is_english_language(lang) and pkg.name:
             try:
                 from ..translate import fetch_google_translation
                 trans = fetch_google_translation(pkg.name, lang)

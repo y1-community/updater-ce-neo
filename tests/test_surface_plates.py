@@ -72,9 +72,13 @@ def test_cards_and_battery_hint_paint_the_bento_surface_without_glass(no_glass):
         image = QImage(widget.size(), QImage.Format.Format_ARGB32_Premultiplied)
         image.fill(Qt.GlobalColor.transparent)
         widget.render(image)
-        assert image.pixelColor(60, 28).name() == T().bg_card
-        window = widget.palette().color(QPalette.ColorRole.Window)
-        assert image.pixelColor(0, 0).name() == window.name()
+        # A padding point, clear of whatever the widget draws in its middle
+        # (the battery toast's glyph sits on the centre line).
+        assert image.pixelColor(20, 8).name() == T().bg_card
+        # The rounded card sits on the window surface, which it also paints in
+        # its own corners: no square plate of a different shade, and nothing
+        # left stale around the radius.
+        assert image.pixelColor(0, 0).name() == T().bg
         widget.close()
 
 
@@ -95,29 +99,56 @@ def test_clear_glass_plate_removes_its_own_fill_without_glass(no_glass):
         assert widget.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground) is False
 
 
-def test_clear_glass_plate_keeps_scroll_views_on_card_surface(no_glass):
-    for view in (QListWidget(), QTextEdit()):
-        surfaces.clear_glass_plate(view)
-        viewport = view.viewport()
-        assert view.autoFillBackground() is False
-        assert viewport.autoFillBackground() is True
-        assert viewport.palette().color(QPalette.ColorRole.Base).name() == T().bg_card
-        assert viewport.testAttribute(Qt.WidgetAttribute.WA_NoSystemBackground) is False
-        assert not view.styleSheet()
-        assert not viewport.styleSheet()
+def test_clear_glass_plate_keeps_scroll_views_clear_inside_cards(no_glass):
+    # Both item views and rich text documents inherit the painted card surface;
+    # neither viewport may add its own square background plate.
+    card = Card()
+    view = QListWidget(card)
+    surfaces.clear_glass_plate(view)
+    viewport = view.viewport()
+    assert view.autoFillBackground() is False
+    assert viewport.autoFillBackground() is False
+    assert viewport.testAttribute(Qt.WidgetAttribute.WA_NoSystemBackground) is True
+    assert not view.styleSheet()
+    assert not viewport.styleSheet()
+    card.close()
+
+    document = QTextEdit()
+    surfaces.clear_glass_plate(document)
+    assert document.viewport().autoFillBackground() is False
+    assert document.viewport().testAttribute(Qt.WidgetAttribute.WA_NoSystemBackground) is True
+
+    notes_card = Card()
+    notes = QTextEdit(notes_card)
+    surfaces.clear_glass_plate(notes)
+    assert notes.viewport().autoFillBackground() is False
+    assert notes.viewport().testAttribute(Qt.WidgetAttribute.WA_NoSystemBackground) is True
+    notes_card.close()
 
 
 def test_select_page_scroll_views_keep_native_styles_and_card_surfaces(no_glass):
     from src.ui.select_page import SelectPackagePage
 
     page = SelectPackagePage()
+    surfaces.clear_glass_plate(page._release_list)
+    surfaces.clear_glass_plate(page._notes)
     for view in (page._release_list, page._notes):
         assert not view.styleSheet()
         assert not view.viewport().styleSheet()
         assert not view.verticalScrollBar().styleSheet()
         assert not view.horizontalScrollBar().styleSheet()
         assert view.frameShape() == view.Shape.NoFrame
-    page.close()
+    try:
+        for view in (page._release_list, page._notes):
+            assert view.viewport().autoFillBackground() is False
+            assert view.viewport().testAttribute(Qt.WidgetAttribute.WA_NoSystemBackground) is True
+        # Theme refresh must preserve the clear card surface.
+        page.refresh_theme()
+        for view in (page._release_list, page._notes):
+            assert view.viewport().autoFillBackground() is False
+            assert view.viewport().testAttribute(Qt.WidgetAttribute.WA_NoSystemBackground) is True
+    finally:
+        page.close()
 
 
 def test_donation_bar_hosts_can_erase_without_glass(no_glass):
