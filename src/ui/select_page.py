@@ -42,7 +42,12 @@ from ..flash_service import (
     _find_scatter,
 )
 from ..sp_flash_gui import update_sp_history_ini
-from ..fw_package import locate_package as locate_fw_package, read_package as read_fw_package
+from ..fw_package import (
+    locate_package as locate_fw_package,
+    read_package as read_fw_package,
+    release_install_heading,
+)
+from ..paths import INSTALL_DIR
 from ..config import (
     DEVICE_MODELS,
     detect_model_and_type_from_name,
@@ -273,6 +278,7 @@ class SelectPackagePage(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._gui_previous_identity = None
         self.settings = None
         self.client = catalog.ReleasesClient()
         self._active_workers = set()
@@ -383,7 +389,7 @@ class SelectPackagePage(QWidget):
             )
             if not ready:
                 return None
-            return {**target, "kind": "cache", "scatter": scatter, "extract": extract_dir}
+            return {**target, "kind": "cache", "scatter": scatter, "extract": extract_dir, "release": target.get("release")}
         if kind == "local":
             path = Path(target.get("path") or "")
             if not path.exists():
@@ -403,7 +409,7 @@ class SelectPackagePage(QWidget):
             )
             if not ready:
                 return None
-            return {**target, "kind": "cache", "scatter": scatter, "extract": extract_dir}
+            return {**target, "kind": "cache", "scatter": scatter, "extract": extract_dir, "release": target.get("release")}
         if kind == "cache":
             ready, scatter, extract_dir, _reason = check_cached_firmware_readiness(
                 scatter_path=target.get("scatter"),
@@ -411,7 +417,7 @@ class SelectPackagePage(QWidget):
                 model=target.get("model") or "",
             )
             if ready:
-                return {**target, "scatter": scatter, "extract": extract_dir}
+                return {**target, "scatter": scatter, "extract": extract_dir, "release": target.get("release")}
         return None
 
     def gui_firmware_target(self) -> Optional[dict]:
@@ -459,11 +465,19 @@ class SelectPackagePage(QWidget):
             "extract": extract,
             "model": (latest or {}).get("model") or "",
             "name": (latest or {}).get("software_name") or "",
+            "release": (latest or {}).get("release"),
         }
 
     def _emit_gui_firmware_changed(self) -> None:
-        self.gui_firmware_changed.emit()
-        self.content_size_changed.emit()
+        old = getattr(self, "_gui_previous_identity", None)
+        candidate = self.gui_firmware_target()
+        new = self._release_identity(candidate)
+        if old != new:
+            self._gui_previous_identity = new
+            self.gui_firmware_changed.emit()
+            self.content_size_changed.emit()
+        else:
+            self._gui_previous_identity = new
 
     def _invalidate_online_gui_target(self) -> None:
         if getattr(self, "_gui_explicit", None) and self._gui_explicit.get("kind") != "local":
@@ -739,18 +753,25 @@ class SelectPackagePage(QWidget):
             self._release_list,
             horizontal=Qt.ScrollBarAlwaysOff,
             vertical=Qt.ScrollBarAsNeeded,
-            transparent=True,
+            transparent=False,
         )
         self._release_list.setAutoFillBackground(False)
-        self._release_list.setAttribute(Qt.WA_NoSystemBackground, True)
+        self._release_list.setAttribute(Qt.WA_NoSystemBackground, False)
         self._release_list.viewport().setAutoFillBackground(False)
         self._release_list.viewport().setAttribute(Qt.WA_TranslucentBackground, False)
-        self._release_list.viewport().setAttribute(Qt.WA_NoSystemBackground, True)
-        self._release_list.setStyleSheet(
-            "QListWidget#releaseList { background: transparent; border: none; outline: none; }"
-            " QListWidget#releaseList::item { border: none; }"
-        )
-        self._release_list.viewport().setStyleSheet("background: transparent; border: none;")
+        self._release_list.viewport().setAttribute(Qt.WA_NoSystemBackground, False)
+        # Use the desktop style for the list and its scrollbars. Local QSS on a
+        # QAbstractScrollArea replaces the Plasma overlay scrollbar with Qt's
+        # classic arrow bar.
+        self._release_list.setStyleSheet("")
+        self._release_list.viewport().setStyleSheet("")
+        self._release_list.verticalScrollBar().setStyleSheet("")
+        self._release_list.horizontalScrollBar().setStyleSheet("")
+        self._release_list.setFrameShape(QFrame.NoFrame)
+        self._release_list.setLineWidth(0)
+        self._release_list.setMidLineWidth(0)
+        self._release_list.setAttribute(Qt.WA_StyledBackground, False)
+        self._release_list.viewport().setAttribute(Qt.WA_StyledBackground, False)
         self._release_list.currentItemChanged.connect(self._on_release_selected)
         self._release_list.itemClicked.connect(self._on_release_clicked)
         self._release_list.itemActivated.connect(self._on_install)
@@ -865,8 +886,8 @@ class SelectPackagePage(QWidget):
         self._notes.document().setDefaultStyleSheet(
             f"body {{ background: transparent; }} a {{ color: {T().fg}; font-weight: 700; text-decoration: none; }}"
         )
-        # Host policies plus the live palette. No stylesheet on this view:
-        # a matching rule would cost the host's overlay scrollbars
+        # Host policies plus the live palette. No widget stylesheet on this
+        # view: a matching rule would cost the host's overlay scrollbars
         # (see src/ui/scrollbars.py).
         configure_scroll_area(
             self._notes,
@@ -875,9 +896,15 @@ class SelectPackagePage(QWidget):
             transparent=True,
         )
         self._notes.setAutoFillBackground(False)
-        self._notes.setAttribute(Qt.WA_NoSystemBackground, True)
+        self._notes.setAttribute(Qt.WA_NoSystemBackground, False)
         self._notes.viewport().setAutoFillBackground(False)
-        self._notes.viewport().setAttribute(Qt.WA_NoSystemBackground, True)
+        self._notes.viewport().setAttribute(Qt.WA_NoSystemBackground, False)
+        self._notes.setStyleSheet("")
+        self._notes.viewport().setStyleSheet("")
+        self._notes.verticalScrollBar().setStyleSheet("")
+        self._notes.horizontalScrollBar().setStyleSheet("")
+        self._notes.setAttribute(Qt.WA_StyledBackground, False)
+        self._notes.viewport().setAttribute(Qt.WA_StyledBackground, False)
         from .surfaces import clear_glass_plate
         clear_glass_plate(self._release_list)
         clear_glass_plate(self._notes)
@@ -1210,6 +1237,7 @@ class SelectPackagePage(QWidget):
         self._path_edit.setText(package_target)
         self._current_package_path = package_target
         self._gui_explicit = None
+        self._gui_previous_identity = None
         self._emit_gui_firmware_changed()
         self._current_installed_release_info = None
 
@@ -1231,9 +1259,7 @@ class SelectPackagePage(QWidget):
             self._current_package_model = det_m or ""
             if det_m:
                 self._select_model_for_manual(det_m)
-                self._current_package_name = f"Installing software on {det_m}"
-            else:
-                self._current_package_name = "Installing software"
+            self._current_package_name = release_install_heading(det_m, (p.parent.name, p.name))
             self._selected_type = det_t or None
         self._remember_gui_local(package_target, self._current_package_model, self._current_package_name)
         self._set_local_banner("sel_current_pkg", p.name)
@@ -2134,6 +2160,7 @@ class SelectPackagePage(QWidget):
         if rel:
             if getattr(self, "_gui_explicit", None) and self._gui_explicit.get("kind") != "local":
                 self._gui_explicit = None
+                self._gui_previous_identity = None
             self._current_selected_rel = rel
             self._details_package = self._package_for_selection()
             self._is_translated = False
@@ -2604,7 +2631,11 @@ class SelectPackagePage(QWidget):
     def _on_local_prep_done(self, ok, extract_dir, err):
         if ok and self._fw_package is None and extract_dir:
             # A browsed zip or folder that carries fw_package.ini fills in its model, type, name and header.
-            self._fw_package = locate_fw_package(extract_dir)
+            self._fw_package = locate_fw_package(
+                extract_dir,
+                app_dir=INSTALL_DIR,
+                source_names=(Path(str(self._current_package_path or "")).name,),
+            )
             if self._fw_package is not None:
                 self._apply_fw_package(self._fw_package)
         self._local_bar.setVisible(False)
@@ -2648,8 +2679,10 @@ class SelectPackagePage(QWidget):
                 eff_model = inferred
                 self._current_package_model = eff_model
                 self._select_model_for_manual(eff_model)
-                if not self._current_package_name or self._current_package_name == "Installing software":
-                    self._current_package_name = f"Installing software on {eff_model}"
+                if not self._current_package_name or self._current_package_name.startswith(("Installing software", "Get ready to install", "Get your")):
+                    self._current_package_name = release_install_heading(
+                        eff_model, (Path(str(self._current_package_path or "")).name,)
+                    )
                 if self._details_package:
                     import dataclasses
                     self._details_package = dataclasses.replace(
@@ -2712,13 +2745,10 @@ class SelectPackagePage(QWidget):
         else:
             # Detect model and variant type from original browsed filename:
             det_m, det_t = detect_model_and_type_from_name(display_name)
+            self._current_package_model = det_m or ""
             if det_m:
-                self._current_package_model = det_m
                 self._select_model_for_manual(det_m)
-                self._current_package_name = f"Installing software on {det_m}"
-            else:
-                self._current_package_model = ""
-                self._current_package_name = "Installing software"
+            self._current_package_name = release_install_heading(det_m, (display_name,))
 
             if det_t:
                 self._selected_type = det_t
@@ -2771,18 +2801,22 @@ class SelectPackagePage(QWidget):
             if idx >= 0:
                 self._type_combo.setCurrentIndex(idx)
                 self._selected_type = self._type_combo.itemData(idx)
-        name = pkg.name
-        lang = (translator().lang or "en").strip()
-        if lang != "en" and name:
-            try:
-                from ..translate import fetch_google_translation
-                trans = fetch_google_translation(name, lang)
-                if trans:
-                    name = trans
-            except Exception:
-                pass
-        if name or pkg.version:
-            self._current_package_name = f"{name} {pkg.version}".strip()
+        model = self._current_package_model or pkg.model or ""
+        if pkg.has_release_name:
+            name = pkg.name
+            lang = (translator().lang or "en").strip()
+            if lang != "en" and name:
+                try:
+                    from ..translate import fetch_google_translation
+                    trans = fetch_google_translation(name, lang)
+                    if trans:
+                        name = trans
+                except Exception:
+                    pass
+            self._current_package_name = catalog.format_install_heading(f"{name} {pkg.version}".strip(), model)
+        else:
+            # No release name in the INI or file names: keep the generic install heading.
+            self._current_package_name = catalog.format_install_heading("", model)
         self._details_package = catalog.FirmwarePackage(
             slug="local-" + pkg.folder.name,
             name=self._current_package_name or pkg.folder.name,
@@ -2834,7 +2868,7 @@ class SelectPackagePage(QWidget):
     def load_local_folder(self, folder: str) -> None:
         p = Path(folder)
         display_name = p.name
-        self._fw_package = read_fw_package(p)
+        self._fw_package = read_fw_package(p, app_dir=INSTALL_DIR)
 
         self._path_edit.setText(folder)
         self._current_package_path = folder
@@ -2858,13 +2892,10 @@ class SelectPackagePage(QWidget):
             self._current_package_name = mfr_info["title"]
         else:
             det_m, det_t = detect_model_and_type_from_name(display_name)
+            self._current_package_model = det_m or ""
             if det_m:
-                self._current_package_model = det_m
                 self._select_model_for_manual(det_m)
-                self._current_package_name = f"Installing software on {det_m}"
-            else:
-                self._current_package_model = ""
-                self._current_package_name = "Installing software"
+            self._current_package_name = release_install_heading(det_m, (display_name,))
 
             if det_t:
                 self._selected_type = det_t
@@ -3033,6 +3064,8 @@ class SelectPackagePage(QWidget):
                 model,
             ),
             "release": rel,
+            "tag_name": rel.get("tag_name"),
+            "software": pkg.name if pkg is not None and getattr(pkg, "name", "") else "",
         }
 
     def focused_firmware(self) -> Optional[dict]:
@@ -3041,6 +3074,21 @@ class SelectPackagePage(QWidget):
             return None
         target = self._firmware_target_for_release(getattr(self, "_current_selected_rel", None))
         return self._gui_target_if_ready(target) or target
+
+    def _release_identity(self, target):
+        """A stable identity key for ``target`` that ignores transient extraction state."""
+        if not isinstance(target, dict):
+            return None
+        rel = target.get("release") or {}
+        tag = rel.get("tag_name") or target.get("tag_name") or ""
+        if tag:
+            return tag
+        pkg = target.get("package")
+        return (
+            target.get("kind"),
+            pkg.name if pkg is not None and getattr(pkg, "name", "") else "",
+            target.get("model") or "",
+        )
 
     def begin_external_prepare(self, target: dict, callback) -> bool:
         """Download or extract ``target``, then ``callback(ok, extract_dir, err)``.

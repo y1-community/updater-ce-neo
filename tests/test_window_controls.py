@@ -35,7 +35,7 @@ def _window():
 
 
 def test_controls_are_built_where_the_platform_puts_them():
-    """Windows draws them itself; macOS and Linux keep the host's controls."""
+    """Windows and Linux (with inline controls) draw them themselves; macOS keeps the host's traffic lights."""
     app = _app()
     window = _window()
     try:
@@ -45,9 +45,23 @@ def test_controls_are_built_where_the_platform_puts_them():
             assert controls.min_button.role == "minimize"
             assert controls.max_button.role == "maximize"
             assert controls.close_button.role == "close"
-        else:
-            # macOS traffic lights and Linux decorations are the host's.
+        elif sys.platform == "darwin":
+            # macOS uses native traffic lights, not custom controls
             assert controls is None
+        else:
+            # Linux: when can_inline_title_with_window_controls() returns True,
+            # we draw our own controls and use a frameless window.
+            # When it returns False (or on unsupported DEs), we use system decorations.
+            from src.ui.main_window import can_inline_title_with_window_controls
+            if can_inline_title_with_window_controls():
+                assert controls is not None, \
+                    "Linux with inline controls needs its own caption controls (frameless window)"
+                assert controls.min_button.role == "minimize"
+                assert controls.max_button.role == "maximize"
+                assert controls.close_button.role == "close"
+            else:
+                # Using system decorations, no custom controls needed
+                assert controls is None
     finally:
         window.close()
         app.processEvents()
@@ -164,6 +178,18 @@ def test_install_state_greys_the_close_control():
     finally:
         window.close()
         app.processEvents()
+
+
+def test_linux_kde_plasma_inlined_window_controls(monkeypatch):
+    """KDE Plasma and modern Linux desktops support inlined window controls."""
+    from src.ui.main_window import can_inline_title_with_window_controls
+
+    monkeypatch.setenv("XDG_CURRENT_DESKTOP", "KDE")
+    monkeypatch.delenv("UPDATER_TRADITIONAL_TITLE", raising=False)
+    assert can_inline_title_with_window_controls() is True
+
+    monkeypatch.setenv("UPDATER_TRADITIONAL_TITLE", "1")
+    assert can_inline_title_with_window_controls() is False
 
 
 if __name__ == "__main__":

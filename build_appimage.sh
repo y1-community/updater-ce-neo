@@ -22,7 +22,7 @@ export BUILD_BRAND="${BUILD_BRAND:-}"
 VERSION=$(grep -oP 'APP_VERSION\s*=\s*"\K[^"]+' src/config.py 2>/dev/null || echo "2.5.0")
 ARCH="${ARCH:-x86_64}"
 
-DIST_DIR="dist/linux"
+DIST_DIR="${DIST_DIR:-dist/linux}"
 BUILD_DIR="build/linux"
 APPDIR="$BUILD_DIR/AppDir"
 SPEC_FILE="InnioasisUpdater.spec"
@@ -86,6 +86,13 @@ while [[ $# -gt 0 ]]; do
 done
 
 export ARCH
+
+# Allow packaging output to be redirected outside the repository (release staging).
+if [[ "$DIST_DIR" = /* ]]; then
+    DIST_DIR="$(realpath -m "$DIST_DIR")"
+else
+    DIST_DIR="$(realpath -m "$DIST_DIR")"
+fi
 
 # Reject a bad brand before anything is deleted: a typo must not wipe good
 # AppImages sitting in dist/.
@@ -172,7 +179,7 @@ log_step() {
     echo "================================================================================"
 }
 
-TOTAL_STEPS=7
+TOTAL_STEPS=8
 
 # --- Preflight Python & Dependencies ------------------------------------------
 PYTHON="${PYTHON:-}"
@@ -256,6 +263,7 @@ if [ "$SKIP_PYINSTALLER" -eq 0 ]; then
         mkdir -p "$DIST_DIR" "$BUILD_DIR"
         docker run --rm \
             -v "$(pwd):/workspace" \
+            -v "$DIST_DIR:$DIST_DIR" \
             updater-linux-builder -c "
 set -e
 python3 -m venv /tmp/venv
@@ -501,9 +509,58 @@ cp -f "$TARBALL_VERSIONED" "$TARBALL_LATEST"
     sha256sum "$(basename "$TARBALL_VERSIONED")" > "$(basename "$TARBALL_VERSIONED").sha256"
     sha256sum "$(basename "$TARBALL_LATEST")" > "$(basename "$TARBALL_LATEST").sha256"
 )
+# Stable aliases required by the end-user download page and run_linux.sh.
+if [ "$BRAND_SLUG" = "InnioasisUpdater" ]; then
+    cp -f "$OUTPUT_VERSIONED" "$DIST_DIR/UpdaterCE.appimage"
+    cp -f "$TARBALL_VERSIONED" "$DIST_DIR/UpdaterCE-${ARCH}.tar.gz"
+    cp -f "$TARBALL_VERSIONED" "$DIST_DIR/UpdaterCE.tar.gz"
+    install -m 0755 run_linux.sh "$DIST_DIR/run_linux.sh"
+    sha256sum "$DIST_DIR/UpdaterCE.appimage" > "$DIST_DIR/UpdaterCE.appimage.sha256"
+    sha256sum "$DIST_DIR/UpdaterCE.tar.gz" > "$DIST_DIR/UpdaterCE.tar.gz.sha256"
+    sha256sum "$DIST_DIR/run_linux.sh" > "$DIST_DIR/run_linux.sh.sha256"
+elif [ "$BRAND_SLUG" = "MediaTekInstaller" ]; then
+    cp -f "$OUTPUT_VERSIONED" "$DIST_DIR/MediaTek Installer.appimage"
+    sha256sum "$DIST_DIR/MediaTek Installer.appimage" > "$DIST_DIR/MediaTek Installer.appimage.sha256"
+fi
+
+# --- Step 8: Portable ZIP of the same folder ------------------------
+if [ "$BRAND_SLUG" = "MediaTekInstaller" ]; then
+    cp -f "$TARBALL_VERSIONED" "$DIST_DIR/MediaTek Installer.tar.gz"
+fi
+log_step 8 "$TOTAL_STEPS" "Packaging Portable ZIP" "Creating the .zip portable archive (Windows-friendly extraction)..."
+ZIP_VERSIONED="$DIST_DIR/${BRAND_SLUG}-${VERSION}-${ARCH}.zip"
+if command -v zip >/dev/null 2>&1; then
+    rm -f "$ZIP_VERSIONED"
+    (cd "$BUILD_DIR/tarball" && zip -qry "$ZIP_VERSIONED" "$APP_NAME")
+else
+    echo "  -> 'zip' not found; writing the archive with Python instead"
+    rm -f "$ZIP_VERSIONED"
+    ARCHIVE_DIR="$BUILD_DIR/tarball" python3 - "$ZIP_VERSIONED" "$APP_NAME" <<'PY'
+import os
+import sys
+import zipfile
+
+out, top = sys.argv[1], sys.argv[2]
+root = os.environ["ARCHIVE_DIR"]
+with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
+    for base, _dirs, files in os.walk(os.path.join(root, top)):
+        for name in files:
+            full = os.path.join(base, name)
+            zf.write(full, os.path.relpath(full, root))
+PY
+fi
+(
+    cd "$DIST_DIR"
+    sha256sum "$(basename "$ZIP_VERSIONED")" > "$(basename "$ZIP_VERSIONED").sha256"
+)
+if [ "$BRAND_SLUG" = "InnioasisUpdater" ]; then
+    cp -f "$ZIP_VERSIONED" "$DIST_DIR/UpdaterCE-Linux-Portable.zip"
+    sha256sum "$DIST_DIR/UpdaterCE-Linux-Portable.zip" > "$DIST_DIR/UpdaterCE-Linux-Portable.zip.sha256"
+fi
 
 APPIMAGE_SIZE=$(du -sh "$OUTPUT_VERSIONED" 2>/dev/null | cut -f1 || echo "unknown")
 TARBALL_SIZE=$(du -sh "$TARBALL_VERSIONED" 2>/dev/null | cut -f1 || echo "unknown")
+ZIP_SIZE=$(du -sh "$ZIP_VERSIONED" 2>/dev/null | cut -f1 || echo "unknown")
 
 echo ""
 echo "================================================================================"
@@ -513,5 +570,14 @@ echo "  Brand:            $DISPLAY_NAME ($BRAND_SLUG)"
 echo "  Version:          $VERSION ($ARCH)"
 echo "  AppImage Package: $OUTPUT_VERSIONED ($APPIMAGE_SIZE)"
 echo "  Tarball Archive:  $TARBALL_VERSIONED ($TARBALL_SIZE)"
+echo "  Portable ZIP:     $ZIP_VERSIONED ($ZIP_SIZE)"
 echo "  Checksum File:    $OUTPUT_VERSIONED.sha256"
+if [ "$BRAND_SLUG" = "InnioasisUpdater" ]; then
+    echo "  Stable downloads: $DIST_DIR/UpdaterCE.appimage"
+    echo "                    $DIST_DIR/UpdaterCE.tar.gz"
+    echo "                    $DIST_DIR/UpdaterCE-Linux-Portable.zip"
+else
+    echo "  Stable downloads: $DIST_DIR/MediaTek Installer.appimage"
+    echo "                    $DIST_DIR/MediaTek Installer.tar.gz"
+fi
 echo "================================================================================"

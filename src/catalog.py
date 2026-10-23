@@ -861,6 +861,19 @@ def infer_model_from_scatter(platform: str, project: str) -> str:
     return ""
 
 
+def format_install_heading(software: str, model: str = "") -> str:
+    """Install-screen heading: ``Get your <model> ready to install <release>``, or the generic label.
+
+    The install has not started until the device is connected, so the heading
+    must not claim anything is already installing.
+    """
+    software = str(software or "").strip()
+    model = str(model or "").strip()
+    if software:
+        return f"Get your {model} ready to install {software}" if model else f"Get ready to install {software}"
+    return f"Get your {model} ready to install software" if model else "Get ready to install software"
+
+
 def format_install_card_title(software: str, version_label: str = "", model: str = "") -> str:
     """``{software} {version or date} for {model}``, omitting empty pieces.
 
@@ -1059,25 +1072,47 @@ class ReleasesClient:
         self.unauth_calls.append(time.time())
 
     def _get_json(self, url):
-        headers = {}
+        from .pat_pool import get_random_pats, report_pat_status
+
+        # 1. Try explicit user token first if configured
+        candidate_tokens = []
         if self.token:
-            headers["Authorization"] = f"token {self.token}"
+            candidate_tokens.append(self.token)
+
+        # 2. Add 3 random PATs from the config.ini PAT pool
+        pats = get_random_pats(count=3)
+        for p in pats:
+            if p not in candidate_tokens:
+                candidate_tokens.append(p)
+
         last_err = None
-        for attempt in range(3):
+        for tok in candidate_tokens:
+            headers = {"Authorization": f"Bearer {tok}"}
             try:
                 resp = self.session.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
                 if resp.status_code == 200:
                     return resp.json()
-                if resp.status_code in (403, 429):
-                    logger.info("GitHub rate limited (%s); skipping API retry", resp.status_code)
+                if resp.status_code in (401, 403, 429):
+                    report_pat_status(tok, resp.status_code)
+                    logger.debug("GitHub token %s... returned HTTP %d; trying next candidate", tok[:15], resp.status_code)
                     last_err = resp.status_code
-                    break
+                    continue
                 last_err = resp.status_code
-                break
             except requests_module().RequestException as e:
                 last_err = e
-                if attempt < 2:
-                    time.sleep(1.0)
+                continue
+
+        # 3. Fallback to unauthenticated request if quota allows
+        if self._can_unauth():
+            self._record_unauth()
+            try:
+                resp = self.session.get(url, timeout=REQUEST_TIMEOUT)
+                if resp.status_code == 200:
+                    return resp.json()
+                last_err = resp.status_code
+            except requests_module().RequestException as e:
+                last_err = e
+
         logger.debug("GitHub request failed for %s: %s", url, last_err)
         return None
 
@@ -1103,7 +1138,8 @@ class ReleasesClient:
                     })
         except Exception as e:
             logger.debug("Expanded assets fetch failed for %s/%s: %s", repo, tag, e)
-        if not assets:
+        from .config import UPDATE_REPO
+        if not assets and repo != UPDATE_REPO:
             for name in ("rom.zip", "rom_y2.zip", "rom_a5.zip"):
                 assets.append({
                     "name": name,
@@ -1253,6 +1289,50 @@ class ReleasesClient:
             logger.debug("Update cache read failed for %s: %s", repo, e)
         return None
 
+    def get_all_update_releases(self, repo, force_refresh: bool = False) -> list:
+        """Fetch all releases for an application update repo (not rom*.zip firmware).
+
+        Returns raw releases with normalized assets list:
+        [{'tag_name': ..., 'name': ..., 'body': ..., 'published_at': ..., 'html_url': ..., 'assets': [...]}, ...]
+        Ordered from newest to oldest. Falls back to Atom feed when API is unavailable.
+        """
+        repo = resolve_firmware_repo(repo)
+        url = f"{GITHUB_API}/repos/{repo}/releases?per_page=30"
+        data = self._get_json(url)
+        releases = []
+        if isinstance(data, list) and data:
+            for r in data:
+                releases.append({
+                    "tag_name": r.get("tag_name", ""),
+                    "name": r.get("name", ""),
+                    "body": r.get("body", ""),
+                    "published_at": r.get("published_at", ""),
+                    "html_url": r.get("html_url", ""),
+                    "assets": [
+                        {
+                            "name": a.get("name", ""),
+                            "browser_download_url": a.get("browser_download_url", ""),
+                            "size": a.get("size", 0),
+                        }
+                        for a in (r.get("assets") or [])
+                    ],
+                })
+            return releases
+
+        # Fallback to public Atom feed
+        atom_raw = self._fetch_releases_atom(repo)
+        if atom_raw:
+            for item in atom_raw:
+                releases.append({
+                    "tag_name": item.get("tag_name", ""),
+                    "name": item.get("name", ""),
+                    "body": item.get("body", ""),
+                    "published_at": item.get("published_at", ""),
+                    "html_url": item.get("html_url", ""),
+                    "assets": item.get("assets", []),
+                })
+        return releases
+
     def get_latest_release_info(self, repo, force: bool = False):
         """Latest release of an app repo (not a firmware repo) as a plain dict:
         tag_name, name, body, published_at, html_url, assets[]. Falls back to
@@ -1262,48 +1342,18 @@ class ReleasesClient:
         if cached and not force:
             return cached
 
-        url = f"{GITHUB_API}/repos/{repo}/releases/latest"
-        data = None
-        if self.token:
-            data = self._get_json(url)
-        elif self._can_unauth():
-            self._record_unauth()
-            data = self._get_json(url)
-        if not data:
-            atom_raw = self._fetch_releases_atom(repo)
-            if atom_raw:
-                latest = atom_raw[0]
-                return {
-                    "tag_name": latest.get("tag_name", ""),
-                    "name": latest.get("name", ""),
-                    "body": latest.get("body", ""),
-                    "published_at": latest.get("published_at", ""),
-                    "html_url": latest.get("html_url", ""),
-                    "assets": latest.get("assets", []),
-                }
-            return cached
-        result = {
-            "tag_name": data.get("tag_name", ""),
-            "name": data.get("name", ""),
-            "body": data.get("body", ""),
-            "published_at": data.get("published_at", ""),
-            "html_url": data.get("html_url", ""),
-            "assets": [
-                {
-                    "name": a.get("name", ""),
-                    "browser_download_url": a.get("browser_download_url", ""),
-                    "size": a.get("size", 0),
-                }
-                for a in (data.get("assets") or [])
-            ],
-        }
-        try:
-            self._updates_cache_path(repo).write_text(
-                json.dumps(result, ensure_ascii=False), encoding="utf-8"
-            )
-        except Exception as e:
-            logger.debug("Update cache write failed for %s: %s", repo, e)
-        return result
+        all_rels = self.get_all_update_releases(repo, force_refresh=force)
+        if all_rels:
+            result = all_rels[0]
+            try:
+                self._updates_cache_path(repo).write_text(
+                    json.dumps(result, ensure_ascii=False), encoding="utf-8"
+                )
+            except Exception as e:
+                logger.debug("Update cache write failed for %s: %s", repo, e)
+            return result
+
+        return cached
 
     # -- normalization ------------------------------------------------------
     def _normalize_release(self, release, repo):

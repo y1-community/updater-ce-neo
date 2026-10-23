@@ -397,9 +397,9 @@ _STRINGS: dict = {
     },
     "linux_prep_fix_body": {
         "zh-CN": "还需要一次管理员授权：MediaTek 设备的 USB 规则与串口访问权限。",
-        "en": "One root step is still needed: the USB rules for MediaTek devices and serial port access.",
-        "fr": "Une étape root reste nécessaire : les règles USB des appareils MediaTek et l'accès au port série.",
-        "es": "Falta un paso con root: las reglas USB para dispositivos MediaTek y el acceso al puerto serie.",
+        "en": "Your password is needed once to set up this computer for flashing: the USB rules for MediaTek devices and serial port access.",
+        "fr": "Votre mot de passe est demandé une fois pour préparer cet ordinateur au flashage : les règles USB des appareils MediaTek et l'accès au port série.",
+        "es": "Se necesita tu contraseña una vez para preparar este equipo para el flasheo: las reglas USB para dispositivos MediaTek y el acceso al puerto serie.",
     },
     "linux_prep_fix_btn": {
         "zh-CN": "授权",
@@ -623,7 +623,7 @@ _STRINGS: dict = {
     },
     "settings_advanced_toggle": {
         "zh-CN": "显示高级安装选项",
-        "en": "Show advanced installation options",
+        "en": "Show Advanced Settings",
         "fr": "Afficher les options d'installation avancées",
         "es": "Mostrar opciones avanzadas de instalación",
         "de": "Erweiterte Installationsoptionen anzeigen",
@@ -631,7 +631,7 @@ _STRINGS: dict = {
     },
     "settings_advanced_desc": {
         "zh-CN": "显示底层刷机工具与终端安装模式。",
-        "en": "Reveal low-level flash backends and terminal install modes.",
+        "en": "Shows install method, installation mode and release filters.",
         "fr": "Afficher les outils de flashage sous-jacents et les modes terminal.",
         "es": "Mostrar herramientas de flasheo subyacentes y modos de terminal.",
         "de": "Low-Level-Flashtools und Terminal-Modi anzeigen.",
@@ -1385,6 +1385,14 @@ _STRINGS: dict = {
         "fr": "• Éteignez complètement votre appareil MediaTek.\n• Laissez le câble USB déconnecté pour l'instant.\n• Selon le modèle, essayez de connecter avec ou sans batterie (ou en maintenant Volume -/+).\n• Cliquez sur Continuer, puis connectez le câble USB lorsque vous y êtes invité.",
         "es": "• Apaga completamente tu dispositivo MediaTek.\n• Mantén el cable USB desconectado por ahora.\n• Según el modelo, intenta conectar con o sin batería (o manteniendo presionado Volumen -/+).\n• Haz clic en Continuar y conecta el cable USB cuando se te indique.",
     },
+    "btn_cancel": {
+        "zh-CN": "取消",
+        "en": "Cancel",
+        "fr": "Annuler",
+        "es": "Cancelar",
+        "de": "Abbrechen",
+        "ja": "キャンセル",
+    },
     "btn_next": {
         "zh-CN": "下一步",
         "en": "Next",
@@ -1654,6 +1662,12 @@ _STRINGS: dict = {
         "en": "Back to Package Select",
         "fr": "Retour au choix du paquet",
         "es": "Volver a seleccionar paquete",
+    },
+    "flash_btn_quit": {
+        "zh-CN": "退出",
+        "en": "Quit",
+        "fr": "Quitter",
+        "es": "Salir",
     },
     "flash_btn_retry": {
         "zh-CN": "重试",
@@ -3594,7 +3608,7 @@ _STRINGS: dict = {
     },
     "settings_method_desc": {
         "zh-CN": "固件写入播放器的方式。Windows 与 Linux 推荐使用 SP Flash Tool 控制台 XML 模式；macOS 仅支持 MTKClient。",
-        "en": "How firmware is written to your player. SP Flash Tool's console-mode XML flow is the recommended method on Windows and Linux; macOS uses MTKClient.",
+        "en": "MTKClient is the default. On Linux, SP Flash Tool is used only if you select it here.",
         "fr": "Méthode d'écriture du firmware sur votre lecteur. Sous Windows et Linux, le mode console XML de SP Flash Tool est recommandé ; macOS utilise MTKClient.",
         "es": "Cómo se escribe el firmware en tu reproductor. En Windows y Linux se recomienda el modo consola XML de SP Flash Tool; macOS usa MTKClient.",
     },
@@ -3738,10 +3752,10 @@ _STRINGS: dict = {
         "es": "¿Tipo?",
     },
     "sel_type_help_tooltip": {
-        "zh-CN": "请先尝试使用 Type A 系统软件。如果安装后滚轮没有反应，请安装 Type B 选项之一。",
-        "en": "Try Type A System Software first. If your scroll wheel doesn't respond after installation, install one of the Type B options.",
-        "fr": "Essayez d'abord le logiciel système de type A. Si votre molette ne répond pas après l'installation, installez l'une des options de type B.",
-        "es": "Pruebe primero el software de sistema Tipo A. Si la rueda táctil no responde después de la instalación, instale una de las opciones de Tipo B.",
+        "zh-CN": "请先尝试使用 Type A 系统软件。如果安装后滚轮没有反应，请安装 Type B 选项之一。B 型设备是指出厂时搭载 2.0 之前固件版本的设备。",
+        "en": "Try Type A System Software first. If your scroll wheel doesn't respond after installation, install one of the Type B options. Type B devices are those that came with firmware versions earlier than 2.0.",
+        "fr": "Essayez d'abord le logiciel système de type A. Si votre molette ne répond pas après l'installation, installez l'une des options de type B. Les appareils de type B sont ceux livrés avec une version de firmware antérieure à 2.0.",
+        "es": "Pruebe primero el software de sistema Tipo A. Si la rueda táctil no responde después de la instalación, instale una de las opciones de Tipo B. Los dispositivos Tipo B son los que se entregaron con versiones de firmware anteriores a 2.0.",
     },
     "sel_refresh_tooltip": {
         "zh-CN": "刷新可用软件目录",
@@ -3762,10 +3776,10 @@ _STRINGS: dict = {
         "es": "Ayuda sobre el tipo de dispositivo",
     },
     "device_type_help_msg": {
-        "zh-CN": "请先尝试使用 Type A 系统软件。\n\n如果安装后滚轮没有反应，请安装 Type B 选项之一。",
-        "en": "Try Type A System Software first.\n\nIf your scroll wheel doesn't respond after installation, install one of the Type B options.",
-        "fr": "Essayez d'abord le logiciel système de type A.\n\nSi votre molette ne répond pas après l'installation, installez l'une des options de type B.",
-        "es": "Pruebe primero el software de sistema Tipo A.\n\nSi la rueda táctil no responde después de la instalación, instale una de las opciones de Tipo B.",
+        "zh-CN": "请先尝试使用 Type A 系统软件。\n\n如果安装后滚轮没有反应，请安装 Type B 选项之一。\n\nB 型设备是指出厂时搭载 2.0 之前固件版本的设备。",
+        "en": "Try Type A System Software first.\n\nIf your scroll wheel doesn't respond after installation, install one of the Type B options.\n\nType B devices are those that came with firmware versions earlier than 2.0.",
+        "fr": "Essayez d'abord le logiciel système de type A.\n\nSi votre molette ne répond pas après l'installation, installez l'une des options de type B.\n\nLes appareils de type B sont ceux livrés avec une version de firmware antérieure à 2.0.",
+        "es": "Pruebe primero el software de sistema Tipo A.\n\nSi la rueda táctil no responde después de la instalación, instale una de las opciones de Tipo B.\n\nLos dispositivos Tipo B son los que se entregaron con versiones de firmware anteriores a 2.0.",
     },
     "software_install_instructions_title": {
         "zh-CN": "软件安装说明",
@@ -3852,12 +3866,12 @@ _STRINGS: dict = {
         "es": "¿Tipo?",
     },
     "sel_type_help_body": {
-        "zh-CN": "请先尝试 A 型系统软件。\n\n如果安装后滚轮没有反应，请改为安装 B 型选项。",
-        "en": "Try Type A System Software first.\n\nIf your scroll wheel doesn't respond after installation, install one of the Type B options.",
-        "fr": "Essayez d'abord le logiciel système de Type A.\n\nSi la molette ne répond pas après l'installation, installez une option de Type B.",
-        "es": "Prueba primero el software de sistema de Tipo A.\n\nSi la rueda de desplazamiento no responde tras la instalación, instala una de las opciones de Tipo B.",
-        "de": "Probieren Sie zuerst die Type-A-Systemsoftware.\n\nWenn das Scrollrad nach der Installation nicht reagiert, installieren Sie eine der Type-B-Optionen.",
-        "ja": "まず Type A のシステムソフトウェアをお試しください。\n\nインストール後にスクロールホイールが反応しない場合は、Type B のいずれかをインストールしてください。",
+        "zh-CN": "请先尝试 A 型系统软件。\n\n如果安装后滚轮没有反应，请改为安装 B 型选项。\n\nB 型设备是指出厂时搭载 2.0 之前固件版本的设备。",
+        "en": "Try Type A System Software first.\n\nIf your scroll wheel doesn't respond after installation, install one of the Type B options.\n\nType B devices are those that came with firmware versions earlier than 2.0.",
+        "fr": "Essayez d'abord le logiciel système de Type A.\n\nSi la molette ne répond pas après l'installation, installez une option de Type B.\n\nLes appareils de Type B sont ceux livrés avec une version de firmware antérieure à 2.0.",
+        "es": "Prueba primero el software de sistema de Tipo A.\n\nSi la rueda de desplazamiento no responde tras la instalación, instala una de las opciones de Tipo B.\n\nLos dispositivos Tipo B son los que se entregaron con versiones de firmware anteriores a 2.0.",
+        "de": "Probieren Sie zuerst die Type-A-Systemsoftware.\n\nWenn das Scrollrad nach der Installation nicht reagiert, installieren Sie eine der Type-B-Optionen.\n\nType-B-Geräte sind Geräte, die mit einer Firmware-Version vor 2.0 ausgeliefert wurden.",
+        "ja": "まず Type A のシステムソフトウェアをお試しください。\n\nインストール後にスクロールホイールが反応しない場合は、Type B のいずれかをインストールしてください。\n\nType B デバイスは、2.0 より前のファームウェアが入った状態で出荷されたデバイスです。",
     },
     "sel_type_help_title": {
         "zh-CN": "设备类型帮助",
@@ -4987,6 +5001,22 @@ _STRINGS: dict = {
         "fr": "Terminer",
         "es": "Finalizar",
         "ja": "完了",
+    },
+    "rockbox_site_themes_note": {
+        "en": "This Rockbox build uses 240\u00d7320 themes, which are not bundled. Get free themes for your player from the Rockbox theme site:",
+        "zh-CN": "\u6b64 Rockbox \u7248\u672c\u4f7f\u7528 240\u00d7320 \u4e3b\u9898\uff0c\u672a\u968f\u5e94\u7528\u6253\u5305\u3002\u8bf7\u4ece Rockbox \u4e3b\u9898\u7f51\u7ad9\u4e3a\u60a8\u7684\u64ad\u653e\u5668\u83b7\u53d6\u514d\u8d39\u4e3b\u9898\uff1a",
+        "de": "Dieser Rockbox-Build verwendet 240\u00d7320-Themes, die nicht mitgeliefert werden. Hole dir kostenlose Themes f\u00fcr deinen Player von der Rockbox-Theme-Seite:",
+        "fr": "Cette version de Rockbox utilise des th\u00e8mes 240\u00d7320, non inclus. T\u00e9l\u00e9chargez des th\u00e8mes gratuits pour votre lecteur sur le site de th\u00e8mes Rockbox :",
+        "es": "Esta compilaci\u00f3n de Rockbox usa temas de 240\u00d7320, no incluidos. Consigue temas gratuitos para tu reproductor en el sitio de temas de Rockbox:",
+        "ja": "\u3053\u306e Rockbox \u30d3\u30eb\u30c9\u306f\u540c\u68b1\u3055\u308c\u3066\u3044\u306a\u3044 240\u00d7320 \u30c6\u30fc\u30de\u3092\u4f7f\u7528\u3057\u307e\u3059\u3002Rockbox \u30c6\u30fc\u30de\u30b5\u30a4\u30c8\u304b\u3089\u7121\u6599\u30c6\u30fc\u30de\u3092\u5165\u624b\u3067\u304d\u307e\u3059\uff1a",
+    },
+    "rockbox_site_themes_open": {
+        "en": "Open the Rockbox theme site",
+        "zh-CN": "\u6253\u5f00 Rockbox \u4e3b\u9898\u7f51\u7ad9",
+        "de": "Rockbox-Theme-Seite \u00f6ffnen",
+        "fr": "Ouvrir le site de th\u00e8mes Rockbox",
+        "es": "Abrir el sitio de temas de Rockbox",
+        "ja": "Rockbox \u30c6\u30fc\u30de\u30b5\u30a4\u30c8\u3092\u958b\u304f",
     },
     "rockbox_troubleshoot_desc": {
         "en": "If your {model} does not boot, disconnect USB, hold the power button for 10s to reset, and power on. Or restore original software.",

@@ -103,10 +103,25 @@ def test_clear_glass_plate_keeps_scroll_views_on_card_surface(no_glass):
         assert viewport.autoFillBackground() is True
         assert viewport.palette().color(QPalette.ColorRole.Base).name() == T().bg_card
         assert viewport.testAttribute(Qt.WidgetAttribute.WA_NoSystemBackground) is False
+        assert not view.styleSheet()
+        assert not viewport.styleSheet()
 
+
+def test_select_page_scroll_views_keep_native_styles_and_card_surfaces(no_glass):
+    from src.ui.select_page import SelectPackagePage
+
+    page = SelectPackagePage()
+    for view in (page._release_list, page._notes):
+        assert not view.styleSheet()
+        assert not view.viewport().styleSheet()
+        assert not view.verticalScrollBar().styleSheet()
+        assert not view.horizontalScrollBar().styleSheet()
+        assert view.frameShape() == view.Shape.NoFrame
+    page.close()
 
 
 def test_donation_bar_hosts_can_erase_without_glass(no_glass):
+
     from src.donation_dialog import DonationStatusBar
     from src.donors import parse_donors_csv_text
 

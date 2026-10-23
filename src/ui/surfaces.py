@@ -188,29 +188,38 @@ def clear_glass_plate(widget: QWidget) -> None:
         widget.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, False)
         widget.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
         widget.setAutoFillBackground(False)
-        widget.setStyleSheet("background: transparent; border: none;")
+        if isinstance(widget, QAbstractScrollArea):
+            # A local stylesheet changes QStyleSheetStyle for the whole view,
+            # replacing the desktop's native scrollbar. The palette and widget
+            # attributes below provide the same transparent surface instead.
+            widget.setStyleSheet("")
+        else:
+            widget.setStyleSheet("background: transparent; border: none;")
     if isinstance(widget, QAbstractScrollArea):
         view = widget.viewport()
         if view is not None:
             if glass_surfaces_enabled():
                 show_glass_backdrop(view)
             else:
-                clear = QColor(0, 0, 0, 0)
+                from .dark import T
+
+                surface = QColor(T().bg_card)
+                surface.setAlpha(255)
                 palette = view.palette()
                 for group in (
                     QPalette.ColorGroup.Active,
                     QPalette.ColorGroup.Inactive,
                     QPalette.ColorGroup.Disabled,
                 ):
-                    palette.setColor(group, QPalette.ColorRole.Base, clear)
-                    palette.setColor(group, QPalette.ColorRole.Window, clear)
+                    palette.setColor(group, QPalette.ColorRole.Base, surface)
+                    palette.setColor(group, QPalette.ColorRole.Window, surface)
                 view.setPalette(palette)
                 view.setBackgroundRole(QPalette.ColorRole.Base)
                 view.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
                 view.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, False)
                 view.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
-                view.setAutoFillBackground(False)
-                view.setStyleSheet("background: transparent; border: none;")
+                view.setAutoFillBackground(True)
+                view.setStyleSheet("")
     if isinstance(widget, QTextEdit):
         _clear_document_background(widget)
 

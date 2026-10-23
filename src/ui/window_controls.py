@@ -8,9 +8,10 @@ custom title bar — the header was reserving room for buttons that never appear
 The header therefore draws the three controls itself, with the 46x32 metrics
 Windows 11 uses, so the caption still looks and behaves like the desktop's.
 
-macOS keeps its native traffic lights (Cocoa draws them over the content view)
-and Linux keeps whatever its window manager draws, so this widget is only built
-on Windows.
+macOS keeps its native traffic lights (Cocoa draws them over the content view);
+on Windows and modern Linux desktops (KDE Plasma, GNOME, etc.), the header
+draws these integrated controls itself so the caption still looks and behaves
+like the desktop's.
 """
 
 from __future__ import annotations
@@ -51,6 +52,11 @@ def _dark_surface(widget) -> bool:
 
 class CaptionControlButton(QPushButton):
     """One caption control. Flat, and painted here rather than by the style."""
+
+    # The maximise glyph is always wired so DWM/NSWindow caption hit-testing
+    # stays aligned with the three-slot layout, even when the button is hidden
+    # for host policy (e.g. maximising is suppressed).
+    maximise_allowed = True
 
     def __init__(self, role: str, parent=None):
         super().__init__(parent)
@@ -150,10 +156,11 @@ class WindowControls(QWidget):
     def __init__(self, window, parent=None):
         super().__init__(parent)
         self.window_ref = window
+        self._maximise_allowed = True
         self.setObjectName("windowControls")
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
         self.setAutoFillBackground(False)
-        self.setFixedSize(CONTROL_WIDTH * 3, CONTROL_HEIGHT)
+        self.setFixedSize(CONTROL_WIDTH * 2, CONTROL_HEIGHT)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -161,13 +168,32 @@ class WindowControls(QWidget):
         self.min_button = CaptionControlButton(ROLE_MINIMIZE, self)
         self.max_button = CaptionControlButton(ROLE_MAXIMIZE, self)
         self.close_button = CaptionControlButton(ROLE_CLOSE, self)
+        # The maximise glyph is always created so caption-hit testing stays in
+        # step with the other two slots, but it is only shown when the host
+        # allows maximising. On macOS there is no in-app strip, and elsewhere
+        # we suppress it so the app cannot be thrown full-screen.
+        self.max_button.setVisible(False)
         for button in (self.min_button, self.max_button, self.close_button):
-            layout.addWidget(button)
+            layout.addWidget(button, 0, Qt.AlignLeft)
 
         self.min_button.clicked.connect(self._minimize)
         self.max_button.clicked.connect(self._toggle_maximize)
         self.close_button.clicked.connect(self._close)
         self.set_state(self._is_maximized())
+
+    def set_maximise_allowed(self, allowed: bool) -> None:
+        """Show or hide the maximise button.
+
+        The glyph is always painted and wired to caption hit-testing; only its
+        visibility follows the host policy, so a forced-restore/window-manager
+        maximise path still maps cleanly to the three-slot caption layout.
+        """
+        allowed = bool(allowed)
+        if allowed == self._maximise_allowed:
+            return
+        self._maximise_allowed = allowed
+        self.max_button.setVisible(allowed)
+        self.updateGeometry()
 
     # -- public interface --------------------------------------------------
     def set_state(self, maximized: bool) -> None:
@@ -201,6 +227,8 @@ class WindowControls(QWidget):
     def _toggle_maximize(self) -> None:
         window = self._window()
         if window is None:
+            return
+        if not self._maximise_allowed:
             return
         if window.isMaximized():
             window.showNormal()

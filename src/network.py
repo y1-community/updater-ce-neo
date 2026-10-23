@@ -116,18 +116,25 @@ LISTING_TOTAL_BUDGET = 12.0
 def fetch_releases_listing(repo: str, timeout: float = LISTING_TIMEOUT):
     """One repository's releases listing (a JSON list), or ``None`` on failure.
 
-    Uses the certifi CA bundle with the project's unverified fallback (see the
-    HTTPS invariants in the repo conventions) so a broken CA store does not look
-    like an unreachable GitHub.
+    Uses candidate PATs from the pat_pool to avoid exhausting unauthenticated
+    rate limits, and falls back to Atom feed if API is unreachable or rate-limited.
     """
     import json
+    from .pat_pool import get_random_pats, report_pat_status
+
+    pats = get_random_pats(count=1)
+    tok = pats[0] if pats else ""
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; InnioasisUpdater/3.0)",
+        "Accept": "application/vnd.github+json",
+    }
+    if tok:
+        headers["Authorization"] = f"Bearer {tok}"
 
     request = urllib.request.Request(
         GITHUB_RELEASES_URL.format(repo=repo),
-        headers={
-            "User-Agent": "Mozilla/5.0 (compatible; InnioasisUpdater/3.0)",
-            "Accept": "application/vnd.github+json",
-        },
+        headers=headers,
     )
     for ctx in (_get_ssl_context(), ssl._create_unverified_context()):
         try:
@@ -138,11 +145,27 @@ def fetch_releases_listing(repo: str, timeout: float = LISTING_TIMEOUT):
                 if isinstance(data, list):
                     return data
         except urllib.error.HTTPError as e:
+            if tok and e.code in (401, 403, 429):
+                report_pat_status(tok, e.code)
             if e.code < 500:
                 # HTTP response from GitHub (e.g. 403 rate limit) proves server is reachable
                 return []
         except Exception:
             continue
+
+    # Fallback to public Atom feed (never rate-limited) to confirm reachability
+    try:
+        atom_req = urllib.request.Request(
+            f"https://github.com/{repo}/releases.atom",
+            headers={"User-Agent": "Mozilla/5.0 (compatible; InnioasisUpdater/3.0)"},
+        )
+        ctx = _get_ssl_context()
+        with urllib.request.urlopen(atom_req, timeout=timeout, context=ctx) as resp:
+            if resp.status < 500:
+                return []
+    except Exception:
+        pass
+
     return None
 
 

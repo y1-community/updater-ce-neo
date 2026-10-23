@@ -39,6 +39,15 @@ class _Mtk:
         self.daloader = _Daloader(ok)
 
 
+class _Handler:
+    def __init__(self, last_error=None):
+        self.calls = []
+        self.last_error = last_error
+
+    def da_write(self, **kwargs):
+        self.calls.append(kwargs)
+
+
 def test_legacy_da_status_reaches_the_failure_message():
     """A DA NACK becomes a message naming the status, not a bare failure."""
     worker = flash_service.FlashWorker(package_path="", method="mtk")
@@ -48,9 +57,6 @@ def test_legacy_da_status_reaches_the_failure_message():
         "status=0x00002301 DA_STORAGE_WRITE_FAIL"
     )
 
-    class _Handler:
-        pass
-
     with pytest.raises(RuntimeError) as err:
         worker._write_mtk_partition(
             _Handler(), mtk, "system", "does-not-need-to-exist.img", "user",
@@ -58,6 +64,42 @@ def test_legacy_da_status_reaches_the_failure_message():
         )
     assert "DA_STORAGE_WRITE_FAIL" in str(err.value)
     assert "system" in str(err.value)
+
+
+def test_named_da_failure_is_propagated_from_last_error():
+    worker = flash_service.FlashWorker(package_path="", method="mtk")
+    mtk = _Mtk()
+    mtk.config.last_error = "NACK chunk 2/5 status=DA_STORAGE_WRITE_FAIL"
+    handler = _Handler()
+
+    with pytest.raises(RuntimeError, match="system failed: NACK chunk 2/5"):
+        worker._write_mtk_partition(
+            handler, mtk, "system", "system.img", "user", offset=None,
+        )
+    assert handler.calls == [
+        {"parttype": "user", "filenames": ["system.img"], "partitions": ["system"]}
+    ]
+
+
+def test_successful_named_write_does_not_become_an_early_failure():
+    worker = flash_service.FlashWorker(package_path="", method="mtk")
+    mtk = _Mtk()
+    handler = _Handler()
+
+    worker._write_mtk_partition(
+        handler, mtk, "system", "system.img", "user", offset=None,
+    )
+    assert len(handler.calls) == 1
+
+
+def test_non_legacy_named_write_does_not_require_optional_last_error():
+    worker = flash_service.FlashWorker(package_path="", method="mtk")
+    handler = _Handler()
+
+    worker._write_mtk_partition(
+        handler, object(), "system", "system.img", "user", offset=None,
+    )
+    assert len(handler.calls) == 1
 
 
 def test_legacy_write_chunk_size_matches_the_reference_table(tmp_path):

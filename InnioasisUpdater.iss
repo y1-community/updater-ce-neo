@@ -20,15 +20,15 @@ AppUpdatesURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppPublisher}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
-LicenseFile=assets/LICENSE.txt
+LicenseFile=LICENSE
 OutputDir=dist\windows
 OutputBaseFilename=UpdaterCE-Setup-2.5.0
 SetupIconFile=assets/icon.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
 PrivilegesRequired=admin
-ArchitecturesAllowed=x64
-ArchitecturesInstallIn64BitMode=x64
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
 VersionInfoVersion=2.5.0
 VersionInfoCompany=Innioasis Updater CE
 VersionInfoDescription=Updater CE installer
@@ -40,9 +40,9 @@ Name: desktopicon; Description: Create a &desktop shortcut; Flags: unchecked
 
 [Files]
 Source: "dist\windows\InnioasisUpdater\InnioasisUpdater.exe"; DestDir: "{app}"; Flags: ignoreversion
+; The wildcard below already includes the exe and the SP Flash Tool payload
+; that sits next to it in the portable folder.
 Source: "dist\windows\InnioasisUpdater\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-; SP Flash Tool payload sits next to the exe in the portable folder.
-Source: "dist\windows\InnioasisUpdater\SP_Flash_Tool\*"; DestDir: "{app}\SP_Flash_Tool"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: {group}\{#MyAppName}; Filename: "{app}\{#MyAppExeName}"

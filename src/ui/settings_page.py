@@ -99,6 +99,7 @@ class SettingsPage(QWidget):
         caption.setCursor(Qt.ArrowCursor)
         switch = QCheckBox()
         switch.setCursor(Qt.ArrowCursor)
+        switch.setStyleSheet("")  # no host style override
         box.addWidget(caption, 1)
         box.addWidget(switch, 0, Qt.AlignRight | Qt.AlignVCenter)
         layout.addWidget(row)
@@ -129,6 +130,7 @@ class SettingsPage(QWidget):
         """
         switch = QCheckBox()
         switch.setCursor(Qt.ArrowCursor)
+        switch.setStyleSheet("")  # no host style override
         caption = QLabel(tr(caption_key))
         caption.setWordWrap(True)
         caption.setVisible(False)
@@ -330,6 +332,7 @@ class SettingsPage(QWidget):
         from .. import elevation
 
         self._cb_run_as_admin = self._add_switch(term_layout, elevation.label_text())
+        self._cb_run_as_admin.setStyleSheet("")  # no host style override
         self._cb_run_as_admin.setToolTip(elevation.description_text())
         self._cb_run_as_admin.toggled.connect(self._on_run_as_admin_toggled)
 
@@ -361,6 +364,7 @@ class SettingsPage(QWidget):
         self._cb_reminders = self._add_title_row_switch(
             self._reminders_card, "settings_reminders_enable",
         )
+        self._cb_reminders.setStyleSheet("")  # no host style override
         self._cb_reminders.toggled.connect(self._on_reminders_toggled)
 
         self._reminders_card.set_layout(rem_layout)
@@ -383,19 +387,23 @@ class SettingsPage(QWidget):
         rock_layout.addWidget(self._rockbox_desc)
 
         self._cb_old_rockbox = self._add_switch(rock_layout, tr("settings_filter_old_rockbox"))
+        self._cb_old_rockbox.setStyleSheet("")  # no host style override
         self._cb_old_rockbox.setToolTip(tr("settings_old_rockbox_warn_body"))
         self._cb_old_rockbox.toggled.connect(self._on_old_rockbox_toggled)
 
         self._cb_nightly = self._add_switch(rock_layout, tr("settings_filter_nightly"))
+        self._cb_nightly.setStyleSheet("")  # no host style override
         self._cb_nightly.toggled.connect(self._on_nightly_toggled)
 
         self._cb_240p = self._add_switch(rock_layout, tr("settings_filter_240p"))
+        self._cb_240p.setStyleSheet("")  # no host style override
         self._cb_240p.setToolTip(tr("settings_240p_tip"))
         self._cb_240p.toggled.connect(self._on_240p_toggled)
 
         self._cb_original_pre307 = self._add_switch(
             rock_layout, tr("settings_filter_original_pre307")
         )
+        self._cb_original_pre307.setStyleSheet("")  # no host style override
         self._cb_original_pre307.setToolTip(tr("settings_original_pre307_warn_body"))
         self._cb_original_pre307.toggled.connect(self._on_original_pre307_toggled)
 
@@ -413,6 +421,7 @@ class SettingsPage(QWidget):
             self._donations_card, "settings_show_donations",
             tooltip=tr("settings_hide_donations_tip"),
         )
+        self._cb_hide_donations.setStyleSheet("")  # no host style override
         self._cb_hide_donations.toggled.connect(self._on_hide_donations_toggled)
 
         # No explainer paragraph: the title already says what the switch does.
@@ -507,6 +516,7 @@ class SettingsPage(QWidget):
             self._offline_mode_card, "settings_offline_mode",
             tooltip=tr("settings_offline_mode_desc"),
         )
+        self._cb_offline_mode.setStyleSheet("")  # no host style override
         self._cb_offline_mode.toggled.connect(self._on_offline_mode_toggled)
 
         self._offline_mode_desc = QLabel(tr("settings_offline_mode_desc"))
@@ -550,6 +560,7 @@ class SettingsPage(QWidget):
         adv_layout.setSpacing(8)
 
         self._cb_advanced_settings = self._add_switch(adv_layout, tr("settings_advanced_toggle"))
+        self._cb_advanced_settings.setStyleSheet("")  # no host style override
         self._cb_advanced_settings.setToolTip(tr("settings_advanced_desc"))
         self._cb_advanced_settings.toggled.connect(self._on_advanced_settings_toggled)
 
@@ -765,12 +776,16 @@ class SettingsPage(QWidget):
         if win and hasattr(win, "_adjust_window_geometry"):
             win._adjust_window_geometry()
 
+    def _advanced_shown(self) -> bool:
+        """True while Show Advanced Settings is on (or the MediaTek build forces it)."""
+        if hasattr(self, "_cb_advanced_settings"):
+            checked = self._cb_advanced_settings.isChecked()
+        else:
+            checked = self._advanced_revealed
+        return bool(checked or is_mediatek_installer())
+
     def _sync_advanced_visibility(self) -> None:
-        show_adv = bool(
-            self._advanced_revealed
-            or (hasattr(self, "_cb_advanced_settings") and self._cb_advanced_settings.isChecked())
-            or is_mediatek_installer()
-        )
+        show_adv = self._advanced_shown()
         is_win_x86 = bool(paths.IS_WINDOWS and windows_only_method() == METHOD_SP and not self._advanced_revealed)
         if hasattr(self, "_terminal_card"):
             self._terminal_card.setVisible(show_adv and self._may_show_card(self._terminal_card))
@@ -901,7 +916,9 @@ class SettingsPage(QWidget):
         which is offline by definition — there is nothing for them to act on.
         """
         self._rockbox_card.setVisible(
-            not is_offline_mode() and self._may_show_card(self._rockbox_card)
+            self._advanced_shown()
+            and not is_offline_mode()
+            and self._may_show_card(self._rockbox_card)
         )
 
     def _update_legacy_cleanup_visibility(self):
@@ -1465,9 +1482,9 @@ class SettingsPage(QWidget):
         if not hasattr(self, "_checker_card") or not hasattr(self, "_checker_desc"):
             return
         installer = is_mediatek_installer()
+        # Follow the visible Show Advanced Settings switch, not the hidden forced flag.
         advanced = bool(
-            getattr(self, "_advanced_revealed", False)
-            or (hasattr(self, "_cb_advanced_settings") and self._cb_advanced_settings.isChecked())
+            (hasattr(self, "_cb_advanced_settings") and self._cb_advanced_settings.isChecked())
             or installer
         )
         if installer:

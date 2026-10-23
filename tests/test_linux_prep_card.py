@@ -95,7 +95,7 @@ def _install_fake_stack(monkeypatch, report, *, ok=True, message="staged"):
 def test_preparation_reports_on_the_card(monkeypatch):
     from PySide6.QtWidgets import QApplication
 
-    from src.i18n import translator
+    from src.i18n import tr, translator
     from src.ui.settings_page import SettingsPage
 
     app = QApplication.instance() or QApplication(["--platform", "offscreen"])
@@ -112,7 +112,10 @@ def test_preparation_reports_on_the_card(monkeypatch):
         assert calls["dialogs"] == 0
         assert page._btn_run_checker.isEnabled(), "the button comes back when the run ends"
         assert page._checker_status_lbl.isHidden() is False
-        assert page._checker_status_lbl.text() == "Your computer is ready to connect to your player."
+        assert page._checker_status_lbl.text() in {
+            tr("linux_prep_ready_friendly"),
+            tr("linux_prep_ready"),
+        }
         assert page._sp_prep_worker is None
         # Already ready: nothing to fix, so the checker is not run a second time.
         assert calls["fix"] == 0 and calls["checked"] == 0
@@ -124,7 +127,7 @@ def test_preparation_reports_on_the_card(monkeypatch):
 def test_root_step_is_asked_on_the_card(monkeypatch):
     from PySide6.QtWidgets import QApplication
 
-    from src.i18n import translator
+    from src.i18n import tr, translator
     from src.ui.settings_page import SettingsPage
 
     app = QApplication.instance() or QApplication(["--platform", "offscreen"])
@@ -158,7 +161,7 @@ def test_prep_entry_point_uses_the_card(monkeypatch):
     """The Linux entry point reveals the card and starts the same preparation."""
     from PySide6.QtWidgets import QApplication
 
-    from src.i18n import translator
+    from src.i18n import tr, translator
     from src.ui.settings_page import SettingsPage
 
     import src.paths as paths_mod
@@ -178,7 +181,10 @@ def test_prep_entry_point_uses_the_card(monkeypatch):
         assert calls["dialogs"] == 0
         assert page._checker_card.isHidden() is False
         assert page._checker_status_lbl.isHidden() is False
-        assert page._checker_status_lbl.text() == "Your computer is ready to connect to your player."
+        assert page._checker_status_lbl.text() in {
+            tr("linux_prep_ready_friendly"),
+            tr("linux_prep_ready"),
+        }
     finally:
         page.deleteLater()
         app.processEvents()
@@ -187,7 +193,7 @@ def test_prep_entry_point_uses_the_card(monkeypatch):
 def test_missing_device_is_informational_not_a_warning():
     from PySide6.QtWidgets import QApplication
 
-    from src.i18n import translator
+    from src.i18n import tr, translator
     from src.ui.settings_page import SettingsPage
 
     app = QApplication.instance() or QApplication(["--platform", "offscreen"])
@@ -204,7 +210,10 @@ def test_missing_device_is_informational_not_a_warning():
     try:
         page._render_sp_report(report)
         app.processEvents()
-        assert page._checker_status_lbl.text() == "Your computer is ready to connect to your player."
+        assert page._checker_status_lbl.text() in {
+            tr("linux_prep_ready_friendly"),
+            tr("linux_prep_ready"),
+        }
         assert page._checker_status_lbl.property("cssClass") != "warning-banner"
     finally:
         page.deleteLater()
@@ -214,7 +223,7 @@ def test_missing_device_is_informational_not_a_warning():
 def test_friendly_copy_hides_tool_names_until_advanced():
     from PySide6.QtWidgets import QApplication
 
-    from src.i18n import translator
+    from src.i18n import tr, translator
     from src.ui.settings_page import SettingsPage
 
     from PySide6.QtCore import QSettings
@@ -241,7 +250,7 @@ def test_friendly_copy_hides_tool_names_until_advanced():
 def test_failed_download_stays_on_the_card(monkeypatch):
     from PySide6.QtWidgets import QApplication
 
-    from src.i18n import translator
+    from src.i18n import tr, translator
     from src.ui.settings_page import SettingsPage
 
     app = QApplication.instance() or QApplication(["--platform", "offscreen"])
@@ -264,7 +273,7 @@ def test_failed_download_stays_on_the_card(monkeypatch):
 def test_successful_prep_emits_completion_but_failure_does_not(monkeypatch):
     from PySide6.QtWidgets import QApplication
 
-    from src.i18n import translator
+    from src.i18n import tr, translator
     from src.ui.settings_page import SettingsPage
 
     app = QApplication.instance() or QApplication(["--platform", "offscreen"])
@@ -291,7 +300,7 @@ def test_setup_flow_hides_gui_launcher_only_while_checker_is_focused(monkeypatch
     from PySide6.QtWidgets import QApplication
 
     import src.sp_flash_gui as sp_gui
-    from src.i18n import translator
+    from src.i18n import tr, translator
     from src.ui.settings_page import SettingsPage
 
     app = QApplication.instance() or QApplication(["--platform", "offscreen"])
@@ -423,7 +432,7 @@ def test_prep_entry_point_shows_the_card_on_its_own(monkeypatch):
     """
     from PySide6.QtWidgets import QApplication
 
-    from src.i18n import translator
+    from src.i18n import tr, translator
     from src.ui.settings_page import SettingsPage
 
     import src.paths as paths_mod
@@ -512,6 +521,11 @@ def test_linux_access_is_a_wizard_stage_before_the_password_and_connect_prompt(m
     window._package_path = "/fake/rom.zip"
     window._package_name = "Original Software 3.2.1"
     window._package_model = "Y2"
+    # The access step belongs to SP Flash Tool. Linux defaults to MTKClient
+    # (no password), so this test pins the SP backend explicitly.
+    window.settings.setValue("flash_method", "sp")
+    window.settings.sync()
+    window._flash_method = "sp"
 
     window._begin_flash_flow()
     assert window._linux_permission_pending
@@ -525,3 +539,57 @@ def test_linux_access_is_a_wizard_stage_before_the_password_and_connect_prompt(m
     assert not window._linux_permission_pending
     assert window._power_off_prompt is True, "connect guidance follows the access step"
     assert not started, "flash waits for the connect guidance Next"
+
+
+def test_mtkclient_run_never_asks_for_a_system_password(monkeypatch):
+    """Linux defaults to MTKClient, which needs no root rights and so must not
+    show the Linux access/wizard stage or open a password prompt."""
+    from PySide6.QtWidgets import QApplication
+
+    import src.linux_sp_flash as linux
+    from src.i18n import translator
+    from src.ui.main_window import MainWindow
+
+    app = QApplication.instance() or QApplication(["--platform", "offscreen"])
+    translator().set_language("en")
+    calls = {"fix": 0, "checked": 0}
+
+    monkeypatch.setattr(linux, "silent_system_prep", lambda: None)
+    monkeypatch.setattr(
+        linux,
+        "run_system_checker",
+        lambda *a, **k: calls.__setitem__("checked", calls["checked"] + 1) or {"items": []},
+    )
+
+    def fake_fix():
+        calls["fix"] += 1
+        return True, "fixed"
+
+    monkeypatch.setattr(linux, "auto_fix_permissions", fake_fix)
+    monkeypatch.setattr(MainWindow, "_needs_linux_device_prep", lambda self: True)
+    monkeypatch.setattr(MainWindow, "_needs_device_prep", lambda self: False)
+
+    window = MainWindow()
+    window.show()
+    started = []
+    window.service.start_flash = lambda *a, **k: started.append(True)
+    window.service.start_device_monitor = lambda *a, **k: None
+    window._package_path = "/fake/rom.zip"
+    window._package_name = "Original Software 3.2.1"
+    window._package_model = "Y2"
+    window.settings.setValue("flash_method", "mtk")
+    window.settings.sync()
+    window._flash_method = "mtk"
+
+    try:
+        window._begin_flash_flow()
+        assert window._flash_method == "mtk"
+        assert not window._linux_permission_pending
+        assert not getattr(window._flash_page, "_permission_prompt", False)
+        assert calls["fix"] == 0, "MTKClient never opens the system password dialog"
+        assert calls["checked"] == 0, "the SP Flash Tool checker is not part of an MTKClient run"
+        assert started, "the MTKClient install starts without an access step"
+    finally:
+        window.settings.setValue("flash_method", "auto")
+        window.close()
+        app.processEvents()

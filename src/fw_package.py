@@ -30,6 +30,7 @@ from __future__ import annotations
 import configparser
 import logging
 import os
+import re
 import shutil
 import sys
 from dataclasses import dataclass
@@ -64,6 +65,7 @@ class FwPackage:
     description: str = ""
     image: Optional[Path] = None
     has_rockbox: bool = False
+    has_rockbox_240p: bool = False
     has_ini: bool = False
 
     @property
@@ -71,6 +73,14 @@ class FwPackage:
         if self.name and self.version:
             return f"{self.name} {self.version}".strip()
         return self.name or ""
+
+    @property
+    def has_release_name(self) -> bool:
+        """True when a real release name was found, not a generic install heading."""
+        if not self.name:
+            return False
+        generic_prefixes = ("Installing software", "Get ready to install", "Get your")
+        return not self.name.startswith(generic_prefixes)
 
 
 def has_rockbox_marker(folder: Union[str, Path]) -> bool:
@@ -85,6 +95,30 @@ def has_rockbox_marker(folder: Union[str, Path]) -> bool:
         )
     except OSError:
         return False
+
+
+def rockbox_package_name(*names: Optional[str]) -> bool:
+    """True when a package name marks a Rockbox install (not its 240p build).
+
+    The name contains ``rockbox``; a 240p zip is excluded by its ``_240`` or ``240p`` naming.
+    """
+    texts = [n.lower() for n in names if n]
+    if any("_240" in t or "240p" in t for t in texts):
+        return False
+    return any("rockbox" in t for t in texts)
+
+
+def rockbox_240p_package_name(*names: Optional[str]) -> bool:
+    """True when the names mark a 240p Rockbox ROM: ``rockbox`` plus a ``240p``/``_240`` tag.
+
+    A release name containing ``240p`` (with Rockbox in the release or ini name and the tag
+    in the zip name) is a Rockbox ROM for the small-screen player. It takes the theme-site
+    completion note instead of the bundled 360p theme push.
+    """
+    texts = [n.lower() for n in names if n]
+    if not any("rockbox" in t for t in texts):
+        return False
+    return any("240p" in t or "_240" in t for t in texts)
 
 
 def read_fw_package_ini(path: Union[str, Path]) -> FwIni:
@@ -168,10 +202,112 @@ def _package_image(folder: Path) -> Optional[Path]:
     return None
 
 
-def read_package(folder: Union[str, Path], require_ini: bool = True) -> Optional[FwPackage]:
+def _release_ini(folder: Path, app_dir: Optional[Path] = None) -> Optional[Path]:
+    """Return the ``fw_package.ini`` describing the release in ``folder``.
+
+    On Windows and Linux the file beside the application executable is preferred, so a
+    portable app zipped with its firmware can describe the release from its own folder.
+    Otherwise the file in the package folder (the SP Flash Tool directory) is used.
+    macOS keeps only the package-folder lookup.
+    """
+    candidates: list[Path] = []
+    if app_dir is not None and not IS_MAC:
+        candidates.append(Path(app_dir) / FW_PACKAGE_INI)
+    candidates.append(folder / FW_PACKAGE_INI)
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+_VERSION_RE = re.compile(r"(?<![\d.])v?(\d+(?:\.\d+)+)(?![\d.])", re.IGNORECASE)
+_NAME_VERSION_RE = re.compile(r"^\s*(?P<name>[A-Za-z][A-Za-z ]*?)[\s_.-]+v?(?P<ver>\d+(?:\.\d+)+)")
+_ARCHIVE_SUFFIX_RE = re.compile(r"\.(zip|rar|7z|txt|ini)$", re.IGNORECASE)
+_GENERIC_NAME_KEYS = {
+    "rom", "fw", "firmware", "update", "package", "original", "software", "release",
+    "build", "full", "stock", "scatter", "image", "installer", "bin", "zip",
+}
+
+
+def _name_key(text: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", str(text).lower())
+
+
+def infer_release_name(model: str, hints) -> tuple[str, str]:
+    """Infer ``(software name, version)`` from file names when ``fw_package.ini`` has no name.
+
+    Release names the catalogue lists for ``model`` (the live ``slidia_manifest.xml`` list,
+    or the static table offline) are matched against the hints first. Otherwise a leading
+    ``Name 1.2.3`` pattern in a hint is used. Returns ``("", "")`` when nothing is recognised,
+    so the caller keeps its generic label.
+    """
+    from . import catalog
+
+    texts = [_ARCHIVE_SUFFIX_RE.sub("", str(h)) for h in hints if h]
+    keys = [_name_key(t) for t in texts]
+
+    name = ""
+    version = ""
+    if model:
+        for cand in catalog.software_names_for_model(model):
+            ck = _name_key(cand)
+            if len(ck) < 4 or ck in _GENERIC_NAME_KEYS:
+                continue
+            if any(ck in k for k in keys) and len(ck) > len(_name_key(name)):
+                name = cand
+        if name:
+            for text in texts:
+                m = _VERSION_RE.search(text)
+                if m:
+                    version = m.group(1)
+                    break
+
+    if not name:
+        for text in texts:
+            m = _NAME_VERSION_RE.match(text)
+            if not m:
+                continue
+            cand = m.group("name").strip()
+            ck = _name_key(cand)
+            if len(ck) >= 3 and ck not in _GENERIC_NAME_KEYS:
+                name = cand
+                version = m.group("ver")
+                break
+
+    return (name, version) if name else ("", "")
+
+
+def release_install_heading(model: str, hints=()) -> str:
+    """Install heading from a release name found in file-name ``hints``.
+
+    Gives ``Get your Y2 ready to install Rockbox 2.5`` when a release name can be inferred, and
+    the generic ready-to-install label otherwise.
+    """
+    from . import catalog
+
+    name, version = infer_release_name(model, tuple(hints))
+    software = f"{name} {version}".strip() if name else ""
+    return catalog.format_install_heading(software, model)
+
+
+def package_install_heading(pkg: "FwPackage") -> str:
+    """Install heading for a parsed package: its release name when known, else the generic label."""
+    from . import catalog
+
+    software = pkg.display_name if pkg.has_release_name else ""
+    return catalog.format_install_heading(software, pkg.model)
+
+
+def read_package(
+    folder: Union[str, Path],
+    require_ini: bool = True,
+    app_dir: Optional[Union[str, Path]] = None,
+    source_names: tuple[str, ...] = (),
+) -> Optional[FwPackage]:
     """Return the package in ``folder`` when it has exactly one scatter and all listed images exist.
 
-    ``fw_package.ini`` is required when ``require_ini=True``, and optional when ``require_ini=False``.
+    ``fw_package.ini`` is looked up beside the app executable (``app_dir``) first, then in
+    ``folder``. It is required when ``require_ini=True`` and optional when ``require_ini=False``.
     """
     from .flash_service import _missing_images
 
@@ -179,8 +315,8 @@ def read_package(folder: Union[str, Path], require_ini: bool = True) -> Optional
     if not folder_p.is_dir():
         return None
 
-    ini = folder_p / FW_PACKAGE_INI
-    has_ini = ini.is_file()
+    ini = _release_ini(folder_p, Path(app_dir) if app_dir is not None else None)
+    has_ini = ini is not None
     if has_ini:
         meta = read_fw_package_ini(ini)
         if not meta.enabled:
@@ -209,40 +345,65 @@ def read_package(folder: Union[str, Path], require_ini: bool = True) -> Optional
             eff_model = ""
 
     eff_name = meta.name
+    eff_version = meta.version
     if not eff_name:
-        eff_name = f"Installing software on {eff_model}" if eff_model else "Installing software"
+        inferred_name, inferred_version = infer_release_name(
+            eff_model, (folder_p.name, scatter.name, *source_names)
+        )
+        eff_name = inferred_name
+        eff_version = eff_version or inferred_version
+    if not eff_name:
+        eff_name = f"Get your {eff_model} ready to install software" if eff_model else "Get ready to install software"
 
-    has_rockbox = has_rockbox_marker(folder_p)
+    has_rockbox = has_rockbox_marker(folder_p) or rockbox_package_name(
+        eff_name, folder_p.name, scatter.name, *source_names
+    )
+    has_rockbox_240p = rockbox_240p_package_name(
+        eff_name, folder_p.name, scatter.name, *source_names
+    )
     image = _package_image(folder_p)
+    if image is None and ini is not None and ini.parent != folder_p:
+        # fw_package.ini beside the app: its updater image may sit there too.
+        image = _package_image(ini.parent)
 
     return FwPackage(
         folder=folder_p.resolve(),
         scatter=scatter.resolve(),
         name=eff_name,
-        version=meta.version,
+        version=eff_version,
         model=eff_model,
         type=meta.type,
         description=meta.description,
         image=image.resolve() if image else None,
         has_rockbox=has_rockbox,
+        has_rockbox_240p=has_rockbox_240p,
         has_ini=has_ini,
     )
 
 
-def locate_package(root: Union[str, Path], require_ini: bool = False) -> Optional[FwPackage]:
-    """Find a firmware package under ``root`` (checking root, then subfolders)."""
+def locate_package(
+    root: Union[str, Path],
+    require_ini: bool = False,
+    app_dir: Optional[Union[str, Path]] = None,
+    source_names: tuple[str, ...] = (),
+) -> Optional[FwPackage]:
+    """Find a firmware package under ``root`` (checking root, then subfolders).
+
+    ``app_dir`` and ``source_names`` are passed to :func:`read_package` so the release name
+    can come from the app's ``fw_package.ini`` or from the browsed file names.
+    """
     root_p = Path(root)
     if not root_p.is_dir():
         return None
 
     # Check root directly
-    pkg = read_package(root_p, require_ini=require_ini)
+    pkg = read_package(root_p, require_ini=require_ini, app_dir=app_dir, source_names=source_names)
     if pkg is not None:
         return pkg
 
     # Search subfolders with fw_package.ini
     for ini in sorted(root_p.rglob(FW_PACKAGE_INI)):
-        pkg = read_package(ini.parent, require_ini=require_ini)
+        pkg = read_package(ini.parent, require_ini=require_ini, app_dir=app_dir, source_names=source_names)
         if pkg is not None:
             return pkg
 
@@ -250,7 +411,9 @@ def locate_package(root: Union[str, Path], require_ini: bool = False) -> Optiona
         # Search subfolders with a single scatter
         for scatter in sorted(root_p.rglob("*.txt")):
             if "scatter" in scatter.name.lower():
-                pkg = read_package(scatter.parent, require_ini=False)
+                pkg = read_package(
+                    scatter.parent, require_ini=False, app_dir=app_dir, source_names=source_names
+                )
                 if pkg is not None:
                     return pkg
     return None
@@ -272,6 +435,8 @@ def find_bundled_firmware(app_dir=None) -> Optional[FwPackage]:
     - macOS: Same folder as the .app bundle.
     - Windows & Linux: In the sp_flash_tool directory of the application
       (e.g. tools/SP_Flash_Tool, INSTALL_DIR/SP_Flash_Tool, or next to binary).
+      Release details come from ``fw_package.ini`` beside the application executable,
+      falling back to the one in the package folder.
 
     Returns an FwPackage if exactly one *scatter*.txt file is found and all declared
     images exist, or None otherwise.
@@ -287,7 +452,6 @@ def find_bundled_firmware(app_dir=None) -> Optional[FwPackage]:
         base_app_parent = _macos_app_parent(base)
         if base_app_parent and base_app_parent.is_dir():
             candidates.append(base_app_parent)
-        candidates.extend([base, base.parent, Path.cwd()])
     else:
         # Windows & Linux: Search sp_flash_tool directory candidates
         sp_found = find_sp_flash_tool()
@@ -299,11 +463,9 @@ def find_bundled_firmware(app_dir=None) -> Optional[FwPackage]:
             candidates.append((base / sub).resolve())
             candidates.append((REPO_ROOT / sub).resolve())
             candidates.append((REPO_ROOT / "tools" / sub).resolve())
-            candidates.append((Path.cwd() / sub).resolve())
 
         candidates.append((REPO_ROOT / "tools" / "windows" / "SP_Flash_Tool_v5.1904_Win").resolve())
         candidates.append((REPO_ROOT / "tools" / "linux" / "SP_Flash_Tool_v5.1904_Linux").resolve())
-        candidates.extend([base, base.parent, Path.cwd()])
 
     seen = set()
     for cand in candidates:
@@ -314,7 +476,7 @@ def find_bundled_firmware(app_dir=None) -> Optional[FwPackage]:
             continue
         seen.add(cand_resolved)
 
-        pkg = read_package(cand_resolved, require_ini=False)
+        pkg = read_package(cand_resolved, require_ini=False, app_dir=base)
         if pkg is not None:
             logger.info("Found bundled firmware package at %s (scatter=%s)", cand_resolved, pkg.scatter.name)
             return pkg
@@ -326,7 +488,7 @@ def find_installed_package(app_dir=None) -> Optional[FwPackage]:
     """Look for a package beside the app executable, then in its parent folder."""
     base = Path(app_dir) if app_dir is not None else Path(INSTALL_DIR)
     for folder in (base, base.parent):
-        pkg = read_package(folder, require_ini=True)
+        pkg = read_package(folder, require_ini=True, app_dir=base)
         if pkg is not None:
             return pkg
     return None
@@ -385,6 +547,13 @@ def stage_bundled_firmware(pkg: FwPackage) -> Path:
     except Exception as e:
         logger.debug("Could not copy rockbox marker: %s", e)
 
+    # Copy the updater image so the staged scatter still shows the release icon
+    if pkg.image is not None and pkg.image.is_file():
+        try:
+            shutil.copy2(pkg.image, staged_dir / pkg.image.name)
+        except Exception as e:
+            logger.debug("Could not copy release icon: %s", e)
+
     # Prime SP Flash Tool's history.ini if the package is in an SP Flash Tool folder
     prime_sp_tool_history_ini(pkg.folder, pkg.scatter)
 
@@ -423,6 +592,10 @@ def prune_to_firmware_package(extract_dir: Union[str, Path]) -> list[str]:
     scatter = pkg.scatter
     folder = scatter.parent
     keep = {scatter.resolve()}
+    # Keep fw_package.ini in the package folder and beside the app executable (portable zips)
+    for ini in root.rglob(FW_PACKAGE_INI):
+        if ini.is_file():
+            keep.add(ini.resolve())
     if (folder / FW_PACKAGE_INI).is_file():
         keep.add((folder / FW_PACKAGE_INI).resolve())
 

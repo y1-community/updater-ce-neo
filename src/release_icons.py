@@ -386,6 +386,9 @@ def load_local_package_icon_bytes(package_path: str | Path | None, *, dark: bool
             return None
         dark = _dark_flag(dark)
         names = list(DARK_ICON_NAMES) + list(LIGHT_ICON_NAMES) if dark else list(LIGHT_ICON_NAMES)
+        if p.is_file() and p.suffix.lower() != ".zip":
+            # A scatter file: its updater image sits in the same folder.
+            p = p.parent
         if p.is_dir():
             for name in names:
                 cand = p / name

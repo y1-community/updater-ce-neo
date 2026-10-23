@@ -66,6 +66,21 @@
   #endif
 #endif
 
+; The SP Flash Tool and MediaTek Download Agents are the device flashing payload.
+; Refuse to compile an installer that would ship without them.
+#if !FileExists(AddBackslash(MyDistDir) + "SP_Flash_Tool\flash_tool.exe")
+  #error "SP Flash Tool (flash_tool.exe) is missing from the payload. Run build_windows.ps1 again."
+#endif
+#if !FileExists(AddBackslash(MyDistDir) + "SP_Flash_Tool\MTK_AllInOne_DA.bin")
+  #error "MediaTek Download Agent MTK_AllInOne_DA.bin is missing from the payload."
+#endif
+#if !FileExists(AddBackslash(MyDistDir) + "SP_Flash_Tool\DA_PL.bin")
+  #error "MediaTek Download Agent DA_PL.bin is missing from the payload."
+#endif
+#if !FileExists(AddBackslash(MyDistDir) + "SP_Flash_Tool\DA_SWSEC.bin")
+  #error "MediaTek Download Agent DA_SWSEC.bin is missing from the payload."
+#endif
+
 [Setup]
 AppId={#MyAppId}
 AppName={#MyAppName}
@@ -82,6 +97,7 @@ DisableProgramGroupPage=yes
 ; kept, except the retired LocalAppData\Innioasis Updater folder, which the
 ; [Code] section sends to {autopf} instead.
 UsePreviousAppDir=yes
+UsePreviousGroup=yes
 UsePreviousTasks=yes
 ; All users (admin) is the only install mode. Running processes are stopped
 ; explicitly in CurStepChanged(ssInstall), so the Restart Manager prompt is off.
@@ -95,8 +111,12 @@ SetupIconFile=..\assets\icon.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
-; Support both 32-bit (x86) and 64-bit (x64, arm64) Windows installations.
-; When running on 64-bit Windows, install in native 64-bit mode. On 32-bit Windows, install in 32-bit mode.
+; Target Windows 8.1 and later (NT 6.3+). Blocks unsupported Windows 7, Vista, and XP.
+MinVersion=6.3
+; The application is 64-bit only (PySide6 ships no 32-bit Windows wheels).
+; Installs are allowed on x64 and arm64 Windows only, and go to the native
+; 64-bit Program Files. 32-bit Windows is refused with a clear message.
+ArchitecturesAllowed=x64compatible arm64
 ArchitecturesInstallIn64BitMode=x64compatible arm64
 UninstallDisplayIcon={app}\{#MyAppExeName}
 VersionInfoVersion={#MyAppVersion}
@@ -122,7 +142,7 @@ Name: "{commonappdata}\SP_FT_Logs"; Permissions: users-modify
 
 [Messages]
 FinishedRestartLabel=Setup has finished installing MediaTek SP Driver on your computer. You will need to restart your computer before you can install software on your device.%n%nWould you like to restart now?
-FinishedRestartMessage=Setup has finished installing MediaTek SP Driver on your computer. You will need to restart your computer before you can install software on your device.%n%nWould you like to restart now?
+FinishedRestartMessage=Setup has finished installing MediaTek SP Driver on your computer. You will need to restart your computer before you can install software on your device.%n%nThe driver requires a reboot to become active. The updater application will launch automatically after the restart.%n%nWould you like to restart now?
 
 [CustomMessages]
 english.StepStopping=Stopping running Updater CE, Python, SP Flash Tool and ADB processes...
@@ -151,7 +171,10 @@ Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+; When no driver was installed, launch the app normally after install.
+; When the MediaTek USB driver was installed, do NOT launch the app here —
+; the Finish page handles the reboot prompt instead (see CurPageChanged).
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent; Check: Not DriverInstalled
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\SP_Flash_Tool\SP_FT_Logs"
@@ -163,6 +186,13 @@ const
   UninstallRoot = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\';
   CurrentUninstallKey = UninstallRoot + '{#MyAppId}_is1';
   LegacyUninstallKey = UninstallRoot + 'Innioasis Updater_is1';
+  { The first Updater CE installer shipped under its own AppId and installed
+    into "{autopf}\Ryan Specter". A machine that ran it has a second uninstall
+    entry and a second set of shortcuts; both are removed on upgrade. }
+  LegacyUpdaterCeKey = UninstallRoot + '{8A1C6F5B-9A3C-4E6D-8F9A-7B3D2E1C0A9F}_is1';
+  { Start Menu folders are a few levels deep at most. The bound stops a
+    runaway walk from ever hanging the installer. }
+  MaxShortcutPurgeDepth = 6;
 
 var
   PriorDesktopShortcut: Boolean;
@@ -194,7 +224,9 @@ begin
   L := Lowercase(Dir);
   Result :=
     (Pos('\appdata\local\innioasis updater', L) > 0) or
-    (Pos('\innioasis community\updater ce', L) > 0);
+    (Pos('\innioasis community\updater ce', L) > 0) or
+    (Pos('\ryan specter', L) > 0) or
+    (Pos('\innioasis updater ce', L) > 0);
 end;
 
 function UninstallerExe(const Uninst: String): String;
@@ -247,21 +279,58 @@ end;
 
 function IsRetiredFolder(const Name: String): Boolean;
 begin
+  { Every menu/desktop folder that carries our name goes, whatever version
+    wrote it: "Innioasis Updater", "Innioasis Updater CE", "Innioasis
+    Community" and the SP Flash Tool group. The generic MediaTek Installer
+    folder is not named here, so that brand is left alone. }
   Result :=
     NameContains(Name, 'Innioasis') or
-    NameContains(Name, 'SP Flash Tool');
+    NameContains(Name, 'SP Flash Tool') or
+    NameContains(Name, 'Updater CE');
+end;
+
+{ Removes a retired Start Menu folder's contents without following junctions
+  or symlinks: a reparse point is unlinked itself, never walked, so a link
+  into a large tree (for example Documents) cannot make the step run for
+  minutes or delete data outside the menu. Depth is bounded as well. }
+procedure RemoveRetiredFolderAt(const Path: String; Depth: Integer);
+var
+  FindRec: TFindRec;
+  Child: String;
+begin
+  if (Depth > MaxShortcutPurgeDepth) or (not DirExists(Path)) then
+    Exit;
+  if FindFirst(Path + '\*', FindRec) then
+  begin
+    try
+      repeat
+        if (FindRec.Name = '.') or (FindRec.Name = '..') then
+          Continue;
+        Child := Path + '\' + FindRec.Name;
+        if (FindRec.Attributes and FILE_ATTRIBUTE_REPARSE_POINT) <> 0 then
+          RemoveDir(Child)
+        else if (FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0 then
+          RemoveRetiredFolderAt(Child, Depth + 1)
+        else
+          DeleteFile(Child);
+      until not FindNext(FindRec);
+    finally
+      FindClose(FindRec);
+    end;
+  end;
+  RemoveDir(Path);
 end;
 
 { Drop Start Menu folders named *Innioasis*, and shortcuts for the old
   app or SP Flash Tool, on this user's menus and desktops and on the
   system-wide ones. The new shortcuts are created afterwards from the
   tasks the person just confirmed. }
-procedure PurgeShortcutTree(const Root: String);
+procedure PurgeShortcutTreeAt(const Root: String; Depth: Integer);
 var
   FindRec: TFindRec;
   Path: String;
 begin
-  if (Root = '') or (not DirExists(Root)) then
+  if (Root = '') or (Depth > MaxShortcutPurgeDepth) or (not DirExists(Root)) then
     Exit;
   if not FindFirst(Root + '\*', FindRec) then
     Exit;
@@ -269,13 +338,17 @@ begin
     repeat
       if (FindRec.Name = '.') or (FindRec.Name = '..') then
         Continue;
+      { A junction or symlink (for example a profile alias of another
+        account) is skipped. Its target is neither walked nor deleted. }
+      if (FindRec.Attributes and FILE_ATTRIBUTE_REPARSE_POINT) <> 0 then
+        Continue;
       Path := Root + '\' + FindRec.Name;
       if (FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0 then
       begin
         if IsRetiredFolder(FindRec.Name) then
-          DelTree(Path, True, True, True)
+          RemoveRetiredFolderAt(Path, Depth + 1)
         else
-          PurgeShortcutTree(Path);
+          PurgeShortcutTreeAt(Path, Depth + 1);
       end
       else if IsRetiredShortcut(FindRec.Name) then
         DeleteFile(Path);
@@ -285,13 +358,20 @@ begin
   end;
 end;
 
+procedure PurgeShortcutTree(const Root: String);
+begin
+  PurgeShortcutTreeAt(Root, 0);
+end;
+
 procedure PurgeRetiredShortcuts;
 begin
-  if not IsUpdaterCeBrand then
-    Exit;
+  { Not gated on the brand: a MediaTek Installer install still has to clear the
+    "Innioasis" shortcuts an older Updater CE left behind, so only one set of
+    menu entries is ever present. Nothing named MediaTek matches below. }
   PurgeShortcutTree(ExpandConstant('{userprograms}'));
   PurgeShortcutTree(ExpandConstant('{userdesktop}'));
   PurgeShortcutTree(ExpandConstant('{commonprograms}'));
+  PurgeShortcutTree(ExpandConstant('{commondesktop}'));
   PurgeShortcutTree(ExpandConstant('{commondesktop}'));
 end;
 
@@ -482,14 +562,18 @@ var
 begin
   { Pre-3.x registered itself under a different uninstall key. }
   RunSilentUninstall(LegacyUninstallKey);
+  { The first Updater CE installer (2.5.x) had its own AppId. }
+  RunSilentUninstall(LegacyUpdaterCeKey);
 
-  { A 3.x copy that still lives in LocalAppData is removed so the new
-    files and shortcuts are the Program Files ones. An install already in
-    the destination folder is updated in place. }
+  { A copy that is registered, but lives anywhere other than the folder this
+    run will install into, is removed first. That covers the old LocalAppData
+    tree as well as a 3.1/3.2 that the user pointed at a custom folder, so an
+    upgrade never leaves two installed copies or two uninstall entries. An
+    install already in the destination folder is updated in place instead. }
   if QueryUninstallValue(CurrentUninstallKey, 'InstallLocation', Prev) then
   begin
     Dest := ExpandConstant('{app}');
-    if IsLegacyInstallDir(Prev) and
+    if (Prev <> '') and
        (CompareText(RemoveBackslashUnlessRoot(Prev), RemoveBackslashUnlessRoot(Dest)) <> 0) then
       RunSilentUninstall(CurrentUninstallKey);
   end;
@@ -525,8 +609,32 @@ end;
 
 function NeedRestart(): Boolean;
 begin
-  { Prompts the user to restart PC at the end of setup after driver installation }
+  { Inno Setup uses this to decide whether to offer a restart after setup.
+    When the MediaTek driver was installed, a reboot is required for the
+    drivers to become operational. }
   Result := DriverInstalled;
+end;
+
+procedure CurPageChanged(CurPageID: Integer);
+begin
+  { When we reach the Finish page and drivers were installed, prompt for reboot
+    instead of offering to launch the application (which won't work until reboot). }
+  if CurPageID = wpFinished and DriverInstalled then
+  begin
+    WizardForm.NextButton.Enabled := True;
+    WizardForm.NextButton.Caption := 'Restart Now';
+    WizardForm.NextButton.OnClick := @RestartComputer;
+  end;
+end;
+
+procedure RestartComputer;
+var
+  ResultCode: Integer;
+begin
+  { Register the app to launch on next login, then restart }
+  if DriverInstalled then
+    RegisterRunOnceStartup;
+  ShellExec('', 'shutdown.exe', '/r /t 0 /c "MediaTek drivers require a restart. The updater will launch after restart."', '', SW_SHOW, ewNoWait, ResultCode);
 end;
 
 { Runs at various stages of setup execution. }
@@ -560,7 +668,8 @@ begin
   end
   else if CurStep = ssDone then
   begin
-    { If driver was installed, register RunOnce so the app launches on the next reboot }
+    { If driver was installed, register RunOnce so the app launches on the next reboot.
+      The reboot prompt is shown on the Finish page via CurPageChanged. }
     if DriverInstalled then
       RegisterRunOnceStartup;
   end;

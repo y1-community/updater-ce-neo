@@ -41,6 +41,7 @@ def test_parse_flash_error_all_locales(app):
         ("NO_SCATTER_FILE", "", "scatter file"),
         ("MISSING_IMAGES", "", "missing"),
         ("SP_FLASH_TOOL_NOT_FOUND", "", "tool"),
+        ("SP_EXIT_0", "", "exit 0"),
         ("SP_EXIT_1", "", "driver"),
         ("Unknown hardware glitch 0xdeadbeef", "0xdeadbeef", "unexpected error"),
     ]
@@ -118,6 +119,7 @@ def test_sp_exit_1_driver_error_handling(app):
 
     assert is_sp_driver_error("SP_EXIT_1")
     assert is_sp_driver_error("SP_EXIT_2")
+    assert not is_sp_driver_error("SP_EXIT_0")
     assert not is_sp_driver_error("S_BROM_CMD_STARTCMD_FAIL (2005)")
     assert not is_sp_driver_error("WRITE_FAILED")
 

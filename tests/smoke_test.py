@@ -388,10 +388,11 @@ def test_update_version_and_assets():
         {"name": "installer.exe", "browser_download_url": "u1", "size": 10},
         {"name": "Innioasis.Updater.for.Mac.dmg", "browser_download_url": "u2", "size": 20},
         {"name": "run_linux.sh", "browser_download_url": "u3", "size": 5},
+        {"name": "UpdaterCE.tar.gz", "browser_download_url": "u4", "size": 100},
     ]
     assert updates.pick_platform_asset(assets, "win32")["name"] == "installer.exe"
     assert updates.pick_platform_asset(assets, "darwin")["name"] == "Innioasis.Updater.for.Mac.dmg"
-    assert updates.pick_platform_asset(assets, "linux")["name"] == "run_linux.sh"
+    assert updates.pick_platform_asset(assets, "linux")["name"] == "UpdaterCE.tar.gz"
     assert updates.pick_platform_asset(assets, "win32")["name"] != "Innioasis.Updater.for.Mac.dmg"
     # Arch preference within the same extension.
     arch_assets = [
@@ -557,10 +558,10 @@ def test_backend_method_dispatch():
         try:
             calls = []
             make("auto")._dispatch_backend(Path("x"), Path("s"))
-            if fs.IS_MAC:
-                assert calls == ["mtk"], "auto on macOS -> MTKClient"
+            if fs.IS_WINDOWS:
+                assert calls == ["sp"], "auto prefers SP Flash Tool on Windows"
             else:
-                assert calls == ["sp"], "auto prefers SP Flash Tool on Windows/Linux"
+                assert calls == ["mtk"], "auto uses MTKClient on macOS and Linux"
         finally:
             fs.paths.find_sp_flash_tool = real_find_sp
     finally:
@@ -2415,25 +2416,26 @@ def test_flash_method_switch():
     w._flash_method = "auto"
 
     w._on_package_selected("C:/fake/rom.zip", "Rockbox (Y1)", "Y1")
-    exp_method = "mtk" if paths.IS_MAC else "sp"
+    exp_method = "sp" if paths.IS_WINDOWS else "mtk"
     assert w._flash_page.current_method() == exp_method, f"legacy auto -> {exp_method}"
 
     if not paths.IS_MAC:
-        # User switches to MTKClient while the backend searches (Windows/Linux).
+        # User switches to the other engine while the backend searches.
         w._settings_page.reveal_advanced_methods()
         combo = w._settings_page._method_combo
-        combo.setCurrentIndex(combo.findData("mtk"))
-        assert w._settings_page.current_method() == "mtk"
-        assert w._flash_page.current_method() == "mtk", "flash page reflects the new method"
-        assert w.settings.value("flash_method") == "mtk"
+        other = "sp" if exp_method == "mtk" else "mtk"
+        combo.setCurrentIndex(combo.findData(other))
+        assert w._settings_page.current_method() == other
+        assert w._flash_page.current_method() == other, "flash page reflects the new method"
+        assert w.settings.value("flash_method") == other
         # The switch itself starts nothing: the power-off step comes first, so
         # a tool is never left searching before the user is ready.
-        assert "mtk" not in [call[1] for call in calls], (
+        assert other not in [call[1] for call in calls], (
             "the new backend must wait for the power-off confirmation"
         )
         assert w._power_off_prompt is True
         w._on_power_off_continue()
-        assert calls[-1] == ("C:/fake/rom.zip", "mtk"), "Continue starts the new backend"
+        assert calls[-1] == ("C:/fake/rom.zip", other), "Continue starts the new backend"
     else:
         # On macOS, MTKClient is the only engine; verify it is the active method.
         assert w._settings_page.current_method() == "mtk"
@@ -3129,10 +3131,20 @@ def test_mtk_write_system_exit_guarded():
     w._log = lambda *a, **k: None
 
     real_scatter = fs._parse_scatter
+    real_plan = fs.build_mtk_write_plan
     real_init, real_handshake, real_attach = (
         mtk_api.init, mtk_api.handshake, mtk_api.attach
     )
     fs._parse_scatter = lambda scatter: [("system", Path("/tmp/system.img"))]
+    fs.build_mtk_write_plan = lambda scatter, model="": [
+        {
+            "name": "system",
+            "path": Path("/tmp/system.img"),
+            "parttype": "user",
+            "offset": None,
+            "length": 8,
+        }
+    ]
 
     class FakeConfig:
         is_brom = True
@@ -3158,6 +3170,7 @@ def test_mtk_write_system_exit_guarded():
             real_init, real_handshake, real_attach
         )
         fs._parse_scatter = real_scatter
+        fs.build_mtk_write_plan = real_plan
     assert results == [(False, "WRITE_FAILED")], results
 
 
@@ -4904,7 +4917,7 @@ def test_settings_platform_prep_cards():
     MTKClient sales blurb is gone from the method notes."""
     from PySide6.QtWidgets import QApplication
     from src import browser, i18n, paths
-    from src.flash_service import METHOD_MTK, METHOD_SP
+    from src.flash_service import METHOD_MTK, METHOD_SP, default_flash_method
     from src.i18n import tr
     from src.ui.flash_page import FlashPage
     from src.ui.settings_page import MEDIATEK_DRIVERS_URL, SettingsPage
@@ -4967,9 +4980,10 @@ def test_settings_platform_prep_cards():
         # A legacy platform-specific alias falls back to the platform default
         # instead of adding a second MTKClient choice.
         page.set_method("mtk_mac")
-        assert page.current_method() == METHOD_SP
-        assert page._method_note.text() == tr("flash_method_note_sp")
-        assert not page._method_note.isHidden()
+        assert default_flash_method() == METHOD_MTK
+        assert page.current_method() == METHOD_MTK
+        assert page._method_note.text() == ""
+        assert page._method_note.isHidden()
         assert page._method_combo.findData("mtk_mac") == -1
         page.set_method(METHOD_SP)
         assert page._method_note.text() == tr("flash_method_note_sp")

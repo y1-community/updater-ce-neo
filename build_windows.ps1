@@ -146,12 +146,21 @@ try {
         }
 
         Write-StepBanner 2 $totalSteps "Validating Bundled Payload" "Ensuring $appSlug.exe and SP_Flash_Tool binaries are present and runnable..."
-        $spDist = Join-Path $stagedAppDir "SP_Flash_Tool\flash_tool.exe"
-        if (Test-Path $spDist) {
-            Write-Host "  -> SP Flash Tool bundled successfully beside application." -ForegroundColor Green
-        } else {
-            Write-Host "  -> Note: SP Flash Tool not staged beside executable; self-healer will fetch on first run." -ForegroundColor DarkYellow
+        # The SP Flash Tool and MediaTek Download Agents are required payload for
+        # flashing devices. Fail the build rather than shipping an installer without them.
+        $requiredPayload = @(
+            "SP_Flash_Tool\flash_tool.exe",
+            "SP_Flash_Tool\MTK_AllInOne_DA.bin",
+            "SP_Flash_Tool\DA_PL.bin",
+            "SP_Flash_Tool\DA_SWSEC.bin"
+        )
+        foreach ($rel in $requiredPayload) {
+            $payloadPath = Join-Path $stagedAppDir $rel
+            if (-not (Test-Path $payloadPath)) {
+                throw "Required payload missing from build output: $payloadPath"
+            }
         }
+        Write-Host "  -> SP Flash Tool and MediaTek Download Agents bundled beside application." -ForegroundColor Green
 
         # Stage DriverInstall.exe and friendly numbered entrypoints for portable distribution
         $driverSource = Join-Path $ProjectRoot "tools\DriverInstall.exe"

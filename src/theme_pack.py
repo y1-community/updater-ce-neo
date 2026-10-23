@@ -33,7 +33,7 @@ from .ui.dark import T
 
 logger = logging.getLogger(__name__)
 
-THEME_PACK_URL = "https://github.com/rockbox-y1/themes/archive/refs/heads/themepack.zip"
+#: Remote/merged themepack archive name (downloads dir or bundled zip).
 THEME_PACK_ZIP_NAME = "rockbox_360p_themepack.zip"
 
 
@@ -392,6 +392,27 @@ class ThemePackGuidanceDialog(QDialog):
 # Directory merge + combined theme-dir builder (360p wizard)
 # ---------------------------------------------------------------------------
 
+try:
+    from . import paths as _paths
+    from .theme_pack_bundled import (
+        BUNDLED_THEME_PACK_ZIP_NAME,
+    )
+    _bundled_zip_path = (getattr(_paths, "RESOURCES_DIR", None) or (_paths.REPO_ROOT / "assets")) / "360p" / BUNDLED_THEME_PACK_ZIP_NAME
+except Exception:
+    _bundled_zip_path = Path("/tmp/missing_asset") / "rockbox_360p_themepack.zip"
+
+
+def bundled_themepack_zip_path() -> Path:
+    """The bundled 360p theme pack archive shipped inside the app bundle.
+
+    On first call this returns the path the app should treat as the bundled
+    theme pack. By default that is the repo/checkout ``assets/360p``
+    archive; packaged builds pin it through the suite's resource helper so a
+    frozen app never reaches back into the checkout tree.
+    """
+    return _bundled_zip_path
+
+
 def bundled_rockbox_dir() -> Path:
     """The app's own ``.rockbox`` content: themes plus the fonts pack.
 
@@ -403,6 +424,12 @@ def bundled_rockbox_dir() -> Path:
 
     base = getattr(_paths, "RESOURCES_DIR", None) or (_paths.REPO_ROOT / "assets")
     return Path(base) / "360p" / "themes-themepack" / ".rockbox"
+
+
+# Legacy alias preserved for any remaining callers and tests.
+def bundled_themepack_dir() -> Path:
+    """Backward-compatible accessor for the legacy unbundled tree location."""
+    return bundled_rockbox_dir()
 
 
 def merge_dirs(src_dir: str | Path, dst_dir: str | Path,
@@ -451,16 +478,26 @@ def build_combined_rockbox_dir(zip_path: str | Path, dest_dir: str | Path,
     """
     dest = Path(dest_dir)
     dest.mkdir(parents=True, exist_ok=True)
-    base = bundled_rockbox_dir()
-    if base.is_dir():
+    base = None
+    if bundled_rockbox_dir().is_dir():
+        base = bundled_rockbox_dir()
+    elif bundled_themepack_zip_path().is_file():
+        # Prefer a bundled archive when the legacy directory is absent.
+        base = dest / "_from_bundled_zip"
+        extract_theme_pack_zip(bundled_themepack_zip_path(), base, progress_cb=None)
+    if base is not None and base.is_dir():
         merge_dirs(base, dest)
     else:
-        logger.warning("build_combined_rockbox_dir: bundled dir missing: %s", base)
+        logger.warning(
+            "build_combined_rockbox_dir: bundled theme source missing: "
+            f"{bundled_rockbox_dir()!r} / {bundled_themepack_zip_path()!r}"
+        )
     return extract_theme_pack_zip(Path(zip_path), dest, progress_cb=progress_cb)
 
 
 def sync_bundled_themepack_from_remote(zip_path: str | Path,
-                                       assets_rockbox_dir: Optional[str | Path] = None) -> int:
+                                       assets_rockbox_dir: Optional[str | Path] = None,
+                                       assets_themepack_zip: Optional[str | Path] = None) -> int:
     """Refresh the in-repo ``assets/360p`` copy from a downloaded remote zip.
 
     Merges the zip over ``assets/360p/themes-themepack/.rockbox`` (or the
@@ -924,6 +961,17 @@ class Rockbox360pSetupWizard(QDialog):
                 self._work_dir = Path(tempfile.mkdtemp(prefix="rockbox_360p_"))
                 self._combined_dir = self._work_dir / ".rockbox"
                 merge_dirs(base, self._combined_dir)
+                cb = getattr(self, "_pending_ready_cb", None)
+                if cb:
+                    cb()
+                return
+            zip_candidate = bundled_themepack_zip_path()
+            if zip_candidate.is_file():
+                import tempfile
+
+                self._work_dir = Path(tempfile.mkdtemp(prefix="rockbox_360p_"))
+                self._combined_dir = self._work_dir / ".rockbox"
+                extract_theme_pack_zip(zip_candidate, self._combined_dir)
                 cb = getattr(self, "_pending_ready_cb", None)
                 if cb:
                     cb()

@@ -1,11 +1,13 @@
 """Flash page — modern OS software update in-progress display (macOS / iOS / Windows Fluent style)."""
 
 import logging
+import platform
+import sys
 
 logger = logging.getLogger(__name__)
 
 from PySide6.QtCore import QEvent, QEventLoop, QRect, QSize, Qt, QTimer
-from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPixmap
+from PySide6.QtGui import QColor, QFont, QPainter, QPalette, QPen, QPixmap
 from PySide6.QtWidgets import (
     QBoxLayout,
     QFrame,
@@ -615,7 +617,10 @@ class _RoundNextButton(QPushButton):
         self._hovered = False
         self._pressed = False
         self._arrow = QPixmap()
-        if symbol == "next":
+        if symbol == "cancel":
+            self.setToolTip(tr("btn_cancel"))
+            self.setAccessibleName(tr("btn_cancel"))
+        elif symbol == "next":
             self.setToolTip(tr("btn_next"))
             self.setAccessibleName(tr("btn_next"))
 
@@ -677,7 +682,11 @@ class _RoundNextButton(QPushButton):
     def rebuild_arrow(self) -> None:
         """Re-render the platform glyph for the current theme colours."""
         _disc, text = self._colors()
+        # "cancel" is a real symbol in every platform map (SF xmark, Segoe
+        # ChromeClose, the SVG cross); "close" is not, and drew a stray glyph.
         self._arrow = get_symbol_pixmap(self._symbol, _ROUND_NEXT_ARROW_PX, text)
+        if self._arrow.isNull() and self._symbol == "cancel":
+            self._arrow = _explicit_cancel_cross(_ROUND_NEXT_ARROW_PX, text)
         self.update()
 
     def _disc_rect(self) -> QRect:
@@ -796,6 +805,35 @@ class _RoundNextButton(QPushButton):
         self._pressed = False
         self.update()
         super().mouseReleaseEvent(event)
+
+
+
+
+def _explicit_cancel_cross(size: int, color: str) -> QPixmap:
+    """A standalone cross for the cancel chip when the platform glyph is missing or too subtle.
+
+    The cancel chip is a muted neutral disc, so platform cancel pictograms (a
+    square stop button, a tiny X in a capsule, etc.) can read as almost
+    nothing at that small size. This draws a simple + over a filled disc so the
+    cancel affordance is visible on every host, and it is only used when the
+    normal ``get_symbol_pixmap("close")`` path returned an empty pixmap.
+    """
+    disc_size = max(int(size), 1) * 2
+    pm = QPixmap(disc_size, disc_size)
+    pm.setDevicePixelRatio(2.0)
+    pm.fill(Qt.transparent)
+    painter = QPainter(pm)
+    painter.setRenderHint(QPainter.Antialiasing, True)
+    pen = QPen(QColor(color), 2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+    center = disc_size // 2
+    half = max(2, disc_size // 5)
+    painter.setPen(pen)
+    painter.drawLine(center - half, center - half, center + half, center + half)
+    painter.drawLine(center + half, center - half, center - half, center + half)
+    painter.end()
+    out = pm.scaled(size * 2, size * 2, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+    out.setDevicePixelRatio(2.0)
+    return out
 
 
 def _configure_progress(bar: QProgressBar) -> None:
@@ -1340,7 +1378,9 @@ class FlashPage(QWidget):
                         break
         copy = getattr(self, "_wait_copy", "")
         from ..branding import is_generic_mtk_brand
+        from .. import paths
         is_mtk = is_generic_mtk_brand()
+        is_linux_host = sys.platform.startswith("linux") or platform.system() == "Linux"
 
         is_power_off = (
             bool(model)
@@ -1379,11 +1419,17 @@ class FlashPage(QWidget):
             from ..paths import RESOURCES_DIR
 
             dark_theme = is_dark()
+            txt = QColor()
             try:
                 pal = self.palette()
                 bg = pal.color(QPalette.ColorRole.Window)
                 txt = pal.color(QPalette.ColorRole.WindowText)
-                if bg.isValid() and bg.lightness() < 128:
+                if is_linux_host:
+                    # Distros may set an explicit Qt scheme that disagrees with
+                    # perceived window brightness; keep illustration polarity
+                    # aligned with the foreground role used to tint it.
+                    dark_theme = txt.isValid() and txt.lightness() > 160
+                elif bg.isValid() and bg.lightness() < 128:
                     dark_theme = True
                 elif txt.isValid() and txt.lightness() > 160:
                     dark_theme = True
@@ -1411,6 +1457,14 @@ class FlashPage(QWidget):
                 pix = QPixmap(str(img_path))
                 if not pix.isNull():
                     scaled = pix.scaledToHeight(60, Qt.TransformationMode.SmoothTransformation)
+
+                    # Keep the source to reapply the desktop text colour after
+                    # a palette switch; recoloring stays in the renderer below.
+                    img_label.setProperty("_hint_source", scaled)
+
+                    pal = img_label.palette()
+                    pal.setBrush(QPalette.ColorRole.Window, QColor(Qt.GlobalColor.transparent))
+                    img_label.setPalette(pal)
                     img_label.setPixmap(scaled)
                     img_label.setFixedSize(scaled.size())
                     img_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
@@ -1422,14 +1476,23 @@ class FlashPage(QWidget):
                     img_label.setFixedSize(0, 0)
                     if host is not None:
                         host.setMinimumHeight(0)
-            else:
-                img_label.setVisible(False)
-                img_label.setFixedSize(0, 0)
-                if host is not None:
-                    host.setMinimumHeight(0)
 
         waiting = getattr(self, "_waiting_view", None)
         host.setVisible(waiting is not None and self._stack.currentWidget() is waiting)
+
+        # The palette can change while the same hint is visible. Keep the
+        # source artwork cached and recompute against the live Linux foreground.
+        if is_linux_host and wanted and img_label is not None and not img_label.pixmap().isNull():
+            from .icons import recolor_bright_pixels
+
+            target_colour = txt if txt.isValid() else QColor()
+            if not target_colour.isValid():
+                target_colour = QApplication.style().standardPalette().color(
+                    QPalette.ColorRole.Text
+                )
+            source = img_label.property("_hint_source")
+            if isinstance(source, QPixmap) and not source.isNull():
+                img_label.setPixmap(recolor_bright_pixels(source, target_colour))
 
     def show_downloading(self):
         val = self._package_name or "\u2014"
@@ -2320,6 +2383,14 @@ class FlashPage(QWidget):
         self._raw_method = str(method or "").strip().lower()
         self._method = normalise_method(method)
 
+    def set_bundled_run(self, enabled: bool) -> None:
+        """Record that this run installs the firmware bundled next to the app."""
+        self._bundled_run = bool(enabled)
+
+    def set_rockbox_site_themes(self, enabled: bool) -> None:
+        """Record that this run installs a Rockbox build whose themes live on themes.rockbox.org."""
+        self._rockbox_site_themes = bool(enabled)
+
     def _initsteps_image(self):
         if paths.IS_MAC:
             return "initsteps.png"
@@ -2771,6 +2842,8 @@ class FlashPage(QWidget):
             getattr(self, "_theme_fallback_next_btn", None),
             getattr(self, "_theme_trouble_recover_btn", None),
             getattr(self, "_theme_back_btn", None),
+            getattr(self, "_stop_continue", None),
+            getattr(self, "_stop_back", None),
             getattr(self, "_stop_continue", None),
             getattr(self, "_stop_back", None),
         ):

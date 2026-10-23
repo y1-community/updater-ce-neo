@@ -35,6 +35,37 @@ IS_MAC = sys.platform == "darwin"
 IS_WINDOWS = sys.platform == "win32" or platform.system() == "Windows"
 
 
+def recolor_bright_pixels(pixmap: QPixmap, color: str | QColor) -> QPixmap:
+    """Replace near-white artwork with ``color`` and preserve the remaining image.
+
+    The Linux paperclip illustrations use white strokes and a white canvas with
+    black text/details. Map the white pixels to the desktop foreground and keep
+    all dark artwork as-is; intermediate pixels retain their antialiasing as
+    alpha instead of making black lettering transparent.
+    """
+    if pixmap.isNull():
+        return pixmap
+    qcolor = QColor(color) if isinstance(color, str) else QColor(color)
+    if not qcolor.isValid():
+        return pixmap
+    image = pixmap.toImage().convertToFormat(QImage.Format.Format_ARGB32)
+    dpr = pixmap.devicePixelRatio()
+    threshold = 192
+    for y in range(image.height()):
+        for x in range(image.width()):
+            px = QColor(image.pixel(x, y))
+            if not px.alpha():
+                continue
+            brightness = min(px.red(), px.green(), px.blue())
+            if brightness < threshold:
+                continue
+            alpha = px.alpha() * brightness // 255
+            image.setPixelColor(x, y, QColor(qcolor.red(), qcolor.green(), qcolor.blue(), alpha))
+    result = QPixmap.fromImage(image)
+    result.setDevicePixelRatio(dpr)
+    return result
+
+
 def tint_pixmap(pixmap: QPixmap, color: str | QColor) -> QPixmap:
     """Tint a monochrome glyph or icon pixmap to target color preserving alpha and DPI."""
     if pixmap.isNull():
@@ -51,7 +82,7 @@ def tint_pixmap(pixmap: QPixmap, color: str | QColor) -> QPixmap:
     p.end()
     return tinted
 
-# Fallback clean vector SVG definitions (stroke: currentColor / white)
+# Fallback clean vector SVG definitions (stroke color is supplied by the active palette)
 _SVG_TEMPLATES = {
     "install": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>

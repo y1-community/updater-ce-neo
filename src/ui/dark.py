@@ -697,16 +697,17 @@ class _Tokens:
         self.bg_nav = window.name()
         self.bg_status = button.name()
         self.bg_tooltip = color(QPalette.ColorRole.ToolTipBase, self.bg_card).name()
-        # Text roles: preserve desktop colors but ensure minimum contrast floor for WCAG AAA
-        if dark and window_text.lightness() < 200:
-            window_text = QColor("#ffffff")
-        text_col = color(QPalette.ColorRole.Text, self.fg)
-        if dark and text_col.lightness() < 200:
-            text_col = QColor("#f9fafb")
+        # Keep the desktop's text roles exactly: Plasma, GNOME and other
+        # Linux desktops deliberately choose their foregrounds for their own
+        # surfaces, and replacing them with generic white/black breaks custom
+        # theme colors in labels, controls, combo boxes and icons.
+        text_col = color(QPalette.ColorRole.Text, window_text.name())
+        button_text = color(QPalette.ColorRole.ButtonText, window_text.name())
+        placeholder = color(QPalette.ColorRole.PlaceholderText, text_col.name())
 
         self.fg = window_text.name()
         self.fg_dim = text_col.name()
-        self.fg_muted = color(QPalette.ColorRole.PlaceholderText, self.fg_dim).name()
+        self.fg_muted = placeholder.name()
         self.subtext = self.fg_muted
         self.border = color(QPalette.ColorRole.Mid, self.border).name()
         self.border_strong = color(QPalette.ColorRole.Dark, self.border_strong).name()
@@ -744,8 +745,8 @@ class _Tokens:
             ).name()
 
         def readable(hue: str) -> str:
-            color = QColor(hue)
-            return color.lighter(150).name() if dark else color.darker(160).name()
+            color_obj = QColor(hue)
+            return color_obj.lighter(150).name() if dark else color_obj.darker(160).name()
 
         ok, warn, danger = "#10b981", "#f59e0b", "#ef4444"
         ok_bg, warn_bg, danger_bg = mix(ok, 0.22), mix(warn, 0.22), mix(danger, 0.22)
@@ -763,6 +764,21 @@ class _Tokens:
         self.progress_ok = ok
         self.progress_err = danger
 
+        # Combo boxes on Linux read most of their painting colours from the
+        # combo widget's own palette (text, window text, base, button) rather
+        # than from the desktop's own palette directly. Pin those roles to the
+        # desktop palette here so the combo matches the rest of the host app
+        # instead of carrying a hard-coded dark-on-dark or light-on-light pair.
+        self._linux_combo_window_text = window_text.name()
+        self._linux_combo_text = text_col.name()
+        self._linux_combo_button_text = button_text.name()
+        self._linux_combo_base = base.name()
+        self._linux_combo_window = window.name()
+        self._linux_combo_highlight = highlight.name()
+        self._linux_combo_highlight_text = highlighted_text.name()
+        # The popup rows use the desktop's Base, not a separately styled card.
+        self._linux_combo_view_base = base.name()
+
 
 class _ThemeState:
     """Singleton holding the current palette and tokens."""
@@ -778,6 +794,10 @@ class _ThemeState:
         self._pure_black = False
         if IS_LINUX and native_palette is not None:
             self.native_palette = QPalette(native_palette)
+            # On Linux the desktop palette drives foregrounds and controls,
+            # while the color-scheme hint still selects the corresponding app
+            # surfaces (including KDE custom surfaces with unusual lightness).
+            self._dark = is_system_dark_mode()
         use_native = (
             IS_LINUX
             and self.native_palette is not None
@@ -911,18 +931,48 @@ def _make_palette(
     native_palette: QPalette | None = None,
 ) -> QPalette:
     if IS_LINUX and native_palette is not None and _palette_is_dark(native_palette) == dark:
-        pal = QPalette(native_palette)
-        if dark:
-            # Enforce WCAG AAA contrast floor on dark surfaces
-            wt = pal.color(QPalette.WindowText)
-            if wt.lightness() < 200:
-                pal.setColor(QPalette.WindowText, QColor("#ffffff"))
-            txt = pal.color(QPalette.Text)
-            if txt.lightness() < 200:
-                pal.setColor(QPalette.Text, QColor("#f9fafb"))
-        return pal
+        # Preserve the whole Linux palette: native controls, selection colors,
+        # disabled colors and desktop-specific foregrounds are all deliberate.
+        return QPalette(native_palette)
     p = QPalette()
     t = _Tokens(dark, pure_black=pure_black)
+    if IS_LINUX and native_palette is not None:
+        pal = QPalette(native_palette)
+        # Take a palette snapshot before our app palette is replaced. Some
+        # Qt styles expose their full desktop palette only through this object.
+        t = _Tokens(dark, pure_black=pure_black, palette=pal, use_native_linux_colors=True)
+        for group in (QPalette.ColorGroup.Active, QPalette.ColorGroup.Inactive, QPalette.ColorGroup.Disabled):
+            for role, value in (
+                (QPalette.ColorRole.Window, t.bg),
+                (QPalette.ColorRole.WindowText, t._linux_combo_window_text),
+                (QPalette.ColorRole.Base, t.bg_input),
+                (QPalette.ColorRole.AlternateBase, t.bg_elev),
+                (QPalette.ColorRole.ToolTipBase, t.bg_tooltip),
+                (QPalette.ColorRole.ToolTipText, t._linux_combo_window_text),
+                (QPalette.ColorRole.Text, t._linux_combo_text),
+                (QPalette.ColorRole.Button, t.bg_card),
+                (QPalette.ColorRole.ButtonText, t._linux_combo_button_text),
+                (QPalette.ColorRole.Highlight, t.accent),
+                (QPalette.ColorRole.HighlightedText, t._linux_combo_highlight_text),
+                (QPalette.ColorRole.PlaceholderText, t.fg_muted),
+                (QPalette.ColorRole.Link, t._linux_combo_text),
+                (QPalette.ColorRole.LinkVisited, t._linux_combo_text),
+                (QPalette.ColorRole.Midlight, t.disabled),
+                (QPalette.ColorRole.Mid, t.border),
+                (QPalette.ColorRole.Dark, t.border_strong),
+            ):
+                pal.setColor(group, role, QColor(value))
+            if group == QPalette.ColorGroup.Disabled:
+                disabled_window = native_palette.color(group, QPalette.ColorRole.WindowText)
+                disabled_input = native_palette.color(group, QPalette.ColorRole.Text)
+                disabled_button = native_palette.color(group, QPalette.ColorRole.ButtonText)
+                if disabled_window.isValid():
+                    pal.setColor(group, QPalette.ColorRole.WindowText, disabled_window)
+                if disabled_input.isValid():
+                    pal.setColor(group, QPalette.ColorRole.Text, disabled_input)
+                if disabled_button.isValid():
+                    pal.setColor(group, QPalette.ColorRole.ButtonText, disabled_button)
+        return pal
     if dark:
         p.setColor(QPalette.Window, QColor(t.bg))
         p.setColor(QPalette.WindowText, QColor(t.fg))
@@ -1151,12 +1201,27 @@ def apply_readable_palette(widget, *, progress: bool = False) -> None:
         QPalette.ColorRole.HighlightedText,
         QPalette.ColorRole.PlaceholderText,
     )
+    foreground = T()
     for group in (
         QPalette.ColorGroup.Active,
         QPalette.ColorGroup.Inactive,
         QPalette.ColorGroup.Disabled,
     ):
         for role in roles:
+            if IS_LINUX and role in (
+                QPalette.ColorRole.WindowText,
+                QPalette.ColorRole.Text,
+                QPalette.ColorRole.ButtonText,
+            ):
+                source_role = {
+                    QPalette.ColorRole.WindowText: "_linux_combo_window_text",
+                    QPalette.ColorRole.Text: "_linux_combo_text",
+                    QPalette.ColorRole.ButtonText: "_linux_combo_button_text",
+                }[role]
+                value = getattr(foreground, source_role, "")
+                if value:
+                    pal.setColor(group, role, QColor(value))
+                    continue
             pal.setColor(group, role, src.color(group, role))
     if progress:
         # The percent uses the theme foreground: dark on light, light on dark.
@@ -1719,18 +1784,115 @@ def theme_fingerprint(app: QApplication | None = None, *, platform_dark: bool = 
     )
 
 
+def configure_combo_palette(combo):
+    """Refresh a QComboBox's own palette from the live theme tokens.
+
+    A combo that only keeps its desktop palette will repaint its dropdown arrow
+    and text using hard-coded host colours (white on dark, black on light),
+    which is what leaves white text on a dark combo and black text on a light
+    combo on Linux. The roles below are the ones Qt asks the combo widget's
+    palette for when it paints the editable portion and the arrow. On Linux,
+    where the desktop palette drove token selection, those desktop-derived roles
+    are preferred so the combo matches the rest of the host app instead of any
+    static light-on-dark or dark-on-light fallback pair.
+    """
+    app = QApplication.instance()
+    if app is None or combo is None:
+        return
+    t = T()
+    pal = combo.palette()
+    # Combo-box text and glyphs are painted from its own palette. Preserve the
+    # desktop's separate WindowText/Text/ButtonText roles instead of applying
+    # a fixed generic foreground to the control.
+    if IS_LINUX and getattr(t, "_linux_combo_text", None):
+        role_colors = {
+            QPalette.ColorRole.WindowText: QColor(t._linux_combo_window_text),
+            QPalette.ColorRole.Text: QColor(t._linux_combo_text),
+            QPalette.ColorRole.ButtonText: QColor(t._linux_combo_button_text),
+        }
+    else:
+        fg = QColor(getattr(t, "fg", "#000000"))
+        role_colors = {
+            QPalette.ColorRole.WindowText: fg,
+            QPalette.ColorRole.Text: fg,
+            QPalette.ColorRole.ButtonText: fg,
+        }
+    for group in (
+        QPalette.ColorGroup.Active,
+        QPalette.ColorGroup.Inactive,
+        QPalette.ColorGroup.Disabled,
+    ):
+        for role, role_color in role_colors.items():
+            pal.setColor(group, role, role_color)
+    combo.setPalette(pal)
+
+
+def configure_combo_view_palette(view):
+    """Refresh a QComboBox pop-up list's palette from the live theme tokens.
+
+    The drop-down view paints list rows from the view's palette. When that view
+    kept a stale dark Base, the menu becomes a black slab on a light desktop and
+    the reverse on a dark one. The roles below are the ones Qt asks the view for
+    when it paints rows. On Linux, where the desktop palette drove token
+    selection, the desktop-derived base/selection roles are preferred so the
+    menu matches the desktop's own lists.
+    """
+    app = QApplication.instance()
+    if app is None or view is None:
+        return
+    t = T()
+    vpal = view.palette()
+    # Prefer the host desktop base / text / selection roles on Linux.
+    if IS_LINUX and getattr(t, "_linux_combo_base", None):
+        base = QColor(t._linux_combo_view_base)
+        text = QColor(t._linux_combo_text)
+        highlight = QColor(t._linux_combo_highlight)
+        highlighted = QColor(t._linux_combo_highlight_text)
+    else:
+        base = QColor(t.bg_input)
+        text = QColor(getattr(t, "fg", "#000000"))
+        highlight = QColor(t.accent)
+        highlighted = QColor("#ffffff")
+    for group in (
+        QPalette.ColorGroup.Active,
+        QPalette.ColorGroup.Inactive,
+        QPalette.ColorGroup.Disabled,
+    ):
+        for role in (
+            QPalette.ColorRole.Window,
+            QPalette.ColorRole.WindowText,
+            QPalette.ColorRole.Base,
+            QPalette.ColorRole.Text,
+            QPalette.ColorRole.Highlight,
+            QPalette.ColorRole.HighlightedText,
+        ):
+            if role == QPalette.ColorRole.Base:
+                vpal.setColor(group, role, base)
+            elif role == QPalette.ColorRole.WindowText:
+                vpal.setColor(group, role, text)
+            elif role == QPalette.ColorRole.Text:
+                vpal.setColor(group, role, text)
+            elif role == QPalette.ColorRole.Highlight:
+                vpal.setColor(group, role, highlight)
+            elif role == QPalette.ColorRole.HighlightedText:
+                vpal.setColor(group, role, highlighted)
+            else:
+                vpal.setColor(group, role, text)
+    view.setPalette(vpal)
+
 def configure_native_combobox(combo, max_visible_items: int = 12) -> None:
     """Configure a QComboBox to match the desktop system font, use native popup widgets,
     and remain scrollable and constrained to an appropriate screen height when holding many items."""
     if combo is None:
         return
 
-    # Windows and macOS handle dropdown fonts and native rendering natively.
-    if IS_WINDOWS or IS_MACOS:
-        combo.setMaxVisibleItems(max_visible_items)
-        return
-
-    # On Linux: match the application font and text colors
+    # On every platform: keep the combo's own palette and the dropdown
+    # view/viewport in sync with the host theme. A combo whose popup kept
+    # a stale dark Base turns the menu into an unreadable black slab on a
+    # light desktop, and the reverse on a dark one. Windows and macOS still
+    # only cap the visible item count here — their styles paint text from
+    # the live palette — but the palette surfaces are refreshed as well so a
+    # theme change never leaves a mismatched popup behind.
     app = QApplication.instance()
     target_font = app.font() if app else QFontDatabase.systemFont(QFontDatabase.SystemFont.GeneralFont)
     if target_font and (not target_font.family() or target_font.pointSize() <= 0):
@@ -1738,34 +1900,14 @@ def configure_native_combobox(combo, max_visible_items: int = 12) -> None:
     if target_font:
         combo.setFont(target_font)
 
-    # Ensure palette text and window text match T().fg
-    try:
-        from .dark import T
-        t = T()
-        fg_color = QColor(getattr(t, "fg", "#000000"))
-        pal = combo.palette()
-        pal.setColor(QPalette.ColorRole.Text, fg_color)
-        pal.setColor(QPalette.ColorRole.WindowText, fg_color)
-        pal.setColor(QPalette.ColorRole.ButtonText, fg_color)
-        combo.setPalette(pal)
-    except Exception:
-        pass
+    configure_combo_palette(combo)
 
     combo.setMaxVisibleItems(max_visible_items)
     view = combo.view()
     if view is not None:
         if target_font:
             view.setFont(target_font)
-        try:
-            from .dark import T
-            t = T()
-            fg_color = QColor(getattr(t, "fg", "#000000"))
-            vpal = view.palette()
-            vpal.setColor(QPalette.ColorRole.Text, fg_color)
-            vpal.setColor(QPalette.ColorRole.WindowText, fg_color)
-            view.setPalette(vpal)
-        except Exception:
-            pass
+        configure_combo_view_palette(view)
         view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         view.setMaximumHeight(360)
@@ -1776,22 +1918,26 @@ def sync_cached_palettes(app: QApplication) -> None:
 
     Combo popups and scroll viewports keep their own palette. A dark Base
     left on those widgets is the black slab, and dark text on that Base is
-    why the dropdowns become unreadable after a live switch.
+    why the dropdowns become unreadable after a live switch. The combo itself
+    gets the lightweight combo palette (not the full readable one) so the
+    dropdown arrow and any text the style reads from the combo stay on theme.
     """
     from PySide6.QtWidgets import QAbstractScrollArea, QComboBox
 
     for widget in app.allWidgets():
         if isinstance(widget, QComboBox):
             configure_native_combobox(widget)
-            apply_readable_palette(widget)
+            configure_combo_palette(widget)
             view = widget.view()
             if view is not None:
-                apply_readable_palette(view)
+                configure_combo_view_palette(view)
                 viewport = view.viewport()
                 if viewport is not None:
                     apply_readable_palette(viewport)
                     viewport.setAutoFillBackground(True)
         elif isinstance(widget, QAbstractScrollArea):
+            if widget.styleSheet():
+                widget.setStyleSheet("")
             viewport = widget.viewport()
             if viewport is None:
                 continue
@@ -1799,6 +1945,11 @@ def sync_cached_palettes(app: QApplication) -> None:
             if base.alpha() == 0 or widget.autoFillBackground():
                 apply_readable_palette(viewport)
                 viewport.setAutoFillBackground(True)
+            elif base.alpha() > 200 and base.lightness() > 40:
+                # Already a light surface, keep it native so the scrollbars
+                # stay platform-drawn and the card's glass overlay does not turn
+                # the area into a solid frame.
+                pass
     try:
         from .glass import arm_combo_popups
         arm_combo_popups(app)

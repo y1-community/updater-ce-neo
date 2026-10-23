@@ -33,6 +33,7 @@ from PySide6.QtCore import (
     QEasingCurve,
     QEvent,
     QEventLoop,
+    QPoint,
     QPropertyAnimation,
     QSettings,
     QSize,
@@ -128,7 +129,6 @@ from .support_page import SupportPage
 from .icons import get_symbol_icon
 from .widgets import CurrentPageStack
 from .sidebar import SidebarButton, sidebar_row_min_height, sidebar_row_spacing
-from .widgets import CurrentPageStack
 
 logger = logging.getLogger(__name__)
 
@@ -286,6 +286,23 @@ class DraggableHeaderBar(QWidget):
         self._drag_offset = None
         super().mouseReleaseEvent(event)
 
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.LeftButton and not caption_drag_blocked(
+            self.childAt(event.position().toPoint())
+        ):
+            win = self.window()
+            if win is not None:
+                if win.isMaximized():
+                    win.showNormal()
+                else:
+                    win.showMaximized()
+                controls = getattr(win, "_window_controls", None)
+                if controls is not None:
+                    controls.set_state(bool(win.isMaximized()))
+                event.accept()
+                return
+        super().mouseDoubleClickEvent(event)
+
 
 def caption_drag_blocked(widget) -> bool:
     """True when a title-band control must keep the click for itself."""
@@ -407,15 +424,25 @@ def title_content_right_margin(window_width: int, bounds, *, fallback: int = 138
 
 def can_inline_title_with_window_controls() -> bool:
     """Return True if the current platform/DE supports inlining custom title/controls seamlessly."""
+    if os.environ.get("UPDATER_TRADITIONAL_TITLE") == "1":
+        return False
     if sys.platform == "darwin":
         return True
     if sys.platform == "win32" or platform.system() == "Windows":
         return True
     if os.environ.get("UPDATER_INLINE_TITLE") == "1":
         return True
-    if os.environ.get("UPDATER_TRADITIONAL_TITLE") == "1":
-        return False
-    # Linux uses the desktop's own window frame so GTK/Plasma decorations apply.
+    # On Linux desktops (KDE Plasma, GNOME, Cinnamon, XFCE), integrate seamlessly
+    # when running in an active graphical desktop environment.
+    desktop = (
+        os.environ.get("XDG_CURRENT_DESKTOP")
+        or os.environ.get("DESKTOP_SESSION")
+        or ""
+    ).lower()
+    if any(k in desktop for k in ("kde", "plasma", "gnome", "cinnamon", "xfce", "unity", "deepin", "mate")):
+        return True
+    if os.environ.get("KDE_FULL_SESSION") == "true":
+        return True
     return False
 
 
@@ -557,6 +584,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
+        self._gui_current_identity = None
         self.settings = QSettings("innioasis", "updater")
         translator().set_language(
             initial_language(str(self.settings.value("language", "") or ""))
@@ -568,9 +596,28 @@ class MainWindow(QMainWindow):
             if icon.exists():
                 self.setWindowIcon(QIcon(str(icon)))
         self.setWindowTitle(self._window_title_for_activity(tr("sel_title")))
-        flags = self.windowFlags() | Qt.WindowCloseButtonHint | Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint
+        
+        # On Linux with custom window controls, hide the system frame for a
+        # seamless appearance. The app draws its own min/max/close buttons and
+        # handles dragging via the header bar.
+        is_linux_inline = (
+            sys.platform.startswith("linux") or platform.system() == "Linux"
+        ) and can_inline_title_with_window_controls()
+        if is_linux_inline:
+            flags = Qt.FramelessWindowHint | Qt.WindowCloseButtonHint
+        else:
+            flags = (
+                self.windowFlags()
+                | Qt.WindowCloseButtonHint
+                | Qt.WindowMinimizeButtonHint
+            )
         self.setWindowFlags(flags)
-        ensure_window_maximize_enabled(self)
+        
+        # On Linux with frameless windows, install an event filter to handle
+        # edge-based resizing (since there's no system frame to handle it).
+        if is_linux_inline:
+            self._install_frameless_resize_handler()
+        
         self.resize(*default_window_size())
         self.setMinimumSize(MINIMUM_WINDOW_WIDTH, MINIMUM_WINDOW_HEIGHT)
 
@@ -676,6 +723,10 @@ class MainWindow(QMainWindow):
                 self._sp_history_sync_token = token
         except Exception:
             pass
+
+    def _on_gui_target_identity_changed(self) -> None:
+        """Downstream reaction to the selection settling on a different package."""
+        pass
 
     def _local_paths_from_mime(self, mime) -> list[Path]:
         paths = []
@@ -1116,24 +1167,37 @@ class MainWindow(QMainWindow):
         self._paint_opaque(bar)
         is_mac = sys.platform == "darwin"
         is_win = sys.platform == "win32" or platform.system() == "Windows"
+        is_linux = sys.platform.startswith("linux") or platform.system() == "Linux"
         controls_left = are_window_controls_on_left()
 
         # The window is all client area, so the caption never draws the system
         # min/max/close buttons over it: DWM still reports their rectangle and
-        # paints nothing there. On Windows the header therefore draws them
+        # paints nothing there. On Windows and Linux the header draws them
         # itself, flush with the trailing edge, and reserves no margin for
-        # buttons that would never appear. macOS keeps its native traffic
-        # lights; Linux keeps its window manager's decorations.
+        # buttons that would never appear. macOS keeps its native traffic lights.
+        #
+        # The maximise button is disabled everywhere: maximising wastes screen
+        # real estate — the sidebar, dropdown, button and icon copy is laid out
+        # for the compact window, not a full-screen plate. Show the button only
+        # when the host forces its own title bar (system decorations on Linux
+        # that we did not opt into, or traditional title mode), where hiding the
+        # glyph would contradict the frame the user asked for; otherwise leave
+        # only min + close so the user cannot throw the app full-screen.
+        from .window_controls import CaptionControlButton
         from .window_controls import WindowControls
 
         self._window_controls = (
             WindowControls(self)
-            if is_win and not controls_left and can_inline_title_with_window_controls()
+            if (is_win or is_linux) and not controls_left and can_inline_title_with_window_controls()
             else None
         )
+        _max_allowed = not (is_mac or (is_linux and self._window_controls is not None))
+        if self._window_controls is not None:
+            CaptionControlButton.maximise_allowed = _max_allowed
+            self._window_controls.set_maximise_allowed(_max_allowed)
 
         left_margin = (84 if is_mac else 70) if controls_left else 18
-        right_margin = 24 if controls_left else (120 if is_win else 90)
+        right_margin = 24 if controls_left else (120 if is_win else (0 if self._window_controls is not None else 90))
         if self._window_controls is not None:
             right_margin = 0
 
@@ -1463,6 +1527,197 @@ class MainWindow(QMainWindow):
         harmonise_window_plates(self)
 
 
+    def _install_frameless_resize_handler(self):
+        """Install an event filter to handle edge-based resizing for frameless windows on Linux.
+        
+        Frameless windows don't have a system frame to handle resizing, so we need to
+        implement it ourselves by detecting mouse position near window edges and
+        adjusting the cursor accordingly.
+        """
+        self._resize_edge_size = 8  # pixels from edge that triggers resize
+        self._resize_edge = None  # current resize edge being dragged
+        self._resize_start_pos = None
+        self._resize_start_size = None
+        
+        # Install event filter on the window to handle mouse events for resizing
+        self.installEventFilter(self)
+    
+    def eventFilter(self, obj, event):
+        """Handle mouse events for edge-based resizing on frameless windows."""
+        if not (sys.platform.startswith("linux") or platform.system() == "Linux"):
+            return super().eventFilter(obj, event)
+        
+        # Only handle events for our own window
+        if obj is not self:
+            return super().eventFilter(obj, event)
+        
+        # Check if we have custom window controls (frameless mode)
+        if not (hasattr(self, "_window_controls") and self._window_controls is not None):
+            return super().eventFilter(obj, event)
+        
+        if event.type() == QEvent.Type.MouseMove:
+            self._handle_frameless_mouse_move(event)
+            return True
+        elif event.type() == QEvent.Type.MouseButtonPress:
+            self._handle_frameless_mouse_press(event)
+            return True
+        elif event.type() == QEvent.Type.MouseButtonRelease:
+            self._handle_frameless_mouse_release(event)
+            return True
+        
+        return super().eventFilter(obj, event)
+    
+    def _get_frameless_resize_edge(self, pos: QPoint) -> int | None:
+        """Determine which edge/corner the mouse is near for resizing.
+        
+        Returns a bitmask of resize directions or None if not near an edge.
+        Uses simple integer flags for compatibility.
+        """
+        rect = self.rect()
+        edge_size = self._resize_edge_size
+        x, y = pos.x(), pos.y()
+        
+        near_left = x < edge_size
+        near_right = x >= rect.width() - edge_size
+        near_top = y < edge_size
+        near_bottom = y >= rect.height() - edge_size
+        
+        # Skip resize edges in the header area (top 44px) to allow dragging
+        if y < int(HEADER_CONTENT_HEIGHT):
+            near_top = False
+        
+        # Use bitmask flags for resize edges
+        edge = 0
+        if near_left:
+            edge |= 1  # Left
+        if near_right:
+            edge |= 2  # Right
+        if near_top:
+            edge |= 4  # Top
+        if near_bottom:
+            edge |= 8  # Bottom
+        
+        return edge if edge else None
+    
+    def _is_maximized(self) -> bool:
+        """Check if the window is currently maximized."""
+        try:
+            return self.isMaximized()
+        except Exception:
+            return False
+    
+    def _handle_frameless_mouse_move(self, event):
+        """Handle mouse move for edge-based resizing."""
+        pos = event.position().toPoint() if hasattr(event, "position") else event.globalPos()
+        
+        # Don't resize when maximized
+        if self._is_maximized():
+            self.unsetCursor()
+            return
+        
+        if self._resize_edge is not None and event.buttons() & Qt.LeftButton:
+            # Resizing
+            self._resize_from_edge(pos)
+            return
+        
+        # Update cursor based on position
+        edge = self._get_frameless_resize_edge(pos)
+        if edge is not None:
+            self._set_resize_cursor(edge)
+        else:
+            self.unsetCursor()
+    
+    def _handle_frameless_mouse_press(self, event):
+        """Handle mouse press for starting edge-based resizing."""
+        if event.button() != Qt.LeftButton:
+            return
+        
+        # Don't resize when maximized
+        if self._is_maximized():
+            return
+        
+        pos = event.position().toPoint() if hasattr(event, "position") else event.globalPos()
+        
+        edge = self._get_frameless_resize_edge(pos)
+        if edge is not None:
+            self._resize_edge = edge
+            self._resize_start_pos = pos
+            self._resize_start_size = self.size()
+            self.setCursor(self._get_resize_cursor_for_edge(edge))
+            event.accept()
+    
+    def _handle_frameless_mouse_release(self, event):
+        """Handle mouse release for ending edge-based resizing."""
+        if self._resize_edge is not None:
+            self._resize_edge = None
+            self._resize_start_pos = None
+            self._resize_start_size = None
+            self.unsetCursor()
+            event.accept()
+    
+    def _resize_from_edge(self, current_pos: QPoint):
+        """Perform the actual resize based on the current edge being dragged."""
+        if self._resize_edge is None or self._resize_start_size is None:
+            return
+        
+        dx = current_pos.x() - self._resize_start_pos.x()
+        dy = current_pos.y() - self._resize_start_pos.y()
+        
+        new_width = self._resize_start_size.width()
+        new_height = self._resize_start_size.height()
+        
+        edge = self._resize_edge
+        
+        # Calculate new dimensions based on which edge(s) are being dragged
+        # edge bitmask: 1=Left, 2=Right, 4=Top, 8=Bottom
+        if edge & 1:  # Left
+            new_width = max(self.minimumWidth(), self._resize_start_size.width() - dx)
+        if edge & 2:  # Right
+            new_width = max(self.minimumWidth(), self._resize_start_size.width() + dx)
+        if edge & 4:  # Top
+            new_height = max(self.minimumHeight(), self._resize_start_size.height() - dy)
+        if edge & 8:  # Bottom
+            new_height = max(self.minimumHeight(), self._resize_start_size.height() + dy)
+        
+        # Also adjust position for top/left edges
+        if edge & 1:  # Left
+            new_x = self.x() + dx
+            if new_x < 0:
+                new_x = 0
+            self.move(new_x, self.y())
+        if edge & 4:  # Top
+            new_y = self.y() + dy
+            if new_y < 0:
+                new_y = 0
+            self.move(self.x(), new_y)
+        
+        self.resize(new_width, new_height)
+    
+    def _set_resize_cursor(self, edge: int):
+        """Set the appropriate cursor for the given resize edge."""
+        cursor = self._get_resize_cursor_for_edge(edge)
+        self.setCursor(cursor)
+    
+    def _get_resize_cursor_for_edge(self, edge: int) -> Qt.CursorShape:
+        """Get the cursor shape for a given resize edge.
+        
+        edge bitmask: 1=Left, 2=Right, 4=Top, 8=Bottom
+        """
+        # Check for corners first (combinations)
+        if edge == (1 | 4):  # Top-Left
+            return Qt.CursorShape.SizeFDiagCursor
+        elif edge == (2 | 4):  # Top-Right
+            return Qt.CursorShape.SizeBDiagCursor
+        elif edge == (1 | 8):  # Bottom-Left
+            return Qt.CursorShape.SizeBDiagCursor
+        elif edge == (2 | 8):  # Bottom-Right
+            return Qt.CursorShape.SizeFDiagCursor
+        elif edge == 1 or edge == 2:  # Left or Right
+            return Qt.CursorShape.SizeHorCursor
+        elif edge == 4 or edge == 8:  # Top or Bottom
+            return Qt.CursorShape.SizeVerCursor
+        return Qt.CursorShape.ArrowCursor
+    
     def _connect_signals(self):
         self.sweep_report.connect(self._on_sweep_report)
         self._select_page.package_selected.connect(self._on_package_selected)
@@ -2107,6 +2362,42 @@ class MainWindow(QMainWindow):
             except Exception:
                 bundled_rockbox = False
         return bool(bundled_rockbox or (is_rockbox and not is_240p) or (local_checked and model == "Y1")), model
+
+    def _rockbox_240p_detected(self) -> bool:
+        """Whether this run installs a 240p Rockbox ROM (theme-site note, no bundled push)."""
+        from ..fw_package import rockbox_240p_package_name
+
+        name = str(getattr(self, "_package_name", "") or "")
+        path = str(getattr(self, "_package_path", "") or "")
+        page = getattr(self, "_select_page", None)
+        info = getattr(page, "current_installed_release_info", lambda: None)() or {}
+        slug = str(info.get("package_slug", "") or "")
+        asset_name = str(info.get("asset_name", "") or "")
+        release_label = str(info.get("release_label", "") or "")
+        selected_rel = getattr(page, "_current_selected_rel", None) if page else None
+        if selected_rel:
+            asset_name = str(selected_rel.get("asset_name", asset_name) or asset_name)
+            release_label = str(selected_rel.get("release_label", release_label) or release_label)
+        fw_names: list[str] = []
+        fw_pkg = getattr(page, "_fw_package", None)
+        if fw_pkg is not None:
+            fw_names.append(str(getattr(fw_pkg, "name", "") or ""))
+            try:
+                folder = getattr(fw_pkg, "folder", None)
+                if folder is not None:
+                    fw_names.append(Path(folder).name)
+                scatter = getattr(fw_pkg, "scatter", None)
+                if scatter is not None:
+                    fw_names.append(Path(scatter).name)
+            except Exception:
+                pass
+        if str(info.get("selected_resolution", "")).lower() == "240p" and any(
+            "rockbox" in str(v).lower() for v in (name, path, slug, asset_name, release_label, *fw_names)
+        ):
+            return True
+        return rockbox_240p_package_name(
+            name, path, slug, asset_name, release_label, *fw_names
+        )
 
     @staticmethod
     def _rockbox_power_on_prompt_key(model: str) -> str:
@@ -2912,6 +3203,18 @@ class MainWindow(QMainWindow):
         self._package_path = path
         self._package_name = name
         self._package_model = model or ""
+        # Choosing a new firmware replaces the saved set: the chosen package's
+        # archive and extracted files are kept, older ones are removed.
+        if path and Path(path).is_file():
+            from ..flash_service import prune_extracted_cache
+            prune_extracted_cache(keep_package_path=path)
+        # Only the auto-started ROM-bundled run ends on Retry or Quit.
+        self._bundled_firmware_run = bool(path) and path == getattr(self, "_bundled_package_path", None)
+        if hasattr(self, "_flash_page"):
+            self._flash_page.set_bundled_run(self._bundled_firmware_run)
+        self._is_240p_rockbox = False
+        if hasattr(self, "_flash_page"):
+            self._flash_page.set_rockbox_site_themes(False)
         self._pre_install_guided = False
         self._cache_recovery_needed = False
         self._fallback_attempted = False
@@ -3177,6 +3480,17 @@ class MainWindow(QMainWindow):
         self._flash_page.update_prep_progress(1)
         self._flash_page.set_prep_eta_seconds(0)
         self._append_log(tr(prep_copy))
+        if backend_method(self._flash_method) == METHOD_MTK:
+            # MTKClient talks to the player through libusb as the normal user:
+            # there is nothing to elevate and no system change to make, so no
+            # password prompt is shown for an MTKClient install. SP Flash Tool
+            # still gets its one-time setup when the run falls back to it.
+            try:
+                linux_sp_flash.silent_system_prep()
+            except Exception as exc:
+                logger.info("Optional Linux user-space prep did not complete: %s", exc)
+            self._linux_permission_pending = False
+            return True
         try:
             # Ordinary user-space pieces never need elevation.
             linux_sp_flash.silent_system_prep()
@@ -3209,7 +3523,17 @@ class MainWindow(QMainWindow):
 
         self._linux_permission_pending = False
         self._linux_permission_confirmed = True
-        self._flash_page.leave_power_off_prompt()
+        # The system password dialog opens over this card, so say what it is
+        # for instead of leaving the generic "please wait" line up while the
+        # user is being asked to authenticate. This is the SP Flash Tool setup
+        # step only; MTKClient installs never reach it.
+        self._flash_page.show_entering_password()
+        try:
+            from PySide6.QtWidgets import QApplication
+
+            QApplication.processEvents()
+        except Exception:
+            pass
         try:
             fixed, detail = linux_sp_flash.auto_fix_permissions()
         except Exception as exc:
@@ -3308,6 +3632,20 @@ class MainWindow(QMainWindow):
 
     def _on_install_done(self) -> None:
         """Leave the completed install and reopen the catalogue the run started from."""
+        if getattr(self, "_bundled_firmware_run", False):
+            if getattr(self, "_is_240p_rockbox", False):
+                # Pre-packaged 240p Rockbox: the check button finishes by quitting the app.
+                self._flash_page.show_completion_appeal(False)
+                self._quit_after_bundled_run()
+                return
+            # ROM-bundled portable run: stay on the run's card (Retry or Quit), never Select.
+            self._flash_page.stop_theme_workers()
+            self._rockbox_themes_flow_active = False
+            self._run_output_open = False
+            self._download_active = False
+            self._flash_page.show_completion_appeal(False)
+            self._flash_page.show_flashing()
+            return
         section = getattr(self, "_catalogue_section", "online") or "online"
         self._flash_page.stop_theme_workers()
         self._rockbox_power_on_pending = False
@@ -3486,10 +3824,6 @@ class MainWindow(QMainWindow):
             )
         except Exception as e:
             logger.debug("Could not pre-update SP history.ini in _begin_flash_flow: %s", e)
-        # A new install replaces the saved firmware set: the installed package's
-        # archive and extracted files are kept, older ones are removed.
-        from ..flash_service import prune_extracted_cache
-        prune_extracted_cache(keep_package_path=self._package_path)
         da_file, auth_file = self._flash_inputs()
         self.service.start_flash(
             self._package_path,
@@ -3839,13 +4173,15 @@ class MainWindow(QMainWindow):
         pkg_low = (self._package_name or "").lower()
         path_low = (self._package_path or "").lower()
         is_target_rockbox = "rockbox" in pkg_low or "rockbox" in path_low
+        is_240p_rockbox = self._rockbox_240p_detected()
 
         self._is_360p_rockbox = is_360p_rockbox
+        self._is_240p_rockbox = is_240p_rockbox
         self._rockbox_power_on_pending = False
         self._rockbox_power_on_model = ""
         self._download_active = False
 
-        if is_360p_rockbox or (is_target_rockbox and eff_model in ("Y1", "Y2")):
+        if is_360p_rockbox or (is_target_rockbox and not is_240p_rockbox and eff_model in ("Y1", "Y2")):
             self._nav_to_page(_PAGE_FLASH)
             self._rockbox_themes_flow_active = True
             self._show_rockbox_power_on_prompt(eff_model)
@@ -3863,6 +4199,7 @@ class MainWindow(QMainWindow):
             self._sync_install_nav_entry()
             self._flash_page.show_flashing()
             self._flash_page.set_device_done()
+            self._flash_page.set_rockbox_site_themes(is_240p_rockbox)
             self._flash_page.show_completion_appeal(False)
             self._apply_release_icon(complete=True)
             self._nav_to_page(_PAGE_FLASH)
@@ -4066,9 +4403,6 @@ class MainWindow(QMainWindow):
         """
         if paths.IS_MAC:
             return ""
-        if paths.IS_WINDOWS and windows_only_method() == METHOD_SP:
-            # x86/x64 Windows uses SP Flash Tool exclusively; no failover to MTKClient.
-            return ""
         current = backend_method(method)
         if current == METHOD_SP:
             return METHOD_MTK
@@ -4153,12 +4487,15 @@ class MainWindow(QMainWindow):
             error_code,
             candidate,
         )
-        prompt_key = "err_connect_failover_recovery"
-        prompt_kwargs = {
-            "failed": _method_label(backend_method(self._flash_method)),
-            "next": _method_label(candidate),
-            "error_code": str(error_code or ""),
-        }
+        if is_connect_failure(error_code):
+            prompt_key = "err_connect_failover_recovery"
+            prompt_kwargs = {
+                "failed": _method_label(backend_method(self._flash_method)),
+                "next": _method_label(candidate),
+            }
+        else:
+            prompt_key = "err_usb_disconnected_recovery"
+            prompt_kwargs = {}
         self._return_to_power_off_stage(
             candidate, recovery=True, prompt_key=prompt_key, prompt_kwargs=prompt_kwargs
         )
@@ -4182,18 +4519,6 @@ class MainWindow(QMainWindow):
                 FlashState.S5_COMPLETE,
             ):
                 self.sm.reset_for_retry()
-            package = Path(getattr(self._select_page, "_current_package_path", "") or "")
-            if package.is_file() and package.suffix.lower() in (".zip", ".rar"):
-                from ..flash_service import compute_extract_dir
-                from ..downloads import downloads_dir
-                extract_dir = Path(compute_extract_dir(str(package)))
-                try:
-                    extract_dir.relative_to(downloads_dir())
-                    if extract_dir.is_dir() and extract_dir.name.startswith(".") and extract_dir.name.endswith("_extracted"):
-                        import shutil
-                        shutil.rmtree(extract_dir)
-                except (OSError, ValueError):
-                    logger.info("Could not invalidate incomplete firmware cache %s", extract_dir, exc_info=True)
             self._cache_recovery_needed = False
             if getattr(self._select_page, "_current_selected_rel", None) is None:
                 self._return_to_select_software()
@@ -4425,6 +4750,10 @@ class MainWindow(QMainWindow):
 
     def _return_to_select_software(self) -> None:
         """Stop the run and select Select Software. Install Software does not stay selected."""
+        if getattr(self, "_bundled_firmware_run", False):
+            # ROM-bundled portable run: X / cancel quits the app instead.
+            self._quit_after_bundled_run()
+            return
         if getattr(self, "_returning_to_select", False):
             return
         self._returning_to_select = True
@@ -4433,6 +4762,12 @@ class MainWindow(QMainWindow):
             self._reset_after_run()
         finally:
             self._returning_to_select = False
+
+    def _quit_after_bundled_run(self) -> None:
+        """Stop the ROM-bundled run and close the app. The stop prompt has already been answered."""
+        self._stop_running_install()
+        self._force_quit = True
+        self.close()
 
     def _on_cancel_flash(self):
         # Only the ✕ (confirm stop) button lands here, via the stop-check
@@ -4744,6 +5079,11 @@ class MainWindow(QMainWindow):
         page = getattr(self, "_select_page", None)
         target = page.gui_firmware_target() if page is not None and hasattr(page, "gui_firmware_target") else None
         available = bool(handoff or target)
+        if target and not handoff:
+            page._gui_previous_identity = page._release_identity(target)
+            self._gui_current_identity = page._gui_previous_identity
+        elif not target:
+            self._gui_current_identity = None
         settings_page = getattr(self, "_settings_page", None)
         setup_flow = bool(
             getattr(self, "_linux_setup_flow_active", False)
@@ -4918,6 +5258,8 @@ class MainWindow(QMainWindow):
         self._gui_handoff_prepare = False
         if not ok or not extract_dir:
             self._download_active = False
+            self._gui_ready = None
+            self._sync_sp_gui_button_visibility()
             self._nav_to_page(_PAGE_SELECT)
             logger.warning("Desktop tool package was not ready: %s", err)
             QMessageBox.warning(
@@ -4926,9 +5268,15 @@ class MainWindow(QMainWindow):
                 tr("gui_handoff_failed"),
             )
             return
-        scatter = _find_scatter(Path(extract_dir), allow_raise=False)
+        try:
+            scatter = _find_scatter(Path(extract_dir), allow_raise=False)
+        except Exception as e:
+            logger.debug("Could not find scatter in extract dir: %s", e, exc_info=True)
+            scatter = None
         if not scatter or not Path(scatter).is_file():
             self._download_active = False
+            self._gui_ready = None
+            self._sync_sp_gui_button_visibility()
             self._nav_to_page(_PAGE_SELECT)
             QMessageBox.warning(
                 self,
@@ -4943,15 +5291,18 @@ class MainWindow(QMainWindow):
             package_path = getattr(page, "_current_package_path", "") or ""
             name = getattr(page, "_current_package_name", "") or name
         model = self._package_model or ""
-        device_tracking.record_latest_package(
-            model=model,
-            software_name=name,
-            tag_name="",
-            package_path=package_path,
-            extract_dir=str(Path(extract_dir).resolve()),
-            scatter_path=str(Path(scatter).resolve()),
-            settings=self.settings,
-        )
+        try:
+            device_tracking.record_latest_package(
+                model=model,
+                software_name=name,
+                tag_name="",
+                package_path=package_path,
+                extract_dir=str(Path(extract_dir).resolve()),
+                scatter_path=str(Path(scatter).resolve()),
+                settings=self.settings,
+            )
+        except Exception as e:
+            logger.debug("Could not record latest package: %s", e, exc_info=True)
         self._gui_ready = (Path(scatter), Path(extract_dir), model)
         try:
             from ..sp_flash_gui import find_sp_flash_tool_dirs, stage_history_before_launch, update_sp_history_ini
@@ -5062,7 +5413,7 @@ class MainWindow(QMainWindow):
         """When a bundled firmware package (scatter in SP_Flash_Tool or next to macOS .app)
         is detected, stage files to the app's working directory, prime SP Flash Tool history.ini,
         and automatically transition into the Install Software screen."""
-        from ..fw_package import find_bundled_firmware, stage_bundled_firmware
+        from ..fw_package import find_bundled_firmware, package_install_heading, stage_bundled_firmware
 
         try:
             pkg = find_bundled_firmware()
@@ -5079,7 +5430,7 @@ class MainWindow(QMainWindow):
 
             # 2. Configure package details in Select page and Main window
             package_path = str(staged_scatter)
-            package_name = pkg.display_name or pkg.name or "Firmware"
+            package_name = package_install_heading(pkg)
             package_model = pkg.model or ""
 
             if hasattr(self, "_select_page") and self._select_page is not None:
@@ -5110,6 +5461,8 @@ class MainWindow(QMainWindow):
                 self._rockbox_themes_flow_active = True
             else:
                 self._bundled_rockbox_themes = False
+
+            self._bundled_package_path = package_path
 
             # 3. Automatically launch into the Install Software screen (_PAGE_FLASH)
             logger.info("Auto-triggering install for bundled firmware: %s (%s)", package_name, package_model)
@@ -5538,14 +5891,41 @@ class MainWindow(QMainWindow):
             self._donations = donations
 
     def _on_support_clicked(self):
-        """Open Support Us in the window. A finished install keeps Install Software selected."""
+        """Open Support Us in the window. A finished install keeps Install Software selected.
+
+        During an install run the page opens as a pop-out modal instead, so the
+        install progress stays on screen underneath.
+        """
         if self._install_run_active() or getattr(self, "_compact_install_screen", False):
+            self._open_support_modal()
             self._highlight_nav(
                 self._stack.currentIndex(),
                 self._sync_install_nav_entry(),
             )
             return
         self._nav_to_page(_PAGE_SUPPORT)
+
+    def _open_support_modal(self):
+        """Show the Support Us page in a pop-out dialog above the install run."""
+        existing = getattr(self, "_support_modal", None)
+        if existing is not None:
+            try:
+                existing.raise_()
+                existing.activateWindow()
+                return
+            except Exception:
+                pass
+        dlg = QDialog(self)
+        dlg.setWindowTitle(tr("nav_donate"))
+        dlg.setModal(True)
+        page = SupportPage(dlg)
+        layout = QVBoxLayout(dlg)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.addWidget(page)
+        dlg.resize(560, page.content_height_hint() + 24)
+        dlg.finished.connect(lambda _r: setattr(self, "_support_modal", None))
+        self._support_modal = dlg
+        dlg.show()
 
     def _show_donation_dialog(self, context="general", *args, **kwargs):
         """Support lives in the window. Install completion does not open a dialog."""
@@ -5608,7 +5988,7 @@ class MainWindow(QMainWindow):
         return super().close()
 
     def closeEvent(self, event):
-        if self._install_run_active():
+        if self._install_run_active() and not getattr(self, "_force_quit", False):
             is_headless = os.environ.get("QT_QPA_PLATFORM") == "offscreen" or bool(os.environ.get("INNIOASIS_HEADLESS"))
             if not is_headless or getattr(self, "_test_close_prompt", False):
                 app_name = get_app_name()

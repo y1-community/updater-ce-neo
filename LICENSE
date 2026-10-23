@@ -1,4 +1,4 @@
-Neo Prototype — Innioasis Updater
+Innioasis Updater CE 2.5
 
 The application code in src/ is provided for evaluation under the MIT License,
 unless the project maintainers choose otherwise before distribution.
@@ -9,5 +9,5 @@ License v3 (GPLv3). See vendor/mtkclient/LICENSE. Any distributed build of this
 application that includes mtkclient must comply with GPLv3.
 
 SP Flash Tool and the MediaTek Download Agents are proprietary MediaTek
-binaries and are NOT redistributed in this repository; they are an optional
-install-time payload for Windows only.
+binaries. They are included with the Windows installer as the device flashing
+payload.

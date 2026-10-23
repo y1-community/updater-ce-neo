@@ -471,13 +471,25 @@ def test_compact_window_mode_and_sidebar_hiding():
 
 
 def test_window_maximization_enabled():
-    """Verify window maximization is enabled across platforms and auto-resizing is disabled when maximized."""
+    """Verify window maximization is suppressed everywhere: the app is laid out for a
+    compact window, and throwing it full-screen would waste the sidebar, dropdown,
+    button and icon copy that is sized for that compact footprint.
+
+    The maximize affordance is removed on every platform: no maximize button hint
+    in the window flags, no Aero Snap / snap layouts on Windows, and no in-app
+    maximise glyph on Linux. The close and minimize hints are still present so the
+    user can exit or minimise without losing work."""
     app = QApplication.instance() or QApplication(sys.argv)
     w = MainWindow()
     flags = w.windowFlags()
-    assert bool(flags & Qt.WindowMaximizeButtonHint), "Maximize button hint must be enabled"
+    assert not bool(flags & Qt.WindowMaximizeButtonHint), (
+        "Maximize button hint must not be reported on any platform."
+    )
     assert bool(flags & Qt.WindowMinimizeButtonHint), "Minimize button hint must be enabled"
     assert bool(flags & Qt.WindowCloseButtonHint), "Close button hint must be enabled"
+    assert not w._window_controls or not w._window_controls.max_button.isVisible(), (
+        "The in-app maximise glyph must not be shown; maximising wastes screen real estate."
+    )
 
 
 def test_close_interception_during_install(monkeypatch=None):

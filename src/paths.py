@@ -262,3 +262,25 @@ def _which(name: str):
     import shutil
 
     return shutil.which(name)
+
+
+def app_cache_dir() -> Path:
+    """Per-user cache directory for downloaded manifests, catalogs and PATs."""
+    if os.name == "nt":
+        base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
+        return base / "Updater CE" / ".cache"
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support"
+        target = base / "Updater CE" / ".cache"
+        legacy = base / "Innioasis Updater" / ".cache"
+        if not target.exists() and legacy.exists():
+            return legacy
+        return target
+    else:
+        base = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
+        target = base / "updater-ce"
+        legacy = base / "innioasis-updater" / ".cache"
+        if not target.exists() and legacy.exists():
+            return legacy
+        return target
+

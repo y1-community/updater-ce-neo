@@ -9,12 +9,11 @@ APP_NAME = "Updater CE"
 CONTACT_EMAIL = "updater-feedback@innioasis.com"
 
 # --- Staggered releases -----------------------------------------------------
-# The Updater CE rewrite goes out one platform at a time, because a platform is
-# only released once its flashing path has been verified on real hardware. 2.5
-# is the Windows run; macOS and Linux keep the build they have until their turn
-# comes. Changing this tuple is the whole switch: the update checker only offers
-# a release that carries an asset for the running platform, so a build on a
-# platform that is not listed simply never sees 2.5.
+# The Updater CE rewrite goes out one platform at a time. 2.5 is the Windows
+# run. The update checker decides by asset name alone (see UPDATE_TARGET_ASSETS):
+# a release is offered on a platform only when it carries that platform's asset,
+# so a Windows-only 2.5 is never offered to macOS or Linux. This tuple records
+# which platforms the current release targets; nothing gates on it.
 RELEASE_TARGETS = ("windows",)
 
 
@@ -134,12 +133,20 @@ UPDATE_REPO = "y1-community/updater-ce-neo"
 UPDATE_CACHE_TTL_SECONDS = 24 * 60 * 60
 UPDATE_CHECK_STARTUP_DELAY_MS = 3000  # silent auto-check shortly after launch
 
-# Specific target release asset filename per operating system for updater-ce-neo releases.
+# Specific target release asset filenames per operating system for updater-ce-neo releases.
 # If these files don't exist in a newer release, it is assumed the user is running the latest build.
 UPDATE_TARGET_ASSETS = {
-    "win32": "installer.exe",
-    "darwin": "Innioasis.Updater.for.Mac.dmg",
-    "linux": "UpdaterCE.appimage",
+    "win32": ("installer.exe", "updaterce-setup.exe"),
+    "darwin": ("innioasis.updater.for.mac.dmg",),
+    "linux": (
+        "updaterce.appimage",
+        "mediatek installer.appimage",
+        "updaterce.tar.gz",
+        "mediatek installer.tar.gz",
+        "updaterce-linux-portable.zip",
+        "updater_ce_linux_portable.tar.gz",
+        "updater_ce_linux_portable.zip",
+    ),
 }
 
 # Asset-extension preference per OS fallback

@@ -881,72 +881,167 @@ class DiagnosticsDialog(QDialog):
 
 
 class UpdateAvailableDialog(QDialog):
+    """Wizard-style update dialog with platform-specific assisted installation."""
+
     def __init__(self, parent=None, info=None, current_version="", on_skip=None):
         super().__init__(parent)
         apply_dialog_theme(self)
         self._info = info
         self._on_skip = on_skip
+        self._worker = None
+        self._dest_path = None
         t = T()
+
         self.setWindowTitle(tr("update_available"))
-        self.setMinimumWidth(520)
-        self.resize(560, 460)
-        layout = QVBoxLayout(self)
-        layout.setSpacing(12)
+        self.setMinimumWidth(540)
+        self.resize(580, 440)
 
-        title = QLabel(
-            f"<h2 style='color:{t.fg_primary};'>{tr('update_available')} &#127881;</h2>"
+        from .flash_page import _RoundNextButton
+        from ..updates import asset_hint, pick_platform_asset
+
+        self._asset = pick_platform_asset(self._info.assets) if self._info else None
+
+        self._main_layout = QVBoxLayout(self)
+        self._main_layout.setContentsMargins(24, 20, 24, 20)
+        self._main_layout.setSpacing(14)
+
+        # Header Row: Squircle icon + title + version badge
+        header_row = QHBoxLayout()
+        header_row.setSpacing(14)
+
+        self._icon_label = QLabel(self)
+        self._icon_label.setFixedSize(48, 48)
+        self._icon_label.setAlignment(Qt.AlignCenter)
+        self._icon_label.setStyleSheet(
+            f"background-color: {t.accent_bg}; border-radius: 12px; font-size: 24px;"
         )
-        title.setTextFormat(Qt.RichText)
-        layout.addWidget(title)
+        self._icon_label.setText("🚀")
+        header_row.addWidget(self._icon_label, 0, Qt.AlignVCenter)
 
-        version = QLabel(
-            f"<b>{tr('update_available_fmt').format(new=self._info.version, current=current_version)}</b>"
+        title_col = QVBoxLayout()
+        title_col.setSpacing(2)
+        self._title_label = QLabel(f"<h2 style='margin:0; padding:0; color:{t.fg_primary};'>{tr('update_available')}</h2>")
+        self._title_label.setTextFormat(Qt.RichText)
+        title_col.addWidget(self._title_label)
+
+        ver_str = tr("update_available_fmt").format(
+            new=self._info.version if self._info else "",
+            current=current_version,
         )
-        version.setTextFormat(Qt.RichText)
-        version.setWordWrap(True)
-        layout.addWidget(version)
+        self._subtitle_label = QLabel(ver_str)
+        self._subtitle_label.setTextFormat(Qt.RichText)
+        self._subtitle_label.setStyleSheet(f"color: {t.fg_muted}; font-size: 13px;")
+        self._subtitle_label.setWordWrap(True)
+        title_col.addWidget(self._subtitle_label)
+        header_row.addLayout(title_col, 1)
 
-        notes_label = QLabel(f"<b>{tr('update_notes')}</b>")
-        notes_label.setTextFormat(Qt.RichText)
-        layout.addWidget(notes_label)
-        self._notes = QTextEdit()
-        self._notes.setReadOnly(True)
-        self._notes.setPlainText(self._info.body.strip() or tr("update_no_notes"))
-        self._notes.setFixedHeight(140)
-        layout.addWidget(self._notes)
+        self._main_layout.addLayout(header_row)
 
-        asset = pick_platform_asset(self._info.assets)
-        hint = asset_hint()
-        guide_key = {
-            "win32": "update_install_win",
-            "darwin": "update_install_mac",
-            "linux": "update_install_linux",
-        }.get(sys.platform, "update_install_generic")
-        guide = QLabel(tr(guide_key).format(hint=hint))
-        guide.setWordWrap(True)
-        guide.setStyleSheet(
-            f"font-size: 12px; color: {t.fg};"
-            f" background-color: {t.info_bg};"
-            f" border-radius: 8px; padding: 10px 14px;"
+        # What's New container. The release notes are the whole body of this
+        # window: no per-platform hint card above them (the installer knows
+        # where its own file came from), and the notes scroll with the host's
+        # own scrollbar, exactly like the Settings menu.
+        self._notes_label = QLabel(f"<b>{tr('update_notes')}</b>")
+        self._notes_label.setTextFormat(Qt.RichText)
+        self._main_layout.addWidget(self._notes_label)
+
+        self._notes = QTextBrowser()
+        self._notes.setObjectName("updateNotes")
+        self._notes.setOpenExternalLinks(True)
+        self._notes.setMinimumHeight(170)
+        self._notes.document().setDefaultStyleSheet(
+            f"a {{ color: {t.accent}; font-weight: 600; text-decoration: none; }}"
         )
-        layout.addWidget(guide)
+        body_text = self._info.body.strip() if self._info else ""
+        if body_text:
+            # No version heading inside the notes: the subtitle above already
+            # says which release this is.
+            self._notes.setHtml(format_markdown_release_notes(body_text))
+        else:
+            self._notes.setPlainText(tr("update_no_notes"))
+        # No stylesheet: a local one replaces the platform scrollbar. The
+        # helper also restores as-needed policies and a light frame.
+        configure_scroll_area(self._notes, vertical=Qt.ScrollBarAsNeeded)
+        self._main_layout.addWidget(self._notes, 1)
 
-        self._asset = asset
-        btn_row = QHBoxLayout()
-        self._download_btn = QPushButton(tr("update_btn_download"))
-        self._download_btn.setDefault(True)
-        self._download_btn.clicked.connect(self._on_download)
-        self._later_btn = QPushButton(tr("update_btn_later"))
-        self._later_btn.clicked.connect(self.reject)
-        self._skip_btn = QPushButton(tr("update_btn_skip"))
-        self._skip_btn.clicked.connect(self._on_skip_version)
-        btn_row.addWidget(self._download_btn)
-        btn_row.addWidget(self._later_btn)
-        btn_row.addWidget(self._skip_btn)
-        btn_row.addStretch()
-        layout.addLayout(btn_row)
+        # Progress bar container (hidden until download starts)
+        self._progress_bar = QProgressBar()
+        self._progress_bar.setRange(0, 100)
+        self._progress_bar.setValue(0)
+        self._progress_bar.setFixedHeight(10)
+        self._progress_bar.setTextVisible(False)
+        self._progress_bar.setStyleSheet(
+            f"QProgressBar {{ background-color: {t.bg_card}; border: 1px solid {t.border}; border-radius: 5px; }}"
+            f"QProgressBar::chunk {{ background-color: {t.accent}; border-radius: 4px; }}"
+        )
+        self._progress_bar.setVisible(False)
+        self._main_layout.addWidget(self._progress_bar)
 
-    def _on_download(self):
+        self._progress_label = QLabel("")
+        self._progress_label.setStyleSheet(f"font-size: 12px; color: {t.fg_muted};")
+        self._progress_label.setVisible(False)
+        self._main_layout.addWidget(self._progress_label)
+
+        # Action Buttons row with Round Next Buttons
+        self._btn_row = QHBoxLayout()
+        self._btn_row.setSpacing(12)
+        self._btn_row.addStretch(1)
+
+        # "Remind me later" wears the same platform back arrow as the steps
+        # that go back in the installer, not a cancel cross.
+        self._cancel_btn = _RoundNextButton(symbol="back", accent=False)
+        self._cancel_btn.setText(tr("update_btn_later"))
+        self._cancel_btn.setToolTip(tr("update_btn_later"))
+        self._cancel_btn.clicked.connect(self._on_cancel_clicked)
+        self._btn_row.addWidget(self._cancel_btn, 0, Qt.AlignVCenter)
+
+        self._action_btn = _RoundNextButton(symbol="next", accent=True)
+        # Older callers and the update wiring tests address the primary chip as
+        # the download button; it is the same widget.
+        self._download_btn = self._action_btn
+        self._action_btn.setText(tr("update_btn_download"))
+        self._action_btn.setToolTip(tr("update_btn_download"))
+        self._action_btn.clicked.connect(self._on_action_clicked)
+        self._btn_row.addWidget(self._action_btn, 0, Qt.AlignVCenter)
+
+        self._main_layout.addLayout(self._btn_row)
+
+        self._download_state = "initial"  # initial -> downloading -> ready
+        # The window grows to the notes it has to show and no further. A
+        # single-shot wait lets the notes document settle first, so a short
+        # release note gives a short dialog instead of a fixed 440 px one.
+        QTimer.singleShot(0, self._fit_to_content)
+
+    def _fit_to_content(self) -> None:
+        """Size to the browser's document, bounded so it always fits a screen."""
+        try:
+            doc_h = int(self._notes.document().size().height())
+            frame = self._notes.frameWidth() * 2
+            wanted_notes = max(170, min(520, doc_h + frame + 8))
+            if self._notes.height() != wanted_notes:
+                self._notes.setMinimumHeight(wanted_notes)
+                self._notes.setMaximumHeight(wanted_notes)
+            hint = self.sizeHint().height()
+            screen = self.screen()
+            limit = int(screen.availableGeometry().height() * 0.9) if screen else 900
+            self.resize(self.width(), max(320, min(hint, limit)))
+        except Exception:
+            pass
+
+    def _on_cancel_clicked(self):
+        if self._worker is not None and self._worker.isRunning():
+            self._worker.terminate()
+            self._worker.wait(500)
+            self._worker = None
+        self.reject()
+
+    def _on_action_clicked(self):
+        if self._download_state == "ready":
+            self._launch_installer()
+            return
+        self._start_update_download()
+
+    def _start_update_download(self):
         import os
         import subprocess
         import tempfile
@@ -955,86 +1050,114 @@ class UpdateAvailableDialog(QDialog):
         from ..browser import open_browser
         from ..downloads import DownloadWorker
 
-        # Linux: take to the linux install instructions page on innioasis.app/guide.html
+        # Linux: take to the install instructions page on innioasis.app/guide.html
         if sys.platform.startswith("linux"):
             open_browser("https://innioasis.app/guide.html")
             self.accept()
             return
 
-        # macOS: if DMG asset exists, open its download URL, otherwise open mac guide
-        if sys.platform == "darwin":
-            dmg_asset = self._asset
-            if not dmg_asset:
-                for a in (self._info.assets or []):
-                    if (a.get("name") or "").lower() == "innioasis.updater.for.mac.dmg":
-                        dmg_asset = a
-                        break
-            dmg_url = dmg_asset.get("browser_download_url") if dmg_asset else ""
-            if dmg_url:
-                open_browser(dmg_url)
-            else:
-                open_browser(self._info.html_url or "https://innioasis.app/guide?platform=mac")
+        # Identify platform download asset
+        target_asset = self._asset
+        if not target_asset and self._info:
+            target_asset = pick_platform_asset(self._info.assets)
+
+        if not target_asset:
+            open_browser(self._info.html_url if self._info else "https://innioasis.app/guide.html")
             self.accept()
             return
 
-        # Windows: download installer exe and offer to launch it
-        exe_asset = None
-        for a in (self._info.assets or []):
-            name = (a.get("name") or "").lower()
-            if name == "installer.exe" or name.endswith(".exe"):
-                exe_asset = a
-                break
-
-        url = (
-            exe_asset.get("browser_download_url")
-            if exe_asset
-            else (self._asset.get("browser_download_url") if self._asset else "")
-        )
+        url = target_asset.get("browser_download_url") or ""
         if not url:
-            open_browser(self._info.html_url or "https://innioasis.app/guide?platform=windows")
+            open_browser(self._info.html_url or "https://innioasis.app/guide.html")
             self.accept()
             return
 
-        filename = (exe_asset or {}).get("name") or f"UpdaterCE-Setup-{self._info.version}.exe"
-        dest_path = Path(tempfile.gettempdir()) / filename
+        filename = target_asset.get("name") or (
+            "Innioasis.Updater.for.Mac.dmg" if sys.platform == "darwin" else f"UpdaterCE-Setup-{self._info.version}.exe"
+        )
 
-        self._download_btn.setEnabled(False)
-        self._download_btn.setText(tr("flash_download_in_progress"))
+        if sys.platform == "darwin":
+            dest_dir = Path.home() / "Downloads"
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            self._dest_path = dest_dir / filename
+        else:
+            self._dest_path = Path(tempfile.gettempdir()) / filename
 
-        worker = DownloadWorker(url, str(dest_path), parent=self)
+        # Switch to wizard progress view
+        self._download_state = "downloading"
+        self._notes.setVisible(False)
+        self._notes_label.setVisible(False)
+        self._progress_bar.setVisible(True)
+        self._progress_bar.setValue(0)
+        self._progress_label.setVisible(True)
+        self._progress_label.setText(f"Connecting... ({filename})")
+        self._action_btn.setEnabled(False)
+
+        worker = DownloadWorker(url, str(self._dest_path), parent=self)
         self._worker = worker
 
+        # DownloadWorker.progress carries a 0-100 int and .status the byte/speed
+        # line. Connecting to a three-argument slot left the label frozen at
+        # "Connecting..." for the whole download, so wire each signal to a
+        # handler that takes exactly what it emits.
+        def on_progress(pct):
+            try:
+                value = int(pct)
+            except (TypeError, ValueError):
+                return
+            self._progress_bar.setValue(max(0, min(100, value)))
+
+        def on_status(text):
+            if text:
+                self._progress_label.setText(str(text))
+
         def on_done(ok, err):
-            if ok and dest_path.is_file():
-                reply = QMessageBox.question(
-                    self,
-                    tr("update_available"),
-                    "The update installer has been downloaded. Would you like to run it now to update Updater CE?",
-                    QMessageBox.Yes | QMessageBox.No,
-                    QMessageBox.Yes,
-                )
-                if reply == QMessageBox.Yes:
+            if ok and self._dest_path and self._dest_path.is_file():
+                self._progress_bar.setValue(100)
+                self._progress_label.setText(f"Saved to: {self._dest_path}")
+                if sys.platform == "darwin":
+                    # macOS: reveal in Finder and quit
                     try:
-                        os.startfile(str(dest_path))
-                    except Exception:
-                        subprocess.Popen([str(dest_path)], shell=True)
+                        subprocess.Popen(["open", "-R", str(self._dest_path)])
+                    except Exception as e:
+                        logger.debug("Failed to reveal dmg in finder: %s", e)
                     QApplication.quit()
                     return
-                else:
-                    QMessageBox.information(
-                        self,
-                        tr("update_available"),
-                        f"Installer saved to:\n{dest_path}",
-                    )
-            else:
-                open_browser(url)
-            self.accept()
 
+                # Windows: ready to install
+                self._download_state = "ready"
+                self._icon_label.setText("🎉")
+                self._progress_label.setText("Ready to install.")
+                self._action_btn.setEnabled(True)
+                self._action_btn.setText(tr("install"))
+                self._action_btn.setToolTip(tr("install"))
+            else:
+                self._progress_label.setText(f"Download failed: {err or 'Network error'}")
+                self._action_btn.setEnabled(True)
+                open_browser(url)
+                self.accept()
+
+        worker.progress.connect(on_progress)
+        worker.status.connect(on_status)
         worker.finished.connect(on_done)
         worker.start()
 
+    def _launch_installer(self):
+        import os
+        import subprocess
+        from PySide6.QtWidgets import QApplication
+
+        if self._dest_path and self._dest_path.is_file():
+            try:
+                os.startfile(str(self._dest_path))
+            except Exception:
+                subprocess.Popen([str(self._dest_path)], shell=True)
+            QApplication.quit()
+        else:
+            self.reject()
+
     def _on_skip_version(self):
-        if self._on_skip:
+        if self._on_skip and self._info:
             self._on_skip(self._info.version)
         self.reject()
 

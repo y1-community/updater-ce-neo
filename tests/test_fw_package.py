@@ -122,6 +122,49 @@ def test_read_package_rejects_two_scatters(tmp_path):
     assert read_package(fw) is None
 
 
+def test_read_package_takes_release_info_from_app_folder_ini(tmp_path):
+    app = tmp_path / "InnioasisUpdater"
+    app.mkdir()
+    (app / fw_package.FW_PACKAGE_INI).write_text(
+        "[Firmware]\nsoftware_name = Rockbox\nversion = 2.5\ntarget_model = Y2\n", encoding="utf-8"
+    )
+    sp = _firmware(app / "SP_Flash_Tool", ini=None)
+    pkg = read_package(sp, require_ini=True, app_dir=app)
+    assert pkg is not None
+    assert pkg.display_name == "Rockbox 2.5"
+    assert pkg.model == "Y2"
+    assert pkg.has_ini
+
+
+def test_read_package_app_folder_ini_takes_precedence_over_package_ini(tmp_path):
+    app = tmp_path / "app"
+    app.mkdir()
+    (app / fw_package.FW_PACKAGE_INI).write_text("[Firmware]\nsoftware_name = App\nversion = 1\n", encoding="utf-8")
+    sp = _firmware(tmp_path / "sp", ini="[Firmware]\nsoftware_name = Package\nversion = 9\n")
+    assert read_package(sp, app_dir=app).display_name == "App 1"
+
+
+def test_read_package_app_folder_ini_can_disable_package(tmp_path):
+    app = tmp_path / "app"
+    app.mkdir()
+    (app / fw_package.FW_PACKAGE_INI).write_text("false\n", encoding="utf-8")
+    sp = _firmware(tmp_path / "sp", ini="[Firmware]\nsoftware_name = Stock\n")
+    assert read_package(sp, app_dir=app) is None
+
+
+def test_find_bundled_firmware_reads_app_folder_ini(tmp_path, monkeypatch):
+    app = tmp_path / "InnioasisUpdater"
+    app.mkdir()
+    (app / fw_package.FW_PACKAGE_INI).write_text(
+        "[Firmware]\nsoftware_name = Rockbox\nversion = 2.5\ntarget_model = Y2\n", encoding="utf-8"
+    )
+    sp = _firmware(app / "SP_Flash_Tool", ini=None)
+    monkeypatch.setattr(fw_package, "find_sp_flash_tool", lambda: sp)
+    pkg = fw_package.find_bundled_firmware(app_dir=app)
+    assert pkg is not None
+    assert pkg.display_name == "Rockbox 2.5"
+
+
 def test_find_installed_package_checks_app_folder_then_parent(tmp_path):
     fw = _firmware(tmp_path / "zip_root")
     # App inside an 'installer' subfolder: its parent (the firmware root) holds the package.
@@ -189,7 +232,7 @@ def test_prefill_opens_install_from_file_with_name_version_and_type(tmp_path):
 
     assert page._views.currentWidget() is page._local_tab
     assert page._path_edit.text() == str(fw.resolve())
-    assert page._current_package_name == "Stock 1.0"
+    assert page._current_package_name == "Get your Y2 ready to install Stock 1.0"
     assert page._details_name.text() == "Stock"
     assert page._details_version.text() == "1.0"
     assert not page._details_header.isHidden()  # page is never shown in tests, so check the widget's own flag
@@ -226,7 +269,7 @@ def test_browsed_zip_contents_fill_the_package_details(tmp_path, monkeypatch):
     page = SelectPackagePage()
     page._fw_package = locate_package(root)
     page._apply_fw_package(page._fw_package)
-    assert page._current_package_name == "Stock 3.0"
+    assert page._current_package_name == "Get ready to install Stock 3.0"
     assert page._details_version.text() == "3.0"
     assert fw.exists()
 
@@ -278,6 +321,42 @@ def test_browsing_a_package_does_not_prune_the_saved_set(tmp_path, monkeypatch):
     assert saved.exists()
     assert (dl / ".Y2_extracted" / "marker").exists()
 
+
+
+def test_cached_extract_is_never_deleted_and_is_restored_in_place(tmp_path, monkeypatch):
+    import zipfile
+    from types import SimpleNamespace
+    from src import downloads
+    from src.flash_service import ExtractWorker
+
+    dl = tmp_path / "app_downloads"
+    dl.mkdir()
+    monkeypatch.setattr(downloads, "downloads_dir", lambda: dl)
+
+    staging = tmp_path / "staging"
+    _firmware(staging, files=("preloader.bin", "boot.img"))
+    archive = dl / "Y2.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        for f in staging.iterdir():
+            zf.write(f, f.name)
+
+    stub = SimpleNamespace(progress=SimpleNamespace(emit=lambda *_: None), _cancelled=False)
+    stub._extract_zip = lambda pkg, d: ExtractWorker._extract_zip(stub, pkg, d)
+    stub._extract_rar = lambda pkg, d: None
+    extract_dir = Path(ExtractWorker._extract(stub, str(archive)))
+    (extract_dir / "keep.txt").write_text("cached")
+    (extract_dir / "boot.img").unlink()
+
+    # A normal install attempt never removes or re-extracts a cached folder.
+    ExtractWorker._extract(stub, str(archive))
+    assert not (extract_dir / "boot.img").exists()
+    assert (extract_dir / "keep.txt").exists()
+
+    # The missing-image retry re-extracts over the cache in place. The archive is
+    # never removed; files the package does not list are pruned as before.
+    ExtractWorker._extract(stub, str(archive), force=True)
+    assert (extract_dir / "boot.img").exists()
+    assert archive.exists()
 
 
 def test_prune_does_nothing_without_a_valid_package(tmp_path):
@@ -332,7 +411,7 @@ def test_read_package_optional_ini(tmp_path):
     assert pkg is not None
     assert pkg.scatter.name == "MT6572_Android_scatter.txt"
     assert pkg.has_ini is False
-    assert "Installing software" in pkg.display_name
+    assert "install software" in pkg.display_name.lower()
 
 
 def test_find_bundled_firmware_in_sp_flash_tool(tmp_path, monkeypatch):
@@ -427,7 +506,7 @@ def test_auto_start_bundled_firmware_navigates_to_flash_page(tmp_path, monkeypat
         app.processEvents()
 
         assert w._stack.currentIndex() == _PAGE_FLASH
-        assert w._package_name == "Solar 2.0"
+        assert w._package_name == "Get your Y1 ready to install Solar 2.0"
         assert w._package_model == "Y1"
         assert w._is_360p_rockbox is True
     finally:
@@ -435,3 +514,78 @@ def test_auto_start_bundled_firmware_navigates_to_flash_page(tmp_path, monkeypat
         app.processEvents()
 
 
+
+
+def test_release_install_heading_uses_release_name_from_file_name():
+    assert fw_package.release_install_heading("Y2", ("Rockbox_2.5.zip",)) == "Get your Y2 ready to install Rockbox 2.5"
+
+
+def test_release_install_heading_falls_back_to_generic_label():
+    assert fw_package.release_install_heading("Y2", ("rom_y2.zip",)) == "Get your Y2 ready to install software"
+    assert fw_package.release_install_heading("", ()) == "Get ready to install software"
+
+
+def test_package_install_heading_prefers_release_name():
+    named = _pkg_for(name="Rockbox", version="2.5", model="Y2")
+    assert fw_package.package_install_heading(named) == "Get your Y2 ready to install Rockbox 2.5"
+    generic = _pkg_for(name="Installing software on Y2", model="Y2")
+    assert fw_package.package_install_heading(generic) == "Get your Y2 ready to install software"
+    generic_new = _pkg_for(name="Get your Y2 ready to install software", model="Y2")
+    assert fw_package.package_install_heading(generic_new) == "Get your Y2 ready to install software"
+
+
+def test_rockbox_240p_package_name_marks_small_screen_rockbox_rom():
+    assert fw_package.rockbox_240p_package_name("Rockbox", "rockbox_y1_240p.zip") is True
+    assert fw_package.rockbox_240p_package_name("Rockbox 2.5", "rom_240.zip") is True
+    # Plain 360p Rockbox builds are not 240p ROMs.
+    assert fw_package.rockbox_240p_package_name("Rockbox", "Rockbox_2.5.zip") is False
+    # A 240p tag without Rockbox is not a Rockbox ROM either.
+    assert fw_package.rockbox_240p_package_name("Stock", "stock_y1_240p.zip") is False
+    assert fw_package.rockbox_240p_package_name("Rockbox") is False
+
+
+def test_read_package_flags_240p_rockbox_without_bundled_flow(tmp_path):
+    folder = _firmware(
+        tmp_path / "pkg",
+        ini="[Firmware]\nsoftware_name = Rockbox\nversion = 2.5\ntarget_model = Y1\n",
+    )
+    pkg = read_package(folder, source_names=("rockbox_y1_240p.zip",))
+    assert pkg is not None
+    assert pkg.has_rockbox_240p is True
+    # The 240p build skips the bundled 360p theme push.
+    assert pkg.has_rockbox is False
+
+
+def _pkg_for(**kwargs):
+    return fw_package.FwPackage(folder=Path("."), scatter=Path("x_scatter.txt"), **kwargs)
+
+
+def test_read_package_infers_name_from_source_zip_name(tmp_path):
+    folder = _firmware(tmp_path / "pkg", ini=None)
+    pkg = read_package(folder, require_ini=False, source_names=("Rockbox_2.5.zip",))
+    assert pkg is not None
+    assert pkg.name == "Rockbox"
+    assert pkg.version == "2.5"
+
+
+def test_read_package_finds_updater_image_beside_app(tmp_path):
+    if fw_package.IS_MAC:
+        pytest.skip("macOS only reads fw_package.ini from the package folder")
+    app_dir = tmp_path / "app"
+    app_dir.mkdir()
+    _ini(app_dir, "[Firmware]\nsoftware_name = Rockbox\nversion = 2.5\n")
+    _png(app_dir / "updater.png")
+    folder = _firmware(tmp_path / "pkg", ini=None)
+    pkg = read_package(folder, require_ini=True, app_dir=app_dir)
+    assert pkg is not None
+    assert pkg.image == (app_dir / "updater.png").resolve()
+
+
+def test_local_icon_found_beside_scatter_file(tmp_path):
+    from src.release_icons import load_local_package_icon_bytes
+
+    folder = _firmware(tmp_path / "pkg")
+    _png(folder / "updater.png")
+    data = load_local_package_icon_bytes(folder / "MT6572_Android_scatter.txt", dark=False)
+    assert data is not None and len(data) > 0
+    assert load_local_package_icon_bytes(tmp_path / "missing_scatter.txt", dark=False) is None

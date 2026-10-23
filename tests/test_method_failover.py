@@ -46,12 +46,15 @@ def test_simulated_macos_entry_does_not_pin_mtkclient():
     real_mac = paths.IS_MAC
     try:
         paths.IS_MAC = False
-        assert fs.normalise_method("mtk_mac") == fs.METHOD_SP
-        assert fs.backend_method("mtk_mac") == fs.METHOD_SP
+        # Linux now defaults to MTKClient; the legacy alias resolves to that
+        # platform default rather than pinning a backend of its own.
+        assert fs.default_flash_method() == fs.METHOD_MTK
+        assert fs.normalise_method("mtk_mac") == fs.METHOD_MTK
+        assert fs.backend_method("mtk_mac") == fs.METHOD_MTK
         # The real choices are untouched.
         assert fs.normalise_method("sp") == fs.METHOD_SP
         assert fs.normalise_method("mtk") == fs.METHOD_MTK
-        assert fs.normalise_method("auto") == fs.METHOD_SP
+        assert fs.normalise_method("auto") == fs.METHOD_MTK
 
         # While the macOS flow is actually running, it is MTKClient.
         paths.IS_MAC = True
@@ -76,7 +79,7 @@ def test_settings_selector_has_one_platform_neutral_mtkclient_entry(monkeypatch)
         assert methods == (fs.METHOD_SP, fs.METHOD_MTK)
         assert page._method_combo.findData("mtk_mac") == -1
         page.set_method("mtk_mac")
-        assert page.current_method() == fs.METHOD_SP
+        assert page.current_method() == fs.default_flash_method()
 
         monkeypatch.setattr(paths, "IS_MAC", True)
         assert page._available_methods() == (fs.METHOD_MTK,)

@@ -147,6 +147,73 @@ def test_find_adb_binary_env_override():
             assert adb_mod.find_adb_binary() == str(fake)
 
 
+def test_completion_site_note_shows_for_240p_rockbox():
+    from PySide6.QtWidgets import QApplication
+    from src.ui.flash_page import FlashPage, ROCKBOX_SITE_THEMES_URL
+
+    assert ROCKBOX_SITE_THEMES_URL == "https://themes.rockbox.org/index.php?target=ipod6g"
+    app = QApplication.instance() or QApplication(["--platform", "offscreen"])
+    page = FlashPage()
+    page.show()
+    try:
+        app.processEvents()
+        page.set_rockbox_site_themes(True)
+        # Not complete yet: nothing shows on the running card.
+        assert not page._rockbox_site_widget.isVisible()
+        assert not page._rockbox_site_btn.isVisible()
+        page.show_flashing()
+        page.set_device_done()
+        app.processEvents()
+        assert page._rockbox_site_widget.isVisible()
+        assert page._rockbox_site_btn.isVisible()
+        # A fresh run hides it again.
+        page.show_waiting()
+        app.processEvents()
+        assert not page._rockbox_site_widget.isVisible()
+        assert not page._rockbox_site_btn.isVisible()
+    finally:
+        page.close()
+        app.processEvents()
+
+
+def test_rockbox_240p_detected_from_package_name_and_path():
+    from PySide6.QtWidgets import QApplication
+    from src.ui.main_window import MainWindow
+
+    app = QApplication.instance() or QApplication(["--platform", "offscreen"])
+    w = MainWindow()
+    try:
+        app.processEvents()
+        w._package_name = "Get your Y1 ready to install Rockbox 2.5"
+        w._package_path = "/tmp/rockbox_y1_240p/extract"
+        assert w._rockbox_240p_detected() is True
+        w._package_path = "/tmp/Rockbox_2.5/extract"
+        assert w._rockbox_240p_detected() is False
+    finally:
+        w.close()
+        app.processEvents()
+
+
+def test_bundled_240p_done_quits_app():
+    from PySide6.QtWidgets import QApplication
+    from src.ui.main_window import MainWindow
+
+    app = QApplication.instance() or QApplication(["--platform", "offscreen"])
+    w = MainWindow()
+    try:
+        app.processEvents()
+        w._bundled_firmware_run = True
+        w._is_240p_rockbox = True
+        called = []
+        w._quit_after_bundled_run = lambda: called.append(True)
+        w._on_install_done()
+        app.processEvents()
+        assert called == [True]
+    finally:
+        w.close()
+        app.processEvents()
+
+
 def test_wizard_instantiates_with_four_pages():
     from PySide6.QtWidgets import QApplication
     from src.theme_pack import Rockbox360pSetupWizard

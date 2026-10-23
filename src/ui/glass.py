@@ -518,13 +518,13 @@ def ensure_window_maximize_enabled(window: QMainWindow | QWidget) -> bool:
     try:
         from PySide6.QtCore import Qt
         if not window.isVisible():
-            flags = window.windowFlags() | Qt.WindowCloseButtonHint | Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint
+            flags = window.windowFlags() | Qt.WindowCloseButtonHint | Qt.WindowMinimizeButtonHint
             window.setWindowFlags(flags)
     except Exception:
         pass
 
     if IS_MACOS:
-        enable_macos_zoom_button(window)
+        _disable_macos_zoom_button(window)
     elif IS_WINDOWS:
         try:
             import ctypes
@@ -535,12 +535,12 @@ def ensure_window_maximize_enabled(window: QMainWindow | QWidget) -> bool:
             hwnd = int(window.winId())
             user32 = ctypes.windll.user32
             style = user32.GetWindowLongW(hwnd, GWL_STYLE)
-            if not (style & WS_MAXIMIZEBOX):
-                user32.SetWindowLongW(hwnd, GWL_STYLE, style | WS_MAXIMIZEBOX)
+            if style & WS_MAXIMIZEBOX:
+                user32.SetWindowLongW(hwnd, GWL_STYLE, style & ~WS_MAXIMIZEBOX)
                 user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, SWP)
-                logger.debug("Restored WS_MAXIMIZEBOX on the window")
+                logger.debug("Removed WS_MAXIMIZEBOX from the window")
         except Exception as e:
-            logger.debug("Could not restore WS_MAXIMIZEBOX: %s", e)
+            logger.debug("Could not remove WS_MAXIMIZEBOX: %s", e)
     return True
 
 

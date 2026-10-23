@@ -448,9 +448,12 @@ def windows_only_method():
 def default_flash_method():
     """Method used until the user picks one.
 
-    Windows/Linux users are steered to SP Flash Tool's console-mode XML flow,
-    the most reliable path on those platforms. macOS has no SP Flash Tool
-    build, so MTKClient is the only option there. Windows follows its CPU.
+    Linux and macOS both use MTKClient by default: it needs no root password,
+    no SP Flash Tool x86 payload and no udev/console configuration to start,
+    and it is the engine the reference build uses on those platforms. Linux
+    keeps SP Flash Tool as the automatic fallback (the run is handed to it
+    when MTKClient cannot bring the device up), so mistyping nothing here
+    never removes the second engine. Windows follows its CPU.
 
     ``paths.IS_MAC`` is read live rather than the module-level ``IS_MAC``
     snapshot so simulated macOS mode (and the tests that toggle it) is
@@ -459,15 +462,16 @@ def default_flash_method():
     locked = windows_only_method()
     if locked:
         return locked
-    return METHOD_MTK if paths.IS_MAC else METHOD_SP
+    return METHOD_MTK
 
 
 def normalise_method(method):
     """Coerce a persisted (possibly legacy) setting into a usable method id.
 
-    Legacy ``"auto"`` resolves to the platform default so users land on SP
-    Flash Tool rather than an ambiguous automatic choice; on macOS every
-    value collapses to MTKClient, the only backend that exists there.
+    Legacy ``"auto"`` resolves to the platform default (MTKClient on Linux and
+    macOS, SP Flash Tool on Windows) rather than an ambiguous automatic
+    choice; on macOS every value collapses to MTKClient, the only backend that
+    exists there.
 
     The legacy ``mtk_mac`` setting is normalized to the platform default. The
     simulated macOS environment remains available to developers through the
@@ -479,10 +483,6 @@ def normalise_method(method):
         return default_flash_method()
     if paths.IS_MAC:
         return METHOD_MTK
-    if windows_only_method() == METHOD_MTK:
-        return METHOD_MTK
-    if windows_only_method() == METHOD_SP:
-        return METHOD_SP
     if value in ("auto", METHOD_MTK_MAC):
         return default_flash_method()
     return value
@@ -548,12 +548,25 @@ _SP_EXIT_ERROR_RE = re.compile(r"\bSP_EXIT_-?\d+\b", re.IGNORECASE)
 
 
 def is_sp_driver_error(value) -> bool:
-    """True when an SP Flash Tool exit or driver error indicates missing MediaTek USB drivers."""
+    """True when an SP Flash Tool exit or driver error indicates missing MediaTek USB drivers.
+
+    Only non-zero ``SP_EXIT_*`` codes are treated as driver-missing signals:
+    exit code 0 means the tool stopped cleanly (no "download ok" in the log)
+    rather than that the driver stack was absent, so ``SP_EXIT_0`` must not
+    route the user to the driver error card.
+    """
     text = str(value or "").strip()
     if not text:
         return False
     upper = text.upper()
-    if _SP_EXIT_ERROR_RE.search(upper):
+    m = _SP_EXIT_ERROR_RE.search(upper)
+    if m:
+        try:
+            n = int(m.group(0).split("SP_EXIT_")[-1])
+        except ValueError:
+            return False
+        if n == 0:
+            return False
         return True
     return any(
         token in upper
@@ -1043,12 +1056,13 @@ LEGACY_MBR_USER_ADDR_BIAS = 8388608  # 8MB (0x800000)
 LEGACY_SEGMENTED_WRITE_BYTES = 52428800  # 50MB per USB transfer chunk
 # Per-transfer chunk size handed to the bundled (Chinese-fork) legacy DA. Its
 # ``sdmmc_write_data`` reads ``config.write_chunk_size`` for every USB transfer
-# and defaults to 1 MiB when unset; the reference build drives the same DA with
-# 1 MiB when unset; the reference build drives the same DA with
-# 512 KiB, and 256 KiB when an image is 1.5 GB or larger so a big transfer still
-# leaves room for the device to answer between chunks.
-LEGACY_WRITE_CHUNK_BYTES = 1048576  # 1 MiB (increased from 512 KiB)
-LEGACY_WRITE_CHUNK_BYTES_LARGE = 524288  # 512 KiB, images >= 1536 MB
+# and defaults to 1 MiB when unset. The reference build (firmware_downloader.py)
+# drives the same DA with 512 KiB, and 256 KiB when an image is 1.5 GB or larger
+# so a big transfer still leaves room for the device to answer between chunks.
+# Never raise these: a larger chunk is exactly what makes a slow preloader-mode
+# target miss its ACK window mid-partition.
+LEGACY_WRITE_CHUNK_BYTES = 524288  # 512 KiB
+LEGACY_WRITE_CHUNK_BYTES_LARGE = 262144  # 256 KiB, images >= 1536 MB
 LEGACY_WRITE_CHUNK_LARGE_IMAGE_BYTES = 1536 * 1024 * 1024
 
 
@@ -1387,11 +1401,10 @@ def _mark_extract_complete(extract_dir):
 def prune_extracted_cache(keep_package_path: Optional[str] = None) -> list:
     """Keep only the set of firmware files for ``keep_package_path``.
 
-    Called when a firmware is about to be installed: older extracted folders and
-    leftover archives in downloads_dir() are removed, and the installed package's
-    own archive and extracted folder are kept so the install (MTKClient or SP
-    Flash Tool) can re-read them. Extracting or browsing a package never calls
-    this, so the saved set is only replaced by a new install.
+    Called only when the user chooses a new firmware: older extracted folders and
+    leftover archives in downloads_dir() are removed, and the chosen package's
+    own archive and extracted folder are kept. Installs, failures, retries and
+    device prep never call this, and never delete the cache.
 
     Returns a list of paths that were removed.
     """
@@ -1472,7 +1485,7 @@ class ExtractWorker(QThread):
             logger.error("Extraction failed: %s", e, exc_info=True)
             self.finished.emit(False, "", str(e))
 
-    def _extract(self, package_path):
+    def _extract(self, package_path, force=False):
         p = Path(package_path)
         is_scatter_file = p.is_file() and (p.suffix.lower() == ".txt" or "scatter" in p.name.lower())
         if is_scatter_file or p.is_dir():
@@ -1486,11 +1499,11 @@ class ExtractWorker(QThread):
 
         extract_dir = compute_extract_dir(package_path)
         from .sp_flash_gui import discard_firmware_history
-        if _is_extract_complete(extract_dir):
+        if not force and _is_extract_complete(extract_dir):
             self.progress.emit(100)
             discard_firmware_history(extract_dir)
             return extract_dir
-        shutil.rmtree(extract_dir, ignore_errors=True)
+        # Cached files are never deleted here: a forced re-extract overwrites them in place.
         extract_dir.mkdir(parents=True, exist_ok=True)
         suffix = Path(package_path).suffix.lower()
         if suffix == ".zip":
@@ -1916,7 +1929,17 @@ def _parse_scatter_entries(scatter_path):
     - physical_start_addr: int
     - partition_size: int
     - offset: calculated byte offset within the target partition (int)
+    - order: position of the entry in the scatter file (the write order the
+      reference build uses)
     """
+    raw_parts = _read_scatter_parts(scatter_path)
+    if not raw_parts:
+        return []
+    return _scatter_entries_from_parts(raw_parts)
+
+
+def _read_scatter_parts(scatter_path):
+    """Split a scatter file into one dict per ``- partition_index:`` block."""
     try:
         content = Path(scatter_path).read_text(encoding="utf-8", errors="ignore")
     except Exception:
@@ -1936,7 +1959,11 @@ def _parse_scatter_entries(scatter_path):
             current[key.strip().lstrip("- ")] = value.strip()
     if current:
         raw_parts.append(current)
+    return raw_parts
 
+
+def _scatter_entries_from_parts(raw_parts):
+    """Turn parsed scatter blocks into write-plan entries (shared parser)."""
     # Determine base linear address for EMMC_USER (typically the linear address
     # of the first EMMC_USER partition, usually 0x1400000 on MT6572/MT6582)
     user_base = None
@@ -1954,7 +1981,7 @@ def _parse_scatter_entries(scatter_path):
         user_base = 0x1400000
 
     entries = []
-    for p in raw_parts:
+    for order, p in enumerate(raw_parts):
         pname = p.get("partition_name", "")
         if not pname:
             continue
@@ -1981,8 +2008,180 @@ def _parse_scatter_entries(scatter_path):
             "physical_start_addr": phys,
             "partition_size": size,
             "offset": offset,
+            "order": order,
         })
     return entries
+
+
+# --- reference write plan (parity with firmware_downloader.py) ---------------
+# The shipped "Innioasis Updater" (firmware_downloader.py) is the build users
+# report as reliable on Linux/macOS. These constants and the plan below mirror
+# exactly what it writes, because the differences are what damage bootloaders:
+#
+#   Y1 (MT6572): one named-``w`` write of these six partitions, in this order.
+#   No preloader, no MBR/EBR, no cache, no format pass.
+#
+#   Y2 (MT6582): the package scatter's physical addresses, in scatter order
+#   (preloader first), skipping the device's own MBR/EBR stubs, full file
+#   lengths, one write per partition.
+#
+# A preloader written last (or wrapped in a synthesised BRLYT header) is what a
+# target that stops answering mid-write boots from: writing it first means a
+# run that dies later still leaves a player that enumerates for another try.
+MTK_Y1_NAMED_WRITE_PARTS = (
+    ("logo", "logo.bin"),
+    ("uboot", "lk.bin"),
+    ("bootimg", "boot.img"),
+    ("recovery", "recovery.img"),
+    ("android", "system.img"),
+    ("usrdata", "userdata.img"),
+)
+# Partition-table scaffolding that belongs to the device, not to the package.
+# The stock zips ship 512-byte all-zero MBR/EBR stubs; writing one over the real
+# table leaves a player that cannot find a single partition.
+MTK_DEVICE_TABLE_PARTS = frozenset(
+    {"mbr", "ebr", "ebr1", "ebr2", "ebr3", "pgpt", "sgpt", "gpt", "pmt"}
+)
+MTK_DEVICE_TABLE_FILES = frozenset(
+    {"mbr", "ebr", "ebr1", "ebr2", "ebr3"}
+)
+
+
+def _is_device_table_partition(partition_name, filename="") -> bool:
+    """True for MBR/EBR/PMT-style regions that must stay device-local."""
+    name = (partition_name or "").strip().lower()
+    fname = Path(str(filename or "")).name.strip().lower()
+    if name in MTK_DEVICE_TABLE_PARTS or fname in MTK_DEVICE_TABLE_FILES:
+        return True
+    return name.startswith("ebr") or fname.startswith("ebr")
+
+
+def _is_empty_placeholder_image(path, sample_max: int = 65536) -> bool:
+    """True for an all-zero image (a stock MBR/EBR stub, typically 512 bytes).
+
+    Only small files are read: a real system/userdata image is hundreds of MB
+    and can never be a table stub, so there is no reason to load it.
+    """
+    try:
+        if Path(path).stat().st_size > sample_max:
+            return False
+        data = Path(path).read_bytes()
+    except OSError:
+        return False
+    if not data:
+        return True
+    if len(data) >= 512 and data[510:512] == b"\x55\xaa":
+        body = data[:510] + data[512:]
+    elif len(data) <= 512 and data[-2:] == b"\x55\xaa":
+        body = data[:-2]
+    else:
+        body = data
+    return not any(body)
+
+
+def _scatter_region_parttype(region: str, partition_name: str = "") -> str:
+    """DA parttype for a scatter entry: ``boot1``/``boot2`` or ``user``."""
+    region = (region or "").strip().upper()
+    if region == "EMMC_BOOT_2":
+        return "boot2"
+    if region.startswith("EMMC_BOOT") or (partition_name or "").strip().upper() == "PRELOADER":
+        return "boot1"
+    return "user"
+
+
+def build_mtk_write_plan(scatter_path, model=""):
+    """Return the ordered write plan the reference build performs.
+
+    Each step is ``{"name", "path", "parttype", "offset", "length"}``.
+    ``offset`` is an absolute byte address for ``da_wo``; ``None`` means a
+    named write (``da_write``), resolved from the device's own partition table.
+
+    The order is the reference one: Y1's fixed named list, Y2's scatter order
+    (which puts the preloader first). Nothing formats a partition, rewrites the
+    device's MBR/EBR, or duplicates the preloader into eMMC boot2.
+    """
+    scatter_p = Path(scatter_path)
+    entries = _parse_scatter_entries(scatter_p)
+    if not entries:
+        return []
+    scatter_dir = scatter_p.parent
+    model_text = str(model or "").upper()
+
+    # Y1: named partitions only. Its scatter has no usable physical addresses
+    # (every EMMC_USER entry says 0x0), which is why the reference never writes
+    # this model by offset.
+    if "Y1" in model_text:
+        by_name = {e["name"].strip().lower(): e for e in entries}
+        plan = []
+        for part_name, file_name in MTK_Y1_NAMED_WRITE_PARTS:
+            entry = by_name.get(part_name)
+            candidates = []
+            if entry is not None and entry.get("file_name"):
+                candidates.append(entry["file_name"])
+            candidates.append(file_name)
+            image = None
+            for candidate in candidates:
+                resolved = _resolve_image_file(scatter_dir, candidate)
+                if resolved.is_file():
+                    image = resolved
+                    break
+            if image is None:
+                continue
+            plan.append(
+                {
+                    "name": part_name,
+                    "path": image,
+                    "parttype": "user",
+                    "offset": None,
+                    "length": image.stat().st_size,
+                }
+            )
+        return plan
+
+    plan = []
+    seen = set()
+    for entry in sorted(entries, key=lambda e: e.get("order", 0)):
+        name = (entry.get("name") or "").strip()
+        if not name or not entry.get("is_download"):
+            continue
+        file_name = (entry.get("file_name") or "").strip()
+        if not file_name or file_name.upper() == "NONE":
+            continue
+        if _is_device_table_partition(name, file_name):
+            resolved = _resolve_image_file(scatter_dir, file_name)
+            if not resolved.is_file() or _is_empty_placeholder_image(resolved):
+                continue
+        image = _resolve_image_file(scatter_dir, file_name)
+        if not image.is_file() or _is_empty_placeholder_image(image):
+            continue
+        key = name.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        length = image.stat().st_size
+        if length <= 0:
+            continue
+        parttype = _scatter_region_parttype(entry.get("region", ""), name)
+        phys = entry.get("physical_start_addr")
+        # Address 0 is real inside eMMC boot1 (the preloader lives there), and
+        # the reference writes it as ``wo 0x0 … --parttype boot1``. In the user
+        # area, 0 means the scatter carries no usable physical address: then
+        # the only safe write is a named one, since writing offset 0 would land
+        # on the partition table.
+        if phys or parttype in ("boot1", "boot2") or name.lower() == "mbr":
+            offset = int(phys or 0)
+        else:
+            offset = None
+        plan.append(
+            {
+                "name": name,
+                "path": image,
+                "parttype": parttype,
+                "offset": offset,
+                "length": length,
+            }
+        )
+    return plan
 
 
 # ---------------------------------------------------------------------------
@@ -2063,14 +2262,23 @@ class _MtkOutputStallDetector(threading.Thread):
         self._stopped = threading.Event()
         self._last_line = ""
         self._last_time = 0.0
+        self._reported = False
 
     def note(self, line):
-        """Called with each backend line that looks like a stalled bring-up."""
+        """Called with each backend line. Only a BROM/DRAM bring-up line arms the
+        stall; any other output means the backend has moved on and disarms it."""
         text = str(line or "").strip()
-        now = time.monotonic()
-        if text:
+        if text.startswith(MTK_BROM_STALL_PREFIXES):
             self._last_line = text
-            self._last_time = now
+            self._last_time = time.monotonic()
+        else:
+            self._last_line = ""
+        self._reported = False
+
+    def progress(self):
+        """Write progress is activity too: a long partition write prints no text."""
+        self._last_line = ""
+        self._reported = False
 
     def maybe_stalled(self):
         """True when the stalled line is old enough to report."""
@@ -2083,7 +2291,13 @@ class _MtkOutputStallDetector(threading.Thread):
 
     def run(self):
         while not self._stopped.wait(self._interval):
-            if self._last_line and (time.monotonic() - self._last_time) >= self._window:
+            if (
+                self._last_line
+                and not self._reported
+                and (time.monotonic() - self._last_time) >= self._window
+            ):
+                # Report once per stall; new output or progress re-arms it.
+                self._reported = True
                 try:
                     self._on_stalled_line(self._last_line, time.monotonic() - self._last_time)
                 except Exception:
@@ -2680,11 +2894,10 @@ class FlashWorker(QThread):
                 if scatter_file is None
                 else f"Image files missing ({', '.join(missing)}); re-extracting..."
             )
-            shutil.rmtree(extract_dir, ignore_errors=True)
             if self._cancelled:
                 self.finished.emit(False, "USER_CANCELLED")
                 return
-            extract_dir = self._extract_package()
+            extract_dir = self._extract_package(force=True)
             if self._cancelled:
                 self.finished.emit(False, "USER_CANCELLED")
                 return
@@ -2829,7 +3042,7 @@ class FlashWorker(QThread):
         self._flash_via_mtkclient(extract_dir, scatter_file)
 
     # -- extraction ----------------------------------------------------------
-    def _extract_package(self):
+    def _extract_package(self, force=False):
         pre = Path(self.pre_extracted_dir) if self.pre_extracted_dir else None
         if pre and pre.is_dir():
             sc = _find_scatter(pre, allow_raise=False)
@@ -2846,9 +3059,9 @@ class FlashWorker(QThread):
         # The helper emits on its own signal. Forward that onto this worker so
         # the progress card moves during unzip instead of sitting at 5%.
         worker.progress.connect(lambda p: self.progress.emit(p))
-        # Same extraction as ExtractWorker: reuses a completed extract, marks
-        # a new one complete, and retires older firmware and archives.
-        extract_dir = worker._extract(self.package_path)
+        # Same extraction as ExtractWorker: reuses a completed extract and marks
+        # a new one complete. Cached files are never removed during an install.
+        extract_dir = worker._extract(self.package_path, force=force)
         return extract_dir
 
     def _validate_extract(self, directory):
@@ -2999,21 +3212,26 @@ class FlashWorker(QThread):
         if self._sp_mismatch:
             self.finished.emit(False, "DEVICE_PACKAGE_MISMATCH")
             return
-        if exit_code == 0:
+
+        # The reference Chinese build decides success from the internal log,
+        # not from the process exit code alone: the console tool can exit
+        # non-zero while the flash actually succeeded. Read the log first so
+        # the log result is the single source of truth for completion.
+        log_success, error_detail = self._read_sp_log_result(launch_time, log_root)
+
+        if "CHIP_TYPE_NOT_MATCH" in str(error_detail).upper():
+            self.finished.emit(False, "DEVICE_PACKAGE_MISMATCH")
+            return
+
+        if log_success:
             self.step_changed.emit(STEP_DONE)
             self.progress.emit(100)
             self._log("Flash complete! Disconnect USB and reboot the device.")
             self.finished.emit(True, "")
             return
 
-        log_success, error_detail = self._read_sp_log_result(launch_time, log_root)
-        if "CHIP_TYPE_NOT_MATCH" in str(error_detail).upper():
-            self.finished.emit(False, "DEVICE_PACKAGE_MISMATCH")
-        elif log_success:
-            self.step_changed.emit(STEP_DONE)
-            self.progress.emit(100)
-            self.finished.emit(True, "")
-        elif error_detail:
+        # Log did not report success: the install did not complete.
+        if error_detail:
             self._log(f"SP Flash Tool error: {error_detail}")
             self._finish_sp_failure(str(error_detail))
         elif self._sp_err_code:
@@ -3023,6 +3241,14 @@ class FlashWorker(QThread):
             self._finish_sp_failure(
                 f"{name} ({self._sp_err_code})" if name else f"SP_ERR_{self._sp_err_code}"
             )
+        elif exit_code == 0:
+            # Exit code 0 but no "download ok" in the log: the tool exited
+            # cleanly without completing the flash (for example, the user
+            # closed it mid-run). Treat exit 0 as completion, not as a driver
+            # error: exit codes are not part of the driver-missing signal, and
+            # the log is the single source of truth for whether the flash
+            # finished.
+            self._finish_sp_failure(f"SP_EXIT_{exit_code}")
         else:
             self._finish_sp_failure(f"SP_EXIT_{exit_code}")
 
@@ -3211,13 +3437,14 @@ class FlashWorker(QThread):
             self.step_changed.emit(STEP_WRITE)
             self._update_sp_image_progress(line)
         elif "download ok" in low:
+            # SP Flash Tool reports "download ok" on each partition write
+            # completion in its console output. The console may still be
+            # running after this line (it can emit per-partition "download ok"
+            # lines), so do not emit STEP_DONE / completion here: the log-file
+            # result check at the end of the run is the single place that
+            # decides success, matching the reference Chinese build.
             self._leave_usb_search()
-            self.step_changed.emit(STEP_DONE)
-            if not getattr(self, "_is_rockbox_flow", False):
-                self.progress.emit(100.0)
-            else:
-                self.progress.emit(90.0)
-            self.action_changed.emit(tr("action_flash_complete"))
+            self._note_install_progress()
         elif "download failed" in low or "s_ft_" in low:
             m = re.search(r"(S_\w+)\s*\((\d+)\)", line)
             self._log(f"Error: {m.group(1)} (code {m.group(2)})" if m else f"SP Flash Tool error: {line}")
@@ -3347,9 +3574,13 @@ class FlashWorker(QThread):
                             self.step_changed.emit(STEP_WRITE)
                             self._update_sp_image_progress(ln)
                         elif "download ok" in low:
+                            # Per-partition "download ok" lines are progress, not
+                            # completion. The final success determination is made by
+                            # _read_sp_log_result after the process exits, matching the
+                            # reference Chinese build which reads the log file once at
+                            # the end rather than reacting to each partition line.
                             self._leave_usb_search()
-                            self.step_changed.emit(STEP_DONE)
-                            self.progress.emit(100)
+                            self._note_install_progress()
                         elif "brom connected" in low:
                             self._leave_usb_search()
                             self.step_changed.emit(STEP_DETECT)
@@ -3379,6 +3610,17 @@ class FlashWorker(QThread):
                 pass
 
     def _read_sp_log_result(self, launch_time, log_root=None):
+        """Read the SP Flash Tool internal log to determine install result.
+
+        The reference Chinese build decides success from the internal log
+        (QT_FLASH_TOOL.log), not from the process exit code alone: the console
+        tool can exit non-zero while the flash actually succeeded, and can exit
+        zero in some partial-write cases. This mirrors that behaviour — the
+        log is the single source of truth for completion detection.
+
+        Returns ``(success: bool, detail: str)``. On success, ``detail`` is
+        empty; on failure, ``detail`` carries the error name and code.
+        """
         log_root = Path(log_root or _SP_LOG_ROOT)
         try:
             if not log_root.exists():
@@ -3395,13 +3637,20 @@ class FlashWorker(QThread):
             if not log_file.exists():
                 return (False, "")
             content = log_file.read_text(encoding="utf-8", errors="ignore")
+            # The reference build checks for "Download Ok" in the log as the
+            # success signal. Both capitalisations appear depending on the tool
+            # version; either one means the flash completed.
             if "Download Ok" in content or "download ok" in content:
                 return (True, "")
+            # Collect error tokens from the log, excluding S_DONE (which is the
+            # success token, not an error). The last distinct error is the one
+            # the user needs to see.
             errors = re.findall(r"(S_\w+)\s*\((\d+)\)", content)
             errors = [(n, c) for n, c in errors if n != "S_DONE"]
             if errors:
                 name, code = errors[-1]
                 return (False, f"{name} ({code})")
+            # Fall back to the last exception line if there is one.
             for line in reversed(content.splitlines()):
                 if "Exception" in line and "err_code" in line:
                     m = re.search(r"err_msg\[\s*(.+?)[\]\n]", line)
@@ -3635,8 +3884,26 @@ class FlashWorker(QThread):
             if self._tool_error:
                 self._log(f"Install failed: {self._tool_error}")
                 self.finished.emit(False, "TOOL_ERROR")
-            elif self._process.returncode == 0:
-                # MTKClient run exited cleanly from the app's point of view.
+                return
+            # The [RESULT] line is the authoritative completion signal from
+            # MTKClient: it carries the real outcome even when the process exit
+            # code disagrees (the CLI can exit non-zero while the flash succeeded,
+            # mirroring the SP Flash Tool behaviour where the log is the source of
+            # truth). Honour it first; fall back to the exit code only when no
+            # result line was emitted.
+            if final_msg or final_ok is not None:
+                if final_ok:
+                    try:
+                        from . import mtk_api
+                        mtk_api.fire_mtk_reset(timeout=2.0)
+                    except Exception:
+                        pass
+                    self.finished.emit(True, "")
+                else:
+                    self.finished.emit(False, final_msg or f"MTK_FLASH_FAILED")
+                return
+            if self._process.returncode == 0:
+                # Clean exit with no [RESULT] line: treat as success.
                 try:
                     from . import mtk_api
                     mtk_api.fire_mtk_reset(timeout=2.0)
@@ -3644,7 +3911,7 @@ class FlashWorker(QThread):
                     pass
                 self.finished.emit(True, "")
             else:
-                self.finished.emit(final_ok, final_msg or f"MTK_FLASH_FAILED ({self._process.returncode})")
+                self.finished.emit(False, f"MTK_FLASH_FAILED ({self._process.returncode})")
         except (subprocess.SubprocessError, OSError) as e:
             if getattr(self, "_process", None) and self._process.poll() is None:
                 try:
@@ -3738,6 +4005,11 @@ class FlashWorker(QThread):
         detector = getattr(self, "_mtk_output_stall_detector", None)
         if detector is not None:
             detector.note(text)
+
+    def _note_mtk_write_progress(self):
+        detector = getattr(self, "_mtk_output_stall_detector", None)
+        if detector is not None:
+            detector.progress()
 
     def _on_mtk_output_stalled(self, line="", elapsed=0.0):
         self._log(f"MTKClient stalled on line: {line} ({int(elapsed)}s)")
@@ -4096,63 +4368,33 @@ class FlashWorker(QThread):
         self.action_changed.emit(tr("action_device_connected"))
         self._apply_mtk_write_strategy(mtk, image_files)
 
-        total = len(image_files)
-
-        scatter_entries_map = {
-            e["name"].lower(): e for e in _parse_scatter_entries(scatter_file)
-        }
-
-        # Sequence: partition table (MBR/EBR) first, systems next, preloader last for safety
-        def _partition_sort_key(item):
-            name = item[0].lower()
-            if name in ("mbr", "pgpt"):
-                return 0
-            if name.startswith("ebr"):
-                return 1
-            if name in ("uboot", "lk"):
-                return 10
-            if name in ("boot", "bootimg"):
-                return 20
-            if name in ("recovery", "secro", "logo"):
-                return 30
-            if name in ("userdata", "cache"):
-                return 80
-            if name in ("system", "android", "innios"):
-                return 90
-            if name == "preloader":
-                return 999  # Flashed last to keep target recoverable
-            return 50
-
-        ordered_images = sorted(image_files, key=_partition_sort_key)
-        write_names = {img[0].lower() for img in ordered_images}
-
-        # Reset unwritten runtime partitions before flashing (never after writing images)
-        _RUNTIME_RESET_PARTITIONS = frozenset(
-            {"odm", "super", "vendor", "android", "product", "system", "cache", "usrdata", "userdata"}
+        # The write plan is the reference build's, not a guess: Y1 gets its six
+        # named partitions, Y2 the package scatter order (preloader first), and
+        # the device's own MBR/EBR stubs are never written back. Nothing is
+        # formatted before the run, so an interrupted install can always be
+        # retried from a player whose preloader still answers.
+        plan = build_mtk_write_plan(
+            scatter_file, getattr(self, "package_model", "") or self.model
         )
-        for p_name, p_entry in scatter_entries_map.items():
-            if p_name in _RUNTIME_RESET_PARTITIONS and p_name not in write_names:
-                offset = p_entry.get("offset")
-                size = p_entry.get("partition_size")
-                if offset is not None and size and size > 0:
-                    self._log(f"Resetting unwritten runtime partition before flash: {p_name}")
-                    try:
-                        daloader = getattr(mtk, "daloader", None)
-                        if daloader is not None and hasattr(daloader, "formatflash"):
-                            daloader.formatflash(
-                                addr=offset,
-                                length=size,
-                                partitionname=p_name,
-                                parttype="user",
-                                display=False,
-                            )
-                        elif hasattr(da_handler, "da_erase"):
-                            da_handler.da_erase([p_name], parttype="user")
-                    except Exception as e:
-                        self._log(f"Notice: pre-flash reset of {p_name} non-fatal: {e}")
-                    self._tool_error = ""
+        if not plan:
+            self._log("Error: no writable partitions in scatter file")
+            self.finished.emit(False, "NO_IMAGE_FILES")
+            return
+        self._log(
+            f"Write plan ({len(plan)} partition(s), "
+            f"{'named writes' if plan[0]['offset'] is None else 'scatter addresses'}):"
+        )
+        for step in plan:
+            where = (
+                f"0x{step['offset']:X}" if step["offset"] is not None else "device table"
+            )
+            self._log(
+                f"  {step['name']:<12} {step['path'].name:<28} {where} "
+                f"{step['parttype']}"
+            )
 
-        total_bytes = sum(file_path.stat().st_size for _, file_path in ordered_images if file_path.exists())
+        total = len(plan)
+        total_bytes = sum(int(step["length"]) for step in plan)
         completed_bytes = 0
         part_completed_bytes = 0
         cur_part_name = ""
@@ -4166,6 +4408,7 @@ class FlashWorker(QThread):
             part_completed_bytes += seg_len
             self._touch_attempt()
             self._note_install_progress()
+            self._note_mtk_write_progress()
 
         def on_mtk_write_progress(pos):
             nonlocal last_log_time, last_log_pct
@@ -4173,6 +4416,7 @@ class FlashWorker(QThread):
                 return
             self._touch_attempt()
             self._note_install_progress()
+            self._note_mtk_write_progress()
             current_done = completed_bytes + pos
             current_part_done = part_completed_bytes + pos
             if total_bytes > 0:
@@ -4224,7 +4468,9 @@ class FlashWorker(QThread):
             mtk.config.guiprogress = _ProgressEmitter(on_mtk_write_progress)
 
         try:
-            for i, (part_name, file_path) in enumerate(ordered_images):
+            for i, step in enumerate(plan):
+                part_name = step["name"]
+                file_path = step["path"]
                 if self._cancelled:
                     self.finished.emit(False, "USER_CANCELLED")
                     return
@@ -4253,16 +4499,16 @@ class FlashWorker(QThread):
                     )
                 )
 
-                entry = scatter_entries_map.get(part_name.lower())
-                region = entry.get("region", "EMMC_USER") if entry else "EMMC_USER"
-                offset = entry.get("offset") if entry else None
-
+                offset = step["offset"]
+                target_part = step["parttype"]
                 is_preloader = part_name.lower() == "preloader"
                 active_file = file_path
-                temp_wrapped = None
                 temp_unsparse = None
 
-                # 1. Unpack Android sparse images in-process
+                # Android sparse images must be raw before a DA write, exactly
+                # as the reference desparses system/cache/userdata with
+                # simg2img first. Nothing else is rewritten: no signed-wrapper
+                # strip, no preloader boot header.
                 if _is_android_sparse(active_file):
                     self._log(tr("log_sparse_fmt").format(part=part_name))
                     self.action_changed.emit(tr("action_unpacking_fmt").format(part=part_name))
@@ -4270,33 +4516,13 @@ class FlashWorker(QThread):
                     temp_unsparse, _ = _convert_sparse_to_raw(active_file, unsparse_dir)
                     active_file = temp_unsparse
 
-                # 2. Detect & strip signed image wrappers (head=64B, tail=236B)
-                cur_fsize = active_file.stat().st_size if active_file.exists() else 0
-                signed_range = _signed_image_payload_range(active_file, cur_fsize) if cur_fsize > 0 else None
+                write_len = active_file.stat().st_size if active_file.exists() else 0
                 file_off = 0
-                write_len = cur_fsize
-                if signed_range is not None:
-                    file_off, write_len = signed_range
-                    self._log(
-                        f"  Stripping signed wrapper: offset=0x{file_off:X}, payload_len=0x{write_len:X}"
-                    )
-
-                if is_preloader:
-                    temp_wrapped = _wrap_preloader_for_raw_boot(
-                        active_file, storage_type="emmc", log_cb=self._log
-                    )
-                    if temp_wrapped != active_file:
-                        active_file = temp_wrapped
-                        file_off = 0
-                        write_len = active_file.stat().st_size if active_file.exists() else 0
-                    target_parts = self._resolve_preloader_target_parts(mtk, normalized_region=region)
-                else:
-                    if region == "EMMC_BOOT_1":
-                        target_parts = ("boot1",)
-                    elif region == "EMMC_BOOT_2":
-                        target_parts = ("boot2",)
-                    else:
-                        target_parts = ("user",)
+                # A desparsed image is bigger than the sparse file on disk, so
+                # the bar's denominator has to grow with it or it reaches the
+                # end of the write slice early.
+                if write_len > int(step["length"]):
+                    total_bytes += write_len - int(step["length"])
 
                 cur_part_name = part_name
                 cur_part_len = write_len
@@ -4304,18 +4530,17 @@ class FlashWorker(QThread):
                 last_log_pct = -1.0
 
                 try:
-                    for target_part in target_parts:
-                        self._write_mtk_partition(
-                            da_handler,
-                            mtk,
-                            part_name,
-                            str(active_file),
-                            target_part,
-                            offset=offset,
-                            file_offset=file_off,
-                            write_length=write_len,
-                            bytes_progress_cb=on_segment_done,
-                        )
+                    self._write_mtk_partition(
+                        da_handler,
+                        mtk,
+                        part_name,
+                        str(active_file),
+                        target_part,
+                        offset=offset,
+                        file_offset=file_off,
+                        write_length=write_len,
+                        bytes_progress_cb=on_segment_done,
+                    )
                 except BaseException as e:
                     if is_disconnection_error(str(e), e):
                         self._log(f"USB disconnection detected during partition write: {e}")
@@ -4324,27 +4549,20 @@ class FlashWorker(QThread):
                         self.usb_disconnected.emit()
                         self.finished.emit(False, "USB_DISCONNECTED")
                         return
-                    if is_preloader:
-                        self._log(f"Warning: Non-fatal preloader write issue ignored: {e}")
-                    else:
-                        self._log(f"Writing {part_name} failed: {e}\n{traceback.format_exc()}")
-                        self.finished.emit(False, "WRITE_FAILED")
-                        return
+                    self._log(f"Writing {part_name} failed: {e}\n{traceback.format_exc()}")
+                    self.finished.emit(False, "WRITE_FAILED")
+                    return
                 finally:
                     if temp_unsparse and temp_unsparse.exists():
                         try:
                             temp_unsparse.unlink(missing_ok=True)
                         except Exception:
                             pass
-                    if temp_wrapped and temp_wrapped != file_path and temp_wrapped.exists():
-                        try:
-                            temp_wrapped.unlink(missing_ok=True)
-                        except Exception:
-                            pass
-                    if file_path.exists():
-                        actual_len = file_path.stat().st_size
-                        if actual_len > part_completed_bytes:
-                            completed_bytes += (actual_len - part_completed_bytes)
+                    actual_len = write_len if active_file == temp_unsparse else (
+                        file_path.stat().st_size if file_path.exists() else 0
+                    )
+                    if actual_len > part_completed_bytes:
+                        completed_bytes += (actual_len - part_completed_bytes)
                     if total_bytes > 0:
                         self._emit_progress(percent_of(completed_bytes, total_bytes, 20, 75))
                         remaining = self._total_eta.note(completed_bytes, total_bytes)
@@ -4363,6 +4581,7 @@ class FlashWorker(QThread):
                 self.step_changed.emit(STEP_WRITE)
                 self.finished.emit(False, "TOOL_ERROR")
                 return
+
             self._end_mtk_run_successfully(mtk, da_handler)
         finally:
             self._flush_log()
@@ -4488,29 +4707,19 @@ class FlashWorker(QThread):
         write_length=None,
         bytes_progress_cb=None,
     ):
-        """Invoke da_handler to write a partition, supporting direct offset write, real DaHandler, and test mocks."""
+        """Write one partition exactly the way the reference build does.
+
+        With a scatter address: one ``da_wo`` for the whole image (the same
+        command ``mtk.py script`` issues). Without one: one named ``da_write``
+        (``mtk.py w``), which resolves the partition from the device table.
+        Nothing is split into 50 MB segments and no image header is rewritten.
+        """
         file_path = Path(file_path_str)
         file_size = file_path.stat().st_size if file_path.exists() else 0
         wlen = write_length if write_length is not None else max(0, file_size - file_offset)
 
-        # Fast path: if offset is known and da_handler / mtk supports direct offset write,
-        # write directly by offset. This bypasses detect_partition and on-device GPT probing,
-        # ensuring reliable writes on MBR/EBR devices (e.g. MT6572, MT6582) and unformatted flash.
         if offset is not None:
             daloader = getattr(mtk, "daloader", None)
-            if daloader is not None and hasattr(daloader, "writeflash") and (wlen > LEGACY_SEGMENTED_WRITE_BYTES or file_offset > 0):
-                self._write_partition_segmented(
-                    mtk,
-                    addr=offset,
-                    file_path_str=file_path_str,
-                    segment_bytes=LEGACY_SEGMENTED_WRITE_BYTES,
-                    parttype=part_type,
-                    file_offset=file_offset,
-                    write_length=wlen,
-                    bytes_progress_cb=bytes_progress_cb,
-                )
-                return
-
             if hasattr(da_handler, "da_wo"):
                 ok = da_handler.da_wo(
                     start=offset,
@@ -4535,16 +4744,31 @@ class FlashWorker(QThread):
                     raise RuntimeError(f"Writing {part_name} at offset {hex(offset)} failed: {err}")
                 return
 
-        # Fallback path: handle_da_cmds / da_write (used by test mocks or when offset is unknown)
+        # Named write: the device's own partition table supplies the address.
+        if hasattr(da_handler, "da_write"):
+            da_handler.da_write(
+                parttype=part_type,
+                filenames=[file_path_str],
+                partitions=[part_name],
+            )
+            # The bundled CLI's ``w`` command treats da_write as a fire-and-
+            # forget operation: failed writes are printed, but the method
+            # returns None and the CLI still exits normally. Reject a named
+            # write only when its own diagnostics report a real failure; a
+            # successful write also clears last_error in the bundled legacy DA.
+            error = getattr(getattr(mtk, "config", None), "last_error", None)
+            if error:
+                raise RuntimeError(f"Writing {part_name} failed: {error}")
+            return
+
         offset_hex = hex(offset) if offset is not None else "0x0"
-        length_hex = hex(wlen)
 
         class _Args:
             partitionname = part_name
             filename = file_path_str
             parttype = part_type
             offset = offset_hex
-            length = length_hex
+            length = hex(wlen)
 
         if hasattr(da_handler, "handle_da_cmds"):
             try:
@@ -4557,14 +4781,8 @@ class FlashWorker(QThread):
                     filenames=file_path_str,
                     parttype=part_type,
                 )
-        elif hasattr(da_handler, "da_write"):
-            da_handler.da_write(
-                parttype=part_type,
-                filenames=[file_path_str],
-                partitions=[part_name],
-            )
-        else:
-            raise RuntimeError("DaHandler has no write method")
+            return
+        raise RuntimeError("DaHandler has no write method")
 
 
 # ---------------------------------------------------------------------------
