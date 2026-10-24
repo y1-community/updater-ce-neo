@@ -111,7 +111,7 @@ def _leave_cleanly(window, exit_code) -> None:
     then pulls the interpreter out from under its ``run()`` — PySide reports
     ``Error calling Python override of QThread::run()`` — and Qt aborts the
     process for a QThread destroyed while its thread is still running, which is
-    the SIGABRT ("Abort trap: 6") in this app's crash reports. When something is
+    the SIGABRT (\"Abort trap: 6\") in this app's crash reports. When something is
     still running, sync the user's settings first and leave the rest of the
     teardown to the OS.
     """
@@ -133,6 +133,107 @@ def _leave_cleanly(window, exit_code) -> None:
         os._exit(exit_code if isinstance(exit_code, int) else 0)
     except Exception:
         pass
+
+
+def _prepare_linux_sp_flash_tool() -> None:
+    """Prepare Linux system for SP Flash Tool USB access.
+
+    This ensures the SP Flash Tool can communicate with MediaTek devices
+    on Linux by configuring udev rules, group permissions, and killing
+    conflicting services. This prevents the S_COM_PORT_OPEN_FAIL (1013)
+    error that crashes the app before the GUI opens.
+    """
+    try:
+        from . import linux_sp_flash
+        from . import process_guard
+
+        # Free any COM ports held by stale processes
+        try:
+            process_guard.free_com_ports()
+            logger.debug("Freed COM ports on Linux startup")
+        except Exception as e:
+            logger.debug("Failed to free COM ports: %s", e)
+
+        # Check for and report conflicting services
+        try:
+            conflicts = process_guard.check_service_conflicts()
+            for conflict in conflicts:
+                logger.warning(
+                    "Conflicting service on Linux: %s - %s",
+                    conflict["severity"],
+                    conflict["message"],
+                )
+        except Exception as e:
+            logger.debug("Could not check service conflicts: %s", e)
+
+        # Check udev rules status and install if missing
+        try:
+            udev_ok, udev_msg = linux_sp_flash.check_udev_rules()
+            logger.info("Udev rules status: %s", udev_msg)
+            if not udev_ok:
+                logger.info("Installing MediaTek udev rules...")
+                install_result, install_msg = linux_sp_flash.install_udev_rules()
+                logger.info("Udev rules installation: %s", install_msg)
+        except Exception as e:
+            logger.debug("Could not check/install udev rules: %s", e)
+
+        # Check user permissions and add to group if needed
+        try:
+            serial_group = "dialout"  # default, will be detected per distro
+            perm_ok, perm_msg = linux_sp_flash.check_user_permissions(serial_group)
+            logger.info("User permissions: %s", perm_msg)
+            if not perm_ok:
+                logger.warning(
+                    "User not in '%s' group. This may prevent SP Flash Tool from "
+                    "accessing MediaTek USB devices. Ensure group membership "
+                    "and restart the application.",
+                    serial_group,
+                )
+        except Exception as e:
+            logger.debug("Could not check user permissions: %s", e)
+
+        # Check for conflicting services and attempt to stop them
+        try:
+            conflicts = process_guard.check_service_conflicts()
+            for conflict in conflicts:
+                service_name = conflict["service"]
+                logger.warning(
+                    "Stopping conflicting service: %s", service_name,
+                )
+                try:
+                    subprocess.run(
+                        ["systemctl", "stop", service_name],
+                        capture_output=True,
+                        timeout=3,
+                    )
+                except Exception:
+                    pass
+        except Exception as e:
+            logger.debug("Could not check/stop service conflicts: %s", e)
+
+        # Run silent system prep (stages libpng12, option.ini, etc.)
+        try:
+            ok = linux_sp_flash.silent_system_prep()
+            if ok:
+                logger.info("Linux system preparation completed successfully")
+            else:
+                logger.warning("Linux system preparation had non-fatal issues")
+        except Exception as e:
+            logger.debug("Linux system preparation exception: %s", e)
+
+        # Check cdc_acm kernel module availability
+        try:
+            cdc_ok, cdc_msg = linux_sp_flash.check_cdc_acm()
+            logger.info("cdc_acm kernel module: %s", cdc_msg)
+        except Exception as e:
+            logger.debug("Could not check cdc_acm: %s", e)
+
+        logger.info("Linux SP Flash Tool preparation complete")
+
+    except ImportError as e:
+        logger.debug("Linux SP Flash Tool preparation skipped: %s", e)
+    except Exception as e:
+        logger.warning("Linux SP Flash Tool preparation failed: %s", e)
 
 
 def main():
@@ -325,6 +426,10 @@ def main():
     from .ui.main_window import apply_interface_direction
 
     apply_interface_direction(app)
+
+    # PREPARE LINUX SYSTEM FOR SP FLASH TOOL before showing the window
+    if _sys.platform.startswith("linux"):
+        _prepare_linux_sp_flash_tool()
 
     window = MainWindow()
     # Before show(): the window must exist to be prepared for glass. After it:

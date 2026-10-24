@@ -237,6 +237,10 @@ def _silence_startup_workers():
                 continue
             if not issubclass(value, QThread) or value in seen:
                 continue
+            # The archive extractor is the real work under test; every other
+            # worker here is a network fetch that is irrelevant to the hand-off.
+            if value.__name__ == "ExtractWorker":
+                continue
             seen.add(value)
             patches.append((value, value.start))
             value.start = lambda self, *args, **kwargs: None  # noqa: B023 - per class
@@ -320,6 +324,130 @@ def test_the_sidebar_launcher_opens_the_cached_firmware(window, world, app):
     window._open_sp_flash_tool_gui()
 
     assert world.wait_for_launch(app) is not None
+
+
+def test_a_focused_browsed_firmware_beats_the_cache_in_history_ini(window, world, app):
+    from src import device_tracking
+
+    world.clear()
+    device_tracking.set_sp_gui_install_enabled(False, window.settings)
+    _seed_cache(world, window.settings)
+
+    # A different firmware, browsed from disk, is the one the user picked.
+    other = world.downloads / "browsed_extract"
+    other.mkdir(exist_ok=True)
+    other_scatter = other / "MT6582_Android_scatter.txt"
+    other_scatter.write_text(SCATTER_BODY, encoding="utf-8")
+    (other / "fat_sparse.img").write_bytes(b"img")
+    window._select_page._current_package_path = str(other_scatter)
+
+    browsed = {
+        "kind": "local",
+        "path": str(other_scatter),
+        "scatter": other_scatter,
+        "extract": other,
+        "model": "Y2",
+        "name": "Browsed",
+    }
+    window._select_page.gui_firmware_target = lambda: browsed
+    window._select_page.explicit_firmware = lambda: browsed
+    window._select_page.focused_firmware = lambda: browsed
+    window._sync_sp_gui_button_visibility()
+    window._open_sp_flash_tool_gui()
+
+    got = world.wait_for_launch(app)
+    assert got is not None
+    history = (world.tool_dir / "history.ini").read_text(encoding="utf-8")
+    # The tool opens lastDir, so that is the focused firmware's scatter. The
+    # cached one may stay in scatterHistory as a recent entry, but never first.
+    assert f"lastDir={other_scatter.resolve()}" in history, history
+    assert f"scatterHistory={other_scatter.resolve()}" in history, history
+
+
+def test_a_focused_online_firmware_not_yet_cached_is_pinned_and_launched(window, world, app):
+    from src import device_tracking
+
+    world.clear()
+    device_tracking.set_sp_gui_install_enabled(False, window.settings)
+    _seed_cache(world, window.settings)
+
+    # An online release that is not on disk yet: the prepare worker downloads
+    # and extracts it, then reports the new extract folder back.
+    fresh = world.downloads / "online_extract"
+    fresh.mkdir(exist_ok=True)
+    fresh_scatter = fresh / "MT6582_Android_scatter.txt"
+    fresh_scatter.write_text(SCATTER_BODY, encoding="utf-8")
+    (fresh / "fat_sparse.img").write_bytes(b"img")
+    target = {
+        "kind": "online",
+        "dest": str(world.downloads / "online.zip"),
+        "model": "Y2",
+        "name": "Online 3.2.0",
+    }
+    window._select_page.gui_firmware_target = lambda: target
+    window._select_page.explicit_firmware = lambda: target
+    window._select_page.focused_firmware = lambda: target
+
+    def fake_prepare(_target, done):
+        done(True, str(fresh), "")
+        return True
+
+    window._select_page.begin_external_prepare = fake_prepare
+    window._sync_sp_gui_button_visibility()
+    window._open_sp_flash_tool_gui()
+
+    got = world.wait_for_launch(app)
+    assert got is not None, "the focused online firmware must reach the tool"
+    history = (world.tool_dir / "history.ini").read_text(encoding="utf-8")
+    assert f"[RecentOpenFile]\nlastDir={fresh_scatter.resolve()}" in history, history
+    assert f"scatterHistory={fresh_scatter.resolve()}" in history, history
+    assert f"lastDir={(world.tool_dir / 'MTK_AllInOne_DA.bin').resolve()}" in history, history
+
+
+def test_a_focused_zip_archive_is_extracted_then_launched(window, world, app, monkeypatch):
+    import zipfile
+
+    import src.sp_flash_gui as sp_flash_gui
+    from src import device_tracking
+
+    # Record the launch instead of running pkexec, which would wait for a password.
+    calls = []
+    monkeypatch.setattr(
+        sp_flash_gui,
+        "launch_sp_flash_tool_gui",
+        lambda **kwargs: (calls.append(kwargs), (True, "requested"))[1],
+    )
+
+    world.clear()
+    device_tracking.set_sp_gui_install_enabled(False, window.settings)
+    _seed_cache(world, window.settings)
+
+    archive = world.downloads / "browsed_pack.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr("MT6582_Android_scatter.txt", SCATTER_BODY)
+        zf.writestr("fat_sparse.img", b"img" * 1000)
+    browsed = {
+        "kind": "local",
+        "path": str(archive),
+        "model": "Y2",
+        "name": "Zip pack",
+    }
+    window._select_page.gui_firmware_target = lambda: browsed
+    window._select_page.explicit_firmware = lambda: browsed
+    window._select_page.focused_firmware = lambda: browsed
+    window._sync_sp_gui_button_visibility()
+    window._open_sp_flash_tool_gui()
+
+    import time
+
+    deadline = time.monotonic() + 8
+    while not calls and time.monotonic() < deadline:
+        app.processEvents()
+        time.sleep(0.05)
+    assert calls, "a focused zip must finish extracting and reach the tool"
+    scatter = calls[0]["scatter_path"]
+    assert Path(scatter).name == "MT6582_Android_scatter.txt"
+    assert Path(scatter).is_file(), "the launched scatter must exist on disk"
 
 
 def test_an_incomplete_cache_is_never_launched(window, world, app):
@@ -559,9 +687,7 @@ def test_the_updater_waits_for_the_tools_process_before_leaving(window, world, a
     deadline = time.time() + 5
     saw_tool = False
     while time.time() < deadline and not saw_tool:
-        saw_tool = any(
-            "flash_tool" in (row[2] or "") for row in process_guard.process_snapshot()
-        )
+        saw_tool = process_guard.flash_tool_running()
         if not saw_tool:
             time.sleep(0.1)
     assert saw_tool
@@ -569,6 +695,24 @@ def test_the_updater_waits_for_the_tools_process_before_leaving(window, world, a
     timer.timeout.emit()
     assert quits == [True], "the updater leaves once the tool is running"
     assert window._gui_quit_started is True
+
+
+def test_the_privilege_prompt_alone_does_not_count_as_the_tool(monkeypatch):
+    import src.process_guard as process_guard
+
+    # The wrapper names the binary as an argument; only the executable counts.
+    wrapper = [(10, 1, "/usr/bin/pkexec /usr/bin/env LD_LIBRARY_PATH=/x /opt/SP/flash_tool")]
+    assert process_guard.flash_tool_running(snapshot=wrapper) is False
+    assert process_guard.flash_tool_running(snapshot=wrapper + [(11, 10, "/opt/SP/flash_tool")]) is True
+
+
+def test_a_leftover_tool_does_not_count_as_this_launch(monkeypatch):
+    import src.process_guard as process_guard
+
+    # Pid 11 was running before the password prompt; only a new pid counts.
+    leftover = [(11, 1, "/opt/SP/flash_tool")]
+    assert process_guard.flash_tool_running(snapshot=leftover, ignore_pids={11}) is False
+    assert process_guard.flash_tool_running(snapshot=leftover + [(12, 10, "/opt/SP/flash_tool")], ignore_pids={11}) is True
 
 
 def test_a_refused_prompt_offers_the_launch_again(window, world, app, monkeypatch):

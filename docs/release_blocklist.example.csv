@@ -1,0 +1,14 @@
+software,model,type,version,except,reason
+# Lines starting with # are ignored.
+# Block one exact version for every model and hardware type (blank = any).
+Y1 Stock ROM,,,1.2.3,,Bootloop reported on several players
+# Block every version below 2.0 for Y2 only.
+Y1 Stock ROM,Y2,,<2.0,,Old kernel drops USB during flashing
+# Block a version range, inclusive at both ends, for hardware type A only.
+Y1 Stock ROM,Y1,A,3.0-3.4,,Battery drain fixed in 3.5
+# Block every version at or above 4.1 for A5.
+Y1 Stock ROM,A5,,>=4.1,,Unverified build, do not install
+# Block one untagged build by its exact tag name (quote it).
+Y1 Community ROM,Y1,,"nightly-2026-09-01",,Corrupts the music library
+# except=nightly keeps untagged/nightly builds available under a version rule.
+Y1 Community ROM,Y1,,<=1.9,nightly,Old stable builds with known flashing issues

@@ -274,7 +274,20 @@ class CaptionControlButton(QPushButton):
                         host_symbols=host_symbols,
                     ),
                 )
-            colour = QColor(self.palette().color(QPalette.ColorRole.WindowText))
+            # On Linux, prefer colors that better match the user's system theme
+            if sys.platform.startswith("linux") and host_symbols:
+                try:
+                    from PySide6.QtWidgets import QApplication
+                    app = QApplication.instance()
+                    if app is not None:
+                        sys_pal = app.style().standardPalette() if app.style() else app.palette()
+                        colour = QColor(sys_pal.color(QPalette.ColorRole.WindowText))
+                    else:
+                        colour = QColor(self.palette().color(QPalette.ColorRole.WindowText))
+                except Exception:
+                    colour = QColor(self.palette().color(QPalette.ColorRole.WindowText))
+            else:
+                colour = QColor(self.palette().color(QPalette.ColorRole.WindowText))
             if self.role == ROLE_CLOSE and hot and not host_symbols:
                 colour = QColor("#ffffff")
             if not self.isEnabled():

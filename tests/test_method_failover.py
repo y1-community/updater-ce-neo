@@ -46,15 +46,15 @@ def test_simulated_macos_entry_does_not_pin_mtkclient():
     real_mac = paths.IS_MAC
     try:
         paths.IS_MAC = False
-        # Linux now defaults to MTKClient; the legacy alias resolves to that
+        # Linux defaults to SP Flash Tool; the legacy alias resolves to that
         # platform default rather than pinning a backend of its own.
-        assert fs.default_flash_method() == fs.METHOD_MTK
-        assert fs.normalise_method("mtk_mac") == fs.METHOD_MTK
-        assert fs.backend_method("mtk_mac") == fs.METHOD_MTK
+        assert fs.default_flash_method() == fs.METHOD_SP
+        assert fs.normalise_method("mtk_mac") == fs.METHOD_SP
+        assert fs.backend_method("mtk_mac") == fs.METHOD_SP
         # The real choices are untouched.
         assert fs.normalise_method("sp") == fs.METHOD_SP
         assert fs.normalise_method("mtk") == fs.METHOD_MTK
-        assert fs.normalise_method("auto") == fs.METHOD_MTK
+        assert fs.normalise_method("auto") == fs.METHOD_SP
 
         # While the macOS flow is actually running, it is MTKClient.
         paths.IS_MAC = True
@@ -494,13 +494,13 @@ def test_power_off_copy_after_an_automatic_method_switch():
         # the step now says how to bring the player back into flash mode.
         window._handle_flash_failure("S_FT_DOWNLOAD_FAIL (4008)")
         assert window._flash_method == "mtk"
+        # The switch returns to the standard disconnect and power-off step, the
+        # same prompt as any fresh install, with the pin tip shown.
         assert window._flash_page._wait_prompt_label.text() == tr(
-            "err_usb_disconnected_recovery"
+            "flash_connect_prompt"
         ).format(model="Y1")
-        # The band still reads "Install Failed", and that line already names the
-        # hidden button, so the separate pin tip stays off.
-        assert window._flash_page._wait_progress_bar.is_failed() is True
-        assert window._flash_page._show_pin_tip is False
+        assert window._flash_page._wait_progress_bar.is_failed() is False
+        assert window._flash_page._show_pin_tip is True
 
         # Choosing the other engine in Settings is not a recovery: the user is
         # not mid-failure, so the plain power-off line is right.
@@ -524,8 +524,8 @@ def test_power_off_copy_after_an_automatic_method_switch():
 
 @pytest.mark.skipif(sys.platform == "darwin", reason="macOS has no SP Flash Tool")
 def test_com_port_failure_fails_over_with_the_engine_names():
-    """A 1013 COM-port error says the tool could not connect, not that the
-    player dropped out, and names the engine taking over."""
+    """A 1013 COM-port error hands over to the other engine after the standard
+    disconnect and power-off step, not as a player-dropped-out failure."""
     from src.i18n import tr
     from src.ui.main_window import MainWindow
 
@@ -552,14 +552,11 @@ def test_com_port_failure_fails_over_with_the_engine_names():
             window._handle_flash_failure("S_COM_PORT_OPEN_FAIL (1013)")
 
         assert window._flash_method == "mtk"
-        text = window._flash_page._wait_prompt_label.text()
-        assert text == tr("err_connect_failover_recovery").format(
-            model="Y1", failed="SP Flash Tool", next="MTKClient"
-        )
-        # Failure, engine taking over, reset steps: three paragraphs separated by gaps.
-        assert len([p for p in text.split("\n\n") if p.strip()]) == 3
-        # The band keeps saying the install failed.
-        assert window._flash_page._wait_progress_bar.is_failed() is True
+        # The switch returns to the standard disconnect and power-off step.
+        assert window._flash_page._wait_prompt_label.text() == tr(
+            "flash_connect_prompt"
+        ).format(model="Y1")
+        assert window._flash_page._wait_progress_bar.is_failed() is False
         assert window._power_off_prompt is True
 
         # A failure mid-download is a different story: the player really did
@@ -569,8 +566,9 @@ def test_com_port_failure_fails_over_with_the_engine_names():
         window._flash_page.set_method("sp")
         window._past_usb_search = False
         window._handle_flash_failure("S_FT_DOWNLOAD_FAIL (4008)")
+        assert window._flash_method == "mtk"
         assert window._flash_page._wait_prompt_label.text() == tr(
-            "err_usb_disconnected_recovery"
+            "flash_connect_prompt"
         ).format(model="Y1")
     finally:
         window.close()

@@ -34,7 +34,7 @@ def test_battery_toast_first_run_and_dismiss(tmp_path, monkeypatch):
     assert hasattr(page, "_battery_toast")
     assert isinstance(page._battery_toast, BatteryToast)
     assert not page._battery_toast.isHidden()
-    assert "make sure the battery is charged" in page._battery_toast._label.text()
+    assert "charge the battery for at least an hour" in page._battery_toast._label.text()
 
     # Click dismiss button
     page._battery_toast._dismiss_btn.click()

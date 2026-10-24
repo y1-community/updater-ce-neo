@@ -5001,11 +5001,12 @@ def test_settings_platform_prep_cards():
         # A legacy platform-specific alias falls back to the platform default
         # instead of adding a second MTKClient choice.
         page.set_method("mtk_mac")
-        assert default_flash_method() == METHOD_MTK
-        assert page.current_method() == METHOD_MTK
+        assert default_flash_method() == METHOD_SP
+        assert page.current_method() == METHOD_SP
+        assert page._method_combo.findData("mtk_mac") == -1
+        page.set_method(METHOD_MTK)
         assert page._method_note.text() == ""
         assert page._method_note.isHidden()
-        assert page._method_combo.findData("mtk_mac") == -1
         page.set_method(METHOD_SP)
         assert page._method_note.text() == tr("flash_method_note_sp")
         assert not page._method_note.isHidden()

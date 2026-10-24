@@ -448,12 +448,10 @@ def windows_only_method():
 def default_flash_method():
     """Method used until the user picks one.
 
-    Linux and macOS both use MTKClient by default: it needs no root password,
-    no SP Flash Tool x86 payload and no udev/console configuration to start,
-    and it is the engine the reference build uses on those platforms. Linux
-    keeps SP Flash Tool as the automatic fallback (the run is handed to it
-    when MTKClient cannot bring the device up), so mistyping nothing here
-    never removes the second engine. Windows follows its CPU.
+    Linux uses SP Flash Tool by default. macOS uses MTKClient, the only
+    engine there. When the first engine fails to start, the guided flow hands
+    the install to the other one after the power-off step. Windows follows
+    its CPU.
 
     ``paths.IS_MAC`` is read live rather than the module-level ``IS_MAC``
     snapshot so simulated macOS mode (and the tests that toggle it) is
@@ -462,14 +460,16 @@ def default_flash_method():
     locked = windows_only_method()
     if locked:
         return locked
+    if not paths.IS_MAC and not paths.IS_WINDOWS:
+        return METHOD_SP
     return METHOD_MTK
 
 
 def normalise_method(method):
     """Coerce a persisted (possibly legacy) setting into a usable method id.
 
-    Legacy ``"auto"`` resolves to the platform default (MTKClient on Linux and
-    macOS, SP Flash Tool on Windows) rather than an ambiguous automatic
+    Legacy ``"auto"`` resolves to the platform default (SP Flash Tool on Linux
+    and Windows, MTKClient on macOS) rather than an ambiguous automatic
     choice; on macOS every value collapses to MTKClient, the only backend that
     exists there.
 
@@ -3640,7 +3640,12 @@ class FlashWorker(QThread):
             # The reference build checks for "Download Ok" in the log as the
             # success signal. Both capitalisations appear depending on the tool
             # version; either one means the flash completed.
-            if "Download Ok" in content or "download ok" in content:
+            if (
+                "Download Ok" in content
+                or "download ok" in content
+                or "Download Succeeded" in content
+                or "All command exec done" in content
+            ):
                 return (True, "")
             # Collect error tokens from the log, excluding S_DONE (which is the
             # success token, not an error). The last distinct error is the one

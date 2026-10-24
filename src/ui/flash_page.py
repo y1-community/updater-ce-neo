@@ -1035,7 +1035,7 @@ class FlashPage(QWidget):
             self._wait_icon,
             self._wait_pkg_label,
             self._wait_progress_bar,
-            [self._wait_continue_btn, self._wait_cancel_btn],
+            [self._wait_cancel_btn, self._wait_continue_btn],
         )
         self._wait_row = self._wait_head.box
 

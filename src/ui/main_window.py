@@ -430,18 +430,11 @@ def can_inline_title_with_window_controls() -> bool:
         return True
     if sys.platform == "win32" or platform.system() == "Windows":
         return True
+    if sys.platform.startswith("linux"):
+        # On Linux, prefer native window decorations for better theme integration
+        # like Konsole - show app name and window controls in the system titlebar
+        return False
     if os.environ.get("UPDATER_INLINE_TITLE") == "1":
-        return True
-    # On Linux desktops (KDE Plasma, GNOME, Cinnamon, XFCE), integrate seamlessly
-    # when running in an active graphical desktop environment.
-    desktop = (
-        os.environ.get("XDG_CURRENT_DESKTOP")
-        or os.environ.get("DESKTOP_SESSION")
-        or ""
-    ).lower()
-    if any(k in desktop for k in ("kde", "plasma", "gnome", "cinnamon", "xfce", "unity", "deepin", "mate")):
-        return True
-    if os.environ.get("KDE_FULL_SESSION") == "true":
         return True
     return False
 
@@ -1324,9 +1317,13 @@ class MainWindow(QMainWindow):
         layout.setSpacing(sidebar_row_spacing())
 
         if not can_inline_title_with_window_controls():
-            brand = self._build_brand_header_widget()
-            layout.addWidget(brand)
-            layout.addSpacing(8)
+            # On Linux with native titlebars, don't show bespoke header in sidebar
+            if sys.platform.startswith("linux"):
+                pass
+            else:
+                brand = self._build_brand_header_widget()
+                layout.addWidget(brand)
+                layout.addSpacing(8)
 
         # Exclusive navigation button group to prevent dual focus or dual checked states
         self._nav_btn_group = QButtonGroup(self)
@@ -3297,6 +3294,15 @@ class MainWindow(QMainWindow):
 
     def _nav_to_page(self, page_idx):
         SidebarButton.dismiss_focus_rings()
+        # When navigating back to Package Select during an install, terminate
+        # any running flash processes (mtk.py or flash_tool) so the next
+        # installation attempt is clean.
+        if page_idx == _PAGE_SELECT and self._install_run_active():
+            from .. import process_guard
+
+            logger.info("Navigating back to Package Select during install, terminating flash processes")
+            process_guard.end_install_session(reason="user navigated back")
+            process_guard.sweep_stray_tools(force=True, reason="navigate back to package select")
         if self._install_run_active() and page_idx not in (
             _PAGE_FLASH, _PAGE_DIAGNOSTICS, _PAGE_NOTICE, _PAGE_RETRY,
         ):
@@ -3393,7 +3399,11 @@ class MainWindow(QMainWindow):
 
         self._sync_sp_history()
 
-        if device_tracking.sp_gui_install_enabled(self.settings):
+        from ..sp_flash_gui import is_sp_flash_gui_supported
+
+        # Same effective choice the Settings page shows: a stored flag only
+        # means "SP Flash Tool GUI" where the GUI is actually supported.
+        if device_tracking.sp_gui_install_enabled(self.settings) and is_sp_flash_gui_supported():
             self._begin_sp_gui_install()
             return
 
@@ -4660,18 +4670,7 @@ class MainWindow(QMainWindow):
             error_code,
             candidate,
         )
-        if is_connect_failure(error_code):
-            prompt_key = "err_connect_failover_recovery"
-            prompt_kwargs = {
-                "failed": _method_label(backend_method(self._flash_method)),
-                "next": _method_label(candidate),
-            }
-        else:
-            prompt_key = "err_usb_disconnected_recovery"
-            prompt_kwargs = {}
-        self._return_to_power_off_stage(
-            candidate, recovery=True, prompt_key=prompt_key, prompt_kwargs=prompt_kwargs
-        )
+        self._return_to_power_off_stage(candidate)
         return True
 
     def _on_progress_retry(self):
@@ -5688,7 +5687,11 @@ class MainWindow(QMainWindow):
 
     def _launch_sp_gui(self, scatter, extract_dir, model):
         from ..sp_flash_gui import launch_sp_flash_tool_gui
+        from .. import process_guard
 
+        # Tool processes already running (leftovers from an earlier session)
+        # must not count as this launch having started.
+        self._tool_pids_before_launch = process_guard.flash_tool_pids()
         ok, msg = launch_sp_flash_tool_gui(
             model=model or "",
             scatter_path=scatter,
@@ -5737,11 +5740,9 @@ class MainWindow(QMainWindow):
             if getattr(self, "_gui_quit_started", False):
                 timer.stop()
                 return
-            running = any(
-                "flash_tool" in (row[2] or "")
-                for row in process_guard.process_snapshot()
-            )
-            if running:
+            if process_guard.flash_tool_running(
+                ignore_pids=getattr(self, "_tool_pids_before_launch", frozenset())
+            ):
                 timer.stop()
                 self._quit_after_gui_handoff()
                 return
@@ -5842,7 +5843,9 @@ class MainWindow(QMainWindow):
         self._select_page.set_auto_translate_notes(wanted)
 
     def _retranslate_all(self):
-        self._brand_label.setText(get_brand_name())
+        # The sidebar brand header is not built on Linux with native titlebars.
+        if hasattr(self, "_brand_label"):
+            self._brand_label.setText(get_brand_name())
         self.setWindowTitle(f"{get_app_name()} v{APP_VERSION}")
         self._update_author_label()
         for key, (btn, _idx) in self._nav_buttons.items():

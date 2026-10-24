@@ -151,3 +151,32 @@ def test_english_keeps_the_dialect_the_system_asks_for(monkeypatch):
         )
     finally:
         translator().set_language(old)
+
+
+def test_switching_language_retranslates_the_window_without_a_brand_label():
+    """Picking a language re-labels the chrome, even when no sidebar brand exists.
+
+    On Linux with native titlebars the sidebar brand header is never built, so
+    ``_brand_label`` is absent; the retranslation must not depend on it.
+    """
+    from src.i18n import translator
+
+    app = _app()
+    from src.ui.main_window import MainWindow
+
+    previous = translator().lang
+    w = MainWindow()
+    try:
+        combo = w._lang_combo
+        for code in ("de", "fr", "en"):
+            combo.setCurrentIndex(combo.findData(code))
+            app.processEvents()
+            assert translator().lang == code
+            assert w._lang_label.text() == translator().t("nav_language")
+            assert w._nav_buttons, "the sidebar nav is built"
+            for key, (btn, _idx) in w._nav_buttons.items():
+                assert btn.text() == translator().t(key), key
+    finally:
+        w.close()
+        app.processEvents()
+        translator().set_language(previous)

@@ -222,6 +222,13 @@ def setup_native_app_style(app: QApplication) -> str:
             if path not in existing and os.path.isdir(path):
                 QCoreApplication.addLibraryPath(path)
         override = os.environ.get("QT_STYLE_OVERRIDE", "")
+        # The desktop's platform theme (Plasma, GNOME, Kvantum via qt6ct) has
+        # already chosen the user's Qt style. Keep it, so its buttons and combos
+        # keep their own depth. Only fall back to Breeze/Adwaita when the host
+        # left Qt on the generic Fusion style.
+        current = app.style().objectName()
+        if current and current.lower() != "fusion":
+            return current
     candidates = native_style_candidates(
         system=system,
         offscreen=offscreen and IS_MACOS,
@@ -1848,6 +1855,13 @@ def theme_fingerprint(app: QApplication | None = None, *, platform_dark: bool = 
         )
         for role in palette_roles
     )
+    style_name = ""
+    try:
+        if app.style() is not None:
+            st = app.style()
+            style_name = st.objectName() or (st.metaObject().className() if st.metaObject() else str(type(st).__name__))
+    except Exception:
+        style_name = ""
     return (
         scheme,
         is_system_dark_mode() if platform_dark else None,
@@ -1855,6 +1869,7 @@ def theme_fingerprint(app: QApplication | None = None, *, platform_dark: bool = 
         accent_text,
         palette_fingerprint,
         icon_style,
+        style_name,
     )
 
 
@@ -1995,6 +2010,8 @@ def sync_cached_palettes(app: QApplication) -> None:
     """
     from PySide6.QtWidgets import QAbstractScrollArea, QComboBox
 
+    from .scrollbars import refresh_scrollbar_palettes
+
     for widget in app.allWidgets():
         if isinstance(widget, QComboBox):
             configure_native_combobox(widget)
@@ -2013,6 +2030,8 @@ def sync_cached_palettes(app: QApplication) -> None:
         elif isinstance(widget, QAbstractScrollArea):
             if widget.styleSheet():
                 widget.setStyleSheet("")
+            # The bars keep a copy of the theme taken when the area was built.
+            refresh_scrollbar_palettes(widget)
             viewport = widget.viewport()
             if viewport is None:
                 continue

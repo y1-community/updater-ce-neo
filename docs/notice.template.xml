@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Template for https://innioasis.app/notice.xml
+
+  Announcements and public service notices shown to users of the app.
+  Each <notice> is one message. Remove the ones you do not need.
+
+  This is the intended format. The app does not read notice.xml yet.
+
+  Attributes on <notice>:
+    id        required, unique. Give a new id to publish a notice again.
+    severity  info | warning | critical   (default: info)
+    from      optional, ISO date YYYY-MM-DD. Shown on or after this date.
+    until     optional, ISO date YYYY-MM-DD. Shown on or before this date.
+    models    optional, comma-separated Y1,Y2,A5. Blank or missing = all models.
+
+  Child elements:
+    <title>   required, short heading.
+    <body>    required, plain text. Line breaks are kept.
+    <link>    optional, an https:// URL the user can open.
+-->
+<notices updated="2026-10-24">
+  <notice id="2026-10-24-example" severity="info" from="2026-10-24" until="2026-12-31" models="Y1,Y2">
+    <title>Welcome to Updater CE</title>
+    <body>Firmware is downloaded from the community catalogue. Keep your player charged and plugged in during an install.</body>
+    <link>https://innioasis.app</link>
+  </notice>
+
+  <notice id="2026-10-20-psa-usb" severity="warning" from="2026-10-20" until="2026-11-20">
+    <title>Use a direct USB port</title>
+    <body>Avoid USB hubs during an install. Some hubs drop the connection partway through a flash.</body>
+  </notice>
+
+  <notice id="2026-10-01-critical-example" severity="critical" from="2026-10-01" until="2026-10-31" models="A5">
+    <title>Do not install build 4.1 on A5</title>
+    <body>This build is known to fail on A5 players. Install the latest stable release instead.</body>
+    <link>https://innioasis.app/releases.html</link>
+  </notice>
+</notices>

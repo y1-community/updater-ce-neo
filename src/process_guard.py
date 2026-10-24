@@ -199,6 +199,30 @@ def process_snapshot() -> list:
     return _ps_snapshot()
 
 
+def flash_tool_running(snapshot=None, ignore_pids=frozenset()) -> bool:
+    """True once the SP Flash Tool executable itself is running.
+
+    A privilege wrapper (pkexec, sudo, run0) or an ``env`` launcher that merely
+    names the binary is not the tool, so it does not count: the app must keep
+    waiting while the password prompt is still up. ``ignore_pids`` lists tool
+    processes that were already running before this launch, so a leftover tool
+    from an earlier session cannot close the updater under a fresh prompt.
+    """
+    rows = process_snapshot() if snapshot is None else snapshot
+    return any(
+        pid not in ignore_pids and _tool_invocation(command) == "flash_tool"
+        for pid, _ppid, command in rows
+    )
+
+
+def flash_tool_pids() -> frozenset:
+    """Pids of every SP Flash Tool executable running right now."""
+    return frozenset(
+        pid for pid, _ppid, command in process_snapshot()
+        if _tool_invocation(command) == "flash_tool"
+    )
+
+
 def _own_ancestry(snapshot=None) -> set:
     """This process and every parent of it, so we never terminate ourselves."""
     safe = {os.getpid()}

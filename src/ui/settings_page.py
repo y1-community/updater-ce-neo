@@ -857,6 +857,10 @@ class SettingsPage(QWidget):
 
     def _sync_advanced_visibility(self) -> None:
         show_adv = self._advanced_shown()
+        if hasattr(self, "_advanced_card"):
+            # The toggle lives on this card, so it must come back when a
+            # focused journey (solo card) ends and the column is restored.
+            self._advanced_card.setVisible(self._may_show_card(self._advanced_card))
         is_win_x86 = bool(paths.IS_WINDOWS and windows_only_method() == METHOD_SP and not show_adv)
         if hasattr(self, "_terminal_card"):
             self._terminal_card.setVisible(show_adv and self._may_show_card(self._terminal_card))

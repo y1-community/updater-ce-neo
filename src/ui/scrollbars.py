@@ -27,6 +27,7 @@ __all__ = [
     "configure_scroll_area",
     "ensure_native_scrolling",
     "make_transparent",
+    "refresh_scrollbar_palettes",
 ]
 
 
@@ -61,18 +62,11 @@ def _paint_theme_surface(widget: QWidget) -> None:
     widget.setPalette(palette)
 
 
-def _keep_scrollbars_opaque(area: QAbstractScrollArea) -> None:
-    """Give the bars the theme's solid roles after the viewport went transparent.
-
-    A scrollbar is a child of the scroll area, so it inherits the transparent
-    Base/Window the viewport needs. The style then has no colour to paint the
-    groove, track and thumb bevel with, and that strip of the window is left
-    unpainted: on a solid window it showed the desktop behind the app (in the
-    report, the Plasma window under the settings list) as a gradient band.
-    """
+def _opaque_scrollbar_palette() -> QPalette | None:
+    """The current application palette with every role made opaque."""
     app = QApplication.instance()
     if app is None:
-        return
+        return None
     # Roles are copied one by one: ``app.palette()`` carries no resolve bits of
     # its own, and a bare ``setPalette`` copy would leave the bar inheriting the
     # transparent roles from the scroll area.
@@ -104,11 +98,36 @@ def _keep_scrollbars_opaque(area: QAbstractScrollArea) -> None:
             color = QColor(color)
             color.setAlpha(255)
             theme.setColor(group, role, color)
+    return theme
+
+
+def refresh_scrollbar_palettes(area: QAbstractScrollArea) -> None:
+    """Re-take the bars' colours from the current theme.
+
+    A bar keeps the palette it was given when the area was built, so a theme
+    switch after that (for example a dark Plasma theme applied once the window
+    exists) left the groove and track in the old light colours.
+    """
+    theme = _opaque_scrollbar_palette()
+    if theme is None:
+        return
     for bar in (area.verticalScrollBar(), area.horizontalScrollBar()):
         if bar is None:
             continue
         bar.setPalette(theme)
         bar.setAutoFillBackground(False)
+
+
+def _keep_scrollbars_opaque(area: QAbstractScrollArea) -> None:
+    """Give the bars the theme's solid roles after the viewport went transparent.
+
+    A scrollbar is a child of the scroll area, so it inherits the transparent
+    Base/Window the viewport needs. The style then has no colour to paint the
+    groove, track and thumb bevel with, and that strip of the window is left
+    unpainted: on a solid window it showed the desktop behind the app (in the
+    report, the Plasma window under the settings list) as a gradient band.
+    """
+    refresh_scrollbar_palettes(area)
 
 
 def make_transparent(area: QAbstractScrollArea) -> None:
