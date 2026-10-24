@@ -60,8 +60,8 @@ if ($isccCmd) {
     }
 }
 if (-not $IsccExe -and -not $NoInstaller) {
-    Write-Warning "ISCC.exe (Inno Setup 6) not found. Inno Setup installers will be skipped."
-    $NoInstaller = $true
+    Write-Error "ISCC.exe (Inno Setup 6) not found. Install Inno Setup 6, or pass -NoInstaller to build the portable folders and zips only."
+    exit 1
 }
 
 if ($Clean) {

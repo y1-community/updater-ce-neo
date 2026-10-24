@@ -95,6 +95,7 @@ echo   updater_ce         Build Updater CE only.
 echo   mediatek_installer Build MediaTek Installer only.
 echo   -Clean             Remove previous Windows build artifacts before compiling.
 echo   -NoInstaller       Skip Inno Setup and build the portable folders and .zip archives only.
+echo                       By default the Inno Setup installer is built; a missing ISCC.exe is an error.
 echo.
 echo Prerequisites: Python 3.10+, PyInstaller, and Inno Setup 6 (optional for the
 echo setup wizard). The app bundles SP Flash Tool from tools/windows/SP_Flash_Tool_v5.1904_Win.
