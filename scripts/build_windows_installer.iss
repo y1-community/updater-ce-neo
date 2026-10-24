@@ -475,8 +475,21 @@ begin
   DelTree(Dir, True, True, True);
 end;
 
+{ Runs the old version's own uninstall.exe from %LocalAppData%\Innioasis Updater,
+  if present, and tells the person what is being cleaned up first. }
+procedure RunOldLocalUninstaller(const Dir: String);
+var
+  ResultCode: Integer;
+begin
+  if not FileExists(Dir + '\uninstall.exe') then
+    Exit;
+  MsgBox('An older version of Updater CE was found in ' + Dir + '. ' +
+    'It will be uninstalled before this version is installed.', mbInformation, MB_OK);
+  Exec(Dir + '\uninstall.exe', '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
 { Every profile's leftovers: the retired LocalAppData data folder, a per-user
-  Programs copy, and its Start Menu and Desktop shortcuts. A locked or
+  Programs copy, its Start Menu, Desktop and taskbar shortcuts. A locked or
   missing folder is skipped rather than stopping the install. }
 procedure RemoveLegacyLocalAppData;
 var
@@ -491,10 +504,12 @@ begin
     for I := 0 to Profiles.Count - 1 do
     begin
       P := Profiles[I];
+      RunOldLocalUninstaller(P + '\AppData\Local\Innioasis Updater');
       RemoveLegacyDataDir(P + '\AppData\Local\Innioasis Updater');
       RemovePerUserInstallDir(P + '\AppData\Local\Programs\UpdaterCE');
       PurgeShortcutTree(P + '\AppData\Roaming\Microsoft\Windows\Start Menu\Programs');
       PurgeShortcutTree(P + '\Desktop');
+      PurgeShortcutTree(P + '\AppData\Roaming\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar');
     end;
   finally
     Profiles.Free;
@@ -642,15 +657,17 @@ procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssInstall then
   begin
-    if not IsUpdaterCeBrand then
-      Exit;
-
+    { Stray Python and Updater processes are stopped for every brand and
+      whether or not an old uninstall.exe exists. }
     ShowStep('StepStopping');
     StopProcess('InnioasisUpdater.exe');
     StopProcess('flash_tool.exe');
     StopProcess('adb.exe');
     StopProcess('python.exe');
     StopProcess('pythonw.exe');
+
+    if not IsUpdaterCeBrand then
+      Exit;
 
     ShowStep('StepRemovingOld');
     RemoveOldInstalls;

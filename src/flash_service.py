@@ -217,6 +217,16 @@ def _strip_qt_trace_prefix(text: str) -> str:
     return tail
 
 
+def is_sp_flash_complete_line(line) -> bool:
+    """True for SP Flash Tool's own completion line ("Flash complete! Disconnect USB...").
+
+    Matched on the word "complete" only: the trailing "Disconnect USB" is an
+    instruction to the user, not a disconnect.
+    """
+    text = _TIMESTAMP_PREFIX_RE.sub("", tool_line_body(line)).lstrip()
+    return "complete" in _strip_qt_trace_prefix(text).lower()
+
+
 def is_sp_usb_search_line(line) -> bool:
     """True when flash_tool is searching USB.
 
@@ -2445,6 +2455,9 @@ class FlashWorker(QThread):
         self._sp_last_sent = 0
         self._sp_mismatch = False
         self._sp_err_code = None
+        # SP Flash Tool reported "Flash complete! Disconnect USB...": the write
+        # is finished, so the trailing "Disconnect USB" is not a failure.
+        self._sp_flash_complete = False
         # Actionable one-liner for the failure this run ended with (only the
         # BROM handshake failures have one today), so the UI can explain a
         # failure without re-parsing the tool's message itself.
@@ -3223,6 +3236,11 @@ class FlashWorker(QThread):
             self.finished.emit(False, "DEVICE_PACKAGE_MISMATCH")
             return
 
+        # The tool's own "Flash complete!" line is the completion signal the
+        # user sees; it only stands when no error was reported.
+        if not error_detail and not self._sp_err_code and self._sp_flash_complete:
+            log_success = True
+
         if log_success:
             self.step_changed.emit(STEP_DONE)
             self.progress.emit(100)
@@ -3391,6 +3409,9 @@ class FlashWorker(QThread):
     def _classify_sp_stdout(self, line):
         if is_sp_usb_search_line(line):
             self._enter_usb_search()
+            return
+        if is_sp_flash_complete_line(line):
+            self._sp_flash_complete = True
             return
         if is_disconnection_error(line):
             self._log(f"Notice: Disconnection detected in SP Flash Tool output: {line}")
@@ -3581,6 +3602,8 @@ class FlashWorker(QThread):
                             # the end rather than reacting to each partition line.
                             self._leave_usb_search()
                             self._note_install_progress()
+                        elif is_sp_flash_complete_line(ln):
+                            self._sp_flash_complete = True
                         elif "brom connected" in low:
                             self._leave_usb_search()
                             self.step_changed.emit(STEP_DETECT)
