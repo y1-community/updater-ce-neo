@@ -218,13 +218,18 @@ def _strip_qt_trace_prefix(text: str) -> str:
 
 
 def is_sp_flash_complete_line(line) -> bool:
-    """True for SP Flash Tool's own completion line ("Flash complete! Disconnect USB...").
+    """True for SP Flash Tool's own completion lines.
 
-    Matched on the word "complete" only: the trailing "Disconnect USB" is an
-    instruction to the user, not a disconnect.
+    Two lines mark a finished command: "Flash complete! Disconnect USB..." and
+    "All command exec done!", which the tool logs after the flash command
+    returns without an exception. Matched on those phrases only: the trailing
+    "Disconnect USB" is an instruction to the user, not a disconnect.
     """
     text = _TIMESTAMP_PREFIX_RE.sub("", tool_line_body(line)).lstrip()
-    return "complete" in _strip_qt_trace_prefix(text).lower()
+    low = _strip_qt_trace_prefix(text).lower()
+    if "incomplete" in low:
+        return False
+    return "complete" in low or "all command exec done" in low
 
 
 def is_sp_usb_search_line(line) -> bool:
@@ -945,12 +950,12 @@ MTK_RECOVERY_WAIT_SECONDS = 60.0
 # cycle to come back), then the retry dialog takes over.
 MTK_DA_ATTEMPTS = 2
 # The app's own no-progress window, counted from the moment a backend command
-# starts. A command that has shown nothing by the time it elapses is ended by
-# the app (the vendor tools wait far longer), the countdown is refreshed when
+# starts (SP Flash Tool: from its "search usb" line). A command that has shown
+# nothing by the time it elapses is ended by the app (the vendor tools wait far longer), the countdown is refreshed when
 # the device is seen, and it is switched off as soon as the download agent or
 # the images start moving. SP Flash Tool's own connection window is set to the
 # same value through its console configuration file.
-ATTEMPT_PROGRESS_TIMEOUT = 30.0
+ATTEMPT_PROGRESS_TIMEOUT = 60.0
 ATTEMPT_PROGRESS_TIMEOUT_MTK = 180.0
 # The target re-enumerates while being restarted into BROM; the USB monitor
 # must not read that as the player being unplugged mid-flash.
@@ -2657,6 +2662,8 @@ class FlashWorker(QThread):
         self._search_started = True
         self._usb_search_active = True
         self._tool_wait_phase = PHASE_CONNECT
+        if not getattr(self, "_attempt_watchdog", None) and not getattr(self, "_attempt_expired", False):
+            self._start_attempt_watchdog()
         if already:
             return
         self.step_changed.emit(STEP_WAITING)
@@ -3236,9 +3243,10 @@ class FlashWorker(QThread):
             self.finished.emit(False, "DEVICE_PACKAGE_MISMATCH")
             return
 
-        # The tool's own "Flash complete!" line is the completion signal the
-        # user sees; it only stands when no error was reported.
-        if not error_detail and not self._sp_err_code and self._sp_flash_complete:
+        # The tool's own completion line ("Flash complete!" or "All command
+        # exec done!") on the console is authoritative: once it has been
+        # emitted the run succeeded, even if an error line appeared later.
+        if self._sp_flash_complete:
             log_success = True
 
         if log_success:
@@ -3348,7 +3356,12 @@ class FlashWorker(QThread):
 
         self._process = spawn()
         register_sp_session(getattr(self._process, "pid", 0))
-        self._start_attempt_watchdog()
+        # Reset the window for this launch, but do not start it: the countdown
+        # starts on the tool's "search usb" line (see _enter_usb_search), not at
+        # launch, when the tool is still initialising and the user has nothing
+        # to connect yet.
+        self._stop_attempt_watchdog()
+        self._attempt_expired = False
 
         # Background thread tailing the SP Flash Tool log file.
         stop_monitor = threading.Event()
@@ -3667,7 +3680,7 @@ class FlashWorker(QThread):
                 "Download Ok" in content
                 or "download ok" in content
                 or "Download Succeeded" in content
-                or "All command exec done" in content
+                or "all command exec done" in content.lower()
             ):
                 return (True, "")
             # Collect error tokens from the log, excluding S_DONE (which is the

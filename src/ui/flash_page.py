@@ -2345,8 +2345,12 @@ class FlashPage(QWidget):
         if hasattr(self, "_wait_mode_hint"):
             self._wait_mode_hint.setVisible(False)
         self.set_waiting_device()
-        timeout_sec = 120 if self._is_mtk_active() else 30
-        self.set_attempt_timeout(timeout_sec)
+        # SP Flash Tool's countdown starts on its "search usb" line (the worker
+        # sends the seconds), so it is not started here. MTKClient keeps its own.
+        if self._is_mtk_active():
+            self.set_attempt_timeout(120)
+        else:
+            self.set_attempt_timeout(0)
 
     def on_install_retry(self, cb) -> None:
         self._install_retry_cb = cb

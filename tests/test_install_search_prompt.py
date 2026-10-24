@@ -166,9 +166,8 @@ def test_continue_launches_console_and_search_lines_drive_connect():
                 assert args[3] == "-s", args
                 assert "-d" in args and "-t" in args and args[-1] == "-r", args
                 assert args[args.index("-t") + 1] == "without", args
-                assert "connect your" in page._wait_prompt_label.text().lower()
-                assert "Y1" in page._wait_prompt_label.text()
-                assert "30s" in page._wait_prompt_label.text()
+                assert "please connect your" not in page._wait_prompt_label.text().lower()
+                assert "30s" not in page._wait_prompt_label.text()
                 assert page._wait_progress_bar.minimum() == 0
                 assert page._wait_progress_bar.maximum() == 100
                 assert window._last_progress == 0

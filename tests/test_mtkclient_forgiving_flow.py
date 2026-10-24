@@ -54,10 +54,10 @@ def test_mtkclient_paperclip_prompt_and_120s_timeout():
     page = FlashPage()
     page.set_model("Y1")
 
-    # SP Flash
+    # SP Flash: the countdown starts on the tool's "search usb" line, not here.
     page.set_method("sp")
     page.leave_power_off_prompt()
-    assert page._attempt_remaining == 30
+    assert page._attempt_remaining == 0
     assert "please connect your y1" in page._wait_prompt_label.text().lower()
 
     # MTKClient - Y1

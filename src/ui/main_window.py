@@ -2422,8 +2422,8 @@ class MainWindow(QMainWindow):
                 self._select_page._check_battery_toast_visibility()
 
         self._nav_to_page(_PAGE_SELECT)
-        self.statusBar().showMessage("App completely reset to defaults, download cache cleared, and battery reminder restored.", 4000)
-        self._append_log("App configuration completely reset to defaults, download cache cleared, and battery reminder restored (R).")
+        self.statusBar().showMessage(tr("status_app_reset_defaults"), 4000)
+        self._append_log(tr("log_app_reset_defaults"))
 
     def _rockbox_themes_required(self) -> tuple[bool, str]:
         """Whether the selected Y1/Y2 Rockbox build needs bundled 360p assets.
