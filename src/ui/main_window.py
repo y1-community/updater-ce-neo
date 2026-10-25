@@ -729,12 +729,8 @@ class MainWindow(QMainWindow):
         from .surfaces import harmonise_window_plates
         harmonise_window_plates(self)
 
-        self._manifest_worker = ManifestWorker(self)
-        self._active_workers.add(self._manifest_worker)
-        self._manifest_worker.finished.connect(
-            lambda entries: self._on_manifest_worker_finished(self._manifest_worker, entries)
-        )
-        self._manifest_worker.start()
+        self._manifest_worker = None
+        QTimer.singleShot(250, self._start_manifest_worker)
         QTimer.singleShot(UPDATE_CHECK_STARTUP_DELAY_MS, self._start_auto_update_check)
         QTimer.singleShot(
             UPDATE_CHECK_STARTUP_DELAY_MS + 1000,
@@ -875,6 +871,17 @@ class MainWindow(QMainWindow):
             page._remember_gui_local(flash_path, "", Path(flash_path).name)
         self._sync_sp_gui_button_visibility()
         self._sync_settings_sp_gui_visibility()
+
+    def _start_manifest_worker(self):
+        if getattr(self, "_manifest_worker", None) is not None:
+            return
+        worker = ManifestWorker(self)
+        self._manifest_worker = worker
+        self._active_workers.add(worker)
+        worker.finished.connect(
+            lambda entries: self._on_manifest_worker_finished(worker, entries)
+        )
+        worker.start()
 
     def _on_manifest_worker_finished(self, worker, entries):
         self._active_workers.discard(worker)
@@ -1170,8 +1177,13 @@ class MainWindow(QMainWindow):
         self._version_label.setStyleSheet(
             "font-size: 11px; color: palette(window-text); background: transparent; border: none; margin: 0; padding: 0;"
         )
+        is_disabled = (
+            device_tracking.is_donation_ui_disabled(self.settings)
+            or device_tracking.is_donation_install_prompt_disabled(self.settings)
+            or device_tracking.is_settings_donations_section_dismissed(self.settings)
+        )
         self._version_label.setVisible(
-            not device_tracking.is_donation_ui_disabled(self.settings)
+            not is_disabled
             and not is_mediatek_installer()
         )
 
@@ -4279,7 +4291,8 @@ class MainWindow(QMainWindow):
         """
         text = str(line or "")
         low = text.lower()
-        if (
+        is_sp = bool(getattr(self, "_used_sp_backend", False))
+        if is_sp and (
             "all command exec" in low
             or ("all command" in low and "exec" in low)
             or "flash complete" in low
@@ -4392,12 +4405,17 @@ class MainWindow(QMainWindow):
         self._append_log(f"Device detected: {port}")
         self._flash_page.set_detected()
 
+    def _is_sp_complete_override(self) -> bool:
+        """True only if an SP Flash Tool run confirmed completion via console."""
+        is_sp = bool(getattr(self, "_used_sp_backend", False))
+        return bool(is_sp and getattr(self, "_saw_all_command_exec", False))
+
     def _on_flash_disconnected(self):
         """Handle abrupt USB disconnection during flash, wait 5s safety window before killing tasks."""
         if (
             self.sm.state is FlashState.S5_COMPLETE
             or getattr(self, "_install_complete", False)
-            or getattr(self, "_saw_all_command_exec", False)
+            or self._is_sp_complete_override()
         ):
             return
         try:
@@ -4435,7 +4453,7 @@ class MainWindow(QMainWindow):
 
     def _kill_flashing_process(self, reason: str = "usb disconnected"):
         """Terminate the flashing process after the safety window has elapsed."""
-        if getattr(self, "_saw_all_command_exec", False) or getattr(self, "_install_complete", False):
+        if self._is_sp_complete_override() or getattr(self, "_install_complete", False):
             return
         self.service.cancel_flash()
         from .. import process_guard
@@ -4502,7 +4520,7 @@ class MainWindow(QMainWindow):
             self.sm.state is FlashState.S5_COMPLETE
             or getattr(self, "_install_complete", False)
             or getattr(self, "_rockbox_themes_flow_active", False)
-            or getattr(self, "_saw_all_command_exec", False)
+            or self._is_sp_complete_override()
             or getattr(self, "_themes_stage_done", False)
         ):
             return
@@ -4524,7 +4542,7 @@ class MainWindow(QMainWindow):
         if hasattr(self, "_kill_process_timer") and self._kill_process_timer.isActive():
             self._kill_process_timer.stop()
 
-        if getattr(self, "_saw_all_command_exec", False):
+        if self._is_sp_complete_override():
             self._append_log("Notice: Flash finished handler confirmed 'all command exec' — classing as success.")
             ok = True
             error_code = ""
@@ -4563,6 +4581,8 @@ class MainWindow(QMainWindow):
             self._handle_flash_failure(error_code)
 
     def _handle_flash_success(self):
+        if hasattr(self, "_flash_page") and self._flash_page is not None:
+            self._flash_page.dismiss_prompt_stop()
         try:
             self.sm.transition_to(FlashState.S5_COMPLETE)
         except ValueError:
@@ -4763,6 +4783,8 @@ class MainWindow(QMainWindow):
 
     def _show_install_failure(self, message: str):
         """Failure stays on the install progress card. Retry is where Cancel was."""
+        if hasattr(self, "_flash_page") and self._flash_page is not None:
+            self._flash_page.dismiss_prompt_stop()
         self._rockbox_themes_flow_active = False
         self._rockbox_power_on_pending = False
         raw = str(message or "")
@@ -5224,6 +5246,8 @@ class MainWindow(QMainWindow):
         # Only the ✕ (confirm stop) button lands here, via the stop-check
         # callback. The ← (back) button only dismisses the check inside the
         # progress card so the run keeps going — it must never navigate away.
+        if hasattr(self, "_flash_page") and self._flash_page is not None:
+            self._flash_page.dismiss_prompt_stop()
         self._return_to_select_software()
 
     def _on_completion_not_now(self):
@@ -6481,7 +6505,11 @@ class MainWindow(QMainWindow):
 
     def _apply_donation_visibility(self, is_disabled=None):
         if is_disabled is None:
-            is_disabled = device_tracking.is_donation_ui_disabled(self.settings)
+            is_disabled = (
+                device_tracking.is_donation_ui_disabled(self.settings)
+                or device_tracking.is_donation_install_prompt_disabled(self.settings)
+                or device_tracking.is_settings_donations_section_dismissed(self.settings)
+            )
         sb = self.statusBar()
         if sb is not None:
             if hasattr(sb, "set_donations_enabled"):

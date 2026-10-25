@@ -23,7 +23,7 @@ import logging
 import os
 import sys
 
-from PySide6.QtCore import QEvent, QObject, QTimer, Qt
+from PySide6.QtCore import QEvent, QObject, QPoint, QRect, QTimer, Qt
 from PySide6.QtGui import QColor, QGuiApplication
 from PySide6.QtWidgets import QComboBox
 
@@ -49,9 +49,52 @@ _SF_SYMBOLS = {
     "download": "arrow.down.circle",
     "folder": "folder",
     "close": "xmark",
+    "trash": "trash",
+    "delete": "trash",
+    "bin": "trash",
+}
+
+_SEGMENTED_SF_SYMBOLS = {
+    "back": "chevron.backward",
+    "next": "chevron.forward",
+    "cancel": "xmark",
+    "close": "xmark",
+    "retry": "arrow.clockwise",
+    "complete": "checkmark",
+    "download": "arrow.down.circle",
+    "trash": "trash",
+    "delete": "trash",
+    "bin": "trash",
 }
 
 _target_class = None
+_segmented_target_class = None
+
+
+def _segmented_target_class_obj():
+    """AppKit object handling clicks on a 2-segment capsule control."""
+    global _segmented_target_class
+    if _segmented_target_class is not None:
+        return _segmented_target_class
+    import objc
+    from AppKit import NSObject
+
+    try:
+        cls = objc.lookUpClass("InnioasisSegmentedPairTarget")
+    except objc.nosuchclass_error:
+        cls = None
+
+    if cls is None:
+
+        class InnioasisSegmentedPairTarget(NSObject):
+            def segmentClicked_(self, sender):  # noqa: N802 (ObjC selector)
+                pair = getattr(self, "_pair", None)
+                if pair is not None:
+                    pair._handle_click(int(sender.selectedSegment()))
+
+        cls = InnioasisSegmentedPairTarget
+    _segmented_target_class = cls
+    return cls
 
 
 def _chip_target_class():
@@ -228,13 +271,23 @@ class NativeRoundChip:
     # -- lifecycle -----------------------------------------------------
     def attach(self) -> bool:
         """Create the AppKit button. Returns True once it is in the view."""
-        if self.live or self._failed:
-            return self.live
+        if self.live:
+            return True
+        if self._failed:
+            return False
+        if getattr(self._host, "_companion", None) is not None or getattr(
+            self._host, "is_segmented_active", lambda: False
+        )():
+            return False
         if not native_round_buttons_available():
             # winId() is not an NSView under the offscreen plugin, and asking
             # AppKit to add a subview to it is a segfault rather than an
             # exception. Never reach AppKit without the session check.
             self._failed = True
+            return False
+        win = self._host.window()
+        if win is None or not win.isVisible():
+            # Window is not visible yet; do not treat as fatal, retry on show/paint.
             return False
         try:
             self._build()
@@ -278,7 +331,16 @@ class NativeRoundChip:
 
                 button.setBorderShape_(NSControlBorderShapeCircle)
         else:
-            button.setBezelStyle_(NSBezelStyleCircular)
+            from AppKit import NSBezelStyleTexturedRounded
+
+            button.setBezelStyle_(NSBezelStyleTexturedRounded)
+            if hasattr(button, "setBorderShape_"):
+                try:
+                    from AppKit import NSControlBorderShapeRounded
+
+                    button.setBorderShape_(NSControlBorderShapeRounded)
+                except Exception:
+                    pass
         button.setBordered_(True)
         button.setTitle_("")
         button.setImagePosition_(NSImageOnly)
@@ -302,6 +364,16 @@ class NativeRoundChip:
 
         self._install_filter()
 
+    def _find_scroll_area(self):
+        from PySide6.QtWidgets import QAbstractScrollArea
+
+        p = self._host.parentWidget()
+        while p is not None:
+            if isinstance(p, QAbstractScrollArea):
+                return p
+            p = p.parentWidget()
+        return None
+
     def _install_filter(self) -> None:
         if self._filter is not None:
             return
@@ -314,7 +386,12 @@ class NativeRoundChip:
             def eventFilter(self, watched, event):
                 if self._chip.live:
                     t = event.type()
-                    if t in (QEvent.Type.Move, QEvent.Type.Resize, QEvent.Type.LayoutRequest):
+                    if t in (
+                        QEvent.Type.Move,
+                        QEvent.Type.Resize,
+                        QEvent.Type.LayoutRequest,
+                        QEvent.Type.Paint,
+                    ):
                         self._chip.sync_frame()
                     elif t == QEvent.Type.Hide:
                         if self._chip._button is not None:
@@ -325,14 +402,56 @@ class NativeRoundChip:
 
         self._filter = _HostFilter(self)
         self._host.installEventFilter(self._filter)
+        self._scroll_area = self._find_scroll_area()
+        if self._scroll_area is not None:
+            try:
+                self._scroll_area.verticalScrollBar().valueChanged.connect(self.sync_frame)
+                self._scroll_area.horizontalScrollBar().valueChanged.connect(self.sync_frame)
+                vp = self._scroll_area.viewport()
+                if vp is not None:
+                    vp.installEventFilter(self._filter)
+            except Exception:
+                pass
 
     def sync_frame(self) -> None:
-        """Keep the AppKit button on the host's disc as the widget resizes."""
+        """Keep the AppKit button on the host's disc as the widget resizes and scrolls."""
         if not self.live:
+            return
+        if getattr(self._host, "_companion", None) is not None or getattr(
+            self._host, "is_segmented_active", lambda: False
+        )():
+            if self._button is not None:
+                self._button.setHidden_(True)
             return
         try:
             win = self._host.window()
-            visible = bool(win and win.isVisible() and self._host.isVisible() and self._host.isVisibleTo(win))
+            visible = bool(
+                win
+                and win.isVisible()
+                and self._host.isVisible()
+                and self._host.isVisibleTo(win)
+            )
+            if visible:
+                scroll_area = getattr(self, "_scroll_area", None)
+                if scroll_area is None:
+                    scroll_area = self._find_scroll_area()
+                    if scroll_area is not None:
+                        self._scroll_area = scroll_area
+                        try:
+                            scroll_area.verticalScrollBar().valueChanged.connect(self.sync_frame)
+                            scroll_area.horizontalScrollBar().valueChanged.connect(self.sync_frame)
+                            vp = scroll_area.viewport()
+                            if vp is not None and self._filter is not None:
+                                vp.installEventFilter(self._filter)
+                        except Exception:
+                            pass
+                if scroll_area is not None:
+                    vp = scroll_area.viewport()
+                    if vp is not None and vp.isVisible():
+                        p_in_vp = self._host.mapTo(vp, QPoint(0, 0))
+                        host_rect_in_vp = QRect(p_in_vp, self._host.size())
+                        if not vp.rect().intersects(host_rect_in_vp):
+                            visible = False
             self._button.setHidden_(not visible)
             if visible:
                 self._button.setFrame_(self._frame_rect())
@@ -345,6 +464,16 @@ class NativeRoundChip:
                 self._host.removeEventFilter(self._filter)
             except Exception:
                 pass
+            if getattr(self, "_scroll_area", None) is not None:
+                try:
+                    self._scroll_area.verticalScrollBar().valueChanged.disconnect(self.sync_frame)
+                    self._scroll_area.horizontalScrollBar().valueChanged.disconnect(self.sync_frame)
+                    vp = self._scroll_area.viewport()
+                    if vp is not None:
+                        vp.removeEventFilter(self._filter)
+                except Exception:
+                    pass
+                self._scroll_area = None
             self._filter = None
         if not self.live:
             return
@@ -427,14 +556,6 @@ class NativeRoundChip:
                 logger.debug("could not clear the chip bezel colour", exc_info=True)
         content = self._content if self._content.isValid() else QColor("#ffffff")
         self._button.setContentTintColor_(_ns_color(content))
-        if not self._accent or not self._glass:
-            # The circular bezel tints its own glyph from the window's
-            # appearance, and a template symbol ignores contentTintColor on
-            # that style; a tint there would only fight the system.
-            try:
-                self._button.setContentTintColor_(NSColor.labelColor())
-            except Exception:
-                pass
 
     def _apply_text(self) -> None:
         self._button.setToolTip_(self._tooltip)
@@ -448,6 +569,338 @@ class NativeRoundChip:
         emit = getattr(self._host, "_native_chip_clicked", None)
         if callable(emit):
             emit()
+
+
+class NativeSegmentedPair:
+    """An AppKit NSSegmentedControl (NSSegmentStyleAutomatic with NSControlBorderShapeCapsule).
+
+    Matches the macOS Safari toolbar back/forward segmented pair aesthetic:
+    [ < | > ]
+    """
+
+    def __init__(self, host, companion):
+        self._host = host
+        self._companion = companion
+        self._control = None
+        self._target = None
+        self._failed = False
+        self._filter = None
+
+    @property
+    def live(self) -> bool:
+        return self._control is not None
+
+    def attach(self) -> bool:
+        if self.live:
+            return True
+        if self._failed:
+            return False
+        if not native_round_buttons_available():
+            self._failed = True
+            return False
+        win = self._host.window()
+        if win is None or not win.isVisible():
+            return False
+        try:
+            self._build()
+        except Exception:
+            logger.debug("could not attach the native segmented pair", exc_info=True)
+            self._failed = True
+            self._control = None
+        return self.live
+
+    def _build(self) -> None:
+        from AppKit import (
+            NSSegmentedControl,
+            NSSegmentSwitchTrackingMomentary,
+            NSSegmentStyleAutomatic,
+        )
+
+        win = self._host.window()
+        if win is None or not win.isVisible():
+            raise RuntimeError("host window not available or not visible yet")
+
+        from .glass import _get_nsview
+        view = _get_nsview(win)
+        if view is None:
+            raise RuntimeError("host window has no NSView yet")
+
+        frame = self._frame_rect(view)
+        is_glass = _glass_available()
+
+        self._glass_backdrop = None
+        if is_glass:
+            try:
+                import objc
+                glass_cls = objc.lookUpClass("NSGlassEffectView")
+            except Exception:
+                glass_cls = None
+            if glass_cls is not None:
+                glass_view = glass_cls.alloc().initWithFrame_(frame)
+                glass_view.setWantsLayer_(True)
+                layer = glass_view.layer()
+                if layer is not None:
+                    layer.setCornerRadius_(float(frame.size.height) / 2.0)
+                    layer.setMasksToBounds_(True)
+                view.addSubview_(glass_view)
+                self._glass_backdrop = glass_view
+
+        control = NSSegmentedControl.alloc().initWithFrame_(frame)
+        control.setSegmentCount_(2)
+        control.setTrackingMode_(NSSegmentSwitchTrackingMomentary)
+        if is_glass:
+            control.setSegmentStyle_(NSSegmentStyleAutomatic)
+            if hasattr(control, "setBorderShape_"):
+                from AppKit import NSControlBorderShapeCapsule
+                control.setBorderShape_(NSControlBorderShapeCapsule)
+        else:
+            from AppKit import NSSegmentStyleTexturedRounded
+            control.setSegmentStyle_(NSSegmentStyleTexturedRounded)
+
+        half_w = float(frame.size.width) / 2.0
+        control.setWidth_forSegment_(half_w, 0)
+        control.setWidth_forSegment_(half_w, 1)
+
+        target = _segmented_target_class_obj().alloc().init()
+        target._pair = self
+        control.setTarget_(target)
+        control.setAction_("segmentClicked:")
+        self._target = target
+        self._control = control
+
+        self._sync_content()
+        visible = bool(
+            self._host.isVisible()
+            and self._companion.isVisible()
+            and self._host.isVisibleTo(win)
+        )
+        control.setHidden_(not visible)
+        if self._glass_backdrop is not None:
+            self._glass_backdrop.setHidden_(not visible)
+        view.addSubview_(control)
+        self._install_filter()
+
+    def _sync_content(self) -> None:
+        if not self.live:
+            return
+        from AppKit import (
+            NSFontWeightRegular,
+            NSImage,
+            NSImageSymbolConfiguration,
+            NSAppearance,
+        )
+        from .dark import is_dark
+
+        cfg = NSImageSymbolConfiguration.configurationWithPointSize_weight_(
+            14.0, NSFontWeightRegular
+        )
+
+        def _get_img(btn, fallback):
+            sym = getattr(btn, "_symbol", "") or fallback
+            name = _SEGMENTED_SF_SYMBOLS.get(sym) or _SF_SYMBOLS.get(sym) or "chevron.forward"
+            img = NSImage.imageWithSystemSymbolName_accessibilityDescription_(name, None)
+            if img is not None and hasattr(img, "imageWithSymbolConfiguration_"):
+                return img.imageWithSymbolConfiguration_(cfg)
+            return img
+
+        img0 = _get_img(self._host, "back")
+        img1 = _get_img(self._companion, "next")
+        if img0:
+            self._control.setImage_forSegment_(img0, 0)
+        if img1:
+            self._control.setImage_forSegment_(img1, 1)
+
+        self._control.setToolTip_forSegment_(self._host.toolTip() or "", 0)
+        self._control.setToolTip_forSegment_(self._companion.toolTip() or "", 1)
+        self._control.setEnabled_forSegment_(bool(self._host.isEnabled()), 0)
+        self._control.setEnabled_forSegment_(bool(self._companion.isEnabled()), 1)
+
+        try:
+            self._control.setAccessibilityLabel_forSegment_(
+                self._host.accessibleName() or self._host.toolTip() or "", 0
+            )
+            self._control.setAccessibilityLabel_forSegment_(
+                self._companion.accessibleName() or self._companion.toolTip() or "", 1
+            )
+        except Exception:
+            pass
+
+        try:
+            name = "NSAppearanceNameDarkAqua" if is_dark() else "NSAppearanceNameAqua"
+            app = NSAppearance.appearanceNamed_(name)
+            if app is not None:
+                self._control.setAppearance_(app)
+        except Exception:
+            pass
+
+    def _frame_rect(self, view=None):
+        from AppKit import NSMakeRect
+        from PySide6.QtCore import QPoint
+
+        win = self._host.window()
+        if win is None:
+            return NSMakeRect(0, 0, 72, 36)
+        if view is None:
+            from .glass import _get_nsview
+            view = _get_nsview(win)
+
+        p0 = self._host.mapTo(win, QPoint(0, 0))
+        p1 = self._companion.mapTo(win, QPoint(self._companion.width(), 0))
+        w = max(40.0, float(p1.x() - p0.x()))
+        h = max(24.0, float(self._host.height()))
+
+        x = float(p0.x())
+        if view is not None and getattr(view, "isFlipped", lambda: True)():
+            y = float(p0.y())
+        elif view is not None:
+            y = float(view.bounds().size.height - (p0.y() + h))
+        else:
+            y = float(p0.y())
+        return NSMakeRect(x, y, float(w), float(h))
+
+    def _find_scroll_area(self):
+        from PySide6.QtWidgets import QAbstractScrollArea
+
+        p = self._host.parentWidget()
+        while p is not None:
+            if isinstance(p, QAbstractScrollArea):
+                return p
+            p = p.parentWidget()
+        return None
+
+    def sync_frame(self) -> None:
+        if not self.live:
+            return
+        try:
+            win = self._host.window()
+            visible = bool(
+                win
+                and win.isVisible()
+                and self._host.isVisible()
+                and self._companion.isVisible()
+                and self._host.isVisibleTo(win)
+            )
+            if visible:
+                scroll_area = getattr(self, "_scroll_area", None)
+                if scroll_area is None:
+                    scroll_area = self._find_scroll_area()
+                    if scroll_area is not None:
+                        self._scroll_area = scroll_area
+                        try:
+                            scroll_area.verticalScrollBar().valueChanged.connect(self.sync_frame)
+                            scroll_area.horizontalScrollBar().valueChanged.connect(self.sync_frame)
+                            vp = scroll_area.viewport()
+                            if vp is not None and self._filter is not None:
+                                vp.installEventFilter(self._filter)
+                        except Exception:
+                            pass
+                if scroll_area is not None:
+                    vp = scroll_area.viewport()
+                    if vp is not None and vp.isVisible():
+                        p_in_vp = self._host.mapTo(vp, QPoint(0, 0))
+                        host_rect_in_vp = QRect(p_in_vp, self._host.size())
+                        if not vp.rect().intersects(host_rect_in_vp):
+                            visible = False
+            self._control.setHidden_(not visible)
+            if getattr(self, "_glass_backdrop", None) is not None:
+                self._glass_backdrop.setHidden_(not visible)
+            if visible:
+                frame = self._frame_rect()
+                self._control.setFrame_(frame)
+                if getattr(self, "_glass_backdrop", None) is not None:
+                    self._glass_backdrop.setFrame_(frame)
+                    layer = self._glass_backdrop.layer()
+                    if layer is not None:
+                        layer.setCornerRadius_(float(frame.size.height) / 2.0)
+                half_w = float(frame.size.width) / 2.0
+                self._control.setWidth_forSegment_(half_w, 0)
+                self._control.setWidth_forSegment_(half_w, 1)
+                self._sync_content()
+        except Exception:
+            pass
+
+    def _install_filter(self) -> None:
+        if self._filter is not None:
+            return
+
+        class _PairFilter(QObject):
+            def __init__(self, pair):
+                super().__init__(pair._host)
+                self._pair = pair
+
+            def eventFilter(self, watched, event):
+                if self._pair.live:
+                    t = event.type()
+                    if t in (
+                        QEvent.Type.Move,
+                        QEvent.Type.Resize,
+                        QEvent.Type.LayoutRequest,
+                        QEvent.Type.Paint,
+                    ):
+                        self._pair.sync_frame()
+                    elif t == QEvent.Type.Hide:
+                        if self._pair._control is not None:
+                            self._pair._control.setHidden_(True)
+                    elif t == QEvent.Type.Show:
+                        self._pair.sync_frame()
+                    elif t == QEvent.Type.EnabledChange:
+                        self._pair._sync_content()
+                return False
+
+        self._filter = _PairFilter(self)
+        self._host.installEventFilter(self._filter)
+        self._companion.installEventFilter(self._filter)
+        self._scroll_area = self._find_scroll_area()
+        if self._scroll_area is not None:
+            try:
+                self._scroll_area.verticalScrollBar().valueChanged.connect(self.sync_frame)
+                self._scroll_area.horizontalScrollBar().valueChanged.connect(self.sync_frame)
+                vp = self._scroll_area.viewport()
+                if vp is not None:
+                    vp.installEventFilter(self._filter)
+            except Exception:
+                pass
+
+    def _handle_click(self, segment_idx: int) -> None:
+        if segment_idx == 0 and self._host and self._host.isEnabled():
+            self._host.click()
+        elif segment_idx == 1 and self._companion and self._companion.isEnabled():
+            self._companion.click()
+
+    def detach(self) -> None:
+        if self._filter is not None:
+            try:
+                self._host.removeEventFilter(self._filter)
+                if self._companion is not None:
+                    self._companion.removeEventFilter(self._filter)
+            except Exception:
+                pass
+            if getattr(self, "_scroll_area", None) is not None:
+                try:
+                    self._scroll_area.verticalScrollBar().valueChanged.disconnect(self.sync_frame)
+                    self._scroll_area.horizontalScrollBar().valueChanged.disconnect(self.sync_frame)
+                    vp = self._scroll_area.viewport()
+                    if vp is not None:
+                        vp.removeEventFilter(self._filter)
+                except Exception:
+                    pass
+                self._scroll_area = None
+            self._filter = None
+        if not self.live:
+            return
+        if self._control is not None:
+            try:
+                self._control.removeFromSuperview()
+            except Exception:
+                pass
+            self._control = None
+        if getattr(self, "_glass_backdrop", None) is not None:
+            try:
+                self._glass_backdrop.removeFromSuperview()
+            except Exception:
+                pass
+            self._glass_backdrop = None
+        self._target = None
 
 
 def native_combo_menus_available() -> bool:

@@ -2,6 +2,7 @@
 
 import logging
 from pathlib import Path
+import sys
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +49,11 @@ from .widgets import (
 )
 from .dark import T, page_top_margin
 from .icons import get_symbol_icon, get_symbol_pixmap
-from .native_controls import NativeRoundChip, native_round_buttons_available
+from .native_controls import (
+    NativeRoundChip,
+    NativeSegmentedPair,
+    native_round_buttons_available,
+)
 
 # Width the progress copy wraps into. A wrapped QLabel inside a horizontal
 # card reports a one-line size hint unless it is given this width.
@@ -397,6 +402,7 @@ class _CardHead(QWidget):
         self.identity_box.addWidget(title)
         self.box.addWidget(self.identity, 1)
         self.band = None
+        self._chips: list[_RoundNextButton] = []
 
     def set_band(self, band: QWidget) -> None:
         """The progress band, directly under the title it reports on."""
@@ -410,11 +416,40 @@ class _CardHead(QWidget):
         round action buttons share one horizontal axis.
         """
         self.box.addWidget(chip, 0, Qt.AlignVCenter)
+        if isinstance(chip, _RoundNextButton):
+            self._chips.append(chip)
+            chip.installEventFilter(self)
+        self._sync_chips_pairing()
+
+    def eventFilter(self, watched, event):  # noqa: N802 (Qt naming)
+        if event.type() in (
+            QEvent.Type.Show,
+            QEvent.Type.Hide,
+            QEvent.Type.EnabledChange,
+            QEvent.Type.Resize,
+        ):
+            self._sync_chips_pairing()
+        return super().eventFilter(watched, event)
+
+    def _sync_chips_pairing(self) -> None:
+        visible = [
+            c
+            for c in self._chips
+            if not c.isHidden()
+        ]
+        if len(visible) == 2:
+            c0, c1 = visible[0], visible[1]
+            c0.set_segmented_pair(companion=c1, is_leading=True)
+            c1.set_segmented_pair(companion=c0, is_leading=False)
+        else:
+            for c in self._chips:
+                c.set_segmented_pair(companion=None)
 
     def _sync_to_band(self) -> None:
         """Vertically centre the release icon and action chips on the progress band."""
         if getattr(self, "_aligning", False) or not hasattr(self, "identity_box") or not hasattr(self, "band"):
             return
+        self._sync_chips_pairing()
         self._aligning = True
         try:
             band_visible = self.band is not None and not self.band.isHidden()
@@ -439,13 +474,24 @@ class _CardHead(QWidget):
                 icon_y = max(0, centre_y - (self.icon.height() - 1) // 2)
                 if self.icon.y() != icon_y:
                     self.icon.move(self.icon.x(), icon_y)
-            for i in range(2, self.box.count()):
-                item = self.box.itemAt(i)
-                chip = item.widget() if item is not None else None
-                if chip is not None and not chip.isHidden():
-                    chip_y = max(0, centre_y - (chip.height() - 1) // 2)
-                    if chip.y() != chip_y:
-                        chip.move(chip.x(), chip_y)
+            visible_chips = [c for c in self._chips if c.isVisible() and not c.isHidden()]
+            if len(visible_chips) == 2:
+                c0, c1 = visible_chips[0], visible_chips[1]
+                c0_y = max(0, centre_y - (c0.height() - 1) // 2)
+                c1_y = max(0, centre_y - (c1.height() - 1) // 2)
+                if c0.y() != c0_y:
+                    c0.move(c0.x(), c0_y)
+                c1_x = c0.x() + c0.width()
+                if c1.x() != c1_x or c1.y() != c1_y:
+                    c1.move(c1_x, c1_y)
+            else:
+                for i in range(2, self.box.count()):
+                    item = self.box.itemAt(i)
+                    chip = item.widget() if item is not None else None
+                    if chip is not None and not chip.isHidden():
+                        chip_y = max(0, centre_y - (chip.height() - 1) // 2)
+                        if chip.y() != chip_y:
+                            chip.move(chip.x(), chip_y)
         finally:
             self._aligning = False
 
@@ -488,7 +534,37 @@ class _GlyphActions(QWidget):
         self._box.setSpacing(10)
         for button in self._buttons:
             self._box.addWidget(button, 0, Qt.AlignCenter)
+            if hasattr(button, "installEventFilter"):
+                button.installEventFilter(self)
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self._sync_chips_pairing()
+
+    def eventFilter(self, watched, event):  # noqa: N802 (Qt naming)
+        if event.type() in (
+            QEvent.Type.Show,
+            QEvent.Type.Hide,
+            QEvent.Type.EnabledChange,
+            QEvent.Type.Resize,
+        ):
+            self._sync_chips_pairing()
+        return super().eventFilter(watched, event)
+
+    def _sync_chips_pairing(self) -> None:
+        visible = [
+            b
+            for b in self._buttons
+            if hasattr(b, "set_segmented_pair") and not b.isHidden()
+        ]
+        if len(visible) == 2:
+            self._box.setSpacing(0)
+            b0, b1 = visible[0], visible[1]
+            b0.set_segmented_pair(companion=b1, is_leading=True)
+            b1.set_segmented_pair(companion=b0, is_leading=False)
+        else:
+            self._box.setSpacing(10)
+            for b in self._buttons:
+                if hasattr(b, "set_segmented_pair"):
+                    b.set_segmented_pair(companion=None)
 
     def set_stacked(self, stacked: bool) -> None:
         """Column instead of row, for a card with no horizontal room left."""
@@ -612,7 +688,7 @@ class _RoundNextButton(QPushButton):
         # moves the install forward wears the accent colour.
         self._accent = bool(accent)
         self.setObjectName("roundNextButton" if accent else "roundGlyphButton")
-        self.setCursor(Qt.PointingHandCursor)
+        self.setCursor(Qt.ArrowCursor)
         # The widget keeps a few pixels of room around the disc for its shadow.
         self.setFixedSize(ROUND_NEXT_BUTTON_PX, ROUND_NEXT_BUTTON_PX)
         self.setFlat(True)
@@ -625,6 +701,9 @@ class _RoundNextButton(QPushButton):
         self._hovered = False
         self._pressed = False
         self._arrow = QPixmap()
+        self._companion = None
+        self._is_leading = False
+        self._segmented_native = None
         # AppKit draws the chip on macOS; None until the widget has a window.
         self._native = None
         self._native_attempted = False
@@ -682,19 +761,97 @@ class _RoundNextButton(QPushButton):
 
     def _colors(self) -> tuple[QColor, str]:
         """Disc and the glyph's contrast colour, from the live theme."""
-        from .dark import T, get_native_accent_color
+        from .dark import T, is_dark
 
-        if self._accent:
+        if is_dark():
+            text = "#ffffff"
+            if self._accent:
+                disc = QColor(getattr(T(), "accent", "") or "#52b036")
+                disc.setAlpha(_ACCENT_DISC_ALPHA)
+            else:
+                disc = QColor(getattr(T(), "bg_elev", "") or "#3a3f4b")
+                disc.setAlpha(_NEUTRAL_DISC_ALPHA)
+        elif self._accent:
             disc = QColor(getattr(T(), "accent", "") or "#52b036")
             disc.setAlpha(_ACCENT_DISC_ALPHA)
+            lum = (0.299 * disc.red() + 0.587 * disc.green() + 0.114 * disc.blue()) / 255.0
+            text = "#000000" if lum > 0.65 else "#ffffff"
         else:
             disc = QColor(getattr(T(), "bg_elev", "") or "#3a3f4b")
             disc.setAlpha(_NEUTRAL_DISC_ALPHA)
-        _accent, text = get_native_accent_color()
-        if not self._accent:
             dark = disc.lightness() < 140
             text = "#ffffff" if dark else "#111827"
         return disc, text
+
+    def set_segmented_pair(self, companion, is_leading: bool = False) -> None:
+        prev_companion = getattr(self, "_companion", None)
+        prev_leading = getattr(self, "_is_leading", False)
+        if prev_companion is companion and prev_leading == bool(is_leading):
+            return
+        self._companion = companion
+        self._is_leading = bool(is_leading)
+
+        if self._segmented_native is not None:
+            self._segmented_native.detach()
+            self._segmented_native = None
+
+        if self._companion is not None:
+            # We are entering segmented mode: detach single round chips immediately so no stray button appears
+            if self._native is not None:
+                self._native.detach()
+                self._native = None
+                self._native_attempted = False
+            comp_native = getattr(self._companion, "_native", None)
+            if comp_native is not None:
+                comp_native.detach()
+                self._companion._native = None
+                self._companion._native_attempted = False
+
+            if self._is_leading:
+                self._attach_segmented_native()
+        else:
+            if self._native is None and native_round_buttons_available():
+                self._native_attempted = False
+                self._attach_native()
+            elif self._native is not None and getattr(self._native, "_button", None) is not None:
+                self._native._button.setHidden_(not self.isVisible())
+
+        self.rebuild_arrow()
+        self.update()
+
+    def _attach_segmented_native(self) -> None:
+        if not native_round_buttons_available() or self._companion is None or not self._is_leading:
+            return
+        win = self.window()
+        if win is None or not win.isVisible():
+            return
+        from .native_controls import NativeSegmentedPair
+        if self._segmented_native is None:
+            # Detach any standalone chips from both buttons before attaching the pair
+            if self._native is not None:
+                self._native.detach()
+                self._native = None
+                self._native_attempted = False
+            comp_native = getattr(self._companion, "_native", None)
+            if comp_native is not None:
+                comp_native.detach()
+                self._companion._native = None
+                self._companion._native_attempted = False
+
+            pair = NativeSegmentedPair(self, self._companion)
+            if pair.attach():
+                self._segmented_native = pair
+            else:
+                self._segmented_native = None
+
+    def is_segmented_active(self) -> bool:
+        if self._segmented_native is not None and self._segmented_native.live:
+            return True
+        if self._companion is not None:
+            comp_seg = getattr(self._companion, "_segmented_native", None)
+            if comp_seg is not None and comp_seg.live:
+                return True
+        return False
 
     def rebuild_arrow(self) -> None:
         """Re-render the platform glyph for the current theme colours.
@@ -723,11 +880,19 @@ class _RoundNextButton(QPushButton):
     def _glyph_symbol(self) -> str:
         """The glyph to draw, mirrored in a right-to-left row."""
         symbol = self._symbol
+        if self._companion is not None:
+            if symbol == "back":
+                symbol = "chevron.left"
+            elif symbol == "next":
+                symbol = "chevron.right"
         if (
-            symbol in ("back", "next")
+            symbol in ("back", "next", "chevron.left", "chevron.right")
             and self.layoutDirection() == Qt.LayoutDirection.RightToLeft
         ):
-            symbol = "next" if symbol == "back" else "back"
+            if symbol in ("back", "chevron.left"):
+                symbol = "chevron.right" if self._companion is not None else "next"
+            else:
+                symbol = "chevron.left" if self._companion is not None else "back"
         return symbol
 
     def changeEvent(self, event):  # noqa: N802 (Qt naming)
@@ -752,7 +917,10 @@ class _RoundNextButton(QPushButton):
 
     def showEvent(self, event):  # noqa: N802 (Qt naming)
         super().showEvent(event)
-        self._attach_native()
+        if self._companion is not None and self._is_leading:
+            self._attach_segmented_native()
+        elif self._companion is None:
+            self._attach_native()
 
     def resizeEvent(self, event):  # noqa: N802 (Qt naming)
         super().resizeEvent(event)
@@ -761,13 +929,24 @@ class _RoundNextButton(QPushButton):
 
     def _attach_native(self) -> None:
         """Hand the chip to AppKit once the widget has its own NSView."""
-        if self._native_attempted or not native_round_buttons_available():
+        if self._companion is not None or self.is_segmented_active():
             return
-        self._native_attempted = True
+        if not native_round_buttons_available():
+            return
+        if self._native is not None and self._native.live:
+            return
+        win = self.window()
+        if win is None or not win.isVisible():
+            return
+        if self._native_attempted:
+            return
         chip = NativeRoundChip(self)
         if not chip.attach():
+            if getattr(chip, "_failed", False):
+                self._native_attempted = True
             self._native = None
             return
+        self._native_attempted = True
         chip.set_symbol(self._glyph_symbol())
         disc, glyph = self._native_colors()
         chip.set_style(accent=self._accent, disc=disc, content=glyph)
@@ -816,12 +995,18 @@ class _RoundNextButton(QPushButton):
         strength = self._shadow_strength()
         steps = _CHIP_SHADOW_PX
         budget = max(1.0, steps * steps)
+        from .glass import is_golden_gate_or_newer
+        is_glass = is_golden_gate_or_newer()
         for step in range(steps, 0, -1):
             alpha = int(_CHIP_SHADOW_ALPHA * strength * (steps - step + 1) / budget)
             if alpha <= 0:
                 continue
             painter.setBrush(QColor(0, 0, 0, min(alpha, 255)))
-            painter.drawEllipse(disc.adjusted(-step, -step + 1, step, step + 1))
+            r = disc.adjusted(-step, -step + 1, step, step + 1)
+            if is_glass:
+                painter.drawEllipse(r)
+            else:
+                painter.drawRoundedRect(r, 5.0, 5.0)
 
     def paint_into(self, painter: QPainter) -> None:
         """Draw the chip — shadow, disc, glyph — into ``painter``.
@@ -845,7 +1030,12 @@ class _RoundNextButton(QPushButton):
         self._paint_shadow(painter, self._disc_rect())
         disc_rect = self._disc_rect()
         painter.setBrush(disc)
-        painter.drawEllipse(disc_rect)
+        from .glass import is_golden_gate_or_newer
+        is_glass = is_golden_gate_or_newer()
+        if is_glass:
+            painter.drawEllipse(disc_rect)
+        else:
+            painter.drawRoundedRect(disc_rect, 5.0, 5.0)
         # A raised chip catches the light along its top edge.
         highlight = disc.lighter(150)
         highlight.setAlpha(min(110, max(35, int(disc.alpha() * 0.45))))
@@ -875,13 +1065,120 @@ class _RoundNextButton(QPushButton):
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawEllipse(disc_rect.adjusted(1, 1, -1, -1))
 
+    def _paint_segmented_into(self, painter: QPainter) -> None:
+        """Draw this segment half of a paired capsule into painter."""
+        if self._arrow.isNull():
+            self.rebuild_arrow()
+        from .dark import is_dark
+        disc, _text = self._colors()
+        if not self.isEnabled():
+            disc.setAlpha(min(disc.alpha(), 110))
+        elif self._pressed:
+            disc = disc.darker(118)
+        elif self._hovered:
+            disc = disc.lighter(112)
+
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setPen(Qt.PenStyle.NoPen)
+
+        disc_rect = self._disc_rect()
+        from .glass import is_golden_gate_or_newer
+        is_glass = is_golden_gate_or_newer()
+        r = disc_rect.height() / 2.0 if is_glass else 5.0
+        h = float(disc_rect.height())
+        y = float(disc_rect.y())
+        w = float(self.width())
+        x0 = float(disc_rect.x())
+
+        from PySide6.QtGui import QPainterPath
+        path = QPainterPath()
+        if self._is_leading:
+            path.moveTo(w, y)
+            path.lineTo(x0 + r, y)
+            path.arcTo(x0, y, h, h, 90, 180)
+            path.lineTo(w, y + h)
+            path.closeSubpath()
+            center_x = x0 + (w - x0) / 2.0
+        else:
+            right_x = float(disc_rect.right() + 1)
+            path.moveTo(0, y + h)
+            path.lineTo(right_x - r, y + h)
+            path.arcTo(right_x - h, y, h, h, 270, 180)
+            path.lineTo(0, y)
+            path.closeSubpath()
+            center_x = right_x / 2.0
+
+        painter.setBrush(disc)
+        painter.drawPath(path)
+
+        # Subtle highlight along the top arc
+        highlight = disc.lighter(150)
+        highlight.setAlpha(min(110, max(35, int(disc.alpha() * 0.45))))
+        painter.setPen(QPen(highlight, 1))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        if self._is_leading:
+            painter.drawArc(disc_rect.adjusted(1, 1, -1, -1), 90 * 16, 90 * 16)
+            # Divider between the segments
+            div_col = QColor(255, 255, 255, 38) if is_dark() else QColor(0, 0, 0, 38)
+            painter.setPen(QPen(div_col, 1))
+            painter.drawLine(int(w) - 1, int(y) + 4, int(w) - 1, int(y + h) - 4)
+        else:
+            painter.drawArc(
+                QRect(int(disc_rect.right() + 1 - h), int(y), int(h), int(h)).adjusted(1, 1, -1, -1),
+                0,
+                90 * 16,
+            )
+
+        painter.setPen(Qt.PenStyle.NoPen)
+        if not self._arrow.isNull():
+            size = _ROUND_NEXT_ARROW_PX
+            center_y = y + h / 2.0
+            painter.drawPixmap(
+                int(round(center_x - size / 2.0)),
+                int(round(center_y - size / 2.0)),
+                self._arrow,
+            )
+
+        if self.hasFocus() and self._keyboard_focused and TabFocusManager.is_tab_active():
+            from .dark import get_native_accent_color
+
+            accent_col, _ = get_native_accent_color()
+            focus_col = QColor(accent_col or "#007aff")
+            focus_pen = QPen(focus_col, 2)
+            painter.setPen(focus_pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawPath(path)
+
     def paintEvent(self, event):  # noqa: N802 (Qt naming)
         # AppKit owns the chip's look when it is live; Qt keeps the slot.
-        if self._native is not None and self._native.live:
+        if self.is_segmented_active():
+            if self._native is not None:
+                self._native.detach()
+                self._native = None
+                self._native_attempted = False
             return
+        if self._companion is not None:
+            if self._native is not None:
+                self._native.detach()
+                self._native = None
+                self._native_attempted = False
+        if self._native is not None and self._native.live and self._companion is None:
+            return
+        if self._native is None and not self._native_attempted and native_round_buttons_available():
+            win = self.window()
+            if win is not None and win.isVisible():
+                if self._companion is not None and self._is_leading:
+                    self._attach_segmented_native()
+                elif self._companion is None:
+                    self._attach_native()
+                if self.is_segmented_active() or (self._native is not None and self._native.live and self._companion is None):
+                    return
         painter = QPainter(self)
         try:
-            self.paint_into(painter)
+            if self._companion is not None:
+                self._paint_segmented_into(painter)
+            else:
+                self.paint_into(painter)
         finally:
             painter.end()
 
@@ -1098,11 +1395,20 @@ class FlashPage(QWidget):
         self._prep_cancel_btn.setToolTip(tr("flash_btn_cancel_wait"))
         self._prep_cancel_btn.clicked.connect(self._on_cancel_wait)
 
+        self._prep_next_btn = _RoundNextButton(symbol="next", accent=True)
+        self._prep_next_btn.setObjectName("prepNextPlaceholderBtn")
+        self._prep_next_btn.setEnabled(False)
+        chips = [self._prep_cancel_btn]
+        if sys.platform == "darwin":
+            chips.append(self._prep_next_btn)
+        else:
+            self._prep_next_btn.setVisible(False)
+
         self._prep_card, self._prep_head, copy = self._new_progress_card(
             self._prep_icon,
             self._prep_pkg_label,
             self._prep_progress,
-            [self._prep_cancel_btn],
+            chips,
         )
         self._prep_row = self._prep_head.box
 
@@ -1125,7 +1431,11 @@ class FlashPage(QWidget):
         # The next step is one round arrow on the card's head row, not a wide
         # button on a row of its own.
         self._wait_continue_btn = _RoundNextButton()
-        self._wait_continue_btn.setVisible(False)
+        if sys.platform == "darwin":
+            self._wait_continue_btn.setVisible(True)
+            self._wait_continue_btn.setEnabled(False)
+        else:
+            self._wait_continue_btn.setVisible(False)
         self._wait_continue_btn.setToolTip(tr("btn_next"))
         self._wait_continue_btn.setAccessibleName(tr("btn_next"))
         self._wait_continue_btn.clicked.connect(self._on_power_off_continue)
@@ -1216,7 +1526,12 @@ class FlashPage(QWidget):
         self._flash_retry_btn.setObjectName("flashRetryBtn")
         self._flash_retry_btn.setToolTip(tr("flash_btn_retry"))
         self._flash_retry_btn.setAccessibleName(tr("flash_btn_retry"))
-        self._flash_retry_btn.setVisible(False)
+        if sys.platform == "darwin":
+            self._flash_retry_btn.setVisible(True)
+            self._flash_retry_btn.setEnabled(False)
+        else:
+            self._flash_retry_btn.setVisible(False)
+            self._flash_retry_btn.setEnabled(False)
         self._flash_retry_btn.clicked.connect(self._on_install_retry)
 
         self._cancel_btn = _RoundNextButton(symbol="cancel", accent=False)
@@ -1258,13 +1573,13 @@ class FlashPage(QWidget):
             self._flash_pkg_label,
             self._progress_bar,
             [
-                self._flash_retry_btn,
                 self._cancel_btn,
+                self._flash_retry_btn,
                 self._done_mark,
+                self._theme_back_btn,
                 self._theme_step1_next_btn,
                 self._theme_fallback_next_btn,
                 self._theme_trouble_recover_btn,
-                self._theme_back_btn,
             ],
         )
         # The chips' row, for the stop check to slot in beside them.
@@ -1327,7 +1642,7 @@ class FlashPage(QWidget):
         driver_box.setSpacing(8)
         self._download_drivers_btn = QPushButton(tr("settings_download_drivers_btn"))
         self._download_drivers_btn.setObjectName("flashDownloadDriversBtn")
-        self._download_drivers_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._download_drivers_btn.setCursor(Qt.CursorShape.ArrowCursor)
         self._download_drivers_btn.clicked.connect(self._open_mediatek_drivers)
         driver_box.addWidget(self._download_drivers_btn)
         driver_box.addStretch(1)
@@ -1427,11 +1742,20 @@ class FlashPage(QWidget):
         self._download_cancel_btn.setToolTip(tr("flash_btn_cancel"))
         self._download_cancel_btn.clicked.connect(self._on_cancel_download)
 
+        self._download_next_btn = _RoundNextButton(symbol="next", accent=True)
+        self._download_next_btn.setObjectName("downloadNextPlaceholderBtn")
+        self._download_next_btn.setEnabled(False)
+        chips = [self._download_cancel_btn]
+        if sys.platform == "darwin":
+            chips.append(self._download_next_btn)
+        else:
+            self._download_next_btn.setVisible(False)
+
         self._download_card, self._download_head, copy = self._new_progress_card(
             self._download_icon,
             self._download_pkg_label,
             self._download_progress,
-            [self._download_cancel_btn],
+            chips,
         )
         self._download_row = self._download_head.box
 
@@ -1503,9 +1827,9 @@ class FlashPage(QWidget):
             return
 
         if is_power_off:
-            from ..config import device_label_for_model
+            from ..config import device_label_for_model, is_a5_model
             model_name = device_label_for_model(model) if model else tr("device_fallback_word")
-            is_a5 = model.upper() == "A5"
+            is_a5 = is_a5_model(model)
             key = "flash_paperclip_hint_a5" if is_a5 else "flash_paperclip_hint"
             label.setText(tr(key).format(model=model_name))
             label.setVisible(True)
@@ -1533,16 +1857,17 @@ class FlashPage(QWidget):
             if not txt.isValid():
                 txt = QApplication.style().standardPalette().color(QPalette.ColorRole.Text)
 
-            # A model's own diagram is any ``paperclip_<model>.svg`` on disk;
-            # every other model — and the unknown model — gets the generic
-            # paperclip, which shows the same hidden button without pretending
-            # to know which revision is in the user's hands.
+            # Y2 uses paperclip_y2.svg; A5 uses paperclip_a5.svg;
+            # all other models (Y1, G-series, Q-series, generic, unknown) use paperclip.svg.
             assets = Path(__file__).resolve().parent.parent.parent / "assets"
-            stems = []
-            model_upper = (model or "").strip().upper()
-            if model_upper:
-                stems.append(f"paperclip_{model_upper.lower()}")
-            stems.append("paperclip")
+            from ..config import is_a5_model, is_y2_model
+
+            if is_a5_model(model):
+                stems = ["paperclip_a5", "paperclip"]
+            elif is_y2_model(model):
+                stems = ["paperclip_y2", "paperclip"]
+            else:
+                stems = ["paperclip"]
 
             img_path = None
             for stem in stems:
@@ -1671,7 +1996,11 @@ class FlashPage(QWidget):
         self._wait_banner_key = "please_wait"
         self._wait_banner.set_key("flash_please_wait")
         if hasattr(self, "_wait_continue_btn"):
-            self._wait_continue_btn.setVisible(False)
+            if sys.platform == "darwin":
+                self._wait_continue_btn.setVisible(True)
+                self._wait_continue_btn.setEnabled(False)
+            else:
+                self._wait_continue_btn.setVisible(False)
         if hasattr(self, "_wait_cancel_btn"):
             self._wait_cancel_btn.setVisible(True)
         if hasattr(self, "_wait_mode_hint"):
@@ -1691,7 +2020,11 @@ class FlashPage(QWidget):
         self._wait_banner_key = "entering_password"
         self._wait_banner.set_key("install_linux_entering_password")
         if hasattr(self, "_wait_continue_btn"):
-            self._wait_continue_btn.setVisible(False)
+            if sys.platform == "darwin":
+                self._wait_continue_btn.setVisible(True)
+                self._wait_continue_btn.setEnabled(False)
+            else:
+                self._wait_continue_btn.setVisible(False)
         if hasattr(self, "_wait_cancel_btn"):
             self._wait_cancel_btn.setVisible(True)
         if hasattr(self, "_wait_mode_hint"):
@@ -1708,7 +2041,11 @@ class FlashPage(QWidget):
         self.set_waiting_device()
         self._set_determinate(self._wait_progress_bar, 0)
         if hasattr(self, "_wait_continue_btn"):
-            self._wait_continue_btn.setVisible(False)
+            if sys.platform == "darwin":
+                self._wait_continue_btn.setVisible(True)
+                self._wait_continue_btn.setEnabled(False)
+            else:
+                self._wait_continue_btn.setVisible(False)
         if hasattr(self, "_wait_cancel_btn"):
             self._wait_cancel_btn.setVisible(True)
         if hasattr(self, "_wait_mode_hint"):
@@ -1799,7 +2136,12 @@ class FlashPage(QWidget):
         done = bool(getattr(self, "_complete", False)) and not failed
         self._warning.setVisible(self._flash_warning_wanted())
         if hasattr(self, "_flash_retry_btn"):
-            self._flash_retry_btn.setVisible(failed)
+            if sys.platform == "darwin":
+                self._flash_retry_btn.setVisible(not done)
+                self._flash_retry_btn.setEnabled(failed)
+            else:
+                self._flash_retry_btn.setVisible(failed)
+                self._flash_retry_btn.setEnabled(failed)
         if hasattr(self, "_cancel_btn"):
             self._cancel_btn.setVisible(not done)
             self._cancel_btn.setEnabled(True)
@@ -1827,6 +2169,7 @@ class FlashPage(QWidget):
 
     def show_install_failure(self, message: str, explanation: str = "", percent: int = 0) -> None:
         """Keep the failure on the install progress card, with Retry and Cancel beneath."""
+        self.dismiss_prompt_stop()
         self._failed = True
         self._prompt_only = False
         self.show_flashing()
@@ -1868,9 +2211,14 @@ class FlashPage(QWidget):
             self._driver_action_row.setVisible(driver_missing)
 
         if hasattr(self, "_wait_continue_btn"):
-            self._wait_continue_btn.setVisible(False)
+            if sys.platform == "darwin":
+                self._wait_continue_btn.setVisible(True)
+                self._wait_continue_btn.setEnabled(False)
+            else:
+                self._wait_continue_btn.setVisible(False)
         if hasattr(self, "_flash_retry_btn"):
             self._flash_retry_btn.setVisible(True)
+            self._flash_retry_btn.setEnabled(True)
         if hasattr(self, "_cancel_btn"):
             self._cancel_btn.setVisible(True)
             self._cancel_btn.setEnabled(True)
@@ -1905,6 +2253,7 @@ class FlashPage(QWidget):
             self._dir_merge_worker = None
 
     def clear_install_failure(self) -> None:
+        self.dismiss_prompt_stop()
         self._failed = False
         self._complete = False
         self.stop_theme_workers()
@@ -1928,7 +2277,12 @@ class FlashPage(QWidget):
         if hasattr(self, "_done_mark"):
             self._done_mark.setVisible(False)
         if hasattr(self, "_flash_retry_btn"):
-            self._flash_retry_btn.setVisible(False)
+            if sys.platform == "darwin":
+                self._flash_retry_btn.setVisible(True)
+                self._flash_retry_btn.setEnabled(False)
+            else:
+                self._flash_retry_btn.setVisible(False)
+                self._flash_retry_btn.setEnabled(False)
             self._flash_retry_btn.setToolTip(tr("flash_btn_retry"))
             self._flash_retry_btn.setAccessibleName(tr("flash_btn_retry"))
             self._cancel_btn.setVisible(True)
@@ -1970,6 +2324,7 @@ class FlashPage(QWidget):
             self._wait_progress_bar.setFormat(tr("install_failed"))
         self._wait_cancel_btn.setVisible(True)
         self._wait_continue_btn.setVisible(True)
+        self._wait_continue_btn.setEnabled(True)
         if on_retry is not None:
             self._power_off_continue_cb = on_retry
             self._install_retry_cb = on_retry
@@ -1988,6 +2343,7 @@ class FlashPage(QWidget):
             self._status_flow.set_forced_stacked(True)
         if hasattr(self, "_flash_retry_btn"):
             self._flash_retry_btn.setVisible(True)
+            self._flash_retry_btn.setEnabled(True)
         if hasattr(self, "_cancel_btn"):
             self._cancel_btn.setVisible(True)
             self._cancel_btn.setEnabled(True)
@@ -2025,6 +2381,7 @@ class FlashPage(QWidget):
         automatic=False,
     ) -> None:
         """Seamless in-card Rockbox 360p themes & fonts post-install flow."""
+        self.dismiss_prompt_stop()
         self._theme_stage_model = model
         self._theme_stage_done_cb = on_done
         self._theme_stage_recover_cb = on_troubleshoot or on_recover
@@ -2436,6 +2793,7 @@ class FlashPage(QWidget):
         # the cancel chip stops the run outright.
         self._wait_cancel_btn.setVisible(True)
         self._wait_continue_btn.setVisible(True)
+        self._wait_continue_btn.setEnabled(True)
         if hasattr(self, "_wait_mode_hint"):
             self._wait_mode_hint.setVisible(False)
         self._update_paperclip_hint()
@@ -2452,7 +2810,11 @@ class FlashPage(QWidget):
         self._prompt_only = False
         self._permission_prompt = False
         if hasattr(self, "_wait_continue_btn"):
-            self._wait_continue_btn.setVisible(False)
+            if sys.platform == "darwin":
+                self._wait_continue_btn.setVisible(True)
+                self._wait_continue_btn.setEnabled(False)
+            else:
+                self._wait_continue_btn.setVisible(False)
         if hasattr(self, "_wait_cancel_btn"):
             self._wait_cancel_btn.setVisible(True)
         if hasattr(self, "_wait_mode_hint"):
@@ -2686,6 +3048,7 @@ class FlashPage(QWidget):
         return not getattr(self, "_themes_stage_active", False)
 
     def set_device_done(self):
+        self.dismiss_prompt_stop()
         self._complete = True
         self._failed = False
         self._warning.setVisible(False)
@@ -3227,7 +3590,7 @@ class FlashPage(QWidget):
                 self._download_status_label,
                 self._download_progress,
                 self._download_cancel_btn,
-                None,
+                getattr(self, "_download_next_btn", None),
                 self._download_col,
             )
         if view is self._preparing_view:
@@ -3237,7 +3600,7 @@ class FlashPage(QWidget):
                 self._prep_step,
                 self._prep_progress,
                 self._prep_cancel_btn,
-                None,
+                getattr(self, "_prep_next_btn", None),
                 self._prep_col,
             )
         if view is self._waiting_view:
@@ -3256,9 +3619,14 @@ class FlashPage(QWidget):
             self._step_label,
             self._progress_bar,
             self._cancel_btn,
-            None,
+            getattr(self, "_flash_retry_btn", None),
             self._flash_col,
         )
+
+    def dismiss_prompt_stop(self) -> None:
+        """Dismiss any active cancellation prompt without stopping the install."""
+        if getattr(self, "_stop_open", False):
+            self._dismiss_stop(False)
 
     def prompt_stop(self, message: str, on_continue=None, *, wait: bool = False) -> bool:
         """Ask, inside the progress card, before stopping a download or install.
@@ -3293,8 +3661,8 @@ class FlashPage(QWidget):
         if label is not None:
             label.setWordWrap(True)
             label.setText(self._stop_message)
-        if bar is not None:
-            bar.hide()
+        # The progress bar stays visible during the stop check so the card
+        # does not suffer a layout shift while the run is still in progress.
         if cancel is not None:
             cancel.hide()
         if extra is not None:
@@ -3319,9 +3687,6 @@ class FlashPage(QWidget):
         label = getattr(self, "_stop_label", None)
         if label is not None:
             label.setText(self._stop_message)
-        bar = getattr(self, "_stop_bar", None)
-        if bar is not None:
-            bar.hide()
         cancel = getattr(self, "_stop_cancel", None)
         if cancel is not None:
             cancel.hide()

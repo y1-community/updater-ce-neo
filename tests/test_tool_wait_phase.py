@@ -351,7 +351,7 @@ def test_paperclip_hint_is_drawn_from_the_bundled_vector_asset(monkeypatch):
 
     from src.ui import icons as icons_module
     from src.ui.dark import T, apply_theme
-    from src.ui.flash_page import FlashPage
+    from src.ui.flash_page import FlashPage, _PAPERCLIP_HINT_PX
 
     app = QApplication.instance() or QApplication(sys.argv)
     apply_theme(app, force_dark=True)
@@ -367,7 +367,16 @@ def test_paperclip_hint_is_drawn_from_the_bundled_vector_asset(monkeypatch):
 
     page = FlashPage()
     try:
-        for model, stem in (("Y1", "paperclip"), ("Y2", "paperclip_y2"), ("A5", "paperclip_a5")):
+        models_and_stems = (
+            ("Y1", "paperclip"),
+            ("Y2", "paperclip_y2"),
+            ("A5", "paperclip_a5"),
+            ("G1", "paperclip"),
+            ("G5", "paperclip"),
+            ("Q3", "paperclip"),
+            ("Generic", "paperclip"),
+        )
+        for model, stem in models_and_stems:
             rendered.clear()
             page.set_model(model)
             page.show_power_off_prompt()
@@ -375,11 +384,11 @@ def test_paperclip_hint_is_drawn_from_the_bundled_vector_asset(monkeypatch):
             assert rendered, model
             asset, height = rendered[-1]
             assert asset.name == f"{stem}.svg", (model, asset)
-            assert height == 60
+            assert height == _PAPERCLIP_HINT_PX
             source = page._paperclip_img.property("_hint_source")
             assert source is not None and not source.isNull()
             logical = source.deviceIndependentSize()
-            assert round(logical.height()) == 60, logical
+            assert round(logical.height()) == _PAPERCLIP_HINT_PX, logical
             # The drawing keeps the asset's own proportions.
             assert 1.45 < logical.width() / logical.height() < 1.62, logical
             visible = page._paperclip_img.pixmap()

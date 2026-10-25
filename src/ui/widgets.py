@@ -11,7 +11,9 @@ import sys
 from PySide6.QtCore import (
     QAbstractAnimation,
     QEasingCurve,
+    QEvent,
     QEventLoop,
+    QObject,
     QPoint,
     QPropertyAnimation,
     QRect,
@@ -580,12 +582,15 @@ class Card(QFrame):
     def add_widget(self, widget):
         self._outer.addWidget(widget)
 
-    def run_confirmation(self, body: str, accept: str, reject: str, *, note: str = "") -> bool:
+    def run_confirmation(
+        self, body: str, accept: str, reject: str, *, note: str = "", symbol: str = "next"
+    ) -> bool:
         """Replace this card's contents with a short confirmation, then restore them.
 
         The swap uses the same short fade as a page change. Reduced motion
         skips it. ``True`` means the accept button was chosen.
         """
+        from PySide6.QtWidgets import QAbstractScrollArea
         from .flash_page import _RoundNextButton
 
         panel = QWidget()
@@ -609,7 +614,7 @@ class Card(QFrame):
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(10)
-        accept_btn = _RoundNextButton(symbol="next", accent=True)
+        accept_btn = _RoundNextButton(symbol=symbol, accent=True)
         accept_btn.setText(accept)
         reject_btn = _RoundNextButton(symbol="cancel", accent=False)
         reject_btn.setText(reject)
@@ -625,6 +630,32 @@ class Card(QFrame):
         self._outer.addWidget(panel)
         panel.show()
         fade_in(panel)
+
+        # While prompts with buttons are being shown in the settings menu,
+        # do not allow the user to scroll until they've answered the prompt.
+        scroll_area = None
+        p = self.parentWidget()
+        while p is not None:
+            if isinstance(p, QAbstractScrollArea):
+                scroll_area = p
+                break
+            p = p.parentWidget()
+
+        class _ScrollLockFilter(QObject):
+            def eventFilter(self, watched, event):
+                if event.type() in (QEvent.Type.Wheel, QEvent.Type.Scroll):
+                    return True
+                return False
+
+        scroll_filter = None
+        scroll_was_enabled = True
+        if scroll_area is not None:
+            scroll_area.ensureWidgetVisible(self)
+            scroll_filter = _ScrollLockFilter(scroll_area)
+            if scroll_area.viewport() is not None:
+                scroll_area.viewport().installEventFilter(scroll_filter)
+            scroll_was_enabled = scroll_area.verticalScrollBar().isEnabled()
+            scroll_area.verticalScrollBar().setEnabled(False)
 
         loop = QEventLoop(self)
         result = {"ok": False}
@@ -642,6 +673,16 @@ class Card(QFrame):
         try:
             loop.exec()
         finally:
+            if scroll_area is not None:
+                if scroll_filter is not None and scroll_area.viewport() is not None:
+                    try:
+                        scroll_area.viewport().removeEventFilter(scroll_filter)
+                    except Exception:
+                        pass
+                try:
+                    scroll_area.verticalScrollBar().setEnabled(scroll_was_enabled)
+                except Exception:
+                    pass
             self._outer.removeWidget(panel)
             panel.hide()
             panel.setParent(None)
@@ -806,22 +847,19 @@ class UpdateToast(QFrame):
         row.addLayout(self._models, 0)
         self._model_buttons = []
 
-        self._install = QPushButton(tr("toast_install"))
-        self._install.setObjectName("updateToastInstall")
-        self._install.setCursor(Qt.CursorShape.ArrowCursor)
-        self._install.setStyleSheet("")
-        self._install.clicked.connect(self.install_clicked.emit)
-        row.addWidget(self._install, 0)
+        from .flash_page import _RoundNextButton
 
-        self._close = QPushButton("\u00d7")
+        self._install = _RoundNextButton(symbol="download", accent=True)
+        self._install.setObjectName("updateToastInstall")
+        self._install.setToolTip(tr("toast_install"))
+        self._install.clicked.connect(self.install_clicked.emit)
+        row.addWidget(self._install, 0, Qt.AlignVCenter)
+
+        self._close = _RoundNextButton(symbol="cancel", accent=False)
         self._close.setObjectName("updateToastClose")
-        self._close.setFlat(True)
-        self._close.setCursor(Qt.CursorShape.ArrowCursor)
-        self._close.setStyleSheet("")
-        self._close.setFixedWidth(28)
         self._close.setToolTip(tr("toast_dismiss"))
         self._close.clicked.connect(self.close_clicked.emit)
-        row.addWidget(self._close, 0)
+        row.addWidget(self._close, 0, Qt.AlignVCenter)
         self.setVisible(False)
 
     def set_offers(self, offers) -> None:
@@ -923,18 +961,16 @@ class AppUpdateToast(QFrame):
         _apply_banner_text(self._label)
         row.addWidget(self._label, 1)
 
-        self._action = QPushButton(tr("toast_install"))
-        self._action.setObjectName("appUpdateToastAction")
-        self._action.setCursor(Qt.CursorShape.ArrowCursor)
-        self._action.setStyleSheet("")
-        self._action.clicked.connect(self.action_clicked.emit)
-        row.addWidget(self._action, 0)
+        from .flash_page import _RoundNextButton
 
-        self._close = QPushButton()
+        self._action = _RoundNextButton(symbol="download", accent=True)
+        self._action.setObjectName("appUpdateToastAction")
+        self._action.setToolTip(tr("toast_install"))
+        self._action.clicked.connect(self.action_clicked.emit)
+        row.addWidget(self._action, 0, Qt.AlignVCenter)
+
+        self._close = _RoundNextButton(symbol="cancel", accent=False)
         self._close.setObjectName("appUpdateToastClose")
-        self._close.setFlat(True)
-        self._close.setCursor(Qt.CursorShape.ArrowCursor)
-        _style_dismiss_chip(self._close, symbol="cancel")
         self._close.setToolTip(tr("toast_dismiss"))
         self._close.clicked.connect(self.close_clicked.emit)
         row.addWidget(self._close, 0, Qt.AlignVCenter)
@@ -962,15 +998,13 @@ class AppUpdateToast(QFrame):
             self._label.setText(f"An update to {app_name} is available.")
         _apply_banner_text(self._label)
         self._close.setToolTip(tr("toast_dismiss"))
-        _style_dismiss_chip(self._close, symbol="cancel")
-        self._action.setText(tr("toast_install"))
+        self._action.setToolTip(tr("toast_install"))
 
     def retranslate(self) -> None:
         self._apply_copy()
 
     def refresh_theme(self) -> None:
         _apply_banner_text(self._label)
-        _style_dismiss_chip(self._close, symbol="cancel")
         self.update()
 
     def paintEvent(self, event):  # noqa: N802 (Qt naming)
@@ -1011,11 +1045,11 @@ class BatteryToast(QFrame):
         _apply_banner_text(self._label)
         row.addWidget(self._label, 1, Qt.AlignVCenter)
 
-        self._dismiss_btn = QPushButton(self)
+        from .flash_page import _RoundNextButton
+
+        self._dismiss_btn = _RoundNextButton(symbol="complete", accent=True)
         self._dismiss_btn.setObjectName("batteryToastDismissBtn")
-        self._dismiss_btn.setCursor(Qt.PointingHandCursor)
         self._dismiss_btn.setToolTip(tr("toast_dismiss"))
-        _style_dismiss_chip(self._dismiss_btn, symbol="check")
         self._dismiss_btn.clicked.connect(self.dismissed.emit)
         row.addWidget(self._dismiss_btn, 0, Qt.AlignVCenter)
 
@@ -1029,15 +1063,129 @@ class BatteryToast(QFrame):
         self._label.setText(self._get_battery_text())
         _apply_banner_text(self._label)
         self._dismiss_btn.setToolTip(tr("toast_dismiss"))
-        _style_dismiss_chip(self._dismiss_btn, symbol="check")
 
     def refresh_theme(self) -> None:
         _apply_banner_text(self._label)
-        _style_dismiss_chip(self._dismiss_btn, symbol="check")
         self.update()
 
     def paintEvent(self, event):  # noqa: N802 (Qt naming)
         """Paint the battery hint as a rounded card on every desktop."""
+        _paint_bento_surface(self, event)
+
+
+class NoticeToast(QFrame):
+    """On-screen toast display for notice.xml announcements.
+
+    Matches the bento surface and styling of UpdateToast and BatteryToast.
+    Uses liquid glass buttons like those seen on the install screen.
+    """
+
+    action_clicked = Signal(str)
+    dismissed = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("noticeToast")
+        self.setProperty("cssClass", "card")
+        self.setAutoFillBackground(False)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.setMinimumHeight(44)
+        self._notice = None
+
+        row = QHBoxLayout(self)
+        row.setContentsMargins(14, 6, 8, 6)
+        row.setSpacing(8)
+
+        self._icon = QLabel("📢", self)
+        self._icon.setStyleSheet("font-size: 14px; background: transparent; border: none;")
+        row.addWidget(self._icon, 0, Qt.AlignVCenter)
+
+        text_col = QVBoxLayout()
+        text_col.setContentsMargins(0, 0, 0, 0)
+        text_col.setSpacing(2)
+
+        self._title_label = QLabel("", self)
+        self._title_label.setWordWrap(False)
+        font_title = self._title_label.font()
+        font_title.setPixelSize(13)
+        font_title.setWeight(QFont.Weight.Bold)
+        self._title_label.setFont(font_title)
+        _apply_banner_text(self._title_label)
+        text_col.addWidget(self._title_label)
+
+        self._content_label = QLabel("", self)
+        self._content_label.setWordWrap(True)
+        self._content_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        font_body = self._content_label.font()
+        font_body.setPixelSize(11)
+        self._content_label.setFont(font_body)
+        _apply_banner_text(self._content_label)
+        text_col.addWidget(self._content_label)
+
+        row.addLayout(text_col, 1)
+
+        from .flash_page import _RoundNextButton
+
+        self._action = _RoundNextButton(symbol="next", accent=True)
+        self._action.setObjectName("noticeToastAction")
+        self._action.setToolTip(tr("btn_next"))
+        self._action.clicked.connect(self._on_action_clicked)
+        row.addWidget(self._action, 0, Qt.AlignVCenter)
+
+        self._close = _RoundNextButton(symbol="cancel", accent=False)
+        self._close.setObjectName("noticeToastClose")
+        self._close.setToolTip(tr("toast_dismiss"))
+        self._close.clicked.connect(self._on_dismiss_clicked)
+        row.addWidget(self._close, 0, Qt.AlignVCenter)
+
+        self.setVisible(False)
+
+    def set_notice(self, notice) -> None:
+        self._notice = notice
+        if notice is not None:
+            self._title_label.setText(getattr(notice, "title", "") or "")
+            self._content_label.setText(getattr(notice, "content", "") or "")
+            link = getattr(notice, "link", "") or ""
+            self._action.setVisible(bool(link))
+            if link:
+                self._action.setToolTip(link)
+            severity = getattr(notice, "severity", "info")
+            if severity == "critical":
+                self._icon.setText("⚠️")
+            elif severity == "warning":
+                self._icon.setText("⚡")
+            else:
+                self._icon.setText("📢")
+            self.setVisible(True)
+        else:
+            self.setVisible(False)
+
+    def notice(self):
+        return self._notice
+
+    def _on_action_clicked(self) -> None:
+        if self._notice and self._notice.link:
+            from PySide6.QtCore import QUrl
+            from PySide6.QtGui import QDesktopServices
+
+            QDesktopServices.openUrl(QUrl(self._notice.link))
+            self.action_clicked.emit(self._notice.link)
+
+    def _on_dismiss_clicked(self) -> None:
+        if self._notice:
+            from ..notice_service import NoticeService
+
+            NoticeService.instance().dismiss_notice(self._notice)
+        self.setVisible(False)
+        self.dismissed.emit()
+
+    def refresh_theme(self) -> None:
+        _apply_banner_text(self._title_label)
+        _apply_banner_text(self._content_label)
+        self.update()
+
+    def paintEvent(self, event):  # noqa: N802 (Qt naming)
+        """Paint notice toast with the same background material as the other toasts."""
         _paint_bento_surface(self, event)
 
 
@@ -1196,19 +1344,22 @@ def paint_progress_bar(
 ) -> None:
     """Paint a rounded progress bar: track, accent chunk and centred percent.
 
-    A free function on purpose so the paint can be checked on its own canvas:
-    ``QWidget.render()`` fills an opaque background first, so a rendered
-    widget never proves what the bar itself drew.
+    On macOS and modern platforms, progress bars are pill/capsule-shaped
+    (radius = height / 2). The track and chunk are clipped to this rounded
+    path so corners never bleed or punch rectangular holes into parent cards.
     """
     rect = QRectF(rect)
     if rect.width() <= 1 or rect.height() <= 1:
         return
-    radius = min(8.0, rect.height() / 2.0)
+    radius = rect.height() / 2.0
     painter.save()
     painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
     painter.setPen(Qt.PenStyle.NoPen)
-    painter.setBrush(track)
-    painter.drawRoundedRect(rect, radius, radius)
+
+    from PySide6.QtGui import QPainterPath
+    track_path = QPainterPath()
+    track_path.addRoundedRect(rect, radius, radius)
+    painter.fillPath(track_path, track)
 
     if busy:
         span = rect.width() * BUSY_SEGMENT
@@ -1218,10 +1369,13 @@ def paint_progress_bar(
     else:
         width = rect.width() * max(0.0, min(1.0, float(fraction)))
         chunk = QRectF(rect.left(), rect.top(), width, rect.height())
+
     if chunk.width() > 1:
-        chunk_radius = min(radius, chunk.width() / 2.0, chunk.height() / 2.0)
+        painter.save()
+        painter.setClipPath(track_path)
         painter.setBrush(fill)
-        painter.drawRoundedRect(chunk, chunk_radius, chunk_radius)
+        painter.drawRoundedRect(chunk, radius, radius)
+        painter.restore()
 
     if text and not busy:
         # A sweeping bar has no percentage to name.
@@ -1367,12 +1521,6 @@ class InstallProgress(QProgressBar):
             label_color = QColor(t.danger_fg)
         text = "" if busy or not self.isTextVisible() else (self.text() or "")
         painter = QPainter(self)
-        # The track is translucent so the card shows through it. Clear first: a
-        # chunk from the previous frame would otherwise stay in the backing
-        # store and glow through the new, emptier track.
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
-        painter.fillRect(self.rect(), Qt.GlobalColor.transparent)
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
         paint_progress_bar(
             painter,
             self.rect(),

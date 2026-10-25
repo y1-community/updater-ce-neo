@@ -1544,6 +1544,7 @@ class SettingsPage(QWidget):
         device_tracking.set_settings_donations_section_dismissed(True)
         device_tracking.set_donation_ui_disabled(True)
         device_tracking.set_donation_install_prompt_disabled(True)
+        self.donation_visibility_changed.emit(True)
         close_layout_gap(self._donations_card)
         win = self.window()
         if win and hasattr(win, "_adjust_window_geometry"):
@@ -1915,6 +1916,7 @@ class SettingsPage(QWidget):
             tr("legacy_cleanup_btn_clean"),
             tr("legacy_cleanup_btn_later"),
             note=tr("legacy_cleanup_reclaim").format(size=reclaim),
+            symbol="trash",
         )
         if not agreed:
             self._reveal_legacy_card()
@@ -1953,7 +1955,11 @@ class SettingsPage(QWidget):
         ``uninstall_platform_tools`` is the user's answer to this card's own
         question; it defaults to keeping them, since a flash run needs ADB.
         """
-        from ..legacy_cleanup import remove_linux_legacy, remove_macos_legacy
+        from ..legacy_cleanup import (
+            remove_linux_legacy,
+            remove_macos_legacy,
+            remove_windows_legacy,
+        )
 
         try:
             if paths.IS_MAC:
@@ -1962,6 +1968,8 @@ class SettingsPage(QWidget):
                     remove_app_support=True,
                     uninstall_platform_tools=bool(uninstall_platform_tools),
                 )
+            elif sys.platform == "win32":
+                _ok, _removed, errors = remove_windows_legacy()
             else:
                 _ok, _removed, errors = remove_linux_legacy(
                     remove_install_dir=True,

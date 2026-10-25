@@ -48,10 +48,38 @@ LEGACY_APP_DIRS = (
 )
 
 LEGACY_SUPPORT_DIR = Path.home() / "Library" / "Application Support" / "Innioasis Updater"
+LEGACY_SUPPORT_DIRS = (
+    Path.home() / "Library" / "Application Support" / "Innioasis Updater",
+    Path.home() / "Library" / "Application Support" / "InnioasisUpdater",
+    Path.home() / "Library" / "Application Support" / "innioasis-updater",
+)
 LEGACY_DOWNLOADS_DIR = Path.home() / "Library" / "Application Support" / "innioasis-updater" / "downloads"
 CURRENT_SUPPORT_DIR = Path.home() / "Library" / "Application Support" / "Updater CE"
 LEGACY_DATA_MARKERS = ("firmware_downloader.py", "run_mac.sh", "run_linux.sh")
+PRE_3_0_APP_SUPPORT_MARKER = "firmware_downloader.py"
 MIGRATION_MARKER = ".updater-ce-legacy-migration-v1"
+
+
+def has_legacy_firmware_downloader(path: Path) -> bool:
+    """True when path or its contents hold the legacy firmware_downloader.py marker."""
+    folder = Path(path)
+    try:
+        if not folder.is_dir():
+            return False
+        if (folder / PRE_3_0_APP_SUPPORT_MARKER).is_file():
+            return True
+        for entry in folder.iterdir():
+            if entry.is_file() and entry.name == PRE_3_0_APP_SUPPORT_MARKER:
+                return True
+            if entry.is_dir() and not entry.name.startswith("."):
+                try:
+                    if (entry / PRE_3_0_APP_SUPPORT_MARKER).is_file():
+                        return True
+                except OSError:
+                    pass
+    except OSError:
+        pass
+    return False
 
 LEGACY_LINUX_INSTALL_DIR = Path.home() / ".local" / "share" / "innioasis-updater"
 # These three are shared with the running app (see install.sh): they belong to
@@ -269,6 +297,8 @@ def detect_legacy_installations() -> dict:
         "linux_desktop_file": None,
         "linux_bin_launcher": None,
         "linux_cache_dir": None,
+        "linux_desktop_shortcuts": [],
+        "windows_legacy_dirs": [],
         "has_platform_tools": False,
         "platform_tools_type": None,
         "platform_tools_paths": [],
@@ -288,12 +318,28 @@ def detect_legacy_installations() -> dict:
                 result["estimated_bytes"] += sz
                 result["items_summary"].append(f"{c.name} ({format_bytes(sz)})")
 
-        legacy_support = LEGACY_SUPPORT_DIR if legacy_folder_is_app_owned(LEGACY_SUPPORT_DIR) else None
-        if legacy_support is not None and legacy_support.is_dir():
-            result["macos_app_support"] = legacy_support
-            sz = _calc_dir_size(legacy_support)
-            result["estimated_bytes"] += sz
-            result["items_summary"].append(f"Application Support/Innioasis Updater ({format_bytes(sz)})")
+        found_support_dirs = []
+        check_dirs = [LEGACY_SUPPORT_DIR]
+        for candidate in LEGACY_SUPPORT_DIRS:
+            if candidate not in check_dirs:
+                check_dirs.append(candidate)
+
+        for supp_dir in check_dirs:
+            if not supp_dir.is_dir():
+                continue
+            # A user can delete their .app without clearing the application support folder.
+            # The presence of firmware_downloader.py or legacy app markers ensures those users
+            # are covered by the remove app feature too.
+            if has_legacy_firmware_downloader(supp_dir) or legacy_folder_is_app_owned(supp_dir):
+                if supp_dir not in found_support_dirs:
+                    found_support_dirs.append(supp_dir)
+                    sz = _calc_dir_size(supp_dir)
+                    result["estimated_bytes"] += sz
+                    result["items_summary"].append(f"Application Support/{supp_dir.name} ({format_bytes(sz)})")
+
+        if found_support_dirs:
+            result["macos_app_support"] = found_support_dirs[0]
+            result["macos_app_supports"] = found_support_dirs
 
         # Check Homebrew android-platform-tools
         brew_cmd = shutil.which("brew")
@@ -325,6 +371,11 @@ def detect_legacy_installations() -> dict:
             result["linux_desktop_file"] = desktop_file
             result["items_summary"].append("innioasis-updater.desktop")
 
+        desktop_shortcut = Path.home() / "Desktop" / "innioasis-updater.desktop"
+        if desktop_shortcut.is_file():
+            result["linux_desktop_shortcuts"].append(desktop_shortcut)
+            result["items_summary"].append("~/Desktop/innioasis-updater.desktop")
+
         bin_launcher = LEGACY_LINUX_BIN_LAUNCHER
         if bin_launcher.is_file():
             result["linux_bin_launcher"] = bin_launcher
@@ -349,12 +400,36 @@ def detect_legacy_installations() -> dict:
             result["platform_tools_type"] = "bin"
             result["platform_tools_paths"] = pt_paths
 
+    # 3. Windows Detection
+    if sys.platform == "win32" or os.environ.get("INNIOASIS_SIMULATE_WINDOWS"):
+        win_candidates = []
+        local_app_data = os.environ.get("LOCALAPPDATA")
+        if local_app_data:
+            win_candidates.extend([
+                Path(local_app_data) / "Innioasis Updater",
+                Path(local_app_data) / "InnioasisUpdater",
+            ])
+        app_data = os.environ.get("APPDATA")
+        if app_data:
+            win_candidates.extend([
+                Path(app_data) / "Innioasis Updater",
+                Path(app_data) / "InnioasisUpdater",
+            ])
+        for folder in win_candidates:
+            if folder.is_dir() and folder not in result["windows_legacy_dirs"]:
+                sz = _calc_dir_size(folder)
+                result["windows_legacy_dirs"].append(folder)
+                result["estimated_bytes"] += sz
+                result["items_summary"].append(f"{folder.name} ({format_bytes(sz)})")
+
     result["has_legacy"] = bool(
         result["macos_apps"]
         or result["macos_app_support"]
         or result["linux_install_dir"]
         or result["linux_desktop_file"]
         or result["linux_bin_launcher"]
+        or result["linux_desktop_shortcuts"]
+        or result["windows_legacy_dirs"]
     )
     return result
 
@@ -411,13 +486,16 @@ def remove_macos_legacy(
                 errors.append(f"Failed to execute authorization prompt: {e}")
 
     if remove_app_support:
-        supp_path = info.get("macos_app_support")
-        if supp_path and legacy_folder_is_app_owned(supp_path):
-            try:
-                shutil.rmtree(supp_path)
-                removed.append(str(supp_path))
-            except Exception as e:
-                errors.append(f"Failed to remove {supp_path}: {e}")
+        supp_paths = info.get("macos_app_supports") or []
+        if not supp_paths and info.get("macos_app_support"):
+            supp_paths = [info["macos_app_support"]]
+        for supp_path in supp_paths:
+            if supp_path and (has_legacy_firmware_downloader(supp_path) or legacy_folder_is_app_owned(supp_path)):
+                try:
+                    shutil.rmtree(supp_path)
+                    removed.append(str(supp_path))
+                except Exception as e:
+                    errors.append(f"Failed to remove {supp_path}: {e}")
 
     if uninstall_platform_tools and info.get("has_platform_tools") and info.get("platform_tools_type") == "brew":
         brew_cmd = shutil.which("brew")
@@ -486,6 +564,14 @@ def remove_linux_legacy(
             except Exception as e:
                 errors.append(f"Failed to remove {cd}: {e}")
 
+        for ds in info.get("linux_desktop_shortcuts", []):
+            if ds.is_file():
+                try:
+                    ds.unlink()
+                    removed.append(str(ds))
+                except Exception as e:
+                    errors.append(f"Failed to remove {ds}: {e}")
+
     if uninstall_platform_tools:
         for pt in info.get("platform_tools_paths", []):
             try:
@@ -495,5 +581,45 @@ def remove_linux_legacy(
             except Exception as e:
                 errors.append(f"Failed to remove {pt}: {e}")
 
+    success = len(errors) == 0
+    return success, removed, errors
+
+
+def remove_windows_legacy() -> Tuple[bool, List[str], List[str]]:
+    """Execute removal of legacy Windows components.
+
+    Runs Uninstall.exe if found, and clears leftover files from %LocalAppData% / %AppData%.
+    """
+    removed = []
+    errors = []
+    info = detect_legacy_installations()
+    dirs = info.get("windows_legacy_dirs", [])
+    for folder in dirs:
+        if not folder.is_dir():
+            continue
+        uninstaller = None
+        for candidate in ("Uninstall.exe", "uninstall.exe", "unins000.exe"):
+            unins_path = folder / candidate
+            if unins_path.is_file():
+                uninstaller = unins_path
+                break
+        if uninstaller is not None:
+            try:
+                proc = subprocess.run(
+                    [str(uninstaller), "/S", "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"],
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+                removed.append(f"{uninstaller.name} executed")
+            except Exception as e:
+                errors.append(f"Uninstaller failed: {e}")
+        # Clear up any leftover files in the folder once uninstaller completes
+        if folder.is_dir():
+            try:
+                shutil.rmtree(folder)
+                removed.append(str(folder))
+            except Exception as e:
+                errors.append(f"Failed to remove {folder}: {e}")
     success = len(errors) == 0
     return success, removed, errors

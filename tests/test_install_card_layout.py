@@ -104,6 +104,38 @@ def test_stop_prompt_keeps_the_status_line_wrapping():
         page.close()
 
 
+def test_stop_prompt_retains_progress_bar_and_prevents_layout_shift():
+    """The progress bar stays visible during the stop prompt to avoid layout shift."""
+    page = _flashing_page(900)
+    try:
+        _app().processEvents()
+        head = page._flash_head
+        bar = page._progress_bar
+        assert bar.isVisible()
+        head_h_before = head.sizeHint().height()
+        label_y_before = page._step_label.mapTo(page._progress_card, page._step_label.pos()).y()
+
+        page.prompt_stop("Would you like to cancel the install?", on_continue=lambda: None)
+        _app().processEvents()
+
+        assert bar.isVisible(), "Progress bar must remain visible during stop prompt"
+        assert head.sizeHint().height() == head_h_before, "Card head must not collapse"
+        assert page._step_label.mapTo(page._progress_card, page._step_label.pos()).y() == label_y_before
+
+        # Background progress updates must also not hide the bar
+        page._apply_stop_hold()
+        assert bar.isVisible()
+
+        page._finish_stop(False)
+        _app().processEvents()
+
+        assert bar.isVisible()
+        assert head.sizeHint().height() == head_h_before
+        assert page._step_label.mapTo(page._progress_card, page._step_label.pos()).y() == label_y_before
+    finally:
+        page.close()
+
+
 def test_round_chips_are_inline_with_the_title_and_progress_band():
     """The chips belong to the title and its band, not to the middle of the card.
 

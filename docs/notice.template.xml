@@ -5,35 +5,32 @@
   Announcements and public service notices shown to users of the app.
   Each <notice> is one message. Remove the ones you do not need.
 
-  This is the intended format. The app does not read notice.xml yet.
-
   Attributes on <notice>:
-    id        required, unique. Give a new id to publish a notice again.
-    severity  info | warning | critical   (default: info)
-    from      optional, ISO date YYYY-MM-DD. Shown on or after this date.
-    until     optional, ISO date YYYY-MM-DD. Shown on or before this date.
-    models    optional, comma-separated Y1,Y2,A5. Blank or missing = all models.
+    id          required, unique. Give a new id to publish a notice again.
+    persistent  boolean ("true" | "false", default: "false").
+                If false, the notice can be dismissed without returning at next run.
+                If true, the notice returns on every app launch even after dismissal.
+                If remote notice.xml contents change from locally cached file,
+                the new notice is immediately loaded and shown.
+    severity    info | warning | critical   (default: info)
+    from        optional, ISO date YYYY-MM-DD. Shown on or after this date.
+    until       optional, ISO date YYYY-MM-DD. Shown on or before this date.
+    models      optional, comma-separated Y1,Y2,A5. Blank or missing = all models.
 
   Child elements:
-    <title>   required, short heading.
-    <body>    required, plain text. Line breaks are kept.
-    <link>    optional, an https:// URL the user can open.
+    <title>     required, short heading.
+    <content>   required, plain text (also accepts <body>).
+    <link>      optional, an https:// URL the user can open.
 -->
-<notices updated="2026-10-24">
-  <notice id="2026-10-24-example" severity="info" from="2026-10-24" until="2026-12-31" models="Y1,Y2">
+<notices updated="2026-10-25">
+  <notice id="2026-10-25-example" persistent="false" severity="info" from="2026-10-25" until="2026-12-31" models="Y1,Y2">
     <title>Welcome to Updater CE</title>
-    <body>Firmware is downloaded from the community catalogue. Keep your player charged and plugged in during an install.</body>
+    <content>Firmware is downloaded from the community catalogue. Keep your player charged and plugged in during an install.</content>
     <link>https://innioasis.app</link>
   </notice>
 
-  <notice id="2026-10-20-psa-usb" severity="warning" from="2026-10-20" until="2026-11-20">
+  <notice id="2026-10-20-psa-usb" persistent="true" severity="warning" from="2026-10-20" until="2026-11-20">
     <title>Use a direct USB port</title>
-    <body>Avoid USB hubs during an install. Some hubs drop the connection partway through a flash.</body>
-  </notice>
-
-  <notice id="2026-10-01-critical-example" severity="critical" from="2026-10-01" until="2026-10-31" models="A5">
-    <title>Do not install build 4.1 on A5</title>
-    <body>This build is known to fail on A5 players. Install the latest stable release instead.</body>
-    <link>https://innioasis.app/releases.html</link>
+    <content>Avoid USB hubs during an install. Some hubs drop the connection partway through a flash.</content>
   </notice>
 </notices>

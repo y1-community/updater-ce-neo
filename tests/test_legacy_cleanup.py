@@ -450,11 +450,17 @@ def test_detection_follows_the_old_downloader_marker(monkeypatch):
         root = Path(tmp)
         folder = root / "innioasis-updater"
         folder.mkdir()
+        monkeypatch.setattr(sys, "platform", "linux")
+        monkeypatch.delenv("INNIOASIS_SIMULATE_MACOS", raising=False)
         monkeypatch.setattr(legacy_cleanup, "LEGACY_LINUX_INSTALL_DIR", folder)
         # The shared paths belong to whatever is installed; keep them out of it.
         monkeypatch.setattr(legacy_cleanup, "LEGACY_LINUX_DESKTOP_FILE", root / "none.desktop")
         monkeypatch.setattr(legacy_cleanup, "LEGACY_LINUX_BIN_LAUNCHER", root / "no-bin")
         monkeypatch.setattr(legacy_cleanup, "LEGACY_LINUX_CACHE_DIR", root / "no-cache")
+        # Isolate host macOS paths from this Linux marker unit test
+        monkeypatch.setattr(legacy_cleanup, "LEGACY_APP_DIRS", ())
+        monkeypatch.setattr(legacy_cleanup, "LEGACY_SUPPORT_DIR", root / "no-support")
+        monkeypatch.setattr(legacy_cleanup, "LEGACY_SUPPORT_DIRS", ())
 
         info = detect_legacy_installations()
         assert info["linux_install_dir"] is None
@@ -464,6 +470,55 @@ def test_detection_follows_the_old_downloader_marker(monkeypatch):
         info = detect_legacy_installations()
         assert info["linux_install_dir"] == folder
         assert info["has_legacy"] is True
+
+
+def test_macos_remove_app_detected_by_app_bundle_or_firmware_downloader(monkeypatch):
+    """On macOS, the remove app feature is raised either by Innioasis Updater.app in Applications
+
+    or by the presence of firmware_downloader.py in Application Support (even if the user deleted the .app).
+    """
+    from src import legacy_cleanup
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        app_dir = root / "Applications"
+        app_dir.mkdir()
+        supp_dir = root / "Application Support" / "Innioasis Updater"
+        supp_dir.mkdir(parents=True)
+
+        monkeypatch.setattr(legacy_cleanup, "LEGACY_APP_DIRS", (app_dir,))
+        monkeypatch.setattr(legacy_cleanup, "LEGACY_SUPPORT_DIR", supp_dir)
+        monkeypatch.setattr(legacy_cleanup, "LEGACY_SUPPORT_DIRS", (supp_dir,))
+        monkeypatch.setenv("INNIOASIS_SIMULATE_MACOS", "1")
+
+        # 1. Neither present: has_legacy is False
+        info = legacy_cleanup.detect_legacy_installations()
+        assert info["has_legacy"] is False
+        assert info["macos_apps"] == []
+        assert info["macos_app_support"] is None
+
+        # 2. User deleted .app, but firmware_downloader.py is present in Application Support
+        downloader = supp_dir / "firmware_downloader.py"
+        downloader.write_text("# legacy downloader\n", encoding="utf-8")
+        info = legacy_cleanup.detect_legacy_installations()
+        assert info["has_legacy"] is True
+        assert info["macos_apps"] == []
+        assert info["macos_app_support"] == supp_dir
+
+        # 3. User also has Innioasis Updater.app in Applications
+        old_app = app_dir / "Innioasis Updater.app"
+        old_app.mkdir()
+        info = legacy_cleanup.detect_legacy_installations()
+        assert info["has_legacy"] is True
+        assert old_app in info["macos_apps"]
+        assert info["macos_app_support"] == supp_dir
+
+        # 4. User has Innioasis Updater.app in Applications, but cleared Application Support
+        downloader.unlink()
+        info = legacy_cleanup.detect_legacy_installations()
+        assert info["has_legacy"] is True
+        assert old_app in info["macos_apps"]
+        assert info["macos_app_support"] is None
 
 
 if __name__ == "__main__":

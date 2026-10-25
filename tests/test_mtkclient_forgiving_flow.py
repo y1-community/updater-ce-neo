@@ -338,7 +338,8 @@ def test_rockbox_post_flash_power_prompt_uses_model_specific_button_and_hides_na
         assert window._install_run_active()
         assert window._settings_btn.isHidden()
         assert window._support_btn.isHidden()
-        assert window._linux_setup_btn.isHidden()
+        if hasattr(window, "_linux_setup_btn"):
+            assert window._linux_setup_btn.isHidden()
         assert window._check_updates_btn.isHidden()
 
         # Guided install chrome stays active until the player has booted;
@@ -363,7 +364,7 @@ def test_rockbox_post_flash_power_prompt_uses_model_specific_button_and_hides_na
 
 def test_sp_flash_rockbox_power_on_prompt(tmp_path):
     """SP Flash Tool also asks Y1/Y2 users to disconnect & power on, then connect USB, rather than bypassing with automatic=True."""
-    from PyQt6.QtCore import QSettings
+    from PySide6.QtCore import QSettings
     from src import paths
     from src.ui.main_window import MainWindow, _PAGE_FLASH
 

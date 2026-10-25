@@ -443,13 +443,27 @@ def set_sp_auth_file(path: str, settings: Optional[QSettings] = None) -> None:
     s.setValue(f"{_GROUP_PREFS}/{_KEY_SP_AUTH_FILE}", text)
 
 
+def _raw_is_donation_install_prompt_disabled(s: QSettings) -> bool:
+    val = s.value(_KEY_DONATION_INSTALL_PROMPT_DISABLED, None)
+    if val is not None:
+        return s.value(_KEY_DONATION_INSTALL_PROMPT_DISABLED, False, type=bool)
+    return s.value(f"{_GROUP_PREFS}/{_KEY_DONATION_INSTALL_PROMPT_DISABLED}", False, type=bool)
+
+
 def is_donation_ui_disabled(settings: Optional[QSettings] = None) -> bool:
     """True if donor names, Thank You screens, and donation prompts are hidden."""
     s = _get_settings(settings)
     val = s.value(_KEY_DONATION_UI_DISABLED, None)
     if val is not None:
-        return s.value(_KEY_DONATION_UI_DISABLED, False, type=bool)
-    return s.value(f"{_GROUP_PREFS}/{_KEY_DONATION_UI_DISABLED}", False, type=bool)
+        if s.value(_KEY_DONATION_UI_DISABLED, False, type=bool):
+            return True
+    elif s.value(f"{_GROUP_PREFS}/{_KEY_DONATION_UI_DISABLED}", False, type=bool):
+        return True
+    if is_settings_donations_section_dismissed(s):
+        return True
+    if _raw_is_donation_install_prompt_disabled(s):
+        return True
+    return False
 
 
 def set_donation_ui_disabled(disabled: bool, settings: Optional[QSettings] = None) -> None:
@@ -464,10 +478,7 @@ def is_donation_install_prompt_disabled(settings: Optional[QSettings] = None) ->
     s = _get_settings(settings)
     if is_donation_ui_disabled(settings):
         return True
-    val = s.value(_KEY_DONATION_INSTALL_PROMPT_DISABLED, None)
-    if val is not None:
-        return s.value(_KEY_DONATION_INSTALL_PROMPT_DISABLED, False, type=bool)
-    return s.value(f"{_GROUP_PREFS}/{_KEY_DONATION_INSTALL_PROMPT_DISABLED}", False, type=bool)
+    return _raw_is_donation_install_prompt_disabled(s)
 
 
 def set_donation_install_prompt_disabled(disabled: bool, settings: Optional[QSettings] = None) -> None:

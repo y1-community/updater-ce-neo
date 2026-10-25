@@ -2331,19 +2331,15 @@ def build_mtk_write_plan(scatter_path, model="", *, preloader_first=True):
         file_name = (entry.get("file_name") or "").strip()
         if not file_name or file_name.upper() == "NONE":
             continue
-        if _is_device_table_partition(name, file_name):
-            # The device's own table scaffolding. The stock zips ship all-zero
-            # stubs here, and even a genuine image describes one layout only:
-            # writing either over the player's live table is what leaves a
-            # device that cannot find a single partition.
+        image = _resolve_image_file(scatter_dir, file_name)
+        if not image.is_file() or _is_empty_placeholder_image(image):
+            # Missing files and all-zero placeholder stubs (such as empty MBR/EBR
+            # stubs) are skipped so only genuine package images are flashed.
             continue
         if entry.get("tail_relative"):
             # An end-of-user-area address (>= 0xFFFF0000) only resolves
             # against the live device's user-area size; guessing it would
             # write the image at a huge bogus offset.
-            continue
-        image = _resolve_image_file(scatter_dir, file_name)
-        if not image.is_file() or _is_empty_placeholder_image(image):
             continue
         key = name.lower()
         if key in seen:
@@ -4303,13 +4299,25 @@ class FlashWorker(QThread):
             pass
         self._finalize_mtk_stall("MTK_OUTPUT_STALLED")
 
+    def _close_mtk_session(self, mtk) -> None:
+        """Close the MTK session port cleanly matching the reference 1.1.7 build."""
+        if mtk is None:
+            return
+        try:
+            if hasattr(mtk, "port") and mtk.port is not None:
+                mtk.port.close(reset=not IS_WINDOWS)
+        except OSError as e:
+            self._log(f"⚠️ Failed to close USB port: {e}")
+        except Exception as e:
+            logger.debug("Failed to close mtk session cleanly: %s", e)
+
     def _end_mtk_run_successfully(self, mtk, da_handler=None) -> None:
         """The last step of a successful in-process MTKClient run.
 
-        Named so the reboot that closes the DA session has exactly one home:
-        the tool-error check in the run loop returns before this, so a failed
-        install never restarts the player into half-written firmware.
+        Matches the reference 1.1.7 build: logs completion, signals success,
+        and releases the MTKClient session cleanly without premature reset.
         """
+        self._finished = True
         self._flush_log()
         self.step_changed.emit(STEP_DONE)
         if not getattr(self, "_is_rockbox_flow", False):
@@ -4317,10 +4325,9 @@ class FlashWorker(QThread):
         else:
             self.progress.emit(90.0)
         self.action_changed.emit(tr("action_flash_complete"))
-        # The DA session is still open: end it by starting the player, the way
-        # an SP Flash Tool run already leaves the device booting.
-        self._reboot_after_mtk_success(mtk, da_handler)
+        self._log("Flash complete! Disconnect USB and reboot the device.")
         self.finished.emit(True, "")
+        self._close_mtk_session(mtk)
 
     def _reboot_after_mtk_success(self, mtk, da_handler=None) -> bool:
         """Restart the player so the firmware just written boots by itself.
@@ -4898,26 +4905,14 @@ class FlashWorker(QThread):
                     # handed to the DA it becomes an unexplained NACK near the
                     # end of the partition.
                     if sparse_regions and part_size:
-                        # Fill extents are DONT_CARE, so anything past the end
-                        # of the device's partition is dropped rather than
-                        # NACKed by the DA — the same "tail will be skipped"
-                        # rule the 1.1.7 build applies to sparse images.
-                        clipped, dropped = _clip_sparse_regions(
-                            sparse_regions, part_size
-                        )
-                        if dropped:
-                            self._log(
-                                f"  {part_name}: data beyond the device's "
-                                f"{part_size / 1048576:.1f}MB partition will be skipped"
-                            )
-                        if not clipped:
+                        data_end = _sparse_data_end(sparse_regions)
+                        if data_end > part_size:
                             raise PackageLayoutError(
-                                f"{part_name} has no data inside the device's "
-                                f"{part_size / 1048576:.1f}MB partition "
+                                f"{part_name} sparse data exceeds partition: "
+                                f"data_end={data_end / 1048576:.1f}MB > partition={part_size / 1048576:.1f}MB "
                                 "(possible package/scatter mismatch)"
                             )
-                        sparse_regions = clipped
-                        transfer_len = _sparse_data_end(sparse_regions)
+                        transfer_len = data_end
                         cur_part_len = transfer_len
                     elif part_size and transfer_len > part_size:
                         raise PackageLayoutError(
@@ -4936,6 +4931,7 @@ class FlashWorker(QThread):
                             offset,
                             target_part,
                             bytes_progress_cb=on_segment_done,
+                            segment_bytes=getattr(self, "_segmented_write_bytes", 0),
                         )
                     else:
                         self._write_mtk_partition(
@@ -5061,6 +5057,7 @@ class FlashWorker(QThread):
         session is not a legacy DA, so nothing is claimed in the log).
         """
         if not self._is_legacy_mode(mtk):
+            self._segmented_write_bytes = 0
             return 0
         chunk = legacy_write_chunk_size([path for _name, path in image_files])
         try:
@@ -5068,6 +5065,7 @@ class FlashWorker(QThread):
         except Exception as e:
             logger.debug("Could not set the legacy write chunk size: %s", e)
             return 0
+        self._segmented_write_bytes = 134217728 if IS_MACOS else 0
         self._log(
             f"Legacy DA write chunk size: {chunk // 1024} KiB "
             "(matches the reference build)"
@@ -5295,13 +5293,13 @@ class FlashWorker(QThread):
         offset,
         parttype,
         bytes_progress_cb=None,
+        segment_bytes: int = 0,
     ) -> None:
         """Write only a sparse image's data extents (the 1.1.7 sparse path).
 
-        A sparse container describes a larger logical image than it stores: the
-        fill between data extents is DONT_CARE. Writing the raw image instead
-        turns a 36 MB userdata into a 2 GB transfer (and, on a player whose
-        live layout is smaller than the package's, NACKs near the tail).
+        Matches Chinese build 1.1.7 FlashWorker._write_partition_by_regions:
+        iterates through all regions, segments large extents if segment_bytes is
+        specified, and calls writeflash for each segment.
         """
         daloader = getattr(mtk, "daloader", None)
         if daloader is None or not hasattr(daloader, "writeflash"):
@@ -5309,34 +5307,41 @@ class FlashWorker(QThread):
         total = len(regions)
         raw_size = os.path.getsize(raw_path)
         for index, (region_off, region_len) in enumerate(regions, 1):
-            self._log(
-                f"  Sparse region {index}/{total}: offset=0x{offset + region_off:X} "
-                f"size={region_len / 1048576:.2f}MB"
-            )
-            # The DA writers clamp a region to the file's bytes and still report
-            # success, so a region the raw image cannot supply must fail here.
-            if region_off + region_len > raw_size:
-                raise RuntimeError(
-                    f"Sparse region {index}/{total} of {part_name} failed: "
-                    f"the image holds {raw_size} bytes, the region ends at "
-                    f"{region_off + region_len}"
+            seg_start = 0
+            while seg_start < region_len:
+                if segment_bytes:
+                    seg_len = min(region_len - seg_start, segment_bytes)
+                else:
+                    seg_len = region_len - seg_start
+                file_off = region_off + seg_start
+                dev_addr = offset + file_off
+                self._log(
+                    f"  Sparse region {index}/{total}: offset=0x{dev_addr:X} "
+                    f"size={seg_len / 1048576:.2f}MB"
                 )
-            ok = daloader.writeflash(
-                addr=offset + region_off,
-                length=region_len,
-                filename=str(raw_path),
-                offset=region_off,
-                parttype=parttype,
-            )
-            error = getattr(getattr(mtk, "config", None), "last_error", None)
-            if not ok or error:
-                raise RuntimeError(
-                    f"Sparse region {index}/{total} of {part_name} failed: "
-                    f"{error or 'writeflash returned failure'}"
+                if file_off + seg_len > raw_size:
+                    raise RuntimeError(
+                        f"Sparse region {index}/{total} of {part_name} failed: "
+                        f"the image holds {raw_size} bytes, the segment ends at "
+                        f"{file_off + seg_len}"
+                    )
+                ok = daloader.writeflash(
+                    addr=dev_addr,
+                    length=seg_len,
+                    filename=str(raw_path),
+                    offset=file_off,
+                    parttype=parttype,
                 )
-            if bytes_progress_cb:
-                bytes_progress_cb(region_len)
-            self._touch_attempt()
+                if not ok:
+                    error = getattr(getattr(mtk, "config", None), "last_error", None)
+                    raise RuntimeError(
+                        f"Sparse region {index}/{total} of {part_name} failed: "
+                        f"{error or 'writeflash returned failure'}"
+                    )
+                seg_start += seg_len
+                if bytes_progress_cb:
+                    bytes_progress_cb(seg_len)
+                self._touch_attempt()
 
     def _write_mtk_partition(
         self,

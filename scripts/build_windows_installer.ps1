@@ -27,6 +27,7 @@ if (-not $AppDir) {
 if (-not (Test-Path $AppDir)) {
     throw "App directory not found: $AppDir"
 }
+$AppDir = (Resolve-Path $AppDir).Path.TrimEnd('\')
 
 if (-not $Version) {
     $ConfigFile = Join-Path $ProjectRoot "src\config.py"
@@ -43,6 +44,7 @@ if (-not $OutDir) {
     $OutDir = Split-Path -Parent $AppDir
 }
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
+$OutDir = (Resolve-Path $OutDir).Path.TrimEnd('\')
 
 # Detect brand from AppDir or exe if not explicitly provided
 $isMtk = ($Brand -eq "mediatek_installer") -or
@@ -74,6 +76,7 @@ if (-not $IsccExe) {
 $issScript = Join-Path $ProjectRoot "scripts\build_windows_installer.iss"
 $isccArgs = @(
     "/DMyAppVersion=$Version",
+    "/DMyRepoRoot=$ProjectRoot\",
     "/DMyDistDir=$AppDir",
     "/O$OutDir",
     "/F$setupBaseName"

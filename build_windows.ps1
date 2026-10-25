@@ -4,6 +4,7 @@ param(
     [switch]$Clean,
     [switch]$NoInstaller,
     [switch]$Installer,
+    [switch]$InstallerOnly,
     # Also pack the finished folder as an MSIX for Microsoft Store submission.
     # Needs the Windows SDK (MakeAppx.exe); identity values come from
     # scripts\msix\msix_identity.<brand>.json (see msix_identity.example.json).
@@ -16,9 +17,15 @@ param(
     [string]$MsixSignPassword = ""
 )
 
-if ($MsixOnly) {
+if ($MsixOnly -or ($Msix -and -not $Installer)) {
     $Msix = $true
     $NoInstaller = $true
+}
+
+if ($InstallerOnly) {
+    $Installer = $true
+    $NoInstaller = $false
+    $Msix = $false
 }
 
 $ErrorActionPreference = "Stop"
@@ -76,15 +83,15 @@ if ($isccCmd) {
     }
 }
 if (-not $IsccExe) {
-    if ($Installer) {
+    if ($Installer -or $InstallerOnly) {
         Write-Error "ISCC.exe (Inno Setup 6) not found. Install Inno Setup 6."
         exit 1
     } elseif ($Msix) {
         Write-Host "ISCC.exe (Inno Setup 6) not found. Skipping Inno Setup installer; proceeding with MSIX packaging." -ForegroundColor Yellow
         $NoInstaller = $true
     } elseif (-not $NoInstaller) {
-        Write-Error "ISCC.exe (Inno Setup 6) not found. Install Inno Setup 6, or pass -NoInstaller or -MsixOnly to build without Inno Setup."
-        exit 1
+        Write-Host "ISCC.exe (Inno Setup 6) not found. Skipping Inno Setup installer (portable folder and zip will be generated)." -ForegroundColor Yellow
+        $NoInstaller = $true
     }
 }
 

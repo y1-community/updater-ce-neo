@@ -51,10 +51,12 @@
     #define MyAppExeName "InnioasisUpdater.exe"
   #endif
 #endif
-#if FileExists("..\LICENSE")
-  #define MyRepoRoot "..\"
-#else
-  #define MyRepoRoot ""
+#ifndef MyRepoRoot
+  #if FileExists("..\LICENSE")
+    #define MyRepoRoot "..\"
+  #else
+    #define MyRepoRoot ""
+  #endif
 #endif
 
 #ifndef MyDistDir
@@ -169,7 +171,7 @@ chinesesimplified.StepDriverInstall=正在安装联发科 (MediaTek) SP 驱动�
 ; ignoreversion replaces older files, so this same installer updates in place.
 Source: "{#MyDistDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; Bundled MediaTek Driver Installer executed during post-install
-Source: "{#MyRepoRoot}tools\DriverInstall.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall ignoreversion
+Source: "{#MyRepoRoot}tools\DriverInstall.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall ignoreversion skipifsourcedoesntexist
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"
@@ -377,7 +379,6 @@ begin
   PurgeShortcutTree(ExpandConstant('{userprograms}'));
   PurgeShortcutTree(ExpandConstant('{userdesktop}'));
   PurgeShortcutTree(ExpandConstant('{commonprograms}'));
-  PurgeShortcutTree(ExpandConstant('{commondesktop}'));
   PurgeShortcutTree(ExpandConstant('{commondesktop}'));
 end;
 
@@ -621,10 +622,11 @@ begin
     Exit;
 
   ShowStep('StepDriverInstall');
-  { Execute DriverInstall.exe silently or with standard installer arguments without rebooting immediately }
-  if Exec(DriverExe, '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART', '', SW_SHOW, ewWaitUntilTerminated, ResultCode) then
+  { Execute DriverInstall.exe silently without rebooting immediately }
+  if Exec(DriverExe, '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
   begin
-    DriverInstalled := True;
+    if (ResultCode = 0) or (ResultCode = 3010) then
+      DriverInstalled := True;
   end;
 end;
 
@@ -632,30 +634,9 @@ function NeedRestart(): Boolean;
 begin
   { Inno Setup uses this to decide whether to offer a restart after setup.
     When the MediaTek driver was installed, a reboot is required for the
-    drivers to become operational. }
+    drivers to become operational. Inno Setup displays the finish page with
+    restart options and cleanly handles system reboot upon user confirmation. }
   Result := DriverInstalled;
-end;
-
-procedure RestartComputer(Sender: TObject);
-var
-  ResultCode: Integer;
-begin
-  { Register the app to launch on next login, then restart }
-  if DriverInstalled then
-    RegisterRunOnceStartup;
-  ShellExec('', 'shutdown.exe', '/r /t 0 /c "MediaTek drivers require a restart. The updater will launch after restart."', '', SW_SHOW, ewNoWait, ResultCode);
-end;
-
-procedure CurPageChanged(CurPageID: Integer);
-begin
-  { When we reach the Finish page and drivers were installed, prompt for reboot
-    instead of offering to launch the application (which won't work until reboot). }
-  if CurPageID = wpFinished and DriverInstalled then
-  begin
-    WizardForm.NextButton.Enabled := True;
-    WizardForm.NextButton.Caption := 'Restart Now';
-    WizardForm.NextButton.OnClick := @RestartComputer;
-  end;
 end;
 
 { Runs at various stages of setup execution. }
@@ -667,6 +648,7 @@ begin
       whether or not an old uninstall.exe exists. }
     ShowStep('StepStopping');
     StopProcess('InnioasisUpdater.exe');
+    StopProcess('MediaTekInstaller.exe');
     StopProcess('flash_tool.exe');
     StopProcess('adb.exe');
     StopProcess('python.exe');

@@ -5340,10 +5340,10 @@ _STRINGS: dict = {
         "es": "No se encontró ninguna versión anterior.",
     },
     "legacy_cleanup_confirm_body": {
-        "zh-CN": "这会移除旧版应用及其支持文件。下载的固件会保留。",
-        "en": "This removes the old app and its support files. Downloaded firmware is kept.",
-        "fr": "Cela supprime l'ancienne app et ses fichiers de support. Les firmwares téléchargés sont conservés.",
-        "es": "Esto elimina la app anterior y sus archivos de soporte. El firmware descargado se mantiene.",
+        "zh-CN": "这会彻底移除旧版应用、已下载的固件及残留文件。",
+        "en": "This completely removes the old app, downloaded firmware, and leftover files.",
+        "fr": "Cela supprime complètement l'ancienne application, les firmwares téléchargés et les fichiers résiduels.",
+        "es": "Esto elimina por completo la aplicación anterior, el firmware descargado y los archivos residuales.",
     },
     "legacy_cleanup_tools_body": {
         "zh-CN": "是否同时移除 Android Platform Tools (ADB / Fastboot)？如果使用 ADB，请选择“保留”。",

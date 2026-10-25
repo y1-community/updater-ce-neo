@@ -70,6 +70,7 @@ from .widgets import (
     Card,
     CurrentPageStack,
     InstallProgress,
+    NoticeToast,
     UpdateToast,
 )
 from .dark import T, link_html, page_margins
@@ -530,12 +531,20 @@ class SelectPackagePage(QWidget):
         was_available = self._online_available
         self._online_available = bool(is_online)
         self._update_view_links()
-        if is_online:
-            self._show_online_view(refresh=not was_available)
-        else:
-            self._views.setCurrentWidget(self._local_tab)
-            if was_available:
-                self._say(tr("sel_offline"), timeout_ms=3000)
+
+        win = self.window()
+        is_busy = (
+            getattr(self, "_prep_worker", None) is not None
+            or getattr(self, "_download_worker", None) is not None
+            or (hasattr(win, "_install_run_active") and win._install_run_active())
+        )
+        if not is_busy:
+            if is_online:
+                self._show_online_view(refresh=not was_available)
+            else:
+                self._views.setCurrentWidget(self._local_tab)
+                if was_available:
+                    self._say(tr("sel_offline"), timeout_ms=3000)
 
     def _build_ui(self):
         t = T()
@@ -626,7 +635,9 @@ class SelectPackagePage(QWidget):
         if is_generic_mtk():
             return
         self._views.setCurrentWidget(self._online_tab)
-        if refresh or not self._release_list.count():
+        if (refresh or not self._release_list.count()) and not (
+            self._releases_worker is not None and self._releases_worker.isRunning()
+        ):
             self._on_model_changed()
 
     def _update_view_links(self):
@@ -757,6 +768,13 @@ class SelectPackagePage(QWidget):
         self._update_offers = []
         self._toast_session_mute = set()
         layout.addWidget(self._update_prompt)
+
+        self._notice_prompt = NoticeToast()
+        layout.addWidget(self._notice_prompt)
+
+        from ..notice_service import NoticeService
+        NoticeService.instance().notice_ready.connect(self._on_notice_ready)
+        NoticeService.instance().fetch_async()
 
         # ── Split Content: Left = Packages + Install; Right = Status + Notes ──
         split = QHBoxLayout()
@@ -1787,6 +1805,15 @@ class SelectPackagePage(QWidget):
         self._populate_software_combo(names)
         self._update_device_status_copy()
         self._on_software_changed()
+        try:
+            from ..notice_service import NoticeService
+            NoticeService.instance().set_model(model)
+        except Exception:
+            pass
+
+    def _on_notice_ready(self, notice) -> None:
+        if hasattr(self, "_notice_prompt") and self._notice_prompt is not None:
+            self._notice_prompt.set_notice(notice)
 
     def _populate_software_combo(self, names, select=None) -> None:
         """Fill the Software dropdown with localised labels.
