@@ -1206,6 +1206,11 @@ def install_progress_readability(bar) -> None:
         bar.setStyle(style)
 
 
+#: Alpha of a progress bar's unfilled track. Translucent, so the window
+#: material behind the card shows through the groove.
+PROGRESS_TRACK_ALPHA = 120
+
+
 def progress_bar_colors(bar=None) -> tuple[QColor, QColor, QColor]:
     """Track, fill and percent colours for a progress bar, from the live theme.
 
@@ -1230,6 +1235,11 @@ def progress_bar_colors(bar=None) -> tuple[QColor, QColor, QColor]:
     label = _progress_label_color(theme_foreground(), track, fill)
     if contrast_ratio(label, fill) < 3.0:
         fill = _shift_until_contrast(label, fill, 3.0)
+    # The unfilled part is a wash, not a plate: the card's material stays
+    # visible through it, so the accent chunk reads as what has been written.
+    # The percent was chosen against the opaque track, which is the lightest
+    # that wash can be over the card, so the pair above stays the worst case.
+    track.setAlpha(PROGRESS_TRACK_ALPHA)
     return track, fill, label
 
 
@@ -1776,6 +1786,14 @@ def apply_theme(
         app.setStyleSheet(_build_qss())
         # QToolTip keeps the host theme's palette: tooltips are the platform's.
         _restyle_existing_widgets(app)
+        # macOS: a dropdown opens the host's own menu. Qt's painted popup is a
+        # hard-edged rectangle there (see native_controls).
+        try:
+            from .native_controls import install_native_combo_menus
+
+            install_native_combo_menus(app)
+        except Exception:
+            logger.debug("native combo menus were not installed", exc_info=True)
         if watcher is not None:
             try:
                 watcher._debounce.stop()
@@ -2018,6 +2036,14 @@ def sync_cached_palettes(app: QApplication) -> None:
     for widget in app.allWidgets():
         if isinstance(widget, QComboBox):
             configure_native_combobox(widget)
+            if not IS_LINUX:
+                # macOS and Windows draw the combo's popup themselves: a menu
+                # of the host's own material, with the host's rounding and
+                # vibrancy. Writing a Base onto that view takes the popup off
+                # the platform menu and leaves the opaque rectangle that made
+                # the macOS dropdowns look foreign. Their closed field is
+                # styled by the platform style for the same reason.
+                continue
             configure_combo_palette(widget)
             view = widget.view()
             if view is not None:

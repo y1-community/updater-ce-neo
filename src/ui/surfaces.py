@@ -34,6 +34,39 @@ def glass_surfaces_enabled() -> bool:
         return False
 
 
+def card_surface_fill() -> QColor:
+    """The flat colour a painted card lays over the window material.
+
+    Kept next to the erase filter because the two must agree: a child that
+    clears itself to this exact colour reproduces the card pixel underneath,
+    while transparent would punch a hole through the card and clear to the
+    window material instead.
+    """
+    from .dark import is_dark
+
+    return QColor(255, 255, 255, 18 if is_dark() else 32)
+
+
+def card_fill_under(widget: QWidget) -> QColor | None:
+    """The painted card surface behind ``widget``, or ``None`` on bare glass.
+
+    A label or list viewport inside a bento card must erase itself to that card,
+    not to the window: the card is a translucent plate, so clearing to
+    transparent removes the plate in that rectangle and leaves a visible box
+    (the window material is clearer there than the card around it).
+    """
+    parent = widget.parentWidget() if widget is not None else None
+    while parent is not None:
+        if (
+            isinstance(parent, QFrame)
+            and parent.property("cssClass") == "card"
+            and not getattr(parent, "_glass_clear", False)
+        ):
+            return card_surface_fill()
+        parent = parent.parentWidget()
+    return None
+
+
 class _BackdropErase(QObject):
     """Replace a widget's dirty rect with the backdrop before it draws."""
 
@@ -48,11 +81,12 @@ class _BackdropErase(QObject):
             painter.setClipRegion(event.region())
         else:
             painter.setClipRect(dirty)
-        # Source replaces the previous glyphs in this rect. A transparent
-        # source is the glass / acrylic already behind the window, not a
-        # theme-colored plate.
+        # Source replaces the previous glyphs in this rect. Inside a painted
+        # card the replacement is that card's own plate, so the rectangle keeps
+        # the card's tint; outside one it is the glass already behind the
+        # window. Either way no theme-coloured plate is painted.
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
-        painter.fillRect(dirty, QColor(0, 0, 0, 0))
+        painter.fillRect(dirty, card_fill_under(obj) or QColor(0, 0, 0, 0))
         painter.end()
         return False
 

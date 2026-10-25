@@ -405,7 +405,12 @@ def test_release_notes_hug_contents_and_shrink_gap():
             break
     app.processEvents()
 
-    assert page._notes.sizeHint().height() >= 150
+    # Long copy is clamped to five lines: the notes scroll inside their card
+    # instead of making the window taller than the screen.
+    from src.ui.select_page import RELEASE_NOTES_MAX_LINES, _RELEASE_NOTES_MAX_PX
+
+    assert page._notes.sizeHint().height() <= _RELEASE_NOTES_MAX_PX
+    assert page._notes.sizeHint().height() >= RELEASE_NOTES_MAX_LINES * 19
     page.close()
     app.processEvents()
 

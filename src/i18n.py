@@ -1288,6 +1288,22 @@ _STRINGS: dict = {
         "de": "Installieren",
         "ja": "インストール",
     },
+    "update_btn_store": {
+        "zh-CN": "打开 Microsoft Store",
+        "en": "Open Microsoft Store",
+        "fr": "Ouvrir le Microsoft Store",
+        "es": "Abrir Microsoft Store",
+        "de": "Microsoft Store öffnen",
+        "ja": "Microsoft Store を開く",
+    },
+    "update_store_available_fmt": {
+        "zh-CN": "{new} 已可在 Microsoft Store 中获取（您当前是 {current}）。",
+        "en": "{new} is available in the Microsoft Store (you have {current}).",
+        "fr": "{new} est disponible dans le Microsoft Store (vous avez {current}).",
+        "es": "{new} está disponible en Microsoft Store (tienes {current}).",
+        "de": "{new} ist im Microsoft Store verfügbar (Sie haben {current}).",
+        "ja": "{new} は Microsoft Store で入手できます（現在は {current}）。",
+    },
     "toast_later": {
         "zh-CN": "稍后",
         "en": "Later",
@@ -2599,6 +2615,17 @@ _STRINGS: dict = {
         "es": "Tu {model} se ha desconectado. Desconecta el USB y usa un clip / alfiler para presionar el botón entre la toma de auriculares y el puerto USB, luego pulsa Siguiente.",
         "de": "Ihr {model} wurde getrennt. Bitte trennen Sie USB und drücken Sie mit einer Büroklammer / Nadel die Taste zwischen Kopfhörerbuchse und USB-Anschluss, dann drücken Sie auf Weiter.",
         "ja": "{model}の接続が切断されました。USBを外し、クリップまたはピンでイヤホンジャックとUSBポートの間にあるボタンを押してから、「次へ」を押してください。",
+    },
+    # Shown instead of the disconnect line when the host cannot enumerate any
+    # USB device at all: a controller that has stopped answering needs a power
+    # cycle, and telling the user to replug the player would waste their time.
+    "err_usb_bus_down_recovery": {
+        "en": "macOS can't see any USB device right now, so your {model} can't be reached. Unplug the player and any USB hub or dock, then restart the Mac - the USB controller needs a power cycle before another install can start.",
+        "zh-CN": "macOS 目前无法识别任何 USB 设备，因此无法连接您的 {model}。请拔下播放器和所有 USB 集线器/扩展坞，然后重启 Mac——USB 控制器需要断电重启后才能再次安装。",
+        "fr": "macOS ne détecte aucun périphérique USB pour le moment, votre {model} est donc inaccessible. Débranchez le lecteur ainsi que tout concentrateur ou dock USB, puis redémarrez le Mac - le contrôleur USB doit être remis sous tension avant une nouvelle installation.",
+        "es": "macOS no detecta ningún dispositivo USB ahora mismo, así que no se puede acceder a tu {model}. Desconecta el reproductor y cualquier concentrador o base USB, y reinicia el Mac: el controlador USB necesita un ciclo de alimentación antes de otra instalación.",
+        "de": "macOS erkennt derzeit kein USB-Gerät, daher ist Ihr {model} nicht erreichbar. Trennen Sie den Player sowie alle USB-Hubs und Docks, und starten Sie den Mac neu - der USB-Controller braucht einen Neustart der Stromversorgung, bevor eine weitere Installation beginnen kann.",
+        "ja": "macOS が USB デバイスを認識していないため、{model} に接続できません。プレーヤーとすべての USB ハブ／ドックを外してから Mac を再起動してください。次のインストールの前に USB コントローラーの電源を入れ直す必要があります。",
     },
     # Shown instead of the disconnect line when the backend never reached the
     # player at all (SP Flash Tool's 1013 / COM-port error) and the run is

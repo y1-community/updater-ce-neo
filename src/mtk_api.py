@@ -24,6 +24,7 @@ import io
 import logging
 import os
 import sys
+import threading
 import time
 
 from . import paths
@@ -89,8 +90,11 @@ def find_cross_platform_libusb() -> str | None:
         return "libusb-1.0.so.0"
 
 
-def get_cross_platform_libusb_backend():
-    """Create a pyusb libusb-1 backend with robust cross-platform path resolution."""
+_shared_backend = None
+_backend_lock = threading.RLock()
+
+
+def _create_libusb_backend():
     try:
         import usb.backend.libusb1
 
@@ -106,6 +110,93 @@ def get_cross_platform_libusb_backend():
     except Exception as e:
         logger.warning("Could not instantiate libusb backend: %s", e)
         return None
+
+
+def get_cross_platform_libusb_backend():
+    """The process-wide pyusb libusb-1 backend.
+
+    One context per process, created once. libusb must not be exited while a
+    device handle is open, and this app enumerates the bus from more than one
+    place (the device monitor, the install worker's connection checks, the
+    recovery path). Building a fresh backend per call meant those calls left a
+    trail of contexts behind and each one's finaliser could run libusb_exit()
+    in the middle of a session — precisely the churn that wedges macOS's
+    IOUSBHost stack and takes the host's own USB ports down with it.
+    """
+    global _shared_backend
+    with _backend_lock:
+        if _shared_backend is None:
+            _shared_backend = _create_libusb_backend()
+        return _shared_backend
+
+
+def dispose_libusb_backend():
+    """Drop the shared context so the next call builds a fresh one.
+
+    Only safe once every device handle this process owns has been released
+    (pyusb's ``dispose_resources``): ``libusb_exit()`` with a live handle is
+    undefined behaviour. The recovery path calls this after the run that owned
+    the player has ended, which is also how a wedged handle gets cleared
+    without touching any other device on the bus.
+    """
+    global _shared_backend
+    with _backend_lock:
+        backend = _shared_backend
+        _shared_backend = None
+    if backend is None:
+        return False
+    try:
+        backend.exit()
+    except Exception as e:  # pragma: no cover - backend teardown is best effort
+        logger.debug("libusb backend exit failed: %s", e)
+    return True
+
+
+_MTK_USB_RESET_GUARD = False
+
+
+def install_macos_usb_reset_guard() -> bool:
+    """Make a USB device reset impossible in this process on macOS.
+
+    ``libusb_reset_device()`` — pyusb's ``Device.reset()`` — re-enumerates the
+    target through the host controller. On macOS it drops every other device
+    behind the same Apple USB hub, which on a laptop is the built-in keyboard
+    and trackpad; after that the ports stay dead until the controller is power
+    cycled. mtkclient asks for that reset in its ``close(reset=True)`` path and
+    the wrapper below already skips it there, but that guard only covers the
+    paths we know about. Wrapping ``Device.reset`` itself covers all of them,
+    including any mtkclient code path a future sync adds.
+    """
+    global _MTK_USB_RESET_GUARD
+    if _MTK_USB_RESET_GUARD:
+        return True
+    if not sys.platform.startswith("darwin"):
+        return False
+    try:
+        import usb.core  # type: ignore
+
+        if getattr(usb.core.Device.reset, "_mtk_guarded", False):
+            _MTK_USB_RESET_GUARD = True
+            return True
+
+        def guarded_reset(self):
+            logger.warning(
+                "Refusing a USB device reset on macOS: it would take down the "
+                "host's other USB devices. Unplug and reconnect the player instead."
+            )
+            return None
+
+        guarded_reset._mtk_guarded = True
+        usb.core.Device.reset = guarded_reset
+        _MTK_USB_RESET_GUARD = True
+        return True
+    except Exception as e:  # pragma: no cover - pyusb is always importable here
+        logger.debug("Could not install the macOS USB reset guard: %s", e)
+        return False
+
+
+# Installed at import so no code path can reach libusb_reset_device() on macOS.
+install_macos_usb_reset_guard()
 
 
 def _apply_runtime_patches():
@@ -259,6 +350,7 @@ def _apply_runtime_patches():
             # other HID device on the host (keyboard, mouse). Close the port
             # without it there, and keep the settle delay the reset path used.
             if reset and sys.platform.startswith("darwin"):
+                install_macos_usb_reset_guard()
                 orig_close(self, reset=False)
                 time.sleep(2)
                 return

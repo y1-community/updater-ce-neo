@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Microsoft Store package manifest for the desktop (Win32) build.
+
+  scripts/build_windows_msix.ps1 fills the @@ tokens in from
+  msix_identity.json and packs the PyInstaller folder with MakeAppx.exe.
+  The identity values in that file must be the ones Partner Center shows under
+  App management -> App identity for the reserved name: the Store rejects a
+  package whose Identity does not match its reservation.
+
+  EntryPoint="Windows.FullTrustApplication" marks this as a packaged desktop
+  app, so the bundled Python runtime, Qt plugins and SP Flash Tool binaries run
+  exactly as they do in the portable build.
+-->
+<Package
+    xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+    xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+    xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+    xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+    IgnorableNamespaces="uap desktop rescap">
+
+  <Identity
+      Name="@@IDENTITY_NAME@@"
+      Publisher="@@PUBLISHER@@"
+      Version="@@VERSION@@"
+      ProcessorArchitecture="@@ARCH@@" />
+
+  <Properties>
+    <DisplayName>@@DISPLAY_NAME@@</DisplayName>
+    <PublisherDisplayName>@@PUBLISHER_DISPLAY_NAME@@</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+    <Description>@@DESCRIPTION@@</Description>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily
+        Name="Windows.Desktop"
+        MinVersion="10.0.17763.0"
+        MaxVersionTested="10.0.22621.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+
+  <Applications>
+    <Application
+        Id="@@APPLICATION_ID@@"
+        Executable="@@EXECUTABLE@@"
+        EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+          DisplayName="@@DISPLAY_NAME@@"
+          Description="@@DESCRIPTION@@"
+          BackgroundColor="transparent"
+          Square150x150Logo="Assets\Square150x150Logo.png"
+          Square44x44Logo="Assets\Square44x44Logo.png">
+        <uap:DefaultTile
+            Wide310x150Logo="Assets\Wide310x150Logo.png"
+            Square310x310Logo="Assets\Square310x310Logo.png"
+            ShortName="@@SHORT_NAME@@" />
+      </uap:VisualElements>
+      <Extensions>
+        <!-- Packaged desktop apps keep their own working directory semantics;
+             the app resolves firmware, cache and logs itself. -->
+        <desktop:Extension
+            Category="windows.fullTrustProcess"
+            Executable="@@EXECUTABLE@@" />
+      </Extensions>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <!-- Required by every packaged desktop application. -->
+    <rescap:Capability Name="runFullTrust" />
+    <!--
+      MediaTek players enumerate over USB (libusb / WinUSB). A full-trust
+      package reaches them without asking, but certification guidance asks for
+      the USB capability to be declared for any package that talks to a device.
+      Uncomment and list the ids the app supports when the submission asks for
+      them (one <Device> per model); the MediaTek boot-ROM and preloader ids are
+      vid 0e8d, and Android/ADB is 0e8d:201d:
+
+      <DeviceCapability Name="usb">
+        <Device Id="vidpid:0e8d 0003">
+          <Function Type="classId:ff * *" />
+        </Device>
+      </DeviceCapability>
+    -->
+  </Capabilities>
+</Package>

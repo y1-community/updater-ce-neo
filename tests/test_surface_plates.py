@@ -89,6 +89,76 @@ def test_window_surface_matches_the_live_theme():
     assert widget.palette().color(QPalette.ColorRole.Window).name() == app_window.name()
 
 
+def test_a_child_inside_a_card_erases_to_the_card_not_the_window(monkeypatch):
+    """A transparent erase inside a card left a boxy, clearer rectangle.
+
+    Every scroll viewport and sealed label clears its dirty rect before it
+    draws. Inside a painted card that clear has to reproduce the card's own
+    translucent plate; clearing to transparent punched the plate out of that
+    rectangle and let the window material show through it un-tinted.
+    """
+    from PySide6.QtGui import QImage
+
+    monkeypatch.setattr(surfaces, "glass_surfaces_enabled", lambda: True)
+    card = Card()
+    card.resize(200, 100)
+    child = QWidget(card)
+    child.setGeometry(20, 20, 160, 60)
+    surfaces.show_glass_backdrop(child)
+    card.show()
+    _app.processEvents()
+    try:
+        image = QImage(card.size(), QImage.Format.Format_ARGB32_Premultiplied)
+        image.fill(Qt.GlobalColor.transparent)
+        card.render(image)
+        outside = image.pixelColor(8, 50)
+        inside = image.pixelColor(100, 50)
+        assert outside.alpha() > 0, "the card plate is missing"
+        assert inside.alpha() == outside.alpha(), (
+            f"the child cleared a hole in the card: {inside.alpha()} vs {outside.alpha()}"
+        )
+        assert (inside.red(), inside.green(), inside.blue()) == (
+            outside.red(),
+            outside.green(),
+            outside.blue(),
+        )
+        assert surfaces.card_fill_under(child) == surfaces.card_surface_fill()
+        assert surfaces.card_fill_under(card) is None
+    finally:
+        card.close()
+
+
+def test_select_page_cards_paint_their_own_surface_on_glass(monkeypatch):
+    """The filter, software list and notes sit on cards, not bare glass.
+
+    Settings and the battery hint paint a rounded pane over the window
+    material; the three Select Software groups are the same kind of card and
+    must not erase themselves back to the bare backdrop.
+    """
+    from PySide6.QtGui import QImage
+
+    from src.ui.select_page import SelectPackagePage
+
+    monkeypatch.setattr(surfaces, "glass_surfaces_enabled", lambda: True)
+    page = SelectPackagePage()
+    page.resize(900, 600)
+    page.show()
+    _app.processEvents()
+    try:
+        for name in ("_filter_group", "_pkg_group", "_notes_group"):
+            card = getattr(page, name)
+            assert card._glass_clear is False, name
+            image = QImage(card.size(), QImage.Format.Format_ARGB32_Premultiplied)
+            image.fill(Qt.GlobalColor.transparent)
+            card.render(image)
+            # A point in the card's left padding: the rounded pane is there.
+            assert image.pixelColor(6, card.height() // 2).alpha() > 0, name
+            # The corner stays clear, so the pane reads as rounded.
+            assert image.pixelColor(0, 0).alpha() == 0, name
+    finally:
+        page.close()
+
+
 def test_clear_glass_plate_removes_its_own_fill_without_glass(no_glass):
     """Text surfaces inherit their parent card instead of painting a plate."""
     for widget in (QLabel("notes"), QWidget()):

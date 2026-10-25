@@ -1,0 +1,12 @@
+{
+  "_comment": "Copy to scripts/msix/msix_identity.json (git-ignored) and replace every value with the ones Partner Center shows under App management -> App identity for the reserved app name. Identity Name and Publisher must match the reservation exactly, or the Store rejects the upload.",
+  "identityName": "Innioasis.UpdaterCE",
+  "publisher": "CN=00000000-0000-0000-0000-000000000000",
+  "publisherDisplayName": "Innioasis",
+  "displayName": "Updater CE",
+  "shortName": "Updater CE",
+  "description": "Install original and community firmware on Innioasis and Timmkoo players.",
+  "applicationId": "UpdaterCE",
+  "executable": "InnioasisUpdater.exe",
+  "architecture": "x64"
+}

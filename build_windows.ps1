@@ -2,7 +2,15 @@ param(
     [ValidateSet("", "both", "updater_ce", "mediatek_installer")]
     [string]$Brand = "both",
     [switch]$Clean,
-    [switch]$NoInstaller
+    [switch]$NoInstaller,
+    # Also pack the finished folder as an MSIX for Microsoft Store submission.
+    # Needs the Windows SDK (MakeAppx.exe); identity values come from
+    # scripts\msix\msix_identity.<brand>.json (see msix_identity.example.json).
+    [switch]$Msix,
+    # Local test certificate (.pfx) for the MSIX. The Store signs the upload
+    # itself, so this is only for installing the package on a test machine.
+    [string]$MsixSignCert = "",
+    [string]$MsixSignPassword = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -121,7 +129,9 @@ try {
         Set-BuildBrand $b
         $env:BUILD_BRAND = $b
 
-        $totalSteps = if (-not $NoInstaller -and $IsccExe) { 5 } else { 4 }
+        $totalSteps = 4
+        if (-not $NoInstaller -and $IsccExe) { $totalSteps++ }
+        if ($Msix) { $totalSteps++ }
 
         # Stage build on local disk first to avoid SMB lock contention on network shares (e.g. Z:\)
         $tempWorkDir = Join-Path $env:TEMP "updater_pyi_work_$b"
@@ -218,6 +228,40 @@ try {
             Copy-Item -Path $stagedSetupExe -Destination $targetSetupExe -Force
             $setupSizeMb = [math]::Round((Get-Item $targetSetupExe).Length / 1MB, 2)
             Write-Host "  -> Setup installer created: $setupBaseName.exe ($setupSizeMb MB)" -ForegroundColor Green
+        }
+
+        if ($Msix) {
+            $msixStep = 4 + $(if (-not $NoInstaller -and $IsccExe) { 1 } else { 0 }) + 1
+            Write-StepBanner $msixStep $totalSteps "Building Microsoft Store Package" "Packing the app folder as an MSIX (MakeAppx) for Store submission..."
+            # Per-brand identity from Partner Center; the generic file is the
+            # fallback for a single-product layout.
+            $identityCandidates = @(
+                (Join-Path $ProjectRoot "scripts\msix\msix_identity_$b.json"),
+                (Join-Path $ProjectRoot "scripts\msix\msix_identity.json")
+            )
+            $identityFile = $null
+            foreach ($candidate in $identityCandidates) {
+                if (Test-Path $candidate) { $identityFile = $candidate; break }
+            }
+            $msixArgs = @(
+                "-NoProfile",
+                "-ExecutionPolicy", "Bypass",
+                "-File", (Join-Path $ProjectRoot "scripts\build_windows_msix.ps1"),
+                "-AppDir", $stagedAppDir,
+                "-Version", $Version,
+                "-OutDir", $DistDir
+            )
+            if ($identityFile) { $msixArgs += @("-IdentityFile", $identityFile) }
+            if ($MsixSignCert) {
+                $msixArgs += @("-SignCert", $MsixSignCert)
+                if ($MsixSignPassword) { $msixArgs += @("-SignPassword", $MsixSignPassword) }
+            }
+            & powershell.exe @msixArgs
+            if ($LASTEXITCODE -ne 0) {
+                throw "MSIX packaging failed for $b (exit code $LASTEXITCODE)"
+            }
+        } else {
+            Write-Host "  (Pass -Msix to also produce the Microsoft Store package for this build.)" -ForegroundColor DarkGray
         }
 
         Remove-Item -Recurse -Force $tempWorkDir -ErrorAction SilentlyContinue

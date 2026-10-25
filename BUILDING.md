@@ -68,6 +68,47 @@ cd updater-ce-neo
 
 > **Note**: On Windows, the app runs 100% SP Flash Tool by default. Press the `M` key on the keyboard to unlock the MTKClient advanced backend option.
 
+### Windows (Microsoft Store / MSIX package)
+
+The same PyInstaller folder is packed as a packaged desktop application for the
+Microsoft Store:
+
+```powershell
+build_windows.ps1 -Brand updater_ce -Msix
+# or
+build_windows.bat updater_ce -Msix
+```
+
+That produces `dist\windows\InnioasisUpdater-<version>.msix` (and, for the other
+front end, `MediaTekInstaller-<version>.msix`) next to the portable folder and
+the Inno Setup wizard. Requirements and one-time setup:
+
+1. **Windows 10/11 SDK** with `MakeAppx.exe` (and `signtool.exe`, only needed to
+   test-sign locally). The build script finds it under
+   `%ProgramFiles(x86)%\Windows Kits\10\bin`.
+2. **A reserved app name in Partner Center.** Copy
+   `scripts\msix\msix_identity.example.json` to
+   `scripts\msix\msix_identity_<brand>.json` (`updater_ce` or
+   `mediatek_installer`) and replace every value with the ones Partner Center
+   shows under **App management → App identity**. `Name` and `Publisher` must
+   match the reservation exactly or the upload is rejected. These files are
+   git-ignored because they are account-specific.
+3. **Upload the unsigned `.msix`.** Microsoft signs Store packages during
+   certification; `-MsixSignCert` is only for installing a test build locally.
+
+What the package declares (see `scripts/msix/AppxManifest.xml`): a packaged
+Win32 desktop app with `Windows.FullTrustApplication` and `runFullTrust`, so the
+bundled Python runtime, Qt plugins and SP Flash Tool binaries run exactly as in
+the portable build. The manifest also carries a commented-out `usb` device
+capability block: declare the MediaTek `vidpid` ids if a submission asks for
+them.
+
+Once published, a newer GitHub release advertises the Store build with an
+`msstore.txt` asset whose first line is `true`. The app reads that file for the
+release it has found, and only when it is running as an MSIX package does it
+offer **Open Microsoft Store** (which opens the Store's *Library → Updates*
+page) instead of downloading an installer over itself.
+
 ---
 
 ### Linux (AppImage)
@@ -128,6 +169,7 @@ engine with different identities:
 ./build_macos.sh            # dist/Updater CE.app + dist/MediaTek Installer.app
 ./build_appimage.sh         # dist/UpdaterCE-*.AppImage + dist/MediaTekInstaller-*.AppImage
 build_windows.bat           # dist\InnioasisUpdater\ + dist\MediaTekInstaller\ (+ both installers)
+build_windows.bat updater_ce -Msix   # ... and the Microsoft Store package
 ```
 
 To build just one (the quick path while iterating on a single front end):

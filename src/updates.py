@@ -26,11 +26,16 @@ from .config import (
     UPDATE_REPO,
     UPDATE_TARGET_ASSETS,
 )
-from .catalog import ReleasesClient
+from .catalog import REQUEST_TIMEOUT, ReleasesClient
 
 logger = logging.getLogger(__name__)
 
 _VERSION_RE = re.compile(r"^\D*(\d+)\.(\d+)(?:\.(\d+))?")
+
+#: Asset a release carries when the same version is on the Microsoft Store.
+#: Its first line is the word ``true`` for a Store release, ``false`` (or no
+#: file) for a release that only exists as a direct download.
+STORE_MARKER_ASSET = "msstore.txt"
 
 
 def parse_version(tag: str):
@@ -157,10 +162,27 @@ class UpdateInfo:
     html_url: str = ""
     assets: list = field(default_factory=list)
     failed: bool = False  # True when the check itself errored
+    #: The release says a Store build of the same version is available.
+    store_available: bool = False
 
     @property
     def version(self) -> str:
         return self.tag.lstrip("vV") if self.tag else ""
+
+
+def parse_store_marker(text: str) -> bool:
+    """Read ``msstore.txt``: the first non-empty line is the word true/false.
+
+    Written by hand in the release notes, so both a bare ``true`` and a line
+    like ``true  # on the Store since 2.5`` read as yes.
+    """
+    for line in (text or "").splitlines():
+        token = line.strip().lower()
+        if not token:
+            continue
+        head = token.split()[0].strip(":,\t-=") if token.split() else token
+        return head in ("true", "yes", "1")
+    return False
 
 
 class UpdateChecker:
@@ -200,11 +222,13 @@ class UpdateChecker:
         for rel in candidate_releases:
             assets = rel.get("assets") or []
             if pick_platform_asset(assets):
+                store = self._store_flag(assets)
                 logger.info(
-                    "Selected update %s for %s (current: %s)",
+                    "Selected update %s for %s (current: %s, store: %s)",
                     rel.get("tag_name"),
                     asset_hint(),
                     self.current,
+                    store,
                 )
                 return UpdateInfo(
                     tag=rel.get("tag_name", ""),
@@ -213,10 +237,40 @@ class UpdateChecker:
                     published_at=rel.get("published_at", ""),
                     html_url=rel.get("html_url", ""),
                     assets=assets,
+                    store_available=store,
                 )
 
         logger.info("No newer releases contain assets for %s; staying on %s", asset_hint(), self.current)
         return UpdateInfo()
+
+    def _store_flag(self, assets) -> bool:
+        """Whether this release advertises a Microsoft Store build.
+
+        Only a Windows build can install from the Store, so nowhere else pays
+        for the extra request. A missing file, an unreachable one or any
+        failure simply means "not on the Store".
+        """
+        if sys.platform != "win32":
+            return False
+        marker = None
+        for asset in assets or []:
+            if (asset.get("name") or "").strip().lower() == STORE_MARKER_ASSET:
+                marker = asset
+                break
+        if marker is None:
+            return False
+        url = marker.get("browser_download_url") or ""
+        session = getattr(self.client, "session", None)
+        if not url or session is None:
+            return False
+        try:
+            response = session.get(url, timeout=REQUEST_TIMEOUT)
+            if getattr(response, "status_code", 0) != 200:
+                return False
+            return parse_store_marker(getattr(response, "text", "") or "")
+        except Exception as e:
+            logger.debug("msstore.txt could not be read: %s", e)
+            return False
 
 
 class UpdateCheckWorker(QThread):

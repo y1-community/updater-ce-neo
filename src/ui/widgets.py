@@ -12,7 +12,9 @@ from PySide6.QtCore import (
     QAbstractAnimation,
     QEasingCurve,
     QEventLoop,
+    QPoint,
     QPropertyAnimation,
+    QRect,
     QRectF,
     QSize,
     Qt,
@@ -28,6 +30,7 @@ from PySide6.QtWidgets import (
     QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QProgressBar,
     QPushButton,
     QSizePolicy,
@@ -927,15 +930,14 @@ class AppUpdateToast(QFrame):
         self._action.clicked.connect(self.action_clicked.emit)
         row.addWidget(self._action, 0)
 
-        self._close = QPushButton("\u00d7")
+        self._close = QPushButton()
         self._close.setObjectName("appUpdateToastClose")
         self._close.setFlat(True)
         self._close.setCursor(Qt.CursorShape.ArrowCursor)
-        self._close.setStyleSheet("")
-        self._close.setFixedWidth(28)
+        _style_dismiss_chip(self._close, symbol="cancel")
         self._close.setToolTip(tr("toast_dismiss"))
         self._close.clicked.connect(self.close_clicked.emit)
-        row.addWidget(self._close, 0)
+        row.addWidget(self._close, 0, Qt.AlignVCenter)
 
         self.setVisible(False)
 
@@ -960,6 +962,7 @@ class AppUpdateToast(QFrame):
             self._label.setText(f"An update to {app_name} is available.")
         _apply_banner_text(self._label)
         self._close.setToolTip(tr("toast_dismiss"))
+        _style_dismiss_chip(self._close, symbol="cancel")
         self._action.setText(tr("toast_install"))
 
     def retranslate(self) -> None:
@@ -967,6 +970,7 @@ class AppUpdateToast(QFrame):
 
     def refresh_theme(self) -> None:
         _apply_banner_text(self._label)
+        _style_dismiss_chip(self._close, symbol="cancel")
         self.update()
 
     def paintEvent(self, event):  # noqa: N802 (Qt naming)
@@ -1007,28 +1011,11 @@ class BatteryToast(QFrame):
         _apply_banner_text(self._label)
         row.addWidget(self._label, 1, Qt.AlignVCenter)
 
-        from .icons import get_symbol_icon
-
         self._dismiss_btn = QPushButton(self)
         self._dismiss_btn.setObjectName("batteryToastDismissBtn")
-        self._dismiss_btn.setFixedSize(24, 24)
         self._dismiss_btn.setCursor(Qt.PointingHandCursor)
-        self._dismiss_btn.setIcon(get_symbol_icon("check", 12))
-        self._dismiss_btn.setIconSize(QSize(12, 12))
         self._dismiss_btn.setToolTip(tr("toast_dismiss"))
-        self._dismiss_btn.setStyleSheet(
-            "QPushButton#batteryToastDismissBtn {"
-            "  border-radius: 12px;"
-            "  background: rgba(37, 99, 235, 0.18);"
-            "  border: none;"
-            "}"
-            "QPushButton#batteryToastDismissBtn:hover {"
-            "  background: rgba(37, 99, 235, 0.32);"
-            "}"
-            "QPushButton#batteryToastDismissBtn:pressed {"
-            "  background: rgba(37, 99, 235, 0.45);"
-            "}"
-        )
+        _style_dismiss_chip(self._dismiss_btn, symbol="check")
         self._dismiss_btn.clicked.connect(self.dismissed.emit)
         row.addWidget(self._dismiss_btn, 0, Qt.AlignVCenter)
 
@@ -1039,20 +1026,142 @@ class BatteryToast(QFrame):
         return tr(key)
 
     def retranslate(self) -> None:
-        from .icons import get_symbol_icon
-
         self._label.setText(self._get_battery_text())
         _apply_banner_text(self._label)
         self._dismiss_btn.setToolTip(tr("toast_dismiss"))
-        self._dismiss_btn.setIcon(get_symbol_icon("check", 12))
+        _style_dismiss_chip(self._dismiss_btn, symbol="check")
 
     def refresh_theme(self) -> None:
         _apply_banner_text(self._label)
+        _style_dismiss_chip(self._dismiss_btn, symbol="check")
         self.update()
 
     def paintEvent(self, event):  # noqa: N802 (Qt naming)
         """Paint the battery hint as a rounded card on every desktop."""
         _paint_bento_surface(self, event)
+
+
+class FlowLayout(QLayout):
+    """Left-to-right layout that wraps its items onto a new line when full.
+
+    A row of buttons in a QHBoxLayout squeezes every button when the window is
+    narrow, and a button that is narrower than its label cuts the words off at
+    both ends. This keeps each item at its own size hint and starts a new line
+    instead. It reports its height for a given width, so the card that holds it
+    grows with the rows it ends up with.
+    """
+
+    def __init__(self, parent=None, margin: int = 0, spacing: int = 8):
+        super().__init__(parent)
+        self._items = []
+        self._spacing = spacing
+        self.setContentsMargins(margin, margin, margin, margin)
+
+    # -- QLayout -------------------------------------------------------
+    def addItem(self, item):  # noqa: N802 (Qt naming)
+        self._items.append(item)
+
+    def count(self):  # noqa: N802 (Qt naming)
+        return len(self._items)
+
+    def itemAt(self, index):  # noqa: N802 (Qt naming)
+        return self._items[index] if 0 <= index < len(self._items) else None
+
+    def takeAt(self, index):  # noqa: N802 (Qt naming)
+        return self._items.pop(index) if 0 <= index < len(self._items) else None
+
+    def expandingDirections(self):  # noqa: N802 (Qt naming)
+        return Qt.Orientation(0)
+
+    def hasHeightForWidth(self):  # noqa: N802 (Qt naming)
+        return True
+
+    def heightForWidth(self, width):  # noqa: N802 (Qt naming)
+        return self._place(QRect(0, 0, max(0, int(width)), 0), apply=False)
+
+    def setGeometry(self, rect):  # noqa: N802 (Qt naming)
+        super().setGeometry(rect)
+        self._place(rect, apply=True)
+
+    def sizeHint(self):  # noqa: N802 (Qt naming)
+        return self.minimumSize()
+
+    def minimumSize(self):  # noqa: N802 (Qt naming)
+        size = QSize(0, 0)
+        for item in self._items:
+            size = size.expandedTo(item.minimumSize())
+        margins = self.contentsMargins()
+        return size + QSize(
+            margins.left() + margins.right(), margins.top() + margins.bottom()
+        )
+
+    # -- placement -----------------------------------------------------
+    def _place(self, rect: QRect, *, apply: bool) -> int:
+        margins = self.contentsMargins()
+        area = rect.adjusted(
+            margins.left(), margins.top(), -margins.right(), -margins.bottom()
+        )
+        x = area.x()
+        y = area.y()
+        line_height = 0
+        for item in self._items:
+            hint = item.sizeHint()
+            next_x = x + hint.width() + self._spacing
+            if next_x - self._spacing > area.right() and line_height > 0:
+                x = area.x()
+                y = y + line_height + self._spacing
+                next_x = x + hint.width() + self._spacing
+                line_height = 0
+            if apply:
+                item.setGeometry(QRect(QPoint(x, y), hint))
+            x = next_x
+            line_height = max(line_height, hint.height())
+        return y + line_height - rect.y() + margins.bottom()
+
+
+#: Diameter of a toast's round dismiss chip.
+_TOAST_CHIP_PX = 24
+
+
+def _style_dismiss_chip(button, *, symbol: str = "check") -> None:
+    """Wear the theme accent on a toast's round dismiss button.
+
+    The checkmark on the battery hint and the cross on an update reminder are
+    the same language as the round action chips on the install cards — accent
+    disc, contrast glyph — small enough to read as a hint control. The accent
+    is read live, so a theme switch recolours the chip with everything else.
+    """
+    from .dark import T, get_native_accent_color
+    from .icons import get_symbol_icon
+
+    if button is None:
+        return
+    accent_color, contrast = get_native_accent_color()
+    disc = QColor(accent_color or getattr(T(), "accent", "") or "#52b036")
+    if not disc.isValid():
+        disc = QColor("#52b036")
+    glyph = QColor(contrast or "#ffffff")
+    if not glyph.isValid():
+        glyph = QColor("#ffffff")
+
+    def rgba(color: QColor, alpha: int) -> str:
+        return f"rgba({color.red()}, {color.green()}, {color.blue()}, {alpha / 255:.3f})"
+
+    radius = _TOAST_CHIP_PX // 2
+    name = button.objectName() or "toastDismissChip"
+    button.setFixedSize(_TOAST_CHIP_PX, _TOAST_CHIP_PX)
+    button.setIcon(get_symbol_icon(symbol, 12, color=glyph.name()))
+    button.setIconSize(QSize(12, 12))
+    button.setStyleSheet(
+        f"QPushButton#{name} {{"
+        f"  border-radius: {radius}px;"
+        f"  background: {rgba(disc, 214)};"
+        "  border: none;"
+        "}"
+        f"QPushButton#{name}:hover {{ background: {rgba(disc, 255)}; }}"
+        f"QPushButton#{name}:pressed {{ background: {rgba(disc.darker(115), 255)}; }}"
+        f"QPushButton#{name}:disabled {{ background: {rgba(disc, 120)}; }}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1248,6 +1357,12 @@ class InstallProgress(QProgressBar):
             label_color = QColor(t.danger_fg)
         text = "" if busy or not self.isTextVisible() else (self.text() or "")
         painter = QPainter(self)
+        # The track is translucent so the card shows through it. Clear first: a
+        # chunk from the previous frame would otherwise stay in the backing
+        # store and glow through the new, emptier track.
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
+        painter.fillRect(self.rect(), Qt.GlobalColor.transparent)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
         paint_progress_bar(
             painter,
             self.rect(),

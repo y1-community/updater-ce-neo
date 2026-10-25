@@ -24,6 +24,32 @@ from . import paths
 logger = logging.getLogger(__name__)
 
 
+def _reset_usb_after_startup(sweep=None):
+    """Rebuild libusb's context once the leftover-helper sweep has finished.
+
+    Called on every launch, before any install can start: a helper that was
+    still holding the player when the last session ended leaves a handle this
+    process inherited only by name, and libusb's context is the one piece of
+    USB state an app can hand back to the host. Off the GUI thread, silent, and
+    only after nothing else is using the bus.
+    """
+    import threading
+
+    def _run():
+        try:
+            if sweep is not None:
+                sweep.join(10)
+            from .usb_recovery import recover_usb_connection
+
+            recover_usb_connection(reap_helpers=False, reset_context=True)
+        except Exception:
+            logger.debug("Startup USB recovery failed", exc_info=True)
+
+    thread = threading.Thread(target=_run, name="startup-usb-recovery", daemon=True)
+    thread.start()
+    return thread
+
+
 def _startup_step(label, fn, /, *args, **kwargs):
     """Run one host-integration step, keeping a failure out of the launch.
 
@@ -447,7 +473,8 @@ def main():
     def _sweep_on_startup():
         # The report travels back on the window's own signal: the sweep runs on
         # a worker thread and the log is a widget.
-        process_guard.sweep_async(reason="startup", on_done=window.sweep_report.emit)
+        sweep = process_guard.sweep_async(reason="startup", on_done=window.sweep_report.emit)
+        _reset_usb_after_startup(sweep)
 
     QTimer.singleShot(1500, _sweep_on_startup)
 

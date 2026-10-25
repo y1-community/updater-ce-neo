@@ -35,3 +35,9 @@ debug/work/
 # Machine-specific SP Flash Tool state (paths, history, UI prefs)
 tools/linux/SP_Flash_Tool_v5.1904_Linux/history.ini
 tools/linux/SP_Flash_Tool_v5.1904_Linux/option.ini
+
+# Microsoft Store packaging: the Partner Center identity is account-specific.
+scripts/msix/msix_identity*.json
+!scripts/msix/msix_identity.example.json
+*.msix
+*.msixupload

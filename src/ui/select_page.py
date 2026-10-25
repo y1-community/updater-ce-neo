@@ -219,14 +219,22 @@ class _TypeInfoMark(QLabel):
         )
 
 
+# Release notes show at most this many lines before they scroll inside their
+# card. Longer copy must not make the app window grow to fit it.
+RELEASE_NOTES_MAX_LINES = 5
+# The notes are 13 px copy with a 1.45 line height (see the body CSS).
+_RELEASE_NOTES_LINE_PX = 19
+_RELEASE_NOTES_MAX_PX = RELEASE_NOTES_MAX_LINES * _RELEASE_NOTES_LINE_PX + 8
+
+
 class _ReleaseNotesBrowser(QTextBrowser):
-    """Release notes view that dynamically sizes vertically to its document content."""
+    """Release notes view that grows to its content, up to five lines."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.setMinimumHeight(80)
-        self.setMaximumHeight(260)
+        self.setMaximumHeight(_RELEASE_NOTES_MAX_PX)
 
     def sizeHint(self) -> QSize:
         doc = self.document()
@@ -238,9 +246,9 @@ class _ReleaseNotesBrowser(QTextBrowser):
             doc.setTextWidth(w)
         doc_h = int(doc.documentLayout().documentSize().height())
         target_h = max(28, doc_h + 8)
-        # Notes scroll inside their card; they must not drive the app window
-        # taller just because a release has unusually long copy.
-        target_h = min(target_h, 260)
+        # Notes scroll inside their card; five lines is enough to see what a
+        # release changed without the window growing to fit the whole body.
+        target_h = min(target_h, _RELEASE_NOTES_MAX_PX)
         from PySide6.QtCore import QSize
         return QSize(super().sizeHint().width(), target_h)
 
@@ -728,7 +736,6 @@ class SelectPackagePage(QWidget):
         filter_layout.setColumnStretch(1, 1)
         filter_layout.setColumnStretch(3, 1)
         self._filter_group.set_layout(filter_layout)
-        self._filter_group.set_glass_clear(True)
 
         layout.addWidget(self._filter_group)
 
@@ -832,7 +839,6 @@ class SelectPackagePage(QWidget):
         pkg_layout.addStretch(1)
 
         self._pkg_group.set_layout(pkg_layout)
-        self._pkg_group.set_glass_clear(True)
         # A scroll viewport erases its contents with Base; keep that palette
         # synchronized with the painted card instead of the generic window.
         self._pkg_group.refresh_theme = lambda: clear_glass_plate(self._release_list)
@@ -946,7 +952,6 @@ class SelectPackagePage(QWidget):
         notes_l.addStretch(1)
 
         self._notes_group.set_layout(notes_l)
-        self._notes_group.set_glass_clear(True)
         right_layout.addWidget(self._notes_group, 1)
 
         split.addWidget(right_panel, 6)

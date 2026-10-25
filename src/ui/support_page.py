@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QGuiApplication, QPixmap
 from PySide6.QtWidgets import (
     QHBoxLayout,
@@ -18,14 +18,54 @@ from ..i18n import tr
 from .dark import page_margins, theme_foreground
 from .support_appeal import bundled_portrait_path, circle_pixmap
 from .surfaces import show_glass_backdrop
-from .widgets import Card
+from .widgets import Card, FlowLayout
+
+
+class _WrappedCopy(QLabel):
+    """Word-wrapped copy whose height follows the width it is given.
+
+    A QLabel measures its size hint as one long line, so a layout hands a
+    wrapped paragraph one line's height and clips the rest of it. Keeping the
+    minimum height in step with the label's own width means the card grows
+    when the window gets narrower (more lines) and gives the room back when it
+    widens, instead of holding on to the height it was built with.
+    """
+
+    height_changed = Signal()
+
+    def __init__(self, text: str = "", parent=None):
+        super().__init__(text, parent)
+        self.setWordWrap(True)
+
+    def needed_height(self) -> int:
+        if self.width() <= 0:
+            return 0
+        return max(0, int(self.heightForWidth(self.width())))
+
+    def _sync_min_height(self) -> None:
+        needed = self.needed_height()
+        if needed <= 0 or needed == self.minimumHeight():
+            return
+        self.setMinimumHeight(needed)
+        self.updateGeometry()
+        self.height_changed.emit()
+
+    def resizeEvent(self, event):  # noqa: N802 (Qt naming)
+        super().resizeEvent(event)
+        self._sync_min_height()
 
 
 class SupportPage(QWidget):
     """Compact Support Us page matching the Select Software screen dimensions and glass material."""
 
+    #: The card needs a different height than it did (rewrap, language, drawer):
+    #: the window has to refit so no copy is left clipped.
+    content_size_changed = Signal()
+
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._last_card_height = 0
+        self._content_check_queued = False
         self.setObjectName("supportPage")
         self.setAutoFillBackground(False)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
@@ -75,8 +115,8 @@ class SupportPage(QWidget):
         card_layout.addLayout(header_row)
 
         # Heartfelt Wikipedia-style Personal Appeal
-        self._appeal_body = QLabel()
-        self._appeal_body.setWordWrap(True)
+        self._appeal_body = _WrappedCopy()
+        self._appeal_body.height_changed.connect(self._queue_content_check)
         self._appeal_body.setTextFormat(Qt.TextFormat.RichText)
         self._appeal_body.setStyleSheet(
             "font-size: 12px; line-height: 1.4; color: palette(window-text); background: transparent; border: none;"
@@ -87,9 +127,9 @@ class SupportPage(QWidget):
         )
         card_layout.addWidget(self._appeal_body)
 
-        # Primary Payment Methods Row
-        btn_row = QHBoxLayout()
-        btn_row.setSpacing(8)
+        # Primary payment methods: each button keeps its own label width and
+        # the row wraps instead of squeezing four labels into a narrow card.
+        btn_row = FlowLayout(spacing=8)
 
         primary_methods = [
             ("donate_kofi", "kofi"),
@@ -105,7 +145,7 @@ class SupportPage(QWidget):
             btn.setCursor(Qt.CursorShape.ArrowCursor)
             btn.setMinimumHeight(28)
             btn.clicked.connect(lambda _=False, u=url: open_browser(u))
-            btn_row.addWidget(btn, 1)
+            btn_row.addWidget(btn)
             self._method_buttons.append((btn, key))
 
         card_layout.addLayout(btn_row)
@@ -181,15 +221,49 @@ class SupportPage(QWidget):
         layout.addWidget(self._card)
         layout.addStretch(1)
 
-    def content_height_hint(self) -> int:
-        """Height needed by the Support page to display its card and methods without compression."""
+    def content_height_hint(self, width: int | None = None) -> int:
+        """Height the card needs at ``width``, wrapped copy and rows included.
+
+        Measured for the width the card will get, not the width it happens to
+        have: the first time the page is shown no layout has run yet, and a
+        single-line size hint there is what left the appeal cut off.
+        """
         if self.layout() is not None:
             self.layout().activate()
         if hasattr(self, "_card") and self._card.layout() is not None:
             self._card.layout().activate()
-        card_h = self._card.sizeHint().height() if hasattr(self, "_card") else 240
         top, right, bottom, left = page_margins()
+        page_w = int(width) if width and int(width) > 0 else int(self.width())
+        card_w = max(1, page_w - left - right)
+        card_h = self._card.sizeHint().height() if hasattr(self, "_card") else 240
+        if hasattr(self, "_card") and card_w > 1:
+            fitted = int(self._card.heightForWidth(card_w))
+            if fitted > 0:
+                card_h = max(card_h, fitted)
         return card_h + top + bottom + 24
+
+    def _queue_content_check(self) -> None:
+        """Coalesce layout-driven rechecks into one event-loop turn."""
+        if self._content_check_queued:
+            return
+        self._content_check_queued = True
+        QTimer.singleShot(0, self._report_content_size)
+
+    def _report_content_size(self) -> None:
+        self._content_check_queued = False
+        if hasattr(self, "_card") and self._card.layout() is not None:
+            self._card.layout().activate()
+        needed = int(self._card.sizeHint().height()) if hasattr(self, "_card") else 0
+        if needed <= 0 or needed == self._last_card_height:
+            return
+        self._last_card_height = needed
+        self.content_size_changed.emit()
+
+    def resizeEvent(self, event):  # noqa: N802 (Qt naming)
+        super().resizeEvent(event)
+        # Re-measure after the new width settles: the wrapped copy above only
+        # knows it needs more lines once it has been given its new width.
+        self._queue_content_check()
 
     def _toggle_crypto_drawer(self):
         show = not self._crypto_drawer.isVisible()
@@ -197,6 +271,7 @@ class SupportPage(QWidget):
         self._crypto_toggle_link.setText(
             tr("donate_crypto_hide") if show else tr("donate_crypto_toggle")
         )
+        self._queue_content_check()
         win = self.window()
         if win is not None and hasattr(win, "_adjust_window_geometry"):
             win._adjust_window_geometry()
@@ -217,6 +292,9 @@ class SupportPage(QWidget):
             f"<b>{tr('donate_support_appeal_lead')}</b> "
             f"{tr('donate_support_appeal_followup')}"
         )
+        # New wording is a new line count; the card has to be re-measured.
+        self._appeal_body._sync_min_height()
+        self._queue_content_check()
         self._honeygain_link.setText(tr("donate_honeygain"))
         self._crypto_toggle_link.setText(
             tr("donate_crypto_hide") if self._crypto_drawer.isVisible() else tr("donate_crypto_toggle")

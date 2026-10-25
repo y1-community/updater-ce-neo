@@ -48,6 +48,7 @@ from .widgets import (
 )
 from .dark import T, page_top_margin
 from .icons import get_symbol_icon, get_symbol_pixmap
+from .native_controls import NativeRoundChip, native_round_buttons_available
 
 # Width the progress copy wraps into. A wrapped QLabel inside a horizontal
 # card reports a one-line size hint unless it is given this width.
@@ -55,6 +56,10 @@ INSTALL_TEXT_WIDTH = 220
 
 #: Settle time after ADB detection so org.rockbox can populate .rockbox.
 ROCKBOX_BOOT_WAIT_MS = 20_000
+
+#: Height of the paperclip diagram. Drawn 8% larger than the original 60 px so
+#: the pin and the button it points at stay legible on a phone-sized photo.
+_PAPERCLIP_HINT_PX = round(60 * 1.08)
 
 
 def install_horizontal_chrome(sidebar: int) -> int:
@@ -591,9 +596,13 @@ class _RoundNextButton(QPushButton):
     The power-off step used to end with a wide "Continue" button on a row of its
     own, which read like a form to fill in. A single round chip reads as the next
     step of a software-update assistant, and the same chip carries a cancel or a
-    back arrow. Every other control on the card stays native; this one draws its
-    own disc so the accent, the hover wash and the press state do not depend on a
-    platform style. Hover text is the button's tooltip.
+    back arrow.
+
+    On macOS the chip *is* an AppKit control (Liquid Glass on macOS 26, the
+    system circular bezel before it — see ``native_controls``), sitting in this
+    widget's NSView and driven by ``clicked`` exactly like the painted disc. The
+    paint below is then the fallback and what Windows/Linux get, where no
+    native round bezel is exposed to Qt widgets.
     """
 
     def __init__(self, parent=None, *, symbol: str = "next", accent: bool = True):
@@ -616,6 +625,9 @@ class _RoundNextButton(QPushButton):
         self._hovered = False
         self._pressed = False
         self._arrow = QPixmap()
+        # AppKit draws the chip on macOS; None until the widget has a window.
+        self._native = None
+        self._native_attempted = False
         if symbol == "cancel":
             self.setToolTip(tr("btn_cancel"))
             self.setAccessibleName(tr("btn_cancel"))
@@ -628,6 +640,12 @@ class _RoundNextButton(QPushButton):
         if text:
             self.setToolTip(text)
             self.setAccessibleName(text)
+
+    def setToolTip(self, text: str) -> None:  # noqa: N802 (Qt naming)
+        super().setToolTip(text)
+        native = getattr(self, "_native", None)
+        if native is not None:
+            native.set_tooltip(text)
 
     def sizeHint(self) -> QSize:  # noqa: N802 (Qt naming)
         return QSize(ROUND_NEXT_BUTTON_PX, ROUND_NEXT_BUTTON_PX)
@@ -690,18 +708,78 @@ class _RoundNextButton(QPushButton):
         keep their real meaning.
         """
         _disc, text = self._colors()
+        symbol = self._glyph_symbol()
+        # "cancel" is a real symbol in every platform map (SF xmark, Segoe
+        # ChromeClose, the SVG cross); "close" is not, and drew a stray glyph.
+        self._arrow = get_symbol_pixmap(symbol, _ROUND_NEXT_ARROW_PX, text)
+        if self._arrow.isNull() and self._symbol == "cancel":
+            self._arrow = _explicit_cancel_cross(_ROUND_NEXT_ARROW_PX, text)
+        if self._native is not None:
+            self._native.set_symbol(symbol)
+            disc, glyph = self._native_colors()
+            self._native.set_style(accent=self._accent, disc=disc, content=glyph)
+        self.update()
+
+    def _glyph_symbol(self) -> str:
+        """The glyph to draw, mirrored in a right-to-left row."""
         symbol = self._symbol
         if (
             symbol in ("back", "next")
             and self.layoutDirection() == Qt.LayoutDirection.RightToLeft
         ):
             symbol = "next" if symbol == "back" else "back"
-        # "cancel" is a real symbol in every platform map (SF xmark, Segoe
-        # ChromeClose, the SVG cross); "close" is not, and drew a stray glyph.
-        self._arrow = get_symbol_pixmap(symbol, _ROUND_NEXT_ARROW_PX, text)
-        if self._arrow.isNull() and self._symbol == "cancel":
-            self._arrow = _explicit_cancel_cross(_ROUND_NEXT_ARROW_PX, text)
+        return symbol
+
+    def _native_colors(self) -> tuple[QColor, QColor]:
+        """The fill AppKit should bezel with, and the glyph colour.
+
+        The painted disc is translucent so the card's material shows through
+        it; a filled AppKit bezel is opaque, so it gets the same colour with
+        alpha cleared rather than a grey wash.
+        """
+        disc, text = self._colors()
+        if self._accent:
+            disc.setAlpha(255)
+        return disc, QColor(text)
+
+    def showEvent(self, event):  # noqa: N802 (Qt naming)
+        super().showEvent(event)
+        self._attach_native()
+
+    def resizeEvent(self, event):  # noqa: N802 (Qt naming)
+        super().resizeEvent(event)
+        if self._native is not None:
+            self._native.sync_frame()
+
+    def _attach_native(self) -> None:
+        """Hand the chip to AppKit once the widget has its own NSView."""
+        if self._native_attempted or not native_round_buttons_available():
+            return
+        self._native_attempted = True
+        chip = NativeRoundChip(self)
+        if not chip.attach():
+            self._native = None
+            return
+        chip.set_symbol(self._glyph_symbol())
+        disc, glyph = self._native_colors()
+        chip.set_style(accent=self._accent, disc=disc, content=glyph)
+        chip.set_enabled(self.isEnabled())
+        chip.set_tooltip(self.toolTip())
+        self._native = chip
         self.update()
+
+    def _native_chip_clicked(self) -> None:
+        """A real AppKit press, delivered as the button's Qt signal."""
+        self._keyboard_focused = False
+        self._hovered = False
+        self._pressed = False
+        if self.isEnabled():
+            self.click()
+
+    def changeEvent(self, event):  # noqa: N802 (Qt naming)
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.EnabledChange and self._native is not None:
+            self._native.set_enabled(self.isEnabled())
 
     def _disc_rect(self) -> QRect:
         """The disc itself: the widget minus the room its shadow needs."""
@@ -790,6 +868,9 @@ class _RoundNextButton(QPushButton):
             painter.drawEllipse(disc_rect.adjusted(1, 1, -1, -1))
 
     def paintEvent(self, event):  # noqa: N802 (Qt naming)
+        # AppKit owns the chip's look when it is live; Qt keeps the slot.
+        if self._native is not None and self._native.live:
+            return
         painter = QPainter(self)
         try:
             self.paint_into(painter)
@@ -1472,7 +1553,7 @@ class FlashPage(QWidget):
             dpr = float(self.devicePixelRatioF() or 1.0)
             # Keep an untinted copy to reapply the desktop text colour after a
             # palette switch; the visible pixmap is the tinted one.
-            source = render_svg_asset(img_path, 60, device_pixel_ratio=dpr)
+            source = render_svg_asset(img_path, _PAPERCLIP_HINT_PX, device_pixel_ratio=dpr)
             if not source.isNull():
                 img_label.setProperty("_hint_source", source)
                 pal = img_label.palette()

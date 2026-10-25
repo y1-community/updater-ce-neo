@@ -639,3 +639,24 @@ def test_a_userdata_sparse_write_that_drops_after_region_one_never_reports_flash
     assert results == [(False, "WRITE_FAILED")], results
     assert successes == []
     assert not any("Flash complete" in m for m in logs), logs
+
+
+def test_a_legacy_da_session_never_probes_the_device_table(tmp_path):
+    """The pre-write table read is what drops the player off the bus.
+
+    The fork's legacy DA does not answer the ``readflash`` issued before the
+    first write: the device stops responding and the host loses it right after
+    Stage 2. The 1.1.7 build writes the package layout directly, so the probe
+    must not be sent on this DA.
+    """
+    scatter = _fixture(tmp_path, "MT6582_Android_scatter.txt")
+    plan = fs.build_mtk_write_plan(scatter, "Y2")
+    assert plan
+
+    class DALegacy:
+        pass
+
+    assert fs.should_probe_live_table(plan, DALegacy()) is False
+    # Another DA type (a future xflash session) still gets the layout check.
+    assert fs.should_probe_live_table(plan, object()) is True
+    assert fs.should_probe_live_table([]) is False

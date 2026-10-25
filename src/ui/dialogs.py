@@ -898,8 +898,14 @@ class UpdateAvailableDialog(QDialog):
 
         from .flash_page import _RoundNextButton
         from ..updates import asset_hint, pick_platform_asset
+        from ..store_package import is_packaged
 
         self._asset = pick_platform_asset(self._info.assets) if self._info else None
+        # A Store build is updated by the Store. Its release only offers that
+        # route when the release itself says the version is on the Store
+        # (msstore.txt), so a direct-download build is never sent there for a
+        # version the Store does not have.
+        self._store = bool(getattr(self._info, "store_available", False)) and is_packaged()
 
         self._main_layout = QVBoxLayout(self)
         self._main_layout.setContentsMargins(24, 20, 24, 20)
@@ -924,7 +930,8 @@ class UpdateAvailableDialog(QDialog):
         self._title_label.setTextFormat(Qt.RichText)
         title_col.addWidget(self._title_label)
 
-        ver_str = tr("update_available_fmt").format(
+        ver_key = "update_store_available_fmt" if self._store else "update_available_fmt"
+        ver_str = tr(ver_key).format(
             new=self._info.version if self._info else "",
             current=current_version,
         )
@@ -999,8 +1006,9 @@ class UpdateAvailableDialog(QDialog):
         # Older callers and the update wiring tests address the primary chip as
         # the download button; it is the same widget.
         self._download_btn = self._action_btn
-        self._action_btn.setText(tr("update_btn_download"))
-        self._action_btn.setToolTip(tr("update_btn_download"))
+        action_key = "update_btn_store" if self._store else "update_btn_download"
+        self._action_btn.setText(tr(action_key))
+        self._action_btn.setToolTip(tr(action_key))
         self._action_btn.clicked.connect(self._on_action_clicked)
         self._btn_row.addWidget(self._action_btn, 0, Qt.AlignVCenter)
 
@@ -1036,6 +1044,12 @@ class UpdateAvailableDialog(QDialog):
         self.reject()
 
     def _on_action_clicked(self):
+        if self._store:
+            from ..store_package import open_store_updates
+
+            open_store_updates()
+            self.accept()
+            return
         if self._download_state == "ready":
             self._launch_installer()
             return

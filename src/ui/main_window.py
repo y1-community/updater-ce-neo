@@ -604,6 +604,8 @@ class _DropOverlay(QWidget):
 class MainWindow(QMainWindow):
     # Report from a background flash-tool sweep; ``list`` of what it stopped.
     sweep_report = Signal(list)
+    # Result of the post-disconnect USB recovery (a UsbRecoveryReport).
+    usb_recovery_report = Signal(object)
 
     log_line_added = Signal(str)
 
@@ -1820,6 +1822,7 @@ class MainWindow(QMainWindow):
     
     def _connect_signals(self):
         self.sweep_report.connect(self._on_sweep_report)
+        self.usb_recovery_report.connect(self._on_usb_recovery_report)
         self._select_page.package_selected.connect(self._on_package_selected)
         if hasattr(self._settings_page, "content_size_changed"):
             self._settings_page.content_size_changed.connect(self._on_settings_content_changed)
@@ -1831,6 +1834,7 @@ class MainWindow(QMainWindow):
         self._select_page.release_icon_ready.connect(self._on_release_icon_ready)
         self._select_page.gui_handoff_abandoned.connect(self._on_gui_handoff_abandoned)
         self._select_page.content_size_changed.connect(self._on_select_content_changed)
+        self._support_page.content_size_changed.connect(self._on_support_content_changed)
         self._select_page.app_update_clicked.connect(self._on_app_update_toast_action)
         self._flash_page.on_install_retry(self._on_progress_retry)
         self._select_page.download_started.connect(self._on_download_started)
@@ -2531,8 +2535,9 @@ class MainWindow(QMainWindow):
 
     def _install_run_active(self) -> bool:
         """True while an install flow owns the window, including prompts."""
-        if getattr(self, "_install_complete", False) or getattr(self, "_install_failed", False):
-            return False
+        # A stage that is still running outranks the flash's own completion
+        # flag: the Rockbox themes/fonts stage runs after the flash reports
+        # success, and must keep Settings and Select locked just the same.
         if getattr(self, "_download_active", False):
             return True
         if getattr(self, "_prep_active", False):
@@ -2545,6 +2550,8 @@ class MainWindow(QMainWindow):
             return True
         if getattr(self, "_power_off_prompt", False):
             return True
+        if getattr(self, "_install_complete", False) or getattr(self, "_install_failed", False):
+            return False
         return hasattr(self, "sm") and self.sm.state in _INSTALL_RUN_STATES
 
     def _build_inline_prompt(self) -> QWidget:
@@ -2933,6 +2940,27 @@ class MainWindow(QMainWindow):
             # install card grows it back, a short page gives the room up.
             self._fit_window_to_page()
 
+    def _on_support_content_changed(self) -> None:
+        """The appeal rewrapped: give the window the height the card now needs.
+
+        The donated card is sized from its content, and that content is a
+        word-wrapped paragraph: a narrower window means more lines. Without
+        this the card kept the height of the width it was built at and cut the
+        last lines off.
+        """
+        stack = getattr(self, "_stack", None)
+        page = getattr(self, "_support_page", None)
+        if stack is None or page is None or stack.currentWidget() is not page:
+            return
+        if (
+            self.isMinimized()
+            or self.isMaximized()
+            or self.isFullScreen()
+            or bool(self.windowState() & (Qt.WindowMaximized | Qt.WindowFullScreen))
+        ):
+            return
+        self._fit_window_to_page()
+
     def _on_settings_content_changed(self):
         """A Settings card changed size: keep the window wide enough for it.
 
@@ -3221,30 +3249,28 @@ class MainWindow(QMainWindow):
         return active
 
     def _on_select_nav_clicked(self):
-        """First entry: package select. If an install is running:
-        - If on another page, reopens the flash run view.
-        - If already on the flash page, clicking acts as cancelling the install.
+        """First entry: package select. While a run owns the window this entry
+        only reopens the install card.
+
+        It must never cancel the run or open Select Software: cancelling is
+        the install card's own ✕, which asks before stopping. A click on this
+        entry during an install is a request to see the run, nothing more.
         """
-        if getattr(self, "_gui_handoff_ready", False) and not self._install_run_active():
-            self._power_off_prompt = False
-            self._flash_page.leave_power_off_prompt()
-            self._nav_to_page(_PAGE_SELECT)
-            return
         if self._install_run_active():
             if self._stack.currentIndex() != _PAGE_FLASH:
                 self._nav_to_page(_PAGE_FLASH)
             else:
-                if getattr(self, "_download_active", False):
-                    self._on_cancel_download()
-                elif self.sm.state in (FlashState.S4_FLASHING,) or getattr(self, "_step_now", "") in _WRITE_STEPS:
-                    self._on_cancel_flash()
-                else:
-                    self._on_cancel_wait()
-        else:
-            if getattr(self, "_install_complete", False):
-                self._install_complete = False
-                self._compact_install_screen = False
+                self._highlight_nav(_PAGE_FLASH, True)
+            return
+        if getattr(self, "_gui_handoff_ready", False):
+            self._power_off_prompt = False
+            self._flash_page.leave_power_off_prompt()
             self._nav_to_page(_PAGE_SELECT)
+            return
+        if getattr(self, "_install_complete", False):
+            self._install_complete = False
+            self._compact_install_screen = False
+        self._nav_to_page(_PAGE_SELECT)
 
     def _page_title(self, page_idx, install_active: bool) -> str:
         if page_idx == _PAGE_SETTINGS:
@@ -3342,15 +3368,10 @@ class MainWindow(QMainWindow):
 
     def _nav_to_page(self, page_idx):
         SidebarButton.dismiss_focus_rings()
-        # When navigating back to Package Select during an install, terminate
-        # any running flash processes (mtk.py or flash_tool) so the next
-        # installation attempt is clean.
-        if page_idx == _PAGE_SELECT and self._install_run_active():
-            from .. import process_guard
-
-            logger.info("Navigating back to Package Select during install, terminating flash processes")
-            process_guard.end_install_session(reason="user navigated back")
-            process_guard.sweep_stray_tools(force=True, reason="navigate back to package select")
+        # Settings and Select Software are closed while a run owns the window:
+        # the user finishes, fails or cancels the install on its card first.
+        # The guard runs before anything else so a blocked call can never
+        # disturb the run's processes or its session on the way out.
         if self._install_run_active() and page_idx not in (
             _PAGE_FLASH, _PAGE_DIAGNOSTICS, _PAGE_NOTICE, _PAGE_RETRY,
         ):
@@ -4302,6 +4323,7 @@ class MainWindow(QMainWindow):
         from .. import process_guard
         process_guard.end_install_session(reason="usb disconnected", sweep=False)
         process_guard.sweep_async(reason="usb disconnected", on_done=self.sweep_report.emit)
+        self._recover_usb_after_disconnect()
         try:
             from ..sleep_inhibit import release_sleep_inhibition
             release_sleep_inhibition()
@@ -4320,6 +4342,53 @@ class MainWindow(QMainWindow):
         self._nav_to_page(_PAGE_FLASH)
         self._update_header_title()
         self._adjust_window_geometry()
+
+    def _recover_usb_after_disconnect(self):
+        """Release the app's USB claims and report what the host can still see.
+
+        A run that dies can leave the player claimed, and on macOS a wedged
+        run can take the host's USB controller down with it. Recovery runs off
+        the GUI thread; when nothing enumerates at all the install card swaps
+        to the power-cycle wording, because replugging the player alone cannot
+        bring a dead controller back.
+        """
+        import threading
+
+        from .. import usb_recovery
+
+        def _run():
+            try:
+                report = usb_recovery.recover_usb_connection(reap_helpers=False)
+            except Exception as e:  # pragma: no cover - recovery never breaks the failure screen
+                logger.debug("USB recovery failed: %s", e)
+                return
+            try:
+                self.usb_recovery_report.emit(report)
+            except RuntimeError:  # pragma: no cover - window closed mid-recovery
+                pass
+
+        threading.Thread(target=_run, name="usb-recovery", daemon=True).start()
+
+    def _on_usb_recovery_report(self, report) -> None:
+        """Log what the host sees after a disconnect; ask for a power cycle if dead."""
+        if report is None:
+            return
+        self._append_log(
+            f"USB recovery: {report.state} "
+            f"({report.total_devices} USB device(s), {report.mtk_devices} MediaTek)"
+        )
+        if getattr(report, "bus_down", False):
+            self._show_usb_bus_down()
+
+    def _show_usb_bus_down(self):
+        """The host has no USB devices at all: ask for a power cycle, not a replug."""
+        if self.sm.state is not FlashState.S5_USB_DISCONNECTED:
+            return
+        self._flash_page.show_usb_disconnected(
+            on_retry=self._on_power_off_continue,
+            on_cancel=self._on_cancel_flash,
+            prompt_key="err_usb_bus_down_recovery",
+        )
 
     def _on_device_lost(self):
         # A player that vanishes *after* the app has declared the flash
@@ -5293,6 +5362,11 @@ class MainWindow(QMainWindow):
 
     def _show_full_settings(self):
         """Open the complete Settings column and highlight its navigation row."""
+        if self._install_run_active():
+            # Settings stays closed while an install, device prep or themes
+            # stage owns the window; the install card is the only screen.
+            self._nav_to_page(_PAGE_FLASH)
+            return
         page = getattr(self, "_settings_page", None)
         self._linux_setup_flow_active = False
         self._sync_settings_nav_label()
@@ -5307,6 +5381,10 @@ class MainWindow(QMainWindow):
 
     def _show_linux_setup(self):
         """Show the Linux preparation card inside Settings, by itself."""
+        if self._install_run_active():
+            # A preparation card is Settings: not reachable mid-run.
+            self._nav_to_page(_PAGE_FLASH)
+            return
         self._nav_to_page(_PAGE_SETTINGS)
         page = getattr(self, "_settings_page", None)
         if page is None or not hasattr(page, "start_sp_flash_prep"):
@@ -6410,10 +6488,21 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(dlg)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.addWidget(page)
-        dlg.resize(560, page.content_height_hint() + 24)
+        dlg.resize(560, page.content_height_hint(560 - 24) + 24)
         dlg.finished.connect(lambda _r: setattr(self, "_support_modal", None))
         self._support_modal = dlg
         dlg.show()
+        # The hint above is measured before the page has its width; one turn
+        # later the wrapped copy knows its real line count, so the dialog takes
+        # the height it actually needs instead of clipping the appeal.
+        def _fit_support_modal() -> None:
+            if not dlg.isVisible():
+                return
+            wanted = page.content_height_hint() + 24
+            if wanted > dlg.height():
+                dlg.resize(dlg.width(), wanted)
+
+        QTimer.singleShot(0, _fit_support_modal)
 
     def _show_donation_dialog(self, context="general", *args, **kwargs):
         """Support lives in the window. Install completion does not open a dialog."""

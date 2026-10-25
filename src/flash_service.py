@@ -2238,6 +2238,23 @@ def _is_device_table_partition(partition_name, filename="") -> bool:
     return name.startswith("ebr") or fname.startswith("ebr")
 
 
+def should_probe_live_table(plan, daloader=None) -> bool:
+    """Whether to read the device's own MBR/EBR chain before writing.
+
+    The probe is a ``readflash`` issued before the first write. The bundled
+    Chinese-fork legacy DA does not answer that request on these players: the
+    device stops responding four seconds later and drops off the USB bus, which
+    is exactly what was killing runs right after Stage 2 on macOS. The 1.1.7
+    build writes the package's layout without reading the table back, so a
+    legacy DA session skips the probe entirely.
+    """
+    if not plan:
+        return False
+    if daloader is not None and type(daloader).__name__ == "DALegacy":
+        return False
+    return True
+
+
 def _is_empty_placeholder_image(path, sample_max: int = 65536) -> bool:
     """True for an all-zero image (a stock MBR/EBR stub, typically 512 bytes).
 
@@ -4643,13 +4660,21 @@ class FlashWorker(QThread):
                 f"(partition {int(step.get('partition_size') or 0) / 1048576:.1f}MB)"
             )
 
-        # Read the device's own MBR/EBR chain before writing. The package
-        # describes the layout it was built for; a player that was last flashed
-        # with a different package can have different start addresses or a
-        # smaller partition at the same start, and writing into that is what
-        # ends in a device NACK near the tail. The 1.1.7 build probes the
-        # device's table the same way, and keeps going when probing fails.
-        live_parts = self._read_live_partitions(mtk, extract_dir)
+        # Read the device's own MBR/EBR chain before writing, but only for a
+        # package that does not ship one. Every Innioasis/Timmkoo package
+        # carries its MBR/EBR images, and the 1.1.7 build writes those without
+        # reading the table back first. On this legacy DA a pre-write
+        # ``readflash`` is not answered: the DA stops responding and the player
+        # drops off the USB bus (seen on macOS right after Stage 2), so issuing
+        # it for a package that already describes its layout costs the run.
+        if should_probe_live_table(plan, getattr(mtk, "daloader", None)):
+            live_parts = self._read_live_partitions(mtk, extract_dir)
+        else:
+            live_parts = []
+            self._log(
+                "Legacy DA: writing the package layout without probing the "
+                "device table (the read is not answered after Stage 2)"
+            )
         live_by_start = dict(live_parts or ())
         for step in plan:
             if step["parttype"] != "user":
@@ -5079,7 +5104,7 @@ class FlashWorker(QThread):
                 bytes_progress_cb(seg_len)
             self._touch_attempt()
 
-    def _read_live_partitions(self, mtk, extract_dir, length: int = 2 * 1024 * 1024):
+    def _read_live_partitions(self, mtk, extract_dir, length: int = 64 * 1024):
         """Read the device's own MBR/EBR chain before anything is written.
 
         Read-only and best-effort: the head of the user area holds the live
