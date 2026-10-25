@@ -235,11 +235,14 @@ class SupportPage(QWidget):
         top, right, bottom, left = page_margins()
         page_w = int(width) if width and int(width) > 0 else int(self.width())
         card_w = max(1, page_w - left - right)
-        card_h = self._card.sizeHint().height() if hasattr(self, "_card") else 240
-        if hasattr(self, "_card") and card_w > 1:
-            fitted = int(self._card.heightForWidth(card_w))
-            if fitted > 0:
-                card_h = max(card_h, fitted)
+        if not hasattr(self, "_card"):
+            return 240 + top + bottom + 24
+        # The height-for-width answer wraps the copy and the button rows for
+        # this width; the size hint alone is the height of the width the card
+        # was last laid out at, which is what left the copy cut off after a
+        # window resize.
+        fitted = int(self._card.heightForWidth(card_w))
+        card_h = fitted if fitted > 0 else int(self._card.sizeHint().height())
         return card_h + top + bottom + 24
 
     def _queue_content_check(self) -> None:
