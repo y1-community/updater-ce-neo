@@ -457,3 +457,52 @@ def test_device_prep_confirmation_before_watch_and_flash():
     assert "please connect your y2" in w._flash_page._wait_prompt_label.text().lower()
 
 
+def test_partition_table_fallback_is_not_a_fatal_tool_error():
+    """The stock Y1/Y2 runs log "Failed to read GPT partition table; falling
+    back to per-partition reads" and then write every partition. It must not
+    be recorded as the failure that ends the install."""
+    from src.flash_service import FlashWorker
+
+    _app()
+    w = FlashWorker("dummy.zip", method="mtk", model="Y2")
+    w._past_usb_search = True
+
+    w._log("⚠️ Failed to read GPT partition table; falling back to per-partition reads")
+    assert w._tool_error == ""
+
+    # The current probe logs the fallback with the tool's own error text.
+    w._log("Could not read the device's partition table: Failed to read GPT header")
+    assert w._tool_error == ""
+
+    # A real DA failure still records, so the exemption stays narrow.
+    w._log("Error on sending emmc read flash command, response: 0x0")
+    assert w._tool_error == "Error on sending emmc read flash command, response: 0x0"
+
+
+def test_errno_during_the_stage2_speed_reconnect_does_not_raise_the_reset_dialog():
+    """mtkclient closes and reopens the port to move the DA to high speed and
+    prints "[Errno 2] Entity not found" in between; the stock Y2 run did this
+    and then flashed every partition. The manual-reset dialog belongs to the
+    connect phase, not to a running flash."""
+    from src.ui.main_window import MainWindow
+
+    app = _app()
+    w = MainWindow()
+    try:
+        w._package_path = "/fake/rom.zip"
+        shown = []
+        w._show_retry_guidance = lambda detail="": shown.append(detail)
+
+        w._past_usb_search = True
+        w._handle_backend_line("DeviceClass - [Errno 2] Entity not found")
+        assert shown == []
+
+        # Before the player is seen the same errno still offers the manual reset.
+        w._past_usb_search = False
+        w._handle_backend_line("DeviceClass - [Errno 2] Entity not found")
+        assert len(shown) == 1, shown
+    finally:
+        w.close()
+        app.processEvents()
+
+

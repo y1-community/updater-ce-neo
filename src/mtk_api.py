@@ -251,6 +251,20 @@ def _apply_runtime_patches():
             return bytes(res[:resplen])
 
         usblib.UsbClass.usbread = patched_usbread
+
+        orig_close = usblib.UsbClass.close
+
+        def patched_close(self, reset=False):
+            # device.reset() is a bus-wide USB reset on macOS: it drops every
+            # other HID device on the host (keyboard, mouse). Close the port
+            # without it there, and keep the settle delay the reset path used.
+            if reset and sys.platform.startswith("darwin"):
+                orig_close(self, reset=False)
+                time.sleep(2)
+                return
+            orig_close(self, reset=reset)
+
+        usblib.UsbClass.close = patched_close
     except Exception as e:
         logger.debug("Could not patch usblib: %s", e)
 

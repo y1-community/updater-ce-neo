@@ -223,13 +223,28 @@ def is_sp_flash_complete_line(line) -> bool:
     Two lines mark a finished command: "Flash complete! Disconnect USB..." and
     "All command exec done!", which the tool logs after the flash command
     returns without an exception. Matched on those phrases only: the trailing
-    "Disconnect USB" is an instruction to the user, not a disconnect.
+    "Disconnect USB" is an instruction to the user, not a disconnect, and a
+    bare "complete" appears in progress and diagnostic lines ("DA upload
+    complete", "Format complete"), so it must not mark the install done.
     """
     text = _TIMESTAMP_PREFIX_RE.sub("", tool_line_body(line)).lstrip()
     low = _strip_qt_trace_prefix(text).lower()
     if "incomplete" in low:
         return False
-    return "complete" in low or "all command exec done" in low
+    return "flash complete" in low or "all command exec done" in low
+
+
+def sp_log_result_is_success(log_success, error_detail, console_complete) -> bool:
+    """Decide an SP Flash Tool run from its internal log, then its console.
+
+    The internal log is the source of truth (the shipped build reads it after
+    the tool exits). The console's own completion line only fills in when the
+    log has no result at all: a log whose last marker is a failure code must
+    never be turned into a completed install by that line.
+    """
+    if log_success:
+        return True
+    return bool(console_complete) and not str(error_detail or "").strip()
 
 
 def is_sp_usb_search_line(line) -> bool:
@@ -279,15 +294,30 @@ _TOOL_FATAL_ERROR_RE = re.compile(
     re.IGNORECASE,
 )
 
+# A failed read of the partition table is a fallback, not a failure: the
+# legacy MBR/EBR package is written from the scatter addresses and the run
+# continues. The shipped build logs this exact line before a successful Y1/Y2
+# install, and ``failed to read`` otherwise matches the fatal-tool pattern.
+_RECOVERABLE_TOOL_LINE_RE = re.compile(
+    r"(?:could not|failed to) read (?:the device's |the )?(?:gpt )?partition table|"
+    r"falling back to per-partition reads|"
+    r"no mbr/ebr table found",
+    re.IGNORECASE,
+)
+
 
 def is_fatal_tool_line(line) -> bool:
     """True when the tool reported a failure that must not read as success.
 
     The app's own notices are exempt: "Notice: userdata format non-fatal: ..."
     is a decision this side of the pipe made, not the tool reporting a failure.
+    A partition-table read that fell back to the package's addresses is exempt
+    for the same reason: the line says the run is continuing, not failing.
     """
     text = tool_line_body(line)
     if not text or text.lower().startswith("notice:"):
+        return False
+    if _RECOVERABLE_TOOL_LINE_RE.search(text):
         return False
     return bool(_TOOL_FATAL_ERROR_RE.search(text))
 
@@ -1070,6 +1100,11 @@ SIGNED_IMAGE_OVERHEAD_SIZE = 300
 _LEGACY_MBR_BIAS_PLATFORMS = frozenset({"MT8382", "MT6572", "MT6574", "MT6582", "MT6580"})
 LEGACY_MBR_USER_ADDR_BIAS = 8388608  # 8MB (0x800000)
 LEGACY_SEGMENTED_WRITE_BYTES = 52428800  # 50MB per USB transfer chunk
+# The bundled legacy DA accepts a WRITE_IMAGE data phase and then stops
+# waiting for the final ACK: it returns True and records this note. The Y1 and
+# Y2 runs both take 109-111s to reach that point and keep the install, so this
+# note is not a failure; any other ``last_error`` next to a True result is.
+_BENIGN_WRITE_IMAGE_NOTE = "WRITE_IMAGE final ack timeout after data accepted"
 # Per-transfer chunk size handed to the bundled (Chinese-fork) legacy DA. Its
 # ``sdmmc_write_data`` reads ``config.write_chunk_size`` for every USB transfer
 # and defaults to 1 MiB when unset. The shipped 1.1.7 build's legacy strategy
@@ -3363,10 +3398,13 @@ class FlashWorker(QThread):
             self.finished.emit(False, "DEVICE_PACKAGE_MISMATCH")
             return
 
-        # The tool's own completion line ("Flash complete!" or "All command
-        # exec done!") on the console is authoritative: once it has been
-        # emitted the run succeeded, even if an error line appeared later.
-        if self._sp_flash_complete:
+        # The console's completion line ("Flash complete!" or "All command
+        # exec done!") can stand in only when the internal log has no result:
+        # a log that ends in a failure code is the tool reporting a failed
+        # command, and must not be overridden by an earlier console line.
+        if sp_log_result_is_success(
+            log_success, error_detail, self._sp_flash_complete
+        ):
             log_success = True
 
         if log_success:
@@ -3795,21 +3833,32 @@ class FlashWorker(QThread):
             content = log_file.read_text(encoding="utf-8", errors="ignore")
             # The reference build checks for "Download Ok" in the log as the
             # success signal. Both capitalisations appear depending on the tool
-            # version; either one means the flash completed.
-            if (
-                "Download Ok" in content
-                or "download ok" in content
-                or "Download Succeeded" in content
-                or "all command exec done" in content.lower()
+            # version. A success token and a failure code can both be present
+            # in one log (the console reports "Download Ok" per completed
+            # image), so the *last* marker of either kind decides: an earlier
+            # success can never turn a later failure into a completed install,
+            # and a retry that ends in "Download Ok" still counts as success.
+            success_at = -1
+            for match in re.finditer(
+                r"download ok|download succeeded|all command exec done",
+                content,
+                re.IGNORECASE,
             ):
+                success_at = match.end()
+            error_at = -1
+            last_error = None
+            # Error tokens exclude S_DONE, which is the success code, not an
+            # error. The last error is the one the user needs to see.
+            for match in re.finditer(r"(S_\w+)\s*\((\d+)\)", content):
+                name, code = match.group(1), match.group(2)
+                if name == "S_DONE":
+                    continue
+                error_at = match.end()
+                last_error = (name, code)
+            if success_at != -1 and success_at > error_at:
                 return (True, "")
-            # Collect error tokens from the log, excluding S_DONE (which is the
-            # success token, not an error). The last distinct error is the one
-            # the user needs to see.
-            errors = re.findall(r"(S_\w+)\s*\((\d+)\)", content)
-            errors = [(n, c) for n, c in errors if n != "S_DONE"]
-            if errors:
-                name, code = errors[-1]
+            if last_error is not None:
+                name, code = last_error
                 return (False, f"{name} ({code})")
             # Fall back to the last exception line if there is one.
             for line in reversed(content.splitlines()):
@@ -5140,8 +5189,22 @@ class FlashWorker(QThread):
                     parttype=1,  # MTK_DA_EMMC_PART_BOOT1
                 )
                 error = getattr(getattr(mtk, "config", None), "last_error", None)
-                if not ok or error:
+                if not ok:
                     raise RuntimeError(error or "WRITE_IMAGE returned failure")
+                if error:
+                    # The legacy DA accepts the whole data phase and then stops
+                    # waiting for the final ACK; it deliberately returns True
+                    # there and records the timeout. The shipped build logs
+                    # "final ACK missing, treating as success for old DA" and
+                    # keeps the install. Only that one note is benign; a DA
+                    # that returns True with any other recorded error is a
+                    # failure, not a completed preloader write.
+                    if not str(error).startswith(_BENIGN_WRITE_IMAGE_NOTE):
+                        raise RuntimeError(error)
+                    self._log(
+                        f"  Legacy WRITE_IMAGE note: {error}; data phase accepted, "
+                        "treating as success for the old DA"
+                    )
             else:
                 # A DA without WRITE_IMAGE falls back to an address write into
                 # boot1; the wrapped image is what makes that safe.
@@ -5183,11 +5246,20 @@ class FlashWorker(QThread):
         if daloader is None or not hasattr(daloader, "writeflash"):
             raise RuntimeError("DA has no writeflash for sparse region writes")
         total = len(regions)
+        raw_size = os.path.getsize(raw_path)
         for index, (region_off, region_len) in enumerate(regions, 1):
             self._log(
                 f"  Sparse region {index}/{total}: offset=0x{offset + region_off:X} "
                 f"size={region_len / 1048576:.2f}MB"
             )
+            # The DA writers clamp a region to the file's bytes and still report
+            # success, so a region the raw image cannot supply must fail here.
+            if region_off + region_len > raw_size:
+                raise RuntimeError(
+                    f"Sparse region {index}/{total} of {part_name} failed: "
+                    f"the image holds {raw_size} bytes, the region ends at "
+                    f"{region_off + region_len}"
+                )
             ok = daloader.writeflash(
                 addr=offset + region_off,
                 length=region_len,

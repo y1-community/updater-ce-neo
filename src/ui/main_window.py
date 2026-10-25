@@ -2720,6 +2720,11 @@ class MainWindow(QMainWindow):
             else self._content_floor_height()
         )
         max_h = max(min_floor, int(content_height) + chrome_h + CONTENT_FIT_SLACK)
+        if is_hugging:
+            # The rail's community row must stay on screen during an install too.
+            nav = getattr(self, "_nav_panel", None)
+            if nav is not None:
+                max_h = max(max_h, nav.sizeHint().height() + chrome_h)
         screen = self.screen()
         if screen is not None:
             available = screen.availableGeometry()
@@ -2904,12 +2909,18 @@ class MainWindow(QMainWindow):
                     ),
                     page_h + prompt_h + actual_chrome + 8,
                 )
-                if not is_install and nav is not None:
+                # The rail counts during an install too: its community row
+                # (Discord, Reddit, GitHub) sits at the bottom and was clipped
+                # when only the progress card was measured.
+                if nav is not None:
                     target_h = max(target_h, nav.sizeHint().height() + actual_chrome)
             else:
                 # The catalogue is still showing. The short install size is
-                # applied once the progress card is the page on screen.
+                # applied once the progress card is the page on screen. The
+                # rail still needs its full height, community row included.
                 target_h = 228
+                if nav is not None:
+                    target_h = max(target_h, nav.sizeHint().height() + int(HEADER_CONTENT_HEIGHT))
             self._hugging_install = True
             self._apply_window_size_limits(target_h)
             self._animate_window_size(target_w, target_h, minimum=(target_w, target_h))
@@ -4199,6 +4210,15 @@ class MainWindow(QMainWindow):
         if kind == LINE_CONNECT_HINT:
             self._show_connect_guide_stage_one()
         elif kind == LINE_RETRY:
+            if getattr(self, "_past_usb_search", False):
+                # mtkclient reopens the port to move the DA to high speed and
+                # logs "[Errno 2] Entity not found" between the close and the
+                # reopen. The stock Y2 run printed exactly that and then wrote
+                # every partition, so a transient errno after the player was
+                # seen must not raise the manual-reset dialog over a running
+                # flash (Retry there could also start a second run). The
+                # worker's own failure path owns recovery from this point.
+                return
             self._show_retry_guidance(
                 tr("retry_guidance_detail_errno").format(code=text.strip())
             )

@@ -47,3 +47,46 @@ def test_error_without_success_line_still_fails(tmp_path):
     ok, detail = worker._read_sp_log_result(launch, tmp_path)
     assert ok is False
     assert "S_DA_INIT_SYNC_ERROR" in detail
+
+
+def test_a_failure_after_a_per_image_download_ok_is_not_success(tmp_path):
+    """A later failure must win over an earlier image's "Download Ok"."""
+    launch = _write_run(
+        tmp_path,
+        "Downloading images...\n"
+        "1% of image data has been sent (7.1M of 711.4M)\n"
+        "Download Ok\n"
+        "Download failed: S_FT_DOWNLOAD_FAIL (4008)\n",
+    )
+    worker = fs.FlashWorker("pkg.zip", method="sp")
+    ok, detail = worker._read_sp_log_result(launch, tmp_path)
+    assert ok is False, detail
+    assert "S_FT_DOWNLOAD_FAIL" in detail
+
+
+def test_the_console_completion_line_cannot_override_a_logged_failure():
+    """The log is the source of truth; the console line only fills a missing log.
+
+    An SP run whose internal log ends in a failure code is the tool reporting a
+    failed command. An earlier console "Flash complete!" must not turn that
+    into a completed install.
+    """
+    assert fs.sp_log_result_is_success(True, "", False) is True
+    assert fs.sp_log_result_is_success(False, "", True) is True
+    assert fs.sp_log_result_is_success(False, "S_FT_DOWNLOAD_FAIL (4008)", True) is False
+    assert fs.sp_log_result_is_success(False, "", False) is False
+
+
+def test_a_final_success_after_an_earlier_error_is_success(tmp_path):
+    """A retried command that ends in "Download Ok" is still a success."""
+    launch = _write_run(
+        tmp_path,
+        "S_FT_FORMAT_FAIL (4010)\n"
+        "Retrying...\n"
+        "Download Ok\n"
+        "All command exec done!\n",
+    )
+    worker = fs.FlashWorker("pkg.zip", method="sp")
+    ok, detail = worker._read_sp_log_result(launch, tmp_path)
+    assert ok is True, detail
+    assert detail == ""

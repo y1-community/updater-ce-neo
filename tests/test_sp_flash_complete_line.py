@@ -31,5 +31,16 @@ def test_ordinary_progress_lines_are_not_completion():
     assert not is_sp_flash_complete_line("Search USB Port ...")
 
 
+def test_a_line_that_merely_mentions_complete_is_not_completion():
+    """Only the tool's two completion phrases count.
+
+    ``complete`` on its own shows up in progress and diagnostic lines; acting
+    on one of those used to override a failed internal-log result.
+    """
+    assert not is_sp_flash_complete_line("DA upload complete")
+    assert not is_sp_flash_complete_line("Format complete, writing images")
+    assert not is_sp_flash_complete_line("1% of image data has been sent, image complete")
+
+
 def test_real_disconnect_still_detected():
     assert is_disconnection_error("device disconnected")

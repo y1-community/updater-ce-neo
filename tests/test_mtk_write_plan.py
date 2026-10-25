@@ -222,9 +222,90 @@ def test_preloader_already_carrying_a_boot_header_is_written_asis(tmp_path):
     assert da.calls[0][1]["length"] == len(payload)
 
 
+class _FinalAckTimeoutDaLoader(_FakeDaLoader):
+    """The old DA accepts the data, times out on the final ACK, returns True.
+
+    This is the path both shipped Y2 runs logged as "final ACK missing,
+    treating as success for old DA".
+    """
+
+    def __init__(self, mtk_ref):
+        super().__init__(image_result=True)
+        self._mtk = mtk_ref
+
+    def sdmmc_write_image(self, **kwargs):
+        result = super().sdmmc_write_image(**kwargs)
+        self._mtk.config.last_error = "WRITE_IMAGE final ack timeout after data accepted"
+        return result
+
+
+def test_a_final_ack_timeout_after_accepted_data_is_a_success(tmp_path):
+    preloader = tmp_path / "preloader.bin"
+    preloader.write_bytes(b"MMM\x01" + b"\xAA" * 4096)
+    mtk = _FakeMtk(_FakeDaLoader())
+    da = _FinalAckTimeoutDaLoader(mtk)
+    mtk.daloader = da
+    worker = fs.FlashWorker("pkg.zip", method="mtk")
+    logs = []
+    worker._log = lambda m: logs.append(str(m))
+
+    worker._write_mtk_preloader(None, mtk, str(preloader))
+
+    assert len(da.calls) == 1
+    assert any("treating as success for the old DA" in m for m in logs), logs
+
+
+class _TruthyWithRealErrorDaLoader(_FakeDaLoader):
+    """A DA that claims success while recording an actual write failure."""
+
+    def __init__(self, mtk_ref):
+        super().__init__(image_result=True)
+        self._mtk = mtk_ref
+
+    def sdmmc_write_image(self, **kwargs):
+        super().sdmmc_write_image(**kwargs)
+        self._mtk.config.last_error = "WRITE_IMAGE NACK status=EMMC_WRITE_ERROR"
+        return True
+
+
+def test_only_the_final_ack_note_is_benign(tmp_path):
+    """A True result with a different recorded error is not a finished write."""
+    preloader = tmp_path / "preloader.bin"
+    preloader.write_bytes(b"MMM\x01" + b"\xAA" * 4096)
+    mtk = _FakeMtk(_FakeDaLoader())
+    da = _TruthyWithRealErrorDaLoader(mtk)
+    mtk.daloader = da
+    worker = fs.FlashWorker("pkg.zip", method="mtk")
+    worker._log = lambda *a, **k: None
+
+    try:
+        worker._write_mtk_preloader(None, mtk, str(preloader))
+    except RuntimeError as err:
+        assert "NACK" in str(err)
+    else:
+        raise AssertionError("only the final-ACK timeout may be treated as success")
+
+
+def test_a_preloader_write_the_da_rejected_still_fails(tmp_path):
+    preloader = tmp_path / "preloader.bin"
+    preloader.write_bytes(b"MMM\x01" + b"\xAA" * 4096)
+    da = _FakeDaLoader(image_result=False)
+    mtk = _FakeMtk(da)
+    mtk.config.last_error = "WRITE_IMAGE data ack failed: expected=0x69 got=empty"
+    worker = fs.FlashWorker("pkg.zip", method="mtk")
+    worker._log = lambda *a, **k: None
+
+    try:
+        worker._write_mtk_preloader(None, mtk, str(preloader))
+    except RuntimeError as err:
+        assert "data ack failed" in str(err)
+    else:
+        raise AssertionError("a rejected WRITE_IMAGE must not look like a finished preloader")
+
+
 def test_sparse_regions_are_written_at_their_own_offsets(tmp_path):
     raw = tmp_path / "userdata.raw.img"
-    raw.write_bytes(b"\x11" * 4096)
+    raw.write_bytes(b"\x11" * 6144)
     daloader = _FakeDaLoader()
     mtk = _FakeMtk(daloader)
     worker = fs.FlashWorker("pkg.zip", method="mtk")
@@ -248,6 +329,113 @@ def test_sparse_regions_are_written_at_their_own_offsets(tmp_path):
     ]
     assert [call[1]["offset"] for call in daloader.calls] == [0, 4096]
     assert seen == [2048, 2048]
+
+
+def test_macos_port_close_never_issues_a_bus_wide_device_reset(monkeypatch):
+    """device.reset() on macOS resets every USB device; closing must not call it."""
+    from src import mtk_api
+    from mtkclient.Library.Connection import usblib
+
+    mtk_api._ensure_imports()
+    monkeypatch.setattr(mtk_api.sys, "platform", "darwin")
+    monkeypatch.setattr(mtk_api.time, "sleep", lambda s: None)
+
+    class _Ctx:
+        def dispose(self, device):
+            pass
+
+    class _Device:
+        resets = 0
+        _ctx = _Ctx()
+
+        def reset(self):
+            _Device.resets += 1
+
+        def is_kernel_driver_active(self, interface):
+            return True
+
+    device = _Device()
+    port = usblib.UsbClass.__new__(usblib.UsbClass)
+    port.connected = True
+    port.device = device
+    port.interface = 0
+    port.info = lambda *a, **k: None
+
+    port.close(reset=True)
+
+    assert _Device.resets == 0, "macOS must not issue a host-wide device reset"
+    assert port.connected is False
+
+
+class _DropAfterFirstRegion(_FakeDaLoader):
+    """The USB link dies after the first sparse region is acknowledged."""
+
+    def writeflash(self, **kwargs):
+        self.calls.append(("writeflash", kwargs))
+        return len(self.calls) == 1
+
+
+def test_a_multi_region_write_that_drops_after_region_one_raises(tmp_path):
+    raw = tmp_path / "userdata.raw.img"
+    raw.write_bytes(b"\x22" * 16384)
+    daloader = _DropAfterFirstRegion()
+    mtk = _FakeMtk(daloader)
+    worker = fs.FlashWorker("pkg.zip", method="mtk")
+    worker._log = lambda *a, **k: None
+    seen = []
+
+    try:
+        worker._write_mtk_sparse_regions(
+            mtk,
+            "USRDATA",
+            str(raw),
+            [(0, 2048), (4096, 2048), (8192, 2048)],
+            0x4C140000,
+            "user",
+            bytes_progress_cb=seen.append,
+        )
+    except RuntimeError as err:
+        assert "Sparse region 2/3" in str(err)
+    else:
+        raise AssertionError("a dropped region must not look like a finished write")
+
+    assert len(daloader.calls) == 2, "no region after the failed one may be sent"
+    assert seen == [2048], "only the acknowledged region counts as transferred"
+
+
+class _TruthyDaLoader(_FakeDaLoader):
+    """The vendor writers clamp a region to the file's bytes and still say True."""
+
+    def writeflash(self, **kwargs):
+        self.calls.append(("writeflash", kwargs))
+        return True
+
+
+def test_a_region_past_the_raw_image_end_is_not_reported_as_written(tmp_path):
+    raw = tmp_path / "userdata.raw.img"
+    raw.write_bytes(b"\x22" * 4096)
+    daloader = _TruthyDaLoader()
+    mtk = _FakeMtk(daloader)
+    worker = fs.FlashWorker("pkg.zip", method="mtk")
+    worker._log = lambda *a, **k: None
+    seen = []
+
+    try:
+        worker._write_mtk_sparse_regions(
+            mtk,
+            "USRDATA",
+            str(raw),
+            [(0, 2048), (4096, 2048)],
+            0x4C140000,
+            "user",
+            bytes_progress_cb=seen.append,
+        )
+    except RuntimeError as err:
+        assert "Sparse region 2/2" in str(err)
+    else:
+        raise AssertionError("a region the raw image cannot supply must not count as written")
+
+    assert seen == [2048], "only the region the image actually holds counts as transferred"
 
 
 def _table_sector(entries, signature=True):
@@ -383,3 +571,71 @@ def test_no_address_means_a_named_write_resolved_by_the_device_table(tmp_path):
     assert handler.calls == [
         ("w", {"parttype": "user", "filenames": [str(image)], "partitions": ["uboot"]})
     ]
+
+
+def _sparse_userdata(path, regions=10):
+    """A real Android sparse image: ``regions`` RAW extents, each followed by a DONT_CARE gap."""
+    import struct
+
+    block = 4096
+    chunks = []
+    for i in range(regions):
+        chunks.append(struct.pack("<2H2I", 0xCAC1, 0, 1, 12 + block) + b"\x22" * block)
+        if i != regions - 1:
+            chunks.append(struct.pack("<2H2I", 0xCAC3, 0, 1, 12))
+    header = struct.pack("<I4H4I", 0xED26FF3A, 1, 0, 28, 12, block, regions * 2 - 1, len(chunks), 0)
+    path.write_bytes(header + b"".join(chunks))
+
+
+class _SparseDaLoader:
+    """Accepts the first sparse region, then drops the link: writeflash reports failure."""
+
+    flashmode = None
+
+    def __init__(self):
+        self.calls = []
+
+    def writeflash(self, **kwargs):
+        self.calls.append(kwargs)
+        return len(self.calls) == 1
+
+
+class _SessionMtk:
+    def __init__(self, daloader):
+        self.daloader = daloader
+        self.port = None
+        self.config = _FakeConfig("MT6572")
+        self.config.is_brom = True
+
+
+def test_a_userdata_sparse_write_that_drops_after_region_one_never_reports_flash_complete(
+    tmp_path, monkeypatch
+):
+    import src.mtk_api as mtk_api
+
+    scatter = _fixture(tmp_path, "MT6572_Android_scatter.txt")
+    _sparse_userdata(scatter.parent / "userdata.img")
+    daloader = _SparseDaLoader()
+    mtk = _SessionMtk(daloader)
+    monkeypatch.setattr(mtk_api, "init", lambda *a, **k: mtk)
+    monkeypatch.setattr(mtk_api, "handshake", lambda handle, directory=".": (handle, object()))
+    monkeypatch.setattr(mtk_api, "attach", lambda handle, directory=".": (handle, object()))
+    monkeypatch.setattr(mtk_api, "close_port", lambda handle: None)
+    monkeypatch.setattr(fs, "_wait_for_mtk_mode", lambda pids, timeout: True)
+
+    worker = fs.FlashWorker("pkg.zip", method="mtk")
+    logs, results, successes = [], [], []
+    worker.log_message.connect(lambda m: logs.extend(m.splitlines()))
+    worker.finished.connect(lambda ok, err: results.append((ok, err)))
+    monkeypatch.setattr(worker, "_write_mtk_preloader", lambda *a, **k: None)
+    monkeypatch.setattr(worker, "_write_mtk_partition", lambda *a, **k: True)
+    monkeypatch.setattr(
+        worker, "_end_mtk_run_successfully", lambda *a, **k: successes.append(True)
+    )
+
+    worker._flash_via_mtkclient(str(scatter.parent), str(scatter))
+
+    assert len(daloader.calls) == 2, "no region after the dropped one may be sent"
+    assert results == [(False, "WRITE_FAILED")], results
+    assert successes == []
+    assert not any("Flash complete" in m for m in logs), logs
