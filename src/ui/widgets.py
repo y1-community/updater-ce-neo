@@ -1192,7 +1192,9 @@ class InstallProgress(QProgressBar):
     def set_failed(self, failed: bool = True, text: str = "") -> None:
         """Switch the progress bar to the failed state: percent replaced by 'Install Failed'."""
         self._failed = bool(failed)
-        self._failed_text = text or tr("install_failed")
+        # Stored empty unless a caller passes wording of its own, so the
+        # default is looked up on every paint and follows a language change.
+        self._failed_text = text or ""
         self._sync_animation()
         self.update()
 

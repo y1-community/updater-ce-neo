@@ -59,13 +59,13 @@ class SupportPage(QWidget):
         info_col = QVBoxLayout()
         info_col.setSpacing(2)
 
-        self._author_lbl = QLabel("Ryan Specter & Community Contributors")
+        self._author_lbl = QLabel(tr("donate_support_author"))
         self._author_lbl.setStyleSheet(
             "font-size: 14px; font-weight: bold; color: palette(window-text); background: transparent; border: none;"
         )
         info_col.addWidget(self._author_lbl)
 
-        self._role_lbl = QLabel("Lead Developer · Updater CE & Community Firmware Project")
+        self._role_lbl = QLabel(tr("donate_support_role"))
         self._role_lbl.setStyleSheet(
             "font-size: 11px; color: palette(placeholder-text); background: transparent; border: none;"
         )
@@ -211,6 +211,8 @@ class SupportPage(QWidget):
         QTimer.singleShot(1500, lambda: (button.setText(orig_text), button.setEnabled(True)))
 
     def retranslate(self) -> None:
+        self._author_lbl.setText(tr("donate_support_author"))
+        self._role_lbl.setText(tr("donate_support_role"))
         self._appeal_body.setText(
             f"<b>{tr('donate_support_appeal_lead')}</b> "
             f"{tr('donate_support_appeal_followup')}"

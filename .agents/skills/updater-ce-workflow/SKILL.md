@@ -29,7 +29,8 @@ QT_QPA_PLATFORM=offscreen python3 tests/smoke_test.py
 
 When testing SP Flash Tool console mode:
 - **Command shape**:
-  `flash_tool -c format-download -s <scatter_path> -d MTK_AllInOne_DA.bin -t without -r`
+  `flash_tool -c download -s <scatter_path> -d MTK_AllInOne_DA.bin -t without -r`
+  (`download` = Download Only, matching 1.1.7; never `format-download`)
 - **Linux staging directory**:
   `~/.cache/innioasis-updater/linux_flash_tool/`
 - **history.ini verification**: Ensure entries contain valid absolute paths:
@@ -108,10 +109,24 @@ When flashing MediaTek devices (Innioasis Y1/Y2, Timmkoo, MT6572, MT6582, MT6580
 - Legacy platforms (`MT8382`, `MT6572`, `MT6574`, `MT6582`, `MT6580`) use MBR/EBR partition tables.
 - Scatter files for MT6582 offset `EMMC_USER` linear addresses by `0x1400000` (20MB) relative to physical start address `0x0`.
 - Always resolve physical offsets: for MBR devices, write by exact physical address, never named GPT writes.
-- Never skip MBR or EBR1; they contain essential partition tables for device boot.
+- Never *write* MBR/EBR/PMT images from the package (the stock zips ship all-zero stubs); the
+  device's live table is the layout it boots from. Reading it back is fine and required.
+- `build_mtk_write_plan` is 1.1.7 parity: every `is_download` image in scatter order, the
+  preloader moved last, each step carrying the scatter's `partition_size` as a bound.
+- Read the device's live MBR/EBR chain (`_read_live_partitions`) before writing and bound every
+  write by the device's own partition size: a package built for a 2 GB userdata must not be
+  written into a player whose userdata is smaller (that NACKs at the tail).
+- The preloader is written last through `sdmmc_write_image` (parttype `boot1`) from
+  `_wrap_preloader_for_raw_boot`, never as a bare `da_wo`: eMMC boot1 holds an EMMC_BOOT/BRLYT
+  header, and writing the raw `MMM\x01` image over it leaves a player the BootROM can't start.
+- No per-partition retries: a failed write stops the run and the user retries the whole flash
+  (BROM mode still answers whatever is in the flash).
 
 ### 2. In-Process Android Sparse & Signed Image Handling
-- **Android Sparse**: Check first 4 bytes for magic `0xed26ff3a` (`_ANDROID_SPARSE_MAGIC`). Always unsparse in-process before writing or write sparse chunks by region. Never write raw sparse files directly to flash.
+- **Android Sparse**: Check first 4 bytes for magic `0xed26ff3a` (`_ANDROID_SPARSE_MAGIC`). Desparse
+  in-process and write only the data extents (`_write_mtk_sparse_regions`), clipped to the device's
+  partition — never write the sparse container itself, and never push a whole 2 GB raw image for a
+  36 MB sparse userdata. Never write raw sparse files directly to flash.
 - **Signed Image Headers**: MediaTek signed images have a 64-byte header (`_MTK_SIGN_HEAD_MAGIC` = `b"SSSS"`) and 236-byte footer (`_MTK_SIGN_TAIL_MAGIC` = `b"EEEE"`). Strip this wrapper when writing to raw partition offsets.
 
 ### 3. USB Segmentation on macOS/Linux
@@ -201,7 +216,7 @@ Expected output contains translated Markdown headers and bullet lists without HT
 ### 1. Verification of Windows Console Mode & 8.3 Paths
 - Test scatter and DA path conversion using `ctypes.windll.kernel32.GetShortPathNameW`.
 - Verify SP Flash Tool console invocation shape matches vendor reference:
-  `flash_tool.exe -c format-download -s <scatter_8.3> -d <da_8.3> -t without -r`
+  `flash_tool.exe -c download -s <scatter_8.3> -d <da_8.3> -t without -r`
 - Verify background log streaming monitors `C:\ProgramData\SP_FT_Logs\*\QT_FLASH_TOOL.log` without polling lag.
 
 ### 2. Archive Extraction & Progress Bar Validation

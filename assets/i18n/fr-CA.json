@@ -440,6 +440,8 @@
  "donate_dont_ask_link": "Ne me demande plus",
  "donate_copied": "Adresse {label} copiée",
  "donate_appeal_costs_for_year": "Si tous ceux qui l'utilisent aujourd'hui faisaient un don, cela permettrait de poursuivre ce projet pendant un an.",
+ "donate_support_author": "Ryan Specter et les contributeurs communautaires",
+ "donate_support_role": "Développeur principal · Projet de mise à jour CE et micrologiciel communautaire",
  "donate_support_appeal_lead": "Les dons m'aident directement à subvenir aux besoins de ma famille et à financer les appareils de test",
  "donate_support_appeal_followup": "qui rendent ce service gratuit accessible à tous. Si cet outil vous a fait gagner du temps ou a sauvé votre joueur aujourd'hui, pensez à faire un petit don : ça compte vraiment pour nous.",
  "community_discord": "Discord",

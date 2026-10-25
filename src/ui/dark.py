@@ -1986,14 +1986,17 @@ def configure_native_combobox(combo, max_visible_items: int = 12) -> None:
     if target_font:
         combo.setFont(target_font)
 
-    configure_combo_palette(combo)
+    # Palette overrides are Linux-only; macOS and Windows keep the native combo.
+    if IS_LINUX:
+        configure_combo_palette(combo)
 
     combo.setMaxVisibleItems(max_visible_items)
     view = combo.view()
     if view is not None:
         if target_font:
             view.setFont(target_font)
-        configure_combo_view_palette(view)
+        if IS_LINUX:
+            configure_combo_view_palette(view)
         view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         view.setMaximumHeight(360)
@@ -2044,11 +2047,15 @@ def sync_cached_palettes(app: QApplication) -> None:
                 # stay platform-drawn and the card's glass overlay does not turn
                 # the area into a solid frame.
                 pass
-    try:
-        from .glass import arm_combo_popups
-        arm_combo_popups(app)
-    except Exception:
-        logger.debug("combo popup material was not armed", exc_info=True)
+    # Custom combo palettes and popup material are Linux-only. On macOS and
+    # Windows the native style paints the combo and its list, so overriding
+    # them here made the dropdowns look non-native.
+    if IS_LINUX:
+        try:
+            from .glass import arm_combo_popups
+            arm_combo_popups(app)
+        except Exception:
+            logger.debug("combo popup material was not armed", exc_info=True)
 
 
 def refresh_theme(app: QApplication | None = None) -> None:

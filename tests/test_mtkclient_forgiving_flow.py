@@ -344,8 +344,7 @@ def test_rockbox_post_flash_power_prompt_uses_model_specific_button_and_hides_na
         # Guided install chrome stays active until the player has booted;
         # the SP Flash Tool button is independent of that flow.
         assert window._install_run_active()
-        assert "power button" in window._flash_page._eta_label.text().lower()
-        assert "y2" in window._flash_page._eta_label.text().lower()
+        assert "disconnect the usb and power on your y2" in window._flash_page._eta_label.text().lower()
 
         window._flash_page._theme_step1_next_btn.click()
         app.processEvents()
@@ -389,9 +388,8 @@ def test_sp_flash_rockbox_power_on_prompt(tmp_path):
         assert window._rockbox_power_on_pending
         assert window._install_run_active()
 
-        # Step 1: Disconnect & power on prompt for Y1 (centre button)
-        assert "center button" in window._flash_page._eta_label.text().lower() or "centre button" in window._flash_page._eta_label.text().lower()
-        assert "y1" in window._flash_page._eta_label.text().lower()
+        # Step 1: Disconnect & power on prompt, shared by both flash methods
+        assert "disconnect the usb and power on your y1" in window._flash_page._eta_label.text().lower()
 
         # User presses the round Next button to confirm disconnect and power on
         window._flash_page._theme_step1_next_btn.click()

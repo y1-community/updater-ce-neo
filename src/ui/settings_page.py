@@ -836,12 +836,15 @@ class SettingsPage(QWidget):
         return tuple(methods)
 
     def _on_advanced_settings_toggled(self, checked: bool) -> None:
+        was_revealed = bool(getattr(self, "_advanced_revealed", False))
         self._advanced_revealed = bool(checked)
         device_tracking.set_advanced_settings_enabled(bool(checked))
         self._sync_advanced_visibility()
         self._sync_linux_prep_copy()
         if not paths.IS_MAC:
             self._reload_method_options()
+        if was_revealed and not checked:
+            self._revert_advanced_settings()
         self.advanced_settings_changed.emit(self._advanced_revealed)
         win = self.window()
         if win and hasattr(win, "_adjust_window_geometry"):
@@ -892,7 +895,13 @@ class SettingsPage(QWidget):
             win._adjust_window_geometry()
 
     def hide_advanced_methods(self):
-        """Hide advanced install methods and cards (D toggle off)."""
+        """Hide advanced install methods and cards (D toggle off).
+
+        Hiding them also puts every choice they expose back to the platform
+        default, so nothing an advanced pass configured keeps applying out of
+        sight.
+        """
+        was_revealed = bool(self._advanced_revealed)
         self._advanced_revealed = False
         device_tracking.set_advanced_settings_enabled(False)
         if hasattr(self, "_cb_advanced_settings"):
@@ -903,10 +912,56 @@ class SettingsPage(QWidget):
         self._sync_linux_prep_copy()
         if not paths.IS_MAC:
             self._reload_method_options()
+        if was_revealed:
+            self._revert_advanced_settings()
         self.advanced_settings_changed.emit(self._advanced_revealed)
         win = self.window()
         if win and hasattr(win, "_adjust_window_geometry"):
             win._adjust_window_geometry()
+
+    def _revert_advanced_settings(self) -> None:
+        """Return every advanced-only choice to the platform default.
+
+        With Show Advanced Settings off the app must behave as it does for a
+        first-run user: the guided in-app install, the platform's own flash
+        method (Windows gets its CPU's engine — MTKClient on ARM64, SP Flash
+        Tool on Intel/AMD), no terminal or SP Flash Tool GUI handoff, no
+        superuser restart, and no release filters, so old builds, nightlies,
+        240p and pre-3.0.7 releases stay hidden.
+        """
+        # Installation mode: guided in-app install wins over terminal / GUI.
+        device_tracking.set_terminal_install_enabled(False)
+        device_tracking.set_sp_gui_install_enabled(False)
+        if hasattr(self, "_sync_install_mode_switches"):
+            self._sync_install_mode_switches()
+
+        # Superuser / administrator restart: off.
+        switch = self._run_as_admin_switch()
+        if switch is not None and switch.isChecked():
+            switch.setChecked(False)  # persists through its own handler
+
+        # Release filters: all off (no old builds, nightlies, 240p, pre-3.0.7).
+        for flag in (
+            device_tracking.FILTER_OLD_ROCKBOX,
+            device_tracking.FILTER_NIGHTLY,
+            device_tracking.FILTER_240P,
+            device_tracking.FILTER_ORIGINAL_PRE_307,
+        ):
+            device_tracking.set_rockbox_release_filter(flag, False)
+        self._apply_filter_flags()
+        self.release_filters_changed.emit()
+
+        # Flash method: the platform default, through the same path a user's
+        # own choice takes, so the main window persists and applies it.
+        from ..flash_service import default_flash_method
+
+        method = default_flash_method()
+        # Persisted here as well as by the main window's handler: the default
+        # must stick even with nothing listening to the signal (a page under
+        # test, or a window still coming up).
+        QSettings("innioasis", "updater").setValue("flash_method", method)
+        self.set_method(method)
+        self.flash_method_changed.emit(method)
 
     def advanced_methods_revealed(self) -> bool:
         return self._advanced_revealed
@@ -982,14 +1037,18 @@ class SettingsPage(QWidget):
     # SP Flash Tool authentication file
     # ------------------------------------------------------------------
     def _update_rockbox_visibility(self):
-        """Offer the Rockbox release filters only with a catalogue to filter.
+        """Offer the Rockbox release filters only behind Show Advanced Settings.
 
         They filter the online Y1/Y2 Rockbox release list, so with no online
         catalogue — offline mode, or a build of the generic MediaTek Installer,
         which is offline by definition — there is nothing for them to act on.
+        They are also an advanced choice: turning Show Advanced Settings off
+        hides them (and resets them) along with the rest of the advanced cards.
         """
         self._rockbox_card.setVisible(
-            not is_offline_mode() and self._may_show_card(self._rockbox_card)
+            self._advanced_shown()
+            and not is_offline_mode()
+            and self._may_show_card(self._rockbox_card)
         )
 
     def _update_legacy_cleanup_visibility(self):
@@ -1192,6 +1251,10 @@ class SettingsPage(QWidget):
             self._cb_advanced_settings.setChecked(self._advanced_revealed)
             self._cb_advanced_settings.blockSignals(False)
         device_tracking.set_advanced_settings_enabled(self._advanced_revealed)
+        if not self._advanced_revealed:
+            # Advanced is off: anything an earlier advanced session left
+            # behind goes back to the app default, not just on the toggle-off.
+            self._revert_advanced_settings()
         self._sync_advanced_visibility()
         self._sync_linux_prep_copy()
         self._prep_card.setVisible(self._may_show_card(self._prep_card) and not paths.IS_MAC)

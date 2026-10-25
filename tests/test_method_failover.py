@@ -494,13 +494,13 @@ def test_power_off_copy_after_an_automatic_method_switch():
         # the step now says how to bring the player back into flash mode.
         window._handle_flash_failure("S_FT_DOWNLOAD_FAIL (4008)")
         assert window._flash_method == "mtk"
-        # The switch returns to the standard disconnect and power-off step, the
-        # same prompt as any fresh install, with the pin tip shown.
+        # The switch names both engines and asks for the paperclip reset
+        # before the next attempt, with no power-cycle wording.
         assert window._flash_page._wait_prompt_label.text() == tr(
-            "flash_connect_prompt"
-        ).format(model="Y1")
-        assert window._flash_page._wait_progress_bar.is_failed() is False
-        assert window._flash_page._show_pin_tip is True
+            "err_connect_failover_recovery"
+        ).format(model="Y1", failed="SP Flash Tool", next="MTKClient")
+        assert "power-cycle" not in window._flash_page._wait_prompt_label.text().lower()
+        assert window._flash_page._show_pin_tip is False
 
         # Choosing the other engine in Settings is not a recovery: the user is
         # not mid-failure, so the plain power-off line is right.
@@ -552,11 +552,10 @@ def test_com_port_failure_fails_over_with_the_engine_names():
             window._handle_flash_failure("S_COM_PORT_OPEN_FAIL (1013)")
 
         assert window._flash_method == "mtk"
-        # The switch returns to the standard disconnect and power-off step.
+        # The switch names both engines and asks for the paperclip reset.
         assert window._flash_page._wait_prompt_label.text() == tr(
-            "flash_connect_prompt"
-        ).format(model="Y1")
-        assert window._flash_page._wait_progress_bar.is_failed() is False
+            "err_connect_failover_recovery"
+        ).format(model="Y1", failed="SP Flash Tool", next="MTKClient")
         assert window._power_off_prompt is True
 
         # A failure mid-download is a different story: the player really did
@@ -568,8 +567,8 @@ def test_com_port_failure_fails_over_with_the_engine_names():
         window._handle_flash_failure("S_FT_DOWNLOAD_FAIL (4008)")
         assert window._flash_method == "mtk"
         assert window._flash_page._wait_prompt_label.text() == tr(
-            "flash_connect_prompt"
-        ).format(model="Y1")
+            "err_connect_failover_recovery"
+        ).format(model="Y1", failed="SP Flash Tool", next="MTKClient")
     finally:
         window.close()
         app.processEvents()

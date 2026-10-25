@@ -440,6 +440,8 @@
  "donate_dont_ask_link": "Arabat goulenn diganin adarre",
  "donate_copied": "{label} chomlec'h kopiet",
  "donate_appeal_costs_for_year": "Ma vefe roet arc'hant gant pep hini a implij an dra-se hiziv e kendalc'hfe ar raktres-mañ da vont en-dro e-pad ur bloavezh",
+ "donate_support_author": "Ryan Specter & Kenlabourerien ar gumuniezh",
+ "donate_support_role": "Diorroer pennañ · Hizivaer CE & Raktres Firmware ar gumuniezh",
  "donate_support_appeal_lead": "Ar skoazelloù a sikour ac'hanon da skoazellañ ma familh ha da arc'hantaouiñ an dafar amprouiñ",
  "donate_support_appeal_followup": "a laka ar servij digoust-mañ da vezañ posupl d'an holl. Ma 'z eo bet espernet amzer deoc'h gant an ostilh-mañ pe ma 'z eo bet saveteet ho c'hoarier hiziv, soñjit en ur skoazell vihan mar plij — talvezout a ra ar bed deomp e gwirionez.",
  "community_discord": "Discord",

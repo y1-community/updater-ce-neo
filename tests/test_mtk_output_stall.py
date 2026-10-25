@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.flash_service import _MtkOutputStallDetector  # noqa: E402
+from src.flash_service import FlashWorker, _MtkOutputStallDetector  # noqa: E402
 
 WINDOW = 0.2
 INTERVAL = 0.02
@@ -60,6 +60,36 @@ def test_ordinary_output_after_a_stall_line_disarms_it():
         det.note("sdmmc_write_data: addr=0x5180000 length=859832320")
 
     assert _run(events) == []
+
+
+def test_a_stage2_checksum_failure_after_the_dram_line_is_a_stall():
+    fired = _run(
+        lambda det: det.note("Failed to read stage-2 config checksum (USB reply too short)")
+    )
+    assert len(fired) == 1
+
+
+def test_subprocess_stall_terminates_backend_and_reports_stall_code():
+    class _Proc:
+        terminated = False
+
+        def poll(self):
+            return None
+
+        def terminate(self):
+            self.terminated = True
+
+    worker = FlashWorker("pkg.zip", method="mtk")
+    proc = _Proc()
+    worker._process = proc
+    finalized = []
+    worker._finalize_mtk_stall = lambda reason, **kw: finalized.append(reason)
+
+    worker._on_mtk_output_stalled_subprocess("DRAM config needed for stage 2", 21.0)
+
+    assert proc.terminated is True
+    assert worker._stalled_out is True
+    assert finalized == ["MTK_OUTPUT_STALLED"]
 
 
 def test_write_progress_only_reads_after_the_last_line_is_quiet():

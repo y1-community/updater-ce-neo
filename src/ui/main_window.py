@@ -2063,6 +2063,10 @@ class MainWindow(QMainWindow):
                 self.resize(*default_window_size())
             # The starting size is the compact one; the page on screen may need
             # more, so it gets the chance to take it once the layout is live.
+            # The floor is content-derived: two release rows plus the
+            # Install / Restore button and the Install-from-file link must fit
+            # at every window size.
+            self.setMinimumSize(MINIMUM_WINDOW_WIDTH, self._content_floor_height())
             QTimer.singleShot(0, self._fit_window_to_page)
             if not os.environ.get("QT_QPA_PLATFORM") == "offscreen" and not os.environ.get("INNIOASIS_HEADLESS"):
                 QTimer.singleShot(1200, self._check_legacy_installations)
@@ -2502,15 +2506,11 @@ class MainWindow(QMainWindow):
             name, path, slug, asset_name, release_label, *fw_names
         )
 
-    @staticmethod
-    def _rockbox_power_on_prompt_key(model: str) -> str:
-        return "rockbox_power_on_prompt_y1" if model.upper() == "Y1" else "rockbox_power_on_prompt_other"
-
     def _show_rockbox_power_on_prompt(self, model: str) -> None:
         """Ask the user to boot the flashed player before ADB/theme setup."""
         self._rockbox_power_on_pending = True
         self._rockbox_power_on_model = model
-        prompt = tr(self._rockbox_power_on_prompt_key(model)).format(model=model)
+        prompt = tr(self._flash_page.rockbox_power_on_prompt_key(model)).format(model=model)
         self._flash_page.show_rockbox_power_on_prompt(
             prompt,
             on_continue=self._continue_rockbox_power_on,
@@ -2672,6 +2672,31 @@ class MainWindow(QMainWindow):
                 logger.debug("Page size hint failed", exc_info=True)
         return self.height()
 
+    def _content_floor_height(self) -> int:
+        """Least window height that still shows two releases and both actions.
+
+        The catalogue keeps its first two release rows and the Install /
+        Restore button plus the Install-from-file link beneath them on screen
+        at every window size, so the window can never be dragged shorter than
+        that card needs. Clamped to the display, since a floor taller than the
+        screen would only push the window off it.
+        """
+        floor = MINIMUM_WINDOW_HEIGHT
+        page = getattr(self, "_select_page", None)
+        measure = getattr(page, "minimum_install_height", None)
+        if callable(measure):
+            try:
+                card_h = int(measure())
+            except Exception:
+                card_h = 0
+            if card_h > 0:
+                _, chrome_h = self._window_chrome()
+                floor = max(floor, card_h + chrome_h + CONTENT_FIT_SLACK)
+        screen = self.screen()
+        if screen is not None:
+            floor = min(floor, int(screen.availableGeometry().height()))
+        return int(floor)
+
     def _apply_window_size_limits(self, content_height: int | None = None, fill_height: bool = False) -> None:
         """Cap resizing at the sizes this page can fill.
 
@@ -2689,7 +2714,11 @@ class MainWindow(QMainWindow):
         is_hugging = getattr(self, "_hugging_install", False) or (
             stack is not None and stack.currentIndex() == _PAGE_FLASH
         )
-        min_floor = COMPACT_INSTALL_MIN_HEIGHT_NO_DONATIONS if is_hugging else MINIMUM_WINDOW_HEIGHT
+        min_floor = (
+            COMPACT_INSTALL_MIN_HEIGHT_NO_DONATIONS
+            if is_hugging
+            else self._content_floor_height()
+        )
         max_h = max(min_floor, int(content_height) + chrome_h + CONTENT_FIT_SLACK)
         screen = self.screen()
         if screen is not None:
@@ -2752,7 +2781,7 @@ class MainWindow(QMainWindow):
             if hinted > 0:
                 need_w = max(need_w, hinted)
                 floor_w = hinted
-        target_h = max(MINIMUM_WINDOW_HEIGHT, target_h)
+        target_h = max(self._content_floor_height(), target_h)
         # The width the user chose is kept: only a page that cannot be drawn in
         # it (long translated words, a wide form) makes the window wider.
         target_w = max(self.width(), MINIMUM_WINDOW_WIDTH, need_w)
@@ -2769,7 +2798,7 @@ class MainWindow(QMainWindow):
         floor_w = max(MINIMUM_WINDOW_WIDTH, min(floor_w, target_w))
         if target_w != self.width() or target_h != self.height():
             self._animate_window_size(
-                target_w, target_h, minimum=(floor_w, MINIMUM_WINDOW_HEIGHT)
+                target_w, target_h, minimum=(floor_w, self._content_floor_height())
             )
         elif floor_w > self.minimumWidth():
             # Nothing to resize, but the page still must not be dragged
@@ -2793,7 +2822,7 @@ class MainWindow(QMainWindow):
             self._apply_window_size_limits(fill_height=True)
             width, height = default_window_size(self.screen())
             self._animate_window_size(
-                width, height, minimum=(MINIMUM_WINDOW_WIDTH, MINIMUM_WINDOW_HEIGHT),
+                width, height, minimum=(MINIMUM_WINDOW_WIDTH, self._content_floor_height()),
             )
             return
 
@@ -2886,7 +2915,7 @@ class MainWindow(QMainWindow):
             self._animate_window_size(target_w, target_h, minimum=(target_w, target_h))
         else:
             min_w = MINIMUM_WINDOW_WIDTH
-            min_h = MINIMUM_WINDOW_HEIGHT
+            min_h = self._content_floor_height()
             self._hugging_install = False
             self.setMinimumSize(min_w, min_h)
             # Whatever page is on screen now owns the window size: leaving the
@@ -3109,7 +3138,11 @@ class MainWindow(QMainWindow):
                 self._settings_btn.setEnabled(False)
             if hasattr(self, "_support_btn"):
                 self._support_btn.setVisible(False)
-            self._set_help_row_visible(False)
+            # The community marks follow the Donations setting even mid-install,
+            # so users can find help while a run is in progress.
+            self._set_help_row_visible(
+                not device_tracking.is_donation_ui_disabled(self.settings)
+            )
             if hasattr(self, "_log_btn"):
                 self._sync_diagnostics_button()
             self._sync_update_button()
@@ -3121,10 +3154,14 @@ class MainWindow(QMainWindow):
             if hasattr(self, "_install_output_btn"):
                 self._install_output_btn.setVisible(True)
                 self._install_output_btn.setEnabled(True)
+            # The language selector stays put during install / prep / themes:
+            # a reader who started in one language can switch to their own and
+            # follow the prompts and instructions in it. Every screen in the
+            # flow retranslates live through ``_retranslate_all``.
             if hasattr(self, "_lang_label"):
-                self._lang_label.setVisible(False)
+                self._lang_label.setVisible(True)
             if hasattr(self, "_lang_combo"):
-                self._lang_combo.setVisible(False)
+                self._lang_combo.setVisible(True)
         else:
             if hasattr(self, "_settings_btn"):
                 self._settings_btn.setVisible(True)
@@ -3377,11 +3414,6 @@ class MainWindow(QMainWindow):
         self._package_path = path
         self._package_name = name
         self._package_model = model or ""
-        # Choosing a new firmware replaces the saved set: the chosen package's
-        # archive and extracted files are kept, older ones are removed.
-        if path and Path(path).is_file():
-            from ..flash_service import prune_extracted_cache
-            prune_extracted_cache(keep_package_path=path)
         # Only the auto-started ROM-bundled run ends on Retry or Quit.
         self._bundled_firmware_run = bool(path) and path == getattr(self, "_bundled_package_path", None)
         if hasattr(self, "_flash_page"):
@@ -4174,7 +4206,17 @@ class MainWindow(QMainWindow):
     def _set_cache_recovery_package(self, detail=""):
         """Keep the selected release and route the user to local cache recovery."""
         package = Path(getattr(self, "_package_path", "") or "")
+        first_report = not getattr(self, "_cache_recovery_needed", False)
         self._cache_recovery_needed = True
+        if first_report:
+            # Clear the firmware cache now, so the next install re-downloads and
+            # re-extracts the package instead of reusing the broken cache.
+            try:
+                from .. import downloads
+                count, _freed = downloads.clear_firmware_cache()
+                self._append_log(f"Cleared firmware cache ({count} item(s)) so the next install re-downloads the firmware.")
+            except Exception:
+                logger.warning("Could not clear firmware cache after a missing-file error", exc_info=True)
         if package.is_dir():
             self._append_log(
                 "Selected local firmware directory is incomplete; choose Select Software and "
@@ -4260,6 +4302,19 @@ class MainWindow(QMainWindow):
         self._adjust_window_geometry()
 
     def _on_device_lost(self):
+        # A player that vanishes *after* the app has declared the flash
+        # successful is expected behaviour — it reboots into the software just
+        # written, and it disappears again while the guided themes/fonts
+        # install talks to it over ADB. Detection belongs to a run in
+        # progress: once success is recorded, the completion screen, the
+        # donation prompt and the guided themes install must not be
+        # interrupted by it. Starting the next run arms detection again.
+        if (
+            self.sm.state is FlashState.S5_COMPLETE
+            or getattr(self, "_install_complete", False)
+            or getattr(self, "_rockbox_themes_flow_active", False)
+        ):
+            return
         if self.sm.state is FlashState.S4_FLASHING or getattr(self, "_past_usb_search", False):
             self._on_flash_disconnected()
         elif self.sm.state in (FlashState.S2_WAIT_CONNECTION, FlashState.S3_DEVICE_DETECTED):
@@ -4588,6 +4643,10 @@ class MainWindow(QMainWindow):
             return ""
         current = backend_method(method)
         if current == METHOD_SP:
+            # MTKClient on Windows is hidden until the M key reveals it, so
+            # SP Flash Tool has no second engine there and retries itself.
+            if paths.IS_WINDOWS and not device_tracking.hidden_mtk_options_enabled():
+                return ""
             return METHOD_MTK
         if current == METHOD_MTK:
             return METHOD_SP
@@ -4670,7 +4729,17 @@ class MainWindow(QMainWindow):
             error_code,
             candidate,
         )
-        self._return_to_power_off_stage(candidate)
+        # The attempt never reached the player, so the step asks for the
+        # paperclip reset and names both engines rather than a power-cycle.
+        self._return_to_power_off_stage(
+            candidate,
+            recovery=True,
+            prompt_key="err_connect_failover_recovery",
+            prompt_kwargs={
+                "failed": _method_label(backend_method(self._flash_method)),
+                "next": _method_label(candidate),
+            },
+        )
         return True
 
     def _on_progress_retry(self):
@@ -6198,7 +6267,7 @@ class MainWindow(QMainWindow):
         quiet = self._install_run_active() or self._handoff_chrome()
         if hasattr(self, "_support_btn") and self._support_btn is not None:
             self._support_btn.setVisible((not is_disabled) and not quiet)
-        self._set_help_row_visible((not is_disabled) and not quiet)
+        self._set_help_row_visible(not is_disabled)
         if hasattr(self, "_version_label") and self._version_label is not None:
             self._version_label.setVisible(not is_disabled and not is_mediatek_installer())
         if hasattr(self, "_credits_btn") and self._credits_btn is not None:

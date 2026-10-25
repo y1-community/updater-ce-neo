@@ -347,16 +347,21 @@ def test_cached_extract_is_never_deleted_and_is_restored_in_place(tmp_path, monk
     (extract_dir / "keep.txt").write_text("cached")
     (extract_dir / "boot.img").unlink()
 
+    # The archive is removed right after extraction; the cached folder is what remains.
+    assert not archive.exists()
+
     # A normal install attempt never removes or re-extracts a cached folder.
     ExtractWorker._extract(stub, str(archive))
     assert not (extract_dir / "boot.img").exists()
     assert (extract_dir / "keep.txt").exists()
 
-    # The missing-image retry re-extracts over the cache in place. The archive is
-    # never removed; files the package does not list are pruned as before.
+    # A forced re-extract over the cache rewrites files in place when the archive is still present.
+    with zipfile.ZipFile(archive, "w") as zf:
+        for f in staging.iterdir():
+            zf.write(f, f.name)
     ExtractWorker._extract(stub, str(archive), force=True)
     assert (extract_dir / "boot.img").exists()
-    assert archive.exists()
+    assert not archive.exists()
 
 
 def test_prune_does_nothing_without_a_valid_package(tmp_path):
@@ -514,6 +519,35 @@ def test_auto_start_bundled_firmware_navigates_to_flash_page(tmp_path, monkeypat
         app.processEvents()
 
 
+def test_cache_missing_failure_clears_firmware_cache(tmp_path, monkeypatch):
+    from src import downloads
+    from src.ui.main_window import MainWindow
+
+    dl = tmp_path / "downloads"
+    dl.mkdir()
+    monkeypatch.setattr(downloads, "downloads_dir", lambda: dl)
+    extract = dl / ".Y1_extracted"
+    extract.mkdir()
+    (extract / "boot.img").write_bytes(b"x")
+    archive = dl / "Y1.zip"
+    archive.write_bytes(b"zip")
+
+    app = _app()
+    w = MainWindow()
+    try:
+        w._show_install_failure("CACHE_FILE_MISSING")
+        app.processEvents()
+        assert not extract.exists()
+        assert not archive.exists()
+        assert w._cache_recovery_needed is True
+
+        # A repeat report during the same run does not clear again.
+        (dl / ".Y1_extracted").mkdir()
+        w._handle_backend_line("FileNotFoundError: [Errno 2] No such file or directory")
+        assert (dl / ".Y1_extracted").exists()
+    finally:
+        w.close()
+        app.processEvents()
 
 
 def test_release_install_heading_uses_release_name_from_file_name():

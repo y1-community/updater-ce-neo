@@ -33,7 +33,7 @@ def _pump(app, predicate, seconds=8.0):
 # line, and the test asserts ``paths.IS_WINDOWS`` before it gets there.
 @pytest.mark.skipif(sys.platform != "win32", reason="console flash_tool command is Windows-only")
 def test_continue_launches_console_and_search_lines_drive_connect():
-    """Continue starts format-download. Search lines reveal the connect sentence."""
+    """Continue starts a Download Only run. Search lines reveal the connect sentence."""
     from PySide6.QtCore import QSettings
     from PySide6.QtWidgets import QApplication
 
@@ -162,7 +162,7 @@ def test_continue_launches_console_and_search_lines_drive_connect():
                 page._wait_continue_btn.click()
                 assert _pump(app, lambda: bool(popen_calls)), "Continue must start the console command"
                 args = popen_calls[0]
-                assert args[1:3] == ["-c", "format-download"], args
+                assert args[1:3] == ["-c", "download"], args
                 assert args[3] == "-s", args
                 assert "-d" in args and "-t" in args and args[-1] == "-r", args
                 assert args[args.index("-t") + 1] == "without", args

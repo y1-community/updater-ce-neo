@@ -14,7 +14,7 @@
   - **Scatter-Driven**: Flashing must be driven dynamically by the package's scatter file (`MT6572_Android_scatter.txt` / `MT6582_Android_scatter.txt`) rather than hard-coding device SoCs.
   - **State Machine**: Adhere strictly to the `S1_READY` -> `S2_PACKAGE_READY` -> `S3_DEVICE_DETECTED` -> `S4_FLASHING` -> `S5_USB_DISCONNECTED` -> `S6_RETRY` lifecycle.
   - **Dual Backend**:
-    - Windows: SP Flash Tool console mode (`format-download`) with MTKClient fallback.
+    - Windows: SP Flash Tool console mode (`download` — Download Only) with MTKClient fallback.
     - Linux: SP Flash Tool console mode (when staged) with MTKClient fallback.
     - macOS: In-process MTKClient backend.
 
@@ -89,7 +89,9 @@ To ensure MediaTek SP Flash Tool executes reliably across all Linux distribution
 ### C. Windows SP Flash Tool Console Invocation & 8.3 Short Paths
 - **8.3 Short Path Conversion (`GetShortPathNameW`)**: SP Flash Tool's C++ parser fails on path strings with spaces or non-ASCII characters. On Windows, always convert scatter and DA file paths to short 8.3 paths via `ctypes.windll.kernel32.GetShortPathNameW` before passing them as CLI arguments.
 - **Console Mode CLI Shape**: SP Flash Tool console mode must be invoked with:
-  `flash_tool.exe -c format-download -s <scatter_8.3> -d <da_8.3> -t without -r`
+  `flash_tool.exe -c download -s <scatter_8.3> -d <da_8.3> -t without -r`
+  (`download` is Download Only, the command the shipped 1.1.7 build runs;
+  `format-download` erases the whole flash first and is never issued)
   (omitting DA when default DA is loaded, and never adding spurious `-f` arguments which SP Flash Tool v5 rejects).
 - **Background Log Monitoring**: SP Flash Tool on Windows emits UI progress and partition details to `C:\ProgramData\SP_FT_Logs\*\QT_FLASH_TOOL.log` rather than stdout. Tail this file in the background during flash runs to stream accurate progress.
 

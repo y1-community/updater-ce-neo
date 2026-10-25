@@ -193,9 +193,16 @@ def test_community_buttons_open_their_links_and_follow_visibility(qapp, monkeypa
         assert not window._discord_btn.isHidden()
         assert not window._reddit_btn.isHidden()
 
+        # Mid-install the marks follow the Donations setting, so help stays
+        # reachable while a run is in progress.
         window._apply_install_ui_state(True)
+        assert not window._discord_btn.isHidden()
+        assert not window._reddit_btn.isHidden()
+        assert not window._github_btn.isHidden()
+        window._apply_donation_visibility(True)
         assert window._discord_btn.isHidden()
-        assert window._reddit_btn.isHidden()
+        assert window._github_btn.isHidden()
+        window._apply_donation_visibility(False)
         window._apply_install_ui_state(False)
         assert not window._discord_btn.isHidden()
         assert not window._reddit_btn.isHidden()

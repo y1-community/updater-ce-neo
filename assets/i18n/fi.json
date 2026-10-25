@@ -440,6 +440,8 @@
  "donate_dont_ask_link": "Älä kysy uudestaan",
  "donate_copied": "{label} osoite kopioitu",
  "donate_appeal_costs_for_year": "Jos kaikki käyttävät tätä tänään lahjoituksia, se jatkaisi tätä projektia vuoden ajan",
+ "donate_support_author": "Ryan Spectre ja yhteisön avustajat",
+ "donate_support_role": "Pääkehittäjä · Updater CE & Community Firmware Project",
  "donate_support_appeal_lead": "Lahjoitukset auttavat minua suoraan tukemaan perhettäni ja rahoittamaan testilaitteita",
  "donate_support_appeal_followup": "jotka tekevät tämän ilmaisen palvelun mahdolliseksi kaikille. Jos tämä työkalu säästää aikaasi tai pelasti pelaajasi tänään, harkitse pientä lahjoitusta – se todella merkitsee meille maailmaa.",
  "community_discord": "Discord",

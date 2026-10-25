@@ -440,6 +440,8 @@
  "donate_dont_ask_link": "Spørg mig ikke igen",
  "donate_copied": "{label}-adressen er kopieret",
  "donate_appeal_costs_for_year": "Hvis alle, der bruger dette i dag, donerede, ville det holde dette projekt i gang i et år",
+ "donate_support_author": "Ryan Spectre og fællesskabsbidragydere",
+ "donate_support_role": "Hovedudvikler · Updater CE og fællesskabets firmwareprojekt",
  "donate_support_appeal_lead": "Donationer hjælper mig direkte med at støtte min familie og finansiere testenhederne",
  "donate_support_appeal_followup": "som gør denne gratis service mulig for alle. Hvis dette værktøj sparede dig tid eller reddede din spiller i dag, så overvej en lille donation - det betyder virkelig alverden for os.",
  "community_discord": "Discord",

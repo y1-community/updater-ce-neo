@@ -2123,7 +2123,7 @@ def test_terminal_install_handoff():
                 assert cmd is not None
                 assert cmd[0].endswith(exe_name), cmd
                 assert cmd[1:] == [
-                    "-c", "format-download", "-s", str(scatter),
+                    "-c", "download", "-s", str(scatter),
                     "-d", str(da), "-t", "without", "-r",
                 ], cmd
                 sp_dirs[is_windows], sp_cmds[is_windows] = sp_dir, cmd
@@ -2185,7 +2185,7 @@ def test_terminal_install_handoff():
             assert os.access(posix, os.X_OK), "launcher must be executable"
 
             win = terminal_install.build_script(
-                ["C:\\sp\\flash_tool.exe", "-c", "format-download"],
+                ["C:\\sp\\flash_tool.exe", "-c", "download"],
                 title="Terminal Install",
                 cwd=str(extract),
                 is_windows=True,
@@ -2250,7 +2250,7 @@ def test_terminal_install_handoff():
             assert w._nav_buttons["nav_select_package"][0].text() == "Select Software"
             assert len(opened) == 1, opened
             text = opened[0].read_text(encoding="utf-8")
-            assert ("--flash-cli" in text or "format-download" in text) and str(scatter) in text, text
+            assert ("--flash-cli" in text or "-c download" in text) and str(scatter) in text, text
             assert w.statusBar().currentMessage() == tr(
                 "status_terminal_install"
             ).format(path=str(opened[0]))
@@ -6474,7 +6474,7 @@ def test_sp_flash_auth_file():
         assert connection.get("type") == "BromUSB"
         # The documented equivalent of the CLI's -t without.
         assert connection.get("without-battery") == "true"
-        assert [child.tag for child in root_el.find("commands")] == ["format-download"]
+        assert [child.tag for child in root_el.find("commands")] == ["download-only"]
 
         # SP Flash Tool's own schema is the real check on that file.
         xsd = (
@@ -6496,7 +6496,7 @@ def test_sp_flash_auth_file():
         # --- console arguments (guided flow and terminal install agree) -------
         plain = sp_flash_tool_console_args(str(scatter), str(da))
         assert plain == [
-            "-c", "format-download",
+            "-c", "download",
             "-s", str(scatter),
             "-d", str(da),
             "-t", "without",

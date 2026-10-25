@@ -440,6 +440,8 @@
  "donate_dont_ask_link": "今後は表示しない",
  "donate_copied": "{label} アドレスがコピーされました",
  "donate_appeal_costs_for_year": "今日これを使っている全員が寄付してくだされば、1年分の運用費が賄えます",
+ "donate_support_author": "Ryan Specter（ライアン・スペクター）とコミュニティの貢献者",
+ "donate_support_role": "リード開発者 · アップデーター CE およびコミュニティ ファームウェア プロジェクト",
  "donate_support_appeal_lead": "皆様の寄付は、家族を支え、テスト用機器を購入するための大切な支援になります",
  "donate_support_appeal_followup": "それらが、誰もが利用できる無料サービスを支えています。このツールが今日、時間の節約やプレーヤーの復旧に役立ったなら、少額でもご寄付をご検討ください。皆様のご支援は私たちにとって何より大切です。",
  "community_discord": "Discord",

@@ -1973,6 +1973,25 @@ class SelectPackagePage(QWidget):
             return max(1, self._release_list.sizeHintForRow(0))
         return self._release_list.fontMetrics().lineSpacing() + 8
 
+    def minimum_install_height(self) -> int:
+        """Least card height that still shows two releases and both actions.
+
+        Two release rows, the Install / Restore button, and the
+        Install-from-file link below it — the window is never allowed to be
+        dragged shorter than this, so the primary actions stay reachable
+        whatever else is on the page.
+        """
+        rows = max(1, self._release_row_height()) * 2
+        list_h = rows + 2 * self._release_list.frameWidth() + 2
+        btn_h = max(32, int(self._install_btn.minimumHeight() or 32))
+        link_h = max(1, self._install_from_file_link.sizeHint().height())
+        spacing = self._pkg_group.layout().spacing() if self._pkg_group.layout() is not None else 6
+        margins = 0
+        layout = self._pkg_group.layout()
+        if layout is not None:
+            margins = layout.contentsMargins().top() + layout.contentsMargins().bottom()
+        return list_h + btn_h + link_h + margins + spacing * 3
+
     def _fit_release_list_height(self):
         """Size the release list to its contents (capped).
 

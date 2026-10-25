@@ -924,13 +924,14 @@ MTK_STALL_WARN_SECONDS = 90
 # stall watcher (which reports when the target stops answering). It covers a
 # different failure: the backend keeps printing, but the same BROM bring-up
 # stall line has been on screen for too long with no change.
-MTK_OUTPUT_STALL_WINDOW = 5.0
+MTK_OUTPUT_STALL_WINDOW = 20.0
 
 # Line prefixes read from the MTKClient console that indicate a BROM bring-up
 # or DRAM bring-up stall rather than normal write progress.
 MTK_BROM_STALL_PREFIXES = (
     "DRAM config needed for",
     "DRAM config",
+    "Failed to read stage-2 config checksum",
 )
 
 # --- MTKClient session bring-up ---------------------------------------------
@@ -1071,7 +1072,7 @@ LEGACY_MBR_USER_ADDR_BIAS = 8388608  # 8MB (0x800000)
 LEGACY_SEGMENTED_WRITE_BYTES = 52428800  # 50MB per USB transfer chunk
 # Per-transfer chunk size handed to the bundled (Chinese-fork) legacy DA. Its
 # ``sdmmc_write_data`` reads ``config.write_chunk_size`` for every USB transfer
-# and defaults to 1 MiB when unset. The reference build (firmware_downloader.py)
+# and defaults to 1 MiB when unset. The shipped 1.1.7 build's legacy strategy
 # drives the same DA with 512 KiB, and 256 KiB when an image is 1.5 GB or larger
 # so a big transfer still leaves room for the device to answer between chunks.
 # Never raise these: a larger chunk is exactly what makes a slow preloader-mode
@@ -1334,6 +1335,119 @@ def _wrap_preloader_for_raw_boot(
         return file_path
 
 
+class PackageLayoutError(RuntimeError):
+    """The package cannot be written to this device's layout.
+
+    Raised before a write starts: an image (or a sparse image's data extents)
+    reaches past the partition the scatter describes. Handing that to the DA is
+    what produces a NACK near the tail of the partition, with the player left
+    half written and no useful diagnosis.
+    """
+
+
+def _sparse_data_end(regions) -> int:
+    """End offset (in the raw image) of the last sparse data extent."""
+    return max((int(off) + int(length) for off, length in regions or ()), default=0)
+
+
+def _clip_sparse_regions(regions, bound: int):
+    """Regions that fit inside ``bound``, plus whether any tail was dropped.
+
+    Fill extents are DONT_CARE, so a sparse image whose data reaches past the
+    device's partition can stop at the partition edge instead of NACKing the
+    DA mid-transfer. Returns ``(regions, clipped)``.
+    """
+    if not bound:
+        return list(regions or ()), False
+    kept = []
+    clipped = False
+    for region_off, region_len in regions or ():
+        if region_off >= bound:
+            clipped = True
+            continue
+        inside = min(int(region_len), bound - int(region_off))
+        if inside != region_len:
+            clipped = True
+        if inside > 0:
+            kept.append((int(region_off), inside))
+    return kept, clipped
+
+
+def _parse_mbr_partitions(data: bytes, sector: int = 512) -> list:
+    """Absolute ``(start, size)`` of every partition an MBR/EBR chain describes.
+
+    The Timmkoo/Innioasis players are MBR-partitioned, so this is the only way
+    to learn their live layout: the scatter describes the layout a package was
+    built for, not the one the player currently has. Entries are returned in
+    address order; a chain that cannot be parsed yields an empty list.
+
+    In an EBR the logical entry is relative to the extended partition's base
+    (the MBR's own extended entry), which is what the players' tables use.
+    """
+    data = data or b""
+    if len(data) < sector or data[510:512] != b"\x55\xaa":
+        return []
+
+    def _entries(buf):
+        out = []
+        for index in range(4):
+            entry = buf[446 + 16 * index : 462 + 16 * index]
+            if len(entry) < 16:
+                break
+            ptype = entry[4]
+            lba, count = unpack("<II", entry[8:16])
+            out.append((ptype, lba, count))
+        return out
+
+    partitions = []
+    extended_base = 0
+    for ptype, lba, count in _entries(data[:sector]):
+        if ptype in (0x05, 0x0F, 0x85):
+            extended_base = extended_base or lba * sector
+            continue
+        if ptype and count and count < 0xFFFFFFF0:
+            partitions.append((lba * sector, count * sector))
+
+    ebr = extended_base
+    seen = set()
+    while ebr and ebr not in seen and len(data) >= ebr + sector:
+        seen.add(ebr)
+        entries = _entries(data[ebr : ebr + sector])
+        if not entries:
+            break
+        # MTK puts every logical partition in EBR1 (all four slots are
+        # partitions, no chaining); a classic chain, when present, uses one
+        # slot as the link to the next EBR.
+        next_ebr = 0
+        for ptype, lba, count in entries:
+            if ptype in (0x05, 0x0F, 0x85):
+                next_ebr = extended_base + lba * sector
+                continue
+            if ptype and count and count < 0xFFFFFFF0:
+                partitions.append(
+                    (extended_base + lba * sector, count * sector)
+                )
+        ebr = next_ebr if next_ebr and next_ebr not in seen else 0
+    return sorted(partitions)
+
+
+def _normalize_platform(name) -> str:
+    """Chip-number form of a platform name: ``MT6572``/``MT6572G`` -> ``6572``.
+
+    The device reports its own name in whatever form its DA uses
+    (``MT6572``, ``MT6572/MT6582 Modem``, ...), so comparing the raw strings
+    would flag a matching package as a mismatch.
+    """
+    text = str(name or "").strip().upper()
+    if not text:
+        return ""
+    if text.startswith("MT"):
+        text = text[2:]
+    text = text.split("/")[0]
+    match = re.search(r"\d+", text)
+    return match.group(0) if match else text
+
+
 # ---------------------------------------------------------------------------
 # Module-level helpers
 # ---------------------------------------------------------------------------
@@ -1384,13 +1498,12 @@ def completed_extract_dir(package_path):
     if not package_path:
         return ""
     p = Path(package_path)
-    if not p.exists():
-        return ""
-    if p.is_file() and (p.suffix.lower() == ".txt" or "scatter" in p.name.lower()):
+    if p.exists() and p.is_file() and (p.suffix.lower() == ".txt" or "scatter" in p.name.lower()):
         return str(p.parent)
-    if p.is_dir():
+    if p.exists() and p.is_dir():
         sc = _find_scatter(p, allow_raise=False)
         return str(sc.parent if sc else p)
+    # The archive may be gone once it has been extracted; the extracted folder is still the source.
     d = compute_extract_dir(package_path)
     return str(d) if _is_extract_complete(d) else ""
 
@@ -1416,10 +1529,9 @@ def _mark_extract_complete(extract_dir):
 def prune_extracted_cache(keep_package_path: Optional[str] = None) -> list:
     """Keep only the set of firmware files for ``keep_package_path``.
 
-    Called only when the user chooses a new firmware: older extracted folders and
-    leftover archives in downloads_dir() are removed, and the chosen package's
-    own archive and extracted folder are kept. Installs, failures, retries and
-    device prep never call this, and never delete the cache.
+    Called only after a different firmware package has finished extracting, so
+    its files are on disk before older extracted folders are replaced. Selecting
+    a package, installs, failures, retries and device prep never call this.
 
     Returns a list of paths that were removed.
     """
@@ -1529,6 +1641,13 @@ class ExtractWorker(QThread):
         prune_to_firmware_package(extract_dir)
         discard_firmware_history(extract_dir)
         _mark_extract_complete(extract_dir)
+        # The archive is no longer needed once its files are extracted.
+        try:
+            Path(package_path).unlink(missing_ok=True)
+        except OSError as e:
+            logger.warning("Could not remove extracted archive %s: %s", package_path, e)
+        # Only now, with the new firmware on disk, may older extractions be replaced.
+        prune_extracted_cache(keep_package_path=package_path)
         return extract_dir
 
     def _extract_zip(self, package, extract_dir):
@@ -1702,8 +1821,13 @@ def sp_flash_tool_console_args(scatter_arg, da_arg, auth_file="", log=None):
                 if log:
                     log(tr("sp_auth_loaded").format(path=auth))
                 return ["-r", "-i", str(config)]
+    # ``-c download`` is Download Only: every partition with an image in the
+    # scatter is overwritten and nothing else is touched. This is the command
+    # the shipped 1.1.7 build runs; ``format-download`` (erase the whole flash
+    # first) is never issued by it, and erasing the device's own partition
+    # table is exactly what makes an install unrecoverable.
     return [
-        "-c", "format-download",
+        "-c", "download",
         "-s", scatter_arg,
         "-d", da_arg,
         "-t", "without",
@@ -1980,18 +2104,19 @@ def _read_scatter_parts(scatter_path):
 def _scatter_entries_from_parts(raw_parts):
     """Turn parsed scatter blocks into write-plan entries (shared parser)."""
     # Determine base linear address for EMMC_USER (typically the linear address
-    # of the first EMMC_USER partition, usually 0x1400000 on MT6572/MT6582)
+    # of the first EMMC_USER partition, usually 0x1400000 on MT6572/MT6582).
+    # Some vendors (the Y1's stock scatter) ship every EMMC_USER
+    # physical_start_addr as 0x0, while Y2-style scatters carry the real one;
+    # both describe the same layout, so a missing physical address is derived
+    # as linear - user_base.
     user_base = None
-    has_non_zero_phys = False
     for p in raw_parts:
         region = p.get("region", "").upper()
         if region == "EMMC_USER":
             lin = _to_int_safe(p.get("linear_start_addr", 0))
-            phys = _to_int_safe(p.get("physical_start_addr", 0))
             if user_base is None:
                 user_base = lin
-            if phys > 0:
-                has_non_zero_phys = True
+                break
     if user_base is None:
         user_base = 0x1400000
 
@@ -2009,10 +2134,15 @@ def _scatter_entries_from_parts(raw_parts):
 
         if region in ("EMMC_BOOT_1", "EMMC_BOOT_2"):
             offset = phys
-        elif has_non_zero_phys:
+        elif phys > 0:
             offset = phys
         else:
-            offset = max(0, lin - user_base)
+            # MTK scatters mark addresses at/above 0xFFFF0000 as relative to
+            # the *end* of the user area (BMTPOOL uses 0xFFFF00a8). They can
+            # only be resolved against the live device's user-area size, so
+            # they never get a linear-minus-base address.
+            tail_relative = lin >= 0xFFFF0000
+            offset = 0 if tail_relative else max(0, lin - user_base)
 
         entries.append({
             "name": pname,
@@ -2023,34 +2153,36 @@ def _scatter_entries_from_parts(raw_parts):
             "physical_start_addr": phys,
             "partition_size": size,
             "offset": offset,
+            "tail_relative": bool(
+                region == "EMMC_USER" and phys <= 0 and lin >= 0xFFFF0000
+            ),
             "order": order,
         })
     return entries
 
 
-# --- reference write plan (parity with firmware_downloader.py) ---------------
-# The shipped "Innioasis Updater" (firmware_downloader.py) is the build users
-# report as reliable on Linux/macOS. These constants and the plan below mirror
-# exactly what it writes, because the differences are what damage bootloaders:
+# --- reference write plan (parity with the shipped 1.1.7 build) --------------
+# Updater 1.1.7 is the build that flashes reliably on macOS through the same
+# legacy MTK DA we bundle. Its plan is the package scatter, in scatter order,
+# with the preloader deferred to the very end:
 #
-#   Y1 (MT6572): one named-``w`` write of these six partitions, in this order.
-#   No preloader, no MBR/EBR, no cache, no format pass.
+#   Every downloadable image is written by scatter address, so the device's
+#   own partition table is never consulted (mtkclient enumerates GPT only, and
+#   the Timmkoo/Innioasis players are MBR-partitioned — a named lookup returns
+#   nothing and the install dies with "Couldn't detect partition").
 #
-#   Y2 (MT6582): the package scatter's physical addresses, in scatter order
-#   (preloader first), skipping the device's own MBR/EBR stubs, full file
-#   lengths, one write per partition.
+#   Y1-style scatters report physical_start_addr 0x0 for every EMMC_USER entry,
+#   so the address is linear - 0x1400000 — the delta the Y2-style scatter
+#   encodes explicitly, and the layout the package's own MBR/EBR images
+#   describe (MBR at user 0x0, ANDROID at 0x3740000, USRDATA at 0x4C140000).
 #
-# A preloader written last (or wrapped in a synthesised BRLYT header) is what a
-# target that stops answering mid-write boots from: writing it first means a
-# run that dies later still leaves a player that enumerates for another try.
-MTK_Y1_NAMED_WRITE_PARTS = (
-    ("logo", "logo.bin"),
-    ("uboot", "lk.bin"),
-    ("bootimg", "boot.img"),
-    ("recovery", "recovery.img"),
-    ("android", "system.img"),
-    ("usrdata", "userdata.img"),
-)
+#   The preloader is written last, wrapped in the BootROM's EMMC_BOOT/BRLYT
+#   header through the DA's WRITE_IMAGE command. Writing it first (or writing
+#   the bare image) is what leaves a player the BootROM no longer recognises;
+#   written last, a run that dies earlier still leaves a player that enumerates
+#   for another try. Nothing formats a partition, rewrites the device's MBR/EBR
+#   or duplicates the preloader into eMMC boot2.
+#
 # Partition-table scaffolding that belongs to the device, not to the package.
 # The stock zips ship 512-byte all-zero MBR/EBR stubs; writing one over the real
 # table leaves a player that cannot find a single partition.
@@ -2104,54 +2236,32 @@ def _scatter_region_parttype(region: str, partition_name: str = "") -> str:
     return "user"
 
 
-def build_mtk_write_plan(scatter_path, model=""):
-    """Return the ordered write plan the reference build performs.
+def build_mtk_write_plan(scatter_path, model="", *, preloader_first=True):
+    """Return the ordered write plan the shipped 1.1.7 build performs.
 
-    Each step is ``{"name", "path", "parttype", "offset", "length"}``.
-    ``offset`` is an absolute byte address for ``da_wo``; ``None`` means a
-    named write (``da_write``), resolved from the device's own partition table.
+    Each step is ``{"name", "path", "parttype", "offset", "length",
+    "partition_size", "region"}``, and every step is an absolute byte address
+    for ``da_wo``: the device's own partition table is never consulted.
+    mtkclient enumerates GPT, while the Timmkoo/Innioasis players
+    (MT6572/MT6582/MT6580/MT8382) are MBR-partitioned, so a named lookup
+    returns nothing and the install dies with "Couldn't detect partition".
 
-    The order is the reference one: Y1's fixed named list, Y2's scatter order
-    (which puts the preloader first). Nothing formats a partition, rewrites the
-    device's MBR/EBR, or duplicates the preloader into eMMC boot2.
+    The order is every downloadable image in scatter order, with the
+    preloader moved to the very front (``preloader_first``), so the boot1
+    loader is in place before any user-area partition is written.
+    Nothing formats a partition, rewrites the device's MBR/EBR, or duplicates
+    the preloader into eMMC boot2.
+
+    ``partition_size`` is the scatter's own size for the partition. It is not
+    a write length — it is the bound an image (or a sparse image's data
+    extents) must fit inside, so a package built for a different layout is
+    caught before it can NACK the device mid-partition.
     """
     scatter_p = Path(scatter_path)
     entries = _parse_scatter_entries(scatter_p)
     if not entries:
         return []
     scatter_dir = scatter_p.parent
-    model_text = str(model or "").upper()
-
-    # Y1: named partitions only. Its scatter has no usable physical addresses
-    # (every EMMC_USER entry says 0x0), which is why the reference never writes
-    # this model by offset.
-    if "Y1" in model_text:
-        by_name = {e["name"].strip().lower(): e for e in entries}
-        plan = []
-        for part_name, file_name in MTK_Y1_NAMED_WRITE_PARTS:
-            entry = by_name.get(part_name)
-            candidates = []
-            if entry is not None and entry.get("file_name"):
-                candidates.append(entry["file_name"])
-            candidates.append(file_name)
-            image = None
-            for candidate in candidates:
-                resolved = _resolve_image_file(scatter_dir, candidate)
-                if resolved.is_file():
-                    image = resolved
-                    break
-            if image is None:
-                continue
-            plan.append(
-                {
-                    "name": part_name,
-                    "path": image,
-                    "parttype": "user",
-                    "offset": None,
-                    "length": image.stat().st_size,
-                }
-            )
-        return plan
 
     plan = []
     seen = set()
@@ -2163,9 +2273,16 @@ def build_mtk_write_plan(scatter_path, model=""):
         if not file_name or file_name.upper() == "NONE":
             continue
         if _is_device_table_partition(name, file_name):
-            resolved = _resolve_image_file(scatter_dir, file_name)
-            if not resolved.is_file() or _is_empty_placeholder_image(resolved):
-                continue
+            # The device's own table scaffolding. The stock zips ship all-zero
+            # stubs here, and even a genuine image describes one layout only:
+            # writing either over the player's live table is what leaves a
+            # device that cannot find a single partition.
+            continue
+        if entry.get("tail_relative"):
+            # An end-of-user-area address (>= 0xFFFF0000) only resolves
+            # against the live device's user-area size; guessing it would
+            # write the image at a huge bogus offset.
+            continue
         image = _resolve_image_file(scatter_dir, file_name)
         if not image.is_file() or _is_empty_placeholder_image(image):
             continue
@@ -2177,16 +2294,13 @@ def build_mtk_write_plan(scatter_path, model=""):
         if length <= 0:
             continue
         parttype = _scatter_region_parttype(entry.get("region", ""), name)
-        phys = entry.get("physical_start_addr")
-        # Address 0 is real inside eMMC boot1 (the preloader lives there), and
-        # the reference writes it as ``wo 0x0 … --parttype boot1``. In the user
-        # area, 0 means the scatter carries no usable physical address: then
-        # the only safe write is a named one, since writing offset 0 would land
-        # on the partition table.
-        if phys or parttype in ("boot1", "boot2") or name.lower() == "mbr":
-            offset = int(phys or 0)
-        else:
-            offset = None
+        # Every step is written by address, exactly as SP Flash Tool does: the
+        # device's partition table is never consulted (mtkclient reads GPT
+        # only, and these players are MBR-partitioned). Address 0 is real
+        # inside eMMC boot1 (the preloader) and at the head of the user area
+        # (which the MBR occupies, and which the table scaffolding above has
+        # already excluded).
+        offset = int(entry.get("offset") or 0)
         plan.append(
             {
                 "name": name,
@@ -2194,8 +2308,14 @@ def build_mtk_write_plan(scatter_path, model=""):
                 "parttype": parttype,
                 "offset": offset,
                 "length": length,
+                "partition_size": int(entry.get("partition_size") or 0),
+                "region": (entry.get("region") or "").upper(),
             }
         )
+
+    if preloader_first:
+        # Stable: everything keeps scatter order, only the preloader moves.
+        plan.sort(key=lambda step: step["name"].strip().lower() != "preloader")
     return plan
 
 
@@ -3772,10 +3892,9 @@ class FlashWorker(QThread):
         """
         if self._cancelled:
             return False
-        self.action_changed.emit(tr("action_recover_powercycle"))
         self._log(
-            f"Attempt {attempt} failed. Recovering: power-cycle the player "
-            "(hold power ~10s) and reconnect it in flash mode."
+            f"Attempt {attempt} failed. Waiting for the player to come back "
+            "in flash mode."
         )
         if _wait_for_mtk_mode(
             (MTK_PRELOADER_PID, MTK_BROM_PID), MTK_RECOVERY_WAIT_SECONDS
@@ -3850,6 +3969,7 @@ class FlashWorker(QThread):
 
         final_ok = False
         final_msg = ""
+        self._stalled_out = False
         try:
             self._process = subprocess.Popen(
                 cmd,
@@ -3861,6 +3981,13 @@ class FlashWorker(QThread):
                 env=env,
             )
             self._start_attempt_watchdog()
+            stall_detector = _MtkOutputStallDetector(
+                self._on_mtk_output_stalled_subprocess,
+                window=MTK_OUTPUT_STALL_WINDOW,
+                interval=0.5,
+            )
+            self._mtk_output_stall_detector = stall_detector
+            stall_detector.start()
             for line in iter(self._process.stdout.readline, ""):
                 line = line.rstrip()
                 if not line:
@@ -3902,6 +4029,8 @@ class FlashWorker(QThread):
                     self._note_mtk_output_for_stall_check(line)
 
             self._stop_attempt_watchdog()
+            stall_detector.stop()
+            self._mtk_output_stall_detector = None
             self._process.wait()
             if self._is_disconnected or is_disconnection_error(self._tool_error) or is_disconnection_error(final_msg):
                 self._log("MTKClient flash terminated due to device disconnection.")
@@ -3918,6 +4047,9 @@ class FlashWorker(QThread):
                 self.cancel()
                 self.usb_disconnected.emit()
                 self.finished.emit(False, "USB_DISCONNECTED")
+                return
+            if getattr(self, "_stalled_out", False):
+                self.finished.emit(False, "MTK_OUTPUT_STALLED")
                 return
             if self._attempt_expired:
                 self.finished.emit(False, ERR_ATTEMPT_TIMEOUT)
@@ -4054,6 +4186,19 @@ class FlashWorker(QThread):
 
     def _on_mtk_output_stalled(self, line="", elapsed=0.0):
         self._log(f"MTKClient stalled on line: {line} ({int(elapsed)}s)")
+        self._finalize_mtk_stall("MTK_OUTPUT_STALLED")
+
+    def _on_mtk_output_stalled_subprocess(self, line="", elapsed=0.0):
+        # Called from the detector thread while the --flash-cli subprocess is
+        # still running. Stop the backend so it cannot keep the device half-
+        # written, then report the stall through the same finalizer.
+        self._log(f"MTKClient stalled on line: {line} ({int(elapsed)}s); stopping the backend")
+        self._stalled_out = True
+        try:
+            if self._process is not None and self._process.poll() is None:
+                self._process.terminate()
+        except Exception:
+            pass
         self._finalize_mtk_stall("MTK_OUTPUT_STALLED")
 
     def _end_mtk_run_successfully(self, mtk, da_handler=None) -> None:
@@ -4409,11 +4554,31 @@ class FlashWorker(QThread):
         self.action_changed.emit(tr("action_device_connected"))
         self._apply_mtk_write_strategy(mtk, image_files)
 
-        # The write plan is the reference build's, not a guess: Y1 gets its six
-        # named partitions, Y2 the package scatter order (preloader first), and
-        # the device's own MBR/EBR stubs are never written back. Nothing is
-        # formatted before the run, so an interrupted install can always be
-        # retried from a player whose preloader still answers.
+        # Refuse before writing anything when the package's chip and the chip
+        # that answered are different. The 1.1.7 build does the same check
+        # right after the DA comes up; without it a package for another player
+        # writes at that player's addresses and the install "succeeds" into a
+        # layout this device does not have.
+        if not self._check_package_platform(mtk, platform):
+            real = self._device_platform_name(mtk) or "unknown"
+            self._log(
+                f"Firmware package does not match device: package platform "
+                f"{platform or 'unknown'}, device chip {real}"
+            )
+            self._log("Confirm that the selected firmware package matches this device model.")
+            try:
+                if hasattr(mtk, "port") and mtk.port is not None:
+                    mtk.port.close()
+            except Exception:
+                pass
+            self.finished.emit(False, "DEVICE_PACKAGE_MISMATCH")
+            return
+
+        # The write plan is the 1.1.7 build's, not a guess: every downloadable
+        # image in scatter order, the preloader last, and the device's own
+        # MBR/EBR stubs never written back. Nothing is formatted before the
+        # run, so an interrupted install can always be retried from a player
+        # whose preloader still answers.
         plan = build_mtk_write_plan(
             scatter_file, getattr(self, "package_model", "") or self.model
         )
@@ -4421,18 +4586,41 @@ class FlashWorker(QThread):
             self._log("Error: no writable partitions in scatter file")
             self.finished.emit(False, "NO_IMAGE_FILES")
             return
-        self._log(
-            f"Write plan ({len(plan)} partition(s), "
-            f"{'named writes' if plan[0]['offset'] is None else 'scatter addresses'}):"
-        )
+        self._log(f"Write plan ({len(plan)} partition(s), scatter addresses):")
         for step in plan:
-            where = (
-                f"0x{step['offset']:X}" if step["offset"] is not None else "device table"
-            )
             self._log(
-                f"  {step['name']:<12} {step['path'].name:<28} {where} "
-                f"{step['parttype']}"
+                f"  {step['name']:<12} {step['path'].name:<28} "
+                f"0x{step['offset']:X} {step['parttype']} "
+                f"(partition {int(step.get('partition_size') or 0) / 1048576:.1f}MB)"
             )
+
+        # Read the device's own MBR/EBR chain before writing. The package
+        # describes the layout it was built for; a player that was last flashed
+        # with a different package can have different start addresses or a
+        # smaller partition at the same start, and writing into that is what
+        # ends in a device NACK near the tail. The 1.1.7 build probes the
+        # device's table the same way, and keeps going when probing fails.
+        live_parts = self._read_live_partitions(mtk, extract_dir)
+        live_by_start = dict(live_parts or ())
+        for step in plan:
+            if step["parttype"] != "user":
+                step["live_size"] = 0
+                continue
+            live_size = int(live_by_start.get(int(step["offset"])) or 0)
+            step["live_size"] = live_size
+            scatter_size = int(step.get("partition_size") or 0)
+            if live_size:
+                if scatter_size and live_size != scatter_size:
+                    self._log(
+                        f"  {step['name']}: device partition is "
+                        f"{live_size / 1048576:.1f}MB, package says "
+                        f"{scatter_size / 1048576:.1f}MB; using the device's size"
+                    )
+            elif live_parts:
+                self._log(
+                    f"  {step['name']}: no device partition starts at "
+                    f"0x{step['offset']:X}; writing at the package's address"
+                )
 
         total = len(plan)
         total_bytes = sum(int(step["length"]) for step in plan)
@@ -4542,46 +4730,115 @@ class FlashWorker(QThread):
 
                 offset = step["offset"]
                 target_part = step["parttype"]
+                part_size = int(step.get("partition_size") or 0)
+                live_size = int(step.get("live_size") or 0)
+                if live_size:
+                    # The device's own partition is the real bound: a package
+                    # built for a 2 GB userdata must not be written into the
+                    # 34 MB userdata the player currently has.
+                    part_size = min(part_size, live_size) if part_size else live_size
                 is_preloader = part_name.lower() == "preloader"
                 active_file = file_path
                 temp_unsparse = None
+                sparse_regions = None
 
                 # Android sparse images must be raw before a DA write, exactly
-                # as the reference desparses system/cache/userdata with
-                # simg2img first. Nothing else is rewritten: no signed-wrapper
-                # strip, no preloader boot header.
+                # as the shipped build desparses system/cache/userdata first.
+                # The converter's region list matters: the 1.1.7 build writes
+                # only the sparse image's data extents, never the empty fill
+                # between them, so a 2 GB userdata container does not become a
+                # 2 GB transfer. Nothing else is rewritten: no signed-wrapper
+                # strip, no boot header (the preloader path owns that).
                 if _is_android_sparse(active_file):
                     self._log(tr("log_sparse_fmt").format(part=part_name))
                     self.action_changed.emit(tr("action_unpacking_fmt").format(part=part_name))
                     unsparse_dir = Path(extract_dir) / ".unsparse_cache"
-                    temp_unsparse, _ = _convert_sparse_to_raw(active_file, unsparse_dir)
+                    temp_unsparse, sparse_regions = _convert_sparse_to_raw(
+                        active_file, unsparse_dir
+                    )
                     active_file = temp_unsparse
 
                 write_len = active_file.stat().st_size if active_file.exists() else 0
                 file_off = 0
                 # A desparsed image is bigger than the sparse file on disk, so
                 # the bar's denominator has to grow with it or it reaches the
-                # end of the write slice early.
-                if write_len > int(step["length"]):
-                    total_bytes += write_len - int(step["length"])
+                # end of the write slice early. Region writes move less than
+                # the raw size, so they use their own extent total.
+                if sparse_regions:
+                    transfer_len = _sparse_data_end(sparse_regions)
+                else:
+                    transfer_len = write_len
+                # The denominator follows what is actually transferred (the
+                # desparsed raw size, or the sparse data extents), not the
+                # on-disk size of a sparse container.
+                effective_len = transfer_len
+                target_len = int(step["length"])
+                if target_len > 0:
+                    total_bytes += effective_len - target_len
 
                 cur_part_name = part_name
-                cur_part_len = write_len
+                cur_part_len = transfer_len
                 part_completed_bytes = 0
                 last_log_pct = -1.0
 
                 try:
-                    self._write_mtk_partition(
-                        da_handler,
-                        mtk,
-                        part_name,
-                        str(active_file),
-                        target_part,
-                        offset=offset,
-                        file_offset=file_off,
-                        write_length=write_len,
-                        bytes_progress_cb=on_segment_done,
-                    )
+                    # The package must fit the partition the scatter describes.
+                    # A mismatch here is what the 1.1.7 build refuses up front
+                    # ("sparse data exceeds partition", "image is too large") —
+                    # handed to the DA it becomes an unexplained NACK near the
+                    # end of the partition.
+                    if sparse_regions and part_size:
+                        # Fill extents are DONT_CARE, so anything past the end
+                        # of the device's partition is dropped rather than
+                        # NACKed by the DA — the same "tail will be skipped"
+                        # rule the 1.1.7 build applies to sparse images.
+                        clipped, dropped = _clip_sparse_regions(
+                            sparse_regions, part_size
+                        )
+                        if dropped:
+                            self._log(
+                                f"  {part_name}: data beyond the device's "
+                                f"{part_size / 1048576:.1f}MB partition will be skipped"
+                            )
+                        if not clipped:
+                            raise PackageLayoutError(
+                                f"{part_name} has no data inside the device's "
+                                f"{part_size / 1048576:.1f}MB partition "
+                                "(possible package/scatter mismatch)"
+                            )
+                        sparse_regions = clipped
+                        transfer_len = _sparse_data_end(sparse_regions)
+                        cur_part_len = transfer_len
+                    elif part_size and transfer_len > part_size:
+                        raise PackageLayoutError(
+                            f"{part_name} image is {transfer_len / 1048576:.1f}MB but the "
+                            f"device's partition is {part_size / 1048576:.1f}MB "
+                            "(possible package/scatter mismatch)"
+                        )
+                    if is_preloader:
+                        self._write_mtk_preloader(da_handler, mtk, str(active_file))
+                    elif sparse_regions:
+                        self._write_mtk_sparse_regions(
+                            mtk,
+                            part_name,
+                            str(active_file),
+                            sparse_regions,
+                            offset,
+                            target_part,
+                            bytes_progress_cb=on_segment_done,
+                        )
+                    else:
+                        self._write_mtk_partition(
+                            da_handler,
+                            mtk,
+                            part_name,
+                            str(active_file),
+                            target_part,
+                            offset=offset,
+                            file_offset=file_off,
+                            write_length=write_len,
+                            bytes_progress_cb=on_segment_done,
+                        )
                 except BaseException as e:
                     if is_disconnection_error(str(e), e):
                         self._log(f"USB disconnection detected during partition write: {e}")
@@ -4591,6 +4848,22 @@ class FlashWorker(QThread):
                         self.finished.emit(False, "USB_DISCONNECTED")
                         return
                     self._log(f"Writing {part_name} failed: {e}\n{traceback.format_exc()}")
+                    if isinstance(e, PackageLayoutError):
+                        self._log(
+                            "The firmware package does not fit this device's layout; "
+                            "nothing after this partition was written."
+                        )
+                        self.finished.emit(False, "DEVICE_PACKAGE_MISMATCH")
+                        return
+                    # The player can still be reflashed over USB even when it
+                    # cannot boot: BROM mode answers whatever is in the flash.
+                    # Whole-run retry is the supported recovery (Start Flash
+                    # again), never a per-partition retry.
+                    self._log(
+                        "The player can still be reflashed over USB in BROM mode: keep the "
+                        "cable connected and click Start Flash to try again. If that "
+                        "fails, unplug USB, wait 3 seconds, reconnect, and flash again."
+                    )
                     self.finished.emit(False, "WRITE_FAILED")
                     return
                 finally:
@@ -4599,9 +4872,12 @@ class FlashWorker(QThread):
                             temp_unsparse.unlink(missing_ok=True)
                         except Exception:
                             pass
-                    actual_len = write_len if active_file == temp_unsparse else (
-                        file_path.stat().st_size if file_path.exists() else 0
-                    )
+                    if sparse_regions:
+                        actual_len = _sparse_data_end(sparse_regions)
+                    elif active_file == temp_unsparse:
+                        actual_len = write_len
+                    else:
+                        actual_len = file_path.stat().st_size if file_path.exists() else 0
                     if actual_len > part_completed_bytes:
                         completed_bytes += (actual_len - part_completed_bytes)
                     if total_bytes > 0:
@@ -4609,6 +4885,10 @@ class FlashWorker(QThread):
                         remaining = self._total_eta.note(completed_bytes, total_bytes)
                         self.eta_changed.emit(remaining if remaining > 0 else -1)
 
+            # The watchdog needs about three one-second misses before it flags a
+            # disconnect, so a player that dropped right after the last write
+            # would otherwise be reported complete. Give it that window first.
+            self._await_usb_watchdog_verdict()
             if self._is_disconnected or is_disconnection_error(self._tool_error):
                 self._log("Install stopped due to USB disconnection.")
                 self.cancel()
@@ -4643,6 +4923,20 @@ class FlashWorker(QThread):
                     mtk.port.close()
             except Exception as e:
                 logger.debug("Failed to close mtk port cleanly: %s", e)
+
+    def _await_usb_watchdog_verdict(self, window: float = 3.5) -> None:
+        """Hold the success decision until the USB watchdog has had its window.
+
+        Returns early once the watchdog has flagged a disconnect or the run was
+        cancelled. A run that never passed USB search has no watchdog verdict.
+        """
+        if not getattr(self, "_past_usb_search", False):
+            return
+        deadline = time.monotonic() + window
+        while time.monotonic() < deadline:
+            if self._is_disconnected or self._cancelled:
+                return
+            time.sleep(0.1)
 
     def _is_legacy_mode(self, mtk):
         mode = getattr(getattr(mtk, "daloader", None), "flashmode", None)
@@ -4736,6 +5030,181 @@ class FlashWorker(QThread):
                 bytes_progress_cb(seg_len)
             self._touch_attempt()
 
+    def _read_live_partitions(self, mtk, extract_dir, length: int = 2 * 1024 * 1024):
+        """Read the device's own MBR/EBR chain before anything is written.
+
+        Read-only and best-effort: the head of the user area holds the live
+        table, and a chain that cannot be parsed leaves the plan untouched.
+        """
+        daloader = getattr(mtk, "daloader", None)
+        if daloader is None or not hasattr(daloader, "readflash"):
+            return []
+        head = Path(extract_dir) / ".unsparse_cache" / "live_table_head.bin"
+        try:
+            head.parent.mkdir(parents=True, exist_ok=True)
+            daloader.readflash(
+                addr=0,
+                length=length,
+                filename=str(head),
+                parttype="user",
+                display=False,
+            )
+            data = head.read_bytes()
+        except BaseException as e:
+            self._log(f"Could not read the device's partition table: {e}")
+            return []
+        finally:
+            try:
+                head.unlink(missing_ok=True)
+            except OSError:
+                pass
+        partitions = _parse_mbr_partitions(data)
+        if not partitions:
+            self._log(
+                "No MBR/EBR table found at the head of the user area; "
+                "writing at the package's own addresses."
+            )
+            return []
+        self._log("Device partition table (read back before writing):")
+        for start, size in partitions:
+            self._log(f"  0x{start:X}  {size / 1048576:.1f}MB")
+        return partitions
+
+    def _device_platform_name(self, mtk) -> str:
+        """Chip the connected device reports (``MT6572``, ``6572``, ...)."""
+        cpu = getattr(getattr(mtk, "config", None), "cpu", None)
+        if not cpu:
+            chip = getattr(getattr(mtk, "config", None), "chipconfig", None)
+            cpu = getattr(chip, "name", None)
+        return str(cpu or "").strip()
+
+    def _check_package_platform(self, mtk, package_platform) -> bool:
+        """True unless the package's chip and the device's chip disagree.
+
+        Either side being unknown means the run cannot be judged, so nothing is
+        blocked (the same rule the 1.1.7 build applies).
+        """
+        pkg = _normalize_platform(package_platform)
+        dev = _normalize_platform(self._device_platform_name(mtk))
+        if not pkg or not dev or pkg.upper() == "UNKNOWN" or dev.upper() == "UNKNOWN":
+            return True
+        return pkg == dev
+
+    def _write_mtk_preloader(self, da_handler, mtk, file_path_str) -> None:
+        """Write the preloader the way the shipped 1.1.7 build does.
+
+        A raw ``MMM\\x01`` preloader is wrapped in the BootROM's EMMC_BOOT /
+        BRLYT header first, then written through the DA's WRITE_IMAGE command
+        into eMMC boot1. eMMC boot1 holds a boot header: writing the bare image
+        over it leaves a player the BootROM no longer recognises.
+
+        This runs last, exactly as in 1.1.7. If the run dies anywhere earlier
+        the player still enumerates with its old preloader and can be flashed
+        again; that is the whole point of deferring it.
+        """
+        file_path = Path(file_path_str)
+        try:
+            storage = str(
+                getattr(
+                    getattr(getattr(mtk, "daloader", None), "daconfig", None),
+                    "storage",
+                    None,
+                ).flashtype
+            ).lower()
+        except Exception:
+            storage = "emmc"
+        if "ufs" in storage:
+            storage = "ufs"
+        else:
+            storage = "emmc"
+
+        write_file = Path(
+            _wrap_preloader_for_raw_boot(file_path, storage, log_cb=self._log)
+        )
+        if write_file != file_path:
+            self._log(
+                "  Legacy preloader uses BootROM header image "
+                f"({write_file.stat().st_size} bytes)"
+            )
+        else:
+            self._log("  Legacy preloader uses original image")
+        try:
+            write_size = write_file.stat().st_size
+            daloader = getattr(mtk, "daloader", None)
+            if daloader is not None and hasattr(daloader, "sdmmc_write_image"):
+                ok = daloader.sdmmc_write_image(
+                    addr=0,
+                    length=write_size,
+                    filename=str(write_file),
+                    display=False,
+                    parttype=1,  # MTK_DA_EMMC_PART_BOOT1
+                )
+                error = getattr(getattr(mtk, "config", None), "last_error", None)
+                if not ok or error:
+                    raise RuntimeError(error or "WRITE_IMAGE returned failure")
+            else:
+                # A DA without WRITE_IMAGE falls back to an address write into
+                # boot1; the wrapped image is what makes that safe.
+                self._write_mtk_partition(
+                    da_handler,
+                    mtk,
+                    "preloader",
+                    str(write_file),
+                    "boot1",
+                    offset=0,
+                    write_length=write_size,
+                )
+            self._log("  Legacy WRITE_IMAGE preloader write complete")
+        finally:
+            if write_file != file_path:
+                try:
+                    write_file.unlink(missing_ok=True)
+                except OSError as e:
+                    logger.debug("Could not remove wrapped preloader: %s", e)
+
+    def _write_mtk_sparse_regions(
+        self,
+        mtk,
+        part_name,
+        raw_path,
+        regions,
+        offset,
+        parttype,
+        bytes_progress_cb=None,
+    ) -> None:
+        """Write only a sparse image's data extents (the 1.1.7 sparse path).
+
+        A sparse container describes a larger logical image than it stores: the
+        fill between data extents is DONT_CARE. Writing the raw image instead
+        turns a 36 MB userdata into a 2 GB transfer (and, on a player whose
+        live layout is smaller than the package's, NACKs near the tail).
+        """
+        daloader = getattr(mtk, "daloader", None)
+        if daloader is None or not hasattr(daloader, "writeflash"):
+            raise RuntimeError("DA has no writeflash for sparse region writes")
+        total = len(regions)
+        for index, (region_off, region_len) in enumerate(regions, 1):
+            self._log(
+                f"  Sparse region {index}/{total}: offset=0x{offset + region_off:X} "
+                f"size={region_len / 1048576:.2f}MB"
+            )
+            ok = daloader.writeflash(
+                addr=offset + region_off,
+                length=region_len,
+                filename=str(raw_path),
+                offset=region_off,
+                parttype=parttype,
+            )
+            error = getattr(getattr(mtk, "config", None), "last_error", None)
+            if not ok or error:
+                raise RuntimeError(
+                    f"Sparse region {index}/{total} of {part_name} failed: "
+                    f"{error or 'writeflash returned failure'}"
+                )
+            if bytes_progress_cb:
+                bytes_progress_cb(region_len)
+            self._touch_attempt()
+
     def _write_mtk_partition(
         self,
         da_handler,
@@ -4750,9 +5219,11 @@ class FlashWorker(QThread):
     ):
         """Write one partition exactly the way the reference build does.
 
-        With a scatter address: one ``da_wo`` for the whole image (the same
-        command ``mtk.py script`` issues). Without one: one named ``da_write``
-        (``mtk.py w``), which resolves the partition from the device table.
+        Every plan step carries a scatter address, so this is one ``da_wo``
+        per image (the same command ``mtk.py script`` issues). The named
+        ``da_write`` below is kept only as a legacy fallback for callers
+        without an address; it resolves the partition from the device table,
+        which is empty on these MBR-partitioned players.
         Nothing is split into 50 MB segments and no image header is rewritten.
         """
         file_path = Path(file_path_str)

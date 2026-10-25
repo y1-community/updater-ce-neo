@@ -440,6 +440,8 @@
  "donate_dont_ask_link": "ደግመህ አትጠይቀኝ።",
  "donate_copied": "{label} አድራሻ ተቀድቷል።",
  "donate_appeal_costs_for_year": "ዛሬ ይህን የሚጠቀም ሁሉ ከለገሰ፣ ይህን ፕሮጀክት ለአንድ አመት ያቆየው ነበር።",
+ "donate_support_author": "ራያን ስፔክተር እና የማህበረሰብ አስተዋፅዖ አበርካቾች",
+ "donate_support_role": "መሪ ገንቢ · ማዘመኛ CE እና የማህበረሰብ ፈርምዌር ፕሮጀክት",
  "donate_support_appeal_lead": "ልገሳ ቤተሰቤን እንድደግፍ እና የሙከራ መሣሪያዎቹን እንድደግፍ በቀጥታ ይረዳኛል።",
  "donate_support_appeal_followup": "ይህ ነፃ አገልግሎት ለሁሉም ሰው የሚቻል ያደርገዋል። ይህ መሳሪያ ጊዜዎን ከቆጠበ ወይም ተጫዋችዎን ዛሬ ካዳነ እባክዎን ትንሽ ልገሳ ያስቡ - በእውነት ለእኛ ዓለም ማለት ነው።",
  "community_discord": "Discord",

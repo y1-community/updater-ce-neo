@@ -2898,8 +2898,10 @@ def test_install_stages_sidebar_visibility_and_compact_height():
         assert w._install_output_btn.isVisible() is True
         assert w._settings_btn.isVisible() is False
         assert w._support_btn.isVisible() is False
-        assert w._discord_btn.isVisible() is False
-        assert w._reddit_btn.isVisible() is False
+        # The community marks follow the Donations setting, install or not.
+        assert w._discord_btn.isVisible() is True
+        assert w._reddit_btn.isVisible() is True
+        assert w._github_btn.isVisible() is True
         assert w._sp_flash_tool_btn.isVisible() is False
         assert w._check_updates_btn.isVisible() is False
         assert w._lang_combo.isVisible() is False

@@ -679,11 +679,26 @@ class _RoundNextButton(QPushButton):
         return disc, text
 
     def rebuild_arrow(self) -> None:
-        """Re-render the platform glyph for the current theme colours."""
+        """Re-render the platform glyph for the current theme colours.
+
+        In a right-to-left language the row mirrors — the back chip sits at
+        the row's right edge — but a glyph does not mirror itself, so the
+        left-pointing back arrow would aim inwards at the next chip (both
+        arrows pointing at each other, actions reading the wrong way round).
+        Mirror the *directional* glyphs there so each points away from the
+        other, the way the row reads; the label, tooltip and accessible name
+        keep their real meaning.
+        """
         _disc, text = self._colors()
+        symbol = self._symbol
+        if (
+            symbol in ("back", "next")
+            and self.layoutDirection() == Qt.LayoutDirection.RightToLeft
+        ):
+            symbol = "next" if symbol == "back" else "back"
         # "cancel" is a real symbol in every platform map (SF xmark, Segoe
         # ChromeClose, the SVG cross); "close" is not, and drew a stray glyph.
-        self._arrow = get_symbol_pixmap(self._symbol, _ROUND_NEXT_ARROW_PX, text)
+        self._arrow = get_symbol_pixmap(symbol, _ROUND_NEXT_ARROW_PX, text)
         if self._arrow.isNull() and self._symbol == "cancel":
             self._arrow = _explicit_cancel_cross(_ROUND_NEXT_ARROW_PX, text)
         self.update()
@@ -1730,7 +1745,7 @@ class FlashPage(QWidget):
         if hasattr(self, "_appeal"):
             self._appeal.setVisible(False)
         if hasattr(self._progress_bar, "set_failed"):
-            self._progress_bar.set_failed(True, tr("install_failed"))
+            self._progress_bar.set_failed(True)
         else:
             self._progress_bar.setFormat(tr("install_failed"))
 
@@ -1813,7 +1828,10 @@ class FlashPage(QWidget):
         else:
             self._wait_progress_bar.setFormat("%p%")
         if hasattr(self, "_step_label"):
-            self._step_label.setStyleSheet("")
+            # Back to the card foreground rather than an empty sheet: empty
+            # inherits the window's default label colour, which is dimmer than
+            # the card's own text and would stand out on the next install.
+            _apply_card_text(self._step_label)
         if hasattr(self, "_eta_label"):
             self._eta_label.setText("")
         if hasattr(self, "_status_flow") and hasattr(self._status_flow, "set_forced_stacked"):
@@ -1858,7 +1876,7 @@ class FlashPage(QWidget):
         msg = self._power_off_prompt_text()
         self._wait_prompt_label.setText(msg)
         if hasattr(self._wait_progress_bar, "set_failed"):
-            self._wait_progress_bar.set_failed(True, tr("install_failed"))
+            self._wait_progress_bar.set_failed(True)
         else:
             self._wait_progress_bar.setFormat(tr("install_failed"))
         self._wait_cancel_btn.setVisible(True)
@@ -2218,6 +2236,12 @@ class FlashPage(QWidget):
         if callable(cb):
             cb()
 
+    def rockbox_power_on_prompt_key(self, model: str) -> str:
+        """One copy for both flash methods: the player may not have been powered
+        up by the flash tool, so the user powers it on before Next."""
+        is_y1 = (model or "").upper() == "Y1"
+        return "rockbox_power_on_prompt_sp_y1" if is_y1 else "rockbox_power_on_prompt_sp_other"
+
     def show_rockbox_power_on_prompt(self, prompt: str, on_continue=None) -> None:
         """Keep the install card active while the user boots the flashed player."""
         self._failed = False
@@ -2498,9 +2522,21 @@ class FlashPage(QWidget):
                 label.setPixmap(painted)
                 label.setText("")
 
+    def _display_package_name(self) -> str:
+        """Card title with its leading software name in the current language.
+
+        The name is stored as the English catalogue title, so a language change
+        re-localises it here rather than keeping the wording from install start.
+        """
+        name = getattr(self, "_package_name", "") or ""
+        canonical = "Original Software"
+        if name == canonical or name.startswith(canonical + " "):
+            return tr("software_original") + name[len(canonical):]
+        return name
+
     def set_package_name(self, name):
         self._package_name = name or ""
-        val = self._package_name or "\u2014"
+        val = self._display_package_name() or "\u2014"
         if hasattr(self, "_prep_pkg_label"):
             self._prep_pkg_label.setText(val)
         if hasattr(self, "_wait_pkg_label"):
@@ -2699,6 +2735,12 @@ class FlashPage(QWidget):
     def retranslate(self):
         for label, key in getattr(self, "_headings", []):
             label.setText(tr(key))
+        if hasattr(self, "_package_name"):
+            self.set_package_name(self._package_name)
+        if hasattr(self, "_progress_bar"):
+            self._progress_bar.update()
+        if hasattr(self, "_wait_progress_bar"):
+            self._wait_progress_bar.update()
         if hasattr(self, "_download_heading"):
             self._download_heading.setText(tr("flash_download_in_progress"))
         if hasattr(self, "_download_cancel_btn"):
@@ -2797,6 +2839,10 @@ class FlashPage(QWidget):
         for name in names:
             label = getattr(self, name, None)
             if label is None:
+                continue
+            if name == "_step_label" and bool(getattr(self, "_failed", False)):
+                # The failure line carries the danger colour; a theme refresh
+                # must not flatten it while the failure is still on screen.
                 continue
             if name in ("_download_heading",):
                 _style_card_heading(label)
