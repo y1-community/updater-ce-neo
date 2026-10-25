@@ -864,7 +864,14 @@ class DiagnosticsManager:
         low = clean.lower()
 
         # Explicit tool tags
-        if clean.startswith(("[SP]", "[QT]")) or "sp_flash" in low or "flash_tool" in low:
+        if (
+            clean.startswith(("[SP]", "[QT]"))
+            or "sp_flash" in low
+            or "flash_tool" in low
+            or "all command exec" in low
+            or ("all command" in low and "exec" in low)
+            or "flash complete" in low
+        ):
             return CAT_SP
         if (
             clean.startswith("[MTK]")
@@ -880,7 +887,8 @@ class DiagnosticsManager:
         # Contextual classification based on active backend during flash
         if self._active_backend == "sp":
             if any(k in low for k in ("search usb", "brom connected", "of da has been sent",
-                                      "download ok", "download failed", "s_ft_", "s_chip", "of image data")):
+                                      "download ok", "download failed", "s_ft_", "s_chip", "of image data",
+                                      "all command", "flash complete", "disconnect")):
                 return CAT_SP
         elif self._active_backend in ("mtk", "mtk_mac"):
             return CAT_MTK

@@ -131,13 +131,19 @@ def _clear_document_background(view: QTextEdit) -> None:
 def paint_window_surface(widget: QWidget) -> None:
     """Make a widget *be* the window's surface, with no plate of its own.
 
-    Windows and Linux have no glass backdrop: the window is painted in the
-    theme's Window role, so a child that fills itself with Base — a shade
-    apart from Window — reads as a rectangle sitting behind the notes or the
-    release list. Copying Window onto Base as well removes the box and still
-    erases the widget on every repaint, so nothing is left half-painted.
+    On macOS the window is one sheet of Liquid Glass, so the surface is the
+    material itself: the widget paints nothing and the header, rail and pages
+    all read as the same sheet. Without a glass backdrop the window is painted
+    in the theme's Window role instead, and a child that fills itself with Base
+    — a shade apart from Window — would read as a rectangle sitting behind the
+    notes or the release list. Copying Window onto Base as well removes the box
+    and still erases the widget on every repaint, so nothing is left
+    half-painted.
     """
     if widget is None:
+        return
+    if glass_surfaces_enabled():
+        show_glass_backdrop(widget)
         return
     app = QApplication.instance()
     surface = QColor()

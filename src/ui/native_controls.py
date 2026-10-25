@@ -190,6 +190,7 @@ class NativeRoundChip:
         self._enabled = True
         self._glass = False
         self._failed = False
+        self._filter = None
 
     # -- state ---------------------------------------------------------
     @property
@@ -251,17 +252,22 @@ class NativeRoundChip:
             NSFocusRingTypeNone,
             NSImageOnly,
             NSImageScaleProportionallyDown,
-            NSMakeRect,
         )
 
-        ptr = int(self._host.winId())
-        if not ptr:
-            raise RuntimeError("the host widget has no NSView yet")
-        # Qt's cocoa plugin hands back the widget's own NSView from winId();
-        # src/ui/glass.py reaches AppKit windows the same way.
-        view = objc.objc_object(c_void_p=ptr)
+        win = self._host.window()
+        if win is None or not win.isVisible():
+            raise RuntimeError("the host window is not available or not visible yet")
 
-        button = NSButton.alloc().initWithFrame_(self._frame_rect())
+        # Attach to the top-level window's NSView directly.
+        # Calling self._host.winId() would turn self._host and its parent Card
+        # into native QNSViews with opaque layers, glitching out card materials
+        # and creating rectangular bounding boxes around buttons.
+        from .glass import _get_nsview
+        view = _get_nsview(win)
+        if view is None:
+            raise RuntimeError("the host window has no NSView yet")
+
+        button = NSButton.alloc().initWithFrame_(self._frame_rect(view))
         self._glass = _glass_available()
         if self._glass:
             from AppKit import NSBezelStyleGlass
@@ -278,7 +284,6 @@ class NativeRoundChip:
         button.setImagePosition_(NSImageOnly)
         button.setImageScaling_(NSImageScaleProportionallyDown)
         button.setFocusRingType_(NSFocusRingTypeNone)
-        button.setFrame_(self._frame_rect())
 
         target = _chip_target_class().alloc().init()
         target._chip = self
@@ -291,18 +296,56 @@ class NativeRoundChip:
         self._apply_colors()
         self._apply_text()
         button.setEnabled_(self._enabled)
+        visible = bool(self._host.isVisible() and self._host.isVisibleTo(win))
+        button.setHidden_(not visible)
         view.addSubview_(button)
+
+        self._install_filter()
+
+    def _install_filter(self) -> None:
+        if self._filter is not None:
+            return
+
+        class _HostFilter(QObject):
+            def __init__(self, chip):
+                super().__init__(chip._host)
+                self._chip = chip
+
+            def eventFilter(self, watched, event):
+                if self._chip.live:
+                    t = event.type()
+                    if t in (QEvent.Type.Move, QEvent.Type.Resize, QEvent.Type.LayoutRequest):
+                        self._chip.sync_frame()
+                    elif t == QEvent.Type.Hide:
+                        if self._chip._button is not None:
+                            self._chip._button.setHidden_(True)
+                    elif t == QEvent.Type.Show:
+                        self._chip.sync_frame()
+                return False
+
+        self._filter = _HostFilter(self)
+        self._host.installEventFilter(self._filter)
 
     def sync_frame(self) -> None:
         """Keep the AppKit button on the host's disc as the widget resizes."""
         if not self.live:
             return
         try:
-            self._button.setFrame_(self._frame_rect())
+            win = self._host.window()
+            visible = bool(win and win.isVisible() and self._host.isVisible() and self._host.isVisibleTo(win))
+            self._button.setHidden_(not visible)
+            if visible:
+                self._button.setFrame_(self._frame_rect())
         except Exception:
             pass
 
     def detach(self) -> None:
+        if self._filter is not None:
+            try:
+                self._host.removeEventFilter(self._filter)
+            except Exception:
+                pass
+            self._filter = None
         if not self.live:
             return
         try:
@@ -313,15 +356,31 @@ class NativeRoundChip:
         self._target = None
 
     # -- internals -----------------------------------------------------
-    def _frame_rect(self):
+    def _frame_rect(self, view=None):
         from AppKit import NSMakeRect
+        from PySide6.QtCore import QPoint
 
         inset = CHIP_INSET_PX
         w = max(1, int(self._host.width()) - inset * 2)
         h = max(1, int(self._host.height()) - inset * 2)
-        # Symmetric insets: AppKit's origin is bottom-left and Qt's top-left,
-        # so only a centred rect is the same rect in both systems.
-        return NSMakeRect(inset, inset, w, h)
+
+        win = self._host.window()
+        if win is None:
+            return NSMakeRect(inset, inset, w, h)
+
+        if view is None:
+            from .glass import _get_nsview
+            view = _get_nsview(win)
+
+        top_left = self._host.mapTo(win, QPoint(0, 0))
+        x = float(top_left.x() + inset)
+        if view is not None and getattr(view, "isFlipped", lambda: True)():
+            y = float(top_left.y() + inset)
+        elif view is not None:
+            y = float(view.bounds().size.height - (top_left.y() + self._host.height()) + inset)
+        else:
+            y = float(top_left.y() + inset)
+        return NSMakeRect(x, y, w, h)
 
     def _apply_image(self) -> None:
         from AppKit import NSFontWeightSemibold, NSImage, NSImageSymbolConfiguration
@@ -467,16 +526,28 @@ class _MenuPopup:
 
     def popup(self) -> None:
         """Show at the combo's bottom-left and block until AppKit dismisses it."""
-        import objc
         from AppKit import NSMakePoint
+        from PySide6.QtCore import QPoint
 
-        view = objc.objc_object(c_void_p=int(self._combo.winId()))
-        bounds = view.bounds()
-        # AppKit's origin is the view's own: a flipped view measures y from the
-        # top, so the visual bottom edge is 0 there and the view height here.
-        y = 0 if view.isFlipped() else bounds.size.height
+        win = self._combo.window()
+        from .glass import _get_nsview
+        view = _get_nsview(win) if win is not None else None
+        if view is None:
+            self._combo.showPopup()
+            return
+
+        # Use the top-level window's NSView directly. Calling self._combo.winId()
+        # would force self._combo and its parent Card into native QNSViews with
+        # opaque layers, glitching out card materials and losing transparency.
+        pos = self._combo.mapTo(win, QPoint(0, self._combo.height()))
+        x = float(pos.x())
+        if getattr(view, "isFlipped", lambda: True)():
+            y = float(pos.y())
+        else:
+            y = float(view.bounds().size.height - pos.y())
+
         self._menu.popUpMenuPositioningItem_atLocation_inView_(
-            None, NSMakePoint(0, y), view
+            None, NSMakePoint(x, y), view
         )
 
     def apply_choice(self) -> None:

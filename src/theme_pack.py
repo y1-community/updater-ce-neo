@@ -559,6 +559,11 @@ class AdbPushWorker(QThread):
         try:
             from . import adb as _adb
 
+            try:
+                _adb.adb_enable_mass_storage(self._adb, self._serial)
+            except Exception:
+                pass
+
             device_dirs = _adb.adb_find_all_rockbox_dirs(self._adb, self._serial)
             if not device_dirs:
                 # The player may expose storage without a probed path; fall

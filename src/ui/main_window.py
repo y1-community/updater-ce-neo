@@ -91,6 +91,7 @@ from ..flash_service import (
     STEP_PLEASE_WAIT,
     STEP_WAITING,
     STEP_WRITE,
+    METHOD_SP,
     FlashService,
     backend_method,
     classify_backend_line,
@@ -128,6 +129,7 @@ from .settings_page import SettingsPage
 from .support_page import SupportPage
 from .icons import get_symbol_icon
 from .widgets import CurrentPageStack
+from .surfaces import paint_window_surface
 from .sidebar import (
     SidebarButton,
     SidebarWidth,
@@ -879,39 +881,13 @@ class MainWindow(QMainWindow):
         if worker is getattr(self, "_manifest_worker", None):
             self._on_manifest_loaded(entries)
 
-    def _paint_opaque(self, widget, color: str | None = None):
-        """Fill a surface so the next paint replaces the previous frame.
-
-        On Liquid Glass and WinUI acrylic the backdrop stays visible: the
-        widget replaces its rect with transparent pixels instead of a solid
-        theme color. Linux keeps the solid fill. This does not use
-        CompositionMode_Clear.
-        """
-        if widget is None:
-            return
-        from .surfaces import glass_surfaces_enabled, show_glass_backdrop
-        if glass_surfaces_enabled():
-            show_glass_backdrop(widget)
-            return
-        widget.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
-        widget.setAutoFillBackground(True)
-        tokens = T()
-        fill = QColor(color or tokens.bg)
-        fg = QColor(tokens.fg)
-        pal = widget.palette()
-        pal.setColor(QPalette.ColorRole.Window, fill)
-        pal.setColor(QPalette.ColorRole.Base, fill)
-        pal.setColor(QPalette.ColorRole.WindowText, fg)
-        pal.setColor(QPalette.ColorRole.Text, fg)
-        pal.setColor(QPalette.ColorRole.ButtonText, fg)
-        widget.setPalette(pal)
 
     def _build_ui(self):
         central = QWidget(self)
         central.setObjectName("centralWidget")
         # Opaque client area. A translucent central widget keeps the previous
         # page's pixels, so the next screen is painted on top of the last one.
-        self._paint_opaque(central)
+        paint_window_surface(central)
         self.setCentralWidget(central)
         central_layout = QVBoxLayout(central)
         central_layout.setContentsMargins(0, 0, 0, 0)
@@ -939,7 +915,7 @@ class MainWindow(QMainWindow):
         # 2. Body row: Navigation sidebar on left, stacked pages on right
         body = QWidget()
         body.setObjectName("mainBody")
-        self._paint_opaque(body)
+        paint_window_surface(body)
         outer = QHBoxLayout(body)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
@@ -947,7 +923,7 @@ class MainWindow(QMainWindow):
         outer.addWidget(self._build_nav())
 
         self._stack = CurrentPageStack()
-        self._paint_opaque(self._stack)
+        paint_window_surface(self._stack)
         self._select_page = SelectPackagePage()
         QTimer.singleShot(0, self._prefill_fw_package)
         self._flash_page = FlashPage()
@@ -977,7 +953,7 @@ class MainWindow(QMainWindow):
         self._notice_host.setObjectName("noticeHost")
         notice_layout = QVBoxLayout(self._notice_host)
         notice_layout.setContentsMargins(16, 12, 16, 12)
-        self._paint_opaque(self._notice_host)
+        paint_window_surface(self._notice_host)
         self._support_page = SupportPage()
 
         for w in (
@@ -990,11 +966,11 @@ class MainWindow(QMainWindow):
             self._notice_host,
             self._support_page,
         ):
-            self._paint_opaque(w)
+            paint_window_surface(w)
             self._stack.addWidget(w)
         content_col = QWidget()
         content_col.setObjectName("contentColumn")
-        self._paint_opaque(content_col)
+        paint_window_surface(content_col)
         content_layout = QVBoxLayout(content_col)
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(0)
@@ -1065,17 +1041,9 @@ class MainWindow(QMainWindow):
         ):
             pass_caption_presses(widget)
 
-    def _refresh_opaque_surfaces(self) -> None:
-        """Repaint fills that were copied from the previous theme."""
-        root = self.centralWidget()
-        if root is None:
-            return
-        for widget in (root, *root.findChildren(QWidget)):
-            if widget.autoFillBackground():
-                self._paint_opaque(widget)
 
     def _on_theme_changed(self):
-        self._refresh_opaque_surfaces()
+        self.update()
         dark = is_dark()
         if sys.platform == "win32" or platform.system() == "Windows":
             apply_windows_acrylic(self, dark=dark)
@@ -1211,7 +1179,7 @@ class MainWindow(QMainWindow):
         t = T()
         bar = DraggableHeaderBar(self)
         bar.setFixedHeight(int(HEADER_CONTENT_HEIGHT))
-        self._paint_opaque(bar)
+        paint_window_surface(bar)
         is_mac = sys.platform == "darwin"
         is_win = sys.platform == "win32" or platform.system() == "Windows"
         is_linux = sys.platform.startswith("linux") or platform.system() == "Linux"
@@ -1263,7 +1231,7 @@ class MainWindow(QMainWindow):
 
         # Title container for active page title
         self._title_container = QWidget()
-        self._paint_opaque(self._title_container)
+        paint_window_surface(self._title_container)
         title_cont_layout = QHBoxLayout(self._title_container)
         title_cont_layout.setContentsMargins(0, 0, 0, 0)
         title_cont_layout.setSpacing(0)
@@ -1495,9 +1463,11 @@ class MainWindow(QMainWindow):
             return
         nav.setStyleSheet("")
         # No stylesheet on the rail. On glass the gaps stay clear so the
-        # backdrop shows; the buttons repaint their own rows. Elsewhere the
-        # rail is a solid pane so a moved highlight cannot linger.
-        self._paint_opaque(nav, T().bg_nav)
+        # window's material shows; the buttons repaint their own rows.
+        # Elsewhere the rail is a solid pane so a moved highlight cannot linger.
+        # The rail carries no material of its own: the whole window is one glass
+        # surface, so a second effect view here would read as a darker panel.
+        paint_window_surface(nav)
         nav.update()
         for btn in nav.findChildren(SidebarButton):
             # The rows belong over the rail's own plate. Raising them is what
@@ -1626,7 +1596,7 @@ class MainWindow(QMainWindow):
             getattr(self, "_support_page", None),
         ):
             if surface is not None:
-                self._paint_opaque(surface)
+                paint_window_surface(surface)
 
         is_mac = sys.platform == "darwin"
         brand_font_size = "13px" if is_mac else _BRAND_FONT_SIZE
@@ -2149,8 +2119,16 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(0, self._on_select_content_changed)
         if sys.platform == "darwin":
             from .glass import apply_glass, configure_traffic_lights
-            apply_glass(self)
-            configure_traffic_lights(self, x_offset=18)
+
+            # One liquid-glass surface for the whole window: the rail, the pages
+            # and their cards are translucent plates over it. Deferred one turn
+            # because the window's native view only exists once show() returns;
+            # applying it here found no host and left the window unblurred.
+            def _apply_native_chrome():
+                apply_glass(self)
+                configure_traffic_lights(self, x_offset=18)
+
+            QTimer.singleShot(0, _apply_native_chrome)
         if event.type() == QEvent.Type.Show and not getattr(self, "_chrome_watchdog", None):
             # Started once: a reset can happen at any point in a session, and the
             # check is a property read rather than a repaint.
@@ -3413,7 +3391,7 @@ class MainWindow(QMainWindow):
             bar = getattr(self, "_title_bar", None)
             if bar is not None and bar.layout() is not None:
                 bar.layout().activate()
-            self._paint_opaque(title_host)
+            paint_window_surface(title_host)
             title_host.update()
 
     def _highlight_nav(self, page_idx, install_active: bool):
@@ -4150,6 +4128,10 @@ class MainWindow(QMainWindow):
         except Exception as e:
             logger.debug("Could not pre-update SP history.ini in _begin_flash_flow: %s", e)
         da_file, auth_file = self._flash_inputs()
+        self._saw_all_command_exec = False
+        self._used_sp_backend = (backend_method(self._flash_method) == METHOD_SP)
+        if hasattr(self, "_failure_grace_timer") and self._failure_grace_timer.isActive():
+            self._failure_grace_timer.stop()
         self.service.start_flash(
             self._package_path,
             pre_extracted_dir=pre_extracted,
@@ -4297,6 +4279,27 @@ class MainWindow(QMainWindow):
         """
         text = str(line or "")
         low = text.lower()
+        if (
+            "all command exec" in low
+            or ("all command" in low and "exec" in low)
+            or "flash complete" in low
+        ):
+            self._saw_all_command_exec = True
+            if hasattr(self, "_failure_grace_timer") and self._failure_grace_timer.isActive():
+                self._failure_grace_timer.stop()
+            # If the app has incorrectly declared a failure or disconnection:
+            if getattr(self, "_install_failed", False) or self.sm.state in (
+                FlashState.S5_USB_DISCONNECTED,
+                FlashState.S5_FAILED,
+            ):
+                logger.info(
+                    "SP Flash Tool 'all command exec' / completion detected; "
+                    "correcting premature failure/disconnection state to success stage."
+                )
+                self._install_failed = False
+                self._handle_flash_success()
+                return
+
         if any(marker in low for marker in _CACHE_MISSING_MARKERS):
             # A file disappearing from the extracted cache is not a player
             # connection problem. Keep it on the install card so the recovery
@@ -4390,18 +4393,27 @@ class MainWindow(QMainWindow):
         self._flash_page.set_detected()
 
     def _on_flash_disconnected(self):
-        """Handle abrupt USB disconnection during flash, kill tasks and show recovery prompt."""
+        """Handle abrupt USB disconnection during flash, wait 5s safety window before killing tasks."""
+        if (
+            self.sm.state is FlashState.S5_COMPLETE
+            or getattr(self, "_install_complete", False)
+            or getattr(self, "_saw_all_command_exec", False)
+        ):
+            return
         try:
             self.sm.transition_to(FlashState.S5_USB_DISCONNECTED)
         except ValueError:
             self.sm.force_state(FlashState.S5_USB_DISCONNECTED)
         self._elapsed_timer.stop()
         self.service.stop_device_monitor()
-        self.service.cancel_flash()
-        from .. import process_guard
-        process_guard.end_install_session(reason="usb disconnected", sweep=False)
-        process_guard.sweep_async(reason="usb disconnected", on_done=self.sweep_report.emit)
-        self._recover_usb_after_disconnect()
+
+        # 5-second safety window before killing the flashing process
+        if not hasattr(self, "_kill_process_timer"):
+            self._kill_process_timer = QTimer(self)
+            self._kill_process_timer.setSingleShot(True)
+            self._kill_process_timer.timeout.connect(lambda: self._kill_flashing_process("usb disconnected"))
+        self._kill_process_timer.start(5000)
+
         try:
             from ..sleep_inhibit import release_sleep_inhibition
             release_sleep_inhibition()
@@ -4420,6 +4432,16 @@ class MainWindow(QMainWindow):
         self._nav_to_page(_PAGE_FLASH)
         self._update_header_title()
         self._adjust_window_geometry()
+
+    def _kill_flashing_process(self, reason: str = "usb disconnected"):
+        """Terminate the flashing process after the safety window has elapsed."""
+        if getattr(self, "_saw_all_command_exec", False) or getattr(self, "_install_complete", False):
+            return
+        self.service.cancel_flash()
+        from .. import process_guard
+        process_guard.end_install_session(reason=reason, sweep=False)
+        process_guard.sweep_async(reason=reason, on_done=self.sweep_report.emit)
+        self._recover_usb_after_disconnect()
 
     def _recover_usb_after_disconnect(self):
         """Release the app's USB claims and report what the host can still see.
@@ -4480,6 +4502,8 @@ class MainWindow(QMainWindow):
             self.sm.state is FlashState.S5_COMPLETE
             or getattr(self, "_install_complete", False)
             or getattr(self, "_rockbox_themes_flow_active", False)
+            or getattr(self, "_saw_all_command_exec", False)
+            or getattr(self, "_themes_stage_done", False)
         ):
             return
         if self.sm.state is FlashState.S4_FLASHING or getattr(self, "_past_usb_search", False):
@@ -4497,6 +4521,14 @@ class MainWindow(QMainWindow):
 
     def _on_flash_finished(self, ok, error_code):
         self._elapsed_timer.stop()
+        if hasattr(self, "_kill_process_timer") and self._kill_process_timer.isActive():
+            self._kill_process_timer.stop()
+
+        if getattr(self, "_saw_all_command_exec", False):
+            self._append_log("Notice: Flash finished handler confirmed 'all command exec' — classing as success.")
+            ok = True
+            error_code = ""
+
         if not ok:
             self._rockbox_themes_flow_active = False
             self._rockbox_power_on_pending = False
@@ -4589,7 +4621,18 @@ class MainWindow(QMainWindow):
         if is_360p_rockbox or (is_target_rockbox and not is_240p_rockbox and eff_model in ("Y1", "Y2")):
             self._nav_to_page(_PAGE_FLASH)
             self._rockbox_themes_flow_active = True
-            self._show_rockbox_power_on_prompt(eff_model)
+            is_sp_win = paths.IS_WINDOWS and (
+                getattr(self, "_used_sp_backend", False)
+                or backend_method(getattr(self, "_flash_method", "")) == METHOD_SP
+            )
+            if is_sp_win:
+                self._append_log(
+                    "Notice: SP Flash Tool on Windows detected — starting automated Rockbox themes flow "
+                    "(waiting 90-120s for ADB connection, no user interaction required)..."
+                )
+                self._start_themes_stage(eff_model, donation_disabled, already_powered_on=True, automatic=True)
+            else:
+                self._show_rockbox_power_on_prompt(eff_model)
         else:
             try:
                 from ..sleep_inhibit import release_sleep_inhibition

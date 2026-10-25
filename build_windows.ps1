@@ -3,15 +3,23 @@ param(
     [string]$Brand = "both",
     [switch]$Clean,
     [switch]$NoInstaller,
+    [switch]$Installer,
     # Also pack the finished folder as an MSIX for Microsoft Store submission.
     # Needs the Windows SDK (MakeAppx.exe); identity values come from
     # scripts\msix\msix_identity.<brand>.json (see msix_identity.example.json).
     [switch]$Msix,
+    [switch]$MsixOnly,
+    [switch]$SkipPyInstaller,
     # Local test certificate (.pfx) for the MSIX. The Store signs the upload
     # itself, so this is only for installing the package on a test machine.
     [string]$MsixSignCert = "",
     [string]$MsixSignPassword = ""
 )
+
+if ($MsixOnly) {
+    $Msix = $true
+    $NoInstaller = $true
+}
 
 $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -67,9 +75,17 @@ if ($isccCmd) {
         }
     }
 }
-if (-not $IsccExe -and -not $NoInstaller) {
-    Write-Error "ISCC.exe (Inno Setup 6) not found. Install Inno Setup 6, or pass -NoInstaller to build the portable folders and zips only."
-    exit 1
+if (-not $IsccExe) {
+    if ($Installer) {
+        Write-Error "ISCC.exe (Inno Setup 6) not found. Install Inno Setup 6."
+        exit 1
+    } elseif ($Msix) {
+        Write-Host "ISCC.exe (Inno Setup 6) not found. Skipping Inno Setup installer; proceeding with MSIX packaging." -ForegroundColor Yellow
+        $NoInstaller = $true
+    } elseif (-not $NoInstaller) {
+        Write-Error "ISCC.exe (Inno Setup 6) not found. Install Inno Setup 6, or pass -NoInstaller or -MsixOnly to build without Inno Setup."
+        exit 1
+    }
 }
 
 if ($Clean) {
@@ -133,101 +149,94 @@ try {
         if (-not $NoInstaller -and $IsccExe) { $totalSteps++ }
         if ($Msix) { $totalSteps++ }
 
-        # Stage build on local disk first to avoid SMB lock contention on network shares (e.g. Z:\)
-        $tempWorkDir = Join-Path $env:TEMP "updater_pyi_work_$b"
-        $tempDistDir = Join-Path $env:TEMP "updater_pyi_dist_$b"
-        if (Test-Path $tempWorkDir) { Remove-Item -Recurse -Force $tempWorkDir -ErrorAction SilentlyContinue }
-        if (Test-Path $tempDistDir) { Remove-Item -Recurse -Force $tempDistDir -ErrorAction SilentlyContinue }
-        New-Item -ItemType Directory -Force -Path $tempWorkDir | Out-Null
-        New-Item -ItemType Directory -Force -Path $tempDistDir | Out-Null
-
-        Write-StepBanner 1 $totalSteps "Compiling with PyInstaller" "Bundling Python runtime, Qt libraries, and application assets into standalone directory..."
-        Write-Host "  -> Running PyInstaller for $b using InnioasisUpdater.spec..."
-        & $PythonExe -m PyInstaller --clean --noconfirm --distpath $tempDistDir --workpath $tempWorkDir "InnioasisUpdater.spec"
-        if ($LASTEXITCODE -ne 0) {
-            throw "PyInstaller failed for $b (exit code $LASTEXITCODE)"
-        }
-        Write-Host "  -> PyInstaller compilation completed successfully." -ForegroundColor Green
-
-        $stagedAppDir = Join-Path $tempDistDir $appSlug
-        $stagedExe = Join-Path $stagedAppDir "$appSlug.exe"
-        if (-not (Test-Path $stagedExe)) {
-            throw "Expected executable not found: $stagedExe"
-        }
-
-        Write-StepBanner 2 $totalSteps "Validating Bundled Payload" "Ensuring $appSlug.exe and SP_Flash_Tool binaries are present and runnable..."
-        # The SP Flash Tool and MediaTek Download Agents are required payload for
-        # flashing devices. Fail the build rather than shipping an installer without them.
-        $requiredPayload = @(
-            "SP_Flash_Tool\flash_tool.exe",
-            "SP_Flash_Tool\MTK_AllInOne_DA.bin",
-            "SP_Flash_Tool\DA_PL.bin",
-            "SP_Flash_Tool\DA_SWSEC.bin"
-        )
-        foreach ($rel in $requiredPayload) {
-            $payloadPath = Join-Path $stagedAppDir $rel
-            if (-not (Test-Path $payloadPath)) {
-                throw "Required payload missing from build output: $payloadPath"
+        if ($SkipPyInstaller) {
+            $stagedAppDir = Join-Path $DistDir $appSlug
+            if (-not (Test-Path $stagedAppDir)) {
+                throw "Cannot skip PyInstaller: staged directory not found at $stagedAppDir"
             }
-        }
-        Write-Host "  -> SP Flash Tool and MediaTek Download Agents bundled beside application." -ForegroundColor Green
-
-        # Stage DriverInstall.exe and friendly numbered entrypoints for portable distribution
-        $driverSource = Join-Path $ProjectRoot "tools\DriverInstall.exe"
-        $driverPortableTarget = Join-Path $stagedAppDir "1. Install Driver First and Reboot PC.exe"
-        if (Test-Path $driverSource) {
-            Copy-Item -Path $driverSource -Destination $driverPortableTarget -Force
-            Write-Host "  -> Bundled '1. Install Driver First and Reboot PC.exe' from tools\DriverInstall.exe" -ForegroundColor Green
+            Write-Host "  -> Skipping PyInstaller step; packaging existing app directory at $stagedAppDir" -ForegroundColor Yellow
         } else {
-            Write-Warning "Driver installer not found at $driverSource; '1. Install Driver First and Reboot PC.exe' was skipped."
+            # Stage build on local disk first to avoid SMB lock contention on network shares (e.g. Z:\)
+            $tempWorkDir = Join-Path $env:TEMP "updater_pyi_work_$b"
+            $tempDistDir = Join-Path $env:TEMP "updater_pyi_dist_$b"
+            if (Test-Path $tempWorkDir) { Remove-Item -Recurse -Force $tempWorkDir -ErrorAction SilentlyContinue }
+            if (Test-Path $tempDistDir) { Remove-Item -Recurse -Force $tempDistDir -ErrorAction SilentlyContinue }
+            New-Item -ItemType Directory -Force -Path $tempWorkDir | Out-Null
+            New-Item -ItemType Directory -Force -Path $tempDistDir | Out-Null
+
+            Write-StepBanner 1 $totalSteps "Compiling with PyInstaller" "Bundling Python runtime, Qt libraries, and application assets into standalone directory..."
+            Write-Host "  -> Running PyInstaller for $b using InnioasisUpdater.spec..."
+            & $PythonExe -m PyInstaller --clean --noconfirm --distpath $tempDistDir --workpath $tempWorkDir "InnioasisUpdater.spec"
+            if ($LASTEXITCODE -ne 0) {
+                throw "PyInstaller failed for $b (exit code $LASTEXITCODE)"
+            }
+            Write-Host "  -> PyInstaller compilation completed successfully." -ForegroundColor Green
+
+            $stagedAppDir = Join-Path $tempDistDir $appSlug
+            $stagedExe = Join-Path $stagedAppDir "$appSlug.exe"
+            if (-not (Test-Path $stagedExe)) {
+                throw "Expected executable not found: $stagedExe"
+            }
+
+            Write-StepBanner 2 $totalSteps "Validating Bundled Payload" "Ensuring $appSlug.exe and SP_Flash_Tool binaries are present and runnable..."
+            # The SP Flash Tool and MediaTek Download Agents are required payload for
+            # flashing devices. Fail the build rather than shipping an installer without them.
+            $requiredPayload = @(
+                "SP_Flash_Tool\flash_tool.exe",
+                "SP_Flash_Tool\MTK_AllInOne_DA.bin",
+                "SP_Flash_Tool\DA_PL.bin",
+                "SP_Flash_Tool\DA_SWSEC.bin"
+            )
+            foreach ($rel in $requiredPayload) {
+                $payloadPath = Join-Path $stagedAppDir $rel
+                if (-not (Test-Path $payloadPath)) {
+                    throw "Required payload missing from build output: $payloadPath"
+                }
+            }
+            Write-Host "  -> SP Flash Tool and MediaTek Download Agents bundled beside application." -ForegroundColor Green
+
+            # Stage DriverInstall.exe and friendly numbered entrypoints for portable distribution
+            $driverSource = Join-Path $ProjectRoot "tools\DriverInstall.exe"
+            $driverPortableTarget = Join-Path $stagedAppDir "1. Install Driver First and Reboot PC.exe"
+            if (Test-Path $driverSource) {
+                Copy-Item -Path $driverSource -Destination $driverPortableTarget -Force
+                Write-Host "  -> Bundled '1. Install Driver First and Reboot PC.exe' from tools\DriverInstall.exe" -ForegroundColor Green
+            } else {
+                Write-Warning "Driver installer not found at $driverSource; '1. Install Driver First and Reboot PC.exe' was skipped."
+            }
+
+            $appPortableAlias = Join-Path $stagedAppDir "2. Install Firmware.exe"
+            Copy-Item -Path $stagedExe -Destination $appPortableAlias -Force
+            Write-Host "  -> Created friendly entry point: '2. Install Firmware.exe' -> $appSlug.exe" -ForegroundColor Green
+
+            Write-StepBanner 3 $totalSteps "Staging Portable Folder" "Syncing compiled distribution files into $DistDir\$appSlug..."
+            $targetAppDir = Join-Path $DistDir $appSlug
+            & robocopy $stagedAppDir $targetAppDir /MIR /R:1 /W:1 /NFL /NDL /NJH /NJS /NC /NS | Out-Null
+            $roboExit = $LASTEXITCODE
+            $deferredSync = $false
+            if ($roboExit -ge 8) {
+                Write-Warning "Some files in $targetAppDir are currently in use (robocopy exit $roboExit). Continuing to package portable zip and installer; portable folder will finish syncing as soon as $appSlug.exe closes."
+                $deferredSync = $true
+            } else {
+                Write-Host "  -> Portable folder synced to $targetAppDir" -ForegroundColor Green
+            }
+
+            Write-StepBanner 4 $totalSteps "Creating Portable ZIP Archive" "Compressing portable folder into $DistDir\$portableZipName..."
+            $zipPath = Join-Path $DistDir $portableZipName
+            $tempZipPath = Join-Path $tempDistDir $portableZipName
+            Compress-Archive -Path $stagedAppDir -DestinationPath $tempZipPath -Force
+            Copy-Item -Path $tempZipPath -Destination $zipPath -Force
+            $zipSizeMb = [math]::Round((Get-Item $zipPath).Length / 1MB, 2)
+            Write-Host "  -> Portable archive created: $portableZipName ($zipSizeMb MB)" -ForegroundColor Green
         }
-
-        $appPortableAlias = Join-Path $stagedAppDir "2. Install Firmware.exe"
-        Copy-Item -Path $stagedExe -Destination $appPortableAlias -Force
-        Write-Host "  -> Created friendly entry point: '2. Install Firmware.exe' -> $appSlug.exe" -ForegroundColor Green
-
-        Write-StepBanner 3 $totalSteps "Staging Portable Folder" "Syncing compiled distribution files into $DistDir\$appSlug..."
-        $targetAppDir = Join-Path $DistDir $appSlug
-        & robocopy $stagedAppDir $targetAppDir /MIR /R:1 /W:1 /NFL /NDL /NJH /NJS /NC /NS | Out-Null
-        $roboExit = $LASTEXITCODE
-        $deferredSync = $false
-        if ($roboExit -ge 8) {
-            Write-Warning "Some files in $targetAppDir are currently in use (robocopy exit $roboExit). Continuing to package portable zip and installer; portable folder will finish syncing as soon as $appSlug.exe closes."
-            $deferredSync = $true
-        } else {
-            Write-Host "  -> Portable folder synced to $targetAppDir" -ForegroundColor Green
-        }
-
-        Write-StepBanner 4 $totalSteps "Creating Portable ZIP Archive" "Compressing portable folder into $DistDir\$portableZipName..."
-        $zipPath = Join-Path $DistDir $portableZipName
-        $tempZipPath = Join-Path $tempDistDir $portableZipName
-        Compress-Archive -Path $stagedAppDir -DestinationPath $tempZipPath -Force
-        Copy-Item -Path $tempZipPath -Destination $zipPath -Force
-        $zipSizeMb = [math]::Round((Get-Item $zipPath).Length / 1MB, 2)
-        Write-Host "  -> Portable archive created: $portableZipName ($zipSizeMb MB)" -ForegroundColor Green
 
         if (-not $NoInstaller -and $IsccExe) {
             Write-StepBanner 5 $totalSteps "Building Windows Setup Wizard" "Compiling Inno Setup wizard ($setupBaseName.exe)..."
-            $issScript = Join-Path $ProjectRoot "scripts\build_windows_installer.iss"
-            $isccArgs = @(
-                "/DMyAppVersion=$Version",
-                "/DMyDistDir=$stagedAppDir",
-                "/O$tempDistDir",
-                "/F$setupBaseName"
-            )
-            if ($isMtk) {
-                $isccArgs += "/DMyIsMediaTek"
-            }
-            $isccArgs += $issScript
-            & $IsccExe @isccArgs
+            $installerScript = Join-Path $ProjectRoot "scripts\build_windows_installer.ps1"
+            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installerScript -AppDir $stagedAppDir -Version $Version -OutDir $DistDir -Brand $b
             if ($LASTEXITCODE -ne 0) {
                 throw "Inno Setup failed for $b (exit code $LASTEXITCODE)"
             }
-            $stagedSetupExe = Join-Path $tempDistDir "$setupBaseName.exe"
-            $targetSetupExe = Join-Path $DistDir "$setupBaseName.exe"
-            Copy-Item -Path $stagedSetupExe -Destination $targetSetupExe -Force
-            $setupSizeMb = [math]::Round((Get-Item $targetSetupExe).Length / 1MB, 2)
-            Write-Host "  -> Setup installer created: $setupBaseName.exe ($setupSizeMb MB)" -ForegroundColor Green
         }
 
         if ($Msix) {

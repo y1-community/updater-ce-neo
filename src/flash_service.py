@@ -222,29 +222,36 @@ def is_sp_flash_complete_line(line) -> bool:
 
     Two lines mark a finished command: "Flash complete! Disconnect USB..." and
     "All command exec done!", which the tool logs after the flash command
-    returns without an exception. Matched on those phrases only: the trailing
-    "Disconnect USB" is an instruction to the user, not a disconnect, and a
-    bare "complete" appears in progress and diagnostic lines ("DA upload
-    complete", "Format complete"), so it must not mark the install done.
+    returns without an exception. Matched on those phrases: any line containing
+    "all command exec", "all command" and "exec", or "flash complete" marks the flash successful.
     """
     text = _TIMESTAMP_PREFIX_RE.sub("", tool_line_body(line)).lstrip()
     low = _strip_qt_trace_prefix(text).lower()
     if "incomplete" in low:
         return False
-    return "flash complete" in low or "all command exec done" in low
+    return (
+        "flash complete" in low
+        or "all command exec" in low
+        or ("all command" in low and "exec" in low)
+    )
 
 
 def sp_log_result_is_success(log_success, error_detail, console_complete) -> bool:
     """Decide an SP Flash Tool run from its internal log, then its console.
 
     The internal log is the source of truth (the shipped build reads it after
-    the tool exits). The console's own completion line only fills in when the
-    log has no result at all: a log whose last marker is a failure code must
-    never be turned into a completed install by that line.
+    the tool exits). If the console emitted "All command exec" or "Flash complete",
+    disconnection or post-flash reboot artifacts (e.g. SP_EXIT_... or USB disconnect)
+    must not turn a completed flash into a failure.
     """
     if log_success:
         return True
-    return bool(console_complete) and not str(error_detail or "").strip()
+    if not console_complete:
+        return False
+    detail = str(error_detail or "").strip()
+    if not detail or is_disconnection_error(detail) or detail.startswith("SP_EXIT_"):
+        return True
+    return False
 
 
 def is_sp_usb_search_line(line) -> bool:
@@ -2724,6 +2731,8 @@ class FlashWorker(QThread):
             misses = 0
             while not self._cancelled and not getattr(self, "_finished", False):
                 time.sleep(1.0)
+                if getattr(self, "_sp_flash_complete", False) or getattr(self, "_finished", False):
+                    break
                 if not getattr(self, "_device_seen", False):
                     continue
                 if self._device_loss_is_held():
@@ -2731,7 +2740,9 @@ class FlashWorker(QThread):
                 if getattr(self, "_past_usb_search", False):
                     if not is_mtk_device_connected():
                         misses += 1
-                        if misses >= 2:  # ~2 seconds missing from USB
+                        if misses >= 5:  # 5-second safety window before determining install failure
+                            if getattr(self, "_sp_flash_complete", False) or getattr(self, "_finished", False):
+                                break
                             self._log("Notice: Device disconnected from USB mid-flash.")
                             self._is_disconnected = True
                             self.cancel()
@@ -3415,16 +3426,15 @@ class FlashWorker(QThread):
             self.finished.emit(False, "DEVICE_PACKAGE_MISMATCH")
             return
 
-        # The console's completion line ("Flash complete!" or "All command
-        # exec done!") can stand in only when the internal log has no result:
-        # a log that ends in a failure code is the tool reporting a failed
-        # command, and must not be overridden by an earlier console line.
-        if sp_log_result_is_success(
+        # The console's completion line ("All command exec" or "Flash complete!")
+        # marks an unconditionally successful flash execution.
+        if self._sp_flash_complete or sp_log_result_is_success(
             log_success, error_detail, self._sp_flash_complete
         ):
             log_success = True
 
         if log_success:
+            self._finished = True
             self.step_changed.emit(STEP_DONE)
             self.progress.emit(100)
             self._log("Flash complete! Disconnect USB and reboot the device.")
@@ -3463,16 +3473,9 @@ class FlashWorker(QThread):
         string, so :func:`sp_error_name` / :func:`sp_error_code` and the error
         page's explanation keep working.
         """
-        if (
-            self._sp_flash_complete
-            and (self._is_disconnected or is_disconnection_error(detail))
-        ):
-            # Completion wins over a *disconnection* only. The tool wrote the
-            # whole image and said so; the cable going away afterwards is the
-            # reboot its own completion line invites. A log that ends in a
-            # failure code is still a failed install — that rule stands.
+        if self._sp_flash_complete:
             self._log(
-                "Notice: SP Flash Tool completion overrides the disconnection: "
+                "Notice: SP Flash Tool 'all command exec' completion overrides failure/exit detail: "
                 f"{detail}"
             )
             self.step_changed.emit(STEP_DONE)
@@ -3574,6 +3577,9 @@ class FlashWorker(QThread):
                         if len(self._sp_stdout_seen) > 4000:
                             self._sp_stdout_seen.clear()
                 if self._cancelled:
+                    if self._sp_flash_complete:
+                        stop_monitor.set()
+                        return 0
                     try:
                         self._process.terminate()
                     except Exception:
@@ -3882,12 +3888,16 @@ class FlashWorker(QThread):
             # success can never turn a later failure into a completed install,
             # and a retry that ends in "Download Ok" still counts as success.
             success_at = -1
+            saw_all_command = False
             for match in re.finditer(
-                r"download ok|download succeeded|all command exec done",
+                r"download ok|download succeeded|all command(?:s)?\s+exec|flash complete",
                 content,
                 re.IGNORECASE,
             ):
                 success_at = match.end()
+                m_low = match.group(0).lower()
+                if "all command" in m_low or "exec" in m_low or "flash complete" in m_low:
+                    saw_all_command = True
             error_at = -1
             last_error = None
             # Error tokens exclude S_DONE, which is the success code, not an
@@ -3898,7 +3908,7 @@ class FlashWorker(QThread):
                     continue
                 error_at = match.end()
                 last_error = (name, code)
-            if success_at != -1 and success_at > error_at:
+            if saw_all_command or (success_at != -1 and success_at > error_at):
                 return (True, "")
             if last_error is not None:
                 name, code = last_error

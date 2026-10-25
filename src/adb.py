@@ -290,3 +290,20 @@ def adb_reboot(adb: str, serial: str) -> bool:
     except Exception as e:
         logger.debug("adb reboot failed: %s", e)
         return False
+
+
+def adb_enable_mass_storage(adb: str, serial: str) -> bool:
+    """Attempt to enable USB mass storage mode via ADB property/service commands."""
+    try:
+        proc = _run_adb(
+            adb,
+            "-s",
+            serial,
+            "shell",
+            "setprop sys.usb.config mass_storage,adb 2>/dev/null || setprop sys.usb.config mass_storage 2>/dev/null || svc usb setFunctions mass_storage 2>/dev/null",
+            timeout=10,
+        )
+        return proc.returncode == 0
+    except Exception as e:
+        logger.debug("adb enable mass storage skipped/failed: %s", e)
+        return False

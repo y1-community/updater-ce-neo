@@ -2126,7 +2126,7 @@ class FlashPage(QWidget):
             win._adjust_window_geometry()
 
         model_str = getattr(self, "_theme_stage_model", "Y1").upper()
-        self._adb_watch_seconds = 90
+        self._adb_watch_seconds = 120 if getattr(self, "_theme_automatic", False) else 90
         usb_prompt = tr("rockbox_step2_connect_usb").format(model=model_str)
         adb_status = tr("rockbox_stage_waiting_adb_fmt").format(remaining=self._adb_watch_seconds)
         self._eta_label.setText(tr("rockbox_stage_installing") if getattr(self, "_theme_automatic", False) else f"{usb_prompt}\n{adb_status}")

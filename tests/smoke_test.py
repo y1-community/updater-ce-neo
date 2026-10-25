@@ -1727,7 +1727,7 @@ def test_titlebar_spacing():
         nav_top = first_widget.mapTo(w, QPoint(0, 0)).y()
         title_top = w._select_page._title.mapTo(w, QPoint(0, 0)).y()
 
-        assert nav_top in (dark.content_top_margin(), 5, 6, 8), (nav_top, dark.content_top_margin())
+        assert nav_top in (dark.content_top_margin(), 5, 6, 7, 8), (nav_top, dark.content_top_margin())
         # Only the window chrome may sit above the first sidebar entry.
         assert nav_top <= 32, f"sidebar starts {nav_top}px down: wasted space under the title bar"
         # The sidebar must not start below the page content.

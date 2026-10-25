@@ -140,13 +140,13 @@ def prepare_window_for_glass(window: QMainWindow | QWidget) -> bool:
 
 
 def _clear_content_layer(ns_win) -> None:
-    """Stop Qt's content view from hiding the material behind it.
+    """Stop Qt's content view and child layers from hiding the material behind it.
 
     ``prepare_window_for_glass`` makes the *window* transparent, but Qt's own
     ``QNSView`` stays on an opaque ``NSViewBackingLayer``. The glass effect view
     sits behind that layer, so on a fresh launch the window reads as a flat
     dark slab and every translucent card plate turns into a grey rectangle with
-    square child boxes. Clearing the layer's background and its opaque flag lets
+    square child boxes. Clearing the layers' background and opaque flag lets
     the material through without touching a single widget.
     """
     try:
@@ -155,14 +155,31 @@ def _clear_content_layer(ns_win) -> None:
         content = ns_win.contentView() if ns_win is not None else None
         if content is None:
             return
-        content.setWantsLayer_(True)
-        layer = content.layer()
-        if layer is None:
-            return
-        if hasattr(layer, "setOpaque_"):
-            layer.setOpaque_(False)
-        if hasattr(layer, "setBackgroundColor_"):
-            layer.setBackgroundColor_(NSColor.clearColor().CGColor())
+
+        clear_cg = NSColor.clearColor().CGColor()
+
+        def _clear_view_layers(v):
+            if v is None:
+                return
+            try:
+                v.setWantsLayer_(True)
+                layer = v.layer()
+                if layer is not None:
+                    if hasattr(layer, "setOpaque_"):
+                        layer.setOpaque_(False)
+                    if hasattr(layer, "setBackgroundColor_"):
+                        layer.setBackgroundColor_(clear_cg)
+            except Exception:
+                pass
+            try:
+                for sub in v.subviews():
+                    t_str = str(type(sub))
+                    if "Glass" not in t_str and "VisualEffect" not in t_str:
+                        _clear_view_layers(sub)
+            except Exception:
+                pass
+
+        _clear_view_layers(content)
     except Exception:
         pass
 
@@ -373,9 +390,14 @@ def apply_glass(
     if not is_glass_supported():
         return False
 
-    # Check if a native glass view is already installed on this window.
-    # Re-applying glass unconditionally stacks multiple NSGlassEffectViews,
-    # destroying translucency and turning the window into an opaque dark slab.
+    # Check if the window's own material is already installed. Re-applying
+    # unconditionally stacks multiple NSGlassEffectViews, destroying translucency
+    # and turning the window into an opaque dark slab.
+    #
+    # Only the host that carries the *window* material counts. An effect view
+    # inside the content view is a widget material, and counting it used to
+    # skip installing the whole-window liquid glass altogether: the window then
+    # stayed an unblurred slab while one panel was glass.
     try:
         view = _get_nsview(window)
         if view:
@@ -383,17 +405,12 @@ def apply_glass(
             if ns_win:
                 content_view = ns_win.contentView()
                 tf = content_view.superview() if content_view else None
-                glass_views = []
-                if tf:
-                    glass_views.extend([
-                        s for s in tf.subviews()
-                        if "Glass" in str(type(s)) or "VisualEffect" in str(type(s))
-                    ])
-                if not glass_views and content_view:
-                    glass_views.extend([
-                        s for s in content_view.subviews()
-                        if "Glass" in str(type(s)) or "VisualEffect" in str(type(s))
-                    ])
+                host = tf if tf is not None else content_view
+                glass_views = [
+                    s
+                    for s in (host.subviews() if host is not None else ())
+                    if "Glass" in str(type(s)) or "VisualEffect" in str(type(s))
+                ]
                 if glass_views:
                     # Deduplicate: if multiple glass views were added, remove any extras
                     for extra in glass_views[1:]:
@@ -402,7 +419,7 @@ def apply_glass(
                         except Exception:
                             pass
                     primary_glass = glass_views[0]
-                    target_rect = tf.bounds() if tf else content_view.bounds()
+                    target_rect = host.bounds()
                     try:
                         primary_glass.setFrame_(target_rect)
                     except Exception:
@@ -1463,6 +1480,19 @@ class _ComboPopupMaterial(QObject):
             flags = window.windowFlags() if window is not None else Qt.WindowType.Widget
             if window is not None and window is not watched and bool(flags & Qt.WindowType.Popup):
                 apply_popup_material(window)
+        elif event.type() == QEvent.Type.Hide and isinstance(watched, QWidget):
+            # A popup makes Qt re-layer the window's content view, and the
+            # material behind it can be left stale and dimmed. Re-assert it on
+            # the window that owns the combo; ``apply_glass`` reuses an existing
+            # effect view instead of adding one, so repeated cycles cannot stack.
+            from PySide6.QtWidgets import QApplication
+
+            window = watched.window()
+            flags = window.windowFlags() if window is not None else Qt.WindowType.Widget
+            if window is not None and window is not watched and bool(flags & Qt.WindowType.Popup):
+                host = QApplication.activeWindow()
+                if host is not None and host is not window:
+                    apply_glass(host)
         return False
 
 

@@ -33,9 +33,21 @@ def test_all_command_exec_done_is_success(tmp_path):
 def test_console_all_command_exec_done_marks_complete():
     assert fs.is_sp_flash_complete_line("All command exec done!")
     assert fs.is_sp_flash_complete_line("  All command exec done!\n")
+    assert fs.is_sp_flash_complete_line("all command exec")
+    assert fs.is_sp_flash_complete_line("all commands exec")
+    assert fs.is_sp_flash_complete_line("all command was exec successfully")
     assert not fs.is_sp_flash_complete_line("General command exec done!")
     assert fs.is_sp_flash_complete_line("Flash complete! Disconnect USB and reboot the device.")
     assert not fs.is_sp_flash_complete_line("Flash incomplete, retrying")
+
+
+def test_diagnostics_classifies_all_command_exec():
+    from src.diagnostics import DiagnosticsManager, CAT_SP
+    dm = DiagnosticsManager()
+    assert dm.classify_line("All command exec done!") == CAT_SP
+    assert dm.classify_line("all command exec") == CAT_SP
+    assert dm.classify_line("all commands exec") == CAT_SP
+    assert dm.classify_line("Flash complete! Disconnect USB") == CAT_SP
 
 
 def test_error_without_success_line_still_fails(tmp_path):
@@ -90,3 +102,87 @@ def test_a_final_success_after_an_earlier_error_is_success(tmp_path):
     ok, detail = worker._read_sp_log_result(launch, tmp_path)
     assert ok is True, detail
     assert detail == ""
+
+
+def test_all_command_exec_followed_by_disconnect_line_is_success(tmp_path):
+    """Diagnosed from real Windows run: 'All command exec done!' followed by 'Disconnect!'."""
+    worker = fs.FlashWorker("pkg.zip", method="sp")
+    worker._classify_sp_stdout("All command exec done!")
+    assert worker._sp_flash_complete is True
+    # The subsequent Disconnect! line emitted upon device reboot must be ignored
+    worker._classify_sp_stdout("Disconnect!")
+    assert worker._is_disconnected is False
+
+    # And finish_sp_failure must override any error detail if _sp_flash_complete is set
+    completed = []
+    worker.finished.connect(lambda ok, detail: completed.append((ok, detail)))
+    worker._finish_sp_failure("SP_EXIT_1")
+    assert completed == [(True, "")]
+
+
+def _make_test_window():
+    from PySide6.QtWidgets import QApplication
+    from src.ui.main_window import MainWindow
+
+    app = QApplication.instance() or QApplication(["--platform", "offscreen"])
+    win = MainWindow()
+    win.start_device_monitor = lambda: None
+    win.service.start_device_monitor = lambda: None
+    win.service.cancel_flash = lambda: None
+    win.service.stop_device_monitor = lambda: None
+    win._ensure_theme_sync = lambda: None
+    return app, win
+
+
+def test_main_window_catches_and_corrects_failure_on_all_command_exec():
+    from src.state import FlashState
+
+    app, win = _make_test_window()
+    try:
+        win._package_path = "dummy.zip"
+        win._package_model = "Y1"
+        win._package_name = "Stock"
+
+        # Simulate MainWindow having declared a failure
+        win._install_failed = True
+        win.sm.force_state(FlashState.S5_USB_DISCONNECTED)
+
+        # When "all command exec" backend line arrives, it must correct itself
+        win._handle_backend_line("[SP] All command exec done!")
+        assert win._saw_all_command_exec is True
+        assert win._install_failed is False
+        assert win.sm.state is FlashState.S5_COMPLETE
+    finally:
+        win._force_quit = True
+        win.close()
+        app.processEvents()
+
+
+def test_rockbox_flow_on_windows_sp_starts_automatically(monkeypatch):
+    monkeypatch.setattr("src.paths.IS_WINDOWS", True)
+    app, win = _make_test_window()
+    try:
+        win._package_path = "rockbox.zip"
+        win._package_model = "Y1"
+        win._package_name = "Rockbox 0.5"
+        win._used_sp_backend = True
+
+        started = []
+        monkeypatch.setattr(
+            win,
+            "_start_themes_stage",
+            lambda model, donation_disabled, already_powered_on=False, automatic=False: started.append(
+                (model, already_powered_on, automatic)
+            ),
+        )
+
+        win._handle_flash_success()
+        assert len(started) == 1
+        model, powered_on, automatic = started[0]
+        assert model == "Y1"
+        assert powered_on is True
+        assert automatic is True
+    finally:
+        win._force_quit = True
+        win.close()
+        app.processEvents()

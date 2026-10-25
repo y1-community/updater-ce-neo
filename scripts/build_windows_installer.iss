@@ -51,11 +51,17 @@
     #define MyAppExeName "InnioasisUpdater.exe"
   #endif
 #endif
+#if FileExists("..\LICENSE")
+  #define MyRepoRoot "..\"
+#else
+  #define MyRepoRoot ""
+#endif
+
 #ifndef MyDistDir
   #ifdef MyIsMediaTek
-    #define MyDistDir "..\dist\windows\MediaTekInstaller"
+    #define MyDistDir MyRepoRoot + "dist\windows\MediaTekInstaller"
   #else
-    #define MyDistDir "..\dist\windows\InnioasisUpdater"
+    #define MyDistDir MyRepoRoot + "dist\windows\InnioasisUpdater"
   #endif
 #endif
 #ifndef MyOutputBase
@@ -104,10 +110,10 @@ UsePreviousTasks=yes
 PrivilegesRequired=admin
 CloseApplications=no
 RestartApplications=no
-LicenseFile=..\LICENSE
-OutputDir=..\dist\windows
+LicenseFile={#MyRepoRoot}LICENSE
+OutputDir={#MyRepoRoot}dist\windows
 OutputBaseFilename={#MyOutputBase}-{#MyAppVersion}
-SetupIconFile=..\assets\icon.ico
+SetupIconFile={#MyRepoRoot}assets\icon.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
@@ -163,7 +169,7 @@ chinesesimplified.StepDriverInstall=正在安装联发科 (MediaTek) SP 驱动�
 ; ignoreversion replaces older files, so this same installer updates in place.
 Source: "{#MyDistDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; Bundled MediaTek Driver Installer executed during post-install
-Source: "..\tools\DriverInstall.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall ignoreversion
+Source: "{#MyRepoRoot}tools\DriverInstall.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall ignoreversion
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"
@@ -630,6 +636,16 @@ begin
   Result := DriverInstalled;
 end;
 
+procedure RestartComputer(Sender: TObject);
+var
+  ResultCode: Integer;
+begin
+  { Register the app to launch on next login, then restart }
+  if DriverInstalled then
+    RegisterRunOnceStartup;
+  ShellExec('', 'shutdown.exe', '/r /t 0 /c "MediaTek drivers require a restart. The updater will launch after restart."', '', SW_SHOW, ewNoWait, ResultCode);
+end;
+
 procedure CurPageChanged(CurPageID: Integer);
 begin
   { When we reach the Finish page and drivers were installed, prompt for reboot
@@ -640,16 +656,6 @@ begin
     WizardForm.NextButton.Caption := 'Restart Now';
     WizardForm.NextButton.OnClick := @RestartComputer;
   end;
-end;
-
-procedure RestartComputer;
-var
-  ResultCode: Integer;
-begin
-  { Register the app to launch on next login, then restart }
-  if DriverInstalled then
-    RegisterRunOnceStartup;
-  ShellExec('', 'shutdown.exe', '/r /t 0 /c "MediaTek drivers require a restart. The updater will launch after restart."', '', SW_SHOW, ewNoWait, ResultCode);
 end;
 
 { Runs at various stages of setup execution. }
