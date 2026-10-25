@@ -730,6 +730,14 @@ class _RoundNextButton(QPushButton):
             symbol = "next" if symbol == "back" else "back"
         return symbol
 
+    def changeEvent(self, event):  # noqa: N802 (Qt naming)
+        if event.type() == QEvent.Type.LayoutDirectionChange:
+            # The row itself mirrors when the language changes; the glyph has
+            # to be re-rendered with it, or the two arrows stay aimed at each
+            # other because nothing told them the row flipped.
+            self.rebuild_arrow()
+        super().changeEvent(event)
+
     def _native_colors(self) -> tuple[QColor, QColor]:
         """The fill AppKit should bezel with, and the glyph colour.
 

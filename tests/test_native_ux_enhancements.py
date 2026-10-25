@@ -2074,12 +2074,17 @@ def test_sidebar_selection_is_not_an_accent_plate():
     assert (dark.red(), dark.green(), dark.blue()) != (accent.red(), accent.green(), accent.blue())
 
 
-def test_combo_popup_uses_translucent_material():
-    """An open combo list is a frost, not a solid plate."""
+def test_combo_popup_is_an_opaque_themed_field():
+    """A dark combo list paints a field, except on Windows where it frosts.
+
+    The list is its own borderless window. A frost on it with no material
+    behind it lets the desktop through the rows, so only Windows — where
+    Acrylic is drawn by the window itself — keeps the translucent field.
+    """
     from PySide6.QtGui import QPalette
     from PySide6.QtWidgets import QComboBox, QWidget
 
-    from src.ui.glass import POPUP_FROST_ALPHA, apply_popup_material
+    from src.ui.glass import IS_WINDOWS, POPUP_FROST_ALPHA, apply_popup_material
 
     app = QApplication.instance() or QApplication(sys.argv)
     apply_theme(app, force_dark=True)
@@ -2089,10 +2094,10 @@ def test_combo_popup_uses_translucent_material():
     combo.addItems(["Original Software", "Rockbox"])
     apply_popup_material(popup)
     base = popup.palette().color(QPalette.ColorRole.Base)
-    assert base.alpha() == POPUP_FROST_ALPHA
-    assert base.alpha() < 200
+    expected = POPUP_FROST_ALPHA if IS_WINDOWS else 255
+    assert base.alpha() == expected
     view = combo.view()
-    assert view.autoFillBackground() is False
+    assert view.autoFillBackground() is not IS_WINDOWS
 
 
 def test_light_menus_and_sidebar_selection_follow_the_theme():
@@ -2158,7 +2163,7 @@ def test_light_menus_and_sidebar_selection_follow_the_theme():
         dark_base = dark_popup.palette().color(QPalette.ColorRole.Base)
         dark_text = dark_popup.palette().color(QPalette.ColorRole.Text)
         assert dark_base.lightness() < 80
-        assert dark_base.alpha() == POPUP_FROST_ALPHA
+        assert dark_base.alpha() > 200
         assert dark_text.lightness() > 160
         assert app.palette().color(QPalette.ColorRole.Window).lightness() < 80
 

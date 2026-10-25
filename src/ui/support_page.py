@@ -42,6 +42,30 @@ class _WrappedCopy(QLabel):
             return 0
         return max(0, int(self.heightForWidth(self.width())))
 
+    def height_for_width(self, width: int) -> int:
+        """Lines the copy needs at ``width``, for a width it does not have yet.
+
+        ``QLabel.heightForWidth`` answers for the width the label currently
+        has (its rich-text document is already laid out), so a card measured
+        for the dialog it is about to go into needs the document itself.
+        """
+        width = max(1, int(width))
+        if self.textFormat() != Qt.TextFormat.RichText:
+            return max(0, int(self.heightForWidth(width)))
+        from PySide6.QtGui import QTextDocument
+
+        doc = QTextDocument()
+        doc.setDefaultFont(self.font())
+        doc.setDocumentMargin(0)
+        doc.setHtml(self.text())
+        doc.setTextWidth(width)
+        return int(doc.size().height())
+
+    def setText(self, text: str) -> None:  # noqa: N802 (Qt naming)
+        super().setText(text)
+        # New wording at the same width is a new line count.
+        self._sync_min_height()
+
     def _sync_min_height(self) -> None:
         needed = self.needed_height()
         if needed <= 0 or needed == self.minimumHeight():
@@ -65,6 +89,7 @@ class SupportPage(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._last_card_height = 0
+        self._applied_card_height = 0
         self._content_check_queued = False
         self.setObjectName("supportPage")
         self.setAutoFillBackground(False)
@@ -237,13 +262,53 @@ class SupportPage(QWidget):
         card_w = max(1, page_w - left - right)
         if not hasattr(self, "_card"):
             return 240 + top + bottom + 24
-        # The height-for-width answer wraps the copy and the button rows for
-        # this width; the size hint alone is the height of the width the card
-        # was last laid out at, which is what left the copy cut off after a
-        # window resize.
-        fitted = int(self._card.heightForWidth(card_w))
-        card_h = fitted if fitted > 0 else int(self._card.sizeHint().height())
-        return card_h + top + bottom + 24
+        return self.card_height_for_width(card_w) + top + bottom + 24
+
+    def card_height_for_width(self, card_w: int) -> int:
+        """Height the card's own layout needs at ``card_w``.
+
+        Asked of the layout, not of the size hint: the wrapped appeal and the
+        wrapping button row both answer heightForWidth for the width in
+        question, which is the only way a narrower card knows it needs more
+        room rather than clipping its last row.
+        """
+        if not hasattr(self, "_card"):
+            return 240
+        if self._card.layout() is not None:
+            self._card.layout().activate()
+        needed = 0
+        if self._card.layout() is not None:
+            needed = int(self._card.layout().totalHeightForWidth(max(1, int(card_w))))
+            needed = max(needed, int(self._card.layout().minimumSize().height()))
+            # A rich-text QLabel answers heightForWidth for the width it already
+            # has, so the layout above measured the appeal at its current
+            # width. Swap in the line count it needs at the width in question.
+            label = getattr(self, "_appeal_body", None)
+            card_now = int(self._card.width())
+            if label is not None and card_now > 1 and label.width() > 0 and int(card_w) != card_now:
+                inset = card_now - int(label.width())
+                needed += label.height_for_width(card_w - inset) - label.needed_height()
+        return needed or 240
+
+    def _sync_card_height(self) -> None:
+        """Give the card exactly the height its content needs at this width.
+
+        The page keeps the card at the top with a stretch below it, so a card
+        that is handed its size hint keeps the height it was built at and the
+        buttons that wrapped onto a further row are drawn past its bottom edge.
+        """
+        card = getattr(self, "_card", None)
+        if card is None:
+            return
+        card_w = int(card.width())
+        if card_w <= 1:
+            top, right, bottom, left = page_margins()
+            card_w = max(1, int(self.width()) - left - right)
+        needed = self.card_height_for_width(card_w)
+        if needed == self._applied_card_height:
+            return
+        self._applied_card_height = needed
+        card.setFixedHeight(needed)
 
     def _queue_content_check(self) -> None:
         """Coalesce layout-driven rechecks into one event-loop turn."""
@@ -254,9 +319,8 @@ class SupportPage(QWidget):
 
     def _report_content_size(self) -> None:
         self._content_check_queued = False
-        if hasattr(self, "_card") and self._card.layout() is not None:
-            self._card.layout().activate()
-        needed = int(self._card.sizeHint().height()) if hasattr(self, "_card") else 0
+        self._sync_card_height()
+        needed = int(self._applied_card_height)
         if needed <= 0 or needed == self._last_card_height:
             return
         self._last_card_height = needed
@@ -265,7 +329,9 @@ class SupportPage(QWidget):
     def resizeEvent(self, event):  # noqa: N802 (Qt naming)
         super().resizeEvent(event)
         # Re-measure after the new width settles: the wrapped copy above only
-        # knows it needs more lines once it has been given its new width.
+        # knows it needs more lines once it has been given its new width, and
+        # the button row only knows how many rows it wrapped onto.
+        self._sync_card_height()
         self._queue_content_check()
 
     def _toggle_crypto_drawer(self):
@@ -296,7 +362,6 @@ class SupportPage(QWidget):
             f"{tr('donate_support_appeal_followup')}"
         )
         # New wording is a new line count; the card has to be re-measured.
-        self._appeal_body._sync_min_height()
         self._queue_content_check()
         self._honeygain_link.setText(tr("donate_honeygain"))
         self._crypto_toggle_link.setText(

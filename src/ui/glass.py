@@ -139,6 +139,34 @@ def prepare_window_for_glass(window: QMainWindow | QWidget) -> bool:
         return False
 
 
+def _clear_content_layer(ns_win) -> None:
+    """Stop Qt's content view from hiding the material behind it.
+
+    ``prepare_window_for_glass`` makes the *window* transparent, but Qt's own
+    ``QNSView`` stays on an opaque ``NSViewBackingLayer``. The glass effect view
+    sits behind that layer, so on a fresh launch the window reads as a flat
+    dark slab and every translucent card plate turns into a grey rectangle with
+    square child boxes. Clearing the layer's background and its opaque flag lets
+    the material through without touching a single widget.
+    """
+    try:
+        from AppKit import NSColor
+
+        content = ns_win.contentView() if ns_win is not None else None
+        if content is None:
+            return
+        content.setWantsLayer_(True)
+        layer = content.layer()
+        if layer is None:
+            return
+        if hasattr(layer, "setOpaque_"):
+            layer.setOpaque_(False)
+        if hasattr(layer, "setBackgroundColor_"):
+            layer.setBackgroundColor_(NSColor.clearColor().CGColor())
+    except Exception:
+        pass
+
+
 def _ensure_seamless_titlebar(window: QMainWindow | QWidget) -> None:
     """Ensure NSWindow titlebar has no separator line and matches window glass material."""
     if not is_glass_supported():
@@ -159,6 +187,7 @@ def _ensure_seamless_titlebar(window: QMainWindow | QWidget) -> None:
                 ns_win.setOpaque_(False)
                 ns_win.setBackgroundColor_(NSColor.clearColor())
                 ns_win.setMovableByWindowBackground_(True)
+                _clear_content_layer(ns_win)
                 if hasattr(ns_win, "setTitlebarSeparatorStyle_"):
                     ns_win.setTitlebarSeparatorStyle_(1)  # NSTitlebarSeparatorStyleNone
 
@@ -1387,7 +1416,12 @@ def apply_popup_material(popup: QWidget) -> None:
 
     A light window gets a light field and dark text. The dark frost and the
     Acrylic tint are not applied there: both leave a near-black menu on a
-    light desktop. A dark window keeps the translucent material.
+    light desktop.
+
+    macOS gets the opaque field too. A combo list there is its own borderless
+    window, and a frost on it has no material behind it to tint: the desktop
+    shows straight through the rows. Only Windows keeps the translucent
+    material, where Acrylic is drawn by the window itself.
     """
     if popup is None:
         return
@@ -1395,17 +1429,13 @@ def apply_popup_material(popup: QWidget) -> None:
     if host is None:
         return
     light = host_palette_is_light(host)
-    pal = menu_palette(host, frost=not light)
-    _bind_menu_palette(popup, pal, fill=light, translucent=not light)
+    frost = (not light) and IS_WINDOWS
+    pal = menu_palette(host, frost=frost)
+    _bind_menu_palette(popup, pal, fill=not frost, translucent=frost)
     for view in _menu_views(popup, pal):
-        _bind_menu_palette(view, pal, fill=light, translucent=False if light else None)
-        _bind_menu_palette(
-            view.viewport(),
-            pal,
-            fill=light,
-            translucent=False if light else None,
-        )
-    if light:
+        _bind_menu_palette(view, pal, fill=not frost, translucent=False)
+        _bind_menu_palette(view.viewport(), pal, fill=not frost, translucent=False)
+    if not frost:
         return
     try:
         from .dark import is_dark
@@ -1414,11 +1444,6 @@ def apply_popup_material(popup: QWidget) -> None:
         dark = True
     if IS_WINDOWS:
         apply_windows_acrylic(popup, dark=dark)
-    elif IS_MACOS and is_glass_supported():
-        try:
-            apply_glass(popup, corner_radius=8.0, dark=dark)
-        except Exception:
-            pass
 
 
 class _ComboPopupMaterial(QObject):

@@ -1084,7 +1084,17 @@ class FlowLayout(QLayout):
         self._place(rect, apply=True)
 
     def sizeHint(self):  # noqa: N802 (Qt naming)
-        return self.minimumSize()
+        # The height is the wrapped height at the width the flow actually has,
+        # so the card that holds it grows when its buttons move onto another
+        # row. Reporting one row here is what left a wrapped row cut off.
+        minimum = self.minimumSize()
+        width = int(self.geometry().width())
+        if width <= 0:
+            parent = self.parentWidget()
+            width = int(parent.width()) if parent is not None else 0
+        if width <= 0:
+            return minimum
+        return QSize(minimum.width(), max(minimum.height(), self.heightForWidth(width)))
 
     def minimumSize(self):  # noqa: N802 (Qt naming)
         size = QSize(0, 0)

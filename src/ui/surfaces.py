@@ -41,10 +41,20 @@ def card_surface_fill() -> QColor:
     clears itself to this exact colour reproduces the card pixel underneath,
     while transparent would punch a hole through the card and clear to the
     window material instead.
-    """
-    from .dark import is_dark
 
-    return QColor(255, 255, 255, 18 if is_dark() else 32)
+    The two branches have to match ``_paint_bento_surface`` exactly. Without a
+    glass backdrop the card is an opaque ``bg_card`` plate; erasing a child to
+    the glass tint there lays a translucent white rectangle *over* that plate,
+    which is the lighter box that appears around labels, hint images and the
+    round chips whenever the window loses its material.
+    """
+    from .dark import T, is_dark
+
+    if glass_surfaces_enabled():
+        return QColor(255, 255, 255, 18 if is_dark() else 32)
+    fill = QColor(T().bg_card)
+    fill.setAlpha(255)
+    return fill
 
 
 def card_fill_under(widget: QWidget) -> QColor | None:

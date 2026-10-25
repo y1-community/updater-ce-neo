@@ -15,13 +15,14 @@ first, which is what keeps the previous label from staying on screen.
 
 from __future__ import annotations
 
+import logging
 import sys
 
 import weakref
 
 from PySide6.QtCore import QCoreApplication, QEvent, QObject, QPoint, QRect, QSize, Qt
-from PySide6.QtGui import QColor, QIcon, QPainter, QPalette, QPixmap
-from PySide6.QtWidgets import QPushButton
+from PySide6.QtGui import QColor, QFontMetrics, QIcon, QPainter, QPalette, QPixmap
+from PySide6.QtWidgets import QPushButton, QWidget
 
 
 from .tab_focus import TabFocusManager
@@ -46,6 +47,232 @@ class _FocusDismissFilter:
     def dismiss_all(cls) -> None:
         TabFocusManager.dismiss_all()
 
+
+
+logger = logging.getLogger(__name__)
+
+#: Widest the rail grows to show a translated row whole. The rail is sized
+#: from its own labels, because a language's copy is often half again as long
+#: as English ("Unterstützen Sie uns" against "Support Us"). Past this the
+#: rail stops growing and the row elides: an ellipsis in a pane that already
+#: made room for itself is the sign that the string is too long, not the pane
+#: being too narrow.
+SIDEBAR_MAX_WIDTH = 320
+
+#: The language picker is a sidebar row too, but its copy is the name of a
+#: language rather than one of ours: "Português (Brasil)" has to fit, an exotic
+#: endonym both script and romanisation may not. Its own ceiling keeps the rail
+#: from being set by one such entry while still showing the selection whole.
+SIDEBAR_PICKER_MAX_WIDTH = 240
+
+#: Narrowest the rail degrades to on a display that cannot afford the page
+#: column's minimum plus a full rail. Rows elide at this width, which is the
+#: honest signal: the screen, not the copy, is what ran out.
+SIDEBAR_MIN_WIDTH = 120
+
+
+def sidebar_base_width(platform_name: str | None = None) -> int:
+    """The rail's width when its labels fit: Aqua rows need a little more."""
+    name = sys.platform if platform_name is None else platform_name
+    return 185 if name == "darwin" else 175
+
+
+class SidebarWidth:
+    """How wide the navigation rail should be, for this language on this display.
+
+    One owner for the whole question. It holds the numbers (base, floor and the
+    two ceilings), measures the rows and the language picker, decides how much
+    the page column's own minimum leaves it on this display, and reports a
+    label that still does not fit — as a tooltip plus one log line, never as
+    silent truncation.
+
+    The window feeds it facts and nothing else: :meth:`apply` whenever labels,
+    theme or display may have changed, then :attr:`width` or
+    :meth:`window_floor` for the result.
+    """
+
+    def __init__(
+        self,
+        *,
+        base: int | None = None,
+        maximum: int = SIDEBAR_MAX_WIDTH,
+        picker_max: int = SIDEBAR_PICKER_MAX_WIDTH,
+        minimum: int = SIDEBAR_MIN_WIDTH,
+    ) -> None:
+        self.base = sidebar_base_width() if base is None else int(base)
+        self.maximum = max(int(maximum), self.base)
+        self.picker_max = max(int(picker_max), self.base)
+        self.minimum = max(1, min(int(minimum), self.base))
+        self._width = self.base
+        self._warned: set[tuple[str, str]] = set()
+
+    # ── results ──
+
+    @property
+    def width(self) -> int:
+        """The width the last :meth:`apply` gave the rail."""
+        return self._width
+
+    def window_floor(self, content_min: int, display_width: int, minimum: int) -> int:
+        """Least window width that keeps the rail and the page column whole."""
+        floor = max(int(minimum), self._width + max(0, int(content_min)))
+        if int(display_width) > 0:
+            floor = min(floor, int(display_width))
+        return max(1, int(floor))
+
+    def affordable(self, display_width: int, content_min: int) -> int:
+        """Most the rail may take while the page column keeps its minimum.
+
+        On a display narrower than a full rail plus the page column the column
+        wins: the rail gives the width back and its rows elide, with their
+        labels in tooltips. ``minimum`` is where the rail stops being a rail.
+        """
+        if int(display_width) <= 0:
+            return self.maximum
+        return max(self.minimum, int(display_width) - max(0, int(content_min)))
+
+    def needed(self, panel: QWidget, picker=None) -> int:
+        """Width the rail needs for this language's labels, within its ceilings.
+
+        Measured from the rows themselves, so the icon, the row padding, the
+        themed font and a translated label are all counted — a fixed 185 px
+        elided the Spanish, Italian, French and Hungarian rows. The language
+        picker is measured too, but against ``picker_max``: it is sized for the
+        selection on screen, not for the longest name in its list.
+        """
+        margins = self._margins(panel)
+        widest = 0
+        for child in panel.findChildren(QWidget, options=Qt.FindChildOption.FindDirectChildrenOnly):
+            if picker is not None and child is picker:
+                continue
+            if not child.isVisibleTo(panel):
+                continue
+            widest = max(widest, self.row_width(child))
+        needed = widest + margins
+        if picker is not None and picker.isVisibleTo(panel):
+            needed = max(needed, min(self.picker_width(picker) + margins, self.picker_max))
+        return max(self.base, min(needed, self.maximum))
+
+    # ── the one call ──
+
+    def apply(
+        self,
+        panel: QWidget,
+        picker=None,
+        *,
+        display_width: int = 0,
+        content_min: int = 0,
+        language: str = "",
+        picker_tooltip: str = "",
+    ) -> bool:
+        """Size ``panel`` for this language and display; True when it changed."""
+        if panel is None:
+            return False
+        width = max(self.minimum, min(self.needed(panel, picker), self.affordable(display_width, content_min)))
+        self._flag_overlong(panel, picker, width - self._margins(panel), language, picker_tooltip)
+        changed = width != panel.width()
+        if changed:
+            panel.setFixedWidth(width)
+        self._width = width
+        return changed
+
+    # ── measurement ──
+
+    @staticmethod
+    def row_width(row) -> int:
+        """Width one rail row needs to draw its whole label."""
+        measure = getattr(row, "required_width", None)
+        if callable(measure):
+            return int(measure())
+        return int(row.sizeHint().width())
+
+    @staticmethod
+    def picker_width(picker) -> int:
+        """Width the picker needs for the selection on screen.
+
+        ``QComboBox.sizeHint`` is sized for the widest item in the list, so one
+        long language name would otherwise set the width of the rail and the
+        selected one would still clip. This asks the style for the size of the
+        text that is actually shown, icon, padding and arrow included.
+        """
+        if picker is None:
+            return 0
+        try:
+            from PySide6.QtWidgets import QStyle, QStyleOptionComboBox
+
+            index = picker.currentIndex()
+            text = picker.currentText()
+            icon = picker.itemIcon(index) if index >= 0 else QIcon()
+            width = QFontMetrics(picker.font()).horizontalAdvance(text)
+            if not icon.isNull():
+                width += picker.iconSize().width() + 4
+            option = QStyleOptionComboBox()
+            option.initFrom(picker)
+            option.currentText = text
+            option.icon = icon
+            option.editable = picker.isEditable()
+            size = picker.style().sizeFromContents(
+                QStyle.ContentsType.CT_ComboBox, option, QSize(width, picker.height()), picker
+            )
+            # Two pixels of slack so the text is not elided on a rounding edge.
+            return int(size.width()) + 2
+        except Exception:
+            return int(picker.sizeHint().width())
+
+    @staticmethod
+    def _margins(panel: QWidget) -> int:
+        """Pixels the rail's layout spends either side of its rows."""
+        layout = panel.layout()
+        if layout is None:
+            return 20
+        box = layout.contentsMargins()
+        return int(box.left() + box.right())
+
+    # ── reporting ──
+
+    def _flag_overlong(
+        self,
+        panel: QWidget,
+        picker,
+        available: int,
+        language: str,
+        picker_tooltip: str,
+    ) -> None:
+        """Make a label that cannot fit the rail findable, never just clipped.
+
+        ``SidebarButton`` elides past the row width, so an ellipsis in a rail
+        that already sized itself is the visible sign a string is unwieldy. The
+        full label rides in the tooltip so it stays readable, and the string is
+        named once per language in the log so it can be shortened. The picker
+        gets the same treatment: its selection is a label in the rail too.
+        """
+
+        def flag(text: str, needed: int, set_tooltip) -> None:
+            too_wide = int(needed) > int(available)
+            set_tooltip(text if too_wide else "")
+            if not too_wide or (language, text) in self._warned:
+                return
+            self._warned.add((language, text))
+            logger.warning(
+                "Sidebar label needs %d px, the rail gives %d px: %r (%s)",
+                int(needed),
+                int(available),
+                text,
+                language,
+            )
+
+        for row in panel.findChildren(SidebarButton):
+            # Only rows that are actually drawn: an update row waiting off
+            # screen is not a label the reader can see elided.
+            if not row.isVisibleTo(panel) or not row.text():
+                continue
+            flag(row.text(), self.row_width(row), row.setToolTip)
+        if picker is not None and picker.isVisibleTo(panel):
+            flag(
+                picker.currentText(),
+                self.picker_width(picker),
+                lambda tip: picker.setToolTip(tip or picker_tooltip),
+            )
 
 
 def sidebar_row_spacing(platform_name: str | None = None) -> int:
@@ -195,6 +422,23 @@ class SidebarButton(QPushButton):
     def dismiss_keyboard_focus(self) -> None:
         self._keyboard_focused = False
         self.update()
+
+    def required_width(self) -> int:
+        """Width this row needs to draw its whole label.
+
+        ``_paint_label`` lays the text out inside its own insets (row inset,
+        icon, the gaps either side of it, the label's own trailing gap) rather
+        than in the style's content rect, so a platform size hint reports less
+        room than the label actually needs. The rail is sized from this.
+        """
+        text = self.text()
+        if not text:
+            return int(super().sizeHint().width())
+        icon_w = self.iconSize().width() if not self.icon().isNull() else 0
+        # Row inset, the gaps around the glyph, and the label's own trailing
+        # gap; two extra pixels so the elide and the paint agree on the edge.
+        chrome = 4 + 8 + icon_w + (8 if icon_w else 0) + 6 + 4 + 2
+        return int(QFontMetrics(self.font()).horizontalAdvance(text)) + chrome
 
     @classmethod
     def dismiss_focus_rings(cls) -> None:

@@ -128,7 +128,12 @@ from .settings_page import SettingsPage
 from .support_page import SupportPage
 from .icons import get_symbol_icon
 from .widgets import CurrentPageStack
-from .sidebar import SidebarButton, sidebar_row_min_height, sidebar_row_spacing
+from .sidebar import (
+    SidebarButton,
+    SidebarWidth,
+    sidebar_row_min_height,
+    sidebar_row_spacing,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -615,6 +620,8 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self._gui_current_identity = None
+        # How wide the rail is lives in one place; this holds its last answer.
+        self._rail_width = SidebarWidth()
         self.settings = QSettings("innioasis", "updater")
         translator().set_language(
             initial_language(str(self.settings.value("language", "") or ""))
@@ -1307,9 +1314,9 @@ class MainWindow(QMainWindow):
         t = T()
         nav = QWidget()
         nav.setObjectName("navPanel")
-        is_mac = sys.platform == "darwin"
-        nav_width = 185 if is_mac else 175
-        nav.setFixedWidth(nav_width)
+        # Sized from its labels by _reapply_rail_width; this is only the width it
+        # opens at, before a language's copy has been measured.
+        nav.setFixedWidth(self._rail_width.base)
 
         layout = QVBoxLayout(nav)
         layout.setContentsMargins(10, 8, 10, 10)
@@ -1443,6 +1450,7 @@ class MainWindow(QMainWindow):
         self._nav_content = nav
         self._apply_nav_surface()
         self._refresh_icons()
+        self._reapply_rail_width()
         return nav
 
     def _populate_languages(self):
@@ -1541,6 +1549,59 @@ class MainWindow(QMainWindow):
                     continue
                 self._lang_combo.setItemIcon(i, lang_icon)
 
+    def _reapply_rail_width(self) -> None:
+        """Labels, theme or display may have changed: re-apply the rail width.
+
+        The rail's width, its caps, the affordability rule and the report of an
+        over-long label all live in ``SidebarWidth``. This feeds it the window's
+        facts, and when the rail actually changed raises the window floor to
+        match — nothing here measures a label or decides a ceiling.
+        """
+        nav = getattr(self, "_nav_panel", None)
+        if nav is None:
+            return
+        changed = self._rail_width.apply(
+            nav,
+            getattr(self, "_lang_combo", None),
+            display_width=self._display_width(),
+            content_min=self._content_column_minimum(),
+            language=getattr(translator(), "lang", ""),
+            picker_tooltip=tr("nav_language"),
+        )
+        if not changed:
+            return
+        # A wider rail raises the window's own floor: dragging below it would
+        # crush the page column under its own cards.
+        if hasattr(self, "_select_page"):
+            self.setMinimumWidth(self._minimum_window_width())
+        if hasattr(self, "_stack") and not self._install_run_active():
+            self._fit_window_to_page()
+
+    def _display_width(self) -> int:
+        """Width the window may grow to: the display it is on."""
+        screen = self.screen()
+        if screen is None:
+            return 0
+        return int(screen.availableGeometry().width())
+
+    def _content_column_minimum(self) -> int:
+        """Narrowest the page column can be drawn: the catalogue's floor."""
+        page = getattr(self, "_select_page", None)
+        if page is None:
+            return 0
+        try:
+            return int(page.minimumSizeHint().width())
+        except Exception:
+            return 0
+
+    def _minimum_window_width(self) -> int:
+        """Least width that keeps the rail and the page column whole."""
+        return self._rail_width.window_floor(
+            self._content_column_minimum(),
+            self._display_width(),
+            MINIMUM_WINDOW_WIDTH,
+        )
+
     def _refresh_components(self):
         """Update window components to match active OS theme tokens.
 
@@ -1627,6 +1688,9 @@ class MainWindow(QMainWindow):
         # A theme switch re-derives the palette, so the plates have to follow it.
         from .surfaces import harmonise_window_plates
         harmonise_window_plates(self)
+        # The theme's font is what the rows are drawn in: re-measure the rail
+        # from the copy at that size.
+        self._reapply_rail_width()
 
 
     def _install_frameless_resize_handler(self):
@@ -2070,7 +2134,12 @@ class MainWindow(QMainWindow):
             # The floor is content-derived: two release rows plus the
             # Install / Restore button and the Install-from-file link must fit
             # at every window size.
-            self.setMinimumSize(MINIMUM_WINDOW_WIDTH, self._content_floor_height())
+            # Measure the rail now that the pages exist: its affordable width
+            # depends on the page column's own minimum, which is only known
+            # once the catalogue has been built. Then the rail's width is part
+            # of the window floor, so a language switch raises that floor.
+            self._reapply_rail_width()
+            self.setMinimumSize(self._minimum_window_width(), self._content_floor_height())
             QTimer.singleShot(0, self._fit_window_to_page)
             if not os.environ.get("QT_QPA_PLATFORM") == "offscreen" and not os.environ.get("INNIOASIS_HEADLESS"):
                 QTimer.singleShot(1200, self._check_legacy_installations)
@@ -2735,7 +2804,9 @@ class MainWindow(QMainWindow):
         screen = self.screen()
         if screen is not None:
             available = screen.availableGeometry()
-            max_w = max(MINIMUM_WINDOW_WIDTH, min(max_w, int(available.width())))
+            # Never cap below the window's own floor: the rail plus the page
+            # column's minimum is what has to fit, even on a small display.
+            max_w = max(self.minimumWidth(), MINIMUM_WINDOW_WIDTH, min(max_w, int(available.width())))
             if fill_height:
                 max_h = int(available.height())
             else:
@@ -2770,6 +2841,10 @@ class MainWindow(QMainWindow):
             self._apply_window_size_limits(fill_height=True)
             return
         chrome_w, chrome_h = self._window_chrome()
+        # The rail's width is the window's width chrome. Take it from the policy
+        # too: a rail resized this turn has not been laid out yet, so the
+        # geometry can still describe the previous width.
+        chrome_w = max(int(chrome_w), int(self._rail_width.width))
         content_h = self._page_content_height(page)
         target_h = int(content_h) + chrome_h + CONTENT_FIT_SLACK
         if stack.currentIndex() == _PAGE_SELECT:
@@ -2783,7 +2858,9 @@ class MainWindow(QMainWindow):
         # inside their scroll area) says how much room it really needs. The
         # page's own minimum is the scroll area's, which is tiny, so without
         # this the cards were cut off at the right edge in a narrow window.
-        floor_w = MINIMUM_WINDOW_WIDTH
+        # The rail's own width is part of the floor: it is sized from its
+        # labels, so it grows with the language.
+        floor_w = self._minimum_window_width()
         width_hint = getattr(page, "content_width_hint", None)
         if callable(width_hint):
             try:
@@ -2834,7 +2911,7 @@ class MainWindow(QMainWindow):
             self._apply_window_size_limits(fill_height=True)
             width, height = default_window_size(self.screen())
             self._animate_window_size(
-                width, height, minimum=(MINIMUM_WINDOW_WIDTH, self._content_floor_height()),
+                width, height, minimum=(self._minimum_window_width(), self._content_floor_height()),
             )
             return
 
@@ -2932,7 +3009,7 @@ class MainWindow(QMainWindow):
             self._apply_window_size_limits(target_h)
             self._animate_window_size(target_w, target_h, minimum=(target_w, target_h))
         else:
-            min_w = MINIMUM_WINDOW_WIDTH
+            min_w = self._minimum_window_width()
             min_h = self._content_floor_height()
             self._hugging_install = False
             self.setMinimumSize(min_w, min_h)
@@ -3246,6 +3323,7 @@ class MainWindow(QMainWindow):
         active = self._install_run_active()
         btn.setText(tr("nav_install_package" if active else "nav_select_package"))
         self._apply_install_ui_state(active)
+        self._reapply_rail_width()
         return active
 
     def _on_select_nav_clicked(self):
@@ -5359,6 +5437,7 @@ class MainWindow(QMainWindow):
             if getattr(self, "_linux_setup_flow_active", False)
             else tr("nav_settings")
         )
+        self._reapply_rail_width()
 
     def _show_full_settings(self):
         """Open the complete Settings column and highlight its navigation row."""
@@ -6054,6 +6133,9 @@ class MainWindow(QMainWindow):
         if self.statusBar() and hasattr(self.statusBar(), "retranslate"):
             self.statusBar().retranslate()
         self._apply_generic_mtk_branding()
+        # Every row has its new language's text now: the rail takes the width
+        # that copy needs instead of eliding it
+        self._reapply_rail_width()
 
     def _on_manifest_loaded(self, entries):
         if entries:
@@ -6105,6 +6187,7 @@ class MainWindow(QMainWindow):
         )
         button.setVisible(available)
         button.setEnabled(available)
+        self._reapply_rail_width()
 
     def _show_update_check_busy(self):
         """Native indeterminate bar while the app-update check runs off-thread."""

@@ -3464,6 +3464,22 @@ class FlashWorker(QThread):
         page's explanation keep working.
         """
         if (
+            self._sp_flash_complete
+            and (self._is_disconnected or is_disconnection_error(detail))
+        ):
+            # Completion wins over a *disconnection* only. The tool wrote the
+            # whole image and said so; the cable going away afterwards is the
+            # reboot its own completion line invites. A log that ends in a
+            # failure code is still a failed install — that rule stands.
+            self._log(
+                "Notice: SP Flash Tool completion overrides the disconnection: "
+                f"{detail}"
+            )
+            self.step_changed.emit(STEP_DONE)
+            self.progress.emit(100)
+            self.finished.emit(True, "")
+            return
+        if (
             self._is_disconnected
             or is_disconnection_error(detail)
         ):
@@ -3602,6 +3618,16 @@ class FlashWorker(QThread):
             self._sp_flash_complete = True
             return
         if is_disconnection_error(line):
+            # The tool has already reported the command finished: the cable
+            # going away now is the device rebooting, not a failed install.
+            # Treating it as a disconnect cancels a completed flash and shows
+            # the player-disconnected card over a good write.
+            if self._sp_flash_complete:
+                self._log(
+                    "Notice: SP Flash Tool reported completion before the device "
+                    f"left USB; ignoring: {line}"
+                )
+                return
             self._log(f"Notice: Disconnection detected in SP Flash Tool output: {line}")
             self._is_disconnected = True
             self.cancel()
