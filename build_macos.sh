@@ -29,6 +29,10 @@ SPEC_FILE="macos.spec"
 BUNDLE_ICON="assets/icon.icns"
 CREATE_DMG=0
 TARGET_ARCH="${TARGET_ARCH:-}"
+# The brand pass re-invokes this script after the option loop has consumed
+# --arch/--dmg, so keep the original argv: the child must build the same
+# architecture and DMG the caller asked for, not the host default.
+ORIGINAL_ARGS=("$@")
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -99,7 +103,7 @@ if [ "${INNOASIS_BRAND_LOCK:-}" = "1" ]; then
 elif [ -n "${BRAND_REQUESTED:-}" ]; then
     rm -rf "$BUILD_DIR"
     clean_brand_artifacts "$BRAND_REQUESTED"
-    INNOASIS_BRAND_LOCK=1 BUILD_BRAND="$BRAND_REQUESTED" "$0" "$@" || exit $?
+    INNOASIS_BRAND_LOCK=1 BUILD_BRAND="$BRAND_REQUESTED" "$0" "${ORIGINAL_ARGS[@]}" || exit $?
     list_built_apps
     exit 0
 else
@@ -108,7 +112,7 @@ else
         clean_brand_artifacts "$brand"
     done
     for brand in updater_ce mediatek_installer; do
-        INNOASIS_BRAND_LOCK=1 BUILD_BRAND="$brand" "$0" "$@" || exit $?
+        INNOASIS_BRAND_LOCK=1 BUILD_BRAND="$brand" "$0" "${ORIGINAL_ARGS[@]}" || exit $?
     done
     echo ""
     echo "=== Built for macOS ==="
