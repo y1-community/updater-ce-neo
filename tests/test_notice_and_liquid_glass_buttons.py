@@ -2,6 +2,9 @@
 
 import os
 import sys
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QApplication, QPushButton
@@ -136,3 +139,45 @@ def test_toast_widgets_use_liquid_glass_round_buttons():
     assert isinstance(n_close, _RoundNextButton)
     assert n_action.cursor().shape() == Qt.ArrowCursor
     assert n_close.cursor().shape() == Qt.ArrowCursor
+
+
+def test_retry_buttons_use_arrow_based_retry_glyph():
+    app = QApplication.instance() or QApplication(sys.argv)
+
+    from src.ui.icons import get_symbol_pixmap, _get_svg_pixmap, _SF_SYMBOL_MAP, _SEGOE_SYMBOL_MAP
+    from src.ui.native_controls import _SF_SYMBOLS, _SEGMENTED_SF_SYMBOLS
+    from src.ui.flash_page import FlashPage, _RoundNextButton
+    from src.i18n import tr
+
+    # 1. Platform mappings for arrow-based retry glyph
+    assert _SF_SYMBOLS["retry"] == "arrow.clockwise"
+    assert _SEGMENTED_SF_SYMBOLS["retry"] == "arrow.clockwise"
+    assert _SF_SYMBOL_MAP["retry"] == "arrow.clockwise"
+    assert _SEGOE_SYMBOL_MAP["retry"] == 0xE72C
+
+    # 2. Universal vector SVG fallback renders non-empty
+    svg_pix = _get_svg_pixmap("retry", 16, "#3ecf6a")
+    assert not svg_pix.isNull()
+    assert svg_pix.width() > 0 and svg_pix.height() > 0
+
+    # 3. get_symbol_pixmap returns valid pixmap
+    pix = get_symbol_pixmap("retry", 16, "#ffffff")
+    assert not pix.isNull()
+
+    # 4. _RoundNextButton with symbol="retry"
+    btn = _RoundNextButton(symbol="retry", accent=True)
+    assert btn._symbol == "retry"
+    assert btn._glyph_symbol() == "retry"
+    assert btn.toolTip() == tr("flash_btn_retry")
+    btn.rebuild_arrow()
+    assert not btn._arrow.isNull()
+
+    # 5. FlashPage retry button uses symbol="retry"
+    page = FlashPage()
+    try:
+        assert page._flash_retry_btn._symbol == "retry"
+        assert page._flash_retry_btn.toolTip() == tr("flash_btn_retry")
+    finally:
+        page.close()
+        app.processEvents()
+

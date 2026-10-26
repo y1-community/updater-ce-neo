@@ -321,38 +321,39 @@ def test_rockbox_post_flash_power_prompt_uses_model_specific_button_and_hides_na
     old_mac = paths.IS_MAC
     try:
         paths.IS_MAC = False
-        window = MainWindow()
-        window.settings = settings
-        window._package_model = "Y2"
-        window._package_name = "Rockbox Y2"
-        window._package_path = "/tmp/rockbox_y2.zip"
-        window._flash_method = "mtk"
-        window._flash_page.set_model("Y2")
-        window._create_themes_wizard = lambda _model: None
-        window.show()
-        window._handle_flash_success()
-        app.processEvents()
+        with patch("src.theme_pack.AdbWatchWorker"):
+            window = MainWindow()
+            window.settings = settings
+            window._package_model = "Y2"
+            window._package_name = "Rockbox Y2"
+            window._package_path = "/tmp/rockbox_y2.zip"
+            window._flash_method = "mtk"
+            window._flash_page.set_model("Y2")
+            window._create_themes_wizard = lambda _model: None
+            window.show()
+            window._handle_flash_success()
+            app.processEvents()
 
-        assert window._stack.currentIndex() == _PAGE_FLASH
-        assert window._rockbox_power_on_pending
-        assert window._install_run_active()
-        assert window._settings_btn.isHidden()
-        assert window._support_btn.isHidden()
-        if hasattr(window, "_linux_setup_btn"):
-            assert window._linux_setup_btn.isHidden()
-        assert window._check_updates_btn.isHidden()
+            assert window._stack.currentIndex() == _PAGE_FLASH
+            assert window._rockbox_power_on_pending
+            assert window._install_run_active()
+            assert window._settings_btn.isHidden()
+            assert window._support_btn.isHidden()
+            if hasattr(window, "_linux_setup_btn"):
+                assert window._linux_setup_btn.isHidden()
+            assert window._check_updates_btn.isHidden()
 
-        # Guided install chrome stays active until the player has booted;
-        # the SP Flash Tool button is independent of that flow.
-        assert window._install_run_active()
-        assert "disconnect the usb and power on your y2" in window._flash_page._eta_label.text().lower()
+            # Guided install chrome stays active until the player has booted;
+            # the SP Flash Tool button is independent of that flow.
+            assert window._install_run_active()
+            assert "disconnect the usb and power on your y2" in window._flash_page._eta_label.text().lower()
 
-        window._flash_page._theme_step1_next_btn.click()
-        app.processEvents()
-        assert not window._rockbox_power_on_pending
-        assert window._flash_page._themes_stage_active
-        assert "connect your y2 by usb" in window._flash_page._eta_label.text().lower()
-        assert "usb" not in window._flash_page._theme_row.accessibleName().lower()
+            window._flash_page._theme_step1_next_btn.click()
+            app.processEvents()
+            assert not window._rockbox_power_on_pending
+            assert window._flash_page._themes_stage_active
+            assert "connect your y2 by usb" in window._flash_page._eta_label.text().lower()
+            assert "usb" not in window._flash_page._theme_row.accessibleName().lower()
     finally:
         paths.IS_MAC = old_mac
         try:
@@ -373,33 +374,34 @@ def test_sp_flash_rockbox_power_on_prompt(tmp_path):
     old_mac = paths.IS_MAC
     try:
         paths.IS_MAC = False
-        window = MainWindow()
-        window.settings = settings
-        window._package_model = "Y1"
-        window._package_name = "Rockbox Y1"
-        window._package_path = "/tmp/rockbox_y1.zip"
-        window._flash_method = "sp"
-        window._flash_page.set_model("Y1")
-        window._create_themes_wizard = lambda _model: None
-        window.show()
-        window._handle_flash_success()
-        app.processEvents()
+        with patch("src.theme_pack.AdbWatchWorker"):
+            window = MainWindow()
+            window.settings = settings
+            window._package_model = "Y1"
+            window._package_name = "Rockbox Y1"
+            window._package_path = "/tmp/rockbox_y1.zip"
+            window._flash_method = "sp"
+            window._flash_page.set_model("Y1")
+            window._create_themes_wizard = lambda _model: None
+            window.show()
+            window._handle_flash_success()
+            app.processEvents()
 
-        assert window._stack.currentIndex() == _PAGE_FLASH
-        assert window._rockbox_power_on_pending
-        assert window._install_run_active()
+            assert window._stack.currentIndex() == _PAGE_FLASH
+            assert window._rockbox_power_on_pending
+            assert window._install_run_active()
 
-        # Step 1: Disconnect & power on prompt, shared by both flash methods
-        assert "disconnect the usb and power on your y1" in window._flash_page._eta_label.text().lower()
+            # Step 1: Disconnect & power on prompt, shared by both flash methods
+            assert "disconnect the usb and power on your y1" in window._flash_page._eta_label.text().lower()
 
-        # User presses the round Next button to confirm disconnect and power on
-        window._flash_page._theme_step1_next_btn.click()
-        app.processEvents()
-        assert not window._rockbox_power_on_pending
-        assert window._flash_page._themes_stage_active
+            # User presses the round Next button to confirm disconnect and power on
+            window._flash_page._theme_step1_next_btn.click()
+            app.processEvents()
+            assert not window._rockbox_power_on_pending
+            assert window._flash_page._themes_stage_active
 
-        # Step 2: Connect USB prompt
-        assert "connect your y1 by usb" in window._flash_page._eta_label.text().lower()
+            # Step 2: Connect USB prompt
+            assert "connect your y1 by usb" in window._flash_page._eta_label.text().lower()
     finally:
         paths.IS_MAC = old_mac
         try:
@@ -409,7 +411,7 @@ def test_sp_flash_rockbox_power_on_prompt(tmp_path):
             pass
 
 
-def test_device_prep_confirmation_before_watch_and_flash():
+def test_device_prep_confirmation_before_watch_and_flash(tmp_path):
 
     """Users are always prompted to power off and disconnect their model/device first.
     The flash worker and device monitor are NOT triggered until the user confirms (presses Next)."""
@@ -435,7 +437,7 @@ def test_device_prep_confirmation_before_watch_and_flash():
     patcher.start()
 
     # 1. Package selected triggers device prep
-    w._package_path = "/fake/rom.zip"
+    w._package_path = str(tmp_path / "unique_test_device_prep_rom.zip")
     w._package_name = "Original Software 3.2.1"
     w._package_model = "Y2"
     w._show_device_prep()

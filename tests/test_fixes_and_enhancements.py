@@ -5,6 +5,9 @@ liquid glass scroll-lock / tracking, and legacy cleanup enhancements.
 
 import os
 import sys
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
 import tempfile
 from pathlib import Path
 from PySide6.QtCore import QEvent, QPoint, QSettings, Qt
@@ -47,6 +50,7 @@ def test_install_failure_dismisses_stop_prompt():
     # Only retry and cancel buttons should be visible (2 buttons, not 4)
     assert not fp._flash_retry_btn.isHidden()
     assert not fp._cancel_btn.isHidden()
+    fp.close()
 
 
 def test_install_completion_dismisses_stop_prompt():
@@ -82,19 +86,25 @@ def test_subtitle_never_reappears_after_dismissal(tmp_path):
     assert player_check.is_donation_ui_disabled(settings) is True
 
     # Test in MainWindow
-    win = MainWindow()
-    try:
-        win.settings = settings
-        win._update_author_label()
-        assert win._version_label.isVisible() is False
+    from unittest.mock import patch
 
-        # Retranslate or theme change must keep it hidden
-        win._retranslate_all()
-        assert win._version_label.isVisible() is False
-        win._apply_donation_visibility()
-        assert win._version_label.isVisible() is False
-    finally:
-        win.close()
+    with patch("src.ui.select_page.ReleasesWorker"), patch("src.manifest.ManifestWorker"), patch("src.donors.fetch_remote_donors_async"):
+        win = MainWindow()
+        try:
+            win.settings = settings
+            win._update_author_label()
+            assert win._version_label.isVisible() is False
+
+            # Retranslate or theme change must keep it hidden
+            win._retranslate_all()
+            assert win._version_label.isVisible() is False
+            win._apply_donation_visibility()
+            assert win._version_label.isVisible() is False
+        finally:
+            win.close()
+            app = QApplication.instance()
+            if app:
+                app.processEvents()
 
 
 def test_card_confirmation_scroll_lock_and_trash_symbol():

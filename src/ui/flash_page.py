@@ -214,7 +214,12 @@ class _FitLabel(_StatusLabel):
         return QSize(self._wrap_width, self._wrapped_height(self._wrap_width))
 
     def minimumSizeHint(self):  # noqa: N802 (Qt naming)
-        return self.sizeHint()
+        if self._single_line:
+            return QSize(0, self.heightForWidth(self._wrap_width))
+        return QSize(
+            min(self._wrap_width, max(40, self._unbroken_width())),
+            self._wrapped_height(self._wrap_width),
+        )
 
     def _unbroken_width(self) -> int:
         text = self.text() or ""
@@ -713,6 +718,9 @@ class _RoundNextButton(QPushButton):
         elif symbol == "next":
             self.setToolTip(tr("btn_next"))
             self.setAccessibleName(tr("btn_next"))
+        elif symbol == "retry":
+            self.setToolTip(tr("flash_btn_retry"))
+            self.setAccessibleName(tr("flash_btn_retry"))
 
     def setText(self, text: str) -> None:  # noqa: N802 (Qt naming)
         super().setText(text)
@@ -995,18 +1003,19 @@ class _RoundNextButton(QPushButton):
         strength = self._shadow_strength()
         steps = _CHIP_SHADOW_PX
         budget = max(1.0, steps * steps)
-        from .glass import is_golden_gate_or_newer
-        is_glass = is_golden_gate_or_newer()
+        from .glass import is_liquid_glass_supported
+
+        is_legacy = sys.platform == "darwin" and not is_liquid_glass_supported()
         for step in range(steps, 0, -1):
             alpha = int(_CHIP_SHADOW_ALPHA * strength * (steps - step + 1) / budget)
             if alpha <= 0:
                 continue
             painter.setBrush(QColor(0, 0, 0, min(alpha, 255)))
             r = disc.adjusted(-step, -step + 1, step, step + 1)
-            if is_glass:
-                painter.drawEllipse(r)
-            else:
+            if is_legacy:
                 painter.drawRoundedRect(r, 5.0, 5.0)
+            else:
+                painter.drawEllipse(r)
 
     def paint_into(self, painter: QPainter) -> None:
         """Draw the chip — shadow, disc, glyph — into ``painter``.
@@ -1030,12 +1039,13 @@ class _RoundNextButton(QPushButton):
         self._paint_shadow(painter, self._disc_rect())
         disc_rect = self._disc_rect()
         painter.setBrush(disc)
-        from .glass import is_golden_gate_or_newer
-        is_glass = is_golden_gate_or_newer()
-        if is_glass:
-            painter.drawEllipse(disc_rect)
-        else:
+        from .glass import is_liquid_glass_supported
+
+        is_legacy = sys.platform == "darwin" and not is_liquid_glass_supported()
+        if is_legacy:
             painter.drawRoundedRect(disc_rect, 5.0, 5.0)
+        else:
+            painter.drawEllipse(disc_rect)
         # A raised chip catches the light along its top edge.
         highlight = disc.lighter(150)
         highlight.setAlpha(min(110, max(35, int(disc.alpha() * 0.45))))
@@ -1082,9 +1092,7 @@ class _RoundNextButton(QPushButton):
         painter.setPen(Qt.PenStyle.NoPen)
 
         disc_rect = self._disc_rect()
-        from .glass import is_golden_gate_or_newer
-        is_glass = is_golden_gate_or_newer()
-        r = disc_rect.height() / 2.0 if is_glass else 5.0
+        use_regular = sys.platform == "darwin"
         h = float(disc_rect.height())
         y = float(disc_rect.y())
         w = float(self.width())
@@ -1092,21 +1100,44 @@ class _RoundNextButton(QPushButton):
 
         from PySide6.QtGui import QPainterPath
         path = QPainterPath()
-        if self._is_leading:
-            path.moveTo(w, y)
-            path.lineTo(x0 + r, y)
-            path.arcTo(x0, y, h, h, 90, 180)
-            path.lineTo(w, y + h)
-            path.closeSubpath()
-            center_x = x0 + (w - x0) / 2.0
+        if not use_regular:
+            r = h / 2.0
+            if self._is_leading:
+                path.moveTo(w, y)
+                path.lineTo(x0 + r, y)
+                path.arcTo(x0, y, h, h, 90, 180)
+                path.lineTo(w, y + h)
+                path.closeSubpath()
+                center_x = x0 + (w - x0) / 2.0
+            else:
+                right_x = float(disc_rect.right() + 1)
+                path.moveTo(0, y + h)
+                path.lineTo(right_x - r, y + h)
+                path.arcTo(right_x - h, y, h, h, 270, 180)
+                path.lineTo(0, y)
+                path.closeSubpath()
+                center_x = right_x / 2.0
         else:
-            right_x = float(disc_rect.right() + 1)
-            path.moveTo(0, y + h)
-            path.lineTo(right_x - r, y + h)
-            path.arcTo(right_x - h, y, h, h, 270, 180)
-            path.lineTo(0, y)
-            path.closeSubpath()
-            center_x = right_x / 2.0
+            r = 5.0
+            if self._is_leading:
+                path.moveTo(w, y)
+                path.lineTo(x0 + r, y)
+                path.arcTo(x0, y, r * 2, r * 2, 90, 90)
+                path.lineTo(x0, y + h - r)
+                path.arcTo(x0, y + h - r * 2, r * 2, r * 2, 180, 90)
+                path.lineTo(w, y + h)
+                path.closeSubpath()
+                center_x = x0 + (w - x0) / 2.0
+            else:
+                right_x = float(disc_rect.right() + 1)
+                path.moveTo(0, y + h)
+                path.lineTo(right_x - r, y + h)
+                path.arcTo(right_x - r * 2, y + h - r * 2, r * 2, r * 2, 270, 90)
+                path.lineTo(right_x, y + r)
+                path.arcTo(right_x - r * 2, y, r * 2, r * 2, 0, 90)
+                path.lineTo(0, y)
+                path.closeSubpath()
+                center_x = right_x / 2.0
 
         painter.setBrush(disc)
         painter.drawPath(path)
@@ -1246,6 +1277,7 @@ def _configure_progress(bar: QProgressBar) -> None:
 
     bar.setObjectName("softwareUpdateProgress")
     install_progress_readability(bar)
+    bar.setStyleSheet("background: transparent; border: none; padding: 0px;")
     bar.setRange(0, 100)
     bar.setValue(0)
     bar.setTextVisible(True)
@@ -1267,6 +1299,92 @@ def _make_squircle_icon(symbol: str = "", asset_name: str = "") -> QLabel:
 
     lbl.setPixmap(squircle_pixmap(QPixmap(), 40, complete=False))
     return lbl
+
+
+class _SvgVectorWidget(QWidget):
+    """Native vector renderer for SVG illustrations.
+
+    Renders directly via QSvgRenderer during paintEvent, ensuring
+    razor-sharp antialiasing at the host screen's native resolution without
+    any bitmap scaling or pixel manipulation.
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        from PySide6.QtSvg import QSvgRenderer
+
+        self._renderer = QSvgRenderer(self)
+        self._svg_raw = ""
+        self._color = QColor("#ffffff")
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+        self.setStyleSheet("background: transparent; border: none;")
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+
+    def load_svg(self, path: Path | str, color: QColor | str) -> bool:
+        try:
+            self._svg_raw = Path(path).read_text(encoding="utf-8")
+        except Exception:
+            self._svg_raw = ""
+            return False
+        return self.set_color(color)
+
+    def set_color(self, color: QColor | str) -> bool:
+        self._color = QColor(color) if isinstance(color, str) else color
+        if not self._svg_raw or not self._color.isValid():
+            return False
+        from .icons import vector_recolor_svg_data
+
+        recolored_svg = vector_recolor_svg_data(self._svg_raw, self._color)
+        from PySide6.QtCore import QByteArray
+
+        ok = self._renderer.load(QByteArray(recolored_svg.encode("utf-8")))
+        if ok and self._renderer.isValid():
+            box = self._renderer.viewBoxF()
+            if box.height() > 0:
+                h = _PAPERCLIP_HINT_PX
+                w = max(1, int(round(h * box.width() / box.height())))
+                self.setFixedSize(w, h)
+        self.update()
+        return ok
+
+    def paintEvent(self, event):  # noqa: N802 (Qt naming)
+        if not self._renderer.isValid():
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+        from PySide6.QtCore import QRectF
+
+        self._renderer.render(painter, QRectF(self.rect()))
+        painter.end()
+
+    def pixmap(self):
+        if not self._svg_raw or not self._renderer.isValid():
+            return QPixmap()
+        dpr = max(2.0, float(self.devicePixelRatioF() or 1.0))
+        box = self._renderer.viewBoxF()
+        h = self.height() if self.height() > 0 else _PAPERCLIP_HINT_PX
+        w = max(1, int(round(h * box.width() / box.height()))) if box.height() > 0 else 100
+        from PySide6.QtGui import QImage
+        from PySide6.QtCore import QRectF
+
+        img = QImage(
+            int(round(w * dpr)),
+            int(round(h * dpr)),
+            QImage.Format.Format_ARGB32_Premultiplied,
+        )
+        img.fill(Qt.GlobalColor.transparent)
+        p = QPainter(img)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+        self._renderer.render(p, QRectF(0, 0, img.width(), img.height()))
+        p.end()
+        img.setDevicePixelRatio(dpr)
+        return QPixmap.fromImage(img)
+
+    def setPixmap(self, pm):
+        pass
 
 
 class FlashPage(QWidget):
@@ -1494,8 +1612,7 @@ class FlashPage(QWidget):
         self._paperclip_hint.setWordWrap(True)
         self._paperclip_hint.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
 
-        self._paperclip_img = QLabel()
-        self._paperclip_img.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
+        self._paperclip_img = _SvgVectorWidget()
         self._paperclip_img.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
         self._paperclip_hint_host = QWidget()
@@ -1522,7 +1639,7 @@ class FlashPage(QWidget):
         # band — while this card is running, has failed, or has finished. A chip
         # in the middle of a taller card reads as belonging to the guidance copy
         # under it instead of to the software it is installing.
-        self._flash_retry_btn = _RoundNextButton(symbol="next", accent=True)
+        self._flash_retry_btn = _RoundNextButton(symbol="retry", accent=True)
         self._flash_retry_btn.setObjectName("flashRetryBtn")
         self._flash_retry_btn.setToolTip(tr("flash_btn_retry"))
         self._flash_retry_btn.setAccessibleName(tr("flash_btn_retry"))
@@ -1558,7 +1675,7 @@ class FlashPage(QWidget):
         self._theme_fallback_next_btn.setVisible(False)
         self._theme_fallback_next_btn.clicked.connect(self._on_theme_fallback_next_clicked)
 
-        self._theme_trouble_recover_btn = _RoundNextButton(symbol="next", accent=True)
+        self._theme_trouble_recover_btn = _RoundNextButton(symbol="retry", accent=True)
         self._theme_trouble_recover_btn.setText(tr("rockbox_recover_troubleshoot"))
         self._theme_trouble_recover_btn.setVisible(False)
         self._theme_trouble_recover_btn.clicked.connect(self._on_theme_recover_clicked)
@@ -1883,26 +2000,33 @@ class FlashPage(QWidget):
             if img_path is None:
                 img_path = assets / "paperclip.svg"
 
-            dpr = float(self.devicePixelRatioF() or 1.0)
-            # Keep an untinted copy to reapply the desktop text colour after a
-            # palette switch; the visible pixmap is the tinted one.
-            source = render_svg_asset(img_path, _PAPERCLIP_HINT_PX, device_pixel_ratio=dpr)
+            from PySide6.QtGui import QGuiApplication
+
+            screen = self.screen() or (self.window().screen() if self.window() else None) or QGuiApplication.primaryScreen()
+            screen_dpr = float(screen.devicePixelRatio() if screen else 2.0)
+            dpr = max(float(self.devicePixelRatioF() or 1.0), screen_dpr, 2.0 if sys.platform == "darwin" else 1.0)
+            source = render_svg_asset(img_path, _PAPERCLIP_HINT_PX, color=txt, device_pixel_ratio=dpr)
             if not source.isNull():
                 img_label.setProperty("_hint_source", source)
-                pal = img_label.palette()
-                pal.setBrush(QPalette.ColorRole.Window, QColor(Qt.GlobalColor.transparent))
-                img_label.setPalette(pal)
-                img_label.setPixmap(recolor_bright_pixels(source, txt))
-                img_label.setFixedSize(source.deviceIndependentSize().toSize())
-                img_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-                img_label.setVisible(True)
-                if host is not None:
-                    host.setMinimumHeight(int(source.deviceIndependentSize().height()) + 18)
+
+            if hasattr(img_label, "load_svg"):
+                ok = img_label.load_svg(img_path, txt)
+                img_label.setVisible(ok)
+                if ok and host is not None:
+                    host.setMinimumHeight(int(img_label.height()) + 18)
             else:
-                img_label.setVisible(False)
-                img_label.setFixedSize(0, 0)
-                if host is not None:
-                    host.setMinimumHeight(0)
+                if not source.isNull():
+                    img_label.setPixmap(source)
+                    img_label.setFixedSize(source.deviceIndependentSize().toSize())
+                    img_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+                    img_label.setVisible(True)
+                    if host is not None:
+                        host.setMinimumHeight(int(source.deviceIndependentSize().height()) + 18)
+                else:
+                    img_label.setVisible(False)
+                    img_label.setFixedSize(0, 0)
+                    if host is not None:
+                        host.setMinimumHeight(0)
 
         waiting = getattr(self, "_waiting_view", None)
         host.setVisible(waiting is not None and self._stack.currentWidget() is waiting)
@@ -2233,24 +2357,20 @@ class FlashPage(QWidget):
         """Cancel and clean up any in-progress Rockbox theme background tasks."""
         if hasattr(self, "_adb_watch_timer"):
             self._adb_watch_timer.stop()
-        if hasattr(self, "_adb_watch_worker") and self._adb_watch_worker is not None:
-            try:
-                self._adb_watch_worker.requestInterruption()
-            except Exception:
-                pass
-            self._adb_watch_worker = None
-        if hasattr(self, "_adb_push_worker") and self._adb_push_worker is not None:
-            try:
-                self._adb_push_worker.requestInterruption()
-            except Exception:
-                pass
-            self._adb_push_worker = None
-        if hasattr(self, "_dir_merge_worker") and self._dir_merge_worker is not None:
-            try:
-                self._dir_merge_worker.requestInterruption()
-            except Exception:
-                pass
-            self._dir_merge_worker = None
+        for attr in ("_adb_watch_worker", "_adb_push_worker", "_dir_merge_worker"):
+            w = getattr(self, attr, None)
+            if w is not None:
+                try:
+                    if w.isRunning():
+                        w.requestInterruption()
+                        w.wait(1500)
+                except Exception:
+                    pass
+                setattr(self, attr, None)
+
+    def closeEvent(self, event):  # noqa: N802 (Qt naming)
+        self.stop_theme_workers()
+        super().closeEvent(event)
 
     def clear_install_failure(self) -> None:
         self.dismiss_prompt_stop()

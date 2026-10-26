@@ -297,7 +297,7 @@ class RetryGuidanceDialog(QDialog):
         row = QHBoxLayout()
         row.setSpacing(10)
         row.addStretch()
-        retry_btn = _RoundNextButton(symbol="next", accent=True)
+        retry_btn = _RoundNextButton(symbol="retry", accent=True)
         retry_btn.setText(tr("retry_guidance_btn_retry"))
         retry_btn.clicked.connect(self._on_retry)
         close_btn = _RoundNextButton(symbol="back", accent=False)

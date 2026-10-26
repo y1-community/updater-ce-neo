@@ -730,12 +730,14 @@ class MainWindow(QMainWindow):
         harmonise_window_plates(self)
 
         self._manifest_worker = None
-        QTimer.singleShot(250, self._start_manifest_worker)
-        QTimer.singleShot(UPDATE_CHECK_STARTUP_DELAY_MS, self._start_auto_update_check)
-        QTimer.singleShot(
-            UPDATE_CHECK_STARTUP_DELAY_MS + 1000,
-            lambda: self._check_device_firmware_updates(manual=False),
-        )
+        is_headless = os.environ.get("QT_QPA_PLATFORM") == "offscreen" or bool(os.environ.get("INNIOASIS_HEADLESS"))
+        if not is_headless:
+            QTimer.singleShot(250, self._start_manifest_worker)
+            QTimer.singleShot(UPDATE_CHECK_STARTUP_DELAY_MS, self._start_auto_update_check)
+            QTimer.singleShot(
+                UPDATE_CHECK_STARTUP_DELAY_MS + 1000,
+                lambda: self._check_device_firmware_updates(manual=False),
+            )
 
         if platform.system() == "Linux" and not paths.IS_MAC:
             # macOS has no SP Flash Tool or Linux setup wizard.
@@ -962,7 +964,6 @@ class MainWindow(QMainWindow):
         notice_layout.setContentsMargins(16, 12, 16, 12)
         paint_window_surface(self._notice_host)
         self._support_page = SupportPage()
-
         for w in (
             self._select_page,
             self._flash_page,
@@ -6720,6 +6721,9 @@ class MainWindow(QMainWindow):
             # running QThread, which aborts the process on the way out.
             icon_loader.requestInterruption()
             self._retire_worker(icon_loader)
+        flash_page = getattr(self, "_flash_page", None)
+        if flash_page is not None and hasattr(flash_page, "stop_theme_workers"):
+            flash_page.stop_theme_workers()
         for w in (
             getattr(self, "_manifest_worker", None),
             getattr(self, "_update_worker", None),

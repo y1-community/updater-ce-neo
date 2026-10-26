@@ -1,3 +1,8 @@
+import os
+import sys
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
 import pytest
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QColor, QImage, QPainter
@@ -116,9 +121,8 @@ def test_native_round_chip_respects_companion():
     assert dummy_btn._hidden is True
 
 
-def test_native_segmented_pair_glass_structure():
-    import sys
-    from src.ui.native_controls import NativeSegmentedPair, _glass_available
+def test_native_segmented_pair_structure():
+    from src.ui.native_controls import NativeSegmentedPair
 
     b0 = _RoundNextButton(symbol="back", accent=False)
     b1 = _RoundNextButton(symbol="next", accent=True)
@@ -126,10 +130,8 @@ def test_native_segmented_pair_glass_structure():
 
     pair = NativeSegmentedPair(b0, b1)
     assert pair._control is None
-
-    if sys.platform == "darwin" and _glass_available():
-        # Verify that _glass_available is detected on this macOS 26+ environment
-        assert _glass_available() is True
+    # Segmented controls use regular macOS styling without liquid glass backdrop
+    assert getattr(pair, "_glass_backdrop", None) is None
 
 
 def test_build_mtk_write_plan_includes_mbr_ebr(tmp_path):
@@ -193,20 +195,26 @@ def test_build_mtk_write_plan_includes_mbr_ebr(tmp_path):
 
 
 def test_is_sp_complete_override_only_for_sp():
-    win = MainWindow()
-    try:
-        # When method is mtk, even if _saw_all_command_exec is True, override must be False
-        win._used_sp_backend = False
-        win._current_method = "mtk"
-        win._flash_method = "mtk"
-        win._saw_all_command_exec = True
-        assert win._is_sp_complete_override() is False
+    from unittest.mock import patch
 
-        # When method is sp, override must be True
-        win._used_sp_backend = True
-        win._current_method = "sp"
-        win._flash_method = "sp"
-        win._saw_all_command_exec = True
-        assert win._is_sp_complete_override() is True
-    finally:
-        win.close()
+    with patch("src.ui.select_page.ReleasesWorker"), patch("src.manifest.ManifestWorker"):
+        win = MainWindow()
+        try:
+            # When method is mtk, even if _saw_all_command_exec is True, override must be False
+            win._used_sp_backend = False
+            win._current_method = "mtk"
+            win._flash_method = "mtk"
+            win._saw_all_command_exec = True
+            assert win._is_sp_complete_override() is False
+
+            # When method is sp, override must be True
+            win._used_sp_backend = True
+            win._current_method = "sp"
+            win._flash_method = "sp"
+            win._saw_all_command_exec = True
+            assert win._is_sp_complete_override() is True
+        finally:
+            win.close()
+            app = QApplication.instance()
+            if app:
+                app.processEvents()

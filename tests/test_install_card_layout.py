@@ -16,7 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QRect, Qt  # noqa: E402
+from PySide6.QtCore import QPoint, QRect, Qt  # noqa: E402
 from PySide6.QtGui import QColor, QImage, QPainter, QPixmap  # noqa: E402
 from PySide6.QtWidgets import QApplication, QStyleFactory  # noqa: E402
 
@@ -213,8 +213,8 @@ def test_cancel_and_action_buttons_are_to_the_right_of_progress():
         # pair of chips has to start past the right edge of the progress band.
         ident = page._flash_head.identity
         band_right = ident.geometry().left() + page._progress_bar.geometry().right()
-        assert page._cancel_btn.x() > page._flash_retry_btn.x()
-        assert page._flash_retry_btn.x() >= band_right, (page._flash_retry_btn.x(), band_right)
+        assert page._cancel_btn.x() < page._flash_retry_btn.x()
+        assert page._cancel_btn.x() >= band_right, (page._cancel_btn.x(), band_right)
     finally:
         page.close()
 
@@ -250,8 +250,9 @@ def test_round_chip_reads_as_raised_above_the_card():
     assert above <= under, (above, under)
 
     # Raised is not opaque: the card still shows through the disc.
-    over_white = _paint_chip(button, QColor("#ffffff")).pixelColor(disc.center())
-    over_black = _paint_chip(button, QColor("#000000")).pixelColor(disc.center())
+    sample_pt = disc.center() + QPoint(-8, 8)
+    over_white = _paint_chip(button, QColor("#ffffff")).pixelColor(sample_pt)
+    over_black = _paint_chip(button, QColor("#000000")).pixelColor(sample_pt)
     assert over_white.getRgb() != over_black.getRgb()
     assert over_black.lightness() < over_white.lightness()
 

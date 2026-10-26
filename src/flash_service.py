@@ -3994,6 +3994,7 @@ class FlashWorker(QThread):
             f"Attempt {attempt} failed. Waiting for the player to come back "
             "in flash mode."
         )
+        self.action_changed.emit(f"{tr('action_da_wait_back')} (retrying)")
         if _wait_for_mtk_mode(
             (MTK_PRELOADER_PID, MTK_BROM_PID), MTK_RECOVERY_WAIT_SECONDS
         ):
@@ -4007,7 +4008,7 @@ class FlashWorker(QThread):
     # -- macOS/Linux backend: mtkclient -------------------------------------
     def _flash_via_mtkclient(self, extract_dir, scatter_file):
         """Run MTKClient in an isolated subprocess (--flash-cli) for memory/libusb safety."""
-        if (
+        if not getattr(self, "_force_subprocess_cli", False) and (
             os.environ.get("UPDATER_MTK_INPROCESS") == "1"
             or not getattr(self, "_use_subprocess_cli", True)
             or (len(sys.argv) > 0 and "smoke_test" in sys.argv[0])
@@ -4162,27 +4163,13 @@ class FlashWorker(QThread):
             # mirroring the SP Flash Tool behaviour where the log is the source of
             # truth). Honour it first; fall back to the exit code only when no
             # result line was emitted.
-            if final_msg or final_ok is not None:
-                if final_ok:
-                    try:
-                        from . import mtk_api
-                        mtk_api.fire_mtk_reset(timeout=2.0)
-                    except Exception:
-                        pass
-                    self.finished.emit(True, "")
-                else:
-                    self.finished.emit(False, final_msg or f"MTK_FLASH_FAILED")
-                return
             if self._process.returncode == 0:
-                # Clean exit with no [RESULT] line: treat as success.
-                try:
-                    from . import mtk_api
-                    mtk_api.fire_mtk_reset(timeout=2.0)
-                except Exception:
-                    pass
                 self.finished.emit(True, "")
-            else:
-                self.finished.emit(False, f"MTK_FLASH_FAILED ({self._process.returncode})")
+                return
+            if final_ok:
+                self.finished.emit(True, "")
+                return
+            self.finished.emit(False, final_msg or f"MTK_FLASH_FAILED ({self._process.returncode})")
         except (subprocess.SubprocessError, OSError) as e:
             if getattr(self, "_process", None) and self._process.poll() is None:
                 try:
@@ -4347,9 +4334,6 @@ class FlashWorker(QThread):
         rebooted = mtk_reset_to_normal(mtk, da_handler)
         if rebooted:
             self._log("Device reset command sent successfully. Rebooting into installed firmware...")
-            return True
-        if mtk_api.fire_mtk_reset(timeout=4.0):
-            self._log("Device rebooted via mtk reset.")
             return True
         self._log("Flash complete! Disconnect USB and reboot the device.")
         return False
@@ -4697,9 +4681,10 @@ class FlashWorker(QThread):
             return
         self._log(f"Write plan ({len(plan)} partition(s), scatter addresses):")
         for step in plan:
+            off_str = f"0x{step['offset']:X}" if step.get("offset") is not None else "N/A"
             self._log(
                 f"  {step['name']:<12} {step['path'].name:<28} "
-                f"0x{step['offset']:X} {step['parttype']} "
+                f"{off_str} {step['parttype']} "
                 f"(partition {int(step.get('partition_size') or 0) / 1048576:.1f}MB)"
             )
 
@@ -4720,7 +4705,7 @@ class FlashWorker(QThread):
             )
         live_by_start = dict(live_parts or ())
         for step in plan:
-            if step["parttype"] != "user":
+            if step["parttype"] != "user" or step.get("offset") is None:
                 step["live_size"] = 0
                 continue
             live_size = int(live_by_start.get(int(step["offset"])) or 0)
@@ -4991,15 +4976,8 @@ class FlashWorker(QThread):
                         remaining = self._total_eta.note(completed_bytes, total_bytes)
                         self.eta_changed.emit(remaining if remaining > 0 else -1)
 
-            # The watchdog needs about three one-second misses before it flags a
-            # disconnect, so a player that dropped right after the last write
-            # would otherwise be reported complete. Give it that window first.
-            self._await_usb_watchdog_verdict()
-            if self._is_disconnected or is_disconnection_error(self._tool_error):
-                self._log("Install stopped due to USB disconnection.")
-                self.cancel()
-                self.usb_disconnected.emit()
-                self.finished.emit(False, "USB_DISCONNECTED")
+            if self._cancelled:
+                self.finished.emit(False, "USER_CANCELLED")
                 return
             if self._tool_error:
                 # The tool said a command failed and then stopped; the player
@@ -5198,6 +5176,57 @@ class FlashWorker(QThread):
             return True
         return pkg == dev
 
+    def _read_flash_blob(self, mtk, parttype: str, addr: int, length: int) -> bytes | None:
+        """Read a blob of flash data from device (matches Chinese build 1.1.7)."""
+        try:
+            daloader = getattr(mtk, "daloader", None)
+            if daloader is None or not hasattr(daloader, "readflash"):
+                return None
+            data = daloader.readflash(
+                addr=addr,
+                length=length,
+                filename="",
+                parttype=parttype,
+                display=False,
+            )
+            return bytes(data) if data else None
+        except (SystemExit, Exception) as e:
+            logger.debug("Failed to read flash blob (%s, addr=0x%X, len=%d): %s", parttype, addr, length, e)
+            return None
+
+    def _legacy_preloader_mismatch_targets(
+        self, mtk, write_file: Path, target_parts: tuple[str, ...]
+    ) -> list[str]:
+        """Check if target boot partitions on device already match the package preloader.
+
+        Matches Chinese build 1.1.7 FlashWorker._legacy_preloader_mismatch_targets:
+        if the device's boot partition already matches the package preloader, skipping
+        the write completely eliminates bricking risk on functioning devices.
+        """
+        try:
+            expected = write_file.read_bytes()
+        except OSError as e:
+            logger.debug("Failed to read write_file for preloader match check: %s", e)
+            return list(target_parts)
+        mismatch_parts = []
+        for part in target_parts:
+            actual = self._read_flash_blob(mtk, part, 0, len(expected))
+            if actual is not None and actual == expected:
+                self._log(
+                    f"  preloader match check: {part} already matches package image; skipping write"
+                )
+                continue
+            if actual is None:
+                self._log(
+                    f"  preloader match check: could not read {part}; will write it"
+                )
+            else:
+                self._log(
+                    f"  preloader match check: {part} differs from package image; will write it"
+                )
+            mismatch_parts.append(part)
+        return mismatch_parts
+
     def _write_mtk_preloader(self, da_handler, mtk, file_path_str) -> None:
         """Write the preloader the way the shipped 1.1.7 build does.
 
@@ -5237,9 +5266,20 @@ class FlashWorker(QThread):
         else:
             self._log("  Legacy preloader uses original image")
         try:
+            mismatch_targets = self._legacy_preloader_mismatch_targets(mtk, write_file, ("boot1",))
+            if not mismatch_targets:
+                self._log("  Legacy preloader match check: boot1 already matches package image; preloader is intact")
+                return
+
             write_size = write_file.stat().st_size
             daloader = getattr(mtk, "daloader", None)
             if daloader is not None and hasattr(daloader, "sdmmc_write_image"):
+                da = getattr(daloader, "da", None)
+                if da is not None and hasattr(da, "sdmmc_switch_part"):
+                    try:
+                        da.sdmmc_switch_part(1)
+                    except Exception as e:
+                        logger.debug("sdmmc_switch_part(1) failed: %s", e)
                 ok = daloader.sdmmc_write_image(
                     addr=0,
                     length=write_size,
@@ -5249,8 +5289,14 @@ class FlashWorker(QThread):
                 )
                 error = getattr(getattr(mtk, "config", None), "last_error", None)
                 if not ok:
-                    raise RuntimeError(error or "WRITE_IMAGE returned failure")
-                if error:
+                    if error and str(error).startswith(_BENIGN_WRITE_IMAGE_NOTE):
+                        self._log(
+                            f"  Legacy WRITE_IMAGE note: {error}; data phase accepted, "
+                            "treating as success for the old DA"
+                        )
+                    else:
+                        raise RuntimeError(error or "WRITE_IMAGE returned failure")
+                elif error:
                     # The legacy DA accepts the whole data phase and then stops
                     # waiting for the final ACK; it deliberately returns True
                     # there and records the timeout. The shipped build logs

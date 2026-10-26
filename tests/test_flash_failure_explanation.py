@@ -4,6 +4,7 @@ and visible danger styling on the app heading in all locales.
 
 import os
 import sys
+from unittest.mock import patch
 import pytest
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QColor
@@ -17,6 +18,12 @@ from src.ui.widgets import InstallProgress
 from src.ui.flash_page import FlashPage
 from src.ui.main_window import MainWindow, _PAGE_FLASH, _PAGE_SELECT
 from src.state import FlashState
+
+
+@pytest.fixture(autouse=True)
+def _mock_background_threads():
+    with patch("src.ui.select_page.ReleasesWorker"), patch("src.manifest.ManifestWorker"), patch("src.donors.fetch_remote_donors_async"):
+        yield
 
 
 @pytest.fixture(scope="module")

@@ -52,6 +52,7 @@ _SF_SYMBOLS = {
     "trash": "trash",
     "delete": "trash",
     "bin": "trash",
+    "retry": "arrow.clockwise",
 }
 
 _SEGMENTED_SF_SYMBOLS = {
@@ -65,6 +66,7 @@ _SEGMENTED_SF_SYMBOLS = {
     "trash": "trash",
     "delete": "trash",
     "bin": "trash",
+    "retry": "arrow.clockwise",
 }
 
 _target_class = None
@@ -572,9 +574,9 @@ class NativeRoundChip:
 
 
 class NativeSegmentedPair:
-    """An AppKit NSSegmentedControl (NSSegmentStyleAutomatic with NSControlBorderShapeCapsule).
+    """An AppKit NSSegmentedControl (NSSegmentStyleTexturedRounded).
 
-    Matches the macOS Safari toolbar back/forward segmented pair aesthetic:
+    Matches the macOS Safari / Finder toolbar back/forward segmented pair aesthetic:
     [ < | > ]
     """
 
@@ -613,7 +615,7 @@ class NativeSegmentedPair:
         from AppKit import (
             NSSegmentedControl,
             NSSegmentSwitchTrackingMomentary,
-            NSSegmentStyleAutomatic,
+            NSSegmentStyleTexturedRounded,
         )
 
         win = self._host.window()
@@ -626,36 +628,11 @@ class NativeSegmentedPair:
             raise RuntimeError("host window has no NSView yet")
 
         frame = self._frame_rect(view)
-        is_glass = _glass_available()
-
-        self._glass_backdrop = None
-        if is_glass:
-            try:
-                import objc
-                glass_cls = objc.lookUpClass("NSGlassEffectView")
-            except Exception:
-                glass_cls = None
-            if glass_cls is not None:
-                glass_view = glass_cls.alloc().initWithFrame_(frame)
-                glass_view.setWantsLayer_(True)
-                layer = glass_view.layer()
-                if layer is not None:
-                    layer.setCornerRadius_(float(frame.size.height) / 2.0)
-                    layer.setMasksToBounds_(True)
-                view.addSubview_(glass_view)
-                self._glass_backdrop = glass_view
 
         control = NSSegmentedControl.alloc().initWithFrame_(frame)
         control.setSegmentCount_(2)
         control.setTrackingMode_(NSSegmentSwitchTrackingMomentary)
-        if is_glass:
-            control.setSegmentStyle_(NSSegmentStyleAutomatic)
-            if hasattr(control, "setBorderShape_"):
-                from AppKit import NSControlBorderShapeCapsule
-                control.setBorderShape_(NSControlBorderShapeCapsule)
-        else:
-            from AppKit import NSSegmentStyleTexturedRounded
-            control.setSegmentStyle_(NSSegmentStyleTexturedRounded)
+        control.setSegmentStyle_(NSSegmentStyleTexturedRounded)
 
         half_w = float(frame.size.width) / 2.0
         control.setWidth_forSegment_(half_w, 0)
@@ -675,8 +652,6 @@ class NativeSegmentedPair:
             and self._host.isVisibleTo(win)
         )
         control.setHidden_(not visible)
-        if self._glass_backdrop is not None:
-            self._glass_backdrop.setHidden_(not visible)
         view.addSubview_(control)
         self._install_filter()
 
@@ -802,16 +777,9 @@ class NativeSegmentedPair:
                         if not vp.rect().intersects(host_rect_in_vp):
                             visible = False
             self._control.setHidden_(not visible)
-            if getattr(self, "_glass_backdrop", None) is not None:
-                self._glass_backdrop.setHidden_(not visible)
             if visible:
                 frame = self._frame_rect()
                 self._control.setFrame_(frame)
-                if getattr(self, "_glass_backdrop", None) is not None:
-                    self._glass_backdrop.setFrame_(frame)
-                    layer = self._glass_backdrop.layer()
-                    if layer is not None:
-                        layer.setCornerRadius_(float(frame.size.height) / 2.0)
                 half_w = float(frame.size.width) / 2.0
                 self._control.setWidth_forSegment_(half_w, 0)
                 self._control.setWidth_forSegment_(half_w, 1)
@@ -894,12 +862,6 @@ class NativeSegmentedPair:
             except Exception:
                 pass
             self._control = None
-        if getattr(self, "_glass_backdrop", None) is not None:
-            try:
-                self._glass_backdrop.removeFromSuperview()
-            except Exception:
-                pass
-            self._glass_backdrop = None
         self._target = None
 
 

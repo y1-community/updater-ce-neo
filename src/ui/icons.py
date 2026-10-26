@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 import platform
 import sys
 from typing import Optional
@@ -35,35 +36,50 @@ IS_MAC = sys.platform == "darwin"
 IS_WINDOWS = sys.platform == "win32" or platform.system() == "Windows"
 
 
-def recolor_bright_pixels(pixmap: QPixmap, color: str | QColor) -> QPixmap:
-    """Replace near-white artwork with ``color`` and preserve the remaining image.
+def vector_recolor_svg_data(svg_text: str, color: str | QColor) -> str:
+    """Recolor monochrome SVG vector data by replacing color codes in the XML.
 
-    The Linux paperclip illustrations use white strokes and a white canvas with
-    black text/details. Map the white pixels to the desktop foreground and keep
-    all dark artwork as-is; intermediate pixels retain their antialiasing as
-    alpha instead of making black lettering transparent.
+    Leaves geometry, viewBox, curves and antialiasing intact so QSvgRenderer
+    can render the vector natively at arbitrary display resolutions.
     """
+    hex_color = color.name() if isinstance(color, QColor) else str(color)
+    import re
+
+    svg_text = re.sub(
+        r"fill\s*:\s*(?:rgb\(\s*254\s*,\s*254\s*,\s*254\s*\)|#fefefe|#fff(?:fff)?|white)",
+        f"fill:{hex_color}",
+        svg_text,
+        flags=re.IGNORECASE,
+    )
+    svg_text = re.sub(
+        r"stroke\s*:\s*(?:rgb\(\s*254\s*,\s*254\s*,\s*254\s*\)|#fefefe|#fff(?:fff)?|white)",
+        f"stroke:{hex_color}",
+        svg_text,
+        flags=re.IGNORECASE,
+    )
+    svg_text = re.sub(
+        r"fill\s*=\s*[\"'](?:rgb\(\s*254\s*,\s*254\s*,\s*254\s*\)|#fefefe|#fff(?:fff)?|white)[\"']",
+        f'fill="{hex_color}"',
+        svg_text,
+        flags=re.IGNORECASE,
+    )
+    svg_text = re.sub(
+        r"stroke\s*=\s*[\"'](?:rgb\(\s*254\s*,\s*254\s*,\s*254\s*\)|#fefefe|#fff(?:fff)?|white)[\"']",
+        f'stroke="{hex_color}"',
+        svg_text,
+        flags=re.IGNORECASE,
+    )
+    return svg_text
+
+
+def recolor_bright_pixels(pixmap: QPixmap, color: str | QColor) -> QPixmap:
+    """Tint artwork with color, preserving alpha and antialiasing."""
     if pixmap.isNull():
         return pixmap
     qcolor = QColor(color) if isinstance(color, str) else QColor(color)
     if not qcolor.isValid():
         return pixmap
-    image = pixmap.toImage().convertToFormat(QImage.Format.Format_ARGB32)
-    dpr = pixmap.devicePixelRatio()
-    threshold = 192
-    for y in range(image.height()):
-        for x in range(image.width()):
-            px = QColor(image.pixel(x, y))
-            if not px.alpha():
-                continue
-            brightness = min(px.red(), px.green(), px.blue())
-            if brightness < threshold:
-                continue
-            alpha = px.alpha() * brightness // 255
-            image.setPixelColor(x, y, QColor(qcolor.red(), qcolor.green(), qcolor.blue(), alpha))
-    result = QPixmap.fromImage(image)
-    result.setDevicePixelRatio(dpr)
-    return result
+    return tint_pixmap(pixmap, qcolor)
 
 
 def tint_pixmap(pixmap: QPixmap, color: str | QColor) -> QPixmap:
@@ -151,6 +167,10 @@ _SVG_TEMPLATES = {
         <path d="M10 11v6M14 11v6"/>
         <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>
     </svg>""",
+    "retry": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/>
+        <polyline points="21 3 21 8 16 8"/>
+    </svg>""",
 }
 
 # Platform mappings
@@ -170,6 +190,7 @@ _SF_SYMBOL_MAP = {
     "complete": "checkmark.circle.fill",
     "check": "checkmark",
     "trash": "trash",
+    "retry": "arrow.clockwise",
     "chevron.left": "chevron.backward",
     "chevron.right": "chevron.forward",
 }
@@ -190,6 +211,7 @@ _SEGOE_SYMBOL_MAP = {
     "complete": 0xE73E,    # CheckMark
     "check": 0xE73E,       # CheckMark
     "trash": 0xE74D,       # Delete
+    "retry": 0xE72C,       # Refresh
     "chevron.left": 0xE76B,
     "chevron.right": 0xE76C,
 }
@@ -224,6 +246,7 @@ _FREEDESKTOP_MAP = {
     "complete": ["emblem-ok-symbolic", "emblem-ok", "object-select-symbolic", "dialog-ok"],
     "check": ["object-select-symbolic", "emblem-ok-symbolic", "dialog-ok", "check"],
     "trash": ["user-trash-symbolic", "user-trash", "edit-delete-symbolic", "edit-delete"],
+    "retry": ["view-refresh-symbolic", "view-refresh", "view-reload-symbolic", "view-reload"],
     # Circle with an i. dialog-question is only used when the information icons are missing.
     "help": ["dialog-information", "help-about", "dialog-question"],
 }
@@ -745,7 +768,13 @@ def render_svg_asset(
     An empty pixmap means the file is missing or is not valid SVG.
     """
     try:
-        renderer = QSvgRenderer(str(path))
+        path_obj = Path(path)
+        if not path_obj.is_file():
+            return QPixmap()
+        raw = path_obj.read_text(encoding="utf-8")
+        if color:
+            raw = vector_recolor_svg_data(raw, color)
+        renderer = QSvgRenderer(QByteArray(raw.encode("utf-8")))
         if not renderer.isValid():
             return QPixmap()
         box = renderer.viewBoxF()
@@ -753,18 +782,20 @@ def render_svg_asset(
             return QPixmap()
         height = max(int(height), 1)
         width = max(1, int(round(height * box.width() / box.height())))
-        dpr = max(float(device_pixel_ratio), 1.0)
-        pix = QPixmap(int(round(width * dpr)), int(round(height * dpr)))
-        pix.fill(Qt.transparent)
-        painter = QPainter(pix)
+        dpr = max(float(device_pixel_ratio), 2.0 if sys.platform == "darwin" else 1.0)
+        img = QImage(
+            int(round(width * dpr)),
+            int(round(height * dpr)),
+            QImage.Format.Format_ARGB32_Premultiplied,
+        )
+        img.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(img)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
-        renderer.render(painter, QRectF(0, 0, pix.width(), pix.height()))
+        renderer.render(painter, QRectF(0, 0, img.width(), img.height()))
         painter.end()
-        pix.setDevicePixelRatio(dpr)
-        if color:
-            pix = recolor_bright_pixels(pix, color)
-        return pix
+        img.setDevicePixelRatio(dpr)
+        return QPixmap.fromImage(img)
     except Exception as exc:  # pragma: no cover - malformed asset
         logger.debug("Could not render %s: %s", path, exc)
         return QPixmap()

@@ -47,17 +47,27 @@ MACOS_VERSION = get_macos_version()
 # macOS 13.0 = Ventura (baseline target)
 # macOS 14.0 = Sonoma
 # macOS 15.0 = Sequoia
-# macOS 26.0+ = Tahoe / "Golden Gate" (Liquid Glass introduction)
+# macOS 26.0+ = Tahoe, 27.0+ = Golden Gate (Liquid Glass introduction)
 VENTURA_VERSION = (13, 0, 0)
-GOLDEN_GATE_VERSION = (26, 0, 0)
+TAHOE_VERSION = (26, 0, 0)
+GOLDEN_GATE_VERSION = (27, 0, 0)
 
 
 def is_ventura_or_newer() -> bool:
     return IS_MACOS and MACOS_VERSION >= VENTURA_VERSION
 
 
+def is_tahoe_or_newer() -> bool:
+    return IS_MACOS and MACOS_VERSION >= TAHOE_VERSION
+
+
 def is_golden_gate_or_newer() -> bool:
     return IS_MACOS and MACOS_VERSION >= GOLDEN_GATE_VERSION
+
+
+def is_liquid_glass_supported() -> bool:
+    """macOS Tahoe (26.0+) and Golden Gate (27.0+) support Liquid Glass."""
+    return is_tahoe_or_newer()
 
 
 def is_windows_acrylic_supported() -> bool:
@@ -424,7 +434,7 @@ def apply_glass(
                         primary_glass.setFrame_(target_rect)
                     except Exception:
                         pass
-                    if not is_golden_gate_or_newer():
+                    if not is_liquid_glass_supported():
                         _sync_legacy_vibrancy(ns_win, primary_glass)
                     _ensure_seamless_titlebar(window)
                     apply_monochrome_window_buttons(window)
@@ -678,7 +688,7 @@ def _sync_legacy_vibrancy(ns_window, glass_view=None) -> None:
 
     Golden Gate is left alone: this returns immediately on macOS 26+.
     """
-    if is_golden_gate_or_newer() or ns_window is None:
+    if is_liquid_glass_supported() or ns_window is None:
         return
     try:
         from .dark import is_dark
@@ -722,7 +732,7 @@ def _pyobjc_prepare_window(window: QMainWindow | QWidget) -> bool:
         ns_window.setOpaque_(False)
         ns_window.setMovableByWindowBackground_(True)
         import AppKit
-        if is_golden_gate_or_newer():
+        if is_liquid_glass_supported():
             # Liquid Glass keeps the appearance this path already used.
             vibrant_dark = getattr(AppKit, "NSAppearanceNameVibrantDark", "NSAppearanceNameVibrantDark")
             appr = AppKit.NSAppearance.appearanceNamed_(vibrant_dark)
@@ -774,8 +784,8 @@ def _pyobjc_apply_glass(window: QMainWindow | QWidget, corner_radius: float) -> 
 
         glass_view = None
 
-        # Try NSGlassEffectView on macOS 26+ (Golden Gate / Tahoe)
-        if is_golden_gate_or_newer():
+        # Try NSGlassEffectView on macOS 26+ (Tahoe / Golden Gate)
+        if is_liquid_glass_supported():
             try:
                 glass_cls = objc.lookUpClass("NSGlassEffectView")
                 glass_view = glass_cls.alloc().initWithFrame_(frame)
@@ -1105,7 +1115,7 @@ def _ctypes_apply_glass(window: QMainWindow | QWidget, corner_radius: float) -> 
         rect = bounds_fn(content_view, objc.sel_registerName(b"bounds"))
 
         # Look up NSGlassEffectView or NSVisualEffectView
-        glass_cls = objc.objc_getClass(b"NSGlassEffectView") if is_golden_gate_or_newer() else None
+        glass_cls = objc.objc_getClass(b"NSGlassEffectView") if is_liquid_glass_supported() else None
         if not glass_cls:
             glass_cls = objc.objc_getClass(b"NSVisualEffectView")
         if not glass_cls:

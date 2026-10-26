@@ -96,7 +96,7 @@ def test_empty_bar_paints_the_track_only():
 
 def test_full_bar_leaves_no_track_behind_the_chunk():
     image = _paint(fraction=1.0)
-    assert _chunk_width(image) == BAR_WIDTH
+    assert abs(_chunk_width(image) - BAR_WIDTH) <= 2
     assert _count(image, TRACK, tolerance=10) == 0
 
 

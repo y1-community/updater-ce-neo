@@ -19,6 +19,10 @@ from PySide6.QtCore import QTimer
 
 logger = logging.getLogger(__name__)
 
+# Global retention set ensuring running QThreads are never garbage-collected
+# prematurely if the parent widget or registry is collected before the OS thread exits.
+_PROCESS_RETIRED_WORKERS = set()
+
 
 def retire_worker(worker, registry):
     """Hold ``worker`` in ``registry`` until its thread has stopped.
@@ -29,6 +33,7 @@ def retire_worker(worker, registry):
     if worker is None:
         return worker
     registry.add(worker)
+    _PROCESS_RETIRED_WORKERS.add(worker)
     try:
         # A worker parented to a widget is deleted with that widget's children,
         # which is how a quit during a download aborted the app.
@@ -45,7 +50,11 @@ def retire_worker(worker, registry):
         if running:
             QTimer.singleShot(500, _forget)
             return
-        _registry.discard(_worker)
+        try:
+            _registry.discard(_worker)
+        except Exception:
+            pass
+        _PROCESS_RETIRED_WORKERS.discard(_worker)
 
     try:
         worker.finished.connect(_forget)

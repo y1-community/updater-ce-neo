@@ -942,8 +942,8 @@ def _pre_liquid_glass_macos() -> bool:
     if sys.platform != "darwin":
         return False
     try:
-        from .glass import is_golden_gate_or_newer
-        return not is_golden_gate_or_newer()
+        from .glass import is_liquid_glass_supported
+        return not is_liquid_glass_supported()
     except Exception:
         return False
 

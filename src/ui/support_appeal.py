@@ -143,6 +143,8 @@ class DeveloperPortrait(QLabel):
         except Exception:
             pass
         thread.requestInterruption()
+        if thread.isRunning():
+            thread.wait(1000)
 
     def _stop_fetch(self) -> None:
         thread = self._thread
