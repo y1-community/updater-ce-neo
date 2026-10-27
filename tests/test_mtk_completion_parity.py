@@ -52,6 +52,31 @@ def test_mtk_flash_success_does_not_fire_mtk_reset(tmp_path):
         assert finished_events == [(True, "")]
 
 
+def test_mtk_result_success_wins_over_expected_usb_reenumeration(tmp_path):
+    """The player may reboot before the child exits after a successful flash."""
+    _app()
+    worker = FlashWorker("dummy.zip", method="mtk", model="Y1")
+    worker._force_subprocess_cli = True
+    finished_events = []
+    worker.finished.connect(lambda ok, msg: finished_events.append((ok, msg)))
+
+    fake_proc = MagicMock()
+    fake_proc.stdout.readline.side_effect = [
+        "[STEP] Write\n",
+        "[RESULT] 1 \n",
+        "",
+    ]
+    fake_proc.wait.return_value = 1
+    fake_proc.returncode = 1
+    fake_proc.poll.return_value = 1
+
+    with patch("subprocess.Popen", return_value=fake_proc), \
+         patch("src.flash_service.is_mtk_device_connected", return_value=False):
+        worker._flash_via_mtkclient(str(tmp_path), "MT6572_Android_scatter.txt")
+
+    assert finished_events == [(True, "")]
+
+
 def test_mtk_flash_clean_exit_no_result_line(tmp_path):
     """Clean exit 0 with no [RESULT] line treats as success without mtk.py reset."""
     _app()
