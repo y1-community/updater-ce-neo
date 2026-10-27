@@ -22,7 +22,7 @@ namespace ConsoleMode
 class GeneralSetting : public XML::Serializable
 {
 public:
-    GeneralSetting(APCore::USBPower power = APCore::AutoDetect);
+    GeneralSetting(APCore::USBPower power = APCore::AutoDetect, bool storage_life_cycle_check = true);
     ~GeneralSetting();
 
     GeneralSetting(const GeneralSetting& setting);

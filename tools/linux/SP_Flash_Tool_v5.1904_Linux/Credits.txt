@@ -1,11 +1,3 @@
-Officially Packed by Mediatek Team!!
+All credits sp flash tools teams
 
-____________________________________
-
-Downloaded from: https://spflashtools.com/category/windows
-How to use Guide: https://androidmtk.com/flash-stock-rom-using-smart-phone-flash-tool
-Driver: https://mtkdriver.com/latest
-____________________________________
-
-Download SP Flash Tool for Linux
-https://spflashtools.com/category/linux
+Sp Flash Tools Latest Version: https://xiaomitools.com/sp-flash-tool/

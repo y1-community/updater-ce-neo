@@ -38,28 +38,28 @@ static void dump_rom_list(
 #define dump_rom_list(x)
 #endif
 
-int RomInfoFactory::GetRomList(const QSharedPointer<APCore::Connection> &conn,
-                               std::list<ROM_INFO> &rom_info_list)
+int RomInfoFactory::GetRomList(std::list<ROM_INFO> &rom_info_list, _BOOL bWithPreloader)
 {
-    return GetRomList(conn->FTHandle(), rom_info_list);
-}
-
-int RomInfoFactory::GetRomList(const FLASHTOOL_API_HANDLE_T FT_Handle, std::list<ROM_INFO> &rom_info_list, _BOOL bWithPreloader)
-{
-    Q_ASSERT(NULL != FT_Handle);
-    unsigned int rom_count(0);
     DL_HANDLE_T dl_handle = GET_DL_HANDLE_T(key_);
+    FLASHTOOL_API_HANDLE_T ft_hand;
+    int ret = DL_GetFTHandle(dl_handle, &ft_hand);
+    if (ret != STATUS_OK)
+    {
+        LOGE("DL_GetFTHandle() failed, ret: %s(%d).", StatusToString(ret), ret);
+        return ret;
+    }
+    unsigned int rom_count(0);
 
     rom_info_list.clear();
 
-    int ret = FlashTool_RomGetCount(FT_Handle, dl_handle, &rom_count, bWithPreloader);
+    ret = FlashTool_RomGetCount(ft_hand, dl_handle, &rom_count, bWithPreloader);
 
     if (S_DONE != ret || rom_count < 1) {
         LOGE("FlashTool_RomGetCount() failed, ret: %s(%d).", StatusToString(ret), ret);
     } else {
         QScopedPointer< ROM_INFO, QScopedPointerArrayDeleter<ROM_INFO> > p_roms(new ROM_INFO[rom_count]);
         ROM_INFO *p = p_roms.data();
-        ret = FlashTool_RomGetInfoAll(FT_Handle, dl_handle, p, rom_count, bWithPreloader);
+        ret = FlashTool_RomGetInfoAll(ft_hand, dl_handle, p, rom_count, bWithPreloader);
         if (S_DONE == ret) {
             for (unsigned int i(0); i < rom_count; i++) {
                 //To unify end_addr

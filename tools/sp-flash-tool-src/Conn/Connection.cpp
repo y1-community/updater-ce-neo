@@ -5,6 +5,7 @@
  *      Author: MTK81019
  */
 
+#include <assert.h>
 #include "Connection.h"
 #include "../Logger/Log.h"
 #include "../Err/Exception.h"
@@ -14,6 +15,8 @@
 
 namespace APCore
 {
+
+#define UI_CONTINUE_BTN_FLAG 1
 
 // class Connection
 const std::string &Connection::Device() const
@@ -137,13 +140,41 @@ int Connection::ConnectDA(CONN_DA_END_STAGE stage, _BOOL enableDRAMin1stDA)
         {
             ++ connected_;
             NotifyDAConnected(da_report(), p_media_.data()->FriendlyName(),
-                              p_media_.data()->USBStatus(), FTHandle());
+                              p_media_.data()->USBStatus());
             LOGI("DA Connected");
         }
         else
         {
             LOGE("Failed to Connect DA: %s(%d)", StatusToString(ret), ret);
             THROW_BROM_EXCEPTION(ret, 0);
+        }
+
+        //will move the code below to other place
+        if (m_storage_life_cycle_check && stage == SECOND_DA)
+        {
+            ret = FlashTool_Device_Control(this->FTHandle(), DEV_DA_STOR_LIFE_CYCLE_CHECK, 0, 0, 0, 0, 0);
+            if (STATUS_OK == ret)
+            {
+                LOGI("Check Storage Life Cycle: %s(%d)", StatusToString(ret), ret);
+            }
+            else if (STATUS_STOR_LIFE_WARN == ret)
+            {
+                if (NULL != question_cb) // for UI, it should not be NULL; for console mode, it is NULL.
+                {
+                    int result = 0;
+                    question_cb(&result);
+                    if (UI_CONTINUE_BTN_FLAG != result) { // not press continue button.
+                        LOGE("Check Storage Life Cycle: %s(%d)", StatusToString(ret), ret);
+                        THROW_BROM_EXCEPTION(ret, 0);
+                    }
+                }
+                LOGI("Check Storage Life Cycle: %s(%d)", StatusToString(ret), ret);
+            }
+            else
+            {
+                LOGE("Check Storage Life Cycle: %s(%d)", StatusToString(ret), ret);
+                THROW_BROM_EXCEPTION(ret, 0);
+            }
         }
     }
 
@@ -186,13 +217,13 @@ void Connection::NotifyBromConnected(
 
 void Connection::NotifyDAConnected(const DA_REPORT_T &res,
         const std::string &friend_name,
-        const int usb_status, const FLASHTOOL_API_HANDLE_T FT_Handle) const
+        const int usb_status) const
 {
     _SHR_OBSERVER_ITERC it = observer_list_.begin();
 
     while (it != observer_list_.end())
     {
-        (*it)->OnDAConnected(res, friend_name, usb_status, FT_Handle);
+        (*it)->OnDAConnected(res, friend_name, usb_status);
         ++ it;
     }
 }

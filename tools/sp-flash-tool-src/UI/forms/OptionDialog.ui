@@ -180,6 +180,22 @@
          <string>Check LIB DA match</string>
         </property>
        </widget>
+       <widget class="QCheckBox" name="checkBox_StorageLifeCycle">
+        <property name="geometry">
+         <rect>
+          <x>20</x>
+          <y>100</y>
+          <width>341</width>
+          <height>21</height>
+         </rect>
+        </property>
+        <property name="text">
+         <string>Storage Life Cycle Check</string>
+        </property>
+        <property name="checked">
+         <bool>true</bool>
+        </property>
+       </widget>
       </widget>
       <widget class="QWidget" name="page_Appearance">
        <widget class="QLabel" name="label_4">

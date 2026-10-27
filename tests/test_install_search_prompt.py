@@ -160,16 +160,20 @@ def test_continue_launches_console_and_search_lines_drive_connect():
                 assert "please connect your" not in page._wait_prompt_label.text().lower()
 
                 page._wait_continue_btn.click()
-                assert _pump(app, lambda: bool(popen_calls)), "Continue must start the console command"
-                args = popen_calls[0]
-                assert args[1:3] == ["-c", "download"], args
+                assert _pump(
+                    app,
+                    lambda: bool([c for c in popen_calls if "taskkill" not in str(c[0]).lower()]),
+                ), "Continue must start the console command"
+                sp_calls = [c for c in popen_calls if "taskkill" not in str(c[0]).lower()]
+                args = sp_calls[0]
+                assert args[1:3] == ["-c", "format-download"], args
                 assert args[3] == "-s", args
                 assert "-d" in args and "-t" in args and args[-1] == "-r", args
                 assert args[args.index("-t") + 1] == "without", args
                 assert "please connect your" not in page._wait_prompt_label.text().lower()
                 assert "30s" not in page._wait_prompt_label.text()
                 assert page._wait_progress_bar.minimum() == 0
-                assert page._wait_progress_bar.maximum() == 100
+                assert page._wait_progress_bar.maximum() == 0
                 assert window._last_progress == 0
 
                 stream.put("  search usb, timeout 3600000 ms...\n")

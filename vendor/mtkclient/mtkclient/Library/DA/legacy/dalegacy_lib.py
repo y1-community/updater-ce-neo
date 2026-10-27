@@ -1266,6 +1266,11 @@ class DALegacy(metaclass=LogBase):
                     pg.update(size)
 
                 step_ack = self.usbread(1)
+                if not step_ack:
+                    for _ in range(4):
+                        step_ack = self.usbread(1)
+                        if step_ack:
+                            break
                 if step_ack != self.Rsp.CONT_CHAR:
                     if step_ack == b"\xA5":
                         status_raw = self.usbread(4)

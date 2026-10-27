@@ -50,9 +50,9 @@ Config::Config(const CommandLineArguments& args)
         {
             power = APCore::AutoDetect;
         }
-        m_pclGeneralSetting = QSharedPointer<GeneralSetting>(new GeneralSetting(power));
+        m_pclGeneralSetting = QSharedPointer<GeneralSetting>(new GeneralSetting(power, args.StorageLifeCycleCheck()));
         m_pclCommandSetting = QSharedPointer<CommandSetting>(new CommandSetting(
-            args.GetScatterFilename(), args.GetRSCIndexStr()));
+            args.GetScatterFilename(), args.GetRSCProjName()));
     }
     m_pclGeneralSetting->vSetArgs(args);
     m_pclCommandSetting->vSetCommand(args.GetCommand());

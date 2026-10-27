@@ -1,0 +1,34 @@
+ 23           0 RESUME                   0
+
+ 24           2 LOAD_GLOBAL              1 (NULL + DaHandler)
+             14 LOAD_FAST                0 (mtk)
+             16 LOAD_FAST                2 (loglevel)
+             18 PRECALL                  2
+             22 CALL                     2
+             32 STORE_FAST               3 (da_handler)
+
+ 25          34 LOAD_FAST                3 (da_handler)
+             36 LOAD_METHOD              1 (connect)
+             58 LOAD_FAST                0 (mtk)
+             60 LOAD_FAST                1 (directory)
+             62 PRECALL                  2
+             66 CALL                     2
+             76 STORE_FAST               0 (mtk)
+
+ 26          78 LOAD_FAST                0 (mtk)
+             80 POP_JUMP_FORWARD_IF_NOT_NONE     2 (to 86)
+
+ 27          82 LOAD_CONST               1 ((None, None))
+             84 RETURN_VALUE
+
+ 28     >>   86 LOAD_FAST                3 (da_handler)
+             88 LOAD_METHOD              2 (configure_da)
+            110 LOAD_FAST                0 (mtk)
+            112 PRECALL                  1
+            116 CALL                     1
+            126 STORE_FAST               0 (mtk)
+
+ 29         128 LOAD_FAST                0 (mtk)
+            130 LOAD_FAST                3 (da_handler)
+            132 BUILD_TUPLE              2
+            134 RETURN_VALUE

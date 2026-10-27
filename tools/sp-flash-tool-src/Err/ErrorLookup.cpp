@@ -876,6 +876,11 @@ string ErrorLookup::BromErrorMessage(STATUS_E error_code,
             tipMsg = "Please retry a official load, if fail again, please ask RD for help.";
             break;
 
+		case STATUS_STOR_LIFE_EXHAUST:
+            errMsg = "The storage in your device has reached end of life, "
+                     "please change to use new device to do opeartions";
+			break;
+
         default:
             break;
         }

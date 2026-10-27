@@ -21,9 +21,11 @@ class BackgroundWorker : public QThread
 public:
     //TODO: refine & unify the callback mechanism(such as std::bind...)
     typedef void (__stdcall * void_callback)();
+	typedef void (__stdcall * void_callback_arg)(int *p_val);
 
     explicit BackgroundWorker(const APKey session_id, AppCore* ap_core, MainController *control,
-                              void_callback cb=NULL, void_callback cb_ok= NULL, QObject *parent = 0);
+                              void_callback cb=NULL, void_callback cb_ok= NULL, void_callback_arg cb_question=NULL, 
+							  QObject *parent = 0);
 
     ~BackgroundWorker();
 
@@ -58,6 +60,7 @@ private:
 
     void_callback finished_cb;
     void_callback ok_cb;
+	void_callback_arg question_cb;
 
     MainController *control_;
 

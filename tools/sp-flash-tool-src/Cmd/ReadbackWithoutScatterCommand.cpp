@@ -6,18 +6,10 @@
 
 namespace APCore
 {
-static int getPreloaderIndex(const op_part_list_t* list, int count)
-{
-    for(int i=0; i<count; i++)
-    {
-        if(strcmp(list[i].part_name, "preloader") == 0)
-            return i;
-    }
-    return -1;
-}
 
 ReadbackWithoutScatterCommand::ReadbackWithoutScatterCommand(APKey key):
-    ICommand(key)
+    ICommand(key),
+    m_reboot(false)
 {
 }
 
@@ -44,7 +36,7 @@ void ReadbackWithoutScatterCommand::UpdateUploadPartitionInfo(partition_info_lis
 	int readbackCount = 0;
     for(int i = 0; i < count; i++)
     {
-    	for (int j = 0; j < p_part_list->count; ++j)
+        for (unsigned int j = 0; j < p_part_list->count; ++j)
     	{
     		if(strcmp(p_part_list->part[j].part_name, flist[i].part_name) == 0)
 	        {
@@ -74,17 +66,7 @@ void ReadbackWithoutScatterCommand::exec(const QSharedPointer<Connection> &conn)
     callbacks_struct_t cbs;
     memset(&cbs, 0, sizeof(cbs));
 
-    //prepare pl_info
-    file_info pl_info;
-    memset(&pl_info, 0, sizeof(pl_info));
-    pl_info.input_type = OP_SOURCE_FILE;
-    int pl_index = getPreloaderIndex(flist, count);
-    if(pl_index != -1)
-    {
-        strcpy(pl_info.file_path, flist[pl_index].file_path);
-    }
-
-    if(connect(&hs, pl_index == -1 ? NULL : &pl_info) != STATUS_OK){
+    if(connect(&hs) != STATUS_OK){
         goto exit;
     }
 
@@ -98,8 +80,6 @@ void ReadbackWithoutScatterCommand::exec(const QSharedPointer<Connection> &conn)
     UpdateUploadPartitionInfo(&readback_partInfoList, flist, &partInfoList);
     cbs.cb_op_progress = cb_rb_operation_progress;
     cbs.cb_stage_message = cb_rb_stage_message;
-
-    //conn->ConnectDA();
 
     LOGI("Begin executing readback without scatter command...");
 
@@ -120,12 +100,20 @@ void ReadbackWithoutScatterCommand::exec(const QSharedPointer<Connection> &conn)
 exit:
     delete[] flist;
     flist = NULL;
+
+    if (m_reboot) reboot_device(hs);
+
     flashtool_destroy_session(hs);
 
     if(status != S_DONE)
     {
         THROW_BROM_EXCEPTION(status,0);
     }
+}
+
+void ReadbackWithoutScatterCommand::setReboot(bool reboot)
+{
+    m_reboot = reboot;
 }
 
 void ReadbackWithoutScatterCommand::cb_rb_operation_progress(void* arg, enum transfer_phase phase,

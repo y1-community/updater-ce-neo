@@ -211,6 +211,7 @@ def find_sp_flash_tool():
         REPO_ROOT / "SP_Flash_Tool",
         REPO_ROOT / "tools" / "SP_Flash_Tool",
         REPO_ROOT / "tools" / "windows" / "SP_Flash_Tool_v5.1904_Win",
+        REPO_ROOT / "tools" / "linux" / "SP_Flash_Tool_v5.1904_Linux",
         Path.cwd() / "SP_Flash_Tool",
         Path.cwd(),
     ]
@@ -241,19 +242,31 @@ def find_sp_flash_tool():
     return None
 
 
-def find_unrar():
-    """Locate an UnRAR executable, in the same order as InniUpdaterChin."""
+def find_unrar() -> str:
+    """Locate an UnRAR / unar executable across platforms."""
     candidates = [
         TOOLS_DIR / "UnRAR.exe",
+        TOOLS_DIR / "unar.exe",
+        TOOLS_DIR / "unar",
+        TOOLS_DIR / "unrar",
+        BUNDLE_DIR / "tools" / "UnRAR.exe",
+        BUNDLE_DIR / "tools" / "unar.exe",
+        BUNDLE_DIR / "tools" / "unar",
+        BUNDLE_DIR / "tools" / "unrar",
+        REPO_ROOT / "tools" / "windows" / "UnRAR.exe",
+        REPO_ROOT / "tools" / "macos" / "unar",
+        REPO_ROOT / "tools" / "linux" / "unar",
+        REPO_ROOT / "tools" / "UnRAR.exe",
+        REPO_ROOT / "tools" / "unar",
         Path.home() / "AppData" / "Local" / "Updater CE" / "tools" / "unrar_win" / "UnRAR.exe",
         Path.home() / "AppData" / "Local" / "Innioasis Updater" / "tools" / "unrar_win" / "UnRAR.exe",
         Path(r"C:\Program Files\WinRAR\UnRAR.exe"),
         Path(r"C:\Program Files (x86)\WinRAR\UnRAR.exe"),
     ]
     for p in candidates:
-        if p and p.exists():
+        if p and p.is_file():
             return str(p)
-    on_path = _which("unrar") or _which("unar")
+    on_path = _which("unar") or _which("unrar")
     if on_path:
         return on_path
     return ""

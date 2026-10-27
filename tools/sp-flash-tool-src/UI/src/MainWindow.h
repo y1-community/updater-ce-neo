@@ -34,12 +34,16 @@
 #include "../../Utility/constString.h"
 #include "../../Setting/PlatformSetting.h"
 #include "../../Setting/DRAMRepairSetting.h"
+#include "../../Setting/FWSetting.h"
 #include "../../Conn/Connection.h"
 #include "../../Utility/sendreport.h"
 #include "../../Utility/Utils.h"
 #include "PlatformObj.h"
 #include "OptionDialog.h"
 #include "OkDialog.h"
+#ifdef _WIN32
+#include "AsyncUpdater.h"
+#endif
 
 
 namespace Ui
@@ -58,9 +62,11 @@ class DeviceTestWidget;
 class ParameterWidget;
 class FormatWidget;
 class WriteMemoryWidget;
+class FW;
+#ifdef _WIN32
 class CheckUpdateDialog;
 class UpdateDialog;
-class AsyncUpdater;
+#endif
 class ReadBackWidget;
 class WelcomeWidget;
 class BromAdapterWidget;
@@ -168,6 +174,7 @@ public:
     QSharedPointer<APCore::DRAMRepairSetting> CreateDRAMRepairSetting();
     QSharedPointer<APCore::DeviceTestSetting> CreateDeviceTestSetting();
     QSharedPointer<APCore::WriteMemorySetting> CreateWriteMemorySetting();
+    QSharedPointer<APCore::FWSetting> CreateFWSetting();
     QSharedPointer<APCore::OTPSetting> CreateOTPSetting();
     QSharedPointer<ISetting> CreateDLSetting();
     QSharedPointer<APCore::SecDLSetting> CreateSecDLSetting();
@@ -256,14 +263,7 @@ public:
 
     void set_polling_is_ok(bool is_ok){
         is_ok_ = is_ok;
-        if(is_ok && download_in_progress_)
-            ShowDonationPrompt();
-        download_in_progress_ = false;
     }
-
-    void MarkDownloadStarted(){ download_in_progress_ = true; }
-    void ShowDonationPrompt();
-    bool download_in_progress_ = false;
 
     void SetSCIDownloadVisible(bool visible){
         is_scidl_visible_ = visible;
@@ -279,12 +279,14 @@ public:
 
     bool eventFilter(QObject *obj, QEvent *event);
     bool operation_support_auto_polling();
-    void AfterDAConnected(const DA_REPORT_T *p_da_report, const FLASHTOOL_API_HANDLE_T FT_Handle);
+    void AfterDAConnected(const DA_REPORT_T *p_da_report);
     void UpdateStorageLabel(HW_StorageType_E storage_type);
     bool IsScatterVer2() const;
     void setStorageLabel(const QString &text);
     QString storageLabelText() const;
     bool LibDAMatchChecked();
+    void ShowConnectPrompt();
+    void DismissConnectPrompt();
 
 private:
     Ui::MainWindow *ui;
@@ -293,6 +295,7 @@ private:
 
     DownloadWidget *download_widget;
     MemoryTestWidget *memtest_widget;
+    FW* fw_widget_;
     DeviceTestWidget *devtest_widget;
     ParameterWidget *parameter_widget;
     FormatWidget *format_widget;
@@ -317,17 +320,19 @@ private:
     ProcessingDialog *processing_dialog_;
     OptionDialog    *option_dialog;
     OkDialog *ok_dialog;
+    QDialog *connect_prompt_dialog_;
+#ifdef _WIN32
     CheckUpdateDialog *checkupdate_dialog;
     UpdateDialog    *update_dialog;
-    EncryDialog     *encry_dialog;
     AsyncUpdater    *async_updater;
+#endif
+    EncryDialog     *encry_dialog;
     PlatformObj *current_platform;
     ScatterObserver* scatter_observer_;
 
     QShortcut *mbadblock_shortcut;
     bool mbadblock_on;
     QShortcut *madvance_shortcut;
-    bool madvance_on;
     QShortcut *mbromAdapter_shortcut;
     bool mbromAdapter_on;
     bool msecurity_on;
@@ -368,8 +373,6 @@ private:
     void CleanChipAndStorageInfo();
     void SaveReadBackSetting();
     void SaveReadBackXMLFile(const QString &fileName, bool full_general_setting);
-    void CleanAllTabWidgets();
-    void CleanTabWidget(TabWidgetBase *widget_ptr);
 
 protected:
     void resizeEvent(QResizeEvent *);
@@ -391,6 +394,9 @@ signals:
 public slots:
     void slot_show_err(int err_code, const std::string &err);
     void slot_check_finish(const bool& hasUpdate);
+#ifdef _WIN32
+    void slot_update_failed(AsyncUpdater::UpdateFailReason failReason);
+#endif
     void slot_UnlockUI();
     void slot_show_ok();
     void slot_conn_init();
@@ -404,10 +410,11 @@ public slots:
     void toggleBromAdapterWidget();
     void toggleSCIDownloadWidget();
     void toggleDeviceTestWidget();
-    void slot_GetDAReport(const DA_REPORT_T *p_da_report, const std::string& friend_name,  const int usb_status , const FLASHTOOL_API_HANDLE_T FT_Handle);
+    void slot_GetDAReport(const DA_REPORT_T *p_da_report, const std::string& friend_name,  const int usb_status);
     void slot_GetBootResult(const BOOT_RESULT *p_boot_result, const std::string& friend_name);
     void slot_UpdateConnStatus(const std::string &friendly_name);
     void stopTimer();
+    void slot_CancelConnectPrompt();
 
 private slots:
     void on_actionAbout_triggered();

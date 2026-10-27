@@ -1,0 +1,296 @@
+=== _do_flash ===
+Consts: (None, 5, 'Reusing extracted directory: ', 'Extracting firmware package: ', False, 'USER_CANCELLED', 'Scatter file missing, extracted directory appears tampered. Re-extracting...', 'Image files missing (', '): ', 3, '...', '', '. Re-extracting...', True, ('ignore_errors',), 'Error: scatter file not found', 'NO_SCATTER_FILE', 'Error: required image files missing in package: ', 'MISSING_IMAGES', 'Scatter file: ')
+Names: ('step_changed', 'emit', 'STEP_EXTRACTING', 'progress', 'pre_extracted_dir', 'Path', 'bool', '_is_extract_complete', 'log_message', 'package_path', '_extract_package', '_cancelled', 'finished', '_validate_extract', 'len', 'shutil', 'rmtree', 'IS_WINDOWS', '_flash_via_sp_flash_tool', '_flash_via_mtkclient')
+Varnames: ('self', 'pre', 'reused', 'extract_dir', 'scatter_file', 'missing')
+
+310           0 RESUME                   0
+
+312           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (step_changed)
+             14 LOAD_METHOD              1 (emit)
+             36 LOAD_GLOBAL              4 (STEP_EXTRACTING)
+             48 PRECALL                  1
+             52 CALL                     1
+             62 POP_TOP
+
+313          64 LOAD_FAST                0 (self)
+             66 LOAD_ATTR                3 (progress)
+             76 LOAD_METHOD              1 (emit)
+             98 LOAD_CONST               1 (5)
+            100 PRECALL                  1
+            104 CALL                     1
+            114 POP_TOP
+
+315         116 LOAD_FAST                0 (self)
+            118 LOAD_ATTR                4 (pre_extracted_dir)
+            128 POP_JUMP_FORWARD_IF_FALSE    20 (to 170)
+            130 LOAD_GLOBAL             11 (NULL + Path)
+            142 LOAD_FAST                0 (self)
+            144 LOAD_ATTR                4 (pre_extracted_dir)
+            154 PRECALL                  1
+            158 CALL                     1
+            168 JUMP_FORWARD             1 (to 172)
+        >>  170 LOAD_CONST               0 (None)
+        >>  172 STORE_FAST               1 (pre)
+
+316         174 LOAD_GLOBAL             13 (NULL + bool)
+            186 LOAD_FAST                1 (pre)
+            188 JUMP_IF_FALSE_OR_POP    14 (to 218)
+            190 LOAD_GLOBAL             15 (NULL + _is_extract_complete)
+            202 LOAD_FAST                1 (pre)
+            204 PRECALL                  1
+            208 CALL                     1
+        >>  218 PRECALL                  1
+            222 CALL                     1
+            232 STORE_FAST               2 (reused)
+
+317         234 LOAD_FAST                2 (reused)
+            236 POP_JUMP_FORWARD_IF_FALSE    32 (to 302)
+
+318         238 LOAD_FAST                0 (self)
+            240 LOAD_ATTR                8 (log_message)
+            250 LOAD_METHOD              1 (emit)
+            272 LOAD_CONST               2 ('Reusing extracted directory: ')
+            274 LOAD_FAST                1 (pre)
+            276 FORMAT_VALUE             0
+            278 BUILD_STRING             2
+            280 PRECALL                  1
+            284 CALL                     1
+            294 POP_TOP
+
+319         296 LOAD_FAST                1 (pre)
+            298 STORE_FAST               3 (extract_dir)
+            300 JUMP_FORWARD            54 (to 410)
+
+321     >>  302 LOAD_FAST                0 (self)
+            304 LOAD_ATTR                8 (log_message)
+            314 LOAD_METHOD              1 (emit)
+            336 LOAD_CONST               3 ('Extracting firmware package: ')
+            338 LOAD_FAST                0 (self)
+            340 LOAD_ATTR                9 (package_path)
+            350 FORMAT_VALUE             0
+            352 BUILD_STRING             2
+            354 PRECALL                  1
+            358 CALL                     1
+            368 POP_TOP
+
+322         370 LOAD_FAST                0 (self)
+            372 LOAD_METHOD             10 (_extract_package)
+            394 PRECALL                  0
+            398 CALL                     0
+            408 STORE_FAST               3 (extract_dir)
+
+323     >>  410 LOAD_FAST                0 (self)
+            412 LOAD_ATTR               11 (_cancelled)
+            422 POP_JUMP_FORWARD_IF_FALSE    29 (to 482)
+
+324         424 LOAD_FAST                0 (self)
+            426 LOAD_ATTR               12 (finished)
+            436 LOAD_METHOD              1 (emit)
+            458 LOAD_CONST               4 (False)
+            460 LOAD_CONST               5 ('USER_CANCELLED')
+            462 PRECALL                  2
+            466 CALL                     2
+            476 POP_TOP
+
+325         478 LOAD_CONST               0 (None)
+            480 RETURN_VALUE
+
+328     >>  482 LOAD_FAST                0 (self)
+            484 LOAD_METHOD             13 (_validate_extract)
+            506 LOAD_FAST                3 (extract_dir)
+            508 PRECALL                  1
+            512 CALL                     1
+            522 UNPACK_SEQUENCE          2
+            526 STORE_FAST               4 (scatter_file)
+            528 STORE_FAST               5 (missing)
+
+333         530 LOAD_FAST                4 (scatter_file)
+            532 POP_JUMP_FORWARD_IF_NONE     2 (to 538)
+            534 LOAD_FAST                5 (missing)
+            536 POP_JUMP_FORWARD_IF_FALSE   246 (to 1030)
+        >>  538 LOAD_FAST                2 (reused)
+            540 POP_JUMP_FORWARD_IF_FALSE   244 (to 1030)
+
+334         542 LOAD_FAST                4 (scatter_file)
+            544 POP_JUMP_FORWARD_IF_NOT_NONE    27 (to 600)
+
+335         546 LOAD_FAST                0 (self)
+            548 LOAD_ATTR                8 (log_message)
+            558 LOAD_METHOD              1 (emit)
+            580 LOAD_CONST               6 ('Scatter file missing, extracted directory appears tampered. Re-extracting...')
+            582 PRECALL                  1
+            586 CALL                     1
+            596 POP_TOP
+            598 JUMP_FORWARD            77 (to 754)
+
+337     >>  600 LOAD_FAST                0 (self)
+            602 LOAD_ATTR                8 (log_message)
+            612 LOAD_METHOD              1 (emit)
+            634 LOAD_CONST               7 ('Image files missing (')
+            636 LOAD_GLOBAL             29 (NULL + len)
+            648 LOAD_FAST                5 (missing)
+            650 PRECALL                  1
+            654 CALL                     1
+            664 FORMAT_VALUE             0
+            666 LOAD_CONST               8 ('): ')
+            668 LOAD_FAST                5 (missing)
+            670 LOAD_CONST               0 (None)
+            672 LOAD_CONST               9 (3)
+            674 BUILD_SLICE              2
+            676 BINARY_SUBSCR
+            686 FORMAT_VALUE             0
+            688 LOAD_GLOBAL             29 (NULL + len)
+            700 LOAD_FAST                5 (missing)
+            702 PRECALL                  1
+            706 CALL                     1
+            716 LOAD_CONST               9 (3)
+            718 COMPARE_OP               4 (>)
+            724 POP_JUMP_FORWARD_IF_FALSE     2 (to 730)
+            726 LOAD_CONST              10 ('...')
+            728 JUMP_FORWARD             1 (to 732)
+        >>  730 LOAD_CONST              11 ('')
+        >>  732 FORMAT_VALUE             0
+            734 LOAD_CONST              12 ('. Re-extracting...')
+            736 BUILD_STRING             6
+            738 PRECALL                  1
+            742 CALL                     1
+            752 POP_TOP
+
+338     >>  754 LOAD_GLOBAL             31 (NULL + shutil)
+            766 LOAD_ATTR               16 (rmtree)
+            776 LOAD_FAST                3 (extract_dir)
+            778 LOAD_CONST              13 (True)
+            780 KW_NAMES                14
+            782 PRECALL                  2
+            786 CALL                     2
+            796 POP_TOP
+
+339         798 LOAD_FAST                0 (self)
+            800 LOAD_ATTR               11 (_cancelled)
+            810 POP_JUMP_FORWARD_IF_FALSE    29 (to 870)
+
+340         812 LOAD_FAST                0 (self)
+            814 LOAD_ATTR               12 (finished)
+            824 LOAD_METHOD              1 (emit)
+            846 LOAD_CONST               4 (False)
+            848 LOAD_CONST               5 ('USER_CANCELLED')
+            850 PRECALL                  2
+            854 CALL                     2
+            864 POP_TOP
+
+341         866 LOAD_CONST               0 (None)
+            868 RETURN_VALUE
+
+342     >>  870 LOAD_FAST                0 (self)
+            872 LOAD_METHOD             10 (_extract_package)
+            894 PRECALL                  0
+            898 CALL                     0
+            908 STORE_FAST               3 (extract_dir)
+
+343         910 LOAD_FAST                0 (self)
+            912 LOAD_ATTR               11 (_cancelled)
+            922 POP_JUMP_FORWARD_IF_FALSE    29 (to 982)
+
+344         924 LOAD_FAST                0 (self)
+            926 LOAD_ATTR               12 (finished)
+            936 LOAD_METHOD              1 (emit)
+            958 LOAD_CONST               4 (False)
+            960 LOAD_CONST               5 ('USER_CANCELLED')
+            962 PRECALL                  2
+            966 CALL                     2
+            976 POP_TOP
+
+345         978 LOAD_CONST               0 (None)
+            980 RETURN_VALUE
+
+346     >>  982 LOAD_FAST                0 (self)
+            984 LOAD_METHOD             13 (_validate_extract)
+           1006 LOAD_FAST                3 (extract_dir)
+           1008 PRECALL                  1
+           1012 CALL                     1
+           1022 UNPACK_SEQUENCE          2
+           1026 STORE_FAST               4 (scatter_file)
+           1028 STORE_FAST               5 (missing)
+
+347     >> 1030 LOAD_FAST                4 (scatter_file)
+           1032 POP_JUMP_FORWARD_IF_TRUE    55 (to 1144)
+
+348        1034 LOAD_FAST                0 (self)
+           1036 LOAD_ATTR                8 (log_message)
+           1046 LOAD_METHOD              1 (emit)
+           1068 LOAD_CONST              15 ('Error: scatter file not found')
+           1070 PRECALL                  1
+           1074 CALL                     1
+           1084 POP_TOP
+
+349        1086 LOAD_FAST                0 (self)
+           1088 LOAD_ATTR               12 (finished)
+           1098 LOAD_METHOD              1 (emit)
+           1120 LOAD_CONST               4 (False)
+           1122 LOAD_CONST              16 ('NO_SCATTER_FILE')
+           1124 PRECALL                  2
+           1128 CALL                     2
+           1138 POP_TOP
+
+350        1140 LOAD_CONST               0 (None)
+           1142 RETURN_VALUE
+
+351     >> 1144 LOAD_FAST                5 (missing)
+           1146 POP_JUMP_FORWARD_IF_FALSE    58 (to 1264)
+
+352        1148 LOAD_FAST                0 (self)
+           1150 LOAD_ATTR                8 (log_message)
+           1160 LOAD_METHOD              1 (emit)
+           1182 LOAD_CONST              17 ('Error: required image files missing in package: ')
+           1184 LOAD_FAST                5 (missing)
+           1186 FORMAT_VALUE             0
+           1188 BUILD_STRING             2
+           1190 PRECALL                  1
+           1194 CALL                     1
+           1204 POP_TOP
+
+353        1206 LOAD_FAST                0 (self)
+           1208 LOAD_ATTR               12 (finished)
+           1218 LOAD_METHOD              1 (emit)
+           1240 LOAD_CONST               4 (False)
+           1242 LOAD_CONST              18 ('MISSING_IMAGES')
+           1244 PRECALL                  2
+           1248 CALL                     2
+           1258 POP_TOP
+
+354        1260 LOAD_CONST               0 (None)
+           1262 RETURN_VALUE
+
+355     >> 1264 LOAD_FAST                0 (self)
+           1266 LOAD_ATTR                8 (log_message)
+           1276 LOAD_METHOD              1 (emit)
+           1298 LOAD_CONST              19 ('Scatter file: ')
+           1300 LOAD_FAST                4 (scatter_file)
+           1302 FORMAT_VALUE             0
+           1304 BUILD_STRING             2
+           1306 PRECALL                  1
+           1310 CALL                     1
+           1320 POP_TOP
+
+357        1322 LOAD_GLOBAL             34 (IS_WINDOWS)
+           1334 POP_JUMP_FORWARD_IF_FALSE    23 (to 1382)
+
+358        1336 LOAD_FAST                0 (self)
+           1338 LOAD_METHOD             18 (_flash_via_sp_flash_tool)
+           1360 LOAD_FAST                4 (scatter_file)
+           1362 PRECALL                  1
+           1366 CALL                     1
+           1376 POP_TOP
+           1378 LOAD_CONST               0 (None)
+           1380 RETURN_VALUE
+
+360     >> 1382 LOAD_FAST                0 (self)
+           1384 LOAD_METHOD             19 (_flash_via_mtkclient)
+           1406 LOAD_FAST                3 (extract_dir)
+           1408 LOAD_FAST                4 (scatter_file)
+           1410 PRECALL                  2
+           1414 CALL                     2
+           1424 POP_TOP
+           1426 LOAD_CONST               0 (None)
+           1428 RETURN_VALUE

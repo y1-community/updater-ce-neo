@@ -345,6 +345,15 @@ void EfuseCommand::DumpCommonArg(
     DumpEfuseOpt(common, sbc_pub_hash1_dis);
     DumpEfuseOpt(common, sbc_pub_hash2_dis);
     DumpEfuseOpt(common, sbc_pub_hash3_dis);
+	
+	// added for mt8168 efuse new item begin
+	DumpEfuseOpt(common, sbc_pubk_hash_fa_dis);
+	DumpEfuseOpt(common, sbc_pubk_hash1_fa_dis);
+    DumpEfuseOpt(common, sbc_pubk_hash2_fa_dis);
+    DumpEfuseOpt(common, sbc_pubk_hash3_fa_dis);
+    DumpEfuseOpt(common, sbc_pubk_hash_mtk_fa_dis);	
+	DumpEfuseOpt(common, fa_mode_en);
+	// added for mt8168 efuse new item end
 
     if (to_write)
     {
@@ -386,6 +395,7 @@ void EfuseCommand::DumpSecureArg(
     DumpEfuseOpt(secure, ack_en);
     DumpEfuseOpt(secure, jtag_dis);
     DumpEfuseOpt(secure, jtag_sw_con);
+	DumpEfuseOpt(secure, rom_cmd_dis);
     DumpEfuseOpt(secure, dbgport_lock_dis);
     DumpEfuseOpt(secure, jtag_sec_passwd_en);
     DumpEfuseOpt(secure, md1_sbc_en);
@@ -671,6 +681,14 @@ void EfuseCommand::SaveCommonArg(
     SaveEfuseOpt(rb_file, common, sbc_pub_hash1_dis);
     SaveEfuseOpt(rb_file, common, sbc_pub_hash2_dis);
     SaveEfuseOpt(rb_file, common, sbc_pub_hash3_dis);
+	// added for mt8168 new items begin
+    SaveEfuseOpt(rb_file, common, sbc_pubk_hash_fa_dis);
+    SaveEfuseOpt(rb_file, common, sbc_pubk_hash1_fa_dis);
+    SaveEfuseOpt(rb_file, common, sbc_pubk_hash2_fa_dis);
+    SaveEfuseOpt(rb_file, common, sbc_pubk_hash3_fa_dis);
+    SaveEfuseOpt(rb_file, common, sbc_pubk_hash_mtk_fa_dis);	
+	SaveEfuseOpt(rb_file, common, fa_mode_en);
+	// added for mt8168 new items end
 
     if (common->spare.buf_len > 0)
     {

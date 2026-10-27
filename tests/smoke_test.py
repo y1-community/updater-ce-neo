@@ -2123,7 +2123,7 @@ def test_terminal_install_handoff():
                 assert cmd is not None
                 assert cmd[0].endswith(exe_name), cmd
                 assert cmd[1:] == [
-                    "-c", "download", "-s", str(scatter),
+                    "-c", "format-download", "-s", str(scatter),
                     "-d", str(da), "-t", "without", "-r",
                 ], cmd
                 sp_dirs[is_windows], sp_cmds[is_windows] = sp_dir, cmd
@@ -2250,7 +2250,7 @@ def test_terminal_install_handoff():
             assert w._nav_buttons["nav_select_package"][0].text() == "Select Software"
             assert len(opened) == 1, opened
             text = opened[0].read_text(encoding="utf-8")
-            assert ("--flash-cli" in text or "-c download" in text) and str(scatter) in text, text
+            assert ("--flash-cli" in text or "-c format-download" in text) and str(scatter) in text, text
             assert w.statusBar().currentMessage() == tr(
                 "status_terminal_install"
             ).format(path=str(opened[0]))
@@ -4156,9 +4156,24 @@ def test_preloader_raw_wrapping_and_routing():
         with open(wrapped, "rb") as f:
             data = f.read()
         # Verify headers
+        from struct import unpack
+
         assert data[:9] == b"EMMC_BOOT"
+        assert unpack("<I", data[16:20])[0] == fs._BRLYT_OFFSET
         assert data[fs._BRLYT_OFFSET : fs._BRLYT_OFFSET + 5] == b"BRLYT"
-        assert len(data) == fs._BOOT_HEADER_SIZE + len(b"\x00" * 1024) + len(fs._PRELOADER_MAGIC)
+        # BL_Descriptor[0].m_bl_exist_magic at BRLYT+20 (0x214) must be 0x42424242 ('BBBB')
+        assert data[fs._BRLYT_OFFSET + 20 : fs._BRLYT_OFFSET + 24] == b"BBBB"
+        raw_payload_len = len(b"\x00" * 1024) + len(fs._PRELOADER_MAGIC)
+        expected_boundary = (fs._PRELOADER_DATA_OFFSET + raw_payload_len + 0x1FF) & ~0x1FF
+        assert unpack("<I", data[fs._BRLYT_OFFSET + 16 : fs._BRLYT_OFFSET + 20])[0] == expected_boundary
+        assert unpack("<I", data[fs._BRLYT_OFFSET + 32 : fs._BRLYT_OFFSET + 36])[0] == expected_boundary
+        assert len(data) == fs._BOOT_HEADER_SIZE + raw_payload_len
+
+        # Verify SP Flash Tool 3145 detection and scatter preloader disable helper
+        assert fs._is_sp_bootloader_header_mismatch("S_DA_UPDATE_BOOTLOADER_EXIST_MAGIC_NOT_MATCHED (3145)", None)
+        assert fs._is_sp_bootloader_header_mismatch("S_DA_UPDATEBOOTLOADER_EXIST_MAGIC_NOT_MATCHED (3145)", None)
+        assert fs._is_sp_bootloader_header_mismatch("", 3145)
+        assert not fs._is_sp_bootloader_header_mismatch("S_TIMEOUT (1042)", 1042)
 
         # An already-wrapped preloader should not be rewrapped
         rewrapped = fs._wrap_preloader_for_raw_boot(wrapped, storage_type="emmc")
@@ -6496,7 +6511,7 @@ def test_sp_flash_auth_file():
         # --- console arguments (guided flow and terminal install agree) -------
         plain = sp_flash_tool_console_args(str(scatter), str(da))
         assert plain == [
-            "-c", "download",
+            "-c", "format-download",
             "-s", str(scatter),
             "-d", str(da),
             "-t", "without",
@@ -6561,6 +6576,7 @@ def test_sp_flash_auth_file():
             w.show()
             app.processEvents()
             page = w._settings_page
+            page._advanced_revealed = True
 
             page.set_method(METHOD_MTK)
             app.processEvents()

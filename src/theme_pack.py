@@ -33,8 +33,157 @@ from .ui.dark import T
 
 logger = logging.getLogger(__name__)
 
+#: Upstream Rockbox 360p themes repository zip.
+THEME_PACK_URL = "https://github.com/rockbox-y1/themes/archive/refs/heads/themepack.zip"
+
 #: Remote/merged themepack archive name (downloads dir or bundled zip).
 THEME_PACK_ZIP_NAME = "rockbox_360p_themepack.zip"
+
+
+def normalize_rockbox_rel_path(filename: str) -> str:
+    """Normalize a zip entry name to a clean relative path inside .rockbox."""
+    name = filename.replace("\\", "/").lstrip("/")
+    if "/.rockbox/" in name:
+        name = name.split("/.rockbox/", 1)[1]
+    elif name.startswith(".rockbox/"):
+        name = name[len(".rockbox/"):]
+    else:
+        parts = name.split("/", 1)
+        if parts[0] not in ("fonts", "themes", "wps", "backdrops", "icons", "apps", "configuration", "codecs"):
+            name = parts[1] if len(parts) > 1 else parts[0]
+    parts = name.split("/")
+    if not name or any(part in ("", ".", "..") for part in parts):
+        return ""
+    return name
+
+
+def merge_remote_theme_pack_into_zip(
+    remote_zip_path: Path | str,
+    target_zip_path: Optional[Path | str] = None,
+    base_zip_path: Optional[Path | str] = None,
+) -> int:
+    """Merge downloaded remote themes into target_zip_path (defaulting to 360p themepack zip).
+
+    Preserves files only present in the base zip (such as fonts), and overwrites
+    any file that exists in the remote archive.
+    Also updates assets/360p/themes-themepack.zip and assets/360p/themes-themepack/.rockbox
+    if they are writable.
+    Returns the count of entries in the resulting zip.
+    """
+    remote_path = Path(remote_zip_path)
+    target_path = Path(target_zip_path) if target_zip_path else (downloads_dir() / THEME_PACK_ZIP_NAME)
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+
+    base_zip = None
+    if base_zip_path and Path(base_zip_path).is_file():
+        base_zip = Path(base_zip_path)
+    elif target_path.is_file() and target_path != remote_path:
+        base_zip = target_path
+    elif bundled_themepack_zip_path().is_file() and bundled_themepack_zip_path() != remote_path:
+        base_zip = bundled_themepack_zip_path()
+
+    remote_files: dict[str, bytes] = {}
+    with zipfile.ZipFile(remote_path, "r") as rz:
+        for info in rz.infolist():
+            if info.is_dir() or info.filename.endswith("/"):
+                continue
+            rel = normalize_rockbox_rel_path(info.filename)
+            if not rel:
+                continue
+            remote_files[rel] = rz.read(info)
+
+    base_files: dict[str, bytes] = {}
+    if base_zip and Path(base_zip).is_file():
+        try:
+            with zipfile.ZipFile(base_zip, "r") as bz:
+                for info in bz.infolist():
+                    if info.is_dir() or info.filename.endswith("/"):
+                        continue
+                    rel = normalize_rockbox_rel_path(info.filename)
+                    if not rel:
+                        continue
+                    if rel not in remote_files:
+                        base_files[rel] = bz.read(info)
+        except Exception as e:
+            logger.warning("Could not read base zip %s: %s", base_zip, e)
+
+    merged = {**base_files, **remote_files}
+
+    temp_target = target_path.with_suffix(".tmp_merge")
+    with zipfile.ZipFile(temp_target, "w", compression=zipfile.ZIP_DEFLATED) as oz:
+        for rel in sorted(merged.keys()):
+            oz.writestr(rel, merged[rel])
+    if temp_target.exists():
+        os.replace(temp_target, target_path)
+
+    return len(merged)
+
+
+def download_and_merge_theme_pack(
+    target_zip_path: Optional[Path | str] = None,
+    timeout: float = 30.0,
+    progress_cb: Optional[Callable[[int, int], None]] = None,
+) -> tuple[bool, str, int]:
+    """Download the latest themepack.zip and merge it into our 360p zip.
+
+    In offline mode, immediately skips downloading and returns (True, "offline", 0).
+    If network download fails, logs a warning and returns (True, "offline_fallback", 0)
+    so callers continue seamlessly with existing stored 360p themes.
+    """
+    from . import config
+    if config.is_offline_mode():
+        logger.info("[Rockbox Themes] Offline mode active: skipping download.")
+        return True, "offline", 0
+
+    temp_remote = downloads_dir() / "themepack_download.zip"
+    try:
+        import urllib.request
+        temp_remote.parent.mkdir(parents=True, exist_ok=True)
+        tmp_part = temp_remote.with_suffix(".part")
+        with urllib.request.urlopen(THEME_PACK_URL, timeout=timeout) as resp, open(tmp_part, "wb") as f:
+            total_size = int(resp.headers.get("Content-Length", 0))
+            downloaded = 0
+            while True:
+                chunk = resp.read(64 * 1024)
+                if not chunk:
+                    break
+                f.write(chunk)
+                downloaded += len(chunk)
+                if progress_cb:
+                    progress_cb(downloaded, total_size)
+        os.replace(tmp_part, temp_remote)
+        count = merge_remote_theme_pack_into_zip(temp_remote, target_zip_path)
+        try:
+            temp_remote.unlink(missing_ok=True)
+        except Exception:
+            pass
+        return True, "merged", count
+    except Exception as e:
+        logger.warning("[Rockbox Themes] Remote theme download/merge failed (%s); using stored 360p zip.", e)
+        try:
+            if temp_remote.exists():
+                temp_remote.unlink(missing_ok=True)
+        except Exception:
+            pass
+        return True, "offline_fallback", 0
+
+
+class ThemePackUpdateWorker(QThread):
+    """Background worker to download and merge the latest 360p themes archive."""
+
+    progress = Signal(int, int)
+    finished = Signal(bool, str, int)  # success, status, count
+
+    def __init__(self, target_zip_path: Optional[Path | str] = None, parent=None):
+        super().__init__(parent)
+        self._target_zip_path = target_zip_path
+
+    def run(self):
+        ok, status, count = download_and_merge_theme_pack(
+            self._target_zip_path,
+            progress_cb=self.progress.emit,
+        )
+        self.finished.emit(ok, status, count)
 
 
 def open_wizards():
@@ -139,16 +288,7 @@ def extract_theme_pack_zip(
             if info.is_dir() or name.endswith("/"):
                 continue
 
-            # Strip repo root directory or themes-themepack/.rockbox/ prefix
-            if "/.rockbox/" in name:
-                rel_part = name.split("/.rockbox/", 1)[1]
-            elif name.startswith(".rockbox/"):
-                rel_part = name[len(".rockbox/"):]
-            else:
-                # Strip leading top-level folder name e.g. themes-themepack/...
-                parts = name.split("/", 1)
-                rel_part = parts[1] if len(parts) > 1 else parts[0]
-
+            rel_part = normalize_rockbox_rel_path(name)
             if not rel_part:
                 continue
 
@@ -413,6 +553,96 @@ def bundled_themepack_zip_path() -> Path:
     return _bundled_zip_path
 
 
+def bundled_fonts_pack_zip_path() -> Path:
+    """The bundled Rockbox 360p fonts pack archive shipped with the app."""
+    from . import paths as _paths
+
+    base = getattr(_paths, "RESOURCES_DIR", None) or (_paths.REPO_ROOT / "assets")
+    return Path(base) / "360p" / "fonts-pack-merge-into-themes-pack.zip"
+
+
+def ensure_normalized_theme_pack_zip(
+    target_zip_path: Optional[Path | str] = None,
+    force_rebuild: bool = False,
+) -> Path:
+    """Return a path to a ready-to-transfer normalized themes+fonts zip.
+
+    Combines bundled themes (assets/360p/themes-themepack.zip), bundled fonts
+    (assets/360p/fonts-pack-merge-into-themes-pack.zip), and any cached remote
+    updates. Every zip entry has its path cleaned via normalize_rockbox_rel_path,
+    meaning root entries in the zip are fonts/..., wps/..., backdrops/..., etc.
+    (no leading 'themes-themepack' or '.rockbox' directory wrapper).
+
+    The original base files in assets/360p are never modified; building occurs in
+    a temporary working file before atomic replacement.
+    """
+    target = Path(target_zip_path) if target_zip_path else (downloads_dir() / THEME_PACK_ZIP_NAME)
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    if not force_rebuild and target.is_file() and target.stat().st_size > 1024:
+        # Check if already normalized (no themes-themepack/ or .rockbox/ prefix)
+        try:
+            with zipfile.ZipFile(target, "r") as zf:
+                sample = [info.filename for info in zf.infolist() if not info.is_dir()][:10]
+                if sample and not any(s.startswith("themes-themepack/") or s.startswith(".rockbox/") for s in sample):
+                    return target
+        except Exception:
+            pass
+
+    entries: dict[str, bytes] = {}
+
+    # 1. Bundled fonts pack
+    fonts_zip = bundled_fonts_pack_zip_path()
+    if fonts_zip.is_file():
+        try:
+            with zipfile.ZipFile(fonts_zip, "r") as fz:
+                for info in fz.infolist():
+                    if info.is_dir() or info.filename.endswith("/"):
+                        continue
+                    rel = normalize_rockbox_rel_path(info.filename)
+                    if rel:
+                        entries[rel] = fz.read(info)
+        except Exception as e:
+            logger.warning("Could not read bundled fonts zip %s: %s", fonts_zip, e)
+
+    # 2. Bundled themes pack
+    themes_zip = bundled_themepack_zip_path()
+    if themes_zip.is_file():
+        try:
+            with zipfile.ZipFile(themes_zip, "r") as tz:
+                for info in tz.infolist():
+                    if info.is_dir() or info.filename.endswith("/"):
+                        continue
+                    rel = normalize_rockbox_rel_path(info.filename)
+                    if rel:
+                        entries[rel] = tz.read(info)
+        except Exception as e:
+            logger.warning("Could not read bundled themes zip %s: %s", themes_zip, e)
+
+    # 3. Existing cached target zip (may have remote themes already merged)
+    if target.is_file() and target != themes_zip:
+        try:
+            with zipfile.ZipFile(target, "r") as cz:
+                for info in cz.infolist():
+                    if info.is_dir() or info.filename.endswith("/"):
+                        continue
+                    rel = normalize_rockbox_rel_path(info.filename)
+                    if rel:
+                        entries[rel] = cz.read(info)
+        except Exception as e:
+            logger.debug("Could not read cached target zip %s: %s", target, e)
+
+    tmp_file = target.with_suffix(".tmp_build")
+    with zipfile.ZipFile(tmp_file, "w", compression=zipfile.ZIP_DEFLATED) as ozf:
+        for rel in sorted(entries.keys()):
+            ozf.writestr(rel, entries[rel])
+
+    if tmp_file.exists():
+        os.replace(tmp_file, target)
+
+    return target
+
+
 def bundled_rockbox_dir() -> Path:
     """The app's own ``.rockbox`` content: themes plus the fonts pack.
 
@@ -433,7 +663,8 @@ def bundled_themepack_dir() -> Path:
 
 
 def merge_dirs(src_dir: str | Path, dst_dir: str | Path,
-               progress_cb: Optional[Callable[[int, int], None]] = None) -> int:
+               progress_cb: Optional[Callable[[int, int], None]] = None,
+               cancel_cb: Optional[Callable[[], bool]] = None) -> int:
     """Merge ``src_dir`` into ``dst_dir``, overwriting same-name files.
 
     Only files are copied (directories are created as needed). Returns the
@@ -446,6 +677,12 @@ def merge_dirs(src_dir: str | Path, dst_dir: str | Path,
     total = len(files)
     count = 0
     for i, src_file in enumerate(files):
+        if cancel_cb is not None:
+            try:
+                if cancel_cb():
+                    break
+            except Exception:
+                pass
         if progress_cb is not None:
             try:
                 progress_cb(i, total)
@@ -517,7 +754,7 @@ class AdbWatchWorker(QThread):
     timed_out = Signal()
     watch_progress = Signal(float)  # 0.0-1.0
 
-    def __init__(self, adb: str, timeout: float = 30, parent=None):
+    def __init__(self, adb: str, timeout: float = 180, parent=None):
         super().__init__(parent)
         self._adb = adb
         self._timeout = timeout
@@ -549,32 +786,84 @@ class AdbPushWorker(QThread):
     progress = Signal(int, int)
     finished = Signal(bool, str)  # success, message
 
-    def __init__(self, adb: str, serial: str, local_dir: Path, parent=None):
+    def __init__(self, adb: str, serial: str, local_dir: Optional[Path] = None, parent=None, zip_path: Optional[Path] = None):
         super().__init__(parent)
         self._adb = adb
         self._serial = serial
-        self._local_dir = Path(local_dir)
+        self._local_dir = Path(local_dir) if local_dir else None
+        self._zip_path = Path(zip_path) if zip_path else None
 
     def run(self):
         try:
             from . import adb as _adb
+            from .theme_sync import find_removable_rockbox_dirs
 
-            try:
-                _adb.adb_enable_mass_storage(self._adb, self._serial)
-            except Exception:
-                pass
+            # Keep Rockbox running over ADB throughout the default transfer.
+            # Switching the gadget to mass-storage here tears down ADB, can
+            # strand the archive transfer, and does not prove host mount/write
+            # completion. USB storage remains an explicit user-assisted fallback.
+            if self.isInterruptionRequested():
+                self.finished.emit(False, "Theme transfer cancelled")
+                return
 
+            # Ensure we have our normalized zip ready
+            zip_file = self._zip_path or ensure_normalized_theme_pack_zip()
+
+            # The automated path stays on ADB. If the user separately enabled
+            # USB mass storage, the timeout/fallback UI presents a folder picker.
+            # Do not write to a discovered host volume in parallel with ADB.
+
+            # Detect locations with .rockbox folders on device via ADB.
             device_dirs = _adb.adb_find_all_rockbox_dirs(self._adb, self._serial)
             if not device_dirs:
-                # The player may expose storage without a probed path; fall
-                # back to the primary candidate and let push create it.
-                device_dirs = [_adb.DEVICE_ROCKBOX_CANDIDATES[0]]
+                self.finished.emit(
+                    False,
+                    "Could not find the player's .rockbox folder over ADB. "
+                    "Use USB storage mode and select the player folder instead.",
+                )
+                return
+
+            # 4. Transfer zip to device and unpack on-device via adb shell
+            if zip_file.is_file():
+                logger.info("Attempting high-speed zip transfer and on-device unpack via ADB...")
+                ok, msg = _adb.adb_push_and_unpack_zip(
+                    self._adb,
+                    self._serial,
+                    zip_file,
+                    device_dirs,
+                    progress_cb=self._on_progress,
+                    cancel_cb=self.isInterruptionRequested,
+                )
+                if ok:
+                    self.finished.emit(True, msg)
+                    return
+                logger.warning("On-device unpack failed (%s); falling back to file push...", msg)
+
+            if self.isInterruptionRequested():
+                self.finished.emit(False, "Theme transfer cancelled")
+                return
+
+            # 5. Fallback: push files over ADB (adb_push_merge)
+            local_src = self._local_dir
+            temp_extract_dir: Optional[Path] = None
+            if not local_src or not local_src.is_dir():
+                import tempfile
+
+                temp_extract_dir = Path(tempfile.mkdtemp(prefix="rockbox_fallback_"))
+                extract_theme_pack_zip(zip_file, temp_extract_dir, progress_cb=None)
+                local_src = temp_extract_dir
 
             total_dirs = len(device_dirs)
             all_ok = True
             messages: list[str] = []
 
             for idx, d_dir in enumerate(device_dirs):
+                if self.isInterruptionRequested():
+                    if temp_extract_dir and temp_extract_dir.exists():
+                        shutil.rmtree(temp_extract_dir, ignore_errors=True)
+                    self.finished.emit(False, "ADB push interrupted")
+                    return
+
                 def _dir_progress(curr: int, total: int, idx=idx, total_dirs=total_dirs):
                     if total > 0:
                         overall_curr = idx * total + curr
@@ -586,9 +875,10 @@ class AdbPushWorker(QThread):
                 ok, msg = _adb.adb_push_merge(
                     self._adb,
                     self._serial,
-                    self._local_dir,
+                    local_src,
                     d_dir,
                     progress_cb=_dir_progress,
+                    cancel_cb=self.isInterruptionRequested,
                 )
                 if not ok:
                     all_ok = False
@@ -596,10 +886,12 @@ class AdbPushWorker(QThread):
                 elif msg:
                     messages.append(msg)
 
+            if temp_extract_dir and temp_extract_dir.exists():
+                shutil.rmtree(temp_extract_dir, ignore_errors=True)
+
             if not all_ok:
                 self.finished.emit(False, "; ".join(messages) or "ADB push failed")
                 return
-            _adb.adb_reboot(self._adb, self._serial)
             self.finished.emit(True, "; ".join(messages))
         except Exception as e:
             logger.exception("ADB theme push failed: %s", e)
@@ -622,7 +914,12 @@ class DirMergeWorker(QThread):
 
     def run(self):
         try:
-            count = merge_dirs(self._src, self._dst, progress_cb=self._on_progress)
+            count = merge_dirs(
+                self._src,
+                self._dst,
+                progress_cb=self._on_progress,
+                cancel_cb=self.isInterruptionRequested,
+            )
             self.finished.emit(True, "", count)
         except Exception as e:
             logger.exception("Theme merge failed: %s", e)
@@ -635,9 +932,9 @@ class DirMergeWorker(QThread):
 class Rockbox360pSetupWizard(QDialog):
     """Post-flash wizard for 360p Rockbox installs: themes + fonts on-device.
 
-    Page 0 asks the user to disconnect, boot into Rockbox, and reconnect.
-    Page 1 watches for an ADB device (30 s) and pushes automatically,
-    rebooting the player when done. When no ADB binary or device is
+    MTKClient installs ask the user to disconnect, boot into Rockbox, and reconnect.
+    The wizard then watches for ADB for up to three minutes and pushes automatically.
+    When no ADB binary or device is
     available, page 2 falls back to the USB Storage Mode folder picker (any
     folder on the device; the ``.rockbox`` location is resolved from there).
     The closing page mirrors the install-done checkmark style.
@@ -651,6 +948,7 @@ class Rockbox360pSetupWizard(QDialog):
         from .ui.glass import apply_dialog_theme
         apply_dialog_theme(self)
         self.model = model
+        self._retired_workers: set[QThread] = set()
         self._adb_binary: Optional[str] = None
         self._adb_serial: Optional[str] = None
         self._via_adb = False
@@ -805,7 +1103,8 @@ class Rockbox360pSetupWizard(QDialog):
             self._next_btn.setText(tr("rockbox_wizard_skip_adb"))
             self._next_btn.setVisible(True)
         elif idx == 2:
-            self._next_btn.setVisible(False)
+            self._next_btn.setText(tr("rockbox_wizard_done"))
+            self._next_btn.setVisible(True)
         else:
             self._next_btn.setText(tr("rockbox_wizard_done"))
             self._next_btn.setVisible(True)
@@ -830,6 +1129,9 @@ class Rockbox360pSetupWizard(QDialog):
             self._stop_watch()
             self._stack.setCurrentIndex(2)
             self._sync_buttons()
+        elif idx == 2:
+            self._cleanup_work_dir()
+            self.accept()
         else:
             self._cleanup_work_dir()
             self.accept()
@@ -853,12 +1155,22 @@ class Rockbox360pSetupWizard(QDialog):
         self._watch_worker.timed_out.connect(self._on_adb_timeout)
         self._watch_worker.start()
 
+    def _retire_worker(self, worker: Optional[QThread]) -> None:
+        if worker is None:
+            return
+        try:
+            from .worker_lifecycle import retire_worker
+            retire_worker(worker, self._retired_workers)
+        except Exception:
+            logger.debug("Could not retain theme worker", exc_info=True)
+
     def _stop_watch(self):
         w = self._watch_worker
         self._watch_worker = None
         if w is not None:
             w.requestInterruption()
-            w.wait(1500)
+            if not w.wait(1500):
+                self._retire_worker(w)
 
     def maybe_adopt_passive_push(self, serial: str) -> bool:
         """Take over a passive ADB push instead of waiting out the watch.
@@ -920,10 +1232,17 @@ class Rockbox360pSetupWizard(QDialog):
         self._sync_buttons()
 
     def _start_adb_push(self):
-        if not self._adb_binary or not self._adb_serial or not self._combined_dir:
+        if not self._adb_binary or not self._adb_serial:
             return
         self._adb_status.setText(tr("rockbox_wizard_adb_pushing"))
-        self._push_worker = AdbPushWorker(self._adb_binary, self._adb_serial, self._combined_dir, parent=self)
+        norm_zip = ensure_normalized_theme_pack_zip(self._zip_path)
+        self._push_worker = AdbPushWorker(
+            self._adb_binary,
+            self._adb_serial,
+            local_dir=self._combined_dir,
+            parent=self,
+            zip_path=norm_zip,
+        )
         self._push_worker.progress.connect(self._on_push_progress)
         self._push_worker.finished.connect(self._on_push_finished)
         self._push_worker.start()
@@ -931,6 +1250,9 @@ class Rockbox360pSetupWizard(QDialog):
     def _on_push_progress(self, curr: int, total: int):
         if total > 0:
             self._adb_bar.setValue(int(curr / total * 100))
+            self._adb_status.setText(
+                tr("rockbox_stage_pushing_files_fmt").format(curr=curr, total=total)
+            )
 
     def _on_push_finished(self, ok: bool, msg: str):
         if not ok:
@@ -1067,6 +1389,17 @@ class Rockbox360pSetupWizard(QDialog):
                 _sync.remember_theme_target(self.model, str(target))
         except Exception:
             pass
+        try:
+            from .notifications import bring_window_to_front, show_completion_notification
+
+            bring_window_to_front(self)
+            show_completion_notification(
+                tr("rockbox_wizard_done_title"),
+                tr("rockbox_wizard_done_desc"),
+                window=self,
+            )
+        except Exception:
+            pass
         self.finished_via_adb.emit(self._via_adb)
         self.installed_success.emit()
 
@@ -1090,7 +1423,8 @@ class Rockbox360pSetupWizard(QDialog):
             try:
                 if w is not None and w.isRunning():
                     w.requestInterruption()
-                    w.wait(1500)
+                    if not w.wait(1500):
+                        self._retire_worker(w)
             except Exception:
                 pass
         self._cleanup_work_dir()

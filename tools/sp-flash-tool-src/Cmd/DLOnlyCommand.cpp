@@ -48,13 +48,52 @@ bool DLOnlyCommand::CheckPMTLayoutChange(const QSharedPointer<Connection> &conn)
     std::list<ROM_INFO> rom_list;
 
     RomInfoFactory info_factory(key_);
-    info_factory.GetRomList(conn, rom_list);
+    info_factory.GetRomList(rom_list);
 
+
+    char scat_version[64]={0};
+    DL_GetScatterVersion(GET_DL_HANDLE_T(key_), scat_version);
+    LOGD("scatter version: %s", scat_version);
+
+    bool process_combo_check_done = false;
     for(std::list<ROM_INFO>::const_iterator rom_it = rom_list.begin();
         rom_it != rom_list.end(); ++rom_it)
     {
         const PART_INFO *pmt =
                 proxy.read_pmt(rom_it->name);
+
+        if(std::string(scat_version) == "V1.2.0" || std::string(scat_version) == "V2.2.0" ) //process combo_partsize_check part first
+        {
+            //only support two part with attr "combo_partisize_check"
+            if(rom_it->combo_partsize_check && !process_combo_check_done)
+            {
+                Q_ASSERT(rom_it != rom_list.end());
+                std::list<ROM_INFO>::const_iterator next_rom = rom_it;
+                std::advance(next_rom,1);
+                Q_ASSERT(next_rom->combo_partsize_check == _TRUE);
+
+                U64 combo_begin_addr = rom_it->begin_addr;
+                U64 combo_end_addr = next_rom->end_addr;
+
+                U64 combo_pmt_begin_addr = pmt->begin_addr;
+                const PART_INFO *next_pmt = proxy.read_pmt(next_rom->name);
+                U64 combo_pmt_end_addr = next_pmt->begin_addr + next_pmt->image_length;
+
+                if(combo_begin_addr != combo_pmt_begin_addr || combo_end_addr != combo_pmt_end_addr)
+                {
+                    ret = true;
+                    LOGD("combo PMT chaned!");
+                    LOGE("combo_begin_addr: 0x%llx, combo_end_addr: 0x%llx", combo_begin_addr, combo_end_addr);
+                    LOGE("combo_pmt_begin_addr: 0x%llx, combo_pmt_end_addr: 0x%llx", combo_pmt_begin_addr, combo_pmt_end_addr);
+                    break;
+                }
+
+                //skip next rom, for here already process it
+                process_combo_check_done = true;
+                ++rom_it;
+                continue;
+            }
+        }
 
         if (pmt != NULL && pmt_is_changed(pmt, *rom_it))
         {

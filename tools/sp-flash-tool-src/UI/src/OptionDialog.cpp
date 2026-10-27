@@ -23,9 +23,9 @@
 #include "../../Utility/LogFilesClean.h"
 #include "../../Host/Inc/RuntimeMemory.h"
 #include "../../Utility/version.h"
+#include "AsyncUARTComPortInfo.h"
 
 #ifdef _WIN32
-#include <InitGuid.h>
 #include <Dbt.h>
 #include <WinUser.h>
 #include <Windows.h>
@@ -48,12 +48,6 @@
 #define DBUS_HAL_INTERFACE          "org.freedesktop.Hal.Manager"
 #define DBUS_HAL_DEVICE_PATH        "/org/freedesktop/Hal/Devices"
 #define DBUS_HAL_DEVICE_INTERFACE   "org.freedesktop.Hal.Device"
-
-//#define Q_WS_WIN
-#ifdef _WIN32
-DEFINE_GUID(GUID_DEVINTERFACE_USB_DEVICE, 0xA5DCBF10, 0x6530, 0x11D2, 0x90, 0x1F,
-            0x00, 0xC0, 0x4F, 0xB9, 0x51, 0xED);
-#endif
 
 class map_value_finder
 {
@@ -118,6 +112,8 @@ OptionDialog::OptionDialog(QWidget *parent, MainWindow *mainWindow) :
 
     ShowCheckRPMBItem(false);
 
+    InitUpdateOptions();
+
     ui->groupBox_DA_log->setVisible(false);
 
     ui->treeWidget->expandAll();
@@ -142,12 +138,6 @@ OptionDialog::OptionDialog(QWidget *parent, MainWindow *mainWindow) :
 
     InitSettings();
 
-    InitUARTInfo();
-
-#ifdef _WIN32
-    RegisterDevicePlugNotification();
-#endif
-
     // start thread to clean log
     startCleanThread();
 }
@@ -157,6 +147,11 @@ OptionDialog::~OptionDialog()
     SaveSettings();
 
     if(NULL != m_workerThread){
+        if (m_workerThread->isRunning())
+        {
+            m_workerThread->quit();
+            m_workerThread->wait();
+        }
         delete m_workerThread;
         m_workerThread = NULL;
     }
@@ -225,27 +220,28 @@ void OptionDialog::InitSettings()
     if(enableEMMCChksum)
         ui->checkBox_emmcchksum->setCheckState(Qt::Checked);
 
-    item.SetSectionName("CheckUpdate");
-    item.SetItemName("Update");
-
+    item.SetItemName("StorageLifeCycleCheck");
     if(item.GetBooleanValue())
-        ui->checkBox->setCheckState(Qt::Checked);
+        ui->checkBox_StorageLifeCycle->setCheckState(Qt::Checked);
     else
-        ui->checkBox->setCheckState(Qt::Unchecked);
+        ui->checkBox_StorageLifeCycle->setCheckState(Qt::Unchecked);
+
+#ifdef _WIN32
+    if (!ToolInfo::IsCustomerVer())
+    {
+        item.SetSectionName("CheckUpdate");
+        item.SetItemName("Update");
+
+        if(item.GetBooleanValue())
+            ui->checkBox->setCheckState(Qt::Checked);
+        else
+            ui->checkBox->setCheckState(Qt::Unchecked);
+    }
+#endif
 
     LoadGeneralSettings();
 
     LoadConnSettings();
-
-#ifdef _WIN32
-    if(ToolInfo::IsCustomerVer())
-        ui->checkBox_libDAMatch->setChecked(Qt::Checked);
-    else
-        ui->checkBox_libDAMatch->setChecked(Qt::Unchecked);
-#else
-    ui->checkBox_libDAMatch->setEnabled(false);
-    ui->checkBox_libDAMatch->setVisible(false);
-#endif
 }
 
 void OptionDialog::SaveSettings()
@@ -278,6 +274,20 @@ void OptionDialog::LoadGeneralSettings()
     item.SetItemName("DALogChannel");
     int daLogChannelIndex = item.GetIntValue();
     ui->comboBox_da_log_channel->setCurrentIndex(daLogChannelIndex == -1 ? 1 : daLogChannelIndex); //defalut: uart
+
+#ifdef _WIN32
+    if(ToolInfo::IsCustomerVer())
+    {
+        IniItem checkItem("option.ini", "Download", "CheckLibDAMatch");
+        bool libDAMatchCheck = checkItem.GetBooleanValue();
+        ui->checkBox_libDAMatch->setChecked(libDAMatchCheck ? Qt::Checked : Qt::Unchecked);
+    }
+    else
+        ui->checkBox_libDAMatch->setChecked(Qt::Unchecked);
+#else
+    ui->checkBox_libDAMatch->setEnabled(false);
+    ui->checkBox_libDAMatch->setVisible(false);
+#endif
 }
 
 void OptionDialog::SaveGeneralSettings()
@@ -305,6 +315,15 @@ void OptionDialog::SaveGeneralSettings()
     QString sLogPath = ui->lineEdit_logPath->text();
     item.SetItemName("LogPath");
     item.SaveStringValue(sLogPath);
+
+#ifdef _WIN32
+    if(ToolInfo::IsCustomerVer())
+    {
+        bool libDAMatchCheck = ui->checkBox_libDAMatch->checkState() == Qt::Checked;
+        IniItem checkItem("option.ini", "Download", "CheckLibDAMatch");
+        checkItem.SaveBooleanValue(libDAMatchCheck);
+    }
+#endif
 }
 
 #define APCore_Conn_BromUART    0
@@ -466,96 +485,74 @@ void OptionDialog::SaveConnSettings()
 
 void OptionDialog::InitUARTInfo()
 {
-    int ret;
+    AsyncUARTComPortInfo *get_uart_info_task = new AsyncUARTComPortInfo();
+    qRegisterMetaType<std::list<std::string> >("std::list<std::string>");
+    connect(get_uart_info_task, SIGNAL(signal_send_uart_infos(const std::list<std::string> &)),
+            this, SLOT(slot_get_uart_com_ports(const std::list<std::string> &)));
+    connect(get_uart_info_task, SIGNAL(finished()), get_uart_info_task, SLOT(deleteLater()));
+    get_uart_info_task->start();
+}
 
-    std::list<std::string> com_port_list;
+void OptionDialog::slot_get_uart_com_ports(const std::list<std::string> &uart_com_ports)
+{
+    ui->comboPort->clear();
 
-    ret = USBCOMFinderWrapper::getComPortInfoStrs(com_port_list);
+    std::list<std::string>::const_iterator it = uart_com_ports.begin();
 
-    if(COM_ENUM_OK != ret)
+    for(; it != uart_com_ports.end(); ++it)
     {
-        if(COM_ENUM_NO_COM_PORT_FOUND== ret)
-            LOGI("No com port detected.");
-        else
-            LOGI("Find com port failed.");
-
-        return;
-    }
-
-    std::list<std::string>::const_iterator it = com_port_list.begin();
-
-    for(; it != com_port_list.end(); ++it)
-    {
-        QString str = QString(QString::fromLocal8Bit((*it).c_str()));
-
+        QString str = QString::fromStdString(*it);
         //remove absoluted path charactors, for windows, windows com port name will be "\\.\COMxx".
 #ifdef _WIN32
         str.replace("\\\\.\\", "");
 #endif
-
         ui->comboPort->addItem(str);
     }
-
 }
+
 #ifdef _WIN32
-
-typedef HDEVNOTIFY (__stdcall *registerDeviceNotify)(__in HANDLE, __in LPVOID, __in DWORD);
-
-void OptionDialog::RegisterDevicePlugNotification()
-{
-    DEV_BROADCAST_DEVICEINTERFACE NotificationFilter;
-
-    ZeroMemory(&NotificationFilter, sizeof(NotificationFilter));
-
-    NotificationFilter.dbcc_size = sizeof(DEV_BROADCAST_DEVICEINTERFACE);
-    NotificationFilter.dbcc_devicetype = DBT_DEVTYP_DEVICEINTERFACE;
-    NotificationFilter.dbcc_classguid = GUID_DEVINTERFACE_USB_DEVICE;
-
-    QLibrary lib("user32.dll");
-    registerDeviceNotify notify;
-    HDEVNOTIFY hDevNotify;
-    if(lib.load())
-    {
-        qDebug() << "Load library sucessful.\n";
-
-        notify = (registerDeviceNotify)lib.resolve("RegisterDeviceNotificationA");
-
-        if(notify)
-           hDevNotify = notify(winId(), &NotificationFilter, DEVICE_NOTIFY_WINDOW_HANDLE);
-
-        if(NULL == hDevNotify)
-        {
-            LOGI("Failed to register USB device notification.");
-        }
-    }
-}
-
 bool OptionDialog::winEvent(MSG *message, long *result)
 {
-    if(message->message == WM_DEVICECHANGE)
+    if (this->isVisible() && message->message == WM_DEVICECHANGE)
     {
+        bool b_need_refresh_uart_ports = false;
         switch(message->wParam)
         {
         case DBT_DEVICEARRIVAL:
+        {
             LOGI("USB Device plug in.");
-
+            b_need_refresh_uart_ports = true;
+        }
             break;
 
         case DBT_DEVICEREMOVECOMPLETE:
+        {
             LOGI("USB Device Removed.");
+            b_need_refresh_uart_ports = true;
+        }
             break;
         }
 
-        ui->comboPort->clear();
-
-        InitUARTInfo();
+        if (b_need_refresh_uart_ports)
+        {
+            InitUARTInfo();
+            *result = 1;
+            return true;
+        }
     }
 
-    *result = 0;
-
-    return false;
+    return QDialog::winEvent(message, result);
 }
 #endif
+
+void OptionDialog::showEvent(QShowEvent *event)
+{
+    if (ui->radioUART->isChecked())
+    {
+        InitUARTInfo();
+    }
+    QDialog::showEvent(event);
+}
 
 QSharedPointer<APCore::ConnSetting> OptionDialog::CreateConnSetting()
 {
@@ -577,6 +574,7 @@ QSharedPointer<APCore::ConnSetting> OptionDialog::CreateConnSetting()
         uart_setting->set_da_log_level(log_level);
         unsigned int log_channel = ui->comboBox_da_log_channel->currentIndex();
         uart_setting->set_da_log_channel(log_channel);
+        uart_setting->set_storage_life_cycle_check(this->CheckStorageLifeCycle());
         return uart_setting;
     }
     else
@@ -599,6 +597,7 @@ QSharedPointer<APCore::ConnSetting> OptionDialog::CreateConnSetting()
         usb_setting->set_da_log_level(log_level);
         unsigned int log_channel = ui->comboBox_da_log_channel->currentIndex();
         usb_setting->set_da_log_channel(log_channel);
+        usb_setting->set_storage_life_cycle_check(this->CheckStorageLifeCycle());
         return usb_setting;
     }
 }
@@ -689,9 +688,13 @@ void OptionDialog::onToggleUSB_UART(bool toggled)
     else if(radio == ui->radioUART)
     {
         ui->radioUSB->setChecked(!toggled);
+        if (toggled)
+        {
+            InitUARTInfo();
+        }
     }
 
-    EnableControl(ui->radioUART->isChecked() == true ? true : false);
+    EnableControl(ui->radioUART->isChecked());
 }
 
 APCore::USBPower OptionDialog::GetPowerControl()
@@ -1235,6 +1238,38 @@ qint64 OptionDialog::GetHoursFromDateEnum() const
     return nDays * 24;
 }
 
+bool OptionDialog::CheckStorageLifeCycle() const
+{
+    return ui->checkBox_StorageLifeCycle->checkState() == Qt::Checked;
+}
+
+void OptionDialog::InitUpdateOptions()
+{
+    bool bNeedRemove = true;
+#ifdef _WIN32
+    if (!ToolInfo::IsCustomerVer())
+    {
+        bNeedRemove = false;
+    }
+#endif
+    if (bNeedRemove)
+    {
+        QList<QTreeWidgetItem *> updateItems = ui->treeWidget->findItems("Install/Update", Qt::MatchFixedString | Qt::MatchCaseSensitive);
+        Q_ASSERT(updateItems.count() == 1);
+        updateItems[0]->setHidden(true);
+        for (size_t i = 0; i < ui->stackedWidget_view->count(); ++i)
+        {
+            QWidget * cur_widget = ui->stackedWidget_view->widget(i);
+            Q_ASSERT(NULL != cur_widget);
+            if (cur_widget->objectName() == "page_Update")
+            {
+                ui->stackedWidget_view->removeWidget(cur_widget);
+                break;
+            }
+        }
+    }
+}
+
 void OptionDialog::on_checkBox_enableTracing_clicked()
 {
     if(ui->checkBox_enableTracing->checkState() == Qt::Checked)
@@ -1264,4 +1299,14 @@ void OptionDialog::on_btn_logPath_clicked()
         sSelectedLogPath = QDir::toNativeSeparators(sSelectedLogPath);
         ui->lineEdit_logPath->setText(sSelectedLogPath);
     }
+}
+
+void OptionDialog::on_checkBox_StorageLifeCycle_clicked()
+{
+    IniItem item("option.ini", "Download", "StorageLifeCycleCheck");
+
+    if(ui->checkBox_StorageLifeCycle->checkState() == Qt::Checked)
+        item.SaveBooleanValue(true);
+    else
+        item.SaveBooleanValue(false);
 }

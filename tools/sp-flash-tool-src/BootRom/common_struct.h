@@ -155,7 +155,7 @@ typedef enum operation_type
    ,PAGE_SPARE_WITH_ECCDECODE
    ,VERIFY_AFTER_PROGRAM
    ,PAGE_SPARE_NORANDOM
-   ,PAGE_FDM   
+   ,PAGE_FDM
    ,FLAG_END
 }operation_type;
 
@@ -174,12 +174,21 @@ typedef enum ram_type
   ,GENERAL_SRAM
 }ram_type_e;
 
+//storage life cycle status
+enum life_cycle_status
+{
+     LIFE_CYCLE_NODEF = 0
+    ,LIFE_CYCLE_NORMAL = 1
+    ,LIFE_CYCLE_WARNING =2
+    ,LIFE_CYCLE_EOL =3
+};
+
 //chip evolution
 typedef enum chip_evolution_type
 {
 	CHIP_EVOLUTION_DEFAULT = 0,
 	CHIP_EVOLUTION_KIBO_PLUS = 1,
-	
+
 	CHIP_EVOLULTION_NO_FOUND= 255
 
 }chip_evolution_e;
@@ -208,7 +217,7 @@ struct nand_extension
       uint32 dummy;
       enum operation_type type;
       enum nand_format_level level;
-   };  
+   };
    uint32 sys_slc_percent;
    uint32 usr_slc_percent;
    /* the real physical size of partition, uint type is KB */
@@ -253,6 +262,10 @@ struct mmc_info_struct
    uint64 user_size;
    uint32 cid[4];
    uint8 fwver[8];
+   uint8 pre_eol_info;
+   uint8 life_time_est_a;
+   uint8 life_time_est_b;
+   uint32 life_time_status;
 };
 #pragma pack(pop)
 
@@ -275,6 +288,7 @@ struct nor_info_struct
    uint64 available_size;
 };
 
+//#pragma pack(push, 8)
 struct ufs_info_struct
 {
    uint32 type; //ufs or none.
@@ -282,9 +296,17 @@ struct ufs_info_struct
    uint64 lu0_size;
    uint64 lu1_size;
    uint64 lu2_size;
-   uint8 cid[16];
-   uint8 fwver[4];
+   uint16 vendor_id;
+   uint8 cid[16+4];
+   uint8 fwver[4+4];
+   uint8 sn[128+4];
+   uint8 pre_eol_info;
+   uint8 life_time_est_a;
+   uint8 life_time_est_b;
+   uint8 stub1;
+   uint32 life_time_status;
 };
+//#pragma pack(pop)
 
 struct ram_item_struct
 {
@@ -305,7 +327,7 @@ struct chip_id_struct
    uint16 hw_sub_code;
    uint16 hw_version;
    uint16 sw_version;
-   uint32 chip_evolution; 
+   uint32 chip_evolution;
 };
 
 struct otp_parameter_struct
@@ -314,7 +336,7 @@ struct otp_parameter_struct
    uint32 length;
 };
 
-struct register_unit 
+struct register_unit
 {
    uint32 address;
    uint32 value;
@@ -322,5 +344,29 @@ struct register_unit
 
 #define FULL_PRJ_NAME_LEN 60
 #define OP_NAME_LEN 30
+
+#define EMMC_ERR_TYPE_STR_MAXSIZE 31
+struct emmc_error_detail
+{
+    uint8 emmc_err_type[EMMC_ERR_TYPE_STR_MAXSIZE+1];
+    unsigned long lba;
+};
+
+struct da_error_detail
+{
+    union
+    {
+        uint8 buff[128];
+        struct emmc_error_detail emmc_err_detail;
+    };
+};
+
+struct ex_ufs_config
+{
+	uint32 force_provision; //default 0
+	uint32 tw_size_gb; // default 0xFFFFFFFF
+	uint32 tw_no_red;  // default 1
+	uint32 hpb_size_gb; //default 0xFFFFFFFF
+};
 
 #endif

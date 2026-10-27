@@ -13,10 +13,12 @@
 
 #include <iostream>
 
+#include "../Host/Inc/CriticalSectionSentry.h"
+
 class LoggerImpl;
 
 class Logger {
-    public:
+public:
     enum Level {
         Verbose = 0,
         Debug,
@@ -42,7 +44,7 @@ class Logger {
     std::string dump_files_path;
 
     std::string ContextInfo() const; //get time,logger name, pid, tid
-    void Log(Level level,const char *pattern, ...);
+    CriticalSection & GetCriticalSection();
 
     Logger& operator<<(Level curlevel);
 
@@ -81,6 +83,9 @@ public:
     static Logger& GetLogger();
     static void DebugOn();
     static void DebugOff();
+
+private:
+    CriticalSection m_cs;
 };
 
 class LogFunc{

@@ -16,6 +16,16 @@
 #include <QtGui>
 #include <QTextCodec>
 #include <QRegExp>
+#include <algorithm>
+
+const static std::map<int, int>::value_type init_values[] = {
+    std::map<int, int>::value_type(FORMAT_ALL_DOWNLOAD, IDS_STRING_SCENE_FMTALLDL),
+    std::map<int, int>::value_type(FIRMWARE_UPGRADE, IDS_STRING_SCENE_FIRMWAREUPGRADE),
+    std::map<int, int>::value_type(DOWNLOAD_ONLY, IDS_STRING_SCENE_DOWNLOADONLY),
+    std::map<int, int>::value_type(WIPE_DATA, IDS_STRING_SCENE_WIPE_DATA)
+};
+
+const static std::map<int, int> g_download_scene_string_tag_map(init_values, init_values + 4);
 
 DownloadWidget::DownloadWidget(QTabWidget *parent, MainWindow *window) :
     TabWidgetBase(2, tr("&Download"), parent),
@@ -24,13 +34,14 @@ DownloadWidget::DownloadWidget(QTabWidget *parent, MainWindow *window) :
     scatterFile_historyList_(),
     authFile_historyList_(),
     certFile_historyList_(),
-    scene_(DOWNLOAD_ONLY),
+    scene_(UNKOWN_DOWNLOAD_SCENE),
     header_(new CheckHeader(Qt::Horizontal, this)),
     storage_(HW_STORAGE_EMMC),
     mStopFlag(0),
     mCurLocationRow(-1)
 {
-    memset(rsc_p_info, 0, sizeof(rsc_p_info));
+    memset(m_rsc_p_info, 0, sizeof(m_rsc_p_info));
+    m_rsc_cnt = 0;
 
     ui_->setupUi(this);
 
@@ -54,16 +65,7 @@ DownloadWidget::DownloadWidget(QTabWidget *parent, MainWindow *window) :
     main_window_->main_controller()->GetPlatformSetting()->addObserver(this);
     main_window_->scatter_observer()->addObserver(this);
 
-    QStringList sceneList;
-
-    sceneList << LoadQString(LANGUAGE_TAG, IDS_STRING_SCENE_FMTALLDL)
-              << LoadQString(LANGUAGE_TAG, IDS_STRING_SCENE_FIRMWAREUPGRADE)
-              << LoadQString(LANGUAGE_TAG, IDS_STRING_SCENE_DOWNLOADONLY)
-              << LoadQString(LANGUAGE_TAG, IDS_STRING_SCENE_WIPE_DATA);
-
-    ui_->comboBox_Scene->addItems(sceneList);
-
-    ui_->comboBox_Scene->setCurrentIndex(DOWNLOAD_ONLY);
+    updateDownloadSceneByConfig();
 
     //LoadDefaultDA();
 
@@ -74,6 +76,7 @@ DownloadWidget::DownloadWidget(QTabWidget *parent, MainWindow *window) :
     UpdateImageList(true, scene_);
 
     header_->SetChecked(true);
+    header_->SetCheckedEnabled(this->checkStateEnabledByConfig());
 
     ui_->tableWidget->setColumnHidden(columnRegion, true);
 }
@@ -88,12 +91,6 @@ DownloadWidget::~DownloadWidget()
     item.SaveStringListValue(authFile_historyList_);
 
     UpdateCustomSceneSelectItems();
-
-    if(header_)
-    {
-        delete header_;
-        header_ = NULL;
-    }
 
     delete ui_;
     ui_ = NULL;
@@ -338,50 +335,24 @@ void DownloadWidget::on_pushButton_download_clicked()
 
     if(ValidateBeforeDownload())
     {
-        // Reset-into-download needs the device disconnected and powered off
-        // first; the user confirms that before the download is started.
-        if(!ConfirmDisconnectAndPowerOff())
+        QMessageBox promptBox(QMessageBox::Information,
+                              tr("Download"),
+                              tr("Please make sure your device is powered off and Disconnected\n\n"
+                                 "You can do this by using a paperclip or pin to press the hidden button between the headphone and USB ports"),
+                              QMessageBox::Ok | QMessageBox::Cancel,
+                              this);
+        promptBox.setDefaultButton(QMessageBox::Ok);
+        if(promptBox.exec() != QMessageBox::Ok)
+        {
             return;
-        main_window_->MarkDownloadStarted();
+        }
+
         StartDownload();
         main_window_->LockOnUI();
         main_window_->GetOkDialog()->setWindowTitle(LoadQString(LANGUAGE_TAG, IDS_STRING_DOWNLOAD_OK));
-        ShowConnectDevicePrompt();
+        main_window_->ShowConnectPrompt();
     }
 }
-
-bool DownloadWidget::ConfirmDisconnectAndPowerOff()
-{
-    QMessageBox box(this);
-    box.setIcon(QMessageBox::Information);
-    box.setWindowTitle(tr("Prepare Device"));
-    box.setText(tr("Disconnect your device and power it off."));
-    box.setInformativeText(tr("Once it is off, hold the reset button with a paperclip while you connect the USB cable.\n\n"
-                              "Click Continue after the device is powered off."));
-    QPushButton *continue_btn = box.addButton(tr("Continue"), QMessageBox::AcceptRole);
-    box.addButton(tr("Cancel"), QMessageBox::RejectRole);
-    box.exec();
-    return box.clickedButton() == continue_btn;
-}
-
-void DownloadWidget::ShowConnectDevicePrompt()
-{
-    // Non-blocking: the download is already running. The box closes on its own
-    // when the device connects (download starts) or an error is logged.
-    if(connect_prompt_ == NULL)
-    {
-        connect_prompt_ = new QMessageBox(this);
-        connect_prompt_->setIcon(QMessageBox::Information);
-        connect_prompt_->setWindowTitle(tr("Connect Device"));
-        connect_prompt_->setText(tr("Connect your device now."));
-        connect_prompt_->setInformativeText(tr("Keep the reset button held while you plug in the USB cable."));
-        connect_prompt_->setStandardButtons(QMessageBox::NoButton);
-        connect(main_window_->main_controller(), SIGNAL(signal_conn_init()), connect_prompt_, SLOT(accept()));
-        connect(main_window_->main_controller(), SIGNAL(signal_err_msg(int, const std::string&)), connect_prompt_, SLOT(accept()));
-    }
-    connect_prompt_->show();
-}
-
 
 void DownloadWidget::on_toolButton_Certification_clicked()
 {
@@ -404,7 +375,7 @@ void DownloadWidget::on_pushButton_stop_clicked()
 
 void DownloadWidget::slot_OnHeaderView_click(int index)
 {
-    if(index == 0)
+    if(index == 0 && this->checkStateEnabledByConfig())
     {
         bool checked = header_->GetChecked();
 
@@ -427,7 +398,7 @@ void DownloadWidget::on_tableWidget_cellClicked(int row, int column)
     {
         choose_rom_file(row);
     }
-    else if (column == ColumnEnable)
+    else if (column == ColumnEnable && checkStateEnabledByConfig())
     {
         RomEnabledChanged(row);
     }
@@ -499,15 +470,9 @@ void DownloadWidget::OnLoadRomFailed()
 
 void DownloadWidget::UpdateUIStatus()
 {
-    QString strPath = ui_->comboBox_scatterFilePath->currentText();
-    scatterFile_historyList_.removeOne(strPath);
-    ui_->comboBox_scatterFilePath->removeItem(ui_->comboBox_scatterFilePath->currentIndex());
-    ui_->comboBox_scatterFilePath->setEditText("");
-    ui_->comboBox_scatterFilePath->setCurrentIndex(-1);
-    main_window_->ResetStatus();
+    removeCurrentScatterFile();
 
-    IniItem item("history.ini", "RecentOpenFile", "lastDir");
-    item.SaveStringValue(tr(""));
+    main_window_->ResetStatus();
 
     SetDACheckSum();
 }
@@ -557,9 +522,15 @@ void DownloadWidget::Enable_groupBox_boot_mode_flag(bool enable)
     ui_->groupBox_boot_mode_flag->setVisible(enable);
 }
 
-unsigned int DownloadWidget::GetRSCIndex(void)
+int DownloadWidget::GetRSCIndex(std::string rscProjName)
 {
-    return (unsigned int)(ui_->comboBox_rsc->currentIndex());
+    for(uint i=0; i<m_rsc_cnt; i++)
+    {
+        if(rscProjName == std::string((char*)m_rsc_p_info[i].full_project_name))
+            return m_rsc_p_info[i].dtbo_index;
+    }
+
+    return -1; //not found
 }
 
 std::string DownloadWidget::GetRSCProjectName(void)
@@ -567,106 +538,114 @@ std::string DownloadWidget::GetRSCProjectName(void)
     return ui_->comboBox_rsc->currentText().toLocal8Bit().constData();
 }
 
-std::string DownloadWidget::GetRSCOperatorName(unsigned int index)
+std::string DownloadWidget::GetRSCOperatorName(std::string rscProjName)
 {
-    return rsc_p_info[index].operator_name;
+    for(uint i=0; i<m_rsc_cnt; i++)
+    {
+        if(rscProjName == std::string((char*)m_rsc_p_info[i].full_project_name))
+            return std::string((char*)m_rsc_p_info[i].op_name);
+    }
+
+    return ""; //not found
 }
 
-void DownloadWidget::Init_RSC_list(proj_item* p_item, unsigned int rsc_cnt)
+std::string DownloadWidget::GetRSCFilePath(void)
+{
+	return m_rsc_file_path;
+}
+
+void DownloadWidget::Init_RSC_list(void)
 {
     ui_->comboBox_rsc->clear();
-    for(unsigned int i = 0; i<rsc_cnt; i++)
+    for(uint i = 0; i<m_rsc_cnt; i++)
     {
-        ui_->comboBox_rsc->insertItem(p_item[i].dtbo_index, (char*)p_item[i].full_project_name);
+        ui_->comboBox_rsc->addItem((char*)m_rsc_p_info[i].full_project_name);
     }
 
     ui_->comboBox_rsc->setCurrentIndex(0);
 }
 
-#define INSTALLED_FILES_NAME "installed-files.txt"
+void DownloadWidget::Clear_RSC_Info(void)
+{
+    ui_->comboBox_rsc->clear();
+    memset(m_rsc_p_info, 0, sizeof(m_rsc_p_info));
+    m_rsc_cnt = 0;
+}
+
 void DownloadWidget::Process_rsc(QString rsc_filename)
 {
-    if(!ToolInfo::IsCustomerVer())
+    if(ToolInfo::IsCustomerVer())
     {
-        //internal flashtool, check rsc.xml exist or not
-        if(QFileInfo(rsc_filename).exists())
-        {
-            LOG("rsc exist");
-            ShowRSCItem(true);
-            std::string rsc = rsc_filename.toLocal8Bit().constData();
-            LOG("rsc file: %s", rsc.c_str());
+        return ;
+    }
+    //internal flashtool, check rsc.xml exist or not
+    if(QFileInfo(rsc_filename).exists())
+    {
+        LOG("rsc exist");
+        ShowRSCItem(true);
+        m_rsc_file_path = rsc_filename.toLocal8Bit().constData();
+        LOG("rsc file: %s", m_rsc_file_path.c_str());
 
-            try{
-                unsigned int rsc_cnt = 0;
-                unsigned int ret = FlashTool_GetRSCCnt(rsc.c_str(), &rsc_cnt);
-                if(STATUS_OK != ret)
-                {
-                    char err_msg[512] = {0};
-                    FlashTool_GetLastErrorMessage(NULL, err_msg);
-                    flashtool_message_box(main_window_,
-                                          main_window_->getConnectButton(),
-                                          CRITICAL_MSGBOX,
-                                          "Smart Phone Flash Tool",
-                                          err_msg,
-                                          "OK");
-                    ui_->comboBox_rsc->clear();
-                }
-                LOG("rsc_cnt: %d", rsc_cnt);
-
-                if(rsc_cnt != 0)
-                {
-                    proj_item* proj_array = new proj_item[rsc_cnt];
-                    ret = FlashTool_GetRSCInfo(rsc.c_str(), proj_array, rsc_cnt);
-                    if(STATUS_OK != ret)
-                    {
-                        char err_msg[512] = {0};
-                        FlashTool_GetLastErrorMessage(NULL, err_msg);
-                        flashtool_message_box(main_window_,
-                                              main_window_->getConnectButton(),
-                                              CRITICAL_MSGBOX,
-                                              "Smart Phone Flash Tool",
-                                              err_msg,
-                                              "OK");
-                        ui_->comboBox_rsc->clear();
-                    }
-                    Init_RSC_list(proj_array, rsc_cnt);
-                    for(unsigned int i=0; i<rsc_cnt; i++)
-                    {
-                        rsc_p_info[i].operator_name = (char*)proj_array[i].op_name;
-                    }
-                    delete[] proj_array;
-                }
-            }catch(const BaseException& exception)
+        try{
+            unsigned int ret = FlashTool_GetRSCCnt(m_rsc_file_path.c_str(), &m_rsc_cnt);
+            if(STATUS_OK != ret)
             {
-                LOGE(exception.err_msg().c_str());
-            }
-        }
-        else
-        {
-            LOG("rsc NOT exist");
-            QDir install_files_dir = QFileInfo(rsc_filename).dir();
-            QString install_files_name = install_files_dir.absoluteFilePath(INSTALLED_FILES_NAME);
-
-            //installed-files.txt contains rsc.xml
-            if(FileContain(install_files_name, "rsc.xml"))
-            {
-                ShowRSCItem(true);
-                char err_msg[512] = {"rsc.xml is missing, please download an integrated load or contact with BM."};
+                char err_msg[512] = {0};
+                FlashTool_GetLastErrorMessage(NULL, err_msg);
                 flashtool_message_box(main_window_,
                                       main_window_->getConnectButton(),
                                       CRITICAL_MSGBOX,
                                       "Smart Phone Flash Tool",
                                       err_msg,
                                       "OK");
-                ui_->comboBox_rsc->clear();
+                Clear_RSC_Info();
             }
-            else
+            LOG("rsc_cnt: %d", m_rsc_cnt);
+            if(m_rsc_cnt > MAX_RSC_PROJ_CNT)
             {
-                LOG("installed-files says NO need rsx.xml; or installed-files NOT exist");
-                ShowRSCItem(false);
+                flashtool_message_box(main_window_,
+                                      main_window_->getConnectButton(),
+                                      CRITICAL_MSGBOX,
+                                      "Smart Phone Flash Tool",
+                                      "rsc_cnt overseed MAX_RSC_PROJ_CNT (64)",
+                                      "OK");
+                Clear_RSC_Info();
+                return;
+            }
+            if(m_rsc_cnt == 0)
+            {
+                flashtool_message_box(main_window_,
+                                      main_window_->getConnectButton(),
+                                      CRITICAL_MSGBOX,
+                                      "Smart Phone Flash Tool",
+                                      "rsc_cnt is 0",
+                                      "OK");
+                Clear_RSC_Info();
+                return;
             }
 
+            ret = FlashTool_GetRSCInfo(m_rsc_file_path.c_str(), m_rsc_p_info, m_rsc_cnt);
+            if(STATUS_OK != ret)
+            {
+                char err_msg[512] = {0};
+                FlashTool_GetLastErrorMessage(NULL, err_msg);
+                flashtool_message_box(main_window_,
+                                      main_window_->getConnectButton(),
+                                      CRITICAL_MSGBOX,
+                                      "Smart Phone Flash Tool",
+                                      err_msg,
+                                      "OK");
+                Clear_RSC_Info();
+                return;
+            }
+            Init_RSC_list();
+
+        }catch(const BaseException& exception)
+        {
+            LOGE(exception.err_msg().c_str());
         }
+    } else {
+        ShowRSCItem(false);
     }
 }
 
@@ -711,6 +690,8 @@ void DownloadWidget::slot_OnLoadByScatterCanceled()
     main_window_->processing_dialog()->hide();
     ui_->comboBox_scatterFilePath->setEditText("");
     ui_->comboBox_scatterFilePath->setCurrentIndex(-1);
+    ui_->tableWidget->setRowCount(0);
+    main_window_->UpdatePlatformImageString("");
     main_window_->ResetStatus();
 }
 
@@ -871,24 +852,6 @@ void DownloadWidget::UserCancelLoadScatter()
     mStopFlag = AP_STOP;
 }
 
-void DownloadWidget::AfterDAConnected(HW_StorageType_E storage_type, const FLASHTOOL_API_HANDLE_T FT_Handle)
-{
-    this->storage_ = storage_type;
-    std::list<ImageInfo> imagelist;
-    //main_window_->main_controller()->GetImageInfoList(imagelist, scene_);
-    main_window_->main_controller()->GetFLashToolImageInfoList(imagelist, FT_Handle, this->scene_);
-
-    ImageStatusMap oRegionStatusMap = this->GetRegionStatusMap();
-    QList<UIImageStruct> oUIRegionList = FilterVisibleImages(imagelist, oRegionStatusMap);
-    ui_->tableWidget->setRowCount(oUIRegionList.count());
-
-    ui_->tableWidget->setColumnHidden(ColumnBeginAddr, false);
-    ui_->tableWidget->setColumnHidden(ColumnEndAddr, false);
-    ui_->tableWidget->setColumnHidden(columnRegion, false);
-
-    RefreshTableWidget(oUIRegionList);
-}
-
 bool DownloadWidget::IsRSCEnabled() const
 {
     return ui_->comboBox_rsc->isVisible() && (!ui_->comboBox_rsc->currentText().isEmpty());
@@ -934,9 +897,23 @@ void DownloadWidget::ShowUnavailableItems(bool show)
     ui_->groupBox_download_cert_to->setVisible(support_dl_cert_to_storage ? show : false);
 
     if(show)
-        ui_->comboBox_Scene->addItem(LoadQString(LANGUAGE_TAG, IDS_STRING_SCENE_WIPE_DATA));
+        ui_->comboBox_Scene->addItem(LoadQString(LANGUAGE_TAG, IDS_STRING_SCENE_WIPE_DATA), WIPE_DATA);
     else
         ui_->comboBox_Scene->removeItem(ui_->comboBox_Scene->count() - 1);
+
+    if (ui_->comboBox_Scene->count() > 0) { // unlock downloadwidget page
+        ui_->comboBox_Scene->setVisible(true);
+        this->DoFinished();
+        if (ui_->comboBox_Scene->findData(scene_) == -1) {
+            changeDownloadSceneToDefault();
+        }
+    }
+    else { // lock downloadwidget page
+        ui_->comboBox_Scene->setVisible(false);
+        this->LockOnUI();
+        ui_->pushButton_stop->setEnabled(false);
+        scene_ = UNKOWN_DOWNLOAD_SCENE;
+    }
 }
 
 void DownloadWidget::ShowRSCItem(bool show)
@@ -1176,11 +1153,17 @@ bool DownloadWidget::hasUncheckedRomInfo()
 
 void DownloadWidget::UpdateScene()
 {
-    if(scene_ != DOWNLOAD_ONLY)
+    if (ui_->comboBox_Scene->count() == 0)
     {
-        ui_->comboBox_Scene->setCurrentIndex(DOWNLOAD_ONLY);
-        scene_ = DOWNLOAD_ONLY;
+        flashtool_message_box(main_window_,
+                              0,
+                              WARNING_MSGBOX,
+                              LoadQString(LANGUAGE_TAG, IDS_STRING_TOOL_NAME),
+                              LoadQString(LANGUAGE_TAG, IDS_STRING_DOWNLOAD_SCENE_SWITCH_INFO),
+                              LoadQString(LANGUAGE_TAG, IDS_STRING_OK));
+        return ;
     }
+    changeDownloadSceneToDefault();
 }
 
 void DownloadWidget::UpdateCustomSceneSelectItems()
@@ -1257,7 +1240,10 @@ void DownloadWidget::SetTabLabel(QTabWidget *tab_widget, int index)
 
     for(int i = 0; i < ui_->comboBox_Scene->count(); i++)
     {
-        ui_->comboBox_Scene->setItemText(i, LoadQString(LANGUAGE_TAG, IDS_STRING_SCENE_FMTALLDL + i));
+        QVariant item_data = ui_->comboBox_Scene->itemData(i);
+        std::map<int, int>::const_iterator iter = g_download_scene_string_tag_map.find(item_data.toInt());
+        assert(iter != g_download_scene_string_tag_map.end());
+        ui_->comboBox_Scene->setItemText(i, LoadQString(LANGUAGE_TAG, iter->second));
     }
 }
 
@@ -1381,6 +1367,20 @@ bool DownloadWidget::ValidateBeforeCertDL()
     return true;
 }
 
+bool has_pgpt_image(const ImageInfo &image)
+{
+    std::string image_name = image.name;
+    std::transform(image_name.begin(), image_name.end(), image_name.begin(), tolower);
+    return image_name == "pgpt";
+}
+
+bool is_pgpt_image_selected(const ImageInfo &image)
+{
+    std::string image_name = image.name;
+    std::transform(image_name.begin(), image_name.end(), image_name.begin(), tolower);
+    return image_name == "pgpt" && image.enabled;
+}
+
 bool DownloadWidget::ValidateBeforeDownload()
 {
    if(ui_->lineEdit_agentFilePath->text().isEmpty())
@@ -1472,6 +1472,34 @@ bool DownloadWidget::ValidateBeforeDownload()
                               "rsc xml file invalid, please check",
                               "OK");
         return false;
+    }
+
+    SCATTER_Head_Info scatter_head_info;
+    main_window_->main_controller()->GetScatterHeadInfo(&scatter_head_info);
+    if (scatter_head_info.skip_pmt_operate)
+    {
+        std::list<ImageInfo>::iterator iter = std::find_if(images.begin(), images.end(), has_pgpt_image);
+        if (iter == images.end())
+        {
+            flashtool_message_box(main_window_,
+                                  0,
+                                  WARNING_MSGBOX,
+                                  LoadQString(LANGUAGE_TAG, IDS_STRING_TOOL_NAME),
+                                  LoadQString(LANGUAGE_TAG, IDS_STRING_DOWNLOAD_PGPT_NOT_EXIST),
+                                  LoadQString(LANGUAGE_TAG, IDS_STRING_OK));
+            return false;
+        }
+        iter = std::find_if(images.begin(), images.end(), is_pgpt_image_selected);
+        if (iter == images.end())
+        {
+            flashtool_message_box(main_window_,
+                                  0,
+                                  WARNING_MSGBOX,
+                                  LoadQString(LANGUAGE_TAG, IDS_STRING_TOOL_NAME),
+                                  LoadQString(LANGUAGE_TAG, IDS_STRING_DOWNLOAD_PGPT_NOT_SELECTED),
+                                  LoadQString(LANGUAGE_TAG, IDS_STRING_OK));
+            return false;
+        }
     }
 
     return true;
@@ -1605,9 +1633,14 @@ void DownloadWidget::choose_rom_file(int row)
                     ui_->tableWidget->item(loader_ext2_visible_index, ColumnLocation)->setText(QString::fromStdString(new_loader_ext_filename));
                 }
 
-                ui_->tableWidget->item(pl_visible_index, ColumnEnable)->setCheckState(Qt::Checked);
-                ui_->tableWidget->item(loader_ext1_visible_index, ColumnEnable)->setCheckState(Qt::Checked);
-                ui_->tableWidget->item(loader_ext2_visible_index, ColumnEnable)->setCheckState(Qt::Checked);
+                if(pl_visible_index != -1)
+                    ui_->tableWidget->item(pl_visible_index, ColumnEnable)->setCheckState(Qt::Checked);
+
+                if(loader_ext1_visible_index != -1)
+                    ui_->tableWidget->item(loader_ext1_visible_index, ColumnEnable)->setCheckState(Qt::Checked);
+
+                if(loader_ext2_visible_index != -1)
+                    ui_->tableWidget->item(loader_ext2_visible_index, ColumnEnable)->setCheckState(Qt::Checked);
             }
         }
         //endo of process pl/ext1/ext2
@@ -1616,23 +1649,7 @@ void DownloadWidget::choose_rom_file(int row)
 
 void DownloadWidget::on_comboBox_Scene_activated(int index)
 {
-    switch(index)
-    {
-    case 0:
-        scene_ = FORMAT_ALL_DOWNLOAD;
-        break;
-
-    case 1:
-        scene_ = FIRMWARE_UPGRADE;
-        break;
-
-    case 2:
-        scene_ = DOWNLOAD_ONLY;
-        break;
-
-    case 3:
-        scene_ = WIPE_DATA;
-    }
+    scene_ = static_cast<Download_Scene>(ui_->comboBox_Scene->itemData(index).toInt());
 
     UpdateRomInfoList(scene_);
 }
@@ -1662,8 +1679,11 @@ void DownloadWidget::on_comboBox_scatterFilePath_activated(const QString &arg1)
 
     QFile file(file_name);
 
-    if(file_name.isEmpty() || file.exists() == false)
+    if(file_name.isEmpty() || file.exists() == false) {
+        main_window_->slot_show_err(STATUS_SCATTER_FILE_NOT_FOUND, "The scatter file cannot find, please make sure the file is exist before download.");
+        removeCurrentScatterFile();
         return;
+    }
 
     LoadScatterFile(file_name);
 
@@ -1795,9 +1815,92 @@ void DownloadWidget::RomEnabledChanged(int row)
     if(p_enable_item->checkState() == Qt::Checked && !ui_->tableWidget->item(row, ColumnLocation)->text().isEmpty())
     {
         main_window_->main_controller()->EnableROM(item_index, true);
+
+        if(row == QueryROMVisbleIndex("super"))
+        {
+            int vbmeta_system_idx = main_window_->main_controller()->QueryROMIndex("vbmeta_system");
+            if(vbmeta_system_idx == -1)
+                LOG("no partition vbmeta_system");
+            int vbmeta_vendor_idx = main_window_->main_controller()->QueryROMIndex("vbmeta_vendor");
+            if(vbmeta_vendor_idx == -1)
+                LOG("no partition vbmeta_vendor");
+
+            if(vbmeta_system_idx != -1 && vbmeta_vendor_idx != -1)
+            {
+                int vbmeta_system_visble_idx = QueryROMVisbleIndex("vbmeta_system");
+                int vbmeta_vendor_visble_idx = QueryROMVisbleIndex("vbmeta_vendor");
+                if(vbmeta_system_visble_idx != -1 && vbmeta_vendor_visble_idx != -1)
+                {
+                    main_window_->main_controller()->EnableROM(vbmeta_system_idx, true);
+                    main_window_->main_controller()->EnableROM(vbmeta_vendor_idx, true);
+                    ui_->tableWidget->item(vbmeta_system_visble_idx, ColumnEnable)->setCheckState(Qt::Checked);
+                    ui_->tableWidget->item(vbmeta_vendor_visble_idx, ColumnEnable)->setCheckState(Qt::Checked);
+                }
+            }
+
+            //for AB load
+            int vbmeta_system_a_idx = main_window_->main_controller()->QueryROMIndex("vbmeta_system_a");
+            if(vbmeta_system_a_idx == -1)
+                LOG("no partition vbmeta_system_a");
+            int vbmeta_vendor_a_idx = main_window_->main_controller()->QueryROMIndex("vbmeta_vendor_a");
+            if(vbmeta_vendor_a_idx == -1)
+                LOG("no partition vbmeta_vendor_a");
+
+            if(vbmeta_system_a_idx != -1 && vbmeta_vendor_a_idx != -1)
+            {
+                int vbmeta_system_a_visble_idx = QueryROMVisbleIndex("vbmeta_system_a");
+                int vbmeta_vendor_a_visble_idx = QueryROMVisbleIndex("vbmeta_vendor_a");
+                if(vbmeta_system_a_visble_idx != -1 && vbmeta_vendor_a_visble_idx != -1)
+                {
+                    main_window_->main_controller()->EnableROM(vbmeta_system_a_idx, true);
+                    main_window_->main_controller()->EnableROM(vbmeta_vendor_a_idx, true);
+                    ui_->tableWidget->item(vbmeta_system_a_visble_idx, ColumnEnable)->setCheckState(Qt::Checked);
+                    ui_->tableWidget->item(vbmeta_vendor_a_visble_idx, ColumnEnable)->setCheckState(Qt::Checked);
+                }
+            }
+
+            int vbmeta_system_b_idx = main_window_->main_controller()->QueryROMIndex("vbmeta_system_b");
+            if(vbmeta_system_b_idx == -1)
+                LOG("no partition vbmeta_system_b");
+            int vbmeta_vendor_b_idx = main_window_->main_controller()->QueryROMIndex("vbmeta_vendor_b");
+            if(vbmeta_vendor_b_idx == -1)
+                LOG("no paritition vbmeta_vendor_b");
+
+            if(vbmeta_system_b_idx != -1 && vbmeta_vendor_b_idx != -1)
+            {
+                int vbmeta_system_b_visble_idx = QueryROMVisbleIndex("vbmeta_system_b");
+                int vbmeta_vendor_b_visble_idx = QueryROMVisbleIndex("vbmeta_vendor_b");
+                if(vbmeta_system_b_visble_idx != -1 && vbmeta_vendor_b_visble_idx != -1)
+                {
+                    main_window_->main_controller()->EnableROM(vbmeta_system_b_idx, true);
+                    main_window_->main_controller()->EnableROM(vbmeta_vendor_b_idx, true);
+                    ui_->tableWidget->item(vbmeta_system_b_visble_idx, ColumnEnable)->setCheckState(Qt::Checked);
+                    ui_->tableWidget->item(vbmeta_vendor_b_visble_idx, ColumnEnable)->setCheckState(Qt::Checked);
+                }
+            }
+            //end of AB load process
+        }
     }
     else
     {
+        if(row == QueryROMVisbleIndex("vbmeta_system") || row == QueryROMVisbleIndex("vbmeta_vendor")
+           ||row == QueryROMVisbleIndex("vbmeta_system_a") || row == QueryROMVisbleIndex("vbmeta_vendor_a")
+           ||row == QueryROMVisbleIndex("vbmeta_system_b") || row == QueryROMVisbleIndex("vbmeta_vendor_b"))
+        {
+            int super_idx = QueryROMVisbleIndex("super");
+            bool super_enable = ui_->tableWidget->item(super_idx, ColumnEnable)->checkState() == Qt::Checked;
+            if(super_enable)
+            {
+                ui_->tableWidget->item(row, ColumnEnable)->setCheckState(Qt::Checked);
+                flashtool_message_box(main_window_,
+                                      main_window_->getConnectButton(),
+                                      INFORMATION_MSGBOX,
+                                      "Smart Phone Flash Tool",
+                                      "Must disable 'super' first!",
+                                      "OK");
+                return;
+            }
+        }
         main_window_->main_controller()->EnableROM(item_index, false);
     }
 
@@ -1827,20 +1930,6 @@ void DownloadWidget::PreloaderChanged(QTableWidgetItem *item)
         }
     }
     //end of process preloader/ext1/ext2
-}
-
-ImageStatusMap DownloadWidget::GetRegionStatusMap() const
-{
-    ImageStatusMap oRegionStatusMap;
-    for (int nIndex = 0; nIndex < ui_->tableWidget->rowCount(); ++nIndex)
-    {
-        QTableWidgetItem *pEnableItem = ui_->tableWidget->item(nIndex, ColumnEnable);
-        QTableWidgetItem *pNameItem = ui_->tableWidget->item(nIndex, ColumnName);
-        QTableWidgetItem *pLocationItem = ui_->tableWidget->item(nIndex, ColumnLocation);
-        Q_ASSERT(pEnableItem && pNameItem && pLocationItem);
-        oRegionStatusMap.insert(pNameItem->text(), qMakePair(pEnableItem->checkState(), pLocationItem->text()));
-    }
-    return oRegionStatusMap;
 }
 
 void DownloadWidget::RefreshTableWidget(const QList<UIImageStruct> &oRegionList)
@@ -1931,6 +2020,8 @@ void DownloadWidget::RefreshTableWidget(const QList<UIImageStruct> &oRegionList)
         header_->SetChecked(true);
     else
         header_->SetChecked(false);
+
+    updateTableWidgetFlagsByConfig();
 }
 
 QList<UIImageStruct> DownloadWidget::FilterVisibleImages(const std::list<ImageInfo> &image_list, const ImageStatusMap &image_status_map) const
@@ -1987,6 +2078,118 @@ void DownloadWidget::restoreImageRegionInfo(std::list<ImageInfo> &image_list) co
         }
         ++nIndex;
     }
+}
+
+void DownloadWidget::updateDownloadSceneByConfig()
+{
+    QString sFormat_all_download = LoadQString(LANGUAGE_TAG, IDS_STRING_SCENE_FMTALLDL);
+    QString sFireware_upgrade = LoadQString(LANGUAGE_TAG, IDS_STRING_SCENE_FIRMWAREUPGRADE);
+    QString sDownload_only = LoadQString(LANGUAGE_TAG, IDS_STRING_SCENE_DOWNLOADONLY);
+    QString sWipe_data = LoadQString(LANGUAGE_TAG, IDS_STRING_SCENE_WIPE_DATA);
+
+    IniItem item("option.ini", "DownloadScene", "");
+    if (item.hasSection()) {
+        item.SetItemName("Format_All_Download");
+        if (item.hasKey() && item.GetBooleanValue()) {
+            ui_->comboBox_Scene->addItem(sFormat_all_download, FORMAT_ALL_DOWNLOAD);
+        }
+        item.SetItemName("Firmware_Upgrade");
+        if (item.hasKey() && item.GetBooleanValue()) {
+            ui_->comboBox_Scene->addItem(sFireware_upgrade, FIRMWARE_UPGRADE);
+        }
+        item.SetItemName("Download_Only");
+        if (item.hasKey() && item.GetBooleanValue()) {
+            ui_->comboBox_Scene->addItem(sDownload_only, DOWNLOAD_ONLY);
+        }
+        ui_->comboBox_Scene->addItem(sWipe_data, WIPE_DATA);
+
+        changeDownloadSceneToDefault();
+    }
+    else {
+        ui_->comboBox_Scene->addItem(sFormat_all_download, FORMAT_ALL_DOWNLOAD);
+        ui_->comboBox_Scene->addItem(sFireware_upgrade, FIRMWARE_UPGRADE);
+        ui_->comboBox_Scene->addItem(sDownload_only, DOWNLOAD_ONLY);
+        ui_->comboBox_Scene->addItem(sWipe_data, WIPE_DATA);
+        ui_->comboBox_Scene->setCurrentIndex(DOWNLOAD_ONLY);
+        scene_ = DOWNLOAD_ONLY;
+    }
+}
+
+void DownloadWidget::changeDownloadSceneToDefault()
+{
+    // linear switch to DOWNLOAD_ONLY, FIRMWARE_UPGEADE, FOEMAT_ALL_DOWNLOAD and WIPE_DATA if they exists
+    // when do scatter change, item checked change or location change.
+    if(ui_->comboBox_Scene->findData(DOWNLOAD_ONLY) != -1)
+    {
+        if (scene_ != DOWNLOAD_ONLY) {
+            ui_->comboBox_Scene->setCurrentIndex(ui_->comboBox_Scene->findData(DOWNLOAD_ONLY));
+            scene_ = DOWNLOAD_ONLY;
+        }
+    }
+    else if(ui_->comboBox_Scene->findData(FIRMWARE_UPGRADE) != -1)
+    {
+        if (scene_ != FIRMWARE_UPGRADE) {
+            ui_->comboBox_Scene->setCurrentIndex(ui_->comboBox_Scene->findData(FIRMWARE_UPGRADE));
+            scene_ = FIRMWARE_UPGRADE;
+        }
+    }
+    else if(ui_->comboBox_Scene->findData(FORMAT_ALL_DOWNLOAD) != -1)
+    {
+        if (scene_ != FORMAT_ALL_DOWNLOAD) {
+            ui_->comboBox_Scene->setCurrentIndex(ui_->comboBox_Scene->findData(FORMAT_ALL_DOWNLOAD));
+            scene_ = FORMAT_ALL_DOWNLOAD;
+        }
+    }
+    else if(ui_->comboBox_Scene->findData(WIPE_DATA) != -1)
+    {
+        if (scene_ != WIPE_DATA) {
+            ui_->comboBox_Scene->setCurrentIndex(ui_->comboBox_Scene->findData(WIPE_DATA));
+            scene_ = WIPE_DATA;
+        }
+    }
+    assert(scene_ != UNKOWN_DOWNLOAD_SCENE);
+}
+
+void DownloadWidget::updateTableWidgetFlagsByConfig()
+{
+    if (checkStateEnabledByConfig()) {
+        for(int row = 0; row < ui_->tableWidget->rowCount(); row++)
+        {
+            QTableWidgetItem *item = ui_->tableWidget->item(row, ColumnEnable);
+            assert(NULL != item);
+            item->setFlags(item->flags()|Qt::ItemIsUserCheckable);
+        }
+    }
+    else {
+        for(int row = 0; row < ui_->tableWidget->rowCount(); row++)
+        {
+            QTableWidgetItem *item = ui_->tableWidget->item(row, ColumnEnable);
+            assert(NULL != item);
+            item->setFlags(item->flags()&~Qt::ItemIsUserCheckable);
+        }
+    }
+}
+
+bool DownloadWidget::checkStateEnabledByConfig() const
+{
+    bool bCheckStateEnabled = true;
+    IniItem item("option.ini", "DownloadScene", "Download_Only");
+    if (item.hasSection() && !item.GetBooleanValue()) { // table widget disable when Download_Only set false.
+        bCheckStateEnabled = false;
+    }
+    return bCheckStateEnabled;
+}
+
+void DownloadWidget::removeCurrentScatterFile()
+{
+    QString strPath = ui_->comboBox_scatterFilePath->currentText();
+    scatterFile_historyList_.removeOne(strPath);
+    ui_->comboBox_scatterFilePath->removeItem(ui_->comboBox_scatterFilePath->currentIndex());
+    ui_->comboBox_scatterFilePath->setEditText("");
+    ui_->comboBox_scatterFilePath->setCurrentIndex(-1);
+
+    IniItem item("history.ini", "RecentOpenFile", "lastDir");
+    item.SaveStringValue(tr(""));
 }
 
 void DownloadWidget::on_checkbox_set_boot_mode_to_meta_clicked()

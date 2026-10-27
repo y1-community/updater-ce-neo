@@ -30,6 +30,7 @@ public:
     QVariant Get();
 
     bool hasKey(const QString &sKey = "") const;
+    bool hasSection(const QString &sSectionName = "") const;
 
 private:
     QString file_path_;

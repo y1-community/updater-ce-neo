@@ -1,10 +1,10 @@
 #include "MainWindow.h"
-#include "ui_MainWindow.h"
 #include <QDialog>
 #include <QLabel>
-#include <QCheckBox>
 #include <QPushButton>
 #include <QVBoxLayout>
+#include <QHBoxLayout>
+#include "ui_MainWindow.h"
 #include "DownloadWidget.h"
 #include "ReadBackWidget.h"
 #include "MemoryTestWidget.h"
@@ -33,6 +33,7 @@
 #include "SDMMCWidget.h"
 #include "NorFlashWidget.h"
 #include "UfsWidget.h"
+#include "fw.h"
 #include "../../Setting/ConnBromUSBSetting.h"
 #include "../../Setting/ConnBromUARTSetting.h"
 #include "../../ConsoleMode/Config.h"
@@ -67,10 +68,13 @@ MainWindow::MainWindow(QWidget *parent) :
     processing_dialog_(new ProcessingDialog(this)),
     option_dialog (new OptionDialog(this, this)),
     ok_dialog(new OkDialog(this)),
+    connect_prompt_dialog_(NULL),
+#ifdef _WIN32
     checkupdate_dialog(NULL),
     update_dialog(NULL),
-    encry_dialog(NULL),
     async_updater(NULL),
+#endif
+    encry_dialog(NULL),
     current_platform(new PlatformObj()),
     scatter_observer_(new ScatterObserver()),
     mbromAdapter_on(false),
@@ -102,6 +106,11 @@ MainWindow::MainWindow(QWidget *parent) :
     SetInitState();
 
     InitShortcuts();
+
+#if defined(_LINUX)
+    FileUtils::copy_99ttyacms_file(true);
+    FileUtils::runModemManagerCmd();
+#endif
 }
 
 void MainWindow::SetUI()
@@ -119,8 +128,8 @@ void MainWindow::SetUI()
     QImage image = Utils::AddStringToImage(":/images/Phone.png", "MediaTek");
 
     ui->ImageLabel->setPixmap(QPixmap::fromImage(image));
-#ifndef _WIN32
-    ui->action_SoftwareUpdate->setVisible(false);
+#ifdef _WIN32
+    ui->action_SoftwareUpdate->setVisible(!ToolInfo::IsCustomerVer());
 #endif
 }
 
@@ -138,6 +147,7 @@ void MainWindow::CreateWidget()
     parameter_widget = new ParameterWidget(ui->tabWidget, this);
     format_widget = new FormatWidget(ui->tabWidget, this);
     writeMemory_widget = new WriteMemoryWidget(ui->tabWidget, this);
+    fw_widget_ = new FW(ui->tabWidget, this);
     readback_widget = new ReadBackWidget(ui->tabWidget, this);
     welcome_widget = new WelcomeWidget(ui->tabWidget, this);
     bromAdapter_widget = new BromAdapterWidget(ui->tabWidget, this);
@@ -174,6 +184,9 @@ void MainWindow::CreateConnect()
 #ifdef _WIN32
     connect(async_updater, SIGNAL(signal_check_finish(const bool&)),
             this, SLOT(slot_check_finish(const bool&)));
+    qRegisterMetaType<AsyncUpdater::UpdateFailReason>("AsyncUpdater::UpdateFailReason");
+    connect(async_updater, SIGNAL(signal_update_failed(AsyncUpdater::UpdateFailReason)),
+            this, SLOT(slot_update_failed(AsyncUpdater::UpdateFailReason)));
 #endif
     connect(option_dialog, SIGNAL(signal_enable_DAChksum(int)),
             this, SLOT(slot_enable_DAChksum(int)));
@@ -216,6 +229,7 @@ void MainWindow::SetInitState()
     writeMemory_widget->setVisible(false);
     devtest_widget->setVisible(false);
     bromAdapter_widget->setVisible(false);
+    fw_widget_->setVisible(false);
     sciDownload_widget_->setVisible(false);
     cloneDownload_wdiget_->setVisible(false);
     download_widget->Enable_groupBox_boot_mode_flag(false);
@@ -273,14 +287,6 @@ MainWindow::~MainWindow()
     async_updater->waitForFinished();
 #endif
 
-    if(about_dialog != NULL)
-    {
-        delete about_dialog;
-        about_dialog = NULL;
-    }
-    CleanAllTabWidgets();
-    CleanChipAndStorageInfo();
-
     if(thread_timer_ != NULL)
     {
         if(thread_timer_->isActive())
@@ -289,41 +295,14 @@ MainWindow::~MainWindow()
         thread_timer_ = NULL;
     }
 
-    if(processing_dialog_)
-    {
-        delete processing_dialog_;
-        processing_dialog_ = NULL;
-    }
-    if(option_dialog)
-    {
-        delete option_dialog;
-        option_dialog = NULL;
-    }
-    if(ok_dialog)
-    {
-        delete ok_dialog;
-        ok_dialog = NULL;
-    }
-    if(checkupdate_dialog)
-    {
-        delete checkupdate_dialog;
-        checkupdate_dialog = NULL;
-    }
-    if(update_dialog)
-    {
-        delete update_dialog;
-        update_dialog = NULL;
-    }
-    if(encry_dialog)
-    {
-        delete encry_dialog;
-        encry_dialog = NULL;
-    }
+#ifdef _WIN32
     if(async_updater)
     {
         delete async_updater;
         async_updater = NULL;
     }
+#endif
+
     if(current_platform)
     {
         delete current_platform;
@@ -354,36 +333,13 @@ MainWindow::~MainWindow()
         delete send_report_;
         send_report_ = NULL;
     }
-    if(mbadblock_shortcut)
+
+    if(connect_prompt_dialog_ != NULL)
     {
-        delete mbadblock_shortcut;
-        mbadblock_shortcut = NULL;
+        delete connect_prompt_dialog_;
+        connect_prompt_dialog_ = NULL;
     }
-    if(madvance_shortcut)
-    {
-        delete madvance_shortcut;
-        madvance_shortcut = NULL;
-    }
-    if(mbromAdapter_shortcut)
-    {
-        delete mbromAdapter_shortcut;
-        mbromAdapter_shortcut = NULL;
-    }
-    if(mSCIDownload_shortcut)
-    {
-        delete mSCIDownload_shortcut;
-        mSCIDownload_shortcut = NULL;
-    }
-    if(mlogger_shortcut)
-    {
-        delete mlogger_shortcut;
-        mlogger_shortcut = NULL;
-    }
-    if(mDevTest_shortcut)
-    {
-        delete mDevTest_shortcut;
-        mDevTest_shortcut = NULL;
-    }
+
     if(ui)
     {
         delete ui;
@@ -598,11 +554,22 @@ QSharedPointer<APCore::SetBootModeSetting> MainWindow::CreateSetBootModeSetting(
 QSharedPointer<APCore::RSCSetting> MainWindow::CreateRSCSetting()
 {
     QSharedPointer<APCore::RSCSetting> setting(new APCore::RSCSetting());
-    unsigned int index = download_widget->GetRSCIndex();
-    setting->setRSCIndex(index);
-    setting->setRSCProjectName(download_widget->GetRSCProjectName());
-    setting->setRSCOperatorName(download_widget->GetRSCOperatorName(index));
 
+    std::string rscProjName = download_widget->GetRSCProjectName();
+    setting->setRSCProjectName(rscProjName);
+    int index = download_widget->GetRSCIndex(rscProjName);
+    if(index == -1)
+    {
+        flashtool_message_box(this,
+                              getConnectButton(),
+                              CRITICAL_MSGBOX,
+                              "Smart Phone Flash Tool",
+                              "not found index for this rsc item",
+                              "OK");
+    }
+    setting->setRSCIndex(index);    
+    setting->setRSCOperatorName(download_widget->GetRSCOperatorName(rscProjName));
+    setting->setRSCFilePath(download_widget->GetRSCFilePath());
     return setting;
 }
 
@@ -650,6 +617,7 @@ QSharedPointer<APCore::ReadbackSetting> MainWindow::CreateReadbackSetting()
 
     setting->set_storage_type(main_controller_->GetPlatformSetting()->getFlashToolStorageConfig().GetStorageType());
     setting->set_is_scatter_ver2(this->IsScatterVer2());
+    setting->set_is_sram_rb(readback_widget->IsSRAMReadback());
 
     readback_widget->SetReadbackListItem(setting);
 
@@ -728,6 +696,12 @@ QSharedPointer<APCore::WriteMemorySetting> MainWindow::CreateWriteMemorySetting(
     setting->set_cb_write_memory_progress(main_callbacks_->WriteMemoryProcess);
     setting->set_cb_write_memory_init(main_callbacks_->WriteMemoryInit);
     return setting;
+}
+
+QSharedPointer<APCore::FWSetting> MainWindow::CreateFWSetting()
+{
+   QSharedPointer<APCore::FWSetting> setting = fw_widget_->CreateFWSetting();
+   return setting;
 }
 
 QSharedPointer<APCore::ChksumSetting> MainWindow::CreateChksumSetting()
@@ -823,33 +797,6 @@ void MainWindow::startDownload()
     emit signal_start_download();
 }
 
-void MainWindow::ShowDonationPrompt()
-{
-    // Same donation link and "don't ask again" behaviour as Updater CE's
-    // post-install support dialog.
-    IniItem item("option.ini", "Donation", "HideAfterDownload");
-    if(item.GetBooleanValue())
-        return;
-
-    // Qt 4 has no QMessageBox::setCheckBox, so the prompt is a plain QDialog.
-    QDialog box(this);
-    box.setWindowTitle(tr("Thank you"));
-    QLabel *text = new QLabel(tr("Download complete. If this tool helped you, consider supporting its development.") + "<br><br>" + tr("Donations: https://ko-fi.com/teamslide"), &box);
-    text->setWordWrap(true);
-    text->setTextInteractionFlags(Qt::TextBrowserInteraction);
-    QCheckBox *dont_ask = new QCheckBox(tr("Don't ask me again"), &box);
-    QPushButton *ok = new QPushButton(tr("OK"), &box);
-    QObject::connect(ok, SIGNAL(clicked()), &box, SLOT(accept()));
-    QVBoxLayout *layout = new QVBoxLayout(&box);
-    layout->addWidget(text);
-    layout->addWidget(dont_ask);
-    layout->addWidget(ok, 0, Qt::AlignRight);
-    box.exec();
-
-    if(dont_ask->isChecked())
-        item.SaveBooleanValue(true);
-}
-
 void MainWindow::startReadback()
 {
     emit signal_start_readback();
@@ -884,6 +831,33 @@ void MainWindow::slot_check_finish(const bool &hasUpdate)
 #endif
 }
 
+#ifdef _WIN32
+void MainWindow::slot_update_failed(AsyncUpdater::UpdateFailReason failReason)
+{
+    switch (failReason)
+    {
+    case AsyncUpdater::lack_of_update_files:
+        flashtool_message_box(this, 0, WARNING_MSGBOX,
+                              LoadQString(this->GetLanguageTag(), IDS_STRING_UPDATE_TITLE),
+                              LoadQString(this->GetLanguageTag(), IDS_STRING_LACKING_OF_UPDATE_FILES),
+                              LoadQString(this->GetLanguageTag(), IDS_STRING_OK));
+        break;
+    case AsyncUpdater::start_update_exe_fail:
+        flashtool_message_box(this, 0, WARNING_MSGBOX,
+                              LoadQString(this->GetLanguageTag(), IDS_STRING_UPDATE_TITLE),
+                              LoadQString(this->GetLanguageTag(), IDS_STRING_START_UPDATE_TOOL_FAILED),
+                              LoadQString(this->GetLanguageTag(), IDS_STRING_OK));
+        break;
+    default:
+        flashtool_message_box(this, 0, WARNING_MSGBOX,
+                              LoadQString(this->GetLanguageTag(), IDS_STRING_UPDATE_TITLE),
+                              LoadQString(this->GetLanguageTag(), IDS_STRING_UPDATE_FAILED),
+                              LoadQString(this->GetLanguageTag(), IDS_STRING_OK));
+        break;
+    }
+}
+#endif
+
 void MainWindow::setChipInfo(ChipInfoWidget *widget, const DA_REPORT_T *p_da_report)
 {
     if(NULL == widget || NULL == p_da_report)
@@ -914,8 +888,7 @@ void MainWindow::setChipInfo(ChipInfoWidget *widget, const DA_REPORT_T *p_da_rep
 
 void MainWindow::slot_GetDAReport(const DA_REPORT_T *p_da_report,
                                   const std::string& friend_name,
-                                  const int usb_status,
-                                  const FLASHTOOL_API_HANDLE_T FT_Handle)
+                                  const int usb_status)
 {
     ui->toolBox_status->setVisible(true);
 
@@ -1059,7 +1032,7 @@ void MainWindow::slot_GetDAReport(const DA_REPORT_T *p_da_report,
 
     setUSBStatus(usb_status);
 
-    AfterDAConnected(p_da_report, FT_Handle);
+    AfterDAConnected(p_da_report);
 }
 
 void MainWindow::setUSBStatus(const int status)
@@ -1160,6 +1133,7 @@ void MainWindow::slot_show_err(int err_code, const std::string& err)
 
 void MainWindow::slot_UnlockUI()
 {
+    DismissConnectPrompt();
     EnableMenus(true);
     lockui_on = false;
     for(std::list<TabWidgetBase*>::const_iterator it = tab_widgets.begin();
@@ -1180,6 +1154,68 @@ void MainWindow::slot_show_ok()
     }
 
     ok_dialog->show();
+}
+
+void MainWindow::ShowConnectPrompt()
+{
+    DismissConnectPrompt();
+
+    connect_prompt_dialog_ = new QDialog(this, Qt::Dialog | Qt::WindowTitleHint | Qt::WindowCloseButtonHint);
+    connect_prompt_dialog_->setWindowTitle(tr("Download"));
+    connect_prompt_dialog_->setModal(false);
+
+    QVBoxLayout *mainLayout = new QVBoxLayout(connect_prompt_dialog_);
+    mainLayout->setContentsMargins(20, 20, 20, 15);
+    mainLayout->setSpacing(15);
+
+    QLabel *msgLabel = new QLabel(tr("Please connect your device by USB now."), connect_prompt_dialog_);
+    msgLabel->setAlignment(Qt::AlignCenter);
+    QFont font = msgLabel->font();
+    font.setPointSize(font.pointSize() > 0 ? font.pointSize() + 1 : 10);
+    msgLabel->setFont(font);
+    mainLayout->addWidget(msgLabel);
+
+    QHBoxLayout *btnLayout = new QHBoxLayout();
+    btnLayout->addStretch();
+    QPushButton *cancelBtn = new QPushButton(tr("Cancel"), connect_prompt_dialog_);
+    btnLayout->addWidget(cancelBtn);
+    btnLayout->addStretch();
+    mainLayout->addLayout(btnLayout);
+
+    connect(cancelBtn, SIGNAL(clicked()), this, SLOT(slot_CancelConnectPrompt()));
+    connect(connect_prompt_dialog_, SIGNAL(rejected()), this, SLOT(slot_CancelConnectPrompt()));
+
+    connect_prompt_dialog_->setMinimumWidth(380);
+    connect_prompt_dialog_->adjustSize();
+    connect_prompt_dialog_->show();
+    connect_prompt_dialog_->raise();
+    connect_prompt_dialog_->activateWindow();
+}
+
+void MainWindow::slot_CancelConnectPrompt()
+{
+    if (connect_prompt_dialog_ != NULL)
+    {
+        disconnect(connect_prompt_dialog_, 0, this, 0);
+        connect_prompt_dialog_->hide();
+        connect_prompt_dialog_->deleteLater();
+        connect_prompt_dialog_ = NULL;
+    }
+    if (main_controller() && !main_controller()->isStop())
+    {
+        main_controller()->StopByUser();
+    }
+}
+
+void MainWindow::DismissConnectPrompt()
+{
+    if (connect_prompt_dialog_ != NULL)
+    {
+        disconnect(connect_prompt_dialog_, 0, this, 0);
+        connect_prompt_dialog_->accept();
+        connect_prompt_dialog_->deleteLater();
+        connect_prompt_dialog_ = NULL;
+    }
 }
 
 void MainWindow::CleanChipAndStorageInfo()
@@ -1231,35 +1267,13 @@ void MainWindow::SaveReadBackXMLFile(const QString &fileName, bool full_general_
     config.SaveFile(file_name.toLocal8Bit().constData(), full_general_setting);
 }
 
-void MainWindow::CleanAllTabWidgets()
-{
-    CleanTabWidget(devtest_widget);
-    CleanTabWidget(parameter_widget);
-    CleanTabWidget(writeMemory_widget);
-    CleanTabWidget(bromAdapter_widget);
-    CleanTabWidget(sciDownload_widget_);
-    CleanTabWidget(cloneDownload_wdiget_);
-}
-
-void MainWindow::CleanTabWidget(TabWidgetBase *widget_ptr)
-{
-    std::list<TabWidgetBase*>::const_iterator cit = std::find(tab_widgets.begin(), tab_widgets.end(), widget_ptr);
-    if (cit == tab_widgets.end())
-    {
-        delete widget_ptr;
-        widget_ptr = NULL;
-    }
-}
-
-void MainWindow::AfterDAConnected(const DA_REPORT_T *p_da_report, const FLASHTOOL_API_HANDLE_T FT_Handle)
+void MainWindow::AfterDAConnected(const DA_REPORT_T *p_da_report)
 {
     if (IsScatterVer2())
     {
-        Q_ASSERT(NULL != FT_Handle);
         HW_StorageType_E storage_type = getDeviceStorageType(p_da_report);
         Q_ASSERT(storage_type != HW_STORAGE_NONE && storage_type != HW_STORAGE_TYPE_END);
         UpdateStorageLabel(storage_type);
-        downloadWidget()->AfterDAConnected(storage_type, FT_Handle);
     }
 }
 
@@ -1361,11 +1375,13 @@ void MainWindow::slot_language_changed(int index)
     if(NULL != encry_dialog)
         encry_dialog->UpdateUI();
 
+#ifdef _WIN32
     if(NULL != checkupdate_dialog)
         checkupdate_dialog->UpdateUI();
 
     if(NULL != update_dialog)
         update_dialog->UpdateUI();
+#endif
 
     QSettings settings(ABS_PATH_C("key.ini"), QSettings::IniFormat);
     int size = settings.beginReadArray("Shortcuts");
@@ -1544,47 +1560,56 @@ void MainWindow::toggleEnableAdvanceMode()
 
     UpdateMenus();
 
+    bool isAdvanceMode = main_controller()->advance_on();
+
     HW_StorageType_E storage_type = main_controller_->GetPlatformSetting()->getFlashToolStorageConfig().GetStorageType();
 
-    format_widget->ShowEraseFlag(main_controller()->advance_on() &&
-                                 storage_type == HW_STORAGE_NAND);
+    readback_widget->ShowRAMSelectBtn(isAdvanceMode && (HW_STORAGE_EMMC == storage_type || HW_STORAGE_UFS == storage_type));
 
-    option_dialog->ShowPhysicalFormatItem(main_controller()->advance_on() &&
-                                          storage_type == HW_STORAGE_NAND);
+    format_widget->ShowEraseFlag(isAdvanceMode && storage_type == HW_STORAGE_NAND);
 
-    if(main_controller()->advance_on() == false)
+    option_dialog->ShowPhysicalFormatItem(isAdvanceMode && storage_type == HW_STORAGE_NAND);
+
+    if(!isAdvanceMode)
     {
         ui->actionWrite_Memory->setChecked(false);
-
         RemoveWriteMemoryPage();
+    }
+
+    if(isAdvanceMode)
+    {
+        tab_widgets.push_back(fw_widget_);
+        fw_widget_->Attach();
+        fw_widget_->SetTabLabel(ui->tabWidget, ui->tabWidget->indexOf(fw_widget_));
+    }
+    else
+    {
+        tab_widgets.remove(fw_widget_);
+        fw_widget_->Detach();
     }
 
     std::string platform_name = main_controller_->GetPlatformSetting()->getLoadPlatformName();
     if(FlashTool_Chip_isOldArch(platform_name.c_str()))
     {
-        memtest_widget->ShowEMMCTest(main_controller()->advance_on() &&
-                                     storage_type == HW_STORAGE_EMMC);
-
-        memtest_widget->ShowNANDTest(main_controller()->advance_on() &&
-                                     storage_type == HW_STORAGE_NAND);
+        memtest_widget->ShowEMMCTest(isAdvanceMode && storage_type == HW_STORAGE_EMMC);
+        memtest_widget->ShowNANDTest(isAdvanceMode && storage_type == HW_STORAGE_NAND);
     }
-    memtest_widget->ShowDRAMRepairBtn(main_controller()->advance_on());
+    memtest_widget->ShowDRAMRepairBtn(isAdvanceMode);
 
     /*
-    memtest_widget->ShowUFSTest(main_controller()->advance_on() &&
-                                 storage_type == HW_STORAGE_UFS);
+    memtest_widget->ShowUFSTest(isAdvanceMode && storage_type == HW_STORAGE_UFS);
     */
 
     //set boot mode flag
     //parse platform xml, <support set boot mode flag>
     bool show_set_boot_mode = main_controller_->GetPlatformSetting()->is_set_boot_mode_support()
-         && main_controller_->advance_on();
+         && isAdvanceMode;
     download_widget->Enable_groupBox_boot_mode_flag(show_set_boot_mode);
     //end of set boot mode flag
 
     //check rpmb option
     bool show_check_rpmb = main_controller()->GetPlatformSetting()->is_check_rpmb_support()
-         && main_controller_->advance_on();
+         && isAdvanceMode;
     option_dialog->ShowCheckRPMBItem(show_check_rpmb);
     //end of check rpmb option
 
@@ -1625,7 +1650,7 @@ void MainWindow::toggleSCIDownloadWidget()
     {
         if(NULL == encry_dialog)
         {
-            encry_dialog = new EncryDialog(this, this);
+            encry_dialog = new EncryDialog(this);
         }
 
         encry_dialog->show();
@@ -1884,7 +1909,6 @@ void MainWindow::RemoveWriteMemoryPage()
     if(it != tab_widgets.end())
     {
         tab_widgets.remove(writeMemory_widget);
-       // tab_widgets.pop_front();
         writeMemory_widget->Detach();
     }
 }

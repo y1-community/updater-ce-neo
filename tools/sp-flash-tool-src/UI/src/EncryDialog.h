@@ -15,7 +15,7 @@ class EncryDialog : public QDialog
     Q_OBJECT
     
 public:
-    explicit EncryDialog(QWidget *parent, MainWindow *window);
+    explicit EncryDialog(MainWindow *parent);
     ~EncryDialog();
 
     void closeEvent(QCloseEvent *e);

@@ -1,0 +1,998 @@
+=== _on_language_changed ===
+Consts: [None]
+Names: ('_lang_combo', 'itemData', 'translator', 'set_language')
+Varnames: ('self', 'index', 'lang_code')
+202           0 RESUME                   0
+
+203           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_lang_combo)
+             14 LOAD_METHOD              1 (itemData)
+             36 LOAD_FAST                1 (index)
+             38 PRECALL                  1
+             42 CALL                     1
+             52 STORE_FAST               2 (lang_code)
+
+204          54 LOAD_FAST                2 (lang_code)
+             56 POP_JUMP_FORWARD_IF_FALSE    22 (to 102)
+
+205          58 LOAD_GLOBAL              5 (NULL + translator)
+             70 LOAD_ATTR                3 (set_language)
+             80 LOAD_FAST                2 (lang_code)
+             82 PRECALL                  1
+             86 CALL                     1
+             96 POP_TOP
+             98 LOAD_CONST               0 (None)
+            100 RETURN_VALUE
+
+204     >>  102 LOAD_CONST               0 (None)
+            104 RETURN_VALUE
+=== _on_state_changed ===
+Consts: [None, 'flash_preparing', 0, 'flash_waiting_device']
+Names: ('_sm', 'context', '_update_nav_enabled', 'FlashState', 'S1_SELECT_FILE', '_nav_to_page', 'PAGE_SELECT', 'S2_WAIT_CONNECTION', 'PAGE_FLASH', '_page_flash', 'show_flashing', 'set_package_name', 'package_name', 'update_step', 'update_progress', 'S4_FLASHING', 'set_waiting_device', 'time', '_flash_start_time', '_elapsed_timer', 'start', '_service', 'start_flash', 'package_path', 'extract_dir', 'S5_COMPLETE', 'FlashCompleteDialog', 'exec', 'reset_full', 'S5_FAILED', 'PAGE_ERROR', '_page_error', 'show_flash_failed', 'progress_percent', 'current_step', 'error_code', 'S5_USB_DISCONNECTED', 'show_usb_disconnected', 'S6_RETRYING', 'PAGE_RETRY', '_page_retry', 'update_info', 'retry_count', 'device_status')
+Varnames: ('self', 'state', 'ctx', 'dlg')
+250           0 RESUME                   0
+
+252           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_sm)
+             14 LOAD_ATTR                1 (context)
+             24 STORE_FAST               2 (ctx)
+
+253          26 LOAD_FAST                0 (self)
+             28 LOAD_METHOD              2 (_update_nav_enabled)
+             50 LOAD_FAST                1 (state)
+             52 PRECALL                  1
+             56 CALL                     1
+             66 POP_TOP
+
+255          68 LOAD_FAST                1 (state)
+             70 LOAD_GLOBAL              6 (FlashState)
+             82 LOAD_ATTR                4 (S1_SELECT_FILE)
+             92 COMPARE_OP               2 (==)
+             98 POP_JUMP_FORWARD_IF_FALSE    28 (to 156)
+
+256         100 LOAD_FAST                0 (self)
+            102 LOAD_METHOD              5 (_nav_to_page)
+            124 LOAD_FAST                0 (self)
+            126 LOAD_ATTR                6 (PAGE_SELECT)
+            136 PRECALL                  1
+            140 CALL                     1
+            150 POP_TOP
+            152 LOAD_CONST               0 (None)
+            154 RETURN_VALUE
+
+258     >>  156 LOAD_FAST                1 (state)
+            158 LOAD_GLOBAL              6 (FlashState)
+            170 LOAD_ATTR                7 (S2_WAIT_CONNECTION)
+            180 COMPARE_OP               2 (==)
+            186 POP_JUMP_FORWARD_IF_FALSE   136 (to 460)
+
+259         188 LOAD_FAST                0 (self)
+            190 LOAD_METHOD              5 (_nav_to_page)
+            212 LOAD_FAST                0 (self)
+            214 LOAD_ATTR                8 (PAGE_FLASH)
+            224 PRECALL                  1
+            228 CALL                     1
+            238 POP_TOP
+
+260         240 LOAD_FAST                0 (self)
+            242 LOAD_ATTR                9 (_page_flash)
+            252 LOAD_METHOD             10 (show_flashing)
+            274 PRECALL                  0
+            278 CALL                     0
+            288 POP_TOP
+
+261         290 LOAD_FAST                0 (self)
+            292 LOAD_ATTR                9 (_page_flash)
+            302 LOAD_METHOD             11 (set_package_name)
+            324 LOAD_FAST                2 (ctx)
+            326 LOAD_ATTR               12 (package_name)
+            336 PRECALL                  1
+            340 CALL                     1
+            350 POP_TOP
+
+262         352 LOAD_FAST                0 (self)
+            354 LOAD_ATTR                9 (_page_flash)
+            364 LOAD_METHOD             13 (update_step)
+            386 LOAD_CONST               1 ('flash_preparing')
+            388 PRECALL                  1
+            392 CALL                     1
+            402 POP_TOP
+
+263         404 LOAD_FAST                0 (self)
+            406 LOAD_ATTR                9 (_page_flash)
+            416 LOAD_METHOD             14 (update_progress)
+            438 LOAD_CONST               2 (0)
+            440 PRECALL                  1
+            444 CALL                     1
+            454 POP_TOP
+            456 LOAD_CONST               0 (None)
+            458 RETURN_VALUE
+
+265     >>  460 LOAD_FAST                1 (state)
+            462 LOAD_GLOBAL              6 (FlashState)
+            474 LOAD_ATTR               15 (S4_FLASHING)
+            484 COMPARE_OP               2 (==)
+            490 POP_JUMP_FORWARD_IF_FALSE   165 (to 822)
+
+266         492 LOAD_FAST                0 (self)
+            494 LOAD_ATTR                9 (_page_flash)
+            504 LOAD_METHOD             16 (set_waiting_device)
+            526 PRECALL                  0
+            530 CALL                     0
+            540 POP_TOP
+
+267         542 LOAD_FAST                0 (self)
+            544 LOAD_ATTR                9 (_page_flash)
+            554 LOAD_METHOD             13 (update_step)
+            576 LOAD_CONST               3 ('flash_waiting_device')
+            578 PRECALL                  1
+            582 CALL                     1
+            592 POP_TOP
+
+268         594 LOAD_FAST                0 (self)
+            596 LOAD_ATTR                9 (_page_flash)
+            606 LOAD_METHOD             14 (update_progress)
+            628 LOAD_CONST               2 (0)
+            630 PRECALL                  1
+            634 CALL                     1
+            644 POP_TOP
+
+269         646 LOAD_GLOBAL             35 (NULL + time)
+            658 LOAD_ATTR               17 (time)
+            668 PRECALL                  0
+            672 CALL                     0
+            682 LOAD_FAST                0 (self)
+            684 STORE_ATTR              18 (_flash_start_time)
+
+270         694 LOAD_FAST                0 (self)
+            696 LOAD_ATTR               19 (_elapsed_timer)
+            706 LOAD_METHOD             20 (start)
+            728 PRECALL                  0
+            732 CALL                     0
+            742 POP_TOP
+
+271         744 LOAD_FAST                0 (self)
+            746 LOAD_ATTR               21 (_service)
+            756 LOAD_METHOD             22 (start_flash)
+            778 LOAD_FAST                2 (ctx)
+            780 LOAD_ATTR               23 (package_path)
+            790 LOAD_FAST                2 (ctx)
+            792 LOAD_ATTR               24 (extract_dir)
+            802 PRECALL                  2
+            806 CALL                     2
+            816 POP_TOP
+            818 LOAD_CONST               0 (None)
+            820 RETURN_VALUE
+
+273     >>  822 LOAD_FAST                1 (state)
+            824 LOAD_GLOBAL              6 (FlashState)
+            836 LOAD_ATTR               25 (S5_COMPLETE)
+            846 COMPARE_OP               2 (==)
+            852 POP_JUMP_FORWARD_IF_FALSE    62 (to 978)
+
+274         854 LOAD_GLOBAL             53 (NULL + FlashCompleteDialog)
+            866 LOAD_FAST                0 (self)
+            868 PRECALL                  1
+            872 CALL                     1
+            882 STORE_FAST               3 (dlg)
+
+275         884 LOAD_FAST                3 (dlg)
+            886 LOAD_METHOD             27 (exec)
+            908 PRECALL                  0
+            912 CALL                     0
+            922 POP_TOP
+
+276         924 LOAD_FAST                0 (self)
+            926 LOAD_ATTR                0 (_sm)
+            936 LOAD_METHOD             28 (reset_full)
+            958 PRECALL                  0
+            962 CALL                     0
+            972 POP_TOP
+            974 LOAD_CONST               0 (None)
+            976 RETURN_VALUE
+
+278     >>  978 LOAD_FAST                1 (state)
+            980 LOAD_GLOBAL              6 (FlashState)
+            992 LOAD_ATTR               29 (S5_FAILED)
+           1002 COMPARE_OP               2 (==)
+           1008 POP_JUMP_FORWARD_IF_FALSE    77 (to 1164)
+
+279        1010 LOAD_FAST                0 (self)
+           1012 LOAD_METHOD              5 (_nav_to_page)
+           1034 LOAD_FAST                0 (self)
+           1036 LOAD_ATTR               30 (PAGE_ERROR)
+           1046 PRECALL                  1
+           1050 CALL                     1
+           1060 POP_TOP
+
+280        1062 LOAD_FAST                0 (self)
+           1064 LOAD_ATTR               31 (_page_error)
+           1074 LOAD_METHOD             32 (show_flash_failed)
+
+281        1096 LOAD_FAST                2 (ctx)
+           1098 LOAD_ATTR               33 (progress_percent)
+           1108 LOAD_FAST                2 (ctx)
+           1110 LOAD_ATTR               34 (current_step)
+
+282        1120 LOAD_FAST                2 (ctx)
+           1122 LOAD_ATTR               35 (error_code)
+           1132 LOAD_FAST                2 (ctx)
+           1134 LOAD_ATTR               12 (package_name)
+
+280        1144 PRECALL                  4
+           1148 CALL                     4
+           1158 POP_TOP
+           1160 LOAD_CONST               0 (None)
+           1162 RETURN_VALUE
+
+285     >> 1164 LOAD_FAST                1 (state)
+           1166 LOAD_GLOBAL              6 (FlashState)
+           1178 LOAD_ATTR               36 (S5_USB_DISCONNECTED)
+           1188 COMPARE_OP               2 (==)
+           1194 POP_JUMP_FORWARD_IF_FALSE    59 (to 1314)
+
+286        1196 LOAD_FAST                0 (self)
+           1198 LOAD_METHOD              5 (_nav_to_page)
+           1220 LOAD_FAST                0 (self)
+           1222 LOAD_ATTR               30 (PAGE_ERROR)
+           1232 PRECALL                  1
+           1236 CALL                     1
+           1246 POP_TOP
+
+287        1248 LOAD_FAST                0 (self)
+           1250 LOAD_ATTR               31 (_page_error)
+           1260 LOAD_METHOD             37 (show_usb_disconnected)
+           1282 LOAD_FAST                2 (ctx)
+           1284 LOAD_ATTR               33 (progress_percent)
+           1294 PRECALL                  1
+           1298 CALL                     1
+           1308 POP_TOP
+           1310 LOAD_CONST               0 (None)
+           1312 RETURN_VALUE
+
+289     >> 1314 LOAD_FAST                1 (state)
+           1316 LOAD_GLOBAL              6 (FlashState)
+           1328 LOAD_ATTR               38 (S6_RETRYING)
+           1338 COMPARE_OP               2 (==)
+           1344 POP_JUMP_FORWARD_IF_FALSE    71 (to 1488)
+
+290        1346 LOAD_FAST                0 (self)
+           1348 LOAD_METHOD              5 (_nav_to_page)
+           1370 LOAD_FAST                0 (self)
+           1372 LOAD_ATTR               39 (PAGE_RETRY)
+           1382 PRECALL                  1
+           1386 CALL                     1
+           1396 POP_TOP
+
+291        1398 LOAD_FAST                0 (self)
+           1400 LOAD_ATTR               40 (_page_retry)
+           1410 LOAD_METHOD             41 (update_info)
+
+292        1432 LOAD_FAST                2 (ctx)
+           1434 LOAD_ATTR               12 (package_name)
+           1444 LOAD_FAST                2 (ctx)
+           1446 LOAD_ATTR               42 (retry_count)
+           1456 LOAD_FAST                2 (ctx)
+           1458 LOAD_ATTR               43 (device_status)
+
+291        1468 PRECALL                  3
+           1472 CALL                     3
+           1482 POP_TOP
+           1484 LOAD_CONST               0 (None)
+           1486 RETURN_VALUE
+
+289     >> 1488 LOAD_CONST               0 (None)
+           1490 RETURN_VALUE
+=== _on_package_selected ===
+Consts: [None, '']
+Names: ('_sm', 'context', 'package_path', 'os', 'path', 'basename', 'package_name', 'extract_dir', '_service', 'extract_async')
+Varnames: ('self', 'path', 'ctx')
+297           0 RESUME                   0
+
+298           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_sm)
+             14 LOAD_ATTR                1 (context)
+             24 STORE_FAST               2 (ctx)
+
+299          26 LOAD_FAST                1 (path)
+             28 LOAD_FAST                2 (ctx)
+             30 STORE_ATTR               2 (package_path)
+
+300          40 LOAD_GLOBAL              6 (os)
+             52 LOAD_ATTR                4 (path)
+             62 LOAD_METHOD              5 (basename)
+             84 LOAD_FAST                1 (path)
+             86 PRECALL                  1
+             90 CALL                     1
+            100 LOAD_FAST                2 (ctx)
+            102 STORE_ATTR               6 (package_name)
+
+301         112 LOAD_CONST               1 ('')
+            114 LOAD_FAST                2 (ctx)
+            116 STORE_ATTR               7 (extract_dir)
+
+302         126 LOAD_FAST                0 (self)
+            128 LOAD_ATTR                8 (_service)
+            138 LOAD_METHOD              9 (extract_async)
+            160 LOAD_FAST                1 (path)
+            162 PRECALL                  1
+            166 CALL                     1
+            176 POP_TOP
+            178 LOAD_CONST               0 (None)
+            180 RETURN_VALUE
+=== _on_extract_progress ===
+Consts: [None, 'extracting']
+Names: ('_page_select', 'set_extract_state')
+Varnames: ('self', 'pct')
+304           0 RESUME                   0
+
+306           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_page_select)
+             14 LOAD_METHOD              1 (set_extract_state)
+             36 LOAD_CONST               1 ('extracting')
+             38 LOAD_FAST                1 (pct)
+             40 PRECALL                  2
+             44 CALL                     2
+             54 POP_TOP
+             56 LOAD_CONST               0 (None)
+             58 RETURN_VALUE
+=== _on_extract_finished ===
+Consts: [None, 'ready', 'USER_CANCELLED', 'idle', '', 'error']
+Names: ('_sm', 'context', 'extract_dir', '_page_select', 'set_extract_state')
+Varnames: ('self', 'ok', 'extract_dir', 'err')
+308           0 RESUME                   0
+
+310           2 LOAD_FAST                1 (ok)
+              4 POP_JUMP_FORWARD_IF_FALSE    45 (to 96)
+
+311           6 LOAD_FAST                2 (extract_dir)
+              8 LOAD_FAST                0 (self)
+             10 LOAD_ATTR                0 (_sm)
+             20 LOAD_ATTR                1 (context)
+             30 STORE_ATTR               2 (extract_dir)
+
+312          40 LOAD_FAST                0 (self)
+             42 LOAD_ATTR                3 (_page_select)
+             52 LOAD_METHOD              4 (set_extract_state)
+             74 LOAD_CONST               1 ('ready')
+             76 PRECALL                  1
+             80 CALL                     1
+             90 POP_TOP
+             92 LOAD_CONST               0 (None)
+             94 RETURN_VALUE
+
+313     >>   96 LOAD_FAST                3 (err)
+             98 LOAD_CONST               2 ('USER_CANCELLED')
+            100 COMPARE_OP               2 (==)
+            106 POP_JUMP_FORWARD_IF_FALSE    28 (to 164)
+
+314         108 LOAD_FAST                0 (self)
+            110 LOAD_ATTR                3 (_page_select)
+            120 LOAD_METHOD              4 (set_extract_state)
+            142 LOAD_CONST               3 ('idle')
+            144 PRECALL                  1
+            148 CALL                     1
+            158 POP_TOP
+            160 LOAD_CONST               0 (None)
+            162 RETURN_VALUE
+
+316     >>  164 LOAD_CONST               4 ('')
+            166 LOAD_FAST                0 (self)
+            168 LOAD_ATTR                0 (_sm)
+            178 LOAD_ATTR                1 (context)
+            188 STORE_ATTR               2 (extract_dir)
+
+317         198 LOAD_FAST                0 (self)
+            200 LOAD_ATTR                3 (_page_select)
+            210 LOAD_METHOD              4 (set_extract_state)
+            232 LOAD_CONST               5 ('error')
+            234 PRECALL                  1
+            238 CALL                     1
+            248 POP_TOP
+            250 LOAD_CONST               0 (None)
+            252 RETURN_VALUE
+=== _on_start_flash_from_select ===
+Consts: [None, 0, ('QMessageBox',), 'flash_in_progress_title', 'flash_in_progress_msg', '[MainWindow] Start flash flow: ']
+Names: ('PySide6.QtWidgets', 'QMessageBox', 'FlashState', 'S2_WAIT_CONNECTION', 'S3_DEVICE_DETECTED', 'S4_FLASHING', 'S6_RETRYING', '_sm', 'state', 'question', 't', 'StandardButton', 'Yes', 'No', '_service', 'cancel_flash', 'stop_device_monitor', 'reset_full', 'S1_SELECT_FILE', 'print', 'context', 'package_path', 'os', 'path', 'basename', 'package_name', '_begin_flash_flow')
+Varnames: ('self', 'package_path', 'QMessageBox', 'busy_states', 'reply', 'ctx')
+321           0 RESUME                   0
+
+322           2 LOAD_CONST               1 (0)
+              4 LOAD_CONST               2 (('QMessageBox',))
+              6 IMPORT_NAME              0 (PySide6.QtWidgets)
+              8 IMPORT_FROM              1 (QMessageBox)
+             10 STORE_FAST               2 (QMessageBox)
+             12 POP_TOP
+
+325          14 LOAD_GLOBAL              4 (FlashState)
+             26 LOAD_ATTR                3 (S2_WAIT_CONNECTION)
+
+326          36 LOAD_GLOBAL              4 (FlashState)
+             48 LOAD_ATTR                4 (S3_DEVICE_DETECTED)
+
+327          58 LOAD_GLOBAL              4 (FlashState)
+             70 LOAD_ATTR                5 (S4_FLASHING)
+
+328          80 LOAD_GLOBAL              4 (FlashState)
+             92 LOAD_ATTR                6 (S6_RETRYING)
+
+324         102 BUILD_TUPLE              4
+            104 STORE_FAST               3 (busy_states)
+
+330         106 LOAD_FAST                0 (self)
+            108 LOAD_ATTR                7 (_sm)
+            118 LOAD_ATTR                8 (state)
+            128 LOAD_FAST                3 (busy_states)
+            130 CONTAINS_OP              0
+            132 POP_JUMP_FORWARD_IF_FALSE   178 (to 490)
+
+331         134 LOAD_FAST                2 (QMessageBox)
+            136 LOAD_METHOD              9 (question)
+
+332         158 LOAD_FAST                0 (self)
+            160 LOAD_GLOBAL             21 (NULL + t)
+            172 LOAD_CONST               3 ('flash_in_progress_title')
+            174 PRECALL                  1
+            178 CALL                     1
+            188 LOAD_GLOBAL             21 (NULL + t)
+            200 LOAD_CONST               4 ('flash_in_progress_msg')
+            202 PRECALL                  1
+            206 CALL                     1
+
+333         216 LOAD_FAST                2 (QMessageBox)
+            218 LOAD_ATTR               11 (StandardButton)
+            228 LOAD_ATTR               12 (Yes)
+            238 LOAD_FAST                2 (QMessageBox)
+            240 LOAD_ATTR               11 (StandardButton)
+            250 LOAD_ATTR               13 (No)
+            260 BINARY_OP                7 (|)
+
+334         264 LOAD_FAST                2 (QMessageBox)
+            266 LOAD_ATTR               11 (StandardButton)
+            276 LOAD_ATTR               13 (No)
+
+331         286 PRECALL                  5
+            290 CALL                     5
+            300 STORE_FAST               4 (reply)
+
+336         302 LOAD_FAST                4 (reply)
+            304 LOAD_FAST                2 (QMessageBox)
+            306 LOAD_ATTR               11 (StandardButton)
+            316 LOAD_ATTR               12 (Yes)
+            326 COMPARE_OP               3 (!=)
+            332 POP_JUMP_FORWARD_IF_FALSE     2 (to 338)
+
+337         334 LOAD_CONST               0 (None)
+            336 RETURN_VALUE
+
+339     >>  338 LOAD_FAST                0 (self)
+            340 LOAD_ATTR               14 (_service)
+            350 LOAD_METHOD             15 (cancel_flash)
+            372 PRECALL                  0
+            376 CALL                     0
+            386 POP_TOP
+
+340         388 LOAD_FAST                0 (self)
+            390 LOAD_ATTR               14 (_service)
+            400 LOAD_METHOD             16 (stop_device_monitor)
+            422 PRECALL                  0
+            426 CALL                     0
+            436 POP_TOP
+
+341         438 LOAD_FAST                0 (self)
+            440 LOAD_ATTR                7 (_sm)
+            450 LOAD_METHOD             17 (reset_full)
+            472 PRECALL                  0
+            476 CALL                     0
+            486 POP_TOP
+            488 JUMP_FORWARD            51 (to 592)
+
+342     >>  490 LOAD_FAST                0 (self)
+            492 LOAD_ATTR                7 (_sm)
+            502 LOAD_ATTR                8 (state)
+            512 LOAD_GLOBAL              4 (FlashState)
+            524 LOAD_ATTR               18 (S1_SELECT_FILE)
+            534 COMPARE_OP               3 (!=)
+            540 POP_JUMP_FORWARD_IF_FALSE    25 (to 592)
+
+345         542 LOAD_FAST                0 (self)
+            544 LOAD_ATTR                7 (_sm)
+            554 LOAD_METHOD             17 (reset_full)
+            576 PRECALL                  0
+            580 CALL                     0
+            590 POP_TOP
+
+347     >>  592 LOAD_GLOBAL             39 (NULL + print)
+            604 LOAD_CONST               5 ('[MainWindow] Start flash flow: ')
+            606 LOAD_FAST                1 (package_path)
+            608 FORMAT_VALUE             0
+            610 BUILD_STRING             2
+            612 PRECALL                  1
+            616 CALL                     1
+            626 POP_TOP
+
+348         628 LOAD_FAST                0 (self)
+            630 LOAD_ATTR                7 (_sm)
+            640 LOAD_ATTR               20 (context)
+            650 STORE_FAST               5 (ctx)
+
+349         652 LOAD_FAST                1 (package_path)
+            654 LOAD_FAST                5 (ctx)
+            656 STORE_ATTR              21 (package_path)
+
+350         666 LOAD_GLOBAL             44 (os)
+            678 LOAD_ATTR               23 (path)
+            688 LOAD_METHOD             24 (basename)
+            710 LOAD_FAST                1 (package_path)
+            712 PRECALL                  1
+            716 CALL                     1
+            726 LOAD_FAST                5 (ctx)
+            728 STORE_ATTR              25 (package_name)
+
+351         738 LOAD_FAST                0 (self)
+            740 LOAD_METHOD             26 (_begin_flash_flow)
+            762 PRECALL                  0
+            766 CALL                     0
+            776 POP_TOP
+            778 LOAD_CONST               0 (None)
+            780 RETURN_VALUE
+=== _begin_flash_flow ===
+Consts: [None]
+Names: ('_sm', 'transition_to', 'FlashState', 'S2_WAIT_CONNECTION', 'S3_DEVICE_DETECTED', 'S4_FLASHING')
+Varnames: ('self',)
+353           0 RESUME                   0
+
+354           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_sm)
+             14 LOAD_METHOD              1 (transition_to)
+             36 LOAD_GLOBAL              4 (FlashState)
+             48 LOAD_ATTR                3 (S2_WAIT_CONNECTION)
+             58 PRECALL                  1
+             62 CALL                     1
+             72 POP_TOP
+
+355          74 LOAD_FAST                0 (self)
+             76 LOAD_ATTR                0 (_sm)
+             86 LOAD_METHOD              1 (transition_to)
+            108 LOAD_GLOBAL              4 (FlashState)
+            120 LOAD_ATTR                4 (S3_DEVICE_DETECTED)
+            130 PRECALL                  1
+            134 CALL                     1
+            144 POP_TOP
+
+356         146 LOAD_FAST                0 (self)
+            148 LOAD_ATTR                0 (_sm)
+            158 LOAD_METHOD              1 (transition_to)
+            180 LOAD_GLOBAL              4 (FlashState)
+            192 LOAD_ATTR                5 (S4_FLASHING)
+            202 PRECALL                  1
+            206 CALL                     1
+            216 POP_TOP
+            218 LOAD_CONST               0 (None)
+            220 RETURN_VALUE
+=== _on_start_upgrade ===
+Consts: [None]
+Names: ('_service', 'stop_device_monitor', '_sm', 'transition_to', 'FlashState', 'S4_FLASHING')
+Varnames: ('self',)
+358           0 RESUME                   0
+
+359           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_service)
+             14 LOAD_METHOD              1 (stop_device_monitor)
+             36 PRECALL                  0
+             40 CALL                     0
+             50 POP_TOP
+
+360          52 LOAD_FAST                0 (self)
+             54 LOAD_ATTR                2 (_sm)
+             64 LOAD_METHOD              3 (transition_to)
+             86 LOAD_GLOBAL              8 (FlashState)
+             98 LOAD_ATTR                5 (S4_FLASHING)
+            108 PRECALL                  1
+            112 CALL                     1
+            122 POP_TOP
+            124 LOAD_CONST               0 (None)
+            126 RETURN_VALUE
+=== _on_cancel_flash ===
+Consts: [None]
+Names: ('_elapsed_timer', 'stop', '_service', 'cancel_flash', 'stop_device_monitor', '_sm', 'reset_full')
+Varnames: ('self',)
+362           0 RESUME                   0
+
+363           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_elapsed_timer)
+             14 LOAD_METHOD              1 (stop)
+             36 PRECALL                  0
+             40 CALL                     0
+             50 POP_TOP
+
+364          52 LOAD_FAST                0 (self)
+             54 LOAD_ATTR                2 (_service)
+             64 LOAD_METHOD              3 (cancel_flash)
+             86 PRECALL                  0
+             90 CALL                     0
+            100 POP_TOP
+
+365         102 LOAD_FAST                0 (self)
+            104 LOAD_ATTR                2 (_service)
+            114 LOAD_METHOD              4 (stop_device_monitor)
+            136 PRECALL                  0
+            140 CALL                     0
+            150 POP_TOP
+
+366         152 LOAD_FAST                0 (self)
+            154 LOAD_ATTR                5 (_sm)
+            164 LOAD_METHOD              6 (reset_full)
+            186 PRECALL                  0
+            190 CALL                     0
+            200 POP_TOP
+            202 LOAD_CONST               0 (None)
+            204 RETURN_VALUE
+=== _on_retry_flash ===
+Consts: [None]
+Names: ('_service', 'cancel_flash', '_sm', 'reset_for_retry', '_begin_flash_flow')
+Varnames: ('self',)
+368           0 RESUME                   0
+
+369           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_service)
+             14 LOAD_METHOD              1 (cancel_flash)
+             36 PRECALL                  0
+             40 CALL                     0
+             50 POP_TOP
+
+370          52 LOAD_FAST                0 (self)
+             54 LOAD_ATTR                2 (_sm)
+             64 LOAD_METHOD              3 (reset_for_retry)
+             86 PRECALL                  0
+             90 CALL                     0
+            100 POP_TOP
+
+371         102 LOAD_FAST                0 (self)
+            104 LOAD_METHOD              4 (_begin_flash_flow)
+            126 PRECALL                  0
+            130 CALL                     0
+            140 POP_TOP
+            142 LOAD_CONST               0 (None)
+            144 RETURN_VALUE
+=== _on_retry_detect ===
+Consts: [None]
+Names: ('_service', 'start_device_monitor')
+Varnames: ('self',)
+373           0 RESUME                   0
+
+374           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_service)
+             14 LOAD_METHOD              1 (start_device_monitor)
+             36 PRECALL                  0
+             40 CALL                     0
+             50 POP_TOP
+             52 LOAD_CONST               0 (None)
+             54 RETURN_VALUE
+=== _on_progress ===
+Consts: [None]
+Names: ('_sm', 'context', 'progress_percent', '_page_flash', 'update_progress')
+Varnames: ('self', 'percent')
+378           0 RESUME                   0
+
+380           2 LOAD_FAST                1 (percent)
+              4 LOAD_FAST                0 (self)
+              6 LOAD_ATTR                0 (_sm)
+             16 LOAD_ATTR                1 (context)
+             26 STORE_ATTR               2 (progress_percent)
+
+381          36 LOAD_FAST                0 (self)
+             38 LOAD_ATTR                3 (_page_flash)
+             48 LOAD_METHOD              4 (update_progress)
+             70 LOAD_FAST                1 (percent)
+             72 PRECALL                  1
+             76 CALL                     1
+             86 POP_TOP
+             88 LOAD_CONST               0 (None)
+             90 RETURN_VALUE
+=== _on_step_changed ===
+Consts: [None, 2, ('STEP_DETECT', 'STEP_DOWNLOAD_DA', 'STEP_DOWNLOAD_BL', 'STEP_WRITE'), ('TRANSLATIONS',), 'svc_']
+Names: ('flash_service', 'STEP_DETECT', 'STEP_DOWNLOAD_DA', 'STEP_DOWNLOAD_BL', 'STEP_WRITE', 'i18n', 'TRANSLATIONS', '_page_flash', 'update_step', 't', '_sm', 'context', 'current_step', 'set_device_flashing')
+Varnames: ('self', 'step', 'STEP_DETECT', 'STEP_DOWNLOAD_DA', 'STEP_DOWNLOAD_BL', 'STEP_WRITE', 'TRANSLATIONS', 'svc_key')
+383           0 RESUME                   0
+
+385           2 LOAD_CONST               1 (2)
+              4 LOAD_CONST               2 (('STEP_DETECT', 'STEP_DOWNLOAD_DA', 'STEP_DOWNLOAD_BL', 'STEP_WRITE'))
+              6 IMPORT_NAME              0 (flash_service)
+              8 IMPORT_FROM              1 (STEP_DETECT)
+             10 STORE_FAST               2 (STEP_DETECT)
+             12 IMPORT_FROM              2 (STEP_DOWNLOAD_DA)
+             14 STORE_FAST               3 (STEP_DOWNLOAD_DA)
+             16 IMPORT_FROM              3 (STEP_DOWNLOAD_BL)
+             18 STORE_FAST               4 (STEP_DOWNLOAD_BL)
+             20 IMPORT_FROM              4 (STEP_WRITE)
+             22 STORE_FAST               5 (STEP_WRITE)
+             24 POP_TOP
+
+386          26 LOAD_CONST               1 (2)
+             28 LOAD_CONST               3 (('TRANSLATIONS',))
+             30 IMPORT_NAME              5 (i18n)
+             32 IMPORT_FROM              6 (TRANSLATIONS)
+             34 STORE_FAST               6 (TRANSLATIONS)
+             36 POP_TOP
+
+387          38 LOAD_CONST               4 ('svc_')
+             40 LOAD_FAST                1 (step)
+             42 FORMAT_VALUE             0
+             44 BUILD_STRING             2
+             46 STORE_FAST               7 (svc_key)
+
+388          48 LOAD_FAST                7 (svc_key)
+             50 LOAD_FAST                6 (TRANSLATIONS)
+             52 CONTAINS_OP              0
+             54 POP_JUMP_FORWARD_IF_FALSE    57 (to 170)
+
+389          56 LOAD_FAST                0 (self)
+             58 LOAD_ATTR                7 (_page_flash)
+             68 LOAD_METHOD              8 (update_step)
+             90 LOAD_FAST                7 (svc_key)
+             92 PRECALL                  1
+             96 CALL                     1
+            106 POP_TOP
+
+390         108 LOAD_GLOBAL             19 (NULL + t)
+            120 LOAD_FAST                7 (svc_key)
+            122 PRECALL                  1
+            126 CALL                     1
+            136 LOAD_FAST                0 (self)
+            138 LOAD_ATTR               10 (_sm)
+            148 LOAD_ATTR               11 (context)
+            158 STORE_ATTR              12 (current_step)
+            168 JUMP_FORWARD            43 (to 256)
+
+392     >>  170 LOAD_FAST                0 (self)
+            172 LOAD_ATTR                7 (_page_flash)
+            182 LOAD_METHOD              8 (update_step)
+            204 LOAD_FAST                1 (step)
+            206 PRECALL                  1
+            210 CALL                     1
+            220 POP_TOP
+
+393         222 LOAD_FAST                1 (step)
+            224 LOAD_FAST                0 (self)
+            226 LOAD_ATTR               10 (_sm)
+            236 LOAD_ATTR               11 (context)
+            246 STORE_ATTR              12 (current_step)
+
+394     >>  256 LOAD_FAST                1 (step)
+            258 LOAD_FAST                2 (STEP_DETECT)
+            260 LOAD_FAST                3 (STEP_DOWNLOAD_DA)
+            262 LOAD_FAST                4 (STEP_DOWNLOAD_BL)
+            264 LOAD_FAST                5 (STEP_WRITE)
+            266 BUILD_TUPLE              4
+            268 CONTAINS_OP              0
+            270 POP_JUMP_FORWARD_IF_FALSE    27 (to 326)
+
+395         272 LOAD_FAST                0 (self)
+            274 LOAD_ATTR                7 (_page_flash)
+            284 LOAD_METHOD             13 (set_device_flashing)
+            306 PRECALL                  0
+            310 CALL                     0
+            320 POP_TOP
+            322 LOAD_CONST               0 (None)
+            324 RETURN_VALUE
+
+394     >>  326 LOAD_CONST               0 (None)
+            328 RETURN_VALUE
+=== _on_log_message ===
+Consts: [None, True]
+Names: ('_sm', 'context', 'log_messages', 'append', 'log_available')
+Varnames: ('self', 'msg')
+397           0 RESUME                   0
+
+399           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_sm)
+             14 LOAD_ATTR                1 (context)
+             24 LOAD_ATTR                2 (log_messages)
+             34 LOAD_METHOD              3 (append)
+             56 LOAD_FAST                1 (msg)
+             58 PRECALL                  1
+             62 CALL                     1
+             72 POP_TOP
+
+400          74 LOAD_CONST               1 (True)
+             76 LOAD_FAST                0 (self)
+             78 LOAD_ATTR                0 (_sm)
+             88 LOAD_ATTR                1 (context)
+             98 STORE_ATTR               4 (log_available)
+            108 LOAD_CONST               0 (None)
+            110 RETURN_VALUE
+=== _on_flash_finished ===
+Consts: [None, 'USER_CANCELLED', 'USB_DISCONNECTED']
+Names: ('_elapsed_timer', 'stop', '_service', 'stop_device_monitor', '_sm', 'context', 'state', 'FlashState', 'S4_FLASHING', 'S6_RETRYING', 'transition_to', 'S5_COMPLETE', 'error_code', 'S5_USB_DISCONNECTED', 'S5_FAILED')
+Varnames: ('self', 'success', 'error_code', 'ctx')
+402           0 RESUME                   0
+
+404           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_elapsed_timer)
+             14 LOAD_METHOD              1 (stop)
+             36 PRECALL                  0
+             40 CALL                     0
+             50 POP_TOP
+
+405          52 LOAD_FAST                0 (self)
+             54 LOAD_ATTR                2 (_service)
+             64 LOAD_METHOD              3 (stop_device_monitor)
+             86 PRECALL                  0
+             90 CALL                     0
+            100 POP_TOP
+
+407         102 LOAD_FAST                2 (error_code)
+            104 LOAD_CONST               1 ('USER_CANCELLED')
+            106 COMPARE_OP               2 (==)
+            112 POP_JUMP_FORWARD_IF_FALSE     2 (to 118)
+
+408         114 LOAD_CONST               0 (None)
+            116 RETURN_VALUE
+
+409     >>  118 LOAD_FAST                0 (self)
+            120 LOAD_ATTR                4 (_sm)
+            130 LOAD_ATTR                5 (context)
+            140 STORE_FAST               3 (ctx)
+
+411         142 LOAD_FAST                0 (self)
+            144 LOAD_ATTR                4 (_sm)
+            154 LOAD_ATTR                6 (state)
+            164 LOAD_GLOBAL             14 (FlashState)
+            176 LOAD_ATTR                8 (S4_FLASHING)
+            186 LOAD_GLOBAL             14 (FlashState)
+            198 LOAD_ATTR                9 (S6_RETRYING)
+            208 BUILD_TUPLE              2
+            210 CONTAINS_OP              1
+            212 POP_JUMP_FORWARD_IF_FALSE     2 (to 218)
+
+412         214 LOAD_CONST               0 (None)
+            216 RETURN_VALUE
+
+413     >>  218 LOAD_FAST                1 (success)
+            220 POP_JUMP_FORWARD_IF_FALSE    38 (to 298)
+
+414         222 LOAD_FAST                0 (self)
+            224 LOAD_ATTR                4 (_sm)
+            234 LOAD_METHOD             10 (transition_to)
+            256 LOAD_GLOBAL             14 (FlashState)
+            268 LOAD_ATTR               11 (S5_COMPLETE)
+            278 PRECALL                  1
+            282 CALL                     1
+            292 POP_TOP
+            294 LOAD_CONST               0 (None)
+            296 RETURN_VALUE
+
+416     >>  298 LOAD_FAST                2 (error_code)
+            300 LOAD_FAST                3 (ctx)
+            302 STORE_ATTR              12 (error_code)
+
+417         312 LOAD_FAST                2 (error_code)
+            314 LOAD_CONST               2 ('USB_DISCONNECTED')
+            316 COMPARE_OP               2 (==)
+            322 POP_JUMP_FORWARD_IF_FALSE    38 (to 400)
+
+418         324 LOAD_FAST                0 (self)
+            326 LOAD_ATTR                4 (_sm)
+            336 LOAD_METHOD             10 (transition_to)
+            358 LOAD_GLOBAL             14 (FlashState)
+            370 LOAD_ATTR               13 (S5_USB_DISCONNECTED)
+            380 PRECALL                  1
+            384 CALL                     1
+            394 POP_TOP
+            396 LOAD_CONST               0 (None)
+            398 RETURN_VALUE
+
+420     >>  400 LOAD_FAST                0 (self)
+            402 LOAD_ATTR                4 (_sm)
+            412 LOAD_METHOD             10 (transition_to)
+            434 LOAD_GLOBAL             14 (FlashState)
+            446 LOAD_ATTR               14 (S5_FAILED)
+            456 PRECALL                  1
+            460 CALL                     1
+            470 POP_TOP
+            472 LOAD_CONST               0 (None)
+            474 RETURN_VALUE
+=== _on_device_found ===
+Consts: [None, '[MainWindow] Device found: ', ', state=']
+Names: ('print', '_sm', 'state', 'context', 'device_port', 'FlashState', 'S2_WAIT_CONNECTION', '_service', 'stop_device_monitor', 'transition_to', 'S3_DEVICE_DETECTED', 'S4_FLASHING')
+Varnames: ('self', 'port')
+429           0 RESUME                   0
+
+431           2 LOAD_GLOBAL              1 (NULL + print)
+             14 LOAD_CONST               1 ('[MainWindow] Device found: ')
+             16 LOAD_FAST                1 (port)
+             18 FORMAT_VALUE             0
+             20 LOAD_CONST               2 (', state=')
+             22 LOAD_FAST                0 (self)
+             24 LOAD_ATTR                1 (_sm)
+             34 LOAD_ATTR                2 (state)
+             44 FORMAT_VALUE             0
+             46 BUILD_STRING             4
+             48 PRECALL                  1
+             52 CALL                     1
+             62 POP_TOP
+
+432          64 LOAD_FAST                1 (port)
+             66 LOAD_FAST                0 (self)
+             68 LOAD_ATTR                1 (_sm)
+             78 LOAD_ATTR                3 (context)
+             88 STORE_ATTR               4 (device_port)
+
+433          98 LOAD_FAST                0 (self)
+            100 LOAD_ATTR                1 (_sm)
+            110 LOAD_ATTR                2 (state)
+            120 LOAD_GLOBAL             10 (FlashState)
+            132 LOAD_ATTR                6 (S2_WAIT_CONNECTION)
+            142 COMPARE_OP               2 (==)
+            148 POP_JUMP_FORWARD_IF_FALSE    99 (to 348)
+
+434         150 LOAD_FAST                0 (self)
+            152 LOAD_ATTR                7 (_service)
+            162 LOAD_METHOD              8 (stop_device_monitor)
+            184 PRECALL                  0
+            188 CALL                     0
+            198 POP_TOP
+
+435         200 LOAD_FAST                0 (self)
+            202 LOAD_ATTR                1 (_sm)
+            212 LOAD_METHOD              9 (transition_to)
+            234 LOAD_GLOBAL             10 (FlashState)
+            246 LOAD_ATTR               10 (S3_DEVICE_DETECTED)
+            256 PRECALL                  1
+            260 CALL                     1
+            270 POP_TOP
+
+436         272 LOAD_FAST                0 (self)
+            274 LOAD_ATTR                1 (_sm)
+            284 LOAD_METHOD              9 (transition_to)
+            306 LOAD_GLOBAL             10 (FlashState)
+            318 LOAD_ATTR               11 (S4_FLASHING)
+            328 PRECALL                  1
+            332 CALL                     1
+            342 POP_TOP
+            344 LOAD_CONST               0 (None)
+            346 RETURN_VALUE
+
+433     >>  348 LOAD_CONST               0 (None)
+            350 RETURN_VALUE
+=== _on_device_lost ===
+Consts: [None, 'disconnected']
+Names: ('_sm', 'state', 'FlashState', 'S4_FLASHING', 'context', 'device_status', '_service', 'cancel_flash', 'transition_to', 'S5_USB_DISCONNECTED')
+Varnames: ('self',)
+438           0 RESUME                   0
+
+440           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_sm)
+             14 LOAD_ATTR                1 (state)
+             24 LOAD_GLOBAL              4 (FlashState)
+             36 LOAD_ATTR                3 (S4_FLASHING)
+             46 COMPARE_OP               2 (==)
+             52 POP_JUMP_FORWARD_IF_FALSE    80 (to 214)
+
+441          54 LOAD_CONST               1 ('disconnected')
+             56 LOAD_FAST                0 (self)
+             58 LOAD_ATTR                0 (_sm)
+             68 LOAD_ATTR                4 (context)
+             78 STORE_ATTR               5 (device_status)
+
+442          88 LOAD_FAST                0 (self)
+             90 LOAD_ATTR                6 (_service)
+            100 LOAD_METHOD              7 (cancel_flash)
+            122 PRECALL                  0
+            126 CALL                     0
+            136 POP_TOP
+
+443         138 LOAD_FAST                0 (self)
+            140 LOAD_ATTR                0 (_sm)
+            150 LOAD_METHOD              8 (transition_to)
+            172 LOAD_GLOBAL              4 (FlashState)
+            184 LOAD_ATTR                9 (S5_USB_DISCONNECTED)
+            194 PRECALL                  1
+            198 CALL                     1
+            208 POP_TOP
+            210 LOAD_CONST               0 (None)
+            212 RETURN_VALUE
+
+440     >>  214 LOAD_CONST               0 (None)
+            216 RETURN_VALUE

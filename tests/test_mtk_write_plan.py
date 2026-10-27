@@ -105,19 +105,21 @@ def test_preloader_first_can_be_switched_off(tmp_path):
     assert sorted(step["name"] for step in unsorted) == sorted(step["name"] for step in first)
 
 
-def test_partition_table_images_are_never_written_back(tmp_path):
-    """Neither the empty stubs nor a genuine table image is flashed.
+def test_partition_table_images_empty_stubs_skipped_genuine_flashed(tmp_path):
+    """Empty MBR/EBR stubs are skipped, but genuine package tables are flashed.
 
-    The device's live table is the layout the player boots from; a table from
-    the package describes one vendor's layout and leaves a flashed player that
-    cannot find a single partition.
+    Parity with the shipped 1.1.7 Chinese build: packages with real MBR/EBR
+    images must have their partition tables flashed so the device layout is valid.
     """
     for stub in (True, False):
         scatter = _fixture(tmp_path / ("stub" if stub else "real"),
                            "MT6582_Android_scatter.txt", stub_tables=stub)
         plan = fs.build_mtk_write_plan(scatter, "Y2")
         names = [step["name"].upper() for step in plan]
-        assert not any(fs._is_device_table_partition(n) for n in names)
+        if stub:
+            assert not any(n in ("MBR", "EBR1", "EBR2") for n in names)
+        else:
+            assert any(n in ("MBR", "EBR1", "EBR2") for n in names)
 
 
 def test_tail_relative_addresses_are_not_flashed_at_a_guessed_offset(tmp_path):

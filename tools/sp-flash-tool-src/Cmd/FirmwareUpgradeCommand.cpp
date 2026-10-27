@@ -109,7 +109,7 @@ ERROR_T theClass::ProduceRomList(
     std::list<ROM_INFO> rom_list;
 
     RomInfoFactory info_factory(key_);
-    info_factory.GetRomList(conn, rom_list);
+    info_factory.GetRomList(rom_list);
 
     std::list<ROM_INFO>::iterator it = rom_list.begin();
 

@@ -16,8 +16,11 @@ public:
     virtual void LoadXML(const XML::Node &node);
     virtual void SaveXML(XML::Node &node) const;
 
+    void setReboot(bool reboot);
+
 private:
     std::vector<op_part_list_t> items;
+    bool m_reboot;
 };
 
 }

@@ -95,3 +95,11 @@ bool IniItem::hasKey(const QString &sKey) const
     return b_has_key;
 }
 
+bool IniItem::hasSection(const QString &sSectionName) const
+{
+    QSettings settings(file_path_, QSettings::IniFormat);
+    QString section_name = sSectionName.trimmed().isEmpty() ? section_name_ : sSectionName.trimmed();
+    QStringList allSections = settings.childGroups();
+    return allSections.contains(section_name);
+}
+

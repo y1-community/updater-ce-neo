@@ -1,0 +1,428 @@
+=== _flash_via_mtkclient ===
+Consts: ['macOS/Linux: 使用 mtkclient（libusb 原生支持）', 8, 'Initializing mtkclient...', 'Error: no downloadable partitions in scatter file', False, 'NO_IMAGE_FILES', None, 'Found ', ' partition image(s)', 0, ('init', 'connect'), ('preloader', 'loader'), 'Waiting for MTK device... Power off the device and connect USB.', '[FlashWorker] Calling mtkclient connect()...', ('mtk', 'directory'), 'Device connection failed: ', '\n', 'CONNECTION_FAILED', 'Device connection returned None', 20, 'Device connected, starting write...', 'USER_CANCELLED', 'Writing ', ' (', 1, '/', '): ', 25, 70, 'w', 'user', ('partitions', 'filenames', 'parttype'), ' failed: ', 'WRITE_FAILED', 100, 'Flash complete! Disconnect USB and reboot the device.', True, '']
+Names: ('step_changed', 'emit', 'STEP_WAITING', 'progress', 'log_message', '_parse_scatter', 'finished', 'len', 'mtk_api', 'init', 'connect', 'print', 'str', 'Exception', 'traceback', 'format_exc', 'STEP_WRITE', 'enumerate', '_cancelled', 'name', 'int', 'max', '_update_time', 'handle_da_cmds', 'STEP_DONE')
+Varnames: ('self', 'extract_dir', 'scatter_file', 'image_files', 'init', 'connect', 'mtk', 'da_handler', 'e', 'total', 'i', 'part_name', 'file_path', 'pct')
+711           0 RESUME                   0
+
+713           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (step_changed)
+             14 LOAD_METHOD              1 (emit)
+             36 LOAD_GLOBAL              4 (STEP_WAITING)
+             48 PRECALL                  1
+             52 CALL                     1
+             62 POP_TOP
+
+714          64 LOAD_FAST                0 (self)
+             66 LOAD_ATTR                3 (progress)
+             76 LOAD_METHOD              1 (emit)
+             98 LOAD_CONST               1 (8)
+            100 PRECALL                  1
+            104 CALL                     1
+            114 POP_TOP
+
+715         116 LOAD_FAST                0 (self)
+            118 LOAD_ATTR                4 (log_message)
+            128 LOAD_METHOD              1 (emit)
+            150 LOAD_CONST               2 ('Initializing mtkclient...')
+            152 PRECALL                  1
+            156 CALL                     1
+            166 POP_TOP
+
+718         168 LOAD_FAST                0 (self)
+            170 LOAD_METHOD              5 (_parse_scatter)
+            192 LOAD_FAST                2 (scatter_file)
+            194 PRECALL                  1
+            198 CALL                     1
+            208 STORE_FAST               3 (image_files)
+
+719         210 LOAD_FAST                3 (image_files)
+            212 POP_JUMP_FORWARD_IF_TRUE    55 (to 324)
+
+720         214 LOAD_FAST                0 (self)
+            216 LOAD_ATTR                4 (log_message)
+            226 LOAD_METHOD              1 (emit)
+            248 LOAD_CONST               3 ('Error: no downloadable partitions in scatter file')
+            250 PRECALL                  1
+            254 CALL                     1
+            264 POP_TOP
+
+721         266 LOAD_FAST                0 (self)
+            268 LOAD_ATTR                6 (finished)
+            278 LOAD_METHOD              1 (emit)
+            300 LOAD_CONST               4 (False)
+            302 LOAD_CONST               5 ('NO_IMAGE_FILES')
+            304 PRECALL                  2
+            308 CALL                     2
+            318 POP_TOP
+
+722         320 LOAD_CONST               6 (None)
+            322 RETURN_VALUE
+
+724     >>  324 LOAD_FAST                0 (self)
+            326 LOAD_ATTR                4 (log_message)
+            336 LOAD_METHOD              1 (emit)
+            358 LOAD_CONST               7 ('Found ')
+            360 LOAD_GLOBAL             15 (NULL + len)
+            372 LOAD_FAST                3 (image_files)
+            374 PRECALL                  1
+            378 CALL                     1
+            388 FORMAT_VALUE             0
+            390 LOAD_CONST               8 (' partition image(s)')
+            392 BUILD_STRING             3
+            394 PRECALL                  1
+            398 CALL                     1
+            408 POP_TOP
+
+726         410 NOP
+
+727         412 LOAD_CONST               9 (0)
+            414 LOAD_CONST              10 (('init', 'connect'))
+            416 IMPORT_NAME              8 (mtk_api)
+            418 IMPORT_FROM              9 (init)
+            420 STORE_FAST               4 (init)
+            422 IMPORT_FROM             10 (connect)
+            424 STORE_FAST               5 (connect)
+            426 POP_TOP
+
+728         428 PUSH_NULL
+            430 LOAD_FAST                4 (init)
+            432 LOAD_CONST               6 (None)
+            434 LOAD_CONST               6 (None)
+            436 KW_NAMES                11
+            438 PRECALL                  2
+            442 CALL                     2
+            452 STORE_FAST               6 (mtk)
+
+730         454 LOAD_FAST                0 (self)
+            456 LOAD_ATTR                4 (log_message)
+            466 LOAD_METHOD              1 (emit)
+            488 LOAD_CONST              12 ('Waiting for MTK device... Power off the device and connect USB.')
+            490 PRECALL                  1
+            494 CALL                     1
+            504 POP_TOP
+
+731         506 LOAD_GLOBAL             23 (NULL + print)
+            518 LOAD_CONST              13 ('[FlashWorker] Calling mtkclient connect()...')
+            520 PRECALL                  1
+            524 CALL                     1
+            534 POP_TOP
+
+733         536 PUSH_NULL
+            538 LOAD_FAST                5 (connect)
+            540 LOAD_FAST                6 (mtk)
+            542 LOAD_GLOBAL             25 (NULL + str)
+            554 LOAD_FAST                1 (extract_dir)
+            556 PRECALL                  1
+            560 CALL                     1
+            570 KW_NAMES                14
+            572 PRECALL                  2
+            576 CALL                     2
+            586 UNPACK_SEQUENCE          2
+            590 STORE_FAST               6 (mtk)
+            592 STORE_FAST               7 (da_handler)
+            594 JUMP_FORWARD           100 (to 796)
+        >>  596 PUSH_EXC_INFO
+
+734         598 LOAD_GLOBAL             26 (Exception)
+            610 CHECK_EXC_MATCH
+            612 POP_JUMP_FORWARD_IF_FALSE    87 (to 788)
+            614 STORE_FAST               8 (e)
+
+735         616 LOAD_FAST                0 (self)
+            618 LOAD_ATTR                4 (log_message)
+            628 LOAD_METHOD              1 (emit)
+            650 LOAD_CONST              15 ('Device connection failed: ')
+            652 LOAD_FAST                8 (e)
+            654 FORMAT_VALUE             0
+            656 LOAD_CONST              16 ('\n')
+            658 LOAD_GLOBAL             29 (NULL + traceback)
+            670 LOAD_ATTR               15 (format_exc)
+            680 PRECALL                  0
+            684 CALL                     0
+            694 FORMAT_VALUE             0
+            696 BUILD_STRING             4
+            698 PRECALL                  1
+            702 CALL                     1
+            712 POP_TOP
+
+736         714 LOAD_FAST                0 (self)
+            716 LOAD_ATTR                6 (finished)
+            726 LOAD_METHOD              1 (emit)
+            748 LOAD_CONST               4 (False)
+            750 LOAD_CONST              17 ('CONNECTION_FAILED')
+            752 PRECALL                  2
+            756 CALL                     2
+            766 POP_TOP
+
+737         768 POP_EXCEPT
+            770 LOAD_CONST               6 (None)
+            772 STORE_FAST               8 (e)
+            774 DELETE_FAST              8 (e)
+            776 LOAD_CONST               6 (None)
+            778 RETURN_VALUE
+        >>  780 LOAD_CONST               6 (None)
+            782 STORE_FAST               8 (e)
+            784 DELETE_FAST              8 (e)
+            786 RERAISE                  1
+
+734     >>  788 RERAISE                  0
+        >>  790 COPY                     3
+            792 POP_EXCEPT
+            794 RERAISE                  1
+
+739     >>  796 LOAD_FAST                6 (mtk)
+            798 POP_JUMP_FORWARD_IF_NONE     2 (to 804)
+            800 LOAD_FAST                7 (da_handler)
+            802 POP_JUMP_FORWARD_IF_NOT_NONE    55 (to 914)
+
+740     >>  804 LOAD_FAST                0 (self)
+            806 LOAD_ATTR                4 (log_message)
+            816 LOAD_METHOD              1 (emit)
+            838 LOAD_CONST              18 ('Device connection returned None')
+            840 PRECALL                  1
+            844 CALL                     1
+            854 POP_TOP
+
+741         856 LOAD_FAST                0 (self)
+            858 LOAD_ATTR                6 (finished)
+            868 LOAD_METHOD              1 (emit)
+            890 LOAD_CONST               4 (False)
+            892 LOAD_CONST              17 ('CONNECTION_FAILED')
+            894 PRECALL                  2
+            898 CALL                     2
+            908 POP_TOP
+
+742         910 LOAD_CONST               6 (None)
+            912 RETURN_VALUE
+
+745     >>  914 LOAD_FAST                0 (self)
+            916 LOAD_ATTR                0 (step_changed)
+            926 LOAD_METHOD              1 (emit)
+            948 LOAD_GLOBAL             32 (STEP_WRITE)
+            960 PRECALL                  1
+            964 CALL                     1
+            974 POP_TOP
+
+746         976 LOAD_FAST                0 (self)
+            978 LOAD_ATTR                3 (progress)
+            988 LOAD_METHOD              1 (emit)
+           1010 LOAD_CONST              19 (20)
+           1012 PRECALL                  1
+           1016 CALL                     1
+           1026 POP_TOP
+
+747        1028 LOAD_FAST                0 (self)
+           1030 LOAD_ATTR                4 (log_message)
+           1040 LOAD_METHOD              1 (emit)
+           1062 LOAD_CONST              20 ('Device connected, starting write...')
+           1064 PRECALL                  1
+           1068 CALL                     1
+           1078 POP_TOP
+
+748        1080 LOAD_GLOBAL             15 (NULL + len)
+           1092 LOAD_FAST                3 (image_files)
+           1094 PRECALL                  1
+           1098 CALL                     1
+           1108 STORE_FAST               9 (total)
+
+750        1110 LOAD_GLOBAL             35 (NULL + enumerate)
+           1122 LOAD_FAST                3 (image_files)
+           1124 PRECALL                  1
+           1128 CALL                     1
+           1138 GET_ITER
+        >> 1140 EXTENDED_ARG             1
+           1142 FOR_ITER               300 (to 1744)
+           1144 UNPACK_SEQUENCE          2
+           1148 STORE_FAST              10 (i)
+           1150 UNPACK_SEQUENCE          2
+           1154 STORE_FAST              11 (part_name)
+           1156 STORE_FAST              12 (file_path)
+
+751        1158 LOAD_FAST                0 (self)
+           1160 LOAD_ATTR               18 (_cancelled)
+           1170 POP_JUMP_FORWARD_IF_FALSE    30 (to 1232)
+
+752        1172 LOAD_FAST                0 (self)
+           1174 LOAD_ATTR                6 (finished)
+           1184 LOAD_METHOD              1 (emit)
+           1206 LOAD_CONST               4 (False)
+           1208 LOAD_CONST              21 ('USER_CANCELLED')
+           1210 PRECALL                  2
+           1214 CALL                     2
+           1224 POP_TOP
+
+753        1226 POP_TOP
+           1228 LOAD_CONST               6 (None)
+           1230 RETURN_VALUE
+
+755     >> 1232 LOAD_FAST                0 (self)
+           1234 LOAD_ATTR                4 (log_message)
+           1244 LOAD_METHOD              1 (emit)
+           1266 LOAD_CONST              22 ('Writing ')
+           1268 LOAD_FAST               11 (part_name)
+           1270 FORMAT_VALUE             0
+           1272 LOAD_CONST              23 (' (')
+           1274 LOAD_FAST               10 (i)
+           1276 LOAD_CONST              24 (1)
+           1278 BINARY_OP                0 (+)
+           1282 FORMAT_VALUE             0
+           1284 LOAD_CONST              25 ('/')
+           1286 LOAD_FAST                9 (total)
+           1288 FORMAT_VALUE             0
+           1290 LOAD_CONST              26 ('): ')
+           1292 LOAD_FAST               12 (file_path)
+           1294 LOAD_ATTR               19 (name)
+           1304 FORMAT_VALUE             0
+           1306 BUILD_STRING             8
+           1308 PRECALL                  1
+           1312 CALL                     1
+           1322 POP_TOP
+
+756        1324 LOAD_CONST              27 (25)
+           1326 LOAD_GLOBAL             41 (NULL + int)
+           1338 LOAD_FAST               10 (i)
+           1340 LOAD_GLOBAL             43 (NULL + max)
+           1352 LOAD_FAST                9 (total)
+           1354 LOAD_CONST              24 (1)
+           1356 PRECALL                  2
+           1360 CALL                     2
+           1370 BINARY_OP               11 (/)
+           1374 LOAD_CONST              28 (70)
+           1376 BINARY_OP                5 (*)
+           1380 PRECALL                  1
+           1384 CALL                     1
+           1394 BINARY_OP                0 (+)
+           1398 STORE_FAST              13 (pct)
+
+757        1400 LOAD_FAST                0 (self)
+           1402 LOAD_ATTR                3 (progress)
+           1412 LOAD_METHOD              1 (emit)
+           1434 LOAD_FAST               13 (pct)
+           1436 PRECALL                  1
+           1440 CALL                     1
+           1450 POP_TOP
+
+758        1452 LOAD_FAST                0 (self)
+           1454 LOAD_METHOD             22 (_update_time)
+           1476 PRECALL                  0
+           1480 CALL                     0
+           1490 POP_TOP
+
+760        1492 NOP
+
+761        1494 LOAD_FAST                7 (da_handler)
+           1496 LOAD_METHOD             23 (handle_da_cmds)
+           1518 LOAD_FAST                6 (mtk)
+           1520 LOAD_CONST              29 ('w')
+
+762        1522 LOAD_FAST               11 (part_name)
+
+763        1524 LOAD_GLOBAL             25 (NULL + str)
+           1536 LOAD_FAST               12 (file_path)
+           1538 PRECALL                  1
+           1542 CALL                     1
+
+764        1552 LOAD_CONST              30 ('user')
+
+761        1554 LOAD_CONST              31 (('partitions', 'filenames', 'parttype'))
+           1556 BUILD_CONST_KEY_MAP      3
+           1558 PRECALL                  3
+           1562 CALL                     3
+           1572 POP_TOP
+           1574 JUMP_BACKWARD          218 (to 1140)
+        >> 1576 PUSH_EXC_INFO
+
+766        1578 LOAD_GLOBAL             26 (Exception)
+           1590 CHECK_EXC_MATCH
+           1592 POP_JUMP_FORWARD_IF_FALSE    71 (to 1736)
+           1594 STORE_FAST               8 (e)
+
+767        1596 LOAD_FAST                0 (self)
+           1598 LOAD_ATTR                4 (log_message)
+           1608 LOAD_METHOD              1 (emit)
+           1630 LOAD_CONST              22 ('Writing ')
+           1632 LOAD_FAST               11 (part_name)
+           1634 FORMAT_VALUE             0
+           1636 LOAD_CONST              32 (' failed: ')
+           1638 LOAD_FAST                8 (e)
+           1640 FORMAT_VALUE             0
+           1642 BUILD_STRING             4
+           1644 PRECALL                  1
+           1648 CALL                     1
+           1658 POP_TOP
+
+768        1660 LOAD_FAST                0 (self)
+           1662 LOAD_ATTR                6 (finished)
+           1672 LOAD_METHOD              1 (emit)
+           1694 LOAD_CONST               4 (False)
+           1696 LOAD_CONST              33 ('WRITE_FAILED')
+           1698 PRECALL                  2
+           1702 CALL                     2
+           1712 POP_TOP
+
+769        1714 POP_EXCEPT
+           1716 LOAD_CONST               6 (None)
+           1718 STORE_FAST               8 (e)
+           1720 DELETE_FAST              8 (e)
+           1722 POP_TOP
+           1724 LOAD_CONST               6 (None)
+           1726 RETURN_VALUE
+        >> 1728 LOAD_CONST               6 (None)
+           1730 STORE_FAST               8 (e)
+           1732 DELETE_FAST              8 (e)
+           1734 RERAISE                  1
+
+766     >> 1736 RERAISE                  0
+        >> 1738 COPY                     3
+           1740 POP_EXCEPT
+           1742 RERAISE                  1
+
+771     >> 1744 LOAD_FAST                0 (self)
+           1746 LOAD_ATTR                0 (step_changed)
+           1756 LOAD_METHOD              1 (emit)
+           1778 LOAD_GLOBAL             48 (STEP_DONE)
+           1790 PRECALL                  1
+           1794 CALL                     1
+           1804 POP_TOP
+
+772        1806 LOAD_FAST                0 (self)
+           1808 LOAD_ATTR                3 (progress)
+           1818 LOAD_METHOD              1 (emit)
+           1840 LOAD_CONST              34 (100)
+           1842 PRECALL                  1
+           1846 CALL                     1
+           1856 POP_TOP
+
+773        1858 LOAD_FAST                0 (self)
+           1860 LOAD_METHOD             22 (_update_time)
+           1882 PRECALL                  0
+           1886 CALL                     0
+           1896 POP_TOP
+
+774        1898 LOAD_FAST                0 (self)
+           1900 LOAD_ATTR                4 (log_message)
+           1910 LOAD_METHOD              1 (emit)
+           1932 LOAD_CONST              35 ('Flash complete! Disconnect USB and reboot the device.')
+           1934 PRECALL                  1
+           1938 CALL                     1
+           1948 POP_TOP
+
+775        1950 LOAD_FAST                0 (self)
+           1952 LOAD_ATTR                6 (finished)
+           1962 LOAD_METHOD              1 (emit)
+           1984 LOAD_CONST              36 (True)
+           1986 LOAD_CONST              37 ('')
+           1988 PRECALL                  2
+           1992 CALL                     2
+           2002 POP_TOP
+           2004 LOAD_CONST               6 (None)
+           2006 RETURN_VALUE
+ExceptionTable:
+  412 to 592 -> 596 [0]
+  596 to 614 -> 790 [1] lasti
+  616 to 766 -> 780 [1] lasti
+  780 to 788 -> 790 [1] lasti
+  1494 to 1572 -> 1576 [1]
+  1576 to 1594 -> 1738 [2] lasti
+  1596 to 1712 -> 1728 [2] lasti
+  1728 to 1736 -> 1738 [2] lasti

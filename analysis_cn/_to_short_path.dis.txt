@@ -1,0 +1,130 @@
+ 44           0 RESUME                   0
+
+ 48           2 LOAD_GLOBAL              1 (NULL + str)
+             14 LOAD_FAST                0 (path)
+             16 PRECALL                  1
+             20 CALL                     1
+             30 STORE_FAST               1 (s)
+
+ 49          32 LOAD_GLOBAL              2 (IS_WINDOWS)
+             44 POP_JUMP_FORWARD_IF_TRUE     2 (to 50)
+
+ 50          46 LOAD_FAST                1 (s)
+             48 RETURN_VALUE
+
+ 51     >>   50 NOP
+
+ 52          52 LOAD_CONST               1 (0)
+             54 LOAD_CONST               2 (None)
+             56 IMPORT_NAME              2 (ctypes)
+             58 STORE_FAST               2 (ctypes)
+
+ 53          60 LOAD_CONST               1 (0)
+             62 LOAD_CONST               3 (('wintypes',))
+             64 IMPORT_NAME              2 (ctypes)
+             66 IMPORT_FROM              3 (wintypes)
+             68 STORE_FAST               3 (wintypes)
+             70 POP_TOP
+
+ 54          72 LOAD_FAST                2 (ctypes)
+             74 LOAD_ATTR                4 (windll)
+             84 LOAD_ATTR                5 (kernel32)
+             94 LOAD_ATTR                6 (GetShortPathNameW)
+            104 STORE_FAST               4 (GetShortPathNameW)
+
+ 55         106 LOAD_FAST                3 (wintypes)
+            108 LOAD_ATTR                7 (LPCWSTR)
+            118 LOAD_FAST                3 (wintypes)
+            120 LOAD_ATTR                8 (LPWSTR)
+            130 LOAD_FAST                3 (wintypes)
+            132 LOAD_ATTR                9 (DWORD)
+            142 BUILD_LIST               3
+            144 LOAD_FAST                4 (GetShortPathNameW)
+            146 STORE_ATTR              10 (argtypes)
+
+ 56         156 LOAD_FAST                3 (wintypes)
+            158 LOAD_ATTR                9 (DWORD)
+            168 LOAD_FAST                4 (GetShortPathNameW)
+            170 STORE_ATTR              11 (restype)
+
+ 59         180 LOAD_FAST                2 (ctypes)
+            182 LOAD_METHOD             12 (create_unicode_buffer)
+            204 LOAD_CONST               4 (261)
+            206 PRECALL                  1
+            210 CALL                     1
+            220 STORE_FAST               5 (buf)
+
+ 60         222 PUSH_NULL
+            224 LOAD_FAST                4 (GetShortPathNameW)
+            226 LOAD_FAST                1 (s)
+            228 LOAD_FAST                5 (buf)
+            230 LOAD_CONST               4 (261)
+            232 PRECALL                  3
+            236 CALL                     3
+            246 STORE_FAST               6 (n)
+
+ 61         248 LOAD_FAST                6 (n)
+            250 LOAD_CONST               1 (0)
+            252 COMPARE_OP               2 (==)
+            258 POP_JUMP_FORWARD_IF_FALSE     2 (to 264)
+
+ 62         260 LOAD_FAST                1 (s)
+            262 RETURN_VALUE
+
+ 63     >>  264 LOAD_FAST                6 (n)
+            266 LOAD_CONST               4 (261)
+            268 COMPARE_OP               5 (>=)
+            274 POP_JUMP_FORWARD_IF_FALSE    46 (to 368)
+
+ 65         276 LOAD_FAST                2 (ctypes)
+            278 LOAD_METHOD             12 (create_unicode_buffer)
+            300 LOAD_FAST                6 (n)
+            302 LOAD_CONST               5 (1)
+            304 BINARY_OP                0 (+)
+            308 PRECALL                  1
+            312 CALL                     1
+            322 STORE_FAST               5 (buf)
+
+ 66         324 PUSH_NULL
+            326 LOAD_FAST                4 (GetShortPathNameW)
+            328 LOAD_FAST                1 (s)
+            330 LOAD_FAST                5 (buf)
+            332 LOAD_FAST                6 (n)
+            334 LOAD_CONST               5 (1)
+            336 BINARY_OP                0 (+)
+            340 PRECALL                  3
+            344 CALL                     3
+            354 LOAD_CONST               1 (0)
+            356 COMPARE_OP               2 (==)
+            362 POP_JUMP_FORWARD_IF_FALSE     2 (to 368)
+
+ 67         364 LOAD_FAST                1 (s)
+            366 RETURN_VALUE
+
+ 68     >>  368 LOAD_FAST                5 (buf)
+            370 LOAD_ATTR               13 (value)
+            380 JUMP_IF_TRUE_OR_POP      1 (to 384)
+            382 LOAD_FAST                1 (s)
+        >>  384 RETURN_VALUE
+        >>  386 PUSH_EXC_INFO
+
+ 69         388 LOAD_GLOBAL             28 (Exception)
+            400 CHECK_EXC_MATCH
+            402 POP_JUMP_FORWARD_IF_FALSE     5 (to 414)
+            404 POP_TOP
+
+ 70         406 LOAD_FAST                1 (s)
+            408 SWAP                     2
+            410 POP_EXCEPT
+            412 RETURN_VALUE
+
+ 69     >>  414 RERAISE                  0
+        >>  416 COPY                     3
+            418 POP_EXCEPT
+            420 RERAISE                  1
+ExceptionTable:
+  52 to 260 -> 386 [0]
+  264 to 364 -> 386 [0]
+  368 to 382 -> 386 [0]
+  386 to 408 -> 416 [1] lasti
+  414 to 414 -> 416 [1] lasti

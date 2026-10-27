@@ -15,6 +15,9 @@ public:
     explicit OkDialog(QWidget *parent = 0);
     ~OkDialog();
 
+private slots:
+    void on_pushButton_buyCoffee_clicked();
+
 private:
     Ui::OkDialog *ui;
 };

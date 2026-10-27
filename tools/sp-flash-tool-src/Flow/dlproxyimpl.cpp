@@ -676,7 +676,7 @@ bool CDLProxyImpl::ValidateAddress(
 
     if(!bInRange)
     {
-        LOGE("Not in valid range, addr(0x%08llx) > checkSize(0x08llx) !", addr, checkSize);
+        LOGE("Not in valid range, addr(0x%08llx) > checkSize(0x%08llx) !", addr, checkSize);
     }
 
     if(!bAlign)

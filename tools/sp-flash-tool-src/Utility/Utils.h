@@ -33,7 +33,8 @@ typedef enum{
     FORMAT_ALL_DOWNLOAD = 0,
     FIRMWARE_UPGRADE,
     DOWNLOAD_ONLY,
-    WIPE_DATA
+    WIPE_DATA,
+    UNKOWN_DOWNLOAD_SCENE
 }Download_Scene;
 
 typedef enum{
@@ -43,6 +44,12 @@ typedef enum{
     CRITICAL_MSGBOX = 3,
     QUESTION_MSGBOX = 4
 }MessageBox_Type;
+
+typedef enum {
+    LONG_PRESS_REBOOT_POWER = 0,
+    LONG_PRESS_REBOOT_HOME = 1,
+    LONG_PRESS_REBOOT_DISABLE = 2
+} LongPressRebootOption;
 
 #define ENUM_TO_STRING(case_id)\
     case case_id:\
@@ -160,7 +167,6 @@ int flashtool_message_box(QWidget *parent,
                            bool report = false);
 
 HW_StorageType_E getDeviceStorageType(const DA_REPORT_T *p_da_report);
-bool FileContain(QString filename, QString str);
 
 
 #ifdef _WIN32

@@ -1,0 +1,988 @@
+  0           0 RESUME                   0
+
+  1           2 LOAD_CONST               0 ('\n弹窗组件 - 刷机完成/失败/日志\n')
+              4 STORE_NAME               0 (__doc__)
+
+  4           6 LOAD_CONST               1 (0)
+              8 LOAD_CONST               2 (('QDialog', 'QVBoxLayout', 'QHBoxLayout', 'QLabel', 'QPushButton'))
+             10 IMPORT_NAME              1 (PySide6.QtWidgets)
+             12 IMPORT_FROM              2 (QDialog)
+             14 STORE_NAME               2 (QDialog)
+             16 IMPORT_FROM              3 (QVBoxLayout)
+             18 STORE_NAME               3 (QVBoxLayout)
+             20 IMPORT_FROM              4 (QHBoxLayout)
+             22 STORE_NAME               4 (QHBoxLayout)
+             24 IMPORT_FROM              5 (QLabel)
+             26 STORE_NAME               5 (QLabel)
+             28 IMPORT_FROM              6 (QPushButton)
+             30 STORE_NAME               6 (QPushButton)
+             32 POP_TOP
+
+  7          34 LOAD_CONST               1 (0)
+             36 LOAD_CONST               3 (('Qt',))
+             38 IMPORT_NAME              7 (PySide6.QtCore)
+             40 IMPORT_FROM              8 (Qt)
+             42 STORE_NAME               8 (Qt)
+             44 POP_TOP
+
+  8          46 LOAD_CONST               4 (2)
+             48 LOAD_CONST               5 (('t',))
+             50 IMPORT_NAME              9 (i18n)
+             52 IMPORT_FROM             10 (t)
+             54 STORE_NAME              10 (t)
+             56 POP_TOP
+
+ 11          58 PUSH_NULL
+             60 LOAD_BUILD_CLASS
+             62 LOAD_CONST               6 (<code object FlashCompleteDialog at 0x000001B35DF11E30, file "app\ui\dialogs.py", line 11>)
+             64 MAKE_FUNCTION            0
+             66 LOAD_CONST               7 ('FlashCompleteDialog')
+             68 LOAD_NAME                2 (QDialog)
+             70 PRECALL                  3
+             74 CALL                     3
+             84 STORE_NAME              11 (FlashCompleteDialog)
+
+ 53          86 PUSH_NULL
+             88 LOAD_BUILD_CLASS
+             90 LOAD_CONST               8 (<code object FlashFailedDialog at 0x000001B35E985F10, file "app\ui\dialogs.py", line 53>)
+             92 MAKE_FUNCTION            0
+             94 LOAD_CONST               9 ('FlashFailedDialog')
+             96 LOAD_NAME                2 (QDialog)
+             98 PRECALL                  3
+            102 CALL                     3
+            112 STORE_NAME              12 (FlashFailedDialog)
+
+124         114 PUSH_NULL
+            116 LOAD_BUILD_CLASS
+            118 LOAD_CONST              10 (<code object LogDialog at 0x000001B35E97B870, file "app\ui\dialogs.py", line 124>)
+            120 MAKE_FUNCTION            0
+            122 LOAD_CONST              11 ('LogDialog')
+            124 LOAD_NAME                2 (QDialog)
+            126 PRECALL                  3
+            130 CALL                     3
+            140 STORE_NAME              13 (LogDialog)
+            142 LOAD_CONST              12 (None)
+            144 RETURN_VALUE
+
+Disassembly of <code object FlashCompleteDialog at 0x000001B35DF11E30, file "app\ui\dialogs.py", line 11>:
+              0 MAKE_CELL                0 (__class__)
+
+ 11           2 RESUME                   0
+              4 LOAD_NAME                0 (__name__)
+              6 STORE_NAME               1 (__module__)
+              8 LOAD_CONST               0 ('FlashCompleteDialog')
+             10 STORE_NAME               2 (__qualname__)
+
+ 12          12 LOAD_CONST               1 ('刷机完成弹窗')
+             14 STORE_NAME               3 (__doc__)
+
+ 14          16 LOAD_CONST               5 ((None,))
+             18 LOAD_CLOSURE             0 (__class__)
+             20 BUILD_TUPLE              1
+             22 LOAD_CONST               3 (<code object __init__ at 0x000001B35E39CDC0, file "app\ui\dialogs.py", line 14>)
+             24 MAKE_FUNCTION            9 (defaults, closure)
+             26 STORE_NAME               4 (__init__)
+
+ 21          28 LOAD_CONST               4 (<code object _build_ui at 0x000001B35DE153F0, file "app\ui\dialogs.py", line 21>)
+             30 MAKE_FUNCTION            0
+             32 STORE_NAME               5 (_build_ui)
+             34 LOAD_CLOSURE             0 (__class__)
+             36 COPY                     1
+             38 STORE_NAME               6 (__classcell__)
+             40 RETURN_VALUE
+
+Disassembly of <code object __init__ at 0x000001B35E39CDC0, file "app\ui\dialogs.py", line 14>:
+              0 COPY_FREE_VARS           1
+
+ 14           2 RESUME                   0
+
+ 15           4 LOAD_GLOBAL              1 (NULL + super)
+             16 PRECALL                  0
+             20 CALL                     0
+             30 LOAD_METHOD              1 (__init__)
+             52 LOAD_FAST                1 (parent)
+             54 PRECALL                  1
+             58 CALL                     1
+             68 POP_TOP
+
+ 16          70 LOAD_FAST                0 (self)
+             72 LOAD_METHOD              2 (setWindowTitle)
+             94 LOAD_GLOBAL              7 (NULL + t)
+            106 LOAD_CONST               1 ('dlg_complete_title')
+            108 PRECALL                  1
+            112 CALL                     1
+            122 PRECALL                  1
+            126 CALL                     1
+            136 POP_TOP
+
+ 17         138 LOAD_FAST                0 (self)
+            140 LOAD_METHOD              4 (setFixedSize)
+            162 LOAD_CONST               2 (420)
+            164 LOAD_CONST               3 (280)
+            166 PRECALL                  2
+            170 CALL                     2
+            180 POP_TOP
+
+ 18         182 LOAD_FAST                0 (self)
+            184 LOAD_METHOD              5 (setWindowFlags)
+            206 LOAD_FAST                0 (self)
+            208 LOAD_METHOD              6 (windowFlags)
+            230 PRECALL                  0
+            234 CALL                     0
+            244 LOAD_GLOBAL             14 (Qt)
+            256 LOAD_ATTR                8 (WindowType)
+            266 LOAD_ATTR                9 (WindowContextHelpButtonHint)
+            276 UNARY_INVERT
+            278 BINARY_OP                1 (&)
+            282 PRECALL                  1
+            286 CALL                     1
+            296 POP_TOP
+
+ 19         298 LOAD_FAST                0 (self)
+            300 LOAD_METHOD             10 (_build_ui)
+            322 PRECALL                  0
+            326 CALL                     0
+            336 POP_TOP
+            338 LOAD_CONST               0 (None)
+            340 RETURN_VALUE
+
+Disassembly of <code object _build_ui at 0x000001B35DE153F0, file "app\ui\dialogs.py", line 21>:
+ 21           0 RESUME                   0
+
+ 22           2 LOAD_GLOBAL              1 (NULL + QVBoxLayout)
+             14 LOAD_FAST                0 (self)
+             16 PRECALL                  1
+             20 CALL                     1
+             30 STORE_FAST               1 (layout)
+
+ 23          32 LOAD_FAST                1 (layout)
+             34 LOAD_METHOD              1 (setSpacing)
+             56 LOAD_CONST               1 (16)
+             58 PRECALL                  1
+             62 CALL                     1
+             72 POP_TOP
+
+ 24          74 LOAD_FAST                1 (layout)
+             76 LOAD_METHOD              2 (setAlignment)
+             98 LOAD_GLOBAL              6 (Qt)
+            110 LOAD_ATTR                4 (AlignmentFlag)
+            120 LOAD_ATTR                5 (AlignCenter)
+            130 PRECALL                  1
+            134 CALL                     1
+            144 POP_TOP
+
+ 26         146 LOAD_GLOBAL             13 (NULL + QLabel)
+            158 LOAD_CONST               2 ('✓')
+            160 PRECALL                  1
+            164 CALL                     1
+            174 STORE_FAST               2 (icon)
+
+ 27         176 LOAD_FAST                2 (icon)
+            178 LOAD_METHOD              2 (setAlignment)
+            200 LOAD_GLOBAL              6 (Qt)
+            212 LOAD_ATTR                4 (AlignmentFlag)
+            222 LOAD_ATTR                5 (AlignCenter)
+            232 PRECALL                  1
+            236 CALL                     1
+            246 POP_TOP
+
+ 28         248 LOAD_FAST                2 (icon)
+            250 LOAD_METHOD              7 (setStyleSheet)
+
+ 29         272 LOAD_CONST               3 ('font-size:48px; color:#2B8A3E; background:#D3F9D8; border-radius:32px; min-width:64px; max-width:64px; min-height:64px; max-height:64px;')
+
+ 28         274 PRECALL                  1
+            278 CALL                     1
+            288 POP_TOP
+
+ 33         290 LOAD_FAST                1 (layout)
+            292 LOAD_METHOD              8 (addWidget)
+            314 LOAD_FAST                2 (icon)
+            316 LOAD_GLOBAL              6 (Qt)
+            328 LOAD_ATTR                4 (AlignmentFlag)
+            338 LOAD_ATTR                5 (AlignCenter)
+            348 KW_NAMES                 4
+            350 PRECALL                  2
+            354 CALL                     2
+            364 POP_TOP
+
+ 35         366 LOAD_GLOBAL             13 (NULL + QLabel)
+            378 LOAD_GLOBAL             19 (NULL + t)
+            390 LOAD_CONST               5 ('dlg_complete_title')
+            392 PRECALL                  1
+            396 CALL                     1
+            406 PRECALL                  1
+            410 CALL                     1
+            420 STORE_FAST               3 (title)
+
+ 36         422 LOAD_FAST                3 (title)
+            424 LOAD_METHOD              2 (setAlignment)
+            446 LOAD_GLOBAL              6 (Qt)
+            458 LOAD_ATTR                4 (AlignmentFlag)
+            468 LOAD_ATTR                5 (AlignCenter)
+            478 PRECALL                  1
+            482 CALL                     1
+            492 POP_TOP
+
+ 37         494 LOAD_FAST                3 (title)
+            496 LOAD_METHOD              7 (setStyleSheet)
+            518 LOAD_CONST               6 ('font-size:20px; font-weight:bold; color:#1A1A2E;')
+            520 PRECALL                  1
+            524 CALL                     1
+            534 POP_TOP
+
+ 38         536 LOAD_FAST                1 (layout)
+            538 LOAD_METHOD              8 (addWidget)
+            560 LOAD_FAST                3 (title)
+            562 PRECALL                  1
+            566 CALL                     1
+            576 POP_TOP
+
+ 40         578 LOAD_GLOBAL             13 (NULL + QLabel)
+            590 LOAD_GLOBAL             19 (NULL + t)
+            602 LOAD_CONST               7 ('dlg_complete_desc')
+            604 PRECALL                  1
+            608 CALL                     1
+            618 PRECALL                  1
+            622 CALL                     1
+            632 STORE_FAST               4 (desc)
+
+ 41         634 LOAD_FAST                4 (desc)
+            636 LOAD_METHOD              2 (setAlignment)
+            658 LOAD_GLOBAL              6 (Qt)
+            670 LOAD_ATTR                4 (AlignmentFlag)
+            680 LOAD_ATTR                5 (AlignCenter)
+            690 PRECALL                  1
+            694 CALL                     1
+            704 POP_TOP
+
+ 42         706 LOAD_FAST                4 (desc)
+            708 LOAD_METHOD             10 (setWordWrap)
+            730 LOAD_CONST               8 (True)
+            732 PRECALL                  1
+            736 CALL                     1
+            746 POP_TOP
+
+ 43         748 LOAD_FAST                4 (desc)
+            750 LOAD_METHOD              7 (setStyleSheet)
+            772 LOAD_CONST               9 ('color:#868E96; font-size:13px;')
+            774 PRECALL                  1
+            778 CALL                     1
+            788 POP_TOP
+
+ 44         790 LOAD_FAST                1 (layout)
+            792 LOAD_METHOD              8 (addWidget)
+            814 LOAD_FAST                4 (desc)
+            816 PRECALL                  1
+            820 CALL                     1
+            830 POP_TOP
+
+ 46         832 LOAD_GLOBAL             23 (NULL + QPushButton)
+            844 LOAD_GLOBAL             19 (NULL + t)
+            856 LOAD_CONST              10 ('dlg_complete_btn')
+            858 PRECALL                  1
+            862 CALL                     1
+            872 PRECALL                  1
+            876 CALL                     1
+            886 STORE_FAST               5 (btn)
+
+ 47         888 LOAD_FAST                5 (btn)
+            890 LOAD_METHOD             12 (setProperty)
+            912 LOAD_CONST              11 ('btnType')
+            914 LOAD_CONST              12 ('success')
+            916 PRECALL                  2
+            920 CALL                     2
+            930 POP_TOP
+
+ 48         932 LOAD_FAST                5 (btn)
+            934 LOAD_METHOD             13 (setFixedWidth)
+            956 LOAD_CONST              13 (140)
+            958 PRECALL                  1
+            962 CALL                     1
+            972 POP_TOP
+
+ 49         974 LOAD_FAST                5 (btn)
+            976 LOAD_ATTR               14 (clicked)
+            986 LOAD_METHOD             15 (connect)
+           1008 LOAD_FAST                0 (self)
+           1010 LOAD_ATTR               16 (accept)
+           1020 PRECALL                  1
+           1024 CALL                     1
+           1034 POP_TOP
+
+ 50        1036 LOAD_FAST                1 (layout)
+           1038 LOAD_METHOD              8 (addWidget)
+           1060 LOAD_FAST                5 (btn)
+           1062 LOAD_GLOBAL              6 (Qt)
+           1074 LOAD_ATTR                4 (AlignmentFlag)
+           1084 LOAD_ATTR                5 (AlignCenter)
+           1094 KW_NAMES                 4
+           1096 PRECALL                  2
+           1100 CALL                     2
+           1110 POP_TOP
+           1112 LOAD_CONST               0 (None)
+           1114 RETURN_VALUE
+
+Disassembly of <code object FlashFailedDialog at 0x000001B35E985F10, file "app\ui\dialogs.py", line 53>:
+              0 MAKE_CELL                0 (__class__)
+
+ 53           2 RESUME                   0
+              4 LOAD_NAME                0 (__name__)
+              6 STORE_NAME               1 (__module__)
+              8 LOAD_CONST               0 ('FlashFailedDialog')
+             10 STORE_NAME               2 (__qualname__)
+
+ 54          12 LOAD_CONST               1 ('刷机失败弹窗')
+             14 STORE_NAME               3 (__doc__)
+
+ 56          16 LOAD_CONST              10 ((None,))
+             18 LOAD_CLOSURE             0 (__class__)
+             20 BUILD_TUPLE              1
+             22 LOAD_CONST               3 (<code object __init__ at 0x000001B35E714600, file "app\ui\dialogs.py", line 56>)
+             24 MAKE_FUNCTION            9 (defaults, closure)
+             26 STORE_NAME               4 (__init__)
+
+ 65          28 LOAD_CONST               4 (<code object _build_ui at 0x000001B35E37B790, file "app\ui\dialogs.py", line 65>)
+             30 MAKE_FUNCTION            0
+             32 STORE_NAME               5 (_build_ui)
+
+107          34 LOAD_CONST               5 (<code object _on_retry at 0x000001B35E91B830, file "app\ui\dialogs.py", line 107>)
+             36 MAKE_FUNCTION            0
+             38 STORE_NAME               6 (_on_retry)
+
+111          40 LOAD_CONST               6 (<code object _on_log at 0x000001B35E91BA30, file "app\ui\dialogs.py", line 111>)
+             42 MAKE_FUNCTION            0
+             44 STORE_NAME               7 (_on_log)
+
+115          46 LOAD_NAME                8 (property)
+
+116          48 LOAD_CONST               7 ('return')
+             50 LOAD_NAME                9 (bool)
+             52 BUILD_TUPLE              2
+             54 LOAD_CONST               8 (<code object want_retry at 0x000001B35EA04D30, file "app\ui\dialogs.py", line 115>)
+             56 MAKE_FUNCTION            4 (annotations)
+
+115          58 PRECALL                  0
+             62 CALL                     0
+
+116          72 STORE_NAME              10 (want_retry)
+
+119          74 LOAD_NAME                8 (property)
+
+120          76 LOAD_CONST               7 ('return')
+             78 LOAD_NAME                9 (bool)
+             80 BUILD_TUPLE              2
+             82 LOAD_CONST               9 (<code object want_log at 0x000001B35EA04E00, file "app\ui\dialogs.py", line 119>)
+             84 MAKE_FUNCTION            4 (annotations)
+
+119          86 PRECALL                  0
+             90 CALL                     0
+
+120         100 STORE_NAME              11 (want_log)
+            102 LOAD_CLOSURE             0 (__class__)
+            104 COPY                     1
+            106 STORE_NAME              12 (__classcell__)
+            108 RETURN_VALUE
+
+Disassembly of <code object __init__ at 0x000001B35E714600, file "app\ui\dialogs.py", line 56>:
+              0 COPY_FREE_VARS           1
+
+ 56           2 RESUME                   0
+
+ 57           4 LOAD_GLOBAL              1 (NULL + super)
+             16 PRECALL                  0
+             20 CALL                     0
+             30 LOAD_METHOD              1 (__init__)
+             52 LOAD_FAST                1 (parent)
+             54 PRECALL                  1
+             58 CALL                     1
+             68 POP_TOP
+
+ 58          70 LOAD_FAST                0 (self)
+             72 LOAD_METHOD              2 (setWindowTitle)
+             94 LOAD_GLOBAL              7 (NULL + t)
+            106 LOAD_CONST               1 ('dlg_failed_title')
+            108 PRECALL                  1
+            112 CALL                     1
+            122 PRECALL                  1
+            126 CALL                     1
+            136 POP_TOP
+
+ 59         138 LOAD_FAST                0 (self)
+            140 LOAD_METHOD              4 (setFixedSize)
+            162 LOAD_CONST               2 (420)
+            164 LOAD_CONST               3 (280)
+            166 PRECALL                  2
+            170 CALL                     2
+            180 POP_TOP
+
+ 60         182 LOAD_FAST                0 (self)
+            184 LOAD_METHOD              5 (setWindowFlags)
+            206 LOAD_FAST                0 (self)
+            208 LOAD_METHOD              6 (windowFlags)
+            230 PRECALL                  0
+            234 CALL                     0
+            244 LOAD_GLOBAL             14 (Qt)
+            256 LOAD_ATTR                8 (WindowType)
+            266 LOAD_ATTR                9 (WindowContextHelpButtonHint)
+            276 UNARY_INVERT
+            278 BINARY_OP                1 (&)
+            282 PRECALL                  1
+            286 CALL                     1
+            296 POP_TOP
+
+ 61         298 LOAD_CONST               4 (False)
+            300 LOAD_FAST                0 (self)
+            302 STORE_ATTR              10 (_want_retry)
+
+ 62         312 LOAD_CONST               4 (False)
+            314 LOAD_FAST                0 (self)
+            316 STORE_ATTR              11 (_want_log)
+
+ 63         326 LOAD_FAST                0 (self)
+            328 LOAD_METHOD             12 (_build_ui)
+            350 PRECALL                  0
+            354 CALL                     0
+            364 POP_TOP
+            366 LOAD_CONST               0 (None)
+            368 RETURN_VALUE
+
+Disassembly of <code object _build_ui at 0x000001B35E37B790, file "app\ui\dialogs.py", line 65>:
+ 65           0 RESUME                   0
+
+ 66           2 LOAD_GLOBAL              1 (NULL + QVBoxLayout)
+             14 LOAD_FAST                0 (self)
+             16 PRECALL                  1
+             20 CALL                     1
+             30 STORE_FAST               1 (layout)
+
+ 67          32 LOAD_FAST                1 (layout)
+             34 LOAD_METHOD              1 (setSpacing)
+             56 LOAD_CONST               1 (16)
+             58 PRECALL                  1
+             62 CALL                     1
+             72 POP_TOP
+
+ 68          74 LOAD_FAST                1 (layout)
+             76 LOAD_METHOD              2 (setAlignment)
+             98 LOAD_GLOBAL              6 (Qt)
+            110 LOAD_ATTR                4 (AlignmentFlag)
+            120 LOAD_ATTR                5 (AlignCenter)
+            130 PRECALL                  1
+            134 CALL                     1
+            144 POP_TOP
+
+ 70         146 LOAD_GLOBAL             13 (NULL + QLabel)
+            158 LOAD_CONST               2 ('!')
+            160 PRECALL                  1
+            164 CALL                     1
+            174 STORE_FAST               2 (icon)
+
+ 71         176 LOAD_FAST                2 (icon)
+            178 LOAD_METHOD              2 (setAlignment)
+            200 LOAD_GLOBAL              6 (Qt)
+            212 LOAD_ATTR                4 (AlignmentFlag)
+            222 LOAD_ATTR                5 (AlignCenter)
+            232 PRECALL                  1
+            236 CALL                     1
+            246 POP_TOP
+
+ 72         248 LOAD_FAST                2 (icon)
+            250 LOAD_METHOD              7 (setStyleSheet)
+
+ 73         272 LOAD_CONST               3 ('font-size:48px; color:#E03131; background:#FFE3E3; border-radius:32px; min-width:64px; max-width:64px; min-height:64px; max-height:64px;')
+
+ 72         274 PRECALL                  1
+            278 CALL                     1
+            288 POP_TOP
+
+ 77         290 LOAD_FAST                1 (layout)
+            292 LOAD_METHOD              8 (addWidget)
+            314 LOAD_FAST                2 (icon)
+            316 LOAD_GLOBAL              6 (Qt)
+            328 LOAD_ATTR                4 (AlignmentFlag)
+            338 LOAD_ATTR                5 (AlignCenter)
+            348 KW_NAMES                 4
+            350 PRECALL                  2
+            354 CALL                     2
+            364 POP_TOP
+
+ 79         366 LOAD_GLOBAL             13 (NULL + QLabel)
+            378 LOAD_GLOBAL             19 (NULL + t)
+            390 LOAD_CONST               5 ('dlg_failed_title')
+            392 PRECALL                  1
+            396 CALL                     1
+            406 PRECALL                  1
+            410 CALL                     1
+            420 STORE_FAST               3 (title)
+
+ 80         422 LOAD_FAST                3 (title)
+            424 LOAD_METHOD              2 (setAlignment)
+            446 LOAD_GLOBAL              6 (Qt)
+            458 LOAD_ATTR                4 (AlignmentFlag)
+            468 LOAD_ATTR                5 (AlignCenter)
+            478 PRECALL                  1
+            482 CALL                     1
+            492 POP_TOP
+
+ 81         494 LOAD_FAST                3 (title)
+            496 LOAD_METHOD              7 (setStyleSheet)
+            518 LOAD_CONST               6 ('font-size:20px; font-weight:bold; color:#1A1A2E;')
+            520 PRECALL                  1
+            524 CALL                     1
+            534 POP_TOP
+
+ 82         536 LOAD_FAST                1 (layout)
+            538 LOAD_METHOD              8 (addWidget)
+            560 LOAD_FAST                3 (title)
+            562 PRECALL                  1
+            566 CALL                     1
+            576 POP_TOP
+
+ 84         578 LOAD_GLOBAL             13 (NULL + QLabel)
+            590 LOAD_GLOBAL             19 (NULL + t)
+            602 LOAD_CONST               7 ('dlg_failed_desc')
+            604 PRECALL                  1
+            608 CALL                     1
+            618 PRECALL                  1
+            622 CALL                     1
+            632 STORE_FAST               4 (desc)
+
+ 85         634 LOAD_FAST                4 (desc)
+            636 LOAD_METHOD              2 (setAlignment)
+            658 LOAD_GLOBAL              6 (Qt)
+            670 LOAD_ATTR                4 (AlignmentFlag)
+            680 LOAD_ATTR                5 (AlignCenter)
+            690 PRECALL                  1
+            694 CALL                     1
+            704 POP_TOP
+
+ 86         706 LOAD_FAST                4 (desc)
+            708 LOAD_METHOD             10 (setWordWrap)
+            730 LOAD_CONST               8 (True)
+            732 PRECALL                  1
+            736 CALL                     1
+            746 POP_TOP
+
+ 87         748 LOAD_FAST                4 (desc)
+            750 LOAD_METHOD              7 (setStyleSheet)
+            772 LOAD_CONST               9 ('color:#868E96; font-size:13px;')
+            774 PRECALL                  1
+            778 CALL                     1
+            788 POP_TOP
+
+ 88         790 LOAD_FAST                1 (layout)
+            792 LOAD_METHOD              8 (addWidget)
+            814 LOAD_FAST                4 (desc)
+            816 PRECALL                  1
+            820 CALL                     1
+            830 POP_TOP
+
+ 90         832 LOAD_GLOBAL             23 (NULL + QHBoxLayout)
+            844 PRECALL                  0
+            848 CALL                     0
+            858 STORE_FAST               5 (btn_row)
+
+ 91         860 LOAD_FAST                5 (btn_row)
+            862 LOAD_METHOD              1 (setSpacing)
+            884 LOAD_CONST              10 (12)
+            886 PRECALL                  1
+            890 CALL                     1
+            900 POP_TOP
+
+ 93         902 LOAD_GLOBAL             25 (NULL + QPushButton)
+            914 LOAD_GLOBAL             19 (NULL + t)
+            926 LOAD_CONST              11 ('dlg_failed_retry')
+            928 PRECALL                  1
+            932 CALL                     1
+            942 PRECALL                  1
+            946 CALL                     1
+            956 STORE_FAST               6 (btn_retry)
+
+ 94         958 LOAD_FAST                6 (btn_retry)
+            960 LOAD_METHOD             13 (setProperty)
+            982 LOAD_CONST              12 ('btnType')
+            984 LOAD_CONST              13 ('danger')
+            986 PRECALL                  2
+            990 CALL                     2
+           1000 POP_TOP
+
+ 95        1002 LOAD_FAST                6 (btn_retry)
+           1004 LOAD_METHOD             14 (setFixedWidth)
+           1026 LOAD_CONST              14 (120)
+           1028 PRECALL                  1
+           1032 CALL                     1
+           1042 POP_TOP
+
+ 96        1044 LOAD_FAST                6 (btn_retry)
+           1046 LOAD_ATTR               15 (clicked)
+           1056 LOAD_METHOD             16 (connect)
+           1078 LOAD_FAST                0 (self)
+           1080 LOAD_ATTR               17 (_on_retry)
+           1090 PRECALL                  1
+           1094 CALL                     1
+           1104 POP_TOP
+
+ 98        1106 LOAD_GLOBAL             25 (NULL + QPushButton)
+           1118 LOAD_GLOBAL             19 (NULL + t)
+           1130 LOAD_CONST              15 ('flash_btn_view_log')
+           1132 PRECALL                  1
+           1136 CALL                     1
+           1146 PRECALL                  1
+           1150 CALL                     1
+           1160 STORE_FAST               7 (btn_log)
+
+ 99        1162 LOAD_FAST                7 (btn_log)
+           1164 LOAD_METHOD             13 (setProperty)
+           1186 LOAD_CONST              12 ('btnType')
+           1188 LOAD_CONST              16 ('secondary')
+           1190 PRECALL                  2
+           1194 CALL                     2
+           1204 POP_TOP
+
+100        1206 LOAD_FAST                7 (btn_log)
+           1208 LOAD_METHOD             14 (setFixedWidth)
+           1230 LOAD_CONST              14 (120)
+           1232 PRECALL                  1
+           1236 CALL                     1
+           1246 POP_TOP
+
+101        1248 LOAD_FAST                7 (btn_log)
+           1250 LOAD_ATTR               15 (clicked)
+           1260 LOAD_METHOD             16 (connect)
+           1282 LOAD_FAST                0 (self)
+           1284 LOAD_ATTR               18 (_on_log)
+           1294 PRECALL                  1
+           1298 CALL                     1
+           1308 POP_TOP
+
+103        1310 LOAD_FAST                5 (btn_row)
+           1312 LOAD_METHOD              8 (addWidget)
+           1334 LOAD_FAST                6 (btn_retry)
+           1336 PRECALL                  1
+           1340 CALL                     1
+           1350 POP_TOP
+
+104        1352 LOAD_FAST                5 (btn_row)
+           1354 LOAD_METHOD              8 (addWidget)
+           1376 LOAD_FAST                7 (btn_log)
+           1378 PRECALL                  1
+           1382 CALL                     1
+           1392 POP_TOP
+
+105        1394 LOAD_FAST                1 (layout)
+           1396 LOAD_METHOD             19 (addLayout)
+           1418 LOAD_FAST                5 (btn_row)
+           1420 PRECALL                  1
+           1424 CALL                     1
+           1434 POP_TOP
+           1436 LOAD_CONST               0 (None)
+           1438 RETURN_VALUE
+
+Disassembly of <code object _on_retry at 0x000001B35E91B830, file "app\ui\dialogs.py", line 107>:
+107           0 RESUME                   0
+
+108           2 LOAD_CONST               1 (True)
+              4 LOAD_FAST                0 (self)
+              6 STORE_ATTR               0 (_want_retry)
+
+109          16 LOAD_FAST                0 (self)
+             18 LOAD_METHOD              1 (accept)
+             40 PRECALL                  0
+             44 CALL                     0
+             54 POP_TOP
+             56 LOAD_CONST               0 (None)
+             58 RETURN_VALUE
+
+Disassembly of <code object _on_log at 0x000001B35E91BA30, file "app\ui\dialogs.py", line 111>:
+111           0 RESUME                   0
+
+112           2 LOAD_CONST               1 (True)
+              4 LOAD_FAST                0 (self)
+              6 STORE_ATTR               0 (_want_log)
+
+113          16 LOAD_FAST                0 (self)
+             18 LOAD_METHOD              1 (accept)
+             40 PRECALL                  0
+             44 CALL                     0
+             54 POP_TOP
+             56 LOAD_CONST               0 (None)
+             58 RETURN_VALUE
+
+Disassembly of <code object want_retry at 0x000001B35EA04D30, file "app\ui\dialogs.py", line 115>:
+115           0 RESUME                   0
+
+117           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_want_retry)
+             14 RETURN_VALUE
+
+Disassembly of <code object want_log at 0x000001B35EA04E00, file "app\ui\dialogs.py", line 119>:
+119           0 RESUME                   0
+
+121           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_want_log)
+             14 RETURN_VALUE
+
+Disassembly of <code object LogDialog at 0x000001B35E97B870, file "app\ui\dialogs.py", line 124>:
+              0 MAKE_CELL                0 (__class__)
+
+124           2 RESUME                   0
+              4 LOAD_NAME                0 (__name__)
+              6 STORE_NAME               1 (__module__)
+              8 LOAD_CONST               0 ('LogDialog')
+             10 STORE_NAME               2 (__qualname__)
+
+125          12 LOAD_CONST               1 ('日志查看窗口')
+             14 STORE_NAME               3 (__doc__)
+
+127          16 LOAD_CONST               6 ((None,))
+             18 LOAD_CONST               3 ('log_text')
+             20 LOAD_NAME                4 (str)
+             22 BUILD_TUPLE              2
+             24 LOAD_CLOSURE             0 (__class__)
+             26 BUILD_TUPLE              1
+             28 LOAD_CONST               4 (<code object __init__ at 0x000001B35E7FF290, file "app\ui\dialogs.py", line 127>)
+             30 MAKE_FUNCTION           13 (defaults, annotations, closure)
+             32 STORE_NAME               5 (__init__)
+
+133          34 LOAD_CONST               3 ('log_text')
+             36 LOAD_NAME                4 (str)
+             38 BUILD_TUPLE              2
+             40 LOAD_CONST               5 (<code object _build_ui at 0x000001B35E375430, file "app\ui\dialogs.py", line 133>)
+             42 MAKE_FUNCTION            4 (annotations)
+             44 STORE_NAME               6 (_build_ui)
+             46 LOAD_CLOSURE             0 (__class__)
+             48 COPY                     1
+             50 STORE_NAME               7 (__classcell__)
+             52 RETURN_VALUE
+
+Disassembly of <code object __init__ at 0x000001B35E7FF290, file "app\ui\dialogs.py", line 127>:
+              0 COPY_FREE_VARS           1
+
+127           2 RESUME                   0
+
+128           4 LOAD_GLOBAL              1 (NULL + super)
+             16 PRECALL                  0
+             20 CALL                     0
+             30 LOAD_METHOD              1 (__init__)
+             52 LOAD_FAST                2 (parent)
+             54 PRECALL                  1
+             58 CALL                     1
+             68 POP_TOP
+
+129          70 LOAD_FAST                0 (self)
+             72 LOAD_METHOD              2 (setWindowTitle)
+             94 LOAD_GLOBAL              7 (NULL + t)
+            106 LOAD_CONST               1 ('dlg_log_title')
+            108 PRECALL                  1
+            112 CALL                     1
+            122 PRECALL                  1
+            126 CALL                     1
+            136 POP_TOP
+
+130         138 LOAD_FAST                0 (self)
+            140 LOAD_METHOD              4 (resize)
+            162 LOAD_CONST               2 (700)
+            164 LOAD_CONST               3 (500)
+            166 PRECALL                  2
+            170 CALL                     2
+            180 POP_TOP
+
+131         182 LOAD_FAST                0 (self)
+            184 LOAD_METHOD              5 (_build_ui)
+            206 LOAD_FAST                1 (log_text)
+            208 PRECALL                  1
+            212 CALL                     1
+            222 POP_TOP
+            224 LOAD_CONST               0 (None)
+            226 RETURN_VALUE
+
+Disassembly of <code object _build_ui at 0x000001B35E375430, file "app\ui\dialogs.py", line 133>:
+133           0 RESUME                   0
+
+134           2 LOAD_CONST               1 (0)
+              4 LOAD_CONST               2 (('QTextEdit',))
+              6 IMPORT_NAME              0 (PySide6.QtWidgets)
+              8 IMPORT_FROM              1 (QTextEdit)
+             10 STORE_FAST               2 (QTextEdit)
+             12 POP_TOP
+
+135          14 LOAD_CONST               3 (2)
+             16 LOAD_CONST               4 (('APP_VERSION', 'CONTACT_EMAIL'))
+             18 IMPORT_NAME              2 (runtime_paths)
+             20 IMPORT_FROM              3 (APP_VERSION)
+             22 STORE_FAST               3 (APP_VERSION)
+             24 IMPORT_FROM              4 (CONTACT_EMAIL)
+             26 STORE_FAST               4 (CONTACT_EMAIL)
+             28 POP_TOP
+
+136          30 LOAD_GLOBAL             11 (NULL + QVBoxLayout)
+             42 LOAD_FAST                0 (self)
+             44 PRECALL                  1
+             48 CALL                     1
+             58 STORE_FAST               5 (layout)
+
+138          60 LOAD_GLOBAL             13 (NULL + QLabel)
+
+139          72 LOAD_GLOBAL             15 (NULL + t)
+             84 LOAD_CONST               5 ('dlg_log_version')
+             86 PRECALL                  1
+             90 CALL                     1
+            100 FORMAT_VALUE             0
+            102 LOAD_CONST               6 (': ')
+            104 LOAD_FAST                3 (APP_VERSION)
+            106 FORMAT_VALUE             0
+            108 LOAD_CONST               7 ('    ')
+
+140         110 LOAD_GLOBAL             15 (NULL + t)
+            122 LOAD_CONST               8 ('dlg_log_contact')
+            124 PRECALL                  1
+            128 CALL                     1
+
+139         138 FORMAT_VALUE             0
+            140 LOAD_CONST               9 (": <a href='mailto:")
+
+141         142 LOAD_FAST                4 (CONTACT_EMAIL)
+
+139         144 FORMAT_VALUE             0
+            146 LOAD_CONST              10 ("'>")
+
+141         148 LOAD_FAST                4 (CONTACT_EMAIL)
+
+139         150 FORMAT_VALUE             0
+            152 LOAD_CONST              11 ('</a>')
+            154 BUILD_STRING            10
+
+138         156 PRECALL                  1
+            160 CALL                     1
+            170 STORE_FAST               6 (info)
+
+143         172 LOAD_FAST                6 (info)
+            174 LOAD_METHOD              8 (setTextFormat)
+            196 LOAD_GLOBAL             18 (Qt)
+            208 LOAD_ATTR               10 (TextFormat)
+            218 LOAD_ATTR               11 (RichText)
+            228 PRECALL                  1
+            232 CALL                     1
+            242 POP_TOP
+
+144         244 LOAD_FAST                6 (info)
+            246 LOAD_METHOD             12 (setOpenExternalLinks)
+            268 LOAD_CONST              12 (True)
+            270 PRECALL                  1
+            274 CALL                     1
+            284 POP_TOP
+
+145         286 LOAD_FAST                6 (info)
+            288 LOAD_METHOD             13 (setTextInteractionFlags)
+            310 LOAD_GLOBAL             18 (Qt)
+            322 LOAD_ATTR               14 (TextInteractionFlag)
+            332 LOAD_ATTR               15 (TextBrowserInteraction)
+            342 PRECALL                  1
+            346 CALL                     1
+            356 POP_TOP
+
+146         358 LOAD_FAST                6 (info)
+            360 LOAD_METHOD             16 (setStyleSheet)
+
+147         382 LOAD_CONST              13 ('QLabel { color:#1A1A2E; font-size:13px; padding:4px 2px; background:transparent; border:none; }')
+
+146         384 PRECALL                  1
+            388 CALL                     1
+            398 POP_TOP
+
+149         400 LOAD_FAST                5 (layout)
+            402 LOAD_METHOD             17 (addWidget)
+            424 LOAD_FAST                6 (info)
+            426 PRECALL                  1
+            430 CALL                     1
+            440 POP_TOP
+
+151         442 PUSH_NULL
+            444 LOAD_FAST                2 (QTextEdit)
+            446 PRECALL                  0
+            450 CALL                     0
+            460 STORE_FAST               7 (text_edit)
+
+152         462 LOAD_FAST                7 (text_edit)
+            464 LOAD_METHOD             18 (setObjectName)
+            486 LOAD_CONST              14 ('log_view')
+            488 PRECALL                  1
+            492 CALL                     1
+            502 POP_TOP
+
+153         504 LOAD_FAST                7 (text_edit)
+            506 LOAD_METHOD             19 (setReadOnly)
+            528 LOAD_CONST              12 (True)
+            530 PRECALL                  1
+            534 CALL                     1
+            544 POP_TOP
+
+154         546 LOAD_FAST                7 (text_edit)
+            548 LOAD_METHOD             20 (setPlainText)
+            570 LOAD_FAST                1 (log_text)
+            572 PRECALL                  1
+            576 CALL                     1
+            586 POP_TOP
+
+155         588 LOAD_FAST                7 (text_edit)
+            590 LOAD_METHOD             16 (setStyleSheet)
+
+156         612 LOAD_CONST              15 ("background-color:#1A1A2E; color:#A0D911; font-family:'Consolas','Courier New',monospace; font-size:12px; border-radius:8px; padding:12px;")
+
+155         614 PRECALL                  1
+            618 CALL                     1
+            628 POP_TOP
+
+160         630 LOAD_FAST                5 (layout)
+            632 LOAD_METHOD             17 (addWidget)
+            654 LOAD_FAST                7 (text_edit)
+            656 PRECALL                  1
+            660 CALL                     1
+            670 POP_TOP
+
+162         672 LOAD_GLOBAL             43 (NULL + QPushButton)
+            684 LOAD_GLOBAL             15 (NULL + t)
+            696 LOAD_CONST              16 ('dlg_btn_close')
+            698 PRECALL                  1
+            702 CALL                     1
+            712 PRECALL                  1
+            716 CALL                     1
+            726 STORE_FAST               8 (btn_close)
+
+163         728 LOAD_FAST                8 (btn_close)
+            730 LOAD_METHOD             22 (setProperty)
+            752 LOAD_CONST              17 ('btnType')
+            754 LOAD_CONST              18 ('secondary')
+            756 PRECALL                  2
+            760 CALL                     2
+            770 POP_TOP
+
+164         772 LOAD_FAST                8 (btn_close)
+            774 LOAD_METHOD             23 (setFixedWidth)
+            796 LOAD_CONST              19 (100)
+            798 PRECALL                  1
+            802 CALL                     1
+            812 POP_TOP
+
+165         814 LOAD_FAST                8 (btn_close)
+            816 LOAD_ATTR               24 (clicked)
+            826 LOAD_METHOD             25 (connect)
+            848 LOAD_FAST                0 (self)
+            850 LOAD_ATTR               26 (close)
+            860 PRECALL                  1
+            864 CALL                     1
+            874 POP_TOP
+
+166         876 LOAD_FAST                5 (layout)
+            878 LOAD_METHOD             17 (addWidget)
+            900 LOAD_FAST                8 (btn_close)
+            902 LOAD_GLOBAL             18 (Qt)
+            914 LOAD_ATTR               27 (AlignmentFlag)
+            924 LOAD_ATTR               28 (AlignRight)
+            934 KW_NAMES                20
+            936 PRECALL                  2
+            940 CALL                     2
+            950 POP_TOP
+            952 LOAD_CONST               0 (None)
+            954 RETURN_VALUE

@@ -400,6 +400,25 @@ LIBEX_EXPORT bool LIB_API flashtool_if_lib_da_match(const char8* da_filename);
 //! <b>Returns</b>:  STATUS_OK if success, or other status indicate specified error.
 LIBEX_EXPORT status_t LIB_API flashtool_download_cert(HSESSION hs, const char* cert_filename);
 
+//! <b>Effects</b>: update firmware of storage
+//! <b>Parameters</b>: hs:                the session handle
+//!                                fw_filename   firmware file full path
+//!					     fw_buffer      firmware content buffer
+//!					     fw_buffer_len firmware content buffer length
+///
+//!					    NOTICE: firmware from file or buffer, only one valid.
+//!								if use file: set fw_buffer = NULL, fw_buffer_len = 0
+//!								if use buffer: set fw_filename =  NULL
+//!
+//! <b>Returns</b>:  STATUS_OK if success, or other status indicate specified error.
+LIBEX_EXPORT status_t LIB_API flashtool_firmware_update(HSESSION hs, const char* fw_filename, const char* fw_buffer, uint32 fw_buffer_len);
+
+//!<b>Effects</b>: config ufs provision option: force_provision, tw_size_gb, tw_no_red, hpb_size_gb
+//!					hs:                the session handle
+//!					cfg:			 ufs config item
+//!
+//! <b>Returns</b>:  STATUS_OK if success, or other status indicate specified error.
+LIBEX_EXPORT status_t LIB_API flashtool_set_ufs_config(HSESSION hs, struct ex_ufs_config* cfg);
 
 LIBEX_EXPORT void LIB_API flashtool_get_last_errmsg(HSESSION hs, char* err_msg);
 

@@ -585,10 +585,81 @@ def remove_linux_legacy(
     return success, removed, errors
 
 
+def _is_windows_legacy_shortcut_name(name: str) -> bool:
+    """True when a shortcut or shortcut folder name belongs to legacy Innioasis / SP Flash installs."""
+    low = (name or "").lower()
+    return "innioasis" in low or "sp flash" in low
+
+
+def _clean_windows_legacy_shortcuts() -> List[str]:
+    """Safely remove legacy .lnk/.url shortcuts and shortcut-only folders from Start Menu and Desktop.
+
+    Never touches user files or paths outside Desktop and Start Menu Programs.
+    """
+    removed: List[str] = []
+    roots: List[Path] = []
+    userprofile = os.environ.get("USERPROFILE")
+    appdata = os.environ.get("APPDATA")
+    programdata = os.environ.get("PROGRAMDATA")
+    public = os.environ.get("PUBLIC")
+    if userprofile:
+        roots.append(Path(userprofile) / "Desktop")
+    if appdata:
+        roots.append(Path(appdata) / "Microsoft" / "Windows" / "Start Menu" / "Programs")
+    if programdata:
+        roots.append(Path(programdata) / "Microsoft" / "Windows" / "Start Menu" / "Programs")
+    if public:
+        roots.append(Path(public) / "Desktop")
+
+    for root in roots:
+        if not root.is_dir():
+            continue
+        try:
+            entries = list(root.iterdir())
+        except OSError:
+            continue
+        for entry in entries:
+            try:
+                if entry.is_symlink():
+                    continue
+                if entry.is_file():
+                    if entry.suffix.lower() in (".lnk", ".url") and _is_windows_legacy_shortcut_name(entry.stem):
+                        entry.unlink()
+                        removed.append(str(entry))
+                elif entry.is_dir() and _is_windows_legacy_shortcut_name(entry.name):
+                    # Only remove .lnk and .url shortcut files inside the folder, then
+                    # remove the folder only if it is empty so user files are never deleted.
+                    for sub in list(entry.rglob("*")):
+                        if sub.is_file() and not sub.is_symlink() and sub.suffix.lower() in (".lnk", ".url"):
+                            try:
+                                sub.unlink()
+                                removed.append(str(sub))
+                            except OSError:
+                                pass
+                    for sub_dir in sorted(
+                        (d for d in entry.rglob("*") if d.is_dir() and not d.is_symlink()),
+                        key=lambda p: len(p.parts),
+                        reverse=True,
+                    ):
+                        try:
+                            sub_dir.rmdir()
+                        except OSError:
+                            pass
+                    try:
+                        entry.rmdir()
+                        removed.append(str(entry))
+                    except OSError:
+                        pass
+            except OSError:
+                continue
+    return removed
+
+
 def remove_windows_legacy() -> Tuple[bool, List[str], List[str]]:
     """Execute removal of legacy Windows components.
 
-    Runs Uninstall.exe if found, and clears leftover files from %LocalAppData% / %AppData%.
+    Runs Uninstall.exe / uninstall.exe if found, clears leftover files from
+    %LocalAppData%\\Innioasis Updater, and removes legacy shortcuts from Start Menu / Desktop.
     """
     removed = []
     errors = []
@@ -598,7 +669,7 @@ def remove_windows_legacy() -> Tuple[bool, List[str], List[str]]:
         if not folder.is_dir():
             continue
         uninstaller = None
-        for candidate in ("Uninstall.exe", "uninstall.exe", "unins000.exe"):
+        for candidate in ("uninstall.exe", "Uninstall.exe", "unins000.exe"):
             unins_path = folder / candidate
             if unins_path.is_file():
                 uninstaller = unins_path
@@ -621,5 +692,9 @@ def remove_windows_legacy() -> Tuple[bool, List[str], List[str]]:
                 removed.append(str(folder))
             except Exception as e:
                 errors.append(f"Failed to remove {folder}: {e}")
+    try:
+        removed.extend(_clean_windows_legacy_shortcuts())
+    except Exception as e:
+        errors.append(f"Failed to clean legacy shortcuts: {e}")
     success = len(errors) == 0
     return success, removed, errors

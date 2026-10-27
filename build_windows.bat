@@ -8,19 +8,29 @@ rem   build_windows.bat updater_ce -Msix     :: also pack the Microsoft Store (M
 
 setlocal enabledelayedexpansion
 
-set "BRAND=both"
+set "BRAND=updater_ce"
 set "CLEAN=0"
 set "NOINSTALLER=0"
 set "INSTALLER=0"
 set "MSIX=0"
 set "MSIXONLY=0"
 set "SKIT_PYI=0"
-set "VERSION=2.5.0"
+set "VERSION=2.5.1"
 set "DIST_DIR=dist\windows"
 set "BUILD_DIR=build\windows"
 
 :parse_args
 if "%~1"=="" goto :args_done
+if /i "%~1"=="both" (
+    set "BRAND=both"
+    shift
+    goto :parse_args
+)
+if /i "%~1"=="all" (
+    set "BRAND=both"
+    shift
+    goto :parse_args
+)
 if /i "%~1"=="updater_ce" (
     set "BRAND=updater_ce"
     shift

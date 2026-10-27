@@ -106,7 +106,7 @@ QString strEngVec[] = {
     QObject::tr("Smart Phone Flash Tool"),
     QObject::tr("About Smart Phone Flash Tool"),
     QObject::tr("DA and Library Info"),
-    QObject::tr("Copyright (c) 2001-2018, MediaTek Inc. All rights reserved."),
+    QObject::tr("Copyright (c) 2001-2020, MediaTek Inc. All rights reserved."),
     QObject::tr("Comment: [Customer Release] "),
     QObject::tr("Comment: [Internal Release] "),
     QObject::tr("Build: "),
@@ -116,6 +116,9 @@ QString strEngVec[] = {
     QObject::tr("<html><head/><body><p>A new version of Flash tool is availabel</p></body></html>"),
     QObject::tr("&Remind Me Later"),
     QObject::tr("&Install Update"),
+    QObject::tr("Lacking of update files.\nPlease re-install the tool or contact the tool owner."),
+    QObject::tr("Start update tool failed.\nPlease re-install the tool or contact the tool owner."),
+    QObject::tr("Update tool failed.\nPlease re-install the tool or contact the tool owner."),    
     QObject::tr("Encrypt"),
     QObject::tr("Please enter password:"),
     QObject::tr("Incorrect Password! Try again!"),
@@ -130,7 +133,11 @@ QString strEngVec[] = {
 	QObject::tr("Please close other Flash Tool which is running before installing update."),
     QObject::tr("DRAM Repair"),
     QObject::tr("DRAM repair address written done"),
-    QObject::tr("DRAM repair address is NOT written.")
+    QObject::tr("DRAM repair address is NOT written."),
+    QObject::tr("Operation failed!\nPlease select at least one download scene or contact tool owner."),
+    QObject::tr("Notice that  90% of life time for storage in your device has passed, please change to use new device as soon as possible.\nDo you want to continue anyway?"),
+    QObject::tr("Please provide pgpt partition before download when skip_pmt_operate is true in scatter file."),
+    QObject::tr("Please pgpt partition MUST be selected before download when skip_pmt_operate is true in scatter file.")
 };
 
 const QString strCHString[]={
@@ -230,7 +237,7 @@ const QString strCHString[]={
     "智能手机下载工具",
     "关于智能手机下载工具",
     "DA 和 Library 信息",
-    "版权 2001-2017 联发科技有限公司。保留所有权利。",
+    "版权 2001-2020 联发科技有限公司。保留所有权利。",
     "备注 [客户版本]",
     "备注：[内部发布]",
     "构建：",
@@ -240,6 +247,9 @@ const QString strCHString[]={
     "<html><head/><body><p>一个新的Flash Tool 版本可用</p></body></html>",
     "下次提醒(&R)",
     "安装更新(&I)",
+    "缺少必要的更新文件导致更新失败！\n请重新安装Flash Tool或联系Tool Owner。",
+    "启动升级工具失败！\n请重新安装Flash Tool或联系Tool Owner。",    
+    "升级失败！\n请重新安装Flash Tool或联系Tool Owner。",        
     "加密",
     "请输入密码：",
     "密码错误，请重试！",
@@ -254,7 +264,11 @@ const QString strCHString[]={
     "更新之前请先闭关其他打开的Flash Tool",
     "DRAM修复",
     "成功写入DRAM修复地址",
-    "未成功写入DRAM修复地址"
+    "未成功写入DRAM修复地址",
+    "操作失败！\n请至少选择一种download scene或联系Tool Owner。",
+    "存储介质生命周期的90%已经消耗，请尽快更换新设备。\n请问您是否继续？",
+    "scatter文件中skip_pmt_operate设置为true时，下载时请提供pgpt分区。",
+    "scatter文件中skip_pmt_operate设置为true时，下载时pgpt分区必须选择。"
 };
 
 const QString strTWString[]={
@@ -354,7 +368,7 @@ const QString strTWString[]={
     "智慧型手機下載工具",
     "關於智慧型手機下載工具",
     "DA 和 Library 訊息",
-    "版權 2001-2017, 聯發科技有限公司。保留所有權利。",
+    "版權 2001-2020, 聯發科技有限公司。保留所有權利。",
     "備註 [客戶版本]",
     "備註：[內部發佈]",
     "構建：",
@@ -364,6 +378,9 @@ const QString strTWString[]={
     "<html><head/><body><p>A new version of Flash tool is availabel</p></body></html>",
     "稍後提醒(&R)",
     "安裝更新(&I)",
+    "缺少必要的更新文件導致更新失敗！\n請重新安裝Flash Tool或聯繫Tool Owner。",
+    "啟動升級工具失敗！\n請重新安裝Flash Tool或聯繫Tool Owner。",    
+    "升級失敗！\n請重新安裝Flash Tool或聯繫Tool Owner。",        
     "加密",
     "請輸入密碼：",
     "密碼錯誤，請重試！",
@@ -378,7 +395,11 @@ const QString strTWString[]={
     "更新之前請先關閉其他打開的Flash Tool",
     "DRAM修復",
     "成功寫入DRAM修復地址",
-    "未成功寫入DRAM修復地址"
+    "未成功寫入DRAM修復地址",
+    "操作失敗！\n請至少選擇一種download scene或聯繫Tool Owner。",
+    "存儲介質生命週期的90%已經消耗，請盡快更換新設備。\n請問您是否繼續？",
+    "scatter文件中skip_pmt_operate設置為true時，下載時請提供pgpt分區。",
+    "scatter文件中skip_pmt_operate設置為true時，下載時pgpt分區必須選擇。"
 };
 
 const QString test = QObject::tr("DownloadTest");

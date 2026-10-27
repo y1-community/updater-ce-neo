@@ -199,7 +199,10 @@ typedef struct DA_REPORT_T {
     U64                 m_ufs_lu0_size;
     U64                 m_ufs_lu1_size;
     U64                 m_ufs_lu2_size;
-    U32                 m_ufs_cid[4];
+	U16                 m_ufs_vendor_id;
+    U8                  m_ufs_cid[16+1];
+    U8                  m_ufs_fwver[4+1];
+    U8                  m_ufs_sn[128+1];	
 
 } DA_REPORT_T;
 
@@ -302,6 +305,8 @@ typedef struct {
 
 #define RESET_BY_PWR_KEY_ALONE	0x50	// 'P'
 #define RESET_BY_PWR_HOME_KEY	0x68	// 'h' - default(everything other than 'P' means 'h')
+#define RESET_DISABLE           0x72    // disable long press reboot feature.
+
 	unsigned char                           m_reset_key; // power key reset, or power+home key reset
 
 	//add for DRAM flip test set connect which DA, 1st or 2nd
@@ -645,6 +650,11 @@ LIBEXPORT int __stdcall FlashTool_Format(
                         const FlashTool_Format_Arg  *p_fmt_arg,
                         FlashTool_Format_Result  *p_fmt_result);
 
+LIBEXPORT int __stdcall FlashTool_Format_Partition(
+	                    FLASHTOOL_API_HANDLE_T  ft_handle, 
+	                    const char8* part_name, 
+	                    const struct callbacks_struct_t* callbacks);
+
 //------------------------------------------------------------------------------
 // Flash read/write
 //------------------------------------------------------------------------------
@@ -885,6 +895,17 @@ typedef struct {
 } FlashTool_MemoryTest_Result;
 
 LIBEXPORT int __stdcall FlashTool_MemoryTest( FLASHTOOL_API_HANDLE_T  ft_handle, const FlashTool_MemoryTest_Arg *p_mt_arg, FlashTool_MemoryTest_Result * p_mt_result);
+
+LIBEXPORT int __stdcall FlashTool_FirmwareUpdate( FLASHTOOL_API_HANDLE_T  ft_handle, const char* fw_filename, const char* fw_buffer, uint32 fw_buffer_len);
+
+
+typedef struct {
+	uint32 force_provision; //default 0
+	uint32 tw_size_gb; // default 0xFFFFFFFF
+	uint32 tw_no_red;  // default 1
+	uint32 hpb_size_gb; //default 0xFFFFFFFF
+}UFS_Config;
+LIBEXPORT int __stdcall FlashTool_SetUFSConfig(FLASHTOOL_API_HANDLE_T  ft_handle, UFS_Config* cfg);
 
 
 typedef struct {
@@ -1233,7 +1254,7 @@ typedef struct{
 
 LIBEXPORT int __stdcall FlashTool_GetRSCCnt(const char* rsc_filename, unsigned int* cnt);
 LIBEXPORT int __stdcall FlashTool_GetRSCInfo(const char* rsc_filename, proj_item* rscinfo, unsigned int rsccnt);
-LIBEXPORT int __stdcall FlashTool_SetRSCInfo(FLASHTOOL_API_HANDLE_T ft_handle, proj_item* da_rsc);
+LIBEXPORT int __stdcall FlashTool_SetRSCInfo(FLASHTOOL_API_HANDLE_T ft_handle, const char* rsc_file, proj_item* da_rsc);
 //rsc end
 
 LIBEXPORT int __stdcall FlashTool_GetHRID(FLASHTOOL_API_HANDLE_T ft_handle, unsigned char* hrid_buf, unsigned int hrid_buflen, bool log = false);

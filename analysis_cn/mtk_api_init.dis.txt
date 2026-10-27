@@ -1,0 +1,57 @@
+ 12           0 RESUME                   0
+
+ 13           2 LOAD_GLOBAL              0 (logging)
+             14 LOAD_ATTR                1 (INFO)
+             24 STORE_FAST               3 (loglevel)
+
+ 14          26 LOAD_GLOBAL              5 (NULL + MtkConfig)
+             38 LOAD_FAST                3 (loglevel)
+             40 LOAD_CONST               0 (None)
+             42 LOAD_CONST               0 (None)
+             44 KW_NAMES                 1
+             46 PRECALL                  3
+             50 CALL                     3
+             60 STORE_FAST               4 (config)
+
+ 15          62 LOAD_FAST                1 (loader)
+             64 LOAD_FAST                4 (config)
+             66 STORE_ATTR               3 (loader)
+
+ 16          76 LOAD_FAST                0 (preloader)
+             78 POP_JUMP_FORWARD_IF_NONE    82 (to 244)
+
+ 17          80 LOAD_GLOBAL              8 (os)
+             92 LOAD_ATTR                5 (path)
+            102 LOAD_METHOD              6 (exists)
+            124 LOAD_FAST                0 (preloader)
+            126 PRECALL                  1
+            130 CALL                     1
+            140 POP_JUMP_FORWARD_IF_FALSE    51 (to 244)
+
+ 18         142 LOAD_FAST                0 (preloader)
+            144 LOAD_FAST                4 (config)
+            146 STORE_ATTR               7 (preloader_filename)
+
+ 19         156 LOAD_GLOBAL             17 (NULL + open)
+            168 LOAD_FAST                4 (config)
+            170 LOAD_ATTR                7 (preloader_filename)
+            180 LOAD_CONST               2 ('rb')
+            182 PRECALL                  2
+            186 CALL                     2
+            196 LOAD_METHOD              9 (read)
+            218 PRECALL                  0
+            222 CALL                     0
+            232 LOAD_FAST                4 (config)
+            234 STORE_ATTR              10 (preloader)
+
+ 20     >>  244 LOAD_GLOBAL             23 (NULL + Mtk)
+            256 LOAD_FAST                4 (config)
+            258 LOAD_FAST                3 (loglevel)
+            260 LOAD_FAST                2 (serialport)
+            262 KW_NAMES                 3
+            264 PRECALL                  3
+            268 CALL                     3
+            278 STORE_FAST               5 (mtk)
+
+ 21         280 LOAD_FAST                5 (mtk)
+            282 RETURN_VALUE

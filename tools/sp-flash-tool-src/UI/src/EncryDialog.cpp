@@ -4,10 +4,10 @@
 #include "MainWindow.h"
 #include <time.h>
 
-EncryDialog::EncryDialog(QWidget *parent, MainWindow *window) :
+EncryDialog::EncryDialog(MainWindow *parent) :
     QDialog(parent),
     ui(new Ui::EncryDialog),
-    main_windows_(window)
+    main_windows_(parent)
 {
     ui->setupUi(this);
 

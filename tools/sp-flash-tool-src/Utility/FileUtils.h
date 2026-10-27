@@ -86,6 +86,12 @@ namespace FileUtils {
       //save file
     int SaveFile(const char*filepath, unsigned char*p_buf, unsigned int file_len);
 
+#if defined(_LINUX)
+    void copy_99ttyacms_file(bool need_check_first_run = false);
+    bool IsValidKernelVersion();
+    void runModemManagerCmd();
+#endif
+
     class FileOpenSentry {
     public:
         FileOpenSentry(const std::string &filepath, const std::string &mode, FILE *&fp)

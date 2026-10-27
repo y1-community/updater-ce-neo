@@ -99,3 +99,84 @@ def test_write_progress_only_reads_after_the_last_line_is_quiet():
         det.progress()
 
     assert _run(events, settle=0.1) == []
+
+
+def test_child_progress_log_refreshes_liveness_without_becoming_failure():
+    holds = []
+    worker = FlashWorker("pkg.zip", method="mtk", device_loss_hold=holds.append)
+    classified = []
+    worker._classify_mtk_output = classified.append
+    line = "Progress: 8.3% Write BOOTIMG (0.5MB/6.0MB), 5.59 MB/s (02m:05s left)"
+
+    worker._handle_mtk_subprocess_log(line)
+    worker._handle_mtk_subprocess_log(line)  # duplicate output must not extend grace
+
+    assert worker._mtk_cli_partition_progress == {"BOOTIMG": 0.5}
+    assert worker._last_install_progress_time > 0
+    assert holds == [30.0]
+    assert classified == []
+
+
+def test_child_progress_log_tracks_advancing_partition_bytes():
+    holds = []
+    worker = FlashWorker("pkg.zip", method="mtk", device_loss_hold=holds.append)
+
+    worker._handle_mtk_subprocess_log(
+        "Progress: 8.3% Write BOOTIMG (0.5MB/6.0MB), 5.59 MB/s (02m:05s left)"
+    )
+    worker._handle_mtk_subprocess_log(
+        "Progress: 16.7% Write BOOTIMG (1.0MB/6.0MB), 5.44 MB/s (02m:04s left)"
+    )
+
+    assert worker._mtk_cli_partition_progress == {"BOOTIMG": 1.0}
+    assert holds == [30.0, 30.0]
+
+
+def test_mtk_usb_loss_handler_ignores_reenumeration_while_write_grace_is_active():
+    from src.state import FlashState
+    from src.ui.main_window import MainWindow
+
+    from PySide6.QtWidgets import QApplication
+
+    app = QApplication.instance() or QApplication(["--platform", "offscreen"])
+    window = MainWindow()
+    worker = FlashWorker("pkg.zip", method="mtk")
+    worker._tool_tag = "MTK"
+    worker._past_usb_search = True
+    worker._device_loss_held_until = time.time() + 30.0
+    window.service._flash_worker = worker
+    window.sm.force_state(FlashState.S4_FLASHING)
+    try:
+        window._on_device_lost()
+        assert window.sm.state is FlashState.S4_FLASHING
+        assert not hasattr(window, "_kill_process_timer")
+        assert window._install_failed is False
+    finally:
+        window.service._flash_worker = None
+        window.close()
+        app.processEvents()
+
+
+def test_mtk_usb_loss_handler_reports_loss_after_write_grace_expires():
+    from src.state import FlashState
+    from src.ui.main_window import MainWindow
+
+    from PySide6.QtWidgets import QApplication
+
+    app = QApplication.instance() or QApplication(["--platform", "offscreen"])
+    window = MainWindow()
+    worker = FlashWorker("pkg.zip", method="mtk")
+    worker._tool_tag = "MTK"
+    worker._past_usb_search = True
+    worker._device_loss_held_until = time.time() - 1.0
+    window.service._flash_worker = worker
+    window.sm.force_state(FlashState.S4_FLASHING)
+    disconnected = []
+    window._on_flash_disconnected = lambda: disconnected.append(True)
+    try:
+        window._on_device_lost()
+        assert disconnected == [True]
+    finally:
+        window.service._flash_worker = None
+        window.close()
+        app.processEvents()

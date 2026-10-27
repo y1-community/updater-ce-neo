@@ -31,12 +31,6 @@ typedef struct
 } UIImageStruct;
 typedef QMap<QString, QPair<Qt::CheckState, QString> > ImageStatusMap;
 
-typedef struct rsc_proj_info_t
-{
-    std::string operator_name;
-    // to add
-}rsc_proj_info;
-
 class MainWindow;
 class CheckHeader;
 class PlatformSetting;
@@ -59,7 +53,8 @@ public:
 
     Download_Scene scene () const
    {
-          return this->scene_;
+        assert(scene_ != UNKOWN_DOWNLOAD_SCENE);
+        return this->scene_;
    }
 
     DECLARE_TABWIDGET_VFUNCS()
@@ -80,7 +75,8 @@ public:
     bool InitialPlatform(void);
     void ShowRSCItem(bool show = false);
     void Process_rsc(QString scatter_filename);
-    void Init_RSC_list(proj_item* p_item, unsigned int rsc_cnt);
+    void Init_RSC_list(void);
+    void Clear_RSC_Info(void);
 
     void BuildGeneralSetting(QSharedPointer<ConsoleMode::GeneralSetting> &gen_setting);
     void BuildDownloadSetting(QSharedPointer<APCore::DADownloadAllSetting> &dl_setting);
@@ -97,12 +93,12 @@ public:
     void EnableBootMode_ComId(bool enable);
     void Enable_groupBox_boot_mode_flag(bool enable);
     void UserCancelLoadScatter();
-    void AfterDAConnected(HW_StorageType_E storage_type, const FLASHTOOL_API_HANDLE_T FT_Handle);
 
     bool IsRSCEnabled() const;
-    unsigned int GetRSCIndex(void);
+    int GetRSCIndex(std::string rscProjName);
     std::string GetRSCProjectName(void);
-    std::string GetRSCOperatorName(unsigned int index);
+    std::string GetRSCOperatorName(std::string rscProjName);
+    std::string GetRSCFilePath(void);
 
     bool GetCertDLToStorage();
 
@@ -132,9 +128,6 @@ private:
 
     int GetSecRoIndex();
     void StartDownload();
-    bool ConfirmDisconnectAndPowerOff();
-    void ShowConnectDevicePrompt();
-    QMessageBox *connect_prompt_ = NULL;
 
     void UpdateUIStatus();
 
@@ -144,10 +137,14 @@ private:
     void QueryPreloadersVisbleIndex(int* pl_index, int* ext1_index, int* ext2_index);
     void RomEnabledChanged(int row);
     void PreloaderChanged(QTableWidgetItem *item);
-    ImageStatusMap GetRegionStatusMap() const;
     void RefreshTableWidget(const QList<UIImageStruct> &oRegionList);
     QList<UIImageStruct> FilterVisibleImages(const std::list<ImageInfo> &image_list, const ImageStatusMap &image_status_map) const;
     void restoreImageRegionInfo(std::list<ImageInfo> &image_list) const;
+    void updateDownloadSceneByConfig();
+    void changeDownloadSceneToDefault();
+    void updateTableWidgetFlagsByConfig();
+    bool checkStateEnabledByConfig() const;
+    void removeCurrentScatterFile();
 
     MainWindow *main_window_;
     Ui::DownloadWidget *ui_;
@@ -164,8 +161,10 @@ private:
     int mStopFlag;
     int mCurLocationRow;
 
-#define MAX_RSC_PROJ_CNT 8
-    rsc_proj_info rsc_p_info[MAX_RSC_PROJ_CNT];
+#define MAX_RSC_PROJ_CNT 64
+    proj_item m_rsc_p_info[MAX_RSC_PROJ_CNT];
+    uint m_rsc_cnt;
+    std::string m_rsc_file_path;
 
 protected:
     void dragEnterEvent(QDragEnterEvent *event);

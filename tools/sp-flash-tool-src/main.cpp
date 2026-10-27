@@ -39,11 +39,19 @@ static int runQtApplication(int argc, char *argv[])
         }
     }
 
+#if defined(_LINUX)
+    if (!FileUtils::IsValidKernelVersion()) {
+        flashtool_message_box(0, 0, CRITICAL_MSGBOX, "Smart Phone Flash Tool",
+                              "Invalid linux kervel version.\nPlease upgrade linux kernel up to at least 4.19.14!", "OK");
+        return 5;
+    }
+#endif
+
     QPixmap pixmap(":/images/FlashToolSplash.png");
     QSplashScreen splash(pixmap);
     splash.show();
     splash.showMessage("SP Flash Tool is loading...\n\n\n\n\n\n\n\n\n\n\n\n\n"
-                       "   Copyright (c) 2001-2018, MediaTek Inc. All rights reserved."
+                       "   Copyright (c) 2001-2020, MediaTek Inc. All rights reserved."
                        ,Qt::AlignBottom,Qt::gray);
 
     MainWindow w;
@@ -62,6 +70,12 @@ static int runQtApplication(int argc, char *argv[])
 int runConsoleMode(int argc, char *argv[])
 {
     QCoreApplication a(argc, argv);
+#if defined(_LINUX)
+    if (!FileUtils::IsValidKernelVersion()) {
+        std::cout << "Invalid linux kervel version, please upgrade linux kernel up to at least 4.19.14!" << std::endl;
+        return 5;
+    }
+#endif
     ConsoleMode::ConsoleModeEntry cm_entry;
     return cm_entry.Run(argc, argv);
 }
@@ -70,6 +84,9 @@ int main(int argc, char *argv[])
 {
     try
     {
+#ifdef _LINUX
+        QCoreApplication::addLibraryPath(QDir::toNativeSeparators("./lib"));
+#endif
         EnableMemLeakCheck();
         Utils::SetTextCodec();
         init_app_path(argv);

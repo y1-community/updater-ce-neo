@@ -22,7 +22,7 @@ APP_ID="com.innioasis.updater"
 # generic cross-platform MediaTek Installer instead: its own name and bundle
 # id, and an app that knows it is offline-only.
 BRAND="$(printf '%s' "${BUILD_BRAND:-updater_ce}" | tr '[:upper:]-' '[:lower:]_')"
-VERSION=$(grep -oP 'APP_VERSION\s*=\s*"\K[^"]+' src/config.py 2>/dev/null || echo "2.5")
+VERSION=$(grep -oP 'APP_VERSION\s*=\s*"\K[^"]+' src/config.py 2>/dev/null || echo "2.5.1")
 DIST_DIR="dist/macos"
 BUILD_DIR="build/macos"
 SPEC_FILE="macos.spec"
@@ -178,6 +178,17 @@ for mod in $CHECK_MODS; do
     fi
 done
 echo "  -> Environment verified: $("$PYTHON" --version 2>&1)"
+if [ "$(uname -s)" = "Darwin" ]; then
+    # PySide6 6.12.0 on Python < 3.12 leaks a None reference per paint call and
+    # the app aborts ("none_dealloc: deallocating None") within a minute.
+    set +e
+    "$PYTHON" scripts/check_pyside_refcount.py
+    rc=$?
+    set -e
+    if [ "$rc" -eq 1 ]; then
+        exit 1
+    fi
+fi
 
 log_step 2 "$TOTAL_STEPS" "Preparing Native Assets & Dynamic Libraries" "Ensuring universal libusb-1.0.dylib and macOS application icon (.icns)..."
 DARWIN_LIBUSB="vendor/mtkclient/mtkclient/Darwin/libusb-1.0.dylib"

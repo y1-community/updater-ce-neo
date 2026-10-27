@@ -110,6 +110,35 @@ def _configure_logging():
         pass
 
 
+_fault_log = None
+
+
+def _enable_native_crash_log():
+    """Write Python tracebacks for hard crashes (SIGSEGV/SIGABRT) to a file.
+
+    A fatal interpreter error bypasses ``logging`` and ``sys.excepthook``; on a
+    windowed Windows/macOS build there is no console either, so without this a
+    native abort leaves no trace at all. The file sits next to updater.log.
+    """
+    global _fault_log
+    try:
+        import faulthandler
+
+        from .downloads import downloads_dir
+
+        path = downloads_dir().parent / "native_crash.log"
+        # Keep the log bounded: start fresh once it passes 1 MiB.
+        mode = "w" if path.exists() and path.stat().st_size > 1 << 20 else "a"
+        _fault_log = open(path, mode, encoding="utf-8")
+        import time as _time
+
+        _fault_log.write(f"\n--- session {_time.strftime('%Y-%m-%d %H:%M:%S')} pid {__import__('os').getpid()} ---\n")
+        _fault_log.flush()
+        faulthandler.enable(file=_fault_log, all_threads=True)
+    except Exception:
+        logger.debug("Native crash log unavailable", exc_info=True)
+
+
 def _running_threads() -> list:
     """Every live Python QThread, whichever module created it."""
     import gc
@@ -170,6 +199,8 @@ def _prepare_linux_sp_flash_tool() -> None:
     error that crashes the app before the GUI opens.
     """
     try:
+        import subprocess
+
         from . import linux_sp_flash
         from . import process_guard
 
@@ -227,8 +258,10 @@ def _prepare_linux_sp_flash_tool() -> None:
                     "Stopping conflicting service: %s", service_name,
                 )
                 try:
+                    # --no-ask-password: never pop a polkit dialog at launch;
+                    # without rights this simply fails and the warning stands.
                     subprocess.run(
-                        ["systemctl", "stop", service_name],
+                        ["systemctl", "--no-ask-password", "stop", service_name],
                         capture_output=True,
                         timeout=3,
                     )
@@ -262,8 +295,55 @@ def _prepare_linux_sp_flash_tool() -> None:
         logger.warning("Linux SP Flash Tool preparation failed: %s", e)
 
 
+def _maybe_shed_redundant_payload():
+    """On x86/x64 Windows with SP Flash Tool ready, MTKClient is redundant.
+
+    Shedding mtkclient saves disk footprint and simplifies the install while
+    leaving SP Flash Tool completely functional. On Windows ARM64, MTKClient
+    is preserved as the primary engine. All file ops are wrapped to gracefully
+    no-op on read-only/system installations.
+    """
+    if paths.IS_MAC or not paths.IS_WINDOWS:
+        return
+    import platform
+    import shutil
+    machine = (platform.machine() or "").lower()
+    intel_machines = ("x86_64", "amd64", "x64", "i386", "i486", "i586", "i686", "x86")
+    if machine not in intel_machines:
+        return
+    sp_exe = paths.SP_FLASH_TOOL_DIR / "flash_tool.exe"
+    if not sp_exe.is_file():
+        return
+    candidates = [
+        paths.INSTALL_DIR / "mtkclient",
+        paths.BUNDLE_DIR / "mtkclient",
+        paths.INSTALL_DIR / "_internal" / "mtkclient",
+    ]
+    for c in candidates:
+        if c.is_dir() and getattr(sys, "frozen", False):
+            try:
+                shutil.rmtree(c, ignore_errors=True)
+                logging.getLogger("innioasis.startup").info("Shed unneeded mtkclient payload: %s", c)
+            except Exception:
+                pass
+
+
 def main():
+    # First, before any Qt call: PySide6 6.12.0 on Python < 3.12 leaks a None
+    # reference per QPainter pen/font change, which aborted the app within a
+    # minute of painting ("none_dealloc: deallocating None"). See runtime_guard.
+    from . import runtime_guard
+
+    runtime_guard.pin_singletons()
     _configure_logging()
+    _enable_native_crash_log()
+
+    # Windows: no helper process (adb, taskkill, powershell ...) may open a
+    # black console window over the app. Must happen before anything spawns.
+    from . import quiet_subprocess
+
+    quiet_subprocess.install()
+    _maybe_shed_redundant_payload()
 
     # Say which front end this is, once: a frozen build carries its brand
     # inside, so this is the one line that tells support which app a log came
@@ -359,12 +439,16 @@ def main():
         process_guard.sweep_stray_tools(reason="before headless install")
         process_guard.begin_install_session(reason="headless install")
 
+        result_emitted = False
+
         def on_finished(ok, msg):
+            nonlocal result_emitted
+            result_emitted = True
             print(f"[RESULT] {int(ok)} {msg}", flush=True)
             process_guard.end_install_session(reason="headless install finished")
-            sys.exit(0 if ok else 1)
+            os._exit(0 if ok else 1)
 
-        worker.finished.connect(on_finished)
+        worker.finished.connect(on_finished, Qt.ConnectionType.DirectConnection)
 
         def handle_sigterm(signum=None, frame=None):
             worker.cancel()
@@ -384,9 +468,18 @@ def main():
                 da_file=da_file,
                 auth_file=auth_file,
             )
+        except SystemExit:
+            raise
         except BaseException as e:
-            print(f"[RESULT] 0 {e}", flush=True)
-            sys.exit(1)
+            if not result_emitted:
+                print(f"[RESULT] 0 {e}", flush=True)
+                process_guard.end_install_session(reason="headless install exception")
+            os._exit(1)
+
+        if not result_emitted:
+            print("[RESULT] 0 MTK_FLASH_UNEXPECTED_EXIT", flush=True)
+            process_guard.end_install_session(reason="headless install unexpected exit")
+            os._exit(1)
         return
 
     import sys as _sys
@@ -404,6 +497,7 @@ def main():
                 QCoreApplication.addLibraryPath(_plugin_dir)
 
     app = QApplication(sys.argv)
+    runtime_guard.report_binding_health()
     app.setAttribute(Qt.ApplicationAttribute.AA_DontUseNativeDialogs, False)
     # Names the app to the desktop (menu entry matching, WM_CLASS, macOS Dock):
     # the packaged front end tells the environment which one it is. Read before

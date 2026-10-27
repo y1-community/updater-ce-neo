@@ -19,7 +19,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 export BUILD_BRAND="${BUILD_BRAND:-}"
-VERSION=$(grep -oP 'APP_VERSION\s*=\s*"\K[^"]+' src/config.py 2>/dev/null || echo "2.5.0")
+VERSION=$(grep -oP 'APP_VERSION\s*=\s*"\K[^"]+' src/config.py 2>/dev/null || echo "2.5.1")
 ARCH="${ARCH:-x86_64}"
 
 DIST_DIR="${DIST_DIR:-dist/linux}"
@@ -254,30 +254,48 @@ fi
 
 if [ "$SKIP_PYINSTALLER" -eq 0 ]; then
     if [ "$SHOULD_USE_CONTAINER" -eq 1 ]; then
-        echo "  -> Building standalone binary in updater-linux-builder container..."
-        if ! docker image inspect updater-linux-builder >/dev/null 2>&1; then
-            echo "  -> Creating updater-linux-builder container image..."
-            docker build -t updater-linux-builder -f Dockerfile.linux_build .
+        ARCH_CONTAINER="linux/amd64"
+        if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
+            ARCH_CONTAINER="linux/arm64"
+        fi
+        IMAGE_NAME="updater-linux-builder-${ARCH}"
+        echo "  -> Building standalone binary in ${IMAGE_NAME} container (${ARCH_CONTAINER})..."
+        if ! docker image inspect "$IMAGE_NAME" >/dev/null 2>&1; then
+            echo "  -> Creating ${IMAGE_NAME} container image..."
+            docker build --platform "$ARCH_CONTAINER" -t "$IMAGE_NAME" -f Dockerfile.linux_build .
         fi
 
         mkdir -p "$DIST_DIR" "$BUILD_DIR"
         docker run --rm \
+            --platform "$ARCH_CONTAINER" \
             -v "$(pwd):/workspace" \
             -v "$DIST_DIR:$DIST_DIR" \
-            updater-linux-builder -c "
+            "$IMAGE_NAME" -c "
 set -e
-python3 -m venv /tmp/venv
-/tmp/venv/bin/pip install -q --upgrade pip
-/tmp/venv/bin/pip install -q -r requirements.txt pyinstaller
-/tmp/venv/bin/python3 scripts/set_build_brand.py '$BRAND'
-/tmp/venv/bin/pyinstaller --clean --noconfirm --distpath '$DIST_DIR' --workpath '$BUILD_DIR' '$SPEC_FILE'
-cp /usr/lib/x86_64-linux-gnu/libusb-1.0.so* '$DIST_DIR/$APP_NAME/_internal/' 2>/dev/null || true
+if [ -d /opt/venv ]; then
+    VENV_CMD=\"/opt/venv/bin\"
+    # A cached builder image may predate the requirements pins (it shipped
+    # PySide6 6.12.0, which crashes on this Python 3.11): re-sync every run.
+    /opt/venv/bin/pip install -q -r requirements.txt pyinstaller
+else
+    python3 -m venv /tmp/venv
+    /tmp/venv/bin/pip install -q --upgrade pip
+    /tmp/venv/bin/pip install -q -r requirements.txt pyinstaller
+    VENV_CMD=\"/tmp/venv/bin\"
+fi
+\$VENV_CMD/python3 scripts/check_pyside_refcount.py
+\$VENV_CMD/python3 scripts/set_build_brand.py '$BRAND'
+\$VENV_CMD/pyinstaller --clean --noconfirm --distpath '$DIST_DIR' --workpath '$BUILD_DIR' '$SPEC_FILE'
+cp /usr/lib/*-linux-gnu/libusb-1.0.so* '$DIST_DIR/$APP_NAME/_internal/' 2>/dev/null || true
 chown -R $(id -u):$(id -g) '$DIST_DIR' '$BUILD_DIR' .cache 2>/dev/null || true
 rm -f src/_build_brand.py
 "
         echo "  -> Container PyInstaller compilation completed."
     else
         echo "  -> Running PyInstaller on host..."
+        if ! "$PYTHON" scripts/check_pyside_refcount.py; then
+            exit 1
+        fi
         "$PYTHON" -m PyInstaller \
             --clean \
             --noconfirm \
@@ -297,17 +315,56 @@ fi
 log_step 3 "$TOTAL_STEPS" "Bundling SP Flash Tool Linux Payload" "Copying flash_tool executable, helper scripts, and libraries into package..."
 SP_TOOL_SRC="tools/linux/SP_Flash_Tool_v5.1904_Linux"
 SP_TOOL_DIST="$DIST_DIR/$APP_NAME/SP_Flash_Tool"
-if [ ! -f "$SP_TOOL_DIST/flash_tool" ] && [ -f "$SP_TOOL_SRC/flash_tool" ]; then
-    echo "  -> Staging bundled SP Flash Tool payload: $SP_TOOL_SRC -> $SP_TOOL_DIST"
-    rm -rf "$SP_TOOL_DIST"
-    cp -r "$SP_TOOL_SRC" "$SP_TOOL_DIST"
-fi
-if [ -f "$SP_TOOL_DIST/flash_tool" ]; then
-    chmod 0755 "$SP_TOOL_DIST/flash_tool" "$SP_TOOL_DIST/flash_tool.sh" 2>/dev/null || true
-    find "$SP_TOOL_DIST" -name "*.so*" -exec chmod a+r {} + 2>/dev/null || true
-    echo "  -> SP Flash Tool payload bundled at $SP_TOOL_DIST"
+if [ "$ARCH" = "x86_64" ]; then
+    if [ -f "$SP_TOOL_SRC/flash_tool" ]; then
+        echo "  -> Staging bundled SP Flash Tool payload: $SP_TOOL_SRC -> $SP_TOOL_DIST"
+        rm -rf "$SP_TOOL_DIST"
+        cp -r "$SP_TOOL_SRC" "$SP_TOOL_DIST"
+        if [ -f "$SP_TOOL_DIST/history.ini" ]; then
+            printf "[RecentOpenFile]\nscatterHistory=@Invalid()\nauthHistory=@Invalid()\n" > "$SP_TOOL_DIST/history.ini"
+        fi
+        rm -rf "$SP_TOOL_DIST/SP_FT_Logs"
+    fi
+    if [ -f "$SP_TOOL_DIST/flash_tool" ]; then
+        chmod 0755 "$SP_TOOL_DIST/flash_tool" "$SP_TOOL_DIST/flash_tool.sh" "$SP_TOOL_DIST/run_flash_tool.sh" 2>/dev/null || true
+        find "$SP_TOOL_DIST" -name "*.so*" -exec chmod a+r {} + 2>/dev/null || true
+        echo "  -> SP Flash Tool payload bundled at $SP_TOOL_DIST"
+    else
+        echo "  -> Note: no local SP Flash Tool payload found; app will download at first run if needed."
+    fi
 else
-    echo "  -> Note: no local SP Flash Tool payload found; app will download at first run if needed."
+    echo "  -> Note: SP Flash Tool is x86_64 only; on $ARCH MTKClient serves as the primary native flasher engine."
+fi
+
+# --- Step 3b: Stage ADB binary ------------------------------------------------
+ADB_BIN=""
+case "$ARCH" in
+    x86_64)
+        if [ -f "tools/adb/linux-x64/adb" ]; then
+            ADB_BIN="tools/adb/linux-x64/adb"
+        fi
+        ;;
+    aarch64|arm64)
+        if [ -f "tools/adb/linux-arm64/adb" ]; then
+            ADB_BIN="tools/adb/linux-arm64/adb"
+        fi
+        ;;
+esac
+
+if [ -n "$ADB_BIN" ] && [ -f "$ADB_BIN" ]; then
+    chmod 0755 "$ADB_BIN"
+    mkdir -p "$DIST_DIR/$APP_NAME/tools/adb"
+    cp "$ADB_BIN" "$DIST_DIR/$APP_NAME/tools/adb/adb"
+    cp "$ADB_BIN" "$DIST_DIR/$APP_NAME/adb"
+    echo "  -> Bundled ADB ($ARCH) at $DIST_DIR/$APP_NAME/tools/adb/adb and $DIST_DIR/$APP_NAME/adb"
+fi
+
+# Stage unar if present for RAR unpacking compatibility
+if [ -f "tools/linux/unar" ]; then
+    mkdir -p "$DIST_DIR/$APP_NAME/tools"
+    cp "tools/linux/unar" "$DIST_DIR/$APP_NAME/tools/unar"
+    chmod 0755 "$DIST_DIR/$APP_NAME/tools/unar"
+    echo "  -> Bundled unar at $DIST_DIR/$APP_NAME/tools/unar"
 fi
 
 # --- Step 4: Prepare AppDir structure -----------------------------------------
@@ -324,7 +381,15 @@ cp -r "$DIST_DIR/$APP_NAME"/* "$APPDIR/usr/bin/"
 
 if [ -d "$APPDIR/usr/bin/SP_Flash_Tool" ]; then
     chmod 0755 "$APPDIR/usr/bin/SP_Flash_Tool/flash_tool" \
-               "$APPDIR/usr/bin/SP_Flash_Tool/flash_tool.sh" 2>/dev/null || true
+               "$APPDIR/usr/bin/SP_Flash_Tool/flash_tool.sh" \
+               "$APPDIR/usr/bin/SP_Flash_Tool/run_flash_tool.sh" 2>/dev/null || true
+    find "$APPDIR/usr/bin/SP_Flash_Tool" -name "*.so*" -exec chmod a+r {} + 2>/dev/null || true
+fi
+
+if [ -n "$ADB_BIN" ] && [ -f "$ADB_BIN" ]; then
+    cp "$ADB_BIN" "$APPDIR/usr/bin/adb"
+    chmod 0755 "$APPDIR/usr/bin/adb"
+    echo "  -> Bundled ADB executable placed on PATH at $APPDIR/usr/bin/adb"
 fi
 
 # Bundle libusb-1.0 into AppDir/usr/lib:
@@ -512,15 +577,19 @@ cp -f "$TARBALL_VERSIONED" "$TARBALL_LATEST"
 # Stable aliases required by the end-user download page and run_linux.sh.
 if [ "$BRAND_SLUG" = "InnioasisUpdater" ]; then
     cp -f "$OUTPUT_VERSIONED" "$DIST_DIR/UpdaterCE.appimage"
+    cp -f "$OUTPUT_VERSIONED" "$DIST_DIR/UpdaterCE.AppImage"
     cp -f "$TARBALL_VERSIONED" "$DIST_DIR/UpdaterCE-${ARCH}.tar.gz"
     cp -f "$TARBALL_VERSIONED" "$DIST_DIR/UpdaterCE.tar.gz"
     install -m 0755 run_linux.sh "$DIST_DIR/run_linux.sh"
     sha256sum "$DIST_DIR/UpdaterCE.appimage" > "$DIST_DIR/UpdaterCE.appimage.sha256"
+    sha256sum "$DIST_DIR/UpdaterCE.AppImage" > "$DIST_DIR/UpdaterCE.AppImage.sha256"
     sha256sum "$DIST_DIR/UpdaterCE.tar.gz" > "$DIST_DIR/UpdaterCE.tar.gz.sha256"
     sha256sum "$DIST_DIR/run_linux.sh" > "$DIST_DIR/run_linux.sh.sha256"
 elif [ "$BRAND_SLUG" = "MediaTekInstaller" ]; then
     cp -f "$OUTPUT_VERSIONED" "$DIST_DIR/MediaTek Installer.appimage"
+    cp -f "$OUTPUT_VERSIONED" "$DIST_DIR/MediaTekInstaller.AppImage"
     sha256sum "$DIST_DIR/MediaTek Installer.appimage" > "$DIST_DIR/MediaTek Installer.appimage.sha256"
+    sha256sum "$DIST_DIR/MediaTekInstaller.AppImage" > "$DIST_DIR/MediaTekInstaller.AppImage.sha256"
 fi
 
 # --- Step 8: Portable ZIP of the same folder ------------------------

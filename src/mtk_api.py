@@ -65,7 +65,15 @@ def find_cross_platform_libusb() -> str | None:
             candidates.extend([
                 os.path.join(appdir, "usr", "lib", "libusb-1.0.so.0"),
                 os.path.join(appdir, "usr", "lib", "x86_64-linux-gnu", "libusb-1.0.so.0"),
+                os.path.join(appdir, "usr", "lib", "aarch64-linux-gnu", "libusb-1.0.so.0"),
                 os.path.join(appdir, "usr", "lib", "libusb-1.0.so"),
+            ])
+        if getattr(paths, "BUNDLE_DIR", None):
+            candidates.extend([
+                str(paths.BUNDLE_DIR / "libusb-1.0.so.0"),
+                str(paths.BUNDLE_DIR / "libusb-1.0.so"),
+                str(paths.BUNDLE_DIR / "_internal" / "libusb-1.0.so.0"),
+                str(paths.BUNDLE_DIR / "_internal" / "libusb-1.0.so"),
             ])
         candidates.extend([
             "/usr/lib/x86_64-linux-gnu/libusb-1.0.so.0",
@@ -77,7 +85,7 @@ def find_cross_platform_libusb() -> str | None:
             "libusb-1.0.so",
         ])
         for c in candidates:
-            if os.path.exists(c):
+            if c and os.path.exists(c):
                 return c
         try:
             import ctypes.util
@@ -568,9 +576,21 @@ def _ensure_imports():
         _Mtk = Mtk
         _MtkConfig = MtkConfig
         _imports_done = True
+    except (ImportError, ModuleNotFoundError) as exc:
+        logger.debug("mtkclient is not present: %s", exc)
+        _imports_done = False
     finally:
         sys.stdout = orig_stdout
         sys.stderr = orig_stderr
+
+
+def is_mtkclient_available() -> bool:
+    """Return True if mtkclient is installed and importable."""
+    try:
+        _ensure_imports()
+        return bool(_imports_done)
+    except Exception:
+        return False
 
 
 def init(loader=None, preloader=None, serialport=None, loglevel=logging.INFO, auth=None):

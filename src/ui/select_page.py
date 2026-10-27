@@ -1712,6 +1712,8 @@ class SelectPackagePage(QWidget):
             self._install_btn.setIcon(self._install_restore_icon())
         if hasattr(self, "_update_prompt") and hasattr(self._update_prompt, "refresh_theme"):
             self._update_prompt.refresh_theme()
+        if hasattr(self, "_battery_toast") and hasattr(self._battery_toast, "refresh_theme"):
+            self._battery_toast.refresh_theme()
         rel = getattr(self, "_current_selected_rel", None)
         if rel and hasattr(self, "_details_icon"):
             self._set_details_header(rel, getattr(self, "_details_package", None) or self._package_for_selection())
@@ -2196,7 +2198,7 @@ class SelectPackagePage(QWidget):
                 for row in range(self._release_list.count()):
                     it = self._release_list.item(row)
                     r = it.data(Qt.UserRole) if it else None
-                    if r and r.get("tag_name") == target_auto:
+                    if r and (target_auto in ("latest", "") or r.get("tag_name") == target_auto):
                         self._release_list.setCurrentRow(row)
                         self._trigger_release_install(r)
                         break
@@ -2696,11 +2698,6 @@ class SelectPackagePage(QWidget):
             package_path=str(self._current_package_path),
             extract_dir=str(extract_abs) if extract_abs else "",
             scatter_path=str(scatter_abs) if scatter_abs else "",
-        )
-        update_sp_history_ini(
-            scatter_path=scatter_abs,
-            extract_dir=extract_abs,
-            model=eff_model,
         )
 
         self._emit_ready()
@@ -3321,11 +3318,7 @@ class SelectPackagePage(QWidget):
                 software_pm, immediate=not getattr(self, "_icon_presented", False),
             )
             self._icon_phase = "software" if not software_pm.isNull() else "placeholder"
-            if (
-                software_pm.isNull()
-                and not release_image_fallback_urls(rel, package, dark=dark)
-                and software_icon_urls(package, dark=dark)
-            ):
+            if software_pm.isNull() and software_icon_urls(package, dark=dark):
                 self._fetch_software_icon(package, dark)
         self._details_header.setVisible(True)
         self._ensure_release_icon(rel)
@@ -3467,6 +3460,16 @@ class SelectPackagePage(QWidget):
         if not rel or str(rel.get("tag_name") or "") != str(tag or ""):
             return
         if not data:
+            package = getattr(self, "_details_package", None)
+            if package and getattr(self, "_icon_phase", "") != "software":
+                from .release_icon import cached_icon_pixmap
+                from ..release_icons import software_icon_urls
+                from .dark import is_dark
+                sw_pm = cached_icon_pixmap(software_icon_urls(package, dark=bool(is_dark())))
+                if not sw_pm.isNull():
+                    self._present_details_icon(sw_pm, immediate=False)
+                    self._icon_phase = "software"
+                    self.release_icon_ready.emit(sw_pm)
             return
         from .release_icon import pixmap_from_icon_bytes
 
@@ -3561,10 +3564,20 @@ class SelectPackagePage(QWidget):
         if release:
             self._trigger_release_install(release, package=package)
         else:
-            item = self._release_list.currentItem()
-            if item:
-                r = item.data(Qt.UserRole)
-                if r and (not tag_name or r.get("tag_name") == tag_name):
-                    self._trigger_release_install(r, package=package)
-                    return
-            self._auto_install_tag = tag_name
+            current_pkg = self.current_package()
+            pkg_match = current_pkg and getattr(current_pkg, "model", "") == model and (
+                getattr(current_pkg, "name", "") == software_name
+                or getattr(current_pkg, "slug", "") == software_name
+            )
+            worker_running = self._releases_worker is not None and self._releases_worker.isRunning()
+            if pkg_match and not worker_running and self._release_list.count() > 0:
+                for row in range(self._release_list.count()):
+                    it = self._release_list.item(row)
+                    r = it.data(Qt.UserRole) if it else None
+                    if r and (not tag_name or tag_name == "latest" or r.get("tag_name") == tag_name):
+                        self._release_list.setCurrentRow(row)
+                        self._trigger_release_install(r, package=package)
+                        return
+            if not self._release_list.count() and not worker_running:
+                self._refresh_releases()
+            self._auto_install_tag = tag_name or "latest"

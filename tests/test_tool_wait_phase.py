@@ -158,10 +158,8 @@ def test_connect_sentence_and_please_wait_bar():
     assert page._wait_prompt_label.text() == tr("flash_please_wait")
     assert page._wait_progress_bar.minimum() == 0
     assert page._wait_progress_bar.maximum() == 0
-    if sys.platform == "darwin":
-        assert not page._wait_continue_btn.isEnabled()
-    else:
-        assert page._wait_continue_btn.isHidden()
+    assert not page._wait_continue_btn.isEnabled()
+    assert not page._wait_continue_btn.isHidden()
     assert "SP Flash Tool" not in page._wait_prompt_label.text()
     assert "MTKClient" not in page._wait_prompt_label.text()
 

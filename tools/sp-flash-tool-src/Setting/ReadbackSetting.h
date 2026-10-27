@@ -53,9 +53,20 @@ public:
 
     void AppendReadbackItem(const ReadbackItem& item);
 
+    bool IsSRAMReadback() const
+    {
+        return m_is_sram_rb;
+    }
+
+    void set_is_sram_rb(bool is_sram_rb)
+    {
+        m_is_sram_rb = is_sram_rb;
+    }
+
 private:
     std::list<ReadbackItem> items;
     bool m_IsphysicalReadback;
+    bool m_is_sram_rb;
 
     CALLBACK_READBACK_PROGRESS_INIT cb_readback_init_;
     CALLBACK_READBACK_PROGRESS cb_readback_progress_;

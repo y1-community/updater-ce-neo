@@ -23,10 +23,16 @@ public:
         m_is_scatter_ver2 = is_scatter_ver2;
     }
 
+    void set_is_sram_rb(bool is_sram_rb)
+    {
+        m_is_sram_rb = is_sram_rb;
+    }
+
 private:
     friend class ReadbackSetting;
     BromReadbackArg readback_arg_;
     bool m_is_scatter_ver2;
+    bool m_is_sram_rb;
 };
 
 }

@@ -1,0 +1,2093 @@
+  0           0 RESUME                   0
+
+  1           2 LOAD_CONST               0 ('\n03 等待设备连接 + 04 刷机进行中\n')
+              4 STORE_NAME               0 (__doc__)
+
+  4           6 LOAD_CONST               1 (0)
+              8 LOAD_CONST               2 (('QWidget', 'QVBoxLayout', 'QHBoxLayout', 'QLabel', 'QPushButton', 'QProgressBar', 'QStackedWidget', 'QTextEdit', 'QMessageBox'))
+             10 IMPORT_NAME              1 (PySide6.QtWidgets)
+             12 IMPORT_FROM              2 (QWidget)
+             14 STORE_NAME               2 (QWidget)
+             16 IMPORT_FROM              3 (QVBoxLayout)
+             18 STORE_NAME               3 (QVBoxLayout)
+             20 IMPORT_FROM              4 (QHBoxLayout)
+             22 STORE_NAME               4 (QHBoxLayout)
+             24 IMPORT_FROM              5 (QLabel)
+             26 STORE_NAME               5 (QLabel)
+             28 IMPORT_FROM              6 (QPushButton)
+             30 STORE_NAME               6 (QPushButton)
+             32 IMPORT_FROM              7 (QProgressBar)
+             34 STORE_NAME               7 (QProgressBar)
+             36 IMPORT_FROM              8 (QStackedWidget)
+             38 STORE_NAME               8 (QStackedWidget)
+             40 IMPORT_FROM              9 (QTextEdit)
+             42 STORE_NAME               9 (QTextEdit)
+             44 IMPORT_FROM             10 (QMessageBox)
+             46 STORE_NAME              10 (QMessageBox)
+             48 POP_TOP
+
+  8          50 LOAD_CONST               1 (0)
+             52 LOAD_CONST               3 (('Signal', 'Qt'))
+             54 IMPORT_NAME             11 (PySide6.QtCore)
+             56 IMPORT_FROM             12 (Signal)
+             58 STORE_NAME              12 (Signal)
+             60 IMPORT_FROM             13 (Qt)
+             62 STORE_NAME              13 (Qt)
+             64 POP_TOP
+
+  9          66 LOAD_CONST               4 (1)
+             68 LOAD_CONST               5 (('Card', 'Banner', 'StatusTag', 'StepIndicator', 'InfoRow'))
+             70 IMPORT_NAME             14 (widgets)
+             72 IMPORT_FROM             15 (Card)
+             74 STORE_NAME              15 (Card)
+             76 IMPORT_FROM             16 (Banner)
+             78 STORE_NAME              16 (Banner)
+             80 IMPORT_FROM             17 (StatusTag)
+             82 STORE_NAME              17 (StatusTag)
+             84 IMPORT_FROM             18 (StepIndicator)
+             86 STORE_NAME              18 (StepIndicator)
+             88 IMPORT_FROM             19 (InfoRow)
+             90 STORE_NAME              19 (InfoRow)
+             92 POP_TOP
+
+ 10          94 LOAD_CONST               6 (2)
+             96 LOAD_CONST               7 (('t', 'translator'))
+             98 IMPORT_NAME             20 (i18n)
+            100 IMPORT_FROM             21 (t)
+            102 STORE_NAME              21 (t)
+            104 IMPORT_FROM             22 (translator)
+            106 STORE_NAME              22 (translator)
+            108 POP_TOP
+
+ 13         110 PUSH_NULL
+            112 LOAD_BUILD_CLASS
+            114 LOAD_CONST               8 (<code object FlashPage at 0x000001B35E7B74C0, file "app\ui\page_flash.py", line 13>)
+            116 MAKE_FUNCTION            0
+            118 LOAD_CONST               9 ('FlashPage')
+            120 LOAD_NAME                2 (QWidget)
+            122 PRECALL                  3
+            126 CALL                     3
+            136 STORE_NAME              23 (FlashPage)
+            138 LOAD_CONST              10 (None)
+            140 RETURN_VALUE
+
+Disassembly of <code object FlashPage at 0x000001B35E7B74C0, file "app\ui\page_flash.py", line 13>:
+              0 MAKE_CELL                0 (__class__)
+
+ 13           2 RESUME                   0
+              4 LOAD_NAME                0 (__name__)
+              6 STORE_NAME               1 (__module__)
+              8 LOAD_CONST               0 ('FlashPage')
+             10 STORE_NAME               2 (__qualname__)
+
+ 14          12 LOAD_CONST               1 ('刷机升级页')
+             14 STORE_NAME               3 (__doc__)
+
+ 16          16 PUSH_NULL
+             18 LOAD_NAME                4 (Signal)
+             20 PRECALL                  0
+             24 CALL                     0
+             34 STORE_NAME               5 (cancel_requested)
+
+ 17          36 PUSH_NULL
+             38 LOAD_NAME                4 (Signal)
+             40 PRECALL                  0
+             44 CALL                     0
+             54 STORE_NAME               6 (start_upgrade)
+
+ 18          56 PUSH_NULL
+             58 LOAD_NAME                4 (Signal)
+             60 PRECALL                  0
+             64 CALL                     0
+             74 STORE_NAME               7 (retry_detect)
+
+ 19          76 PUSH_NULL
+             78 LOAD_NAME                4 (Signal)
+             80 PRECALL                  0
+             84 CALL                     0
+             94 STORE_NAME               8 (view_log)
+
+ 21          96 LOAD_CONST              29 ((None,))
+             98 LOAD_CLOSURE             0 (__class__)
+            100 BUILD_TUPLE              1
+            102 LOAD_CONST               3 (<code object __init__ at 0x000001B35E767A50, file "app\ui\page_flash.py", line 21>)
+            104 MAKE_FUNCTION            9 (defaults, closure)
+            106 STORE_NAME               9 (__init__)
+
+ 31         108 LOAD_CONST               4 (<code object _build_ui at 0x000001B35E638050, file "app\ui\page_flash.py", line 31>)
+            110 MAKE_FUNCTION            0
+            112 STORE_NAME              10 (_build_ui)
+
+ 49         114 LOAD_CONST               5 ('return')
+            116 LOAD_NAME               11 (QWidget)
+            118 BUILD_TUPLE              2
+            120 LOAD_CONST               6 (<code object _build_waiting_view at 0x000001B35E373E50, file "app\ui\page_flash.py", line 49>)
+            122 MAKE_FUNCTION            4 (annotations)
+            124 STORE_NAME              12 (_build_waiting_view)
+
+150         126 LOAD_CONST               5 ('return')
+            128 LOAD_NAME               11 (QWidget)
+            130 BUILD_TUPLE              2
+            132 LOAD_CONST               7 (<code object _build_flashing_view at 0x000001B36020AD70, file "app\ui\page_flash.py", line 150>)
+            134 MAKE_FUNCTION            4 (annotations)
+            136 STORE_NAME              13 (_build_flashing_view)
+
+239         138 LOAD_CONST               8 (<code object show_waiting at 0x000001B35E952D30, file "app\ui\page_flash.py", line 239>)
+            140 MAKE_FUNCTION            0
+            142 STORE_NAME              14 (show_waiting)
+
+243         144 LOAD_CONST               9 (<code object show_flashing at 0x000001B35E952430, file "app\ui\page_flash.py", line 243>)
+            146 MAKE_FUNCTION            0
+            148 STORE_NAME              15 (show_flashing)
+
+247         150 LOAD_CONST              10 ('name')
+            152 LOAD_NAME               16 (str)
+            154 BUILD_TUPLE              2
+            156 LOAD_CONST              11 (<code object set_package_name at 0x000001B35E985A50, file "app\ui\page_flash.py", line 247>)
+            158 MAKE_FUNCTION            4 (annotations)
+            160 STORE_NAME              17 (set_package_name)
+
+251         162 LOAD_CONST              12 ('connected')
+            164 LOAD_NAME               18 (bool)
+            166 BUILD_TUPLE              2
+            168 LOAD_CONST              13 (<code object set_device_connected at 0x000001B35E712D40, file "app\ui\page_flash.py", line 251>)
+            170 MAKE_FUNCTION            4 (annotations)
+            172 STORE_NAME              19 (set_device_connected)
+
+261         174 LOAD_CONST              14 (<code object set_waiting_device at 0x000001B35E952550, file "app\ui\page_flash.py", line 261>)
+            176 MAKE_FUNCTION            0
+            178 STORE_NAME              20 (set_waiting_device)
+
+265         180 LOAD_CONST              15 (<code object set_device_flashing at 0x000001B35E9528B0, file "app\ui\page_flash.py", line 265>)
+            182 MAKE_FUNCTION            0
+            184 STORE_NAME              21 (set_device_flashing)
+
+269         186 LOAD_CONST              16 ('percent')
+            188 LOAD_NAME               22 (int)
+            190 BUILD_TUPLE              2
+            192 LOAD_CONST              17 (<code object update_progress at 0x000001B35E985B80, file "app\ui\page_flash.py", line 269>)
+            194 MAKE_FUNCTION            4 (annotations)
+            196 STORE_NAME              23 (update_progress)
+
+273         198 LOAD_CONST              18 ('step_key')
+            200 LOAD_NAME               16 (str)
+            202 BUILD_TUPLE              2
+            204 LOAD_CONST              19 (<code object update_step at 0x000001B35E9FCB20, file "app\ui\page_flash.py", line 273>)
+            206 MAKE_FUNCTION            4 (annotations)
+            208 STORE_NAME              24 (update_step)
+
+281         210 LOAD_CONST              20 ('elapsed')
+            212 LOAD_NAME               16 (str)
+            214 LOAD_CONST              21 ('eta')
+            216 LOAD_NAME               16 (str)
+            218 BUILD_TUPLE              4
+            220 LOAD_CONST              22 (<code object update_time at 0x000001B35E91BC30, file "app\ui\page_flash.py", line 281>)
+            222 MAKE_FUNCTION            4 (annotations)
+            224 STORE_NAME              25 (update_time)
+
+284         226 LOAD_CONST              23 ('key')
+            228 LOAD_NAME               16 (str)
+            230 LOAD_CONST              24 ('banner_type')
+            232 LOAD_NAME               16 (str)
+            234 BUILD_TUPLE              4
+            236 LOAD_CONST              25 (<code object _set_banner at 0x000001B35E971A50, file "app\ui\page_flash.py", line 284>)
+            238 MAKE_FUNCTION            4 (annotations)
+            240 STORE_NAME              26 (_set_banner)
+
+290         242 LOAD_CONST              23 ('key')
+            244 LOAD_NAME               16 (str)
+            246 BUILD_TUPLE              2
+            248 LOAD_CONST              26 (<code object _set_conn at 0x000001B35E952AF0, file "app\ui\page_flash.py", line 290>)
+            250 MAKE_FUNCTION            4 (annotations)
+            252 STORE_NAME              27 (_set_conn)
+
+294         254 LOAD_CONST              27 (<code object _on_cancel at 0x000001B35E517C40, file "app\ui\page_flash.py", line 294>)
+            256 MAKE_FUNCTION            0
+            258 STORE_NAME              28 (_on_cancel)
+
+303         260 LOAD_CONST              28 (<code object _retranslate at 0x000001B36020BA80, file "app\ui\page_flash.py", line 303>)
+            262 MAKE_FUNCTION            0
+            264 STORE_NAME              29 (_retranslate)
+            266 LOAD_CLOSURE             0 (__class__)
+            268 COPY                     1
+            270 STORE_NAME              30 (__classcell__)
+            272 RETURN_VALUE
+
+Disassembly of <code object __init__ at 0x000001B35E767A50, file "app\ui\page_flash.py", line 21>:
+              0 COPY_FREE_VARS           1
+
+ 21           2 RESUME                   0
+
+ 22           4 LOAD_GLOBAL              1 (NULL + super)
+             16 PRECALL                  0
+             20 CALL                     0
+             30 LOAD_METHOD              1 (__init__)
+             52 LOAD_FAST                1 (parent)
+             54 PRECALL                  1
+             58 CALL                     1
+             68 POP_TOP
+
+ 23          70 LOAD_CONST               1 ('flash_banner_wait')
+             72 LOAD_FAST                0 (self)
+             74 STORE_ATTR               2 (_banner_key)
+
+ 24          84 LOAD_CONST               2 ('warning')
+             86 LOAD_FAST                0 (self)
+             88 STORE_ATTR               3 (_banner_type)
+
+ 25          98 LOAD_CONST               3 ('')
+            100 LOAD_FAST                0 (self)
+            102 STORE_ATTR               4 (_conn_value_key)
+
+ 26         112 LOAD_CONST               3 ('')
+            114 LOAD_FAST                0 (self)
+            116 STORE_ATTR               5 (_step_key)
+
+ 27         126 LOAD_FAST                0 (self)
+            128 LOAD_METHOD              6 (_build_ui)
+            150 PRECALL                  0
+            154 CALL                     0
+            164 POP_TOP
+
+ 28         166 LOAD_FAST                0 (self)
+            168 LOAD_METHOD              7 (show_waiting)
+            190 PRECALL                  0
+            194 CALL                     0
+            204 POP_TOP
+
+ 29         206 LOAD_GLOBAL             16 (translator)
+            218 LOAD_ATTR                9 (language_changed)
+            228 LOAD_METHOD             10 (connect)
+            250 LOAD_FAST                0 (self)
+            252 LOAD_ATTR               11 (_retranslate)
+            262 PRECALL                  1
+            266 CALL                     1
+            276 POP_TOP
+            278 LOAD_CONST               0 (None)
+            280 RETURN_VALUE
+
+Disassembly of <code object _build_ui at 0x000001B35E638050, file "app\ui\page_flash.py", line 31>:
+ 31           0 RESUME                   0
+
+ 32           2 LOAD_GLOBAL              1 (NULL + QVBoxLayout)
+             14 LOAD_FAST                0 (self)
+             16 PRECALL                  1
+             20 CALL                     1
+             30 STORE_FAST               1 (root)
+
+ 33          32 LOAD_FAST                1 (root)
+             34 LOAD_METHOD              1 (setContentsMargins)
+             56 LOAD_CONST               1 (0)
+             58 LOAD_CONST               1 (0)
+             60 LOAD_CONST               1 (0)
+             62 LOAD_CONST               1 (0)
+             64 PRECALL                  4
+             68 CALL                     4
+             78 POP_TOP
+
+ 34          80 LOAD_FAST                1 (root)
+             82 LOAD_METHOD              2 (setSpacing)
+            104 LOAD_CONST               1 (0)
+            106 PRECALL                  1
+            110 CALL                     1
+            120 POP_TOP
+
+ 36         122 LOAD_GLOBAL              7 (NULL + Banner)
+            134 LOAD_GLOBAL              9 (NULL + t)
+            146 LOAD_CONST               2 ('flash_banner_wait')
+            148 PRECALL                  1
+            152 CALL                     1
+            162 LOAD_CONST               3 ('warning')
+            164 PRECALL                  2
+            168 CALL                     2
+            178 LOAD_FAST                0 (self)
+            180 STORE_ATTR               5 (_banner)
+
+ 37         190 LOAD_FAST                1 (root)
+            192 LOAD_METHOD              6 (addWidget)
+            214 LOAD_FAST                0 (self)
+            216 LOAD_ATTR                5 (_banner)
+            226 PRECALL                  1
+            230 CALL                     1
+            240 POP_TOP
+
+ 38         242 LOAD_FAST                1 (root)
+            244 LOAD_METHOD              7 (addSpacing)
+            266 LOAD_CONST               4 (16)
+            268 PRECALL                  1
+            272 CALL                     1
+            282 POP_TOP
+
+ 40         284 LOAD_GLOBAL             17 (NULL + QStackedWidget)
+            296 PRECALL                  0
+            300 CALL                     0
+            310 LOAD_FAST                0 (self)
+            312 STORE_ATTR               9 (_stack)
+
+ 41         322 LOAD_FAST                1 (root)
+            324 LOAD_METHOD              6 (addWidget)
+            346 LOAD_FAST                0 (self)
+            348 LOAD_ATTR                9 (_stack)
+            358 LOAD_CONST               5 (1)
+            360 PRECALL                  2
+            364 CALL                     2
+            374 POP_TOP
+
+ 43         376 LOAD_FAST                0 (self)
+            378 LOAD_METHOD             10 (_build_waiting_view)
+            400 PRECALL                  0
+            404 CALL                     0
+            414 LOAD_FAST                0 (self)
+            416 STORE_ATTR              11 (_waiting_view)
+
+ 44         426 LOAD_FAST                0 (self)
+            428 LOAD_ATTR                9 (_stack)
+            438 LOAD_METHOD              6 (addWidget)
+            460 LOAD_FAST                0 (self)
+            462 LOAD_ATTR               11 (_waiting_view)
+            472 PRECALL                  1
+            476 CALL                     1
+            486 POP_TOP
+
+ 46         488 LOAD_FAST                0 (self)
+            490 LOAD_METHOD             12 (_build_flashing_view)
+            512 PRECALL                  0
+            516 CALL                     0
+            526 LOAD_FAST                0 (self)
+            528 STORE_ATTR              13 (_flashing_view)
+
+ 47         538 LOAD_FAST                0 (self)
+            540 LOAD_ATTR                9 (_stack)
+            550 LOAD_METHOD              6 (addWidget)
+            572 LOAD_FAST                0 (self)
+            574 LOAD_ATTR               13 (_flashing_view)
+            584 PRECALL                  1
+            588 CALL                     1
+            598 POP_TOP
+            600 LOAD_CONST               0 (None)
+            602 RETURN_VALUE
+
+Disassembly of <code object _build_waiting_view at 0x000001B35E373E50, file "app\ui\page_flash.py", line 49>:
+ 49           0 RESUME                   0
+
+ 50           2 LOAD_GLOBAL              1 (NULL + QWidget)
+             14 PRECALL                  0
+             18 CALL                     0
+             28 STORE_FAST               1 (page)
+
+ 51          30 LOAD_GLOBAL              3 (NULL + QHBoxLayout)
+             42 LOAD_FAST                1 (page)
+             44 PRECALL                  1
+             48 CALL                     1
+             58 STORE_FAST               2 (layout)
+
+ 52          60 LOAD_FAST                2 (layout)
+             62 LOAD_METHOD              2 (setContentsMargins)
+             84 LOAD_CONST               1 (0)
+             86 LOAD_CONST               1 (0)
+             88 LOAD_CONST               1 (0)
+             90 LOAD_CONST               1 (0)
+             92 PRECALL                  4
+             96 CALL                     4
+            106 POP_TOP
+
+ 53         108 LOAD_FAST                2 (layout)
+            110 LOAD_METHOD              3 (setSpacing)
+            132 LOAD_CONST               2 (16)
+            134 PRECALL                  1
+            138 CALL                     1
+            148 POP_TOP
+
+ 56         150 LOAD_GLOBAL              9 (NULL + Card)
+            162 PRECALL                  0
+            166 CALL                     0
+            176 STORE_FAST               3 (left_card)
+
+ 57         178 LOAD_GLOBAL             11 (NULL + QVBoxLayout)
+            190 PRECALL                  0
+            194 CALL                     0
+            204 STORE_FAST               4 (left_layout)
+
+ 59         206 LOAD_GLOBAL             13 (NULL + QLabel)
+            218 LOAD_GLOBAL             15 (NULL + t)
+            230 LOAD_CONST               3 ('flash_wait_title')
+            232 PRECALL                  1
+            236 CALL                     1
+            246 PRECALL                  1
+            250 CALL                     1
+            260 LOAD_FAST                0 (self)
+            262 STORE_ATTR               8 (_wait_title)
+
+ 60         272 LOAD_FAST                0 (self)
+            274 LOAD_ATTR                8 (_wait_title)
+            284 LOAD_METHOD              9 (setObjectName)
+            306 LOAD_CONST               4 ('section_title')
+            308 PRECALL                  1
+            312 CALL                     1
+            322 POP_TOP
+
+ 61         324 LOAD_GLOBAL             13 (NULL + QLabel)
+            336 LOAD_GLOBAL             15 (NULL + t)
+            348 LOAD_CONST               5 ('flash_wait_desc')
+            350 PRECALL                  1
+            354 CALL                     1
+            364 PRECALL                  1
+            368 CALL                     1
+            378 LOAD_FAST                0 (self)
+            380 STORE_ATTR              10 (_wait_desc)
+
+ 62         390 LOAD_FAST                0 (self)
+            392 LOAD_ATTR               10 (_wait_desc)
+            402 LOAD_METHOD             11 (setStyleSheet)
+            424 LOAD_CONST               6 ('QLabel { color:#868E96; background:transparent; border:none; }')
+            426 PRECALL                  1
+            430 CALL                     1
+            440 POP_TOP
+
+ 63         442 LOAD_FAST                0 (self)
+            444 LOAD_ATTR               10 (_wait_desc)
+            454 LOAD_METHOD             12 (setWordWrap)
+            476 LOAD_CONST               7 (True)
+            478 PRECALL                  1
+            482 CALL                     1
+            492 POP_TOP
+
+ 64         494 LOAD_FAST                4 (left_layout)
+            496 LOAD_METHOD             13 (addWidget)
+            518 LOAD_FAST                0 (self)
+            520 LOAD_ATTR                8 (_wait_title)
+            530 PRECALL                  1
+            534 CALL                     1
+            544 POP_TOP
+
+ 65         546 LOAD_FAST                4 (left_layout)
+            548 LOAD_METHOD             13 (addWidget)
+            570 LOAD_FAST                0 (self)
+            572 LOAD_ATTR               10 (_wait_desc)
+            582 PRECALL                  1
+            586 CALL                     1
+            596 POP_TOP
+
+ 66         598 LOAD_FAST                4 (left_layout)
+            600 LOAD_METHOD             14 (addSpacing)
+            622 LOAD_CONST               8 (12)
+            624 PRECALL                  1
+            628 CALL                     1
+            638 POP_TOP
+
+ 69         640 LOAD_GLOBAL              1 (NULL + QWidget)
+            652 PRECALL                  0
+            656 CALL                     0
+            666 STORE_FAST               5 (pkg_frame)
+
+ 70         668 LOAD_FAST                5 (pkg_frame)
+            670 LOAD_METHOD              9 (setObjectName)
+            692 LOAD_CONST               9 ('pkg_frame')
+            694 PRECALL                  1
+            698 CALL                     1
+            708 POP_TOP
+
+ 71         710 LOAD_FAST                5 (pkg_frame)
+            712 LOAD_METHOD             11 (setStyleSheet)
+
+ 72         734 LOAD_CONST              10 ('#pkg_frame { background:#F8F9FA; border:1px solid #DEE2E6; border-radius:8px; padding:12px; }')
+
+ 71         736 PRECALL                  1
+            740 CALL                     1
+            750 POP_TOP
+
+ 74         752 LOAD_GLOBAL              3 (NULL + QHBoxLayout)
+            764 LOAD_FAST                5 (pkg_frame)
+            766 PRECALL                  1
+            770 CALL                     1
+            780 STORE_FAST               6 (pkg_layout)
+
+ 75         782 LOAD_GLOBAL             13 (NULL + QLabel)
+            794 LOAD_GLOBAL             15 (NULL + t)
+            806 LOAD_CONST              11 ('sel_current_pkg')
+            808 PRECALL                  1
+            812 CALL                     1
+            822 PRECALL                  1
+            826 CALL                     1
+            836 LOAD_FAST                0 (self)
+            838 STORE_ATTR              15 (_pkg_label)
+
+ 76         848 LOAD_FAST                0 (self)
+            850 LOAD_ATTR               15 (_pkg_label)
+            860 LOAD_METHOD             11 (setStyleSheet)
+            882 LOAD_CONST               6 ('QLabel { color:#868E96; background:transparent; border:none; }')
+            884 PRECALL                  1
+            888 CALL                     1
+            898 POP_TOP
+
+ 77         900 LOAD_GLOBAL             13 (NULL + QLabel)
+            912 LOAD_CONST              12 ('--')
+            914 PRECALL                  1
+            918 CALL                     1
+            928 LOAD_FAST                0 (self)
+            930 STORE_ATTR              16 (_lbl_wait_pkg)
+
+ 78         940 LOAD_FAST                0 (self)
+            942 LOAD_ATTR               16 (_lbl_wait_pkg)
+            952 LOAD_METHOD             11 (setStyleSheet)
+            974 LOAD_CONST              13 ('QLabel { font-weight:bold; color:#1A1A2E; background:transparent; border:none; }')
+            976 PRECALL                  1
+            980 CALL                     1
+            990 POP_TOP
+
+ 79         992 LOAD_FAST                6 (pkg_layout)
+            994 LOAD_METHOD             13 (addWidget)
+           1016 LOAD_FAST                0 (self)
+           1018 LOAD_ATTR               15 (_pkg_label)
+           1028 PRECALL                  1
+           1032 CALL                     1
+           1042 POP_TOP
+
+ 80        1044 LOAD_FAST                6 (pkg_layout)
+           1046 LOAD_METHOD             13 (addWidget)
+           1068 LOAD_FAST                0 (self)
+           1070 LOAD_ATTR               16 (_lbl_wait_pkg)
+           1080 LOAD_CONST              14 (1)
+           1082 PRECALL                  2
+           1086 CALL                     2
+           1096 POP_TOP
+
+ 81        1098 LOAD_FAST                4 (left_layout)
+           1100 LOAD_METHOD             13 (addWidget)
+           1122 LOAD_FAST                5 (pkg_frame)
+           1124 PRECALL                  1
+           1128 CALL                     1
+           1138 POP_TOP
+
+ 82        1140 LOAD_FAST                4 (left_layout)
+           1142 LOAD_METHOD             14 (addSpacing)
+           1164 LOAD_CONST               8 (12)
+           1166 PRECALL                  1
+           1170 CALL                     1
+           1180 POP_TOP
+
+ 85        1182 LOAD_GLOBAL             13 (NULL + QLabel)
+           1194 LOAD_GLOBAL             15 (NULL + t)
+           1206 LOAD_CONST              15 ('flash_guide_title')
+           1208 PRECALL                  1
+           1212 CALL                     1
+           1222 PRECALL                  1
+           1226 CALL                     1
+           1236 LOAD_FAST                0 (self)
+           1238 STORE_ATTR              17 (_guide_title)
+
+ 86        1248 LOAD_FAST                0 (self)
+           1250 LOAD_ATTR               17 (_guide_title)
+           1260 LOAD_METHOD             11 (setStyleSheet)
+           1282 LOAD_CONST              16 ('QLabel { font-weight:bold; background:transparent; border:none; }')
+           1284 PRECALL                  1
+           1288 CALL                     1
+           1298 POP_TOP
+
+ 87        1300 LOAD_FAST                4 (left_layout)
+           1302 LOAD_METHOD             13 (addWidget)
+           1324 LOAD_FAST                0 (self)
+           1326 LOAD_ATTR               17 (_guide_title)
+           1336 PRECALL                  1
+           1340 CALL                     1
+           1350 POP_TOP
+
+ 88        1352 BUILD_LIST               0
+           1354 LOAD_FAST                0 (self)
+           1356 STORE_ATTR              18 (_guide_labels)
+
+ 89        1366 LOAD_CONST              17 (('flash_guide_1', 'flash_guide_2', 'flash_guide_3', 'flash_guide_4'))
+           1368 GET_ITER
+        >> 1370 FOR_ITER               100 (to 1572)
+           1372 STORE_FAST               7 (key)
+
+ 90        1374 LOAD_GLOBAL             13 (NULL + QLabel)
+           1386 LOAD_GLOBAL             15 (NULL + t)
+           1398 LOAD_FAST                7 (key)
+           1400 PRECALL                  1
+           1404 CALL                     1
+           1414 PRECALL                  1
+           1418 CALL                     1
+           1428 STORE_FAST               8 (lbl)
+
+ 91        1430 LOAD_FAST                8 (lbl)
+           1432 LOAD_METHOD             11 (setStyleSheet)
+           1454 LOAD_CONST              18 ('QLabel { color:#495057; padding:2px 0; background:transparent; border:none; }')
+           1456 PRECALL                  1
+           1460 CALL                     1
+           1470 POP_TOP
+
+ 92        1472 LOAD_FAST                4 (left_layout)
+           1474 LOAD_METHOD             13 (addWidget)
+           1496 LOAD_FAST                8 (lbl)
+           1498 PRECALL                  1
+           1502 CALL                     1
+           1512 POP_TOP
+
+ 93        1514 LOAD_FAST                0 (self)
+           1516 LOAD_ATTR               18 (_guide_labels)
+           1526 LOAD_METHOD             19 (append)
+           1548 LOAD_FAST                8 (lbl)
+           1550 LOAD_FAST                7 (key)
+           1552 BUILD_TUPLE              2
+           1554 PRECALL                  1
+           1558 CALL                     1
+           1568 POP_TOP
+           1570 JUMP_BACKWARD          101 (to 1370)
+
+ 95     >> 1572 LOAD_FAST                4 (left_layout)
+           1574 LOAD_METHOD             20 (addStretch)
+           1596 PRECALL                  0
+           1600 CALL                     0
+           1610 POP_TOP
+
+ 96        1612 LOAD_FAST                3 (left_card)
+           1614 LOAD_METHOD             21 (set_layout)
+           1636 LOAD_FAST                4 (left_layout)
+           1638 PRECALL                  1
+           1642 CALL                     1
+           1652 POP_TOP
+
+ 97        1654 LOAD_FAST                2 (layout)
+           1656 LOAD_METHOD             13 (addWidget)
+           1678 LOAD_FAST                3 (left_card)
+           1680 LOAD_CONST              19 (2)
+           1682 PRECALL                  2
+           1686 CALL                     2
+           1696 POP_TOP
+
+100        1698 LOAD_GLOBAL              9 (NULL + Card)
+           1710 PRECALL                  0
+           1714 CALL                     0
+           1724 STORE_FAST               9 (right_card)
+
+101        1726 LOAD_GLOBAL             11 (NULL + QVBoxLayout)
+           1738 PRECALL                  0
+           1742 CALL                     0
+           1752 STORE_FAST              10 (right_layout)
+
+103        1754 LOAD_GLOBAL             13 (NULL + QLabel)
+           1766 LOAD_GLOBAL             15 (NULL + t)
+           1778 LOAD_CONST              20 ('flash_device_status')
+           1780 PRECALL                  1
+           1784 CALL                     1
+           1794 PRECALL                  1
+           1798 CALL                     1
+           1808 LOAD_FAST                0 (self)
+           1810 STORE_ATTR              22 (_device_status_title)
+
+104        1820 LOAD_FAST                0 (self)
+           1822 LOAD_ATTR               22 (_device_status_title)
+           1832 LOAD_METHOD              9 (setObjectName)
+           1854 LOAD_CONST               4 ('section_title')
+           1856 PRECALL                  1
+           1860 CALL                     1
+           1870 POP_TOP
+
+105        1872 LOAD_FAST               10 (right_layout)
+           1874 LOAD_METHOD             13 (addWidget)
+           1896 LOAD_FAST                0 (self)
+           1898 LOAD_ATTR               22 (_device_status_title)
+           1908 PRECALL                  1
+           1912 CALL                     1
+           1922 POP_TOP
+
+107        1924 LOAD_GLOBAL             47 (NULL + StatusTag)
+           1936 LOAD_CONST              21 ('idle')
+           1938 PRECALL                  1
+           1942 CALL                     1
+           1952 LOAD_FAST                0 (self)
+           1954 STORE_ATTR              24 (_wait_status_tag)
+
+108        1964 LOAD_FAST               10 (right_layout)
+           1966 LOAD_METHOD             13 (addWidget)
+           1988 LOAD_FAST                0 (self)
+           1990 LOAD_ATTR               24 (_wait_status_tag)
+           2000 LOAD_GLOBAL             50 (Qt)
+           2012 LOAD_ATTR               26 (AlignmentFlag)
+           2022 LOAD_ATTR               27 (AlignLeft)
+           2032 KW_NAMES                22
+           2034 PRECALL                  2
+           2038 CALL                     2
+           2048 POP_TOP
+
+109        2050 LOAD_FAST               10 (right_layout)
+           2052 LOAD_METHOD             14 (addSpacing)
+           2074 LOAD_CONST              23 (8)
+           2076 PRECALL                  1
+           2080 CALL                     1
+           2090 POP_TOP
+
+111        2092 LOAD_GLOBAL              3 (NULL + QHBoxLayout)
+           2104 PRECALL                  0
+           2108 CALL                     0
+           2118 STORE_FAST              11 (conn_row)
+
+112        2120 LOAD_GLOBAL             13 (NULL + QLabel)
+           2132 LOAD_GLOBAL             15 (NULL + t)
+           2144 LOAD_CONST              24 ('flash_conn_status')
+           2146 PRECALL                  1
+           2150 CALL                     1
+           2160 PRECALL                  1
+           2164 CALL                     1
+           2174 LOAD_FAST                0 (self)
+           2176 STORE_ATTR              28 (_conn_label)
+
+113        2186 LOAD_FAST                0 (self)
+           2188 LOAD_ATTR               28 (_conn_label)
+           2198 LOAD_METHOD             11 (setStyleSheet)
+           2220 LOAD_CONST               6 ('QLabel { color:#868E96; background:transparent; border:none; }')
+           2222 PRECALL                  1
+           2226 CALL                     1
+           2236 POP_TOP
+
+114        2238 LOAD_GLOBAL             13 (NULL + QLabel)
+           2250 LOAD_GLOBAL             15 (NULL + t)
+           2262 LOAD_CONST              25 ('flash_no_device')
+           2264 PRECALL                  1
+           2268 CALL                     1
+           2278 PRECALL                  1
+           2282 CALL                     1
+           2292 LOAD_FAST                0 (self)
+           2294 STORE_ATTR              29 (_lbl_conn_status)
+
+115        2304 LOAD_FAST                0 (self)
+           2306 LOAD_ATTR               29 (_lbl_conn_status)
+           2316 LOAD_METHOD             11 (setStyleSheet)
+           2338 LOAD_CONST              16 ('QLabel { font-weight:bold; background:transparent; border:none; }')
+           2340 PRECALL                  1
+           2344 CALL                     1
+           2354 POP_TOP
+
+116        2356 LOAD_FAST               11 (conn_row)
+           2358 LOAD_METHOD             13 (addWidget)
+           2380 LOAD_FAST                0 (self)
+           2382 LOAD_ATTR               28 (_conn_label)
+           2392 PRECALL                  1
+           2396 CALL                     1
+           2406 POP_TOP
+
+117        2408 LOAD_FAST               11 (conn_row)
+           2410 LOAD_METHOD             13 (addWidget)
+           2432 LOAD_FAST                0 (self)
+           2434 LOAD_ATTR               29 (_lbl_conn_status)
+           2444 LOAD_CONST              14 (1)
+           2446 PRECALL                  2
+           2450 CALL                     2
+           2460 POP_TOP
+
+118        2462 LOAD_FAST               10 (right_layout)
+           2464 LOAD_METHOD             30 (addLayout)
+           2486 LOAD_FAST               11 (conn_row)
+           2488 PRECALL                  1
+           2492 CALL                     1
+           2502 POP_TOP
+
+120        2504 LOAD_FAST               10 (right_layout)
+           2506 LOAD_METHOD             14 (addSpacing)
+           2528 LOAD_CONST               2 (16)
+           2530 PRECALL                  1
+           2534 CALL                     1
+           2544 POP_TOP
+
+121        2546 LOAD_GLOBAL             13 (NULL + QLabel)
+           2558 LOAD_GLOBAL             15 (NULL + t)
+           2570 LOAD_CONST              26 ('flash_btn_upgrade')
+           2572 PRECALL                  1
+           2576 CALL                     1
+           2586 PRECALL                  1
+           2590 CALL                     1
+           2600 LOAD_FAST                0 (self)
+           2602 STORE_ATTR              31 (_upgrade_label)
+
+122        2612 LOAD_FAST                0 (self)
+           2614 LOAD_ATTR               31 (_upgrade_label)
+           2624 LOAD_METHOD             11 (setStyleSheet)
+           2646 LOAD_CONST              27 ('QLabel { color:#868E96; font-size:12px; background:transparent; border:none; }')
+           2648 PRECALL                  1
+           2652 CALL                     1
+           2662 POP_TOP
+
+123        2664 LOAD_FAST               10 (right_layout)
+           2666 LOAD_METHOD             13 (addWidget)
+           2688 LOAD_FAST                0 (self)
+           2690 LOAD_ATTR               31 (_upgrade_label)
+           2700 PRECALL                  1
+           2704 CALL                     1
+           2714 POP_TOP
+
+125        2716 LOAD_GLOBAL              3 (NULL + QHBoxLayout)
+           2728 PRECALL                  0
+           2732 CALL                     0
+           2742 STORE_FAST              12 (btn_row)
+
+126        2744 LOAD_GLOBAL             65 (NULL + QPushButton)
+           2756 LOAD_GLOBAL             15 (NULL + t)
+           2768 LOAD_CONST              26 ('flash_btn_upgrade')
+           2770 PRECALL                  1
+           2774 CALL                     1
+           2784 PRECALL                  1
+           2788 CALL                     1
+           2798 LOAD_FAST                0 (self)
+           2800 STORE_ATTR              33 (_btn_start_upgrade)
+
+127        2810 LOAD_FAST                0 (self)
+           2812 LOAD_ATTR               33 (_btn_start_upgrade)
+           2822 LOAD_METHOD             34 (setProperty)
+           2844 LOAD_CONST              28 ('btnType')
+           2846 LOAD_CONST              29 ('primary')
+           2848 PRECALL                  2
+           2852 CALL                     2
+           2862 POP_TOP
+
+128        2864 LOAD_FAST                0 (self)
+           2866 LOAD_ATTR               33 (_btn_start_upgrade)
+           2876 LOAD_METHOD             35 (setEnabled)
+           2898 LOAD_CONST              30 (False)
+           2900 PRECALL                  1
+           2904 CALL                     1
+           2914 POP_TOP
+
+129        2916 LOAD_FAST                0 (self)
+           2918 LOAD_ATTR               33 (_btn_start_upgrade)
+           2928 LOAD_ATTR               36 (clicked)
+           2938 LOAD_METHOD             37 (connect)
+           2960 LOAD_FAST                0 (self)
+           2962 LOAD_ATTR               38 (start_upgrade)
+           2972 PRECALL                  1
+           2976 CALL                     1
+           2986 POP_TOP
+
+131        2988 LOAD_GLOBAL             65 (NULL + QPushButton)
+           3000 LOAD_GLOBAL             15 (NULL + t)
+           3012 LOAD_CONST              31 ('flash_btn_retry_detect')
+           3014 PRECALL                  1
+           3018 CALL                     1
+           3028 PRECALL                  1
+           3032 CALL                     1
+           3042 LOAD_FAST                0 (self)
+           3044 STORE_ATTR              39 (_btn_retry_detect)
+
+132        3054 LOAD_FAST                0 (self)
+           3056 LOAD_ATTR               39 (_btn_retry_detect)
+           3066 LOAD_METHOD             34 (setProperty)
+           3088 LOAD_CONST              28 ('btnType')
+           3090 LOAD_CONST              32 ('secondary')
+           3092 PRECALL                  2
+           3096 CALL                     2
+           3106 POP_TOP
+
+133        3108 LOAD_FAST                0 (self)
+           3110 LOAD_ATTR               39 (_btn_retry_detect)
+           3120 LOAD_ATTR               36 (clicked)
+           3130 LOAD_METHOD             37 (connect)
+           3152 LOAD_FAST                0 (self)
+           3154 LOAD_ATTR               40 (retry_detect)
+           3164 PRECALL                  1
+           3168 CALL                     1
+           3178 POP_TOP
+
+135        3180 LOAD_FAST               12 (btn_row)
+           3182 LOAD_METHOD             13 (addWidget)
+           3204 LOAD_FAST                0 (self)
+           3206 LOAD_ATTR               33 (_btn_start_upgrade)
+           3216 PRECALL                  1
+           3220 CALL                     1
+           3230 POP_TOP
+
+136        3232 LOAD_FAST               12 (btn_row)
+           3234 LOAD_METHOD             13 (addWidget)
+           3256 LOAD_FAST                0 (self)
+           3258 LOAD_ATTR               39 (_btn_retry_detect)
+           3268 PRECALL                  1
+           3272 CALL                     1
+           3282 POP_TOP
+
+137        3284 LOAD_FAST               10 (right_layout)
+           3286 LOAD_METHOD             30 (addLayout)
+           3308 LOAD_FAST               12 (btn_row)
+           3310 PRECALL                  1
+           3314 CALL                     1
+           3324 POP_TOP
+
+139        3326 LOAD_GLOBAL             13 (NULL + QLabel)
+           3338 LOAD_GLOBAL             15 (NULL + t)
+           3350 LOAD_CONST              33 ('flash_btn_rules')
+           3352 PRECALL                  1
+           3356 CALL                     1
+           3366 PRECALL                  1
+           3370 CALL                     1
+           3380 LOAD_FAST                0 (self)
+           3382 STORE_ATTR              41 (_rules)
+
+140        3392 LOAD_FAST                0 (self)
+           3394 LOAD_ATTR               41 (_rules)
+           3404 LOAD_METHOD             11 (setStyleSheet)
+           3426 LOAD_CONST              34 ('QLabel { color:#ADB5BD; font-size:11px; background:transparent; border:none; }')
+           3428 PRECALL                  1
+           3432 CALL                     1
+           3442 POP_TOP
+
+141        3444 LOAD_FAST                0 (self)
+           3446 LOAD_ATTR               41 (_rules)
+           3456 LOAD_METHOD             12 (setWordWrap)
+           3478 LOAD_CONST               7 (True)
+           3480 PRECALL                  1
+           3484 CALL                     1
+           3494 POP_TOP
+
+142        3496 LOAD_FAST               10 (right_layout)
+           3498 LOAD_METHOD             13 (addWidget)
+           3520 LOAD_FAST                0 (self)
+           3522 LOAD_ATTR               41 (_rules)
+           3532 PRECALL                  1
+           3536 CALL                     1
+           3546 POP_TOP
+
+144        3548 LOAD_FAST               10 (right_layout)
+           3550 LOAD_METHOD             20 (addStretch)
+           3572 PRECALL                  0
+           3576 CALL                     0
+           3586 POP_TOP
+
+145        3588 LOAD_FAST                9 (right_card)
+           3590 LOAD_METHOD             21 (set_layout)
+           3612 LOAD_FAST               10 (right_layout)
+           3614 PRECALL                  1
+           3618 CALL                     1
+           3628 POP_TOP
+
+146        3630 LOAD_FAST                2 (layout)
+           3632 LOAD_METHOD             13 (addWidget)
+           3654 LOAD_FAST                9 (right_card)
+           3656 LOAD_CONST              14 (1)
+           3658 PRECALL                  2
+           3662 CALL                     2
+           3672 POP_TOP
+
+148        3674 LOAD_FAST                1 (page)
+           3676 RETURN_VALUE
+
+Disassembly of <code object _build_flashing_view at 0x000001B36020AD70, file "app\ui\page_flash.py", line 150>:
+150           0 RESUME                   0
+
+151           2 LOAD_GLOBAL              1 (NULL + QWidget)
+             14 PRECALL                  0
+             18 CALL                     0
+             28 STORE_FAST               1 (page)
+
+152          30 LOAD_GLOBAL              3 (NULL + QHBoxLayout)
+             42 LOAD_FAST                1 (page)
+             44 PRECALL                  1
+             48 CALL                     1
+             58 STORE_FAST               2 (layout)
+
+153          60 LOAD_FAST                2 (layout)
+             62 LOAD_METHOD              2 (setContentsMargins)
+             84 LOAD_CONST               1 (0)
+             86 LOAD_CONST               1 (0)
+             88 LOAD_CONST               1 (0)
+             90 LOAD_CONST               1 (0)
+             92 PRECALL                  4
+             96 CALL                     4
+            106 POP_TOP
+
+154         108 LOAD_FAST                2 (layout)
+            110 LOAD_METHOD              3 (setSpacing)
+            132 LOAD_CONST               2 (16)
+            134 PRECALL                  1
+            138 CALL                     1
+            148 POP_TOP
+
+157         150 LOAD_GLOBAL              9 (NULL + Card)
+            162 PRECALL                  0
+            166 CALL                     0
+            176 STORE_FAST               3 (left_card)
+
+158         178 LOAD_GLOBAL             11 (NULL + QVBoxLayout)
+            190 PRECALL                  0
+            194 CALL                     0
+            204 STORE_FAST               4 (left_layout)
+
+160         206 LOAD_GLOBAL             13 (NULL + QLabel)
+            218 LOAD_GLOBAL             15 (NULL + t)
+            230 LOAD_CONST               3 ('flash_progress_title')
+            232 PRECALL                  1
+            236 CALL                     1
+            246 PRECALL                  1
+            250 CALL                     1
+            260 LOAD_FAST                0 (self)
+            262 STORE_ATTR               8 (_progress_title)
+
+161         272 LOAD_FAST                0 (self)
+            274 LOAD_ATTR                8 (_progress_title)
+            284 LOAD_METHOD              9 (setObjectName)
+            306 LOAD_CONST               4 ('section_title')
+            308 PRECALL                  1
+            312 CALL                     1
+            322 POP_TOP
+
+162         324 LOAD_FAST                4 (left_layout)
+            326 LOAD_METHOD             10 (addWidget)
+            348 LOAD_FAST                0 (self)
+            350 LOAD_ATTR                8 (_progress_title)
+            360 PRECALL                  1
+            364 CALL                     1
+            374 POP_TOP
+
+164         376 LOAD_GLOBAL             23 (NULL + QProgressBar)
+            388 PRECALL                  0
+            392 CALL                     0
+            402 LOAD_FAST                0 (self)
+            404 STORE_ATTR              12 (_progress_bar)
+
+165         414 LOAD_FAST                0 (self)
+            416 LOAD_ATTR               12 (_progress_bar)
+            426 LOAD_METHOD             13 (setRange)
+            448 LOAD_CONST               1 (0)
+            450 LOAD_CONST               5 (100)
+            452 PRECALL                  2
+            456 CALL                     2
+            466 POP_TOP
+
+166         468 LOAD_FAST                0 (self)
+            470 LOAD_ATTR               12 (_progress_bar)
+            480 LOAD_METHOD             14 (setValue)
+            502 LOAD_CONST               1 (0)
+            504 PRECALL                  1
+            508 CALL                     1
+            518 POP_TOP
+
+167         520 LOAD_FAST                0 (self)
+            522 LOAD_ATTR               12 (_progress_bar)
+            532 LOAD_METHOD             15 (setTextVisible)
+            554 LOAD_CONST               6 (False)
+            556 PRECALL                  1
+            560 CALL                     1
+            570 POP_TOP
+
+168         572 LOAD_FAST                4 (left_layout)
+            574 LOAD_METHOD             10 (addWidget)
+            596 LOAD_FAST                0 (self)
+            598 LOAD_ATTR               12 (_progress_bar)
+            608 PRECALL                  1
+            612 CALL                     1
+            622 POP_TOP
+
+170         624 LOAD_GLOBAL             13 (NULL + QLabel)
+            636 LOAD_CONST               7 ('0%')
+            638 PRECALL                  1
+            642 CALL                     1
+            652 LOAD_FAST                0 (self)
+            654 STORE_ATTR              16 (_lbl_percent)
+
+171         664 LOAD_FAST                0 (self)
+            666 LOAD_ATTR               16 (_lbl_percent)
+            676 LOAD_METHOD             17 (setStyleSheet)
+            698 LOAD_CONST               8 ('QLabel { font-size:28px; font-weight:bold; color:#2B8A3E; background:transparent; border:none; }')
+            700 PRECALL                  1
+            704 CALL                     1
+            714 POP_TOP
+
+172         716 LOAD_FAST                4 (left_layout)
+            718 LOAD_METHOD             10 (addWidget)
+            740 LOAD_FAST                0 (self)
+            742 LOAD_ATTR               16 (_lbl_percent)
+            752 PRECALL                  1
+            756 CALL                     1
+            766 POP_TOP
+
+174         768 LOAD_GLOBAL             37 (NULL + StepIndicator)
+            780 PRECALL                  0
+            784 CALL                     0
+            794 LOAD_FAST                0 (self)
+            796 STORE_ATTR              19 (_step_indicator)
+
+175         806 LOAD_FAST                4 (left_layout)
+            808 LOAD_METHOD             10 (addWidget)
+            830 LOAD_FAST                0 (self)
+            832 LOAD_ATTR               19 (_step_indicator)
+            842 PRECALL                  1
+            846 CALL                     1
+            856 POP_TOP
+
+176         858 LOAD_FAST                4 (left_layout)
+            860 LOAD_METHOD             20 (addSpacing)
+            882 LOAD_CONST               9 (12)
+            884 PRECALL                  1
+            888 CALL                     1
+            898 POP_TOP
+
+178         900 LOAD_GLOBAL              9 (NULL + Card)
+            912 PRECALL                  0
+            916 CALL                     0
+            926 STORE_FAST               5 (action_card)
+
+179         928 LOAD_GLOBAL             11 (NULL + QVBoxLayout)
+            940 PRECALL                  0
+            944 CALL                     0
+            954 STORE_FAST               6 (action_layout)
+
+180         956 LOAD_GLOBAL             13 (NULL + QLabel)
+            968 LOAD_GLOBAL             15 (NULL + t)
+            980 LOAD_CONST              10 ('flash_current_action')
+            982 PRECALL                  1
+            986 CALL                     1
+            996 PRECALL                  1
+           1000 CALL                     1
+           1010 LOAD_FAST                0 (self)
+           1012 STORE_ATTR              21 (_action_title)
+
+181        1022 LOAD_FAST                0 (self)
+           1024 LOAD_ATTR               21 (_action_title)
+           1034 LOAD_METHOD             17 (setStyleSheet)
+           1056 LOAD_CONST              11 ('QLabel { font-weight:bold; background:transparent; border:none; }')
+           1058 PRECALL                  1
+           1062 CALL                     1
+           1072 POP_TOP
+
+182        1074 LOAD_GLOBAL             13 (NULL + QLabel)
+           1086 LOAD_GLOBAL             15 (NULL + t)
+           1098 LOAD_CONST              12 ('flash_preparing')
+           1100 PRECALL                  1
+           1104 CALL                     1
+           1114 PRECALL                  1
+           1118 CALL                     1
+           1128 LOAD_FAST                0 (self)
+           1130 STORE_ATTR              22 (_lbl_current_action)
+
+183        1140 LOAD_FAST                0 (self)
+           1142 LOAD_ATTR               22 (_lbl_current_action)
+           1152 LOAD_METHOD             17 (setStyleSheet)
+           1174 LOAD_CONST              13 ('QLabel { color:#495057; background:transparent; border:none; }')
+           1176 PRECALL                  1
+           1180 CALL                     1
+           1190 POP_TOP
+
+184        1192 LOAD_FAST                0 (self)
+           1194 LOAD_ATTR               22 (_lbl_current_action)
+           1204 LOAD_METHOD             23 (setWordWrap)
+           1226 LOAD_CONST              14 (True)
+           1228 PRECALL                  1
+           1232 CALL                     1
+           1242 POP_TOP
+
+185        1244 LOAD_GLOBAL             13 (NULL + QLabel)
+           1256 LOAD_GLOBAL             15 (NULL + t)
+           1268 LOAD_CONST              15 ('flash_warning')
+           1270 PRECALL                  1
+           1274 CALL                     1
+           1284 PRECALL                  1
+           1288 CALL                     1
+           1298 LOAD_FAST                0 (self)
+           1300 STORE_ATTR              24 (_lbl_action_warning)
+
+186        1310 LOAD_FAST                0 (self)
+           1312 LOAD_ATTR               24 (_lbl_action_warning)
+           1322 LOAD_METHOD             17 (setStyleSheet)
+           1344 LOAD_CONST              16 ('QLabel { color:#868E96; font-size:12px; background:transparent; border:none; }')
+           1346 PRECALL                  1
+           1350 CALL                     1
+           1360 POP_TOP
+
+187        1362 LOAD_FAST                0 (self)
+           1364 LOAD_ATTR               24 (_lbl_action_warning)
+           1374 LOAD_METHOD             23 (setWordWrap)
+           1396 LOAD_CONST              14 (True)
+           1398 PRECALL                  1
+           1402 CALL                     1
+           1412 POP_TOP
+
+188        1414 LOAD_FAST                6 (action_layout)
+           1416 LOAD_METHOD             10 (addWidget)
+           1438 LOAD_FAST                0 (self)
+           1440 LOAD_ATTR               21 (_action_title)
+           1450 PRECALL                  1
+           1454 CALL                     1
+           1464 POP_TOP
+
+189        1466 LOAD_FAST                6 (action_layout)
+           1468 LOAD_METHOD             10 (addWidget)
+           1490 LOAD_FAST                0 (self)
+           1492 LOAD_ATTR               22 (_lbl_current_action)
+           1502 PRECALL                  1
+           1506 CALL                     1
+           1516 POP_TOP
+
+190        1518 LOAD_FAST                6 (action_layout)
+           1520 LOAD_METHOD             10 (addWidget)
+           1542 LOAD_FAST                0 (self)
+           1544 LOAD_ATTR               24 (_lbl_action_warning)
+           1554 PRECALL                  1
+           1558 CALL                     1
+           1568 POP_TOP
+
+191        1570 LOAD_FAST                5 (action_card)
+           1572 LOAD_METHOD             25 (set_layout)
+           1594 LOAD_FAST                6 (action_layout)
+           1596 PRECALL                  1
+           1600 CALL                     1
+           1610 POP_TOP
+
+192        1612 LOAD_FAST                4 (left_layout)
+           1614 LOAD_METHOD             10 (addWidget)
+           1636 LOAD_FAST                5 (action_card)
+           1638 PRECALL                  1
+           1642 CALL                     1
+           1652 POP_TOP
+
+194        1654 LOAD_FAST                4 (left_layout)
+           1656 LOAD_METHOD             26 (addStretch)
+           1678 PRECALL                  0
+           1682 CALL                     0
+           1692 POP_TOP
+
+195        1694 LOAD_FAST                3 (left_card)
+           1696 LOAD_METHOD             25 (set_layout)
+           1718 LOAD_FAST                4 (left_layout)
+           1720 PRECALL                  1
+           1724 CALL                     1
+           1734 POP_TOP
+
+196        1736 LOAD_FAST                2 (layout)
+           1738 LOAD_METHOD             10 (addWidget)
+           1760 LOAD_FAST                3 (left_card)
+           1762 LOAD_CONST              17 (2)
+           1764 PRECALL                  2
+           1768 CALL                     2
+           1778 POP_TOP
+
+199        1780 LOAD_GLOBAL              9 (NULL + Card)
+           1792 PRECALL                  0
+           1796 CALL                     0
+           1806 STORE_FAST               7 (right_card)
+
+200        1808 LOAD_FAST                7 (right_card)
+           1810 LOAD_METHOD              2 (setContentsMargins)
+           1832 LOAD_CONST               9 (12)
+           1834 LOAD_CONST              18 (20)
+           1836 LOAD_CONST               9 (12)
+           1838 LOAD_CONST              18 (20)
+           1840 PRECALL                  4
+           1844 CALL                     4
+           1854 POP_TOP
+
+201        1856 LOAD_GLOBAL             11 (NULL + QVBoxLayout)
+           1868 PRECALL                  0
+           1872 CALL                     0
+           1882 STORE_FAST               8 (right_layout)
+
+203        1884 LOAD_GLOBAL             13 (NULL + QLabel)
+           1896 LOAD_GLOBAL             15 (NULL + t)
+           1908 LOAD_CONST              19 ('flash_status_panel')
+           1910 PRECALL                  1
+           1914 CALL                     1
+           1924 PRECALL                  1
+           1928 CALL                     1
+           1938 LOAD_FAST                0 (self)
+           1940 STORE_ATTR              27 (_status_panel_title)
+
+204        1950 LOAD_FAST                0 (self)
+           1952 LOAD_ATTR               27 (_status_panel_title)
+           1962 LOAD_METHOD              9 (setObjectName)
+           1984 LOAD_CONST               4 ('section_title')
+           1986 PRECALL                  1
+           1990 CALL                     1
+           2000 POP_TOP
+
+205        2002 LOAD_FAST                8 (right_layout)
+           2004 LOAD_METHOD             10 (addWidget)
+           2026 LOAD_FAST                0 (self)
+           2028 LOAD_ATTR               27 (_status_panel_title)
+           2038 PRECALL                  1
+           2042 CALL                     1
+           2052 POP_TOP
+
+207        2054 LOAD_GLOBAL             57 (NULL + InfoRow)
+           2066 LOAD_CONST              20 ('flash_local_pkg')
+           2068 LOAD_CONST              21 ('--')
+           2070 PRECALL                  2
+           2074 CALL                     2
+           2084 LOAD_FAST                0 (self)
+           2086 STORE_ATTR              29 (_info_pkg)
+
+208        2096 LOAD_GLOBAL             57 (NULL + InfoRow)
+           2108 LOAD_CONST              22 ('flash_conn_status')
+           2110 LOAD_GLOBAL             15 (NULL + t)
+           2122 LOAD_CONST              23 ('flash_conn_waiting')
+           2124 PRECALL                  1
+           2128 CALL                     1
+           2138 PRECALL                  2
+           2142 CALL                     2
+           2152 LOAD_FAST                0 (self)
+           2154 STORE_ATTR              30 (_info_conn)
+
+209        2164 LOAD_GLOBAL             57 (NULL + InfoRow)
+           2176 LOAD_CONST              24 ('flash_current_step')
+           2178 LOAD_CONST              21 ('--')
+           2180 PRECALL                  2
+           2184 CALL                     2
+           2194 LOAD_FAST                0 (self)
+           2196 STORE_ATTR              31 (_info_step)
+
+210        2206 LOAD_GLOBAL             57 (NULL + InfoRow)
+           2218 LOAD_CONST              25 ('flash_elapsed')
+           2220 LOAD_CONST              26 ('00:00')
+           2222 PRECALL                  2
+           2226 CALL                     2
+           2236 LOAD_FAST                0 (self)
+           2238 STORE_ATTR              32 (_info_elapsed)
+
+212        2248 LOAD_FAST                8 (right_layout)
+           2250 LOAD_METHOD             10 (addWidget)
+           2272 LOAD_FAST                0 (self)
+           2274 LOAD_ATTR               29 (_info_pkg)
+           2284 PRECALL                  1
+           2288 CALL                     1
+           2298 POP_TOP
+
+213        2300 LOAD_FAST                8 (right_layout)
+           2302 LOAD_METHOD             10 (addWidget)
+           2324 LOAD_FAST                0 (self)
+           2326 LOAD_ATTR               30 (_info_conn)
+           2336 PRECALL                  1
+           2340 CALL                     1
+           2350 POP_TOP
+
+214        2352 LOAD_FAST                8 (right_layout)
+           2354 LOAD_METHOD             10 (addWidget)
+           2376 LOAD_FAST                0 (self)
+           2378 LOAD_ATTR               31 (_info_step)
+           2388 PRECALL                  1
+           2392 CALL                     1
+           2402 POP_TOP
+
+215        2404 LOAD_FAST                8 (right_layout)
+           2406 LOAD_METHOD             10 (addWidget)
+           2428 LOAD_FAST                0 (self)
+           2430 LOAD_ATTR               32 (_info_elapsed)
+           2440 PRECALL                  1
+           2444 CALL                     1
+           2454 POP_TOP
+
+217        2456 LOAD_FAST                8 (right_layout)
+           2458 LOAD_METHOD             26 (addStretch)
+           2480 PRECALL                  0
+           2484 CALL                     0
+           2494 POP_TOP
+
+219        2496 LOAD_GLOBAL              3 (NULL + QHBoxLayout)
+           2508 PRECALL                  0
+           2512 CALL                     0
+           2522 STORE_FAST               9 (btn_row)
+
+220        2524 LOAD_GLOBAL             67 (NULL + QPushButton)
+           2536 LOAD_GLOBAL             15 (NULL + t)
+           2548 LOAD_CONST              27 ('flash_btn_cancel')
+           2550 PRECALL                  1
+           2554 CALL                     1
+           2564 PRECALL                  1
+           2568 CALL                     1
+           2578 LOAD_FAST                0 (self)
+           2580 STORE_ATTR              34 (_btn_cancel)
+
+221        2590 LOAD_FAST                0 (self)
+           2592 LOAD_ATTR               34 (_btn_cancel)
+           2602 LOAD_METHOD             35 (setProperty)
+           2624 LOAD_CONST              28 ('btnType')
+           2626 LOAD_CONST              29 ('secondary')
+           2628 PRECALL                  2
+           2632 CALL                     2
+           2642 POP_TOP
+
+222        2644 LOAD_FAST                0 (self)
+           2646 LOAD_ATTR               34 (_btn_cancel)
+           2656 LOAD_ATTR               36 (clicked)
+           2666 LOAD_METHOD             37 (connect)
+           2688 LOAD_FAST                0 (self)
+           2690 LOAD_ATTR               38 (_on_cancel)
+           2700 PRECALL                  1
+           2704 CALL                     1
+           2714 POP_TOP
+
+224        2716 LOAD_GLOBAL             67 (NULL + QPushButton)
+           2728 LOAD_GLOBAL             15 (NULL + t)
+           2740 LOAD_CONST              30 ('flash_btn_view_log')
+           2742 PRECALL                  1
+           2746 CALL                     1
+           2756 PRECALL                  1
+           2760 CALL                     1
+           2770 LOAD_FAST                0 (self)
+           2772 STORE_ATTR              39 (_btn_view_log)
+
+225        2782 LOAD_FAST                0 (self)
+           2784 LOAD_ATTR               39 (_btn_view_log)
+           2794 LOAD_METHOD             35 (setProperty)
+           2816 LOAD_CONST              28 ('btnType')
+           2818 LOAD_CONST              29 ('secondary')
+           2820 PRECALL                  2
+           2824 CALL                     2
+           2834 POP_TOP
+
+226        2836 LOAD_FAST                0 (self)
+           2838 LOAD_ATTR               39 (_btn_view_log)
+           2848 LOAD_ATTR               36 (clicked)
+           2858 LOAD_METHOD             37 (connect)
+           2880 LOAD_FAST                0 (self)
+           2882 LOAD_ATTR               40 (view_log)
+           2892 PRECALL                  1
+           2896 CALL                     1
+           2906 POP_TOP
+
+228        2908 LOAD_FAST                9 (btn_row)
+           2910 LOAD_METHOD             10 (addWidget)
+           2932 LOAD_FAST                0 (self)
+           2934 LOAD_ATTR               34 (_btn_cancel)
+           2944 PRECALL                  1
+           2948 CALL                     1
+           2958 POP_TOP
+
+229        2960 LOAD_FAST                9 (btn_row)
+           2962 LOAD_METHOD             10 (addWidget)
+           2984 LOAD_FAST                0 (self)
+           2986 LOAD_ATTR               39 (_btn_view_log)
+           2996 PRECALL                  1
+           3000 CALL                     1
+           3010 POP_TOP
+
+230        3012 LOAD_FAST                8 (right_layout)
+           3014 LOAD_METHOD             41 (addLayout)
+           3036 LOAD_FAST                9 (btn_row)
+           3038 PRECALL                  1
+           3042 CALL                     1
+           3052 POP_TOP
+
+232        3054 LOAD_FAST                7 (right_card)
+           3056 LOAD_METHOD             25 (set_layout)
+           3078 LOAD_FAST                8 (right_layout)
+           3080 PRECALL                  1
+           3084 CALL                     1
+           3094 POP_TOP
+
+233        3096 LOAD_FAST                2 (layout)
+           3098 LOAD_METHOD             10 (addWidget)
+           3120 LOAD_FAST                7 (right_card)
+           3122 LOAD_CONST              31 (1)
+           3124 PRECALL                  2
+           3128 CALL                     2
+           3138 POP_TOP
+
+235        3140 LOAD_FAST                1 (page)
+           3142 RETURN_VALUE
+
+Disassembly of <code object show_waiting at 0x000001B35E952D30, file "app\ui\page_flash.py", line 239>:
+239           0 RESUME                   0
+
+240           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_stack)
+             14 LOAD_METHOD              1 (setCurrentIndex)
+             36 LOAD_CONST               1 (0)
+             38 PRECALL                  1
+             42 CALL                     1
+             52 POP_TOP
+
+241          54 LOAD_FAST                0 (self)
+             56 LOAD_METHOD              2 (_set_banner)
+             78 LOAD_CONST               2 ('flash_banner_wait')
+             80 LOAD_CONST               3 ('warning')
+             82 PRECALL                  2
+             86 CALL                     2
+             96 POP_TOP
+             98 LOAD_CONST               0 (None)
+            100 RETURN_VALUE
+
+Disassembly of <code object show_flashing at 0x000001B35E952430, file "app\ui\page_flash.py", line 243>:
+243           0 RESUME                   0
+
+244           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_stack)
+             14 LOAD_METHOD              1 (setCurrentIndex)
+             36 LOAD_CONST               1 (1)
+             38 PRECALL                  1
+             42 CALL                     1
+             52 POP_TOP
+
+245          54 LOAD_FAST                0 (self)
+             56 LOAD_METHOD              2 (_set_banner)
+             78 LOAD_CONST               2 ('flash_banner_ready')
+             80 LOAD_CONST               3 ('warning')
+             82 PRECALL                  2
+             86 CALL                     2
+             96 POP_TOP
+             98 LOAD_CONST               0 (None)
+            100 RETURN_VALUE
+
+Disassembly of <code object set_package_name at 0x000001B35E985A50, file "app\ui\page_flash.py", line 247>:
+247           0 RESUME                   0
+
+248           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_lbl_wait_pkg)
+             14 LOAD_METHOD              1 (setText)
+             36 LOAD_FAST                1 (name)
+             38 PRECALL                  1
+             42 CALL                     1
+             52 POP_TOP
+
+249          54 LOAD_FAST                0 (self)
+             56 LOAD_ATTR                2 (_info_pkg)
+             66 LOAD_METHOD              3 (set_value)
+             88 LOAD_FAST                1 (name)
+             90 PRECALL                  1
+             94 CALL                     1
+            104 POP_TOP
+            106 LOAD_CONST               0 (None)
+            108 RETURN_VALUE
+
+Disassembly of <code object set_device_connected at 0x000001B35E712D40, file "app\ui\page_flash.py", line 251>:
+251           0 RESUME                   0
+
+252           2 LOAD_FAST                1 (connected)
+              4 POP_JUMP_FORWARD_IF_FALSE    93 (to 192)
+
+253           6 LOAD_FAST                0 (self)
+              8 LOAD_ATTR                0 (_wait_status_tag)
+             18 LOAD_METHOD              1 (set_status)
+             40 LOAD_CONST               1 ('connected')
+             42 PRECALL                  1
+             46 CALL                     1
+             56 POP_TOP
+
+254          58 LOAD_FAST                0 (self)
+             60 LOAD_ATTR                2 (_lbl_conn_status)
+             70 LOAD_METHOD              3 (setText)
+             92 LOAD_GLOBAL              9 (NULL + t)
+            104 LOAD_CONST               2 ('status_connected')
+            106 PRECALL                  1
+            110 CALL                     1
+            120 PRECALL                  1
+            124 CALL                     1
+            134 POP_TOP
+
+255         136 LOAD_FAST                0 (self)
+            138 LOAD_ATTR                5 (_btn_start_upgrade)
+            148 LOAD_METHOD              6 (setEnabled)
+            170 LOAD_CONST               3 (True)
+            172 PRECALL                  1
+            176 CALL                     1
+            186 POP_TOP
+            188 LOAD_CONST               0 (None)
+            190 RETURN_VALUE
+
+257     >>  192 LOAD_FAST                0 (self)
+            194 LOAD_ATTR                0 (_wait_status_tag)
+            204 LOAD_METHOD              1 (set_status)
+            226 LOAD_CONST               4 ('idle')
+            228 PRECALL                  1
+            232 CALL                     1
+            242 POP_TOP
+
+258         244 LOAD_FAST                0 (self)
+            246 LOAD_ATTR                2 (_lbl_conn_status)
+            256 LOAD_METHOD              3 (setText)
+            278 LOAD_GLOBAL              9 (NULL + t)
+            290 LOAD_CONST               5 ('flash_no_device')
+            292 PRECALL                  1
+            296 CALL                     1
+            306 PRECALL                  1
+            310 CALL                     1
+            320 POP_TOP
+
+259         322 LOAD_FAST                0 (self)
+            324 LOAD_ATTR                5 (_btn_start_upgrade)
+            334 LOAD_METHOD              6 (setEnabled)
+            356 LOAD_CONST               6 (False)
+            358 PRECALL                  1
+            362 CALL                     1
+            372 POP_TOP
+            374 LOAD_CONST               0 (None)
+            376 RETURN_VALUE
+
+Disassembly of <code object set_waiting_device at 0x000001B35E952550, file "app\ui\page_flash.py", line 261>:
+261           0 RESUME                   0
+
+262           2 LOAD_FAST                0 (self)
+              4 LOAD_METHOD              0 (_set_banner)
+             26 LOAD_CONST               1 ('flash_banner_ready')
+             28 LOAD_CONST               2 ('warning')
+             30 PRECALL                  2
+             34 CALL                     2
+             44 POP_TOP
+
+263          46 LOAD_FAST                0 (self)
+             48 LOAD_METHOD              1 (_set_conn)
+             70 LOAD_CONST               3 ('flash_conn_waiting')
+             72 PRECALL                  1
+             76 CALL                     1
+             86 POP_TOP
+             88 LOAD_CONST               0 (None)
+             90 RETURN_VALUE
+
+Disassembly of <code object set_device_flashing at 0x000001B35E9528B0, file "app\ui\page_flash.py", line 265>:
+265           0 RESUME                   0
+
+266           2 LOAD_FAST                0 (self)
+              4 LOAD_METHOD              0 (_set_banner)
+             26 LOAD_CONST               1 ('flash_banner_flashing')
+             28 LOAD_CONST               2 ('success')
+             30 PRECALL                  2
+             34 CALL                     2
+             44 POP_TOP
+
+267          46 LOAD_FAST                0 (self)
+             48 LOAD_METHOD              1 (_set_conn)
+             70 LOAD_CONST               3 ('flash_conn_connected')
+             72 PRECALL                  1
+             76 CALL                     1
+             86 POP_TOP
+             88 LOAD_CONST               0 (None)
+             90 RETURN_VALUE
+
+Disassembly of <code object update_progress at 0x000001B35E985B80, file "app\ui\page_flash.py", line 269>:
+269           0 RESUME                   0
+
+270           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_progress_bar)
+             14 LOAD_METHOD              1 (setValue)
+             36 LOAD_FAST                1 (percent)
+             38 PRECALL                  1
+             42 CALL                     1
+             52 POP_TOP
+
+271          54 LOAD_FAST                0 (self)
+             56 LOAD_ATTR                2 (_lbl_percent)
+             66 LOAD_METHOD              3 (setText)
+             88 LOAD_FAST                1 (percent)
+             90 FORMAT_VALUE             0
+             92 LOAD_CONST               1 ('%')
+             94 BUILD_STRING             2
+             96 PRECALL                  1
+            100 CALL                     1
+            110 POP_TOP
+            112 LOAD_CONST               0 (None)
+            114 RETURN_VALUE
+
+Disassembly of <code object update_step at 0x000001B35E9FCB20, file "app\ui\page_flash.py", line 273>:
+273           0 RESUME                   0
+
+275           2 LOAD_FAST                1 (step_key)
+              4 LOAD_FAST                0 (self)
+              6 STORE_ATTR               0 (_step_key)
+
+276          16 LOAD_GLOBAL              3 (NULL + t)
+             28 LOAD_FAST                1 (step_key)
+             30 PRECALL                  1
+             34 CALL                     1
+             44 STORE_FAST               2 (text)
+
+277          46 LOAD_FAST                0 (self)
+             48 LOAD_ATTR                2 (_lbl_current_action)
+             58 LOAD_METHOD              3 (setText)
+             80 LOAD_FAST                2 (text)
+             82 PRECALL                  1
+             86 CALL                     1
+             96 POP_TOP
+
+278          98 LOAD_FAST                0 (self)
+            100 LOAD_ATTR                4 (_info_step)
+            110 LOAD_METHOD              5 (set_value)
+            132 LOAD_FAST                2 (text)
+            134 PRECALL                  1
+            138 CALL                     1
+            148 POP_TOP
+
+279         150 LOAD_FAST                0 (self)
+            152 LOAD_ATTR                6 (_step_indicator)
+            162 LOAD_METHOD              7 (set_step_by_name)
+            184 LOAD_FAST                2 (text)
+            186 PRECALL                  1
+            190 CALL                     1
+            200 POP_TOP
+            202 LOAD_CONST               1 (None)
+            204 RETURN_VALUE
+
+Disassembly of <code object update_time at 0x000001B35E91BC30, file "app\ui\page_flash.py", line 281>:
+281           0 RESUME                   0
+
+282           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_info_elapsed)
+             14 LOAD_METHOD              1 (set_value)
+             36 LOAD_FAST                1 (elapsed)
+             38 PRECALL                  1
+             42 CALL                     1
+             52 POP_TOP
+             54 LOAD_CONST               0 (None)
+             56 RETURN_VALUE
+
+Disassembly of <code object _set_banner at 0x000001B35E971A50, file "app\ui\page_flash.py", line 284>:
+284           0 RESUME                   0
+
+285           2 LOAD_FAST                1 (key)
+              4 LOAD_FAST                0 (self)
+              6 STORE_ATTR               0 (_banner_key)
+
+286          16 LOAD_FAST                2 (banner_type)
+             18 LOAD_FAST                0 (self)
+             20 STORE_ATTR               1 (_banner_type)
+
+287          30 LOAD_FAST                0 (self)
+             32 LOAD_ATTR                2 (_banner)
+             42 LOAD_METHOD              3 (setText)
+             64 LOAD_GLOBAL              9 (NULL + t)
+             76 LOAD_FAST                1 (key)
+             78 PRECALL                  1
+             82 CALL                     1
+             92 PRECALL                  1
+             96 CALL                     1
+            106 POP_TOP
+
+288         108 LOAD_FAST                0 (self)
+            110 LOAD_ATTR                2 (_banner)
+            120 LOAD_METHOD              5 (set_type)
+            142 LOAD_FAST                2 (banner_type)
+            144 PRECALL                  1
+            148 CALL                     1
+            158 POP_TOP
+            160 LOAD_CONST               0 (None)
+            162 RETURN_VALUE
+
+Disassembly of <code object _set_conn at 0x000001B35E952AF0, file "app\ui\page_flash.py", line 290>:
+290           0 RESUME                   0
+
+291           2 LOAD_FAST                1 (key)
+              4 LOAD_FAST                0 (self)
+              6 STORE_ATTR               0 (_conn_value_key)
+
+292          16 LOAD_FAST                0 (self)
+             18 LOAD_ATTR                1 (_info_conn)
+             28 LOAD_METHOD              2 (set_value)
+             50 LOAD_GLOBAL              7 (NULL + t)
+             62 LOAD_FAST                1 (key)
+             64 PRECALL                  1
+             68 CALL                     1
+             78 PRECALL                  1
+             82 CALL                     1
+             92 POP_TOP
+             94 LOAD_CONST               0 (None)
+             96 RETURN_VALUE
+
+Disassembly of <code object _on_cancel at 0x000001B35E517C40, file "app\ui\page_flash.py", line 294>:
+294           0 RESUME                   0
+
+295           2 LOAD_GLOBAL              1 (NULL + QMessageBox)
+             14 LOAD_ATTR                1 (question)
+
+296          24 LOAD_FAST                0 (self)
+             26 LOAD_GLOBAL              5 (NULL + t)
+             38 LOAD_CONST               1 ('flash_cancel_title')
+             40 PRECALL                  1
+             44 CALL                     1
+             54 LOAD_GLOBAL              5 (NULL + t)
+             66 LOAD_CONST               2 ('flash_cancel_msg')
+             68 PRECALL                  1
+             72 CALL                     1
+
+297          82 LOAD_GLOBAL              0 (QMessageBox)
+             94 LOAD_ATTR                3 (StandardButton)
+            104 LOAD_ATTR                4 (Yes)
+            114 LOAD_GLOBAL              0 (QMessageBox)
+            126 LOAD_ATTR                3 (StandardButton)
+            136 LOAD_ATTR                5 (No)
+            146 BINARY_OP                7 (|)
+
+298         150 LOAD_GLOBAL              0 (QMessageBox)
+            162 LOAD_ATTR                3 (StandardButton)
+            172 LOAD_ATTR                5 (No)
+
+295         182 PRECALL                  5
+            186 CALL                     5
+            196 STORE_FAST               1 (reply)
+
+300         198 LOAD_FAST                1 (reply)
+            200 LOAD_GLOBAL              0 (QMessageBox)
+            212 LOAD_ATTR                3 (StandardButton)
+            222 LOAD_ATTR                4 (Yes)
+            232 COMPARE_OP               2 (==)
+            238 POP_JUMP_FORWARD_IF_FALSE    27 (to 294)
+
+301         240 LOAD_FAST                0 (self)
+            242 LOAD_ATTR                6 (cancel_requested)
+            252 LOAD_METHOD              7 (emit)
+            274 PRECALL                  0
+            278 CALL                     0
+            288 POP_TOP
+            290 LOAD_CONST               0 (None)
+            292 RETURN_VALUE
+
+300     >>  294 LOAD_CONST               0 (None)
+            296 RETURN_VALUE
+
+Disassembly of <code object _retranslate at 0x000001B36020BA80, file "app\ui\page_flash.py", line 303>:
+303           0 RESUME                   0
+
+305           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_wait_title)
+             14 LOAD_METHOD              1 (setText)
+             36 LOAD_GLOBAL              5 (NULL + t)
+             48 LOAD_CONST               1 ('flash_wait_title')
+             50 PRECALL                  1
+             54 CALL                     1
+             64 PRECALL                  1
+             68 CALL                     1
+             78 POP_TOP
+
+306          80 LOAD_FAST                0 (self)
+             82 LOAD_ATTR                3 (_wait_desc)
+             92 LOAD_METHOD              1 (setText)
+            114 LOAD_GLOBAL              5 (NULL + t)
+            126 LOAD_CONST               2 ('flash_wait_desc')
+            128 PRECALL                  1
+            132 CALL                     1
+            142 PRECALL                  1
+            146 CALL                     1
+            156 POP_TOP
+
+307         158 LOAD_FAST                0 (self)
+            160 LOAD_ATTR                4 (_pkg_label)
+            170 LOAD_METHOD              1 (setText)
+            192 LOAD_GLOBAL              5 (NULL + t)
+            204 LOAD_CONST               3 ('sel_current_pkg')
+            206 PRECALL                  1
+            210 CALL                     1
+            220 PRECALL                  1
+            224 CALL                     1
+            234 POP_TOP
+
+308         236 LOAD_FAST                0 (self)
+            238 LOAD_ATTR                5 (_guide_title)
+            248 LOAD_METHOD              1 (setText)
+            270 LOAD_GLOBAL              5 (NULL + t)
+            282 LOAD_CONST               4 ('flash_guide_title')
+            284 PRECALL                  1
+            288 CALL                     1
+            298 PRECALL                  1
+            302 CALL                     1
+            312 POP_TOP
+
+309         314 LOAD_FAST                0 (self)
+            316 LOAD_ATTR                6 (_guide_labels)
+            326 GET_ITER
+        >>  328 FOR_ITER                39 (to 408)
+            330 UNPACK_SEQUENCE          2
+            334 STORE_FAST               1 (lbl)
+            336 STORE_FAST               2 (key)
+
+310         338 LOAD_FAST                1 (lbl)
+            340 LOAD_METHOD              1 (setText)
+            362 LOAD_GLOBAL              5 (NULL + t)
+            374 LOAD_FAST                2 (key)
+            376 PRECALL                  1
+            380 CALL                     1
+            390 PRECALL                  1
+            394 CALL                     1
+            404 POP_TOP
+            406 JUMP_BACKWARD           40 (to 328)
+
+311     >>  408 LOAD_FAST                0 (self)
+            410 LOAD_ATTR                7 (_device_status_title)
+            420 LOAD_METHOD              1 (setText)
+            442 LOAD_GLOBAL              5 (NULL + t)
+            454 LOAD_CONST               5 ('flash_device_status')
+            456 PRECALL                  1
+            460 CALL                     1
+            470 PRECALL                  1
+            474 CALL                     1
+            484 POP_TOP
+
+312         486 LOAD_FAST                0 (self)
+            488 LOAD_ATTR                8 (_conn_label)
+            498 LOAD_METHOD              1 (setText)
+            520 LOAD_GLOBAL              5 (NULL + t)
+            532 LOAD_CONST               6 ('flash_conn_status')
+            534 PRECALL                  1
+            538 CALL                     1
+            548 PRECALL                  1
+            552 CALL                     1
+            562 POP_TOP
+
+313         564 LOAD_FAST                0 (self)
+            566 LOAD_ATTR                9 (_upgrade_label)
+            576 LOAD_METHOD              1 (setText)
+            598 LOAD_GLOBAL              5 (NULL + t)
+            610 LOAD_CONST               7 ('flash_btn_upgrade')
+            612 PRECALL                  1
+            616 CALL                     1
+            626 PRECALL                  1
+            630 CALL                     1
+            640 POP_TOP
+
+314         642 LOAD_FAST                0 (self)
+            644 LOAD_ATTR               10 (_btn_start_upgrade)
+            654 LOAD_METHOD              1 (setText)
+            676 LOAD_GLOBAL              5 (NULL + t)
+            688 LOAD_CONST               7 ('flash_btn_upgrade')
+            690 PRECALL                  1
+            694 CALL                     1
+            704 PRECALL                  1
+            708 CALL                     1
+            718 POP_TOP
+
+315         720 LOAD_FAST                0 (self)
+            722 LOAD_ATTR               11 (_btn_retry_detect)
+            732 LOAD_METHOD              1 (setText)
+            754 LOAD_GLOBAL              5 (NULL + t)
+            766 LOAD_CONST               8 ('flash_btn_retry_detect')
+            768 PRECALL                  1
+            772 CALL                     1
+            782 PRECALL                  1
+            786 CALL                     1
+            796 POP_TOP
+
+316         798 LOAD_FAST                0 (self)
+            800 LOAD_ATTR               12 (_rules)
+            810 LOAD_METHOD              1 (setText)
+            832 LOAD_GLOBAL              5 (NULL + t)
+            844 LOAD_CONST               9 ('flash_btn_rules')
+            846 PRECALL                  1
+            850 CALL                     1
+            860 PRECALL                  1
+            864 CALL                     1
+            874 POP_TOP
+
+318         876 LOAD_FAST                0 (self)
+            878 LOAD_ATTR               13 (_progress_title)
+            888 LOAD_METHOD              1 (setText)
+            910 LOAD_GLOBAL              5 (NULL + t)
+            922 LOAD_CONST              10 ('flash_progress_title')
+            924 PRECALL                  1
+            928 CALL                     1
+            938 PRECALL                  1
+            942 CALL                     1
+            952 POP_TOP
+
+319         954 LOAD_FAST                0 (self)
+            956 LOAD_ATTR               14 (_action_title)
+            966 LOAD_METHOD              1 (setText)
+            988 LOAD_GLOBAL              5 (NULL + t)
+           1000 LOAD_CONST              11 ('flash_current_action')
+           1002 PRECALL                  1
+           1006 CALL                     1
+           1016 PRECALL                  1
+           1020 CALL                     1
+           1030 POP_TOP
+
+320        1032 LOAD_FAST                0 (self)
+           1034 LOAD_ATTR               15 (_lbl_action_warning)
+           1044 LOAD_METHOD              1 (setText)
+           1066 LOAD_GLOBAL              5 (NULL + t)
+           1078 LOAD_CONST              12 ('flash_warning')
+           1080 PRECALL                  1
+           1084 CALL                     1
+           1094 PRECALL                  1
+           1098 CALL                     1
+           1108 POP_TOP
+
+321        1110 LOAD_FAST                0 (self)
+           1112 LOAD_ATTR               16 (_status_panel_title)
+           1122 LOAD_METHOD              1 (setText)
+           1144 LOAD_GLOBAL              5 (NULL + t)
+           1156 LOAD_CONST              13 ('flash_status_panel')
+           1158 PRECALL                  1
+           1162 CALL                     1
+           1172 PRECALL                  1
+           1176 CALL                     1
+           1186 POP_TOP
+
+322        1188 LOAD_FAST                0 (self)
+           1190 LOAD_ATTR               17 (_btn_cancel)
+           1200 LOAD_METHOD              1 (setText)
+           1222 LOAD_GLOBAL              5 (NULL + t)
+           1234 LOAD_CONST              14 ('flash_btn_cancel')
+           1236 PRECALL                  1
+           1240 CALL                     1
+           1250 PRECALL                  1
+           1254 CALL                     1
+           1264 POP_TOP
+
+323        1266 LOAD_FAST                0 (self)
+           1268 LOAD_ATTR               18 (_btn_view_log)
+           1278 LOAD_METHOD              1 (setText)
+           1300 LOAD_GLOBAL              5 (NULL + t)
+           1312 LOAD_CONST              15 ('flash_btn_view_log')
+           1314 PRECALL                  1
+           1318 CALL                     1
+           1328 PRECALL                  1
+           1332 CALL                     1
+           1342 POP_TOP
+
+325        1344 LOAD_FAST                0 (self)
+           1346 LOAD_ATTR               19 (_banner)
+           1356 LOAD_METHOD              1 (setText)
+           1378 LOAD_GLOBAL              5 (NULL + t)
+           1390 LOAD_FAST                0 (self)
+           1392 LOAD_ATTR               20 (_banner_key)
+           1402 PRECALL                  1
+           1406 CALL                     1
+           1416 PRECALL                  1
+           1420 CALL                     1
+           1430 POP_TOP
+
+326        1432 LOAD_FAST                0 (self)
+           1434 LOAD_ATTR               21 (_conn_value_key)
+           1444 POP_JUMP_FORWARD_IF_FALSE    44 (to 1534)
+
+327        1446 LOAD_FAST                0 (self)
+           1448 LOAD_ATTR               22 (_info_conn)
+           1458 LOAD_METHOD             23 (set_value)
+           1480 LOAD_GLOBAL              5 (NULL + t)
+           1492 LOAD_FAST                0 (self)
+           1494 LOAD_ATTR               21 (_conn_value_key)
+           1504 PRECALL                  1
+           1508 CALL                     1
+           1518 PRECALL                  1
+           1522 CALL                     1
+           1532 POP_TOP
+
+328     >> 1534 LOAD_FAST                0 (self)
+           1536 LOAD_ATTR               24 (_step_key)
+           1546 POP_JUMP_FORWARD_IF_FALSE   100 (to 1748)
+
+329        1548 LOAD_GLOBAL              5 (NULL + t)
+           1560 LOAD_FAST                0 (self)
+           1562 LOAD_ATTR               24 (_step_key)
+           1572 PRECALL                  1
+           1576 CALL                     1
+           1586 STORE_FAST               3 (text)
+
+330        1588 LOAD_FAST                0 (self)
+           1590 LOAD_ATTR               25 (_lbl_current_action)
+           1600 LOAD_METHOD              1 (setText)
+           1622 LOAD_FAST                3 (text)
+           1624 PRECALL                  1
+           1628 CALL                     1
+           1638 POP_TOP
+
+331        1640 LOAD_FAST                0 (self)
+           1642 LOAD_ATTR               26 (_info_step)
+           1652 LOAD_METHOD             23 (set_value)
+           1674 LOAD_FAST                3 (text)
+           1676 PRECALL                  1
+           1680 CALL                     1
+           1690 POP_TOP
+
+332        1692 LOAD_FAST                0 (self)
+           1694 LOAD_ATTR               27 (_step_indicator)
+           1704 LOAD_METHOD             28 (set_step_by_name)
+           1726 LOAD_FAST                3 (text)
+           1728 PRECALL                  1
+           1732 CALL                     1
+           1742 POP_TOP
+           1744 LOAD_CONST               0 (None)
+           1746 RETURN_VALUE
+
+328     >> 1748 LOAD_CONST               0 (None)
+           1750 RETURN_VALUE

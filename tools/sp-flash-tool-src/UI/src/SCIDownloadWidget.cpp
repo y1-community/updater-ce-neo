@@ -33,16 +33,6 @@ SCIDownloadWidget::SCIDownloadWidget(QTabWidget* parent, MainWindow *window) :
 
 SCIDownloadWidget::~SCIDownloadWidget()
 {
-    if(delegate_)
-    {
-        delete delegate_;
-        delegate_ = NULL;
-    }
-    if(header_)
-    {
-        delete header_;
-        header_ = NULL;
-    }
     if(ui)
     {
         delete ui;

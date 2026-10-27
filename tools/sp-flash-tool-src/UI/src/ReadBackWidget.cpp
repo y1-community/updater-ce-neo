@@ -3,6 +3,7 @@
 #include "MainWindow.h"
 #include "MainController.h"
 #include "ICallback.h"
+#include "CheckHeader.h"
 #include "../../Public/AppTypes.h"
 #include "../../Logger/Log.h"
 #include "ReadBackAddressDialog.h"
@@ -21,7 +22,6 @@
 #include <stdio.h>
 #include <set>
 #include "../../Host/Inc/RuntimeMemory.h"
-#include "../../Utility/version.h"
 
 static const unsigned int kDefaultAddress = 0;
 static const unsigned int kDefaultLength = 4096;
@@ -39,6 +39,7 @@ ReadBackWidget::ReadBackWidget(QTabWidget *parent, MainWindow *window) :
     ui_(new Ui::ReadBackWidget),
     main_window_(window),
     addr_dialog_(new ReadBackAddressDialog(this)),
+    m_header_(new CheckHeader(Qt::Horizontal, this)),
     storage_(HW_STORAGE_EMMC),
     platform_changed_(false),
     readback_xml_loaded(false)
@@ -59,15 +60,15 @@ ReadBackWidget::ReadBackWidget(QTabWidget *parent, MainWindow *window) :
     read_flag_map_["VerifyAfterProgram"] = NUTL_VERIFY_AFTER_PROGRAM;
 
     ui_->tableWidget->setColumnHidden(ColumnRegion, true);
+    ui_->tableWidget->setHorizontalHeader(m_header_);
+    QObject::connect(m_header_,SIGNAL(sectionClicked(int)),
+                     this, SLOT(slot_OnHeaderView_click(int)));
+    ui_->tableWidget->horizontalHeader()->setResizeMode(QHeaderView::ResizeToContents);
+    ShowRAMSelectBtn(false);
 }
 
 ReadBackWidget::~ReadBackWidget()
 {
-    if(addr_dialog_)
-    {
-        delete addr_dialog_;
-        addr_dialog_ = NULL;
-    }
     if(ui_)
     {
     delete ui_;
@@ -81,6 +82,8 @@ void ReadBackWidget::LockOnUI()
     ui_->toolButton_remove->setEnabled(false);
     ui_->toolButton_readBack->setEnabled(false);
     ui_->toolButton_stop->setEnabled(true);
+    ui_->m_sram_rb_button->setEnabled(false);
+    ui_->m_dram_rb_button->setEnabled(false);
     ui_->tableWidget->setEnabled(false);
 }
 
@@ -90,6 +93,8 @@ void ReadBackWidget::DoFinished()
     ui_->toolButton_remove->setEnabled(true);
     ui_->toolButton_readBack->setEnabled(true);
     ui_->toolButton_stop->setEnabled(false);
+    ui_->m_sram_rb_button->setEnabled(true);
+    ui_->m_dram_rb_button->setEnabled(true);
     ui_->tableWidget->setEnabled(true);
 
     main_window_->main_controller()->ClearAllRBItem();
@@ -200,16 +205,15 @@ void ReadBackWidget::UpdateReadBackItemsByScatter(bool scatter_ver2)
       item = new QTableWidgetItem(QDir::toNativeSeparators(path));
       ui_->tableWidget->setItem(row, ColumnFile, item);
 
-      QCheckBox *checkbox;
-      checkbox = (QCheckBox *)ui_->tableWidget->cellWidget(row,ColumnEnable);
-
-      if(checkbox == NULL)
-      {
-         checkbox = new QCheckBox(ui_->tableWidget);
-         ui_->tableWidget->setCellWidget(row, ColumnEnable, checkbox);
+      item = ui_->tableWidget->item(row, ColumnEnable);
+      if (item == NULL) {
+          item = new QTableWidgetItem();
+          ui_->tableWidget->setItem(row, ColumnEnable, item);
       }
-      checkbox->setChecked(false);
+      item->setCheckState(Qt::Unchecked);
+      item->setFlags(item->flags()| Qt::ItemIsUserCheckable);
    }
+   m_header_->SetChecked(false);
 }
 
 void ReadBackWidget::LoadReadBackFromXMLFile(const std::string &file_name)
@@ -265,14 +269,13 @@ void ReadBackWidget::AppendOneReadBackRow(const ReadbackItem &readbackitem)
     item = new QTableWidgetItem(QDir::toNativeSeparators(path));
     ui_->tableWidget->setItem(row, ColumnFile, item);
 
-    QCheckBox *checkbox;
-    checkbox = (QCheckBox *)ui_->tableWidget->cellWidget(row,ColumnEnable);
-    if(checkbox == NULL)
-    {
-        checkbox = new QCheckBox(ui_->tableWidget);
-        ui_->tableWidget->setCellWidget(row, ColumnEnable, checkbox);
+    item = ui_->tableWidget->item(row, ColumnEnable);
+    if (item == NULL) {
+        item = new QTableWidgetItem();
+        ui_->tableWidget->setItem(row, ColumnEnable, item);
     }
-    checkbox->setChecked(readbackitem.enable());
+    item->setCheckState(readbackitem.enable() ? Qt::Checked : Qt::Unchecked);
+    item->setFlags(item->flags()| Qt::ItemIsUserCheckable);
 }
 
 void ReadBackWidget::DoLoadReadBackSetting(ConsoleMode::Config &config)
@@ -290,6 +293,7 @@ void ReadBackWidget::DoLoadReadBackSetting(ConsoleMode::Config &config)
             {
                 AppendOneReadBackRow(*cit);
             }
+            UpdateHeadViewCheckState();
         }
     }
 }
@@ -348,6 +352,12 @@ bool ReadBackWidget::ValidReadBackXMLFormat(const std::string &file_name) const
     return false;
 }
 
+bool ReadBackWidget::IsLoadedByScatter() const
+{
+    IniItem item("option.ini", "ReadBack", "ShowByScatter");
+    return item.GetBooleanValue();
+}
+
 U32 ReadBackWidget::adaptUfsEmmcCommonRegionID(U32 nRegionID, HW_StorageType_E en_storage_type) const
 {
     U32 nAdaptRegionID = nRegionID;
@@ -387,6 +397,51 @@ U32 ReadBackWidget::adaptUfsEmmcCommonRegionID(U32 nRegionID, HW_StorageType_E e
         }
     }
     return nAdaptRegionID;
+}
+
+bool ReadBackWidget::HasUnCheckedRBItem() const
+{
+    bool hasUnChecked = ui_->tableWidget->rowCount() == 0;
+    for (int i = 0; i < ui_->tableWidget->rowCount(); ++i)
+    {
+        QTableWidgetItem *pItem = ui_->tableWidget->item(i, ColumnEnable);
+        Q_ASSERT(NULL != pItem);
+        if (pItem->checkState() == Qt::Unchecked)
+        {
+            hasUnChecked = true;
+            break;
+        }
+    }
+    return hasUnChecked;
+}
+
+void ReadBackWidget::SetAllRBItemCheckState(Qt::CheckState checkState)
+{
+    for (int i = 0; i < ui_->tableWidget->rowCount(); ++i)
+    {
+        QTableWidgetItem *pItem = ui_->tableWidget->item(i, ColumnEnable);
+        Q_ASSERT(NULL != pItem);
+        if (pItem->checkState() != checkState)
+        {
+            pItem->setCheckState(checkState);
+        }
+    }
+}
+
+void ReadBackWidget::UpdateHeadViewCheckState()
+{
+    m_header_->SetChecked(HasUnCheckedRBItem() ? false : true);
+}
+
+bool ReadBackWidget::IsSRAMReadback()
+{
+    return ui_->m_sram_rb_button->isVisible() && ui_->m_sram_rb_button->isChecked();
+}
+
+void ReadBackWidget::ShowRAMSelectBtn(bool show)
+{
+    ui_->m_sram_rb_button->setVisible(show);
+    ui_->m_dram_rb_button->setVisible(show);
 }
 
 void ReadBackWidget::SetTabLabel(QTabWidget *tab_widget, int index)
@@ -432,7 +487,7 @@ void ReadBackWidget::on_toolButton_readBack_clicked()
         main_window_->main_controller()->SetConnSetting(main_window_->CreateConnSetting());
         main_window_->main_controller()->QueueAJob(main_window_->CreateReadbackSetting());
 
-        if(!ToolInfo::IsCustomerVer() && main_window_->isAutoPollingEnable())
+        if(main_window_->isAutoPollingEnable())
             main_window_->main_controller()->QueueAJob(main_window_->CreateWatchDogSetting());
 
         main_window_->main_controller()->StartExecuting(
@@ -465,7 +520,8 @@ void ReadBackWidget::on_toolButton_add_clicked()
 
     int row = ui_->tableWidget->rowCount();
     QString path = FileUtils::GetAppDirectory().c_str();
-    path += QDir::separator() + kDefaultFilePrefix + QString::number(row);
+    static int file_index = 0;
+    path += QDir::separator() + kDefaultFilePrefix + QString::number(file_index++);
     path = QDir::toNativeSeparators(path);
 
     bool scatter_ver2 = main_window_->IsScatterVer2();
@@ -489,6 +545,7 @@ void ReadBackWidget::on_toolButton_add_clicked()
 
     ReadbackItem item(row, true, addr, len, path.toStdString(), read_flag, region, addr_flag);
     AppendOneReadBackRow(item);
+    UpdateHeadViewCheckState();
 }
 
 void ReadBackWidget::on_toolButton_remove_clicked()
@@ -498,12 +555,14 @@ void ReadBackWidget::on_toolButton_remove_clicked()
     {
          ui_->tableWidget->removeRow(row);
     }
+    UpdateHeadViewCheckState();
 }
 
 ReadbackItem ReadBackWidget::GetRBItem(int row)
 {
-    QCheckBox *checkbox = (QCheckBox*)ui_->tableWidget->cellWidget(row,ColumnEnable);
-    bool enable = checkbox->isChecked();
+    QTableWidgetItem *pItem = ui_->tableWidget->item(row, ColumnEnable);
+    Q_ASSERT(NULL != pItem);
+    bool enable = pItem->checkState() == Qt::Checked;
 
     NUTL_ReadFlag_E read_flag = ParseReadFlag(
                 ui_->tableWidget->item(row, ColumnReadFlag)->text());
@@ -648,12 +707,13 @@ void ReadBackWidget::on_tableWidget_cellDoubleClicked(int row, int column)
 
                 ui_->tableWidget->item(row, ColumnRegion)->setText(addr_dialog_->region());
 
-                QCheckBox *checkbox = (QCheckBox*)ui_->tableWidget->cellWidget(row,ColumnEnable);
+                QTableWidgetItem *pItem = ui_->tableWidget->item(row, ColumnEnable);
+                Q_ASSERT(NULL != pItem);
+                bool enable = pItem->checkState() == Qt::Checked;
 
                 QString file = ui_->tableWidget->item(row,ColumnFile)->text();
 
-                ReadbackItem item(row,checkbox->isChecked(),
-                                  addr,len,string(file.toLocal8Bit()),read_flag, region_id);
+                ReadbackItem item(row, enable, addr,len,string(file.toLocal8Bit()),read_flag, region_id);
 
                 LOG("updating Readback Item(%d)", item.index());
             }
@@ -662,6 +722,25 @@ void ReadBackWidget::on_tableWidget_cellDoubleClicked(int row, int column)
                 main_window_->ShowHelpContents(NULL, IDS_STRING_ERROR_ALIGN, "E_APP_ADDR_ALIGN_RB.htm");
             }
         }
+    }
+}
+
+void ReadBackWidget::slot_OnHeaderView_click(int index)
+{
+    if(index == ColumnEnable)
+    {
+        bool checked = m_header_->GetChecked();
+
+        SetAllRBItemCheckState(checked ? Qt::Checked : Qt::Unchecked);
+    }
+}
+
+void ReadBackWidget::on_tableWidget_cellClicked(int row, int column)
+{
+    Q_UNUSED(row);
+    if (column == ColumnEnable)
+    {
+        UpdateHeadViewCheckState();
     }
 }
 
@@ -699,9 +778,9 @@ bool ReadBackWidget::ValidateBeforeReadback() const
     unsigned int count = ui_->tableWidget->rowCount();
     for(unsigned int i=0; i<count; i++)
     {
-        QCheckBox *checkbox = (QCheckBox*)ui_->tableWidget->cellWidget(i, ColumnEnable);
-        Q_ASSERT(checkbox != NULL);
-        if(checkbox->checkState()==Qt::Checked)
+        QTableWidgetItem *pItem = ui_->tableWidget->item(i, ColumnEnable);
+        Q_ASSERT(NULL != pItem);
+        if(pItem->checkState() == Qt::Checked)
         {
             has_item = true;
             break;
@@ -739,9 +818,7 @@ void ReadBackWidget::onPlatformChanged()
 void ReadBackWidget::OnScatterChanged(bool showRegion, bool scatter_ver2)
 {
 	//add for customer support requirement:show readback items by partitions in scatter file
-	IniItem item("option.ini", "ReadBack", "ShowByScatter");
-	bool does_show_by_scatter = item.GetBooleanValue();
-	if(does_show_by_scatter)
+    if(this->IsLoadedByScatter())
 	{
 	   ui_->tableWidget->setColumnHidden(ColumnName, false);
        UpdateReadBackItemsByScatter(scatter_ver2);
@@ -775,6 +852,9 @@ void ReadBackWidget::OnScatterChanged(bool showRegion, bool scatter_ver2)
         }
 	}
     addr_dialog_->OnScatterChanged(showRegion, scatter_ver2);
+
+    bool is_advanced_mode = main_window_->main_controller()->advance_on();
+    ShowRAMSelectBtn(is_advanced_mode && (HW_STORAGE_EMMC == storage_ || HW_STORAGE_UFS == storage_));
 }
 
 void ReadBackWidget::ShowReadFlagColumn(bool show)
@@ -789,9 +869,15 @@ int ReadBackWidget::GetRBCount() const
 
 void ReadBackWidget::AutoLoadReadBackSetting()
 {
-    if (!readback_xml_loaded)
+    /* priority:
+     * 1. auto load by scatter;
+     * 2. auto load by readback_ui_bak.xml file.
+     */
+    if (!readback_xml_loaded && !IsLoadedByScatter())
     {
-        readback_xml_loaded = true;
         LoadReadBackFromXMLFile(ABS_PATH("readback_ui_bak.xml"));
     }
+    // only try once to load items from readback_ui_bak.xml when first time to this page.
+    // prevent ShowByScatter option changed manually when tool running.
+    readback_xml_loaded = true;
 }

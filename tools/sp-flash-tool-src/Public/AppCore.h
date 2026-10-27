@@ -50,7 +50,6 @@ public:
     //get all roms' info for UI(list view)
     void GetROMList(const APKey key, std::list<ImageInfo>& image_list, Download_Scene scene = FORMAT_ALL_DOWNLOAD);
 
-    void GetFlashToolROMList(const APKey key, const FLASHTOOL_API_HANDLE_T FT_Handle, std::list<ImageInfo>& image_list, Download_Scene scene = FORMAT_ALL_DOWNLOAD);
     void GetImageInfoFromRomList(std::list<ImageInfo> &image_list, const std::list<ROM_INFO> &rom_list, Download_Scene scene);
 
     static _BOOL IsEnableRom(const std::string &rom_name, Download_Scene scene = FORMAT_ALL_DOWNLOAD);

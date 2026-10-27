@@ -13,7 +13,7 @@ public:
     ~ConnOb();
 
     virtual void OnBromConnected(const BOOT_RESULT &, const std::string &);
-    virtual void OnDAConnected(const DA_REPORT_T &, const std::string &, const int, const FLASHTOOL_API_HANDLE_T);
+    virtual void OnDAConnected(const DA_REPORT_T &, const std::string &, const int);
 
 private:
     MainController *control_;

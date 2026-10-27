@@ -316,15 +316,9 @@ void Logger::RemovePCLogHandle() {
     pimpl->RemovePCLogHandle();
 }
 
-void Logger::Log(Level level, const char *pattern, ...) {
-    static char buffer[2048];
-    va_list params;
-    va_start(params, pattern);
-    vsnprintf(buffer, 2048, pattern, params);
-    va_end(params);
-    *this << level;
-    *this << ContextInfo();
-    *this << buffer << std::endl;
+CriticalSection &Logger::GetCriticalSection()
+{
+    return m_cs;
 }
 
 Logger& Logger::operator<<(ostream& (*pf)(ostream&)) {
@@ -472,10 +466,12 @@ void Logger::DebugOn() {
                 Logger::GetSPFlashToolDumpFileFolder()+ DEFAULT_LOG_FILE,
                 Logger::Verbose);
 
+    CriticalSectionSentry lck(Logger::GetLogger().GetCriticalSection());
     Logger::GetLogger()<<Logger::Debug<<ToolInfo::ToString()<<std::endl;
 }
 
 void Logger::DebugOff() {
+    CriticalSectionSentry lck(Logger::GetLogger().GetCriticalSection());
     Logger::GetLogger()<<Logger::Debug<<
             "================================================================="
             "================================================================="
@@ -490,9 +486,11 @@ void Logger::DebugOff() {
 
 void LogFunc::operator ()(const char * format,...)
 {
+    CriticalSectionSentry lck(Logger::GetLogger().GetCriticalSection());
+
     std::string log_str(format);
     va_list params;
-    static char msg[2048];
+    static char msg[2048] = {0};
 
     va_start( params, format );
     vsnprintf( msg, 2040, log_str.c_str(), params );

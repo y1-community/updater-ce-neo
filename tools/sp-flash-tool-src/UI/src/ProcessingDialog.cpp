@@ -24,11 +24,6 @@ ProcessingDialog::~ProcessingDialog()
         delete ui;
         ui = NULL;
     }
-    if(animation)
-    {
-        delete animation;
-        animation = NULL;
-    }
 }
 
 void ProcessingDialog::showDialog(const QString& message)

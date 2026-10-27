@@ -161,6 +161,7 @@ std::string EfuseExtraKeyToString(EFUSE_KEY key)
     ENUM_TO_STRING(C_3P_RSA_PUBK_LOCK_LOCK)
     ENUM_TO_STRING(C_3P_DATA_LOCK_LOCK)
     ENUM_TO_STRING(CUST_CRYPT_DATA)
+    ENUM_TO_STRING(CUST_DATA)
     ENUM_TO_STRING(C_3P_PID)
     ENUM_TO_STRING(C_3P_EPPK)
     ENUM_TO_STRING(C_3P_CPD)
@@ -1173,23 +1174,6 @@ HW_StorageType_E getDeviceStorageType(const DA_REPORT_T *p_da_report)
         Q_ASSERT(false);
         return HW_STORAGE_NONE;
     }
-}
-
-bool FileContain(QString filename, QString str)
-{
-    QFile file(filename);
-    if(!file.open(QIODevice::ReadOnly|QIODevice::Text))
-        return false;
-
-    QTextStream in(&file);
-    while(!in.atEnd())
-    {
-        QString line = in.readLine();
-        if(line.contains(str))
-            return true;
-    }
-
-    return false;
 }
 
 #ifdef _WIN32

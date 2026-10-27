@@ -441,6 +441,7 @@ typedef enum
 	
     CUSTK,
     CUST_CRYPT_DATA,
+    CUST_DATA,
     C_3P_PID,
     C_3P_EPPK,
     C_3P_CPD,
@@ -548,8 +549,14 @@ typedef struct {
     unsigned int    pid_vid_custom_en;
     unsigned int    ufs_boot_dis; //-1
     unsigned int    efuse_sf_boot_dis;
-    unsigned int    sdmmc_boot_dis;    
-    unsigned int    ext_reserved[27]; //32-1-1-1-2
+    unsigned int    sdmmc_boot_dis;
+    unsigned int    sbc_pubk_hash_fa_dis;
+    unsigned int    sbc_pubk_hash1_fa_dis;
+    unsigned int    sbc_pubk_hash2_fa_dis;
+    unsigned int    sbc_pubk_hash3_fa_dis;
+    unsigned int    sbc_pubk_hash_mtk_fa_dis;
+    unsigned int    fa_mode_en;
+    unsigned int    ext_reserved[19]; //32-1-1-1-2
 } Efuse_Common_Arg;
 
 // Argument for writing Efuse security register
@@ -626,7 +633,9 @@ typedef struct{
     unsigned int sbc_pubk_hash2_lock; //-1
     unsigned int sbc_pubk_hash3_lock; //-1
     unsigned int cust_crypt_data_lock; //-1
-    unsigned int reserved[26];//32-1-1-1-3
+    unsigned int cust_data_lock; //-1
+    unsigned int sbc_pubk_ctrl_lock; //-1
+    unsigned int reserved[24];//32-1-1-1-3-2
 } Efuse_Lock_Arg;
 
 typedef struct{

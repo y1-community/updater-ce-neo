@@ -59,6 +59,8 @@ from .native_controls import (
 # card reports a one-line size hint unless it is given this width.
 INSTALL_TEXT_WIDTH = 220
 
+ROCKBOX_SITE_THEMES_URL = "https://themes.rockbox.org/index.php?target=ipod6g"
+
 #: Settle time after ADB detection so org.rockbox can populate .rockbox.
 ROCKBOX_BOOT_WAIT_MS = 20_000
 
@@ -606,11 +608,13 @@ class _FlowRow(QWidget):
     def row_width(self) -> int:
         """Width both lines need side by side."""
         width = 0
-        for label in self._labels:
+        visible_labels = [l for l in self._labels if l.isVisible()]
+        for label in visible_labels:
             text = label.text() or ""
             if text:
                 width += label.fontMetrics().horizontalAdvance(text)
-        return width + self._box.spacing() * (len(self._labels) - 1) + 4
+        spacing = self._box.spacing() * max(0, len(visible_labels) - 1)
+        return width + spacing + 4
 
     def _horizontal_for(self, width: int) -> bool:
         if self._forced_stacked:
@@ -644,6 +648,12 @@ class _FlowRow(QWidget):
 
     def refresh(self) -> None:
         """Re-decide the direction after a label's text changed."""
+        t0 = (self._labels[0].text() or "").strip().lower()
+        t1 = (self._labels[1].text() or "").strip().lower()
+        if t0 and t1 and t0 == t1:
+            self._labels[1].setVisible(False)
+        elif self._labels[1].text().strip():
+            self._labels[1].setVisible(True)
         self.set_horizontal(self._horizontal_for(self.width()))
 
     def hasHeightForWidth(self) -> bool:  # noqa: N802 (Qt naming)
@@ -715,12 +725,32 @@ class _RoundNextButton(QPushButton):
         if symbol == "cancel":
             self.setToolTip(tr("btn_cancel"))
             self.setAccessibleName(tr("btn_cancel"))
+        elif symbol == "back":
+            self.setToolTip(tr("btn_back"))
+            self.setAccessibleName(tr("btn_back"))
         elif symbol == "next":
             self.setToolTip(tr("btn_next"))
             self.setAccessibleName(tr("btn_next"))
         elif symbol == "retry":
             self.setToolTip(tr("flash_btn_retry"))
             self.setAccessibleName(tr("flash_btn_retry"))
+        elif symbol == "folder":
+            self.setToolTip(tr("rockbox_step_select_player_folder"))
+            self.setAccessibleName(tr("rockbox_step_select_player_folder"))
+
+    def set_symbol(self, symbol: str) -> None:
+        if self._symbol == symbol:
+            return
+        self._symbol = symbol
+        self._arrow = QPixmap()
+        self.rebuild_arrow()
+        if self._segmented_native is not None:
+            self._segmented_native._sync_content()
+        elif self._companion is not None:
+            comp_seg = getattr(self._companion, "_segmented_native", None)
+            if comp_seg is not None:
+                comp_seg._sync_content()
+        self.update()
 
     def setText(self, text: str) -> None:  # noqa: N802 (Qt naming)
         super().setText(text)
@@ -903,12 +933,34 @@ class _RoundNextButton(QPushButton):
                 symbol = "chevron.left" if self._companion is not None else "back"
         return symbol
 
+    def refresh_theme(self) -> None:
+        """Update colours and re-render glyph when host theme or accent changes."""
+        self._arrow = QPixmap()
+        self.rebuild_arrow()
+        if self._segmented_native is not None:
+            self._segmented_native._sync_content()
+        elif self._companion is not None:
+            comp_seg = getattr(self._companion, "_segmented_native", None)
+            if comp_seg is not None:
+                comp_seg._sync_content()
+        self.update()
+
     def changeEvent(self, event):  # noqa: N802 (Qt naming)
         if event.type() == QEvent.Type.LayoutDirectionChange:
             # The row itself mirrors when the language changes; the glyph has
             # to be re-rendered with it, or the two arrows stay aimed at each
             # other because nothing told them the row flipped.
             self.rebuild_arrow()
+        elif event.type() in (QEvent.Type.PaletteChange, QEvent.Type.ApplicationPaletteChange):
+            self.refresh_theme()
+        elif event.type() == QEvent.Type.EnabledChange:
+            if self._native is not None:
+                self._native.set_enabled(self.isEnabled())
+            if self._segmented_native is not None:
+                self._segmented_native._sync_content()
+            elif self._companion is not None and getattr(self._companion, "_segmented_native", None) is not None:
+                self._companion._segmented_native._sync_content()
+            self.update()
         super().changeEvent(event)
 
     def _native_colors(self) -> tuple[QColor, QColor]:
@@ -971,10 +1023,6 @@ class _RoundNextButton(QPushButton):
         if self.isEnabled():
             self.click()
 
-    def changeEvent(self, event):  # noqa: N802 (Qt naming)
-        super().changeEvent(event)
-        if event.type() == QEvent.Type.EnabledChange and self._native is not None:
-            self._native.set_enabled(self.isEnabled())
 
     def _disc_rect(self) -> QRect:
         """The disc itself: the widget minus the room its shadow needs."""
@@ -1164,11 +1212,15 @@ class _RoundNextButton(QPushButton):
         if not self._arrow.isNull():
             size = _ROUND_NEXT_ARROW_PX
             center_y = y + h / 2.0
+            if not self.isEnabled():
+                painter.setOpacity(0.4)
             painter.drawPixmap(
                 int(round(center_x - size / 2.0)),
                 int(round(center_y - size / 2.0)),
                 self._arrow,
             )
+            if not self.isEnabled():
+                painter.setOpacity(1.0)
 
         if self.hasFocus() and self._keyboard_focused and TabFocusManager.is_tab_active():
             from .dark import get_native_accent_color
@@ -1516,11 +1568,8 @@ class FlashPage(QWidget):
         self._prep_next_btn = _RoundNextButton(symbol="next", accent=True)
         self._prep_next_btn.setObjectName("prepNextPlaceholderBtn")
         self._prep_next_btn.setEnabled(False)
-        chips = [self._prep_cancel_btn]
-        if sys.platform == "darwin":
-            chips.append(self._prep_next_btn)
-        else:
-            self._prep_next_btn.setVisible(False)
+        self._prep_next_btn.setVisible(True)
+        chips = [self._prep_cancel_btn, self._prep_next_btn]
 
         self._prep_card, self._prep_head, copy = self._new_progress_card(
             self._prep_icon,
@@ -1549,11 +1598,8 @@ class FlashPage(QWidget):
         # The next step is one round arrow on the card's head row, not a wide
         # button on a row of its own.
         self._wait_continue_btn = _RoundNextButton()
-        if sys.platform == "darwin":
-            self._wait_continue_btn.setVisible(True)
-            self._wait_continue_btn.setEnabled(False)
-        else:
-            self._wait_continue_btn.setVisible(False)
+        self._wait_continue_btn.setVisible(True)
+        self._wait_continue_btn.setEnabled(False)
         self._wait_continue_btn.setToolTip(tr("btn_next"))
         self._wait_continue_btn.setAccessibleName(tr("btn_next"))
         self._wait_continue_btn.clicked.connect(self._on_power_off_continue)
@@ -1643,15 +1689,11 @@ class FlashPage(QWidget):
         self._flash_retry_btn.setObjectName("flashRetryBtn")
         self._flash_retry_btn.setToolTip(tr("flash_btn_retry"))
         self._flash_retry_btn.setAccessibleName(tr("flash_btn_retry"))
-        if sys.platform == "darwin":
-            self._flash_retry_btn.setVisible(True)
-            self._flash_retry_btn.setEnabled(False)
-        else:
-            self._flash_retry_btn.setVisible(False)
-            self._flash_retry_btn.setEnabled(False)
+        self._flash_retry_btn.setVisible(True)
+        self._flash_retry_btn.setEnabled(False)
         self._flash_retry_btn.clicked.connect(self._on_install_retry)
 
-        self._cancel_btn = _RoundNextButton(symbol="cancel", accent=False)
+        self._cancel_btn = _RoundNextButton(symbol="back", accent=False)
         self._cancel_btn.setObjectName("softwareUpdateCancelBtn")
         self._cancel_btn.setToolTip(tr("flash_btn_cancel"))
         self._cancel_btn.clicked.connect(self._on_cancel)
@@ -1670,8 +1712,9 @@ class FlashPage(QWidget):
         self._theme_step1_next_btn.setVisible(False)
         self._theme_step1_next_btn.clicked.connect(self._on_theme_step1_next_clicked)
 
-        self._theme_fallback_next_btn = _RoundNextButton(symbol="next", accent=True)
-        self._theme_fallback_next_btn.setText(tr("dialog_pre_install_continue"))
+        self._theme_fallback_next_btn = _RoundNextButton(symbol="folder", accent=True)
+        self._theme_fallback_next_btn.setText(tr("rockbox_step_select_player_folder"))
+        self._theme_fallback_next_btn.setToolTip(tr("rockbox_step_select_player_folder"))
         self._theme_fallback_next_btn.setVisible(False)
         self._theme_fallback_next_btn.clicked.connect(self._on_theme_fallback_next_clicked)
 
@@ -1749,6 +1792,11 @@ class FlashPage(QWidget):
         trouble_box.setContentsMargins(0, 0, 0, 0)
         trouble_box.setSpacing(0)
         theme_vbox.addWidget(self._theme_trouble_widget)
+
+        self._rockbox_site_widget = QWidget()
+        self._rockbox_site_widget.setVisible(False)
+        self._rockbox_site_btn = QPushButton(tr("rockbox_site_themes_open"))
+        self._rockbox_site_btn.setVisible(False)
 
         self._theme_row.setVisible(False)
         copy.addWidget(self._theme_row)
@@ -1845,6 +1893,11 @@ class FlashPage(QWidget):
         self._eta_row = InfoRow("flash_eta")
         self._prep_eta_seconds = 0
         self._eta_label.setText("")
+        if getattr(self, "_rockbox_site_themes", False):
+            if hasattr(self, "_rockbox_site_widget"):
+                self._rockbox_site_widget.setVisible(True)
+            if hasattr(self, "_rockbox_site_btn"):
+                self._rockbox_site_btn.setVisible(True)
 
         return self._wrap_centered(self._progress_card, warning_container)
 
@@ -1862,11 +1915,8 @@ class FlashPage(QWidget):
         self._download_next_btn = _RoundNextButton(symbol="next", accent=True)
         self._download_next_btn.setObjectName("downloadNextPlaceholderBtn")
         self._download_next_btn.setEnabled(False)
-        chips = [self._download_cancel_btn]
-        if sys.platform == "darwin":
-            chips.append(self._download_next_btn)
-        else:
-            self._download_next_btn.setVisible(False)
+        self._download_next_btn.setVisible(True)
+        chips = [self._download_cancel_btn, self._download_next_btn]
 
         self._download_card, self._download_head, copy = self._new_progress_card(
             self._download_icon,
@@ -2088,6 +2138,10 @@ class FlashPage(QWidget):
 
     def show_waiting(self):
         self._complete = False
+        if hasattr(self, "_rockbox_site_widget"):
+            self._rockbox_site_widget.setVisible(False)
+        if hasattr(self, "_rockbox_site_btn"):
+            self._rockbox_site_btn.setVisible(False)
         self._switch_view(self._waiting_view)
         if not self._prompt_only:
             # Nothing has been written yet. The bar stays at 0 until DA or
@@ -2120,11 +2174,8 @@ class FlashPage(QWidget):
         self._wait_banner_key = "please_wait"
         self._wait_banner.set_key("flash_please_wait")
         if hasattr(self, "_wait_continue_btn"):
-            if sys.platform == "darwin":
-                self._wait_continue_btn.setVisible(True)
-                self._wait_continue_btn.setEnabled(False)
-            else:
-                self._wait_continue_btn.setVisible(False)
+            self._wait_continue_btn.setVisible(True)
+            self._wait_continue_btn.setEnabled(False)
         if hasattr(self, "_wait_cancel_btn"):
             self._wait_cancel_btn.setVisible(True)
         if hasattr(self, "_wait_mode_hint"):
@@ -2144,11 +2195,8 @@ class FlashPage(QWidget):
         self._wait_banner_key = "entering_password"
         self._wait_banner.set_key("install_linux_entering_password")
         if hasattr(self, "_wait_continue_btn"):
-            if sys.platform == "darwin":
-                self._wait_continue_btn.setVisible(True)
-                self._wait_continue_btn.setEnabled(False)
-            else:
-                self._wait_continue_btn.setVisible(False)
+            self._wait_continue_btn.setVisible(True)
+            self._wait_continue_btn.setEnabled(False)
         if hasattr(self, "_wait_cancel_btn"):
             self._wait_cancel_btn.setVisible(True)
         if hasattr(self, "_wait_mode_hint"):
@@ -2165,11 +2213,8 @@ class FlashPage(QWidget):
         self.set_waiting_device()
         self._set_determinate(self._wait_progress_bar, 0)
         if hasattr(self, "_wait_continue_btn"):
-            if sys.platform == "darwin":
-                self._wait_continue_btn.setVisible(True)
-                self._wait_continue_btn.setEnabled(False)
-            else:
-                self._wait_continue_btn.setVisible(False)
+            self._wait_continue_btn.setVisible(True)
+            self._wait_continue_btn.setEnabled(False)
         if hasattr(self, "_wait_cancel_btn"):
             self._wait_cancel_btn.setVisible(True)
         if hasattr(self, "_wait_mode_hint"):
@@ -2221,12 +2266,21 @@ class FlashPage(QWidget):
             copy = getattr(self, "_wait_copy", "")
             if not getattr(self, "_prompt_only", False) and copy not in ("power_off", "stage"):
                 if copy == "please_wait_connecting":
-                    self._wait_prompt_label.setText(self._wait_connecting_prompt_text())
+                    text = self._wait_connecting_prompt_text()
                 else:
                     if remaining > 0:
                         self._wait_copy = "connect"
                     if self._wait_copy == "connect":
-                        self._wait_prompt_label.setText(self._connect_device_prompt_text())
+                        text = self._connect_device_prompt_text()
+                    else:
+                        text = ""
+                if text:
+                    if getattr(self, "_stop_open", False):
+                        saved = getattr(self, "_stop_saved", None)
+                        if saved:
+                            self._stop_saved = (text, saved[1], saved[2], saved[3], saved[4])
+                    else:
+                        self._wait_prompt_label.setText(text)
 
     def show_real_stage(self, text: str) -> None:
         """Drop the connect sentence and the throbber once the tool moves on."""
@@ -2241,6 +2295,9 @@ class FlashPage(QWidget):
 
     def _hide_theme_wizard_chips(self) -> None:
         for attr in (
+            "_cancel_btn",
+            "_flash_retry_btn",
+            "_done_mark",
             "_theme_step1_next_btn",
             "_theme_fallback_next_btn",
             "_theme_trouble_recover_btn",
@@ -2249,6 +2306,7 @@ class FlashPage(QWidget):
             btn = getattr(self, attr, None)
             if btn is not None:
                 btn.setVisible(False)
+                btn.setEnabled(True)
 
     def show_flashing(self):
         if getattr(self, "_wait_copy", "") in ("connect", "please_wait", "please_wait_connecting"):
@@ -2260,17 +2318,34 @@ class FlashPage(QWidget):
         done = bool(getattr(self, "_complete", False)) and not failed
         self._warning.setVisible(self._flash_warning_wanted())
         if hasattr(self, "_flash_retry_btn"):
-            if sys.platform == "darwin":
-                self._flash_retry_btn.setVisible(not done)
-                self._flash_retry_btn.setEnabled(failed)
+            self._flash_retry_btn.setVisible(not done)
+            self._flash_retry_btn.setEnabled(failed)
+            self._flash_retry_btn.set_symbol("retry" if failed else "next")
+            if failed:
+                self._flash_retry_btn.setToolTip(tr("flash_btn_retry"))
+                self._flash_retry_btn.setAccessibleName(tr("flash_btn_retry"))
             else:
-                self._flash_retry_btn.setVisible(failed)
-                self._flash_retry_btn.setEnabled(failed)
+                self._flash_retry_btn.setToolTip(tr("btn_next"))
+                self._flash_retry_btn.setAccessibleName(tr("btn_next"))
         if hasattr(self, "_cancel_btn"):
-            self._cancel_btn.setVisible(not done)
-            self._cancel_btn.setEnabled(True)
+            if done:
+                self._cancel_btn.setVisible(True)
+                self._cancel_btn.setEnabled(False)
+                self._cancel_btn.set_symbol("back")
+                self._cancel_btn.setToolTip("")
+                self._cancel_btn.setAccessibleName("")
+            else:
+                self._cancel_btn.setVisible(True)
+                self._cancel_btn.setEnabled(True)
+                self._cancel_btn.set_symbol("cancel" if failed else "back")
+                self._cancel_btn.setToolTip(tr("flash_btn_cancel"))
+                self._cancel_btn.setAccessibleName(tr("flash_btn_cancel"))
         if hasattr(self, "_done_mark"):
             self._done_mark.setVisible(done)
+            if done:
+                self._done_mark.setEnabled(True)
+        if hasattr(self, "_flash_head") and hasattr(self._flash_head, "_sync_chips_pairing"):
+            self._flash_head._sync_chips_pairing()
         if not failed and hasattr(self, "_driver_action_row"):
             self._driver_action_row.setVisible(False)
         self._hide_theme_wizard_chips()
@@ -2335,17 +2410,16 @@ class FlashPage(QWidget):
             self._driver_action_row.setVisible(driver_missing)
 
         if hasattr(self, "_wait_continue_btn"):
-            if sys.platform == "darwin":
-                self._wait_continue_btn.setVisible(True)
-                self._wait_continue_btn.setEnabled(False)
-            else:
-                self._wait_continue_btn.setVisible(False)
+            self._wait_continue_btn.setVisible(True)
+            self._wait_continue_btn.setEnabled(False)
         if hasattr(self, "_flash_retry_btn"):
             self._flash_retry_btn.setVisible(True)
             self._flash_retry_btn.setEnabled(True)
+            self._flash_retry_btn.set_symbol("retry")
         if hasattr(self, "_cancel_btn"):
             self._cancel_btn.setVisible(True)
             self._cancel_btn.setEnabled(True)
+            self._cancel_btn.set_symbol("cancel")
         if message == "CACHE_FILE_MISSING":
             self._flash_retry_btn.setToolTip(tr("sel_cache_retry_tooltip"))
             self._flash_retry_btn.setAccessibleName(tr("sel_cache_retry_button"))
@@ -2392,21 +2466,26 @@ class FlashPage(QWidget):
             _apply_card_text(self._step_label)
         if hasattr(self, "_eta_label"):
             self._eta_label.setText("")
+        if getattr(self, "_rockbox_site_themes", False):
+            if hasattr(self, "_rockbox_site_widget"):
+                self._rockbox_site_widget.setVisible(True)
+            if hasattr(self, "_rockbox_site_btn"):
+                self._rockbox_site_btn.setVisible(True)
         if hasattr(self, "_status_flow") and hasattr(self._status_flow, "set_forced_stacked"):
             self._status_flow.set_forced_stacked(False)
         if hasattr(self, "_done_mark"):
             self._done_mark.setVisible(False)
         if hasattr(self, "_flash_retry_btn"):
-            if sys.platform == "darwin":
-                self._flash_retry_btn.setVisible(True)
-                self._flash_retry_btn.setEnabled(False)
-            else:
-                self._flash_retry_btn.setVisible(False)
-                self._flash_retry_btn.setEnabled(False)
-            self._flash_retry_btn.setToolTip(tr("flash_btn_retry"))
-            self._flash_retry_btn.setAccessibleName(tr("flash_btn_retry"))
+            self._flash_retry_btn.setVisible(True)
+            self._flash_retry_btn.setEnabled(False)
+            self._flash_retry_btn.set_symbol("next")
+            self._flash_retry_btn.setToolTip(tr("btn_next"))
+            self._flash_retry_btn.setAccessibleName(tr("btn_next"))
             self._cancel_btn.setVisible(True)
             self._cancel_btn.setEnabled(True)
+            self._cancel_btn.set_symbol("back")
+            self._cancel_btn.setToolTip(tr("flash_btn_cancel"))
+            self._cancel_btn.setAccessibleName(tr("flash_btn_cancel"))
         self._hide_theme_wizard_chips()
         if hasattr(self, "_theme_row"):
             self._theme_row.setVisible(False)
@@ -2580,9 +2659,14 @@ class FlashPage(QWidget):
         if hasattr(self, "_theme_trouble_widget"):
             self._theme_trouble_widget.setVisible(False)
         self._hide_theme_wizard_chips()
+        if hasattr(self, "_theme_back_btn"):
+            self._theme_back_btn.setEnabled(False)
+            self._theme_back_btn.setVisible(True)
         if hasattr(self, "_theme_step1_next_btn"):
+            self._theme_step1_next_btn.setEnabled(True)
             self._theme_step1_next_btn.setVisible(True)
         if hasattr(self, "_flash_head"):
+            self._flash_head._sync_chips_pairing()
             self._flash_head._sync_to_band()
         win = self.window()
         if win and hasattr(win, "_adjust_window_geometry"):
@@ -2592,9 +2676,11 @@ class FlashPage(QWidget):
         if hasattr(self, "_theme_step1_widget"):
             self._theme_step1_widget.setVisible(False)
         if hasattr(self, "_theme_fallback_widget"):
-            self._theme_fallback_widget.setVisible(False)
+            self._theme_fallback_widget.setVisible(True)
         if hasattr(self, "_theme_trouble_widget"):
             self._theme_trouble_widget.setVisible(False)
+        if hasattr(self, "_theme_row"):
+            self._theme_row.setVisible(True)
         self._hide_theme_wizard_chips()
         if hasattr(self, "_flash_head"):
             self._flash_head._sync_to_band()
@@ -2603,10 +2689,11 @@ class FlashPage(QWidget):
             win._adjust_window_geometry()
 
         model_str = getattr(self, "_theme_stage_model", "Y1").upper()
-        self._adb_watch_seconds = 120 if getattr(self, "_theme_automatic", False) else 90
+        from ..adb import ADB_WATCH_TIMEOUT_SECONDS
+        self._adb_watch_seconds = ADB_WATCH_TIMEOUT_SECONDS
         usb_prompt = tr("rockbox_step2_connect_usb").format(model=model_str)
         adb_status = tr("rockbox_stage_waiting_adb_fmt").format(remaining=self._adb_watch_seconds)
-        self._eta_label.setText(tr("rockbox_stage_installing") if getattr(self, "_theme_automatic", False) else f"{usb_prompt}\n{adb_status}")
+        self._eta_label.setText("" if getattr(self, "_theme_automatic", False) else f"{usb_prompt}\n{adb_status}")
         self._log_theme(f"[Rockbox Themes] Step 2: Waiting for USB connection and ADB handshake ({self._adb_watch_seconds}s timeout)...")
 
         from ..adb import find_adb_binary
@@ -2632,8 +2719,8 @@ class FlashPage(QWidget):
             model_str = getattr(self, "_theme_stage_model", "Y1").upper()
             usb_prompt = tr("rockbox_step2_connect_usb").format(model=model_str)
             adb_status = tr("rockbox_stage_waiting_adb_fmt").format(remaining=self._adb_watch_seconds)
-            self._eta_label.setText(tr("rockbox_stage_installing") if getattr(self, "_theme_automatic", False) else f"{usb_prompt}\n{adb_status}")
-            if self._adb_watch_seconds in (50, 40, 30, 20, 10, 5):
+            self._eta_label.setText("" if getattr(self, "_theme_automatic", False) else f"{usb_prompt}\n{adb_status}")
+            if self._adb_watch_seconds in (100, 80, 60, 40, 20, 10, 5):
                 self._log_theme(f"[Rockbox Themes] Waiting for ADB device... ({self._adb_watch_seconds}s remaining)")
         else:
             if hasattr(self, "_adb_watch_timer"):
@@ -2646,18 +2733,25 @@ class FlashPage(QWidget):
             self._theme_row.setVisible(False)
         self._hide_theme_wizard_chips()
         self._log_theme(f"[Rockbox Themes] Player detected via ADB (serial: {serial}). Waiting {ROCKBOX_BOOT_WAIT_MS // 1000}s for Rockbox to populate .rockbox...")
-        self._eta_label.setText(tr("rockbox_stage_installing"))
+        self._eta_label.setText(tr("rockbox_stage_pushing"))
         QTimer.singleShot(ROCKBOX_BOOT_WAIT_MS, lambda: self._start_adb_theme_push(serial))
 
     def _start_adb_theme_push(self, serial: str) -> None:
         self._log_theme("[Rockbox Themes] Pushing 360p themes & fonts over ADB...")
         self._eta_label.setText(tr("rockbox_stage_pushing"))
+        self._theme_last_logged_curr = 0
         from ..adb import find_adb_binary
-        from ..theme_pack import AdbPushWorker, bundled_rockbox_dir
+        from ..theme_pack import AdbPushWorker, ensure_normalized_theme_pack_zip
         adb_bin = find_adb_binary()
-        local_dir = bundled_rockbox_dir()
+        norm_zip = ensure_normalized_theme_pack_zip()
 
-        self._adb_push_worker = AdbPushWorker(adb_bin, serial, local_dir, parent=self)
+        self._adb_push_worker = AdbPushWorker(
+            adb_bin,
+            serial,
+            local_dir=None,
+            parent=self,
+            zip_path=norm_zip,
+        )
         self._adb_push_worker.progress.connect(self._on_theme_push_progress)
         self._adb_push_worker.finished.connect(self._on_theme_push_finished)
         self._adb_push_worker.start()
@@ -2669,15 +2763,28 @@ class FlashPage(QWidget):
         pct = (float(curr) / max(1.0, float(total))) * 100.0
         scaled = scale_theme_progress(pct)
         self._progress_bar.set_precise_value(scaled)
-        self._eta_label.setText(
-            tr("rockbox_stage_pushing_files_fmt").format(curr=curr, total=total)
-        )
-        if curr == 1 or curr == total or curr % 25 == 0:
-            self._log_theme(f"[Rockbox Themes] Pushed {curr}/{total} theme files to player ({int(pct)}%)...")
+        if total == 100:
+            if curr < 65:
+                self._eta_label.setText(f"{tr('rockbox_stage_pushing')} ({curr}%)")
+            elif curr < 95:
+                self._eta_label.setText(tr("rockbox_stage_installing"))
+            else:
+                self._eta_label.setText(tr("rockbox_stage_pushing"))
+        else:
+            self._eta_label.setText(
+                tr("rockbox_stage_pushing_files_fmt").format(curr=curr, total=total)
+            )
+        last_logged = getattr(self, "_theme_last_logged_curr", 0)
+        if curr == 1 or curr == total or (curr - last_logged) >= 25 or (total == 100 and (curr - last_logged) >= 20):
+            self._theme_last_logged_curr = curr
+            if total == 100:
+                self._log_theme(f"[Rockbox Themes] Theme pack transfer progress: {curr}%...")
+            else:
+                self._log_theme(f"[Rockbox Themes] Pushed {curr}/{total} theme files to player ({int(pct)}%)...")
 
     def _on_theme_push_finished(self, ok: bool, msg: str) -> None:
         if ok:
-            self._log_theme("[Rockbox Themes] Themes and fonts pushed successfully via ADB! Rebooting player into Rockbox...")
+            self._log_theme("[Rockbox Themes] Themes and fonts were transferred and verified successfully via ADB.")
             self._finish_rockbox_themes_stage()
         else:
             self._log_theme(f"[Rockbox Themes] ADB theme push encountered an issue: {msg}. Falling back to USB storage guidance.")
@@ -2700,9 +2807,16 @@ class FlashPage(QWidget):
         if hasattr(self, "_theme_trouble_widget"):
             self._theme_trouble_widget.setVisible(False)
         self._hide_theme_wizard_chips()
+        if hasattr(self, "_theme_back_btn"):
+            self._theme_back_btn.setEnabled(False)
+            self._theme_back_btn.setVisible(True)
         if hasattr(self, "_theme_fallback_next_btn"):
+            self._theme_fallback_next_btn.set_symbol("folder")
+            self._theme_fallback_next_btn.setToolTip(tr("rockbox_step_select_player_folder"))
+            self._theme_fallback_next_btn.setEnabled(True)
             self._theme_fallback_next_btn.setVisible(True)
         if hasattr(self, "_flash_head"):
+            self._flash_head._sync_chips_pairing()
             self._flash_head._sync_to_band()
         win = self.window()
         if win and hasattr(win, "_adjust_window_geometry"):
@@ -2734,6 +2848,7 @@ class FlashPage(QWidget):
             self._theme_fallback_widget.setVisible(False)
         self._hide_theme_wizard_chips()
         self._eta_label.setText(tr("rockbox_stage_pushing"))
+        self._theme_last_logged_curr = 0
 
         self._dir_merge_worker = DirMergeWorker(src_dir, dest_dir, parent=self)
         self._dir_merge_worker.progress.connect(self._on_theme_push_progress)
@@ -2765,11 +2880,14 @@ class FlashPage(QWidget):
         if hasattr(self, "_theme_trouble_widget"):
             self._theme_trouble_widget.setVisible(True)
         self._hide_theme_wizard_chips()
-        if hasattr(self, "_theme_trouble_recover_btn"):
-            self._theme_trouble_recover_btn.setVisible(True)
         if hasattr(self, "_theme_back_btn"):
+            self._theme_back_btn.setEnabled(True)
             self._theme_back_btn.setVisible(True)
+        if hasattr(self, "_theme_trouble_recover_btn"):
+            self._theme_trouble_recover_btn.setEnabled(True)
+            self._theme_trouble_recover_btn.setVisible(True)
         if hasattr(self, "_flash_head"):
+            self._flash_head._sync_chips_pairing()
             self._flash_head._sync_to_band()
         win = self.window()
         if win and hasattr(win, "_adjust_window_geometry"):
@@ -2779,10 +2897,15 @@ class FlashPage(QWidget):
         self._on_theme_fallback_next_clicked()
 
     def _on_theme_recover_clicked(self) -> None:
-        self._log_theme("[Rockbox Themes] User requested troubleshooting/retry recovery.")
+        self._log_theme("[Rockbox Themes] User requested restore original software.")
         cb = getattr(self, "_theme_stage_recover_cb", None)
         if callable(cb):
             cb()
+            return
+        win = self.window()
+        if win and hasattr(win, "restore_original_software"):
+            model = getattr(self, "_theme_stage_model", "Y1")
+            win.restore_original_software(model)
 
     def _finish_rockbox_themes_stage(self, manual_count=None, dest=None) -> None:
         if manual_count is not None:
@@ -2808,13 +2931,13 @@ class FlashPage(QWidget):
         is_y1 = (model or "").upper() == "Y1"
         return "rockbox_power_on_prompt_sp_y1" if is_y1 else "rockbox_power_on_prompt_sp_other"
 
-    def show_rockbox_power_on_prompt(self, prompt: str, on_continue=None) -> None:
+    def show_rockbox_power_on_prompt(self, prompt: str, on_continue=None, on_recover=None) -> None:
         """Keep the install card active while the user boots the flashed player."""
         self._failed = False
         self._complete = False
         self._themes_stage_active = False
         self._theme_stage_done_cb = None
-        self._theme_stage_recover_cb = None
+        self._theme_stage_recover_cb = on_recover
         self.stop_theme_workers()
         if hasattr(self, "_theme_row"):
             self._theme_row.setVisible(False)
@@ -2842,7 +2965,7 @@ class FlashPage(QWidget):
         if hasattr(self, "_theme_row"):
             self._theme_row.setVisible(True)
         if hasattr(self, "_theme_fallback_widget"):
-            self._theme_fallback_widget.setVisible(False)
+            self._theme_fallback_widget.setVisible(True)
         if hasattr(self, "_theme_trouble_widget"):
             self._theme_trouble_widget.setVisible(False)
         if hasattr(self, "_flash_head"):
@@ -2930,11 +3053,8 @@ class FlashPage(QWidget):
         self._prompt_only = False
         self._permission_prompt = False
         if hasattr(self, "_wait_continue_btn"):
-            if sys.platform == "darwin":
-                self._wait_continue_btn.setVisible(True)
-                self._wait_continue_btn.setEnabled(False)
-            else:
-                self._wait_continue_btn.setVisible(False)
+            self._wait_continue_btn.setVisible(True)
+            self._wait_continue_btn.setEnabled(False)
         if hasattr(self, "_wait_cancel_btn"):
             self._wait_cancel_btn.setVisible(True)
         if hasattr(self, "_wait_mode_hint"):
@@ -3173,12 +3293,18 @@ class FlashPage(QWidget):
         self._failed = False
         self._warning.setVisible(False)
         if hasattr(self, "_cancel_btn"):
-            self._cancel_btn.setVisible(False)
+            self._cancel_btn.setVisible(True)
             self._cancel_btn.setEnabled(False)
+            self._cancel_btn.set_symbol("back")
+            self._cancel_btn.setToolTip("")
+            self._cancel_btn.setAccessibleName("")
         if hasattr(self, "_done_mark"):
             self._done_mark.setVisible(True)
+            self._done_mark.setEnabled(True)
         if hasattr(self, "_flash_retry_btn"):
             self._flash_retry_btn.setVisible(False)
+        if hasattr(self, "_flash_head") and hasattr(self._flash_head, "_sync_chips_pairing"):
+            self._flash_head._sync_chips_pairing()
         source = getattr(self, "_release_source", None)
         if source is not None:
             self.set_release_icon(source, complete=True)
@@ -3187,6 +3313,11 @@ class FlashPage(QWidget):
         self._wait_status.set_status("complete")
         self._progress_bar.setValue(100)
         self._eta_label.setText("")
+        if getattr(self, "_rockbox_site_themes", False):
+            if hasattr(self, "_rockbox_site_widget"):
+                self._rockbox_site_widget.setVisible(True)
+            if hasattr(self, "_rockbox_site_btn"):
+                self._rockbox_site_btn.setVisible(True)
 
     def update_prep_progress(self, percent):
         self._set_determinate(self._prep_progress, percent)
@@ -3217,7 +3348,71 @@ class FlashPage(QWidget):
             flow.refresh()
         self._notify_geometry_change()
 
+    _ACTION_HOLD_MS = 1000
+
     def update_action(self, text):
+        """Show a status line without flicker.
+
+        Console tools emit status text many times a second. A new line is held
+        on screen for ``_ACTION_HOLD_MS`` before it replaces the current one, and
+        a change that only moves digits (a percentage) updates the label in place
+        with no layout pass. Without this, the line clears and reappears, the
+        window shrinks and grows, and the progress bar gets cropped.
+        """
+        import re
+        import time
+
+        text = text or ""
+        shown = getattr(self, "_action_shown_text", None)
+        if shown is None:
+            self._action_apply_text(text)
+            self._action_shown_at = time.monotonic()
+            self._action_shown_text = text
+            return
+
+        if re.sub(r"\d+", "#", text) == re.sub(r"\d+", "#", shown):
+            # Only the numbers moved: no hold, no relayout.
+            self._action_shown_text = text
+            self._action_label.setText(text)
+            self._action_pending_text = None
+            return
+
+        if text == shown:
+            self._action_pending_text = None
+            return
+
+        elapsed = (time.monotonic() - getattr(self, "_action_shown_at", 0.0)) * 1000.0
+        if elapsed >= self._ACTION_HOLD_MS and not getattr(self, "_action_pending_text", None):
+            self._action_apply_text(text)
+            self._action_shown_at = time.monotonic()
+            self._action_shown_text = text
+            return
+
+        # Hold: remember the newest line and apply it once the hold ends.
+        self._action_pending_text = text
+        timer = getattr(self, "_action_hold_timer", None)
+        if timer is None:
+            from PySide6.QtCore import QTimer
+            timer = QTimer(self)
+            timer.setSingleShot(True)
+            timer.timeout.connect(self._action_flush_pending)
+            self._action_hold_timer = timer
+        if not timer.isActive():
+            remaining = max(0, int(self._ACTION_HOLD_MS - elapsed))
+            timer.start(remaining)
+
+    def _action_flush_pending(self):
+        import time
+
+        text = getattr(self, "_action_pending_text", None)
+        self._action_pending_text = None
+        if text is None or text == getattr(self, "_action_shown_text", None):
+            return
+        self._action_apply_text(text)
+        self._action_shown_at = time.monotonic()
+        self._action_shown_text = text
+
+    def _action_apply_text(self, text):
         self._action_label.setText(text)
         if text and not getattr(self, "_stop_open", False) and not getattr(self, "_failed", False) and not getattr(self, "_themes_stage_active", False):
             if hasattr(self, "_step_label"):
@@ -3350,7 +3545,11 @@ class FlashPage(QWidget):
         if hasattr(self, "_theme_no_btn"):
             self._theme_no_btn.setText(tr("rockbox_running_no"))
         if hasattr(self, "_theme_browse_btn"):
-            self._theme_browse_btn.setText(tr("sel_browse_folder"))
+            self._theme_browse_btn.setText(tr("rockbox_step_select_player_folder"))
+            self._theme_browse_btn.setToolTip(tr("rockbox_step_select_player_folder"))
+        if hasattr(self, "_theme_fallback_next_btn"):
+            self._theme_fallback_next_btn.setText(tr("rockbox_step_select_player_folder"))
+            self._theme_fallback_next_btn.setToolTip(tr("rockbox_step_select_player_folder"))
         if hasattr(self, "_theme_finish_btn"):
             self._theme_finish_btn.setText(tr("rockbox_btn_finish"))
         if hasattr(self, "_theme_recover_link"):
@@ -3359,6 +3558,7 @@ class FlashPage(QWidget):
             self._theme_trouble_recover_btn.setText(tr("rockbox_recover_troubleshoot"))
         if hasattr(self, "_theme_back_btn"):
             self._theme_back_btn.setText(tr("rockbox_wizard_back"))
+            self._theme_back_btn.setToolTip(tr("rockbox_wizard_back"))
         if hasattr(self, "_download_drivers_btn"):
             self._download_drivers_btn.setText(tr("settings_download_drivers_btn"))
         self._flash_banner.retranslate()
@@ -3496,8 +3696,8 @@ class FlashPage(QWidget):
         straight back to Select Software. Once a run is under way the same
         chip asks first, because there the target is already mid-write.
         """
-        if getattr(self, "_prompt_only", False):
-            callback = self._cancel_wait_callback
+        if getattr(self, "_prompt_only", False) or getattr(self, "_failed", False):
+            callback = getattr(self, "_cancel_wait_callback", None) or getattr(self, "_cancel_callback", None)
             if callable(callback):
                 callback()
             return
@@ -3756,6 +3956,9 @@ class FlashPage(QWidget):
         window-close path, where Back leaves the run in place.
         """
         if getattr(self, "_stop_open", False):
+            if wait:
+                self._finish_stop(True)
+                return True
             return False
         self._ensure_stop_buttons()
         card, row, label, bar, cancel, extra, column = self._stop_target()

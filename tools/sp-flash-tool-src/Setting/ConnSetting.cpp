@@ -14,7 +14,8 @@ namespace APCore
 
 ConnSetting::ConnSetting():
     stop_flag_(NULL),
-    m_timeout(60*60*1000)
+    m_timeout(60*60*1000),
+    m_storage_life_cycle_check(true)
 {
 }
 

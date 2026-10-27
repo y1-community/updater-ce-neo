@@ -63,6 +63,7 @@ _SEGMENTED_SF_SYMBOLS = {
     "retry": "arrow.clockwise",
     "complete": "checkmark",
     "download": "arrow.down.circle",
+    "folder": "folder",
     "trash": "trash",
     "delete": "trash",
     "bin": "trash",

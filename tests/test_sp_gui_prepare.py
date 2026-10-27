@@ -378,8 +378,8 @@ def test_on_linux_the_updater_stays_up_while_the_password_prompt_is_open(
     quits = []
     monkeypatch.setattr(mw_mod, "QApplication", _QuitRecorder())
 
-    # The prompt is up: no flash_tool process yet, then the tool appears.
-    snapshots = [[], [(101, 1, "flash_tool")]]
+    # Pre-launch and prompt-up: no flash_tool process yet, then the tool appears.
+    snapshots = [[], [], [(101, 1, "flash_tool")]]
     monkeypatch.setattr(
         process_guard,
         "process_snapshot",

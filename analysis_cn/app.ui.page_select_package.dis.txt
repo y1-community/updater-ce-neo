@@ -1,0 +1,1830 @@
+  0           0 RESUME                   0
+
+  1           2 LOAD_CONST               0 ('\n02 选择本地软件包\n')
+              4 STORE_NAME               0 (__doc__)
+
+  4           6 LOAD_CONST               1 (0)
+              8 LOAD_CONST               2 (('QWidget', 'QVBoxLayout', 'QHBoxLayout', 'QLabel', 'QPushButton', 'QFileDialog', 'QLineEdit', 'QProgressBar'))
+             10 IMPORT_NAME              1 (PySide6.QtWidgets)
+             12 IMPORT_FROM              2 (QWidget)
+             14 STORE_NAME               2 (QWidget)
+             16 IMPORT_FROM              3 (QVBoxLayout)
+             18 STORE_NAME               3 (QVBoxLayout)
+             20 IMPORT_FROM              4 (QHBoxLayout)
+             22 STORE_NAME               4 (QHBoxLayout)
+             24 IMPORT_FROM              5 (QLabel)
+             26 STORE_NAME               5 (QLabel)
+             28 IMPORT_FROM              6 (QPushButton)
+             30 STORE_NAME               6 (QPushButton)
+             32 IMPORT_FROM              7 (QFileDialog)
+             34 STORE_NAME               7 (QFileDialog)
+             36 IMPORT_FROM              8 (QLineEdit)
+             38 STORE_NAME               8 (QLineEdit)
+             40 IMPORT_FROM              9 (QProgressBar)
+             42 STORE_NAME               9 (QProgressBar)
+             44 POP_TOP
+
+  8          46 LOAD_CONST               1 (0)
+             48 LOAD_CONST               3 (('Signal', 'Qt'))
+             50 IMPORT_NAME             10 (PySide6.QtCore)
+             52 IMPORT_FROM             11 (Signal)
+             54 STORE_NAME              11 (Signal)
+             56 IMPORT_FROM             12 (Qt)
+             58 STORE_NAME              12 (Qt)
+             60 POP_TOP
+
+  9          62 LOAD_CONST               4 (1)
+             64 LOAD_CONST               5 (('Card', 'StatusTag'))
+             66 IMPORT_NAME             13 (widgets)
+             68 IMPORT_FROM             14 (Card)
+             70 STORE_NAME              14 (Card)
+             72 IMPORT_FROM             15 (StatusTag)
+             74 STORE_NAME              15 (StatusTag)
+             76 POP_TOP
+
+ 10          78 LOAD_CONST               6 (2)
+             80 LOAD_CONST               7 (('t', 'translator'))
+             82 IMPORT_NAME             16 (i18n)
+             84 IMPORT_FROM             17 (t)
+             86 STORE_NAME              17 (t)
+             88 IMPORT_FROM             18 (translator)
+             90 STORE_NAME              18 (translator)
+             92 POP_TOP
+
+ 13          94 PUSH_NULL
+             96 LOAD_BUILD_CLASS
+             98 LOAD_CONST               8 (<code object SelectPackagePage at 0x000001B35DF50AB0, file "app\ui\page_select_package.py", line 13>)
+            100 MAKE_FUNCTION            0
+            102 LOAD_CONST               9 ('SelectPackagePage')
+            104 LOAD_NAME                2 (QWidget)
+            106 PRECALL                  3
+            110 CALL                     3
+            120 STORE_NAME              19 (SelectPackagePage)
+            122 LOAD_CONST              10 (None)
+            124 RETURN_VALUE
+
+Disassembly of <code object SelectPackagePage at 0x000001B35DF50AB0, file "app\ui\page_select_package.py", line 13>:
+              0 MAKE_CELL                0 (__class__)
+
+ 13           2 RESUME                   0
+              4 LOAD_NAME                0 (__name__)
+              6 STORE_NAME               1 (__module__)
+              8 LOAD_CONST               0 ('SelectPackagePage')
+             10 STORE_NAME               2 (__qualname__)
+
+ 14          12 LOAD_CONST               1 ('选择本地软件包页')
+             14 STORE_NAME               3 (__doc__)
+
+ 16          16 PUSH_NULL
+             18 LOAD_NAME                4 (Signal)
+             20 LOAD_NAME                5 (str)
+             22 PRECALL                  1
+             26 CALL                     1
+             36 STORE_NAME               6 (start_flash)
+
+ 17          38 PUSH_NULL
+             40 LOAD_NAME                4 (Signal)
+             42 LOAD_NAME                5 (str)
+             44 PRECALL                  1
+             48 CALL                     1
+             58 STORE_NAME               7 (package_selected)
+
+ 19          60 LOAD_CONST              17 ((None,))
+             62 LOAD_CLOSURE             0 (__class__)
+             64 BUILD_TUPLE              1
+             66 LOAD_CONST               3 (<code object __init__ at 0x000001B35E77FD70, file "app\ui\page_select_package.py", line 19>)
+             68 MAKE_FUNCTION            9 (defaults, closure)
+             70 STORE_NAME               8 (__init__)
+
+ 27          72 LOAD_CONST               4 (<code object _build_ui at 0x000001B35E5F3E80, file "app\ui\page_select_package.py", line 27>)
+             74 MAKE_FUNCTION            0
+             76 STORE_NAME               9 (_build_ui)
+
+189          78 LOAD_CONST               5 (<code object _on_choose_file at 0x000001B35E7B74C0, file "app\ui\page_select_package.py", line 189>)
+             80 MAKE_FUNCTION            0
+             82 STORE_NAME              10 (_on_choose_file)
+
+199          84 LOAD_CONST               6 (<code object _on_start_flash at 0x000001B35E91D980, file "app\ui\page_select_package.py", line 199>)
+             86 MAKE_FUNCTION            0
+             88 STORE_NAME              11 (_on_start_flash)
+
+208          90 LOAD_CONST              18 ((0,))
+             92 LOAD_CONST               8 ('state')
+             94 LOAD_NAME                5 (str)
+             96 LOAD_CONST               9 ('percent')
+             98 LOAD_NAME               12 (int)
+            100 BUILD_TUPLE              4
+            102 LOAD_CONST              10 (<code object set_extract_state at 0x000001B35E366210, file "app\ui\page_select_package.py", line 208>)
+            104 MAKE_FUNCTION            5 (defaults, annotations)
+            106 STORE_NAME              13 (set_extract_state)
+
+235         108 LOAD_CONST              11 (<code object _update_state at 0x000001B35E3658D0, file "app\ui\page_select_package.py", line 235>)
+            110 MAKE_FUNCTION            0
+            112 STORE_NAME              14 (_update_state)
+
+256         114 LOAD_CONST              12 (<code object _retranslate at 0x000001B35E375430, file "app\ui\page_select_package.py", line 256>)
+            116 MAKE_FUNCTION            0
+            118 STORE_NAME              15 (_retranslate)
+
+277         120 LOAD_CONST              13 ('return')
+            122 LOAD_NAME                5 (str)
+            124 BUILD_TUPLE              2
+            126 LOAD_CONST              14 (<code object get_package_path at 0x000001B35E4DACE0, file "app\ui\page_select_package.py", line 277>)
+            128 MAKE_FUNCTION            4 (annotations)
+            130 STORE_NAME              16 (get_package_path)
+
+280         132 LOAD_CONST              15 ('path')
+            134 LOAD_NAME                5 (str)
+            136 BUILD_TUPLE              2
+            138 LOAD_CONST              16 (<code object set_package_path at 0x000001B35E91BC30, file "app\ui\page_select_package.py", line 280>)
+            140 MAKE_FUNCTION            4 (annotations)
+            142 STORE_NAME              17 (set_package_path)
+            144 LOAD_CLOSURE             0 (__class__)
+            146 COPY                     1
+            148 STORE_NAME              18 (__classcell__)
+            150 RETURN_VALUE
+
+Disassembly of <code object __init__ at 0x000001B35E77FD70, file "app\ui\page_select_package.py", line 19>:
+              0 COPY_FREE_VARS           1
+
+ 19           2 RESUME                   0
+
+ 20           4 LOAD_GLOBAL              1 (NULL + super)
+             16 PRECALL                  0
+             20 CALL                     0
+             30 LOAD_METHOD              1 (__init__)
+             52 LOAD_FAST                1 (parent)
+             54 PRECALL                  1
+             58 CALL                     1
+             68 POP_TOP
+
+ 21          70 LOAD_CONST               1 ('')
+             72 LOAD_FAST                0 (self)
+             74 STORE_ATTR               2 (_package_path)
+
+ 22          84 LOAD_CONST               2 ('idle')
+             86 LOAD_FAST                0 (self)
+             88 STORE_ATTR               3 (_extract_state)
+
+ 23          98 LOAD_FAST                0 (self)
+            100 LOAD_METHOD              4 (_build_ui)
+            122 PRECALL                  0
+            126 CALL                     0
+            136 POP_TOP
+
+ 24         138 LOAD_FAST                0 (self)
+            140 LOAD_METHOD              5 (_update_state)
+            162 PRECALL                  0
+            166 CALL                     0
+            176 POP_TOP
+
+ 25         178 LOAD_GLOBAL             12 (translator)
+            190 LOAD_ATTR                7 (language_changed)
+            200 LOAD_METHOD              8 (connect)
+            222 LOAD_FAST                0 (self)
+            224 LOAD_ATTR                9 (_retranslate)
+            234 PRECALL                  1
+            238 CALL                     1
+            248 POP_TOP
+            250 LOAD_CONST               0 (None)
+            252 RETURN_VALUE
+
+Disassembly of <code object _build_ui at 0x000001B35E5F3E80, file "app\ui\page_select_package.py", line 27>:
+ 27           0 RESUME                   0
+
+ 28           2 LOAD_GLOBAL              1 (NULL + QVBoxLayout)
+             14 LOAD_FAST                0 (self)
+             16 PRECALL                  1
+             20 CALL                     1
+             30 STORE_FAST               1 (root)
+
+ 29          32 LOAD_FAST                1 (root)
+             34 LOAD_METHOD              1 (setContentsMargins)
+             56 LOAD_CONST               1 (0)
+             58 LOAD_CONST               1 (0)
+             60 LOAD_CONST               1 (0)
+             62 LOAD_CONST               1 (0)
+             64 PRECALL                  4
+             68 CALL                     4
+             78 POP_TOP
+
+ 30          80 LOAD_FAST                1 (root)
+             82 LOAD_METHOD              2 (setSpacing)
+            104 LOAD_CONST               2 (16)
+            106 PRECALL                  1
+            110 CALL                     1
+            120 POP_TOP
+
+ 33         122 LOAD_GLOBAL              7 (NULL + Card)
+            134 PRECALL                  0
+            138 CALL                     0
+            148 STORE_FAST               2 (flow_card)
+
+ 34         150 LOAD_GLOBAL              1 (NULL + QVBoxLayout)
+            162 PRECALL                  0
+            166 CALL                     0
+            176 STORE_FAST               3 (flow_layout)
+
+ 35         178 LOAD_GLOBAL              9 (NULL + QLabel)
+            190 LOAD_GLOBAL             11 (NULL + t)
+            202 LOAD_CONST               3 ('home_flow_title')
+            204 PRECALL                  1
+            208 CALL                     1
+            218 PRECALL                  1
+            222 CALL                     1
+            232 LOAD_FAST                0 (self)
+            234 STORE_ATTR               6 (_flow_title)
+
+ 36         244 LOAD_FAST                0 (self)
+            246 LOAD_ATTR                6 (_flow_title)
+            256 LOAD_METHOD              7 (setObjectName)
+            278 LOAD_CONST               4 ('section_title')
+            280 PRECALL                  1
+            284 CALL                     1
+            294 POP_TOP
+
+ 37         296 LOAD_FAST                3 (flow_layout)
+            298 LOAD_METHOD              8 (addWidget)
+            320 LOAD_FAST                0 (self)
+            322 LOAD_ATTR                6 (_flow_title)
+            332 PRECALL                  1
+            336 CALL                     1
+            346 POP_TOP
+
+ 40         348 BUILD_LIST               0
+            350 LOAD_FAST                0 (self)
+            352 STORE_ATTR               9 (_step_labels)
+
+ 41         362 BUILD_LIST               0
+            364 LOAD_CONST               5 (('home_step_1', 'home_step_2', 'home_step_3', 'home_step_4', 'home_step_5', 'home_step_6'))
+            366 LIST_EXTEND              1
+            368 STORE_FAST               4 (step_keys)
+
+ 42         370 LOAD_GLOBAL             21 (NULL + range)
+            382 LOAD_CONST               6 (2)
+            384 PRECALL                  1
+            388 CALL                     1
+            398 GET_ITER
+        >>  400 EXTENDED_ARG             1
+            402 FOR_ITER               467 (to 1338)
+            404 STORE_FAST               5 (row_idx)
+
+ 43         406 LOAD_GLOBAL             23 (NULL + QHBoxLayout)
+            418 PRECALL                  0
+            422 CALL                     0
+            432 STORE_FAST               6 (row)
+
+ 44         434 LOAD_FAST                6 (row)
+            436 LOAD_METHOD              2 (setSpacing)
+            458 LOAD_CONST               7 (4)
+            460 PRECALL                  1
+            464 CALL                     1
+            474 POP_TOP
+
+ 45         476 LOAD_FAST                4 (step_keys)
+            478 LOAD_FAST                5 (row_idx)
+            480 LOAD_CONST               8 (3)
+            482 BINARY_OP                5 (*)
+            486 LOAD_FAST                5 (row_idx)
+            488 LOAD_CONST               9 (1)
+            490 BINARY_OP                0 (+)
+            494 LOAD_CONST               8 (3)
+            496 BINARY_OP                5 (*)
+            500 BUILD_SLICE              2
+            502 BINARY_SUBSCR
+            512 STORE_FAST               7 (row_keys)
+
+ 46         514 LOAD_GLOBAL             25 (NULL + enumerate)
+            526 LOAD_FAST                7 (row_keys)
+            528 PRECALL                  1
+            532 CALL                     1
+            542 GET_ITER
+        >>  544 EXTENDED_ARG             1
+            546 FOR_ITER               352 (to 1252)
+            548 UNPACK_SEQUENCE          2
+            552 STORE_FAST               8 (i)
+            554 STORE_FAST               9 (key)
+
+ 47         556 LOAD_GLOBAL              9 (NULL + QLabel)
+            568 LOAD_GLOBAL             11 (NULL + t)
+            580 LOAD_FAST                9 (key)
+            582 PRECALL                  1
+            586 CALL                     1
+            596 PRECALL                  1
+            600 CALL                     1
+            610 STORE_FAST              10 (lbl)
+
+ 48         612 LOAD_FAST               10 (lbl)
+            614 LOAD_METHOD             13 (setAlignment)
+            636 LOAD_GLOBAL             28 (Qt)
+            648 LOAD_ATTR               15 (AlignmentFlag)
+            658 LOAD_ATTR               16 (AlignCenter)
+            668 PRECALL                  1
+            672 CALL                     1
+            682 POP_TOP
+
+ 49         684 LOAD_FAST               10 (lbl)
+            686 LOAD_METHOD             17 (setStyleSheet)
+
+ 50         708 LOAD_CONST              10 ('QLabel { background:#F0F4FA; border:1px solid #D0D7E2; border-radius:16px; padding:6px 10px; color:#4A5568; font-size:12px; }')
+
+ 49         710 PRECALL                  1
+            714 CALL                     1
+            724 POP_TOP
+
+ 53         726 LOAD_FAST               10 (lbl)
+            728 LOAD_METHOD             18 (fontMetrics)
+            750 PRECALL                  0
+            754 CALL                     0
+            764 LOAD_METHOD             19 (horizontalAdvance)
+            786 LOAD_GLOBAL             11 (NULL + t)
+            798 LOAD_FAST                9 (key)
+            800 PRECALL                  1
+            804 CALL                     1
+            814 PRECALL                  1
+            818 CALL                     1
+            828 STORE_FAST              11 (tw)
+
+ 54         830 LOAD_FAST               10 (lbl)
+            832 LOAD_METHOD             20 (setMinimumWidth)
+            854 LOAD_FAST               11 (tw)
+            856 LOAD_CONST              11 (24)
+            858 BINARY_OP                0 (+)
+            862 PRECALL                  1
+            866 CALL                     1
+            876 POP_TOP
+
+ 55         878 LOAD_FAST                6 (row)
+            880 LOAD_METHOD              8 (addWidget)
+            902 LOAD_FAST               10 (lbl)
+            904 PRECALL                  1
+            908 CALL                     1
+            918 POP_TOP
+
+ 56         920 LOAD_FAST                0 (self)
+            922 LOAD_ATTR                9 (_step_labels)
+            932 LOAD_METHOD             21 (append)
+            954 LOAD_FAST               10 (lbl)
+            956 LOAD_FAST                9 (key)
+            958 BUILD_TUPLE              2
+            960 PRECALL                  1
+            964 CALL                     1
+            974 POP_TOP
+
+ 57         976 LOAD_FAST                8 (i)
+            978 LOAD_GLOBAL             45 (NULL + len)
+            990 LOAD_FAST                7 (row_keys)
+            992 PRECALL                  1
+            996 CALL                     1
+           1006 LOAD_CONST               9 (1)
+           1008 BINARY_OP               10 (-)
+           1012 COMPARE_OP               0 (<)
+           1018 POP_JUMP_FORWARD_IF_FALSE   114 (to 1248)
+
+ 58        1020 LOAD_GLOBAL              9 (NULL + QLabel)
+           1032 LOAD_CONST              12 ('—')
+           1034 PRECALL                  1
+           1038 CALL                     1
+           1048 STORE_FAST              12 (dash)
+
+ 59        1050 LOAD_FAST               12 (dash)
+           1052 LOAD_METHOD             13 (setAlignment)
+           1074 LOAD_GLOBAL             28 (Qt)
+           1086 LOAD_ATTR               15 (AlignmentFlag)
+           1096 LOAD_ATTR               16 (AlignCenter)
+           1106 PRECALL                  1
+           1110 CALL                     1
+           1120 POP_TOP
+
+ 60        1122 LOAD_FAST               12 (dash)
+           1124 LOAD_METHOD             17 (setStyleSheet)
+           1146 LOAD_CONST              13 ('QLabel { color:#CED4DA; background:transparent; border:none; }')
+           1148 PRECALL                  1
+           1152 CALL                     1
+           1162 POP_TOP
+
+ 61        1164 LOAD_FAST               12 (dash)
+           1166 LOAD_METHOD             23 (setFixedWidth)
+           1188 LOAD_CONST              14 (20)
+           1190 PRECALL                  1
+           1194 CALL                     1
+           1204 POP_TOP
+
+ 62        1206 LOAD_FAST                6 (row)
+           1208 LOAD_METHOD              8 (addWidget)
+           1230 LOAD_FAST               12 (dash)
+           1232 PRECALL                  1
+           1236 CALL                     1
+           1246 POP_TOP
+        >> 1248 EXTENDED_ARG             1
+           1250 JUMP_BACKWARD          354 (to 544)
+
+ 63     >> 1252 LOAD_FAST                6 (row)
+           1254 LOAD_METHOD             24 (addStretch)
+           1276 PRECALL                  0
+           1280 CALL                     0
+           1290 POP_TOP
+
+ 64        1292 LOAD_FAST                3 (flow_layout)
+           1294 LOAD_METHOD             25 (addLayout)
+           1316 LOAD_FAST                6 (row)
+           1318 PRECALL                  1
+           1322 CALL                     1
+           1332 POP_TOP
+           1334 EXTENDED_ARG             1
+           1336 JUMP_BACKWARD          469 (to 400)
+
+ 65     >> 1338 LOAD_FAST                2 (flow_card)
+           1340 LOAD_METHOD             26 (set_layout)
+           1362 LOAD_FAST                3 (flow_layout)
+           1364 PRECALL                  1
+           1368 CALL                     1
+           1378 POP_TOP
+
+ 66        1380 LOAD_FAST                1 (root)
+           1382 LOAD_METHOD              8 (addWidget)
+           1404 LOAD_FAST                2 (flow_card)
+           1406 PRECALL                  1
+           1410 CALL                     1
+           1420 POP_TOP
+
+ 69        1422 LOAD_GLOBAL              7 (NULL + Card)
+           1434 PRECALL                  0
+           1438 CALL                     0
+           1448 STORE_FAST              13 (source_card)
+
+ 70        1450 LOAD_GLOBAL              1 (NULL + QVBoxLayout)
+           1462 PRECALL                  0
+           1466 CALL                     0
+           1476 STORE_FAST              14 (source_layout)
+
+ 71        1478 LOAD_GLOBAL              9 (NULL + QLabel)
+           1490 LOAD_GLOBAL             11 (NULL + t)
+           1502 LOAD_CONST              15 ('sel_source_title')
+           1504 PRECALL                  1
+           1508 CALL                     1
+           1518 PRECALL                  1
+           1522 CALL                     1
+           1532 LOAD_FAST                0 (self)
+           1534 STORE_ATTR              27 (_source_title)
+
+ 72        1544 LOAD_FAST                0 (self)
+           1546 LOAD_ATTR               27 (_source_title)
+           1556 LOAD_METHOD              7 (setObjectName)
+           1578 LOAD_CONST               4 ('section_title')
+           1580 PRECALL                  1
+           1584 CALL                     1
+           1594 POP_TOP
+
+ 73        1596 LOAD_GLOBAL              9 (NULL + QLabel)
+           1608 LOAD_GLOBAL             11 (NULL + t)
+           1620 LOAD_CONST              16 ('sel_source_desc')
+           1622 PRECALL                  1
+           1626 CALL                     1
+           1636 PRECALL                  1
+           1640 CALL                     1
+           1650 LOAD_FAST                0 (self)
+           1652 STORE_ATTR              28 (_source_desc)
+
+ 74        1662 LOAD_FAST                0 (self)
+           1664 LOAD_ATTR               28 (_source_desc)
+           1674 LOAD_METHOD             17 (setStyleSheet)
+           1696 LOAD_CONST              17 ('QLabel { color: #868E96; background: transparent; border: none; }')
+           1698 PRECALL                  1
+           1702 CALL                     1
+           1712 POP_TOP
+
+ 75        1714 LOAD_FAST                0 (self)
+           1716 LOAD_ATTR               28 (_source_desc)
+           1726 LOAD_METHOD             29 (setWordWrap)
+           1748 LOAD_CONST              18 (True)
+           1750 PRECALL                  1
+           1754 CALL                     1
+           1764 POP_TOP
+
+ 76        1766 LOAD_FAST               14 (source_layout)
+           1768 LOAD_METHOD              8 (addWidget)
+           1790 LOAD_FAST                0 (self)
+           1792 LOAD_ATTR               27 (_source_title)
+           1802 PRECALL                  1
+           1806 CALL                     1
+           1816 POP_TOP
+
+ 77        1818 LOAD_FAST               14 (source_layout)
+           1820 LOAD_METHOD              8 (addWidget)
+           1842 LOAD_FAST                0 (self)
+           1844 LOAD_ATTR               28 (_source_desc)
+           1854 PRECALL                  1
+           1858 CALL                     1
+           1868 POP_TOP
+
+ 78        1870 LOAD_FAST               13 (source_card)
+           1872 LOAD_METHOD             26 (set_layout)
+           1894 LOAD_FAST               14 (source_layout)
+           1896 PRECALL                  1
+           1900 CALL                     1
+           1910 POP_TOP
+
+ 79        1912 LOAD_FAST                1 (root)
+           1914 LOAD_METHOD              8 (addWidget)
+           1936 LOAD_FAST               13 (source_card)
+           1938 PRECALL                  1
+           1942 CALL                     1
+           1952 POP_TOP
+
+ 82        1954 LOAD_GLOBAL             23 (NULL + QHBoxLayout)
+           1966 PRECALL                  0
+           1970 CALL                     0
+           1980 STORE_FAST              15 (content_row)
+
+ 83        1982 LOAD_FAST               15 (content_row)
+           1984 LOAD_METHOD              2 (setSpacing)
+           2006 LOAD_CONST               2 (16)
+           2008 PRECALL                  1
+           2012 CALL                     1
+           2022 POP_TOP
+
+ 86        2024 LOAD_GLOBAL              7 (NULL + Card)
+           2036 PRECALL                  0
+           2040 CALL                     0
+           2050 STORE_FAST              16 (left_card)
+
+ 87        2052 LOAD_GLOBAL              1 (NULL + QVBoxLayout)
+           2064 PRECALL                  0
+           2068 CALL                     0
+           2078 STORE_FAST              17 (left_layout)
+
+ 88        2080 LOAD_GLOBAL              9 (NULL + QLabel)
+           2092 LOAD_GLOBAL             11 (NULL + t)
+           2104 LOAD_CONST              19 ('sel_title')
+           2106 PRECALL                  1
+           2110 CALL                     1
+           2120 PRECALL                  1
+           2124 CALL                     1
+           2134 LOAD_FAST                0 (self)
+           2136 STORE_ATTR              30 (_left_title)
+
+ 89        2146 LOAD_FAST                0 (self)
+           2148 LOAD_ATTR               30 (_left_title)
+           2158 LOAD_METHOD              7 (setObjectName)
+           2180 LOAD_CONST               4 ('section_title')
+           2182 PRECALL                  1
+           2186 CALL                     1
+           2196 POP_TOP
+
+ 90        2198 LOAD_GLOBAL              9 (NULL + QLabel)
+           2210 LOAD_GLOBAL             11 (NULL + t)
+           2222 LOAD_CONST              20 ('sel_desc')
+           2224 PRECALL                  1
+           2228 CALL                     1
+           2238 PRECALL                  1
+           2242 CALL                     1
+           2252 LOAD_FAST                0 (self)
+           2254 STORE_ATTR              31 (_left_desc)
+
+ 91        2264 LOAD_FAST                0 (self)
+           2266 LOAD_ATTR               31 (_left_desc)
+           2276 LOAD_METHOD             29 (setWordWrap)
+           2298 LOAD_CONST              18 (True)
+           2300 PRECALL                  1
+           2304 CALL                     1
+           2314 POP_TOP
+
+ 92        2316 LOAD_FAST                0 (self)
+           2318 LOAD_ATTR               31 (_left_desc)
+           2328 LOAD_METHOD             17 (setStyleSheet)
+           2350 LOAD_CONST              17 ('QLabel { color: #868E96; background: transparent; border: none; }')
+           2352 PRECALL                  1
+           2356 CALL                     1
+           2366 POP_TOP
+
+ 93        2368 LOAD_FAST               17 (left_layout)
+           2370 LOAD_METHOD              8 (addWidget)
+           2392 LOAD_FAST                0 (self)
+           2394 LOAD_ATTR               30 (_left_title)
+           2404 PRECALL                  1
+           2408 CALL                     1
+           2418 POP_TOP
+
+ 94        2420 LOAD_FAST               17 (left_layout)
+           2422 LOAD_METHOD              8 (addWidget)
+           2444 LOAD_FAST                0 (self)
+           2446 LOAD_ATTR               31 (_left_desc)
+           2456 PRECALL                  1
+           2460 CALL                     1
+           2470 POP_TOP
+
+ 95        2472 LOAD_FAST               17 (left_layout)
+           2474 LOAD_METHOD             32 (addSpacing)
+           2496 LOAD_CONST              21 (12)
+           2498 PRECALL                  1
+           2502 CALL                     1
+           2512 POP_TOP
+
+ 97        2514 LOAD_GLOBAL             23 (NULL + QHBoxLayout)
+           2526 PRECALL                  0
+           2530 CALL                     0
+           2540 STORE_FAST              18 (file_row)
+
+ 98        2542 LOAD_GLOBAL             67 (NULL + QPushButton)
+           2554 LOAD_GLOBAL             11 (NULL + t)
+           2566 LOAD_CONST              22 ('sel_btn_choose')
+           2568 PRECALL                  1
+           2572 CALL                     1
+           2582 PRECALL                  1
+           2586 CALL                     1
+           2596 LOAD_FAST                0 (self)
+           2598 STORE_ATTR              34 (_btn_choose)
+
+ 99        2608 LOAD_FAST                0 (self)
+           2610 LOAD_ATTR               34 (_btn_choose)
+           2620 LOAD_METHOD             35 (setProperty)
+           2642 LOAD_CONST              23 ('btnType')
+           2644 LOAD_CONST              24 ('secondary')
+           2646 PRECALL                  2
+           2650 CALL                     2
+           2660 POP_TOP
+
+100        2662 LOAD_FAST                0 (self)
+           2664 LOAD_ATTR               34 (_btn_choose)
+           2674 LOAD_METHOD             20 (setMinimumWidth)
+           2696 LOAD_CONST              25 (120)
+           2698 PRECALL                  1
+           2702 CALL                     1
+           2712 POP_TOP
+
+101        2714 LOAD_FAST                0 (self)
+           2716 LOAD_ATTR               34 (_btn_choose)
+           2726 LOAD_ATTR               36 (clicked)
+           2736 LOAD_METHOD             37 (connect)
+           2758 LOAD_FAST                0 (self)
+           2760 LOAD_ATTR               38 (_on_choose_file)
+           2770 PRECALL                  1
+           2774 CALL                     1
+           2784 POP_TOP
+
+103        2786 LOAD_GLOBAL             79 (NULL + QLineEdit)
+           2798 PRECALL                  0
+           2802 CALL                     0
+           2812 LOAD_FAST                0 (self)
+           2814 STORE_ATTR              40 (_path_display)
+
+104        2824 LOAD_FAST                0 (self)
+           2826 LOAD_ATTR               40 (_path_display)
+           2836 LOAD_METHOD             41 (setReadOnly)
+           2858 LOAD_CONST              18 (True)
+           2860 PRECALL                  1
+           2864 CALL                     1
+           2874 POP_TOP
+
+105        2876 LOAD_FAST                0 (self)
+           2878 LOAD_ATTR               40 (_path_display)
+           2888 LOAD_METHOD             42 (setPlaceholderText)
+           2910 LOAD_GLOBAL             11 (NULL + t)
+           2922 LOAD_CONST              26 ('sel_placeholder')
+           2924 PRECALL                  1
+           2928 CALL                     1
+           2938 PRECALL                  1
+           2942 CALL                     1
+           2952 POP_TOP
+
+106        2954 LOAD_FAST                0 (self)
+           2956 LOAD_ATTR               40 (_path_display)
+           2966 LOAD_METHOD             17 (setStyleSheet)
+
+107        2988 LOAD_CONST              27 ('background:#F8F9FA; border:1px solid #DEE2E6; border-radius:6px; padding:8px 12px; color:#495057;')
+
+106        2990 PRECALL                  1
+           2994 CALL                     1
+           3004 POP_TOP
+
+110        3006 LOAD_FAST               18 (file_row)
+           3008 LOAD_METHOD              8 (addWidget)
+           3030 LOAD_FAST                0 (self)
+           3032 LOAD_ATTR               34 (_btn_choose)
+           3042 PRECALL                  1
+           3046 CALL                     1
+           3056 POP_TOP
+
+111        3058 LOAD_FAST               18 (file_row)
+           3060 LOAD_METHOD              8 (addWidget)
+           3082 LOAD_FAST                0 (self)
+           3084 LOAD_ATTR               40 (_path_display)
+           3094 LOAD_CONST               9 (1)
+           3096 PRECALL                  2
+           3100 CALL                     2
+           3110 POP_TOP
+
+112        3112 LOAD_FAST               17 (left_layout)
+           3114 LOAD_METHOD             25 (addLayout)
+           3136 LOAD_FAST               18 (file_row)
+           3138 PRECALL                  1
+           3142 CALL                     1
+           3152 POP_TOP
+
+115        3154 LOAD_GLOBAL             87 (NULL + QWidget)
+           3166 PRECALL                  0
+           3170 CALL                     0
+           3180 LOAD_FAST                0 (self)
+           3182 STORE_ATTR              44 (_info_frame)
+
+116        3192 LOAD_GLOBAL              1 (NULL + QVBoxLayout)
+           3204 LOAD_FAST                0 (self)
+           3206 LOAD_ATTR               44 (_info_frame)
+           3216 PRECALL                  1
+           3220 CALL                     1
+           3230 STORE_FAST              19 (info_layout)
+
+117        3232 LOAD_FAST               19 (info_layout)
+           3234 LOAD_METHOD              1 (setContentsMargins)
+           3256 LOAD_CONST               1 (0)
+           3258 LOAD_CONST              21 (12)
+           3260 LOAD_CONST               1 (0)
+           3262 LOAD_CONST               1 (0)
+           3264 PRECALL                  4
+           3268 CALL                     4
+           3278 POP_TOP
+
+118        3280 LOAD_GLOBAL              9 (NULL + QLabel)
+           3292 LOAD_GLOBAL             11 (NULL + t)
+           3304 LOAD_CONST              28 ('sel_selected_title')
+           3306 PRECALL                  1
+           3310 CALL                     1
+           3320 PRECALL                  1
+           3324 CALL                     1
+           3334 LOAD_FAST                0 (self)
+           3336 STORE_ATTR              45 (_info_title)
+
+119        3346 LOAD_FAST                0 (self)
+           3348 LOAD_ATTR               45 (_info_title)
+           3358 LOAD_METHOD             17 (setStyleSheet)
+           3380 LOAD_CONST              29 ('QLabel { font-weight:bold; color:#1A1A2E; background:transparent; border:none; }')
+           3382 PRECALL                  1
+           3386 CALL                     1
+           3396 POP_TOP
+
+120        3398 LOAD_GLOBAL              9 (NULL + QLabel)
+           3410 LOAD_GLOBAL             11 (NULL + t)
+           3422 LOAD_CONST              30 ('sel_filename')
+           3424 PRECALL                  1
+           3428 CALL                     1
+           3438 FORMAT_VALUE             0
+           3440 LOAD_CONST              31 (': --')
+           3442 BUILD_STRING             2
+           3444 PRECALL                  1
+           3448 CALL                     1
+           3458 LOAD_FAST                0 (self)
+           3460 STORE_ATTR              46 (_lbl_filename)
+
+121        3470 LOAD_GLOBAL              9 (NULL + QLabel)
+           3482 LOAD_GLOBAL             11 (NULL + t)
+           3494 LOAD_CONST              32 ('sel_filepath')
+           3496 PRECALL                  1
+           3500 CALL                     1
+           3510 FORMAT_VALUE             0
+           3512 LOAD_CONST              31 (': --')
+           3514 BUILD_STRING             2
+           3516 PRECALL                  1
+           3520 CALL                     1
+           3530 LOAD_FAST                0 (self)
+           3532 STORE_ATTR              47 (_lbl_filepath)
+
+122        3542 LOAD_FAST                0 (self)
+           3544 LOAD_ATTR               46 (_lbl_filename)
+           3554 LOAD_METHOD             17 (setStyleSheet)
+           3576 LOAD_CONST              33 ('QLabel { color:#495057; background:transparent; border:none; }')
+           3578 PRECALL                  1
+           3582 CALL                     1
+           3592 POP_TOP
+
+123        3594 LOAD_FAST                0 (self)
+           3596 LOAD_ATTR               47 (_lbl_filepath)
+           3606 LOAD_METHOD             29 (setWordWrap)
+           3628 LOAD_CONST              18 (True)
+           3630 PRECALL                  1
+           3634 CALL                     1
+           3644 POP_TOP
+
+124        3646 LOAD_FAST                0 (self)
+           3648 LOAD_ATTR               47 (_lbl_filepath)
+           3658 LOAD_METHOD             17 (setStyleSheet)
+           3680 LOAD_CONST              33 ('QLabel { color:#495057; background:transparent; border:none; }')
+           3682 PRECALL                  1
+           3686 CALL                     1
+           3696 POP_TOP
+
+125        3698 LOAD_FAST               19 (info_layout)
+           3700 LOAD_METHOD              8 (addWidget)
+           3722 LOAD_FAST                0 (self)
+           3724 LOAD_ATTR               45 (_info_title)
+           3734 PRECALL                  1
+           3738 CALL                     1
+           3748 POP_TOP
+
+126        3750 LOAD_FAST               19 (info_layout)
+           3752 LOAD_METHOD              8 (addWidget)
+           3774 LOAD_FAST                0 (self)
+           3776 LOAD_ATTR               46 (_lbl_filename)
+           3786 PRECALL                  1
+           3790 CALL                     1
+           3800 POP_TOP
+
+127        3802 LOAD_FAST               19 (info_layout)
+           3804 LOAD_METHOD              8 (addWidget)
+           3826 LOAD_FAST                0 (self)
+           3828 LOAD_ATTR               47 (_lbl_filepath)
+           3838 PRECALL                  1
+           3842 CALL                     1
+           3852 POP_TOP
+
+130        3854 LOAD_GLOBAL             97 (NULL + QProgressBar)
+           3866 PRECALL                  0
+           3870 CALL                     0
+           3880 LOAD_FAST                0 (self)
+           3882 STORE_ATTR              49 (_extract_bar)
+
+131        3892 LOAD_FAST                0 (self)
+           3894 LOAD_ATTR               49 (_extract_bar)
+           3904 LOAD_METHOD             50 (setRange)
+           3926 LOAD_CONST               1 (0)
+           3928 LOAD_CONST              34 (100)
+           3930 PRECALL                  2
+           3934 CALL                     2
+           3944 POP_TOP
+
+132        3946 LOAD_FAST                0 (self)
+           3948 LOAD_ATTR               49 (_extract_bar)
+           3958 LOAD_METHOD             51 (setValue)
+           3980 LOAD_CONST               1 (0)
+           3982 PRECALL                  1
+           3986 CALL                     1
+           3996 POP_TOP
+
+133        3998 LOAD_FAST                0 (self)
+           4000 LOAD_ATTR               49 (_extract_bar)
+           4010 LOAD_METHOD             52 (setTextVisible)
+           4032 LOAD_CONST              35 (False)
+           4034 PRECALL                  1
+           4038 CALL                     1
+           4048 POP_TOP
+
+134        4050 LOAD_FAST                0 (self)
+           4052 LOAD_ATTR               49 (_extract_bar)
+           4062 LOAD_METHOD             53 (setFixedHeight)
+           4084 LOAD_CONST              36 (6)
+           4086 PRECALL                  1
+           4090 CALL                     1
+           4100 POP_TOP
+
+135        4102 LOAD_FAST                0 (self)
+           4104 LOAD_ATTR               49 (_extract_bar)
+           4114 LOAD_METHOD             54 (setVisible)
+           4136 LOAD_CONST              35 (False)
+           4138 PRECALL                  1
+           4142 CALL                     1
+           4152 POP_TOP
+
+136        4154 LOAD_GLOBAL              9 (NULL + QLabel)
+           4166 LOAD_CONST              37 ('')
+           4168 PRECALL                  1
+           4172 CALL                     1
+           4182 LOAD_FAST                0 (self)
+           4184 STORE_ATTR              55 (_extract_status_label)
+
+137        4194 LOAD_FAST                0 (self)
+           4196 LOAD_ATTR               55 (_extract_status_label)
+           4206 LOAD_METHOD             17 (setStyleSheet)
+
+138        4228 LOAD_CONST              38 ('QLabel { color:#868E96; font-size:12px; background:transparent; border:none; }')
+
+137        4230 PRECALL                  1
+           4234 CALL                     1
+           4244 POP_TOP
+
+140        4246 LOAD_FAST               19 (info_layout)
+           4248 LOAD_METHOD             32 (addSpacing)
+           4270 LOAD_CONST              36 (6)
+           4272 PRECALL                  1
+           4276 CALL                     1
+           4286 POP_TOP
+
+141        4288 LOAD_FAST               19 (info_layout)
+           4290 LOAD_METHOD              8 (addWidget)
+           4312 LOAD_FAST                0 (self)
+           4314 LOAD_ATTR               49 (_extract_bar)
+           4324 PRECALL                  1
+           4328 CALL                     1
+           4338 POP_TOP
+
+142        4340 LOAD_FAST               19 (info_layout)
+           4342 LOAD_METHOD              8 (addWidget)
+           4364 LOAD_FAST                0 (self)
+           4366 LOAD_ATTR               55 (_extract_status_label)
+           4376 PRECALL                  1
+           4380 CALL                     1
+           4390 POP_TOP
+
+144        4392 LOAD_FAST                0 (self)
+           4394 LOAD_ATTR               44 (_info_frame)
+           4404 LOAD_METHOD             54 (setVisible)
+           4426 LOAD_CONST              35 (False)
+           4428 PRECALL                  1
+           4432 CALL                     1
+           4442 POP_TOP
+
+145        4444 LOAD_FAST               17 (left_layout)
+           4446 LOAD_METHOD              8 (addWidget)
+           4468 LOAD_FAST                0 (self)
+           4470 LOAD_ATTR               44 (_info_frame)
+           4480 PRECALL                  1
+           4484 CALL                     1
+           4494 POP_TOP
+
+147        4496 LOAD_FAST               17 (left_layout)
+           4498 LOAD_METHOD             24 (addStretch)
+           4520 PRECALL                  0
+           4524 CALL                     0
+           4534 POP_TOP
+
+148        4536 LOAD_FAST               16 (left_card)
+           4538 LOAD_METHOD             26 (set_layout)
+           4560 LOAD_FAST               17 (left_layout)
+           4562 PRECALL                  1
+           4566 CALL                     1
+           4576 POP_TOP
+
+149        4578 LOAD_FAST               15 (content_row)
+           4580 LOAD_METHOD              8 (addWidget)
+           4602 LOAD_FAST               16 (left_card)
+           4604 LOAD_CONST               6 (2)
+           4606 PRECALL                  2
+           4610 CALL                     2
+           4620 POP_TOP
+
+152        4622 LOAD_GLOBAL              7 (NULL + Card)
+           4634 PRECALL                  0
+           4638 CALL                     0
+           4648 STORE_FAST              20 (right_card)
+
+153        4650 LOAD_GLOBAL              1 (NULL + QVBoxLayout)
+           4662 PRECALL                  0
+           4666 CALL                     0
+           4676 STORE_FAST              21 (right_layout)
+
+154        4678 LOAD_GLOBAL              9 (NULL + QLabel)
+           4690 LOAD_GLOBAL             11 (NULL + t)
+           4702 LOAD_CONST              39 ('sel_status_title')
+           4704 PRECALL                  1
+           4708 CALL                     1
+           4718 PRECALL                  1
+           4722 CALL                     1
+           4732 LOAD_FAST                0 (self)
+           4734 STORE_ATTR              56 (_right_title)
+
+155        4744 LOAD_FAST                0 (self)
+           4746 LOAD_ATTR               56 (_right_title)
+           4756 LOAD_METHOD              7 (setObjectName)
+           4778 LOAD_CONST               4 ('section_title')
+           4780 PRECALL                  1
+           4784 CALL                     1
+           4794 POP_TOP
+
+156        4796 LOAD_GLOBAL              9 (NULL + QLabel)
+           4808 LOAD_GLOBAL             11 (NULL + t)
+           4820 LOAD_CONST              40 ('sel_status_desc')
+           4822 PRECALL                  1
+           4826 CALL                     1
+           4836 PRECALL                  1
+           4840 CALL                     1
+           4850 LOAD_FAST                0 (self)
+           4852 STORE_ATTR              57 (_right_desc)
+
+157        4862 LOAD_FAST                0 (self)
+           4864 LOAD_ATTR               57 (_right_desc)
+           4874 LOAD_METHOD             29 (setWordWrap)
+           4896 LOAD_CONST              18 (True)
+           4898 PRECALL                  1
+           4902 CALL                     1
+           4912 POP_TOP
+
+158        4914 LOAD_FAST                0 (self)
+           4916 LOAD_ATTR               57 (_right_desc)
+           4926 LOAD_METHOD             17 (setStyleSheet)
+           4948 LOAD_CONST              17 ('QLabel { color: #868E96; background: transparent; border: none; }')
+           4950 PRECALL                  1
+           4954 CALL                     1
+           4964 POP_TOP
+
+159        4966 LOAD_FAST               21 (right_layout)
+           4968 LOAD_METHOD              8 (addWidget)
+           4990 LOAD_FAST                0 (self)
+           4992 LOAD_ATTR               56 (_right_title)
+           5002 PRECALL                  1
+           5006 CALL                     1
+           5016 POP_TOP
+
+160        5018 LOAD_FAST               21 (right_layout)
+           5020 LOAD_METHOD              8 (addWidget)
+           5042 LOAD_FAST                0 (self)
+           5044 LOAD_ATTR               57 (_right_desc)
+           5054 PRECALL                  1
+           5058 CALL                     1
+           5068 POP_TOP
+
+161        5070 LOAD_FAST               21 (right_layout)
+           5072 LOAD_METHOD             32 (addSpacing)
+           5094 LOAD_CONST              41 (8)
+           5096 PRECALL                  1
+           5100 CALL                     1
+           5110 POP_TOP
+
+163        5112 LOAD_GLOBAL            117 (NULL + StatusTag)
+           5124 LOAD_CONST              42 ('not_selected')
+           5126 PRECALL                  1
+           5130 CALL                     1
+           5140 LOAD_FAST                0 (self)
+           5142 STORE_ATTR              59 (_status_tag)
+
+164        5152 LOAD_FAST               21 (right_layout)
+           5154 LOAD_METHOD              8 (addWidget)
+           5176 LOAD_FAST                0 (self)
+           5178 LOAD_ATTR               59 (_status_tag)
+           5188 LOAD_GLOBAL             28 (Qt)
+           5200 LOAD_ATTR               15 (AlignmentFlag)
+           5210 LOAD_ATTR               60 (AlignLeft)
+           5220 KW_NAMES                43
+           5222 PRECALL                  2
+           5226 CALL                     2
+           5236 POP_TOP
+
+166        5238 LOAD_FAST               21 (right_layout)
+           5240 LOAD_METHOD             32 (addSpacing)
+           5262 LOAD_CONST               7 (4)
+           5264 PRECALL                  1
+           5268 CALL                     1
+           5278 POP_TOP
+
+167        5280 LOAD_GLOBAL              9 (NULL + QLabel)
+           5292 LOAD_GLOBAL             11 (NULL + t)
+           5304 LOAD_CONST              44 ('sel_current_pkg')
+           5306 PRECALL                  1
+           5310 CALL                     1
+           5320 PRECALL                  1
+           5324 CALL                     1
+           5334 LOAD_FAST                0 (self)
+           5336 STORE_ATTR              61 (_pkg_label)
+
+168        5346 LOAD_FAST                0 (self)
+           5348 LOAD_ATTR               61 (_pkg_label)
+           5358 LOAD_METHOD             17 (setStyleSheet)
+           5380 LOAD_CONST              38 ('QLabel { color:#868E96; font-size:12px; background:transparent; border:none; }')
+           5382 PRECALL                  1
+           5386 CALL                     1
+           5396 POP_TOP
+
+169        5398 LOAD_GLOBAL              9 (NULL + QLabel)
+           5410 LOAD_CONST              45 ('--')
+           5412 PRECALL                  1
+           5416 CALL                     1
+           5426 LOAD_FAST                0 (self)
+           5428 STORE_ATTR              62 (_lbl_current_pkg)
+
+170        5438 LOAD_FAST                0 (self)
+           5440 LOAD_ATTR               62 (_lbl_current_pkg)
+           5450 LOAD_METHOD             29 (setWordWrap)
+           5472 LOAD_CONST              18 (True)
+           5474 PRECALL                  1
+           5478 CALL                     1
+           5488 POP_TOP
+
+171        5490 LOAD_FAST                0 (self)
+           5492 LOAD_ATTR               62 (_lbl_current_pkg)
+           5502 LOAD_METHOD             17 (setStyleSheet)
+           5524 LOAD_CONST              46 ('QLabel { font-weight:bold; font-size:14px; color:#1A1A2E; background:transparent; border:none; }')
+           5526 PRECALL                  1
+           5530 CALL                     1
+           5540 POP_TOP
+
+172        5542 LOAD_FAST               21 (right_layout)
+           5544 LOAD_METHOD              8 (addWidget)
+           5566 LOAD_FAST                0 (self)
+           5568 LOAD_ATTR               61 (_pkg_label)
+           5578 PRECALL                  1
+           5582 CALL                     1
+           5592 POP_TOP
+
+173        5594 LOAD_FAST               21 (right_layout)
+           5596 LOAD_METHOD              8 (addWidget)
+           5618 LOAD_FAST                0 (self)
+           5620 LOAD_ATTR               62 (_lbl_current_pkg)
+           5630 PRECALL                  1
+           5634 CALL                     1
+           5644 POP_TOP
+
+175        5646 LOAD_FAST               21 (right_layout)
+           5648 LOAD_METHOD             24 (addStretch)
+           5670 PRECALL                  0
+           5674 CALL                     0
+           5684 POP_TOP
+
+177        5686 LOAD_GLOBAL             67 (NULL + QPushButton)
+           5698 LOAD_GLOBAL             11 (NULL + t)
+           5710 LOAD_CONST              47 ('sel_btn_start')
+           5712 PRECALL                  1
+           5716 CALL                     1
+           5726 PRECALL                  1
+           5730 CALL                     1
+           5740 LOAD_FAST                0 (self)
+           5742 STORE_ATTR              63 (_btn_start)
+
+178        5752 LOAD_FAST                0 (self)
+           5754 LOAD_ATTR               63 (_btn_start)
+           5764 LOAD_METHOD             35 (setProperty)
+           5786 LOAD_CONST              23 ('btnType')
+           5788 LOAD_CONST              48 ('primary')
+           5790 PRECALL                  2
+           5794 CALL                     2
+           5804 POP_TOP
+
+179        5806 LOAD_FAST                0 (self)
+           5808 LOAD_ATTR               63 (_btn_start)
+           5818 LOAD_METHOD             23 (setFixedWidth)
+           5840 LOAD_CONST              49 (160)
+           5842 PRECALL                  1
+           5846 CALL                     1
+           5856 POP_TOP
+
+180        5858 LOAD_FAST                0 (self)
+           5860 LOAD_ATTR               63 (_btn_start)
+           5870 LOAD_ATTR               36 (clicked)
+           5880 LOAD_METHOD             37 (connect)
+           5902 LOAD_FAST                0 (self)
+           5904 LOAD_ATTR               64 (_on_start_flash)
+           5914 PRECALL                  1
+           5918 CALL                     1
+           5928 POP_TOP
+
+181        5930 LOAD_FAST               21 (right_layout)
+           5932 LOAD_METHOD              8 (addWidget)
+           5954 LOAD_FAST                0 (self)
+           5956 LOAD_ATTR               63 (_btn_start)
+           5966 LOAD_GLOBAL             28 (Qt)
+           5978 LOAD_ATTR               15 (AlignmentFlag)
+           5988 LOAD_ATTR               16 (AlignCenter)
+           5998 KW_NAMES                43
+           6000 PRECALL                  2
+           6004 CALL                     2
+           6014 POP_TOP
+
+183        6016 LOAD_FAST               20 (right_card)
+           6018 LOAD_METHOD             26 (set_layout)
+           6040 LOAD_FAST               21 (right_layout)
+           6042 PRECALL                  1
+           6046 CALL                     1
+           6056 POP_TOP
+
+184        6058 LOAD_FAST               20 (right_card)
+           6060 LOAD_METHOD             20 (setMinimumWidth)
+           6082 LOAD_CONST              50 (280)
+           6084 PRECALL                  1
+           6088 CALL                     1
+           6098 POP_TOP
+
+185        6100 LOAD_FAST               15 (content_row)
+           6102 LOAD_METHOD              8 (addWidget)
+           6124 LOAD_FAST               20 (right_card)
+           6126 LOAD_CONST               9 (1)
+           6128 PRECALL                  2
+           6132 CALL                     2
+           6142 POP_TOP
+
+187        6144 LOAD_FAST                1 (root)
+           6146 LOAD_METHOD             25 (addLayout)
+           6168 LOAD_FAST               15 (content_row)
+           6170 LOAD_CONST               9 (1)
+           6172 PRECALL                  2
+           6176 CALL                     2
+           6186 POP_TOP
+           6188 LOAD_CONST               0 (None)
+           6190 RETURN_VALUE
+
+Disassembly of <code object _on_choose_file at 0x000001B35E7B74C0, file "app\ui\page_select_package.py", line 189>:
+189           0 RESUME                   0
+
+190           2 LOAD_GLOBAL              1 (NULL + QFileDialog)
+             14 LOAD_ATTR                1 (getOpenFileName)
+
+191          24 LOAD_FAST                0 (self)
+             26 LOAD_GLOBAL              5 (NULL + t)
+             38 LOAD_CONST               1 ('sel_dialog_title')
+             40 PRECALL                  1
+             44 CALL                     1
+             54 LOAD_CONST               2 ('')
+             56 LOAD_GLOBAL              5 (NULL + t)
+             68 LOAD_CONST               3 ('sel_dialog_filter')
+             70 PRECALL                  1
+             74 CALL                     1
+
+190          84 PRECALL                  4
+             88 CALL                     4
+             98 UNPACK_SEQUENCE          2
+            102 STORE_FAST               1 (path)
+            104 STORE_FAST               2 (_)
+
+193         106 LOAD_FAST                1 (path)
+            108 POP_JUMP_FORWARD_IF_FALSE    77 (to 264)
+
+194         110 LOAD_FAST                1 (path)
+            112 LOAD_FAST                0 (self)
+            114 STORE_ATTR               3 (_package_path)
+
+195         124 LOAD_FAST                0 (self)
+            126 LOAD_METHOD              4 (set_extract_state)
+            148 LOAD_CONST               4 ('extracting')
+            150 LOAD_CONST               5 (0)
+            152 PRECALL                  2
+            156 CALL                     2
+            166 POP_TOP
+
+196         168 LOAD_FAST                0 (self)
+            170 LOAD_METHOD              5 (_update_state)
+            192 PRECALL                  0
+            196 CALL                     0
+            206 POP_TOP
+
+197         208 LOAD_FAST                0 (self)
+            210 LOAD_ATTR                6 (package_selected)
+            220 LOAD_METHOD              7 (emit)
+            242 LOAD_FAST                1 (path)
+            244 PRECALL                  1
+            248 CALL                     1
+            258 POP_TOP
+            260 LOAD_CONST               0 (None)
+            262 RETURN_VALUE
+
+193     >>  264 LOAD_CONST               0 (None)
+            266 RETURN_VALUE
+
+Disassembly of <code object _on_start_flash at 0x000001B35E91D980, file "app\ui\page_select_package.py", line 199>:
+199           0 RESUME                   0
+
+200           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_package_path)
+             14 POP_JUMP_FORWARD_IF_TRUE     2 (to 20)
+
+201          16 LOAD_CONST               0 (None)
+             18 RETURN_VALUE
+
+202     >>   20 LOAD_FAST                0 (self)
+             22 LOAD_ATTR                1 (_extract_state)
+             32 LOAD_CONST               1 ('ready')
+             34 COMPARE_OP               2 (==)
+             40 POP_JUMP_FORWARD_IF_FALSE    33 (to 108)
+
+203          42 LOAD_FAST                0 (self)
+             44 LOAD_ATTR                2 (start_flash)
+             54 LOAD_METHOD              3 (emit)
+             76 LOAD_FAST                0 (self)
+             78 LOAD_ATTR                0 (_package_path)
+             88 PRECALL                  1
+             92 CALL                     1
+            102 POP_TOP
+            104 LOAD_CONST               0 (None)
+            106 RETURN_VALUE
+
+204     >>  108 LOAD_FAST                0 (self)
+            110 LOAD_ATTR                1 (_extract_state)
+            120 LOAD_CONST               2 ('error')
+            122 COMPARE_OP               2 (==)
+            128 POP_JUMP_FORWARD_IF_FALSE    55 (to 240)
+
+205         130 LOAD_FAST                0 (self)
+            132 LOAD_METHOD              4 (set_extract_state)
+            154 LOAD_CONST               3 ('extracting')
+            156 LOAD_CONST               4 (0)
+            158 PRECALL                  2
+            162 CALL                     2
+            172 POP_TOP
+
+206         174 LOAD_FAST                0 (self)
+            176 LOAD_ATTR                5 (package_selected)
+            186 LOAD_METHOD              3 (emit)
+            208 LOAD_FAST                0 (self)
+            210 LOAD_ATTR                0 (_package_path)
+            220 PRECALL                  1
+            224 CALL                     1
+            234 POP_TOP
+            236 LOAD_CONST               0 (None)
+            238 RETURN_VALUE
+
+204     >>  240 LOAD_CONST               0 (None)
+            242 RETURN_VALUE
+
+Disassembly of <code object set_extract_state at 0x000001B35E366210, file "app\ui\page_select_package.py", line 208>:
+208           0 RESUME                   0
+
+210           2 LOAD_FAST                1 (state)
+              4 LOAD_FAST                0 (self)
+              6 STORE_ATTR               0 (_extract_state)
+
+211          16 LOAD_FAST                1 (state)
+             18 LOAD_CONST               1 ('extracting')
+             20 COMPARE_OP               2 (==)
+             26 POP_JUMP_FORWARD_IF_FALSE   120 (to 268)
+
+212          28 LOAD_FAST                0 (self)
+             30 LOAD_ATTR                1 (_extract_bar)
+             40 LOAD_METHOD              2 (setVisible)
+             62 LOAD_CONST               2 (True)
+             64 PRECALL                  1
+             68 CALL                     1
+             78 POP_TOP
+
+213          80 LOAD_FAST                0 (self)
+             82 LOAD_ATTR                1 (_extract_bar)
+             92 LOAD_METHOD              3 (setValue)
+            114 LOAD_FAST                2 (percent)
+            116 PRECALL                  1
+            120 CALL                     1
+            130 POP_TOP
+
+214         132 LOAD_FAST                0 (self)
+            134 LOAD_ATTR                4 (_extract_status_label)
+            144 LOAD_METHOD              5 (setText)
+            166 LOAD_GLOBAL             13 (NULL + t)
+            178 LOAD_CONST               3 ('sel_extracting')
+            180 LOAD_FAST                2 (percent)
+            182 KW_NAMES                 4
+            184 PRECALL                  2
+            188 CALL                     2
+            198 PRECALL                  1
+            202 CALL                     1
+            212 POP_TOP
+
+215         214 LOAD_FAST                0 (self)
+            216 LOAD_ATTR                4 (_extract_status_label)
+            226 LOAD_METHOD              7 (setStyleSheet)
+
+216         248 LOAD_CONST               5 ('QLabel { color:#3B5BDB; font-size:12px; background:transparent; border:none; }')
+
+215         250 PRECALL                  1
+            254 CALL                     1
+            264 POP_TOP
+            266 JUMP_FORWARD           248 (to 764)
+
+218     >>  268 LOAD_FAST                1 (state)
+            270 LOAD_CONST               6 ('ready')
+            272 COMPARE_OP               2 (==)
+            278 POP_JUMP_FORWARD_IF_FALSE    92 (to 464)
+
+219         280 LOAD_FAST                0 (self)
+            282 LOAD_ATTR                1 (_extract_bar)
+            292 LOAD_METHOD              2 (setVisible)
+            314 LOAD_CONST               7 (False)
+            316 PRECALL                  1
+            320 CALL                     1
+            330 POP_TOP
+
+220         332 LOAD_FAST                0 (self)
+            334 LOAD_ATTR                4 (_extract_status_label)
+            344 LOAD_METHOD              5 (setText)
+            366 LOAD_GLOBAL             13 (NULL + t)
+            378 LOAD_CONST               8 ('sel_extract_ready')
+            380 PRECALL                  1
+            384 CALL                     1
+            394 PRECALL                  1
+            398 CALL                     1
+            408 POP_TOP
+
+221         410 LOAD_FAST                0 (self)
+            412 LOAD_ATTR                4 (_extract_status_label)
+            422 LOAD_METHOD              7 (setStyleSheet)
+
+222         444 LOAD_CONST               9 ('QLabel { color:#2B8A3E; font-size:12px; font-weight:bold; background:transparent; border:none; }')
+
+221         446 PRECALL                  1
+            450 CALL                     1
+            460 POP_TOP
+            462 JUMP_FORWARD           150 (to 764)
+
+224     >>  464 LOAD_FAST                1 (state)
+            466 LOAD_CONST              10 ('error')
+            468 COMPARE_OP               2 (==)
+            474 POP_JUMP_FORWARD_IF_FALSE    92 (to 660)
+
+225         476 LOAD_FAST                0 (self)
+            478 LOAD_ATTR                1 (_extract_bar)
+            488 LOAD_METHOD              2 (setVisible)
+            510 LOAD_CONST               7 (False)
+            512 PRECALL                  1
+            516 CALL                     1
+            526 POP_TOP
+
+226         528 LOAD_FAST                0 (self)
+            530 LOAD_ATTR                4 (_extract_status_label)
+            540 LOAD_METHOD              5 (setText)
+            562 LOAD_GLOBAL             13 (NULL + t)
+            574 LOAD_CONST              11 ('sel_extract_failed')
+            576 PRECALL                  1
+            580 CALL                     1
+            590 PRECALL                  1
+            594 CALL                     1
+            604 POP_TOP
+
+227         606 LOAD_FAST                0 (self)
+            608 LOAD_ATTR                4 (_extract_status_label)
+            618 LOAD_METHOD              7 (setStyleSheet)
+
+228         640 LOAD_CONST              12 ('QLabel { color:#C92A2A; font-size:12px; font-weight:bold; background:transparent; border:none; }')
+
+227         642 PRECALL                  1
+            646 CALL                     1
+            656 POP_TOP
+            658 JUMP_FORWARD            52 (to 764)
+
+231     >>  660 LOAD_FAST                0 (self)
+            662 LOAD_ATTR                1 (_extract_bar)
+            672 LOAD_METHOD              2 (setVisible)
+            694 LOAD_CONST               7 (False)
+            696 PRECALL                  1
+            700 CALL                     1
+            710 POP_TOP
+
+232         712 LOAD_FAST                0 (self)
+            714 LOAD_ATTR                4 (_extract_status_label)
+            724 LOAD_METHOD              5 (setText)
+            746 LOAD_CONST              13 ('')
+            748 PRECALL                  1
+            752 CALL                     1
+            762 POP_TOP
+
+233     >>  764 LOAD_FAST                0 (self)
+            766 LOAD_ATTR                8 (_btn_start)
+            776 LOAD_METHOD              9 (setEnabled)
+            798 LOAD_FAST                1 (state)
+            800 LOAD_CONST              14 (('ready', 'error'))
+            802 CONTAINS_OP              0
+            804 PRECALL                  1
+            808 CALL                     1
+            818 POP_TOP
+            820 LOAD_CONST              15 (None)
+            822 RETURN_VALUE
+
+Disassembly of <code object _update_state at 0x000001B35E3658D0, file "app\ui\page_select_package.py", line 235>:
+235           0 RESUME                   0
+
+236           2 LOAD_GLOBAL              1 (NULL + bool)
+             14 LOAD_FAST                0 (self)
+             16 LOAD_ATTR                1 (_package_path)
+             26 PRECALL                  1
+             30 CALL                     1
+             40 STORE_FAST               1 (has_pkg)
+
+238          42 LOAD_FAST                1 (has_pkg)
+             44 POP_JUMP_FORWARD_IF_TRUE    26 (to 98)
+
+239          46 LOAD_FAST                0 (self)
+             48 LOAD_ATTR                2 (_btn_start)
+             58 LOAD_METHOD              3 (setEnabled)
+             80 LOAD_CONST               1 (False)
+             82 PRECALL                  1
+             86 CALL                     1
+             96 POP_TOP
+
+241     >>   98 LOAD_FAST                1 (has_pkg)
+            100 POP_JUMP_FORWARD_IF_FALSE   239 (to 580)
+
+242         102 LOAD_CONST               2 (0)
+            104 LOAD_CONST               0 (None)
+            106 IMPORT_NAME              4 (os)
+            108 STORE_FAST               2 (os)
+
+243         110 LOAD_FAST                2 (os)
+            112 LOAD_ATTR                5 (path)
+            122 LOAD_METHOD              6 (basename)
+            144 LOAD_FAST                0 (self)
+            146 LOAD_ATTR                1 (_package_path)
+            156 PRECALL                  1
+            160 CALL                     1
+            170 STORE_FAST               3 (name)
+
+244         172 LOAD_FAST                0 (self)
+            174 LOAD_ATTR                7 (_path_display)
+            184 LOAD_METHOD              8 (setText)
+            206 LOAD_FAST                0 (self)
+            208 LOAD_ATTR                1 (_package_path)
+            218 PRECALL                  1
+            222 CALL                     1
+            232 POP_TOP
+
+245         234 LOAD_FAST                0 (self)
+            236 LOAD_ATTR                9 (_lbl_filename)
+            246 LOAD_METHOD              8 (setText)
+            268 LOAD_GLOBAL             21 (NULL + t)
+            280 LOAD_CONST               3 ('sel_filename')
+            282 PRECALL                  1
+            286 CALL                     1
+            296 FORMAT_VALUE             0
+            298 LOAD_CONST               4 (': ')
+            300 LOAD_FAST                3 (name)
+            302 FORMAT_VALUE             0
+            304 BUILD_STRING             3
+            306 PRECALL                  1
+            310 CALL                     1
+            320 POP_TOP
+
+246         322 LOAD_FAST                0 (self)
+            324 LOAD_ATTR               11 (_lbl_filepath)
+            334 LOAD_METHOD              8 (setText)
+            356 LOAD_GLOBAL             21 (NULL + t)
+            368 LOAD_CONST               5 ('sel_filepath')
+            370 PRECALL                  1
+            374 CALL                     1
+            384 FORMAT_VALUE             0
+            386 LOAD_CONST               4 (': ')
+            388 LOAD_FAST                0 (self)
+            390 LOAD_ATTR                1 (_package_path)
+            400 FORMAT_VALUE             0
+            402 BUILD_STRING             3
+            404 PRECALL                  1
+            408 CALL                     1
+            418 POP_TOP
+
+247         420 LOAD_FAST                0 (self)
+            422 LOAD_ATTR               12 (_lbl_current_pkg)
+            432 LOAD_METHOD              8 (setText)
+            454 LOAD_FAST                3 (name)
+            456 PRECALL                  1
+            460 CALL                     1
+            470 POP_TOP
+
+248         472 LOAD_FAST                0 (self)
+            474 LOAD_ATTR               13 (_info_frame)
+            484 LOAD_METHOD             14 (setVisible)
+            506 LOAD_CONST               6 (True)
+            508 PRECALL                  1
+            512 CALL                     1
+            522 POP_TOP
+
+249         524 LOAD_FAST                0 (self)
+            526 LOAD_ATTR               15 (_status_tag)
+            536 LOAD_METHOD             16 (set_status)
+            558 LOAD_CONST               7 ('selected')
+            560 PRECALL                  1
+            564 CALL                     1
+            574 POP_TOP
+            576 LOAD_CONST               0 (None)
+            578 RETURN_VALUE
+
+251     >>  580 LOAD_FAST                0 (self)
+            582 LOAD_ATTR                7 (_path_display)
+            592 LOAD_METHOD              8 (setText)
+            614 LOAD_CONST               8 ('')
+            616 PRECALL                  1
+            620 CALL                     1
+            630 POP_TOP
+
+252         632 LOAD_FAST                0 (self)
+            634 LOAD_ATTR               12 (_lbl_current_pkg)
+            644 LOAD_METHOD              8 (setText)
+            666 LOAD_CONST               9 ('--')
+            668 PRECALL                  1
+            672 CALL                     1
+            682 POP_TOP
+
+253         684 LOAD_FAST                0 (self)
+            686 LOAD_ATTR               13 (_info_frame)
+            696 LOAD_METHOD             14 (setVisible)
+            718 LOAD_CONST               1 (False)
+            720 PRECALL                  1
+            724 CALL                     1
+            734 POP_TOP
+
+254         736 LOAD_FAST                0 (self)
+            738 LOAD_ATTR               15 (_status_tag)
+            748 LOAD_METHOD             16 (set_status)
+            770 LOAD_CONST              10 ('not_selected')
+            772 PRECALL                  1
+            776 CALL                     1
+            786 POP_TOP
+            788 LOAD_CONST               0 (None)
+            790 RETURN_VALUE
+
+Disassembly of <code object _retranslate at 0x000001B35E375430, file "app\ui\page_select_package.py", line 256>:
+256           0 RESUME                   0
+
+257           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_flow_title)
+             14 LOAD_METHOD              1 (setText)
+             36 LOAD_GLOBAL              5 (NULL + t)
+             48 LOAD_CONST               1 ('home_flow_title')
+             50 PRECALL                  1
+             54 CALL                     1
+             64 PRECALL                  1
+             68 CALL                     1
+             78 POP_TOP
+
+258          80 LOAD_FAST                0 (self)
+             82 LOAD_ATTR                3 (_step_labels)
+             92 GET_ITER
+        >>   94 FOR_ITER               115 (to 326)
+             96 UNPACK_SEQUENCE          2
+            100 STORE_FAST               1 (lbl)
+            102 STORE_FAST               2 (key)
+
+259         104 LOAD_FAST                1 (lbl)
+            106 LOAD_METHOD              1 (setText)
+            128 LOAD_GLOBAL              5 (NULL + t)
+            140 LOAD_FAST                2 (key)
+            142 PRECALL                  1
+            146 CALL                     1
+            156 PRECALL                  1
+            160 CALL                     1
+            170 POP_TOP
+
+260         172 LOAD_FAST                1 (lbl)
+            174 LOAD_METHOD              4 (fontMetrics)
+            196 PRECALL                  0
+            200 CALL                     0
+            210 LOAD_METHOD              5 (horizontalAdvance)
+            232 LOAD_GLOBAL              5 (NULL + t)
+            244 LOAD_FAST                2 (key)
+            246 PRECALL                  1
+            250 CALL                     1
+            260 PRECALL                  1
+            264 CALL                     1
+            274 STORE_FAST               3 (tw)
+
+261         276 LOAD_FAST                1 (lbl)
+            278 LOAD_METHOD              6 (setMinimumWidth)
+            300 LOAD_FAST                3 (tw)
+            302 LOAD_CONST               2 (24)
+            304 BINARY_OP                0 (+)
+            308 PRECALL                  1
+            312 CALL                     1
+            322 POP_TOP
+            324 JUMP_BACKWARD          116 (to 94)
+
+263     >>  326 LOAD_FAST                0 (self)
+            328 LOAD_METHOD              7 (set_extract_state)
+            350 LOAD_FAST                0 (self)
+            352 LOAD_ATTR                8 (_extract_state)
+            362 LOAD_FAST                0 (self)
+            364 LOAD_ATTR                9 (_extract_bar)
+            374 LOAD_METHOD             10 (value)
+            396 PRECALL                  0
+            400 CALL                     0
+            410 PRECALL                  2
+            414 CALL                     2
+            424 POP_TOP
+
+264         426 LOAD_FAST                0 (self)
+            428 LOAD_ATTR               11 (_source_title)
+            438 LOAD_METHOD              1 (setText)
+            460 LOAD_GLOBAL              5 (NULL + t)
+            472 LOAD_CONST               3 ('sel_source_title')
+            474 PRECALL                  1
+            478 CALL                     1
+            488 PRECALL                  1
+            492 CALL                     1
+            502 POP_TOP
+
+265         504 LOAD_FAST                0 (self)
+            506 LOAD_ATTR               12 (_source_desc)
+            516 LOAD_METHOD              1 (setText)
+            538 LOAD_GLOBAL              5 (NULL + t)
+            550 LOAD_CONST               4 ('sel_source_desc')
+            552 PRECALL                  1
+            556 CALL                     1
+            566 PRECALL                  1
+            570 CALL                     1
+            580 POP_TOP
+
+266         582 LOAD_FAST                0 (self)
+            584 LOAD_ATTR               13 (_left_title)
+            594 LOAD_METHOD              1 (setText)
+            616 LOAD_GLOBAL              5 (NULL + t)
+            628 LOAD_CONST               5 ('sel_title')
+            630 PRECALL                  1
+            634 CALL                     1
+            644 PRECALL                  1
+            648 CALL                     1
+            658 POP_TOP
+
+267         660 LOAD_FAST                0 (self)
+            662 LOAD_ATTR               14 (_left_desc)
+            672 LOAD_METHOD              1 (setText)
+            694 LOAD_GLOBAL              5 (NULL + t)
+            706 LOAD_CONST               6 ('sel_desc')
+            708 PRECALL                  1
+            712 CALL                     1
+            722 PRECALL                  1
+            726 CALL                     1
+            736 POP_TOP
+
+268         738 LOAD_FAST                0 (self)
+            740 LOAD_ATTR               15 (_btn_choose)
+            750 LOAD_METHOD              1 (setText)
+            772 LOAD_GLOBAL              5 (NULL + t)
+            784 LOAD_CONST               7 ('sel_btn_choose')
+            786 PRECALL                  1
+            790 CALL                     1
+            800 PRECALL                  1
+            804 CALL                     1
+            814 POP_TOP
+
+269         816 LOAD_FAST                0 (self)
+            818 LOAD_ATTR               16 (_path_display)
+            828 LOAD_METHOD             17 (setPlaceholderText)
+            850 LOAD_GLOBAL              5 (NULL + t)
+            862 LOAD_CONST               8 ('sel_placeholder')
+            864 PRECALL                  1
+            868 CALL                     1
+            878 PRECALL                  1
+            882 CALL                     1
+            892 POP_TOP
+
+270         894 LOAD_FAST                0 (self)
+            896 LOAD_ATTR               18 (_info_title)
+            906 LOAD_METHOD              1 (setText)
+            928 LOAD_GLOBAL              5 (NULL + t)
+            940 LOAD_CONST               9 ('sel_selected_title')
+            942 PRECALL                  1
+            946 CALL                     1
+            956 PRECALL                  1
+            960 CALL                     1
+            970 POP_TOP
+
+271         972 LOAD_FAST                0 (self)
+            974 LOAD_ATTR               19 (_right_title)
+            984 LOAD_METHOD              1 (setText)
+           1006 LOAD_GLOBAL              5 (NULL + t)
+           1018 LOAD_CONST              10 ('sel_status_title')
+           1020 PRECALL                  1
+           1024 CALL                     1
+           1034 PRECALL                  1
+           1038 CALL                     1
+           1048 POP_TOP
+
+272        1050 LOAD_FAST                0 (self)
+           1052 LOAD_ATTR               20 (_right_desc)
+           1062 LOAD_METHOD              1 (setText)
+           1084 LOAD_GLOBAL              5 (NULL + t)
+           1096 LOAD_CONST              11 ('sel_status_desc')
+           1098 PRECALL                  1
+           1102 CALL                     1
+           1112 PRECALL                  1
+           1116 CALL                     1
+           1126 POP_TOP
+
+273        1128 LOAD_FAST                0 (self)
+           1130 LOAD_ATTR               21 (_pkg_label)
+           1140 LOAD_METHOD              1 (setText)
+           1162 LOAD_GLOBAL              5 (NULL + t)
+           1174 LOAD_CONST              12 ('sel_current_pkg')
+           1176 PRECALL                  1
+           1180 CALL                     1
+           1190 PRECALL                  1
+           1194 CALL                     1
+           1204 POP_TOP
+
+274        1206 LOAD_FAST                0 (self)
+           1208 LOAD_ATTR               22 (_btn_start)
+           1218 LOAD_METHOD              1 (setText)
+           1240 LOAD_GLOBAL              5 (NULL + t)
+           1252 LOAD_CONST              13 ('sel_btn_start')
+           1254 PRECALL                  1
+           1258 CALL                     1
+           1268 PRECALL                  1
+           1272 CALL                     1
+           1282 POP_TOP
+
+275        1284 LOAD_FAST                0 (self)
+           1286 LOAD_METHOD             23 (_update_state)
+           1308 PRECALL                  0
+           1312 CALL                     0
+           1322 POP_TOP
+           1324 LOAD_CONST               0 (None)
+           1326 RETURN_VALUE
+
+Disassembly of <code object get_package_path at 0x000001B35E4DACE0, file "app\ui\page_select_package.py", line 277>:
+277           0 RESUME                   0
+
+278           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_package_path)
+             14 RETURN_VALUE
+
+Disassembly of <code object set_package_path at 0x000001B35E91BC30, file "app\ui\page_select_package.py", line 280>:
+280           0 RESUME                   0
+
+281           2 LOAD_FAST                1 (path)
+              4 LOAD_FAST                0 (self)
+              6 STORE_ATTR               0 (_package_path)
+
+282          16 LOAD_FAST                0 (self)
+             18 LOAD_METHOD              1 (_update_state)
+             40 PRECALL                  0
+             44 CALL                     0
+             54 POP_TOP
+             56 LOAD_CONST               0 (None)
+             58 RETURN_VALUE

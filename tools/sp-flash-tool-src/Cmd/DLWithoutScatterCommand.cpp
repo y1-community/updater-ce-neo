@@ -7,15 +7,6 @@
 
 namespace APCore
 {
-static int getPreloaderIndex(const op_part_list_t* list, int count)
-{
-    for(int i=0; i<count; i++)
-    {
-        if(strcmp(list[i].part_name, "preloader") == 0)
-            return i;
-    }
-    return -1;
-}
 
 DLWithoutScatterCommand::DLWithoutScatterCommand(APKey key):
     ICommand(key),
@@ -42,7 +33,6 @@ void DLWithoutScatterCommand::get_partition_list(op_part_list_t* list, int count
 }
 
 void DLWithoutScatterCommand::exec(const QSharedPointer<Connection> &conn){
-  //  conn->ConnectDA();
     Q_UNUSED(conn);
 
     HSESSION hs;
@@ -62,19 +52,7 @@ void DLWithoutScatterCommand::exec(const QSharedPointer<Connection> &conn){
 
     cbs.cb_stage_message = cb_stage_message_ == NULL ? cb_dl_stage_message: cb_stage_message_;
 
-    //prepare pl_info
-    file_info pl_info;
-    memset(&pl_info, 0, sizeof(pl_info));
-    pl_info.input_type = OP_SOURCE_FILE;
-    int pl_index = getPreloaderIndex(flist, count);
-    LOGD("pl_index: %d", pl_index);
-    if(pl_index != -1)
-    {
-        strcpy(pl_info.file_path, flist[pl_index].file_path);
-        LOGD("pl_path: %s", pl_info.file_path);
-    }
-
-    if(connect(&hs, pl_index == -1 ? NULL : &pl_info) != STATUS_OK){
+    if(connect(&hs) != STATUS_OK){
         goto exit;
     }
 
@@ -100,11 +78,7 @@ exit:
     delete[] flist;
     flist = NULL;
 
-    struct reboot_option option = {0};
-    option.is_dev_reboot = 1;
-    option.timeout_ms = 3000;
-
-    flashtool_shutdown_device(hs, option);
+    reboot_device(hs);
 
     flashtool_destroy_session(hs);
 

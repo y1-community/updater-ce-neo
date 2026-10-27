@@ -5,6 +5,7 @@
 #include <io.h>
 #else
 #include <sys/io.h>
+#include <sys/utsname.h>
 #endif
 
 #include <sys/stat.h>
@@ -12,6 +13,9 @@
 #include <sstream>
 #include <fstream>
 #include <iomanip>
+#include <cerrno>
+#include <cstring>
+#include <cstdlib>
 
 #include <QCoreApplication>
 #include <QDir>
@@ -21,6 +25,7 @@
 
 #include "../Host/Inc/RuntimeMemory.h"
 #include "../Utility/Utils.h"
+#include "../Utility/IniItem.h"
 //Log files
 #include "../Logger/Log.h"
 #include "../BootRom/brom.h"
@@ -36,22 +41,30 @@
 namespace FileUtils{
     using std::string;
     const std::string kBackupFolder("BackupData");
-       const unsigned int kChipIDLength(16);
+    const unsigned int kChipIDLength(16);
+#if defined(_LINUX)
+#define RULES_PATH "/etc/udev/rules.d"
+#define TTYACMS_FILE "99-ttyacms.rules"
+#define KERNEL_INVALID_MIN_VERSION std::string("4.11.12")
+#define KERNEL_INVALID_MAX_VERSION std::string("4.19.14")
+#endif
+#define HISTORY_INI_FILE "history.ini"
 }
 
 E_CHECK_DIR_STATUS FileUtils::CheckDirectory(const std::string &dir, bool createIfNotExist) {
-    if(QDir(QString(dir.c_str())).exists()){
-        LOG("%s(): the dir(%s) already exists.", __FUNCTION__, dir.c_str());
+    QDir dir_obj(QString::fromStdString(dir));
+    if(dir_obj.exists()){
+        LOG("%s(): the dir(%s) already exists.", __FUNCTION__, qPrintable(dir_obj.absolutePath()));
         return DIR_EXIST;
     }
 
     if(!createIfNotExist){
-        LOG("%s(): the dir(%s) does not exist.", __FUNCTION__, dir.c_str());
+        LOG("%s(): the dir(%s) does not exist.", __FUNCTION__, qPrintable(dir_obj.absolutePath()));
         return DIR_NOT_EXIST;
     }
 
-    if(!QDir(QString(dir.c_str())).mkpath(dir.c_str())){
-        LOG("%s(): create the dir(%s) failed.", __FUNCTION__, dir.c_str());
+    if(!dir_obj.mkpath(dir_obj.absolutePath())){
+        LOG("%s(): create the dir(%s) failed.", __FUNCTION__, qPrintable(dir_obj.absolutePath()));
         return CREATE_DIR_FAIL; //create directory fail
     }
     else
@@ -63,7 +76,7 @@ E_CHECK_DIR_STATUS FileUtils::CheckDirectory(const std::string &dir, bool create
               S_IXGRP |S_IRGRP | S_IWGRP |
               S_IXOTH |S_IROTH | S_IWOTH );
 #endif
-        LOG("%s(): create the dir(%s) succeed.", __FUNCTION__, dir.c_str());
+        LOG("%s(): create the dir(%s) succeed.", __FUNCTION__, qPrintable(dir_obj.absolutePath()));
         return CREATE_DIR_SUCCESS; //create directory successfully
     }
 }
@@ -615,6 +628,110 @@ int FileUtils::SaveFile(const char*filepath, unsigned char*p_buf, unsigned int f
      return 0;
 }
 
+#if defined(_LINUX)
+void FileUtils::copy_99ttyacms_file(bool need_check_first_run/* = false*/)
+{
+    QString rules_path = QString(RULES_PATH);
+    if (!IsDirectoryExist(rules_path.toStdString())) {
+        LOG("skip to copy 99-ttyacms.rules file, reason: %s is NOT exist!", rules_path.toStdString().c_str());
+        return;
+    }
 
+    QString dest_file = rules_path + QDir::separator().toLatin1() + QString(TTYACMS_FILE);
+    dest_file = QDir::toNativeSeparators(dest_file);
+    if (IsFileExist(dest_file.toStdString())) {
+        LOG("skip to copy 99-ttyacms.rules file, reason: %s has already exist!", dest_file.toStdString().c_str());
+        return;
+    }
 
+    if (need_check_first_run) {
+        QString history_file = QString::fromStdString(AbsolutePath(std::string(HISTORY_INI_FILE)));
+        history_file = QDir::toNativeSeparators(history_file);
+        if (IsFileExist(history_file.toStdString())) { // not the first to run flash tool GUI, skip copy
+            LOG("skip to copy 99-ttyacms.rules file, reason: the tool not the first time to run!");
+            return;
+        }
+    }
 
+    QString src_file = QString::fromStdString(AbsolutePath(std::string(TTYACMS_FILE)));
+    src_file = QDir::toNativeSeparators(src_file);
+    if (!IsFileExist(src_file.toStdString())) {
+        LOG("skip to copy 99-ttyacms.rules file, reason: %s NOT exist!", src_file.toStdString().c_str());
+        return;
+    }
+
+    if (!QFileInfo(rules_path).isWritable()) {
+        LOG("skip to copy 99-ttyacms.rules file, reason: %s has no write permission!", rules_path.toStdString().c_str());
+        return;
+    }
+
+    // linux modemmanager issue fixed: copy 99-ttyacms.rules file to /etc/udev/rules.d directory.
+    if (QFile::copy(src_file, dest_file)) {
+        LOG("copy 99-ttyacms.rules file successfully!");
+    } else {
+        LOG("copy 99-ttyacms.rules file failed, reason: %s", strerror(errno));
+    }
+}
+
+void DumpKernelInfo(const struct utsname &kernel_info)
+{
+    printf("sysname:%s\n nodename:%s\n release:%s\n version:%s\n machine:%s\n \n ",\
+                        kernel_info.sysname,\
+                        kernel_info.nodename,\
+                        kernel_info.release,\
+                        kernel_info.version,\
+                        kernel_info.machine);
+#if _UTSNAME_DOMAIN_LENGTH - 0
+#ifdef __USE_GNU
+    printf(" domainame:%s\n ",kernel_info.domainname);
+    //char domainname[_UTSNAME_DOMAIN_LENGTH];
+#else
+    printf(" __domainame:%s\n ",kernel_info.__domainname);
+    //char __domainname[_UTSNAME_DOMAIN_LENGTH];
+#endif
+#endif
+}
+
+bool FileUtils::IsValidKernelVersion()
+{
+    struct utsname buf;
+    int ret = uname(&buf);
+    if (ret < 0) {
+        perror("uname function call failed.");
+        return true; //ignore to check linux kernel version
+    }
+    else {
+        DumpKernelInfo(buf);
+
+        std::string kernel_release = buf.release;
+        std::size_t found = kernel_release.find('-');
+        if (found == std::string::npos) {
+            perror("invalid kernel release string");
+            return true;
+        }
+        std::string cur_kernel_version = kernel_release.substr(0, found);
+        std::cout << "cur_kernel_version = " << cur_kernel_version << std::endl;
+        bool is_valid_kernel = (KERNEL_INVALID_MIN_VERSION > cur_kernel_version
+                || cur_kernel_version >= KERNEL_INVALID_MAX_VERSION);
+        return is_valid_kernel;
+    }
+}
+
+void FileUtils::runModemManagerCmd()
+{
+    IniItem item("option.ini", "ModemManager", "RunModemManagerCmd");
+    if (item.GetBooleanValue()) {
+        std::string modemmanager_cmd_file = FileUtils::AbsolutePath("modemmanagercmd.sh");
+        if (QFileInfo(QString::fromStdString(modemmanager_cmd_file)).exists()) {
+            system("sudo chmod +x modemmanagercmd.sh");
+            system("sudo ./modemmanagercmd.sh &");
+            LOG("running \"sudo ./modemmanagercmd.sh &\" cmd in background!");
+        } else {
+            LOG("modemmanagercmd.sh file is NOT exists.");
+        }
+    } else {
+        LOG("NO need to run \"sudo ./modemmanagercmd.sh &\" cmd.");
+    }
+}
+
+#endif

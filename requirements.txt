@@ -1,4 +1,8 @@
-PySide6>=6.5
+# PySide6 6.12.0 drops a None reference per QPainter pen/font change; on Python
+# < 3.12 (mortal None) that aborts the app with "none_dealloc: deallocating None"
+# within a minute. scripts/check_pyside_refcount.py gates every build on this.
+PySide6>=6.5,<6.12; python_version < "3.12"
+PySide6>=6.5; python_version >= "3.12"
 requests>=2.31
 pyusb>=1.2
 pycryptodome>=3.19

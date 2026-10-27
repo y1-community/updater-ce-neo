@@ -6,6 +6,7 @@
 #include "../Conn/Connection.h"
 #include "../XMLParser/XMLSerializable.h"
 #include "../Logger/Log.h"
+#include "../Utility/Utils.h"
 
 namespace APCore
 {
@@ -17,7 +18,7 @@ public:
     virtual ~ConnSetting();
 
     virtual Connection *CreateConnection(
-            APKey key, HW_StorageType_E stor, bool pwr_key_reset) = 0;
+            APKey key, HW_StorageType_E stor, LongPressRebootOption pwr_key_reset_option) = 0;
 
     void set_stop_flag(int * p_stop)
     {
@@ -34,6 +35,11 @@ public:
         m_com_port = com_port;
     }
 
+    void set_storage_life_cycle_check(bool storage_life_cycle_check)
+    {
+        m_storage_life_cycle_check = storage_life_cycle_check;
+    }
+
     static ConnSetting* FromXML(const XML::Node &node);
 
 protected:
@@ -46,10 +52,19 @@ protected:
     {
         return m_timeout;
     }
+
+    bool get_storage_life_cycle_check() const
+    {
+        return m_storage_life_cycle_check;
+    }
+
 protected:
     int *stop_flag_;
     int m_timeout;
     std::string m_com_port;
+
+private:
+    bool m_storage_life_cycle_check;
 };
 
 

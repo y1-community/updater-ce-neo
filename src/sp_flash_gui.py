@@ -815,13 +815,12 @@ def update_sp_history_ini(
 
 
 def _linux_gui_environment_args(env: dict) -> list[str]:
-    """Pass only the desktop/runtime variables needed by a root-owned Qt GUI."""
+    """Pass only the desktop/runtime variables needed by an elevated Qt GUI."""
     keys = (
         "DISPLAY",
         "XAUTHORITY",
         "WAYLAND_DISPLAY",
         "XDG_RUNTIME_DIR",
-        "QT_QPA_PLATFORM",
         "QT_PLUGIN_PATH",
         "LD_LIBRARY_PATH",
         "LANG",
@@ -836,12 +835,43 @@ def _linux_gui_environment_args(env: dict) -> list[str]:
 
 
 def launch_linux_sp_flash_tool_gui(binary: Path, cwd: Path, env: dict) -> Tuple[bool, str]:
-    """Ask a system privilege agent to open the Linux GUI as root.
+    """Open the Linux SP Flash Tool GUI without a password prompt by default.
 
-    The tool must inherit the active desktop connection and its bundled Qt
-    libraries. Starting it through pkexec/sudo avoids restarting Updater CE
-    with root, and keeps all package/history files owned by the user.
+    Because the user's serial group and udev rules are prepared beforehand,
+    SP Flash Tool runs directly as the current user unless the user explicitly
+    enabled 'Run as Administrator' in Settings.
     """
+    want_root = False
+    try:
+        from . import elevation
+        want_root = bool(elevation.run_as_admin_enabled())
+    except Exception:
+        want_root = False
+
+    if not want_root:
+        launch_env = os.environ.copy()
+        if env:
+            launch_env.update(env)
+        try:
+            proc = subprocess.Popen(
+                [str(binary)],
+                cwd=str(cwd),
+                env=launch_env,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+            try:
+                from . import process_guard
+
+                process_guard.register_handoff_pid(proc.pid)
+            except Exception:
+                pass
+            return True, f"SP Flash Tool GUI launched (PID {proc.pid})."
+        except OSError as exc:
+            return False, str(exc)
+
     env_args = _linux_gui_environment_args(env)
     env_bin = shutil.which("env") or "/usr/bin/env"
     launch_args = [env_bin, *env_args, str(binary)]
@@ -870,7 +900,7 @@ def launch_linux_sp_flash_tool_gui(binary: Path, cwd: Path, env: dict) -> Tuple[
     errors = []
     for command, command_env in commands:
         try:
-            subprocess.Popen(
+            proc = subprocess.Popen(
                 command,
                 cwd=str(cwd),
                 env=command_env,
@@ -879,6 +909,12 @@ def launch_linux_sp_flash_tool_gui(binary: Path, cwd: Path, env: dict) -> Tuple[
                 stderr=subprocess.DEVNULL,
                 start_new_session=True,
             )
+            try:
+                from . import process_guard
+
+                process_guard.register_handoff_pid(proc.pid)
+            except Exception:
+                pass
             return True, "SP Flash Tool GUI launch requested with administrator privileges."
         except OSError as exc:
             errors.append(str(exc))
@@ -1023,12 +1059,18 @@ def launch_sp_flash_tool_gui(
             return False, history_msg
         try:
             creationflags = getattr(subprocess, "DETACHED_PROCESS", 0)
-            subprocess.Popen(
+            proc = subprocess.Popen(
                 [str(flash_tool_exe)],
                 cwd=str(chosen_dir),
                 env=os.environ.copy(),
                 creationflags=creationflags,
             )
+            try:
+                from . import process_guard
+
+                process_guard.register_handoff_pid(proc.pid)
+            except Exception:
+                pass
             return True, "SP Flash Tool GUI launched successfully."
         except Exception as e:
             logger.exception("Failed to launch flash_tool.exe on Windows")

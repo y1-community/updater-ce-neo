@@ -7,7 +7,8 @@
 
 namespace APCore
 {
-ReadbackWithoutScatterSetting::ReadbackWithoutScatterSetting()
+ReadbackWithoutScatterSetting::ReadbackWithoutScatterSetting():
+    m_reboot(false)
 {
 }
 
@@ -16,6 +17,7 @@ QSharedPointer<APCore::ICommand> ReadbackWithoutScatterSetting::CreateCommand(AP
 
     cmd->set_partion_list(items);
     cmd->set_da_file(da_);
+    cmd->setReboot(m_reboot);
 
     return cmd;
 }
@@ -53,6 +55,11 @@ void ReadbackWithoutScatterSetting::LoadXML(const XML::Node &node)
 
 void ReadbackWithoutScatterSetting::SaveXML(XML::Node &node) const{
     LOGI("The node name is %s.", node.GetName().c_str());
+}
+
+void ReadbackWithoutScatterSetting::setReboot(bool reboot)
+{
+    m_reboot = reboot;
 }
 
 }

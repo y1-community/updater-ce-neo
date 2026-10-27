@@ -1,0 +1,12 @@
+Stop open: False
+Wait cancel visible: True
+Wait continue visible: True
+install_run_active: True
+Inside timer after closeEvent:
+  Stop open: True
+  Stop actions visible: True
+  Stop actions parent: <src.ui.flash_page._CardHead(0x23139ead0d0) at 0x000002313AB9F580>
+  Stop actions rect: PySide6.QtCore.QRect(314, 21, 72, 36)
+  Stop continue rect: PySide6.QtCore.QRect(36, 0, 36, 36)
+  Stop continue isVisibleTo: True
+Event accepted? True

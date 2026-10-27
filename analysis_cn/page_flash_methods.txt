@@ -1,0 +1,175 @@
+============================== update_step ==============================
+Consts: ['接受 i18n key，内部翻译并跟踪以便语言切换时刷新。', None]
+Names: ('_step_key', 't', '_lbl_current_action', 'setText', '_info_step', 'set_value', '_step_indicator', 'set_step_by_name')
+Varnames: ('self', 'step_key', 'text')
+273           0 RESUME                   0
+
+275           2 LOAD_FAST                1 (step_key)
+              4 LOAD_FAST                0 (self)
+              6 STORE_ATTR               0 (_step_key)
+
+276          16 LOAD_GLOBAL              3 (NULL + t)
+             28 LOAD_FAST                1 (step_key)
+             30 PRECALL                  1
+             34 CALL                     1
+             44 STORE_FAST               2 (text)
+
+277          46 LOAD_FAST                0 (self)
+             48 LOAD_ATTR                2 (_lbl_current_action)
+             58 LOAD_METHOD              3 (setText)
+             80 LOAD_FAST                2 (text)
+             82 PRECALL                  1
+             86 CALL                     1
+             96 POP_TOP
+
+278          98 LOAD_FAST                0 (self)
+            100 LOAD_ATTR                4 (_info_step)
+            110 LOAD_METHOD              5 (set_value)
+            132 LOAD_FAST                2 (text)
+            134 PRECALL                  1
+            138 CALL                     1
+            148 POP_TOP
+
+279         150 LOAD_FAST                0 (self)
+            152 LOAD_ATTR                6 (_step_indicator)
+            162 LOAD_METHOD              7 (set_step_by_name)
+            184 LOAD_FAST                2 (text)
+            186 PRECALL                  1
+            190 CALL                     1
+            200 POP_TOP
+            202 LOAD_CONST               1 (None)
+            204 RETURN_VALUE
+============================== set_device_connected ==============================
+Consts: [None, 'connected', 'status_connected', True, 'idle', 'flash_no_device', False]
+Names: ('_wait_status_tag', 'set_status', '_lbl_conn_status', 'setText', 't', '_btn_start_upgrade', 'setEnabled')
+Varnames: ('self', 'connected')
+251           0 RESUME                   0
+
+252           2 LOAD_FAST                1 (connected)
+              4 POP_JUMP_FORWARD_IF_FALSE    93 (to 192)
+
+253           6 LOAD_FAST                0 (self)
+              8 LOAD_ATTR                0 (_wait_status_tag)
+             18 LOAD_METHOD              1 (set_status)
+             40 LOAD_CONST               1 ('connected')
+             42 PRECALL                  1
+             46 CALL                     1
+             56 POP_TOP
+
+254          58 LOAD_FAST                0 (self)
+             60 LOAD_ATTR                2 (_lbl_conn_status)
+             70 LOAD_METHOD              3 (setText)
+             92 LOAD_GLOBAL              9 (NULL + t)
+            104 LOAD_CONST               2 ('status_connected')
+            106 PRECALL                  1
+            110 CALL                     1
+            120 PRECALL                  1
+            124 CALL                     1
+            134 POP_TOP
+
+255         136 LOAD_FAST                0 (self)
+            138 LOAD_ATTR                5 (_btn_start_upgrade)
+            148 LOAD_METHOD              6 (setEnabled)
+            170 LOAD_CONST               3 (True)
+            172 PRECALL                  1
+            176 CALL                     1
+            186 POP_TOP
+            188 LOAD_CONST               0 (None)
+            190 RETURN_VALUE
+
+257     >>  192 LOAD_FAST                0 (self)
+            194 LOAD_ATTR                0 (_wait_status_tag)
+            204 LOAD_METHOD              1 (set_status)
+            226 LOAD_CONST               4 ('idle')
+            228 PRECALL                  1
+            232 CALL                     1
+            242 POP_TOP
+
+258         244 LOAD_FAST                0 (self)
+            246 LOAD_ATTR                2 (_lbl_conn_status)
+            256 LOAD_METHOD              3 (setText)
+            278 LOAD_GLOBAL              9 (NULL + t)
+            290 LOAD_CONST               5 ('flash_no_device')
+            292 PRECALL                  1
+            296 CALL                     1
+            306 PRECALL                  1
+            310 CALL                     1
+            320 POP_TOP
+
+259         322 LOAD_FAST                0 (self)
+            324 LOAD_ATTR                5 (_btn_start_upgrade)
+            334 LOAD_METHOD              6 (setEnabled)
+            356 LOAD_CONST               6 (False)
+            358 PRECALL                  1
+            362 CALL                     1
+            372 POP_TOP
+            374 LOAD_CONST               0 (None)
+            376 RETURN_VALUE
+============================== set_device_flashing ==============================
+Consts: [None, 'flash_banner_flashing', 'success', 'flash_conn_connected']
+Names: ('_set_banner', '_set_conn')
+Varnames: ('self',)
+265           0 RESUME                   0
+
+266           2 LOAD_FAST                0 (self)
+              4 LOAD_METHOD              0 (_set_banner)
+             26 LOAD_CONST               1 ('flash_banner_flashing')
+             28 LOAD_CONST               2 ('success')
+             30 PRECALL                  2
+             34 CALL                     2
+             44 POP_TOP
+
+267          46 LOAD_FAST                0 (self)
+             48 LOAD_METHOD              1 (_set_conn)
+             70 LOAD_CONST               3 ('flash_conn_connected')
+             72 PRECALL                  1
+             76 CALL                     1
+             86 POP_TOP
+             88 LOAD_CONST               0 (None)
+             90 RETURN_VALUE
+============================== show_waiting ==============================
+Consts: [None, 0, 'flash_banner_wait', 'warning']
+Names: ('_stack', 'setCurrentIndex', '_set_banner')
+Varnames: ('self',)
+239           0 RESUME                   0
+
+240           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_stack)
+             14 LOAD_METHOD              1 (setCurrentIndex)
+             36 LOAD_CONST               1 (0)
+             38 PRECALL                  1
+             42 CALL                     1
+             52 POP_TOP
+
+241          54 LOAD_FAST                0 (self)
+             56 LOAD_METHOD              2 (_set_banner)
+             78 LOAD_CONST               2 ('flash_banner_wait')
+             80 LOAD_CONST               3 ('warning')
+             82 PRECALL                  2
+             86 CALL                     2
+             96 POP_TOP
+             98 LOAD_CONST               0 (None)
+            100 RETURN_VALUE
+============================== show_flashing ==============================
+Consts: [None, 1, 'flash_banner_ready', 'warning']
+Names: ('_stack', 'setCurrentIndex', '_set_banner')
+Varnames: ('self',)
+243           0 RESUME                   0
+
+244           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_stack)
+             14 LOAD_METHOD              1 (setCurrentIndex)
+             36 LOAD_CONST               1 (1)
+             38 PRECALL                  1
+             42 CALL                     1
+             52 POP_TOP
+
+245          54 LOAD_FAST                0 (self)
+             56 LOAD_METHOD              2 (_set_banner)
+             78 LOAD_CONST               2 ('flash_banner_ready')
+             80 LOAD_CONST               3 ('warning')
+             82 PRECALL                  2
+             86 CALL                     2
+             96 POP_TOP
+             98 LOAD_CONST               0 (None)
+            100 RETURN_VALUE

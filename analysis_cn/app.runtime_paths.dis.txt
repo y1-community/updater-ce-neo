@@ -1,0 +1,143 @@
+  0           0 RESUME                   0
+
+  1           2 LOAD_CONST               0 ('\n统一路径解析：开发模式 vs PyInstaller 打包模式\n\n打包后有两个重要目录：\n- BUNDLE_DIR (sys._MEIPASS): PyInstaller 解压的内部资源（style.qss、mtkclient 等）\n- INSTALL_DIR (exe 所在目录): Inno Setup 安装的文件（SP_Flash_Tool、UnRAR 等）\n')
+              4 STORE_NAME               0 (__doc__)
+
+  8           6 LOAD_CONST               1 (0)
+              8 LOAD_CONST               2 (None)
+             10 IMPORT_NAME              1 (sys)
+             12 STORE_NAME               1 (sys)
+
+  9          14 LOAD_CONST               1 (0)
+             16 LOAD_CONST               2 (None)
+             18 IMPORT_NAME              2 (os)
+             20 STORE_NAME               2 (os)
+
+ 10          22 LOAD_CONST               1 (0)
+             24 LOAD_CONST               3 (('Path',))
+             26 IMPORT_NAME              3 (pathlib)
+             28 IMPORT_FROM              4 (Path)
+             30 STORE_NAME               4 (Path)
+             32 POP_TOP
+
+ 13          34 LOAD_CONST               4 ('return')
+             36 LOAD_NAME                4 (Path)
+             38 BUILD_TUPLE              2
+             40 LOAD_CONST               5 (<code object _get_bundle_dir at 0x000001B35E8B28B0, file "app\runtime_paths.py", line 13>)
+             42 MAKE_FUNCTION            4 (annotations)
+             44 STORE_NAME               5 (_get_bundle_dir)
+
+ 20          46 LOAD_CONST               4 ('return')
+             48 LOAD_NAME                4 (Path)
+             50 BUILD_TUPLE              2
+             52 LOAD_CONST               6 (<code object _get_install_dir at 0x000001B35E77FD70, file "app\runtime_paths.py", line 20>)
+             54 MAKE_FUNCTION            4 (annotations)
+             56 STORE_NAME               6 (_get_install_dir)
+
+ 27          58 PUSH_NULL
+             60 LOAD_NAME                5 (_get_bundle_dir)
+             62 PRECALL                  0
+             66 CALL                     0
+             76 STORE_NAME               7 (BUNDLE_DIR)
+
+ 28          78 PUSH_NULL
+             80 LOAD_NAME                6 (_get_install_dir)
+             82 PRECALL                  0
+             86 CALL                     0
+             96 STORE_NAME               8 (INSTALL_DIR)
+
+ 31          98 LOAD_CONST               7 ('1.1.2')
+            100 STORE_NAME               9 (APP_VERSION)
+
+ 32         102 LOAD_CONST               8 ('updater-feedback@innioasis.com')
+            104 STORE_NAME              10 (CONTACT_EMAIL)
+
+ 35         106 LOAD_NAME                7 (BUNDLE_DIR)
+            108 STORE_NAME              11 (BASE_DIR)
+
+ 36         110 LOAD_NAME                7 (BUNDLE_DIR)
+            112 LOAD_CONST               9 ('mtkclient')
+            114 BINARY_OP               11 (/)
+            118 STORE_NAME              12 (MTKCLIENT_DIR)
+
+ 37         120 LOAD_NAME                7 (BUNDLE_DIR)
+            122 LOAD_CONST              10 ('app')
+            124 BINARY_OP               11 (/)
+            128 LOAD_CONST              11 ('resources')
+            130 BINARY_OP               11 (/)
+            134 STORE_NAME              13 (RESOURCES_DIR)
+
+ 40         136 LOAD_NAME                8 (INSTALL_DIR)
+            138 LOAD_CONST              12 ('SP_Flash_Tool')
+            140 BINARY_OP               11 (/)
+            144 STORE_NAME              14 (SP_FLASH_TOOL_DIR)
+
+ 41         146 LOAD_NAME                8 (INSTALL_DIR)
+            148 LOAD_CONST              13 ('tools')
+            150 BINARY_OP               11 (/)
+            154 STORE_NAME              15 (TOOLS_DIR)
+            156 LOAD_CONST               2 (None)
+            158 RETURN_VALUE
+
+Disassembly of <code object _get_bundle_dir at 0x000001B35E8B28B0, file "app\runtime_paths.py", line 13>:
+ 13           0 RESUME                   0
+
+ 15           2 LOAD_GLOBAL              1 (NULL + getattr)
+             14 LOAD_GLOBAL              2 (sys)
+             26 LOAD_CONST               1 ('frozen')
+             28 LOAD_CONST               2 (False)
+             30 PRECALL                  3
+             34 CALL                     3
+             44 POP_JUMP_FORWARD_IF_FALSE    25 (to 96)
+
+ 16          46 LOAD_GLOBAL              5 (NULL + Path)
+             58 LOAD_GLOBAL              2 (sys)
+             70 LOAD_ATTR                3 (_MEIPASS)
+             80 PRECALL                  1
+             84 CALL                     1
+             94 RETURN_VALUE
+
+ 17     >>   96 LOAD_GLOBAL              5 (NULL + Path)
+            108 LOAD_GLOBAL              8 (__file__)
+            120 PRECALL                  1
+            124 CALL                     1
+            134 LOAD_METHOD              5 (resolve)
+            156 PRECALL                  0
+            160 CALL                     0
+            170 LOAD_ATTR                6 (parent)
+            180 LOAD_ATTR                6 (parent)
+            190 RETURN_VALUE
+
+Disassembly of <code object _get_install_dir at 0x000001B35E77FD70, file "app\runtime_paths.py", line 20>:
+ 20           0 RESUME                   0
+
+ 22           2 LOAD_GLOBAL              1 (NULL + getattr)
+             14 LOAD_GLOBAL              2 (sys)
+             26 LOAD_CONST               1 ('frozen')
+             28 LOAD_CONST               2 (False)
+             30 PRECALL                  3
+             34 CALL                     3
+             44 POP_JUMP_FORWARD_IF_FALSE    54 (to 154)
+
+ 23          46 LOAD_GLOBAL              5 (NULL + Path)
+             58 LOAD_GLOBAL              6 (os)
+             70 LOAD_ATTR                4 (path)
+             80 LOAD_METHOD              5 (dirname)
+            102 LOAD_GLOBAL              2 (sys)
+            114 LOAD_ATTR                6 (executable)
+            124 PRECALL                  1
+            128 CALL                     1
+            138 PRECALL                  1
+            142 CALL                     1
+            152 RETURN_VALUE
+
+ 24     >>  154 LOAD_GLOBAL              5 (NULL + Path)
+            166 LOAD_GLOBAL             14 (__file__)
+            178 PRECALL                  1
+            182 CALL                     1
+            192 LOAD_METHOD              8 (resolve)
+            214 PRECALL                  0
+            218 CALL                     0
+            228 LOAD_ATTR                9 (parent)
+            238 LOAD_ATTR                9 (parent)
+            248 RETURN_VALUE

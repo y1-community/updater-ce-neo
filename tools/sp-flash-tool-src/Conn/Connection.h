@@ -33,23 +33,28 @@ class ConnObserver
 {
 public:
     virtual void OnBromConnected(const BOOT_RESULT&, const std::string &) = 0;
-    virtual void OnDAConnected(const DA_REPORT_T&, const std::string &, const int, const FLASHTOOL_API_HANDLE_T) = 0;
+    virtual void OnDAConnected(const DA_REPORT_T&, const std::string &, const int) = 0;
     /*
     virtual void OnDisconnected() = 0;
     */
-    virtual ~ConnObserver(){};
+    virtual ~ConnObserver(){}
 };
 
 class Connection
 {
 public:
+	typedef void (__stdcall * void_callback_arg)(int *p_val);
+
     Connection(
             _SHARED_PTR<ConnMedia> med,
-            _SHARED_PTR<ConnArgBox> box)
+            _SHARED_PTR<ConnArgBox> box,
+            bool storage_life_cycle_check)
         : connected_(0),
           p_media_(med),
           p_arg_box_(box),
-          p_inner_conn_(NULL)
+          p_inner_conn_(NULL),
+          question_cb(NULL),
+          m_storage_life_cycle_check(storage_life_cycle_check)
     {
     }
 
@@ -93,9 +98,10 @@ public:
 
     void setPowerType(int force_chg);
     bool isDAConnected(){return connected_ > 1;}
+	void setCallBack(void_callback_arg cb_question) {question_cb = cb_question;}
 private:
     void NotifyBromConnected(const BOOT_RESULT&, const std::string&) const;
-    void NotifyDAConnected(const DA_REPORT_T&, const std::string&, const int usb_status, const FLASHTOOL_API_HANDLE_T FT_Handle) const;
+    void NotifyDAConnected(const DA_REPORT_T&, const std::string&, const int usb_status) const;
     /*
     void NotifyDisconnected();
     */
@@ -105,6 +111,8 @@ private:
     _SHARED_PTR<ConnArgBox> p_arg_box_;
     _SHARED_PTR<ConnBase> p_inner_conn_;
     _SHR_OBSERVER_LIST observer_list_;
+	void_callback_arg question_cb;
+    bool m_storage_life_cycle_check;
 };
 
 

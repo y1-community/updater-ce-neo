@@ -1,0 +1,2729 @@
+  0           0 RESUME                   0
+
+  1           2 LOAD_CONST               0 ('\n主窗口 - 左侧导航 + 右侧内容区\n')
+              4 STORE_NAME               0 (__doc__)
+
+  4           6 LOAD_CONST               1 (0)
+              8 LOAD_CONST               2 (None)
+             10 IMPORT_NAME              1 (os)
+             12 STORE_NAME               1 (os)
+
+  5          14 LOAD_CONST               1 (0)
+             16 LOAD_CONST               2 (None)
+             18 IMPORT_NAME              2 (time)
+             20 STORE_NAME               2 (time)
+
+  6          22 LOAD_CONST               1 (0)
+             24 LOAD_CONST               3 (('Path',))
+             26 IMPORT_NAME              3 (pathlib)
+             28 IMPORT_FROM              4 (Path)
+             30 STORE_NAME               4 (Path)
+             32 POP_TOP
+
+  7          34 LOAD_CONST               1 (0)
+             36 LOAD_CONST               4 (('QMainWindow', 'QWidget', 'QHBoxLayout', 'QVBoxLayout', 'QPushButton', 'QStackedWidget', 'QLabel', 'QFrame', 'QComboBox'))
+             38 IMPORT_NAME              5 (PySide6.QtWidgets)
+             40 IMPORT_FROM              6 (QMainWindow)
+             42 STORE_NAME               6 (QMainWindow)
+             44 IMPORT_FROM              7 (QWidget)
+             46 STORE_NAME               7 (QWidget)
+             48 IMPORT_FROM              8 (QHBoxLayout)
+             50 STORE_NAME               8 (QHBoxLayout)
+             52 IMPORT_FROM              9 (QVBoxLayout)
+             54 STORE_NAME               9 (QVBoxLayout)
+             56 IMPORT_FROM             10 (QPushButton)
+             58 STORE_NAME              10 (QPushButton)
+             60 IMPORT_FROM             11 (QStackedWidget)
+             62 STORE_NAME              11 (QStackedWidget)
+             64 IMPORT_FROM             12 (QLabel)
+             66 STORE_NAME              12 (QLabel)
+             68 IMPORT_FROM             13 (QFrame)
+             70 STORE_NAME              13 (QFrame)
+             72 IMPORT_FROM             14 (QComboBox)
+             74 STORE_NAME              14 (QComboBox)
+             76 POP_TOP
+
+ 11          78 LOAD_CONST               1 (0)
+             80 LOAD_CONST               5 (('Qt', 'Slot', 'QTimer'))
+             82 IMPORT_NAME             15 (PySide6.QtCore)
+             84 IMPORT_FROM             16 (Qt)
+             86 STORE_NAME              16 (Qt)
+             88 IMPORT_FROM             17 (Slot)
+             90 STORE_NAME              17 (Slot)
+             92 IMPORT_FROM             18 (QTimer)
+             94 STORE_NAME              18 (QTimer)
+             96 POP_TOP
+
+ 13          98 LOAD_CONST               6 (2)
+            100 LOAD_CONST               7 (('t', 'translator', 'LANGUAGES'))
+            102 IMPORT_NAME             19 (i18n)
+            104 IMPORT_FROM             20 (t)
+            106 STORE_NAME              20 (t)
+            108 IMPORT_FROM             21 (translator)
+            110 STORE_NAME              21 (translator)
+            112 IMPORT_FROM             22 (LANGUAGES)
+            114 STORE_NAME              22 (LANGUAGES)
+            116 POP_TOP
+
+ 14         118 LOAD_CONST               6 (2)
+            120 LOAD_CONST               8 (('StateMachine', 'FlashState', 'FlashContext'))
+            122 IMPORT_NAME             23 (state)
+            124 IMPORT_FROM             24 (StateMachine)
+            126 STORE_NAME              24 (StateMachine)
+            128 IMPORT_FROM             25 (FlashState)
+            130 STORE_NAME              25 (FlashState)
+            132 IMPORT_FROM             26 (FlashContext)
+            134 STORE_NAME              26 (FlashContext)
+            136 POP_TOP
+
+ 15         138 LOAD_CONST               6 (2)
+            140 LOAD_CONST               9 (('FlashService',))
+            142 IMPORT_NAME             27 (flash_service)
+            144 IMPORT_FROM             28 (FlashService)
+            146 STORE_NAME              28 (FlashService)
+            148 POP_TOP
+
+ 16         150 LOAD_CONST              10 (1)
+            152 LOAD_CONST              11 (('SelectPackagePage',))
+            154 IMPORT_NAME             29 (page_select_package)
+            156 IMPORT_FROM             30 (SelectPackagePage)
+            158 STORE_NAME              30 (SelectPackagePage)
+            160 POP_TOP
+
+ 17         162 LOAD_CONST              10 (1)
+            164 LOAD_CONST              12 (('FlashPage',))
+            166 IMPORT_NAME             31 (page_flash)
+            168 IMPORT_FROM             32 (FlashPage)
+            170 STORE_NAME              32 (FlashPage)
+            172 POP_TOP
+
+ 18         174 LOAD_CONST              10 (1)
+            176 LOAD_CONST              13 (('ErrorPage',))
+            178 IMPORT_NAME             33 (page_error)
+            180 IMPORT_FROM             34 (ErrorPage)
+            182 STORE_NAME              34 (ErrorPage)
+            184 POP_TOP
+
+ 19         186 LOAD_CONST              10 (1)
+            188 LOAD_CONST              14 (('RetryPage',))
+            190 IMPORT_NAME             35 (page_retry)
+            192 IMPORT_FROM             36 (RetryPage)
+            194 STORE_NAME              36 (RetryPage)
+            196 POP_TOP
+
+ 20         198 LOAD_CONST              10 (1)
+            200 LOAD_CONST              15 (('FlashCompleteDialog', 'FlashFailedDialog', 'LogDialog'))
+            202 IMPORT_NAME             37 (dialogs)
+            204 IMPORT_FROM             38 (FlashCompleteDialog)
+            206 STORE_NAME              38 (FlashCompleteDialog)
+            208 IMPORT_FROM             39 (FlashFailedDialog)
+            210 STORE_NAME              39 (FlashFailedDialog)
+            212 IMPORT_FROM             40 (LogDialog)
+            214 STORE_NAME              40 (LogDialog)
+            216 POP_TOP
+
+ 23         218 PUSH_NULL
+            220 LOAD_BUILD_CLASS
+            222 LOAD_CONST              16 (<code object MainWindow at 0x0000017F1ED01E50, file "app\ui\main_window.py", line 23>)
+            224 MAKE_FUNCTION            0
+            226 LOAD_CONST              17 ('MainWindow')
+            228 LOAD_NAME                6 (QMainWindow)
+            230 PRECALL                  3
+            234 CALL                     3
+            244 STORE_NAME              41 (MainWindow)
+            246 LOAD_CONST               2 (None)
+            248 RETURN_VALUE
+
+Disassembly of <code object MainWindow at 0x0000017F1ED01E50, file "app\ui\main_window.py", line 23>:
+              0 MAKE_CELL                0 (__class__)
+
+ 23           2 RESUME                   0
+              4 LOAD_NAME                0 (__name__)
+              6 STORE_NAME               1 (__module__)
+              8 LOAD_CONST               0 ('MainWindow')
+             10 STORE_NAME               2 (__qualname__)
+
+ 24          12 LOAD_CONST               1 ('主窗口')
+             14 STORE_NAME               3 (__doc__)
+
+ 26          16 LOAD_CONST               2 (0)
+             18 STORE_NAME               4 (PAGE_SELECT)
+
+ 27          20 LOAD_CONST               3 (1)
+             22 STORE_NAME               5 (PAGE_FLASH)
+
+ 28          24 LOAD_CONST               4 (2)
+             26 STORE_NAME               6 (PAGE_ERROR)
+
+ 29          28 LOAD_CONST               5 (3)
+             30 STORE_NAME               7 (PAGE_RETRY)
+
+ 31          32 LOAD_CLOSURE             0 (__class__)
+             34 BUILD_TUPLE              1
+             36 LOAD_CONST               6 (<code object __init__ at 0x0000017F1E79F6F0, file "app\ui\main_window.py", line 31>)
+             38 MAKE_FUNCTION            8 (closure)
+             40 STORE_NAME               8 (__init__)
+
+ 57          42 LOAD_CONST               7 (<code object _build_ui at 0x0000017F1ECA5440, file "app\ui\main_window.py", line 57>)
+             44 MAKE_FUNCTION            0
+             46 STORE_NAME               9 (_build_ui)
+
+158          48 LOAD_CONST               8 (<code object _connect_signals at 0x0000017F1ECA6400, file "app\ui\main_window.py", line 158>)
+             50 MAKE_FUNCTION            0
+             52 STORE_NAME              10 (_connect_signals)
+
+194          54 LOAD_CONST               9 (<code object _load_style at 0x0000017F1EFBDBB0, file "app\ui\main_window.py", line 194>)
+             56 MAKE_FUNCTION            0
+             58 STORE_NAME              11 (_load_style)
+
+202          60 LOAD_CONST              10 ('index')
+             62 LOAD_NAME               12 (int)
+             64 BUILD_TUPLE              2
+             66 LOAD_CONST              11 (<code object _on_language_changed at 0x0000017F1EE91460, file "app\ui\main_window.py", line 202>)
+             68 MAKE_FUNCTION            4 (annotations)
+             70 STORE_NAME              13 (_on_language_changed)
+
+207          72 LOAD_CONST              12 (<code object _retranslate at 0x0000017F1EBB0A20, file "app\ui\main_window.py", line 207>)
+             74 MAKE_FUNCTION            0
+             76 STORE_NAME              14 (_retranslate)
+
+219          78 LOAD_NAME               15 (FlashState)
+             80 LOAD_ATTR               16 (S5_COMPLETE)
+
+220          90 LOAD_NAME               15 (FlashState)
+             92 LOAD_ATTR               17 (S5_FAILED)
+
+221         102 LOAD_NAME               15 (FlashState)
+            104 LOAD_ATTR               18 (S5_USB_DISCONNECTED)
+
+218         114 BUILD_TUPLE              3
+            116 STORE_NAME              19 (_TERMINAL_STATES)
+
+224         118 LOAD_CONST              13 ('page_idx')
+            120 LOAD_NAME               12 (int)
+            122 BUILD_TUPLE              2
+            124 LOAD_CONST              14 (<code object _nav_to_page at 0x0000017F1EBAF1E0, file "app\ui\main_window.py", line 224>)
+            126 MAKE_FUNCTION            4 (annotations)
+            128 STORE_NAME              20 (_nav_to_page)
+
+239         130 LOAD_CONST              15 ('state')
+            132 LOAD_NAME               15 (FlashState)
+            134 BUILD_TUPLE              2
+            136 LOAD_CONST              16 (<code object _update_nav_enabled at 0x0000017F1EE398A0, file "app\ui\main_window.py", line 239>)
+            138 MAKE_FUNCTION            4 (annotations)
+            140 STORE_NAME              21 (_update_nav_enabled)
+
+250         142 PUSH_NULL
+            144 LOAD_NAME               22 (Slot)
+            146 LOAD_NAME               15 (FlashState)
+            148 PRECALL                  1
+            152 CALL                     1
+
+251         162 LOAD_CONST              15 ('state')
+            164 LOAD_NAME               15 (FlashState)
+            166 BUILD_TUPLE              2
+            168 LOAD_CONST              17 (<code object _on_state_changed at 0x0000017F1ECA6B00, file "app\ui\main_window.py", line 250>)
+            170 MAKE_FUNCTION            4 (annotations)
+
+250         172 PRECALL                  0
+            176 CALL                     0
+
+251         186 STORE_NAME              23 (_on_state_changed)
+
+297         188 LOAD_CONST              18 ('path')
+            190 LOAD_NAME               24 (str)
+            192 BUILD_TUPLE              2
+            194 LOAD_CONST              19 (<code object _on_package_selected at 0x0000017F1EE395C0, file "app\ui\main_window.py", line 297>)
+            196 MAKE_FUNCTION            4 (annotations)
+            198 STORE_NAME              25 (_on_package_selected)
+
+304         200 PUSH_NULL
+            202 LOAD_NAME               22 (Slot)
+            204 LOAD_NAME               12 (int)
+            206 PRECALL                  1
+            210 CALL                     1
+
+305         220 LOAD_CONST              20 ('pct')
+            222 LOAD_NAME               12 (int)
+            224 BUILD_TUPLE              2
+            226 LOAD_CONST              21 (<code object _on_extract_progress at 0x0000017F1EFA3A30, file "app\ui\main_window.py", line 304>)
+            228 MAKE_FUNCTION            4 (annotations)
+
+304         230 PRECALL                  0
+            234 CALL                     0
+
+305         244 STORE_NAME              26 (_on_extract_progress)
+
+308         246 PUSH_NULL
+            248 LOAD_NAME               22 (Slot)
+            250 LOAD_NAME               27 (bool)
+            252 LOAD_NAME               24 (str)
+            254 LOAD_NAME               24 (str)
+            256 PRECALL                  3
+            260 CALL                     3
+
+309         270 LOAD_CONST              22 ('ok')
+            272 LOAD_NAME               27 (bool)
+            274 LOAD_CONST              23 ('extract_dir')
+            276 LOAD_NAME               24 (str)
+            278 LOAD_CONST              24 ('err')
+            280 LOAD_NAME               24 (str)
+            282 BUILD_TUPLE              6
+            284 LOAD_CONST              25 (<code object _on_extract_finished at 0x0000017F1EE48AB0, file "app\ui\main_window.py", line 308>)
+            286 MAKE_FUNCTION            4 (annotations)
+
+308         288 PRECALL                  0
+            292 CALL                     0
+
+309         302 STORE_NAME              28 (_on_extract_finished)
+
+321         304 LOAD_CONST              26 ('package_path')
+            306 LOAD_NAME               24 (str)
+            308 BUILD_TUPLE              2
+            310 LOAD_CONST              27 (<code object _on_start_flash_from_select at 0x0000017F1ED25690, file "app\ui\main_window.py", line 321>)
+            312 MAKE_FUNCTION            4 (annotations)
+            314 STORE_NAME              29 (_on_start_flash_from_select)
+
+353         316 LOAD_CONST              28 (<code object _begin_flash_flow at 0x0000017F1EE6B770, file "app\ui\main_window.py", line 353>)
+            318 MAKE_FUNCTION            0
+            320 STORE_NAME              30 (_begin_flash_flow)
+
+358         322 LOAD_CONST              29 (<code object _on_start_upgrade at 0x0000017F1EF634B0, file "app\ui\main_window.py", line 358>)
+            324 MAKE_FUNCTION            0
+            326 STORE_NAME              31 (_on_start_upgrade)
+
+362         328 LOAD_CONST              30 (<code object _on_cancel_flash at 0x0000017F1F09CCB0, file "app\ui\main_window.py", line 362>)
+            330 MAKE_FUNCTION            0
+            332 STORE_NAME              32 (_on_cancel_flash)
+
+368         334 LOAD_CONST              31 (<code object _on_retry_flash at 0x0000017F1EE16100, file "app\ui\main_window.py", line 368>)
+            336 MAKE_FUNCTION            0
+            338 STORE_NAME              33 (_on_retry_flash)
+
+373         340 LOAD_CONST              32 (<code object _on_retry_detect at 0x0000017F1EFBBC30, file "app\ui\main_window.py", line 373>)
+            342 MAKE_FUNCTION            0
+            344 STORE_NAME              34 (_on_retry_detect)
+
+378         346 PUSH_NULL
+            348 LOAD_NAME               22 (Slot)
+            350 LOAD_NAME               12 (int)
+            352 PRECALL                  1
+            356 CALL                     1
+
+379         366 LOAD_CONST              33 ('percent')
+            368 LOAD_NAME               12 (int)
+            370 BUILD_TUPLE              2
+            372 LOAD_CONST              34 (<code object _on_progress at 0x0000017F1F0171B0, file "app\ui\main_window.py", line 378>)
+            374 MAKE_FUNCTION            4 (annotations)
+
+378         376 PRECALL                  0
+            380 CALL                     0
+
+379         390 STORE_NAME              35 (_on_progress)
+
+383         392 PUSH_NULL
+            394 LOAD_NAME               22 (Slot)
+            396 LOAD_NAME               24 (str)
+            398 PRECALL                  1
+            402 CALL                     1
+
+384         412 LOAD_CONST              35 ('step')
+            414 LOAD_NAME               24 (str)
+            416 BUILD_TUPLE              2
+            418 LOAD_CONST              36 (<code object _on_step_changed at 0x0000017F1ED47C00, file "app\ui\main_window.py", line 383>)
+            420 MAKE_FUNCTION            4 (annotations)
+
+383         422 PRECALL                  0
+            426 CALL                     0
+
+384         436 STORE_NAME              36 (_on_step_changed)
+
+397         438 PUSH_NULL
+            440 LOAD_NAME               22 (Slot)
+            442 LOAD_NAME               24 (str)
+            444 PRECALL                  1
+            448 CALL                     1
+
+398         458 LOAD_CONST              37 ('msg')
+            460 LOAD_NAME               24 (str)
+            462 BUILD_TUPLE              2
+            464 LOAD_CONST              38 (<code object _on_log_message at 0x0000017F1EE91330, file "app\ui\main_window.py", line 397>)
+            466 MAKE_FUNCTION            4 (annotations)
+
+397         468 PRECALL                  0
+            472 CALL                     0
+
+398         482 STORE_NAME              37 (_on_log_message)
+
+402         484 PUSH_NULL
+            486 LOAD_NAME               22 (Slot)
+            488 LOAD_NAME               27 (bool)
+            490 LOAD_NAME               24 (str)
+            492 PRECALL                  2
+            496 CALL                     2
+
+403         506 LOAD_CONST              39 ('success')
+            508 LOAD_NAME               27 (bool)
+            510 LOAD_CONST              40 ('error_code')
+            512 LOAD_NAME               24 (str)
+            514 BUILD_TUPLE              4
+            516 LOAD_CONST              41 (<code object _on_flash_finished at 0x0000017F1EBAF720, file "app\ui\main_window.py", line 402>)
+            518 MAKE_FUNCTION            4 (annotations)
+
+402         520 PRECALL                  0
+            524 CALL                     0
+
+403         534 STORE_NAME              38 (_on_flash_finished)
+
+422         536 LOAD_CONST              42 (<code object _tick_elapsed at 0x0000017F1EE6B910, file "app\ui\main_window.py", line 422>)
+            538 MAKE_FUNCTION            0
+            540 STORE_NAME              39 (_tick_elapsed)
+
+429         542 PUSH_NULL
+            544 LOAD_NAME               22 (Slot)
+            546 LOAD_NAME               24 (str)
+            548 PRECALL                  1
+            552 CALL                     1
+
+430         562 LOAD_CONST              43 ('port')
+            564 LOAD_NAME               24 (str)
+            566 BUILD_TUPLE              2
+            568 LOAD_CONST              44 (<code object _on_device_found at 0x0000017F1EC87370, file "app\ui\main_window.py", line 429>)
+            570 MAKE_FUNCTION            4 (annotations)
+
+429         572 PRECALL                  0
+            576 CALL                     0
+
+430         586 STORE_NAME              40 (_on_device_found)
+
+438         588 PUSH_NULL
+            590 LOAD_NAME               22 (Slot)
+            592 PRECALL                  0
+            596 CALL                     0
+
+439         606 LOAD_CONST              45 (<code object _on_device_lost at 0x0000017F1EE6BAB0, file "app\ui\main_window.py", line 438>)
+            608 MAKE_FUNCTION            0
+
+438         610 PRECALL                  0
+            614 CALL                     0
+
+439         624 STORE_NAME              41 (_on_device_lost)
+
+447         626 LOAD_CONST              46 (<code object _show_log_dialog at 0x0000017F1EF4EE30, file "app\ui\main_window.py", line 447>)
+            628 MAKE_FUNCTION            0
+            630 STORE_NAME              42 (_show_log_dialog)
+
+452         632 LOAD_CONST              47 (<code object _open_contact_mail at 0x0000017F1EE91200, file "app\ui\main_window.py", line 452>)
+            634 MAKE_FUNCTION            0
+            636 STORE_NAME              43 (_open_contact_mail)
+
+458         638 LOAD_CLOSURE             0 (__class__)
+            640 BUILD_TUPLE              1
+            642 LOAD_CONST              48 (<code object closeEvent at 0x0000017F1EF635F0, file "app\ui\main_window.py", line 458>)
+            644 MAKE_FUNCTION            8 (closure)
+            646 STORE_NAME              44 (closeEvent)
+            648 LOAD_CLOSURE             0 (__class__)
+            650 COPY                     1
+            652 STORE_NAME              45 (__classcell__)
+            654 RETURN_VALUE
+
+Disassembly of <code object __init__ at 0x0000017F1E79F6F0, file "app\ui\main_window.py", line 31>:
+              0 COPY_FREE_VARS           1
+
+ 31           2 RESUME                   0
+
+ 32           4 LOAD_GLOBAL              1 (NULL + super)
+             16 PRECALL                  0
+             20 CALL                     0
+             30 LOAD_METHOD              1 (__init__)
+             52 PRECALL                  0
+             56 CALL                     0
+             66 POP_TOP
+
+ 33          68 LOAD_FAST                0 (self)
+             70 LOAD_METHOD              2 (setWindowTitle)
+             92 LOAD_GLOBAL              7 (NULL + t)
+            104 LOAD_CONST               1 ('app_name')
+            106 PRECALL                  1
+            110 CALL                     1
+            120 PRECALL                  1
+            124 CALL                     1
+            134 POP_TOP
+
+ 34         136 LOAD_FAST                0 (self)
+            138 LOAD_METHOD              4 (resize)
+            160 LOAD_CONST               2 (1100)
+            162 LOAD_CONST               3 (700)
+            164 PRECALL                  2
+            168 CALL                     2
+            178 POP_TOP
+
+ 35         180 LOAD_FAST                0 (self)
+            182 LOAD_METHOD              5 (setMinimumSize)
+            204 LOAD_CONST               2 (1100)
+            206 LOAD_CONST               4 (680)
+            208 PRECALL                  2
+            212 CALL                     2
+            222 POP_TOP
+
+ 37         224 LOAD_CONST               5 (2)
+            226 LOAD_CONST               6 (('RESOURCES_DIR',))
+            228 IMPORT_NAME              6 (runtime_paths)
+            230 IMPORT_FROM              7 (RESOURCES_DIR)
+            232 STORE_FAST               1 (RESOURCES_DIR)
+            234 POP_TOP
+
+ 38         236 LOAD_CONST               7 (0)
+            238 LOAD_CONST               8 (('QIcon',))
+            240 IMPORT_NAME              8 (PySide6.QtGui)
+            242 IMPORT_FROM              9 (QIcon)
+            244 STORE_FAST               2 (QIcon)
+            246 POP_TOP
+
+ 39         248 LOAD_FAST                1 (RESOURCES_DIR)
+            250 LOAD_CONST               9 ('icon.ico')
+            252 BINARY_OP               11 (/)
+            256 STORE_FAST               3 (icon_path)
+
+ 40         258 LOAD_FAST                3 (icon_path)
+            260 LOAD_METHOD             10 (exists)
+            282 PRECALL                  0
+            286 CALL                     0
+            296 POP_JUMP_FORWARD_IF_FALSE    43 (to 384)
+
+ 41         298 LOAD_FAST                0 (self)
+            300 LOAD_METHOD             11 (setWindowIcon)
+            322 PUSH_NULL
+            324 LOAD_FAST                2 (QIcon)
+            326 LOAD_GLOBAL             25 (NULL + str)
+            338 LOAD_FAST                3 (icon_path)
+            340 PRECALL                  1
+            344 CALL                     1
+            354 PRECALL                  1
+            358 CALL                     1
+            368 PRECALL                  1
+            372 CALL                     1
+            382 POP_TOP
+
+ 43     >>  384 LOAD_GLOBAL             27 (NULL + StateMachine)
+            396 LOAD_FAST                0 (self)
+            398 PRECALL                  1
+            402 CALL                     1
+            412 LOAD_FAST                0 (self)
+            414 STORE_ATTR              14 (_sm)
+
+ 44         424 LOAD_GLOBAL             31 (NULL + FlashService)
+            436 LOAD_FAST                0 (self)
+            438 PRECALL                  1
+            442 CALL                     1
+            452 LOAD_FAST                0 (self)
+            454 STORE_ATTR              16 (_service)
+
+ 46         464 LOAD_GLOBAL             35 (NULL + QTimer)
+            476 LOAD_FAST                0 (self)
+            478 PRECALL                  1
+            482 CALL                     1
+            492 LOAD_FAST                0 (self)
+            494 STORE_ATTR              18 (_elapsed_timer)
+
+ 47         504 LOAD_FAST                0 (self)
+            506 LOAD_ATTR               18 (_elapsed_timer)
+            516 LOAD_METHOD             19 (setInterval)
+            538 LOAD_CONST              10 (1000)
+            540 PRECALL                  1
+            544 CALL                     1
+            554 POP_TOP
+
+ 48         556 LOAD_FAST                0 (self)
+            558 LOAD_ATTR               18 (_elapsed_timer)
+            568 LOAD_ATTR               20 (timeout)
+            578 LOAD_METHOD             21 (connect)
+            600 LOAD_FAST                0 (self)
+            602 LOAD_ATTR               22 (_tick_elapsed)
+            612 PRECALL                  1
+            616 CALL                     1
+            626 POP_TOP
+
+ 49         628 LOAD_CONST              11 (0.0)
+            630 LOAD_FAST                0 (self)
+            632 STORE_ATTR              23 (_flash_start_time)
+
+ 51         642 LOAD_FAST                0 (self)
+            644 LOAD_METHOD             24 (_build_ui)
+            666 PRECALL                  0
+            670 CALL                     0
+            680 POP_TOP
+
+ 52         682 LOAD_FAST                0 (self)
+            684 LOAD_METHOD             25 (_connect_signals)
+            706 PRECALL                  0
+            710 CALL                     0
+            720 POP_TOP
+
+ 53         722 LOAD_FAST                0 (self)
+            724 LOAD_METHOD             26 (_load_style)
+            746 PRECALL                  0
+            750 CALL                     0
+            760 POP_TOP
+
+ 55         762 LOAD_FAST                0 (self)
+            764 LOAD_METHOD             27 (_on_state_changed)
+            786 LOAD_GLOBAL             56 (FlashState)
+            798 LOAD_ATTR               29 (S1_SELECT_FILE)
+            808 PRECALL                  1
+            812 CALL                     1
+            822 POP_TOP
+            824 LOAD_CONST               0 (None)
+            826 RETURN_VALUE
+
+Disassembly of <code object _build_ui at 0x0000017F1ECA5440, file "app\ui\main_window.py", line 57>:
+              0 MAKE_CELL                0 (self)
+
+ 57           2 RESUME                   0
+
+ 58           4 LOAD_GLOBAL              1 (NULL + QWidget)
+             16 PRECALL                  0
+             20 CALL                     0
+             30 STORE_FAST               1 (central)
+
+ 59          32 LOAD_DEREF               0 (self)
+             34 LOAD_METHOD              1 (setCentralWidget)
+             56 LOAD_FAST                1 (central)
+             58 PRECALL                  1
+             62 CALL                     1
+             72 POP_TOP
+
+ 60          74 LOAD_GLOBAL              5 (NULL + QHBoxLayout)
+             86 LOAD_FAST                1 (central)
+             88 PRECALL                  1
+             92 CALL                     1
+            102 STORE_FAST               2 (main_layout)
+
+ 61         104 LOAD_FAST                2 (main_layout)
+            106 LOAD_METHOD              3 (setContentsMargins)
+            128 LOAD_CONST               1 (0)
+            130 LOAD_CONST               1 (0)
+            132 LOAD_CONST               1 (0)
+            134 LOAD_CONST               1 (0)
+            136 PRECALL                  4
+            140 CALL                     4
+            150 POP_TOP
+
+ 62         152 LOAD_FAST                2 (main_layout)
+            154 LOAD_METHOD              4 (setSpacing)
+            176 LOAD_CONST               1 (0)
+            178 PRECALL                  1
+            182 CALL                     1
+            192 POP_TOP
+
+ 65         194 LOAD_GLOBAL             11 (NULL + QFrame)
+            206 PRECALL                  0
+            210 CALL                     0
+            220 STORE_FAST               3 (nav)
+
+ 66         222 LOAD_FAST                3 (nav)
+            224 LOAD_METHOD              6 (setObjectName)
+            246 LOAD_CONST               2 ('nav_panel')
+            248 PRECALL                  1
+            252 CALL                     1
+            262 POP_TOP
+
+ 67         264 LOAD_FAST                3 (nav)
+            266 LOAD_METHOD              7 (setFixedWidth)
+            288 LOAD_CONST               3 (200)
+            290 PRECALL                  1
+            294 CALL                     1
+            304 POP_TOP
+
+ 68         306 LOAD_GLOBAL             17 (NULL + QVBoxLayout)
+            318 LOAD_FAST                3 (nav)
+            320 PRECALL                  1
+            324 CALL                     1
+            334 STORE_FAST               4 (nav_layout)
+
+ 69         336 LOAD_FAST                4 (nav_layout)
+            338 LOAD_METHOD              3 (setContentsMargins)
+            360 LOAD_CONST               4 (8)
+            362 LOAD_CONST               5 (16)
+            364 LOAD_CONST               4 (8)
+            366 LOAD_CONST               5 (16)
+            368 PRECALL                  4
+            372 CALL                     4
+            382 POP_TOP
+
+ 70         384 LOAD_FAST                4 (nav_layout)
+            386 LOAD_METHOD              4 (setSpacing)
+            408 LOAD_CONST               6 (4)
+            410 PRECALL                  1
+            414 CALL                     1
+            424 POP_TOP
+
+ 72         426 LOAD_GLOBAL             19 (NULL + QLabel)
+            438 LOAD_GLOBAL             21 (NULL + t)
+            450 LOAD_CONST               7 ('nav_title')
+            452 PRECALL                  1
+            456 CALL                     1
+            466 PRECALL                  1
+            470 CALL                     1
+            480 LOAD_DEREF               0 (self)
+            482 STORE_ATTR              11 (_nav_title)
+
+ 73         492 LOAD_DEREF               0 (self)
+            494 LOAD_ATTR               11 (_nav_title)
+            504 LOAD_METHOD             12 (setStyleSheet)
+            526 LOAD_CONST               8 ('QLabel { font-weight:bold; font-size:14px; color:#1A1A2E; padding:8px; background:transparent; border:none; }')
+            528 PRECALL                  1
+            532 CALL                     1
+            542 POP_TOP
+
+ 74         544 LOAD_FAST                4 (nav_layout)
+            546 LOAD_METHOD             13 (addWidget)
+            568 LOAD_DEREF               0 (self)
+            570 LOAD_ATTR               11 (_nav_title)
+            580 PRECALL                  1
+            584 CALL                     1
+            594 POP_TOP
+
+ 76         596 BUILD_LIST               0
+            598 LOAD_DEREF               0 (self)
+            600 STORE_ATTR              14 (_nav_buttons)
+
+ 78         610 LOAD_CONST               9 ('nav_select_package')
+            612 LOAD_DEREF               0 (self)
+            614 LOAD_ATTR               15 (PAGE_SELECT)
+            624 BUILD_TUPLE              2
+
+ 77         626 BUILD_LIST               1
+            628 LOAD_DEREF               0 (self)
+            630 STORE_ATTR              16 (_nav_keys)
+
+ 80         640 LOAD_DEREF               0 (self)
+            642 LOAD_ATTR               16 (_nav_keys)
+            652 GET_ITER
+        >>  654 FOR_ITER               135 (to 926)
+            656 UNPACK_SEQUENCE          2
+            660 STORE_FAST               5 (key)
+            662 STORE_FAST               6 (page_idx)
+
+ 81         664 LOAD_GLOBAL             35 (NULL + QPushButton)
+            676 LOAD_GLOBAL             21 (NULL + t)
+            688 LOAD_FAST                5 (key)
+            690 PRECALL                  1
+            694 CALL                     1
+            704 PRECALL                  1
+            708 CALL                     1
+            718 STORE_FAST               7 (btn)
+
+ 82         720 LOAD_FAST                7 (btn)
+            722 LOAD_METHOD             18 (setCheckable)
+            744 LOAD_CONST              10 (True)
+            746 PRECALL                  1
+            750 CALL                     1
+            760 POP_TOP
+
+ 83         762 LOAD_FAST                7 (btn)
+            764 LOAD_ATTR               19 (clicked)
+            774 LOAD_METHOD             20 (connect)
+            796 LOAD_FAST                6 (page_idx)
+            798 BUILD_TUPLE              1
+            800 LOAD_CLOSURE             0 (self)
+            802 BUILD_TUPLE              1
+            804 LOAD_CONST              11 (<code object <lambda> at 0x0000017F1EFBB870, file "app\ui\main_window.py", line 83>)
+            806 MAKE_FUNCTION            9 (defaults, closure)
+            808 PRECALL                  1
+            812 CALL                     1
+            822 POP_TOP
+
+ 84         824 LOAD_FAST                4 (nav_layout)
+            826 LOAD_METHOD             13 (addWidget)
+            848 LOAD_FAST                7 (btn)
+            850 PRECALL                  1
+            854 CALL                     1
+            864 POP_TOP
+
+ 85         866 LOAD_DEREF               0 (self)
+            868 LOAD_ATTR               14 (_nav_buttons)
+            878 LOAD_METHOD             21 (append)
+            900 LOAD_FAST                7 (btn)
+            902 LOAD_FAST                6 (page_idx)
+            904 LOAD_FAST                5 (key)
+            906 BUILD_TUPLE              3
+            908 PRECALL                  1
+            912 CALL                     1
+            922 POP_TOP
+            924 JUMP_BACKWARD          136 (to 654)
+
+ 87     >>  926 LOAD_FAST                4 (nav_layout)
+            928 LOAD_METHOD             22 (addStretch)
+            950 PRECALL                  0
+            954 CALL                     0
+            964 POP_TOP
+
+ 89         966 LOAD_CONST              12 (2)
+            968 LOAD_CONST              13 (('CONTACT_EMAIL',))
+            970 IMPORT_NAME             23 (runtime_paths)
+            972 IMPORT_FROM             24 (CONTACT_EMAIL)
+            974 STORE_FAST               8 (CONTACT_EMAIL)
+            976 POP_TOP
+
+ 90         978 LOAD_GLOBAL             35 (NULL + QPushButton)
+            990 LOAD_GLOBAL             21 (NULL + t)
+           1002 LOAD_CONST              14 ('nav_contact')
+           1004 PRECALL                  1
+           1008 CALL                     1
+           1018 PRECALL                  1
+           1022 CALL                     1
+           1032 LOAD_DEREF               0 (self)
+           1034 STORE_ATTR              25 (_btn_contact)
+
+ 91        1044 LOAD_DEREF               0 (self)
+           1046 LOAD_ATTR               25 (_btn_contact)
+           1056 LOAD_METHOD             26 (setToolTip)
+           1078 LOAD_FAST                8 (CONTACT_EMAIL)
+           1080 PRECALL                  1
+           1084 CALL                     1
+           1094 POP_TOP
+
+ 92        1096 LOAD_DEREF               0 (self)
+           1098 LOAD_ATTR               25 (_btn_contact)
+           1108 LOAD_ATTR               19 (clicked)
+           1118 LOAD_METHOD             20 (connect)
+           1140 LOAD_DEREF               0 (self)
+           1142 LOAD_ATTR               27 (_open_contact_mail)
+           1152 PRECALL                  1
+           1156 CALL                     1
+           1166 POP_TOP
+
+ 95        1168 LOAD_FAST                4 (nav_layout)
+           1170 LOAD_METHOD             13 (addWidget)
+           1192 LOAD_DEREF               0 (self)
+           1194 LOAD_ATTR               25 (_btn_contact)
+           1204 PRECALL                  1
+           1208 CALL                     1
+           1218 POP_TOP
+
+ 97        1220 LOAD_GLOBAL             35 (NULL + QPushButton)
+           1232 LOAD_GLOBAL             21 (NULL + t)
+           1244 LOAD_CONST              15 ('nav_log')
+           1246 PRECALL                  1
+           1250 CALL                     1
+           1260 PRECALL                  1
+           1264 CALL                     1
+           1274 LOAD_DEREF               0 (self)
+           1276 STORE_ATTR              28 (_btn_log)
+
+ 98        1286 LOAD_DEREF               0 (self)
+           1288 LOAD_ATTR               28 (_btn_log)
+           1298 LOAD_ATTR               19 (clicked)
+           1308 LOAD_METHOD             20 (connect)
+           1330 LOAD_DEREF               0 (self)
+           1332 LOAD_ATTR               29 (_show_log_dialog)
+           1342 PRECALL                  1
+           1346 CALL                     1
+           1356 POP_TOP
+
+ 99        1358 LOAD_FAST                4 (nav_layout)
+           1360 LOAD_METHOD             13 (addWidget)
+           1382 LOAD_DEREF               0 (self)
+           1384 LOAD_ATTR               28 (_btn_log)
+           1394 PRECALL                  1
+           1398 CALL                     1
+           1408 POP_TOP
+
+102        1410 LOAD_FAST                4 (nav_layout)
+           1412 LOAD_METHOD             30 (addSpacing)
+           1434 LOAD_CONST               4 (8)
+           1436 PRECALL                  1
+           1440 CALL                     1
+           1450 POP_TOP
+
+103        1452 LOAD_GLOBAL             19 (NULL + QLabel)
+           1464 LOAD_GLOBAL             21 (NULL + t)
+           1476 LOAD_CONST              16 ('nav_language')
+           1478 PRECALL                  1
+           1482 CALL                     1
+           1492 PRECALL                  1
+           1496 CALL                     1
+           1506 STORE_FAST               9 (lang_label)
+
+104        1508 LOAD_FAST                9 (lang_label)
+           1510 LOAD_METHOD             12 (setStyleSheet)
+           1532 LOAD_CONST              17 ('QLabel { color:#868E96; font-size:12px; padding:4px 8px; background:transparent; border:none; }')
+           1534 PRECALL                  1
+           1538 CALL                     1
+           1548 POP_TOP
+
+105        1550 LOAD_FAST                4 (nav_layout)
+           1552 LOAD_METHOD             13 (addWidget)
+           1574 LOAD_FAST                9 (lang_label)
+           1576 PRECALL                  1
+           1580 CALL                     1
+           1590 POP_TOP
+
+106        1592 LOAD_FAST                9 (lang_label)
+           1594 LOAD_DEREF               0 (self)
+           1596 STORE_ATTR              31 (_lang_label)
+
+108        1606 LOAD_GLOBAL             65 (NULL + QComboBox)
+           1618 PRECALL                  0
+           1622 CALL                     0
+           1632 LOAD_DEREF               0 (self)
+           1634 STORE_ATTR              33 (_lang_combo)
+
+109        1644 LOAD_DEREF               0 (self)
+           1646 LOAD_ATTR               33 (_lang_combo)
+           1656 LOAD_METHOD              6 (setObjectName)
+           1678 LOAD_CONST              18 ('lang_combo')
+           1680 PRECALL                  1
+           1684 CALL                     1
+           1694 POP_TOP
+
+110        1696 LOAD_GLOBAL             69 (NULL + LANGUAGES)
+           1708 LOAD_ATTR               35 (items)
+           1718 PRECALL                  0
+           1722 CALL                     0
+           1732 GET_ITER
+        >> 1734 FOR_ITER                32 (to 1800)
+           1736 UNPACK_SEQUENCE          2
+           1740 STORE_FAST              10 (code)
+           1742 STORE_FAST              11 (name)
+
+111        1744 LOAD_DEREF               0 (self)
+           1746 LOAD_ATTR               33 (_lang_combo)
+           1756 LOAD_METHOD             36 (addItem)
+           1778 LOAD_FAST               11 (name)
+           1780 LOAD_FAST               10 (code)
+           1782 PRECALL                  2
+           1786 CALL                     2
+           1796 POP_TOP
+           1798 JUMP_BACKWARD           33 (to 1734)
+
+113     >> 1800 LOAD_CONST               1 (0)
+           1802 LOAD_CONST              19 (('QListView',))
+           1804 IMPORT_NAME             37 (PySide6.QtWidgets)
+           1806 IMPORT_FROM             38 (QListView)
+           1808 STORE_FAST              12 (QListView)
+           1810 POP_TOP
+
+114        1812 PUSH_NULL
+           1814 LOAD_FAST               12 (QListView)
+           1816 PRECALL                  0
+           1820 CALL                     0
+           1830 STORE_FAST              13 (list_view)
+
+115        1832 LOAD_FAST               13 (list_view)
+           1834 LOAD_METHOD             12 (setStyleSheet)
+
+116        1856 LOAD_CONST              20 ('QListView { background-color:#FFFFFF; color:#1A1A2E; border:1px solid #D0D7E2; outline:none; }QListView::item { padding:6px 12px; min-height:24px; color:#1A1A2E; }QListView::item:selected { background-color:#EBF0FF; color:#3B5BDB; }')
+
+115        1858 PRECALL                  1
+           1862 CALL                     1
+           1872 POP_TOP
+
+121        1874 LOAD_DEREF               0 (self)
+           1876 LOAD_ATTR               33 (_lang_combo)
+           1886 LOAD_METHOD             39 (setView)
+           1908 LOAD_FAST               13 (list_view)
+           1910 PRECALL                  1
+           1914 CALL                     1
+           1924 POP_TOP
+
+123        1926 LOAD_DEREF               0 (self)
+           1928 LOAD_ATTR               33 (_lang_combo)
+           1938 LOAD_METHOD             40 (findData)
+           1960 LOAD_GLOBAL             82 (translator)
+           1972 LOAD_ATTR               42 (lang)
+           1982 PRECALL                  1
+           1986 CALL                     1
+           1996 STORE_FAST              14 (idx)
+
+124        1998 LOAD_DEREF               0 (self)
+           2000 LOAD_ATTR               33 (_lang_combo)
+           2010 LOAD_METHOD             43 (setCurrentIndex)
+           2032 LOAD_FAST               14 (idx)
+           2034 LOAD_CONST               1 (0)
+           2036 COMPARE_OP               5 (>=)
+           2042 POP_JUMP_FORWARD_IF_FALSE     2 (to 2048)
+           2044 LOAD_FAST               14 (idx)
+           2046 JUMP_FORWARD             1 (to 2050)
+        >> 2048 LOAD_CONST               1 (0)
+        >> 2050 PRECALL                  1
+           2054 CALL                     1
+           2064 POP_TOP
+
+125        2066 LOAD_DEREF               0 (self)
+           2068 LOAD_ATTR               33 (_lang_combo)
+           2078 LOAD_ATTR               44 (currentIndexChanged)
+           2088 LOAD_METHOD             20 (connect)
+           2110 LOAD_DEREF               0 (self)
+           2112 LOAD_ATTR               45 (_on_language_changed)
+           2122 PRECALL                  1
+           2126 CALL                     1
+           2136 POP_TOP
+
+126        2138 LOAD_FAST                4 (nav_layout)
+           2140 LOAD_METHOD             13 (addWidget)
+           2162 LOAD_DEREF               0 (self)
+           2164 LOAD_ATTR               33 (_lang_combo)
+           2174 PRECALL                  1
+           2178 CALL                     1
+           2188 POP_TOP
+
+128        2190 LOAD_FAST                2 (main_layout)
+           2192 LOAD_METHOD             13 (addWidget)
+           2214 LOAD_FAST                3 (nav)
+           2216 PRECALL                  1
+           2220 CALL                     1
+           2230 POP_TOP
+
+131        2232 LOAD_GLOBAL              1 (NULL + QWidget)
+           2244 PRECALL                  0
+           2248 CALL                     0
+           2258 STORE_FAST              15 (content_area)
+
+132        2260 LOAD_FAST               15 (content_area)
+           2262 LOAD_METHOD              6 (setObjectName)
+           2284 LOAD_CONST              21 ('content_area')
+           2286 PRECALL                  1
+           2290 CALL                     1
+           2300 POP_TOP
+
+133        2302 LOAD_FAST               15 (content_area)
+           2304 LOAD_METHOD             12 (setStyleSheet)
+           2326 LOAD_CONST              22 ('QWidget#content_area { background-color: #F0F4FA; }')
+           2328 PRECALL                  1
+           2332 CALL                     1
+           2342 POP_TOP
+
+134        2344 LOAD_GLOBAL             17 (NULL + QVBoxLayout)
+           2356 LOAD_FAST               15 (content_area)
+           2358 PRECALL                  1
+           2362 CALL                     1
+           2372 STORE_FAST              16 (content_layout)
+
+135        2374 LOAD_FAST               16 (content_layout)
+           2376 LOAD_METHOD              3 (setContentsMargins)
+           2398 LOAD_CONST              23 (24)
+           2400 LOAD_CONST              24 (20)
+           2402 LOAD_CONST              23 (24)
+           2404 LOAD_CONST              24 (20)
+           2406 PRECALL                  4
+           2410 CALL                     4
+           2420 POP_TOP
+
+137        2422 LOAD_GLOBAL             19 (NULL + QLabel)
+           2434 LOAD_GLOBAL             21 (NULL + t)
+           2446 LOAD_CONST              25 ('app_name')
+           2448 PRECALL                  1
+           2452 CALL                     1
+           2462 PRECALL                  1
+           2466 CALL                     1
+           2476 LOAD_DEREF               0 (self)
+           2478 STORE_ATTR              46 (_header)
+
+138        2488 LOAD_DEREF               0 (self)
+           2490 LOAD_ATTR               46 (_header)
+           2500 LOAD_METHOD             12 (setStyleSheet)
+
+139        2522 LOAD_CONST              26 ('QLabel { font-size:14px; color:#868E96; padding-bottom:8px; border-bottom: 1px solid #E8ECF2; background:transparent; }')
+
+138        2524 PRECALL                  1
+           2528 CALL                     1
+           2538 POP_TOP
+
+142        2540 LOAD_FAST               16 (content_layout)
+           2542 LOAD_METHOD             13 (addWidget)
+           2564 LOAD_DEREF               0 (self)
+           2566 LOAD_ATTR               46 (_header)
+           2576 PRECALL                  1
+           2580 CALL                     1
+           2590 POP_TOP
+
+144        2592 LOAD_GLOBAL             95 (NULL + QStackedWidget)
+           2604 PRECALL                  0
+           2608 CALL                     0
+           2618 LOAD_DEREF               0 (self)
+           2620 STORE_ATTR              48 (_stack)
+
+145        2630 LOAD_GLOBAL             99 (NULL + SelectPackagePage)
+           2642 PRECALL                  0
+           2646 CALL                     0
+           2656 LOAD_DEREF               0 (self)
+           2658 STORE_ATTR              50 (_page_select)
+
+146        2668 LOAD_GLOBAL            103 (NULL + FlashPage)
+           2680 PRECALL                  0
+           2684 CALL                     0
+           2694 LOAD_DEREF               0 (self)
+           2696 STORE_ATTR              52 (_page_flash)
+
+147        2706 LOAD_GLOBAL            107 (NULL + ErrorPage)
+           2718 PRECALL                  0
+           2722 CALL                     0
+           2732 LOAD_DEREF               0 (self)
+           2734 STORE_ATTR              54 (_page_error)
+
+148        2744 LOAD_GLOBAL            111 (NULL + RetryPage)
+           2756 PRECALL                  0
+           2760 CALL                     0
+           2770 LOAD_DEREF               0 (self)
+           2772 STORE_ATTR              56 (_page_retry)
+
+150        2782 LOAD_DEREF               0 (self)
+           2784 LOAD_ATTR               48 (_stack)
+           2794 LOAD_METHOD             13 (addWidget)
+           2816 LOAD_DEREF               0 (self)
+           2818 LOAD_ATTR               50 (_page_select)
+           2828 PRECALL                  1
+           2832 CALL                     1
+           2842 POP_TOP
+
+151        2844 LOAD_DEREF               0 (self)
+           2846 LOAD_ATTR               48 (_stack)
+           2856 LOAD_METHOD             13 (addWidget)
+           2878 LOAD_DEREF               0 (self)
+           2880 LOAD_ATTR               52 (_page_flash)
+           2890 PRECALL                  1
+           2894 CALL                     1
+           2904 POP_TOP
+
+152        2906 LOAD_DEREF               0 (self)
+           2908 LOAD_ATTR               48 (_stack)
+           2918 LOAD_METHOD             13 (addWidget)
+           2940 LOAD_DEREF               0 (self)
+           2942 LOAD_ATTR               54 (_page_error)
+           2952 PRECALL                  1
+           2956 CALL                     1
+           2966 POP_TOP
+
+153        2968 LOAD_DEREF               0 (self)
+           2970 LOAD_ATTR               48 (_stack)
+           2980 LOAD_METHOD             13 (addWidget)
+           3002 LOAD_DEREF               0 (self)
+           3004 LOAD_ATTR               56 (_page_retry)
+           3014 PRECALL                  1
+           3018 CALL                     1
+           3028 POP_TOP
+
+155        3030 LOAD_FAST               16 (content_layout)
+           3032 LOAD_METHOD             13 (addWidget)
+           3054 LOAD_DEREF               0 (self)
+           3056 LOAD_ATTR               48 (_stack)
+           3066 LOAD_CONST              27 (1)
+           3068 PRECALL                  2
+           3072 CALL                     2
+           3082 POP_TOP
+
+156        3084 LOAD_FAST                2 (main_layout)
+           3086 LOAD_METHOD             13 (addWidget)
+           3108 LOAD_FAST               15 (content_area)
+           3110 LOAD_CONST              27 (1)
+           3112 PRECALL                  2
+           3116 CALL                     2
+           3126 POP_TOP
+           3128 LOAD_CONST               0 (None)
+           3130 RETURN_VALUE
+
+Disassembly of <code object <lambda> at 0x0000017F1EFBB870, file "app\ui\main_window.py", line 83>:
+              0 COPY_FREE_VARS           1
+
+ 83           2 RESUME                   0
+              4 LOAD_DEREF               2 (self)
+              6 LOAD_METHOD              0 (_nav_to_page)
+             28 LOAD_FAST                1 (idx)
+             30 PRECALL                  1
+             34 CALL                     1
+             44 RETURN_VALUE
+
+Disassembly of <code object _connect_signals at 0x0000017F1ECA6400, file "app\ui\main_window.py", line 158>:
+              0 MAKE_CELL                0 (self)
+
+158           2 RESUME                   0
+
+159           4 LOAD_DEREF               0 (self)
+              6 LOAD_ATTR                0 (_sm)
+             16 LOAD_ATTR                1 (state_changed)
+             26 LOAD_METHOD              2 (connect)
+             48 LOAD_DEREF               0 (self)
+             50 LOAD_ATTR                3 (_on_state_changed)
+             60 PRECALL                  1
+             64 CALL                     1
+             74 POP_TOP
+
+160          76 LOAD_GLOBAL              8 (translator)
+             88 LOAD_ATTR                5 (language_changed)
+             98 LOAD_METHOD              2 (connect)
+            120 LOAD_DEREF               0 (self)
+            122 LOAD_ATTR                6 (_retranslate)
+            132 PRECALL                  1
+            136 CALL                     1
+            146 POP_TOP
+
+163         148 LOAD_DEREF               0 (self)
+            150 LOAD_ATTR                7 (_page_select)
+            160 LOAD_ATTR                8 (start_flash)
+            170 LOAD_METHOD              2 (connect)
+            192 LOAD_DEREF               0 (self)
+            194 LOAD_ATTR                9 (_on_start_flash_from_select)
+            204 PRECALL                  1
+            208 CALL                     1
+            218 POP_TOP
+
+164         220 LOAD_DEREF               0 (self)
+            222 LOAD_ATTR                7 (_page_select)
+            232 LOAD_ATTR               10 (package_selected)
+            242 LOAD_METHOD              2 (connect)
+            264 LOAD_DEREF               0 (self)
+            266 LOAD_ATTR               11 (_on_package_selected)
+            276 PRECALL                  1
+            280 CALL                     1
+            290 POP_TOP
+
+167         292 LOAD_DEREF               0 (self)
+            294 LOAD_ATTR               12 (_page_flash)
+            304 LOAD_ATTR               13 (cancel_requested)
+            314 LOAD_METHOD              2 (connect)
+            336 LOAD_DEREF               0 (self)
+            338 LOAD_ATTR               14 (_on_cancel_flash)
+            348 PRECALL                  1
+            352 CALL                     1
+            362 POP_TOP
+
+168         364 LOAD_DEREF               0 (self)
+            366 LOAD_ATTR               12 (_page_flash)
+            376 LOAD_ATTR               15 (start_upgrade)
+            386 LOAD_METHOD              2 (connect)
+            408 LOAD_DEREF               0 (self)
+            410 LOAD_ATTR               16 (_on_start_upgrade)
+            420 PRECALL                  1
+            424 CALL                     1
+            434 POP_TOP
+
+169         436 LOAD_DEREF               0 (self)
+            438 LOAD_ATTR               12 (_page_flash)
+            448 LOAD_ATTR               17 (retry_detect)
+            458 LOAD_METHOD              2 (connect)
+            480 LOAD_DEREF               0 (self)
+            482 LOAD_ATTR               18 (_on_retry_detect)
+            492 PRECALL                  1
+            496 CALL                     1
+            506 POP_TOP
+
+170         508 LOAD_DEREF               0 (self)
+            510 LOAD_ATTR               12 (_page_flash)
+            520 LOAD_ATTR               19 (view_log)
+            530 LOAD_METHOD              2 (connect)
+            552 LOAD_DEREF               0 (self)
+            554 LOAD_ATTR               20 (_show_log_dialog)
+            564 PRECALL                  1
+            568 CALL                     1
+            578 POP_TOP
+
+173         580 LOAD_DEREF               0 (self)
+            582 LOAD_ATTR               21 (_page_error)
+            592 LOAD_ATTR               22 (retry_flash)
+            602 LOAD_METHOD              2 (connect)
+            624 LOAD_DEREF               0 (self)
+            626 LOAD_ATTR               23 (_on_retry_flash)
+            636 PRECALL                  1
+            640 CALL                     1
+            650 POP_TOP
+
+174         652 LOAD_DEREF               0 (self)
+            654 LOAD_ATTR               21 (_page_error)
+            664 LOAD_ATTR               24 (reselect_package)
+            674 LOAD_METHOD              2 (connect)
+            696 LOAD_CLOSURE             0 (self)
+            698 BUILD_TUPLE              1
+            700 LOAD_CONST               1 (<code object <lambda> at 0x0000017F1EFBB960, file "app\ui\main_window.py", line 174>)
+            702 MAKE_FUNCTION            8 (closure)
+            704 PRECALL                  1
+            708 CALL                     1
+            718 POP_TOP
+
+175         720 LOAD_DEREF               0 (self)
+            722 LOAD_ATTR               21 (_page_error)
+            732 LOAD_ATTR               25 (reconnect_device)
+            742 LOAD_METHOD              2 (connect)
+            764 LOAD_DEREF               0 (self)
+            766 LOAD_ATTR               18 (_on_retry_detect)
+            776 PRECALL                  1
+            780 CALL                     1
+            790 POP_TOP
+
+176         792 LOAD_DEREF               0 (self)
+            794 LOAD_ATTR               21 (_page_error)
+            804 LOAD_ATTR               19 (view_log)
+            814 LOAD_METHOD              2 (connect)
+            836 LOAD_DEREF               0 (self)
+            838 LOAD_ATTR               20 (_show_log_dialog)
+            848 PRECALL                  1
+            852 CALL                     1
+            862 POP_TOP
+
+179         864 LOAD_DEREF               0 (self)
+            866 LOAD_ATTR               26 (_page_retry)
+            876 LOAD_ATTR               27 (cancel_retry)
+            886 LOAD_METHOD              2 (connect)
+            908 LOAD_DEREF               0 (self)
+            910 LOAD_ATTR               14 (_on_cancel_flash)
+            920 PRECALL                  1
+            924 CALL                     1
+            934 POP_TOP
+
+182         936 LOAD_DEREF               0 (self)
+            938 LOAD_ATTR               28 (_service)
+            948 LOAD_ATTR               29 (progress)
+            958 LOAD_METHOD              2 (connect)
+            980 LOAD_DEREF               0 (self)
+            982 LOAD_ATTR               30 (_on_progress)
+            992 PRECALL                  1
+            996 CALL                     1
+           1006 POP_TOP
+
+183        1008 LOAD_DEREF               0 (self)
+           1010 LOAD_ATTR               28 (_service)
+           1020 LOAD_ATTR               31 (step_changed)
+           1030 LOAD_METHOD              2 (connect)
+           1052 LOAD_DEREF               0 (self)
+           1054 LOAD_ATTR               32 (_on_step_changed)
+           1064 PRECALL                  1
+           1068 CALL                     1
+           1078 POP_TOP
+
+184        1080 LOAD_DEREF               0 (self)
+           1082 LOAD_ATTR               28 (_service)
+           1092 LOAD_ATTR               33 (log_message)
+           1102 LOAD_METHOD              2 (connect)
+           1124 LOAD_DEREF               0 (self)
+           1126 LOAD_ATTR               34 (_on_log_message)
+           1136 PRECALL                  1
+           1140 CALL                     1
+           1150 POP_TOP
+
+185        1152 LOAD_DEREF               0 (self)
+           1154 LOAD_ATTR               28 (_service)
+           1164 LOAD_ATTR               35 (flash_finished)
+           1174 LOAD_METHOD              2 (connect)
+           1196 LOAD_DEREF               0 (self)
+           1198 LOAD_ATTR               36 (_on_flash_finished)
+           1208 PRECALL                  1
+           1212 CALL                     1
+           1222 POP_TOP
+
+186        1224 LOAD_DEREF               0 (self)
+           1226 LOAD_ATTR               28 (_service)
+           1236 LOAD_ATTR               37 (device_found)
+           1246 LOAD_METHOD              2 (connect)
+           1268 LOAD_DEREF               0 (self)
+           1270 LOAD_ATTR               38 (_on_device_found)
+           1280 PRECALL                  1
+           1284 CALL                     1
+           1294 POP_TOP
+
+187        1296 LOAD_DEREF               0 (self)
+           1298 LOAD_ATTR               28 (_service)
+           1308 LOAD_ATTR               39 (device_lost)
+           1318 LOAD_METHOD              2 (connect)
+           1340 LOAD_DEREF               0 (self)
+           1342 LOAD_ATTR               40 (_on_device_lost)
+           1352 PRECALL                  1
+           1356 CALL                     1
+           1366 POP_TOP
+
+190        1368 LOAD_DEREF               0 (self)
+           1370 LOAD_ATTR               28 (_service)
+           1380 LOAD_ATTR               41 (extract_progress)
+           1390 LOAD_METHOD              2 (connect)
+           1412 LOAD_DEREF               0 (self)
+           1414 LOAD_ATTR               42 (_on_extract_progress)
+           1424 PRECALL                  1
+           1428 CALL                     1
+           1438 POP_TOP
+
+191        1440 LOAD_DEREF               0 (self)
+           1442 LOAD_ATTR               28 (_service)
+           1452 LOAD_ATTR               43 (extract_log)
+           1462 LOAD_METHOD              2 (connect)
+           1484 LOAD_DEREF               0 (self)
+           1486 LOAD_ATTR               34 (_on_log_message)
+           1496 PRECALL                  1
+           1500 CALL                     1
+           1510 POP_TOP
+
+192        1512 LOAD_DEREF               0 (self)
+           1514 LOAD_ATTR               28 (_service)
+           1524 LOAD_ATTR               44 (extract_finished)
+           1534 LOAD_METHOD              2 (connect)
+           1556 LOAD_DEREF               0 (self)
+           1558 LOAD_ATTR               45 (_on_extract_finished)
+           1568 PRECALL                  1
+           1572 CALL                     1
+           1582 POP_TOP
+           1584 LOAD_CONST               0 (None)
+           1586 RETURN_VALUE
+
+Disassembly of <code object <lambda> at 0x0000017F1EFBB960, file "app\ui\main_window.py", line 174>:
+              0 COPY_FREE_VARS           1
+
+174           2 RESUME                   0
+              4 LOAD_DEREF               0 (self)
+              6 LOAD_ATTR                0 (_sm)
+             16 LOAD_METHOD              1 (reset_full)
+             38 PRECALL                  0
+             42 CALL                     0
+             52 RETURN_VALUE
+
+Disassembly of <code object _load_style at 0x0000017F1EFBDBB0, file "app\ui\main_window.py", line 194>:
+194           0 RESUME                   0
+
+195           2 LOAD_CONST               1 (2)
+              4 LOAD_CONST               2 (('RESOURCES_DIR',))
+              6 IMPORT_NAME              0 (runtime_paths)
+              8 IMPORT_FROM              1 (RESOURCES_DIR)
+             10 STORE_FAST               1 (RESOURCES_DIR)
+             12 POP_TOP
+
+196          14 LOAD_FAST                1 (RESOURCES_DIR)
+             16 LOAD_CONST               3 ('style.qss')
+             18 BINARY_OP               11 (/)
+             22 STORE_FAST               2 (qss_path)
+
+197          24 LOAD_FAST                2 (qss_path)
+             26 LOAD_METHOD              2 (exists)
+             48 PRECALL                  0
+             52 CALL                     0
+             62 POP_JUMP_FORWARD_IF_FALSE    43 (to 150)
+
+198          64 LOAD_FAST                0 (self)
+             66 LOAD_METHOD              3 (setStyleSheet)
+             88 LOAD_FAST                2 (qss_path)
+             90 LOAD_METHOD              4 (read_text)
+            112 LOAD_CONST               4 ('utf-8')
+            114 KW_NAMES                 5
+            116 PRECALL                  1
+            120 CALL                     1
+            130 PRECALL                  1
+            134 CALL                     1
+            144 POP_TOP
+            146 LOAD_CONST               0 (None)
+            148 RETURN_VALUE
+
+197     >>  150 LOAD_CONST               0 (None)
+            152 RETURN_VALUE
+
+Disassembly of <code object _on_language_changed at 0x0000017F1EE91460, file "app\ui\main_window.py", line 202>:
+202           0 RESUME                   0
+
+203           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_lang_combo)
+             14 LOAD_METHOD              1 (itemData)
+             36 LOAD_FAST                1 (index)
+             38 PRECALL                  1
+             42 CALL                     1
+             52 STORE_FAST               2 (lang_code)
+
+204          54 LOAD_FAST                2 (lang_code)
+             56 POP_JUMP_FORWARD_IF_FALSE    22 (to 102)
+
+205          58 LOAD_GLOBAL              5 (NULL + translator)
+             70 LOAD_ATTR                3 (set_language)
+             80 LOAD_FAST                2 (lang_code)
+             82 PRECALL                  1
+             86 CALL                     1
+             96 POP_TOP
+             98 LOAD_CONST               0 (None)
+            100 RETURN_VALUE
+
+204     >>  102 LOAD_CONST               0 (None)
+            104 RETURN_VALUE
+
+Disassembly of <code object _retranslate at 0x0000017F1EBB0A20, file "app\ui\main_window.py", line 207>:
+207           0 RESUME                   0
+
+208           2 LOAD_FAST                0 (self)
+              4 LOAD_METHOD              0 (setWindowTitle)
+             26 LOAD_GLOBAL              3 (NULL + t)
+             38 LOAD_CONST               1 ('app_name')
+             40 PRECALL                  1
+             44 CALL                     1
+             54 PRECALL                  1
+             58 CALL                     1
+             68 POP_TOP
+
+209          70 LOAD_FAST                0 (self)
+             72 LOAD_ATTR                2 (_header)
+             82 LOAD_METHOD              3 (setText)
+            104 LOAD_GLOBAL              3 (NULL + t)
+            116 LOAD_CONST               1 ('app_name')
+            118 PRECALL                  1
+            122 CALL                     1
+            132 PRECALL                  1
+            136 CALL                     1
+            146 POP_TOP
+
+210         148 LOAD_FAST                0 (self)
+            150 LOAD_ATTR                4 (_nav_title)
+            160 LOAD_METHOD              3 (setText)
+            182 LOAD_GLOBAL              3 (NULL + t)
+            194 LOAD_CONST               2 ('nav_title')
+            196 PRECALL                  1
+            200 CALL                     1
+            210 PRECALL                  1
+            214 CALL                     1
+            224 POP_TOP
+
+211         226 LOAD_FAST                0 (self)
+            228 LOAD_ATTR                5 (_btn_log)
+            238 LOAD_METHOD              3 (setText)
+            260 LOAD_GLOBAL              3 (NULL + t)
+            272 LOAD_CONST               3 ('nav_log')
+            274 PRECALL                  1
+            278 CALL                     1
+            288 PRECALL                  1
+            292 CALL                     1
+            302 POP_TOP
+
+212         304 LOAD_FAST                0 (self)
+            306 LOAD_ATTR                6 (_btn_contact)
+            316 LOAD_METHOD              3 (setText)
+            338 LOAD_GLOBAL              3 (NULL + t)
+            350 LOAD_CONST               4 ('nav_contact')
+            352 PRECALL                  1
+            356 CALL                     1
+            366 PRECALL                  1
+            370 CALL                     1
+            380 POP_TOP
+
+213         382 LOAD_FAST                0 (self)
+            384 LOAD_ATTR                7 (_nav_buttons)
+            394 GET_ITER
+        >>  396 FOR_ITER                40 (to 478)
+            398 UNPACK_SEQUENCE          3
+            402 STORE_FAST               1 (btn)
+            404 STORE_FAST               2 (page_idx)
+            406 STORE_FAST               3 (key)
+
+214         408 LOAD_FAST                1 (btn)
+            410 LOAD_METHOD              3 (setText)
+            432 LOAD_GLOBAL              3 (NULL + t)
+            444 LOAD_FAST                3 (key)
+            446 PRECALL                  1
+            450 CALL                     1
+            460 PRECALL                  1
+            464 CALL                     1
+            474 POP_TOP
+            476 JUMP_BACKWARD           41 (to 396)
+
+213     >>  478 LOAD_CONST               0 (None)
+            480 RETURN_VALUE
+
+Disassembly of <code object _nav_to_page at 0x0000017F1EBAF1E0, file "app\ui\main_window.py", line 224>:
+224           0 RESUME                   0
+
+227           2 LOAD_FAST                1 (page_idx)
+              4 LOAD_FAST                0 (self)
+              6 LOAD_ATTR                0 (PAGE_SELECT)
+             16 COMPARE_OP               2 (==)
+             22 POP_JUMP_FORWARD_IF_FALSE    46 (to 116)
+             24 LOAD_FAST                0 (self)
+             26 LOAD_ATTR                1 (_sm)
+             36 LOAD_ATTR                2 (state)
+             46 LOAD_FAST                0 (self)
+             48 LOAD_ATTR                3 (_TERMINAL_STATES)
+             58 CONTAINS_OP              0
+             60 POP_JUMP_FORWARD_IF_FALSE    27 (to 116)
+
+228          62 LOAD_FAST                0 (self)
+             64 LOAD_ATTR                1 (_sm)
+             74 LOAD_METHOD              4 (reset_full)
+             96 PRECALL                  0
+            100 CALL                     0
+            110 POP_TOP
+
+229         112 LOAD_CONST               0 (None)
+            114 RETURN_VALUE
+
+231     >>  116 LOAD_FAST                0 (self)
+            118 LOAD_ATTR                5 (_stack)
+            128 LOAD_METHOD              6 (setCurrentIndex)
+            150 LOAD_FAST                1 (page_idx)
+            152 PRECALL                  1
+            156 CALL                     1
+            166 POP_TOP
+
+232         168 LOAD_FAST                0 (self)
+            170 LOAD_ATTR                7 (_nav_buttons)
+            180 GET_ITER
+        >>  182 FOR_ITER               141 (to 466)
+            184 UNPACK_SEQUENCE          3
+            188 STORE_FAST               2 (btn)
+            190 STORE_FAST               3 (idx)
+            192 STORE_FAST               4 (key)
+
+233         194 LOAD_FAST                2 (btn)
+            196 LOAD_METHOD              8 (setProperty)
+            218 LOAD_CONST               1 ('active')
+            220 LOAD_GLOBAL             19 (NULL + str)
+            232 LOAD_FAST                3 (idx)
+            234 LOAD_FAST                1 (page_idx)
+            236 COMPARE_OP               2 (==)
+            242 PRECALL                  1
+            246 CALL                     1
+            256 LOAD_METHOD             10 (lower)
+            278 PRECALL                  0
+            282 CALL                     0
+            292 PRECALL                  2
+            296 CALL                     2
+            306 POP_TOP
+
+234         308 LOAD_FAST                2 (btn)
+            310 LOAD_METHOD             11 (style)
+            332 PRECALL                  0
+            336 CALL                     0
+            346 LOAD_METHOD             12 (unpolish)
+            368 LOAD_FAST                2 (btn)
+            370 PRECALL                  1
+            374 CALL                     1
+            384 POP_TOP
+
+235         386 LOAD_FAST                2 (btn)
+            388 LOAD_METHOD             11 (style)
+            410 PRECALL                  0
+            414 CALL                     0
+            424 LOAD_METHOD             13 (polish)
+            446 LOAD_FAST                2 (btn)
+            448 PRECALL                  1
+            452 CALL                     1
+            462 POP_TOP
+            464 JUMP_BACKWARD          142 (to 182)
+
+232     >>  466 LOAD_CONST               0 (None)
+            468 RETURN_VALUE
+
+Disassembly of <code object _update_nav_enabled at 0x0000017F1EE398A0, file "app\ui\main_window.py", line 239>:
+239           0 RESUME                   0
+
+241           2 LOAD_FAST                1 (state)
+
+242           4 LOAD_GLOBAL              0 (FlashState)
+             16 LOAD_ATTR                1 (S2_WAIT_CONNECTION)
+
+243          26 LOAD_GLOBAL              0 (FlashState)
+             38 LOAD_ATTR                2 (S3_DEVICE_DETECTED)
+
+244          48 LOAD_GLOBAL              0 (FlashState)
+             60 LOAD_ATTR                3 (S4_FLASHING)
+
+245          70 LOAD_GLOBAL              0 (FlashState)
+             82 LOAD_ATTR                4 (S6_RETRYING)
+
+241          92 BUILD_TUPLE              4
+             94 CONTAINS_OP              0
+             96 STORE_FAST               2 (busy)
+
+247          98 LOAD_FAST                0 (self)
+            100 LOAD_ATTR                5 (_nav_buttons)
+            110 GET_ITER
+        >>  112 FOR_ITER                28 (to 170)
+            114 UNPACK_SEQUENCE          3
+            118 STORE_FAST               3 (btn)
+            120 STORE_FAST               4 (_idx)
+            122 STORE_FAST               5 (_key)
+
+248         124 LOAD_FAST                3 (btn)
+            126 LOAD_METHOD              6 (setEnabled)
+            148 LOAD_FAST                2 (busy)
+            150 UNARY_NOT
+            152 PRECALL                  1
+            156 CALL                     1
+            166 POP_TOP
+            168 JUMP_BACKWARD           29 (to 112)
+
+247     >>  170 LOAD_CONST               1 (None)
+            172 RETURN_VALUE
+
+Disassembly of <code object _on_state_changed at 0x0000017F1ECA6B00, file "app\ui\main_window.py", line 250>:
+250           0 RESUME                   0
+
+252           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_sm)
+             14 LOAD_ATTR                1 (context)
+             24 STORE_FAST               2 (ctx)
+
+253          26 LOAD_FAST                0 (self)
+             28 LOAD_METHOD              2 (_update_nav_enabled)
+             50 LOAD_FAST                1 (state)
+             52 PRECALL                  1
+             56 CALL                     1
+             66 POP_TOP
+
+255          68 LOAD_FAST                1 (state)
+             70 LOAD_GLOBAL              6 (FlashState)
+             82 LOAD_ATTR                4 (S1_SELECT_FILE)
+             92 COMPARE_OP               2 (==)
+             98 POP_JUMP_FORWARD_IF_FALSE    28 (to 156)
+
+256         100 LOAD_FAST                0 (self)
+            102 LOAD_METHOD              5 (_nav_to_page)
+            124 LOAD_FAST                0 (self)
+            126 LOAD_ATTR                6 (PAGE_SELECT)
+            136 PRECALL                  1
+            140 CALL                     1
+            150 POP_TOP
+            152 LOAD_CONST               0 (None)
+            154 RETURN_VALUE
+
+258     >>  156 LOAD_FAST                1 (state)
+            158 LOAD_GLOBAL              6 (FlashState)
+            170 LOAD_ATTR                7 (S2_WAIT_CONNECTION)
+            180 COMPARE_OP               2 (==)
+            186 POP_JUMP_FORWARD_IF_FALSE   136 (to 460)
+
+259         188 LOAD_FAST                0 (self)
+            190 LOAD_METHOD              5 (_nav_to_page)
+            212 LOAD_FAST                0 (self)
+            214 LOAD_ATTR                8 (PAGE_FLASH)
+            224 PRECALL                  1
+            228 CALL                     1
+            238 POP_TOP
+
+260         240 LOAD_FAST                0 (self)
+            242 LOAD_ATTR                9 (_page_flash)
+            252 LOAD_METHOD             10 (show_flashing)
+            274 PRECALL                  0
+            278 CALL                     0
+            288 POP_TOP
+
+261         290 LOAD_FAST                0 (self)
+            292 LOAD_ATTR                9 (_page_flash)
+            302 LOAD_METHOD             11 (set_package_name)
+            324 LOAD_FAST                2 (ctx)
+            326 LOAD_ATTR               12 (package_name)
+            336 PRECALL                  1
+            340 CALL                     1
+            350 POP_TOP
+
+262         352 LOAD_FAST                0 (self)
+            354 LOAD_ATTR                9 (_page_flash)
+            364 LOAD_METHOD             13 (update_step)
+            386 LOAD_CONST               1 ('flash_preparing')
+            388 PRECALL                  1
+            392 CALL                     1
+            402 POP_TOP
+
+263         404 LOAD_FAST                0 (self)
+            406 LOAD_ATTR                9 (_page_flash)
+            416 LOAD_METHOD             14 (update_progress)
+            438 LOAD_CONST               2 (0)
+            440 PRECALL                  1
+            444 CALL                     1
+            454 POP_TOP
+            456 LOAD_CONST               0 (None)
+            458 RETURN_VALUE
+
+265     >>  460 LOAD_FAST                1 (state)
+            462 LOAD_GLOBAL              6 (FlashState)
+            474 LOAD_ATTR               15 (S4_FLASHING)
+            484 COMPARE_OP               2 (==)
+            490 POP_JUMP_FORWARD_IF_FALSE   165 (to 822)
+
+266         492 LOAD_FAST                0 (self)
+            494 LOAD_ATTR                9 (_page_flash)
+            504 LOAD_METHOD             16 (set_waiting_device)
+            526 PRECALL                  0
+            530 CALL                     0
+            540 POP_TOP
+
+267         542 LOAD_FAST                0 (self)
+            544 LOAD_ATTR                9 (_page_flash)
+            554 LOAD_METHOD             13 (update_step)
+            576 LOAD_CONST               3 ('flash_waiting_device')
+            578 PRECALL                  1
+            582 CALL                     1
+            592 POP_TOP
+
+268         594 LOAD_FAST                0 (self)
+            596 LOAD_ATTR                9 (_page_flash)
+            606 LOAD_METHOD             14 (update_progress)
+            628 LOAD_CONST               2 (0)
+            630 PRECALL                  1
+            634 CALL                     1
+            644 POP_TOP
+
+269         646 LOAD_GLOBAL             35 (NULL + time)
+            658 LOAD_ATTR               17 (time)
+            668 PRECALL                  0
+            672 CALL                     0
+            682 LOAD_FAST                0 (self)
+            684 STORE_ATTR              18 (_flash_start_time)
+
+270         694 LOAD_FAST                0 (self)
+            696 LOAD_ATTR               19 (_elapsed_timer)
+            706 LOAD_METHOD             20 (start)
+            728 PRECALL                  0
+            732 CALL                     0
+            742 POP_TOP
+
+271         744 LOAD_FAST                0 (self)
+            746 LOAD_ATTR               21 (_service)
+            756 LOAD_METHOD             22 (start_flash)
+            778 LOAD_FAST                2 (ctx)
+            780 LOAD_ATTR               23 (package_path)
+            790 LOAD_FAST                2 (ctx)
+            792 LOAD_ATTR               24 (extract_dir)
+            802 PRECALL                  2
+            806 CALL                     2
+            816 POP_TOP
+            818 LOAD_CONST               0 (None)
+            820 RETURN_VALUE
+
+273     >>  822 LOAD_FAST                1 (state)
+            824 LOAD_GLOBAL              6 (FlashState)
+            836 LOAD_ATTR               25 (S5_COMPLETE)
+            846 COMPARE_OP               2 (==)
+            852 POP_JUMP_FORWARD_IF_FALSE    62 (to 978)
+
+274         854 LOAD_GLOBAL             53 (NULL + FlashCompleteDialog)
+            866 LOAD_FAST                0 (self)
+            868 PRECALL                  1
+            872 CALL                     1
+            882 STORE_FAST               3 (dlg)
+
+275         884 LOAD_FAST                3 (dlg)
+            886 LOAD_METHOD             27 (exec)
+            908 PRECALL                  0
+            912 CALL                     0
+            922 POP_TOP
+
+276         924 LOAD_FAST                0 (self)
+            926 LOAD_ATTR                0 (_sm)
+            936 LOAD_METHOD             28 (reset_full)
+            958 PRECALL                  0
+            962 CALL                     0
+            972 POP_TOP
+            974 LOAD_CONST               0 (None)
+            976 RETURN_VALUE
+
+278     >>  978 LOAD_FAST                1 (state)
+            980 LOAD_GLOBAL              6 (FlashState)
+            992 LOAD_ATTR               29 (S5_FAILED)
+           1002 COMPARE_OP               2 (==)
+           1008 POP_JUMP_FORWARD_IF_FALSE    77 (to 1164)
+
+279        1010 LOAD_FAST                0 (self)
+           1012 LOAD_METHOD              5 (_nav_to_page)
+           1034 LOAD_FAST                0 (self)
+           1036 LOAD_ATTR               30 (PAGE_ERROR)
+           1046 PRECALL                  1
+           1050 CALL                     1
+           1060 POP_TOP
+
+280        1062 LOAD_FAST                0 (self)
+           1064 LOAD_ATTR               31 (_page_error)
+           1074 LOAD_METHOD             32 (show_flash_failed)
+
+281        1096 LOAD_FAST                2 (ctx)
+           1098 LOAD_ATTR               33 (progress_percent)
+           1108 LOAD_FAST                2 (ctx)
+           1110 LOAD_ATTR               34 (current_step)
+
+282        1120 LOAD_FAST                2 (ctx)
+           1122 LOAD_ATTR               35 (error_code)
+           1132 LOAD_FAST                2 (ctx)
+           1134 LOAD_ATTR               12 (package_name)
+
+280        1144 PRECALL                  4
+           1148 CALL                     4
+           1158 POP_TOP
+           1160 LOAD_CONST               0 (None)
+           1162 RETURN_VALUE
+
+285     >> 1164 LOAD_FAST                1 (state)
+           1166 LOAD_GLOBAL              6 (FlashState)
+           1178 LOAD_ATTR               36 (S5_USB_DISCONNECTED)
+           1188 COMPARE_OP               2 (==)
+           1194 POP_JUMP_FORWARD_IF_FALSE    59 (to 1314)
+
+286        1196 LOAD_FAST                0 (self)
+           1198 LOAD_METHOD              5 (_nav_to_page)
+           1220 LOAD_FAST                0 (self)
+           1222 LOAD_ATTR               30 (PAGE_ERROR)
+           1232 PRECALL                  1
+           1236 CALL                     1
+           1246 POP_TOP
+
+287        1248 LOAD_FAST                0 (self)
+           1250 LOAD_ATTR               31 (_page_error)
+           1260 LOAD_METHOD             37 (show_usb_disconnected)
+           1282 LOAD_FAST                2 (ctx)
+           1284 LOAD_ATTR               33 (progress_percent)
+           1294 PRECALL                  1
+           1298 CALL                     1
+           1308 POP_TOP
+           1310 LOAD_CONST               0 (None)
+           1312 RETURN_VALUE
+
+289     >> 1314 LOAD_FAST                1 (state)
+           1316 LOAD_GLOBAL              6 (FlashState)
+           1328 LOAD_ATTR               38 (S6_RETRYING)
+           1338 COMPARE_OP               2 (==)
+           1344 POP_JUMP_FORWARD_IF_FALSE    71 (to 1488)
+
+290        1346 LOAD_FAST                0 (self)
+           1348 LOAD_METHOD              5 (_nav_to_page)
+           1370 LOAD_FAST                0 (self)
+           1372 LOAD_ATTR               39 (PAGE_RETRY)
+           1382 PRECALL                  1
+           1386 CALL                     1
+           1396 POP_TOP
+
+291        1398 LOAD_FAST                0 (self)
+           1400 LOAD_ATTR               40 (_page_retry)
+           1410 LOAD_METHOD             41 (update_info)
+
+292        1432 LOAD_FAST                2 (ctx)
+           1434 LOAD_ATTR               12 (package_name)
+           1444 LOAD_FAST                2 (ctx)
+           1446 LOAD_ATTR               42 (retry_count)
+           1456 LOAD_FAST                2 (ctx)
+           1458 LOAD_ATTR               43 (device_status)
+
+291        1468 PRECALL                  3
+           1472 CALL                     3
+           1482 POP_TOP
+           1484 LOAD_CONST               0 (None)
+           1486 RETURN_VALUE
+
+289     >> 1488 LOAD_CONST               0 (None)
+           1490 RETURN_VALUE
+
+Disassembly of <code object _on_package_selected at 0x0000017F1EE395C0, file "app\ui\main_window.py", line 297>:
+297           0 RESUME                   0
+
+298           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_sm)
+             14 LOAD_ATTR                1 (context)
+             24 STORE_FAST               2 (ctx)
+
+299          26 LOAD_FAST                1 (path)
+             28 LOAD_FAST                2 (ctx)
+             30 STORE_ATTR               2 (package_path)
+
+300          40 LOAD_GLOBAL              6 (os)
+             52 LOAD_ATTR                4 (path)
+             62 LOAD_METHOD              5 (basename)
+             84 LOAD_FAST                1 (path)
+             86 PRECALL                  1
+             90 CALL                     1
+            100 LOAD_FAST                2 (ctx)
+            102 STORE_ATTR               6 (package_name)
+
+301         112 LOAD_CONST               1 ('')
+            114 LOAD_FAST                2 (ctx)
+            116 STORE_ATTR               7 (extract_dir)
+
+302         126 LOAD_FAST                0 (self)
+            128 LOAD_ATTR                8 (_service)
+            138 LOAD_METHOD              9 (extract_async)
+            160 LOAD_FAST                1 (path)
+            162 PRECALL                  1
+            166 CALL                     1
+            176 POP_TOP
+            178 LOAD_CONST               0 (None)
+            180 RETURN_VALUE
+
+Disassembly of <code object _on_extract_progress at 0x0000017F1EFA3A30, file "app\ui\main_window.py", line 304>:
+304           0 RESUME                   0
+
+306           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_page_select)
+             14 LOAD_METHOD              1 (set_extract_state)
+             36 LOAD_CONST               1 ('extracting')
+             38 LOAD_FAST                1 (pct)
+             40 PRECALL                  2
+             44 CALL                     2
+             54 POP_TOP
+             56 LOAD_CONST               0 (None)
+             58 RETURN_VALUE
+
+Disassembly of <code object _on_extract_finished at 0x0000017F1EE48AB0, file "app\ui\main_window.py", line 308>:
+308           0 RESUME                   0
+
+310           2 LOAD_FAST                1 (ok)
+              4 POP_JUMP_FORWARD_IF_FALSE    45 (to 96)
+
+311           6 LOAD_FAST                2 (extract_dir)
+              8 LOAD_FAST                0 (self)
+             10 LOAD_ATTR                0 (_sm)
+             20 LOAD_ATTR                1 (context)
+             30 STORE_ATTR               2 (extract_dir)
+
+312          40 LOAD_FAST                0 (self)
+             42 LOAD_ATTR                3 (_page_select)
+             52 LOAD_METHOD              4 (set_extract_state)
+             74 LOAD_CONST               1 ('ready')
+             76 PRECALL                  1
+             80 CALL                     1
+             90 POP_TOP
+             92 LOAD_CONST               0 (None)
+             94 RETURN_VALUE
+
+313     >>   96 LOAD_FAST                3 (err)
+             98 LOAD_CONST               2 ('USER_CANCELLED')
+            100 COMPARE_OP               2 (==)
+            106 POP_JUMP_FORWARD_IF_FALSE    28 (to 164)
+
+314         108 LOAD_FAST                0 (self)
+            110 LOAD_ATTR                3 (_page_select)
+            120 LOAD_METHOD              4 (set_extract_state)
+            142 LOAD_CONST               3 ('idle')
+            144 PRECALL                  1
+            148 CALL                     1
+            158 POP_TOP
+            160 LOAD_CONST               0 (None)
+            162 RETURN_VALUE
+
+316     >>  164 LOAD_CONST               4 ('')
+            166 LOAD_FAST                0 (self)
+            168 LOAD_ATTR                0 (_sm)
+            178 LOAD_ATTR                1 (context)
+            188 STORE_ATTR               2 (extract_dir)
+
+317         198 LOAD_FAST                0 (self)
+            200 LOAD_ATTR                3 (_page_select)
+            210 LOAD_METHOD              4 (set_extract_state)
+            232 LOAD_CONST               5 ('error')
+            234 PRECALL                  1
+            238 CALL                     1
+            248 POP_TOP
+            250 LOAD_CONST               0 (None)
+            252 RETURN_VALUE
+
+Disassembly of <code object _on_start_flash_from_select at 0x0000017F1ED25690, file "app\ui\main_window.py", line 321>:
+321           0 RESUME                   0
+
+322           2 LOAD_CONST               1 (0)
+              4 LOAD_CONST               2 (('QMessageBox',))
+              6 IMPORT_NAME              0 (PySide6.QtWidgets)
+              8 IMPORT_FROM              1 (QMessageBox)
+             10 STORE_FAST               2 (QMessageBox)
+             12 POP_TOP
+
+325          14 LOAD_GLOBAL              4 (FlashState)
+             26 LOAD_ATTR                3 (S2_WAIT_CONNECTION)
+
+326          36 LOAD_GLOBAL              4 (FlashState)
+             48 LOAD_ATTR                4 (S3_DEVICE_DETECTED)
+
+327          58 LOAD_GLOBAL              4 (FlashState)
+             70 LOAD_ATTR                5 (S4_FLASHING)
+
+328          80 LOAD_GLOBAL              4 (FlashState)
+             92 LOAD_ATTR                6 (S6_RETRYING)
+
+324         102 BUILD_TUPLE              4
+            104 STORE_FAST               3 (busy_states)
+
+330         106 LOAD_FAST                0 (self)
+            108 LOAD_ATTR                7 (_sm)
+            118 LOAD_ATTR                8 (state)
+            128 LOAD_FAST                3 (busy_states)
+            130 CONTAINS_OP              0
+            132 POP_JUMP_FORWARD_IF_FALSE   178 (to 490)
+
+331         134 LOAD_FAST                2 (QMessageBox)
+            136 LOAD_METHOD              9 (question)
+
+332         158 LOAD_FAST                0 (self)
+            160 LOAD_GLOBAL             21 (NULL + t)
+            172 LOAD_CONST               3 ('flash_in_progress_title')
+            174 PRECALL                  1
+            178 CALL                     1
+            188 LOAD_GLOBAL             21 (NULL + t)
+            200 LOAD_CONST               4 ('flash_in_progress_msg')
+            202 PRECALL                  1
+            206 CALL                     1
+
+333         216 LOAD_FAST                2 (QMessageBox)
+            218 LOAD_ATTR               11 (StandardButton)
+            228 LOAD_ATTR               12 (Yes)
+            238 LOAD_FAST                2 (QMessageBox)
+            240 LOAD_ATTR               11 (StandardButton)
+            250 LOAD_ATTR               13 (No)
+            260 BINARY_OP                7 (|)
+
+334         264 LOAD_FAST                2 (QMessageBox)
+            266 LOAD_ATTR               11 (StandardButton)
+            276 LOAD_ATTR               13 (No)
+
+331         286 PRECALL                  5
+            290 CALL                     5
+            300 STORE_FAST               4 (reply)
+
+336         302 LOAD_FAST                4 (reply)
+            304 LOAD_FAST                2 (QMessageBox)
+            306 LOAD_ATTR               11 (StandardButton)
+            316 LOAD_ATTR               12 (Yes)
+            326 COMPARE_OP               3 (!=)
+            332 POP_JUMP_FORWARD_IF_FALSE     2 (to 338)
+
+337         334 LOAD_CONST               0 (None)
+            336 RETURN_VALUE
+
+339     >>  338 LOAD_FAST                0 (self)
+            340 LOAD_ATTR               14 (_service)
+            350 LOAD_METHOD             15 (cancel_flash)
+            372 PRECALL                  0
+            376 CALL                     0
+            386 POP_TOP
+
+340         388 LOAD_FAST                0 (self)
+            390 LOAD_ATTR               14 (_service)
+            400 LOAD_METHOD             16 (stop_device_monitor)
+            422 PRECALL                  0
+            426 CALL                     0
+            436 POP_TOP
+
+341         438 LOAD_FAST                0 (self)
+            440 LOAD_ATTR                7 (_sm)
+            450 LOAD_METHOD             17 (reset_full)
+            472 PRECALL                  0
+            476 CALL                     0
+            486 POP_TOP
+            488 JUMP_FORWARD            51 (to 592)
+
+342     >>  490 LOAD_FAST                0 (self)
+            492 LOAD_ATTR                7 (_sm)
+            502 LOAD_ATTR                8 (state)
+            512 LOAD_GLOBAL              4 (FlashState)
+            524 LOAD_ATTR               18 (S1_SELECT_FILE)
+            534 COMPARE_OP               3 (!=)
+            540 POP_JUMP_FORWARD_IF_FALSE    25 (to 592)
+
+345         542 LOAD_FAST                0 (self)
+            544 LOAD_ATTR                7 (_sm)
+            554 LOAD_METHOD             17 (reset_full)
+            576 PRECALL                  0
+            580 CALL                     0
+            590 POP_TOP
+
+347     >>  592 LOAD_GLOBAL             39 (NULL + print)
+            604 LOAD_CONST               5 ('[MainWindow] Start flash flow: ')
+            606 LOAD_FAST                1 (package_path)
+            608 FORMAT_VALUE             0
+            610 BUILD_STRING             2
+            612 PRECALL                  1
+            616 CALL                     1
+            626 POP_TOP
+
+348         628 LOAD_FAST                0 (self)
+            630 LOAD_ATTR                7 (_sm)
+            640 LOAD_ATTR               20 (context)
+            650 STORE_FAST               5 (ctx)
+
+349         652 LOAD_FAST                1 (package_path)
+            654 LOAD_FAST                5 (ctx)
+            656 STORE_ATTR              21 (package_path)
+
+350         666 LOAD_GLOBAL             44 (os)
+            678 LOAD_ATTR               23 (path)
+            688 LOAD_METHOD             24 (basename)
+            710 LOAD_FAST                1 (package_path)
+            712 PRECALL                  1
+            716 CALL                     1
+            726 LOAD_FAST                5 (ctx)
+            728 STORE_ATTR              25 (package_name)
+
+351         738 LOAD_FAST                0 (self)
+            740 LOAD_METHOD             26 (_begin_flash_flow)
+            762 PRECALL                  0
+            766 CALL                     0
+            776 POP_TOP
+            778 LOAD_CONST               0 (None)
+            780 RETURN_VALUE
+
+Disassembly of <code object _begin_flash_flow at 0x0000017F1EE6B770, file "app\ui\main_window.py", line 353>:
+353           0 RESUME                   0
+
+354           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_sm)
+             14 LOAD_METHOD              1 (transition_to)
+             36 LOAD_GLOBAL              4 (FlashState)
+             48 LOAD_ATTR                3 (S2_WAIT_CONNECTION)
+             58 PRECALL                  1
+             62 CALL                     1
+             72 POP_TOP
+
+355          74 LOAD_FAST                0 (self)
+             76 LOAD_ATTR                0 (_sm)
+             86 LOAD_METHOD              1 (transition_to)
+            108 LOAD_GLOBAL              4 (FlashState)
+            120 LOAD_ATTR                4 (S3_DEVICE_DETECTED)
+            130 PRECALL                  1
+            134 CALL                     1
+            144 POP_TOP
+
+356         146 LOAD_FAST                0 (self)
+            148 LOAD_ATTR                0 (_sm)
+            158 LOAD_METHOD              1 (transition_to)
+            180 LOAD_GLOBAL              4 (FlashState)
+            192 LOAD_ATTR                5 (S4_FLASHING)
+            202 PRECALL                  1
+            206 CALL                     1
+            216 POP_TOP
+            218 LOAD_CONST               0 (None)
+            220 RETURN_VALUE
+
+Disassembly of <code object _on_start_upgrade at 0x0000017F1EF634B0, file "app\ui\main_window.py", line 358>:
+358           0 RESUME                   0
+
+359           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_service)
+             14 LOAD_METHOD              1 (stop_device_monitor)
+             36 PRECALL                  0
+             40 CALL                     0
+             50 POP_TOP
+
+360          52 LOAD_FAST                0 (self)
+             54 LOAD_ATTR                2 (_sm)
+             64 LOAD_METHOD              3 (transition_to)
+             86 LOAD_GLOBAL              8 (FlashState)
+             98 LOAD_ATTR                5 (S4_FLASHING)
+            108 PRECALL                  1
+            112 CALL                     1
+            122 POP_TOP
+            124 LOAD_CONST               0 (None)
+            126 RETURN_VALUE
+
+Disassembly of <code object _on_cancel_flash at 0x0000017F1F09CCB0, file "app\ui\main_window.py", line 362>:
+362           0 RESUME                   0
+
+363           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_elapsed_timer)
+             14 LOAD_METHOD              1 (stop)
+             36 PRECALL                  0
+             40 CALL                     0
+             50 POP_TOP
+
+364          52 LOAD_FAST                0 (self)
+             54 LOAD_ATTR                2 (_service)
+             64 LOAD_METHOD              3 (cancel_flash)
+             86 PRECALL                  0
+             90 CALL                     0
+            100 POP_TOP
+
+365         102 LOAD_FAST                0 (self)
+            104 LOAD_ATTR                2 (_service)
+            114 LOAD_METHOD              4 (stop_device_monitor)
+            136 PRECALL                  0
+            140 CALL                     0
+            150 POP_TOP
+
+366         152 LOAD_FAST                0 (self)
+            154 LOAD_ATTR                5 (_sm)
+            164 LOAD_METHOD              6 (reset_full)
+            186 PRECALL                  0
+            190 CALL                     0
+            200 POP_TOP
+            202 LOAD_CONST               0 (None)
+            204 RETURN_VALUE
+
+Disassembly of <code object _on_retry_flash at 0x0000017F1EE16100, file "app\ui\main_window.py", line 368>:
+368           0 RESUME                   0
+
+369           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_service)
+             14 LOAD_METHOD              1 (cancel_flash)
+             36 PRECALL                  0
+             40 CALL                     0
+             50 POP_TOP
+
+370          52 LOAD_FAST                0 (self)
+             54 LOAD_ATTR                2 (_sm)
+             64 LOAD_METHOD              3 (reset_for_retry)
+             86 PRECALL                  0
+             90 CALL                     0
+            100 POP_TOP
+
+371         102 LOAD_FAST                0 (self)
+            104 LOAD_METHOD              4 (_begin_flash_flow)
+            126 PRECALL                  0
+            130 CALL                     0
+            140 POP_TOP
+            142 LOAD_CONST               0 (None)
+            144 RETURN_VALUE
+
+Disassembly of <code object _on_retry_detect at 0x0000017F1EFBBC30, file "app\ui\main_window.py", line 373>:
+373           0 RESUME                   0
+
+374           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_service)
+             14 LOAD_METHOD              1 (start_device_monitor)
+             36 PRECALL                  0
+             40 CALL                     0
+             50 POP_TOP
+             52 LOAD_CONST               0 (None)
+             54 RETURN_VALUE
+
+Disassembly of <code object _on_progress at 0x0000017F1F0171B0, file "app\ui\main_window.py", line 378>:
+378           0 RESUME                   0
+
+380           2 LOAD_FAST                1 (percent)
+              4 LOAD_FAST                0 (self)
+              6 LOAD_ATTR                0 (_sm)
+             16 LOAD_ATTR                1 (context)
+             26 STORE_ATTR               2 (progress_percent)
+
+381          36 LOAD_FAST                0 (self)
+             38 LOAD_ATTR                3 (_page_flash)
+             48 LOAD_METHOD              4 (update_progress)
+             70 LOAD_FAST                1 (percent)
+             72 PRECALL                  1
+             76 CALL                     1
+             86 POP_TOP
+             88 LOAD_CONST               0 (None)
+             90 RETURN_VALUE
+
+Disassembly of <code object _on_step_changed at 0x0000017F1ED47C00, file "app\ui\main_window.py", line 383>:
+383           0 RESUME                   0
+
+385           2 LOAD_CONST               1 (2)
+              4 LOAD_CONST               2 (('STEP_DETECT', 'STEP_DOWNLOAD_DA', 'STEP_DOWNLOAD_BL', 'STEP_WRITE'))
+              6 IMPORT_NAME              0 (flash_service)
+              8 IMPORT_FROM              1 (STEP_DETECT)
+             10 STORE_FAST               2 (STEP_DETECT)
+             12 IMPORT_FROM              2 (STEP_DOWNLOAD_DA)
+             14 STORE_FAST               3 (STEP_DOWNLOAD_DA)
+             16 IMPORT_FROM              3 (STEP_DOWNLOAD_BL)
+             18 STORE_FAST               4 (STEP_DOWNLOAD_BL)
+             20 IMPORT_FROM              4 (STEP_WRITE)
+             22 STORE_FAST               5 (STEP_WRITE)
+             24 POP_TOP
+
+386          26 LOAD_CONST               1 (2)
+             28 LOAD_CONST               3 (('TRANSLATIONS',))
+             30 IMPORT_NAME              5 (i18n)
+             32 IMPORT_FROM              6 (TRANSLATIONS)
+             34 STORE_FAST               6 (TRANSLATIONS)
+             36 POP_TOP
+
+387          38 LOAD_CONST               4 ('svc_')
+             40 LOAD_FAST                1 (step)
+             42 FORMAT_VALUE             0
+             44 BUILD_STRING             2
+             46 STORE_FAST               7 (svc_key)
+
+388          48 LOAD_FAST                7 (svc_key)
+             50 LOAD_FAST                6 (TRANSLATIONS)
+             52 CONTAINS_OP              0
+             54 POP_JUMP_FORWARD_IF_FALSE    57 (to 170)
+
+389          56 LOAD_FAST                0 (self)
+             58 LOAD_ATTR                7 (_page_flash)
+             68 LOAD_METHOD              8 (update_step)
+             90 LOAD_FAST                7 (svc_key)
+             92 PRECALL                  1
+             96 CALL                     1
+            106 POP_TOP
+
+390         108 LOAD_GLOBAL             19 (NULL + t)
+            120 LOAD_FAST                7 (svc_key)
+            122 PRECALL                  1
+            126 CALL                     1
+            136 LOAD_FAST                0 (self)
+            138 LOAD_ATTR               10 (_sm)
+            148 LOAD_ATTR               11 (context)
+            158 STORE_ATTR              12 (current_step)
+            168 JUMP_FORWARD            43 (to 256)
+
+392     >>  170 LOAD_FAST                0 (self)
+            172 LOAD_ATTR                7 (_page_flash)
+            182 LOAD_METHOD              8 (update_step)
+            204 LOAD_FAST                1 (step)
+            206 PRECALL                  1
+            210 CALL                     1
+            220 POP_TOP
+
+393         222 LOAD_FAST                1 (step)
+            224 LOAD_FAST                0 (self)
+            226 LOAD_ATTR               10 (_sm)
+            236 LOAD_ATTR               11 (context)
+            246 STORE_ATTR              12 (current_step)
+
+394     >>  256 LOAD_FAST                1 (step)
+            258 LOAD_FAST                2 (STEP_DETECT)
+            260 LOAD_FAST                3 (STEP_DOWNLOAD_DA)
+            262 LOAD_FAST                4 (STEP_DOWNLOAD_BL)
+            264 LOAD_FAST                5 (STEP_WRITE)
+            266 BUILD_TUPLE              4
+            268 CONTAINS_OP              0
+            270 POP_JUMP_FORWARD_IF_FALSE    27 (to 326)
+
+395         272 LOAD_FAST                0 (self)
+            274 LOAD_ATTR                7 (_page_flash)
+            284 LOAD_METHOD             13 (set_device_flashing)
+            306 PRECALL                  0
+            310 CALL                     0
+            320 POP_TOP
+            322 LOAD_CONST               0 (None)
+            324 RETURN_VALUE
+
+394     >>  326 LOAD_CONST               0 (None)
+            328 RETURN_VALUE
+
+Disassembly of <code object _on_log_message at 0x0000017F1EE91330, file "app\ui\main_window.py", line 397>:
+397           0 RESUME                   0
+
+399           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_sm)
+             14 LOAD_ATTR                1 (context)
+             24 LOAD_ATTR                2 (log_messages)
+             34 LOAD_METHOD              3 (append)
+             56 LOAD_FAST                1 (msg)
+             58 PRECALL                  1
+             62 CALL                     1
+             72 POP_TOP
+
+400          74 LOAD_CONST               1 (True)
+             76 LOAD_FAST                0 (self)
+             78 LOAD_ATTR                0 (_sm)
+             88 LOAD_ATTR                1 (context)
+             98 STORE_ATTR               4 (log_available)
+            108 LOAD_CONST               0 (None)
+            110 RETURN_VALUE
+
+Disassembly of <code object _on_flash_finished at 0x0000017F1EBAF720, file "app\ui\main_window.py", line 402>:
+402           0 RESUME                   0
+
+404           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_elapsed_timer)
+             14 LOAD_METHOD              1 (stop)
+             36 PRECALL                  0
+             40 CALL                     0
+             50 POP_TOP
+
+405          52 LOAD_FAST                0 (self)
+             54 LOAD_ATTR                2 (_service)
+             64 LOAD_METHOD              3 (stop_device_monitor)
+             86 PRECALL                  0
+             90 CALL                     0
+            100 POP_TOP
+
+407         102 LOAD_FAST                2 (error_code)
+            104 LOAD_CONST               1 ('USER_CANCELLED')
+            106 COMPARE_OP               2 (==)
+            112 POP_JUMP_FORWARD_IF_FALSE     2 (to 118)
+
+408         114 LOAD_CONST               0 (None)
+            116 RETURN_VALUE
+
+409     >>  118 LOAD_FAST                0 (self)
+            120 LOAD_ATTR                4 (_sm)
+            130 LOAD_ATTR                5 (context)
+            140 STORE_FAST               3 (ctx)
+
+411         142 LOAD_FAST                0 (self)
+            144 LOAD_ATTR                4 (_sm)
+            154 LOAD_ATTR                6 (state)
+            164 LOAD_GLOBAL             14 (FlashState)
+            176 LOAD_ATTR                8 (S4_FLASHING)
+            186 LOAD_GLOBAL             14 (FlashState)
+            198 LOAD_ATTR                9 (S6_RETRYING)
+            208 BUILD_TUPLE              2
+            210 CONTAINS_OP              1
+            212 POP_JUMP_FORWARD_IF_FALSE     2 (to 218)
+
+412         214 LOAD_CONST               0 (None)
+            216 RETURN_VALUE
+
+413     >>  218 LOAD_FAST                1 (success)
+            220 POP_JUMP_FORWARD_IF_FALSE    38 (to 298)
+
+414         222 LOAD_FAST                0 (self)
+            224 LOAD_ATTR                4 (_sm)
+            234 LOAD_METHOD             10 (transition_to)
+            256 LOAD_GLOBAL             14 (FlashState)
+            268 LOAD_ATTR               11 (S5_COMPLETE)
+            278 PRECALL                  1
+            282 CALL                     1
+            292 POP_TOP
+            294 LOAD_CONST               0 (None)
+            296 RETURN_VALUE
+
+416     >>  298 LOAD_FAST                2 (error_code)
+            300 LOAD_FAST                3 (ctx)
+            302 STORE_ATTR              12 (error_code)
+
+417         312 LOAD_FAST                2 (error_code)
+            314 LOAD_CONST               2 ('USB_DISCONNECTED')
+            316 COMPARE_OP               2 (==)
+            322 POP_JUMP_FORWARD_IF_FALSE    38 (to 400)
+
+418         324 LOAD_FAST                0 (self)
+            326 LOAD_ATTR                4 (_sm)
+            336 LOAD_METHOD             10 (transition_to)
+            358 LOAD_GLOBAL             14 (FlashState)
+            370 LOAD_ATTR               13 (S5_USB_DISCONNECTED)
+            380 PRECALL                  1
+            384 CALL                     1
+            394 POP_TOP
+            396 LOAD_CONST               0 (None)
+            398 RETURN_VALUE
+
+420     >>  400 LOAD_FAST                0 (self)
+            402 LOAD_ATTR                4 (_sm)
+            412 LOAD_METHOD             10 (transition_to)
+            434 LOAD_GLOBAL             14 (FlashState)
+            446 LOAD_ATTR               14 (S5_FAILED)
+            456 PRECALL                  1
+            460 CALL                     1
+            470 POP_TOP
+            472 LOAD_CONST               0 (None)
+            474 RETURN_VALUE
+
+Disassembly of <code object _tick_elapsed at 0x0000017F1EE6B910, file "app\ui\main_window.py", line 422>:
+422           0 RESUME                   0
+
+423           2 LOAD_GLOBAL              1 (NULL + time)
+             14 LOAD_ATTR                0 (time)
+             24 PRECALL                  0
+             28 CALL                     0
+             38 LOAD_FAST                0 (self)
+             40 LOAD_ATTR                1 (_flash_start_time)
+             50 BINARY_OP               10 (-)
+             54 STORE_FAST               1 (elapsed)
+
+424          56 LOAD_GLOBAL              5 (NULL + divmod)
+             68 LOAD_GLOBAL              7 (NULL + int)
+             80 LOAD_FAST                1 (elapsed)
+             82 PRECALL                  1
+             86 CALL                     1
+             96 LOAD_CONST               1 (60)
+             98 PRECALL                  2
+            102 CALL                     2
+            112 UNPACK_SEQUENCE          2
+            116 STORE_FAST               2 (mins)
+            118 STORE_FAST               3 (secs)
+
+425         120 LOAD_FAST                2 (mins)
+            122 LOAD_CONST               2 ('02d')
+            124 FORMAT_VALUE             4 (with format)
+            126 LOAD_CONST               3 (':')
+            128 LOAD_FAST                3 (secs)
+            130 LOAD_CONST               2 ('02d')
+            132 FORMAT_VALUE             4 (with format)
+            134 BUILD_STRING             3
+            136 STORE_FAST               4 (text)
+
+426         138 LOAD_FAST                4 (text)
+            140 LOAD_FAST                0 (self)
+            142 LOAD_ATTR                4 (_sm)
+            152 LOAD_ATTR                5 (context)
+            162 STORE_ATTR               6 (elapsed_time)
+
+427         172 LOAD_FAST                0 (self)
+            174 LOAD_ATTR                7 (_page_flash)
+            184 LOAD_METHOD              8 (update_time)
+            206 LOAD_FAST                4 (text)
+            208 LOAD_CONST               4 ('--:--')
+            210 PRECALL                  2
+            214 CALL                     2
+            224 POP_TOP
+            226 LOAD_CONST               0 (None)
+            228 RETURN_VALUE
+
+Disassembly of <code object _on_device_found at 0x0000017F1EC87370, file "app\ui\main_window.py", line 429>:
+429           0 RESUME                   0
+
+431           2 LOAD_GLOBAL              1 (NULL + print)
+             14 LOAD_CONST               1 ('[MainWindow] Device found: ')
+             16 LOAD_FAST                1 (port)
+             18 FORMAT_VALUE             0
+             20 LOAD_CONST               2 (', state=')
+             22 LOAD_FAST                0 (self)
+             24 LOAD_ATTR                1 (_sm)
+             34 LOAD_ATTR                2 (state)
+             44 FORMAT_VALUE             0
+             46 BUILD_STRING             4
+             48 PRECALL                  1
+             52 CALL                     1
+             62 POP_TOP
+
+432          64 LOAD_FAST                1 (port)
+             66 LOAD_FAST                0 (self)
+             68 LOAD_ATTR                1 (_sm)
+             78 LOAD_ATTR                3 (context)
+             88 STORE_ATTR               4 (device_port)
+
+433          98 LOAD_FAST                0 (self)
+            100 LOAD_ATTR                1 (_sm)
+            110 LOAD_ATTR                2 (state)
+            120 LOAD_GLOBAL             10 (FlashState)
+            132 LOAD_ATTR                6 (S2_WAIT_CONNECTION)
+            142 COMPARE_OP               2 (==)
+            148 POP_JUMP_FORWARD_IF_FALSE    99 (to 348)
+
+434         150 LOAD_FAST                0 (self)
+            152 LOAD_ATTR                7 (_service)
+            162 LOAD_METHOD              8 (stop_device_monitor)
+            184 PRECALL                  0
+            188 CALL                     0
+            198 POP_TOP
+
+435         200 LOAD_FAST                0 (self)
+            202 LOAD_ATTR                1 (_sm)
+            212 LOAD_METHOD              9 (transition_to)
+            234 LOAD_GLOBAL             10 (FlashState)
+            246 LOAD_ATTR               10 (S3_DEVICE_DETECTED)
+            256 PRECALL                  1
+            260 CALL                     1
+            270 POP_TOP
+
+436         272 LOAD_FAST                0 (self)
+            274 LOAD_ATTR                1 (_sm)
+            284 LOAD_METHOD              9 (transition_to)
+            306 LOAD_GLOBAL             10 (FlashState)
+            318 LOAD_ATTR               11 (S4_FLASHING)
+            328 PRECALL                  1
+            332 CALL                     1
+            342 POP_TOP
+            344 LOAD_CONST               0 (None)
+            346 RETURN_VALUE
+
+433     >>  348 LOAD_CONST               0 (None)
+            350 RETURN_VALUE
+
+Disassembly of <code object _on_device_lost at 0x0000017F1EE6BAB0, file "app\ui\main_window.py", line 438>:
+438           0 RESUME                   0
+
+440           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_sm)
+             14 LOAD_ATTR                1 (state)
+             24 LOAD_GLOBAL              4 (FlashState)
+             36 LOAD_ATTR                3 (S4_FLASHING)
+             46 COMPARE_OP               2 (==)
+             52 POP_JUMP_FORWARD_IF_FALSE    80 (to 214)
+
+441          54 LOAD_CONST               1 ('disconnected')
+             56 LOAD_FAST                0 (self)
+             58 LOAD_ATTR                0 (_sm)
+             68 LOAD_ATTR                4 (context)
+             78 STORE_ATTR               5 (device_status)
+
+442          88 LOAD_FAST                0 (self)
+             90 LOAD_ATTR                6 (_service)
+            100 LOAD_METHOD              7 (cancel_flash)
+            122 PRECALL                  0
+            126 CALL                     0
+            136 POP_TOP
+
+443         138 LOAD_FAST                0 (self)
+            140 LOAD_ATTR                0 (_sm)
+            150 LOAD_METHOD              8 (transition_to)
+            172 LOAD_GLOBAL              4 (FlashState)
+            184 LOAD_ATTR                9 (S5_USB_DISCONNECTED)
+            194 PRECALL                  1
+            198 CALL                     1
+            208 POP_TOP
+            210 LOAD_CONST               0 (None)
+            212 RETURN_VALUE
+
+440     >>  214 LOAD_CONST               0 (None)
+            216 RETURN_VALUE
+
+Disassembly of <code object _show_log_dialog at 0x0000017F1EF4EE30, file "app\ui\main_window.py", line 447>:
+447           0 RESUME                   0
+
+448           2 LOAD_CONST               1 ('\n')
+              4 LOAD_METHOD              0 (join)
+             26 LOAD_FAST                0 (self)
+             28 LOAD_ATTR                1 (_sm)
+             38 LOAD_ATTR                2 (context)
+             48 LOAD_ATTR                3 (log_messages)
+             58 PRECALL                  1
+             62 CALL                     1
+             72 JUMP_IF_TRUE_OR_POP     14 (to 102)
+             74 LOAD_GLOBAL              9 (NULL + t)
+             86 LOAD_CONST               2 ('dlg_log_empty')
+             88 PRECALL                  1
+             92 CALL                     1
+        >>  102 STORE_FAST               1 (log_text)
+
+449         104 LOAD_GLOBAL             11 (NULL + LogDialog)
+            116 LOAD_FAST                1 (log_text)
+            118 LOAD_FAST                0 (self)
+            120 PRECALL                  2
+            124 CALL                     2
+            134 STORE_FAST               2 (dlg)
+
+450         136 LOAD_FAST                2 (dlg)
+            138 LOAD_METHOD              6 (exec)
+            160 PRECALL                  0
+            164 CALL                     0
+            174 POP_TOP
+            176 LOAD_CONST               0 (None)
+            178 RETURN_VALUE
+
+Disassembly of <code object _open_contact_mail at 0x0000017F1EE91200, file "app\ui\main_window.py", line 452>:
+452           0 RESUME                   0
+
+453           2 LOAD_CONST               1 (0)
+              4 LOAD_CONST               2 (('QUrl',))
+              6 IMPORT_NAME              0 (PySide6.QtCore)
+              8 IMPORT_FROM              1 (QUrl)
+             10 STORE_FAST               1 (QUrl)
+             12 POP_TOP
+
+454          14 LOAD_CONST               1 (0)
+             16 LOAD_CONST               3 (('QDesktopServices',))
+             18 IMPORT_NAME              2 (PySide6.QtGui)
+             20 IMPORT_FROM              3 (QDesktopServices)
+             22 STORE_FAST               2 (QDesktopServices)
+             24 POP_TOP
+
+455          26 LOAD_CONST               4 (2)
+             28 LOAD_CONST               5 (('CONTACT_EMAIL',))
+             30 IMPORT_NAME              4 (runtime_paths)
+             32 IMPORT_FROM              5 (CONTACT_EMAIL)
+             34 STORE_FAST               3 (CONTACT_EMAIL)
+             36 POP_TOP
+
+456          38 LOAD_FAST                2 (QDesktopServices)
+             40 LOAD_METHOD              6 (openUrl)
+             62 PUSH_NULL
+             64 LOAD_FAST                1 (QUrl)
+             66 LOAD_CONST               6 ('mailto:')
+             68 LOAD_FAST                3 (CONTACT_EMAIL)
+             70 FORMAT_VALUE             0
+             72 BUILD_STRING             2
+             74 PRECALL                  1
+             78 CALL                     1
+             88 PRECALL                  1
+             92 CALL                     1
+            102 POP_TOP
+            104 LOAD_CONST               0 (None)
+            106 RETURN_VALUE
+
+Disassembly of <code object closeEvent at 0x0000017F1EF635F0, file "app\ui\main_window.py", line 458>:
+              0 COPY_FREE_VARS           1
+
+458           2 RESUME                   0
+
+459           4 LOAD_FAST                0 (self)
+              6 LOAD_ATTR                0 (_service)
+             16 LOAD_METHOD              1 (cleanup)
+             38 PRECALL                  0
+             42 CALL                     0
+             52 POP_TOP
+
+460          54 LOAD_GLOBAL              5 (NULL + super)
+             66 PRECALL                  0
+             70 CALL                     0
+             80 LOAD_METHOD              3 (closeEvent)
+            102 LOAD_FAST                1 (event)
+            104 PRECALL                  1
+            108 CALL                     1
+            118 POP_TOP
+            120 LOAD_CONST               0 (None)
+            122 RETURN_VALUE

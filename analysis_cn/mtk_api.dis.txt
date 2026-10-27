@@ -1,0 +1,216 @@
+  0           0 RESUME                   0
+
+  2           2 LOAD_CONST               0 (0)
+              4 LOAD_CONST               1 (None)
+              6 IMPORT_NAME              0 (logging)
+              8 STORE_NAME               0 (logging)
+
+  3          10 LOAD_CONST               0 (0)
+             12 LOAD_CONST               1 (None)
+             14 IMPORT_NAME              1 (os)
+             16 STORE_NAME               1 (os)
+
+  4          18 LOAD_CONST               0 (0)
+             20 LOAD_CONST               1 (None)
+             22 IMPORT_NAME              2 (sys)
+             24 STORE_NAME               2 (sys)
+
+  6          26 LOAD_CONST               0 (0)
+             28 LOAD_CONST               2 (('DaHandler',))
+             30 IMPORT_NAME              3 (mtkclient.Library.DA.mtk_da_handler)
+             32 IMPORT_FROM              4 (DaHandler)
+             34 STORE_NAME               4 (DaHandler)
+             36 POP_TOP
+
+  7          38 LOAD_CONST               0 (0)
+             40 LOAD_CONST               3 (('ErrorHandler',))
+             42 IMPORT_NAME              5 (mtkclient.Library.error)
+             44 IMPORT_FROM              6 (ErrorHandler)
+             46 STORE_NAME               6 (ErrorHandler)
+             48 POP_TOP
+
+  8          50 LOAD_CONST               0 (0)
+             52 LOAD_CONST               4 (('Mtk',))
+             54 IMPORT_NAME              7 (mtkclient.Library.mtk_class)
+             56 IMPORT_FROM              8 (Mtk)
+             58 STORE_NAME               8 (Mtk)
+             60 POP_TOP
+
+  9          62 LOAD_CONST               0 (0)
+             64 LOAD_CONST               5 (('MtkConfig',))
+             66 IMPORT_NAME              9 (mtkclient.config.mtk_config)
+             68 IMPORT_FROM             10 (MtkConfig)
+             70 STORE_NAME              10 (MtkConfig)
+             72 POP_TOP
+
+ 12          74 LOAD_CONST              11 ((None,))
+             76 LOAD_CONST               6 (<code object init at 0x000001EE70957A50, file "mtk_api.py", line 12>)
+             78 MAKE_FUNCTION            1 (defaults)
+             80 STORE_NAME              11 (init)
+
+ 23          82 LOAD_CONST               7 ('.')
+             84 LOAD_NAME                0 (logging)
+             86 LOAD_ATTR               12 (INFO)
+             96 BUILD_TUPLE              2
+             98 LOAD_CONST               8 (<code object connect at 0x000001EE70AA30F0, file "mtk_api.py", line 23>)
+            100 MAKE_FUNCTION            1 (defaults)
+            102 STORE_NAME              13 (connect)
+
+ 32         104 LOAD_CONST               9 (<code object main at 0x000001EE709FC7B0, file "mtk_api.py", line 32>)
+            106 MAKE_FUNCTION            0
+            108 STORE_NAME              14 (main)
+
+ 39         110 LOAD_NAME               15 (__name__)
+            112 LOAD_CONST              10 ('__main__')
+            114 COMPARE_OP               2 (==)
+            120 POP_JUMP_FORWARD_IF_FALSE    12 (to 146)
+
+ 40         122 PUSH_NULL
+            124 LOAD_NAME               14 (main)
+            126 PRECALL                  0
+            130 CALL                     0
+            140 POP_TOP
+            142 LOAD_CONST               1 (None)
+            144 RETURN_VALUE
+
+ 39     >>  146 LOAD_CONST               1 (None)
+            148 RETURN_VALUE
+
+Disassembly of <code object init at 0x000001EE70957A50, file "mtk_api.py", line 12>:
+ 12           0 RESUME                   0
+
+ 13           2 LOAD_GLOBAL              0 (logging)
+             14 LOAD_ATTR                1 (INFO)
+             24 STORE_FAST               3 (loglevel)
+
+ 14          26 LOAD_GLOBAL              5 (NULL + MtkConfig)
+             38 LOAD_FAST                3 (loglevel)
+             40 LOAD_CONST               0 (None)
+             42 LOAD_CONST               0 (None)
+             44 KW_NAMES                 1
+             46 PRECALL                  3
+             50 CALL                     3
+             60 STORE_FAST               4 (config)
+
+ 15          62 LOAD_FAST                1 (loader)
+             64 LOAD_FAST                4 (config)
+             66 STORE_ATTR               3 (loader)
+
+ 16          76 LOAD_FAST                0 (preloader)
+             78 POP_JUMP_FORWARD_IF_NONE    82 (to 244)
+
+ 17          80 LOAD_GLOBAL              8 (os)
+             92 LOAD_ATTR                5 (path)
+            102 LOAD_METHOD              6 (exists)
+            124 LOAD_FAST                0 (preloader)
+            126 PRECALL                  1
+            130 CALL                     1
+            140 POP_JUMP_FORWARD_IF_FALSE    51 (to 244)
+
+ 18         142 LOAD_FAST                0 (preloader)
+            144 LOAD_FAST                4 (config)
+            146 STORE_ATTR               7 (preloader_filename)
+
+ 19         156 LOAD_GLOBAL             17 (NULL + open)
+            168 LOAD_FAST                4 (config)
+            170 LOAD_ATTR                7 (preloader_filename)
+            180 LOAD_CONST               2 ('rb')
+            182 PRECALL                  2
+            186 CALL                     2
+            196 LOAD_METHOD              9 (read)
+            218 PRECALL                  0
+            222 CALL                     0
+            232 LOAD_FAST                4 (config)
+            234 STORE_ATTR              10 (preloader)
+
+ 20     >>  244 LOAD_GLOBAL             23 (NULL + Mtk)
+            256 LOAD_FAST                4 (config)
+            258 LOAD_FAST                3 (loglevel)
+            260 LOAD_FAST                2 (serialport)
+            262 KW_NAMES                 3
+            264 PRECALL                  3
+            268 CALL                     3
+            278 STORE_FAST               5 (mtk)
+
+ 21         280 LOAD_FAST                5 (mtk)
+            282 RETURN_VALUE
+
+Disassembly of <code object connect at 0x000001EE70AA30F0, file "mtk_api.py", line 23>:
+ 23           0 RESUME                   0
+
+ 24           2 LOAD_GLOBAL              1 (NULL + DaHandler)
+             14 LOAD_FAST                0 (mtk)
+             16 LOAD_FAST                2 (loglevel)
+             18 PRECALL                  2
+             22 CALL                     2
+             32 STORE_FAST               3 (da_handler)
+
+ 25          34 LOAD_FAST                3 (da_handler)
+             36 LOAD_METHOD              1 (connect)
+             58 LOAD_FAST                0 (mtk)
+             60 LOAD_FAST                1 (directory)
+             62 PRECALL                  2
+             66 CALL                     2
+             76 STORE_FAST               0 (mtk)
+
+ 26          78 LOAD_FAST                0 (mtk)
+             80 POP_JUMP_FORWARD_IF_NOT_NONE     2 (to 86)
+
+ 27          82 LOAD_CONST               1 ((None, None))
+             84 RETURN_VALUE
+
+ 28     >>   86 LOAD_FAST                3 (da_handler)
+             88 LOAD_METHOD              2 (configure_da)
+            110 LOAD_FAST                0 (mtk)
+            112 PRECALL                  1
+            116 CALL                     1
+            126 STORE_FAST               0 (mtk)
+
+ 29         128 LOAD_FAST                0 (mtk)
+            130 LOAD_FAST                3 (da_handler)
+            132 BUILD_TUPLE              2
+            134 RETURN_VALUE
+
+Disassembly of <code object main at 0x000001EE709FC7B0, file "mtk_api.py", line 32>:
+ 32           0 RESUME                   0
+
+ 33           2 LOAD_GLOBAL              1 (NULL + init)
+             14 LOAD_CONST               0 (None)
+             16 LOAD_CONST               0 (None)
+             18 KW_NAMES                 1
+             20 PRECALL                  2
+             24 CALL                     2
+             34 STORE_FAST               0 (mtk)
+
+ 34          36 LOAD_GLOBAL              3 (NULL + connect)
+             48 LOAD_FAST                0 (mtk)
+             50 LOAD_CONST               2 ('.')
+             52 KW_NAMES                 3
+             54 PRECALL                  2
+             58 CALL                     2
+             68 UNPACK_SEQUENCE          2
+             72 STORE_FAST               0 (mtk)
+             74 STORE_FAST               1 (da_handler)
+
+ 35          76 LOAD_FAST                1 (da_handler)
+             78 LOAD_METHOD              2 (da_rs)
+            100 LOAD_CONST               4 (0)
+            102 LOAD_CONST               5 (16384)
+            104 LOAD_CONST               6 ('')
+            106 LOAD_CONST               7 ('user')
+            108 LOAD_CONST               8 (False)
+            110 KW_NAMES                 9
+            112 PRECALL                  5
+            116 CALL                     5
+            126 STORE_FAST               2 (data)
+
+ 36         128 LOAD_GLOBAL              7 (NULL + print)
+            140 LOAD_FAST                2 (data)
+            142 LOAD_METHOD              4 (hex)
+            164 PRECALL                  0
+            168 CALL                     0
+            178 PRECALL                  1
+            182 CALL                     1
+            192 POP_TOP
+            194 LOAD_CONST               0 (None)
+            196 RETURN_VALUE

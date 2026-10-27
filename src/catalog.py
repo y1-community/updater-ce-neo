@@ -393,7 +393,7 @@ def parse_version_designations(version_name: str) -> dict:
     """Parse version names and extract designations with flexible adjective handling."""
     designations = []
     adjectives = ['compatible', 'aware', 'supported', 'enabled', 'disabled', 'ready', 'optimized', 'enhanced']
-    excluded_parts = ['type', 'b', 'base', 'stable']
+    excluded_parts = ['type', 'b', 'base', 'stable', 'koensayr', 'os']
 
     clean_version = re.sub(r'-[a-f0-9]{16,}!?$', '', version_name or '')
     clean_version = clean_version.rstrip('-!')
@@ -402,6 +402,19 @@ def parse_version_designations(version_name: str) -> dict:
     timestamp_match = re.search(r'(\d{8})-(\d{4})\b', clean_version)
     if timestamp_match:
         extracted_version = f"{timestamp_match.group(1)}-{timestamp_match.group(2)}"
+
+    # Compound version check, e.g. 2.4.0-koensayr-3.0.2 or 2.0.4-os-3.0.2
+    if not extracted_version:
+        compound_m = re.search(
+            r"(?:^|[^\d.])(?:v|v\.)?(\d+\.\d+(?:\.\d+)?)[-_](?:[a-zA-Z0-9]+[-_]|os[-_])?v?(\d+\.\d+(?:\.\d+)?)(?:[^\d.]|$)",
+            clean_version,
+            re.IGNORECASE,
+        )
+        if compound_m:
+            extracted_version = compound_m.group(1)
+            from .i18n import tr
+            os_ver = compound_m.group(2)
+            designations.append(tr("label_for_os").format(version=os_ver))
 
     if not extracted_version:
         m_rel = re.search(r'\b(?:release|realease)\s*v?(\d+(?:\.\d+)*)\b', clean_version, re.IGNORECASE)
@@ -930,10 +943,21 @@ def parse_clean_release_tag_label(rel, prefer_240p=False, version_only=False) ->
     date_str = _release_datestamp_label(raw)
 
     # 2. Semantic version check (e.g. 3.1.2, 0.9.0, 1.8.2)
-    v_match = re.search(r"(?:^|[^\d.])(?:v|v\.)?(\d+\.\d+(?:\.\d+)?(?:[a-zA-Z0-9]+)?)(?:[^\d.]|$)", raw, re.IGNORECASE)
-    semver_str = None
-    if v_match:
-        semver_str = v_match.group(1)
+    # Check compound version like 2.4.0-koensayr-3.0.2 or 2.0.4-os-3.0.2
+    compound_m = re.search(
+        r"(?:^|[^\d.])(?:v|v\.)?(\d+\.\d+(?:\.\d+)?)[-_](?:[a-zA-Z0-9]+[-_]|os[-_])?v?(\d+\.\d+(?:\.\d+)?)(?:[^\d.]|$)",
+        raw,
+        re.IGNORECASE,
+    )
+    compound_os_version = None
+    if compound_m:
+        semver_str = compound_m.group(1)
+        compound_os_version = compound_m.group(2)
+    else:
+        v_match = re.search(r"(?:^|[^\d.])(?:v|v\.)?(\d+\.\d+(?:\.\d+)?(?:[a-zA-Z0-9]+)?)(?:[^\d.]|$)", raw, re.IGNORECASE)
+        semver_str = None
+        if v_match:
+            semver_str = v_match.group(1)
 
     version_part = semver_str or date_str
     if not version_part:
@@ -942,6 +966,12 @@ def parse_clean_release_tag_label(rel, prefer_240p=False, version_only=False) ->
     # 3. Extract verbs from tag_name (and raw string)
     lower_raw = raw.lower()
     verbs = []
+
+    if compound_os_version:
+        from .i18n import tr
+        os_label = tr("label_for_os").format(version=compound_os_version)
+        if os_label not in verbs:
+            verbs.append(os_label)
 
     # ADB
     if re.search(r"\badb\b", lower_raw) or "-adb" in lower_raw or "adb-" in lower_raw or "(adb)" in lower_raw:

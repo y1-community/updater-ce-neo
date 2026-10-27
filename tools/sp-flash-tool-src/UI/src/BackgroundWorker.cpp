@@ -9,10 +9,12 @@
 #include "connob.h"
 
 BackgroundWorker::BackgroundWorker(const APKey session_id, AppCore* ap_core, MainController *control,
-                                   void_callback cb, void_callback cb_ok, QObject *parent) :
+                                   void_callback cb, void_callback cb_ok, void_callback_arg cb_question, 
+								   QObject *parent) :
     QThread(parent),session_id_(session_id), ap_core_(ap_core),
     current_cb(NULL),conn_setting_(NULL),
-    platform_setting_(new APCore::PlatformSetting), stop_flag(AP_STOP),finished_cb(cb), ok_cb(cb_ok), control_(control)
+    platform_setting_(new APCore::PlatformSetting), stop_flag(AP_STOP),finished_cb(cb), ok_cb(cb_ok), 
+	question_cb(cb_question), control_(control)
 {
     LOG("ctor of BackgroundWorker...");
 }
@@ -64,8 +66,9 @@ void BackgroundWorker::run()
                     conn_setting_->CreateConnection(
                         session_id_,
                         storage_type,
-                        platform_setting_->supportPowerKeyReset()
+                        platform_setting_->longPressRebootOption()
                         ));
+		conn->setCallBack(question_cb);
 
         QSharedPointer<APCore::ConnOb> observer
                 = QSharedPointer<APCore::ConnOb>(new APCore::ConnOb(control_));
@@ -95,6 +98,10 @@ void BackgroundWorker::run()
         {
             LOGI("DRAM repair status: DRAM reapair address is NOT written!");
         }
+		else if (brom_exp.err_code() == STATUS_STOR_LIFE_WARN) //has dealed with in DA connection function, reset UI throw exception.
+		{
+            // do nothing, log info has been written in DA connection function.
+		}
         else
         {
             LOGE("BROM Exception! (%s)(%s)", brom_exp.err_msg().c_str(),

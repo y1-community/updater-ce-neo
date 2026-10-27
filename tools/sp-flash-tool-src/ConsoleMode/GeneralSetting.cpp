@@ -10,7 +10,7 @@
 namespace ConsoleMode
 {
 
-GeneralSetting::GeneralSetting(APCore::USBPower power)
+GeneralSetting::GeneralSetting(APCore::USBPower power, bool storage_life_cycle_check)
 {
     this->m_pclArg = QSharedPointer<GeneralArg> ( new GeneralArg() );
     m_pclConnSetting = QSharedPointer<APCore::ConnSetting> (
@@ -18,6 +18,7 @@ GeneralSetting::GeneralSetting(APCore::USBPower power)
                   APCore::USBHighSpeed,
                   power));
     m_pclConnSetting->set_timeout(120000);
+    m_pclConnSetting->set_storage_life_cycle_check(storage_life_cycle_check);
     m_pclChksumSetting = QSharedPointer<APCore::ChksumSetting>(new APCore::ChksumSetting());
     m_pclChksumSetting->set_chksum_level(0);
     m_pclLogInfoSetting = QSharedPointer<APCore::LogInfoSetting>(new APCore::LogInfoSetting());

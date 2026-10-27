@@ -144,6 +144,16 @@ void EfuseSetting::LoadXML(const XML::Node &node)
       {
          LoadCommonCtrl(child_node);
       }
+	  else if (_STRICMP(node_tag, "sbc-pubk-ctrl"))
+	  {
+	      //mt8168 added for parse sbc_pubk_ctrl node
+	      LoadSbcPubkCtrl(child_node);
+	  }
+	  else if(_STRICMP(node_tag, "fa-ctrl"))
+	  {
+	      // mt8168 added for parse fa mode ctrl
+	      LoadFaModeCtrl(child_node);
+	  }
       else if (_STRICMP(node_tag, "custom-ctrl"))
       {
          //add for MT8695, HASH1~3 ctrl should be custom ctrl
@@ -274,6 +284,10 @@ void EfuseSetting::LoadXML(const XML::Node &node)
       {
          LoadCustk(child_node);
       }
+      else if(_STRICMP(node_tag, "cust_data"))
+      {
+         LoadCustData(child_node);
+      }
       else if(_STRICMP(node_tag, "cust_crypt_data"))
       {
          LoadCustCryptData(child_node);
@@ -327,6 +341,43 @@ void EfuseSetting::LoadXML(const XML::Node &node)
 void EfuseSetting::SaveXML(XML::Node &node) const
 {
    Q_UNUSED(node);
+}
+
+void EfuseSetting::LoadSbcPubkCtrl(
+	const XML::Node &node)
+{
+    string text;
+
+	text = node.GetAttribute("Disable_SBC_PUBK_HASH");
+	common_arg_.sbc_pub_hash_dis = Bool2EfuseOpt(text);
+	text = node.GetAttribute("Disable_SBC_PUBK_HASH1");
+	common_arg_.sbc_pub_hash1_dis = Bool2EfuseOpt(text);
+	text = node.GetAttribute("Disable_SBC_PUBK_HASH2");
+	common_arg_.sbc_pub_hash2_dis = Bool2EfuseOpt(text);
+	text = node.GetAttribute("Disable_SBC_PUBK_HASH3");
+	common_arg_.sbc_pub_hash3_dis = Bool2EfuseOpt(text);
+
+
+	text = node.GetAttribute("Disable_SBC_PUBK_HASH_FA");
+	common_arg_.sbc_pubk_hash_fa_dis= Bool2EfuseOpt(text);
+	text = node.GetAttribute("Disable_SBC_PUBK_HASH1_FA");
+	common_arg_.sbc_pubk_hash1_fa_dis= Bool2EfuseOpt(text);
+	text = node.GetAttribute("Disable_SBC_PUBK_HASH2_FA");
+	common_arg_.sbc_pubk_hash2_fa_dis= Bool2EfuseOpt(text);	 
+	text = node.GetAttribute("Disable_SBC_PUBK_HASH3_FA");
+	common_arg_.sbc_pubk_hash3_fa_dis= Bool2EfuseOpt(text);
+	text = node.GetAttribute("Disable_SBC_PUBK_MTK_FA");
+	common_arg_.sbc_pubk_hash_mtk_fa_dis= Bool2EfuseOpt(text);
+
+}
+
+void EfuseSetting::LoadFaModeCtrl(
+	const  XML::Node &node)
+{
+    string text;
+
+	text = node.GetAttribute("Enable_FA");
+	common_arg_.fa_mode_en = Bool2EfuseOpt(text);
 }
 
 void EfuseSetting::LoadCommonCtrl(
@@ -723,6 +774,12 @@ void EfuseSetting::LoadSecureLock(
 
    text = node.GetAttribute("cust_crypt_data_lock");
    lock_arg_.cust_crypt_data_lock = Bool2EfuseOpt(text);
+
+   text = node.GetAttribute("cust_data_lock");
+   lock_arg_.cust_data_lock = Bool2EfuseOpt(text);
+
+   text = node.GetAttribute("sbc_pubk_ctrl_lock");
+   lock_arg_.sbc_pubk_ctrl_lock = Bool2EfuseOpt(text);
 }
 
 void EfuseSetting::LoadMHWRes(const XML::Node &node)
@@ -1147,7 +1204,11 @@ void EfuseSetting::LoadCustCryptData(
 {
    LoadKey(CUST_CRYPT_DATA, node);
 }
-
+void EfuseSetting::LoadCustData(
+   const XML::Node &node)
+{
+   LoadKey(CUST_DATA, node);
+}
 void EfuseSetting::LoadSWVer0(
    const XML::Node &node)
 {

@@ -12,7 +12,7 @@ class AboutDialog : public QDialog
 {
     Q_OBJECT
 public:
-    explicit AboutDialog(MainWindow *window, QWidget *parent = 0);
+    explicit AboutDialog(MainWindow *parent);
     ~AboutDialog();
 
     void UpdateVersionInfo();

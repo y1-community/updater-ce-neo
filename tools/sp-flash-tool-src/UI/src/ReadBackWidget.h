@@ -17,6 +17,8 @@ class ReadBackWidget;
 class MainWindow;
 class ReadBackAddressDialog;
 class PlatformSetting;
+class CheckHeader;
+
 class ReadBackWidget : public TabWidgetBase, public APCore::IPlatformOb, public IScatterObj
 {
     Q_OBJECT
@@ -45,11 +47,14 @@ public:
     int GetRBCount() const;
     void AutoLoadReadBackSetting();
     void set_da_connected(bool da_connected);
+    bool IsSRAMReadback();
+    void ShowRAMSelectBtn(bool show);
 
 private:
     Ui::ReadBackWidget *ui_;
     MainWindow *main_window_;
     ReadBackAddressDialog *addr_dialog_;
+    CheckHeader *m_header_;
 
     std::map<QString, NUTL_ReadFlag_E> read_flag_map_;
     HW_StorageType_E storage_;
@@ -74,7 +79,11 @@ private:
     bool ValidateDAScatterFileLoaded(bool showPrompt) const;
     bool ValidatePlatformMatched(ConsoleMode::Config &config) const;
     bool ValidReadBackXMLFormat(const std::string &file_name) const;
+    bool IsLoadedByScatter() const;
     U32 adaptUfsEmmcCommonRegionID(U32 nRegionID, HW_StorageType_E en_storage_type) const;
+    bool HasUnCheckedRBItem()const;
+    void SetAllRBItemCheckState(Qt::CheckState checkState);
+    void UpdateHeadViewCheckState();
 
 signals:
    void signal_platform_changed(HW_StorageType_E &storage);
@@ -87,6 +96,8 @@ private slots:
     void on_toolButton_add_clicked();
     void on_toolButton_remove_clicked();
     void on_tableWidget_cellDoubleClicked(int row, int column);
+    void slot_OnHeaderView_click(int index);
+    void on_tableWidget_cellClicked(int row, int column);
 };
 
 #endif // READBACKWIDGET_H

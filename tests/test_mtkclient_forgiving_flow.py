@@ -319,8 +319,10 @@ def test_rockbox_post_flash_power_prompt_uses_model_specific_button_and_hides_na
     app = _app()
     settings = QSettings(str(tmp_path / "rockbox-flow.ini"), QSettings.Format.IniFormat)
     old_mac = paths.IS_MAC
+    old_win = paths.IS_WINDOWS
     try:
         paths.IS_MAC = False
+        paths.IS_WINDOWS = False
         with patch("src.theme_pack.AdbWatchWorker"):
             window = MainWindow()
             window.settings = settings
@@ -356,6 +358,7 @@ def test_rockbox_post_flash_power_prompt_uses_model_specific_button_and_hides_na
             assert "usb" not in window._flash_page._theme_row.accessibleName().lower()
     finally:
         paths.IS_MAC = old_mac
+        paths.IS_WINDOWS = old_win
         try:
             window.close()
             app.processEvents()
@@ -372,8 +375,10 @@ def test_sp_flash_rockbox_power_on_prompt(tmp_path):
     app = _app()
     settings = QSettings(str(tmp_path / "sp-rockbox-flow.ini"), QSettings.Format.IniFormat)
     old_mac = paths.IS_MAC
+    old_win = paths.IS_WINDOWS
     try:
         paths.IS_MAC = False
+        paths.IS_WINDOWS = False
         with patch("src.theme_pack.AdbWatchWorker"):
             window = MainWindow()
             window.settings = settings
@@ -404,6 +409,7 @@ def test_sp_flash_rockbox_power_on_prompt(tmp_path):
             assert "connect your y1 by usb" in window._flash_page._eta_label.text().lower()
     finally:
         paths.IS_MAC = old_mac
+        paths.IS_WINDOWS = old_win
         try:
             window.close()
             app.processEvents()

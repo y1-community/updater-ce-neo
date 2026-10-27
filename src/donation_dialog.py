@@ -41,18 +41,7 @@ class _DonationRefreshBridge(QObject):
 
 
 def decorative_updates_needed(widget) -> bool:
-    """True when a decorative ticker/animation is worth running at all.
-
-    The donation bar and the dialog's ticker are ambient decoration: they keep
-    rotating text to show supporters. Every rotation repaints, and on macOS the
-    window sits over a blurred glass backdrop, so a repaint is composite work
-    for the window server as well. While the app is in the background, its
-    window is minimised, or the widget is hidden, nobody sees the result — so
-    the timers stay armed but their work is skipped until it is visible again.
-    """
-    app = QApplication.instance()
-    if app is not None and app.applicationState() != Qt.ApplicationState.ApplicationActive:
-        return False
+    """True when a decorative ticker/animation is worth running at all."""
     if not widget.isVisible():
         return False
     window = widget.window()
@@ -555,33 +544,122 @@ class DonationStatusBar(QStatusBar):
             self._donor_label.setText(self._donor_lines[0])
 
     def _build_donor_lines(self):
-        lines = []
-        for donation in self.donations:
-            if donation.get("amount", 0) <= 0:
+        """Build recognized donor recognition lines adhering to community display rules.
+
+        - Ko-Fi donations: 'bought x coffees' (or 1 coffee).
+        - Other methods (Revolut, PayPal, Patreon, Bitcoin, etc.): '$x by [Method]' (or '$x').
+        - Top supporters: Recognise higher than average or multiple donations with 'Top supporter ' prefix.
+        - Ko-Fi only top supporters show total in coffees; multiple methods show total in dollars.
+        - Natural relative date phrasing (e.g. 'last year', 'in August', 'last month', 'in July', etc.).
+        """
+        from .donors import format_donation_when
+
+        valid = []
+        for d in self.donations:
+            amt = float(d.get("amount", 0))
+            if amt <= 0:
                 continue
-            name = donation.get("name", tr("donate_supporter"))
-            amount = float(donation.get("amount", 0))
-            amount_text = str(int(amount)) if amount.is_integer() else f"{amount:.2f}"
-            url = donation.get("url", "")
-            when = relative_date(donation.get("dt"))
-            t = T()
-            anchor = (
-                f'<a href="{url}" style="color:{t.fg}; font-weight:bold;">{name}</a>'
-                if url else name
-            )
-            # The status bar has a fixed space between Credits / Thanks and
-            # the right edge. Keep the line intentionally compact so it reads
-            # without scrolling even at the app's minimum window width.
-            short_name = name if len(name) <= 16 else name[:15].rstrip() + "…"
-            anchor = (
-                f'<a href="{url}" style="color:{t.fg}; font-weight:bold;">{short_name}</a>'
-                if url else short_name
-            )
-            # "donated $5 · Yesterday": the time period follows the amount.
-            when_text = f" · {when}" if when else ""
-            lines.append(tr("donate_ticker_status_fmt").format(
-                anchor=anchor, amount=amount_text, when=when_text
-            ))
+            name = (d.get("name") or "").strip()
+            if not name or name.lower() in ("innioasis", "total"):
+                continue
+            valid.append(d)
+
+        if not valid:
+            return [tr("donate_thanks_status")]
+
+        # Group by normalized donor name to compute totals and multiple donations
+        groups = {}
+        for d in valid:
+            norm_name = (d.get("name") or "").strip().lower()
+            groups.setdefault(norm_name, []).append(d)
+
+        lines = []
+        t = T()
+
+        def make_anchor(name: str, url: str) -> str:
+            short = name if len(name) <= 24 else name[:23].rstrip() + "…"
+            if url:
+                return f'<a href="{url}" style="color:{t.fg}; font-weight:bold;">{short}</a>'
+            return f'<b style="color:{t.fg};">{short}</b>'
+
+        def format_line(name: str, amt: float, methods: set[str], dt, url: str, is_top: bool) -> str:
+            anchor = make_anchor(name, url)
+            top_prefix = tr("donate_top_supporter_prefix") if is_top else ""
+            when = format_donation_when(dt)
+            methods_norm = {m.lower() for m in methods}
+            ko_fi_only = all("ko-fi" in m or "kofi" in m for m in methods_norm)
+
+            if ko_fi_only:
+                coffees = max(1, int(round(amt)))
+                tmpl = tr("donate_bought_coffee") if coffees == 1 else tr("donate_bought_coffees")
+                raw_line = tmpl.format(top_prefix=top_prefix, anchor=anchor, count=coffees, when=when)
+            else:
+                amt_str = str(int(amt)) if amt.is_integer() else f"{amt:.2f}"
+                clean_method = ""
+                if len(methods_norm) == 1:
+                    m = next(iter(methods_norm))
+                    if "revolut" in m:
+                        clean_method = "Revolut"
+                    elif "paypal" in m:
+                        clean_method = "PayPal"
+                    elif "bitcoin" in m or "btc" in m:
+                        clean_method = "Bitcoin"
+                    elif "patreon" in m:
+                        clean_method = "Patreon"
+                    elif "boosty" in m:
+                        clean_method = "Boosty"
+                    elif "honeygain" in m:
+                        clean_method = "Honeygain"
+                    else:
+                        clean_method = list(methods)[0].strip()
+
+                if clean_method and clean_method.lower() != "donation":
+                    tmpl = tr("donate_donated_by_method")
+                    raw_line = tmpl.format(
+                        top_prefix=top_prefix,
+                        anchor=anchor,
+                        amount=amt_str,
+                        method=clean_method,
+                        when=when,
+                    )
+                else:
+                    tmpl = tr("donate_donated_amount")
+                    raw_line = tmpl.format(
+                        top_prefix=top_prefix,
+                        anchor=anchor,
+                        amount=amt_str,
+                        when=when,
+                    )
+
+            return raw_line.replace("  ", " ").replace(" .", ".").strip()
+
+        # Add top supporter multi-donation aggregations first
+        processed_multi = set()
+        for norm_name, d_list in groups.items():
+            if len(d_list) >= 2:
+                total_amt = sum(float(x.get("amount", 0)) for x in d_list)
+                is_top = (total_amt >= 20.0) or (len(d_list) >= 2 and total_amt >= 10.0)
+                methods = {str(x.get("method") or "Donation").strip() for x in d_list}
+                # Latest date and best URL
+                latest_d = max(d_list, key=lambda x: x.get("dt") or datetime.min)
+                url = next((x.get("url") for x in d_list if x.get("url")), "")
+                display_name = d_list[0].get("name") or norm_name.title()
+                line = format_line(display_name, total_amt, methods, latest_d.get("dt"), url, is_top=is_top)
+                lines.append(line)
+                processed_multi.add(norm_name)
+
+        # Add single donations (and individual top supporters)
+        for d in valid:
+            norm_name = (d.get("name") or "").strip().lower()
+            if norm_name in processed_multi:
+                continue
+            amt = float(d.get("amount", 0))
+            is_top = (amt >= 20.0)
+            methods = {str(d.get("method") or "Donation").strip()}
+            display_name = d.get("name") or "Supporter"
+            line = format_line(display_name, amt, methods, d.get("dt"), d.get("url") or "", is_top=is_top)
+            lines.append(line)
+
         return lines or [tr("donate_thanks_status")]
 
     def _refresh_goal(self):
@@ -596,7 +674,7 @@ class DonationStatusBar(QStatusBar):
             self._goal_bar.setVisible(False)
             self._donor_label.setVisible(True)
             if not self._donor_label.text():
-                self._donor_label.setText(self._next_ticker_message())
+                self._donor_label.setText(self._donor_lines[0] if self._donor_lines else tr("donate_thanks_status"))
         else:
             self._showing_goal = True
             self._goal_label.setVisible(True)
@@ -607,56 +685,86 @@ class DonationStatusBar(QStatusBar):
             )
             self._goal_bar.setValue(int(round(percent * 10)))
 
-    def _next_ticker_message(self) -> str:
-        """Pick the next message for the ticker: rotating donor lines and community appeals."""
+    def _show_next_donor_line(self):
+        if not self._donor_lines:
+            self._donor_lines = self._build_donor_lines()
+        if not hasattr(self, "_donor_index"):
+            self._donor_index = 0
+        msg = self._donor_lines[self._donor_index % len(self._donor_lines)]
+        self._donor_index += 1
+
+        self._showing_goal = False
+        self._goal_label.setVisible(False)
+        self._goal_bar.setVisible(False)
+        self._donor_label.setVisible(True)
+        self._donor_label.setText(msg)
+        self._donor_label.repaint()
+
+    def _show_next_message_line(self):
         import random
-        # 1. "If everyone using this today donated, it would cover our costs for a year" (Shown very occasionally, ~12%)
+        raised, _remaining, percent, target = get_monthly_goal_stats(self.donations)
+        raised = float(raised)
+        goal_suppressed = (raised <= 0.0 or raised >= 200.0)
+        goal_reached = raised >= float(target)
+
+        # Occasional 12% appeal
         if random.random() < 0.12:
-            return tr("donate_appeal_costs_for_year")
-
-        has_real_donors = bool(self._donor_lines and any(d.get("amount", 0) > 0 for d in self.donations))
-        if not hasattr(self, "_ticker_turn"):
-            self._ticker_turn = 0
-        self._ticker_turn += 1
-
-        if has_real_donors and (self._ticker_turn % 2 == 1):
-            if self._donor_lines:
-                msg = self._donor_lines[0]
-                self._donor_lines = self._donor_lines[1:] + self._donor_lines[:1]
-                return msg
-
-        appeals = get_appeal_messages()
-        if not hasattr(self, "_appeal_index"):
-            self._appeal_index = 0
-        msg = appeals[self._appeal_index % len(appeals)]
-        self._appeal_index += 1
-        return msg
-
-    def _rotate(self):
-        if not getattr(self, "_donations_enabled", True) or self._status_container.isVisible():
-            return
-        if not decorative_updates_needed(self):
-            return
-        if getattr(self, "_goal_suppressed", False) or getattr(self, "_goal_reached", False):
             self._showing_goal = False
             self._goal_label.setVisible(False)
             self._goal_bar.setVisible(False)
             self._donor_label.setVisible(True)
-            self._donor_label.setText(self._next_ticker_message())
-            self.repaint()
+            self._donor_label.setText(tr("donate_appeal_costs_for_year"))
             self._donor_label.repaint()
-            if hasattr(self, "_donor_ticker"):
-                self._donor_ticker.sync()
             return
-        self._showing_goal = not self._showing_goal
-        self._goal_label.setVisible(self._showing_goal)
-        self._goal_bar.setVisible(self._showing_goal)
-        self._donor_label.setVisible(not self._showing_goal)
-        if not self._showing_goal:
-            self._donor_label.setText(self._next_ticker_message())
-        self.repaint()
-        if not self._showing_goal:
+
+        if not hasattr(self, "_msg_turn"):
+            self._msg_turn = 0
+        self._msg_turn += 1
+
+        show_goal = (not goal_suppressed and not goal_reached and (self._msg_turn % 2 == 1))
+        if show_goal:
+            raised_text = str(int(raised)) if raised.is_integer() else f"{raised:.2f}"
+            self._showing_goal = True
+            self._goal_label.setVisible(True)
+            self._goal_bar.setVisible(True)
+            self._donor_label.setVisible(False)
+            self._goal_label.setText(
+                tr("donate_goal_status_fmt").format(raised=raised_text, target=target)
+            )
+            self._goal_bar.setValue(int(round(percent * 10)))
+            self._goal_label.repaint()
+            self._goal_bar.repaint()
+        else:
+            appeals = get_appeal_messages()
+            if not hasattr(self, "_appeal_index"):
+                self._appeal_index = 0
+            msg = appeals[self._appeal_index % len(appeals)]
+            self._appeal_index += 1
+
+            self._showing_goal = False
+            self._goal_label.setVisible(False)
+            self._goal_bar.setVisible(False)
+            self._donor_label.setVisible(True)
+            self._donor_label.setText(msg)
             self._donor_label.repaint()
+
+    def _rotate(self):
+        """Strictly alternate: Message line (Goal/Appeal) -> Donation line -> Message line -> Donation line."""
+        if not getattr(self, "_donations_enabled", True) or self._status_container.isVisible():
+            return
+        if not decorative_updates_needed(self):
+            return
+
+        if not hasattr(self, "_cycle_turn"):
+            self._cycle_turn = 0
+        self._cycle_turn += 1
+
+        if self._cycle_turn % 2 == 1:
+            self._show_next_donor_line()
+        else:
+            self._show_next_message_line()
+
+        self.repaint()
         if hasattr(self, "_goal_ticker"):
             self._goal_ticker.sync()
         if hasattr(self, "_donor_ticker"):

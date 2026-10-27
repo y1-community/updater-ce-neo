@@ -1,0 +1,245 @@
+=== _monitor_sp_log_file ===
+Consts: ('监控 SP Flash Tool 日志文件，解析详细进度', 'C:/ProgramData/SP_FT_Logs', None, 2, <code object <lambda> at 0x00000190218FB870, file "app\flash_service.py", line 675>, True, ('key', 'reverse'), 0, 'QT_FLASH_TOOL.log', 'r', 'utf-8', 'ignore', ('encoding', 'errors'), 'of image data has been sent', 'Download Ok', 'download ok', 100, 'BROM connected', 12, 0.5)
+Names: ('Path', 'exists', 'time', 'sleep', 'sorted', 'iterdir', '_log_monitor_running', 'open', 'seek', 'readlines', 'tell', 'step_changed', 'emit', 'STEP_WRITE', '_update_sp_image_progress', 'lower', 'STEP_DONE', '_emit_progress', 'STEP_DETECT', 'Exception')
+Varnames: ('self', 'log_dir', 'dirs', 'log_file', 'last_pos', 'f', 'new_lines', 'line')
+
+665           0 RESUME                   0
+
+667           2 LOAD_GLOBAL              1 (NULL + Path)
+             14 LOAD_CONST               1 ('C:/ProgramData/SP_FT_Logs')
+             16 PRECALL                  1
+             20 CALL                     1
+             30 STORE_FAST               1 (log_dir)
+
+668          32 LOAD_FAST                1 (log_dir)
+             34 LOAD_METHOD              1 (exists)
+             56 PRECALL                  0
+             60 CALL                     0
+             70 POP_JUMP_FORWARD_IF_TRUE     2 (to 76)
+
+669          72 LOAD_CONST               2 (None)
+             74 RETURN_VALUE
+
+672     >>   76 LOAD_GLOBAL              5 (NULL + time)
+             88 LOAD_ATTR                3 (sleep)
+             98 LOAD_CONST               3 (2)
+            100 PRECALL                  1
+            104 CALL                     1
+            114 POP_TOP
+
+675         116 LOAD_GLOBAL              9 (NULL + sorted)
+            128 LOAD_FAST                1 (log_dir)
+            130 LOAD_METHOD              5 (iterdir)
+            152 PRECALL                  0
+            156 CALL                     0
+            166 LOAD_CONST               4 (<code object <lambda> at 0x00000190218FB870, file "app\flash_service.py", line 675>)
+            168 MAKE_FUNCTION            0
+            170 LOAD_CONST               5 (True)
+            172 KW_NAMES                 6
+            174 PRECALL                  3
+            178 CALL                     3
+            188 STORE_FAST               2 (dirs)
+
+676         190 LOAD_FAST                2 (dirs)
+            192 POP_JUMP_FORWARD_IF_TRUE     2 (to 198)
+
+677         194 LOAD_CONST               2 (None)
+            196 RETURN_VALUE
+
+679     >>  198 LOAD_FAST                2 (dirs)
+            200 LOAD_CONST               7 (0)
+            202 BINARY_SUBSCR
+            212 LOAD_CONST               8 ('QT_FLASH_TOOL.log')
+            214 BINARY_OP               11 (/)
+            218 STORE_FAST               3 (log_file)
+
+680         220 LOAD_CONST               7 (0)
+            222 STORE_FAST               4 (last_pos)
+
+682         224 LOAD_FAST                0 (self)
+            226 LOAD_ATTR                6 (_log_monitor_running)
+            236 EXTENDED_ARG             1
+            238 POP_JUMP_FORWARD_IF_FALSE   370 (to 980)
+
+683     >>  240 NOP
+
+684         242 LOAD_FAST                3 (log_file)
+            244 LOAD_METHOD              1 (exists)
+            266 PRECALL                  0
+            270 CALL                     0
+            280 EXTENDED_ARG             1
+            282 POP_JUMP_FORWARD_IF_FALSE   301 (to 886)
+
+685         284 LOAD_GLOBAL             15 (NULL + open)
+            296 LOAD_FAST                3 (log_file)
+            298 LOAD_CONST               9 ('r')
+            300 LOAD_CONST              10 ('utf-8')
+            302 LOAD_CONST              11 ('ignore')
+            304 KW_NAMES                12
+            306 PRECALL                  4
+            310 CALL                     4
+            320 BEFORE_WITH
+            322 STORE_FAST               5 (f)
+
+686         324 LOAD_FAST                5 (f)
+            326 LOAD_METHOD              8 (seek)
+            348 LOAD_FAST                4 (last_pos)
+            350 PRECALL                  1
+            354 CALL                     1
+            364 POP_TOP
+
+687         366 LOAD_FAST                5 (f)
+            368 LOAD_METHOD              9 (readlines)
+            390 PRECALL                  0
+            394 CALL                     0
+            404 STORE_FAST               6 (new_lines)
+
+688         406 LOAD_FAST                5 (f)
+            408 LOAD_METHOD             10 (tell)
+            430 PRECALL                  0
+            434 CALL                     0
+            444 STORE_FAST               4 (last_pos)
+
+685         446 LOAD_CONST               2 (None)
+            448 LOAD_CONST               2 (None)
+            450 LOAD_CONST               2 (None)
+            452 PRECALL                  2
+            456 CALL                     2
+            466 POP_TOP
+            468 JUMP_FORWARD            11 (to 492)
+        >>  470 PUSH_EXC_INFO
+            472 WITH_EXCEPT_START
+            474 POP_JUMP_FORWARD_IF_TRUE     4 (to 484)
+            476 RERAISE                  2
+        >>  478 COPY                     3
+            480 POP_EXCEPT
+            482 RERAISE                  1
+        >>  484 POP_TOP
+            486 POP_EXCEPT
+            488 POP_TOP
+            490 POP_TOP
+
+690     >>  492 LOAD_FAST                6 (new_lines)
+            494 GET_ITER
+        >>  496 FOR_ITER               194 (to 886)
+            498 STORE_FAST               7 (line)
+
+691         500 LOAD_CONST              13 ('of image data has been sent')
+            502 LOAD_FAST                7 (line)
+            504 CONTAINS_OP              0
+            506 POP_JUMP_FORWARD_IF_FALSE    53 (to 614)
+
+692         508 LOAD_FAST                0 (self)
+            510 LOAD_ATTR               11 (step_changed)
+            520 LOAD_METHOD             12 (emit)
+            542 LOAD_GLOBAL             26 (STEP_WRITE)
+            554 PRECALL                  1
+            558 CALL                     1
+            568 POP_TOP
+
+693         570 LOAD_FAST                0 (self)
+            572 LOAD_METHOD             14 (_update_sp_image_progress)
+            594 LOAD_FAST                7 (line)
+            596 PRECALL                  1
+            600 CALL                     1
+            610 POP_TOP
+            612 JUMP_BACKWARD           59 (to 496)
+
+695     >>  614 LOAD_CONST              14 ('Download Ok')
+            616 LOAD_FAST                7 (line)
+            618 CONTAINS_OP              0
+            620 POP_JUMP_FORWARD_IF_TRUE    22 (to 666)
+            622 LOAD_CONST              15 ('download ok')
+            624 LOAD_FAST                7 (line)
+            626 LOAD_METHOD             15 (lower)
+            648 PRECALL                  0
+            652 CALL                     0
+            662 CONTAINS_OP              0
+            664 POP_JUMP_FORWARD_IF_FALSE    53 (to 772)
+
+696     >>  666 LOAD_FAST                0 (self)
+            668 LOAD_ATTR               11 (step_changed)
+            678 LOAD_METHOD             12 (emit)
+            700 LOAD_GLOBAL             32 (STEP_DONE)
+            712 PRECALL                  1
+            716 CALL                     1
+            726 POP_TOP
+
+697         728 LOAD_FAST                0 (self)
+            730 LOAD_METHOD             17 (_emit_progress)
+            752 LOAD_CONST              16 (100)
+            754 PRECALL                  1
+            758 CALL                     1
+            768 POP_TOP
+            770 JUMP_BACKWARD          138 (to 496)
+
+699     >>  772 LOAD_CONST              17 ('BROM connected')
+            774 LOAD_FAST                7 (line)
+            776 CONTAINS_OP              0
+            778 POP_JUMP_FORWARD_IF_FALSE    52 (to 884)
+
+700         780 LOAD_FAST                0 (self)
+            782 LOAD_ATTR               11 (step_changed)
+            792 LOAD_METHOD             12 (emit)
+            814 LOAD_GLOBAL             36 (STEP_DETECT)
+            826 PRECALL                  1
+            830 CALL                     1
+            840 POP_TOP
+
+701         842 LOAD_FAST                0 (self)
+            844 LOAD_METHOD             17 (_emit_progress)
+            866 LOAD_CONST              18 (12)
+            868 PRECALL                  1
+            872 CALL                     1
+            882 POP_TOP
+        >>  884 JUMP_BACKWARD          195 (to 496)
+        >>  886 JUMP_FORWARD            16 (to 920)
+        >>  888 PUSH_EXC_INFO
+
+703         890 LOAD_GLOBAL             38 (Exception)
+            902 CHECK_EXC_MATCH
+            904 POP_JUMP_FORWARD_IF_FALSE     3 (to 912)
+            906 POP_TOP
+
+704         908 POP_EXCEPT
+            910 JUMP_FORWARD             4 (to 920)
+
+703     >>  912 RERAISE                  0
+        >>  914 COPY                     3
+            916 POP_EXCEPT
+            918 RERAISE                  1
+
+705     >>  920 LOAD_GLOBAL              5 (NULL + time)
+            932 LOAD_ATTR                3 (sleep)
+            942 LOAD_CONST              19 (0.5)
+            944 PRECALL                  1
+            948 CALL                     1
+            958 POP_TOP
+
+682         960 LOAD_FAST                0 (self)
+            962 LOAD_ATTR                6 (_log_monitor_running)
+            972 EXTENDED_ARG             1
+            974 POP_JUMP_BACKWARD_IF_TRUE   368 (to 240)
+            976 LOAD_CONST               2 (None)
+            978 RETURN_VALUE
+        >>  980 LOAD_CONST               2 (None)
+            982 RETURN_VALUE
+ExceptionTable:
+  242 to 320 -> 888 [0]
+  322 to 444 -> 470 [1] lasti
+  446 to 468 -> 888 [0]
+  470 to 476 -> 478 [3] lasti
+  478 to 482 -> 888 [0]
+  484 to 484 -> 478 [3] lasti
+  486 to 884 -> 888 [0]
+  888 to 906 -> 914 [1] lasti
+  912 to 912 -> 914 [1] lasti
+
+Disassembly of <code object <lambda> at 0x00000190218FB870, file "app\flash_service.py", line 675>:
+675           0 RESUME                   0
+              2 LOAD_FAST                0 (p)
+              4 LOAD_METHOD              0 (stat)
+             26 PRECALL                  0
+             30 CALL                     0
+             40 LOAD_ATTR                1 (st_mtime)
+             50 RETURN_VALUE

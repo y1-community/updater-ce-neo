@@ -513,7 +513,6 @@ def process_env(stage: Path) -> dict:
     plugins = stage / "plugins"
     if plugins.is_dir():
         env["QT_PLUGIN_PATH"] = str(plugins)
-    env.setdefault("QT_QPA_PLATFORM", "xcb")
     return env
 
 
@@ -1434,10 +1433,11 @@ def launch_linux_flash_tool(
     env: dict = None,
     log_cb=None,
 ) -> subprocess.Popen:
-    """Launch Linux flash_tool with privilege escalation (doas, pkexec, sudo, run0, etc.) and silent fallback.
+    """Launch Linux flash_tool without a password prompt by default.
 
-    If the user fails or cancels authentication to run as root, SP Flash Tool is
-    silently executed as the current user without root.
+    Because the user's serial group and udev rules are prepared beforehand,
+    SP Flash Tool runs directly as the current user unless the user explicitly
+    enabled 'Run as Administrator' in Settings.
     """
     if cwd is None:
         cwd = stage
@@ -1459,14 +1459,21 @@ def launch_linux_flash_tool(
             env=base_env,
         )
 
-    # 2. Check if privilege escalation is possible
+    # 2. Only escalate if the user explicitly opted into running as root/admin.
+    want_root = False
+    try:
+        from . import elevation
+        want_root = bool(elevation.run_as_admin_enabled())
+    except Exception:
+        want_root = False
+
     is_headless = (
         os.environ.get("QT_QPA_PLATFORM") == "offscreen"
         or bool(os.environ.get("INNIOASIS_HEADLESS"))
         or (not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"))
     )
 
-    if not is_headless:
+    if want_root and not is_headless:
         candidates = find_available_escalation_tools()
         for tool in candidates:
             proc, cancelled = _attempt_escalation(tool, runner, cmd_args, cwd, base_env, log_cb)
@@ -1499,7 +1506,7 @@ def launch_linux_flash_tool(
                         proc.stdout = _PrependedStream(first_line, proc.stdout)
                     return proc
 
-    # 3. Silent fallback: launch without root
+    # 3. Default path: launch directly without root
     if log_cb:
         log_cb("Running SP Flash Tool without root privileges.")
     return subprocess.Popen(
@@ -1554,7 +1561,7 @@ def run_system_checker(stage: Path = None) -> dict:
     script_path = write_setup_script()
 
     has_high_conflict = any(c.get("severity") == "high" for c in conflicts)
-    overall_ready = arch_ok and pkg_ok and exec_ok and udev_ok and not has_high_conflict
+    overall_ready = arch_ok and pkg_ok and exec_ok and udev_ok and user_perm_ok and not has_high_conflict
 
     items = [
         {

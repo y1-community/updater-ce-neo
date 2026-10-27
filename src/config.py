@@ -4,7 +4,7 @@ Values mirror the InniUpdaterChin app (APP_VERSION 1.1.2, contact email) and
 the online catalogue / donation endpoints used by Updater CE and innioasis.app.
 """
 
-APP_VERSION = "2.5"
+APP_VERSION = "2.5.1"
 APP_NAME = "Updater CE"
 CONTACT_EMAIL = "updater-feedback@innioasis.com"
 
@@ -187,7 +187,7 @@ DONATION_LINKS = {
     "patreon": "https://www.patreon.com/ryanspecter",
     "honeygain": "https://join.honeygain.com/ITSRY2B5D7",
     "discord": "https://discord.gg/zHrT2zrcek",
-    "reddit": "https://reddit.com/r/innioasismodders",
+    "reddit": "https://reddit.com/r/innioasis",
     # Help questions go to the project's discussions, not an issue tracker.
     "github": "https://github.com/y1-community/updater-ce-neo/discussions",
 }

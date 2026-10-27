@@ -187,14 +187,7 @@ def icon_candidate_urls(release, package=None, *, dark: bool | None = None) -> l
 
 def release_image_fallback_urls(release, package=None, *, dark: bool | None = None) -> list[str]:
     """Manifest candidates used after the release's preferred and generic images."""
-    is_catalogue_release = bool(
-        release
-        and (
-            release.get("source_repo")
-            or (release.get("html_url") or "").startswith("https://github.com/")
-        )
-    )
-    if not is_catalogue_release:
+    if not package:
         return []
     return software_icon_urls(package, dark=dark)
 

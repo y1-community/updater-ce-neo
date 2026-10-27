@@ -8,7 +8,7 @@
 #include "../../Host/Inc/RuntimeMemory.h"
 
 DeviceTestWidget::DeviceTestWidget(QTabWidget *parent, MainWindow *window) :
-    TabWidgetBase(4, tr("Device&Test"), parent),
+    TabWidgetBase(10, tr("Device&Test"), parent),
     main_window_(window),
     ui_(new Ui::DeviceTestWidget)
 {

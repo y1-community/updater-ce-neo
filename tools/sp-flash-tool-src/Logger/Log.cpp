@@ -20,6 +20,8 @@ static const char kSep= '/';
 
 void QDebugLogFunc::operator()(const char * format,...)
 {
+    CriticalSectionSentry lck(Logger::GetLogger().GetCriticalSection());
+
     std::string log_str(format);
     va_list params;
     static char msg[2048] = {0};

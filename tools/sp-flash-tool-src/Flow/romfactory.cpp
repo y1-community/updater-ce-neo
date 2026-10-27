@@ -27,6 +27,11 @@ ERROR_T CRomFactory::produce(const ROM_INFO &rom,
     switch (rom.operation_type)
     {
     case OPER_BOOTLOADERS:
+        // if AB system, loader_ext_b filename is null, not enalbe, DO NOT produce it
+        // otherwise will make fw error: "loader_ext_a, loader_ext_b should select together"
+        if(std::string(rom.filepath) == "" && rom.enable == _FALSE)
+            return ERROR_OK;
+
         if(format_whole_flash_)
             return CreateCompositeBL(rom);
         else

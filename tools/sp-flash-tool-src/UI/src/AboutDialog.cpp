@@ -12,9 +12,9 @@ const QString AboutDialog::S_COMMENT("Comment:");
 const QString AboutDialog::S_BUILD_DATE("Build-Date: ");
 const QString AboutDialog::S_DA_V_PRE("DA_v");
 
-AboutDialog::AboutDialog(MainWindow *window, QWidget *parent) :
+AboutDialog::AboutDialog(MainWindow *parent) :
     QDialog(parent),
-    main_window(window),
+    main_window(parent),
     ui(new Ui::AboutDialog)
 {
     ui->setupUi(this);

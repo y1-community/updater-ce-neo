@@ -23,14 +23,14 @@ QtFlashTool.Dependency.Files := \
  $(wildcard Lib/*.sh) \
  $(wildcard Lib/*.qhc) \
  $(wildcard Lib/*.qch) \
- $(wildcard Lib/Updater) \
- $(wildcard Lib/FlashToolUpdater) \
+ $(wildcard Lib/Release.json) \
+ $(wildcard Lib/99-ttyacms.rules) \
 
 QtFlashTool.Dependency.Dirs := \
  $(wildcard Lib/QtLinux/*)
 
 QtFlashTool.Output.Files := *.xml *.xsd *.ini *.so *.bin *.sh *.qhc *.qch *.txt \
-	Updater FlashToolUpdater flash_tool \
+	flash_tool 99-ttyacms.rules Release.json \
 	bin lib plugins \
 	codecs imageformats sqldrivers
 

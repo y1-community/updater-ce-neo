@@ -8,7 +8,7 @@ namespace APCore
 {
 
 ReadbackCommand::ReadbackCommand(APKey key)
-    :ICommand(key), readback_arg_(), m_is_scatter_ver2(false)
+    :ICommand(key), readback_arg_(), m_is_scatter_ver2(false), m_is_sram_rb(false)
 {
 }
 
@@ -19,7 +19,15 @@ ReadbackCommand::~ReadbackCommand()
 
 void ReadbackCommand::exec(const QSharedPointer<Connection> &conn)
 {
-    conn->ConnectDA();
+    LOGI("m_is_sram_rb: %d", m_is_sram_rb);
+    if(m_is_sram_rb)
+    {
+        conn->ConnectDA(FIRST_DA, _FALSE);
+    }
+    else
+    {
+        conn->ConnectDA();
+    }
 
     if (m_is_scatter_ver2)
     {
@@ -39,10 +47,33 @@ void ReadbackCommand::exec(const QSharedPointer<Connection> &conn)
                 conn->FTHandle(),
                 readback_arg_.raw_arg(),
                 &rb_result);
-    LOGD("Readback result: %s(%d)", StatusToString(ret), ret);
+    LOGD("Readback result: %s(0x%x)", StatusToString(ret), ret);
     if(ret != S_DONE)
     {
-        THROW_BROM_EXCEPTION(ret,0);
+        char out_buffer[128] = {0};
+        unsigned int bytes_returned = 0;
+        int status= FlashTool_Device_Control(conn->FTHandle(),
+                                             DEV_DA_GET_ERROR_DETAIL,
+                                             0,
+                                             0,
+                                             out_buffer,
+                                             128,
+                                             &bytes_returned);
+        LOGI("DEV_DA_GET_ERROR_DETAIL status: 0x%x", status);
+        if(status != S_DONE)
+        {
+            //for not support DEV_DA_GET_ERROR_DETAIL, just return ret is ok
+            THROW_BROM_EXCEPTION(ret,0);
+        }
+        else
+        {
+            std::string err_msg = out_buffer;
+            unsigned long lba = *(unsigned long*)(out_buffer+EMMC_ERR_TYPE_STR_MAXSIZE+1);
+            LOGI("lba: %lu", lba);
+            err_msg += "\nlba: "+ NumberToString(lba);
+            LOGI("err_msg: %s", err_msg.c_str());
+            THROW_APP_EXCEPTION(ret, err_msg);
+        }
     }
 
     LOGI("Readback Succeeded.");

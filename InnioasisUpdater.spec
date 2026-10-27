@@ -212,5 +212,12 @@ try:
             if (_sp_target / _log_dir).is_dir():
                 shutil.rmtree(_sp_target / _log_dir, ignore_errors=True)
         print(f"[spec] copied SP_Flash_Tool payload from {SP_FLASH_SRC} -> {_sp_target}")
+
+    _tools_dir = _app_dir / "tools"
+    _unrar_src = PROJECT_ROOT / "tools" / "windows" / "UnRAR.exe"
+    if _unrar_src.exists():
+        _tools_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(_unrar_src, _tools_dir / "UnRAR.exe")
+        print(f"[spec] copied UnRAR payload from {_unrar_src} -> {_tools_dir / 'UnRAR.exe'}")
 except Exception as exc:  # noqa: BLE001
     print(f"[spec] WARNING: could not place SP_Flash_Tool payload: {exc}")

@@ -78,10 +78,12 @@ public:
 
     bool LibDAMatchChecked();
 
+protected:
+    virtual void showEvent(QShowEvent *event);
+
 private:
     APCore::USBPower GetPowerControl();
     void ReInitItems();
-    void RegisterDevicePlugNotification();
     void InitThemeItems();
     void ShowCustomThemeSetting(bool show);
     void AdjustTime();
@@ -96,6 +98,8 @@ private:
     void EnableControl(bool enable);
     void startCleanThread();
     qint64 GetHoursFromDateEnum() const;
+    bool CheckStorageLifeCycle() const;
+    void InitUpdateOptions();
 
 private:
     MainWindow *main_window_;
@@ -139,6 +143,10 @@ private slots:
     void on_checkBox_rpmb_clicked();
 
     void on_btn_logPath_clicked();
+
+    void on_checkBox_StorageLifeCycle_clicked();
+
+    void slot_get_uart_com_ports(const std::list<std::string> &uart_com_ports);
 
 signals:
     void signal_enable_DAChksum(int Chksum_type);

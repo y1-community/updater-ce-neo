@@ -79,6 +79,7 @@ typedef struct partition_info_t
    uint32 d_type; //NAND scatter file, FULL_PAGE/LOW_PAGE
    uint32 slc_percentage;
    uint32 rom_type; 
+   BOOL combo_partsize_check;
 }partition_info_t;
 
 typedef struct partition_info_list_t
@@ -96,6 +97,7 @@ typedef struct scatter_file_info_t
 	  char8 chip_version[PARAM_BUF_SIZE];
       char8 storage[PARAM_BUF_SIZE];
 	  bool skip_pt_operate;
+	  bool resize_check;
       uint32 partition_count;
    }hdr;
    partition_info_t part[MAX_PARTITION_COUNT]; //only visable partitions
@@ -294,6 +296,8 @@ typedef enum device_control_code
     DEV_SET_BOOT_MODE,
     DEV_DA_PMIC_COLD_RESET,
     DEV_DA_DRAM_REPAIR,
+    DEV_DA_STOR_LIFE_CYCLE_CHECK,
+    DEV_DA_GET_ERROR_DETAIL,
     DEV_PL_STAY_STILL = 0x200 
 }device_control_code_e;
 

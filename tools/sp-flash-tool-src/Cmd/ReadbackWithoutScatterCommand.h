@@ -21,6 +21,8 @@ public:
         part_list_ = items;
     }
 
+    void setReboot(bool reboot);
+
     static void __stdcall cb_rb_operation_progress(void* arg, enum transfer_phase phase,
                                                    unsigned int progress,
                                                    unsigned long long data_xferd,
@@ -35,6 +37,7 @@ private:
 
 private:
     std::vector<op_part_list_t> part_list_;
+    bool m_reboot;
 };
 
 }

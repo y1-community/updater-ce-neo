@@ -70,7 +70,7 @@ private:
     QSharedPointer<APCore::RSCSetting> CreateRSCSetting() const;
     QSharedPointer<APCore::DRAMRepairSetting> CreateDRAMRepairSetting() const;
     bool isDownloadCmd(const std::string &cmd_name) const;
-    bool getRSCInfoByIndex(std::string *proj_name, std::string *proj_operator) const;
+    bool getRSCInfoByProjName(unsigned int *index, std::string *proj_operator) const;
     QString getRSCFileName() const;
     void addRSCSetting();
 
@@ -83,7 +83,7 @@ private:
     bool m_has_rsc_cmd;
     bool m_has_download_cmd;
     std::string m_scatter_file;
-    std::string m_rsc_index_str;
+    std::string m_rsc_proj_name;
 };
 
 }

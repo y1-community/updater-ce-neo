@@ -20,17 +20,6 @@ ParameterWidget::ParameterWidget(QTabWidget *parent, MainWindow *window) :
 
 ParameterWidget::~ParameterWidget()
 {
-    if(otp_write_dialog_)
-    {
-        delete otp_write_dialog_;
-        otp_write_dialog_ = NULL;
-    }
-    if(otp_read_dialog_)
-    {
-        delete otp_read_dialog_;
-        otp_read_dialog_ = NULL;
-    }
-
     if(ui_)
     {
         delete ui_;

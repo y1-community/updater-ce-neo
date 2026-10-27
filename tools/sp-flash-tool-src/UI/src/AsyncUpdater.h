@@ -12,6 +12,15 @@
 class AsyncUpdater : public QObject
 {
     Q_OBJECT
+
+public:
+    typedef enum _UpdateFailReason
+    {
+        unknown_reason = 0,
+        lack_of_update_files,
+        start_update_exe_fail
+    } UpdateFailReason;
+
 public:
     explicit AsyncUpdater(QObject *parent);
     ~AsyncUpdater();
@@ -36,11 +45,15 @@ private:
     void processError(QProcess::ProcessError err);
     void ReadReleaseNotes(const std::string &path);
     void ConstructReleaseNotes(QtJson::JsonObject &jsonObject);
+    bool UpdateToolsPreCheck() const;
+    void DoUpdateTool();
+    bool RunAsAdmin(const QString &appName, const QStringList &paramterList) const;
 
 private:
     std::string ReleaseFolder;
     std::string UpdaterExe;
     std::string ReleaseNote;
+    std::string CurrentVersion;
 
     void parserUpdateInfo();
 
@@ -55,6 +68,7 @@ private:
 signals:
     void signal_check_finish(const bool &bUpdate);
     void signal_update_finish();
+    void signal_update_failed(AsyncUpdater::UpdateFailReason);
 
 public slots:
 

@@ -6,6 +6,7 @@
 #include "../../Host/Inc/RuntimeMemory.h"
 #include <QtDebug>
 #include <QTime>
+#include <QMessageBox>
 
 static const QString PColorRed (" QProgressBar::chunk{background-color: red} QProgressBar {text-align: center; border-radius: 0px}");
 static const QString PColorGreen (" QProgressBar::chunk{background-color: green} QProgressBar {text-align: center; border-radius: 0px}");
@@ -51,6 +52,7 @@ void MainWindowCallback::InstallSignals()
 
     connect(this, SIGNAL(signal_OperationFinished()),SLOT(slot_OperationFinished()));
     connect(this, SIGNAL(signal_OperationOK()), SLOT(slot_OperationOK()));
+	connect(this, SIGNAL(signal_OperationQuestion(int *)), SLOT(slot_OperationQuestion(int *)), Qt::BlockingQueuedConnection);
 #if 0 //2013/08/21: Remove signals and slots to align with observers notification
     connect(this, SIGNAL(signal_GetDAReport(const DA_REPORT_T*,const std::string& friend_name)),
             SLOT(slot_GetDAReport(const DA_REPORT_T*,const std::string& friend_name)));
@@ -142,6 +144,11 @@ void __stdcall MainWindowCallback::OperationFinished()
 void __stdcall MainWindowCallback::OperationOK()
 {
     emit instance_->signal_OperationOK();
+}
+
+void __stdcall MainWindowCallback::OperationQuestion(int *p_val)
+{
+    emit instance_->signal_OperationQuestion(p_val);
 }
 
 int __stdcall MainWindowCallback::GetDAReport(
@@ -367,11 +374,13 @@ int __stdcall MainWindowCallback::memChecksumPro(unsigned char finished_percenta
 //slot functions to update UI in main thread.
 void MainWindowCallback::slot_OperationFinished()
 {
+    main_window->DismissConnectPrompt();
     time_label_timer->stop();
 }
 
 void MainWindowCallback::slot_OperationOK()
 {
+    main_window->DismissConnectPrompt();
     bool isFinished = false;
 
     if(!main_window->operation_support_auto_polling()
@@ -418,6 +427,23 @@ void MainWindowCallback::slot_OperationOK()
     }
 }
 
+void MainWindowCallback::slot_OperationQuestion(int *p_val)
+{
+	Q_ASSERT(NULL != p_val);
+	*p_val = 0;
+	int ret = flashtool_message_box(main_window, NULL, QUESTION_MSGBOX, 
+		LoadQString(main_window->GetLanguageTag(), IDS_STRING_WARNING),
+        LoadQString(main_window->GetLanguageTag(), IDS_STRING_STOR_LIFE_WARN_REMINDER),
+		LoadQString(main_window->GetLanguageTag(), IDS_STRING_CONTINUE),
+		LoadQString(main_window->GetLanguageTag(), IDS_STRING_CANCEL));
+	if (ret == QMessageBox::AcceptRole)
+	{
+		*p_val = 1;
+	} else {
+		main_window->ResetStatus();
+	}
+}
+
 void MainWindowCallback::slot_GetDAReport(const DA_REPORT_T *p_da_report,
                                           const std::string& friend_name,
                                           const std::string& usb_status)
@@ -434,6 +460,7 @@ void MainWindowCallback::slot_GetDAReport(const DA_REPORT_T *p_da_report,
 void MainWindowCallback::slot_DownloadDAInit(void *usr_arg)
 {
     Q_UNUSED(usr_arg);
+    main_window->DismissConnectPrompt();
     if(!main_window->main_controller()->isStop())
     {
         main_window->ui->progressBar->setStyleSheet(PColorRed);
@@ -451,6 +478,7 @@ void MainWindowCallback::slot_DownloadDAProgress(unsigned char percent, unsigned
 {
     Q_UNUSED(total_bytes);
     Q_UNUSED(usr_arg);
+    main_window->DismissConnectPrompt();
     if(!main_window->main_controller()->isStop())
     {
         main_window->ui->progressBar->setValue(percent);
@@ -468,6 +496,7 @@ void MainWindowCallback::slot_CheckUSBStatusInit(void *arg, const char* /* usb_s
 void MainWindowCallback::slot_DADLChksum_Init(void* usr_arg, const char* /*image_name*/)
 {
     Q_UNUSED(usr_arg);
+    main_window->DismissConnectPrompt();
     if(!main_window->main_controller()->isStop())
     {
         LOGD("chksum initial...");

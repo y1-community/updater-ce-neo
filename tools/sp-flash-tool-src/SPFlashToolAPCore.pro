@@ -42,7 +42,8 @@ win32:LIBS += -L$$quote($$PWD/lib) \
     -L$$quote($$PWD/lib/QtWin) \
     -lFlashToolLib \
     -lFlashtoollibEx \
-    -lSLA_Challenge
+    -lSLA_Challenge \
+    -lshell32
 
 unix:LIBS += -L$$quote($$PWD/Lib) \
     -L$$quote($$PWD/Lib/QtLinux) \
@@ -138,9 +139,6 @@ SOURCES += \
     UI/src/OkDialog.cpp \
     UI/src/FormatWidget.cpp \
     UI/src/WriteMemoryWidget.cpp \
-    UI/src/UpdateDialog.cpp \
-    UI/src/CheckUpdateDialog.cpp \
-    UI/src/AsyncUpdater.cpp \
     Arg/BromChksumArg.cpp \
     Setting/ChksumSetting.cpp \
     Rules/ChksumRule.cpp \
@@ -229,16 +227,26 @@ SOURCES += \
     Setting/RSCSetting.cpp \
     ConsoleMode/CommandSettingValidator.cpp \
     Cmd/DRAMRepairCommand.cpp \
-    Setting/DRAMRepairSetting.cpp
+    Setting/DRAMRepairSetting.cpp \
+    UI/src/AsyncUARTComPortInfo.cpp \
+    UI/src/fw.cpp \
+    Cmd/FWCommand.cpp \
+    Setting/FWSetting.cpp \
+    Cmd/ICommand.cpp
 
 # ONLY Windows related begins here
 win32:SOURCES += Host/Win/RuntimeMemory.cpp \
-    Host/Win/DeviceConn.cpp
+    Host/Win/DeviceConn.cpp \
+    Host/Win/CriticalSectionSentry.cpp \
+    UI/src/UpdateDialog.cpp \
+    UI/src/CheckUpdateDialog.cpp \
+    UI/src/AsyncUpdater.cpp
 
 # ONLY Linux related begins here
 unix:SOURCES += Host/Linux/RuntimeMemory.cpp \
     Host/Linux/DeviceScan.cpp \
-    Host/Linux/DeviceConn.cpp
+    Host/Linux/DeviceConn.cpp \
+    Host/Linux/CriticalSectionSentry.cpp
 
 HEADERS += \
     Conn/Connection.h \
@@ -346,9 +354,6 @@ HEADERS += \
     UI/src/OkDialog.h \
     UI/src/FormatWidget.h \
     UI/src/WriteMemoryWidget.h \
-    UI/src/UpdateDialog.h \
-    UI/src/CheckUpdateDialog.h \
-    UI/src/AsyncUpdater.h \
     UI/src/UfsWidget.h \
     Arg/BromChksumArg.h \
     Setting/ChksumSetting.h \
@@ -444,7 +449,16 @@ HEADERS += \
     Cmd/RSCCommand.h \
     ConsoleMode/CommandSettingValidator.h \
     Cmd/DRAMRepairCommand.h \
-    Setting/DRAMRepairSetting.h
+    Setting/DRAMRepairSetting.h \
+    Host/Inc/CriticalSectionSentry.h \
+    UI/src/AsyncUARTComPortInfo.h \
+    Setting/FWSetting.h \
+    Cmd/FWCommand.h \
+    UI/src/fw.h
+
+win32:HEADERS += UI/src/UpdateDialog.h \
+    UI/src/CheckUpdateDialog.h \
+    UI/src/AsyncUpdater.h
 
 linux:HEADERS += Linux/WINDEF.H \
     Linux/linux_flash_tool.h \
@@ -470,8 +484,6 @@ FORMS += \
     UI/forms/TabWidget/FormatWidget.ui \
     UI/forms/OptionDialog.ui \
     UI/forms/TabWidget/WriteMemoryWidget.ui \
-    UI/forms/UpdateDialog.ui \
-    UI/forms/CheckUpdateDialog.ui \
     UI/forms/TabWidget/WelcomeWidget.ui \
     UI/forms/TabWidget/BromAdapterWidget.ui \
     UI/forms/SDMMCWidget.ui \
@@ -482,8 +494,11 @@ FORMS += \
     UI/forms/TabWidget/SCIDownloadWidget.ui \
     UI/forms/TabWidget/CloneDownloadWidget.ui \
     UI/forms/EncryDialog.ui \
-    UI/forms/UfsWidget.ui
+    UI/forms/UfsWidget.ui \
+    UI/forms/TabWidget/fw.ui
 
+win32:FORMS += UI/forms/UpdateDialog.ui \
+    UI/forms/CheckUpdateDialog.ui
 
 RESOURCES += \
     UI/icon.qrc \

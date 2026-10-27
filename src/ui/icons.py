@@ -73,13 +73,34 @@ def vector_recolor_svg_data(svg_text: str, color: str | QColor) -> str:
 
 
 def recolor_bright_pixels(pixmap: QPixmap, color: str | QColor) -> QPixmap:
-    """Tint artwork with color, preserving alpha and antialiasing."""
+    """Replace near-white artwork with ``color`` and preserve the remaining image.
+
+    The Linux paperclip illustrations use white strokes and a white canvas with
+    black text/details. Map the white pixels to the desktop foreground and keep
+    all dark artwork as-is; intermediate pixels retain their antialiasing as
+    alpha instead of making black lettering transparent.
+    """
     if pixmap.isNull():
         return pixmap
     qcolor = QColor(color) if isinstance(color, str) else QColor(color)
     if not qcolor.isValid():
         return pixmap
-    return tint_pixmap(pixmap, qcolor)
+    image = pixmap.toImage().convertToFormat(QImage.Format.Format_ARGB32)
+    dpr = pixmap.devicePixelRatio()
+    threshold = 192
+    for y in range(image.height()):
+        for x in range(image.width()):
+            px = QColor(image.pixel(x, y))
+            if not px.alpha():
+                continue
+            brightness = min(px.red(), px.green(), px.blue())
+            if brightness < threshold:
+                continue
+            alpha = px.alpha() * brightness // 255
+            image.setPixelColor(x, y, QColor(qcolor.red(), qcolor.green(), qcolor.blue(), alpha))
+    result = QPixmap.fromImage(image)
+    result.setDevicePixelRatio(dpr)
+    return result
 
 
 def tint_pixmap(pixmap: QPixmap, color: str | QColor) -> QPixmap:
@@ -564,6 +585,36 @@ def _has_visible_pixels(pixmap: QPixmap) -> bool:
             if (image.pixel(x, y) >> 24) & 0xFF > 40:
                 return True
     return False
+
+
+def app_icon_pixmap(size: int = 48) -> QPixmap:
+    """Return the application icon pixmap at the requested size.
+
+    - macOS: Apple native icon styling (Dark, Clear, Tinted) via macos_app_icon_pixmap.
+    - Windows / Linux: Bundled assets/icon.png scaled with smooth transformation.
+    """
+    if IS_MAC:
+        try:
+            pix = macos_app_icon_pixmap(size)
+            if pix is not None and not pix.isNull():
+                return pix
+        except Exception as e:
+            logger.debug("Failed to get macos app icon pixmap: %s", e)
+
+    try:
+        from .. import paths
+
+        icon_path = paths.RESOURCES_DIR / "icon.png"
+        if icon_path.exists():
+            pm = QPixmap(str(icon_path))
+            if not pm.isNull():
+                return pm.scaled(
+                    size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation
+                )
+    except Exception as e:
+        logger.debug("Failed to load bundled icon.png: %s", e)
+
+    return QPixmap()
 
 
 def _get_sf_symbol_pixmap(symbol_name: str, size: int, color: str = "#FFFFFF") -> Optional[QPixmap]:

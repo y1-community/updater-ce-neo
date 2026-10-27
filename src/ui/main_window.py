@@ -696,6 +696,7 @@ class MainWindow(QMainWindow):
         # only exists while this is set (see _sync_update_button).
         self._pending_app_update = None
         self._install_failed = False
+        self._saw_all_command_exec = False
         self._failure_title = ""
         self._cache_recovery_needed = False
         self._legacy_migration_checked = False
@@ -721,6 +722,7 @@ class MainWindow(QMainWindow):
         # many times over; this keeps the guidance dialog to once per attempt.
         self._active_workers = set()
         self._build_ui()
+        self._install_themes_shortcut()
         self.setAcceptDrops(True)
         self._drop_overlay = _DropOverlay(self)
         self._drop_check_active = False
@@ -750,21 +752,31 @@ class MainWindow(QMainWindow):
             self._sp_history_timer.setInterval(30000)
             self._sp_history_timer.timeout.connect(self._sync_sp_history)
             self._sp_history_timer.start()
+            if not is_headless:
+                QTimer.singleShot(800, self._sync_sp_history)
 
     def _sync_sp_history(self):
-        """Refresh history.ini when the scatter path changes. Once is enough."""
+        """Passively keep history.ini pointed at the last cached firmware's scatter and DA.
+
+        Runs on launch, on the background timer while idle, and after a firmware
+        install finishes — never during an active firmware install or while
+        SP Flash Tool is running.
+        """
         try:
-            from .. import sp_flash_gui
+            if (
+                self._install_run_active()
+                or getattr(self, "_gui_handoff_prepare", False)
+                or getattr(self, "_gui_launch_in_flight", False)
+                or getattr(self, "_gui_quit_started", False)
+            ):
+                return
+            from .. import process_guard, sp_flash_gui
             if not sp_flash_gui.is_sp_flash_gui_supported():
                 return
-            model = getattr(self, "_package_model", "") or ""
-            scatter, _extract, resolved_model = sp_flash_gui.resolve_cached_firmware(model=model)
-            key = os.path.normcase(str(scatter)) if scatter else ""
-            token = (key, model or resolved_model or "")
-            if token == getattr(self, "_sp_history_sync_token", None):
+            if process_guard.install_session_active() or process_guard.is_flash_tool_process_running():
                 return
-            if sp_flash_gui.update_sp_history_ini(model=model):
-                self._sp_history_sync_token = token
+            model = getattr(self, "_package_model", "") or ""
+            sp_flash_gui.update_sp_history_ini(model=model)
         except Exception:
             pass
 
@@ -1003,6 +1015,9 @@ class MainWindow(QMainWindow):
         )
         self._settings_page.check_updates_requested.connect(
             lambda: self._check_device_firmware_updates(manual=True)
+        )
+        self._settings_page.install_rockbox_themes_requested.connect(
+            self._on_settings_install_rockbox_themes
         )
 
         self._donations = parse_donors_csv_text(load_donors_file([
@@ -1327,7 +1342,7 @@ class MainWindow(QMainWindow):
         self._nav_btn_group.addButton(btn, _PAGE_SELECT)
 
         self._settings_btn = self._make_nav_button(tr("nav_settings"), "settings", checkable=True)
-        self._settings_btn.clicked.connect(self._show_full_settings)
+        self._settings_btn.clicked.connect(self._on_settings_nav_clicked)
         layout.addWidget(self._settings_btn)
         self._nav_buttons["nav_settings"] = (self._settings_btn, _PAGE_SETTINGS)
         self._nav_btn_group.addButton(self._settings_btn, _PAGE_SETTINGS)
@@ -1341,6 +1356,8 @@ class MainWindow(QMainWindow):
         if platform.system() == "Linux" and not paths.IS_MAC:
             self._linux_setup_btn = self._make_nav_button(tr("nav_linux_setup"), "tools")
             self._linux_setup_btn.clicked.connect(self._show_linux_setup)
+            self._linux_setup_btn.setVisible(False)
+            self._linux_setup_btn.setEnabled(False)
             layout.addWidget(self._linux_setup_btn)
             self._aux_nav_buttons.append(self._linux_setup_btn)
 
@@ -2493,6 +2510,90 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(tr("status_app_reset_defaults"), 4000)
         self._append_log(tr("log_app_reset_defaults"))
 
+    def _install_themes_shortcut(self) -> None:
+        """Ctrl+T (Cmd+T on macOS) starts the Rockbox themes & fonts stage on demand."""
+        from PySide6.QtGui import QKeySequence, QShortcut
+
+        # Qt maps "Ctrl" to the Command key on macOS, so one sequence covers both.
+        shortcut = QShortcut(QKeySequence("Ctrl+T"), self)
+        shortcut.setContext(Qt.ShortcutContext.WindowShortcut)
+        shortcut.activated.connect(self.start_rockbox_themes_manually)
+        self._themes_shortcut = shortcut
+
+    def _manual_themes_model(self) -> str:
+        """Y1 or Y2 for a manually started themes stage."""
+        candidates = []
+        page = getattr(self, "_select_page", None)
+        if page is not None:
+            try:
+                candidates.append(page.current_model())
+            except Exception:
+                pass
+        candidates.append(getattr(self, "_package_model", "") or "")
+        for value in candidates:
+            upper = str(value or "").upper()
+            if "Y2" in upper:
+                return "Y2"
+            if "Y1" in upper:
+                return "Y1"
+        return "Y1"
+
+    def _on_settings_install_rockbox_themes(self) -> None:
+        """Triggered from Settings card: install Rockbox 360p themes."""
+        if self._install_run_active():
+            self._append_log("Rockbox themes install ignored: an install is already in progress.")
+            return
+
+        from ..config import is_offline_mode
+        offline = is_offline_mode()
+        model = self._manual_themes_model()
+        self._append_log(f"Starting Rockbox 360p themes installation for {model}...")
+
+        if not offline:
+            self._append_log("[Rockbox Themes] Checking for latest 360p themes from GitHub...")
+            from ..theme_pack import ThemePackUpdateWorker
+            self._theme_update_worker = ThemePackUpdateWorker(parent=self)
+            self._theme_update_worker.finished.connect(self._on_theme_update_finished)
+            self._theme_update_worker.start()
+            if hasattr(self, "_settings_page"):
+                self._settings_page.set_themes_refreshing(True, tr("settings_themes_refreshing"))
+        else:
+            self._append_log("[Rockbox Themes] Offline mode active: using built-in 360p theme pack.")
+
+        self.start_rockbox_themes_manually()
+
+    def _on_theme_update_finished(self, ok: bool, status: str, count: int) -> None:
+        if hasattr(self, "_settings_page"):
+            self._settings_page.set_themes_refreshing(False)
+        if ok and status == "merged":
+            self._append_log(f"[Rockbox Themes] Successfully downloaded and merged {count} latest themes into 360p pack.")
+        elif status == "offline_fallback":
+            self._append_log("[Rockbox Themes] Offline or download unreachable; using stored 360p theme pack.")
+
+    def start_rockbox_themes_manually(self) -> bool:
+        """Begin the Rockbox themes & fonts stage without a flash having just run.
+
+        Does nothing while an install is in progress. Otherwise it opens the same
+        guided stage a Rockbox install hands off to: power the player on, connect
+        USB, then the themes and fonts are pushed over ADB.
+        """
+        if self._install_run_active():
+            self._append_log("Rockbox themes shortcut ignored: an install is already running.")
+            return False
+        model = self._manual_themes_model()
+        self._append_log(f"Rockbox themes & fonts stage started manually for {model}.")
+        self._package_model = model
+        self._install_complete = False
+        self._install_failed = False
+        self._themes_stage_done = False
+        self._compact_install_screen = False
+        self._rockbox_themes_flow_active = True
+        self._is_360p_rockbox = True
+        self._flash_page.set_model(model)
+        self._nav_to_page(_PAGE_FLASH)
+        self._show_rockbox_power_on_prompt(model)
+        return True
+
     def _rockbox_themes_required(self) -> tuple[bool, str]:
         """Whether the selected Y1/Y2 Rockbox build needs bundled 360p assets.
 
@@ -2572,12 +2673,15 @@ class MainWindow(QMainWindow):
 
     def _show_rockbox_power_on_prompt(self, model: str) -> None:
         """Ask the user to boot the flashed player before ADB/theme setup."""
+        self._install_complete = True
+        self._install_failed = False
         self._rockbox_power_on_pending = True
         self._rockbox_power_on_model = model
         prompt = tr(self._flash_page.rockbox_power_on_prompt_key(model)).format(model=model)
         self._flash_page.show_rockbox_power_on_prompt(
             prompt,
             on_continue=self._continue_rockbox_power_on,
+            on_recover=lambda: self.restore_original_software(model),
         )
         self._sync_install_nav_entry()
         self._adjust_window_geometry()
@@ -2778,8 +2882,16 @@ class MainWindow(QMainWindow):
             content_height = self._page_content_height(page) if page is not None else 0
         _, chrome_h = self._window_chrome()
         max_w = MAXIMUM_WINDOW_WIDTH
-        is_hugging = getattr(self, "_hugging_install", False) or (
-            stack is not None and stack.currentIndex() == _PAGE_FLASH
+        solo_settings_card = bool(
+            stack is not None
+            and stack.currentIndex() == _PAGE_SETTINGS
+            and getattr(self, "_settings_page", None) is not None
+            and self._settings_page.focused_card() is not None
+        )
+        is_hugging = (
+            getattr(self, "_hugging_install", False)
+            or (stack is not None and stack.currentIndex() == _PAGE_FLASH)
+            or solo_settings_card
         )
         min_floor = (
             COMPACT_INSTALL_MIN_HEIGHT_NO_DONATIONS
@@ -2861,7 +2973,21 @@ class MainWindow(QMainWindow):
             if hinted > 0:
                 need_w = max(need_w, hinted)
                 floor_w = hinted
-        target_h = max(self._content_floor_height(), target_h)
+        solo_settings_card = bool(
+            stack.currentIndex() == _PAGE_SETTINGS
+            and getattr(self, "_settings_page", None) is not None
+            and self._settings_page.focused_card() is not None
+        )
+        floor_h = (
+            COMPACT_INSTALL_MIN_HEIGHT_NO_DONATIONS
+            if solo_settings_card
+            else self._content_floor_height()
+        )
+        if solo_settings_card:
+            nav = getattr(self, "_nav_panel", None)
+            if nav is not None:
+                floor_h = max(floor_h, nav.minimumSizeHint().height() + chrome_h)
+        target_h = max(floor_h, target_h)
         # The width the user chose is kept: only a page that cannot be drawn in
         # it (long translated words, a wide form) makes the window wider.
         target_w = max(self.width(), MINIMUM_WINDOW_WIDTH, need_w)
@@ -2871,14 +2997,14 @@ class MainWindow(QMainWindow):
             target_w = min(target_w, int(available.width()), MAXIMUM_WINDOW_WIDTH)
             target_h = min(target_h, int(available.height()))
             floor_w = min(floor_w, int(available.width()), MAXIMUM_WINDOW_WIDTH)
-        if stack.currentIndex() == _PAGE_SETTINGS:
+        if stack.currentIndex() == _PAGE_SETTINGS and not solo_settings_card:
             max_settings_h = min(int(available.height()) - 60, 560) if screen is not None else 560
             target_h = min(target_h, max(DEFAULT_WINDOW_HEIGHT, max_settings_h))
         self._apply_window_size_limits(target_h)
         floor_w = max(MINIMUM_WINDOW_WIDTH, min(floor_w, target_w))
         if target_w != self.width() or target_h != self.height():
             self._animate_window_size(
-                target_w, target_h, minimum=(floor_w, self._content_floor_height())
+                target_w, target_h, minimum=(floor_w, floor_h)
             )
         elif floor_w > self.minimumWidth():
             # Nothing to resize, but the page still must not be dragged
@@ -3000,8 +3126,17 @@ class MainWindow(QMainWindow):
             self._apply_window_size_limits(target_h)
             self._animate_window_size(target_w, target_h, minimum=(target_w, target_h))
         else:
+            solo_settings_card = bool(
+                curr_idx == _PAGE_SETTINGS
+                and getattr(self, "_settings_page", None) is not None
+                and self._settings_page.focused_card() is not None
+            )
             min_w = self._minimum_window_width()
-            min_h = self._content_floor_height()
+            min_h = (
+                COMPACT_INSTALL_MIN_HEIGHT_NO_DONATIONS
+                if solo_settings_card
+                else self._content_floor_height()
+            )
             self._hugging_install = False
             self.setMinimumSize(min_w, min_h)
             # Whatever page is on screen now owns the window size: leaving the
@@ -3219,12 +3354,14 @@ class MainWindow(QMainWindow):
 
     def _apply_install_ui_state(self, active: bool):
         handoff = self._handoff_chrome()
+        linux_setup = bool(getattr(self, "_linux_setup_flow_active", False))
         key = (
             bool(active),
             bool(handoff),
+            bool(linux_setup),
         )
         if getattr(self, "_install_ui_key", None) == key:
-            if not active:
+            if not active and not linux_setup:
                 self._reveal_sp_gui_button()
             return
         self._install_ui_key = key
@@ -3237,9 +3374,15 @@ class MainWindow(QMainWindow):
         if controls is not None:
             controls.set_close_enabled(not active)
 
+        select_entry = getattr(self, "_nav_buttons", {}).get("nav_select_package")
+        select_btn = select_entry[0] if select_entry else None
+
         if active:
             # During install / extraction / prep stages: only show "Install Software"
             # and Diagnostics (simplified user facing install output).
+            if select_btn is not None:
+                select_btn.setVisible(True)
+                select_btn.setEnabled(True)
             if hasattr(self, "_settings_btn"):
                 self._settings_btn.setVisible(False)
                 self._settings_btn.setEnabled(False)
@@ -3255,6 +3398,7 @@ class MainWindow(QMainWindow):
             self._sync_update_button()
             if hasattr(self, "_linux_setup_btn"):
                 self._linux_setup_btn.setVisible(False)
+                self._linux_setup_btn.setEnabled(False)
             if hasattr(self, "_sp_flash_tool_btn"):
                 self._sp_flash_tool_btn.setVisible(False)
                 self._sp_flash_tool_btn.setEnabled(False)
@@ -3269,22 +3413,61 @@ class MainWindow(QMainWindow):
                 self._lang_label.setVisible(True)
             if hasattr(self, "_lang_combo"):
                 self._lang_combo.setVisible(True)
+        elif linux_setup:
+            # During initial Linux Setup: lock the sidebar onto the renamed
+            # "Linux Setup" button (_settings_btn) and hide all other navigation
+            # buttons so nothing can take the user out of the setup screen.
+            if select_btn is not None:
+                select_btn.setVisible(False)
+                select_btn.setEnabled(False)
+            if hasattr(self, "_settings_btn"):
+                self._settings_btn.setVisible(True)
+                self._settings_btn.setEnabled(True)
+                self._settings_btn.blockSignals(True)
+                self._settings_btn.setChecked(True)
+                self._settings_btn.blockSignals(False)
+            if hasattr(self, "_support_btn"):
+                self._support_btn.setVisible(False)
+                self._support_btn.setEnabled(False)
+            self._set_help_row_visible(
+                not device_tracking.is_donation_ui_disabled(self.settings)
+            )
+            if hasattr(self, "_log_btn"):
+                self._log_btn.setVisible(False)
+                self._log_btn.setEnabled(False)
+            if hasattr(self, "_check_updates_btn"):
+                self._check_updates_btn.setVisible(False)
+                self._check_updates_btn.setEnabled(False)
+            if hasattr(self, "_linux_setup_btn"):
+                self._linux_setup_btn.setVisible(False)
+                self._linux_setup_btn.setEnabled(False)
+            if hasattr(self, "_sp_flash_tool_btn"):
+                self._sp_flash_tool_btn.setVisible(False)
+                self._sp_flash_tool_btn.setEnabled(False)
+            if hasattr(self, "_install_output_btn"):
+                self._install_output_btn.setVisible(False)
+                self._install_output_btn.setEnabled(False)
+            if hasattr(self, "_lang_label"):
+                self._lang_label.setVisible(True)
+            if hasattr(self, "_lang_combo"):
+                self._lang_combo.setVisible(True)
         else:
+            if select_btn is not None:
+                select_btn.setVisible(True)
+                select_btn.setEnabled(True)
             if hasattr(self, "_settings_btn"):
                 self._settings_btn.setVisible(True)
                 self._settings_btn.setEnabled(True)
             if hasattr(self, "_support_btn"):
                 self._support_btn.setVisible(True)
+                self._support_btn.setEnabled(True)
             self._set_help_row_visible(True)
             if hasattr(self, "_log_btn"):
                 self._sync_diagnostics_button()
             self._sync_update_button()
             if hasattr(self, "_linux_setup_btn"):
-                setup_done = self.settings.value(
-                    "linux_setup_completed", False, type=bool
-                ) or getattr(self, "_linux_setup_flow_active", False)
-                self._linux_setup_btn.setVisible(not setup_done or self._linux_setup_flow_active)
-                self._linux_setup_btn.setEnabled(not setup_done or self._linux_setup_flow_active)
+                self._linux_setup_btn.setVisible(False)
+                self._linux_setup_btn.setEnabled(False)
             if hasattr(self, "_sp_flash_tool_btn"):
                 self._sync_sp_gui_button_visibility()
             if hasattr(self, "_install_output_btn"):
@@ -3448,6 +3631,9 @@ class MainWindow(QMainWindow):
             # highlight back on the page that is actually showing.
             self._highlight_nav(self._stack.currentIndex(), True)
             return
+        if getattr(self, "_linux_setup_flow_active", False) and page_idx != _PAGE_SETTINGS:
+            self._highlight_nav(_PAGE_SETTINGS, False)
+            return
         self._stack.setCurrentIndex(page_idx)
         from .surfaces import harmonise_window_plates
         harmonise_window_plates(self)
@@ -3529,8 +3715,6 @@ class MainWindow(QMainWindow):
         self._flash_method = self._preferred_flash_method()
         if hasattr(self, "_flash_page"):
             self._flash_page.set_method(self._flash_method)
-
-        self._sync_sp_history()
 
         from ..sp_flash_gui import is_sp_flash_gui_supported
 
@@ -4125,7 +4309,6 @@ class MainWindow(QMainWindow):
         )
         try:
             from ..flash_service import compute_extract_dir, _find_scatter, _parse_scatter_platform
-            from ..sp_flash_gui import update_sp_history_ini
 
             ed = pre_extracted or compute_extract_dir(self._package_path)
             sc = _find_scatter(Path(ed)) if Path(ed).is_dir() else None
@@ -4133,13 +4316,8 @@ class MainWindow(QMainWindow):
                 platform = _parse_scatter_platform(sc) or ""
                 if platform:
                     self._flash_page.set_platform(platform)
-            update_sp_history_ini(
-                scatter_path=sc,
-                extract_dir=Path(ed) if Path(ed).is_dir() else None,
-                model=self._package_model,
-            )
         except Exception as e:
-            logger.debug("Could not pre-update SP history.ini in _begin_flash_flow: %s", e)
+            logger.debug("Could not inspect scatter platform in _begin_flash_flow: %s", e)
         da_file, auth_file = self._flash_inputs()
         self._saw_all_command_exec = False
         self._used_sp_backend = (backend_method(self._flash_method) == METHOD_SP)
@@ -4168,7 +4346,14 @@ class MainWindow(QMainWindow):
         if step == STEP_EXTRACTING:
             self._flash_page.show_preparing()
         elif step == STEP_DETECT:
-            self._flash_page.show_please_wait(connecting=True)
+            self._past_usb_search = True
+            self._usb_search_active = False
+            self._flash_page.show_real_stage(tr("step_detect"))
+            self._flash_page.set_detected()
+            self._flash_page.set_device_flashing()
+            self._flash_page.show_flashing()
+            self._settings_page.set_method_enabled(False)
+            self._enter_flashing_state()
         elif step == STEP_PLEASE_WAIT:
             self._usb_search_active = False
             self._last_progress = 0
@@ -4177,6 +4362,8 @@ class MainWindow(QMainWindow):
             self._settings_page.set_method_enabled(True)
             self._set_state(FlashState.S2_WAIT_CONNECTION)
         elif step == STEP_WAITING:
+            if getattr(self, "_past_usb_search", False):
+                return
             # A handshake retry prints search or hint again after please-wait.
             self._past_usb_search = False
             self._usb_search_active = True
@@ -4186,10 +4373,6 @@ class MainWindow(QMainWindow):
             # Still waiting for the device: the method may be switched.
             self._settings_page.set_method_enabled(True)
             self._set_state(FlashState.S2_WAIT_CONNECTION)
-        elif step == STEP_DETECT:
-            self._flash_page.show_real_stage(tr("step_detect"))
-            self._flash_page.set_detected()
-            self._set_state(FlashState.S3_DEVICE_DETECTED)
         elif step in _WRITE_STEPS:
             self._flash_page.show_flashing()
             self._flash_page.set_device_flashing()
@@ -4292,7 +4475,7 @@ class MainWindow(QMainWindow):
         """
         text = str(line or "")
         low = text.lower()
-        is_sp = bool(getattr(self, "_used_sp_backend", False))
+        is_sp = bool(getattr(self, "_used_sp_backend", False)) or text.startswith("[SP]")
         if is_sp and (
             "all command exec" in low
             or ("all command" in low and "exec" in low)
@@ -4413,6 +4596,17 @@ class MainWindow(QMainWindow):
 
     def _on_flash_disconnected(self):
         """Handle abrupt USB disconnection during flash, wait 5s safety window before killing tasks."""
+        service = getattr(self, "service", None)
+        worker = getattr(service, "_flash_worker", None)
+        if (
+            worker is not None
+            and getattr(worker, "_tool_tag", "") == "MTK"
+            and not getattr(worker, "_finished", False)
+            and getattr(worker, "_past_usb_search", False)
+            and time.time() < getattr(worker, "_device_loss_held_until", 0.0)
+        ):
+            self._append_log("Notice: USB device re-enumeration while MTKClient is writing; keeping the install active.")
+            return
         if (
             self.sm.state is FlashState.S5_COMPLETE
             or getattr(self, "_install_complete", False)
@@ -4614,6 +4808,12 @@ class MainWindow(QMainWindow):
         if hasattr(self, "_settings_page"):
             self._settings_page.refresh_settings()
 
+        try:
+            from ..sp_flash_gui import update_sp_history_ini
+            update_sp_history_ini(model=model)
+        except Exception as e:
+            logger.debug("Could not update SP history.ini on install complete: %s", e)
+
         donation_disabled = device_tracking.is_donation_install_prompt_disabled(self.settings)
         eff_model = (model or self._package_model or "").upper()
         pkg_low = (self._package_name or "").lower()
@@ -4642,6 +4842,11 @@ class MainWindow(QMainWindow):
         if is_360p_rockbox or (is_target_rockbox and not is_240p_rockbox and eff_model in ("Y1", "Y2")):
             self._nav_to_page(_PAGE_FLASH)
             self._rockbox_themes_flow_active = True
+            # Keep the completion screen's recorded success state while the
+            # post-flash theme wizard runs. USB enumeration is expected to
+            # change during the ADB handoff and is not a firmware failure.
+            self._install_complete = True
+            self._install_failed = False
             is_sp_win = paths.IS_WINDOWS and (
                 getattr(self, "_used_sp_backend", False)
                 or backend_method(getattr(self, "_flash_method", "")) == METHOD_SP
@@ -4677,9 +4882,11 @@ class MainWindow(QMainWindow):
                     True, self._on_completion_dont_ask, self._on_completion_not_now,
                 )
             self._adjust_window_geometry()
+            self._sync_sp_history()
             self._show_status(
                 tr("status_install_ok_fmt").format(software=software, steps=steps), 60000
             )
+            self._notify_task_complete(software, model)
 
     def _create_themes_wizard(self, model: str):
         """Factory seam for the 360p themes stage (tests stub the dialog)."""
@@ -4727,7 +4934,7 @@ class MainWindow(QMainWindow):
         self._flash_page.start_rockbox_themes_stage(
             model=model,
             on_done=lambda: self._finish_themes_stage(donation_disabled),
-            on_recover=self._on_progress_retry,
+            on_recover=lambda: self.restore_original_software(model),
             log_cb=self._append_log,
             already_powered_on=already_powered_on,
             automatic=automatic,
@@ -4762,12 +4969,74 @@ class MainWindow(QMainWindow):
                 True, self._on_completion_dont_ask, self._on_completion_not_now,
             )
         self._adjust_window_geometry()
+        self._sync_sp_history()
         model = self._package_model or ""
         software = self._package_name or "Firmware"
         steps = install_power_on_steps(model)
         self._show_status(
             tr("status_install_ok_fmt").format(software=software, steps=steps), 60000
         )
+        self._notify_task_complete(software, model)
+
+    def _notify_task_complete(self, software: str, model: str) -> None:
+        """Bring the window forward and post a native notification when a task finishes."""
+        try:
+            from ..notifications import bring_window_to_front, show_completion_notification
+            title = tr("notify_install_complete_title")
+            message = f"{software} {model}".strip()
+            show_completion_notification(title, message, window=self)
+            bring_window_to_front(self)
+        except Exception:
+            logger.debug("Completion notification failed", exc_info=True)
+
+    def restore_original_software(self, model: str = "") -> None:
+        """Trigger a download and install of the latest original software for model."""
+        eff_model = (
+            model
+            or getattr(self, "_package_model", "")
+            or getattr(getattr(self, "_flash_page", None), "_theme_stage_model", "")
+            or getattr(getattr(self, "_flash_page", None), "_model", "")
+            or self._select_page.current_model()
+            or "Y1"
+        ).upper()
+        if "Y2" in eff_model:
+            eff_model = "Y2"
+        elif "A5" in eff_model:
+            eff_model = "A5"
+        else:
+            eff_model = "Y1"
+
+        self._append_log(f"Restoring original software for {eff_model}...")
+        self.service.cancel_flash()
+        self.service.stop_device_monitor()
+        self._elapsed_timer.stop()
+        if hasattr(self, "_flash_page"):
+            self._flash_page.stop_theme_workers()
+            self._flash_page.clear_install_failure()
+        self._themes_stage_done = True
+        self._rockbox_themes_flow_active = False
+        self._rockbox_power_on_pending = False
+        self._rockbox_power_on_model = ""
+        self._install_failed = False
+        self._failure_title = ""
+        self._power_off_prompt = False
+        self._pre_install_guided = False
+        self._saw_all_command_exec = False
+        self._fallback_attempted = False
+        self._cache_recovery_needed = False
+        if self.sm.state in (
+            FlashState.S5_FAILED,
+            FlashState.S5_USB_DISCONNECTED,
+            FlashState.S4_FLASHING,
+            FlashState.S5_COMPLETE,
+        ):
+            self.sm.reset_for_retry()
+
+        self._flash_method = self._preferred_flash_method()
+        if hasattr(self, "_flash_page"):
+            self._flash_page.set_method(self._flash_method)
+
+        self._select_page.start_install_for_release(eff_model, "Original Software", tag_name="")
 
     def _ensure_theme_sync(self) -> None:
         """Start the passive 360p theme sync (self-gating; idle when untracked)."""
@@ -4868,18 +5137,15 @@ class MainWindow(QMainWindow):
         """The other backend for ``method``, or "" when there is not one.
 
         Only hosts that ship both engines can switch: macOS has no SP Flash
-        Tool at all. This is about the guided in-app flow only — the terminal
-        launcher and the SP Flash Tool GUI handoff are deliberately left to
-        run the tool themselves.
+        Tool at all. On Windows, SP Flash Tool is the native flashing backend
+        and does not automatically fail over to MTKclient (which requires
+        different USB driver filters). Auto-failover from SP Flash Tool to
+        MTKclient is a Linux feature.
         """
-        if paths.IS_MAC:
+        if paths.IS_MAC or paths.IS_WINDOWS:
             return ""
         current = backend_method(method)
         if current == METHOD_SP:
-            # MTKClient on Windows is hidden until the M key reveals it, so
-            # SP Flash Tool has no second engine there and retries itself.
-            if paths.IS_WINDOWS and not device_tracking.hidden_mtk_options_enabled():
-                return ""
             return METHOD_MTK
         if current == METHOD_MTK:
             return METHOD_SP
@@ -5003,6 +5269,7 @@ class MainWindow(QMainWindow):
         self.service.stop_device_monitor()
         self._elapsed_timer.stop()
         self._install_failed = False
+        self._saw_all_command_exec = False
         self._failure_title = ""
         self._flash_page.clear_install_failure()
         self._power_off_prompt = True
@@ -5035,6 +5302,7 @@ class MainWindow(QMainWindow):
         ):
             self.sm.reset_for_retry()
         self._install_failed = False
+        self._saw_all_command_exec = False
         self._failure_title = ""
         self._flash_page.clear_install_failure()
         self._power_off_prompt = False
@@ -5048,11 +5316,6 @@ class MainWindow(QMainWindow):
         self._sp_1013_seen = False
         self._flash_method = self._preferred_flash_method()
         self._flash_page.set_method(self._flash_method)
-        try:
-            from ..sp_flash_gui import update_sp_history_ini
-            update_sp_history_ini(model=self._package_model)
-        except Exception as e:
-            logger.debug("Could not update SP history.ini on retry: %s", e)
         self._retry_page.update_info(
             self._package_name, self.sm.context.retry_count, "status_retrying"
         )
@@ -5163,12 +5426,6 @@ class MainWindow(QMainWindow):
         if self.sm.state not in (FlashState.S2_WAIT_CONNECTION, FlashState.S3_DEVICE_DETECTED):
             logger.info("Install method set to %s for the next run", backend_method(method))
             return
-        if method in ("sp", "auto"):
-            try:
-                from ..sp_flash_gui import update_sp_history_ini
-                update_sp_history_ini(model=self._package_model)
-            except Exception as e:
-                logger.debug("Could not update SP history.ini on method change: %s", e)
         # Kept silent for the user: the app is a front end for both engines and
         # the install flow should read the same either way. The restart is a
         # diagnostic detail, and the new command must not start until the user
@@ -5269,7 +5526,7 @@ class MainWindow(QMainWindow):
     def _apply_release_icon(self, complete: bool = False) -> None:
         """Squircle until a release icon is cached, then that image. The check overlays either."""
         from .release_icon import load_release_pixmap
-        from ..release_icons import icon_candidate_urls
+        from ..release_icons import icon_candidate_urls, release_image_fallback_urls
         from ..config import is_mediatek_installer
 
         page = getattr(self, "_select_page", None)
@@ -5301,7 +5558,7 @@ class MainWindow(QMainWindow):
         if pixmap is None or pixmap.isNull():
             pixmap = load_release_pixmap(release, package, allow_network=False, dark=dark, package_path=getattr(self, "_package_path", None))
         self._flash_page.set_release_icon(pixmap, complete=complete)
-        if not icon_candidate_urls(release, package, dark=dark):
+        if not icon_candidate_urls(release, package, dark=dark) and not release_image_fallback_urls(release, package, dark=dark):
             return
 
         class _Loader(QThread):
@@ -5507,6 +5764,14 @@ class MainWindow(QMainWindow):
         )
         self._reapply_rail_width()
 
+    def _on_settings_nav_clicked(self):
+        """Clicking the sidebar Settings button while it is temporarily renamed
+        to 'Linux Setup' keeps the user on the setup screen."""
+        if getattr(self, "_linux_setup_flow_active", False):
+            self._highlight_nav(_PAGE_SETTINGS, False)
+            return
+        self._show_full_settings()
+
     def _show_full_settings(self):
         """Open the complete Settings column and highlight its navigation row."""
         if self._install_run_active():
@@ -5521,9 +5786,8 @@ class MainWindow(QMainWindow):
             page.clear_card_focus()
         self._nav_to_page(_PAGE_SETTINGS)
         if hasattr(self, "_linux_setup_btn"):
-            setup_done = self.settings.value("linux_setup_completed", False, type=bool)
-            self._linux_setup_btn.setVisible(not setup_done)
-            self._linux_setup_btn.setEnabled(not setup_done)
+            self._linux_setup_btn.setVisible(False)
+            self._linux_setup_btn.setEnabled(False)
         self._sync_sp_gui_button_visibility()
 
     def _show_linux_setup(self):
@@ -5538,10 +5802,13 @@ class MainWindow(QMainWindow):
             return
         self._linux_setup_flow_active = True
         self._sync_settings_nav_label()
+        self._sync_install_nav_entry()
         page.show_card_alone(page._checker_card)
         self._sync_sp_gui_button_visibility()
         if not page.start_sp_flash_prep():
             self._linux_setup_flow_active = False
+            self._sync_settings_nav_label()
+            self._sync_install_nav_entry()
             page.clear_card_focus()
             self._highlight_nav(_PAGE_SETTINGS, self._install_run_active())
             self._sync_sp_gui_button_visibility()
@@ -5557,6 +5824,7 @@ class MainWindow(QMainWindow):
             return
         self._linux_setup_flow_active = False
         self._sync_settings_nav_label()
+        self.settings.setValue("linux_first_run_completed", True)
         self.settings.setValue("linux_setup_completed", True)
         setup_btn = getattr(self, "_linux_setup_btn", None)
         if setup_btn is not None:
@@ -5564,6 +5832,7 @@ class MainWindow(QMainWindow):
             setup_btn.setEnabled(False)
         if self._settings_page.focused_card() is not None:
             self._settings_page.clear_card_focus()
+        self._sync_install_nav_entry()
         self._nav_to_page(_PAGE_SELECT)
 
     def _sync_sp_gui_button_visibility(self) -> bool:
@@ -6054,10 +6323,17 @@ class MainWindow(QMainWindow):
             if getattr(self, "_gui_quit_started", False):
                 timer.stop()
                 return
-            if process_guard.flash_tool_running(
-                ignore_pids=getattr(self, "_tool_pids_before_launch", frozenset())
-            ):
+            snap = process_guard.process_snapshot()
+            current_pids = frozenset(
+                pid for pid, _ppid, cmd in snap
+                if process_guard._tool_invocation(cmd) == "flash_tool"
+            )
+            ignore_pids = getattr(self, "_tool_pids_before_launch", frozenset())
+            new_pids = current_pids - ignore_pids
+            if new_pids:
                 timer.stop()
+                for pid in new_pids:
+                    process_guard.register_handoff_pid(pid)
                 self._quit_after_gui_handoff()
                 return
             if time.monotonic() - start >= timeout_seconds:
@@ -6090,23 +6366,27 @@ class MainWindow(QMainWindow):
         QApplication.quit()
 
     def _check_linux_first_run(self):
-        """First run on Linux: prepare on the Settings card, not in a window.
-
-        This used to open the setup window on top of the app. The card holds
-        the same preparation, so the first run simply lands on it — a flash
-        run stages the engine on its own either way.
+        """First run on Linux: automatically open the locked Linux setup screen
+        unless the host is already prepared (udev rules + serial group + engine).
         """
         if paths.IS_MAC or os.environ.get("QT_QPA_PLATFORM") == "offscreen" or os.environ.get("CI"):
             return
         from .. import linux_sp_flash
 
+        if not linux_sp_flash.arch_supported():
+            return
         stage = linux_sp_flash.stage_dir()
-        first_run_done = self.settings.value("linux_first_run_completed", False, type=bool)
         files_ready = linux_sp_flash.files_ready(stage)
+        distro = linux_sp_flash.detect_linux_distro()
+        udev_ok, _ = linux_sp_flash.check_udev_rules()
+        user_perm_ok, _ = linux_sp_flash.check_user_permissions(distro.get("serial_group", "dialout"))
 
-        if not files_ready or not first_run_done:
+        if files_ready and udev_ok and user_perm_ok:
             self.settings.setValue("linux_first_run_completed", True)
-            self._show_linux_setup()
+            self.settings.setValue("linux_setup_completed", True)
+            return
+
+        self._show_linux_setup()
 
     def _open_credits(self):
         from ..browser import open_browser
@@ -6696,9 +6976,11 @@ class MainWindow(QMainWindow):
         """
         return retire_worker(worker, self._retired_workers)
 
-    def cleanup_workers(self):
+    def cleanup_workers(self, sweep: bool = True):
         """Cleanly terminate and wait for any background workers."""
-        self.service.cleanup()
+        if getattr(self, "_gui_quit_started", False):
+            sweep = False
+        self.service.cleanup(sweep=sweep)
         select_page = getattr(self, "_select_page", None)
         if select_page is not None:
             rw = getattr(select_page, "_releases_worker", None)
@@ -6741,7 +7023,18 @@ class MainWindow(QMainWindow):
         return super().close()
 
     def closeEvent(self, event):
-        if self._install_run_active() and not getattr(self, "_force_quit", False):
+        flashing_in_flight = (
+            getattr(self, "_download_active", False)
+            or getattr(self, "_prep_active", False)
+            or (hasattr(self, "sm") and self.sm.state in (FlashState.S4_FLASHING, FlashState.S3_DEVICE_DETECTED))
+            or getattr(self, "_rockbox_themes_flow_active", False)
+        ) and not (
+            getattr(self, "_install_failed", False)
+            or getattr(self, "_install_complete", False)
+            or getattr(self, "_power_off_prompt", False)
+            or (hasattr(self, "sm") and self.sm.state in (FlashState.S5_FAILED, FlashState.S5_USB_DISCONNECTED, FlashState.S5_COMPLETE))
+        )
+        if flashing_in_flight and not getattr(self, "_force_quit", False):
             is_headless = os.environ.get("QT_QPA_PLATFORM") == "offscreen" or bool(os.environ.get("INNIOASIS_HEADLESS"))
             if not is_headless or getattr(self, "_test_close_prompt", False):
                 app_name = get_app_name()
@@ -6770,13 +7063,26 @@ class MainWindow(QMainWindow):
                 release_sleep_inhibition()
             except Exception:
                 pass
+        elif hasattr(self, "service") and self.service:
+            try:
+                self.service.cancel_flash()
+            except Exception:
+                pass
+            try:
+                from ..sleep_inhibit import release_sleep_inhibition
+                release_sleep_inhibition()
+            except Exception:
+                pass
 
         # Closing the window ends any install window: a backend left behind
         # would hold the USB port after the app is gone.
         from .. import process_guard
 
-        for item in process_guard.end_install_session(reason="app closed"):
-            logger.info("Stopped leftover %s (pid %s) on close", item.get("tool"), item.get("pid"))
+        if getattr(self, "_gui_quit_started", False):
+            process_guard.end_install_session(reason="app closed after gui handoff", sweep=False)
+        else:
+            for item in process_guard.end_install_session(reason="app closed"):
+                logger.info("Stopped leftover %s (pid %s) on close", item.get("tool"), item.get("pid"))
 
         if hasattr(self, "_theme_watcher") and self._theme_watcher:
             try:
@@ -6789,7 +7095,7 @@ class MainWindow(QMainWindow):
                 service.stop()
             except Exception:
                 pass
-        self.cleanup_workers()
+        self.cleanup_workers(sweep=False)
         super().closeEvent(event)
 
 

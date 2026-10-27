@@ -88,8 +88,9 @@ bool PlatformSetting::initByNewScatterFile(const DL_PlatformInfo &info, std::str
     try {
         if (PlatformTable::queryPhaseOutChip(chip_name))
         {
+            std::string tool_version = PlatformTable::queryToolVer4PhaseOutChip(chip_name);
             char buff[256] = {0};
-            sprintf(buff, "Please use flashtool version v5.1728.00 to handle old platform %s.", chip_name.c_str());
+            sprintf(buff, "Please use flashtool version %s to handle old platform %s.", tool_version.c_str(), chip_name.c_str());
             error_hint = buff;
             LOGE("Scatter file which is loaded has been phased out!");
             this->is_scatter_file_valid_ = false;

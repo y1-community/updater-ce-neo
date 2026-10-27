@@ -99,13 +99,14 @@ chmod +x build_appimage.sh
 ./build_appimage.sh --brand updater_ce  # Updater CE only
 ```
 
-- Output: `dist/linux/UpdaterCE-<version>-<arch>.AppImage` (and the MediaTek
-  Installer AppImage), each carrying SP Flash Tool and the udev setup helpers.
-- The arch also selects `appimagetool-<arch>.AppImage`; if the upstream asset
-  for that arch does not exist the step fails, so `x86_64` and `aarch64` are
-  the reliable two.
-- Linux builds use SP Flash Tool by default, with MTKClient as the alternate
-  backend.
+- Output: `dist/linux/InnioasisUpdater-<version>-<arch>.AppImage` (alias `UpdaterCE.appimage` / `UpdaterCE.AppImage`) and `dist/linux/MediaTekInstaller-<version>-<arch>.AppImage` (alias `MediaTek Installer.appimage`), each carrying the full stack:
+  - Customized SP Flash Tool (`tools/linux/SP_Flash_Tool_v5.1904_Linux`, on x86_64)
+  - Precompiled MTKClient with bundled `libusb-1.0`
+  - Vendored ADB (`tools/adb`, on `PATH` for both x86_64 and aarch64)
+  - Automated udev rules & serial group setup helpers
+- Rebuild customized SP Flash Tool for Linux at any time with `./tools/build_linux_sp_flash.sh`.
+- The arch also selects `appimagetool-<arch>.AppImage`; both `x86_64` and `aarch64` are fully supported.
+- Linux builds on x86-64 use SP Flash Tool by default (with MTKClient as alternate backend); ARM64 builds use native MTKClient.
 
 ---
 

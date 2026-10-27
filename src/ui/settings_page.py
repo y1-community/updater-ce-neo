@@ -72,6 +72,7 @@ class SettingsPage(QWidget):
     card_focus_finished = Signal()
     linux_prep_completed = Signal()
     advanced_settings_changed = Signal(bool)
+    install_rockbox_themes_requested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -183,6 +184,7 @@ class SettingsPage(QWidget):
         for name in (
             "_method_card", "_terminal_card", "_reminders_card", "_rockbox_card",
             "_donations_card", "_cache_card", "_prep_card", "_offline_mode_card",
+            "_install_themes_card",
             "_legacy_cleanup_card", "_advanced_card",
         ):
             card = getattr(self, name, None)
@@ -193,6 +195,31 @@ class SettingsPage(QWidget):
     def _may_show_card(self, card) -> bool:
         """False for every card but the focused one, while one is focused."""
         return self._solo_card is None or self._solo_card is card
+
+    def content_height_hint(self) -> int:
+        """Height needed by the Settings page, hugging a solo card when focused."""
+        card = getattr(self, "_solo_card", None)
+        if card is not None:
+            card.adjustSize()
+            height = max(
+                int(card.sizeHint().height()),
+                int(card.minimumSizeHint().height()),
+            )
+            layout = self.layout()
+            if layout is not None:
+                margins = layout.contentsMargins()
+                height += margins.top() + margins.bottom()
+            return max(1, height)
+        scroll = getattr(self, "_settings_scroll", None)
+        if scroll is not None and scroll.widget() is not None:
+            inner = scroll.widget()
+            height = int(inner.sizeHint().height()) + 2 * scroll.frameWidth()
+            layout = self.layout()
+            if layout is not None:
+                margins = layout.contentsMargins()
+                height += margins.top() + margins.bottom()
+            return max(1, height)
+        return max(1, int(self.sizeHint().height()))
 
     def show_card_alone(self, card) -> None:
         """Put one card on screen by itself and hide the rest.
@@ -207,8 +234,15 @@ class SettingsPage(QWidget):
             # offer) hides the rest of Settings — including the Advanced
             # Settings toggle — until the user leaves it.
             other.setVisible(other is card)
+        scroll = getattr(self, "_settings_scroll", None)
+        if scroll is not None:
+            scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            if scroll.verticalScrollBar() is not None:
+                scroll.verticalScrollBar().setValue(0)
+                scroll.verticalScrollBar().setEnabled(False)
         if card is getattr(self, "_checker_card", None):
             self._sync_linux_prep_copy()
+        self.content_size_changed.emit()
         win = self.window()
         if win is not None and hasattr(win, "_highlight_nav"):
             from .main_window import _PAGE_SETTINGS
@@ -219,8 +253,14 @@ class SettingsPage(QWidget):
     def clear_card_focus(self) -> None:
         """Give the column back to the ordinary per-card visibility rules."""
         self._solo_card = None
+        scroll = getattr(self, "_settings_scroll", None)
+        if scroll is not None:
+            scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            if scroll.verticalScrollBar() is not None:
+                scroll.verticalScrollBar().setEnabled(True)
         self.refresh_settings()
         self._sync_linux_prep_copy()
+        self.content_size_changed.emit()
 
     def _finish_card_focus(self) -> None:
         """Leave focus mode and tell the window the card's journey is over.
@@ -262,14 +302,9 @@ class SettingsPage(QWidget):
         layout.setSpacing(18)
 
         # --- Card 1: Install method ---
-        self._method_card = Card("settings_method_group")
+        self._method_card = Card(self._method_card_title_key())
         method_layout = QVBoxLayout()
         method_layout.setSpacing(12)
-
-        self._method_desc = QLabel(tr("settings_method_desc"))
-        self._method_desc.setWordWrap(True)
-        self._method_desc.setProperty("cssClass", "subtitle")
-        method_layout.addWidget(self._method_desc)
 
         method_row = QHBoxLayout()
         self._method_label = QLabel(tr("flash_method"))
@@ -599,6 +634,36 @@ class SettingsPage(QWidget):
         )
         layout.addWidget(self._offline_mode_card)
 
+        # --- Card: Install Rockbox 360p Themes ---
+        self._install_themes_card = Card("settings_install_themes_group")
+        themes_layout = QVBoxLayout()
+        themes_layout.setSpacing(8)
+
+        self._install_themes_desc = QLabel(tr("settings_install_themes_desc"))
+        self._install_themes_desc.setWordWrap(True)
+        self._install_themes_desc.setProperty("cssClass", "dimmed")
+        themes_layout.addWidget(self._install_themes_desc)
+
+        themes_btn_row = QHBoxLayout()
+        themes_btn_row.setSpacing(10)
+        self._install_themes_btn = QPushButton(tr("settings_install_rockbox_themes_btn"))
+        self._install_themes_btn.setIcon(get_symbol_icon("folder", 14, color=T().fg))
+        self._install_themes_btn.clicked.connect(self._on_install_rockbox_themes_clicked)
+        themes_btn_row.addWidget(self._install_themes_btn)
+
+        self._install_themes_status_lbl = QLabel("")
+        self._install_themes_status_lbl.setWordWrap(True)
+        self._install_themes_status_lbl.setProperty("cssClass", "subtitle")
+        self._install_themes_status_lbl.setVisible(False)
+        themes_btn_row.addWidget(self._install_themes_status_lbl, 1)
+        themes_layout.addLayout(themes_btn_row)
+
+        self._install_themes_card.set_layout(themes_layout)
+        self._install_themes_card.setVisible(
+            self._may_show_card(self._install_themes_card) and not is_mediatek_installer()
+        )
+        layout.addWidget(self._install_themes_card)
+
         # --- Card 6: Remove old app (shown only for a pre-3.0 install) ---
         self._legacy_cleanup_card = Card("legacy_cleanup_card_title")
         leg_layout = QVBoxLayout()
@@ -830,6 +895,13 @@ class SettingsPage(QWidget):
         if locked and not advanced:
             # Windows is fixed by CPU: x86/x64 gets SP Flash Tool only, ARM64 MTKClient only.
             return (locked,)
+        if not paths.IS_WINDOWS and not paths.IS_MAC:
+            # On Linux, SP Flash Tool is the default method (when arch is supported),
+            # with MTKClient as the second tool / fallback.
+            from .. import linux_sp_flash
+            if not linux_sp_flash.arch_supported():
+                return (METHOD_MTK,)
+            return (METHOD_SP, METHOD_MTK)
         methods = [METHOD_SP]
         if advanced or not paths.IS_WINDOWS:
             methods.append(METHOD_MTK)
@@ -1330,6 +1402,10 @@ class SettingsPage(QWidget):
         self._reminders_card.setVisible(
             self._may_show_card(self._reminders_card) and not mediatek_installer
         )
+        if hasattr(self, "_install_themes_card"):
+            self._install_themes_card.setVisible(
+                self._may_show_card(self._install_themes_card) and not mediatek_installer
+            )
         self._update_rockbox_visibility()
         self._update_sp_auth_visibility()
 
@@ -1587,6 +1663,17 @@ class SettingsPage(QWidget):
         self._cache_status_lbl.setText(msg)
         self.content_size_changed.emit()
 
+    def set_themes_refreshing(self, refreshing: bool, status_text: str = "") -> None:
+        """Swap the themes button for a refresh notice while a background theme pack update runs."""
+        if not hasattr(self, "_install_themes_btn"):
+            return
+        self._install_themes_btn.setVisible(not refreshing)
+        self._install_themes_status_lbl.setText(status_text if refreshing else "")
+        self._install_themes_status_lbl.setVisible(refreshing)
+
+    def _on_install_rockbox_themes_clicked(self):
+        self.install_rockbox_themes_requested.emit()
+
     def _on_run_checker(self):
         """Prepare SP Flash Tool from this card, not from a window of its own.
 
@@ -1697,12 +1784,24 @@ class SettingsPage(QWidget):
                 warn=True,
             )
             return
+        win = self.window()
+        setup_flow = bool(
+            self._solo_card is self._checker_card
+            or (win is not None and getattr(win, "_linux_setup_flow_active", False))
+        )
+        body_key = "linux_prep_fix_body_wizard" if setup_flow else "linux_prep_fix_body"
         agreed = self._checker_card.run_confirmation(
-            tr("linux_prep_fix_body"),
+            tr(body_key),
             tr("linux_prep_fix_btn"),
             tr("flash_btn_cancel"),
         )
         if not agreed:
+            if setup_flow:
+                if win is not None:
+                    win._force_quit = True
+                    win.close()
+                QApplication.quit()
+                return
             self._show_checker_status(tr("linux_prep_needs_access"), warn=True)
             return
         self._show_checker_status(tr("linux_prep_fixing"))
@@ -1720,6 +1819,21 @@ class SettingsPage(QWidget):
             self._show_checker_status(
                 tr("linux_prep_fixed_friendly" if is_mediatek_installer() else "linux_prep_fixed")
             )
+            if setup_flow:
+                if win is not None and hasattr(win, "settings"):
+                    win.settings.setValue("linux_first_run_completed", True)
+                    win.settings.setValue("linux_setup_completed", True)
+                self._checker_card.run_confirmation(
+                    tr("linux_prep_reboot_body"),
+                    tr("linux_prep_reboot_done_btn"),
+                    "",
+                    symbol="check",
+                )
+                if win is not None:
+                    win._force_quit = True
+                    win.close()
+                QApplication.quit()
+                return
             self.linux_prep_completed.emit()
         else:
             self._render_sp_report(verdict, ask_again=False)
@@ -1733,6 +1847,8 @@ class SettingsPage(QWidget):
         style.polish(label)
         label.setVisible(True)
         self._reveal_checker_card()
+        if self._solo_card is not None:
+            self.content_size_changed.emit()
 
     def _reveal_checker_card(self):
         """Scroll the preparation card fully into view as it grows."""
@@ -1787,11 +1903,16 @@ class SettingsPage(QWidget):
         if win is not None and hasattr(win, "_open_sp_flash_tool_gui"):
             win._open_sp_flash_tool_gui()
 
+    @staticmethod
+    def _method_card_title_key() -> str:
+        """The MediaTek Installer names the engine; the full app says Install Method."""
+        return "settings_method_group_mediatek" if is_mediatek_installer() else "settings_method_group"
+
     def retranslate(self):
         """Retranslate UI elements upon language switch."""
         self._header.setText(tr("settings_title"))
+        self._method_card._title_key = self._method_card_title_key()
         self._method_card.retranslate()
-        self._method_desc.setText(tr("settings_method_desc"))
         self._method_label.setText(tr("flash_method"))
         self._reload_method_options()
         self._terminal_card.retranslate()
@@ -1867,6 +1988,13 @@ class SettingsPage(QWidget):
         self._set_switch_caption(self._cb_offline_mode, tr("settings_offline_mode"))
         self._cb_offline_mode.setToolTip(tr("settings_offline_mode_desc"))
         self._offline_mode_desc.setText(tr("settings_offline_mode_desc"))
+        if hasattr(self, "_install_themes_card"):
+            self._install_themes_card.retranslate()
+        if hasattr(self, "_install_themes_desc"):
+            self._install_themes_desc.setText(tr("settings_install_themes_desc"))
+        if hasattr(self, "_install_themes_btn"):
+            self._install_themes_btn.setText(tr("settings_install_rockbox_themes_btn"))
+            self._install_themes_btn.setIcon(get_symbol_icon("folder", 14, color=T().fg))
         self._sp_auth_label.setText(tr("settings_sp_auth"))
         self._sp_auth_browse.setText(tr("settings_sp_auth_browse"))
         self._sp_auth_clear.setText(tr("settings_sp_auth_clear"))

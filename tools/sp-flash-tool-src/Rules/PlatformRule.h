@@ -7,6 +7,7 @@
 #include <set>
 
 #include "../XMLParser/XMLSerializable.h"
+#include "../Utility/Utils.h"
 
 using std::string;
 using std::istringstream;
@@ -71,8 +72,8 @@ public:
         return auto_format_all_support;
     }
 
-    bool supportPowerKeyReset() const {
-        return power_key_reset_support;
+    LongPressRebootOption longPressRebootOption() const {
+        return long_press_reboot_option;
     }
 
     bool isAutoPollingEnable() const {
@@ -114,7 +115,7 @@ private:
     //Enable set default format length
     bool is_default_set_format_length;
     bool auto_format_all_support;
-    bool power_key_reset_support;
+    LongPressRebootOption long_press_reboot_option;
     bool is_auto_polling_enable;
     unsigned int  auto_polling_upper_limit;
     bool set_boot_mode_support;
@@ -130,6 +131,7 @@ public:
     Platform queryByScatter(const std::string &scatter);
     Platform queryByChipName(const std::string &chipName);
 	static bool queryPhaseOutChip(const std::string &chipName);
+    static std::string queryToolVer4PhaseOutChip(const std::string &chipName);
 
 private:
     void LoadFile(const std::string &filename);
@@ -142,7 +144,6 @@ private:
 
     std::map<std::string, Platform> nameMap;
     std::map<std::string, Platform> simpleNameMap;
-    static const std::set<std::string> m_phaseOutChips;
 
     friend PlatformTable& GetPlatformTable();
 };

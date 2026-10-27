@@ -45,6 +45,7 @@ private:
 public:
     static void __stdcall OperationFinished();
     static void __stdcall OperationOK();
+	static void __stdcall OperationQuestion(int *p_val);
     static int __stdcall GetDAReport(const DA_REPORT_T *p_da_report, void *usr_arg);
     static int __stdcall DownloadDAInit(void *usr_arg);
     static int __stdcall DownloadDAProgress(unsigned char percent, unsigned int send_bytes,
@@ -117,6 +118,7 @@ public:
 signals:
     void signal_OperationFinished();
     void signal_OperationOK();
+	void signal_OperationQuestion(int *p_val);
     void signal_GetDAReport(const DA_REPORT_T *p_da_report,
                             const std::string& friend_name,
                             const std::string& usb_status);
@@ -191,6 +193,7 @@ public slots:
 
     void slot_OperationFinished();
     void slot_OperationOK();
+	void slot_OperationQuestion(int *p_val);
     void slot_GetDAReport(const DA_REPORT_T *p_da_report, const std::string& friend_name, const::std::string& usb_status);
     void slot_DownloadDAInit(void *usr_arg);
     void slot_DownloadDAProgress(unsigned char percent, unsigned int send_bytes,

@@ -468,6 +468,10 @@ class ReleaseIconJob(QThread):
                     return
                 if icons.icon_known_miss(url, directory):
                     continue
+                square_only = (
+                    url in generic_release_urls
+                    and icons.release_asset_requires_square(url, rel, self._package)
+                )
                 if network_started:
                     gap = icons.next_preload_gap(rng)
                     self.gaps.append(gap)

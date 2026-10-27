@@ -262,6 +262,25 @@ cleanup_legacy() {
         fi
     fi
 
+    # 5. Remove retired desktop shortcuts containing Innioasis or SP Flash in applications/Desktop
+    for sc_dir in "$DESKTOP_DIR" "$HOME/Desktop"; do
+        if [ -d "$sc_dir" ]; then
+            for sc_file in "$sc_dir"/*.desktop; do
+                [ -f "$sc_file" ] || continue
+                sc_base="$(basename "$sc_file")"
+                case "${sc_base,,}" in
+                    *innioasis*|*"sp flash"*|*sp_flash*|*spflashtool*)
+                        if [ "$sc_file" != "$DESKTOP_FILE" ]; then
+                            rm -f "$sc_file"
+                            log_success "Removed legacy shortcut: $sc_file"
+                            found_legacy=1
+                        fi
+                        ;;
+                esac
+            done
+        fi
+    done
+
     if [ "$found_legacy" -eq 0 ]; then
         log_info "No legacy pre-3.0 artifacts detected."
     else
@@ -517,7 +536,27 @@ if [ "$BRAND" = "mediatek_installer" ]; then
 Version=1.0
 Name=MediaTek Installer
 GenericName=MediaTek Device Flasher
+GenericName[de]=MediaTek-Firmware-Installationsprogramm
+GenericName[es]=Instalador de firmware MediaTek
+GenericName[fr]=Installateur de micrologiciel MediaTek
+GenericName[it]=Programma di installazione firmware MediaTek
+GenericName[ja]=MediaTek ファームウェア書き込みツール
+GenericName[ko]=MediaTek 펌웨어 설치 도구
+GenericName[pt_BR]=Instalador de Firmware MediaTek
+GenericName[ru]=Установщик прошивок MediaTek
+GenericName[zh_CN]=MediaTek 固件刷机工具
+GenericName[zh_TW]=MediaTek 韌體刷機工具
 Comment=Universal MediaTek BootROM and Preloader firmware flasher
+Comment[de]=Universelles Flash-Programm für MediaTek-BootROM- und Preloader-Firmware
+Comment[es]=Instalador universal de firmware MediaTek BootROM y Preloader
+Comment[fr]=Outil de flashage universel pour micrologiciels MediaTek BootROM et Preloader
+Comment[it]=Strumento universale di installazione firmware MediaTek BootROM e Preloader
+Comment[ja]=MediaTek BootROM および Preloader 対応ユニバーサルファームウェア書き込みツール
+Comment[ko]=범용 MediaTek BootROM 및 Preloader 펌웨어 플래시 도구
+Comment[pt_BR]=Instalador universal de firmware MediaTek BootROM e Preloader
+Comment[ru]=Универсальный инструмент прошивки устройств MediaTek (BootROM и Preloader)
+Comment[zh_CN]=通用 MediaTek BootROM 与 Preloader 固件刷写工具
+Comment[zh_TW]=通用 MediaTek BootROM 與 Preloader 韌體刷寫工具
 Exec=$WRAPPER_SCRIPT
 Icon=$ICON_NAME
 Terminal=false
@@ -532,7 +571,27 @@ else
 Version=1.0
 Name=Updater CE
 GenericName=Firmware Flasher
+GenericName[de]=Firmware-Installationsprogramm
+GenericName[es]=Instalador de firmware
+GenericName[fr]=Installateur de micrologiciel
+GenericName[it]=Programma di installazione firmware
+GenericName[ja]=ファームウェア書き込みツール
+GenericName[ko]=펌웨어 설치 도구
+GenericName[pt_BR]=Instalador de Firmware
+GenericName[ru]=Установщик прошивок
+GenericName[zh_CN]=固件刷机与更新工具
+GenericName[zh_TW]=韌體刷機與更新工具
 Comment=Flash, update, and restore Innioasis and Timmkoo digital audio players
+Comment[de]=Innioasis- und Timmkoo-Musikplayer flashen, aktualisieren und wiederherstellen
+Comment[es]=Instala, actualiza y restaura reproductores de audio digital Innioasis y Timmkoo
+Comment[fr]=Flasher, mettre à jour et restaurer les baladeurs numériques Innioasis et Timmkoo
+Comment[it]=Installa, aggiorna e ripristina i lettori audio digitali Innioasis e Timmkoo
+Comment[ja]=Innioasis および Timmkoo デジタルオーディオプレーヤーの更新・復元ツール
+Comment[ko]=Innioasis 및 Timmkoo 디지털 오디오 플레이어 펌웨어 설치, 업데이트 및 복원
+Comment[pt_BR]=Instale, atualize e restaure reprodutores de áudio digital Innioasis e Timmkoo
+Comment[ru]=Прошивка, обновление и восстановление цифровых аудиоплееров Innioasis и Timmkoo
+Comment[zh_CN]=刷写、更新与恢复 Innioasis 及 Timmkoo 数字音频播放器
+Comment[zh_TW]=刷寫、更新與還原 Innioasis 及 Timmkoo 數位音訊播放器
 Exec=$WRAPPER_SCRIPT
 Icon=$ICON_NAME
 Terminal=false

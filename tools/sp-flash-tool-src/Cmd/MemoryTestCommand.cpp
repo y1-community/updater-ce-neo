@@ -570,7 +570,7 @@ int MemoryTestCommand::RAMIncDecTestIO(FlashTool_MemoryTest_Arg *mt_arg,
     return CHECK_METEST_RESULT(FlashTool_MemoryTest(ft_handle, mt_arg, mt_result));
 }
 
-#define DRAM_FILE_TEST_MAX_SIZE (0xc0000000) //3G
+#define DRAM_FILE_TEST_MAX_SIZE (0x1000000000) //64G
 
 int MemoryTestCommand::DRAMFlipTest(FlashTool_MemoryTest_Arg *mt_arg,
                   FlashTool_MemoryTest_Result *mt_result,

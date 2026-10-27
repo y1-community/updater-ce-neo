@@ -1,0 +1,700 @@
+  0           0 RESUME                   0
+
+  1           2 LOAD_CONST               0 ('\n状态机：驱动整个刷机流程的核心。\nPRD 第11页定义了 S1-S6 六个状态，加上异常子状态。\n')
+              4 STORE_NAME               0 (__doc__)
+
+  5           6 LOAD_CONST               1 (0)
+              8 LOAD_CONST               2 (('Enum', 'auto'))
+             10 IMPORT_NAME              1 (enum)
+             12 IMPORT_FROM              2 (Enum)
+             14 STORE_NAME               2 (Enum)
+             16 IMPORT_FROM              3 (auto)
+             18 STORE_NAME               3 (auto)
+             20 POP_TOP
+
+  6          22 LOAD_CONST               1 (0)
+             24 LOAD_CONST               3 (('dataclass', 'field'))
+             26 IMPORT_NAME              4 (dataclasses)
+             28 IMPORT_FROM              5 (dataclass)
+             30 STORE_NAME               5 (dataclass)
+             32 IMPORT_FROM              6 (field)
+             34 STORE_NAME               6 (field)
+             36 POP_TOP
+
+  7          38 LOAD_CONST               1 (0)
+             40 LOAD_CONST               4 (('QObject', 'Signal'))
+             42 IMPORT_NAME              7 (PySide6.QtCore)
+             44 IMPORT_FROM              8 (QObject)
+             46 STORE_NAME               8 (QObject)
+             48 IMPORT_FROM              9 (Signal)
+             50 STORE_NAME               9 (Signal)
+             52 POP_TOP
+
+ 10          54 PUSH_NULL
+             56 LOAD_BUILD_CLASS
+             58 LOAD_CONST               5 (<code object FlashState at 0x0000017F1EF4EFA0, file "app\state.py", line 10>)
+             60 MAKE_FUNCTION            0
+             62 LOAD_CONST               6 ('FlashState')
+             64 LOAD_NAME                2 (Enum)
+             66 PRECALL                  3
+             70 CALL                     3
+             80 STORE_NAME              10 (FlashState)
+
+ 22          82 LOAD_NAME                5 (dataclass)
+
+ 23          84 PUSH_NULL
+             86 LOAD_BUILD_CLASS
+             88 LOAD_CONST               7 (<code object FlashContext at 0x0000017F1EE69070, file "app\state.py", line 22>)
+             90 MAKE_FUNCTION            0
+             92 LOAD_CONST               8 ('FlashContext')
+             94 PRECALL                  2
+             98 CALL                     2
+
+ 22         108 PRECALL                  0
+            112 CALL                     0
+
+ 23         122 STORE_NAME              11 (FlashContext)
+
+ 40         124 PUSH_NULL
+            126 LOAD_BUILD_CLASS
+            128 LOAD_CONST               9 (<code object StateMachine at 0x0000017F1EBB1A40, file "app\state.py", line 40>)
+            130 MAKE_FUNCTION            0
+            132 LOAD_CONST              10 ('StateMachine')
+            134 LOAD_NAME                8 (QObject)
+            136 PRECALL                  3
+            140 CALL                     3
+            150 STORE_NAME              12 (StateMachine)
+            152 LOAD_CONST              11 (None)
+            154 RETURN_VALUE
+
+Disassembly of <code object FlashState at 0x0000017F1EF4EFA0, file "app\state.py", line 10>:
+ 10           0 RESUME                   0
+              2 LOAD_NAME                0 (__name__)
+              4 STORE_NAME               1 (__module__)
+              6 LOAD_CONST               0 ('FlashState')
+              8 STORE_NAME               2 (__qualname__)
+
+ 11          10 LOAD_CONST               1 ('主流程状态机')
+             12 STORE_NAME               3 (__doc__)
+
+ 12          14 PUSH_NULL
+             16 LOAD_NAME                4 (auto)
+             18 PRECALL                  0
+             22 CALL                     0
+             32 STORE_NAME               5 (S1_SELECT_FILE)
+
+ 13          34 PUSH_NULL
+             36 LOAD_NAME                4 (auto)
+             38 PRECALL                  0
+             42 CALL                     0
+             52 STORE_NAME               6 (S2_WAIT_CONNECTION)
+
+ 14          54 PUSH_NULL
+             56 LOAD_NAME                4 (auto)
+             58 PRECALL                  0
+             62 CALL                     0
+             72 STORE_NAME               7 (S3_DEVICE_DETECTED)
+
+ 15          74 PUSH_NULL
+             76 LOAD_NAME                4 (auto)
+             78 PRECALL                  0
+             82 CALL                     0
+             92 STORE_NAME               8 (S4_FLASHING)
+
+ 16          94 PUSH_NULL
+             96 LOAD_NAME                4 (auto)
+             98 PRECALL                  0
+            102 CALL                     0
+            112 STORE_NAME               9 (S5_COMPLETE)
+
+ 17         114 PUSH_NULL
+            116 LOAD_NAME                4 (auto)
+            118 PRECALL                  0
+            122 CALL                     0
+            132 STORE_NAME              10 (S5_FAILED)
+
+ 18         134 PUSH_NULL
+            136 LOAD_NAME                4 (auto)
+            138 PRECALL                  0
+            142 CALL                     0
+            152 STORE_NAME              11 (S5_USB_DISCONNECTED)
+
+ 19         154 PUSH_NULL
+            156 LOAD_NAME                4 (auto)
+            158 PRECALL                  0
+            162 CALL                     0
+            172 STORE_NAME              12 (S6_RETRYING)
+            174 LOAD_CONST               2 (None)
+            176 RETURN_VALUE
+
+Disassembly of <code object FlashContext at 0x0000017F1EE69070, file "app\state.py", line 22>:
+ 22           0 RESUME                   0
+              2 LOAD_NAME                0 (__name__)
+              4 STORE_NAME               1 (__module__)
+              6 LOAD_CONST               0 ('FlashContext')
+              8 STORE_NAME               2 (__qualname__)
+             10 SETUP_ANNOTATIONS
+
+ 24          12 LOAD_CONST               1 ('PRD 第18页 - 状态字段表')
+             14 STORE_NAME               3 (__doc__)
+
+ 25          16 LOAD_CONST               2 ('')
+             18 STORE_NAME               4 (package_path)
+             20 LOAD_NAME                5 (str)
+             22 LOAD_NAME                6 (__annotations__)
+             24 LOAD_CONST               3 ('package_path')
+             26 STORE_SUBSCR
+
+ 26          30 LOAD_CONST               2 ('')
+             32 STORE_NAME               7 (package_name)
+             34 LOAD_NAME                5 (str)
+             36 LOAD_NAME                6 (__annotations__)
+             38 LOAD_CONST               4 ('package_name')
+             40 STORE_SUBSCR
+
+ 27          44 LOAD_CONST               2 ('')
+             46 STORE_NAME               8 (extract_dir)
+             48 LOAD_NAME                5 (str)
+             50 LOAD_NAME                6 (__annotations__)
+             52 LOAD_CONST               5 ('extract_dir')
+             54 STORE_SUBSCR
+
+ 28          58 LOAD_CONST               6 ('idle')
+             60 STORE_NAME               9 (device_status)
+             62 LOAD_NAME                5 (str)
+             64 LOAD_NAME                6 (__annotations__)
+             66 LOAD_CONST               7 ('device_status')
+             68 STORE_SUBSCR
+
+ 29          72 LOAD_CONST               2 ('')
+             74 STORE_NAME              10 (device_port)
+             76 LOAD_NAME                5 (str)
+             78 LOAD_NAME                6 (__annotations__)
+             80 LOAD_CONST               8 ('device_port')
+             82 STORE_SUBSCR
+
+ 30          86 LOAD_CONST               2 ('')
+             88 STORE_NAME              11 (current_step)
+             90 LOAD_NAME                5 (str)
+             92 LOAD_NAME                6 (__annotations__)
+             94 LOAD_CONST               9 ('current_step')
+             96 STORE_SUBSCR
+
+ 31         100 LOAD_CONST              10 (0)
+            102 STORE_NAME              12 (progress_percent)
+            104 LOAD_NAME               13 (int)
+            106 LOAD_NAME                6 (__annotations__)
+            108 LOAD_CONST              11 ('progress_percent')
+            110 STORE_SUBSCR
+
+ 32         114 LOAD_CONST              12 ('00:00')
+            116 STORE_NAME              14 (elapsed_time)
+            118 LOAD_NAME                5 (str)
+            120 LOAD_NAME                6 (__annotations__)
+            122 LOAD_CONST              13 ('elapsed_time')
+            124 STORE_SUBSCR
+
+ 33         128 LOAD_CONST              14 ('--:--')
+            130 STORE_NAME              15 (eta)
+            132 LOAD_NAME                5 (str)
+            134 LOAD_NAME                6 (__annotations__)
+            136 LOAD_CONST              15 ('eta')
+            138 STORE_SUBSCR
+
+ 34         142 LOAD_CONST               2 ('')
+            144 STORE_NAME              16 (error_code)
+            146 LOAD_NAME                5 (str)
+            148 LOAD_NAME                6 (__annotations__)
+            150 LOAD_CONST              16 ('error_code')
+            152 STORE_SUBSCR
+
+ 35         156 LOAD_CONST              10 (0)
+            158 STORE_NAME              17 (retry_count)
+            160 LOAD_NAME               13 (int)
+            162 LOAD_NAME                6 (__annotations__)
+            164 LOAD_CONST              17 ('retry_count')
+            166 STORE_SUBSCR
+
+ 36         170 LOAD_CONST              18 (False)
+            172 STORE_NAME              18 (log_available)
+            174 LOAD_NAME               19 (bool)
+            176 LOAD_NAME                6 (__annotations__)
+            178 LOAD_CONST              19 ('log_available')
+            180 STORE_SUBSCR
+
+ 37         184 PUSH_NULL
+            186 LOAD_NAME               20 (field)
+            188 LOAD_NAME               21 (list)
+            190 KW_NAMES                20
+            192 PRECALL                  1
+            196 CALL                     1
+            206 STORE_NAME              22 (log_messages)
+            208 LOAD_NAME               21 (list)
+            210 LOAD_NAME                6 (__annotations__)
+            212 LOAD_CONST              21 ('log_messages')
+            214 STORE_SUBSCR
+            218 LOAD_CONST              22 (None)
+            220 RETURN_VALUE
+
+Disassembly of <code object StateMachine at 0x0000017F1EBB1A40, file "app\state.py", line 40>:
+              0 MAKE_CELL                0 (__class__)
+
+ 40           2 RESUME                   0
+              4 LOAD_NAME                0 (__name__)
+              6 STORE_NAME               1 (__module__)
+              8 LOAD_CONST               0 ('StateMachine')
+             10 STORE_NAME               2 (__qualname__)
+
+ 41          12 LOAD_CONST               1 ('\n    状态机控制器。\n    所有页面切换、按钮启禁用都由状态驱动。\n    ')
+             14 STORE_NAME               3 (__doc__)
+
+ 45          16 PUSH_NULL
+             18 LOAD_NAME                4 (Signal)
+             20 LOAD_NAME                5 (FlashState)
+             22 PRECALL                  1
+             26 CALL                     1
+             36 STORE_NAME               6 (state_changed)
+
+ 49          38 LOAD_NAME                5 (FlashState)
+             40 LOAD_ATTR                7 (S1_SELECT_FILE)
+
+ 50          50 LOAD_NAME                5 (FlashState)
+             52 LOAD_ATTR                8 (S2_WAIT_CONNECTION)
+
+ 49          62 BUILD_LIST               1
+
+ 52          64 LOAD_NAME                5 (FlashState)
+             66 LOAD_ATTR                8 (S2_WAIT_CONNECTION)
+
+ 53          76 LOAD_NAME                5 (FlashState)
+             78 LOAD_ATTR                9 (S3_DEVICE_DETECTED)
+
+ 54          88 LOAD_NAME                5 (FlashState)
+             90 LOAD_ATTR                7 (S1_SELECT_FILE)
+
+ 52         100 BUILD_LIST               2
+
+ 56         102 LOAD_NAME                5 (FlashState)
+            104 LOAD_ATTR                9 (S3_DEVICE_DETECTED)
+
+ 57         114 LOAD_NAME                5 (FlashState)
+            116 LOAD_ATTR               10 (S4_FLASHING)
+
+ 58         126 LOAD_NAME                5 (FlashState)
+            128 LOAD_ATTR                8 (S2_WAIT_CONNECTION)
+
+ 59         138 LOAD_NAME                5 (FlashState)
+            140 LOAD_ATTR                7 (S1_SELECT_FILE)
+
+ 56         150 BUILD_LIST               3
+
+ 61         152 LOAD_NAME                5 (FlashState)
+            154 LOAD_ATTR               10 (S4_FLASHING)
+
+ 62         164 LOAD_NAME                5 (FlashState)
+            166 LOAD_ATTR               11 (S5_COMPLETE)
+
+ 63         176 LOAD_NAME                5 (FlashState)
+            178 LOAD_ATTR               12 (S5_FAILED)
+
+ 64         188 LOAD_NAME                5 (FlashState)
+            190 LOAD_ATTR               13 (S5_USB_DISCONNECTED)
+
+ 61         200 BUILD_LIST               3
+
+ 66         202 LOAD_NAME                5 (FlashState)
+            204 LOAD_ATTR               11 (S5_COMPLETE)
+
+ 67         214 LOAD_NAME                5 (FlashState)
+            216 LOAD_ATTR                7 (S1_SELECT_FILE)
+
+ 66         226 BUILD_LIST               1
+
+ 69         228 LOAD_NAME                5 (FlashState)
+            230 LOAD_ATTR               12 (S5_FAILED)
+
+ 70         240 LOAD_NAME                5 (FlashState)
+            242 LOAD_ATTR               14 (S6_RETRYING)
+
+ 71         252 LOAD_NAME                5 (FlashState)
+            254 LOAD_ATTR                7 (S1_SELECT_FILE)
+
+ 69         264 BUILD_LIST               2
+
+ 73         266 LOAD_NAME                5 (FlashState)
+            268 LOAD_ATTR               13 (S5_USB_DISCONNECTED)
+
+ 74         278 LOAD_NAME                5 (FlashState)
+            280 LOAD_ATTR               14 (S6_RETRYING)
+
+ 75         290 LOAD_NAME                5 (FlashState)
+            292 LOAD_ATTR                8 (S2_WAIT_CONNECTION)
+
+ 73         302 BUILD_LIST               2
+
+ 77         304 LOAD_NAME                5 (FlashState)
+            306 LOAD_ATTR               14 (S6_RETRYING)
+
+ 78         316 LOAD_NAME                5 (FlashState)
+            318 LOAD_ATTR                8 (S2_WAIT_CONNECTION)
+
+ 79         328 LOAD_NAME                5 (FlashState)
+            330 LOAD_ATTR               12 (S5_FAILED)
+
+ 80         340 LOAD_NAME                5 (FlashState)
+            342 LOAD_ATTR               13 (S5_USB_DISCONNECTED)
+
+ 77         352 BUILD_LIST               3
+
+ 48         354 BUILD_MAP                8
+            356 STORE_NAME              15 (TRANSITIONS)
+
+ 84         358 LOAD_CONST              14 ((None,))
+            360 LOAD_CLOSURE             0 (__class__)
+            362 BUILD_TUPLE              1
+            364 LOAD_CONST               3 (<code object __init__ at 0x0000017F1E5D0570, file "app\state.py", line 84>)
+            366 MAKE_FUNCTION            9 (defaults, closure)
+            368 STORE_NAME              16 (__init__)
+
+ 89         370 LOAD_NAME               17 (property)
+
+ 90         372 LOAD_CONST               4 ('return')
+            374 LOAD_NAME                5 (FlashState)
+            376 BUILD_TUPLE              2
+            378 LOAD_CONST               5 (<code object state at 0x0000017F1F07B9E0, file "app\state.py", line 89>)
+            380 MAKE_FUNCTION            4 (annotations)
+
+ 89         382 PRECALL                  0
+            386 CALL                     0
+
+ 90         396 STORE_NAME              18 (state)
+
+ 93         398 LOAD_NAME               17 (property)
+
+ 94         400 LOAD_CONST               4 ('return')
+            402 LOAD_NAME               19 (FlashContext)
+            404 BUILD_TUPLE              2
+            406 LOAD_CONST               6 (<code object context at 0x0000017F1F0885E0, file "app\state.py", line 93>)
+            408 MAKE_FUNCTION            4 (annotations)
+
+ 93         410 PRECALL                  0
+            414 CALL                     0
+
+ 94         424 STORE_NAME              20 (context)
+
+ 97         426 LOAD_CONST               7 ('new_state')
+            428 LOAD_NAME                5 (FlashState)
+            430 BUILD_TUPLE              2
+            432 LOAD_CONST               8 (<code object transition_to at 0x0000017F1EDFF120, file "app\state.py", line 97>)
+            434 MAKE_FUNCTION            4 (annotations)
+            436 STORE_NAME              21 (transition_to)
+
+109         438 LOAD_CONST               7 ('new_state')
+            440 LOAD_NAME                5 (FlashState)
+            442 BUILD_TUPLE              2
+            444 LOAD_CONST               9 (<code object force_state at 0x0000017F20CA8230, file "app\state.py", line 109>)
+            446 MAKE_FUNCTION            4 (annotations)
+            448 STORE_NAME              22 (force_state)
+
+114         450 LOAD_CONST              10 (<code object reset_for_retry at 0x0000017F1F0481F0, file "app\state.py", line 114>)
+            452 MAKE_FUNCTION            0
+            454 STORE_NAME              23 (reset_for_retry)
+
+125         456 LOAD_CONST              11 (<code object reset_full at 0x0000017F1EE16250, file "app\state.py", line 125>)
+            458 MAKE_FUNCTION            0
+            460 STORE_NAME              24 (reset_full)
+
+131         462 LOAD_CONST               7 ('new_state')
+            464 LOAD_NAME                5 (FlashState)
+            466 LOAD_CONST              12 ('old_state')
+            468 LOAD_NAME                5 (FlashState)
+            470 BUILD_TUPLE              4
+            472 LOAD_CONST              13 (<code object _on_enter at 0x0000017F1ED5B1F0, file "app\state.py", line 131>)
+            474 MAKE_FUNCTION            4 (annotations)
+            476 STORE_NAME              25 (_on_enter)
+            478 LOAD_CLOSURE             0 (__class__)
+            480 COPY                     1
+            482 STORE_NAME              26 (__classcell__)
+            484 RETURN_VALUE
+
+Disassembly of <code object __init__ at 0x0000017F1E5D0570, file "app\state.py", line 84>:
+              0 COPY_FREE_VARS           1
+
+ 84           2 RESUME                   0
+
+ 85           4 LOAD_GLOBAL              1 (NULL + super)
+             16 PRECALL                  0
+             20 CALL                     0
+             30 LOAD_METHOD              1 (__init__)
+             52 LOAD_FAST                1 (parent)
+             54 PRECALL                  1
+             58 CALL                     1
+             68 POP_TOP
+
+ 86          70 LOAD_GLOBAL              4 (FlashState)
+             82 LOAD_ATTR                3 (S1_SELECT_FILE)
+             92 LOAD_FAST                0 (self)
+             94 STORE_ATTR               4 (_state)
+
+ 87         104 LOAD_GLOBAL             11 (NULL + FlashContext)
+            116 PRECALL                  0
+            120 CALL                     0
+            130 LOAD_FAST                0 (self)
+            132 STORE_ATTR               6 (_context)
+            142 LOAD_CONST               0 (None)
+            144 RETURN_VALUE
+
+Disassembly of <code object state at 0x0000017F1F07B9E0, file "app\state.py", line 89>:
+ 89           0 RESUME                   0
+
+ 91           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_state)
+             14 RETURN_VALUE
+
+Disassembly of <code object context at 0x0000017F1F0885E0, file "app\state.py", line 93>:
+ 93           0 RESUME                   0
+
+ 95           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_context)
+             14 RETURN_VALUE
+
+Disassembly of <code object transition_to at 0x0000017F1EDFF120, file "app\state.py", line 97>:
+ 97           0 RESUME                   0
+
+ 99           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (TRANSITIONS)
+             14 LOAD_METHOD              1 (get)
+             36 LOAD_FAST                0 (self)
+             38 LOAD_ATTR                2 (_state)
+             48 BUILD_LIST               0
+             50 PRECALL                  2
+             54 CALL                     2
+             64 STORE_FAST               2 (allowed)
+
+100          66 LOAD_FAST                1 (new_state)
+             68 LOAD_FAST                2 (allowed)
+             70 CONTAINS_OP              1
+             72 POP_JUMP_FORWARD_IF_FALSE    36 (to 146)
+
+101          74 LOAD_GLOBAL              7 (NULL + ValueError)
+
+102          86 LOAD_CONST               1 ('非法状态转移: ')
+             88 LOAD_FAST                0 (self)
+             90 LOAD_ATTR                2 (_state)
+            100 LOAD_ATTR                4 (name)
+            110 FORMAT_VALUE             0
+            112 LOAD_CONST               2 (' → ')
+            114 LOAD_FAST                1 (new_state)
+            116 LOAD_ATTR                4 (name)
+            126 FORMAT_VALUE             0
+            128 BUILD_STRING             4
+
+101         130 PRECALL                  1
+            134 CALL                     1
+            144 RAISE_VARARGS            1
+
+104     >>  146 LOAD_FAST                0 (self)
+            148 LOAD_ATTR                2 (_state)
+            158 STORE_FAST               3 (old_state)
+
+105         160 LOAD_FAST                1 (new_state)
+            162 LOAD_FAST                0 (self)
+            164 STORE_ATTR               2 (_state)
+
+106         174 LOAD_FAST                0 (self)
+            176 LOAD_METHOD              5 (_on_enter)
+            198 LOAD_FAST                1 (new_state)
+            200 LOAD_FAST                3 (old_state)
+            202 PRECALL                  2
+            206 CALL                     2
+            216 POP_TOP
+
+107         218 LOAD_FAST                0 (self)
+            220 LOAD_ATTR                6 (state_changed)
+            230 LOAD_METHOD              7 (emit)
+            252 LOAD_FAST                1 (new_state)
+            254 PRECALL                  1
+            258 CALL                     1
+            268 POP_TOP
+            270 LOAD_CONST               3 (None)
+            272 RETURN_VALUE
+
+Disassembly of <code object force_state at 0x0000017F20CA8230, file "app\state.py", line 109>:
+109           0 RESUME                   0
+
+111           2 LOAD_FAST                1 (new_state)
+              4 LOAD_FAST                0 (self)
+              6 STORE_ATTR               0 (_state)
+
+112          16 LOAD_FAST                0 (self)
+             18 LOAD_ATTR                1 (state_changed)
+             28 LOAD_METHOD              2 (emit)
+             50 LOAD_FAST                1 (new_state)
+             52 PRECALL                  1
+             56 CALL                     1
+             66 POP_TOP
+             68 LOAD_CONST               1 (None)
+             70 RETURN_VALUE
+
+Disassembly of <code object reset_for_retry at 0x0000017F1F0481F0, file "app\state.py", line 114>:
+114           0 RESUME                   0
+
+116           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_context)
+             14 COPY                     1
+             16 LOAD_ATTR                1 (retry_count)
+             26 LOAD_CONST               1 (1)
+             28 BINARY_OP               13 (+=)
+             32 SWAP                     2
+             34 STORE_ATTR               1 (retry_count)
+
+117          44 LOAD_CONST               2 (0)
+             46 LOAD_FAST                0 (self)
+             48 LOAD_ATTR                0 (_context)
+             58 STORE_ATTR               2 (progress_percent)
+
+118          68 LOAD_CONST               3 ('')
+             70 LOAD_FAST                0 (self)
+             72 LOAD_ATTR                0 (_context)
+             82 STORE_ATTR               3 (current_step)
+
+119          92 LOAD_CONST               4 ('00:00')
+             94 LOAD_FAST                0 (self)
+             96 LOAD_ATTR                0 (_context)
+            106 STORE_ATTR               4 (elapsed_time)
+
+120         116 LOAD_CONST               5 ('--:--')
+            118 LOAD_FAST                0 (self)
+            120 LOAD_ATTR                0 (_context)
+            130 STORE_ATTR               5 (eta)
+
+121         140 LOAD_CONST               3 ('')
+            142 LOAD_FAST                0 (self)
+            144 LOAD_ATTR                0 (_context)
+            154 STORE_ATTR               6 (error_code)
+
+122         164 LOAD_CONST               6 ('idle')
+            166 LOAD_FAST                0 (self)
+            168 LOAD_ATTR                0 (_context)
+            178 STORE_ATTR               7 (device_status)
+
+123         188 LOAD_FAST                0 (self)
+            190 LOAD_METHOD              8 (transition_to)
+            212 LOAD_GLOBAL             18 (FlashState)
+            224 LOAD_ATTR               10 (S6_RETRYING)
+            234 PRECALL                  1
+            238 CALL                     1
+            248 POP_TOP
+            250 LOAD_CONST               7 (None)
+            252 RETURN_VALUE
+
+Disassembly of <code object reset_full at 0x0000017F1EE16250, file "app\state.py", line 125>:
+125           0 RESUME                   0
+
+127           2 LOAD_GLOBAL              1 (NULL + FlashContext)
+             14 PRECALL                  0
+             18 CALL                     0
+             28 LOAD_FAST                0 (self)
+             30 STORE_ATTR               1 (_context)
+
+128          40 LOAD_GLOBAL              4 (FlashState)
+             52 LOAD_ATTR                3 (S1_SELECT_FILE)
+             62 LOAD_FAST                0 (self)
+             64 STORE_ATTR               4 (_state)
+
+129          74 LOAD_FAST                0 (self)
+             76 LOAD_ATTR                5 (state_changed)
+             86 LOAD_METHOD              6 (emit)
+            108 LOAD_FAST                0 (self)
+            110 LOAD_ATTR                4 (_state)
+            120 PRECALL                  1
+            124 CALL                     1
+            134 POP_TOP
+            136 LOAD_CONST               1 (None)
+            138 RETURN_VALUE
+
+Disassembly of <code object _on_enter at 0x0000017F1ED5B1F0, file "app\state.py", line 131>:
+131           0 RESUME                   0
+
+133           2 LOAD_FAST                1 (new_state)
+              4 LOAD_GLOBAL              0 (FlashState)
+             16 LOAD_ATTR                1 (S2_WAIT_CONNECTION)
+             26 COMPARE_OP               2 (==)
+             32 POP_JUMP_FORWARD_IF_FALSE    14 (to 62)
+
+134          34 LOAD_CONST               1 ('idle')
+             36 LOAD_FAST                0 (self)
+             38 LOAD_ATTR                2 (_context)
+             48 STORE_ATTR               3 (device_status)
+             58 LOAD_CONST               8 (None)
+             60 RETURN_VALUE
+
+135     >>   62 LOAD_FAST                1 (new_state)
+             64 LOAD_GLOBAL              0 (FlashState)
+             76 LOAD_ATTR                4 (S3_DEVICE_DETECTED)
+             86 COMPARE_OP               2 (==)
+             92 POP_JUMP_FORWARD_IF_FALSE    14 (to 122)
+
+136          94 LOAD_CONST               2 ('connected')
+             96 LOAD_FAST                0 (self)
+             98 LOAD_ATTR                2 (_context)
+            108 STORE_ATTR               3 (device_status)
+            118 LOAD_CONST               8 (None)
+            120 RETURN_VALUE
+
+137     >>  122 LOAD_FAST                1 (new_state)
+            124 LOAD_GLOBAL              0 (FlashState)
+            136 LOAD_ATTR                5 (S4_FLASHING)
+            146 COMPARE_OP               2 (==)
+            152 POP_JUMP_FORWARD_IF_FALSE    50 (to 254)
+
+138         154 LOAD_CONST               3 (0)
+            156 LOAD_FAST                0 (self)
+            158 LOAD_ATTR                2 (_context)
+            168 STORE_ATTR               6 (progress_percent)
+
+139         178 LOAD_CONST               4 ('')
+            180 LOAD_FAST                0 (self)
+            182 LOAD_ATTR                2 (_context)
+            192 STORE_ATTR               7 (current_step)
+
+140         202 LOAD_CONST               5 ('00:00')
+            204 LOAD_FAST                0 (self)
+            206 LOAD_ATTR                2 (_context)
+            216 STORE_ATTR               8 (elapsed_time)
+
+141         226 LOAD_CONST               6 ('--:--')
+            228 LOAD_FAST                0 (self)
+            230 LOAD_ATTR                2 (_context)
+            240 STORE_ATTR               9 (eta)
+            250 LOAD_CONST               8 (None)
+            252 RETURN_VALUE
+
+142     >>  254 LOAD_FAST                1 (new_state)
+            256 LOAD_GLOBAL              0 (FlashState)
+            268 LOAD_ATTR               10 (S5_USB_DISCONNECTED)
+            278 COMPARE_OP               2 (==)
+            284 POP_JUMP_FORWARD_IF_FALSE    14 (to 314)
+
+143         286 LOAD_CONST               7 ('disconnected')
+            288 LOAD_FAST                0 (self)
+            290 LOAD_ATTR                2 (_context)
+            300 STORE_ATTR               3 (device_status)
+            310 LOAD_CONST               8 (None)
+            312 RETURN_VALUE
+
+144     >>  314 LOAD_FAST                1 (new_state)
+            316 LOAD_GLOBAL              0 (FlashState)
+            328 LOAD_ATTR               11 (S6_RETRYING)
+            338 COMPARE_OP               2 (==)
+            344 POP_JUMP_FORWARD_IF_FALSE    14 (to 374)
+
+145         346 LOAD_CONST               4 ('')
+            348 LOAD_FAST                0 (self)
+            350 LOAD_ATTR                2 (_context)
+            360 STORE_ATTR               7 (current_step)
+            370 LOAD_CONST               8 (None)
+            372 RETURN_VALUE
+
+144     >>  374 LOAD_CONST               8 (None)
+            376 RETURN_VALUE

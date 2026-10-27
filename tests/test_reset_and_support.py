@@ -175,7 +175,7 @@ def test_community_buttons_open_their_links_and_follow_visibility(qapp, monkeypa
         window._reddit_btn.click()
         assert opened == [
             "https://discord.gg/zHrT2zrcek",
-            "https://reddit.com/r/innioasismodders",
+            "https://reddit.com/r/innioasis",
         ]
         assert DONATION_LINKS["discord"] == opened[0]
         assert DONATION_LINKS["reddit"] == opened[1]
@@ -280,4 +280,53 @@ def test_donation_status_bar_rotation_and_centering(qapp):
     bar.close()
     bar.deleteLater()
     qapp.processEvents()
+
+
+def test_windows_legacy_shortcut_cleanup_never_deletes_user_files(tmp_path, monkeypatch):
+    from src import legacy_cleanup
+
+    fake_home = tmp_path / "User"
+    desktop = fake_home / "Desktop"
+    start_menu = fake_home / "AppData" / "Roaming" / "Microsoft" / "Windows" / "Start Menu" / "Programs"
+    desktop.mkdir(parents=True)
+    start_menu.mkdir(parents=True)
+
+    # 1. Shortcuts that MUST be removed (.lnk / .url containing Innioasis or SP Flash)
+    old_app_lnk = desktop / "Innioasis Updater.lnk"
+    old_sp_lnk = desktop / "SP Flash Tool.lnk"
+    old_app_lnk.write_text("shortcut")
+    old_sp_lnk.write_text("shortcut")
+
+    menu_folder = start_menu / "Innioasis Updater"
+    menu_folder.mkdir()
+    (menu_folder / "Innioasis Updater.lnk").write_text("shortcut")
+    (menu_folder / "SP Flash Tool.lnk").write_text("shortcut")
+
+    # 2. User files that MUST NEVER be deleted even if named Innioasis / SP Flash
+    user_zip = desktop / "Innioasis Y1 Backup.zip"
+    user_notes = desktop / "SP Flash notes.txt"
+    user_folder = desktop / "My Innioasis Music"
+    user_folder.mkdir()
+    user_song = user_folder / "song.mp3"
+    user_zip.write_text("user zip data")
+    user_notes.write_text("user notes")
+    user_song.write_text("audio")
+
+    monkeypatch.setenv("USERPROFILE", str(fake_home))
+    monkeypatch.setenv("APPDATA", str(fake_home / "AppData" / "Roaming"))
+    monkeypatch.setenv("PROGRAMDATA", str(tmp_path / "ProgramData"))
+    monkeypatch.setenv("PUBLIC", str(tmp_path / "Public"))
+
+    removed = legacy_cleanup._clean_windows_legacy_shortcuts()
+    assert len(removed) >= 5
+    assert not old_app_lnk.exists()
+    assert not old_sp_lnk.exists()
+    assert not menu_folder.exists()
+
+    # Non-shortcut user files and folders with user files are completely untouched
+    assert user_zip.exists()
+    assert user_notes.exists()
+    assert user_folder.exists()
+    assert user_song.exists()
+
 

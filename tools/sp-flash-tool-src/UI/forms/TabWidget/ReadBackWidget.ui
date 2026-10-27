@@ -177,6 +177,23 @@
        </widget>
       </item>
       <item>
+       <widget class="QRadioButton" name="m_sram_rb_button">
+        <property name="text">
+         <string>by SRAM</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QRadioButton" name="m_dram_rb_button">
+        <property name="text">
+         <string>by DRAM</string>
+        </property>
+        <property name="checked">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
        <spacer name="horizontalSpacer">
         <property name="orientation">
          <enum>Qt::Horizontal</enum>

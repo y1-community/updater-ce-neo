@@ -17,6 +17,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src import flash_service as fs
+from src import device_tracking, paths
 from src.i18n import tr, _STRINGS
 from src.state import FlashState
 from src.ui.main_window import MainWindow
@@ -52,8 +53,10 @@ def test_com_port_reboot_suggestion_i18n():
         assert "1013" in table[lang]
 
 
-def test_sp_1013_failover_to_mtk_then_reboot_suggestion():
-    """Default flow: SP Flash Tool gets 1013 -> attempts MTKclient -> MTKclient fails -> suggests reboot."""
+def test_sp_1013_failover_to_mtk_then_reboot_suggestion(monkeypatch):
+    """Default flow on Linux: SP Flash Tool gets 1013 -> attempts MTKclient -> MTKclient fails -> suggests reboot."""
+    monkeypatch.setattr(paths, "IS_WINDOWS", False)
+    monkeypatch.setattr(paths, "IS_MAC", False)
     app = _app()
     settings = QSettings("innioasis", "updater")
     orig_pref = settings.value("flash_method")
@@ -118,11 +121,16 @@ def test_sp_1013_failover_to_mtk_then_reboot_suggestion():
         app.processEvents()
 
 
-def test_mtk_preference_failover_to_sp_1013_immediate_reboot_suggestion():
-    """User preferred MTKclient -> MTK fails -> SP Flash Tool gets 1013 -> immediate reboot suggestion."""
+def test_mtk_preference_failover_to_sp_1013_immediate_reboot_suggestion(monkeypatch):
+    """User preferred MTKclient -> MTK fails -> SP Flash Tool gets 1013 -> immediate reboot suggestion (Linux)."""
+    monkeypatch.setattr(paths, "IS_WINDOWS", False)
+    monkeypatch.setattr(paths, "IS_MAC", False)
     app = _app()
     settings = QSettings("innioasis", "updater")
     orig_pref = settings.value("flash_method")
+    orig_adv = settings.value("advanced_settings")
+    settings.setValue("advanced_settings", True)
+    device_tracking.set_advanced_settings_enabled(True)
     settings.setValue("flash_method", "mtk")
 
     window = MainWindow()
@@ -181,15 +189,25 @@ def test_mtk_preference_failover_to_sp_1013_immediate_reboot_suggestion():
             settings.remove("flash_method")
         else:
             settings.setValue("flash_method", orig_pref)
+        if orig_adv is None:
+            settings.remove("advanced_settings")
+        else:
+            settings.setValue("advanced_settings", orig_adv)
+        device_tracking.set_advanced_settings_enabled(bool(orig_adv))
         window.close()
         app.processEvents()
 
 
-def test_app_restart_preserves_preference_and_tries_method_b_on_fail():
-    """Simulate app reboot: preferred method is tried first, then method B on fail."""
+def test_app_restart_preserves_preference_and_tries_method_b_on_fail(monkeypatch):
+    """Simulate app reboot: preferred method is tried first, then method B on fail (Linux)."""
+    monkeypatch.setattr(paths, "IS_WINDOWS", False)
+    monkeypatch.setattr(paths, "IS_MAC", False)
     app = _app()
     settings = QSettings("innioasis", "updater")
     orig_pref = settings.value("flash_method")
+    orig_adv = settings.value("advanced_settings")
+    settings.setValue("advanced_settings", True)
+    device_tracking.set_advanced_settings_enabled(True)
 
     try:
         # Case A: Default / SP Flash Tool preference
@@ -214,4 +232,56 @@ def test_app_restart_preserves_preference_and_tries_method_b_on_fail():
             settings.remove("flash_method")
         else:
             settings.setValue("flash_method", orig_pref)
+        if orig_adv is None:
+            settings.remove("advanced_settings")
+        else:
+            settings.setValue("advanced_settings", orig_adv)
+        device_tracking.set_advanced_settings_enabled(bool(orig_adv))
+        app.processEvents()
+
+
+def test_windows_sp_failure_shows_error_card_without_mtk_failover(monkeypatch):
+    """On Windows, SP Flash Tool failures NEVER fail over to MTKclient or trap the user."""
+    monkeypatch.setattr(paths, "IS_WINDOWS", True)
+    monkeypatch.setattr(paths, "IS_MAC", False)
+    app = _app()
+    settings = QSettings("innioasis", "updater")
+    orig_pref = settings.value("flash_method")
+    settings.setValue("flash_method", "sp")
+
+    window = MainWindow()
+    calls = []
+    window.service.start_flash = lambda pkg, pre="", method="auto", **kw: calls.append(method)
+    window.service.start_device_monitor = lambda: None
+    window.service.cancel_flash = lambda: None
+    window.service.stop_device_monitor = lambda: None
+    window._ensure_elevated_for_install = lambda: True
+
+    try:
+        window.show()
+        window._package_path = "C:/fake/rom.zip"
+        window._package_name = "Original Software 3.1.2 for Y1"
+        window._package_model = "Y1"
+        window._flash_method = "sp"
+        window._flash_page.set_method("sp")
+
+        # SP Flash Tool fails with an error (e.g. 1013 or 3145)
+        window._handle_flash_failure("S_COM_PORT_OPEN_FAIL (1013)")
+
+        # Must NOT fail over to MTKclient on Windows
+        assert window._flash_method == "sp"
+        assert window._fallback_attempted is False
+        assert window._power_off_prompt is False
+        assert window.sm.state == FlashState.S5_FAILED
+        assert window._install_failed is True
+
+        # Close must NOT be trapped or blocked by an active install confirmation
+        closed = window.close()
+        assert closed is True
+    finally:
+        if orig_pref is None:
+            settings.remove("flash_method")
+        else:
+            settings.setValue("flash_method", orig_pref)
+        window.close()
         app.processEvents()

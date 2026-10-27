@@ -206,7 +206,7 @@ def test_error_page_shows_the_guidance_for_a_failed_flash():
             package_name="rom.zip",
             retry_count=0,
         )
-        assert "Wrong Model Connected" in page._error_row.value()
+        assert tr("err_sp_wrong_model_title") in page._error_row.value()
         assert tr("err_sp_wrong_model") in page._cause.text()
 
         # An unknown failure leaves no stale hint behind.
@@ -331,9 +331,11 @@ def test_starting_the_watchdog_expires_a_worker_that_never_reports():
 # Guided-install failover
 # --------------------------------------------------------------------------
 @pytest.mark.skipif(sys.platform == "darwin", reason="macOS has no SP Flash Tool")
-def test_failed_attempt_goes_back_to_the_power_off_step():
+def test_failed_attempt_goes_back_to_the_power_off_step(monkeypatch):
+    from src import paths
     from src.ui.main_window import MainWindow
 
+    monkeypatch.setattr(paths, "IS_WINDOWS", False)
     app = _app()
     window = MainWindow()
     calls = []
@@ -385,10 +387,11 @@ def test_wrong_model_never_falls_back_to_the_other_backend():
         app.processEvents()
 
 
-def test_no_failover_without_a_second_backend():
+def test_no_failover_without_a_second_backend(monkeypatch):
     from src.ui.main_window import MainWindow
     from src import paths
 
+    monkeypatch.setattr(paths, "IS_WINDOWS", False)
     app = _app()
     window = MainWindow()
     try:
@@ -458,7 +461,7 @@ def test_switching_method_is_silent_and_waits_for_the_confirmation():
 
 
 @pytest.mark.skipif(sys.platform == "darwin", reason="macOS has no SP Flash Tool")
-def test_power_off_copy_after_an_automatic_method_switch():
+def test_power_off_copy_after_an_automatic_method_switch(monkeypatch):
     """Only the automatic engine switch shows the recovery card.
 
     That attempt left the player mid-download, so the card keeps saying the
@@ -468,10 +471,12 @@ def test_power_off_copy_after_an_automatic_method_switch():
     """
     from PySide6.QtCore import QSettings
 
+    from src import paths
     from src.i18n import tr
     from src.state import FlashState
     from src.ui.main_window import MainWindow
 
+    monkeypatch.setattr(paths, "IS_WINDOWS", False)
     app = _app()
     settings = QSettings("innioasis", "updater")
     previous = settings.value("flash_method")
@@ -523,12 +528,14 @@ def test_power_off_copy_after_an_automatic_method_switch():
 
 
 @pytest.mark.skipif(sys.platform == "darwin", reason="macOS has no SP Flash Tool")
-def test_com_port_failure_fails_over_with_the_engine_names():
+def test_com_port_failure_fails_over_with_the_engine_names(monkeypatch):
     """A 1013 COM-port error hands over to the other engine after the standard
     disconnect and power-off step, not as a player-dropped-out failure."""
+    from src import paths
     from src.i18n import tr
     from src.ui.main_window import MainWindow
 
+    monkeypatch.setattr(paths, "IS_WINDOWS", False)
     app = _app()
     window = MainWindow()
     window.service.start_flash = lambda pkg, pre="", method="auto", **kw: None

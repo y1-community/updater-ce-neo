@@ -21,7 +21,15 @@ from PySide6.QtCore import QObject, QSettings, QTimer, Signal
 
 @pytest.fixture(autouse=True)
 def _default_user_level(monkeypatch):
-    """Each test starts with Advanced Settings off, never the real user config."""
+    """Each test starts with Advanced Settings off and Linux platform flags."""
+    import platform
+    import src.paths as paths_mod
+    import src.linux_sp_flash as linux_mod
+
+    monkeypatch.setattr(paths_mod, "IS_WINDOWS", False)
+    monkeypatch.setattr(paths_mod, "IS_MAC", False)
+    monkeypatch.setattr(platform, "system", lambda: "Linux")
+    monkeypatch.setattr(linux_mod, "arch_supported", lambda: True)
     QSettings("innioasis", "updater").remove("advanced_settings")
     yield
     QSettings("innioasis", "updater").remove("advanced_settings")
@@ -344,6 +352,9 @@ def test_linux_setup_shortcut_has_distinct_focus_from_full_settings(monkeypatch,
         window._show_linux_setup()
         assert window._stack.currentIndex() == _PAGE_SETTINGS
         assert window._settings_btn.isChecked()
+        assert window._settings_btn.text() == "Linux Setup"
+        assert window._linux_setup_btn.isHidden()
+        assert window._nav_buttons["nav_select_package"][0].isHidden()
         assert not window._linux_setup_btn.isCheckable()
         assert page.focused_card() is page._checker_card
         assert page._btn_launch_sp.isHidden()
@@ -351,6 +362,7 @@ def test_linux_setup_shortcut_has_distinct_focus_from_full_settings(monkeypatch,
         window._show_full_settings()
         assert window._stack.currentIndex() == _PAGE_SETTINGS
         assert window._settings_btn.isChecked()
+        assert window._settings_btn.text() == "Settings"
         assert not window._linux_setup_btn.isCheckable()
         assert page.focused_card() is None
     finally:
@@ -592,4 +604,58 @@ def test_mtkclient_run_never_asks_for_a_system_password(monkeypatch):
     finally:
         window.settings.setValue("flash_method", "auto")
         window.close()
+        app.processEvents()
+
+
+def test_linux_setup_wizard_asks_to_reboot_after_group_fix_and_quits_on_decline(monkeypatch):
+    """In the locked Linux Setup wizard state:
+    - declining the superuser confirmation closes the app;
+    - accepting runs auto_fix_permissions, then shows a single checkmark button
+      asking the user to restart their computer, which closes the app when clicked.
+    """
+    from PySide6.QtWidgets import QApplication
+
+    from src.i18n import tr, translator
+    from src.ui.settings_page import SettingsPage
+
+    app = QApplication.instance() or QApplication(["--platform", "offscreen"])
+    translator().set_language("en")
+    calls = _install_fake_stack(monkeypatch, _needs_root_report())
+    quit_calls = []
+    monkeypatch.setattr(QApplication, "quit", staticmethod(lambda: quit_calls.append(True)))
+
+    page = SettingsPage()
+    try:
+        page.show_card_alone(page._checker_card)
+        # 1. Declining the initial confirmation in setup_flow closes the app.
+        QTimer.singleShot(0, lambda: page._checker_card._confirm_reject.click())
+        page._btn_run_checker.click()
+        app.processEvents()
+        assert calls["fix"] == 0
+        assert quit_calls == [True]
+
+        # 2. Accepting runs auto_fix_permissions and presents the reboot checkmark step.
+        quit_calls.clear()
+        page._sp_prep_worker = None
+        real_confirm = page._checker_card.run_confirmation
+        confirm_steps = []
+
+        def _auto_accept_confirm(body, accept, reject, *, note="", symbol="next"):
+            confirm_steps.append((body, accept, reject, symbol))
+            QTimer.singleShot(0, lambda: page._checker_card._confirm_accept.click())
+            return real_confirm(body, accept, reject, note=note, symbol=symbol)
+
+        monkeypatch.setattr(page._checker_card, "run_confirmation", _auto_accept_confirm)
+        page._btn_run_checker.click()
+        app.processEvents()
+        assert calls["fix"] == 1
+        assert len(confirm_steps) == 2
+        assert confirm_steps[0][0] == tr("linux_prep_fix_body_wizard")
+        assert confirm_steps[0][3] == "next"
+        assert confirm_steps[1][0] == tr("linux_prep_reboot_body")
+        assert confirm_steps[1][2] == ""
+        assert confirm_steps[1][3] == "check"
+        assert quit_calls == [True]
+    finally:
+        page.deleteLater()
         app.processEvents()

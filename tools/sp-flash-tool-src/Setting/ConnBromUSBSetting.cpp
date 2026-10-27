@@ -62,7 +62,7 @@ ConnBromUSBSetting::ConnBromUSBSetting(const XML::Node &node)
 }
 
 Connection *ConnBromUSBSetting::CreateConnection(
-        APKey key, HW_StorageType_E stor, bool pwr_key_reset)
+        APKey key, HW_StorageType_E stor, LongPressRebootOption pwr_key_reset_option)
 {
     BromBootArg args;
 
@@ -89,8 +89,13 @@ Connection *ConnBromUSBSetting::CreateConnection(
 
     ft_conn_arg.m_force_charge = force_chg;
 
-    ft_conn_arg.m_reset_key =
-        pwr_key_reset ? RESET_BY_PWR_KEY_ALONE : RESET_BY_PWR_HOME_KEY;
+    if (pwr_key_reset_option == LONG_PRESS_REBOOT_POWER) {
+        ft_conn_arg.m_reset_key = RESET_BY_PWR_KEY_ALONE;
+    } else if (pwr_key_reset_option == LONG_PRESS_REBOOT_DISABLE) {
+        ft_conn_arg.m_reset_key = RESET_DISABLE;
+    } else {
+        ft_conn_arg.m_reset_key = RESET_BY_PWR_HOME_KEY;
+    }
 
     ft_conn_arg.m_da_log_level = get_da_log_level();
 
@@ -118,7 +123,7 @@ Connection *ConnBromUSBSetting::CreateConnection(
     _SHARED_PTR<ConnArgBox> box = _SHARED_PTR<ConnArgBox>(new ConnArgBox(
                 key, get_stop_flag(), get_timeout(),stor, ft_conn_arg));
 
-    return new Connection(med, box);
+    return new Connection(med, box, get_storage_life_cycle_check());
 }
 
 void ConnBromUSBSetting::LoadXML(const XML::Node &node)
@@ -180,6 +185,9 @@ void ConnBromUSBSetting::LoadXML(const XML::Node &node)
         m_timeout = atoi(timeout_str.c_str());
 
     m_com_port = node.GetAttribute("com-port");
+
+    std::string storage_life_cycle_check = node.GetAttribute("storage_life_cycle_check");
+    this->set_storage_life_cycle_check(storage_life_cycle_check == "true");
 }
 
 void ConnBromUSBSetting::SaveXML(XML::Node &node) const
@@ -229,6 +237,8 @@ void ConnBromUSBSetting::SaveXML(XML::Node &node) const
 
     child.SetAttribute("timeout-count",QString::number(m_timeout).toStdString());
     child.SetAttribute("com-port",m_com_port);
+
+    child.SetAttribute("storage_life_cycle_check", get_storage_life_cycle_check()? "true": "false");
 }
 
 }

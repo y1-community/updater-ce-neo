@@ -931,6 +931,9 @@
    <property name="text">
     <string>Software Update...</string>
    </property>
+   <property name="visible">
+    <bool>false</bool>
+   </property>
   </action>
   <action name="actionReadback">
    <property name="text">

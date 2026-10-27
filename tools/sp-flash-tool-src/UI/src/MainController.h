@@ -63,9 +63,6 @@ public:
 
     void GetImageInfoList(std::list<ImageInfo> &image_info_list, Download_Scene scene = FORMAT_ALL_DOWNLOAD);
 
-    void GetFLashToolImageInfoList(std::list<ImageInfo> &image_info_list,
-                                   const FLASHTOOL_API_HANDLE_T FT_Handle, Download_Scene scene = FORMAT_ALL_DOWNLOAD);
-
     void EnableROM(const int index, bool enable);
 
     void EnableROM(const std::string &rom_name, bool enable);
@@ -111,7 +108,7 @@ public:
     bool is_stop_by_user() const{return is_stop_by_user_;}
 
     QSharedPointer<APCore::PlatformSetting> GetPlatformSetting() const{return platform_setting;}
-    void get_da_report(const DA_REPORT_T &da_report, const std::string&, const int, const FLASHTOOL_API_HANDLE_T);
+    void get_da_report(const DA_REPORT_T &da_report, const std::string&, const int);
     void get_brom_result(const BOOT_RESULT &brom_result, const std::string&);
     void set_loop_dl_ok(bool is_ok);
 
@@ -135,7 +132,7 @@ signals:
     void signal_stop_working();
     void signal_conn_init();
     void signal_show_ok();
-    void signal_GetDAReport(const DA_REPORT_T *p_da_report, const std::string& friend_name, const int usb_status, const FLASHTOOL_API_HANDLE_T FT_Handle);
+    void signal_GetDAReport(const DA_REPORT_T *p_da_report, const std::string& friend_name, const int usb_status);
     void signal_GetBootResult(const BOOT_RESULT *p_boot_result, const std::string& friend_name);
 
 public slots:

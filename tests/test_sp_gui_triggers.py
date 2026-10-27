@@ -715,6 +715,61 @@ def test_a_leftover_tool_does_not_count_as_this_launch(monkeypatch):
     assert process_guard.flash_tool_running(snapshot=leftover + [(12, 10, "/opt/SP/flash_tool")], ignore_pids={11}) is True
 
 
+def test_leftover_tool_does_not_trigger_premature_quit(window, world, monkeypatch):
+    import src.process_guard as process_guard
+    import src.sp_flash_gui as sp_flash_gui
+    from src.ui import main_window as mw
+
+    world.clear()
+    quits = []
+    real_app = mw.QApplication
+
+    class _QuitRecorder:
+        def quit(self):
+            quits.append(True)
+
+        def __getattr__(self, name):
+            return getattr(real_app, name)
+
+    monkeypatch.setattr(mw, "QApplication", _QuitRecorder())
+    monkeypatch.setattr(mw.paths, "IS_LINUX", True)
+    monkeypatch.setattr(mw.QTimer, "singleShot", staticmethod(lambda *a, **k: None))
+    monkeypatch.setattr(window.service, "terminate_install_sessions", lambda *a, **k: "stopped")
+    monkeypatch.setattr(
+        sp_flash_gui, "launch_sp_flash_tool_gui", lambda **kwargs: (True, "waiting for prompt")
+    )
+
+    # Leftover tool (pid 999) already exists before launch.
+    leftover = [(999, 1, "/opt/SP/flash_tool")]
+    new_tool = [(999, 1, "/opt/SP/flash_tool"), (1001, 50, "/opt/SP/flash_tool")]
+    snapshots = [leftover, leftover, new_tool]
+    monkeypatch.setattr(
+        process_guard,
+        "process_snapshot",
+        lambda: snapshots.pop(0) if snapshots else new_tool,
+    )
+
+    window._gui_ready = (world.scatter, world.extract, "Y2")
+    window._gui_handoff_ready = True
+    window._gui_handoff_prepare = True
+    window._complete_gui_handoff()
+
+    # Right after launch, the app must still be open while password prompt is active
+    assert quits == []
+    timer = window._tool_launch_timer
+    assert timer is not None and timer.isActive()
+
+    # Poll tick 1: still only the leftover tool 999 running -> must not quit
+    timer.timeout.emit()
+    assert quits == []
+
+    # Poll tick 2: new tool 1001 appears -> now it quits cleanly
+    timer.timeout.emit()
+    assert quits == [True]
+    assert 1001 in process_guard.handoff_pids()
+
+
+
 def test_a_refused_prompt_offers_the_launch_again(window, world, app, monkeypatch):
     import src.process_guard as process_guard
     import src.sp_flash_gui as sp_flash_gui

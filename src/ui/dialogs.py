@@ -918,10 +918,17 @@ class UpdateAvailableDialog(QDialog):
         self._icon_label = QLabel(self)
         self._icon_label.setFixedSize(48, 48)
         self._icon_label.setAlignment(Qt.AlignCenter)
-        self._icon_label.setStyleSheet(
-            f"background-color: {t.accent_bg}; border-radius: 12px; font-size: 24px;"
-        )
-        self._icon_label.setText("🚀")
+        from . import icons
+
+        pix = icons.app_icon_pixmap(48)
+        if not pix.isNull():
+            self._icon_label.setPixmap(pix)
+            self._icon_label.setStyleSheet("background: transparent; border: none;")
+        else:
+            self._icon_label.setStyleSheet(
+                f"background-color: {t.accent_bg}; border-radius: 12px; font-size: 24px;"
+            )
+            self._icon_label.setText("🚀")
         header_row.addWidget(self._icon_label, 0, Qt.AlignVCenter)
 
         title_col = QVBoxLayout()

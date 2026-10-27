@@ -30,10 +30,12 @@ import sys
 import threading
 import time
 import traceback
+import uuid
 import zipfile
+import zlib
 from pathlib import Path
 from struct import pack, unpack
-from typing import Optional, Union
+from typing import Optional, Union, Tuple
 
 from .downloads import downloads_dir
 
@@ -257,13 +259,19 @@ def sp_log_result_is_success(log_success, error_detail, console_complete) -> boo
 def is_sp_usb_search_line(line) -> bool:
     """True when flash_tool is searching USB.
 
-    The connect sentence follows this prefix only: case-insensitive, with
+    The connect sentence follows this prefix: case-insensitive, with
     leading whitespace (and a log timestamp) ignored, and recognised inside
-    the tool's own internal Qt trace as well as on its console stream. A later
-    mention inside a write log is not a search.
+    the tool's own internal Qt trace as well as on its console stream. Matches
+    "search usb", "searchusb", and "scanning usb port".
     """
     text = _TIMESTAMP_PREFIX_RE.sub("", tool_line_body(line)).lstrip()
-    return _strip_qt_trace_prefix(text).lower().startswith("search usb")
+    low = _strip_qt_trace_prefix(text).lower()
+    return (
+        low.startswith("search usb")
+        or "search usb" in low
+        or "searchusb" in low
+        or "scanning usb" in low
+    )
 
 
 def is_mtk_usb_search_line(line) -> bool:
@@ -500,10 +508,10 @@ def windows_only_method():
 def default_flash_method():
     """Method used until the user picks one.
 
-    Linux uses SP Flash Tool by default. macOS uses MTKClient, the only
-    engine there. When the first engine fails to start, the guided flow hands
-    the install to the other one after the power-off step. Windows follows
-    its CPU.
+    SP Flash Tool is the default method on Linux (when the host architecture is
+    supported) and Windows x86/x64, with MTKClient as the fallback / second tool
+    attempted if an installation cannot proceed via SP Flash Tool. macOS and
+    ARM64 Linux/Windows use MTKClient.
 
     ``paths.IS_MAC`` is read live rather than the module-level ``IS_MAC``
     snapshot so simulated macOS mode (and the tests that toggle it) is
@@ -512,9 +520,11 @@ def default_flash_method():
     locked = windows_only_method()
     if locked:
         return locked
-    if not paths.IS_MAC and not paths.IS_WINDOWS:
-        return METHOD_SP
-    return METHOD_MTK
+    if paths.IS_MAC:
+        return METHOD_MTK
+    if paths.IS_LINUX:
+        return METHOD_SP if linux_sp_flash.arch_supported() else METHOD_MTK
+    return METHOD_SP
 
 
 def normalise_method(method):
@@ -571,6 +581,10 @@ SP_ERROR_GUIDANCE = {
     "S_COM_PORT_OPEN_FAIL": "err_sp_com_port",
     "S_FT_ENABLE_DRAM_FAIL": "err_sp_enable_dram",
     "S_DA_SDMMC_READ_FAILED": "err_sp_storage_read",
+    "S_DA_UPDATE_BOOTLOADER_EXIST_MAGIC_NOT_MATCHED": "err_sp_download_fail",
+    "S_DA_UPDATE_BOOTLOADER_EXIST_TYPE_NOT_MATCHED": "err_sp_download_fail",
+    "S_DA_UPDATE_BOOTLOADER_FILE_SIZE_EXCEEDS_BOUNDARY_ADDR": "err_sp_download_fail",
+    "S_DA_UPDATE_BOOTLOADER_BEGIN_ADDR_NOT_MATCHED": "err_sp_download_fail",
 }
 
 # Numeric-only fallback for the tail of a run that only carries
@@ -579,6 +593,10 @@ SP_ERROR_CODE_NAMES = {
     "1013": "S_COM_PORT_OPEN_FAIL",
     "1042": "S_TIMEOUT",
     "2005": "S_BROM_CMD_STARTCMD_FAIL",
+    "3145": "S_DA_UPDATE_BOOTLOADER_EXIST_MAGIC_NOT_MATCHED",
+    "3146": "S_DA_UPDATE_BOOTLOADER_EXIST_TYPE_NOT_MATCHED",
+    "3147": "S_DA_UPDATE_BOOTLOADER_FILE_SIZE_EXCEEDS_BOUNDARY_ADDR",
+    "3148": "S_DA_UPDATE_BOOTLOADER_BEGIN_ADDR_NOT_MATCHED",
     "3184": "S_CHIP_TYPE_NOT_MATCH",
     "4008": "S_FT_DOWNLOAD_FAIL",
     "1093": "S_DA_INIT_SYNC_ERROR",
@@ -962,6 +980,10 @@ MTK_STALL_WARN_SECONDS = 90
 # different failure: the backend keeps printing, but the same BROM bring-up
 # stall line has been on screen for too long with no change.
 MTK_OUTPUT_STALL_WINDOW = 20.0
+# USB enumeration can briefly disappear while the legacy DA is writing. Keep
+# the device-loss UI from cancelling an active MTK transfer; the worker's own
+# bounded USB checks will still report a real disconnect after this window.
+MTK_WRITE_PROGRESS_USB_GRACE_SECONDS = 30.0
 
 # Line prefixes read from the MTKClient console that indicate a BROM bring-up
 # or DRAM bring-up stall rather than normal write progress.
@@ -1092,7 +1114,11 @@ _BOOT_HEADER_SIZE = 2048
 _BRLYT_OFFSET = 512
 _PRELOADER_DATA_OFFSET = 2048
 _PRELOADER_MAGIC = b"MMM\x01"
-_BRLYT_MAGIC = 0x42524C59  # 'BRLY'
+# MediaTek BL_Descriptor.m_bl_exist_magic at BRLYT+0x14 (boot1 offset 0x214).
+# Must be 0x42424242 ('BBBB'); writing 0x42524C59 ('BRLY') here causes SP Flash
+# Tool's DA (EMMC_CheckAndUpdateBLDescriptor) to abort with error 3145
+# (S_DA_UPDATE_BOOTLOADER_EXIST_MAGIC_NOT_MATCHED) on subsequent downloads.
+_BRLYT_MAGIC = 0x42424242  # 'BBBB' (BL_EXIST_MAGIC)
 _BRLYT_TYPE_EMMC = 0x00010005
 _BRLYT_TYPE_SDMMC = 0x00010008
 
@@ -1299,6 +1325,8 @@ def _detect_legacy_user_addr_bias(scatter_path, parts=None):
 
 
 def _fill_boot_magic(header: bytearray, storage_type: str = "emmc"):
+    from struct import pack
+
     storage = storage_type.lower()
     version_tail = b"\x01\x00\x00\x00"
     if storage == "ufs":
@@ -1313,20 +1341,27 @@ def _fill_boot_magic(header: bytearray, storage_type: str = "emmc"):
         header[0:9] = b"EMMC_BOOT"
         header[9:12] = b"\x00\x00\x00"
         header[12:16] = version_tail
+    header[16:20] = pack("<I", _BRLYT_OFFSET)
 
 
 def _fill_brlyt_header(header: bytearray, raw_size: int):
     from struct import pack
 
     image_size = _PRELOADER_DATA_OFFSET + raw_size
+    # MediaTek's DA (EMMC_SetupHBDescriptor / EMMC_CheckAndUpdateBLDescriptor)
+    # rounds m_bl_boundary_dev_addr up to a 512-byte sector boundary
+    # ((begin_dev_addr + bl_size + 0x1FF) & ~0x1FF). Leaving it unaligned causes
+    # error 3147 (S_DA_UPDATE_BOOTLOADER_FILE_SIZE_EXCEEDS_BOUNDARY_ADDR) when
+    # SP Flash Tool updates a preloader whose size is not a multiple of 512.
+    boundary_addr = (image_size + 0x1FF) & ~0x1FF
     header[_BRLYT_OFFSET : _BRLYT_OFFSET + 8] = b"BRLYT\x00\x00\x00"
     header[_BRLYT_OFFSET + 8 : _BRLYT_OFFSET + 12] = pack("<I", 1)
     header[_BRLYT_OFFSET + 12 : _BRLYT_OFFSET + 16] = pack("<I", _PRELOADER_DATA_OFFSET)
-    header[_BRLYT_OFFSET + 16 : _BRLYT_OFFSET + 20] = pack("<I", image_size)
+    header[_BRLYT_OFFSET + 16 : _BRLYT_OFFSET + 20] = pack("<I", boundary_addr)
     header[_BRLYT_OFFSET + 20 : _BRLYT_OFFSET + 24] = pack("<I", _BRLYT_MAGIC)
     header[_BRLYT_OFFSET + 24 : _BRLYT_OFFSET + 28] = pack("<I", _BRLYT_TYPE_EMMC)
     header[_BRLYT_OFFSET + 28 : _BRLYT_OFFSET + 32] = pack("<I", _PRELOADER_DATA_OFFSET)
-    header[_BRLYT_OFFSET + 32 : _BRLYT_OFFSET + 36] = pack("<I", image_size)
+    header[_BRLYT_OFFSET + 32 : _BRLYT_OFFSET + 36] = pack("<I", boundary_addr)
     header[_BRLYT_OFFSET + 36 : _BRLYT_OFFSET + 40] = pack("<I", 1)
 
 
@@ -1618,6 +1653,19 @@ def _parse_sp_size(text):
     return int(value * mult.get(m.group(2).upper(), 1))
 
 
+def _calc_dir_size(d: Path) -> int:
+    total = 0
+    try:
+        for entry in os.scandir(str(d)):
+            if entry.is_file(follow_symlinks=False):
+                total += entry.stat().st_size
+            elif entry.is_dir(follow_symlinks=False):
+                total += _calc_dir_size(Path(entry.path))
+    except (OSError, PermissionError):
+        pass
+    return total
+
+
 # ---------------------------------------------------------------------------
 # Extraction worker
 # ---------------------------------------------------------------------------
@@ -1735,9 +1783,13 @@ class ExtractWorker(QThread):
         unrar = paths.find_unrar()
         if not unrar:
             raise RuntimeError(
-                "UnRAR tool not found. On Windows install WinRAR; on macOS run 'brew install unrar'"
+                "UnRAR / unar tool not found. On Windows place UnRAR.exe in tools/; on macOS run 'brew install unar'; on Linux run 'sudo apt install unar'"
             )
-        cmd = [unrar, "x", "-o+", "-y", str(package), str(extract_dir) + os.sep]
+        is_unar = "unar" in Path(unrar).stem.lower()
+        if is_unar:
+            cmd = [unrar, "-f", "-o", str(extract_dir), str(package)]
+        else:
+            cmd = [unrar, "x", "-o+", "-y", str(package), str(extract_dir) + os.sep]
         proc = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -1746,25 +1798,49 @@ class ExtractWorker(QThread):
         )
         buf = b""
         last_pct = -1
-        while not self._cancelled:
-            raw = proc.stdout.read1(1024)  # type: ignore[union-attr]
-            if not raw:
-                break
-            buf += raw
-            for m in re.finditer(rb"(\d+)%", buf):
-                pct = min(99, int(m.group(1)))
-                if pct != last_pct:
-                    last_pct = pct
-                    self.progress.emit(pct)
-                    QThread.msleep(1)
-            if len(buf) > 4096:
-                buf = buf[-256:]
+        stop_event = threading.Event()
+        pkg_size = max(1, os.path.getsize(package))
+
+        def _dir_monitor():
+            nonlocal last_pct
+            while not stop_event.wait(0.2) and not self._cancelled:
+                try:
+                    cur = _calc_dir_size(Path(extract_dir))
+                    pct = min(95, max(1, int(cur * 95 / pkg_size)))
+                    if pct > last_pct:
+                        last_pct = pct
+                        self.progress.emit(pct)
+                except Exception:
+                    pass
+
+        monitor_thread = threading.Thread(target=_dir_monitor, daemon=True, name="RarExtractMonitor")
+        monitor_thread.start()
+
+        try:
+            while not self._cancelled:
+                raw = proc.stdout.read1(1024) if hasattr(proc.stdout, "read1") else proc.stdout.read(1024)  # type: ignore[union-attr]
+                if not raw:
+                    break
+                buf += raw
+                for m in re.finditer(rb"(\d+)%", buf):
+                    pct = min(99, int(m.group(1)))
+                    if pct > last_pct:
+                        last_pct = pct
+                        self.progress.emit(pct)
+                        QThread.msleep(1)
+                if len(buf) > 4096:
+                    buf = buf[-256:]
+        finally:
+            stop_event.set()
+            monitor_thread.join(timeout=1.0)
+
         if self._cancelled:
             proc.terminate()
             return
         proc.wait()
         if proc.returncode != 0:
-            raise RuntimeError(f"UnRAR exit code {proc.returncode}")
+            tool_name = "unar" if is_unar else "UnRAR"
+            raise RuntimeError(f"{tool_name} exit code {proc.returncode}")
         self.progress.emit(100)
 
 
@@ -1863,18 +1939,85 @@ def sp_flash_tool_console_args(scatter_arg, da_arg, auth_file="", log=None):
                 if log:
                     log(tr("sp_auth_loaded").format(path=auth))
                 return ["-r", "-i", str(config)]
-    # ``-c download`` is Download Only: every partition with an image in the
-    # scatter is overwritten and nothing else is touched. This is the command
-    # the shipped 1.1.7 build runs; ``format-download`` (erase the whole flash
-    # first) is never issued by it, and erasing the device's own partition
-    # table is exactly what makes an install unrecoverable.
+    # ``-c format-download`` is Format All + Download: the reference Chinese
+    # 1.1.7 build runs this unconditionally (see analysis_cn/_flash_via_sp_flash_tool.dis.txt).
+    # Full erase before download avoids S_DA_UPDATE_BOOTLOADER_EXIST_MAGIC_NOT_MATCHED (3145)
+    # when target NAND/eMMC does not have matching DSP_BL headers.
     return [
-        "-c", "download",
+        "-c", "format-download",
         "-s", scatter_arg,
         "-d", da_arg,
         "-t", "without",
         "-r",
     ]
+
+
+_SP_BOOTLOADER_HEADER_ERROR_CODES = frozenset({"3145", "3146", "3147", "3148"})
+_SP_BOOTLOADER_HEADER_ERROR_MARKERS = (
+    "EXIST_MAGIC_NOT_MATCHED",
+    "EXIST_TYPE_NOT_MATCHED",
+    "FILE_SIZE_EXCEEDS_BOUNDARY_ADDR",
+    "BEGIN_ADDR_NOT_MATCHED",
+    "(3145)",
+    "(3146)",
+    "(3147)",
+    "(3148)",
+    "err_code[3145]",
+    "err_code[3146]",
+    "err_code[3147]",
+    "err_code[3148]",
+)
+
+
+def _is_sp_bootloader_header_mismatch(error_detail="", err_code=None) -> bool:
+    """True when SP Flash Tool's DA aborted CMD_DownloadBootLoader because the
+    existing boot1 BRLYT descriptor had a legacy magic/boundary (3145-3148)."""
+    code_str = str(err_code or "").strip()
+    if code_str in _SP_BOOTLOADER_HEADER_ERROR_CODES:
+        return True
+    detail_up = str(error_detail or "").upper()
+    return any(marker.upper() in detail_up for marker in _SP_BOOTLOADER_HEADER_ERROR_MARKERS)
+
+
+def _write_scatter_without_preloader(scatter_path) -> Optional[Path]:
+    """Create a staged scatter file in the same directory with PRELOADER
+    ``is_download: false`` so SP Flash Tool skips CMD_DownloadBootLoader when
+    boot1 already has a working preloader with a legacy BRLYT descriptor."""
+    scatter_p = Path(scatter_path).resolve()
+    try:
+        lines = scatter_p.read_text(encoding="utf-8", errors="ignore").splitlines(keepends=True)
+    except OSError:
+        return None
+
+    in_preloader = False
+    changed = False
+    out_lines = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("- partition_index:") or stripped.startswith("partition_index:"):
+            in_preloader = False
+        elif stripped.startswith("partition_name:"):
+            part_name = stripped.split(":", 1)[1].strip().upper()
+            in_preloader = part_name in ("PRELOADER", "DSP_BL")
+        elif in_preloader and stripped.startswith("is_download:"):
+            val = stripped.split(":", 1)[1].strip().lower()
+            if val == "true":
+                prefix = line[: line.lower().find("true")]
+                ending = "\r\n" if line.endswith("\r\n") else ("\n" if line.endswith("\n") else "")
+                line = f"{prefix}false{ending}"
+                changed = True
+                in_preloader = False
+        out_lines.append(line)
+
+    if not changed:
+        return None
+
+    out_path = scatter_p.parent / f"{scatter_p.stem}_no_preloader{scatter_p.suffix}"
+    try:
+        out_path.write_text("".join(out_lines), encoding="utf-8")
+        return out_path
+    except OSError:
+        return None
 
 
 def _resolve_image_file(scatter_dir, fname):
@@ -2143,6 +2286,17 @@ def _read_scatter_parts(scatter_path):
     return raw_parts
 
 
+def _legacy_scatter_has_mbr_ebr(parts) -> bool:
+    """Return True if the parsed scatter contains legacy MBR/EBR partition definitions."""
+    names = {
+        str(part.get("partition_name", "")).strip().lower()
+        for part in parts
+        if str(part.get("region", "")).strip().upper() == "EMMC_USER"
+        or not str(part.get("region", "")).strip()
+    }
+    return {"mbr", "ebr1"}.issubset(names)
+
+
 def _scatter_entries_from_parts(raw_parts):
     """Turn parsed scatter blocks into write-plan entries (shared parser)."""
     # Determine base linear address for EMMC_USER (typically the linear address
@@ -2242,7 +2396,246 @@ def _is_device_table_partition(partition_name, filename="") -> bool:
     fname = Path(str(filename or "")).name.strip().lower()
     if name in MTK_DEVICE_TABLE_PARTS or fname in MTK_DEVICE_TABLE_FILES:
         return True
-    return name.startswith("ebr") or fname.startswith("ebr")
+def _build_protective_mbr(user_size: int, pagesize: int = 512) -> bytes:
+    """Build a protective MBR (LBA 0) with a single type 0xEE partition spanning the disk."""
+    disk_lbas = max(1, user_size // pagesize)
+    mbr = bytearray(pagesize)
+    mbr[446] = 0        # boot indicator
+    mbr[450] = 0xEE     # OS type: EFI GPT
+    mbr[454:458] = pack("<I", 1)  # starting LBA
+    mbr[458:462] = pack("<I", min(max(1, disk_lbas - 1), 0xFFFFFFFF))  # size in LBA
+    mbr[510:512] = b"\x55\xAA"   # signature
+    return bytes(mbr)
+
+
+def _build_gpt_header(
+    pagesize: int,
+    current_lba: int,
+    backup_lba: int,
+    first_usable_lba: int,
+    last_usable_lba: int,
+    disk_guid: bytes,
+    entry_lba: int,
+    num_entries: int,
+    entry_size: int,
+    entry_crc: int,
+) -> bytes:
+    """Build a standard 92-byte GPT header aligned to pagesize."""
+    header_size = 92
+    header = bytearray(pagesize)
+    header[0:8] = b"EFI PART"
+    header[8:12] = pack("<I", 0x00010000)
+    header[12:16] = pack("<I", header_size)
+    header[16:20] = pack("<I", 0)  # CRC zeroed for calculation
+    header[20:24] = pack("<I", 0)
+    header[24:32] = pack("<Q", current_lba)
+    header[32:40] = pack("<Q", backup_lba)
+    header[40:48] = pack("<Q", first_usable_lba)
+    header[48:56] = pack("<Q", last_usable_lba)
+    header[56:72] = (disk_guid or b"\x00" * 16)[:16]
+    header[72:80] = pack("<Q", entry_lba)
+    header[80:84] = pack("<I", num_entries)
+    header[84:88] = pack("<I", entry_size)
+    header[88:92] = pack("<I", entry_crc)
+    header_crc = zlib.crc32(bytes(header[:header_size])) & 0xFFFFFFFF
+    header[16:20] = pack("<I", header_crc)
+    return bytes(header)
+
+
+def _stable_partition_guid(name: str) -> bytes:
+    """Generate deterministic partition GUID from partition name."""
+    namespace = uuid.UUID("ebd0a0a2-b9e5-4433-87c0-68b6b72699c7")
+    return uuid.uuid5(namespace, (name or "").strip().lower()).bytes_le
+
+
+def _parse_scatter_gpt_reserved_sizes(scatter_path) -> Tuple[int, int]:
+    """Return (pgpt_size, sgpt_size) in bytes from scatter."""
+    pgpt_size = 0
+    sgpt_size = 0
+    for part in _read_scatter_parts(scatter_path):
+        if (part.get("region") or "").strip().upper() != "EMMC_USER":
+            continue
+        name = (part.get("partition_name") or "").strip().lower()
+        size = _to_int_safe(part.get("partition_size", 0))
+        if name == "pgpt":
+            pgpt_size = size
+        elif name == "sgpt":
+            sgpt_size = size
+    return pgpt_size, sgpt_size
+
+
+def _parse_scatter_all_user_partitions(scatter_path, user_size: int = 0):
+    """Parse all EMMC_USER partitions from scatter for GPT generation/sync.
+    Returns {partition_name_lower: (byte_start_address, byte_size)}.
+    """
+    parts = _read_scatter_parts(scatter_path)
+    if not parts:
+        return {}
+    entries = _scatter_entries_from_parts(parts)
+    result = {}
+    tail_reserved = []
+    userdata_key = None
+
+    for entry in entries:
+        if (entry.get("region") or "").upper() != "EMMC_USER":
+            continue
+        pname = (entry.get("name") or "").strip().lower()
+        if pname in ("gpt", "pgpt", "sgpt", "bmtpool"):
+            continue
+
+        raw_addr = _to_int_safe(entry.get("physical_start_addr", 0)) or _to_int_safe(entry.get("linear_start_addr", 0))
+        size = _to_int_safe(entry.get("partition_size", 0))
+
+        if raw_addr >= 0xFFFF0000:
+            if user_size > 0:
+                offset_from_end = 0x100000000 - raw_addr
+                addr = max(0, user_size - offset_from_end)
+                tail_reserved.append((pname, addr, size))
+            continue
+
+        addr = entry.get("offset", raw_addr)
+        if pname in ("userdata", "usrdata"):
+            userdata_key = pname
+        result[pname] = (addr, size)
+
+    tail_bound = user_size
+    for pname, addr, size in sorted(tail_reserved, key=lambda x: x[1]):
+        result[pname] = (addr, size)
+        if addr < tail_bound:
+            tail_bound = addr
+
+    if userdata_key and userdata_key in result and user_size > 0:
+        ud_addr, ud_size = result[userdata_key]
+        if tail_bound > ud_addr:
+            result[userdata_key] = (ud_addr, tail_bound - ud_addr)
+
+    return result
+
+
+def _get_emmc_user_size(mtk) -> int:
+    """Read eMMC user-area capacity from DA configuration."""
+    daloader = getattr(mtk, "daloader", None)
+    daconfig = getattr(daloader, "daconfig", None)
+    legacy = getattr(daconfig, "legacy_storage", None)
+    if legacy is not None and getattr(legacy, "emmc", None) is not None:
+        size = int(getattr(legacy.emmc, "m_emmc_ua_size", 0) or 0)
+        if size > 0:
+            return size
+    storage = getattr(daconfig, "storage", None)
+    emmc = getattr(storage, "emmc", None)
+    if emmc is not None:
+        for attr in ("user_size", "m_emmc_ua_size", "ua_size", "m_emmc_user_size"):
+            val = int(getattr(emmc, attr, 0) or 0)
+            if val > 0:
+                return val
+    return 0
+
+
+def _infer_user_size_from_gpt_blob(raw: bytes, pagesize: int = 512) -> int:
+    """Infer eMMC user disk capacity from backup LBA field in primary GPT header."""
+    if raw is None or len(raw) < pagesize + 92:
+        return 0
+    if raw[pagesize : pagesize + 8] != b"EFI PART":
+        return 0
+    backup_lba = unpack("<Q", raw[pagesize + 32 : pagesize + 40])[0]
+    if backup_lba <= 34:
+        return 0
+    return (backup_lba + 1) * pagesize
+
+
+def _build_gpt_blobs_from_scatter(
+    scatter_file,
+    user_size: int,
+    pagesize: int = 512,
+    existing_gpt_blob: Optional[bytes] = None,
+):
+    """Build primary GPT, backup GPT, and protective MBR blobs directly from scatter layout."""
+    scatter_parts = _parse_scatter_all_user_partitions(scatter_file, user_size)
+    if not scatter_parts:
+        raise RuntimeError("GPT generation failed: no valid EMMC_USER partition found in scatter")
+    if user_size <= pagesize * 34:
+        raise RuntimeError("GPT generation failed: failed to get valid EMMC_USER capacity")
+
+    pgpt_size, sgpt_size = _parse_scatter_gpt_reserved_sizes(scatter_file)
+    first_usable_lba = max(34, (pgpt_size // pagesize) if pgpt_size else 34)
+    disk_last_lba = (user_size // pagesize) - 1
+    last_usable_lba = disk_last_lba - max(1, (sgpt_size // pagesize) if sgpt_size else 33)
+
+    if last_usable_lba <= first_usable_lba:
+        raise RuntimeError("GPT generation failed: usable LBA range is invalid")
+
+    scatter_entries = sorted(scatter_parts.items(), key=lambda item: item[1][0])
+    entry_size = 128
+    num_entries = max(128, len(scatter_entries))
+    entries_len = num_entries * entry_size
+    entries_sectors = (entries_len + pagesize - 1) // pagesize
+    primary_entry_lba = 2
+    backup_entry_lba = disk_last_lba - entries_sectors
+
+    entry_array = bytearray(entries_sectors * pagesize)
+    type_guid = uuid.UUID("ebd0a0a2-b9e5-4433-87c0-68b6b72699c7")
+
+    new_cache = {}
+    for index, (name, (addr, size)) in enumerate(scatter_entries):
+        first_lba = addr // pagesize
+        last_lba = (addr + size) // pagesize - 1
+        if first_lba < first_usable_lba:
+            first_lba = first_usable_lba
+        if last_lba > last_usable_lba:
+            last_lba = last_usable_lba
+        if first_lba > last_lba:
+            continue
+
+        new_cache[name] = (first_lba * pagesize, (last_lba - first_lba + 1) * pagesize)
+
+        entry_off = index * entry_size
+        entry_array[entry_off : entry_off + 16] = type_guid.bytes_le
+        entry_array[entry_off + 16 : entry_off + 32] = _stable_partition_guid(name)
+        entry_array[entry_off + 32 : entry_off + 40] = pack("<Q", first_lba)
+        entry_array[entry_off + 40 : entry_off + 48] = pack("<Q", last_lba)
+        enc_name = name.encode("utf-16-le")[:72]
+        entry_array[entry_off + 56 : entry_off + 56 + len(enc_name)] = enc_name
+
+    entry_crc = zlib.crc32(bytes(entry_array[:entries_len])) & 0xFFFFFFFF
+    disk_guid = b"\x00" * 16
+
+    primary_header = _build_gpt_header(
+        pagesize=pagesize,
+        current_lba=1,
+        backup_lba=disk_last_lba,
+        first_usable_lba=first_usable_lba,
+        last_usable_lba=last_usable_lba,
+        disk_guid=disk_guid,
+        entry_lba=primary_entry_lba,
+        num_entries=num_entries,
+        entry_size=entry_size,
+        entry_crc=entry_crc,
+    )
+
+    backup_header = _build_gpt_header(
+        pagesize=pagesize,
+        current_lba=disk_last_lba,
+        backup_lba=1,
+        first_usable_lba=first_usable_lba,
+        last_usable_lba=last_usable_lba,
+        disk_guid=disk_guid,
+        entry_lba=backup_entry_lba,
+        num_entries=num_entries,
+        entry_size=entry_size,
+        entry_crc=entry_crc,
+    )
+
+    primary_len = (primary_entry_lba + entries_sectors) * pagesize
+    primary_blob = bytearray(primary_len)
+    primary_blob[:pagesize] = _build_protective_mbr(user_size, pagesize)
+    primary_blob[pagesize : 2 * pagesize] = primary_header
+    entries_start = primary_entry_lba * pagesize
+    primary_blob[entries_start : entries_start + len(entry_array)] = entry_array
+
+    backup_blob = bytes(entry_array) + backup_header
+    backup_addr = backup_entry_lba * pagesize
+
+    return bytes(primary_blob), backup_addr, backup_blob, new_cache
 
 
 def should_probe_live_table(plan, daloader=None) -> bool:
@@ -2295,7 +2688,13 @@ def _scatter_region_parttype(region: str, partition_name: str = "") -> str:
     return "user"
 
 
-def build_mtk_write_plan(scatter_path, model="", *, preloader_first=True):
+def build_mtk_write_plan(
+    scatter_path,
+    model="",
+    *,
+    preloader_first=True,
+    skip_table_partitions=False,
+):
     """Return the ordered write plan the shipped 1.1.7 build performs.
 
     Each step is ``{"name", "path", "parttype", "offset", "length",
@@ -2305,11 +2704,15 @@ def build_mtk_write_plan(scatter_path, model="", *, preloader_first=True):
     (MT6572/MT6582/MT6580/MT8382) are MBR-partitioned, so a named lookup
     returns nothing and the install dies with "Couldn't detect partition".
 
-    The order is every downloadable image in scatter order, with the
-    preloader moved to the very front (``preloader_first``), so the boot1
-    loader is in place before any user-area partition is written.
-    Nothing formats a partition, rewrites the device's MBR/EBR, or duplicates
-    the preloader into eMMC boot2.
+    The order is every downloadable image in scatter order. When ``preloader_first``
+    is True, the preloader is moved to the front. When ``preloader_first`` is False
+    (default in actual flash sessions, matching the Chinese 1.1.7 build strategy
+    ``legacy_preloader_last``), the preloader is moved to the very end so an interrupted
+    write leaves the existing BROM/preloader boot mechanism intact.
+
+    Non-empty partition tables (MBR, EBR1) shipped in the package are included
+    so the device has its partition tables configured, while all-zero empty stubs
+    are skipped via ``_is_empty_placeholder_image``.
 
     ``partition_size`` is the scatter's own size for the partition. It is not
     a write length — it is the bound an image (or a sparse image's data
@@ -2330,6 +2733,8 @@ def build_mtk_write_plan(scatter_path, model="", *, preloader_first=True):
             continue
         file_name = (entry.get("file_name") or "").strip()
         if not file_name or file_name.upper() == "NONE":
+            continue
+        if skip_table_partitions and _is_device_table_partition(name, file_name):
             continue
         image = _resolve_image_file(scatter_dir, file_name)
         if not image.is_file() or _is_empty_placeholder_image(image):
@@ -2353,8 +2758,7 @@ def build_mtk_write_plan(scatter_path, model="", *, preloader_first=True):
         # device's partition table is never consulted (mtkclient reads GPT
         # only, and these players are MBR-partitioned). Address 0 is real
         # inside eMMC boot1 (the preloader) and at the head of the user area
-        # (which the MBR occupies, and which the table scaffolding above has
-        # already excluded).
+        # (which the MBR occupies).
         offset = int(entry.get("offset") or 0)
         plan.append(
             {
@@ -2369,8 +2773,11 @@ def build_mtk_write_plan(scatter_path, model="", *, preloader_first=True):
         )
 
     if preloader_first:
-        # Stable: everything keeps scatter order, only the preloader moves.
+        # Stable: everything keeps scatter order, only the preloader moves to front.
         plan.sort(key=lambda step: step["name"].strip().lower() != "preloader")
+    else:
+        # Preloader last (Chinese build strategy: middle + system + preloader)
+        plan.sort(key=lambda step: step["name"].strip().lower() == "preloader")
     return plan
 
 
@@ -2623,6 +3030,8 @@ class FlashWorker(QThread):
         self._attempt_expired = False
         self._attempt_watchdog = None
         self._sp_progress_hwm = 0
+        self._mtk_cli_progress_hwm = 0
+        self._mtk_cli_partition_progress: dict[str, float] = {}
         # Measured write rate for the ETA. Reset when the write phase begins:
         # the handshake and the format are not the transfer being timed.
         self._eta = ThroughputEta()
@@ -2734,6 +3143,14 @@ class FlashWorker(QThread):
                 if self._device_loss_is_held():
                     continue
                 if getattr(self, "_past_usb_search", False):
+                    progress_grace = (
+                        MTK_WRITE_PROGRESS_USB_GRACE_SECONDS
+                        if getattr(self, "_tool_tag", "") == "MTK"
+                        else 6.0
+                    )
+                    if time.time() - getattr(self, "_last_install_progress_time", 0.0) < progress_grace:
+                        misses = 0
+                        continue
                     if not is_mtk_device_connected():
                         misses += 1
                         if misses >= 5:  # 5-second safety window before determining install failure
@@ -2809,6 +3226,7 @@ class FlashWorker(QThread):
 
     def _note_install_progress(self):
         """Real transfer began: the no-progress window no longer applies."""
+        self._last_install_progress_time = time.time()
         watchdog = getattr(self, "_attempt_watchdog", None)
         if watchdog is not None:
             watchdog.disarm()
@@ -3157,13 +3575,8 @@ class FlashWorker(QThread):
                 extract_dir=str(Path(extract_dir).resolve()),
                 scatter_path=str(Path(scatter_file).resolve()),
             )
-            update_sp_history_ini(
-                scatter_path=Path(scatter_file).resolve(),
-                extract_dir=Path(extract_dir).resolve(),
-                model=detected_model,
-            )
         except Exception as e:
-            logger.debug("Could not update SP history.ini during flash: %s", e)
+            logger.debug("Could not record latest package during flash: %s", e)
 
         self._dispatch_backend(extract_dir, scatter_file)
 
@@ -3340,6 +3753,16 @@ class FlashWorker(QThread):
             da_arg = str(da_file)
 
         align_scatter_disk_images(scatter_file, log=self._log)
+        if IS_WINDOWS:
+            scatter_arg = _to_short_path(scatter_file)
+            if not str(scatter_arg).isascii():
+                self._log(
+                    "Warning: scatter path contains non-ASCII characters and 8.3 short "
+                    "name is unavailable. SP Flash Tool may fail to load the package."
+                )
+        else:
+            scatter_arg = str(scatter_file)
+
         try:
             scatter_images = _parse_scatter(scatter_file)
             self._sp_total_bytes = sum(fp.stat().st_size for _, fp in scatter_images if fp.exists())
@@ -3348,116 +3771,109 @@ class FlashWorker(QThread):
         self._sp_completed_bytes = 0
         self._sp_last_part_total = 0
         self._sp_last_sent = 0
-        try:
-            from .sp_flash_gui import update_sp_history_ini
-            update_sp_history_ini(
-                sp_dir=sp_dir,
-                scatter_path=scatter_file,
-                extract_dir=scatter_file.parent,
-            )
-        except Exception as e:
-            logger.debug("Could not update SP history.ini before flash_tool: %s", e)
 
         auth_file = self._resolve_auth_file()
         if self.da_file and str(Path(da_file)) != str(Path(sp_dir) / "MTK_AllInOne_DA.bin"):
             self._log(f"Download agent: {Path(da_file).name}")
 
         self._announce_please_wait()
-        if IS_WINDOWS:
-            cmd = [
-                str(flash_tool_exe),
-                *sp_flash_tool_console_args(
+        try:
+            if IS_WINDOWS:
+                cmd = [
+                    str(flash_tool_exe),
+                    *sp_flash_tool_console_args(
+                        scatter_arg, da_arg, auth_file, self._log
+                    ),
+                ]
+                self._log("Launching SP Flash Tool (console mode, searching USB)...")
+                self._log("Keep the device unplugged until the connect prompt appears.")
+
+                def spawn():
+                    return subprocess.Popen(
+                        cmd,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        text=True,
+                        bufsize=1,
+                        cwd=str(sp_dir),
+                        env=env,
+                        creationflags=creationflags,
+                    )
+            else:
+                cmd_args = sp_flash_tool_console_args(
                     scatter_arg, da_arg, auth_file, self._log
-                ),
-            ]
-            self._log("Launching SP Flash Tool (console mode, searching USB)...")
-            self._log("Keep the device unplugged until the connect prompt appears.")
-
-            def spawn():
-                return subprocess.Popen(
-                    cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    bufsize=1,
-                    cwd=str(sp_dir),
-                    env=env,
-                    creationflags=creationflags,
                 )
-        else:
-            cmd_args = sp_flash_tool_console_args(
-                scatter_arg, da_arg, auth_file, self._log
-            )
-            self._log("Preparing SP Flash Tool environment (Linux)...")
+                self._log("Preparing SP Flash Tool environment (Linux)...")
 
-            def spawn():
-                return linux_sp_flash.launch_linux_flash_tool(
-                    stage=sp_dir,
-                    cmd_args=cmd_args,
-                    cwd=sp_dir,
-                    env=env,
-                    log_cb=self._log,
+                def spawn():
+                    return linux_sp_flash.launch_linux_flash_tool(
+                        stage=sp_dir,
+                        cmd_args=cmd_args,
+                        cwd=sp_dir,
+                        env=env,
+                        log_cb=self._log,
+                    )
+
+            exit_code, launch_time = self._sp_console_search(spawn, log_root)
+            if self._attempt_expired:
+                # Nothing happened inside the app's own window: report it as such
+                # so the flow can offer the other backend.
+                self.finished.emit(False, ERR_ATTEMPT_TIMEOUT)
+                return
+            if exit_code is None:
+                return
+
+            if self._sp_mismatch:
+                self.finished.emit(False, "DEVICE_PACKAGE_MISMATCH")
+                return
+
+            # The reference Chinese build decides success from the internal log,
+            # not from the process exit code alone: the console tool can exit
+            # non-zero while the flash actually succeeded. Read the log first so
+            # the log result is the single source of truth for completion.
+            log_success, error_detail = self._read_sp_log_result(launch_time, log_root)
+
+            if "CHIP_TYPE_NOT_MATCH" in str(error_detail).upper():
+                self.finished.emit(False, "DEVICE_PACKAGE_MISMATCH")
+                return
+
+            # The console's completion line ("All command exec" or "Flash complete!")
+            # marks an unconditionally successful flash execution.
+            if self._sp_flash_complete or sp_log_result_is_success(
+                log_success, error_detail, self._sp_flash_complete
+            ):
+                log_success = True
+
+            if log_success:
+                self._finished = True
+                self.step_changed.emit(STEP_DONE)
+                self.progress.emit(100)
+                self._log("Flash complete! Disconnect USB and reboot the device.")
+                self.finished.emit(True, "")
+                return
+
+            if error_detail:
+                self._log(f"SP Flash Tool error: {error_detail}")
+                self._finish_sp_failure(str(error_detail))
+            elif self._sp_err_code:
+                # Name the number so the error page can explain it; the raw code
+                # stays in the message for support.
+                name = SP_ERROR_CODE_NAMES.get(str(self._sp_err_code), "")
+                self._finish_sp_failure(
+                    f"{name} ({self._sp_err_code})" if name else f"SP_ERR_{self._sp_err_code}"
                 )
-
-        exit_code, launch_time = self._sp_console_search(spawn, log_root)
-        if self._attempt_expired:
-            # Nothing happened inside the app's own window: report it as such
-            # so the flow can offer the other backend.
-            self.finished.emit(False, ERR_ATTEMPT_TIMEOUT)
-            return
-        if exit_code is None:
-            return
-
-        if self._sp_mismatch:
-            self.finished.emit(False, "DEVICE_PACKAGE_MISMATCH")
-            return
-
-        # The reference Chinese build decides success from the internal log,
-        # not from the process exit code alone: the console tool can exit
-        # non-zero while the flash actually succeeded. Read the log first so
-        # the log result is the single source of truth for completion.
-        log_success, error_detail = self._read_sp_log_result(launch_time, log_root)
-
-        if "CHIP_TYPE_NOT_MATCH" in str(error_detail).upper():
-            self.finished.emit(False, "DEVICE_PACKAGE_MISMATCH")
-            return
-
-        # The console's completion line ("All command exec" or "Flash complete!")
-        # marks an unconditionally successful flash execution.
-        if self._sp_flash_complete or sp_log_result_is_success(
-            log_success, error_detail, self._sp_flash_complete
-        ):
-            log_success = True
-
-        if log_success:
-            self._finished = True
-            self.step_changed.emit(STEP_DONE)
-            self.progress.emit(100)
-            self._log("Flash complete! Disconnect USB and reboot the device.")
-            self.finished.emit(True, "")
-            return
-
-        # Log did not report success: the install did not complete.
-        if error_detail:
-            self._log(f"SP Flash Tool error: {error_detail}")
-            self._finish_sp_failure(str(error_detail))
-        elif self._sp_err_code:
-            # Name the number so the error page can explain it; the raw code
-            # stays in the message for support.
-            name = SP_ERROR_CODE_NAMES.get(str(self._sp_err_code), "")
-            self._finish_sp_failure(
-                f"{name} ({self._sp_err_code})" if name else f"SP_ERR_{self._sp_err_code}"
-            )
-        elif exit_code == 0:
-            # Exit code 0 but no "download ok" in the log: the tool exited
-            # cleanly without completing the flash (for example, the user
-            # closed it mid-run). Treat exit 0 as completion, not as a driver
-            # error: exit codes are not part of the driver-missing signal, and
-            # the log is the single source of truth for whether the flash
-            # finished.
-            self._finish_sp_failure(f"SP_EXIT_{exit_code}")
-        else:
-            self._finish_sp_failure(f"SP_EXIT_{exit_code}")
+            elif exit_code == 0:
+                # Exit code 0 but no "download ok" in the log: the tool exited
+                # cleanly without completing the flash (for example, the user
+                # closed it mid-run). Treat exit 0 as completion, not as a driver
+                # error: exit codes are not part of the driver-missing signal, and
+                # the log is the single source of truth for whether the flash
+                # finished.
+                self._finish_sp_failure(f"SP_EXIT_{exit_code}")
+            else:
+                self._finish_sp_failure(f"SP_EXIT_{exit_code}")
+        finally:
+            pass
 
     def _finish_sp_failure(self, detail):
         """Emit a failed SP run, carrying the hint that failure calls for.
@@ -3614,7 +4030,8 @@ class FlashWorker(QThread):
 
     def _classify_sp_stdout(self, line):
         if is_sp_usb_search_line(line):
-            self._enter_usb_search()
+            if not getattr(self, "_past_usb_search", False) and not getattr(self, "_device_seen", False):
+                self._enter_usb_search()
             return
         if is_sp_flash_complete_line(line):
             self._sp_flash_complete = True
@@ -3642,7 +4059,15 @@ class FlashWorker(QThread):
             self._search_timed_out = True
         if "s_chip_type_not_match" in low:
             self._sp_mismatch = True
-        elif "brom connected" in low:
+        elif (
+            "brom connected" in low
+            or "da high speed usb port detected" in low
+            or "usb port is obtained" in low
+            or "usb port detected" in low
+            or "com port is open" in low
+            or "executing dadownloadall" in low
+            or "start downloading via da" in low
+        ):
             self._leave_usb_search()
             self.step_changed.emit(STEP_DETECT)
             self.progress.emit(12)
@@ -3820,13 +4245,19 @@ class FlashWorker(QThread):
                             self._note_install_progress()
                         elif is_sp_flash_complete_line(ln):
                             self._sp_flash_complete = True
-                        elif "brom connected" in low:
+                        elif (
+                            "brom connected" in low
+                            or "da high speed usb port detected" in low
+                            or "usb port is obtained" in low
+                            or "usb port detected" in low
+                            or "com port is open" in low
+                            or "executing dadownloadall" in low
+                            or "start downloading via da" in low
+                        ):
                             self._leave_usb_search()
                             self.step_changed.emit(STEP_DETECT)
                             self.progress.emit(12)
                         elif "of da has been sent" in low or "of bootloader has been sent" in low:
-                            self._classify_sp_stdout(ln)
-                        elif is_sp_usb_search_line(ln):
                             self._classify_sp_stdout(ln)
                         # Forward the internal log itself, minus lines the
                         # console stream already reported, so the diagnostics
@@ -4066,7 +4497,7 @@ class FlashWorker(QThread):
             self._resolve_auth_file(),
         ])
 
-        final_ok = False
+        final_ok = None
         final_msg = ""
         self._stalled_out = False
         try:
@@ -4100,6 +4531,9 @@ class FlashWorker(QThread):
                     # Stay at 0 until the tool has moved past the USB search.
                     if pct is not None and (self._past_usb_search or pct == 0):
                         self.progress.emit(0 if not self._past_usb_search else pct)
+                        if pct > self._mtk_cli_progress_hwm:
+                            self._mtk_cli_progress_hwm = pct
+                            self._note_mtk_subprocess_write_progress()
                 elif line.startswith("[ETA] "):
                     try:
                         eta_val = int(line[len("[ETA] "):])
@@ -4110,27 +4544,41 @@ class FlashWorker(QThread):
                     step = line[len("[STEP] "):]
                     if step not in (STEP_WAITING, STEP_PLEASE_WAIT):
                         self._leave_usb_search()
+                    if step == STEP_WRITE:
+                        self._note_mtk_subprocess_write_progress()
                     self.step_changed.emit(step)
                 elif line.startswith("[ACTION] "):
                     self.action_changed.emit(line[len("[ACTION] "):])
                 elif line.startswith("[LOG] "):
                     payload = line[len("[LOG] "):]
-                    self._log(payload)
-                    self._classify_mtk_output(payload)
-                    self._note_mtk_output_for_stall_check(payload)
+                    self._handle_mtk_subprocess_log(payload)
                 elif line.startswith("[RESULT] "):
                     parts = line[len("[RESULT] "):].split(" ", 1)
                     final_ok = bool(int(parts[0]))
                     final_msg = parts[1] if len(parts) > 1 else ""
                 else:
                     self._log(line)
-                    self._classify_mtk_output(line)
+                    # When running in subprocess mode, [PROGRESS] lines emitted from
+                    # the child worker's byte-level tracking drive the overall progress bar.
+                    # Raw partition progress lines must not overwrite it, but they do
+                    # prove that the DA is still writing and refresh USB-loss liveness.
+                    if line.lower().startswith("progress:"):
+                        self._note_mtk_partition_progress(line)
+                    else:
+                        self._classify_mtk_output(line)
                     self._note_mtk_output_for_stall_check(line)
 
             self._stop_attempt_watchdog()
             stall_detector.stop()
             self._mtk_output_stall_detector = None
             self._process.wait()
+            # The child emits [RESULT] only after its flash worker has reached a
+            # terminal state. A successful write may reboot the player and make
+            # USB disappear before the child exits; do not let that expected
+            # re-enumeration override the explicit success record.
+            if final_ok is True:
+                self.finished.emit(True, "")
+                return
             if self._is_disconnected or is_disconnection_error(self._tool_error) or is_disconnection_error(final_msg):
                 self._log("MTKClient flash terminated due to device disconnection.")
                 self.cancel()
@@ -4163,10 +4611,10 @@ class FlashWorker(QThread):
             # mirroring the SP Flash Tool behaviour where the log is the source of
             # truth). Honour it first; fall back to the exit code only when no
             # result line was emitted.
-            if self._process.returncode == 0:
-                self.finished.emit(True, "")
+            if final_ok is not None:
+                self.finished.emit(False, final_msg or "MTK_FLASH_FAILED")
                 return
-            if final_ok:
+            if self._process.returncode == 0:
                 self.finished.emit(True, "")
                 return
             self.finished.emit(False, final_msg or f"MTK_FLASH_FAILED ({self._process.returncode})")
@@ -4184,6 +4632,44 @@ class FlashWorker(QThread):
             self.finished.emit(False, "CLI_START_FAILED")
 
     # -- MTKClient output-stall helpers --------------------------------------
+    def _handle_mtk_subprocess_log(self, payload: str) -> None:
+        """Forward child output and keep parent-side liveness watchdogs current."""
+        is_partition_progress = str(payload).lstrip().lower().startswith("progress:")
+        if is_partition_progress:
+            self._note_mtk_partition_progress(payload)
+        self._log(payload)
+        # Per-partition byte progress must not be interpreted as global flash
+        # progress; the child already sends the aggregate [PROGRESS] signal.
+        if not is_partition_progress:
+            self._classify_mtk_output(payload)
+        self._note_mtk_output_for_stall_check(payload)
+
+    def _note_mtk_subprocess_write_progress(self):
+        """Record child-process write activity for the parent USB watchdogs."""
+        self._note_install_progress()
+        self._touch_attempt()
+        self._hold_device_loss(MTK_WRITE_PROGRESS_USB_GRACE_SECONDS)
+
+    def _note_mtk_partition_progress(self, line: str) -> None:
+        """Refresh liveness only when the child reports a larger byte position."""
+        match = re.search(
+            r"Progress:\s*[\d.]+%\s+Write\s+(.+?)\s+\(([\d.]+)MB/([\d.]+)MB\)",
+            line,
+            re.IGNORECASE,
+        )
+        if not match:
+            return
+        partition = match.group(1).strip().upper()
+        try:
+            done_mb = float(match.group(2))
+        except ValueError:
+            return
+        previous = self._mtk_cli_partition_progress.get(partition, -1.0)
+        if done_mb <= previous:
+            return
+        self._mtk_cli_partition_progress[partition] = done_mb
+        self._note_mtk_subprocess_write_progress()
+
     def _other_backend_available_for(self, method):
         resolved = backend_method(method)
         if is_mtk_method(method):
@@ -4313,8 +4799,8 @@ class FlashWorker(QThread):
             self.progress.emit(90.0)
         self.action_changed.emit(tr("action_flash_complete"))
         self._log("Flash complete! Disconnect USB and reboot the device.")
-        self.finished.emit(True, "")
         self._close_mtk_session(mtk)
+        self.finished.emit(True, "")
 
     def _reboot_after_mtk_success(self, mtk, da_handler=None) -> bool:
         """Restart the player so the firmware just written boots by itself.
@@ -4668,12 +5154,14 @@ class FlashWorker(QThread):
             return
 
         # The write plan is the 1.1.7 build's, not a guess: every downloadable
-        # image in scatter order, the preloader last, and the device's own
-        # MBR/EBR stubs never written back. Nothing is formatted before the
-        # run, so an interrupted install can always be retried from a player
-        # whose preloader still answers.
+        # image in scatter order, the preloader last, and genuine package
+        # MBR/EBR tables written while empty stubs are skipped. Nothing is formatted
+        # before the run, so an interrupted install can always be retried from a
+        # player whose preloader still answers.
         plan = build_mtk_write_plan(
-            scatter_file, getattr(self, "package_model", "") or self.model
+            scatter_file,
+            getattr(self, "package_model", "") or self.model,
+            preloader_first=False,
         )
         if not plan:
             self._log("Error: no writable partitions in scatter file")
@@ -4687,6 +5175,13 @@ class FlashWorker(QThread):
                 f"{off_str} {step['parttype']} "
                 f"(partition {int(step.get('partition_size') or 0) / 1048576:.1f}MB)"
             )
+
+        # Synchronize / create partition table from scatter for GPT devices to ensure
+        # damaged partition tables are restored and valid before partition writes.
+        try:
+            self._sync_gpt_with_scatter(mtk, {}, scatter_file, create_when_missing=True)
+        except Exception as e:
+            logger.warning("Partition table sync warning: %s", e)
 
         # Read the device's own MBR/EBR chain before writing, but only for a
         # package that does not ship one. Every Innioasis/Timmkoo package
@@ -4740,6 +5235,7 @@ class FlashWorker(QThread):
             self._touch_attempt()
             self._note_install_progress()
             self._note_mtk_write_progress()
+            on_mtk_write_progress(0)
 
         def on_mtk_write_progress(pos):
             nonlocal last_log_time, last_log_pct
@@ -4864,15 +5360,15 @@ class FlashWorker(QThread):
                 file_off = 0
                 # A desparsed image is bigger than the sparse file on disk, so
                 # the bar's denominator has to grow with it or it reaches the
-                # end of the write slice early. Region writes move less than
-                # the raw size, so they use their own extent total.
+                # end of the write slice early. Region writes move only the
+                # actual data extents (matching Chinese build sum(region_len)).
                 if sparse_regions:
-                    transfer_len = _sparse_data_end(sparse_regions)
+                    transfer_len = sum(int(seg_len) for _, seg_len in sparse_regions)
                 else:
                     transfer_len = write_len
                 # The denominator follows what is actually transferred (the
                 # desparsed raw size, or the sparse data extents), not the
-                # on-disk size of a sparse container.
+                # on-disk size of a sparse container or empty filler.
                 effective_len = transfer_len
                 target_len = int(step["length"])
                 if target_len > 0:
@@ -4889,15 +5385,30 @@ class FlashWorker(QThread):
                     # ("sparse data exceeds partition", "image is too large") —
                     # handed to the DA it becomes an unexplained NACK near the
                     # end of the partition.
+                    # Android sparse images can contain data extents up to the total filesystem
+                    # container boundary (e.g. 2 GB or 4 GB), while the physical partition or
+                    # storage on device may be bounded. Fill extents are DONT_CARE, so clip
+                    # sparse regions to part_size so out-of-bound sectors are never sent to the DA.
+                    daloader = getattr(mtk, "daloader", None)
+                    daconfig = getattr(daloader, "daconfig", None)
+                    legacy_storage = getattr(daconfig, "legacy_storage", None)
+                    emmc = getattr(legacy_storage, "emmc", None)
+                    emmc_ua_size = getattr(emmc, "m_emmc_ua_size", 0) or 0
+                    if target_part == "user" and emmc_ua_size > 0 and offset is not None:
+                        max_user_space = max(0, emmc_ua_size - offset)
+                        if part_size:
+                            part_size = min(part_size, max_user_space)
+                        else:
+                            part_size = max_user_space
+
                     if sparse_regions and part_size:
-                        data_end = _sparse_data_end(sparse_regions)
-                        if data_end > part_size:
-                            raise PackageLayoutError(
-                                f"{part_name} sparse data exceeds partition: "
-                                f"data_end={data_end / 1048576:.1f}MB > partition={part_size / 1048576:.1f}MB "
-                                "(possible package/scatter mismatch)"
+                        sparse_regions, clipped = _clip_sparse_regions(sparse_regions, part_size)
+                        if clipped:
+                            self._log(
+                                f"  Sparse data for {part_name} clipped to partition bound "
+                                f"({part_size / 1048576:.1f}MB)"
                             )
-                        transfer_len = data_end
+                        transfer_len = sum(int(seg_len) for _, seg_len in sparse_regions)
                         cur_part_len = transfer_len
                     elif part_size and transfer_len > part_size:
                         raise PackageLayoutError(
@@ -4964,7 +5475,7 @@ class FlashWorker(QThread):
                         except Exception:
                             pass
                     if sparse_regions:
-                        actual_len = _sparse_data_end(sparse_regions)
+                        actual_len = sum(int(seg_len) for _, seg_len in sparse_regions)
                     elif active_file == temp_unsparse:
                         actual_len = write_len
                     else:
@@ -5042,8 +5553,7 @@ class FlashWorker(QThread):
             mtk.config.write_chunk_size = chunk
         except Exception as e:
             logger.debug("Could not set the legacy write chunk size: %s", e)
-            return 0
-        self._segmented_write_bytes = 134217728 if IS_MACOS else 0
+        self._segmented_write_bytes = LEGACY_SEGMENTED_WRITE_BYTES
         self._log(
             f"Legacy DA write chunk size: {chunk // 1024} KiB "
             "(matches the reference build)"
@@ -5155,6 +5665,138 @@ class FlashWorker(QThread):
         for start, size in partitions:
             self._log(f"  0x{start:X}  {size / 1048576:.1f}MB")
         return partitions
+
+    def _read_flash_blob(self, mtk, parttype: str, addr: int, length: int) -> bytes:
+        daloader = getattr(mtk, "daloader", None)
+        if daloader is None or not hasattr(daloader, "readflash"):
+            return b""
+        try:
+            data = daloader.readflash(
+                addr=addr, length=length, filename="", parttype=parttype, display=False
+            )
+            if isinstance(data, (bytes, bytearray)):
+                return bytes(data)
+        except Exception as e:
+            logger.debug("readflash failed: %s", e)
+        return b""
+
+    def _read_user_blob(self, mtk, addr: int, length: int) -> bytes:
+        return self._read_flash_blob(mtk, "user", addr, length)
+
+    def _write_gpt_blobs(
+        self, mtk, primary_blob: bytes, backup_addr: int, backup_blob: bytes
+    ) -> bool:
+        writes = [
+            (0, primary_blob, "primary GPT"),
+            (backup_addr, backup_blob, "backup GPT"),
+        ]
+        for addr, blob, label in writes:
+            ok = mtk.daloader.writeflash(
+                addr=addr,
+                length=len(blob),
+                filename="",
+                parttype="user",
+                wdata=blob,
+                display=False,
+            )
+            if not ok:
+                err = getattr(getattr(mtk, "config", None), "last_error", "")
+                detail = f" ({err})" if err else " (device did not confirm write)"
+                raise RuntimeError(f"{label} write failed{detail}")
+            # Readback verification
+            actual = self._read_user_blob(mtk, addr, len(blob))
+            if actual and actual != blob:
+                raise RuntimeError(f"{label} readback verification failed")
+            self._log(f"{label} write/readback verification passed")
+        return True
+
+    def _sync_gpt_with_scatter(
+        self, mtk, gpt_cache: dict, scatter_file, create_when_missing: bool = True
+    ) -> dict:
+        """Align device partition table with scatter layout prior to flashing.
+
+        For GPT layouts:
+          1. Parses scatter partitions for EMMC_USER.
+          2. Inspects device GPT header at LBA 0-33.
+          3. Rebuilds or creates primary and backup GPT if missing or mismatched.
+        For legacy MBR/EBR layouts:
+          Preserves existing partition table images; skips GPT sync.
+        """
+        parts = _read_scatter_parts(scatter_file)
+        if _legacy_scatter_has_mbr_ebr(parts):
+            self._log(
+                "GPT sync: legacy MBR/EBR package uses bundled partition-table images; skipping GPT sync"
+            )
+            return gpt_cache
+
+        pagesize = max(512, int(getattr(getattr(mtk, "config", None), "pagesize", 512) or 512))
+        gpt_read_len = 34 * pagesize
+        user_size = _get_emmc_user_size(mtk)
+
+        raw = self._read_user_blob(mtk, 0, gpt_read_len)
+        if raw is None or len(raw) < pagesize:
+            self._log("⚠️ GPT sync: could not read device table header from LBA 0; proceeding with scatter")
+            return gpt_cache
+
+        if user_size <= pagesize * 34:
+            inferred_size = _infer_user_size_from_gpt_blob(raw, pagesize)
+            if inferred_size > pagesize * 34:
+                user_size = inferred_size
+                self._log(f"GPT sync: USER capacity inferred from existing GPT: {user_size / 1048576:.1f}MB")
+
+        scatter_parts = _parse_scatter_all_user_partitions(scatter_file, user_size)
+        if not scatter_parts:
+            self._log("⚠️ GPT sync: no EMMC_USER partition found in scatter; skipping sync")
+            return gpt_cache
+
+        # Check GPT signature
+        has_gpt_sig = (
+            len(raw) >= pagesize + 8
+            and raw[pagesize : pagesize + 8] == b"EFI PART"
+        )
+
+        if not has_gpt_sig:
+            if not create_when_missing:
+                self._log("⚠️ GPT sync: standard GPT signature not detected on device; skipping sync")
+                return gpt_cache
+            if user_size <= pagesize * 34:
+                self._log("⚠️ GPT sync: cannot create GPT without valid EMMC_USER capacity")
+                return gpt_cache
+            self._log("GPT sync: standard GPT signature not detected on device; creating GPT from scatter")
+            try:
+                primary_blob, backup_addr, backup_blob, new_cache = _build_gpt_blobs_from_scatter(
+                    scatter_file, user_size, pagesize, raw
+                )
+                self._write_gpt_blobs(mtk, primary_blob, backup_addr, backup_blob)
+                self._log(f"GPT created from scatter (primary=0x0, backup=0x{backup_addr:X})")
+                return new_cache
+            except Exception as e:
+                self._log(f"⚠️ GPT creation from scatter encountered error: {e}")
+                return gpt_cache
+
+        # Existing GPT matches or needs update
+        needs_rebuild = False
+        for name, (s_addr, s_size) in scatter_parts.items():
+            if name in gpt_cache:
+                c_addr, c_size = gpt_cache[name]
+                if c_addr != s_addr:
+                    needs_rebuild = True
+                    break
+
+        if needs_rebuild and user_size > pagesize * 34:
+            self._log("GPT partition entries do not match scatter; rebuilding primary/backup GPT from scatter")
+            try:
+                primary_blob, backup_addr, backup_blob, new_cache = _build_gpt_blobs_from_scatter(
+                    scatter_file, user_size, pagesize, raw
+                )
+                self._write_gpt_blobs(mtk, primary_blob, backup_addr, backup_blob)
+                self._log(f"GPT rebuilt from scatter (primary=0x0, backup=0x{backup_addr:X})")
+                return new_cache
+            except Exception as e:
+                self._log(f"⚠️ GPT rebuild from scatter encountered error: {e}")
+
+        self._log("GPT layout matches scatter; no sync needed")
+        return gpt_cache
 
     def _device_platform_name(self, mtk) -> str:
         """Chip the connected device reports (``MT6572``, ``6572``, ...)."""
@@ -5350,6 +5992,9 @@ class FlashWorker(QThread):
         daloader = getattr(mtk, "daloader", None)
         if daloader is None or not hasattr(daloader, "writeflash"):
             raise RuntimeError("DA has no writeflash for sparse region writes")
+        if not regions:
+            self._log(f"  No sparse data extents to write for {part_name}")
+            return
         total = len(regions)
         raw_size = os.path.getsize(raw_path)
         for index, (region_off, region_len) in enumerate(regions, 1):
@@ -5388,6 +6033,12 @@ class FlashWorker(QThread):
                 if bytes_progress_cb:
                     bytes_progress_cb(seg_len)
                 self._touch_attempt()
+        total_data = sum(int(seg_len) for _, seg_len in regions)
+        skipped_mb = (raw_size - total_data) / 1048576
+        data_mb = total_data / 1048576
+        self._log(
+            f"  Region write complete: data={data_mb:.1f}MB skipped_DONT_CARE={skipped_mb:.1f}MB regions={total}"
+        )
 
     def _write_mtk_partition(
         self,
@@ -5415,6 +6066,18 @@ class FlashWorker(QThread):
         wlen = write_length if write_length is not None else max(0, file_size - file_offset)
 
         if offset is not None:
+            segment_bytes = getattr(self, "_segmented_write_bytes", LEGACY_SEGMENTED_WRITE_BYTES) or LEGACY_SEGMENTED_WRITE_BYTES
+            if segment_bytes and wlen > segment_bytes and part_type == "user":
+                return self._write_partition_segmented(
+                    mtk=mtk,
+                    addr=offset,
+                    file_path_str=file_path_str,
+                    segment_bytes=segment_bytes,
+                    parttype=part_type,
+                    file_offset=file_offset,
+                    write_length=wlen,
+                    bytes_progress_cb=bytes_progress_cb,
+                )
             daloader = getattr(mtk, "daloader", None)
             if hasattr(da_handler, "da_wo"):
                 ok = da_handler.da_wo(
@@ -5426,6 +6089,8 @@ class FlashWorker(QThread):
                 if not ok:
                     err = getattr(getattr(mtk, "config", None), "last_error", None) or "write failed"
                     raise RuntimeError(f"Writing {part_name} at offset {hex(offset)} failed: {err}")
+                if bytes_progress_cb:
+                    bytes_progress_cb(wlen)
                 return
             if daloader is not None and hasattr(daloader, "writeflash"):
                 ok = daloader.writeflash(
@@ -5438,6 +6103,8 @@ class FlashWorker(QThread):
                 if not ok:
                     err = getattr(getattr(mtk, "config", None), "last_error", None) or "write failed"
                     raise RuntimeError(f"Writing {part_name} at offset {hex(offset)} failed: {err}")
+                if bytes_progress_cb:
+                    bytes_progress_cb(wlen)
                 return
 
         # Named write: the device's own partition table supplies the address.
@@ -5990,10 +6657,10 @@ class FlashService(QObject):
             )
         return f"Stopped the previous install session ({len(killed)} tool run(s))."
 
-    def cleanup(self):
+    def cleanup(self, sweep: bool = True):
         self.cancel_flash()
         self.cancel_extract()
         self.stop_device_monitor()
         from . import process_guard
 
-        process_guard.end_install_session(reason="shutdown")
+        process_guard.end_install_session(reason="shutdown", sweep=sweep)

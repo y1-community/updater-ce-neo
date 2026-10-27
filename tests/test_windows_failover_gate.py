@@ -39,14 +39,14 @@ def test_windows_sp_has_no_mtk_failover_without_m_key():
             device_tracking.set_hidden_mtk_options(bool(orig))
 
 
-def test_windows_sp_fails_over_to_mtk_once_m_key_reveals_it():
+def test_windows_sp_never_fails_over_to_mtk():
     window = _window()
     settings = QSettings("innioasis", "updater")
     orig = settings.value("hidden_mtk_options")
     device_tracking.set_hidden_mtk_options(True)
     try:
         with patch.object(paths, "IS_MAC", False), patch.object(paths, "IS_WINDOWS", True):
-            assert window._other_method("sp") == "mtk"
+            assert window._other_method("sp") == ""
     finally:
         if orig is None:
             settings.remove("hidden_mtk_options")

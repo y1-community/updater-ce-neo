@@ -496,6 +496,20 @@ def build():
     )
     shutil.copytree(ASSETS, APP_CODE / "assets", dirs_exist_ok=True)
 
+    # 5b. Unar (cross-platform .rar extractor parity with Chinese reference release)
+    unar_src = ROOT / "tools" / "macos" / "unar"
+    if unar_src.exists():
+        tools_fw = FRAMEWORKS / "tools"
+        tools_fw.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(unar_src, tools_fw / "unar")
+        os.chmod(tools_fw / "unar", 0o755)
+        tools_res = RESOURCES / "tools"
+        tools_res.mkdir(parents=True, exist_ok=True)
+        try:
+            (tools_res / "unar").symlink_to(Path("../Frameworks/tools/unar"))
+        except Exception:
+            shutil.copy2(unar_src, tools_res / "unar")
+
     # 6. Icon
     icon_icns = ASSETS / "icon.icns"
     if icon_icns.exists():
@@ -513,8 +527,8 @@ def build():
         "CFBundleInfoDictionaryVersion": "6.0",
         "CFBundleName": APP_DISPLAY_NAME,
         "CFBundlePackageType": "APPL",
-        "CFBundleShortVersionString": "2.5.0",
-        "CFBundleVersion": "2.5.0",
+        "CFBundleShortVersionString": "2.5.1",
+        "CFBundleVersion": "2.5.1",
         "LSApplicationCategoryType": "public.app-category.utilities",
         "LSMinimumSystemVersion": "12.0",
         "NSHighResolutionCapable": True,

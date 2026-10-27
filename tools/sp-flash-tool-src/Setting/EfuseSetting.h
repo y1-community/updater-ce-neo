@@ -113,6 +113,7 @@ private:
     void LoadSbcPubKey2(const XML::Node &node);
     void LoadSbcPubKey3(const XML::Node &node);	
     void LoadCustCryptData(const XML::Node &node);
+	void LoadCustData(const XML::Node &node);
 	void Load3PData(const XML::Node &node);
 	void LoadPid(const XML::Node &node);
 	void LoadEppk(const XML::Node &node);
@@ -133,6 +134,9 @@ private:
 	void LoadSWVer1(const XML::Node &node);
 	void LoadSWVer2(const XML::Node &node);
 	void LoadSWVer3(const XML::Node &node);
+    // added for mt8168 by shuai
+    void LoadSbcPubkCtrl(const XML::Node &node);
+    void LoadFaModeCtrl(const XML::Node &node);
 private:
     Efuse_Common_Arg    common_arg_;
     Efuse_Secure_Arg    secure_arg_;

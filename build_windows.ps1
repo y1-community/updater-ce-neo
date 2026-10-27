@@ -1,6 +1,6 @@
 param(
-    [ValidateSet("", "both", "updater_ce", "mediatek_installer")]
-    [string]$Brand = "both",
+    [ValidateSet("", "both", "all", "updater_ce", "mediatek_installer")]
+    [string]$Brand = "updater_ce",
     [switch]$Clean,
     [switch]$NoInstaller,
     [switch]$Installer,
@@ -34,7 +34,7 @@ Set-Location $ProjectRoot
 
 $DistDir = Join-Path $ProjectRoot "dist\windows"
 $BuildDir = Join-Path $ProjectRoot "build\windows"
-$Version = "2.5.0"
+$Version = "2.5.1"
 $ConfigFile = Join-Path $ProjectRoot "src\config.py"
 if (Test-Path $ConfigFile) {
     $match = Select-String -Path $ConfigFile -Pattern 'APP_VERSION\s*=\s*"([^"]+)"' | Select-Object -First 1
@@ -65,6 +65,16 @@ if (-not $PythonExe) {
     exit 1
 }
 
+# PySide6 6.12.0 on Python < 3.12 leaks a None reference per paint call and the
+# frozen app aborts ("none_dealloc: deallocating None") within a minute.
+if (-not $SkipPyInstaller) {
+    & $PythonExe (Join-Path $ProjectRoot "scripts\check_pyside_refcount.py")
+    if ($LASTEXITCODE -eq 1) {
+        Write-Error "Leaking PySide6 build environment; run: $PythonExe -m pip install -r requirements.txt"
+        exit 1
+    }
+}
+
 # Locate Inno Setup (ISCC.exe)
 $IsccExe = $null
 $isccCmd = Get-Command iscc.exe -ErrorAction SilentlyContinue
@@ -72,8 +82,11 @@ if ($isccCmd) {
     $IsccExe = $isccCmd.Source
 } else {
     foreach ($p in @(
+        "C:\Program Files\Inno Setup 7\ISCC.exe",
+        "C:\Program Files (x86)\Inno Setup 7\ISCC.exe",
         "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
         "C:\Program Files\Inno Setup 6\ISCC.exe",
+        (Join-Path $env:LOCALAPPDATA "Programs\Inno Setup 7\ISCC.exe"),
         (Join-Path $env:LOCALAPPDATA "Programs\Inno Setup 6\ISCC.exe")
     )) {
         if (Test-Path $p) {
@@ -105,10 +118,12 @@ New-Item -ItemType Directory -Force -Path $DistDir | Out-Null
 New-Item -ItemType Directory -Force -Path $BuildDir | Out-Null
 
 $BrandsToBuild = @()
-if ($Brand -eq "" -or $Brand -eq "both") {
+if ($Brand -eq "both" -or $Brand -eq "all") {
     $BrandsToBuild = @("updater_ce", "mediatek_installer")
+} elseif ($Brand -eq "mediatek_installer") {
+    $BrandsToBuild = @("mediatek_installer")
 } else {
-    $BrandsToBuild = @($Brand.ToLower())
+    $BrandsToBuild = @("updater_ce")
 }
 
 function Write-StepBanner([int]$step, [int]$total, [string]$title, [string]$desc) {
@@ -216,6 +231,16 @@ try {
             Copy-Item -Path $stagedExe -Destination $appPortableAlias -Force
             Write-Host "  -> Created friendly entry point: '2. Install Firmware.exe' -> $appSlug.exe" -ForegroundColor Green
 
+            # Stage UnRAR.exe into tools/ folder beside the executable for .rar unpacking compatibility
+            $unrarSource = Join-Path $ProjectRoot "tools\windows\UnRAR.exe"
+            $unrarTargetDir = Join-Path $stagedAppDir "tools"
+            $unrarTarget = Join-Path $unrarTargetDir "UnRAR.exe"
+            if (Test-Path $unrarSource) {
+                if (-not (Test-Path $unrarTargetDir)) { New-Item -ItemType Directory -Force -Path $unrarTargetDir | Out-Null }
+                Copy-Item -Path $unrarSource -Destination $unrarTarget -Force
+                Write-Host "  -> Bundled 'tools\UnRAR.exe' for cross-platform .rar extraction" -ForegroundColor Green
+            }
+
             Write-StepBanner 3 $totalSteps "Staging Portable Folder" "Syncing compiled distribution files into $DistDir\$appSlug..."
             $targetAppDir = Join-Path $DistDir $appSlug
             & robocopy $stagedAppDir $targetAppDir /MIR /R:1 /W:1 /NFL /NDL /NJH /NJS /NC /NS | Out-Null
@@ -280,11 +305,13 @@ try {
             Write-Host "  (Pass -Msix to also produce the Microsoft Store package for this build.)" -ForegroundColor DarkGray
         }
 
-        Remove-Item -Recurse -Force $tempWorkDir -ErrorAction SilentlyContinue
+        if ($tempWorkDir) {
+            Remove-Item -Recurse -Force $tempWorkDir -ErrorAction SilentlyContinue
+        }
         if ($deferredSync) {
             $syncCmd = "while (Get-Process -Name '$appSlug' -ErrorAction SilentlyContinue) { Start-Sleep -Seconds 2 }; robocopy '$stagedAppDir' '$targetAppDir' /MIR /R:2 /W:1 /NFL /NDL /NJH /NJS /NC /NS | Out-Null; Remove-Item -Recurse -Force '$tempDistDir' -ErrorAction SilentlyContinue"
             Start-Process -FilePath "powershell.exe" -ArgumentList @("-NoProfile", "-WindowStyle", "Hidden", "-Command", $syncCmd)
-        } else {
+        } elseif ($tempDistDir) {
             Remove-Item -Recurse -Force $tempDistDir -ErrorAction SilentlyContinue
         }
     }

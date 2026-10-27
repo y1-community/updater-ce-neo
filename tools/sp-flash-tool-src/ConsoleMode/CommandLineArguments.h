@@ -32,7 +32,7 @@ public:
 
     const std::string &GetHelpInfo() const;
 
-    std::string GetRSCIndexStr() const;
+    std::string GetRSCProjName() const;
 
     bool Parse(int argc, char **argv);
 
@@ -51,8 +51,14 @@ public:
         return m_battery_option;
     }
 
+    bool StorageLifeCycleCheck() const
+    {
+        return m_storage_life_cycle_check;
+    }
+
 private:
     bool valid_com_port(const QString &usb_com_port) const;
+    char swith_long_arg_to_short(const char *arg) const;
 
 private:
     std::string m_szInputFilename;
@@ -66,7 +72,8 @@ private:
     bool m_fgDisplayHepInfo;
     bool m_onlyOutput;
     bool m_reboot;
-    std::string m_rsc_index_str;
+    bool m_storage_life_cycle_check;
+    std::string m_rsc_proj_name;
     std::string m_battery_option;
 };
 

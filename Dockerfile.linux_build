@@ -20,6 +20,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     patchelf \
     && rm -rf /var/lib/apt/lists/*
 
+COPY requirements.txt /tmp/requirements.txt
+RUN python3 -m venv /opt/venv && \
+    /opt/venv/bin/pip install --no-cache-dir --upgrade pip && \
+    /opt/venv/bin/pip install --no-cache-dir pyinstaller -r /tmp/requirements.txt
+
 WORKDIR /workspace
 
 ENTRYPOINT ["/bin/bash"]

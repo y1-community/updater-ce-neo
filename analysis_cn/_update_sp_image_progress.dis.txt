@@ -1,0 +1,82 @@
+=== _update_sp_image_progress ===
+Consts: ("根据 'XX% of image data has been sent (XX of XX)' 计算累计进度。\n\n        只追踪 >=100MB 的分区（Y1: 330M, R2: super 7.71G, MX3: 3.50G），\n        映射到 20-90%。小分区瞬间完成，忽略不计。\n        ", '(\\d+)%\\s+of image data has been sent\\s+\\(([^)]+)\\s+of\\s+([^)]+)\\)', None, 1, 3, 104857600, 20, 0.7)
+Names: ('re', 'search', 'int', 'group', '_parse_sp_size', '_sp_progress_hwm', 'progress', 'emit')
+Varnames: ('self', 'line', 'm', 'pct', 'total', 'mapped')
+
+596           0 RESUME                   0
+
+602           2 LOAD_GLOBAL              1 (NULL + re)
+             14 LOAD_ATTR                1 (search)
+             24 LOAD_CONST               1 ('(\\d+)%\\s+of image data has been sent\\s+\\(([^)]+)\\s+of\\s+([^)]+)\\)')
+             26 LOAD_FAST                1 (line)
+             28 PRECALL                  2
+             32 CALL                     2
+             42 STORE_FAST               2 (m)
+
+603          44 LOAD_FAST                2 (m)
+             46 POP_JUMP_FORWARD_IF_TRUE     2 (to 52)
+
+604          48 LOAD_CONST               2 (None)
+             50 RETURN_VALUE
+
+605     >>   52 LOAD_GLOBAL              5 (NULL + int)
+             64 LOAD_FAST                2 (m)
+             66 LOAD_METHOD              3 (group)
+             88 LOAD_CONST               3 (1)
+             90 PRECALL                  1
+             94 CALL                     1
+            104 PRECALL                  1
+            108 CALL                     1
+            118 STORE_FAST               3 (pct)
+
+606         120 LOAD_FAST                0 (self)
+            122 LOAD_METHOD              4 (_parse_sp_size)
+            144 LOAD_FAST                2 (m)
+            146 LOAD_METHOD              3 (group)
+            168 LOAD_CONST               4 (3)
+            170 PRECALL                  1
+            174 CALL                     1
+            184 PRECALL                  1
+            188 CALL                     1
+            198 STORE_FAST               4 (total)
+
+608         200 LOAD_FAST                4 (total)
+            202 LOAD_CONST               5 (104857600)
+            204 COMPARE_OP               0 (<)
+            210 POP_JUMP_FORWARD_IF_FALSE     2 (to 216)
+
+609         212 LOAD_CONST               2 (None)
+            214 RETURN_VALUE
+
+611     >>  216 LOAD_CONST               6 (20)
+            218 LOAD_GLOBAL              5 (NULL + int)
+            230 LOAD_FAST                3 (pct)
+            232 LOAD_CONST               7 (0.7)
+            234 BINARY_OP                5 (*)
+            238 PRECALL                  1
+            242 CALL                     1
+            252 BINARY_OP                0 (+)
+            256 STORE_FAST               5 (mapped)
+
+614         258 LOAD_FAST                5 (mapped)
+            260 LOAD_FAST                0 (self)
+            262 LOAD_ATTR                5 (_sp_progress_hwm)
+            272 COMPARE_OP               4 (>)
+            278 POP_JUMP_FORWARD_IF_FALSE    35 (to 350)
+
+615         280 LOAD_FAST                5 (mapped)
+            282 LOAD_FAST                0 (self)
+            284 STORE_ATTR               5 (_sp_progress_hwm)
+
+616         294 LOAD_FAST                0 (self)
+            296 LOAD_ATTR                6 (progress)
+            306 LOAD_METHOD              7 (emit)
+            328 LOAD_FAST                5 (mapped)
+            330 PRECALL                  1
+            334 CALL                     1
+            344 POP_TOP
+            346 LOAD_CONST               2 (None)
+            348 RETURN_VALUE
+
+614     >>  350 LOAD_CONST               2 (None)
+            352 RETURN_VALUE

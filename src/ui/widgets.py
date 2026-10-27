@@ -605,6 +605,7 @@ class Card(QFrame):
             note_lbl.setWordWrap(True)
             note_lbl.setProperty("cssClass", "subtitle")
             copy_col.addWidget(note_lbl)
+        body_lbl = None
         if body:
             body_lbl = QLabel(body)
             body_lbl.setWordWrap(True)
@@ -618,9 +619,12 @@ class Card(QFrame):
         accept_btn.setText(accept)
         reject_btn = _RoundNextButton(symbol="cancel", accent=False)
         reject_btn.setText(reject)
+        if not reject:
+            reject_btn.setVisible(False)
         row.addWidget(accept_btn, 0, Qt.AlignVCenter)
         row.addWidget(reject_btn, 0, Qt.AlignVCenter)
         layout.addLayout(row)
+        self._confirm_body = body_lbl
         self._confirm_accept = accept_btn
         self._confirm_reject = reject_btn
 
@@ -630,6 +634,9 @@ class Card(QFrame):
         self._outer.addWidget(panel)
         panel.show()
         fade_in(panel)
+        win = self.window()
+        if win is not None and hasattr(win, "_adjust_window_geometry"):
+            QTimer.singleShot(0, win._adjust_window_geometry)
 
         # While prompts with buttons are being shown in the settings menu,
         # do not allow the user to scroll until they've answered the prompt.
@@ -921,6 +928,10 @@ class UpdateToast(QFrame):
 
     def refresh_theme(self) -> None:
         _apply_banner_text(self._label)
+        if hasattr(self, "_close") and hasattr(self._close, "refresh_theme"):
+            self._close.refresh_theme()
+        if hasattr(self, "_install") and hasattr(self._install, "refresh_theme"):
+            self._install.refresh_theme()
         self.update()
 
     def paintEvent(self, event):  # noqa: N802 (Qt naming)
@@ -1005,6 +1016,10 @@ class AppUpdateToast(QFrame):
 
     def refresh_theme(self) -> None:
         _apply_banner_text(self._label)
+        if hasattr(self, "_close") and hasattr(self._close, "refresh_theme"):
+            self._close.refresh_theme()
+        if hasattr(self, "_install") and hasattr(self._install, "refresh_theme"):
+            self._install.refresh_theme()
         self.update()
 
     def paintEvent(self, event):  # noqa: N802 (Qt naming)
@@ -1066,6 +1081,8 @@ class BatteryToast(QFrame):
 
     def refresh_theme(self) -> None:
         _apply_banner_text(self._label)
+        if hasattr(self, "_dismiss_btn") and hasattr(self._dismiss_btn, "refresh_theme"):
+            self._dismiss_btn.refresh_theme()
         self.update()
 
     def paintEvent(self, event):  # noqa: N802 (Qt naming)

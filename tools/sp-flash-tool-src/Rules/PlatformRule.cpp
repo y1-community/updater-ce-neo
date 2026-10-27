@@ -22,9 +22,21 @@
 using XML::Node;
 using XML::Document;
 
-const static std::string phaseOutChips[5] = {"MT6573", "MT6575", "MT6577", "MT6589", "MT8135"};
+const static std::string phaseOutChips[] = {"MT6573", "MT6575", "MT6577", "MT6589", "MT8135", "MT6775", "MT3967"};
 
-const std::set<std::string> PlatformTable::m_phaseOutChips(phaseOutChips, phaseOutChips + 5);
+const std::set<std::string> g_phaseOutChips(phaseOutChips, phaseOutChips + 7);
+
+const static std::map<std::string, std::string>::value_type init_values[] = {
+    std::map<std::string, std::string>::value_type("MT6573", "v5.1728.00"),
+    std::map<std::string, std::string>::value_type("MT6575", "v5.1728.00"),
+    std::map<std::string, std::string>::value_type("MT6577", "v5.1728.00"),
+    std::map<std::string, std::string>::value_type("MT6589", "v5.1728.00"),
+    std::map<std::string, std::string>::value_type("MT8135", "v5.1728.00"),
+    std::map<std::string, std::string>::value_type("MT6775", "v5.1932.00"),
+    std::map<std::string, std::string>::value_type("MT3967", "v5.1932.00")
+};
+
+const static std::map<std::string, std::string> g_phase_out_chip_tool_map(init_values, init_values + 7);
 
 Platform::Platform() : name(), simple_name()
 {
@@ -40,7 +52,7 @@ Platform::Platform() : name(), simple_name()
     is_default_da_dl_all_hs = false;
     dl_auto_detect_battery = true; // ?
     auto_format_all_support = true;
-    power_key_reset_support = false;
+    long_press_reboot_option = LONG_PRESS_REBOOT_HOME;
     is_auto_polling_enable = false;
     auto_polling_upper_limit = 0;
     set_boot_mode_support = false;
@@ -98,7 +110,13 @@ void Platform::LoadXML(const XML::Node &node)
     this->is_default_set_format_length = parseBoolean(temp);
 
     temp = node.GetAttribute("reset_key_configuration");
-    this->power_key_reset_support = (temp=="P");
+    if (temp == "P") {
+        this->long_press_reboot_option = LONG_PRESS_REBOOT_POWER;
+    } else if (temp == "DISABLE") {
+        this->long_press_reboot_option = LONG_PRESS_REBOOT_DISABLE;
+    } else {
+        this->long_press_reboot_option = LONG_PRESS_REBOOT_HOME;
+    }
 
     temp = node.GetAttribute("is_auto_polling_enable");
     this->is_auto_polling_enable = parseBoolean(temp);
@@ -233,7 +251,19 @@ bool PlatformTable::queryPhaseOutChip(const std::string &chipName)
 {
     std::string upperChipName = chipName;
     std::transform(upperChipName.begin(), upperChipName.end(), upperChipName.begin(), ::toupper);
-    return m_phaseOutChips.count(upperChipName) != 0;
+    return g_phaseOutChips.count(upperChipName) != 0;
+}
+
+std::string PlatformTable::queryToolVer4PhaseOutChip(const std::string &chipName)
+{
+    std::string upperChipName = chipName;
+    std::transform(upperChipName.begin(), upperChipName.end(), upperChipName.begin(), ::toupper);
+    std::map<std::string, std::string>::const_iterator iter = g_phase_out_chip_tool_map.find(upperChipName);
+    if (iter != g_phase_out_chip_tool_map.end())
+    {
+        return iter->second;
+    }
+    return std::string();
 }
 
 PlatformTable& GetPlatformTable(){

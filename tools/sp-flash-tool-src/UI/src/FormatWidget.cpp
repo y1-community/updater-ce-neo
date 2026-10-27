@@ -7,7 +7,6 @@
 #include "../../Utility/constString.h"
 #include "../../Utility/Utils.h"
 #include "../../Host/Inc/RuntimeMemory.h"
-#include "../../Utility/version.h"
 
 static const int kMaxLength(18);
 const std::string FormatWidget::unsupport_fmt_other_chips[] = {"MT6739"};
@@ -266,7 +265,7 @@ void FormatWidget::on_toolButton_Start_clicked()
         main_window_->main_controller()->SetConnSetting(main_window_->CreateConnSetting());
         main_window_->main_controller()->QueueAJob(main_window_->CreateComboFormatSetting());
 
-        if(!ToolInfo::IsCustomerVer() && main_window_->isAutoPollingEnable())
+        if(main_window_->isAutoPollingEnable())
             main_window_->main_controller()->QueueAJob(main_window_->CreateWatchDogSetting());
 
         main_window_->main_controller()->StartExecuting(

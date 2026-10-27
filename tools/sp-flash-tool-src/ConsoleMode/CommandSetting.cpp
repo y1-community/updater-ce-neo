@@ -7,12 +7,12 @@
 namespace ConsoleMode
 {
 #define RSC_FILE_NAME "rsc.xml"
-CommandSetting::CommandSetting(const std::string &scatter_file, const std::string &rsc_index_str):
+CommandSetting::CommandSetting(const std::string &scatter_file, const std::string &rsc_proj_name):
     efuse_read_only_(false),
     m_has_rsc_cmd(false),
     m_has_download_cmd(false),
     m_scatter_file(scatter_file),
-    m_rsc_index_str(rsc_index_str)
+    m_rsc_proj_name(rsc_proj_name)
 {
 	 vClearSetting();
 }
@@ -23,11 +23,10 @@ CommandSetting::~CommandSetting()
 
 CommandSetting::CommandSetting(const XML::Node &node, bool efuse_read_only, bool reboot):
     m_has_rsc_cmd(false),
-    m_has_download_cmd(false)
+    m_has_download_cmd(false),
+    efuse_read_only_(efuse_read_only),
+    isNeedEnableWatchDog_(reboot)
 {
-    efuse_read_only_ = efuse_read_only;
-    isNeedEnableWatchDog_ = reboot;
-
     LoadXML(node);
 }
 
@@ -39,7 +38,7 @@ void CommandSetting::vSetCommand(const std::string &command)
 
         vCreateSetting(command, XML::Node(NULL));
 
-        if (!m_rsc_index_str.empty() && this->isDownloadCmd(command))
+        if (!m_rsc_proj_name.empty() && this->isDownloadCmd(command))
         {
             addRSCSetting();
         }
@@ -123,7 +122,7 @@ void CommandSetting::vCreateSetting(const std::string& command, const XML::Node 
     }
     else if ("download-withoutScatter" == command){
         p1 = CreateDLWithoutScatterSetting();
-        //isNeedEnableWatchDog_ = true;
+        isNeedEnableWatchDog_ = false; // force to reboot in DL without scatter cmd flow, DO NOT add watch dog cmd.
         LOGI("Download without scatter command::Create");
         LOGI("DownloadCommand::Execute");
     }
@@ -141,6 +140,7 @@ void CommandSetting::vCreateSetting(const std::string& command, const XML::Node 
     }
     else if("readback-withoutscatter" == command){
         p1 = CreateReadbackWithoutScatterSetting();
+        isNeedEnableWatchDog_ = false; //set reboot flag to RB without scatter cmd flow to control reboot, DO NOT add watch dog cmd.
         LOGI("Readback without scatter::Create");
     }
     else if("firmware-upgrade"==command)
@@ -285,6 +285,7 @@ QSharedPointer<APCore::ReadbackSetting> CommandSetting::CreateReadbackSetting()
 QSharedPointer<APCore::ReadbackWithoutScatterSetting> CommandSetting::CreateReadbackWithoutScatterSetting()
 {
     QSharedPointer<APCore::ReadbackWithoutScatterSetting> setting(new APCore::ReadbackWithoutScatterSetting());
+    setting->setReboot(isNeedEnableWatchDog_);
 
     return setting;
 }
@@ -313,6 +314,7 @@ QSharedPointer<APCore::EfuseSetting> CommandSetting::CreateEfuseSetting()
 QSharedPointer<APCore::RSCSetting> CommandSetting::CreateRSCSetting() const
 {
     QSharedPointer<APCore::RSCSetting> setting(new APCore::RSCSetting());
+    setting->setRSCFilePath(this->getRSCFileName().toStdString());
     return setting;
 }
 
@@ -329,7 +331,7 @@ bool CommandSetting::isDownloadCmd(const std::string &cmd_name) const
     return cmd_sets.contains(QString::fromStdString(cmd_name));
 }
 
-bool CommandSetting::getRSCInfoByIndex(std::string *proj_name, std::string *proj_operator) const
+bool CommandSetting::getRSCInfoByProjName(unsigned int *index, std::string *proj_operator) const
 {
     unsigned int rsc_count = 0;
     QString rsc_file = this->getRSCFileName();
@@ -354,10 +356,10 @@ bool CommandSetting::getRSCInfoByIndex(std::string *proj_name, std::string *proj
         }
         for (unsigned int i = 0; i < rsc_count; ++i)
         {
-            if (proj_array[i].dtbo_index == std::atoi(m_rsc_index_str.c_str()))
+        if ((char*)proj_array[i].full_project_name == m_rsc_proj_name)
             {
-                *proj_name = (char *)proj_array[i].full_project_name;
-                *proj_operator = (char *)proj_array[i].op_name;
+            *index = proj_array[i].dtbo_index;
+            *proj_operator = (char *)proj_array[i].op_name;
                 return true;
             }
         }
@@ -416,6 +418,7 @@ void CommandSetting::removeRSCSetting()
         if(NULL != rsc_setting)
         {
             m_aclCommandSettings.remove(*it);
+            LOGI("remove RSC command from console mode command list.");
             break;
         }
     }
@@ -444,20 +447,21 @@ QString CommandSetting::getRSCFileName() const
 
 void CommandSetting::addRSCSetting()
 {
-    std::string proj_name;
+    unsigned int index;
     std::string proj_operator;
-    if (this->getRSCInfoByIndex(&proj_name, &proj_operator))
+    if (this->getRSCInfoByProjName(&index, &proj_operator))
     {
         QSharedPointer<APCore::RSCSetting> rsc_setting = CreateRSCSetting();
-        rsc_setting->setRSCIndex(std::atoi(m_rsc_index_str.c_str()));
-        rsc_setting->setRSCProjectName(proj_name);
+        rsc_setting->setRSCProjectName(m_rsc_proj_name);
+        rsc_setting->setRSCIndex(index);
         rsc_setting->setRSCOperatorName(proj_operator);
+        rsc_setting->setRSCFilePath(this->getRSCFileName().toStdString());
         vAddSetting(rsc_setting);
         m_has_rsc_cmd = true;
     }
     else
     {
-        LOGE("rsc index (%s) is invalid for %s", m_rsc_index_str.c_str(),
+        LOGE("m_rsc_proj_name(%s) is invalid for %s", m_rsc_proj_name.c_str(),
              this->getRSCFileName().toStdString().c_str());
         THROW_APP_EXCEPTION(S_INVALID_ARGUMENTS, "");
     }

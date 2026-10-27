@@ -76,6 +76,25 @@ _ACTIVE_SESSIONS = 0
 # Last sweep's result, for the diagnostics page and the log.
 _LAST_SWEEP: list = []
 
+# Processes handed off to (or launched for) external GUI tools: immune from sweeps.
+_HANDOFF_PIDS: set = set()
+
+
+def register_handoff_pid(pid: int) -> None:
+    """Mark a process (e.g. handed-off SP Flash Tool or its launcher) as immune from stray tool sweeps."""
+    if pid and pid > 1:
+        _HANDOFF_PIDS.add(pid)
+
+
+def unregister_handoff_pid(pid: int) -> None:
+    """Remove a process from the handoff immunity set."""
+    _HANDOFF_PIDS.discard(pid)
+
+
+def handoff_pids() -> frozenset:
+    """Return all PIDs protected as handed-off GUI tools."""
+    return frozenset(_HANDOFF_PIDS)
+
 
 def _split_command(command: str) -> list:
     """Command line tokens, keeping quoted paths (``"C:\\SP Flash Tool\\"``) whole."""
@@ -145,10 +164,17 @@ def _parse_ps_output(text: str) -> list:
 
 def _ps_snapshot() -> list:
     """Every live process as ``(pid, ppid, command)`` (best effort)."""
-    for args in (["ps", "-axo", "pid=,ppid=,command="], ["ps", "-ef"]):
+    env = os.environ.copy()
+    env.pop("COLUMNS", None)
+    for args in (
+        ["ps", "-ww", "-eo", "pid=,ppid=,command="],
+        ["ps", "-ww", "-ef"],
+        ["ps", "-axo", "pid=,ppid=,command="],
+        ["ps", "-ef"],
+    ):
         try:
             res = subprocess.run(
-                args, capture_output=True, text=True, timeout=6
+                args, env=env, capture_output=True, text=True, timeout=6
             )
         except Exception as e:
             logger.debug("Process listing with %s failed: %s", args, e)
@@ -223,6 +249,33 @@ def flash_tool_pids() -> frozenset:
     )
 
 
+def is_flash_tool_process_running() -> bool:
+    """Fast check for whether SP Flash Tool (GUI or console) is currently running."""
+    if install_session_active():
+        return True
+    if _HANDOFF_PIDS:
+        return True
+    try:
+        if sys.platform.startswith("win") or os.name == "nt":
+            res = subprocess.run(
+                ["tasklist", "/FI", "IMAGENAME eq flash_tool.exe", "/FO", "CSV", "/NH"],
+                capture_output=True,
+                text=True,
+                timeout=3,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            return "flash_tool.exe" in (res.stdout or "").lower()
+        res = subprocess.run(
+            ["pgrep", "-x", "flash_tool"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+        return res.returncode == 0 and bool((res.stdout or "").strip())
+    except Exception:
+        return False
+
+
 def _own_ancestry(snapshot=None) -> set:
     """This process and every parent of it, so we never terminate ourselves."""
     safe = {os.getpid()}
@@ -245,13 +298,28 @@ def _own_ancestry(snapshot=None) -> set:
     return safe
 
 
+def _is_handoff_descendant(pid: int, by_pid: dict) -> bool:
+    """True if pid is or descends from a process registered for GUI handoff."""
+    if not _HANDOFF_PIDS:
+        return False
+    curr = pid
+    for _ in range(64):
+        if curr in _HANDOFF_PIDS:
+            return True
+        curr = by_pid.get(curr)
+        if not curr or curr <= 1:
+            break
+    return False
+
+
 def stray_tool_processes(snapshot=None) -> list:
     """Running flash-backend processes as ``[{"pid", "tool", "command"}]``."""
     rows = process_snapshot() if snapshot is None else snapshot
     safe = _own_ancestry(rows)
+    by_pid = {pid: ppid for pid, ppid, _cmd in rows}
     found = []
     for pid, _ppid, command in rows:
-        if pid in safe or pid <= 1:
+        if pid in safe or pid <= 1 or pid in _HANDOFF_PIDS or _is_handoff_descendant(pid, by_pid):
             continue
         tool = _tool_invocation(command)
         if not tool:
@@ -493,6 +561,8 @@ def sweep_stray_tools(force: bool = False, reason: str = "") -> list:
         if install_session_active() and not force:
             break
         if not force and item["pid"] in active_pids:
+            continue
+        if item["pid"] in _HANDOFF_PIDS:
             continue
         if _terminate(item["pid"], item["tool"]):
             killed.append(item)

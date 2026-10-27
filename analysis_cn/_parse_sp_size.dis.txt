@@ -1,0 +1,59 @@
+585           0 RESUME                   0
+
+588           2 LOAD_FAST                0 (text)
+              4 LOAD_METHOD              0 (strip)
+             26 PRECALL                  0
+             30 CALL                     0
+             40 STORE_FAST               0 (text)
+
+589          42 LOAD_GLOBAL              3 (NULL + re)
+             54 LOAD_ATTR                2 (match)
+             64 LOAD_CONST               1 ('([0-9.]+)\\s*([KMGT]?)')
+             66 LOAD_FAST                0 (text)
+             68 LOAD_GLOBAL              2 (re)
+             80 LOAD_ATTR                3 (IGNORECASE)
+             90 PRECALL                  3
+             94 CALL                     3
+            104 STORE_FAST               1 (m)
+
+590         106 LOAD_FAST                1 (m)
+            108 POP_JUMP_FORWARD_IF_TRUE     2 (to 114)
+
+591         110 LOAD_CONST               2 (0)
+            112 RETURN_VALUE
+
+592     >>  114 LOAD_GLOBAL              9 (NULL + float)
+            126 LOAD_FAST                1 (m)
+            128 LOAD_METHOD              5 (group)
+            150 LOAD_CONST               3 (1)
+            152 PRECALL                  1
+            156 CALL                     1
+            166 PRECALL                  1
+            170 CALL                     1
+            180 STORE_FAST               2 (val)
+
+593         182 LOAD_FAST                1 (m)
+            184 LOAD_METHOD              5 (group)
+            206 LOAD_CONST               4 (2)
+            208 PRECALL                  1
+            212 CALL                     1
+            222 LOAD_METHOD              6 (upper)
+            244 PRECALL                  0
+            248 CALL                     0
+            258 STORE_FAST               3 (unit)
+
+594         260 LOAD_FAST                2 (val)
+            262 LOAD_CONST               3 (1)
+            264 LOAD_CONST               5 (1024)
+            266 LOAD_CONST               6 (1048576)
+            268 LOAD_CONST               7 (1073741824)
+            270 LOAD_CONST               8 (1099511627776)
+            272 LOAD_CONST               9 (('', 'K', 'M', 'G', 'T'))
+            274 BUILD_CONST_KEY_MAP      5
+            276 LOAD_METHOD              7 (get)
+            298 LOAD_FAST                3 (unit)
+            300 LOAD_CONST               3 (1)
+            302 PRECALL                  2
+            306 CALL                     2
+            316 BINARY_OP                5 (*)
+            320 RETURN_VALUE

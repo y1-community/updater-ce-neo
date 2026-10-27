@@ -37,10 +37,8 @@ MainController::MainController(QObject *parent, MainWindow *window) :
     //redirecting the err signal to MainController's
     connect(async_loader, SIGNAL(signal_err_msg(int, const std::string&)),
             this,SIGNAL(signal_err_msg(int, const std::string&)));
-    qRegisterMetaType<FLASHTOOL_API_HANDLE_T>("FLASHTOOL_API_HANDLE_T");
-    connect(this, SIGNAL(signal_GetDAReport(const DA_REPORT_T*, const std::string&, const int, const FLASHTOOL_API_HANDLE_T)),
-            main_window, SLOT(slot_GetDAReport(const DA_REPORT_T*,const std::string&, const int, const FLASHTOOL_API_HANDLE_T)),
-            Qt::BlockingQueuedConnection);
+    connect(this, SIGNAL(signal_GetDAReport(const DA_REPORT_T*, const std::string&, const int)),
+            main_window, SLOT(slot_GetDAReport(const DA_REPORT_T*,const std::string&, const int)));
 
     connect(this, SIGNAL(signal_GetBootResult(const BOOT_RESULT*,const std::string&)),
             main_window, SLOT(slot_GetBootResult(const BOOT_RESULT*,const std::string&)));
@@ -371,18 +369,6 @@ void MainController::GetImageInfoList(std::list<ImageInfo> &image_info_list, Dow
     }
 }
 
-void MainController::GetFLashToolImageInfoList(std::list<ImageInfo> &image_info_list, const FLASHTOOL_API_HANDLE_T FT_Handle, Download_Scene scene)
-{
-    try
-    {
-        app_core->GetFlashToolROMList(session_id, FT_Handle, image_info_list, scene);
-    }
-    catch(const BaseException &e)
-    {
-        emit signal_err_msg(e.err_code(), e.err_msg());
-    }
-}
-
 void MainController::EnableROM(const int index, bool enable)
 {
     try{
@@ -548,7 +534,8 @@ void MainController::CreateNewThread()
 
     background_worker = new BackgroundWorker(session_id,app_core,this,
                             main_window->main_callbacks()->OperationFinished,
-                            main_window->main_callbacks()->OperationOK);
+                            main_window->main_callbacks()->OperationOK,
+							main_window->main_callbacks()->OperationQuestion);
 
     connect(this,SIGNAL(signal_stop_working()),
             background_worker, SLOT(slot_stop_executing()), Qt::DirectConnection);
@@ -590,10 +577,9 @@ void MainController::EnableMarkBadBlocksMode()
 
 void MainController::get_da_report(const DA_REPORT_T &da_report,
                                    const std::string &friend_name,
-                                   const int usb_status,
-                                   const FLASHTOOL_API_HANDLE_T FT_Handle)
+                                   const int usb_status)
 {
-    emit signal_GetDAReport(&da_report, friend_name, usb_status, FT_Handle);
+    emit signal_GetDAReport(&da_report, friend_name, usb_status);
 }
 
 void MainController::get_brom_result(const BOOT_RESULT &brom_result, const std::string &friend_name)

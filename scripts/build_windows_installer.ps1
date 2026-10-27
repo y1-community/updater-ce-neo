@@ -37,7 +37,7 @@ if (-not $Version) {
             $Version = $match.Matches[0].Groups[1].Value
         }
     }
-    if (-not $Version) { $Version = "2.5.0" }
+    if (-not $Version) { $Version = "2.5.1" }
 }
 
 if (-not $OutDir) {
@@ -58,8 +58,11 @@ function Find-ISCC {
     $cmd = Get-Command iscc.exe -ErrorAction SilentlyContinue
     if ($cmd) { return $cmd.Source }
     foreach ($p in @(
+        "C:\Program Files\Inno Setup 7\ISCC.exe",
+        "C:\Program Files (x86)\Inno Setup 7\ISCC.exe",
         "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
         "C:\Program Files\Inno Setup 6\ISCC.exe",
+        (Join-Path $env:LOCALAPPDATA "Programs\Inno Setup 7\ISCC.exe"),
         (Join-Path $env:LOCALAPPDATA "Programs\Inno Setup 6\ISCC.exe")
     )) {
         if (Test-Path $p) { return $p }

@@ -12,7 +12,7 @@ CheckHeader::CheckHeader(Qt::Orientation orientation, QWidget *parent) :
 
 void CheckHeader::SetChecked(bool checked)
 {
-    if(isEnabled() && ischecked_ != checked)
+    if(ischecked_ != checked)
     {
         ischecked_ = checked;
         updateSection(0);
@@ -47,7 +47,7 @@ void CheckHeader::paintSection(QPainter *painter, const QRect &rect,
 
 void CheckHeader::mousePressEvent(QMouseEvent *e)
 {
-    if(isEnabled() && logicalIndexAt(e->pos()) == 0)
+    if(ischecked_enabled && isEnabled() && logicalIndexAt(e->pos()) == 0)
     {
         ischecked_= !ischecked_;
         updateSection(0);

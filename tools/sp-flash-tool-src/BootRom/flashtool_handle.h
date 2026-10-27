@@ -1611,6 +1611,10 @@ typedef struct ROM_INFO {
     unsigned int            part_id;
 
     U64                     partition_size;
+
+	// for two partition share flash size, such as userdata + mrdump
+	// allow userdata size change when download only /firmwareupgrade
+	_BOOL                   combo_partsize_check;
 } ROM_INFO;
 
 typedef struct {
@@ -1623,6 +1627,7 @@ typedef struct {
     U32  blockSize;
 	bool modem_check;
 	char modem[8];
+	bool skip_pmt_operate;
 }SCATTER_Head_Info;
 
 typedef struct {

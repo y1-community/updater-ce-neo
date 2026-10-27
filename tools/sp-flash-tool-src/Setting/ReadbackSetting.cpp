@@ -19,6 +19,7 @@ namespace APCore
 
 ReadbackSetting::ReadbackSetting()
     : m_IsphysicalReadback(false),
+      m_is_sram_rb(false),
       cb_readback_init_(NULL),
       cb_readback_progress_(NULL)
 {
@@ -30,6 +31,7 @@ QSharedPointer<APCore::ICommand> ReadbackSetting::CreateCommand(APKey key)
     QSharedPointer<APCore::ReadbackCommand> cmd(new APCore::ReadbackCommand(key));
     cmd->readback_arg().set_storage_type(storage_type_);
     cmd->set_is_scatter_ver2(m_is_scatter_ver2);
+    cmd->set_is_sram_rb(m_is_sram_rb);
 
     APCore::RBHandle *rb_handle = GET_RB_HANDLE(key);
     cmd->readback_arg().set_rb_handle(rb_handle->handle_t());
@@ -109,8 +111,8 @@ void ReadbackSetting::LoadXML(const XML::Node &node)
 
                 U64 begin_addr;
                 sscanf(rb_node.GetAttribute("start-address").c_str(),"%llX",&begin_addr);
-                unsigned int len(0);
-                sscanf(rb_node.GetAttribute("readback-length").c_str(), "%X", &len);
+                U64 len(0);
+                sscanf(rb_node.GetAttribute("readback-length").c_str(), "%llX", &len);
 
                 NUTL_AddrTypeFlag_E addr_flag = NUTL_ADDR_LOGICAL;
                 std::string ad_flag = rb_node.GetAttribute("addr-flag");

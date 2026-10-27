@@ -102,6 +102,46 @@ def relative_date(dt, now=None):
         return tr('donate_when_year')
 
 
+def format_donation_when(dt, now=None) -> str:
+    """Return a natural phrasing for the donation date: 'last year', 'in August', 'last month', etc."""
+    from .i18n import tr
+
+    if not dt:
+        return ""
+    now = now or datetime.now()
+    today = now.date()
+    dt_date = dt.date() if hasattr(dt, "date") else dt
+    delta = today - dt_date
+    days = delta.days
+
+    if days == 0:
+        return tr("donate_when_today").lower()
+    elif days == 1:
+        return tr("donate_when_yesterday").lower()
+    elif days < 7:
+        return tr("donate_when_days").format(count=days)
+    elif days < 14:
+        return tr("donate_when_week")
+
+    # Check last month
+    if dt.year == now.year and dt.month == now.month - 1:
+        return tr("donate_when_last_month")
+    elif dt.year == now.year - 1 and now.month == 1 and dt.month == 12:
+        return tr("donate_when_last_month")
+
+    # Check in same year
+    if dt.year == now.year:
+        month_name = tr(f"month_{dt.month:02d}")
+        return tr("donate_when_in_month").format(month=month_name)
+
+    # Check last year
+    if dt.year == now.year - 1:
+        return tr("donate_when_last_year")
+
+    # Earlier year
+    return tr("donate_when_in_year").format(year=dt.year)
+
+
 def load_donors_file(paths):
     """Read the first existing non-empty donors.csv among ``paths``."""
     for p in paths:

@@ -1,0 +1,1219 @@
+  0           0 RESUME                   0
+
+  1           2 LOAD_CONST               0 ('\n自定义组件：步骤条、状态标签、信息行等可复用 widget。\n')
+              4 STORE_NAME               0 (__doc__)
+
+  4           6 LOAD_CONST               1 (0)
+              8 LOAD_CONST               2 (('QWidget', 'QHBoxLayout', 'QVBoxLayout', 'QLabel', 'QFrame'))
+             10 IMPORT_NAME              1 (PySide6.QtWidgets)
+             12 IMPORT_FROM              2 (QWidget)
+             14 STORE_NAME               2 (QWidget)
+             16 IMPORT_FROM              3 (QHBoxLayout)
+             18 STORE_NAME               3 (QHBoxLayout)
+             20 IMPORT_FROM              4 (QVBoxLayout)
+             22 STORE_NAME               4 (QVBoxLayout)
+             24 IMPORT_FROM              5 (QLabel)
+             26 STORE_NAME               5 (QLabel)
+             28 IMPORT_FROM              6 (QFrame)
+             30 STORE_NAME               6 (QFrame)
+             32 POP_TOP
+
+  7          34 LOAD_CONST               1 (0)
+             36 LOAD_CONST               3 (('Qt',))
+             38 IMPORT_NAME              7 (PySide6.QtCore)
+             40 IMPORT_FROM              8 (Qt)
+             42 STORE_NAME               8 (Qt)
+             44 POP_TOP
+
+  8          46 LOAD_CONST               4 (2)
+             48 LOAD_CONST               5 (('t', 'translator'))
+             50 IMPORT_NAME              9 (i18n)
+             52 IMPORT_FROM             10 (t)
+             54 STORE_NAME              10 (t)
+             56 IMPORT_FROM             11 (translator)
+             58 STORE_NAME              11 (translator)
+             60 POP_TOP
+
+ 11          62 PUSH_NULL
+             64 LOAD_BUILD_CLASS
+             66 LOAD_CONST               6 (<code object StatusTag at 0x000001B35E9F58A0, file "app\ui\widgets.py", line 11>)
+             68 MAKE_FUNCTION            0
+             70 LOAD_CONST               7 ('StatusTag')
+             72 LOAD_NAME                5 (QLabel)
+             74 PRECALL                  3
+             78 CALL                     3
+             88 STORE_NAME              12 (StatusTag)
+
+ 44          90 PUSH_NULL
+             92 LOAD_BUILD_CLASS
+             94 LOAD_CONST               8 (<code object StepIndicator at 0x000001B35E985A50, file "app\ui\widgets.py", line 44>)
+             96 MAKE_FUNCTION            0
+             98 LOAD_CONST               9 ('StepIndicator')
+            100 LOAD_NAME                2 (QWidget)
+            102 PRECALL                  3
+            106 CALL                     3
+            116 STORE_NAME              13 (StepIndicator)
+
+125         118 PUSH_NULL
+            120 LOAD_BUILD_CLASS
+            122 LOAD_CONST              10 (<code object InfoRow at 0x000001B35E9F5680, file "app\ui\widgets.py", line 125>)
+            124 MAKE_FUNCTION            0
+            126 LOAD_CONST              11 ('InfoRow')
+            128 LOAD_NAME                2 (QWidget)
+            130 PRECALL                  3
+            134 CALL                     3
+            144 STORE_NAME              14 (InfoRow)
+
+163         146 PUSH_NULL
+            148 LOAD_BUILD_CLASS
+            150 LOAD_CONST              12 (<code object Card at 0x000001B35E97B960, file "app\ui\widgets.py", line 163>)
+            152 MAKE_FUNCTION            0
+            154 LOAD_CONST              13 ('Card')
+            156 LOAD_NAME                6 (QFrame)
+            158 PRECALL                  3
+            162 CALL                     3
+            172 STORE_NAME              15 (Card)
+
+186         174 PUSH_NULL
+            176 LOAD_BUILD_CLASS
+            178 LOAD_CONST              14 (<code object Banner at 0x000001B35E91BE30, file "app\ui\widgets.py", line 186>)
+            180 MAKE_FUNCTION            0
+            182 LOAD_CONST              15 ('Banner')
+            184 LOAD_NAME                5 (QLabel)
+            186 PRECALL                  3
+            190 CALL                     3
+            200 STORE_NAME              16 (Banner)
+            202 LOAD_CONST              16 (None)
+            204 RETURN_VALUE
+
+Disassembly of <code object StatusTag at 0x000001B35E9F58A0, file "app\ui\widgets.py", line 11>:
+              0 MAKE_CELL                0 (__class__)
+
+ 11           2 RESUME                   0
+              4 LOAD_NAME                0 (__name__)
+              6 STORE_NAME               1 (__module__)
+              8 LOAD_CONST               0 ('StatusTag')
+             10 STORE_NAME               2 (__qualname__)
+
+ 12          12 LOAD_CONST               1 ('状态标签 - 小圆角彩色标签')
+             14 STORE_NAME               3 (__doc__)
+
+ 15          16 LOAD_CONST               2 (('background:#FFF9DB; color:#E67700; border:1px solid #FFE066;', 'status_idle'))
+
+ 16          18 LOAD_CONST               3 (('background:#D3F9D8; color:#2B8A3E; border:1px solid #8CE99A;', 'status_connected'))
+
+ 17          20 LOAD_CONST               4 (('background:#FFE3E3; color:#C92A2A; border:1px solid #FFA8A8;', 'status_disconnected'))
+
+ 18          22 LOAD_CONST               5 (('background:#D0EBFF; color:#1971C2; border:1px solid #74C0FC;', 'status_flashing'))
+
+ 19          24 LOAD_CONST               6 (('background:#D3F9D8; color:#2B8A3E; border:1px solid #8CE99A;', 'status_complete'))
+
+ 20          26 LOAD_CONST               7 (('background:#FFE3E3; color:#C92A2A; border:1px solid #FFA8A8;', 'status_failed'))
+
+ 21          28 LOAD_CONST               8 (('background:#FFE3E3; color:#C92A2A; border:1px solid #FFA8A8;', 'status_usb_disconnected'))
+
+ 22          30 LOAD_CONST               9 (('background:#D3F9D8; color:#2B8A3E; border:1px solid #8CE99A;', 'status_selected'))
+
+ 23          32 LOAD_CONST              10 (('background:#FFE3E3; color:#C92A2A; border:1px solid #FFA8A8;', 'status_not_selected'))
+
+ 24          34 LOAD_CONST              11 (('background:#D0EBFF; color:#1971C2; border:1px solid #74C0FC;', 'status_retrying'))
+
+ 14          36 LOAD_CONST              12 (('idle', 'connected', 'disconnected', 'flashing', 'complete', 'failed', 'usb_disconnected', 'selected', 'not_selected', 'retrying'))
+             38 BUILD_CONST_KEY_MAP     10
+             40 STORE_NAME               4 (STYLE_MAP)
+
+ 27          42 LOAD_CONST              18 (('idle', None))
+             44 LOAD_CLOSURE             0 (__class__)
+             46 BUILD_TUPLE              1
+             48 LOAD_CONST              15 (<code object __init__ at 0x000001B35E7B72F0, file "app\ui\widgets.py", line 27>)
+             50 MAKE_FUNCTION            9 (defaults, closure)
+             52 STORE_NAME               5 (__init__)
+
+ 34          54 LOAD_CONST              16 ('status')
+             56 LOAD_NAME                6 (str)
+             58 BUILD_TUPLE              2
+             60 LOAD_CONST              17 (<code object set_status at 0x000001B35E7FFDF0, file "app\ui\widgets.py", line 34>)
+             62 MAKE_FUNCTION            4 (annotations)
+             64 STORE_NAME               7 (set_status)
+             66 LOAD_CLOSURE             0 (__class__)
+             68 COPY                     1
+             70 STORE_NAME               8 (__classcell__)
+             72 RETURN_VALUE
+
+Disassembly of <code object __init__ at 0x000001B35E7B72F0, file "app\ui\widgets.py", line 27>:
+              0 COPY_FREE_VARS           1
+              2 MAKE_CELL                0 (self)
+
+ 27           4 RESUME                   0
+
+ 28           6 LOAD_GLOBAL              1 (NULL + super)
+             18 PRECALL                  0
+             22 CALL                     0
+             32 LOAD_METHOD              1 (__init__)
+             54 LOAD_FAST                2 (parent)
+             56 PRECALL                  1
+             60 CALL                     1
+             70 POP_TOP
+
+ 29          72 LOAD_DEREF               0 (self)
+             74 LOAD_METHOD              2 (setAlignment)
+             96 LOAD_GLOBAL              6 (Qt)
+            108 LOAD_ATTR                4 (AlignmentFlag)
+            118 LOAD_ATTR                5 (AlignCenter)
+            128 PRECALL                  1
+            132 CALL                     1
+            142 POP_TOP
+
+ 30         144 LOAD_FAST                1 (status)
+            146 LOAD_DEREF               0 (self)
+            148 STORE_ATTR               6 (_status)
+
+ 31         158 LOAD_DEREF               0 (self)
+            160 LOAD_METHOD              7 (set_status)
+            182 LOAD_FAST                1 (status)
+            184 PRECALL                  1
+            188 CALL                     1
+            198 POP_TOP
+
+ 32         200 LOAD_GLOBAL             16 (translator)
+            212 LOAD_ATTR                9 (language_changed)
+            222 LOAD_METHOD             10 (connect)
+            244 LOAD_CLOSURE             0 (self)
+            246 BUILD_TUPLE              1
+            248 LOAD_CONST               1 (<code object <lambda> at 0x000001B35E97BD20, file "app\ui\widgets.py", line 32>)
+            250 MAKE_FUNCTION            8 (closure)
+            252 PRECALL                  1
+            256 CALL                     1
+            266 POP_TOP
+            268 LOAD_CONST               0 (None)
+            270 RETURN_VALUE
+
+Disassembly of <code object <lambda> at 0x000001B35E97BD20, file "app\ui\widgets.py", line 32>:
+              0 COPY_FREE_VARS           1
+
+ 32           2 RESUME                   0
+              4 LOAD_DEREF               0 (self)
+              6 LOAD_METHOD              0 (set_status)
+             28 LOAD_DEREF               0 (self)
+             30 LOAD_ATTR                1 (_status)
+             40 PRECALL                  1
+             44 CALL                     1
+             54 RETURN_VALUE
+
+Disassembly of <code object set_status at 0x000001B35E7FFDF0, file "app\ui\widgets.py", line 34>:
+ 34           0 RESUME                   0
+
+ 35           2 LOAD_FAST                1 (status)
+              4 LOAD_FAST                0 (self)
+              6 STORE_ATTR               0 (_status)
+
+ 36          16 LOAD_FAST                0 (self)
+             18 LOAD_ATTR                1 (STYLE_MAP)
+             28 LOAD_METHOD              2 (get)
+             50 LOAD_FAST                1 (status)
+             52 LOAD_FAST                0 (self)
+             54 LOAD_ATTR                1 (STYLE_MAP)
+             64 LOAD_CONST               1 ('idle')
+             66 BINARY_SUBSCR
+             76 PRECALL                  2
+             80 CALL                     2
+             90 UNPACK_SEQUENCE          2
+             94 STORE_FAST               2 (style)
+             96 STORE_FAST               3 (key)
+
+ 37          98 LOAD_FAST                0 (self)
+            100 LOAD_METHOD              3 (setText)
+            122 LOAD_GLOBAL              9 (NULL + t)
+            134 LOAD_FAST                3 (key)
+            136 PRECALL                  1
+            140 CALL                     1
+            150 PRECALL                  1
+            154 CALL                     1
+            164 POP_TOP
+
+ 38         166 LOAD_FAST                0 (self)
+            168 LOAD_METHOD              5 (setStyleSheet)
+
+ 39         190 LOAD_CONST               2 ('QLabel { ')
+            192 LOAD_FAST                2 (style)
+            194 FORMAT_VALUE             0
+            196 LOAD_CONST               3 (' padding:4px 12px; border-radius:4px; font-size:12px; font-weight:bold; }')
+            198 BUILD_STRING             3
+
+ 38         200 PRECALL                  1
+            204 CALL                     1
+            214 POP_TOP
+            216 LOAD_CONST               0 (None)
+            218 RETURN_VALUE
+
+Disassembly of <code object StepIndicator at 0x000001B35E985A50, file "app\ui\widgets.py", line 44>:
+              0 MAKE_CELL                0 (__class__)
+
+ 44           2 RESUME                   0
+              4 LOAD_NAME                0 (__name__)
+              6 STORE_NAME               1 (__module__)
+              8 LOAD_CONST               0 ('StepIndicator')
+             10 STORE_NAME               2 (__qualname__)
+
+ 45          12 LOAD_CONST               1 ('\n    步骤条：设备识别 → 擦除旧分区 → 写入镜像 → 完成\n    ')
+             14 STORE_NAME               3 (__doc__)
+
+ 49          16 BUILD_LIST               0
+             18 LOAD_CONST               2 (('step_detect', 'step_erase', 'step_write', 'step_done'))
+             20 LIST_EXTEND              1
+             22 STORE_NAME               4 (STEP_KEYS)
+
+ 52          24 LOAD_CONST               3 ('QLabel { background:#D3F9D8; color:#2B8A3E; border:1px solid #8CE99A; padding:4px 12px; border-radius:12px; font-size:12px; }')
+
+ 54          26 LOAD_CONST               4 ('QLabel { background:#D0EBFF; color:#1971C2; border:1px solid #74C0FC; padding:4px 12px; border-radius:12px; font-size:12px; }')
+
+ 56          28 LOAD_CONST               5 ('QLabel { background:#F1F3F5; color:#868E96; border:1px solid #DEE2E6; padding:4px 12px; border-radius:12px; font-size:12px; }')
+
+ 51          30 LOAD_CONST               6 (('done', 'active', 'pending'))
+             32 BUILD_CONST_KEY_MAP      3
+             34 STORE_NAME               5 (STEP_STYLES)
+
+ 60          36 LOAD_CONST              17 ((None,))
+             38 LOAD_CLOSURE             0 (__class__)
+             40 BUILD_TUPLE              1
+             42 LOAD_CONST               8 (<code object __init__ at 0x000001B3605F81F0, file "app\ui\widgets.py", line 60>)
+             44 MAKE_FUNCTION            9 (defaults, closure)
+             46 STORE_NAME               6 (__init__)
+
+ 68          48 LOAD_CONST               9 (<code object _build_ui at 0x000001B35E669030, file "app\ui\widgets.py", line 68>)
+             50 MAKE_FUNCTION            0
+             52 STORE_NAME               7 (_build_ui)
+
+ 86          54 LOAD_CONST              10 ('index')
+             56 LOAD_NAME                8 (int)
+             58 BUILD_TUPLE              2
+             60 LOAD_CONST              11 (<code object set_active_step at 0x000001B35E41A0C0, file "app\ui\widgets.py", line 86>)
+             62 MAKE_FUNCTION            4 (annotations)
+             64 STORE_NAME               9 (set_active_step)
+
+ 97          66 LOAD_CONST              12 ('step_name')
+             68 LOAD_NAME               10 (str)
+             70 BUILD_TUPLE              2
+             72 LOAD_CONST              13 (<code object set_step_by_name at 0x000001B3605F83B0, file "app\ui\widgets.py", line 97>)
+             74 MAKE_FUNCTION            4 (annotations)
+             76 STORE_NAME              11 (set_step_by_name)
+
+113          78 LOAD_NAME               12 (staticmethod)
+
+114          80 LOAD_CONST              14 ('lbl')
+             82 LOAD_NAME               13 (QLabel)
+             84 BUILD_TUPLE              2
+             86 LOAD_CONST              15 (<code object _fit_label at 0x000001B35E971BB0, file "app\ui\widgets.py", line 113>)
+             88 MAKE_FUNCTION            4 (annotations)
+
+113          90 PRECALL                  0
+             94 CALL                     0
+
+114         104 STORE_NAME              14 (_fit_label)
+
+119         106 LOAD_CONST              16 (<code object _retranslate at 0x000001B35E8B28B0, file "app\ui\widgets.py", line 119>)
+            108 MAKE_FUNCTION            0
+            110 STORE_NAME              15 (_retranslate)
+            112 LOAD_CLOSURE             0 (__class__)
+            114 COPY                     1
+            116 STORE_NAME              16 (__classcell__)
+            118 RETURN_VALUE
+
+Disassembly of <code object __init__ at 0x000001B3605F81F0, file "app\ui\widgets.py", line 60>:
+              0 COPY_FREE_VARS           1
+
+ 60           2 RESUME                   0
+
+ 61           4 LOAD_GLOBAL              1 (NULL + super)
+             16 PRECALL                  0
+             20 CALL                     0
+             30 LOAD_METHOD              1 (__init__)
+             52 LOAD_FAST                1 (parent)
+             54 PRECALL                  1
+             58 CALL                     1
+             68 POP_TOP
+
+ 62          70 BUILD_LIST               0
+             72 LOAD_FAST                0 (self)
+             74 STORE_ATTR               2 (_labels)
+
+ 63          84 LOAD_CONST               1 (0)
+             86 LOAD_FAST                0 (self)
+             88 STORE_ATTR               3 (_active_index)
+
+ 64          98 LOAD_FAST                0 (self)
+            100 LOAD_METHOD              4 (_build_ui)
+            122 PRECALL                  0
+            126 CALL                     0
+            136 POP_TOP
+
+ 65         138 LOAD_FAST                0 (self)
+            140 LOAD_METHOD              5 (set_active_step)
+            162 LOAD_CONST               1 (0)
+            164 PRECALL                  1
+            168 CALL                     1
+            178 POP_TOP
+
+ 66         180 LOAD_GLOBAL             12 (translator)
+            192 LOAD_ATTR                7 (language_changed)
+            202 LOAD_METHOD              8 (connect)
+            224 LOAD_FAST                0 (self)
+            226 LOAD_ATTR                9 (_retranslate)
+            236 PRECALL                  1
+            240 CALL                     1
+            250 POP_TOP
+            252 LOAD_CONST               0 (None)
+            254 RETURN_VALUE
+
+Disassembly of <code object _build_ui at 0x000001B35E669030, file "app\ui\widgets.py", line 68>:
+ 68           0 RESUME                   0
+
+ 69           2 LOAD_GLOBAL              1 (NULL + QHBoxLayout)
+             14 LOAD_FAST                0 (self)
+             16 PRECALL                  1
+             20 CALL                     1
+             30 STORE_FAST               1 (layout)
+
+ 70          32 LOAD_FAST                1 (layout)
+             34 LOAD_METHOD              1 (setContentsMargins)
+             56 LOAD_CONST               1 (0)
+             58 LOAD_CONST               1 (0)
+             60 LOAD_CONST               1 (0)
+             62 LOAD_CONST               1 (0)
+             64 PRECALL                  4
+             68 CALL                     4
+             78 POP_TOP
+
+ 71          80 LOAD_FAST                1 (layout)
+             82 LOAD_METHOD              2 (setSpacing)
+            104 LOAD_CONST               2 (4)
+            106 PRECALL                  1
+            110 CALL                     1
+            120 POP_TOP
+
+ 73         122 LOAD_GLOBAL              7 (NULL + enumerate)
+            134 LOAD_FAST                0 (self)
+            136 LOAD_ATTR                4 (STEP_KEYS)
+            146 PRECALL                  1
+            150 CALL                     1
+            160 GET_ITER
+        >>  162 EXTENDED_ARG             1
+            164 FOR_ITER               258 (to 682)
+            166 UNPACK_SEQUENCE          2
+            170 STORE_FAST               2 (i)
+            172 STORE_FAST               3 (key)
+
+ 74         174 LOAD_GLOBAL             11 (NULL + QLabel)
+            186 LOAD_GLOBAL             13 (NULL + t)
+            198 LOAD_FAST                3 (key)
+            200 PRECALL                  1
+            204 CALL                     1
+            214 PRECALL                  1
+            218 CALL                     1
+            228 STORE_FAST               4 (lbl)
+
+ 75         230 LOAD_FAST                4 (lbl)
+            232 LOAD_METHOD              7 (setAlignment)
+            254 LOAD_GLOBAL             16 (Qt)
+            266 LOAD_ATTR                9 (AlignmentFlag)
+            276 LOAD_ATTR               10 (AlignCenter)
+            286 PRECALL                  1
+            290 CALL                     1
+            300 POP_TOP
+
+ 76         302 LOAD_FAST                0 (self)
+            304 LOAD_ATTR               11 (_labels)
+            314 LOAD_METHOD             12 (append)
+            336 LOAD_FAST                4 (lbl)
+            338 PRECALL                  1
+            342 CALL                     1
+            352 POP_TOP
+
+ 77         354 LOAD_FAST                1 (layout)
+            356 LOAD_METHOD             13 (addWidget)
+            378 LOAD_FAST                4 (lbl)
+            380 PRECALL                  1
+            384 CALL                     1
+            394 POP_TOP
+
+ 79         396 LOAD_FAST                2 (i)
+            398 LOAD_GLOBAL             29 (NULL + len)
+            410 LOAD_FAST                0 (self)
+            412 LOAD_ATTR                4 (STEP_KEYS)
+            422 PRECALL                  1
+            426 CALL                     1
+            436 LOAD_CONST               3 (1)
+            438 BINARY_OP               10 (-)
+            442 COMPARE_OP               0 (<)
+            448 POP_JUMP_FORWARD_IF_FALSE   114 (to 678)
+
+ 80         450 LOAD_GLOBAL             11 (NULL + QLabel)
+            462 LOAD_CONST               4 ('›')
+            464 PRECALL                  1
+            468 CALL                     1
+            478 STORE_FAST               5 (line)
+
+ 81         480 LOAD_FAST                5 (line)
+            482 LOAD_METHOD              7 (setAlignment)
+            504 LOAD_GLOBAL             16 (Qt)
+            516 LOAD_ATTR                9 (AlignmentFlag)
+            526 LOAD_ATTR               10 (AlignCenter)
+            536 PRECALL                  1
+            540 CALL                     1
+            550 POP_TOP
+
+ 82         552 LOAD_FAST                5 (line)
+            554 LOAD_METHOD             15 (setStyleSheet)
+            576 LOAD_CONST               5 ('QLabel { color: #CED4DA; font-size: 14px; background: transparent; border: none; }')
+            578 PRECALL                  1
+            582 CALL                     1
+            592 POP_TOP
+
+ 83         594 LOAD_FAST                5 (line)
+            596 LOAD_METHOD             16 (setFixedWidth)
+            618 LOAD_CONST               6 (14)
+            620 PRECALL                  1
+            624 CALL                     1
+            634 POP_TOP
+
+ 84         636 LOAD_FAST                1 (layout)
+            638 LOAD_METHOD             13 (addWidget)
+            660 LOAD_FAST                5 (line)
+            662 PRECALL                  1
+            666 CALL                     1
+            676 POP_TOP
+        >>  678 EXTENDED_ARG             1
+            680 JUMP_BACKWARD          260 (to 162)
+
+ 73     >>  682 LOAD_CONST               0 (None)
+            684 RETURN_VALUE
+
+Disassembly of <code object set_active_step at 0x000001B35E41A0C0, file "app\ui\widgets.py", line 86>:
+ 86           0 RESUME                   0
+
+ 87           2 LOAD_FAST                1 (index)
+              4 LOAD_FAST                0 (self)
+              6 STORE_ATTR               0 (_active_index)
+
+ 88          16 LOAD_GLOBAL              3 (NULL + enumerate)
+             28 LOAD_FAST                0 (self)
+             30 LOAD_ATTR                2 (_labels)
+             40 PRECALL                  1
+             44 CALL                     1
+             54 GET_ITER
+        >>   56 FOR_ITER               136 (to 330)
+             58 UNPACK_SEQUENCE          2
+             62 STORE_FAST               2 (i)
+             64 STORE_FAST               3 (lbl)
+
+ 89          66 LOAD_FAST                2 (i)
+             68 LOAD_FAST                1 (index)
+             70 COMPARE_OP               0 (<)
+             76 POP_JUMP_FORWARD_IF_FALSE    33 (to 144)
+
+ 90          78 LOAD_FAST                3 (lbl)
+             80 LOAD_METHOD              3 (setStyleSheet)
+            102 LOAD_FAST                0 (self)
+            104 LOAD_ATTR                4 (STEP_STYLES)
+            114 LOAD_CONST               1 ('done')
+            116 BINARY_SUBSCR
+            126 PRECALL                  1
+            130 CALL                     1
+            140 POP_TOP
+            142 JUMP_FORWARD            71 (to 286)
+
+ 91     >>  144 LOAD_FAST                2 (i)
+            146 LOAD_FAST                1 (index)
+            148 COMPARE_OP               2 (==)
+            154 POP_JUMP_FORWARD_IF_FALSE    33 (to 222)
+
+ 92         156 LOAD_FAST                3 (lbl)
+            158 LOAD_METHOD              3 (setStyleSheet)
+            180 LOAD_FAST                0 (self)
+            182 LOAD_ATTR                4 (STEP_STYLES)
+            192 LOAD_CONST               2 ('active')
+            194 BINARY_SUBSCR
+            204 PRECALL                  1
+            208 CALL                     1
+            218 POP_TOP
+            220 JUMP_FORWARD            32 (to 286)
+
+ 94     >>  222 LOAD_FAST                3 (lbl)
+            224 LOAD_METHOD              3 (setStyleSheet)
+            246 LOAD_FAST                0 (self)
+            248 LOAD_ATTR                4 (STEP_STYLES)
+            258 LOAD_CONST               3 ('pending')
+            260 BINARY_SUBSCR
+            270 PRECALL                  1
+            274 CALL                     1
+            284 POP_TOP
+
+ 95     >>  286 LOAD_FAST                0 (self)
+            288 LOAD_METHOD              5 (_fit_label)
+            310 LOAD_FAST                3 (lbl)
+            312 PRECALL                  1
+            316 CALL                     1
+            326 POP_TOP
+            328 JUMP_BACKWARD          137 (to 56)
+
+ 88     >>  330 LOAD_CONST               0 (None)
+            332 RETURN_VALUE
+
+Disassembly of <code object set_step_by_name at 0x000001B3605F83B0, file "app\ui\widgets.py", line 97>:
+ 97           0 RESUME                   0
+
+ 99           2 LOAD_CONST               1 (2)
+              4 LOAD_CONST               2 (('TRANSLATIONS',))
+              6 IMPORT_NAME              0 (i18n)
+              8 IMPORT_FROM              1 (TRANSLATIONS)
+             10 STORE_FAST               2 (TRANSLATIONS)
+             12 POP_TOP
+
+101          14 LOAD_CONST               3 (0)
+             16 LOAD_CONST               3 (0)
+             18 LOAD_CONST               3 (0)
+
+102          20 LOAD_CONST               1 (2)
+
+103          22 LOAD_CONST               4 (3)
+
+100          24 LOAD_CONST               5 (('svc_DETECT', 'svc_DOWNLOAD_DA', 'svc_DOWNLOAD_BL', 'svc_WRITE', 'svc_DONE'))
+             26 BUILD_CONST_KEY_MAP      5
+             28 STORE_FAST               3 (step_key_map)
+
+105          30 LOAD_FAST                3 (step_key_map)
+             32 LOAD_METHOD              2 (items)
+             54 PRECALL                  0
+             58 CALL                     0
+             68 GET_ITER
+        >>   70 FOR_ITER                73 (to 218)
+             72 UNPACK_SEQUENCE          2
+             76 STORE_FAST               4 (svc_key)
+             78 STORE_FAST               5 (idx)
+
+106          80 LOAD_FAST                2 (TRANSLATIONS)
+             82 LOAD_METHOD              3 (get)
+            104 LOAD_FAST                4 (svc_key)
+            106 BUILD_MAP                0
+            108 PRECALL                  2
+            112 CALL                     2
+            122 STORE_FAST               6 (entry)
+
+107         124 LOAD_FAST                1 (step_name)
+            126 LOAD_FAST                6 (entry)
+            128 LOAD_METHOD              4 (values)
+            150 PRECALL                  0
+            154 CALL                     0
+            164 CONTAINS_OP              0
+            166 POP_JUMP_FORWARD_IF_FALSE    24 (to 216)
+
+108         168 LOAD_FAST                0 (self)
+            170 LOAD_METHOD              5 (set_active_step)
+            192 LOAD_FAST                5 (idx)
+            194 PRECALL                  1
+            198 CALL                     1
+            208 POP_TOP
+
+109         210 POP_TOP
+            212 LOAD_CONST               0 (None)
+            214 RETURN_VALUE
+
+107     >>  216 JUMP_BACKWARD           74 (to 70)
+
+111     >>  218 LOAD_FAST                0 (self)
+            220 LOAD_METHOD              5 (set_active_step)
+            242 LOAD_CONST               3 (0)
+            244 PRECALL                  1
+            248 CALL                     1
+            258 POP_TOP
+            260 LOAD_CONST               0 (None)
+            262 RETURN_VALUE
+
+Disassembly of <code object _fit_label at 0x000001B35E971BB0, file "app\ui\widgets.py", line 113>:
+113           0 RESUME                   0
+
+116           2 LOAD_FAST                0 (lbl)
+              4 LOAD_METHOD              0 (fontMetrics)
+             26 PRECALL                  0
+             30 CALL                     0
+             40 LOAD_METHOD              1 (horizontalAdvance)
+             62 LOAD_FAST                0 (lbl)
+             64 LOAD_METHOD              2 (text)
+             86 PRECALL                  0
+             90 CALL                     0
+            100 PRECALL                  1
+            104 CALL                     1
+            114 STORE_FAST               1 (tw)
+
+117         116 LOAD_FAST                0 (lbl)
+            118 LOAD_METHOD              3 (setMinimumWidth)
+            140 LOAD_FAST                1 (tw)
+            142 LOAD_CONST               1 (28)
+            144 BINARY_OP                0 (+)
+            148 PRECALL                  1
+            152 CALL                     1
+            162 POP_TOP
+            164 LOAD_CONST               2 (None)
+            166 RETURN_VALUE
+
+Disassembly of <code object _retranslate at 0x000001B35E8B28B0, file "app\ui\widgets.py", line 119>:
+119           0 RESUME                   0
+
+120           2 LOAD_GLOBAL              1 (NULL + enumerate)
+             14 LOAD_FAST                0 (self)
+             16 LOAD_ATTR                1 (STEP_KEYS)
+             26 PRECALL                  1
+             30 CALL                     1
+             40 GET_ITER
+        >>   42 FOR_ITER                50 (to 144)
+             44 UNPACK_SEQUENCE          2
+             48 STORE_FAST               1 (i)
+             50 STORE_FAST               2 (key)
+
+121          52 LOAD_FAST                0 (self)
+             54 LOAD_ATTR                2 (_labels)
+             64 LOAD_FAST                1 (i)
+             66 BINARY_SUBSCR
+             76 LOAD_METHOD              3 (setText)
+             98 LOAD_GLOBAL              9 (NULL + t)
+            110 LOAD_FAST                2 (key)
+            112 PRECALL                  1
+            116 CALL                     1
+            126 PRECALL                  1
+            130 CALL                     1
+            140 POP_TOP
+            142 JUMP_BACKWARD           51 (to 42)
+
+122     >>  144 LOAD_FAST                0 (self)
+            146 LOAD_METHOD              5 (set_active_step)
+            168 LOAD_FAST                0 (self)
+            170 LOAD_ATTR                6 (_active_index)
+            180 PRECALL                  1
+            184 CALL                     1
+            194 POP_TOP
+            196 LOAD_CONST               0 (None)
+            198 RETURN_VALUE
+
+Disassembly of <code object InfoRow at 0x000001B35E9F5680, file "app\ui\widgets.py", line 125>:
+              0 MAKE_CELL                0 (__class__)
+
+125           2 RESUME                   0
+              4 LOAD_NAME                0 (__name__)
+              6 STORE_NAME               1 (__module__)
+              8 LOAD_CONST               0 ('InfoRow')
+             10 STORE_NAME               2 (__qualname__)
+
+126          12 LOAD_CONST               1 ('信息行：标签 + 值')
+             14 STORE_NAME               3 (__doc__)
+
+128          16 LOAD_CONST              13 (('', None))
+             18 LOAD_CONST               4 ('label_key')
+             20 LOAD_NAME                4 (str)
+             22 LOAD_CONST               5 ('value')
+             24 LOAD_NAME                4 (str)
+             26 BUILD_TUPLE              4
+             28 LOAD_CLOSURE             0 (__class__)
+             30 BUILD_TUPLE              1
+             32 LOAD_CONST               6 (<code object __init__ at 0x000001B35E3718F0, file "app\ui\widgets.py", line 128>)
+             34 MAKE_FUNCTION           13 (defaults, annotations, closure)
+             36 STORE_NAME               5 (__init__)
+
+147          38 LOAD_CONST               7 (<code object _retranslate at 0x000001B35E8CF230, file "app\ui\widgets.py", line 147>)
+             40 MAKE_FUNCTION            0
+             42 STORE_NAME               6 (_retranslate)
+
+152          44 LOAD_CONST               8 ('key')
+             46 LOAD_NAME                4 (str)
+             48 BUILD_TUPLE              2
+             50 LOAD_CONST               9 (<code object set_label at 0x000001B35E91BB30, file "app\ui\widgets.py", line 152>)
+             52 MAKE_FUNCTION            4 (annotations)
+             54 STORE_NAME               7 (set_label)
+
+156          56 LOAD_CONST               5 ('value')
+             58 LOAD_NAME                4 (str)
+             60 BUILD_TUPLE              2
+             62 LOAD_CONST              10 (<code object set_value at 0x000001B35E91B830, file "app\ui\widgets.py", line 156>)
+             64 MAKE_FUNCTION            4 (annotations)
+             66 STORE_NAME               8 (set_value)
+
+159          68 LOAD_CONST              11 ('return')
+             70 LOAD_NAME                4 (str)
+             72 BUILD_TUPLE              2
+             74 LOAD_CONST              12 (<code object value at 0x000001B35E97BA50, file "app\ui\widgets.py", line 159>)
+             76 MAKE_FUNCTION            4 (annotations)
+             78 STORE_NAME               9 (value)
+             80 LOAD_CLOSURE             0 (__class__)
+             82 COPY                     1
+             84 STORE_NAME              10 (__classcell__)
+             86 RETURN_VALUE
+
+Disassembly of <code object __init__ at 0x000001B35E3718F0, file "app\ui\widgets.py", line 128>:
+              0 COPY_FREE_VARS           1
+
+128           2 RESUME                   0
+
+129           4 LOAD_GLOBAL              1 (NULL + super)
+             16 PRECALL                  0
+             20 CALL                     0
+             30 LOAD_METHOD              1 (__init__)
+             52 LOAD_FAST                3 (parent)
+             54 PRECALL                  1
+             58 CALL                     1
+             68 POP_TOP
+
+130          70 LOAD_FAST                1 (label_key)
+             72 LOAD_FAST                0 (self)
+             74 STORE_ATTR               2 (_label_key)
+
+131          84 LOAD_GLOBAL              7 (NULL + QHBoxLayout)
+             96 LOAD_FAST                0 (self)
+             98 PRECALL                  1
+            102 CALL                     1
+            112 STORE_FAST               4 (layout)
+
+132         114 LOAD_FAST                4 (layout)
+            116 LOAD_METHOD              4 (setContentsMargins)
+            138 LOAD_CONST               1 (0)
+            140 LOAD_CONST               2 (8)
+            142 LOAD_CONST               1 (0)
+            144 LOAD_CONST               2 (8)
+            146 PRECALL                  4
+            150 CALL                     4
+            160 POP_TOP
+
+134         162 LOAD_CONST               3 (2)
+            164 LOAD_CONST               4 (('TRANSLATIONS',))
+            166 IMPORT_NAME              5 (i18n)
+            168 IMPORT_FROM              6 (TRANSLATIONS)
+            170 STORE_FAST               5 (TRANSLATIONS)
+            172 POP_TOP
+
+135         174 LOAD_GLOBAL             15 (NULL + QLabel)
+            186 LOAD_FAST                1 (label_key)
+            188 LOAD_FAST                5 (TRANSLATIONS)
+            190 CONTAINS_OP              0
+            192 POP_JUMP_FORWARD_IF_FALSE    15 (to 224)
+            194 LOAD_GLOBAL             17 (NULL + t)
+            206 LOAD_FAST                1 (label_key)
+            208 PRECALL                  1
+            212 CALL                     1
+            222 JUMP_FORWARD             1 (to 226)
+        >>  224 LOAD_FAST                1 (label_key)
+        >>  226 PRECALL                  1
+            230 CALL                     1
+            240 LOAD_FAST                0 (self)
+            242 STORE_ATTR               9 (_label)
+
+136         252 LOAD_FAST                0 (self)
+            254 LOAD_ATTR                9 (_label)
+            264 LOAD_METHOD             10 (setStyleSheet)
+            286 LOAD_CONST               5 ('QLabel { color: #868E96; font-size: 13px; background: transparent; border: none; }')
+            288 PRECALL                  1
+            292 CALL                     1
+            302 POP_TOP
+
+137         304 LOAD_FAST                0 (self)
+            306 LOAD_ATTR                9 (_label)
+            316 LOAD_METHOD             11 (setMinimumWidth)
+            338 LOAD_CONST               6 (80)
+            340 PRECALL                  1
+            344 CALL                     1
+            354 POP_TOP
+
+139         356 LOAD_GLOBAL             15 (NULL + QLabel)
+            368 LOAD_FAST                2 (value)
+            370 PRECALL                  1
+            374 CALL                     1
+            384 LOAD_FAST                0 (self)
+            386 STORE_ATTR              12 (_value)
+
+140         396 LOAD_FAST                0 (self)
+            398 LOAD_ATTR               12 (_value)
+            408 LOAD_METHOD             10 (setStyleSheet)
+            430 LOAD_CONST               7 ('QLabel { color: #1A1A2E; font-size: 13px; font-weight: bold; background: transparent; border: none; }')
+            432 PRECALL                  1
+            436 CALL                     1
+            446 POP_TOP
+
+142         448 LOAD_FAST                4 (layout)
+            450 LOAD_METHOD             13 (addWidget)
+            472 LOAD_FAST                0 (self)
+            474 LOAD_ATTR                9 (_label)
+            484 PRECALL                  1
+            488 CALL                     1
+            498 POP_TOP
+
+143         500 LOAD_FAST                4 (layout)
+            502 LOAD_METHOD             13 (addWidget)
+            524 LOAD_FAST                0 (self)
+            526 LOAD_ATTR               12 (_value)
+            536 LOAD_CONST               8 (1)
+            538 PRECALL                  2
+            542 CALL                     2
+            552 POP_TOP
+
+145         554 LOAD_GLOBAL             28 (translator)
+            566 LOAD_ATTR               15 (language_changed)
+            576 LOAD_METHOD             16 (connect)
+            598 LOAD_FAST                0 (self)
+            600 LOAD_ATTR               17 (_retranslate)
+            610 PRECALL                  1
+            614 CALL                     1
+            624 POP_TOP
+            626 LOAD_CONST               0 (None)
+            628 RETURN_VALUE
+
+Disassembly of <code object _retranslate at 0x000001B35E8CF230, file "app\ui\widgets.py", line 147>:
+147           0 RESUME                   0
+
+148           2 LOAD_CONST               1 (2)
+              4 LOAD_CONST               2 (('TRANSLATIONS',))
+              6 IMPORT_NAME              0 (i18n)
+              8 IMPORT_FROM              1 (TRANSLATIONS)
+             10 STORE_FAST               1 (TRANSLATIONS)
+             12 POP_TOP
+
+149          14 LOAD_FAST                0 (self)
+             16 LOAD_ATTR                2 (_label_key)
+             26 LOAD_FAST                1 (TRANSLATIONS)
+             28 CONTAINS_OP              0
+             30 POP_JUMP_FORWARD_IF_FALSE    46 (to 124)
+
+150          32 LOAD_FAST                0 (self)
+             34 LOAD_ATTR                3 (_label)
+             44 LOAD_METHOD              4 (setText)
+             66 LOAD_GLOBAL             11 (NULL + t)
+             78 LOAD_FAST                0 (self)
+             80 LOAD_ATTR                2 (_label_key)
+             90 PRECALL                  1
+             94 CALL                     1
+            104 PRECALL                  1
+            108 CALL                     1
+            118 POP_TOP
+            120 LOAD_CONST               0 (None)
+            122 RETURN_VALUE
+
+149     >>  124 LOAD_CONST               0 (None)
+            126 RETURN_VALUE
+
+Disassembly of <code object set_label at 0x000001B35E91BB30, file "app\ui\widgets.py", line 152>:
+152           0 RESUME                   0
+
+153           2 LOAD_FAST                1 (key)
+              4 LOAD_FAST                0 (self)
+              6 STORE_ATTR               0 (_label_key)
+
+154          16 LOAD_FAST                0 (self)
+             18 LOAD_METHOD              1 (_retranslate)
+             40 PRECALL                  0
+             44 CALL                     0
+             54 POP_TOP
+             56 LOAD_CONST               0 (None)
+             58 RETURN_VALUE
+
+Disassembly of <code object set_value at 0x000001B35E91B830, file "app\ui\widgets.py", line 156>:
+156           0 RESUME                   0
+
+157           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_value)
+             14 LOAD_METHOD              1 (setText)
+             36 LOAD_FAST                1 (value)
+             38 PRECALL                  1
+             42 CALL                     1
+             52 POP_TOP
+             54 LOAD_CONST               0 (None)
+             56 RETURN_VALUE
+
+Disassembly of <code object value at 0x000001B35E97BA50, file "app\ui\widgets.py", line 159>:
+159           0 RESUME                   0
+
+160           2 LOAD_FAST                0 (self)
+              4 LOAD_ATTR                0 (_value)
+             14 LOAD_METHOD              1 (text)
+             36 PRECALL                  0
+             40 CALL                     0
+             50 RETURN_VALUE
+
+Disassembly of <code object Card at 0x000001B35E97B960, file "app\ui\widgets.py", line 163>:
+              0 MAKE_CELL                0 (__class__)
+
+163           2 RESUME                   0
+              4 LOAD_NAME                0 (__name__)
+              6 STORE_NAME               1 (__module__)
+              8 LOAD_CONST               0 ('Card')
+             10 STORE_NAME               2 (__qualname__)
+
+164          12 LOAD_CONST               1 ('卡片容器')
+             14 STORE_NAME               3 (__doc__)
+
+166          16 LOAD_CONST               6 ((None,))
+             18 LOAD_CLOSURE             0 (__class__)
+             20 BUILD_TUPLE              1
+             22 LOAD_CONST               3 (<code object __init__ at 0x000001B35E91D7D0, file "app\ui\widgets.py", line 166>)
+             24 MAKE_FUNCTION            9 (defaults, closure)
+             26 STORE_NAME               4 (__init__)
+
+172          28 LOAD_CONST               4 (<code object set_layout at 0x000001B35E97B870, file "app\ui\widgets.py", line 172>)
+             30 MAKE_FUNCTION            0
+             32 STORE_NAME               5 (set_layout)
+
+175          34 LOAD_CONST               5 (<code object paintEvent at 0x000001B35E6A6CE0, file "app\ui\widgets.py", line 175>)
+             36 MAKE_FUNCTION            0
+             38 STORE_NAME               6 (paintEvent)
+             40 LOAD_CLOSURE             0 (__class__)
+             42 COPY                     1
+             44 STORE_NAME               7 (__classcell__)
+             46 RETURN_VALUE
+
+Disassembly of <code object __init__ at 0x000001B35E91D7D0, file "app\ui\widgets.py", line 166>:
+              0 COPY_FREE_VARS           1
+
+166           2 RESUME                   0
+
+167           4 LOAD_GLOBAL              1 (NULL + super)
+             16 PRECALL                  0
+             20 CALL                     0
+             30 LOAD_METHOD              1 (__init__)
+             52 LOAD_FAST                1 (parent)
+             54 PRECALL                  1
+             58 CALL                     1
+             68 POP_TOP
+
+168          70 LOAD_FAST                0 (self)
+             72 LOAD_METHOD              2 (setObjectName)
+             94 LOAD_CONST               1 ('app_card')
+             96 PRECALL                  1
+            100 CALL                     1
+            110 POP_TOP
+
+169         112 LOAD_FAST                0 (self)
+            114 LOAD_METHOD              3 (setContentsMargins)
+            136 LOAD_CONST               2 (24)
+            138 LOAD_CONST               3 (20)
+            140 LOAD_CONST               2 (24)
+            142 LOAD_CONST               3 (20)
+            144 PRECALL                  4
+            148 CALL                     4
+            158 POP_TOP
+
+170         160 LOAD_FAST                0 (self)
+            162 LOAD_METHOD              4 (setFrameShape)
+            184 LOAD_GLOBAL             10 (QFrame)
+            196 LOAD_ATTR                6 (Shape)
+            206 LOAD_ATTR                7 (NoFrame)
+            216 PRECALL                  1
+            220 CALL                     1
+            230 POP_TOP
+            232 LOAD_CONST               0 (None)
+            234 RETURN_VALUE
+
+Disassembly of <code object set_layout at 0x000001B35E97B870, file "app\ui\widgets.py", line 172>:
+172           0 RESUME                   0
+
+173           2 LOAD_FAST                0 (self)
+              4 LOAD_METHOD              0 (setLayout)
+             26 LOAD_FAST                1 (layout)
+             28 PRECALL                  1
+             32 CALL                     1
+             42 POP_TOP
+             44 LOAD_CONST               0 (None)
+             46 RETURN_VALUE
+
+Disassembly of <code object paintEvent at 0x000001B35E6A6CE0, file "app\ui\widgets.py", line 175>:
+175           0 RESUME                   0
+
+176           2 LOAD_CONST               1 (0)
+              4 LOAD_CONST               2 (('QPainter', 'QColor', 'QPen', 'QBrush'))
+              6 IMPORT_NAME              0 (PySide6.QtGui)
+              8 IMPORT_FROM              1 (QPainter)
+             10 STORE_FAST               2 (QPainter)
+             12 IMPORT_FROM              2 (QColor)
+             14 STORE_FAST               3 (QColor)
+             16 IMPORT_FROM              3 (QPen)
+             18 STORE_FAST               4 (QPen)
+             20 IMPORT_FROM              4 (QBrush)
+             22 STORE_FAST               5 (QBrush)
+             24 POP_TOP
+
+177          26 PUSH_NULL
+             28 LOAD_FAST                2 (QPainter)
+             30 LOAD_FAST                0 (self)
+             32 PRECALL                  1
+             36 CALL                     1
+             46 STORE_FAST               6 (painter)
+
+178          48 LOAD_FAST                6 (painter)
+             50 LOAD_METHOD              5 (setRenderHint)
+             72 LOAD_FAST                2 (QPainter)
+             74 LOAD_ATTR                6 (RenderHint)
+             84 LOAD_ATTR                7 (Antialiasing)
+             94 PRECALL                  1
+             98 CALL                     1
+            108 POP_TOP
+
+179         110 LOAD_FAST                0 (self)
+            112 LOAD_METHOD              8 (rect)
+            134 PRECALL                  0
+            138 CALL                     0
+            148 LOAD_METHOD              9 (adjusted)
+            170 LOAD_CONST               3 (1)
+            172 LOAD_CONST               3 (1)
+            174 LOAD_CONST               4 (-1)
+            176 LOAD_CONST               4 (-1)
+            178 PRECALL                  4
+            182 CALL                     4
+            192 STORE_FAST               7 (rect)
+
+180         194 LOAD_FAST                6 (painter)
+            196 LOAD_METHOD             10 (setPen)
+            218 PUSH_NULL
+            220 LOAD_FAST                4 (QPen)
+            222 PUSH_NULL
+            224 LOAD_FAST                3 (QColor)
+            226 LOAD_CONST               5 ('#E8ECF2')
+            228 PRECALL                  1
+            232 CALL                     1
+            242 LOAD_CONST               3 (1)
+            244 PRECALL                  2
+            248 CALL                     2
+            258 PRECALL                  1
+            262 CALL                     1
+            272 POP_TOP
+
+181         274 LOAD_FAST                6 (painter)
+            276 LOAD_METHOD             11 (setBrush)
+            298 PUSH_NULL
+            300 LOAD_FAST                5 (QBrush)
+            302 PUSH_NULL
+            304 LOAD_FAST                3 (QColor)
+            306 LOAD_CONST               6 ('#FFFFFF')
+            308 PRECALL                  1
+            312 CALL                     1
+            322 PRECALL                  1
+            326 CALL                     1
+            336 PRECALL                  1
+            340 CALL                     1
+            350 POP_TOP
+
+182         352 LOAD_FAST                6 (painter)
+            354 LOAD_METHOD             12 (drawRoundedRect)
+            376 LOAD_FAST                7 (rect)
+            378 LOAD_CONST               7 (12)
+            380 LOAD_CONST               7 (12)
+            382 PRECALL                  3
+            386 CALL                     3
+            396 POP_TOP
+
+183         398 LOAD_FAST                6 (painter)
+            400 LOAD_METHOD             13 (end)
+            422 PRECALL                  0
+            426 CALL                     0
+            436 POP_TOP
+            438 LOAD_CONST               0 (None)
+            440 RETURN_VALUE
+
+Disassembly of <code object Banner at 0x000001B35E91BE30, file "app\ui\widgets.py", line 186>:
+              0 MAKE_CELL                0 (__class__)
+
+186           2 RESUME                   0
+              4 LOAD_NAME                0 (__name__)
+              6 STORE_NAME               1 (__module__)
+              8 LOAD_CONST               0 ('Banner')
+             10 STORE_NAME               2 (__qualname__)
+
+187          12 LOAD_CONST               1 ('提示横幅')
+             14 STORE_NAME               3 (__doc__)
+
+189          16 LOAD_CONST               9 (('', 'warning', None))
+             18 LOAD_CONST               5 ('text')
+             20 LOAD_NAME                4 (str)
+             22 LOAD_CONST               6 ('banner_type')
+             24 LOAD_NAME                4 (str)
+             26 BUILD_TUPLE              4
+             28 LOAD_CLOSURE             0 (__class__)
+             30 BUILD_TUPLE              1
+             32 LOAD_CONST               7 (<code object __init__ at 0x000001B35E971D10, file "app\ui\widgets.py", line 189>)
+             34 MAKE_FUNCTION           13 (defaults, annotations, closure)
+             36 STORE_NAME               5 (__init__)
+
+194          38 LOAD_CONST               6 ('banner_type')
+             40 LOAD_NAME                4 (str)
+             42 BUILD_TUPLE              2
+             44 LOAD_CONST               8 (<code object set_type at 0x000001B35E8CF370, file "app\ui\widgets.py", line 194>)
+             46 MAKE_FUNCTION            4 (annotations)
+             48 STORE_NAME               6 (set_type)
+             50 LOAD_CLOSURE             0 (__class__)
+             52 COPY                     1
+             54 STORE_NAME               7 (__classcell__)
+             56 RETURN_VALUE
+
+Disassembly of <code object __init__ at 0x000001B35E971D10, file "app\ui\widgets.py", line 189>:
+              0 COPY_FREE_VARS           1
+
+189           2 RESUME                   0
+
+190           4 LOAD_GLOBAL              1 (NULL + super)
+             16 PRECALL                  0
+             20 CALL                     0
+             30 LOAD_METHOD              1 (__init__)
+             52 LOAD_FAST                1 (text)
+             54 LOAD_FAST                3 (parent)
+             56 PRECALL                  2
+             60 CALL                     2
+             70 POP_TOP
+
+191          72 LOAD_FAST                0 (self)
+             74 LOAD_METHOD              2 (setWordWrap)
+             96 LOAD_CONST               1 (True)
+             98 PRECALL                  1
+            102 CALL                     1
+            112 POP_TOP
+
+192         114 LOAD_FAST                0 (self)
+            116 LOAD_METHOD              3 (set_type)
+            138 LOAD_FAST                2 (banner_type)
+            140 PRECALL                  1
+            144 CALL                     1
+            154 POP_TOP
+            156 LOAD_CONST               0 (None)
+            158 RETURN_VALUE
+
+Disassembly of <code object set_type at 0x000001B35E8CF370, file "app\ui\widgets.py", line 194>:
+194           0 RESUME                   0
+
+196           2 LOAD_CONST               1 ('background:#FFF9DB; border:1px solid #FFE066; color:#E67700;')
+
+197           4 LOAD_CONST               2 ('background:#FFE3E3; border:1px solid #FFA8A8; color:#C92A2A;')
+
+198           6 LOAD_CONST               3 ('background:#D3F9D8; border:1px solid #8CE99A; color:#2B8A3E;')
+
+199           8 LOAD_CONST               4 ('background:#D0EBFF; border:1px solid #74C0FC; color:#1971C2;')
+
+195          10 LOAD_CONST               5 (('warning', 'error', 'success', 'info'))
+             12 BUILD_CONST_KEY_MAP      4
+             14 STORE_FAST               2 (styles)
+
+201          16 LOAD_FAST                2 (styles)
+             18 LOAD_METHOD              0 (get)
+             40 LOAD_FAST                1 (banner_type)
+             42 LOAD_FAST                2 (styles)
+             44 LOAD_CONST               6 ('warning')
+             46 BINARY_SUBSCR
+             56 PRECALL                  2
+             60 CALL                     2
+             70 STORE_FAST               3 (base)
+
+202          72 LOAD_FAST                0 (self)
+             74 LOAD_METHOD              1 (setStyleSheet)
+
+203          96 LOAD_CONST               7 ('QLabel { ')
+             98 LOAD_FAST                3 (base)
+            100 FORMAT_VALUE             0
+            102 LOAD_CONST               8 (' border-radius:8px; padding:12px 20px; font-size:14px; }')
+            104 BUILD_STRING             3
+
+202         106 PRECALL                  1
+            110 CALL                     1
+            120 POP_TOP
+            122 LOAD_CONST               0 (None)
+            124 RETURN_VALUE

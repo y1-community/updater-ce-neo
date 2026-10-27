@@ -22,10 +22,9 @@ void ConnOb::OnBromConnected(const BOOT_RESULT &boot_result,
 
 void ConnOb::OnDAConnected(const DA_REPORT_T &da_report,
                            const std::string &friendly_name,
-                           const int usb_status,
-                           const FLASHTOOL_API_HANDLE_T FT_Handle)
+                           const int usb_status)
 {
-    control_->get_da_report(da_report, friendly_name, usb_status, FT_Handle);
+    control_->get_da_report(da_report, friendly_name, usb_status);
 }
 
 }

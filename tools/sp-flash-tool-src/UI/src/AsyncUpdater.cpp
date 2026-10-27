@@ -1,3 +1,10 @@
+#ifdef UNICODE
+#undef UNICODE
+// using ShellExecuteExA to startup and forward paramters for SP_Updater.exe program written by python.
+#include <windows.h>
+#define UNICODE
+#endif
+
 #include "AsyncUpdater.h"
 #include <QRunnable>
 #include <QThreadPool>
@@ -17,6 +24,7 @@
 #include "../../Utility/constString.h"
 #include "../../Host/Inc/RuntimeMemory.h"
 #include "../../Utility/Utils.h"
+#include "../../Logger/Log.h"
 
 #ifdef _WIN32
 #define STR_RELEASE_FOLDER  "Windows"
@@ -31,6 +39,8 @@
 #define Limitation_Bringup_SubKey   "Bringup"
 #define Limitation_Update_SubKey    "Update"
 #define Support_Platform_Key        "Support-Platforms"
+
+const static std::string g_update_using_tools[] = {"ReplaceBin.exe", "update.ini"};
 
 class CheckUpdateRunnable : public QRunnable
 {
@@ -91,6 +101,10 @@ void AsyncUpdater::parserUpdateInfo()
     ReleaseNote = settings.value("releaseNote").toString().toStdString();
 
     settings.endGroup();
+
+    settings.beginGroup("BRING UP");
+    CurrentVersion = settings.value("currentVersion", "").toString().toStdString();
+    settings.endGroup();
 }
 
 AsyncUpdater::AsyncUpdater(QObject *parent) :
@@ -114,24 +128,13 @@ void AsyncUpdater::AsyncUpdateTool()
 
 void AsyncUpdater::UpdateTool()
 {
-    std::string updater = ABS_PATH(UpdaterExe);
-
-    QString extPath = QString(updater.c_str());
-
-    QProcess process;
-
-    QObject::connect(&process, SIGNAL(error(QProcess::ProcessError)),
-                     this, SLOT(processError(QProcess::ProcessError)));
-
-    QStringList parameter;
-
-    std::string temp = newVersionPackage;
-
-    parameter << temp.c_str();
-
-    process.startDetached(extPath, parameter);
-
-    QApplication::exit(0);
+    if (UpdateToolsPreCheck())
+    {
+        DoUpdateTool();
+    }
+    else {
+        emit signal_update_failed(lack_of_update_files);
+    }
 }
 
 void AsyncUpdater::CheckAsyncNewVersion()
@@ -160,7 +163,8 @@ void AsyncUpdater::CheckUpdate()
 
     std::string latestVer = allVersions.back();
 
-    if(latestVer.compare(ToolInfo::VersionNum()) > 0)
+    bool bNeedUpdate = CurrentVersion.empty() ? latestVer.compare(ToolInfo::VersionNum()) > 0 : latestVer.compare(CurrentVersion) > 0;
+    if(bNeedUpdate)
     {
         std::list<std::string> files;
 
@@ -206,6 +210,90 @@ void AsyncUpdater::ConstructReleaseNotes(QtJson::JsonObject &jsonObject){
             releaseNotes += "   " + bug.toString() + "\n\n";
         }
     }
+}
+
+bool AsyncUpdater::UpdateToolsPreCheck() const
+{
+    bool update_pre_check_state = true;
+    for (unsigned int i = 0; i < sizeof(g_update_using_tools)/sizeof(g_update_using_tools[0]); ++i)
+    {
+        std::string tool_path = ABS_PATH(g_update_using_tools[i]);
+        if (!FileUtils::IsFileExist(tool_path))
+        {
+            update_pre_check_state = false;
+            break;
+        }
+    }
+    // check Updater.exe/SP_Updater.exe/SP_Updater_backup.exe using update.ini file
+    if (update_pre_check_state) {
+        std::string updater_tool = ABS_PATH(UpdaterExe + ".exe");
+        update_pre_check_state = FileUtils::IsFileExist(updater_tool);
+    }
+    return update_pre_check_state;
+}
+
+void AsyncUpdater::DoUpdateTool()
+{
+    std::string updater = ABS_PATH(UpdaterExe);
+
+    QString exePath = QString(updater.c_str());
+
+    QStringList parameter;
+
+    parameter << newVersionPackage.c_str();
+
+    bool bSuccess = false;
+    // QSysInfo::WV_6_1 means WV_WINDOWS7, Operating system version 6.1, corresponds to Windows 7 and Windows Server 2008 R2.
+    if (QSysInfo::windowsVersion() > QSysInfo::WV_6_1)
+    {
+        bSuccess = this->RunAsAdmin(exePath, parameter);
+    }
+    else
+    {
+        QProcess process;
+        QObject::connect(&process, SIGNAL(error(QProcess::ProcessError)),
+                         this, SLOT(processError(QProcess::ProcessError)));
+        bSuccess = process.startDetached(exePath, parameter);
+    }
+
+    if (bSuccess)
+    {
+        QApplication::exit(0);
+    }
+    else
+    {
+        emit signal_update_failed(start_update_exe_fail);
+    }
+}
+
+bool AsyncUpdater::RunAsAdmin(const QString &appName, const QStringList &paramterList) const
+{
+    QString paramters_arg;
+    for (int i = 0; i < paramterList.size(); ++i)
+    {
+        paramters_arg += QString("\"%1\"").arg(paramterList[i]);
+        if (i != paramterList.size() - 1) {
+            paramters_arg += " ";
+        }
+    }
+
+    paramters_arg = QDir::toNativeSeparators(paramters_arg);
+    LOG("paramter argument: %s", paramters_arg.toStdString().c_str());
+
+    SHELLEXECUTEINFO execinfo;
+    memset(&execinfo, 0, sizeof(execinfo));
+    execinfo.lpFile         = appName.toStdString().c_str();
+    execinfo.cbSize         = sizeof(execinfo);
+    execinfo.lpVerb         = TEXT("runas");
+    execinfo.fMask          = SEE_MASK_NO_CONSOLE;
+    execinfo.nShow          = SW_SHOWDEFAULT;
+    execinfo.lpParameters   = paramters_arg.toStdString().c_str();
+
+    BOOL bSuccess = ShellExecuteEx(&execinfo);
+    if (!bSuccess) {
+        LOG("ShellExecuteEx error code: %d", GetLastError());
+    }
+    return (bool)bSuccess;
 }
 
 void AsyncUpdater::ReadReleaseNotes(const std::string &path)

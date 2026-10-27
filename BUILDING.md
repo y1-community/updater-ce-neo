@@ -119,11 +119,23 @@ git clone https://github.com/y1-community/updater-ce-neo.git
 cd updater-ce-neo
 
 chmod +x build_appimage.sh
-./build_appimage.sh
+./build_appimage.sh                    # builds x86_64
+./build_appimage.sh --arch aarch64     # builds ARM64
 ```
 
 **Output** (both front ends — see section 5):
-- `dist/UpdaterCE-3.0-x86_64.AppImage` and `dist/MediaTekInstaller-3.0-x86_64.AppImage` (standalone portable AppImages with bundled SP Flash Tool and udev setup tools)
+- `dist/linux/InnioasisUpdater-2.5-x86_64.AppImage` (alias `UpdaterCE.appimage` / `UpdaterCE.AppImage`) and `dist/linux/MediaTekInstaller-2.5-x86_64.AppImage` (alias `MediaTek Installer.appimage`)
+- Standalone portable `.tar.gz` and `.zip` archives next to each AppImage
+- Bundled full stack:
+  - **Customized SP Flash Tool for Linux** (`tools/linux/SP_Flash_Tool_v5.1904_Linux`, built from `tools/sp-flash-tool-src` via `tools/build_linux_sp_flash.sh` against Ubuntu 16.04 glibc 2.23 baseline with self-contained Qt 4.8.7 runtime libraries)
+  - **In-process MTKClient** with bytecode precompilation and bundled `libusb-1.0`
+  - **Vendored ADB** on `PATH` for both `x86_64` and `aarch64` (`tools/adb`)
+  - **Automated udev rules & serial group setup** for all major Linux distributions
+
+To recompile our customized SP Flash Tool for Linux from source at any time:
+```bash
+./tools/build_linux_sp_flash.sh
+```
 
 ---
 
@@ -131,9 +143,10 @@ chmod +x build_appimage.sh
 
 | Platform | Default Backend | Alternate Backend | Bundled Payload |
 | :--- | :--- | :--- | :--- |
-| **macOS** | **MTKClient** | None (SP Flash Tool has no macOS build) | `vendor/mtkclient` + `libusb-1.0.dylib` + `MTK_AllInOne_DA_mt6590.bin` |
-| **Windows** | **SP Flash Tool** | **MTKClient** (unlocked via `M` key) | `tools/windows/SP_Flash_Tool_v5.1904_Win` |
-| **Linux** | **SP Flash Tool** | **MTKClient** | `tools/linux/SP_Flash_Tool_v5.1904_Linux` |
+| **macOS** | **MTKClient** | None (SP Flash Tool has no macOS build) | `vendor/mtkclient` + `libusb-1.0.dylib` + `MTK_AllInOne_DA_mt6590.bin` + `tools/adb` |
+| **Windows** | **SP Flash Tool** | **MTKClient** (unlocked via `M` key) | `tools/windows/SP_Flash_Tool_v5.1904_Win` + `tools/adb` |
+| **Linux (x86-64)** | **SP Flash Tool** | **MTKClient** | `tools/linux/SP_Flash_Tool_v5.1904_Linux` + `tools/adb` + `libusb-1.0` |
+| **Linux (ARM64)** | **MTKClient** | None (SP Flash Tool is x86-64 only) | Precompiled `mtkclient` + `tools/adb/linux-arm64` + `libusb-1.0` |
 
 ---
 

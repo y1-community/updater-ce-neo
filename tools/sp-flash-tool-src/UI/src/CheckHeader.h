@@ -17,6 +17,7 @@ public:
     explicit CheckHeader(Qt::Orientation orientation, QWidget *parent = 0);
     void SetChecked(bool checked);
     bool GetChecked(){return ischecked_;}
+    void SetCheckedEnabled(bool checkedEnabled) { ischecked_enabled = checkedEnabled; }
 
 protected:
     void paintSection(QPainter *painter, const QRect &rect, int logicalIndex) const;
@@ -26,6 +27,7 @@ private:
     QRect CheckBoxRect(const QRect &sourceRect)const;
 
     bool ischecked_;
+    bool ischecked_enabled;
 
 signals:
     void toggled(bool checked);
