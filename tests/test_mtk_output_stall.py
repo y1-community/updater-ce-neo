@@ -171,12 +171,14 @@ def test_mtk_usb_loss_handler_reports_loss_after_write_grace_expires():
     worker._device_loss_held_until = time.time() - 1.0
     window.service._flash_worker = worker
     window.sm.force_state(FlashState.S4_FLASHING)
-    disconnected = []
-    window._on_flash_disconnected = lambda: disconnected.append(True)
     try:
         window._on_device_lost()
-        assert disconnected == [True]
+        assert window.sm.state is FlashState.S5_USB_DISCONNECTED
+        assert window._install_failed is True
+        assert window._kill_process_timer.isActive()
     finally:
+        if hasattr(window, "_kill_process_timer"):
+            window._kill_process_timer.stop()
         window.service._flash_worker = None
         window.close()
         app.processEvents()
