@@ -6090,6 +6090,7 @@ class MainWindow(QMainWindow):
             return False
         self._gui_handoff_ready = False
         self._gui_handoff_prepare = True
+        self._install_failed = False
         self._package_model = target.get("model") or self._package_model or ""
         self._package_name = target.get("name") or self._package_name or ""
         self._flash_page.set_package_name(self._package_name)
