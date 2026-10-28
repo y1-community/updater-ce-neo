@@ -4825,6 +4825,12 @@ _STRINGS: dict = {
         "fr": "Erreur interne",
         "es": "Error interno",
     },
+    "err_code_partition_table_invalid": {
+        "zh-CN": "分区表写入后校验失败",
+        "en": "Partition table verification failed after writing",
+        "fr": "Échec de la vérification de la table de partitions après écriture",
+        "es": "Falló la verificación de la tabla de particiones tras escribir",
+    },
     # Backend failures explained in the user's terms. The raw tool name/code
     # stays in the Error Code row above them.
     "err_sp_wrong_model_title": {

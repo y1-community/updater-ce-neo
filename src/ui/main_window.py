@@ -608,6 +608,16 @@ class _DropOverlay(QWidget):
         self._window._drop_firmware(event)
 
 
+def _completion_notification_message(software: str, model: str) -> str:
+    """Notification body without repeating the model the package name carries."""
+    message = str(software or "").strip()
+    if model:
+        tokens = message.upper().replace("(", " ").replace(")", " ").split()
+        if str(model).upper() not in tokens:
+            message = f"{message} {model}".strip()
+    return message
+
+
 class MainWindow(QMainWindow):
     # Report from a background flash-tool sweep; ``list`` of what it stopped.
     sweep_report = Signal(list)
@@ -4941,6 +4951,9 @@ class MainWindow(QMainWindow):
             self._flash_page.set_device_done()
             self._flash_page.set_rockbox_site_themes(is_240p_rockbox)
             self._flash_page.show_completion_appeal(False)
+            self._flash_page.show_completion_note(
+                donation_disabled, software=software, model=model
+            )
             self._apply_release_icon(complete=True)
             self._nav_to_page(_PAGE_FLASH)
             if not donation_disabled:
@@ -5034,10 +5047,13 @@ class MainWindow(QMainWindow):
             self._flash_page.show_completion_appeal(
                 True, self._on_completion_dont_ask, self._on_completion_not_now,
             )
-        self._adjust_window_geometry()
-        self._sync_sp_history()
         model = self._package_model or ""
         software = self._package_name or "Firmware"
+        self._flash_page.show_completion_note(
+            donation_disabled, software=software, model=model
+        )
+        self._adjust_window_geometry()
+        self._sync_sp_history()
         steps = install_power_on_steps(model)
         self._show_status(
             tr("status_install_ok_fmt").format(software=software, steps=steps), 60000
@@ -5049,7 +5065,7 @@ class MainWindow(QMainWindow):
         try:
             from ..notifications import bring_window_to_front, show_completion_notification
             title = tr("notify_install_complete_title")
-            message = f"{software} {model}".strip()
+            message = _completion_notification_message(software, model)
             show_completion_notification(title, message, window=self)
             bring_window_to_front(self)
         except Exception:

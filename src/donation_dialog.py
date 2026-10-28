@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .config import DONATION_LINKS, device_label_for_model, install_power_on_steps
+from .config import DONATION_LINKS, device_label_for_model
 from .donors import fetch_remote_donors_async, get_monthly_goal_stats, relative_date
 from .i18n import tr, tr_brand
 from .ui.dark import T, is_dark
@@ -933,34 +933,11 @@ class DonationDialog(QDialog):
         alt_box.addWidget(self._donor_view)
         self._donor_view.setVisible(False)
 
-        # Installation Complete banner (prominently shown first after firmware install)
+        # The appeal's own headline and subtitle already name the install
+        # ("X is installed on your Y."), so a separate success banner here
+        # would say the same thing twice. The no-donations completion screen
+        # carries that explanation instead (FlashPage.show_completion_note).
         if self.context == "install_success":
-            steps = install_power_on_steps(self.model)
-            formatted = self.software_name or tr("donate_this_firmware")
-            if not self.software_name or self.software_name in ("firmware", "this firmware", "local", "browse"):
-                header_text = f"We've installed the software on your <b>{self.model}</b>."
-            else:
-                header_text = f"We've installed <b>{formatted}</b> on your <b>{self.model}</b>."
-
-            success_box = QWidget()
-            success_box.setStyleSheet(
-                f"QWidget {{ background-color: {t.bg_elev}; border: 1px solid {t.ok_fg};"
-                f" border-radius: 8px; }}"
-            )
-            s_layout = QVBoxLayout(success_box)
-            s_layout.setContentsMargins(14, 10, 14, 10)
-            s_layout.setSpacing(4)
-            s_title = QLabel(f"<span style='color:{t.ok_fg}; font-weight:700; font-size:13px;'>✓ {header_text}</span>")
-            s_title.setTextFormat(Qt.RichText)
-            s_title.setStyleSheet("border: none; background: transparent;")
-            s_layout.addWidget(s_title)
-            s_steps = QLabel(f"<span style='color:{title_color}; font-size:12px; font-weight:600;'>{steps}</span>")
-            s_steps.setTextFormat(Qt.RichText)
-            s_steps.setWordWrap(True)
-            s_steps.setStyleSheet("border: none; background: transparent;")
-            s_layout.addWidget(s_steps)
-            layout.addWidget(success_box)
-
             if getattr(self, "is_360p_rockbox", False):
                 self._theme_box = QWidget()
                 self._theme_box.setStyleSheet(

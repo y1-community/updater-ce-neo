@@ -769,6 +769,9 @@ class _SparseDaLoader:
         self.calls.append(kwargs)
         return len(self.calls) == 1
 
+    def formatflash(self, **kwargs):
+        return True
+
 
 class _SessionMtk:
     def __init__(self, daloader):
@@ -797,8 +800,18 @@ def test_a_userdata_sparse_write_that_drops_after_region_one_never_reports_flash
     logs, results, successes = [], [], []
     worker.log_message.connect(lambda m: logs.extend(m.splitlines()))
     worker.finished.connect(lambda ok, err: results.append((ok, err)))
+    # This test exercises the sparse-write failure, not address probing; the
+    # fake DA has no readback path for the probe.
+    monkeypatch.setattr(
+        worker,
+        "_auto_configure_scatter_user_addressing",
+        lambda _mtk, _scatter, current=None: current,
+    )
     monkeypatch.setattr(worker, "_write_mtk_preloader", lambda *a, **k: None)
     monkeypatch.setattr(worker, "_write_mtk_partition", lambda *a, **k: True)
+    # Writes are stubbed here, so there is no image data to read back; this
+    # test is about a sparse region failing mid-partition.
+    monkeypatch.setattr(worker, "_verify_user_write_samples", lambda *a, **k: None)
     monkeypatch.setattr(
         worker, "_end_mtk_run_successfully", lambda *a, **k: successes.append(True)
     )

@@ -1834,6 +1834,18 @@ class FlashPage(QWidget):
         _apply_card_text(self._warning)
         w_layout.addWidget(self._warning)
 
+        # Completion explanation for readers who turned the donations appeal
+        # off: the appeal's headline/subtitle usually says what was installed,
+        # so this note only appears when that block is hidden.
+        self._complete_note = QLabel()
+        self._complete_note.setWordWrap(True)
+        self._complete_note.setAlignment(Qt.AlignCenter)
+        self._complete_note.setProperty("cssClass", "hint")
+        self._complete_note.setVisible(False)
+        self._complete_note_software = ""
+        self._complete_note_model = ""
+        w_layout.addWidget(self._complete_note)
+
         self._appeal = QWidget()
         self._appeal.setAutoFillBackground(False)
         self._appeal.setStyleSheet("")
@@ -2315,6 +2327,8 @@ class FlashPage(QWidget):
                 btn.setEnabled(True)
 
     def show_flashing(self):
+        if hasattr(self, "_complete_note"):
+            self._complete_note.setVisible(False)
         if getattr(self, "_wait_copy", "") in ("connect", "please_wait", "please_wait_connecting"):
             self._wait_copy = "stage"
             if hasattr(self, "_wait_prompt_label"):
@@ -3173,6 +3187,26 @@ class FlashPage(QWidget):
         if hasattr(self, "_appeal_dont"):
             self._appeal_dont.setText(self._dont_ask_html())
 
+    def _render_completion_note(self) -> None:
+        software = self._complete_note_software or tr("flash_current_pkg")
+        model = self._complete_note_model or tr("device_fallback_word")
+        from ..config import install_power_on_steps
+
+        installed = tr("donate_completion_subtitle").format(
+            software=software, model=model
+        )
+        self._complete_note.setText(
+            f"{installed}\n{install_power_on_steps(model)}"
+        )
+
+    def show_completion_note(self, visible: bool, software: str = "", model: str = "") -> None:
+        """Explain the finished install when the donations appeal is hidden."""
+        self._complete_note_software = str(software or "").strip()
+        self._complete_note_model = str(model or "").strip()
+        self._render_completion_note()
+        self._complete_note.setVisible(bool(visible))
+        self._notify_geometry_change()
+
     def show_completion_appeal(self, visible: bool, callback=None, on_not_now=None) -> None:
         """Coffee note under a finished install. Hidden when donations are already off.
 
@@ -3602,6 +3636,8 @@ class FlashPage(QWidget):
             # must not turn a finished install's appeal back into the generic
             # project pitch.
             self._render_appeal_copy()
+        if hasattr(self, "_complete_note"):
+            self._render_completion_note()
         self._style_done_button()
         self._apply_guide_highlight()
         if self._prep_step_key:

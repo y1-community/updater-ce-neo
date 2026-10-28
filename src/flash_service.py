@@ -42,6 +42,7 @@ from struct import pack, unpack
 from typing import Optional, Union, Tuple
 
 from .downloads import downloads_dir
+from . import mtk_legacy_layout as mtk_layout
 
 # Combined ETA used by the install card and the Device Prep stage. The install
 # card already shows a measured write ETA, and the Device Prep stage is a
@@ -1153,6 +1154,18 @@ _BENIGN_WRITE_IMAGE_NOTE = "WRITE_IMAGE final ack timeout after data accepted"
 # Their first sample sectors must match the package image on the device.
 _LEGACY_TABLE_PARTS = ("MBR", "EBR1", "EBR2")
 _LEGACY_TABLE_SAMPLE_BYTES = 512
+# Boot-critical partitions the Chinese build reads back after writing. A write
+# the DA reports as successful but that did not land is the difference between
+# a player that boots and one that does not.
+_VERIFY_AFTER_WRITE_PARTITIONS = frozenset(
+    {
+        "bootimg", "ebr2", "vbmeta", "nvram", "recovery", "ebr1", "uboot",
+        "lk", "tee2", "logo", "dtbo", "sec_ro", "tee1", "mbr", "lk2",
+        "secro", "boot",
+    }
+)
+_VERIFY_SAMPLE_BYTES = 65536
+_VERIFY_BLOCK_ALIGN = 512
 # Per-transfer chunk size handed to the bundled (Chinese-fork) legacy DA. Its
 # ``sdmmc_write_data`` reads ``config.write_chunk_size`` for every USB transfer
 # and defaults to 1 MiB when unset. The shipped 1.1.7 build's legacy strategy
@@ -5046,6 +5059,9 @@ class FlashWorker(QThread):
     def _flash_via_mtkclient_core(self, extract_dir, scatter_file, platform="", da_file="", auth_file=""):
         # Raw output printed while this backend runs comes from MTKClient.
         self._tool_tag = "MTK"
+        # Set once the USER partition tables have been read back and matched;
+        # the completion gate below only re-verifies when this is still False.
+        self._legacy_tables_verified = False
         # A Download Agent / auth file chosen by the user (MediaTek Installer)
         # beats whatever this worker was constructed with; both are optional.
         if da_file:
@@ -5376,22 +5392,39 @@ class FlashWorker(QThread):
             self.finished.emit(False, "DEVICE_PACKAGE_MISMATCH")
             return
 
-        # The reference only calibrates from a saved readback capture; it does
-        # not send readflash commands to the connected legacy DA before writing.
+        # The reference does not trust a fixed MBR bias. It reads the player's
+        # MBR/EBR1 at every candidate address, scores those samples against the
+        # package images, and only writes after one unique layout is proven.
         try:
             addressing = self._configure_scatter_user_addressing(scatter_file)
+            addressing = self._auto_configure_scatter_user_addressing(
+                mtk, scatter_file, addressing
+            )
+            user_size = _get_emmc_user_size(mtk)
+            block_size = _parse_scatter_block_size(scatter_file)
             plan = build_mtk_write_plan(
                 scatter_file,
                 getattr(self, "package_model", "") or self.model,
                 preloader_first=False,
                 user_addressing=addressing,
-                user_size=_get_emmc_user_size(mtk),
-                block_size=_parse_scatter_block_size(scatter_file),
+                user_size=user_size,
+                block_size=block_size,
             )
         except PackageLayoutError as e:
-            self._log(f"Legacy USER address mapping is unsafe; no partitions were written: {e}")
-            self.finished.emit(False, "DEVICE_PACKAGE_MISMATCH")
+            unresolved = "auto-probe" in str(e)
+            self._log(
+                "Legacy USER address mapping is unsafe; no partitions were written: "
+                f"{e}"
+            )
+            self.finished.emit(
+                False, "USER_ADDRESS_UNRESOLVED" if unresolved else "DEVICE_PACKAGE_MISMATCH"
+            )
             return
+
+        image_names = {str(name).strip().lower() for name, _path in image_files}
+        self._safe_full_flash = bool(
+            image_names & mtk_layout.FULL_FLASH_SYSTEM_PARTITIONS
+        ) and bool(image_names & mtk_layout.FULL_FLASH_BOOT_PARTITIONS)
 
         # The write plan is the 1.1.7 build's, not a guess: every downloadable
         # image in scatter order, the preloader last, and genuine package
@@ -5412,6 +5445,20 @@ class FlashWorker(QThread):
         # The Chinese build issues no GPT sync before its writes (the reference
         # sequence is init, connect, then one ``w`` per partition), so the
         # package's own partition images are written as they are.
+
+        # Full-image installs clear the rebuildable runtime partitions first;
+        # a partial package must not touch them. This is a read-modify-write
+        # integrity step, not the "format all" the SP backend uses.
+        if self._safe_full_flash:
+            try:
+                self._reset_runtime_partitions_before_flash(
+                    mtk, scatter_file, addressing, user_size, block_size
+                )
+            except BaseException as e:
+                self._log(f"Runtime partition cleanup failed: {e}")
+                self._log("No firmware images were written.")
+                self.finished.emit(False, "WRITE_FAILED")
+                return
 
         # Address calibration above is based only on the package and any
         # matching saved readback captures. No DA readback is issued here.
@@ -5645,6 +5692,24 @@ class FlashWorker(QThread):
                             f"device's partition is {part_size / 1048576:.1f}MB "
                             "(possible package/scatter mismatch)"
                         )
+                    # Clear the target range first, exactly as the CMR build
+                    # does. A short image written over stale partition data
+                    # leaves the tail (and sparse DONT_CARE holes) holding the
+                    # old firmware, which is how a flash "succeeds" but does
+                    # not boot. Table images and full-size images need no erase.
+                    pre_erased = False
+                    if (
+                        not is_preloader
+                        and offset is not None
+                        and self._should_pre_erase_user_partition(
+                            part_name, transfer_len, part_size, sparse_regions
+                        )
+                    ):
+                        self._erase_partition_for_write(
+                            mtk, offset, part_size, part_name
+                        )
+                        pre_erased = True
+
                     if is_preloader:
                         self._write_mtk_preloader(
                             da_handler, mtk, str(active_file), legacy_tables
@@ -5671,6 +5736,26 @@ class FlashWorker(QThread):
                             file_offset=file_off,
                             write_length=write_len,
                             bytes_progress_cb=on_segment_done,
+                        )
+
+                    # The CMR build reads sample sectors back after writing
+                    # every boot-critical image and verifies the partition
+                    # tables before touching the preloader. Treat a mismatch as
+                    # a failed install: the player would otherwise be told
+                    # "success" while holding a half-valid image.
+                    if (
+                        target_part == "user"
+                        and offset is not None
+                        and not sparse_regions
+                        and part_name.lower() in _VERIFY_AFTER_WRITE_PARTITIONS
+                    ):
+                        self._verify_user_write_samples(
+                            mtk,
+                            offset,
+                            active_file,
+                            part_name,
+                            file_offset=file_off,
+                            verify_length=write_len,
                         )
                 except BaseException as e:
                     if is_disconnection_error(str(e), e):
@@ -5729,6 +5814,8 @@ class FlashWorker(QThread):
                 self.finished.emit(False, "TOOL_ERROR")
                 return
 
+            if not self._verify_partition_tables_before_completion(mtk, legacy_tables):
+                return
             self._end_mtk_run_successfully(mtk, da_handler)
         finally:
             self._flush_log()
@@ -5791,6 +5878,354 @@ class FlashWorker(QThread):
         )
         return chunk
 
+    # -- legacy USER erase / verification (CMR write-flow parity) -----------
+    def _mtk_storage_type(self, mtk) -> str:
+        storage = getattr(
+            getattr(getattr(mtk, "daloader", None), "daconfig", None),
+            "storage",
+            None,
+        )
+        return str(getattr(storage, "flashtype", "emmc") or "emmc").lower()
+
+    @staticmethod
+    def _format_addr_range(addr, length) -> str:
+        if not length:
+            return f"start=0x{int(addr or 0):X} end=0x{int(addr or 0):X}"
+        return f"start=0x{int(addr):X} end=0x{int(addr) + int(length) - 1:X}"
+
+    def _safe_formatflash(self, mtk, **kwargs) -> bool:
+        """The legacy DA exits the process on a format error; keep it a failure."""
+        daloader = getattr(mtk, "daloader", None)
+        if daloader is None or not hasattr(daloader, "formatflash"):
+            raise RuntimeError("DA has no formatflash for the pre-erase step")
+        try:
+            return bool(daloader.formatflash(**kwargs))
+        except SystemExit as e:
+            raise RuntimeError(f"formatflash triggered exit: {e}") from e
+
+    def _should_segment_format_for_user_region(self, mtk, addr, length) -> bool:
+        if not self._is_legacy_mode(mtk) or self._mtk_storage_type(mtk) != "emmc":
+            return False
+        end_addr = int(addr) + max(int(length), 1) - 1
+        return bool(
+            int(length) > mtk_layout.LEGACY_FORMAT_SEGMENT_BYTES
+            or (
+                int(addr) <= mtk_layout.LEGACY_FORMAT_32BIT_ADDR_LIMIT
+                and end_addr > mtk_layout.LEGACY_FORMAT_32BIT_ADDR_LIMIT
+            )
+        )
+
+    def _erase_partition_segmented_for_write(self, mtk, addr, length, part_name) -> None:
+        segments = []
+        offset = 0
+        while offset < length:
+            segment_addr = int(addr) + offset
+            segment_len = min(
+                mtk_layout.LEGACY_FORMAT_SEGMENT_BYTES, int(length) - offset
+            )
+            if (
+                segment_addr <= mtk_layout.LEGACY_FORMAT_32BIT_ADDR_LIMIT
+                and segment_addr + segment_len > mtk_layout.LEGACY_FORMAT_32BIT_ADDR_LIMIT
+            ):
+                segment_len = (
+                    mtk_layout.LEGACY_FORMAT_32BIT_ADDR_LIMIT + 1 - segment_addr
+                )
+            if segment_len <= 0:
+                break
+            segments.append((segment_addr, segment_len))
+            offset += segment_len
+        total = len(segments)
+        self._log(
+            f"  Segmented pre-erase for partition {part_name} "
+            f"{self._format_addr_range(addr, length)} "
+            f"({length / 1048576:.1f}MB), segment="
+            f"{mtk_layout.LEGACY_FORMAT_SEGMENT_BYTES // 1048576}MB ..."
+        )
+        for index, (segment_addr, segment_len) in enumerate(segments, 1):
+            self._log(
+                f"    Erase segment {index}/{total}: "
+                f"{self._format_addr_range(segment_addr, segment_len)}"
+            )
+            ok = self._safe_formatflash(
+                mtk,
+                addr=segment_addr,
+                length=segment_len,
+                partitionname=part_name,
+                parttype="user",
+                display=False,
+            )
+            if not ok:
+                detail = getattr(getattr(mtk, "config", None), "last_error", None)
+                suffix = f" ({detail})" if detail else " (device did not confirm)"
+                raise RuntimeError(f"Partition {part_name} pre-erase failed{suffix}")
+            self._touch_attempt()
+            self._note_install_progress()
+
+    def _erase_partition_for_write(self, mtk, addr, length, part_name) -> None:
+        if length is None or int(length) <= 0:
+            return
+        if self._should_segment_format_for_user_region(mtk, addr, length):
+            self._erase_partition_segmented_for_write(mtk, addr, length, part_name)
+            return
+        self._log(
+            f"  Pre-erasing partition {part_name} "
+            f"{self._format_addr_range(addr, length)} "
+            f"({int(length) / 1048576:.1f}MB) ..."
+        )
+        ok = self._safe_formatflash(
+            mtk,
+            addr=int(addr),
+            length=int(length),
+            partitionname=part_name,
+            parttype="user",
+            display=False,
+        )
+        if not ok:
+            detail = getattr(getattr(mtk, "config", None), "last_error", None)
+            suffix = f" ({detail})" if detail else " (device did not confirm)"
+            raise RuntimeError(f"Partition {part_name} pre-erase failed{suffix}")
+        self._touch_attempt()
+        self._note_install_progress()
+
+    def _should_pre_erase_user_partition(
+        self, part_name, transfer_length, partition_size, sparse_regions=None
+    ) -> bool:
+        """Only clear a range when the image does not already fill it."""
+        if (part_name or "").strip().lower() in mtk_layout.PARTITION_TABLE_PARTITIONS:
+            return False
+        if not partition_size or int(partition_size) <= 0:
+            return False
+        transfer = int(transfer_length or 0)
+        return 0 < transfer < int(partition_size)
+
+    def _reset_runtime_partitions_before_flash(
+        self, mtk, scatter_path, addressing, user_size, block_size
+    ) -> None:
+        """Clear rebuildable runtime partitions before a full legacy flash."""
+        parts = _read_scatter_parts(scatter_path)
+        targets = []
+        for part in parts:
+            if not mtk_layout.user_part(part):
+                continue
+            name = str(part.get("partition_name", "")).strip()
+            if name.lower() not in mtk_layout.RUNTIME_RESET_PARTITIONS:
+                continue
+            candidate = mtk_layout.UserAddressCandidate(
+                addressing.mode, addressing.bias, addressing.source or ""
+            )
+            addr = mtk_layout.resolve_user_addr(
+                part, candidate, user_size, block_size
+            )
+            size = _to_int_safe(part.get("partition_size", 0))
+            if addr is None or size <= 0:
+                continue
+            targets.append((name, addr, size))
+        if not targets:
+            return
+        self._log(
+            "Cleaning rebuildable runtime partition(s) before full flash: "
+            + ", ".join(name for name, _addr, _size in targets)
+        )
+        for name, addr, size in targets:
+            self._log(
+                f"  Cleaning {name}: {self._format_addr_range(addr, size)} "
+                f"size={size / 1048576:.1f}MB ..."
+            )
+            self._erase_partition_for_write(mtk, addr, size, name)
+
+    def _verify_user_write_samples(
+        self,
+        mtk,
+        addr: int,
+        file_path,
+        part_name: str,
+        file_offset: int = 0,
+        verify_length: int = None,
+    ) -> None:
+        """Read back up to 64KiB at the start, middle and end of a write.
+
+        Matches Chinese build 1.1.7 ``_verify_user_write_samples``: a mismatch
+        raises, so a DA that acknowledged a write that did not land can never
+        be reported as a completed install. Offsets are 512-aligned because the
+        legacy DA reads whole sectors.
+        """
+        path = Path(file_path)
+        try:
+            file_size = path.stat().st_size
+        except OSError:
+            return
+        fsize = int(verify_length) if verify_length is not None else file_size - file_offset
+        if fsize <= 0:
+            return
+        sample_len = min(_VERIFY_SAMPLE_BYTES, fsize)
+        raw_offsets = {
+            0,
+            max(0, fsize // 2 - sample_len // 2),
+            max(0, fsize - sample_len),
+        }
+        offsets = sorted(
+            off // _VERIFY_BLOCK_ALIGN * _VERIFY_BLOCK_ALIGN for off in raw_offsets
+        )
+        with path.open("rb") as stream:
+            for off in offsets:
+                read_len = min(sample_len, fsize - off)
+                stream.seek(file_offset + off)
+                expected = stream.read(read_len)
+                actual = self._read_flash_blob(
+                    mtk, "user", int(addr) + off, read_len
+                )
+                if actual != expected:
+                    raise RuntimeError(
+                        f"{part_name} readback verification failed offset=0x{off:X} "
+                        f"size={read_len}"
+                    )
+        self._log(f"  {part_name} sample readback verification passed")
+
+
+    def _auto_configure_scatter_user_addressing(self, mtk, scatter_path, current=None):
+        """Choose the USER address policy from live MBR/EBR evidence.
+
+        The Chinese build does not trust a fixed bias: it probes the device at
+        every candidate address, scores what it finds against the package's
+        MBR/EBR images and only writes once a unique layout is established.
+        A layout that cannot be proven aborts the run before any write, which
+        is the difference between a recoverable player and a brick.
+        """
+        if not self._is_legacy_mode(mtk):
+            return current
+        parts = _read_scatter_parts(scatter_path)
+        if not _legacy_scatter_has_mbr_ebr(parts):
+            return current
+        if current is None:
+            current = self._configure_scatter_user_addressing(scatter_path)
+
+        user_size = _get_emmc_user_size(mtk) or None
+        block_size = (
+            _parse_scatter_block_size(scatter_path)
+            or mtk_layout.DEFAULT_SCATTER_BLOCK_SIZE
+        )
+        current_candidate = mtk_layout.UserAddressCandidate(
+            current.mode, current.bias, current.source or ""
+        )
+
+        def read_blob(addr, length):
+            return self._read_user_blob(mtk, addr, length)
+
+        scored = []
+        for candidate in mtk_layout.scatter_candidates(parts, current_candidate):
+            result = mtk_layout.probe_candidate(
+                parts,
+                Path(scatter_path).parent,
+                candidate,
+                read_blob,
+                user_size,
+                block_size,
+            )
+            scored.append((candidate, result))
+
+        trusted_current = bool(
+            current.source and "readback" in current.source.lower()
+        )
+        if not scored:
+            if trusted_current:
+                self._log(
+                    "  USER address auto-probe read no candidate data; "
+                    "keeping readback-calibrated address policy"
+                )
+                return current
+            raise PackageLayoutError(
+                "USER address auto-probe failed: could not read any candidate "
+                "MBR/EBR calibration data; write stopped to avoid flashing to "
+                "the wrong address"
+            )
+
+        strong = [(candidate, result) for candidate, result in scored if result.strong]
+        if not strong:
+            if trusted_current:
+                self._log(
+                    "  USER address auto-probe found no strong evidence; "
+                    "keeping readback-calibrated address policy"
+                )
+                return current
+            raise PackageLayoutError(
+                "USER address auto-probe failed: could not get dual-table image "
+                "match or image match plus dual-table layout evidence; write "
+                "stopped to avoid flashing to the wrong address"
+            )
+
+        best_score = max(result.score for _candidate, result in strong)
+        top = [item for item in strong if item[1].score == best_score]
+        chosen, chosen_result = top[0]
+
+        equivalent = None
+        if len(top) > 1:
+            base_layout = mtk_layout.candidate_layout(
+                chosen, parts, user_size, block_size
+            )
+            if base_layout is not None:
+                equivalent = chosen
+                for candidate, _result in top[1:]:
+                    if (
+                        mtk_layout.candidate_layout(
+                            candidate, parts, user_size, block_size
+                        )
+                        != base_layout
+                    ):
+                        equivalent = None
+                        break
+
+        notes = "; ".join(chosen_result.notes) or "no notes"
+        self._log(
+            f"  USER address auto-probe: {chosen.source}, score={chosen_result.score} ({notes})"
+        )
+        if len(top) > 1:
+            if equivalent is not None:
+                self._log(
+                    "  USER address auto-probe: equivalent top candidates resolve "
+                    "to the same physical layout ("
+                    + ", ".join(candidate.source for candidate, _ in top)
+                    + "); continuing"
+                )
+            else:
+                current_result = next(
+                    (
+                        result
+                        for candidate, result in scored
+                        if candidate.mode == current.mode
+                        and candidate.bias == current.bias
+                    ),
+                    None,
+                )
+                if (
+                    current_result is not None
+                    and current_result.strong
+                    and current_result.score == best_score
+                ):
+                    self._log(
+                        "  USER address auto-probe: multiple strong candidates "
+                        f"have the same score={best_score}; keeping current "
+                        "strong-evidence policy"
+                    )
+                    return current
+                details = "; ".join(
+                    f"{candidate.source} score={result.score}"
+                    for candidate, result in top
+                )
+                raise PackageLayoutError(
+                    "USER address auto-probe failed: multiple strong candidates "
+                    "have the same score, so the physical write address cannot "
+                    f"be chosen safely (score={best_score}: {details}); write "
+                    "stopped to avoid flashing to the wrong address"
+                )
+
+        chosen_address = _ScatterUserAddressCandidate(
+            chosen.mode, chosen.bias, chosen.source
+        )
+        if current.mode == chosen_address.mode and current.bias == chosen_address.bias:
+            self._log(
+                f"  USER address auto-probe: current policy matches score={chosen_result.score}"
+            )
+        return chosen_address
 
     def _configure_scatter_user_addressing(self, scatter_path):
         """Choose the scatter address policy using the reference's saved readback calibration."""
@@ -6200,17 +6635,22 @@ class FlashWorker(QThread):
             mismatch_parts.append(part)
         return mismatch_parts
 
-    def _verify_legacy_partition_tables(self, mtk, table_images: dict) -> None:
-        """Read back the MBR/EBR sample sectors before the final preloader write.
+    def _verify_legacy_partition_tables(
+        self, mtk, table_images: dict, before_preloader: bool = True
+    ) -> None:
+        """Read back the MBR/EBR sample sectors and compare them to the package.
 
         Matches Chinese build 1.1.7 ``_verify_partition_table_after_flash``: the
-        USER partition tables must already be on the device, as written, before
-        the preloader (the last image) is touched. A mismatch raises, so the old
-        preloader stays in place.
+        USER partition tables must already be on the device, as written. Called
+        before the final preloader write (a mismatch keeps the old preloader) and
+        again from the completion gate when that earlier pass did not run.
         """
         if not table_images:
             return
-        self._log("Verifying USER partition table before final Legacy preloader write")
+        if before_preloader:
+            self._log("Verifying USER partition table before final Legacy preloader write")
+        else:
+            self._log("Verifying USER partition table after flash")
         verified = []
         for name in _LEGACY_TABLE_PARTS:
             if name not in table_images:
@@ -6225,6 +6665,34 @@ class FlashWorker(QThread):
             verified.append(name)
         if verified:
             self._log("Legacy partition table verification passed: " + ", ".join(verified))
+            self._legacy_tables_verified = True
+
+    def _verify_partition_tables_before_completion(self, mtk, table_images: dict) -> bool:
+        """Completion gate from the CMR's ``verify_partition_table`` closure.
+
+        A flash is only reported as done once the USER partition tables on the
+        device match the package; otherwise the run fails with
+        ``PARTITION_TABLE_INVALID``. When the pre-preloader pass already checked
+        them, the CMR skips the second read because the final preloader write
+        only touched boot storage.
+        """
+        if self._legacy_tables_verified:
+            self._log(
+                "Partition table remains verified; final preloader write only "
+                "changed boot storage"
+            )
+            return True
+        if not table_images:
+            return True
+        try:
+            self._verify_legacy_partition_tables(
+                mtk, table_images, before_preloader=False
+            )
+        except RuntimeError as e:
+            self._log(f"❌ Partition table verification failed: {e}")
+            self.finished.emit(False, "PARTITION_TABLE_INVALID")
+            return False
+        return True
 
     def _write_mtk_preloader(self, da_handler, mtk, file_path_str, table_images=None) -> None:
         """Write the preloader the way the shipped 1.1.7 build does.

@@ -12,6 +12,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -145,6 +146,96 @@ def test_preloader_mismatch_check_writes_when_different(tmp_path):
     with patch.object(worker, "_legacy_preloader_mismatch_targets", return_value=["boot1"]):
         worker._write_mtk_preloader(MagicMock(), mock_mtk, str(preloader_bin))
         mock_da.sdmmc_write_image.assert_called_once()
+
+
+def _gate_worker():
+    worker = FlashWorker("dummy.zip", method="mtk", model="Y2")
+    worker._log = lambda *a, **k: None
+    worker._legacy_tables_verified = False
+    events = []
+    steps = []
+    worker.finished.connect(lambda ok, msg: events.append((ok, msg)))
+    worker.step_changed.connect(steps.append)
+    return worker, events, steps
+
+
+def _table_mtk(table_blobs):
+    daloader = MagicMock()
+
+    def _readflash(addr, length, filename="", parttype=None, display=True):
+        return table_blobs.get(int(addr), b"\x00" * int(length))
+
+    daloader.readflash.side_effect = _readflash
+    port = MagicMock()
+    return SimpleNamespace(daloader=daloader, config=SimpleNamespace(last_error=None), port=port)
+
+
+def test_completion_gate_verifies_tables_then_reports_success(tmp_path):
+    worker, events, steps = _gate_worker()
+    table = b"MBR!" + b"\x00" * 508
+    mtk = _table_mtk({0xB80000: table})
+
+    ok = worker._verify_partition_tables_before_completion(
+        mtk, {"MBR": (0xB80000, "user", table)}
+    )
+    assert ok is True
+    assert worker._legacy_tables_verified is True
+
+    worker._end_mtk_run_successfully(mtk)
+    assert events == [(True, "")]
+    assert STEP_DONE in steps
+
+
+def test_completion_gate_fails_the_flash_when_a_table_did_not_land():
+    worker, events, _steps = _gate_worker()
+    table = b"MBR!" + b"\x00" * 508
+    mtk = _table_mtk({})  # reads return zeroes: the write did not land
+
+    ok = worker._verify_partition_tables_before_completion(
+        mtk, {"MBR": (0xB80000, "user", table)}
+    )
+
+    assert ok is False
+    assert events == [(False, "PARTITION_TABLE_INVALID")]
+
+
+def test_completion_gate_skips_the_read_when_already_verified():
+    worker, events, _steps = _gate_worker()
+    worker._legacy_tables_verified = True
+    mtk = _table_mtk({})
+
+    ok = worker._verify_partition_tables_before_completion(
+        mtk, {"MBR": (0xB80000, "user", b"ignored")}
+    )
+
+    assert ok is True
+    mtk.daloader.readflash.assert_not_called()
+    assert events == []
+
+
+def test_write_verification_samples_start_middle_and_end(tmp_path):
+    """A write that lands only at offset 0 must still fail verification."""
+    worker = FlashWorker("dummy.zip", method="mtk", model="Y2")
+    worker._log = lambda *a, **k: None
+
+    image = tmp_path / "lk.bin"
+    payload = bytes(range(256)) * 1024  # 256 KiB
+    image.write_bytes(payload)
+
+    corrupt_at = 128 * 1024
+    on_device = bytearray(payload)
+    on_device[corrupt_at : corrupt_at + 512] = b"\xff" * 512
+
+    daloader = MagicMock()
+    daloader.readflash.side_effect = lambda addr, length, filename="", parttype=None, display=True: bytes(
+        on_device[int(addr) : int(addr) + int(length)]
+    )
+    mtk = SimpleNamespace(
+        daloader=daloader, config=SimpleNamespace(last_error=None), port=MagicMock()
+    )
+
+    with pytest.raises(RuntimeError, match="lk readback verification failed"):
+        worker._verify_user_write_samples(mtk, 0x1000000, image, "lk")
 
 
 def test_end_mtk_run_successfully_emits_completion_directly():

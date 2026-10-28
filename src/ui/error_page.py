@@ -26,6 +26,7 @@ _ERROR_CODE_KEYS = {
     "NO_SCATTER_FILE": "err_code_no_scatter",
     "MISSING_IMAGES": "err_code_missing_images",
     "INTERNAL_ERROR": "err_code_internal",
+    "PARTITION_TABLE_INVALID": "err_code_partition_table_invalid",
     "ERR_ATTEMPT_TIMEOUT": "err_attempt_timeout_title",
     "NO_DEVICE": "flash_no_device",
     "USB_DISCONNECTED": "err_usb_title",
