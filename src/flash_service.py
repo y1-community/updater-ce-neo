@@ -1166,7 +1166,7 @@ def legacy_write_chunk_size(image_paths) -> int:
 def layman_task_name(part_name: str) -> str:
     """Return user-friendly layman description for a partition or task."""
     low = (part_name or "").lower().strip()
-    if low in {"usr", "usrdata", "userdata", "user_data"}:
+    if low == "usr" or "usr" in low or "user_data" in low or "userdata" in low:
         return tr("task_writing_user_storage")
     if any(k in low for k in ("system", "android", "innios")):
         return tr("task_writing_system")
@@ -3391,7 +3391,6 @@ class FlashWorker(QThread):
             return
         if low.startswith("done") or low.startswith("progress"):
             self._leave_usb_search()
-            self._tool_error = ""
             self._note_install_progress()
             self._touch_attempt()
             if low.startswith("progress:"):
@@ -3449,6 +3448,14 @@ class FlashWorker(QThread):
             )
             if is_mtk:
                 self._touch_attempt()
+                # In-process MTKClient prints transfer percentages through the
+                # diagnostics tee rather than config.gui. Feed those same raw
+                # lines to the subtitle parser here so activity stays in sync
+                # with the DA output. The formatted action itself is never a
+                # Progress: line, so it cannot recurse.
+                progress_line = tool_line_body(line)
+                if progress_line.lower().startswith("progress:"):
+                    self._update_mtk_partition_action(progress_line)
             waiting_mtk = is_mtk and not self._past_usb_search
             if not self._tool_error and is_fatal_tool_line(line) and not waiting_mtk:
                 self._tool_error = line.strip()
