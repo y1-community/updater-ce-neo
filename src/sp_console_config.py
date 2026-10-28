@@ -14,7 +14,7 @@ over in the console configuration file instead::
         <authentication>custom.auth</authentication>
         <connection type="BromUSB" high-speed="true" without-battery="true" .../>
       </general>
-      <commands><download-only/></commands>
+      <commands><format-download/></commands>
     </flashtool-config>
 
 ``without-battery="true"`` is the documented equivalent of the CLI's
@@ -22,11 +22,9 @@ over in the console configuration file instead::
 ``-r`` still redirects the debug log to us alongside ``-i``, so the app keeps
 parsing the same progress lines.
 
-``<download-only/>`` is Download Only, the same operation as the CLI's
-``-c download`` and the one the shipped 1.1.7 build runs. It is deliberately
-not ``format-download``: that erases the whole flash (the player's own
-partition table included) before writing, which is not what the reference
-does and not something an interrupted install can recover from.
+``<format-download/>`` is Format All + Download, the same operation as the
+CLI's ``-c format-download``, which the shipped 1.1.7 build runs with or
+without an authentication file, so the two paths erase and write alike.
 
 Auth files are optional — most targets are not secure-booted — so the plain
 ``-c download -s ... -d ... -t without -r`` command line stays the
@@ -144,7 +142,7 @@ def build_console_config_xml(
             f' timeout-count="{int(connection_timeout_ms)}" com-port="" />',
             "    </general>",
             "    <commands>",
-            "        <download-only/>",
+            "        <format-download/>",
             "    </commands>",
             "</flashtool-config>",
             "",

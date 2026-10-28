@@ -4184,21 +4184,9 @@ def test_preloader_raw_wrapping_and_routing():
     finally:
         raw_preloader_path.unlink(missing_ok=True)
 
-    # 2. Test preloader routing targets for legacy vs modern
-    w = fs.FlashWorker("dummy.zip", method="mtk")
-
-    class FakeMtkLegacy:
-        class daloader:
-            flashmode = "LEGACY"
-
-    class FakeMtkModern:
-        class daloader:
-            flashmode = "XFLASH"
-
-    assert w._resolve_preloader_target_parts(FakeMtkLegacy()) == ("boot1",)
-    assert w._resolve_preloader_target_parts(FakeMtkModern()) == ("boot1", "boot2")
-    assert w._resolve_preloader_target_parts(FakeMtkLegacy(), "EMMC_BOOT_1") == ("boot1",)
-    assert w._resolve_preloader_target_parts(FakeMtkModern(), "EMMC_BOOT_2") == ("boot2",)
+    # 2. Preloader write mode: UFS writes separately, eMMC uses the composite write
+    assert fs._preloader_write_mode("ufs") == fs.PreloaderWriteMode.SEPARATE
+    assert fs._preloader_write_mode("emmc") == fs.PreloaderWriteMode.COMPOSITE
 
 
 def test_cross_platform_mtk_payloads_and_backend_dispatch():
@@ -6398,7 +6386,7 @@ def test_sp_flash_auth_file():
 
     from PySide6.QtWidgets import QApplication
     from src import config, device_tracking, paths, sp_console_config, terminal_install
-    from src.flash_service import METHOD_MTK, METHOD_SP, sp_flash_tool_console_args
+    from src.flash_service import METHOD_MTK, METHOD_SP, sp_flash_tool_console_args, SpAuthFileError
     from src.i18n import tr
     from src.ui.main_window import MainWindow
 
@@ -6499,7 +6487,7 @@ def test_sp_flash_auth_file():
         assert connection.get("type") == "BromUSB"
         # The documented equivalent of the CLI's -t without.
         assert connection.get("without-battery") == "true"
-        assert [child.tag for child in root_el.find("commands")] == ["download-only"]
+        assert [child.tag for child in root_el.find("commands")] == ["format-download"]
 
         # SP Flash Tool's own schema is the real check on that file.
         xsd = (
@@ -6533,20 +6521,26 @@ def test_sp_flash_auth_file():
         assert with_auth[:2] == ["-r", "-i"], with_auth
         assert Path(with_auth[2]).is_file(), with_auth
         assert any(str(auth) in line for line in logged), logged
+        # The authenticated path is the same full erase: no download-only shortcut.
+        assert "<format-download/>" in Path(with_auth[2]).read_text(encoding="utf-8")
 
-        # A file that vanished is reported, and the flash still goes ahead.
-        logged = []
-        gone = sp_flash_tool_console_args(str(scatter), str(da), str(root / "gone.auth"), logged.append)
-        assert gone == plain, gone
-        assert logged and str(root / "gone.auth") in logged[0], logged
-        assert logged[0] != "sp_auth_missing_file", "raw i18n keys never reach users"
+        # A chosen auth file that vanished is an error, never a silent no-auth flash.
+        raised = None
+        try:
+            sp_flash_tool_console_args(str(scatter), str(da), str(root / "gone.auth"))
+        except SpAuthFileError as e:
+            raised = e
+        assert raised is not None, "a missing chosen auth file must raise"
 
-        # ... and an unusable scatter falls back with an explanation, not a guess.
-        logged = []
-        fallback = sp_flash_tool_console_args(str(no_platform), str(da), str(auth), logged.append)
-        assert fallback == sp_flash_tool_console_args(str(no_platform), str(da)), fallback
-        assert logged and "platform" in logged[0], logged
-        assert logged[0] != "sp_config_missing_platform", "raw i18n keys never reach users"
+        # ... and so is one whose scatter cannot describe a console configuration.
+        raised = None
+        try:
+            sp_flash_tool_console_args(str(no_platform), str(da), str(auth))
+        except SpAuthFileError as e:
+            raised = e
+        assert raised is not None, "an unusable scatter must raise, not drop the auth file"
+        assert raised.reason == "missing_platform", raised.reason
+        assert raised.path == str(auth), raised.path
 
         # The terminal install builds the very same command.
         orig_windows, orig_mac = paths.IS_WINDOWS, paths.IS_MAC
@@ -6575,13 +6569,17 @@ def test_sp_flash_auth_file():
 
         # --- the Settings control --------------------------------------------
         import src.ui.settings_page as settings_page
+        import src.linux_sp_flash as linux_sp_flash
 
         orig_mtk = config.IS_MEDIATEK_INSTALLER
         orig_dialog = settings_page.QFileDialog.getOpenFileName
+        orig_arch_supported = linux_sp_flash.arch_supported
         try:
             config.IS_MEDIATEK_INSTALLER = True
-            # macOS has no SP Flash Tool, so the option only exists off it.
+            # macOS has no SP Flash Tool, so the option only exists off it. Pin the
+            # Linux arch gate too, so the selector offers SP on any host CPU.
             paths.IS_MAC = False
+            linux_sp_flash.arch_supported = lambda: True
             w = MainWindow()
             w.show()
             app.processEvents()
@@ -6618,6 +6616,7 @@ def test_sp_flash_auth_file():
             app.processEvents()
         finally:
             settings_page.QFileDialog.getOpenFileName = orig_dialog
+            linux_sp_flash.arch_supported = orig_arch_supported
             config.IS_MEDIATEK_INSTALLER = orig_mtk
             paths.IS_MAC = orig_mac
 
@@ -6628,10 +6627,9 @@ def test_window_minimum_size_and_titlebar_stability():
     """Choose Software opens compact; every page then takes the size it needs."""
     from PySide6.QtWidgets import QApplication
     from src.ui.main_window import (
-        DEFAULT_WINDOW_HEIGHT,
-        DEFAULT_WINDOW_WIDTH,
         MINIMUM_WINDOW_HEIGHT,
         MINIMUM_WINDOW_WIDTH,
+        MAXIMUM_SELECT_WINDOW_HEIGHT,
         MainWindow,
         default_window_size,
     )
@@ -6642,24 +6640,25 @@ def test_window_minimum_size_and_titlebar_stability():
     w.show()
     app.processEvents()
 
-    # 1. Minimum size stays under the default so the window can still shrink
-    assert w.minimumSize().width() == MINIMUM_WINDOW_WIDTH
-    assert w.minimumSize().height() == MINIMUM_WINDOW_HEIGHT
-    assert w.minimumSize().width() <= DEFAULT_WINDOW_WIDTH
-    assert w.minimumSize().height() <= DEFAULT_WINDOW_HEIGHT
+    # 1. The catalogue pins the window to the size it fitted: there is no
+    #    minimum to drag under and no maximum to drag up to.
+    assert w.minimumSize() == w.maximumSize() == w.size()
+    assert w.minimumSize().width() >= MINIMUM_WINDOW_WIDTH
+    assert w.minimumSize().height() >= MINIMUM_WINDOW_HEIGHT
 
     # 2. Choose Software opens compact, clamped to this screen, and never
     #    larger than the ceiling its own content can fill.
     started_w, started_h = default_window_size(w.screen())
     assert w.size().width() == started_w
-    assert MINIMUM_WINDOW_HEIGHT <= w.size().height() <= w.maximumHeight()
+    assert MINIMUM_WINDOW_HEIGHT <= w.size().height() <= MAXIMUM_SELECT_WINDOW_HEIGHT
 
-    # 3. Each page owns the size it needs: the form takes room, and the
-    #    catalogue gives it back when it comes around again.
+    # 3. Each page owns the size it needs: the form hands the border back, and
+    #    the catalogue pins its own fit when it comes around again.
     w._nav_to_page(4)  # Settings
     app.processEvents()
     assert w.size().width() == started_w
     assert w.size().height() <= w.maximumHeight()
+    assert w.minimumWidth() < w.maximumWidth(), "another page can still be resized"
 
     w._nav_to_page(0)  # Select
     app.processEvents()

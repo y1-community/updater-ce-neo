@@ -29,8 +29,8 @@ QT_QPA_PLATFORM=offscreen python3 tests/smoke_test.py
 
 When testing SP Flash Tool console mode:
 - **Command shape**:
-  `flash_tool -c download -s <scatter_path> -d MTK_AllInOne_DA.bin -t without -r`
-  (`download` = Download Only, matching 1.1.7; never `format-download`)
+  `flash_tool -c format-download -s <scatter_path> -d MTK_AllInOne_DA.bin -t without -r`
+  (`format-download` = Format All + Download, matching 1.1.7)
 - **Linux staging directory**:
   `~/.cache/innioasis-updater/linux_flash_tool/`
 - **history.ini verification**: Ensure entries contain valid absolute paths:

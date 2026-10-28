@@ -211,3 +211,51 @@ def test_main_window_heading_visibility_on_failure(app):
         win.close()
         win.deleteLater()
         app.processEvents()
+
+
+def test_stale_usb_loss_does_not_caption_the_next_attempt(app):
+    """A lost-USB state left in the machine must not title a fresh attempt.
+
+    The state machine keeps its terminal states when the user returns to
+    Select Software, so keying the header off it painted the next attempt's
+    download, extraction and power-off cards with the previous attempt's
+    "The USB connection was lost." heading.
+    """
+    win = MainWindow()
+    try:
+        app.processEvents()
+        lost = tr("err_usb_lost_title")
+        title = win._select_page._title
+
+        # An earlier attempt dropped the player.
+        win.sm.force_state(FlashState.S5_USB_DISCONNECTED)
+        win._install_failed = True
+        win._failure_title = lost
+
+        # The next attempt starts by downloading; that card is not a failure.
+        win._on_download_started("Rockbox 0.2.5 (Beta) for Y2", "Y2")
+        assert win._stack.currentIndex() == _PAGE_FLASH
+        assert title.text() == tr("flash_download_in_progress")
+        assert lost not in title.text()
+
+        # A local archive skips the download and goes straight to extraction.
+        win.sm.force_state(FlashState.S5_USB_DISCONNECTED)
+        win._install_failed = True
+        win._failure_title = lost
+        win._power_off_prompt = False
+        win._on_prep_started("Local firmware", "Y2")
+        assert title.text() == tr("flash_install_in_progress")
+        assert lost not in title.text()
+
+        # The power-off prompt that a new attempt shows before Next.
+        win.sm.force_state(FlashState.S5_USB_DISCONNECTED)
+        win._install_failed = True
+        win._failure_title = lost
+        win._prep_active = False
+        win._show_device_prep()
+        assert title.text() == tr("dialog_pre_install_title")
+        assert lost not in title.text()
+    finally:
+        win.close()
+        win.deleteLater()
+        app.processEvents()

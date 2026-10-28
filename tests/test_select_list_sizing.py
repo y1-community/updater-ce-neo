@@ -268,7 +268,7 @@ def test_default_size_is_wide_but_clamped_to_the_screen():
 
 
 def test_resizing_is_capped_at_the_content_and_the_design_width():
-    """The window can be dragged neither into empty space nor wider than designed."""
+    """A pinned catalogue, and caps wherever the user may still resize."""
     from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QApplication
     from src.ui.main_window import MainWindow, MAXIMUM_WINDOW_WIDTH
@@ -281,9 +281,10 @@ def test_resizing_is_capped_at_the_content_and_the_design_width():
     restore_workers = _freeze_background_listing(w, sp)
     try:
         _fill_big_rows(sp, 2)
-        assert _pump_until(app, lambda: True)
+        assert _pump_until(app, lambda: getattr(w, "_select_size_hold", None) is not None)
         screen_h = w.screen().availableGeometry().height()
-        assert w.maximumWidth() == min(MAXIMUM_WINDOW_WIDTH, w.screen().availableGeometry().width())
+        # The catalogue is a fixed-size screen: there is no cap to drag up to.
+        assert w.minimumSize() == w.maximumSize() == w.size()
         assert w.maximumHeight() < screen_h, "a short page must not offer empty height"
 
         # Ask for more than the ceiling: the page's own content wins.
@@ -292,11 +293,14 @@ def test_resizing_is_capped_at_the_content_and_the_design_width():
         assert w.width() <= MAXIMUM_WINDOW_WIDTH
         assert w.height() <= w.maximumHeight()
 
-        # The log is the one page that keeps every pixel.
+        # A page the user may resize stays capped at the design width, and the
+        # log is the one page that keeps every pixel.
         w._unlock_diagnostics()
         w._show_diagnostics()
-        app.processEvents()
-        assert w.maximumHeight() >= screen_h - 2
+        assert _pump_until(app, lambda: w.maximumHeight() >= screen_h - 2)
+        assert w.maximumWidth() == min(
+            MAXIMUM_WINDOW_WIDTH, w.screen().availableGeometry().width()
+        )
     finally:
         restore_workers()
     w.close()
@@ -348,6 +352,51 @@ def test_fit_skipped_while_install_owns_window():
             assert w.height() == settled_h
         finally:
             w._power_off_prompt = False
+    finally:
+        restore_workers()
+    w.close()
+    app.processEvents()
+
+
+def test_catalogue_window_is_pinned_until_another_page_owns_it():
+    """Select Software sizes itself, so the user cannot drag the window there."""
+    from PySide6.QtWidgets import QApplication
+    from src.ui.main_window import MainWindow, _PAGE_SELECT, _PAGE_SETTINGS
+
+    app = QApplication.instance() or QApplication(["--platform", "offscreen"])
+    w = MainWindow()
+    w.show()
+    assert _quiesce(app, w)
+    restore_workers = _freeze_background_listing(w, w._select_page)
+    try:
+        assert _pump_until(app, lambda: getattr(w, "_select_size_hold", None) is not None)
+        pinned = w.size()
+        assert w.minimumSize() == pinned and w.maximumSize() == pinned
+
+        # What a border drag asks for is clamped away, on both axes.
+        w.resize(pinned.width() + 260, pinned.height() + 180)
+        app.processEvents()
+        assert w.size() == pinned, w.size()
+        w.resize(max(320, pinned.width() - 260), max(240, pinned.height() - 180))
+        app.processEvents()
+        assert w.size() == pinned, w.size()
+
+        # Another page hands the border back...
+        w._nav_to_page(_PAGE_SETTINGS)
+        assert _pump_until(
+            app,
+            lambda: getattr(w, "_select_size_hold", None) is None
+            and not getattr(w, "_size_animating", False),
+        )
+        grown = w.size()
+        w.resize(min(w.maximumWidth(), grown.width() + 40), grown.height())
+        app.processEvents()
+        assert w.width() > grown.width(), (grown.width(), w.width())
+
+        # ... and coming back pins the freshly fitted size again.
+        w._nav_to_page(_PAGE_SELECT)
+        assert _pump_until(app, lambda: getattr(w, "_select_size_hold", None) is not None)
+        assert w.minimumSize() == w.maximumSize() == w.size()
     finally:
         restore_workers()
     w.close()

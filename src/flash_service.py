@@ -19,6 +19,8 @@ extract → validate → flash pipeline for both backends) and ``FlashService``
 (orchestration, cancellation, zombie-process reaping, device monitor).
 """
 
+import hashlib
+import json
 import logging
 import math
 import os
@@ -27,12 +29,14 @@ import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import traceback
 import uuid
 import zipfile
 import zlib
+from dataclasses import dataclass
 from pathlib import Path
 from struct import pack, unpack
 from typing import Optional, Union, Tuple
@@ -834,6 +838,10 @@ def parse_flash_error(value, model: str = "") -> tuple[str, str]:
     if any(k in raw.upper() for k in ("SP_FLASH_TOOL_NOT_FOUND", "MTK_IMPORT_FAILED")):
         return tr("err_tool_unavailable_title"), tr("err_tool_unavailable_desc")
 
+    # 10b. The authentication file the user chose cannot be used.
+    if "SP_AUTH_FILE_UNUSABLE" in raw.upper():
+        return tr("err_auth_file_unusable_title"), tr("err_auth_file_unusable_desc")
+
     # 11. Known SP error guidance fallback
     name = sp_error_name(raw) or SP_ERROR_CODE_NAMES.get(sp_error_code(raw), "")
     if name and name in SP_ERROR_GUIDANCE:
@@ -1132,12 +1140,19 @@ SIGNED_IMAGE_FOOTER_SIZE = 236
 SIGNED_IMAGE_OVERHEAD_SIZE = 300
 _LEGACY_MBR_BIAS_PLATFORMS = frozenset({"MT8382", "MT6572", "MT6574", "MT6582", "MT6580"})
 LEGACY_MBR_USER_ADDR_BIAS = 8388608  # 8MB (0x800000)
-LEGACY_SEGMENTED_WRITE_BYTES = 52428800  # 50MB per USB transfer chunk
+_SCATTER_TAIL_ADDR_MIN = 0xFFFF0000
+_SCATTER_TAIL_ADDR_MAX = 0xFFFFFFFF
+DEFAULT_SCATTER_BLOCK_SIZE = 0x20000
+LEGACY_SEGMENTED_WRITE_BYTES = 52428800  # 50 MiB per legacy DA command segment
 # The bundled legacy DA accepts a WRITE_IMAGE data phase and then stops
 # waiting for the final ACK: it returns True and records this note. The Y1 and
 # Y2 runs both take 109-111s to reach that point and keep the install, so this
 # note is not a failure; any other ``last_error`` next to a True result is.
 _BENIGN_WRITE_IMAGE_NOTE = "WRITE_IMAGE final ack timeout after data accepted"
+# USER-area tables the Chinese build reads back before the final preloader write.
+# Their first sample sectors must match the package image on the device.
+_LEGACY_TABLE_PARTS = ("MBR", "EBR1", "EBR2")
+_LEGACY_TABLE_SAMPLE_BYTES = 512
 # Per-transfer chunk size handed to the bundled (Chinese-fork) legacy DA. Its
 # ``sdmmc_write_data`` reads ``config.write_chunk_size`` for every USB transfer
 # and defaults to 1 MiB when unset. The shipped 1.1.7 build's legacy strategy
@@ -1370,6 +1385,21 @@ def _fill_brlyt_header(header: bytearray, raw_size: int):
     header[_BRLYT_OFFSET + 28 : _BRLYT_OFFSET + 32] = pack("<I", _PRELOADER_DATA_OFFSET)
     header[_BRLYT_OFFSET + 32 : _BRLYT_OFFSET + 36] = pack("<I", boundary_addr)
     header[_BRLYT_OFFSET + 36 : _BRLYT_OFFSET + 40] = pack("<I", 1)
+
+
+class PreloaderWriteMode:
+    """How a non-legacy DA writes the preloader, as Chinese build 1.1.7 does it.
+
+    COMPOSITE is one ``writeflash`` with ``parttype=10``, covering both boot areas.
+    SEPARATE writes boot1 then boot2, each as its own ``writeflash``.
+    """
+
+    COMPOSITE = "composite"
+    SEPARATE = "separate"
+
+
+def _preloader_write_mode(storage: str) -> str:
+    return PreloaderWriteMode.SEPARATE if storage == "ufs" else PreloaderWriteMode.COMPOSITE
 
 
 def _wrap_preloader_for_raw_boot(
@@ -1915,37 +1945,41 @@ def _parse_scatter_platform(scatter_path):
     return ""
 
 
+class SpAuthFileError(Exception):
+    """The authentication file the user chose cannot be handed to SP Flash Tool."""
+
+    def __init__(self, path, reason="missing"):
+        super().__init__(f"{reason}: {path}")
+        self.path = path
+        self.reason = reason
+
+
 def sp_flash_tool_console_args(scatter_arg, da_arg, auth_file="", log=None):
     """Console arguments for flash_tool, carrying an auth file when one is set.
 
     SP Flash Tool has no ``--auth`` switch, so an authentication file is only
     reachable through the console configuration file (``-i``). Without one the
-    plain command line is used, exactly as before — auth files are optional and
-    most targets are not secure-booted.
+    plain ``format-download`` command line is used. A set auth file that is
+    missing, empty or cannot be written raises :class:`SpAuthFileError`: flashing
+    without the file the user chose would be silently wrong.
     """
     auth = str(auth_file or "").strip()
     if auth:
         from . import sp_console_config
 
         if not sp_console_config.auth_file_usable(auth):
-            if log:
-                log(tr("sp_auth_missing_file").format(path=auth))
-        else:
-            try:
-                config = sp_console_config.write_console_config(
-                    scatter_arg, da_arg, auth
-                )
-            except sp_console_config.SpConfigError as e:
-                if log:
-                    log(tr(f"sp_config_{e.reason}"))
-            except OSError as e:
-                logger.warning("Could not write the SP console configuration: %s", e)
-                if log:
-                    log(tr("sp_config_write_failed"))
-            else:
-                if log:
-                    log(tr("sp_auth_loaded").format(path=auth))
-                return ["-r", "-i", str(config)]
+            raise SpAuthFileError(auth, "missing")
+        try:
+            config = sp_console_config.write_console_config(
+                scatter_arg, da_arg, auth
+            )
+        except sp_console_config.SpConfigError as e:
+            raise SpAuthFileError(auth, e.reason) from e
+        except OSError as e:
+            raise SpAuthFileError(auth, "write_failed") from e
+        if log:
+            log(tr("sp_auth_loaded").format(path=auth))
+        return ["-r", "-i", str(config)]
     # ``-c format-download`` is Format All + Download: the reference Chinese
     # 1.1.7 build runs this unconditionally (see analysis_cn/_flash_via_sp_flash_tool.dis.txt).
     # Full erase before download avoids S_DA_UPDATE_BOOTLOADER_EXIST_MAGIC_NOT_MATCHED (3145)
@@ -2304,6 +2338,13 @@ def _legacy_scatter_has_mbr_ebr(parts) -> bool:
     return {"mbr", "ebr1"}.issubset(names)
 
 
+@dataclass(frozen=True)
+class _ScatterUserAddressCandidate:
+    mode: str
+    bias: int
+    source: str = ""
+
+
 def _scatter_hex_int(value):
     """Parse a scatter hex field, or None when it is absent/unparseable.
 
@@ -2319,7 +2360,65 @@ def _scatter_hex_int(value):
 
 def _is_scatter_tail_addr(value) -> bool:
     """True for an address relative to the *end* of the user area (0xFFFF0000+)."""
-    return value is not None and 0xFFFF0000 <= value <= 0xFFFFFFFF
+    return value is not None and _SCATTER_TAIL_ADDR_MIN <= value <= _SCATTER_TAIL_ADDR_MAX
+
+
+def _resolve_scatter_special_addr(addr, user_size: int | None, block_size: int):
+    if addr is None or addr < 0:
+        return None
+    if not _is_scatter_tail_addr(addr):
+        return addr
+    if not user_size or not block_size:
+        return None
+    resolved = int(user_size) - (addr & 0xFFFF) * int(block_size)
+    return resolved if resolved >= 0 else None
+
+
+def _parse_scatter_block_size(scatter_path) -> int:
+    try:
+        content = Path(scatter_path).read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return DEFAULT_SCATTER_BLOCK_SIZE
+    match = re.search(r"^\s*block_size:\s*(0x[0-9a-fA-F]+|\d+)\s*$", content, re.MULTILINE)
+    value = _scatter_hex_int(match.group(1)) if match else None
+    return value if value and value > 0 else DEFAULT_SCATTER_BLOCK_SIZE
+
+
+def _resolve_scatter_user_addr_for_candidate(part, candidate, user_size, block_size):
+    """Resolve a USER address with the reference build's configured policy."""
+    if candidate.mode == "linear":
+        linear = _scatter_hex_int(part.get("linear_start_addr", ""))
+        if linear is not None:
+            return _resolve_scatter_special_addr(
+                max(0, linear - candidate.bias), user_size, block_size
+            )
+
+    physical = _scatter_hex_int(part.get("physical_start_addr", ""))
+    if physical is not None:
+        return _resolve_scatter_special_addr(
+            physical + candidate.bias, user_size, block_size
+        )
+
+    linear = _scatter_hex_int(part.get("linear_start_addr", ""))
+    return _resolve_scatter_special_addr(linear, user_size, block_size)
+
+
+def _readback_bias_matches_physical_layout(parts, bias, physical_bias) -> bool:
+    """True when a readback bias reproduces every comparable USER partition's physical address."""
+    comparable = 0
+    for part in parts:
+        if str(part.get("region", "")).strip().upper() != "EMMC_USER":
+            continue
+        if str(part.get("is_reserved", "")).strip().lower() == "true":
+            continue
+        linear = _scatter_hex_int(part.get("linear_start_addr", ""))
+        physical = _scatter_hex_int(part.get("physical_start_addr", ""))
+        if linear is None or physical is None or _is_scatter_tail_addr(physical):
+            continue
+        comparable += 1
+        if linear - bias != physical + physical_bias:
+            return False
+    return comparable > 0
 
 
 def _scatter_user_physical_addresses_are_usable(raw_parts) -> bool:
@@ -2754,6 +2853,9 @@ def build_mtk_write_plan(
     *,
     preloader_first=True,
     skip_table_partitions=False,
+    user_addressing=None,
+    user_size=None,
+    block_size=None,
 ):
     """Return the ordered write plan the shipped 1.1.7 build performs.
 
@@ -2787,6 +2889,9 @@ def build_mtk_write_plan(
 
     plan = []
     seen = set()
+    raw_parts = _read_scatter_parts(scatter_p) if user_addressing is not None else None
+    if user_addressing is not None and user_size is None:
+        user_size = 0
     for entry in sorted(entries, key=lambda e: e.get("order", 0)):
         name = (entry.get("name") or "").strip()
         if not name or not entry.get("is_download"):
@@ -2820,6 +2925,20 @@ def build_mtk_write_plan(
         # inside eMMC boot1 (the preloader) and at the head of the user area
         # (which the MBR occupies).
         offset = int(entry.get("offset") or 0)
+        if user_addressing is not None and parttype == "user":
+            raw_part = raw_parts[int(entry.get("order", 0))]
+            calibrated = _resolve_scatter_user_addr_for_candidate(
+                raw_part, user_addressing, user_size, block_size or DEFAULT_SCATTER_BLOCK_SIZE
+            )
+            if calibrated is None:
+                raise PackageLayoutError(
+                    f"Cannot resolve the {name} USER address from this scatter and device capacity"
+                )
+            if user_size and calibrated + length > user_size:
+                raise PackageLayoutError(
+                    f"{name} image at 0x{calibrated:X} exceeds the eMMC USER capacity"
+                )
+            offset = calibrated
         plan.append(
             {
                 "name": name,
@@ -3035,6 +3154,7 @@ class FlashWorker(QThread):
     step_changed = Signal(str)
     progress = Signal(object)
     action_changed = Signal(str)
+    partition_progress_changed = Signal(str)
     log_message = Signal(str)
     # Seconds left of the app's no-progress window while a backend command is
     # still silent; 0 once the countdown ends (progress began, or it expired).
@@ -3091,6 +3211,7 @@ class FlashWorker(QThread):
         self._sp_progress_hwm = 0
         self._mtk_cli_progress_hwm = 0
         self._mtk_cli_partition_progress: dict[str, float] = {}
+
         # Measured write rate for the ETA. Reset when the write phase begins:
         # the handshake and the format are not the transfer being timed.
         self._eta = ThroughputEta()
@@ -3395,6 +3516,13 @@ class FlashWorker(QThread):
             self._touch_attempt()
             if low.startswith("progress:"):
                 self._update_mtk_partition_action(text)
+            # Legacy DA prints progress local to one write command, with a
+            # hex position/total (e.g. 38% of a 50 MiB segment). The worker's
+            # byte callback separately emits cumulative install progress, so
+            # never map this percentage onto the whole-install progress bar.
+            if re.search(r"\bWrite:\s*\(0x[0-9a-f]+/0x[0-9a-f]+\)", text, re.IGNORECASE):
+                self.step_changed.emit(STEP_WRITE)
+                return
             m = re.search(r"(\d+(?:\.\d+)?)\s*%", text)
             if m:
                 try:
@@ -3846,12 +3974,16 @@ class FlashWorker(QThread):
 
         self._announce_please_wait()
         try:
+            sp_args = sp_flash_tool_console_args(scatter_arg, da_arg, auth_file, self._log)
+        except SpAuthFileError as e:
+            self._log(f"Authentication file cannot be used: {e.path}")
+            self.finished.emit(False, "SP_AUTH_FILE_UNUSABLE")
+            return
+        try:
             if IS_WINDOWS:
                 cmd = [
                     str(flash_tool_exe),
-                    *sp_flash_tool_console_args(
-                        scatter_arg, da_arg, auth_file, self._log
-                    ),
+                    *sp_args,
                 ]
                 self._log("Launching SP Flash Tool (console mode, searching USB)...")
                 self._log("Keep the device unplugged until the connect prompt appears.")
@@ -3868,9 +4000,7 @@ class FlashWorker(QThread):
                         creationflags=creationflags,
                     )
             else:
-                cmd_args = sp_flash_tool_console_args(
-                    scatter_arg, da_arg, auth_file, self._log
-                )
+                cmd_args = sp_args
                 self._log("Preparing SP Flash Tool environment (Linux)...")
 
                 def spawn():
@@ -4617,6 +4747,8 @@ class FlashWorker(QThread):
                     self.step_changed.emit(step)
                 elif line.startswith("[ACTION] "):
                     self.action_changed.emit(line[len("[ACTION] "):])
+                elif line.startswith("[PARTITION_PROGRESS] "):
+                    self.partition_progress_changed.emit(line[len("[PARTITION_PROGRESS] "):])
                 elif line.startswith("[LOG] "):
                     payload = line[len("[LOG] "):]
                     self._handle_mtk_subprocess_log(payload)
@@ -4719,7 +4851,7 @@ class FlashWorker(QThread):
         self._hold_device_loss(MTK_WRITE_PROGRESS_USB_GRACE_SECONDS)
 
     def _update_mtk_partition_action(self, line: str) -> None:
-        """Show the current partition's own percentage in the install subtitle."""
+        """Show the current partition's own percentage on the install card."""
         match = re.search(
             r"Progress:\s*([\d.]+)%\s+Write\s+(.+?)\s+\(([\d.]+)MB/([\d.]+)MB\)",
             line,
@@ -4728,12 +4860,12 @@ class FlashWorker(QThread):
         if not match:
             return
         try:
-            pct = int(float(match.group(1)))
+            pct = float(match.group(1))
         except ValueError:
             return
         task = layman_task_name(match.group(2).strip())
-        self.action_changed.emit(
-            tr("action_writing_task_fmt").format(task=task, pct=pct)
+        self.partition_progress_changed.emit(
+            tr("action_writing_task_fmt").format(task=task, pct=f"{pct:.1f}")
         )
 
     def _note_mtk_partition_progress(self, line: str) -> None:
@@ -5244,16 +5376,26 @@ class FlashWorker(QThread):
             self.finished.emit(False, "DEVICE_PACKAGE_MISMATCH")
             return
 
+        # The reference only calibrates from a saved readback capture; it does
+        # not send readflash commands to the connected legacy DA before writing.
+        try:
+            addressing = self._configure_scatter_user_addressing(scatter_file)
+            plan = build_mtk_write_plan(
+                scatter_file,
+                getattr(self, "package_model", "") or self.model,
+                preloader_first=False,
+                user_addressing=addressing,
+                user_size=_get_emmc_user_size(mtk),
+                block_size=_parse_scatter_block_size(scatter_file),
+            )
+        except PackageLayoutError as e:
+            self._log(f"Legacy USER address mapping is unsafe; no partitions were written: {e}")
+            self.finished.emit(False, "DEVICE_PACKAGE_MISMATCH")
+            return
+
         # The write plan is the 1.1.7 build's, not a guess: every downloadable
         # image in scatter order, the preloader last, and genuine package
-        # MBR/EBR tables written while empty stubs are skipped. Nothing is formatted
-        # before the run, so an interrupted install can always be retried from a
-        # player whose preloader still answers.
-        plan = build_mtk_write_plan(
-            scatter_file,
-            getattr(self, "package_model", "") or self.model,
-            preloader_first=False,
-        )
+        # MBR/EBR tables written while empty stubs are skipped.
         if not plan:
             self._log("Error: no writable partitions in scatter file")
             self.finished.emit(False, "NO_IMAGE_FILES")
@@ -5271,11 +5413,8 @@ class FlashWorker(QThread):
         # sequence is init, connect, then one ``w`` per partition), so the
         # package's own partition images are written as they are.
 
-        # The Chinese build reads nothing back before its writes: the reference
-        # sequence is init, connect, then one ``w`` per partition. On this
-        # legacy DA a pre-write ``readflash`` is not answered either (the DA
-        # stops responding and the player drops off the USB bus right after
-        # Stage 2), so the package's own layout is what gets written.
+        # Address calibration above is based only on the package and any
+        # matching saved readback captures. No DA readback is issued here.
         live_parts = []
         live_by_start = dict(live_parts or ())
         for step in plan:
@@ -5304,6 +5443,7 @@ class FlashWorker(QThread):
         part_completed_bytes = 0
         cur_part_name = ""
         cur_part_len = 0
+        legacy_tables: dict[str, tuple] = {}
         last_log_time = 0.0
         last_log_pct = -1.0
 
@@ -5323,6 +5463,10 @@ class FlashWorker(QThread):
             self._touch_attempt()
             self._note_install_progress()
             self._note_mtk_write_progress()
+            # MTKClient's guiprogress position resets for each legacy DA call.
+            # Completed segments have already been folded into completed_bytes
+            # (install-wide) and part_completed_bytes (partition-local) by
+            # on_segment_done().
             current_done = completed_bytes + pos
             current_part_done = part_completed_bytes + pos
             if total_bytes > 0:
@@ -5364,9 +5508,9 @@ class FlashWorker(QThread):
                 )
                 self._log(line)
                 task_label = layman_task_name(cur_part_name)
-                self.action_changed.emit(
+                self.partition_progress_changed.emit(
                     tr("action_writing_task_fmt").format(
-                        task=task_label, pct=int(part_pct)
+                        task=task_label, pct=f"{part_pct:.1f}"
                     )
                 )
 
@@ -5399,9 +5543,9 @@ class FlashWorker(QThread):
                     part=part_name, i=i + 1, total=total, file=file_path.name,
                 ))
                 task_label = layman_task_name(part_name)
-                self.action_changed.emit(
+                self.partition_progress_changed.emit(
                     tr("action_writing_task_fmt").format(
-                        task=task_label, pct=0
+                        task=task_label, pct="0.0"
                     )
                 )
 
@@ -5435,6 +5579,12 @@ class FlashWorker(QThread):
                     )
                     active_file = temp_unsparse
 
+                if part_name.upper() in _LEGACY_TABLE_PARTS:
+                    # Capture the expected sample now: a desparsed temp image is
+                    # removed once its step finishes.
+                    with open(active_file, "rb") as f:
+                        expected_sample = f.read(_LEGACY_TABLE_SAMPLE_BYTES)
+                    legacy_tables[part_name.upper()] = (offset, target_part, expected_sample)
                 write_len = active_file.stat().st_size if active_file.exists() else 0
                 file_off = 0
                 # A desparsed image is bigger than the sparse file on disk, so
@@ -5496,7 +5646,9 @@ class FlashWorker(QThread):
                             "(possible package/scatter mismatch)"
                         )
                     if is_preloader:
-                        self._write_mtk_preloader(da_handler, mtk, str(active_file))
+                        self._write_mtk_preloader(
+                            da_handler, mtk, str(active_file), legacy_tables
+                        )
                     elif sparse_regions:
                         self._write_mtk_sparse_regions(
                             mtk,
@@ -5639,20 +5791,120 @@ class FlashWorker(QThread):
         )
         return chunk
 
-    def _resolve_preloader_target_parts(self, mtk, normalized_region: str = ""):
-        norm = normalized_region.upper() if normalized_region else ""
-        if norm == "EMMC_BOOT_1":
-            return ("boot1",)
-        elif norm == "EMMC_BOOT_2":
-            return ("boot2",)
-        elif norm == "EMMC_BOOT1_BOOT2":
-            if self._is_legacy_mode(mtk):
-                return ("boot1",)
-            return ("boot1", "boot2")
+
+    def _configure_scatter_user_addressing(self, scatter_path):
+        """Choose the scatter address policy using the reference's saved readback calibration."""
+        parts = _read_scatter_parts(scatter_path)
+        physical_bias = _detect_legacy_user_addr_bias(scatter_path, parts)
+        physical_usable = _scatter_user_physical_addresses_are_usable(parts)
+        bias, source = self._find_readback_linear_bias(scatter_path, parts)
+        if physical_usable and (
+            bias is None or _readback_bias_matches_physical_layout(parts, bias, physical_bias)
+        ):
+            candidate = _ScatterUserAddressCandidate("physical", physical_bias)
+        elif bias is not None:
+            if physical_usable:
+                source = f"{source}, overrides physical_start_addr"
+            candidate = _ScatterUserAddressCandidate("linear", bias, source)
         else:
-            if self._is_legacy_mode(mtk):
-                return ("boot1",)
-            return ("boot1", "boot2")
+            candidate = _ScatterUserAddressCandidate(
+                "linear", 0, "readback calibration not found; using original linear address"
+            )
+        self._log(f"  USER address policy: {candidate.source or 'physical_start_addr'}")
+        return candidate
+
+    def _find_readback_linear_bias(self, scatter_path, parts):
+        """Return (bias, source) from a saved readback capture of this scatter's MBR, or (None, "")."""
+        mbr_part = next(
+            (part for part in parts
+             if str(part.get("partition_name", "")).strip().lower() == "mbr"
+             and str(part.get("region", "")).strip().upper() == "EMMC_USER"),
+            None,
+        )
+        if mbr_part is None:
+            return None, ""
+        mbr_linear = _scatter_hex_int(mbr_part.get("linear_start_addr", ""))
+        mbr_file = _resolve_image_file(Path(scatter_path).parent, mbr_part.get("file_name", ""))
+        if mbr_linear is None or not mbr_file.is_file():
+            return None, ""
+        try:
+            mbr_data = mbr_file.read_bytes()
+        except OSError:
+            return None, ""
+        if not mbr_data:
+            return None, ""
+
+        ebr_part = next(
+            (part for part in parts
+             if str(part.get("partition_name", "")).strip().lower() == "ebr1"
+             and str(part.get("region", "")).strip().upper() == "EMMC_USER"),
+            None,
+        )
+        ebr_linear = _scatter_hex_int(ebr_part.get("linear_start_addr", "")) if ebr_part else None
+        ebr_file = (
+            _resolve_image_file(Path(scatter_path).parent, ebr_part.get("file_name", ""))
+            if ebr_part else None
+        )
+        try:
+            ebr_data = ebr_file.read_bytes() if ebr_file and ebr_file.is_file() else b""
+        except OSError:
+            ebr_data = b""
+
+        try:
+            scatter_hash = hashlib.sha256(Path(scatter_path).read_bytes()).hexdigest()
+        except OSError:
+            scatter_hash = ""
+        manifests = sorted(
+            Path(tempfile.gettempdir()).glob("innioasis_readback_*/manifest.json"),
+            key=lambda path: path.stat().st_mtime if path.exists() else 0,
+            reverse=True,
+        )
+        for manifest_path in manifests:
+            try:
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if manifest.get("status") != "complete":
+                continue
+            if not self._readback_manifest_matches_scatter(manifest, scatter_path, scatter_hash):
+                continue
+            dump_file = next(
+                (dump.get("file") for dump in manifest.get("dumps", [])
+                 if dump.get("label") in ("EMMC_USER header key area", "EMMC_USER 头部关键区")
+                 and dump.get("file")),
+                None,
+            )
+            if not dump_file or not (manifest_path.parent / str(dump_file)).is_file():
+                continue
+            try:
+                data = (manifest_path.parent / str(dump_file)).read_bytes()
+            except OSError:
+                continue
+            found = data.find(mbr_data)
+            if found < 0:
+                continue
+            bias = mbr_linear - found
+            if bias < 0:
+                continue
+            if ebr_linear is not None and ebr_data:
+                ebr_addr = ebr_linear - bias
+                if ebr_addr < 0 or data[ebr_addr:ebr_addr + len(ebr_data)] != ebr_data:
+                    continue
+            return bias, f"readback calibration {manifest_path.parent.name}"
+        return None, ""
+
+    def _readback_manifest_matches_scatter(self, manifest, scatter_path, scatter_hash):
+        saved_scatter = Path(str(manifest.get("scatter_file", ""))).resolve()
+        if saved_scatter == Path(scatter_path).resolve():
+            return True
+        if scatter_hash and saved_scatter.is_file():
+            try:
+                if hashlib.sha256(saved_scatter.read_bytes()).hexdigest() == scatter_hash:
+                    return True
+            except OSError:
+                pass
+        saved_package = str(manifest.get("package_path", ""))
+        return bool(saved_package and saved_package == str(self.package_path))
 
     def _write_partition_segmented(
         self,
@@ -5665,7 +5917,7 @@ class FlashWorker(QThread):
         write_length: Optional[int] = None,
         bytes_progress_cb=None,
     ):
-        """Write large partitions in chunks (50MB by default) to keep USB transfers responsive."""
+        """Write large partitions as a sequence of 50 MiB DA commands."""
         file_path = Path(file_path_str)
         file_size = file_path.stat().st_size if file_path.exists() else 0
         fsize = write_length if write_length is not None else max(0, file_size - file_offset)
@@ -5948,7 +6200,33 @@ class FlashWorker(QThread):
             mismatch_parts.append(part)
         return mismatch_parts
 
-    def _write_mtk_preloader(self, da_handler, mtk, file_path_str) -> None:
+    def _verify_legacy_partition_tables(self, mtk, table_images: dict) -> None:
+        """Read back the MBR/EBR sample sectors before the final preloader write.
+
+        Matches Chinese build 1.1.7 ``_verify_partition_table_after_flash``: the
+        USER partition tables must already be on the device, as written, before
+        the preloader (the last image) is touched. A mismatch raises, so the old
+        preloader stays in place.
+        """
+        if not table_images:
+            return
+        self._log("Verifying USER partition table before final Legacy preloader write")
+        verified = []
+        for name in _LEGACY_TABLE_PARTS:
+            if name not in table_images:
+                continue
+            addr, parttype, expected = table_images[name]
+            actual = self._read_flash_blob(mtk, parttype, addr, len(expected))
+            if actual != expected:
+                raise RuntimeError(
+                    f"{name} readback verification failed offset=0x{addr:X} size={len(expected)}"
+                )
+            self._log(f"  {name} sample readback verification passed")
+            verified.append(name)
+        if verified:
+            self._log("Legacy partition table verification passed: " + ", ".join(verified))
+
+    def _write_mtk_preloader(self, da_handler, mtk, file_path_str, table_images=None) -> None:
         """Write the preloader the way the shipped 1.1.7 build does.
 
         A raw ``MMM\\x01`` preloader is wrapped in the BootROM's EMMC_BOOT /
@@ -5987,6 +6265,10 @@ class FlashWorker(QThread):
         else:
             self._log("  Legacy preloader uses original image")
         try:
+            self._verify_legacy_partition_tables(mtk, table_images or {})
+            if not self._is_legacy_mode(mtk):
+                self._write_preloader_non_legacy(mtk, write_file, _preloader_write_mode(storage))
+                return
             mismatch_targets = self._legacy_preloader_mismatch_targets(mtk, write_file, ("boot1",))
             if not mismatch_targets:
                 self._log("  Legacy preloader match check: boot1 already matches package image; preloader is intact")
@@ -6009,28 +6291,23 @@ class FlashWorker(QThread):
                     parttype=1,  # MTK_DA_EMMC_PART_BOOT1
                 )
                 error = getattr(getattr(mtk, "config", None), "last_error", None)
-                if not ok:
-                    if error and str(error).startswith(_BENIGN_WRITE_IMAGE_NOTE):
-                        self._log(
-                            f"  Legacy WRITE_IMAGE note: {error}; data phase accepted, "
-                            "treating as success for the old DA"
-                        )
-                    else:
-                        raise RuntimeError(error or "WRITE_IMAGE returned failure")
-                elif error:
-                    # The legacy DA accepts the whole data phase and then stops
-                    # waiting for the final ACK; it deliberately returns True
-                    # there and records the timeout. The shipped build logs
-                    # "final ACK missing, treating as success for old DA" and
-                    # keeps the install. Only that one note is benign; a DA
-                    # that returns True with any other recorded error is a
+                benign = bool(error) and str(error).startswith(_BENIGN_WRITE_IMAGE_NOTE)
+                if not ok and not benign:
+                    raise RuntimeError(error or "WRITE_IMAGE returned failure")
+                if ok and error and not benign:
+                    # A DA that returns True with any other recorded error is a
                     # failure, not a completed preloader write.
-                    if not str(error).startswith(_BENIGN_WRITE_IMAGE_NOTE):
-                        raise RuntimeError(error)
+                    raise RuntimeError(error)
+                if error:
+                    # The legacy DA accepts the whole data phase, stops waiting
+                    # for the final ACK and returns True. The shipped build logs
+                    # this and keeps the install; the note is cleared so it does
+                    # not stay recorded as a failure on the config.
                     self._log(
-                        f"  Legacy WRITE_IMAGE note: {error}; data phase accepted, "
-                        "treating as success for the old DA"
+                        "  Legacy WRITE_IMAGE boot1 data phase confirmed; final ACK missing, "
+                        "treating as success for old DA"
                     )
+                    mtk.config.last_error = None
             else:
                 # A DA without WRITE_IMAGE falls back to an address write into
                 # boot1; the wrapped image is what makes that safe.
@@ -6050,6 +6327,36 @@ class FlashWorker(QThread):
                     write_file.unlink(missing_ok=True)
                 except OSError as e:
                     logger.debug("Could not remove wrapped preloader: %s", e)
+
+    def _write_preloader_non_legacy(self, mtk, write_file: Path, mode: str) -> None:
+        """Write boot1/boot2 through a non-legacy DA, matching 1.1.7 ``_write_preloader``.
+
+        COMPOSITE tries one ``writeflash`` for both boot areas. A rejected composite
+        write falls back to SEPARATE, which writes boot1 then boot2.
+        """
+        write_size = write_file.stat().st_size
+        if mode == PreloaderWriteMode.COMPOSITE:
+            self._log("  Writing preloader in composite mode (parttype=10) ...")
+            if mtk.daloader.writeflash(
+                addr=0, length=write_size, filename=str(write_file), parttype=10
+            ):
+                return
+            self._log(
+                "⚠️ Composite write was rejected, possibly due to DA version differences; "
+                "falling back to separate mode"
+            )
+            mtk.config.last_error = None
+        self._log("  Writing boot1 / boot2 in separate mode ...")
+        for part in ("boot1", "boot2"):
+            if not mtk.daloader.writeflash(
+                addr=0, length=write_size, filename=str(write_file), parttype=part
+            ):
+                detail = getattr(mtk.config, "last_error", None)
+                suffix = f" ({detail})" if detail else ""
+                raise RuntimeError(
+                    f"Preloader write to {part} failed{suffix}; "
+                    "unplug and reconnect USB, then try again"
+                )
 
     def _write_mtk_sparse_regions(
         self,
@@ -6493,6 +6800,7 @@ class FlashService(QObject):
     step_changed = Signal(str)
     progress = Signal(object)
     action_changed = Signal(str)
+    partition_progress_changed = Signal(str)
     log_message = Signal(str)
     attempt_timeout = Signal(int)
     # Seconds left of the write, measured from this install's own write rate;
@@ -6621,6 +6929,7 @@ class FlashService(QObject):
         worker.step_changed.connect(self.step_changed)
         worker.progress.connect(self.progress)
         worker.action_changed.connect(self.action_changed)
+        worker.partition_progress_changed.connect(self.partition_progress_changed)
         worker.log_message.connect(self.log_message)
         worker.attempt_timeout.connect(self.attempt_timeout)
         worker.eta_changed.connect(self.eta_changed)
@@ -6656,7 +6965,8 @@ class FlashService(QObject):
     @staticmethod
     def _detach_worker(worker):
         for sig in (worker.step_changed, worker.progress, worker.action_changed,
-                    worker.log_message, worker.attempt_timeout, worker.eta_changed,
+                    worker.partition_progress_changed, worker.log_message,
+                    worker.attempt_timeout, worker.eta_changed,
                     worker.finished):
             try:
                 sig.disconnect()

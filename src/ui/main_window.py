@@ -1739,6 +1739,10 @@ class MainWindow(QMainWindow):
         Returns a bitmask of resize directions or None if not near an edge.
         Uses simple integer flags for compatibility.
         """
+        if getattr(self, "_select_size_hold", None) is not None:
+            # The catalogue pins the size: an edge drag cannot change it, so it
+            # must not offer the resize cursor or start a resize either.
+            return None
         rect = self.rect()
         edge_size = self._resize_edge_size
         x, y = pos.x(), pos.y()
@@ -1931,6 +1935,10 @@ class MainWindow(QMainWindow):
         self.service.step_changed.connect(self._on_step_changed)
         self.service.progress.connect(self._on_progress)
         self.service.action_changed.connect(self._flash_page.update_action)
+        if hasattr(self.service, "partition_progress_changed"):
+            self.service.partition_progress_changed.connect(
+                self._flash_page.update_partition_progress
+            )
         self.service.log_message.connect(self._on_log_message)
         self.service.flash_finished.connect(self._on_flash_finished)
         self.service.device_found.connect(self._on_device_found)
@@ -1968,6 +1976,7 @@ class MainWindow(QMainWindow):
         """Zip or archive extraction belongs on the install card, not the catalogue."""
         self._download_active = False
         self._prep_active = True
+        self._install_failed = False
         if name:
             self._package_name = name
         if model:
@@ -2868,6 +2877,42 @@ class MainWindow(QMainWindow):
             floor = min(floor, int(screen.availableGeometry().height()))
         return int(floor)
 
+    def _select_page_on_screen(self) -> bool:
+        """True while the software catalogue owns the window."""
+        stack = getattr(self, "_stack", None)
+        return (
+            self.isVisible()
+            and stack is not None
+            and stack.currentIndex() == _PAGE_SELECT
+        )
+
+    def _hold_select_window_size(self) -> None:
+        """Pin the window to the size the catalogue fitted itself to.
+
+        The catalogue measures its own content and the window follows it, so a
+        border drag can only spread the two columns apart or leave an empty
+        band under the last card. While that page is on screen its current
+        size is the only one on offer. The app's own fits still run: each one
+        releases the hold, sizes the window, and takes it again.
+        """
+        if not self._select_page_on_screen():
+            return
+        size = QSize(self.width(), self.height())
+        if getattr(self, "_select_size_hold", None) is None:
+            self._select_size_hold = (self.minimumSize(), self.maximumSize())
+        self.setMinimumSize(size)
+        self.setMaximumSize(size)
+
+    def _release_select_window_size(self) -> None:
+        """Lift the catalogue's fixed-size hold so a page can be fitted."""
+        hold = getattr(self, "_select_size_hold", None)
+        if hold is None:
+            return
+        self._select_size_hold = None
+        previous_min, previous_max = hold
+        self.setMinimumSize(previous_min)
+        self.setMaximumSize(previous_max)
+
     def _apply_window_size_limits(self, content_height: int | None = None, fill_height: bool = False) -> None:
         """Cap resizing at the sizes this page can fill.
 
@@ -2940,6 +2985,7 @@ class MainWindow(QMainWindow):
         page = stack.currentWidget() if stack is not None else None
         if page is None:
             return
+        self._release_select_window_size()
         if stack.currentIndex() == _PAGE_DIAGNOSTICS:
             self._apply_window_size_limits(fill_height=True)
             return
@@ -3010,6 +3056,10 @@ class MainWindow(QMainWindow):
             # Nothing to resize, but the page still must not be dragged
             # narrower than its cards.
             self.setMinimumWidth(floor_w)
+        if not getattr(self, "_size_animating", False):
+            # An animation re-takes the hold in _finish_size_anim; taking it
+            # now would freeze the window at the size it is about to leave.
+            self._hold_select_window_size()
 
     def _adjust_window_geometry(self):
         """Adjust window size to fit the content of the active page without wasted space."""
@@ -3021,6 +3071,7 @@ class MainWindow(QMainWindow):
         ):
             return
 
+        self._release_select_window_size()
         curr_idx = self._stack.currentIndex() if hasattr(self, "_stack") else _PAGE_SELECT
         # The log needs the full window, including while an install is running:
         # it is the one page that is allowed to keep growing past its content.
@@ -3288,6 +3339,7 @@ class MainWindow(QMainWindow):
         """Ease a programmatic resize. Reduced motion and a maximized window snap."""
         from .widgets import prefers_reduced_motion
 
+        self._release_select_window_size()
         width = int(width)
         height = int(height)
         anim = getattr(self, "_size_anim", None)
@@ -3343,6 +3395,7 @@ class MainWindow(QMainWindow):
             self._verify_native_chrome()
         if hasattr(self, "_schedule_caption_button_refresh"):
             self._schedule_caption_button_refresh()
+        self._hold_select_window_size()
 
     def _handoff_chrome(self) -> bool:
         """The disconnect hint and the download that leads to it."""
@@ -3530,9 +3583,11 @@ class MainWindow(QMainWindow):
         if page_idx == _PAGE_DIAGNOSTICS:
             return tr("log_center")
         if page_idx == _PAGE_FLASH:
-            if getattr(self, "_install_failed", False) or (
-                hasattr(self, "sm") and self.sm.state in (FlashState.S5_FAILED, FlashState.S5_USB_DISCONNECTED)
-            ):
+            # Only the card's own flag titles the page. The state machine keeps
+            # its terminal states across a return to Select Software, so keying
+            # off them captioned the next attempt's download/prep/power-off
+            # card with the previous attempt's lost-USB failure.
+            if getattr(self, "_install_failed", False):
                 return getattr(self, "_failure_title", None) or tr("install_failed_title")
             if getattr(self, "_power_off_prompt", False):
                 return tr("dialog_pre_install_title")
@@ -3558,9 +3613,7 @@ class MainWindow(QMainWindow):
         title = self._select_page._title
         curr_idx = self._stack.currentIndex() if hasattr(self, "_stack") else _PAGE_SELECT
         install_active = self._install_run_active() or getattr(self, "_compact_install_screen", False)
-        failed = getattr(self, "_install_failed", False) or (
-            hasattr(self, "sm") and self.sm.state in (FlashState.S5_FAILED, FlashState.S5_USB_DISCONNECTED)
-        )
+        failed = getattr(self, "_install_failed", False)
         text = self._page_title(curr_idx, install_active)
         title.setText(text)
         self._align_page_title()
@@ -3635,6 +3688,9 @@ class MainWindow(QMainWindow):
             self._highlight_nav(_PAGE_SETTINGS, False)
             return
         self._stack.setCurrentIndex(page_idx)
+        if page_idx != _PAGE_SELECT:
+            # The catalogue's fixed-size hold belongs to that page alone.
+            self._release_select_window_size()
         from .surfaces import harmonise_window_plates
         harmonise_window_plates(self)
         # A card shown on its own owns the Settings page only while that page is
@@ -3698,6 +3754,7 @@ class MainWindow(QMainWindow):
         self._remember_catalogue_section()
         self._download_active = False
         self._prep_active = False
+        self._install_failed = False
         self._package_path = path
         self._package_name = name
         self._package_model = model or ""
@@ -3768,16 +3825,25 @@ class MainWindow(QMainWindow):
             logger.debug("Terminal install: platform detection failed: %s", e)
 
         da_file, auth_file = self._flash_inputs()
-        command = terminal_install.build_install_command(
-            self._flash_method,
-            extract_dir,
-            scatter,
-            package_path=self._package_path,
-            platform_name=platform_name,
-            auth_file=auth_file,
-            da_file=da_file,
-            model=self._package_model,
-        )
+        from ..flash_service import SpAuthFileError
+
+        try:
+            command = terminal_install.build_install_command(
+                self._flash_method,
+                extract_dir,
+                scatter,
+                package_path=self._package_path,
+                platform_name=platform_name,
+                auth_file=auth_file,
+                da_file=da_file,
+                model=self._package_model,
+            )
+        except SpAuthFileError as e:
+            QMessageBox.warning(
+                self, tr("terminal_install_title"), tr("err_auth_file_unusable_desc")
+            )
+            logger.debug("Terminal install: auth file unusable: %s", e)
+            return
         if command is None:
             self._nav_to_page(_PAGE_SELECT)
             QMessageBox.warning(

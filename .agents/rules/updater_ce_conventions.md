@@ -90,8 +90,8 @@ To ensure MediaTek SP Flash Tool executes reliably across all Linux distribution
 - **8.3 Short Path Conversion (`GetShortPathNameW`)**: SP Flash Tool's C++ parser fails on path strings with spaces or non-ASCII characters. On Windows, always convert scatter and DA file paths to short 8.3 paths via `ctypes.windll.kernel32.GetShortPathNameW` before passing them as CLI arguments.
 - **Console Mode CLI Shape**: SP Flash Tool console mode must be invoked with:
   `flash_tool.exe -c download -s <scatter_8.3> -d <da_8.3> -t without -r`
-  (`download` is Download Only, the command the shipped 1.1.7 build runs;
-  `format-download` erases the whole flash first and is never issued)
+  (`format-download` is Format All + Download, the command the shipped 1.1.7 build runs
+  with or without an authentication file; an auth file is passed via the `-i` console config)
   (omitting DA when default DA is loaded, and never adding spurious `-f` arguments which SP Flash Tool v5 rejects).
 - **Background Log Monitoring**: SP Flash Tool on Windows emits UI progress and partition details to `C:\ProgramData\SP_FT_Logs\*\QT_FLASH_TOOL.log` rather than stdout. Tail this file in the background during flash runs to stream accurate progress.
 

@@ -1747,9 +1747,14 @@ class FlashPage(QWidget):
 
         self._step_label = _status_label(tr("step_write"))
         self._eta_label = _status_label("")
+        self._partition_progress_label = _status_label("")
+        self._partition_progress_label.setObjectName("partitionWriteProgress")
+        self._partition_progress_label.setWordWrap(True)
+        self._partition_progress_label.setVisible(False)
         # Step and ETA share one row on a wide card, stack on a narrow one.
         self._status_flow = _FlowRow(self._step_label, self._eta_label)
         copy.addWidget(self._status_flow)
+        copy.addWidget(self._partition_progress_label)
 
         self._theme_row = QWidget()
         theme_vbox = QVBoxLayout(self._theme_row)
@@ -1893,6 +1898,7 @@ class FlashPage(QWidget):
         self._eta_row = InfoRow("flash_eta")
         self._prep_eta_seconds = 0
         self._eta_label.setText("")
+        self._partition_progress_label.setVisible(False)
         if getattr(self, "_rockbox_site_themes", False):
             if hasattr(self, "_rockbox_site_widget"):
                 self._rockbox_site_widget.setVisible(True)
@@ -2368,6 +2374,7 @@ class FlashPage(QWidget):
 
     def show_install_failure(self, message: str, explanation: str = "", percent: int = 0) -> None:
         """Keep the failure on the install progress card, with Retry and Cancel beneath."""
+        self.update_partition_progress("")
         self.dismiss_prompt_stop()
         self._failed = True
         self._prompt_only = False
@@ -2466,6 +2473,7 @@ class FlashPage(QWidget):
             _apply_card_text(self._step_label)
         if hasattr(self, "_eta_label"):
             self._eta_label.setText("")
+        self._partition_progress_label.setVisible(False)
         if getattr(self, "_rockbox_site_themes", False):
             if hasattr(self, "_rockbox_site_widget"):
                 self._rockbox_site_widget.setVisible(True)
@@ -3227,6 +3235,7 @@ class FlashPage(QWidget):
 
     def set_package_name(self, name):
         self._package_name = name or ""
+        self.update_partition_progress("")
         val = self._display_package_name() or "\u2014"
         if hasattr(self, "_prep_pkg_label"):
             self._prep_pkg_label.setText(val)
@@ -3288,6 +3297,7 @@ class FlashPage(QWidget):
         return not getattr(self, "_themes_stage_active", False)
 
     def set_device_done(self):
+        self.update_partition_progress("")
         self.dismiss_prompt_stop()
         self._complete = True
         self._failed = False
@@ -3313,6 +3323,7 @@ class FlashPage(QWidget):
         self._wait_status.set_status("complete")
         self._progress_bar.setValue(100)
         self._eta_label.setText("")
+        self._partition_progress_label.setVisible(False)
         if getattr(self, "_rockbox_site_themes", False):
             if hasattr(self, "_rockbox_site_widget"):
                 self._rockbox_site_widget.setVisible(True)
@@ -3349,6 +3360,26 @@ class FlashPage(QWidget):
         self._notify_geometry_change()
 
     _ACTION_HOLD_MS = 1000
+
+    def update_partition_progress(self, text: str) -> None:
+        """Show the backend's current partition percent on the install card."""
+        label = getattr(self, "_partition_progress_label", None)
+        if label is None:
+            return
+        text = str(text or "")
+        if not text:
+            label.clear()
+            label.setVisible(False)
+            self._notify_geometry_change()
+            return
+        label.setText(text)
+        if getattr(self, "_complete", False) or getattr(self, "_failed", False):
+            label.setVisible(False)
+            return
+        was_hidden = label.isHidden()
+        label.setVisible(True)
+        if was_hidden:
+            self._notify_geometry_change()
 
     def update_action(self, text):
         """Show a status line without flicker.
@@ -3733,6 +3764,7 @@ class FlashPage(QWidget):
             "_prep_pkg_label", "_prep_step",
             "_wait_pkg_label", "_wait_prompt_label", "_wait_mode_hint",
             "_flash_pkg_label", "_step_label", "_eta_label",
+            "_partition_progress_label",
             "_download_pkg_label", "_download_status_label", "_paperclip_hint",
         )
         for name in names:

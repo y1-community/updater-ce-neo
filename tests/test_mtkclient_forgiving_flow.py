@@ -149,6 +149,16 @@ def test_mtkclient_forgiving_handshake_and_progress_detection():
     assert STEP_WRITE in steps
     assert any(p >= 50 for p in progress_vals)
 
+    # DA segment progress uses a local hex byte counter; its 50 MiB percent
+    # belongs only to the partition indicator, not the install-wide bar.
+    steps.clear()
+    progress_vals.clear()
+    w._classify_mtk_output(
+        "Progress: |███████---| 38.0% Write: (0x1300000/0x3200000), 5.96 MB/s"
+    )
+    assert STEP_WRITE in steps
+    assert progress_vals == []
+
 
 def test_rockbox_themes_stage_power_on_and_fallback():
     """Rockbox post-flash flow begins with model-specific power-button guidance,
@@ -270,23 +280,36 @@ def test_layman_subtitle_and_action_update():
     assert layman_task_name("userdata") == tr("task_writing_user_storage")
     assert layman_task_name("USRDATA") == tr("task_writing_user_storage")
 
-    # MTKClient's partition progress updates the activity subtitle, not only the log.
+    # MTKClient forwards precise per-partition progress independently.
     from src.flash_service import FlashWorker
+    page.show_flashing()
     worker = FlashWorker("dummy.zip", method="mtk")
     actions = []
+    partition_progress = []
     worker.action_changed.connect(actions.append)
+    worker.partition_progress_changed.connect(partition_progress.append)
+    worker.partition_progress_changed.connect(page.update_partition_progress)
     worker._classify_mtk_output(
         "Progress: 48.9% Write USRDATA (17.0MB/34.7MB), 5.1 MB/s (01s left)"
     )
-    assert actions[-1] == tr("action_writing_task_fmt").format(
-        task=tr("task_writing_user_storage"), pct=48
+    assert partition_progress[-1] == tr("action_writing_task_fmt").format(
+        task=tr("task_writing_user_storage"), pct="48.9"
     )
+    page.update_progress(20)
+    assert page._partition_progress_label.isVisible()
+    assert "48.9%" in page._partition_progress_label.text()
+    assert tr("task_writing_user_storage") in page._partition_progress_label.text()
+    assert page._progress_bar.value() == 20
+    page.update_action(tr("action_install_in_progress"))
+    assert "48.9%" in page._partition_progress_label.text()
 
-    # update_action sets the subtitle label on the flash card
-    sample_action = tr("action_writing_task_fmt").format(task=tr("task_writing_system"), pct=42)
-    page.update_action(sample_action)
-    assert "42%" in page._step_label.text()
-    assert tr("task_writing_system") in page._step_label.text()
+    # The subprocess path receives the parent's structured child log; it must
+    # parse that line too, rather than relying on child [ACTION] output.
+    worker._handle_mtk_subprocess_log(
+        "Progress: 19.6% Write ANDROID (160.5MB/820.0MB), 5.54 MB/s (02m:03s left)"
+    )
+    assert "19.6%" in page._partition_progress_label.text()
+    assert tr("task_writing_system") in page._partition_progress_label.text()
 
 
 def test_preloader_skipped_in_mtkclient():

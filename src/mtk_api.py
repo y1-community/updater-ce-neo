@@ -207,8 +207,45 @@ def install_macos_usb_reset_guard() -> bool:
 install_macos_usb_reset_guard()
 
 
+def _patch_mtk_progress_output() -> bool:
+    """Keep MTKClient's original terminal progress output alongside GUI updates.
+
+    The bundled progress helper suppresses its own bars whenever guiprogress is
+    set. Temporarily disabling that callback only while its original update()
+    formats/writes the progress line preserves MTKClient's output verbatim; the
+    same callback is then invoked so the guided install UI remains responsive.
+    """
+    try:
+        from mtkclient.Library import gui_utils
+
+        progress = gui_utils.progress
+        original_update = progress.update
+        if getattr(original_update, "_updater_tee_progress", False):
+            return True
+
+        def update_with_console_and_gui(self, length):
+            callback = getattr(self, "guiprogress", None)
+            if callback is None:
+                return original_update(self, length)
+            self.guiprogress = None
+            try:
+                result = original_update(self, length)
+            finally:
+                self.guiprogress = callback
+            callback(self.pos)
+            return result
+
+        update_with_console_and_gui._updater_tee_progress = True
+        progress.update = update_with_console_and_gui
+        return True
+    except Exception as e:
+        logger.debug("Could not preserve MTKClient progress output: %s", e)
+        return False
+
+
 def _apply_runtime_patches():
     """Apply runtime USB and platform adaptations without modifying upstream mtkclient."""
+    _patch_mtk_progress_output()
     try:
         from mtkclient.config import usb_ids
 

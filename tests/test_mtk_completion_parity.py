@@ -133,7 +133,7 @@ def test_preloader_mismatch_check_writes_when_different(tmp_path):
     preloader_data = b"MMM\x01" + b"\x00" * 2044
     preloader_bin.write_bytes(preloader_data)
 
-    mock_da = MagicMock()
+    mock_da = MagicMock(flashmode="LEGACY")
     mock_da.readflash.return_value = b"\x00" * 2048
     mock_da.sdmmc_write_image.return_value = True
     mock_mtk = MagicMock(daloader=mock_da)

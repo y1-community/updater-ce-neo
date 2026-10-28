@@ -9,6 +9,9 @@ writing an image past the partition the scatter describes.
 
 import shutil
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
 
 from src import flash_service as fs
 
@@ -99,6 +102,83 @@ def test_y2_writes_the_preloader_first_at_boot1_and_skips_table_stubs(tmp_path):
     assert by_name["ANDROID"]["length"] == (by_name["ANDROID"]["path"]).stat().st_size
 
 
+def test_y2_addressing_uses_only_matching_completed_readback_capture(tmp_path, monkeypatch):
+    import json
+
+    from src.flash_service import FlashWorker
+
+    scatter = _fixture(tmp_path, "MT6582_Android_scatter.txt", stub_tables=False)
+    mbr = bytearray(512)
+    mbr[:15] = b"PACKAGE-MBR-REF"
+    mbr[510:512] = b"\\x55\\xaa"
+    ebr = bytearray(512)
+    ebr[:15] = b"PACKAGE-EBR-REF"
+    ebr[510:512] = b"\\x55\\xaa"
+    (scatter.parent / "MBR").write_bytes(mbr)
+    (scatter.parent / "EBR1").write_bytes(ebr)
+
+    # The captured table bytes prove a 0x800000 linear bias. This contradicts
+    # the scatter's fixed physical+8MB mapping, so the reference switches to
+    # the calibrated linear map.
+    user_head = tmp_path / "innioasis_readback_matching" / "user_head.bin"
+    user_head.parent.mkdir()
+    mbr_addr, ebr_addr = 0x1400000 - 0x800000, 0x1480000 - 0x800000
+    with user_head.open("wb") as capture:
+        capture.truncate(ebr_addr + len(ebr))
+        capture.seek(mbr_addr)
+        capture.write(mbr)
+        capture.seek(ebr_addr)
+        capture.write(ebr)
+    (user_head.parent / "manifest.json").write_text(json.dumps({
+        "status": "complete",
+        "scatter_file": str(scatter.resolve()),
+        "package_path": "fixture-package.zip",
+        "dumps": [{"label": "EMMC_USER header key area", "file": user_head.name}],
+    }))
+    monkeypatch.setattr(fs.tempfile, "gettempdir", lambda: str(tmp_path))
+
+    worker = FlashWorker("fixture-package.zip", method="mtk", model="Y2")
+    addressing = worker._configure_scatter_user_addressing(scatter)
+    assert (addressing.mode, addressing.bias) == ("linear", 0x800000)
+
+    plan = fs.build_mtk_write_plan(
+        scatter, "Y2", preloader_first=False, user_addressing=addressing,
+        user_size=0x50000000, block_size=fs._parse_scatter_block_size(scatter),
+    )
+    by_name = {step["name"].upper(): step for step in plan}
+    assert by_name["UBOOT"]["offset"] == 0x3120000 - 0x800000
+    assert by_name["ANDROID"]["offset"] == 0x6580000 - 0x800000
+    assert by_name["USRDATA"]["offset"] == 0x41780000 - 0x800000
+
+
+def test_y2_without_usable_readback_keeps_reference_physical_fallback(tmp_path, monkeypatch):
+    import json
+
+    from src.flash_service import FlashWorker
+
+    scatter = _fixture(tmp_path, "MT6582_Android_scatter.txt")
+    # An incomplete capture for another scatter is not calibration evidence.
+    readback_dir = tmp_path / "innioasis_readback_unrelated"
+    readback_dir.mkdir()
+    (readback_dir / "manifest.json").write_text(json.dumps({
+        "status": "running",
+        "scatter_file": str(tmp_path / "different_scatter.txt"),
+        "dumps": [],
+    }))
+    monkeypatch.setattr(fs.tempfile, "gettempdir", lambda: str(tmp_path))
+
+    worker = FlashWorker("fixture-package.zip", method="mtk", model="Y2")
+    addressing = worker._configure_scatter_user_addressing(scatter)
+    assert (addressing.mode, addressing.bias) == ("physical", fs.LEGACY_MBR_USER_ADDR_BIAS)
+    plan = fs.build_mtk_write_plan(
+        scatter, "Y2", user_addressing=addressing, user_size=0x50000000,
+        block_size=fs._parse_scatter_block_size(scatter),
+    )
+    by_name = {step["name"].upper(): step for step in plan}
+    assert by_name["UBOOT"]["offset"] == 0x1D20000 + fs.LEGACY_MBR_USER_ADDR_BIAS
+    assert by_name["ANDROID"]["offset"] == 0x5180000 + fs.LEGACY_MBR_USER_ADDR_BIAS
+
+
 def test_preloader_first_can_be_switched_off(tmp_path):
     scatter = _fixture(tmp_path, "MT6582_Android_scatter.txt")
     first = fs.build_mtk_write_plan(scatter, "Y2")
@@ -168,6 +248,8 @@ def test_plan_never_contains_a_preloader_duplicate_for_boot2(tmp_path):
 
 
 class _FakeDaLoader:
+    flashmode = "LEGACY"  # the bundled legacy DA reports this session mode
+
     def __init__(self, image_result=True):
         self.calls = []
         self.image_result = image_result
@@ -258,7 +340,8 @@ def test_a_final_ack_timeout_after_accepted_data_is_a_success(tmp_path):
     worker._write_mtk_preloader(None, mtk, str(preloader))
 
     assert len(da.calls) == 1
-    assert any("treating as success for the old DA" in m for m in logs), logs
+    assert any("treating as success for old DA" in m for m in logs), logs
+    assert mtk.config.last_error is None, "the benign final-ACK note must be cleared"
 
 
 class _TruthyWithRealErrorDaLoader(_FakeDaLoader):
@@ -335,6 +418,87 @@ def test_sparse_regions_are_written_at_their_own_offsets(tmp_path):
     ]
     assert [call[1]["offset"] for call in daloader.calls] == [0, 4096]
     assert seen == [2048, 2048]
+
+
+class _TableReadbackDaLoader(_FakeDaLoader):
+    """Serves readflash from a device map keyed by (parttype, addr)."""
+
+    def __init__(self, device):
+        super().__init__()
+        self.device = device
+
+    def readflash(self, **kwargs):
+        self.calls.append(("readflash", kwargs))
+        return self.device.get((kwargs["parttype"], kwargs["addr"]), b"")
+
+
+def _table_image(name):
+    return (name.encode() * 200)[:512]
+
+
+_TABLE_ADDRS = {"MBR": 0x0, "EBR1": 0x40000, "EBR2": 0x80000}
+
+
+def test_table_readbacks_precede_the_final_preloader_write(tmp_path):
+    """MBR/EBR1/EBR2 are read back from the device before the boot1 preloader write."""
+    preloader = tmp_path / "preloader.bin"
+    preloader.write_bytes(b"MMM\x01" + b"\xAA" * 4096)
+    tables = {}
+    device = {}
+    for name, addr in _TABLE_ADDRS.items():
+        tables[name] = (addr, "user", _table_image(name))
+        device[("user", addr)] = _table_image(name)
+    da = _TableReadbackDaLoader(device)
+    mtk = _FakeMtk(da)
+    worker = fs.FlashWorker("pkg.zip", method="mtk")
+    logs = []
+    worker._log = lambda m: logs.append(str(m))
+
+    worker._write_mtk_preloader(None, mtk, str(preloader), tables)
+
+    kinds = [kind for kind, _ in da.calls]
+    write_at = kinds.index("write_image")
+    table_reads = [
+        kwargs for kind, kwargs in da.calls[:write_at] if kwargs["parttype"] == "user"
+    ]
+    assert [c["addr"] for c in table_reads] == [0x0, 0x40000, 0x80000]
+    assert all(kind == "readflash" for kind in kinds[:write_at])
+    assert kinds.count("write_image") == 1
+    assert any("Legacy partition table verification passed" in m for m in logs), logs
+
+
+def test_a_table_that_reads_back_differently_blocks_the_preloader(tmp_path, monkeypatch):
+    """A mismatched EBR1 sample raises before WRITE_IMAGE and removes the wrapped temp."""
+    preloader = tmp_path / "preloader.bin"
+    preloader.write_bytes(b"MMM\x01" + b"\xAA" * 4096)
+    wrapped = tmp_path / "wrapped.bin"
+    wrapped.write_bytes(b"X" * 64)
+    monkeypatch.setattr(
+        fs, "_wrap_preloader_for_raw_boot", lambda path, storage, log_cb=None: wrapped
+    )
+    tables = {
+        "MBR": (_TABLE_ADDRS["MBR"], "user", _table_image("MBR")),
+        "EBR1": (_TABLE_ADDRS["EBR1"], "user", _table_image("EBR1")),
+    }
+    device = {
+        ("user", _TABLE_ADDRS["MBR"]): _table_image("MBR"),
+        ("user", _TABLE_ADDRS["EBR1"]): b"\x00" * 512,
+    }
+    da = _TableReadbackDaLoader(device)
+    mtk = _FakeMtk(da)
+    worker = fs.FlashWorker("pkg.zip", method="mtk")
+    worker._log = lambda *a, **k: None
+
+    try:
+        worker._write_mtk_preloader(None, mtk, str(preloader), tables)
+    except RuntimeError as err:
+        assert "EBR1 readback verification failed offset=0x40000 size=512" in str(err), str(err)
+    else:
+        raise AssertionError("a table that reads back differently must block the preloader")
+
+    assert not any(kind == "write_image" for kind, _ in da.calls)
+    assert not wrapped.exists(), "the wrapped temp image must be cleaned up"
+    assert preloader.exists()
 
 
 def test_macos_port_close_never_issues_a_bus_wide_device_reset(monkeypatch):
@@ -666,3 +830,82 @@ def test_a_legacy_da_session_never_probes_the_device_table(tmp_path):
     # Another DA type (a future xflash session) still gets the layout check.
     assert fs.should_probe_live_table(plan, object()) is True
     assert fs.should_probe_live_table([]) is False
+
+
+class _NonLegacyDaLoader(_FakeDaLoader):
+    """A non-legacy DA whose writeflash results are scripted per parttype."""
+
+    def __init__(self, results, config):
+        super().__init__()
+        self.results = results
+        self.config = config
+
+    def writeflash(self, **kwargs):
+        self.calls.append(("writeflash", kwargs))
+        ok = self.results.get(kwargs["parttype"], True)
+        if not ok:
+            self.config.last_error = "device busy"
+        return ok
+
+
+def _non_legacy_worker(tmp_path, results, flashtype="emmc"):
+    preloader = tmp_path / "preloader.bin"
+    preloader.write_bytes(b"MMM\x01" + b"\xCC" * 4096)
+    mtk = _FakeMtk(None)
+    da = _NonLegacyDaLoader(results, mtk.config)
+    mtk.daloader = da
+    da.flashmode = "XFLASH"
+    da.daconfig = SimpleNamespace(storage=SimpleNamespace(flashtype=flashtype))
+    worker = fs.FlashWorker("pkg.zip", method="mtk")
+    worker._log = lambda *a, **k: None
+    return worker, mtk, da, preloader
+
+
+def test_preloader_write_mode_is_separate_for_ufs_and_composite_otherwise():
+    assert fs._preloader_write_mode("ufs") == fs.PreloaderWriteMode.SEPARATE
+    assert fs._preloader_write_mode("emmc") == fs.PreloaderWriteMode.COMPOSITE
+
+
+def test_non_legacy_emmc_writes_one_composite_parttype_10_image(tmp_path):
+    worker, mtk, da, preloader = _non_legacy_worker(tmp_path, {})
+
+    worker._write_mtk_preloader(None, mtk, str(preloader))
+
+    assert [c[1]["parttype"] for c in da.calls] == [10]
+    assert da.calls[0][1]["addr"] == 0
+
+
+def test_non_legacy_ufs_writes_boot1_then_boot2_without_composite(tmp_path):
+    worker, mtk, da, preloader = _non_legacy_worker(tmp_path, {}, flashtype="ufs")
+
+    worker._write_mtk_preloader(None, mtk, str(preloader))
+
+    assert [c[1]["parttype"] for c in da.calls] == ["boot1", "boot2"]
+
+
+def test_rejected_composite_write_falls_back_to_boot1_then_boot2(tmp_path):
+    worker, mtk, da, preloader = _non_legacy_worker(tmp_path, {10: False})
+
+    worker._write_mtk_preloader(None, mtk, str(preloader))
+
+    assert [c[1]["parttype"] for c in da.calls] == [10, "boot1", "boot2"]
+
+
+def test_failed_separate_write_raises_and_cleans_up_the_wrapped_image(tmp_path, monkeypatch):
+    worker, mtk, da, preloader = _non_legacy_worker(tmp_path, {10: False, "boot1": False})
+    written = []
+    real_wrap = fs._wrap_preloader_for_raw_boot
+
+    def tracking_wrap(*args, **kwargs):
+        out = real_wrap(*args, **kwargs)
+        written.append(Path(out))
+        return out
+
+    monkeypatch.setattr(fs, "_wrap_preloader_for_raw_boot", tracking_wrap)
+
+    with pytest.raises(RuntimeError, match="boot1 failed .*device busy"):
+        worker._write_mtk_preloader(None, mtk, str(preloader))
+
+    assert [c[1]["parttype"] for c in da.calls] == [10, "boot1"]
+    assert written, "the preloader must be wrapped before the write"
+    assert all(not p.exists() for p in written)

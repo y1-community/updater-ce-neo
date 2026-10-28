@@ -430,6 +430,7 @@ def main():
         worker.step_changed.connect(lambda x: print(f"[STEP] {x}", flush=True))
         worker.log_message.connect(lambda x: print(f"[LOG] {x}", flush=True))
         worker.action_changed.connect(lambda x: print(f"[ACTION] {x}", flush=True))
+        worker.partition_progress_changed.connect(lambda x: print(f"[PARTITION_PROGRESS] {x}", flush=True))
         worker.eta_changed.connect(lambda x: print(f"[ETA] {x}", flush=True))
 
         from . import process_guard

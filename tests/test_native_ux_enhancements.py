@@ -384,8 +384,6 @@ def test_compact_window_mode_and_sidebar_hiding():
     """Verify window shrinks to compact mode and hides Settings during an install."""
     from src.state import FlashState
     from src.ui.main_window import (
-        MINIMUM_WINDOW_HEIGHT,
-        MINIMUM_WINDOW_WIDTH,
         _PAGE_SETTINGS,
         _PAGE_FLASH,
         _PAGE_SELECT,
@@ -466,8 +464,11 @@ def test_compact_window_mode_and_sidebar_hiding():
     assert w._log_btn.isVisible() is True
     assert w._check_updates_btn.isVisible() is True
     assert w._lang_combo.isVisible() is True
-    assert w.minimumSize().width() == MINIMUM_WINDOW_WIDTH
-    assert w.minimumSize().height() == MINIMUM_WINDOW_HEIGHT
+    # The catalogue pins the window again to the size the page fitted.
+    if getattr(w, "_size_anim", None) is not None:
+        w._size_anim.setCurrentTime(200)
+    app.processEvents()
+    assert w.minimumSize() == w.maximumSize() == w.size()
 
 
 def test_window_maximization_enabled():

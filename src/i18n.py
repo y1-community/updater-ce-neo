@@ -5019,6 +5019,18 @@ _STRINGS: dict = {
         "de": "Dem Firmware-Paket fehlt die Scatter-Datei oder erforderliche Image-Dateien. Bitte laden Sie das Paket erneut herunter oder wählen Sie eine vollständige Datei.",
         "ja": "ファームウェアパッケージにscatterファイルまたは必要なイメージファイルが含まれていません。パッケージを再ダウンロードするか完全なファームウェアファイルを選択してください。",
     },
+    "err_auth_file_unusable_title": {
+        "zh-CN": "身份验证文件无法使用",
+        "en": "Authentication File Unusable",
+        "fr": "Fichier d'authentification inutilisable",
+        "es": "Archivo de autenticación no utilizable",
+    },
+    "err_auth_file_unusable_desc": {
+        "zh-CN": "你选择的身份验证文件不存在、为空或无法写入。请重新选择有效的文件，或在设置中清除它后再刷机。",
+        "en": "The authentication file you chose is missing, empty or could not be written. Choose a valid file, or clear it in Settings, then flash again.",
+        "fr": "Le fichier d'authentification choisi est introuvable, vide ou n'a pas pu être écrit. Choisissez un fichier valide ou effacez-le dans les réglages, puis relancez le flash.",
+        "es": "El archivo de autenticación elegido no existe, está vacío o no se pudo escribir. Elige un archivo válido o bórralo en Ajustes y vuelve a flashear.",
+    },
     "err_tool_unavailable_title": {
         "zh-CN": "刷机工具不可用",
         "en": "Flashing Tool Unavailable",
