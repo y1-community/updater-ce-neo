@@ -671,7 +671,11 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(MINIMUM_WINDOW_WIDTH, MINIMUM_WINDOW_HEIGHT)
 
         self.sm = StateMachine(self)
+        self.sm.state_changed.connect(self._on_state_changed)
         self.service = FlashService(self)
+
+        # Initial window geometry adjustment after full setup
+        self._adjust_window_geometry()
 
         self._package_path = ""
         self._package_name = ""
@@ -3081,6 +3085,12 @@ class MainWindow(QMainWindow):
         ):
             return
 
+        # If flash page is not yet set up, use minimum size to avoid crashes
+        if not hasattr(self, "_flash_page"):
+            self.setMinimumSize(MINIMUM_WINDOW_WIDTH, MINIMUM_WINDOW_HEIGHT)
+            self._release_select_window_size()
+            return
+
         self._release_select_window_size()
         curr_idx = self._stack.currentIndex() if hasattr(self, "_stack") else _PAGE_SELECT
         # The log needs the full window, including while an install is running:
@@ -4468,6 +4478,10 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
         self._sync_install_nav_entry()
+
+    def _on_state_changed(self):
+        """Called when the state machine transitions — resize the window to fit."""
+        self._adjust_window_geometry()
 
     def _enter_flashing_state(self):
         if self.sm.state is not FlashState.S4_FLASHING:
