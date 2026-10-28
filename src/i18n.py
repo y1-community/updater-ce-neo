@@ -4660,6 +4660,12 @@ _STRINGS: dict = {
         "fr": "Écriture du logo d'affichage",
         "es": "Escribiendo el logotipo de pantalla",
     },
+    "task_writing_user_storage": {
+        "zh-CN": "正在写入用户存储分区",
+        "en": "Writing user storage partition",
+        "fr": "Écriture de la partition de stockage utilisateur",
+        "es": "Escribiendo la partición de almacenamiento del usuario",
+    },
     "task_preparing_storage": {
         "zh-CN": "准备用户存储空间",
         "en": "Preparing user storage",

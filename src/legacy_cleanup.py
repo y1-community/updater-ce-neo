@@ -9,15 +9,21 @@ Updater CE 3.0 is a complete rewrite and standalone replacement packaged as comp
 optimized native binaries.
 
 SAFETY INVARIANTS:
-1. Both pre-3.0 bundles are old apps and are offered for removal:
-   'Innioasis Updater.app' (with space, created by pre-3.0 run_mac.sh) and
-   'InnioasisUpdater.app' (no space). Either or both may be installed.
+1. The macOS product is now called 'Innioasis Updater.app', the same name the
+   pre-3.0 run_mac.sh bundle had. That name is therefore refused by name:
+   nothing here may ever delete '/Applications/Innioasis Updater.app' — it may
+   be the app itself. The only old bundle still offered is 'InnioasisUpdater.app'
+   (no space, the standalone offline tool).
 2. NEVER detect, touch, or remove the bundle this process is running from,
    whatever it is called: `_running_app_bundle()` is resolved from
    ``sys.executable`` and both detection and removal refuse it. The current
-   product names ('Updater CE.app', 'UpdaterCE.app', 'MediaTek Installer.app')
-   are refused by name as well.
-3. Updater CE stores data under 'Updater CE'; legacy application-support folders are copied only after app-owned markers are found, and the source is retained.
+   product names ('Innioasis Updater.app', 'Updater CE.app', 'UpdaterCE.app',
+   'MediaTek Installer.app') are refused by name as well.
+3. On macOS the app keeps its own cache and files in the very Application
+   Support folder the pre-3.0 app used ('Innioasis Updater'). Only a root-level
+   ``firmware_downloader.py`` marks the old app: with it present the folder's
+   *contents* are cleared (the folder itself stays), without it nothing in the
+   folder is ever treated as legacy — the app's own files live there now.
 """
 
 import os
@@ -31,15 +37,19 @@ from typing import Dict, List, Optional, Tuple
 # Current product bundles. Their *contents* are the app, never a leftover, so
 # they are refused even when an old copy sits in another Applications folder.
 PROTECTED_APP_NAMES = {
+    # The current macOS product name — also the pre-3.0 run_mac.sh name. Never
+    # removable: when this app runs from /Applications/Innioasis Updater.app it
+    # must not offer to delete itself, and when it runs from elsewhere the same
+    # path may already be the installed new app.
+    "innioasis updater.app",
     "updater ce.app",
     "updaterce.app",
     "mediatek installer.app",
 }
 
-# The old apps this service offers to remove. The no-space bundle is the
-# standalone offline tool; the spaced one is what run_mac.sh installed.
+# The old app this service still offers to remove: the no-space standalone
+# offline tool. The spaced bundle is now the current product name (protected).
 LEGACY_APP_NAMES = (
-    "Innioasis Updater.app",
     "InnioasisUpdater.app",
 )
 LEGACY_APP_DIRS = (
@@ -112,14 +122,56 @@ def looks_like_pre_3_0_linux_install(path: Path = None) -> bool:
 
 
 def legacy_folder_is_app_owned(path: Path) -> bool:
-    """Require a recognizable legacy app marker before offering folder cleanup."""
+    """Require a recognizable legacy app marker before offering folder cleanup.
+
+    The shared macOS folder ('Innioasis Updater') is excluded: the current app
+    stores its own cache and files there, so only its root-level
+    ``firmware_downloader.py`` can mark it as old (see
+    :func:`clear_legacy_support_now`).
+    """
     folder = Path(path)
+    if folder == LEGACY_SUPPORT_DIR:
+        return folder.is_dir() and (folder / PRE_3_0_APP_SUPPORT_MARKER).is_file()
     if folder == LEGACY_DOWNLOADS_DIR:
         return folder.is_dir()
     return folder.is_dir() and (
         any((folder / marker).is_file() for marker in LEGACY_DATA_MARKERS)
         or any((folder / name).exists() for name in ("downloads", ".cache", "SP_Flash_Tool"))
     )
+
+
+def clear_legacy_support_now() -> tuple[bool, str]:
+    """Silently clear the pre-3.0 app's contents from the shared macOS folder.
+
+    First-launch cleanup for ``~/Library/Application Support/Innioasis Updater``:
+    the current macOS app and the pre-3.0 app share this folder, so the only
+    honest "old app" marker is the old app's entry script sitting at its root.
+    With ``firmware_downloader.py`` present every entry in the folder belongs to
+    the old install and is removed — the folder itself stays, as the app's own
+    home. Without the marker the folder is the app's own and nothing is touched.
+    """
+    folder = LEGACY_SUPPORT_DIR
+    if not (folder / PRE_3_0_APP_SUPPORT_MARKER).is_file():
+        return False, "no legacy marker; folder belongs to the app"
+    try:
+        entries = list(folder.iterdir())
+    except OSError as exc:
+        return False, f"could not list {folder}: {exc}"
+    removed = 0
+    errors: list[str] = []
+    for entry in entries:
+        try:
+            if entry.is_symlink() or entry.is_file():
+                entry.unlink()
+            else:
+                shutil.rmtree(entry)
+            removed += 1
+        except OSError as exc:
+            errors.append(f"{entry.name}: {exc}")
+    note = f"cleared {removed} legacy entries from {folder.name}"
+    if errors:
+        note += f" ({len(errors)} failed: {'; '.join(errors[:3])})"
+    return (not errors), note
 
 
 def _copy_missing_tree(source: Path, destination: Path, copied: list[str], prefix: str = "") -> None:
@@ -328,9 +380,15 @@ def detect_legacy_installations() -> dict:
             if not supp_dir.is_dir():
                 continue
             # A user can delete their .app without clearing the application support folder.
-            # The presence of firmware_downloader.py or legacy app markers ensures those users
-            # are covered by the remove app feature too.
-            if has_legacy_firmware_downloader(supp_dir) or legacy_folder_is_app_owned(supp_dir):
+            # The shared folder ('Innioasis Updater') is the app's own home now:
+            # only its root-level firmware_downloader.py marks the old app, so the
+            # app's cache/files in there never read as legacy. The other legacy
+            # folders keep the wider marker rules.
+            if supp_dir == LEGACY_SUPPORT_DIR:
+                owned = (supp_dir / PRE_3_0_APP_SUPPORT_MARKER).is_file()
+            else:
+                owned = has_legacy_firmware_downloader(supp_dir) or legacy_folder_is_app_owned(supp_dir)
+            if owned:
                 if supp_dir not in found_support_dirs:
                     found_support_dirs.append(supp_dir)
                     sz = _calc_dir_size(supp_dir)
@@ -490,7 +548,19 @@ def remove_macos_legacy(
         if not supp_paths and info.get("macos_app_support"):
             supp_paths = [info["macos_app_support"]]
         for supp_path in supp_paths:
-            if supp_path and (has_legacy_firmware_downloader(supp_path) or legacy_folder_is_app_owned(supp_path)):
+            if not supp_path:
+                continue
+            if supp_path == LEGACY_SUPPORT_DIR:
+                # The shared folder is the current app's own home: clear its
+                # contents only while the old app's marker is there, and keep
+                # the folder itself (with the app's own files, if any) intact.
+                ok, note = clear_legacy_support_now()
+                if ok:
+                    removed.append(str(supp_path) + " (contents)")
+                elif "no legacy marker" not in note:
+                    errors.append(f"Failed to clear {supp_path}: {note}")
+                continue
+            if has_legacy_firmware_downloader(supp_path) or legacy_folder_is_app_owned(supp_path):
                 try:
                     shutil.rmtree(supp_path)
                     removed.append(str(supp_path))

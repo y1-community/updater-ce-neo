@@ -5458,6 +5458,8 @@ def test_macos_universal_app_bundle():
         (
             p
             for p in (
+                ROOT / "dist" / "macos" / "Innioasis Updater.app",
+                ROOT / "dist" / "Innioasis Updater.app",
                 ROOT / "dist" / "macos" / "Updater CE.app",
                 ROOT / "dist" / "Updater CE.app",
                 ROOT / "dist" / "macos" / "Innioasis Updater CE.app",
@@ -5495,7 +5497,15 @@ def test_macos_universal_app_bundle():
         assert CPU_TYPE_ARM64 in cputypes, f"arm64 slice missing in {path.name}: {cputypes}"
 
     # 1. Launcher executable
-    exe_name = "Updater CE" if (app_dir / "Contents" / "MacOS" / "Updater CE").exists() else "Innioasis Updater CE"
+    exe_name = next(
+        (
+            name
+            for name in ("Innioasis Updater", "Updater CE", "Innioasis Updater CE")
+            if (app_dir / "Contents" / "MacOS" / name).exists()
+        ),
+        None,
+    )
+    assert exe_name is not None, f"no launcher executable found in {app_dir}"
     exe_path = app_dir / "Contents" / "MacOS" / exe_name
     _check_universal_slices(exe_path)
 
@@ -5540,7 +5550,7 @@ def test_macos_universal_app_bundle():
     with open(info_plist_path, "rb") as f:
         info = plistlib.load(f)
     assert info.get("LSMinimumSystemVersion") in ("12.0", "13.0")
-    assert info.get("CFBundleExecutable") in ("Updater CE", "Innioasis Updater CE")
+    assert info.get("CFBundleExecutable") in ("Innioasis Updater", "Updater CE", "Innioasis Updater CE")
 
 
 def test_tools_manager_and_self_healing():

@@ -1583,19 +1583,15 @@ class ReleasesClient:
 
 
 def _app_cache_dir():
-    """Per-user cache dir, stored under 'Updater CE'."""
+    """Per-user cache dir: 'Updater CE' on Windows, the shared
+    'Innioasis Updater' Application Support folder on macOS."""
     import sys
 
     if os.name == "nt":
         base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
         return base / "Updater CE" / ".cache"
     elif sys.platform == "darwin":
-        base = Path.home() / "Library" / "Application Support"
-        target = base / "Updater CE" / ".cache"
-        legacy = base / "Innioasis Updater" / ".cache"
-        if not target.exists() and legacy.exists():
-            return legacy
-        return target
+        return Path.home() / "Library" / "Application Support" / "Innioasis Updater" / ".cache"
     else:
         base = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
         target = base / "updater-ce"

@@ -284,12 +284,10 @@ def app_cache_dir() -> Path:
         base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
         return base / "Updater CE" / ".cache"
     elif sys.platform == "darwin":
-        base = Path.home() / "Library" / "Application Support"
-        target = base / "Updater CE" / ".cache"
-        legacy = base / "Innioasis Updater" / ".cache"
-        if not target.exists() and legacy.exists():
-            return legacy
-        return target
+        # The app's own cache lives in the shared Application Support folder —
+        # the pre-3.0 app's folder, which first launch clears of the old app's
+        # files (see legacy_cleanup.clear_legacy_support_now).
+        return Path.home() / "Library" / "Application Support" / "Innioasis Updater" / ".cache"
     else:
         base = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
         target = base / "updater-ce"

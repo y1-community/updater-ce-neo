@@ -9,11 +9,9 @@ Two gaps this file pins down:
   unplugged while the tool is searching, and plugged back in only once the
   connect prompt is up — now travels on the failure the progress card shows,
   with the raw code still in front of it so the error page keeps explaining it.
-* An in-process MTKClient run used to leave the player sitting in download mode
-  because the DA session was never closed. The last step of a *successful* run
-  now sends mtkclient's own ``reset`` (``daloader.shutdown(bootmode=0)``), so
-  the player boots the firmware it was just given, the way an SP Flash Tool run
-  already does. A failed run must never reach that reboot.
+* A successful in-process MTKClient run ends like the Chinese 1.1.7 reference:
+  it logs "Flash complete! Disconnect USB and reboot the device." and reports
+  success. It sends no reset, so the user power-cycles the player.
 """
 
 import inspect
@@ -149,32 +147,26 @@ def test_mtk_reset_uses_mtkclients_own_reset_command():
     assert fs.mtk_reset_to_normal(None) is False
 
 
-def test_a_successful_mtk_run_restarts_the_player_exactly_once():
+def test_a_successful_mtk_run_ends_without_a_reset_like_the_reference():
     _app()
     worker = _worker(method="mtk")
     loader = _Loader()
+    lines = []
+    worker.log_message.connect(lines.append)
 
     worker._end_mtk_run_successfully(SimpleNamespace(daloader=loader), None)
 
-    assert loader.calls == [0], "one reset, sent once"
+    assert loader.calls == [], "the reference sends no reset after the last write"
     assert worker.codes == [(True, "")]
+    assert any("reboot the device" in line for line in lines)
 
 
-def test_a_reset_that_cannot_be_sent_never_fails_the_install():
+def test_a_successful_mtk_run_without_a_loader_still_succeeds():
     _app()
-    # The player dropped off the bus, or was already power-cycled: mtkclient
-    # raises (it may even sys.exit()) and the install is still a success.
     worker = _worker(method="mtk")
-    loader = _Loader(raises=True)
 
-    worker._end_mtk_run_successfully(SimpleNamespace(daloader=loader), None)
-
-    assert loader.calls == [0]
-    assert worker.codes == [(True, "")]
-
-    # Same for a session that never had a loader at all.
-    worker = _worker(method="mtk")
     worker._end_mtk_run_successfully(SimpleNamespace(), None)
+
     assert worker.codes == [(True, "")]
 
 

@@ -90,12 +90,8 @@ def _app_cache_dir() -> Path:
         base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
         return base / "Updater CE"
     elif platform.system() == "Darwin":
-        base = Path.home() / "Library" / "Application Support"
-        target = base / "Updater CE"
-        legacy = base / "Innioasis Updater"
-        if not target.exists() and legacy.exists():
-            return legacy
-        return target
+        # macOS keeps its files in the shared 'Innioasis Updater' folder.
+        return Path.home() / "Library" / "Application Support" / "Innioasis Updater"
     else:
         base = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
         target = base / "updater-ce"

@@ -54,20 +54,21 @@ def test_y1_writes_the_preloader_first_then_every_downloadable_image(tmp_path):
         "USRDATA",
     ]
     # The stock scatter reports physical_start_addr 0x0 for every EMMC_USER
-    # entry, so the address is linear - 0x1400000 — the layout the package's
-    # own MBR/EBR images describe (ANDROID at 0x3740000, USRDATA at
-    # 0x4C140000). Every step is an address write; the device's table is
-    # never consulted.
+    # entry, so the reference writes each image at the scatter's own
+    # linear_start_addr — its flash logs show MBR start=0x1400000,
+    # UBOOT 0x3120000, ANDROID 0x4B40000 (the linear column verbatim, never
+    # linear minus a base). Every step is an address write; the device's
+    # table is never consulted.
     by_name = {step["name"]: step for step in plan}
     assert {name: step["offset"] for name, step in by_name.items() if name != "PRELOADER"} == {
-        "UBOOT": 0x1D20000,
-        "BOOTIMG": 0x1D80000,
-        "RECOVERY": 0x2380000,
-        "SEC_RO": 0x2980000,
-        "LOGO": 0x2A40000,
-        "ANDROID": 0x3740000,
-        "CACHE": 0x2C140000,
-        "USRDATA": 0x4C140000,
+        "UBOOT": 0x3120000,
+        "BOOTIMG": 0x3180000,
+        "RECOVERY": 0x3780000,
+        "SEC_RO": 0x3D80000,
+        "LOGO": 0x3E40000,
+        "ANDROID": 0x4B40000,
+        "CACHE": 0x2D540000,
+        "USRDATA": 0x4D540000,
     }
     assert by_name["PRELOADER"]["parttype"] == "boot1"
     assert by_name["PRELOADER"]["offset"] == 0
@@ -86,10 +87,13 @@ def test_y2_writes_the_preloader_first_at_boot1_and_skips_table_stubs(tmp_path):
     assert plan[0]["offset"] == 0
     names = [step["name"] for step in plan]
     assert "MBR" not in names and "EBR1" not in names and "EBR2" not in names
+    # The real Y2 scatter carries a usable physical column (physical =
+    # linear - 0x1400000), so the reference's physical path applies:
+    # physical_start_addr + LEGACY_MBR_USER_ADDR_BIAS (8 MB).
     by_name = {step["name"]: step for step in plan}
-    assert by_name["UBOOT"]["offset"] == 0x1D20000
-    assert by_name["ANDROID"]["offset"] == 0x5180000
-    assert by_name["USRDATA"]["offset"] == 0x40380000
+    assert by_name["UBOOT"]["offset"] == 0x1D20000 + 0x800000
+    assert by_name["ANDROID"]["offset"] == 0x5180000 + 0x800000
+    assert by_name["USRDATA"]["offset"] == 0x40380000 + 0x800000
     # Full image lengths: nothing is capped to the scatter partition size and
     # no signed wrapper is stripped.
     assert by_name["ANDROID"]["length"] == (by_name["ANDROID"]["path"]).stat().st_size

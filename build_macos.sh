@@ -16,7 +16,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-APP_NAME="Updater CE"
+APP_NAME="Innioasis Updater"
 APP_ID="com.innioasis.updater"
 # BUILD_BRAND=mediatek_installer (or --brand mediatek_installer) packages the
 # generic cross-platform MediaTek Installer instead: its own name and bundle
@@ -81,7 +81,10 @@ done
 clean_brand_artifacts() {
     case "$1" in
         updater_ce)
-            rm -rf "$DIST_DIR/Updater CE.app" "$DIST_DIR"/UpdaterCE-*.dmg
+            # The current bundle name plus the stale "Updater CE.app" name
+            # from earlier builds, so a rebuild never leaves two apps behind.
+            rm -rf "$DIST_DIR/Innioasis Updater.app" "$DIST_DIR/Updater CE.app" \
+                "$DIST_DIR"/InnioasisUpdater-*.dmg "$DIST_DIR"/UpdaterCE-*.dmg
             ;;
         mediatek_installer)
             rm -rf "$DIST_DIR/MediaTek Installer.app" "$DIST_DIR"/MediaTekInstaller-*.dmg
@@ -282,7 +285,7 @@ if [ "$CREATE_DMG" -eq 1 ]; then
     if [ "$BRAND" = "mediatek_installer" ]; then
         BRAND_SLUG="MediaTekInstaller"
     else
-        BRAND_SLUG="UpdaterCE"
+        BRAND_SLUG="InnioasisUpdater"
     fi
     DMG_NAME="${BRAND_SLUG}-${VERSION}${ARCH_SUFFIX}-macOS.dmg"
     echo "  -> Generating DMG: $DIST_DIR/$DMG_NAME..."

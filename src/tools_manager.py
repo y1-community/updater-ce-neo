@@ -111,7 +111,7 @@ def get_user_tools_dir() -> Path:
         d = base / "Updater CE" / "tools"
     elif platform.system() == "Darwin":
         base = Path.home() / "Library" / "Application Support"
-        target = base / "Updater CE" / "tools"
+        target = base / "Innioasis Updater" / "tools"
         legacy = base / "Innioasis" / "tools"
         if not target.exists() and legacy.exists():
             return legacy

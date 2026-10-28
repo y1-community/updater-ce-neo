@@ -22,37 +22,39 @@ from src.legacy_cleanup import (
 
 
 def test_protected_app_invariants():
-    """Current product bundles are protected; both old apps are removable.
+    """Current product bundles are protected — including 'Innioasis Updater.app'.
 
-    The no-space bundle used to be listed as protected because it is the
-    standalone offline tool. It is now an *old* app: the user asked for either
-    or both of 'Innioasis Updater.app' and 'InnioasisUpdater.app' to be removed,
-    and the invariant that replaced it is the running bundle — whatever the
-    build is called, it can never offer to delete itself.
+    The macOS product now carries the pre-3.0 run_mac.sh name, so that path is
+    refused by name: the app may be running from it, and a copy sitting in
+    /Applications may already *be* the new app. Nothing in this service may
+    ever offer to delete it. The no-space 'InnioasisUpdater.app' standalone
+    tool is still an old app, and the running bundle is refused whatever it is
+    called.
     """
     from src import legacy_cleanup
 
+    assert is_protected_app(Path("/Applications/Innioasis Updater.app")) is True
+    assert is_protected_app(Path("~/Applications/Innioasis Updater.app")) is True
     assert is_protected_app(Path("/Applications/Updater CE.app")) is True
     assert is_protected_app(Path("/Applications/UpdaterCE.app")) is True
     assert is_protected_app(Path("/Applications/MediaTek Installer.app")) is True
 
-    # Both old apps are offered, wherever they sit.
-    assert is_protected_app(Path("/Applications/Innioasis Updater.app")) is False
-    assert is_protected_app(Path("~/Applications/Innioasis Updater.app")) is False
+    # The no-space standalone tool is still an old app.
     assert is_protected_app(Path("/Applications/InnioasisUpdater.app")) is False
 
-    # …but never the bundle this process runs from, even when it has that name.
+    # …but never the bundle this process runs from, even when that name is not
+    # in the protected set at all.
     original = legacy_cleanup._running_app_bundle
     legacy_cleanup._running_app_bundle = lambda: Path("/Applications/InnioasisUpdater.app")
     try:
         assert is_protected_app(Path("/Applications/InnioasisUpdater.app")) is True
-        assert is_protected_app(Path("/Applications/Innioasis Updater.app")) is False
+        assert is_protected_app(Path("/Applications/Innioasis Updater.app")) is True
     finally:
         legacy_cleanup._running_app_bundle = original
 
 
-def test_detection_finds_both_old_apps(tmp_path=None):
-    """Either old bundle — or both — raises the removal offer; current ones do not."""
+def test_detection_offers_only_the_no_space_old_app(tmp_path=None):
+    """Only the no-space bundle is offered; 'Innioasis Updater.app' is current."""
     import tempfile
 
     from src import legacy_cleanup
@@ -69,7 +71,7 @@ def test_detection_finds_both_old_apps(tmp_path=None):
         try:
             info = legacy_cleanup.detect_legacy_installations()
             names = sorted(item.name for item in info["macos_apps"])
-            assert names == ["Innioasis Updater.app", "InnioasisUpdater.app"], names
+            assert names == ["InnioasisUpdater.app"], names
             assert info["has_legacy"] is True
         finally:
             legacy_cleanup.LEGACY_APP_DIRS = original_dirs
@@ -79,8 +81,8 @@ def test_detection_finds_both_old_apps(tmp_path=None):
                 os.environ["INNIOASIS_SIMULATE_MACOS"] = old_sim
 
 
-def test_removal_takes_both_old_apps():
-    """Both old bundles go at once; the current one in the same folder stays."""
+def test_removal_takes_the_no_space_old_app_only():
+    """The no-space bundle goes; 'Innioasis Updater.app' and current ones stay."""
     import tempfile
 
     from src import legacy_cleanup
@@ -90,7 +92,7 @@ def test_removal_takes_both_old_apps():
     os.environ["INNIOASIS_SIMULATE_MACOS"] = "1"
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
-        spaced = root / "Innioasis Updater.app"
+        spaced = root / "Innioasis Updater.app"  # now the current product name
         nospace = root / "InnioasisUpdater.app"
         current = root / "Updater CE.app"
         for bundle in (spaced, nospace, current):
@@ -105,10 +107,9 @@ def test_removal_takes_both_old_apps():
             assert errors == [], errors
             assert ok is True
             assert sorted(Path(item).name for item in removed) == [
-                "Innioasis Updater.app",
                 "InnioasisUpdater.app",
             ], removed
-            assert not spaced.exists()
+            assert spaced.is_dir(), "the current macOS product name must never be removed"
             assert not nospace.exists()
             assert current.is_dir(), "a current product bundle must never be removed"
         finally:
@@ -472,10 +473,13 @@ def test_detection_follows_the_old_downloader_marker(monkeypatch):
         assert info["has_legacy"] is True
 
 
-def test_macos_remove_app_detected_by_app_bundle_or_firmware_downloader(monkeypatch):
-    """On macOS, the remove app feature is raised either by Innioasis Updater.app in Applications
+def test_macos_legacy_is_the_downloader_marker_not_the_app_name(monkeypatch):
+    """The shared folder is old only while firmware_downloader.py is at its root.
 
-    or by the presence of firmware_downloader.py in Application Support (even if the user deleted the .app).
+    'Innioasis Updater.app' is the current product name, so the bundle itself
+    never raises the offer. The marker in Application Support is what does —
+    and once it is gone there is nothing left to offer, even if the old .app
+    still sits in Applications.
     """
     from src import legacy_cleanup
 
@@ -497,7 +501,8 @@ def test_macos_remove_app_detected_by_app_bundle_or_firmware_downloader(monkeypa
         assert info["macos_apps"] == []
         assert info["macos_app_support"] is None
 
-        # 2. User deleted .app, but firmware_downloader.py is present in Application Support
+        # 2. firmware_downloader.py in Application Support raises the offer
+        #    (even if the user deleted the .app).
         downloader = supp_dir / "firmware_downloader.py"
         downloader.write_text("# legacy downloader\n", encoding="utf-8")
         info = legacy_cleanup.detect_legacy_installations()
@@ -505,20 +510,59 @@ def test_macos_remove_app_detected_by_app_bundle_or_firmware_downloader(monkeypa
         assert info["macos_apps"] == []
         assert info["macos_app_support"] == supp_dir
 
-        # 3. User also has Innioasis Updater.app in Applications
+        # 3. The .app in Applications is the current product name: never
+        #    detected, never offered — only the support-folder marker counts.
         old_app = app_dir / "Innioasis Updater.app"
         old_app.mkdir()
         info = legacy_cleanup.detect_legacy_installations()
         assert info["has_legacy"] is True
-        assert old_app in info["macos_apps"]
+        assert old_app not in info["macos_apps"]
+        assert info["macos_apps"] == []
         assert info["macos_app_support"] == supp_dir
 
-        # 4. User has Innioasis Updater.app in Applications, but cleared Application Support
+        # 4. Marker gone: the old app version is already gone — the .app alone
+        #    raises nothing, and the folder is left to the current app.
         downloader.unlink()
         info = legacy_cleanup.detect_legacy_installations()
-        assert info["has_legacy"] is True
-        assert old_app in info["macos_apps"]
+        assert info["has_legacy"] is False
+        assert info["macos_apps"] == []
         assert info["macos_app_support"] is None
+
+
+def test_clear_legacy_support_now_is_marker_gated(monkeypatch):
+    """Contents clear only while firmware_downloader.py marks the old app.
+
+    Without the marker the folder is the current app's own home — its downloads
+    and cache stay untouched. With it, every entry goes and the folder itself
+    survives, because the app keeps storing its files there.
+    """
+    from src import legacy_cleanup
+
+    with tempfile.TemporaryDirectory() as tmp:
+        folder = Path(tmp) / "Innioasis Updater"
+        (folder / "downloads").mkdir(parents=True)
+        own_file = folder / "downloads" / "rom.zip"
+        own_file.write_text("x", encoding="utf-8")
+        (folder / ".cache").mkdir()
+        (folder / ".cache" / "catalog.json").write_text("{}", encoding="utf-8")
+        monkeypatch.setattr(legacy_cleanup, "LEGACY_SUPPORT_DIR", folder)
+
+        # No marker: the app's own files are never treated as legacy.
+        ok, note = legacy_cleanup.clear_legacy_support_now()
+        assert ok is False
+        assert "no legacy marker" in note
+        assert own_file.is_file()
+
+        # Marker present: every entry goes, the folder stays.
+        (folder / "firmware_downloader.py").write_text("# old app", encoding="utf-8")
+        ok, note = legacy_cleanup.clear_legacy_support_now()
+        assert ok is True, note
+        assert folder.is_dir()
+        assert list(folder.iterdir()) == []
+
+        # And a second call is a no-op: without the marker, nothing to clear.
+        ok, note = legacy_cleanup.clear_legacy_support_now()
+        assert ok is False
 
 
 if __name__ == "__main__":
@@ -527,8 +571,8 @@ if __name__ == "__main__":
     test_calc_dir_size()
     test_legacy_dialog_instantiation()
     test_remove_old_app_card_follows_the_detection()
-    test_detection_finds_both_old_apps()
-    test_removal_takes_both_old_apps()
+    test_detection_offers_only_the_no_space_old_app()
+    test_removal_takes_the_no_space_old_app_only()
     test_platform_tools_question_asks_and_is_honoured()
     test_removal_journey_stays_in_the_card()
     print("All legacy cleanup tests passed!")

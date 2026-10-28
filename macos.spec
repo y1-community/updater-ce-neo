@@ -23,7 +23,10 @@ if not _BUILD_BRAND and (PROJECT_ROOT / "src" / "_build_brand.py").exists():
             _BUILD_BRAND = _line.split("=")[-1].strip().strip('"\'')
             break
 IS_MEDIATEK_INSTALLER_BUILD = _BUILD_BRAND in ("mediatek_installer", "generic_mtk")
-APP_DISPLAY_NAME = "MediaTek Installer" if IS_MEDIATEK_INSTALLER_BUILD else "Updater CE"
+# The macOS product ships as "Innioasis Updater.app" — the name the pre-3.0
+# release used, deliberately kept (legacy_cleanup refuses it by name so the app
+# can never offer to delete its own path).
+APP_DISPLAY_NAME = "MediaTek Installer" if IS_MEDIATEK_INSTALLER_BUILD else "Innioasis Updater"
 BUNDLE_ID = (
     "com.innioasis.mediatekinstaller" if IS_MEDIATEK_INSTALLER_BUILD else "com.innioasis.updater"
 )

@@ -6670,6 +6670,23 @@ class MainWindow(QMainWindow):
 
     def _check_legacy_installations(self):
         try:
+            if sys.platform == "darwin":
+                # macOS, first launch: the pre-3.0 app's footprint is the
+                # Application Support folder marked by firmware_downloader.py.
+                # Clear it silently and be done — no removal offer is ever put
+                # on screen. The .app itself is never touched (the current
+                # macOS product carries the old app's name), and without the
+                # marker the folder is the app's own and stays as it is.
+                if getattr(self, "_legacy_migration_checked", False):
+                    return
+                self._legacy_migration_checked = True
+                from ..legacy_cleanup import clear_legacy_support_now
+
+                cleared, note = clear_legacy_support_now()
+                if cleared:
+                    logger.info("Legacy application support cleanup: %s", note)
+                self.settings.setValue("legacy_cleanup_prompted", True)
+                return
             from ..legacy_cleanup import (
                 detect_legacy_installations,
                 migrate_legacy_application_support,

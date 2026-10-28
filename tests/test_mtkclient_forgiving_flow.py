@@ -267,7 +267,20 @@ def test_layman_subtitle_and_action_update():
     assert layman_task_name("boot") == tr("task_writing_boot")
     assert layman_task_name("recovery") == tr("task_writing_recovery")
     assert layman_task_name("mbr") == tr("task_writing_partition_table")
-    assert layman_task_name("userdata") == tr("task_preparing_storage")
+    assert layman_task_name("userdata") == tr("task_writing_user_storage")
+    assert layman_task_name("USRDATA") == tr("task_writing_user_storage")
+
+    # MTKClient's partition progress updates the activity subtitle, not only the log.
+    from src.flash_service import FlashWorker
+    worker = FlashWorker("dummy.zip", method="mtk")
+    actions = []
+    worker.action_changed.connect(actions.append)
+    worker._classify_mtk_output(
+        "Progress: 48.9% Write USRDATA (17.0MB/34.7MB), 5.1 MB/s (01s left)"
+    )
+    assert actions[-1] == tr("action_writing_task_fmt").format(
+        task=tr("task_writing_user_storage"), pct=48
+    )
 
     # update_action sets the subtitle label on the flash card
     sample_action = tr("action_writing_task_fmt").format(task=tr("task_writing_system"), pct=42)

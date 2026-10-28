@@ -24,7 +24,7 @@ def _user_sp_copy_dir() -> Path:
         base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
         return base / "Updater CE" / "SP_Flash_Tool"
     if paths.IS_MAC:
-        return Path.home() / "Library" / "Application Support" / "Updater CE" / "SP_Flash_Tool"
+        return Path.home() / "Library" / "Application Support" / "Innioasis Updater" / "SP_Flash_Tool"
     base = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
     return Path(base) / "updater-ce" / "SP_Flash_Tool"
 

@@ -1166,6 +1166,8 @@ def legacy_write_chunk_size(image_paths) -> int:
 def layman_task_name(part_name: str) -> str:
     """Return user-friendly layman description for a partition or task."""
     low = (part_name or "").lower().strip()
+    if low in {"usr", "usrdata", "userdata", "user_data"}:
+        return tr("task_writing_user_storage")
     if any(k in low for k in ("system", "android", "innios")):
         return tr("task_writing_system")
     if any(k in low for k in ("boot", "bootimg")):
@@ -1301,6 +1303,11 @@ def _signed_image_payload_range(file_path, file_size: int):
     return (SIGNED_IMAGE_HEADER_SIZE, file_size - SIGNED_IMAGE_OVERHEAD_SIZE)
 
 
+def _scatter_part_label(part) -> str:
+    """Partition name from a parsed scatter block or a write-plan entry."""
+    return str(part.get("name") or part.get("partition_name") or "")
+
+
 def _detect_legacy_user_addr_bias(scatter_path, parts=None):
     """Detect whether a scatter file on a legacy platform requires MBR user address biasing."""
     platform_name = _parse_scatter_platform(scatter_path)
@@ -1309,14 +1316,14 @@ def _detect_legacy_user_addr_bias(scatter_path, parts=None):
     if not parts or not isinstance(parts[0], dict):
         parts = _parse_scatter_entries(scatter_path)
     has_boot_preloader = any(
-        part.get("name", "").strip().lower() == "preloader"
-        and part.get("region", "").strip().upper().startswith("EMMC_BOOT")
+        _scatter_part_label(part).strip().lower() == "preloader"
+        and str(part.get("region", "")).strip().upper().startswith("EMMC_BOOT")
         for part in parts
     )
     user_names = {
-        part.get("name", "").strip().lower()
+        _scatter_part_label(part).strip().lower()
         for part in parts
-        if part.get("region", "").strip().upper() == "EMMC_USER"
+        if str(part.get("region", "")).strip().upper() == "EMMC_USER"
     }
     if has_boot_preloader and {"mbr", "ebr1"}.issubset(user_names):
         return LEGACY_MBR_USER_ADDR_BIAS
@@ -2259,7 +2266,7 @@ def _parse_scatter_entries(scatter_path):
     raw_parts = _read_scatter_parts(scatter_path)
     if not raw_parts:
         return []
-    return _scatter_entries_from_parts(raw_parts)
+    return _scatter_entries_from_parts(raw_parts, scatter_path)
 
 
 def _read_scatter_parts(scatter_path):
@@ -2297,24 +2304,72 @@ def _legacy_scatter_has_mbr_ebr(parts) -> bool:
     return {"mbr", "ebr1"}.issubset(names)
 
 
-def _scatter_entries_from_parts(raw_parts):
-    """Turn parsed scatter blocks into write-plan entries (shared parser)."""
-    # Determine base linear address for EMMC_USER (typically the linear address
-    # of the first EMMC_USER partition, usually 0x1400000 on MT6572/MT6582).
-    # Some vendors (the Y1's stock scatter) ship every EMMC_USER
-    # physical_start_addr as 0x0, while Y2-style scatters carry the real one;
-    # both describe the same layout, so a missing physical address is derived
-    # as linear - user_base.
-    user_base = None
-    for p in raw_parts:
-        region = p.get("region", "").upper()
-        if region == "EMMC_USER":
-            lin = _to_int_safe(p.get("linear_start_addr", 0))
-            if user_base is None:
-                user_base = lin
-                break
-    if user_base is None:
-        user_base = 0x1400000
+def _scatter_hex_int(value):
+    """Parse a scatter hex field, or None when it is absent/unparseable.
+
+    The reference build's ``_parse_scatter_hex_int`` returns None rather than
+    0: its address mode decision treats a missing physical address differently
+    from a present one.
+    """
+    try:
+        return int(str(value).strip(), 16)
+    except (TypeError, ValueError):
+        return None
+
+
+def _is_scatter_tail_addr(value) -> bool:
+    """True for an address relative to the *end* of the user area (0xFFFF0000+)."""
+    return value is not None and 0xFFFF0000 <= value <= 0xFFFFFFFF
+
+
+def _scatter_user_physical_addresses_are_usable(raw_parts) -> bool:
+    """Whether the scatter's own ``physical_start_addr`` column can address writes.
+
+    Ported from the shipped 1.1.7 build's
+    ``FlashWorker._scatter_user_physical_addresses_are_usable``: over the
+    non-reserved EMMC_USER entries the physical column must hold at least two
+    distinct non-zero values, and they must ascend in scatter order
+    (tail-relative addresses excluded). The Y1's stock scatter zeroes every
+    physical address and fails this test, which is what sends the reference
+    down its linear-address path.
+    """
+    values = []
+    for part in raw_parts:
+        if str(part.get("region", "")).strip().upper() != "EMMC_USER":
+            continue
+        if str(part.get("is_reserved", "")).strip().lower() == "true":
+            continue
+        values.append(_scatter_hex_int(part.get("physical_start_addr", "")))
+    values = [v for v in values if v is not None]
+    if len(values) < 2:
+        return False
+    if len({v for v in values if v != 0}) < 2:
+        return False
+    ordered = [v for v in values if not _is_scatter_tail_addr(v)]
+    return ordered == sorted(ordered)
+
+
+def _scatter_entries_from_parts(raw_parts, scatter_path=None):
+    """Turn parsed scatter blocks into write-plan entries (shared parser).
+
+    The write address is the shipped 1.1.7 build's
+    ``FlashWorker._resolve_scatter_user_addr`` verbatim:
+
+    * physical column usable (real Y2-style scatter) → ``physical_start_addr
+      + legacy bias`` — the 8 MB ``LEGACY_MBR_USER_ADDR_BIAS`` that maps the
+      scatter's user-relative physical address onto the device's absolute
+      address;
+    * otherwise (the Y1's stock scatter zeroes every physical address) →
+      ``linear_start_addr`` itself, the reference's "readback calibration not
+      found; using original linear address" path. A readback calibration
+      cannot exist before the device is connected, and the reference's own
+      flash logs confirm it: ``start=0x1400000`` for MBR — the scatter's
+      linear address, never linear minus a base.
+    """
+    physical_usable = _scatter_user_physical_addresses_are_usable(raw_parts)
+    addr_bias = 0
+    if physical_usable and scatter_path is not None:
+        addr_bias = _detect_legacy_user_addr_bias(scatter_path, raw_parts)
 
     entries = []
     for order, p in enumerate(raw_parts):
@@ -2328,17 +2383,23 @@ def _scatter_entries_from_parts(raw_parts):
         size = _to_int_safe(p.get("partition_size", 0))
         is_dl = p.get("is_download", "").lower() == "true"
 
-        if region in ("EMMC_BOOT_1", "EMMC_BOOT_2"):
+        # MTK scatters mark addresses at/above 0xFFFF0000 as relative to the
+        # *end* of the user area (BMTPOOL uses 0xFFFF00a8). They can only be
+        # resolved against the live device's user-area size, so they never get
+        # a scatter address of their own in the plan.
+        tail_relative = bool(
+            region == "EMMC_USER"
+            and (_is_scatter_tail_addr(phys) or (phys <= 0 and _is_scatter_tail_addr(lin)))
+        )
+
+        if tail_relative:
+            offset = 0
+        elif region in ("EMMC_BOOT_1", "EMMC_BOOT_2"):
             offset = phys
-        elif phys > 0:
-            offset = phys
+        elif physical_usable:
+            offset = phys + addr_bias
         else:
-            # MTK scatters mark addresses at/above 0xFFFF0000 as relative to
-            # the *end* of the user area (BMTPOOL uses 0xFFFF00a8). They can
-            # only be resolved against the live device's user-area size, so
-            # they never get a linear-minus-base address.
-            tail_relative = lin >= 0xFFFF0000
-            offset = 0 if tail_relative else max(0, lin - user_base)
+            offset = max(0, lin)
 
         entries.append({
             "name": pname,
@@ -2349,9 +2410,7 @@ def _scatter_entries_from_parts(raw_parts):
             "physical_start_addr": phys,
             "partition_size": size,
             "offset": offset,
-            "tail_relative": bool(
-                region == "EMMC_USER" and phys <= 0 and lin >= 0xFFFF0000
-            ),
+            "tail_relative": tail_relative,
             "order": order,
         })
     return entries
@@ -2367,10 +2426,11 @@ def _scatter_entries_from_parts(raw_parts):
 #   the Timmkoo/Innioasis players are MBR-partitioned — a named lookup returns
 #   nothing and the install dies with "Couldn't detect partition").
 #
-#   Y1-style scatters report physical_start_addr 0x0 for every EMMC_USER entry,
-#   so the address is linear - 0x1400000 — the delta the Y2-style scatter
-#   encodes explicitly, and the layout the package's own MBR/EBR images
-#   describe (MBR at user 0x0, ANDROID at 0x3740000, USRDATA at 0x4C140000).
+#   Y1-style scatters report physical_start_addr 0x0 for every EMMC_USER
+#   entry, so the reference writes each image at the scatter's own
+#   linear_start_addr (its flash logs: MBR start=0x1400000, UBOOT 0x3120000,
+#   ANDROID 0x4B40000 — the linear column verbatim). Y2-style scatters carry a
+#   usable physical column, written as physical + LEGACY_MBR_USER_ADDR_BIAS.
 #
 #   The preloader is written last, wrapped in the BootROM's EMMC_BOOT/BRLYT
 #   header through the DA's WRITE_IMAGE command. Writing it first (or writing
@@ -2992,12 +3052,11 @@ class FlashWorker(QThread):
     # ends as a failure rather than searching forever.
     SP_SEARCH_RESTARTS = 4
     SP_SEARCH_RESTART_PAUSE = 1.0
-    # Reboot the player out of download mode after a successful in-process
-    # MTKClient write (mtkclient's own ``reset``), so an MTKClient install ends
-    # the same way an SP Flash Tool one already does: with the player starting
-    # the firmware it was just given, no power-cycle by the user. Tests that
-    # stub the mtk session turn this off.
-    reboot_after_success = True
+    # Opt-in reboot after a successful in-process MTKClient write. Off by
+    # default: the reference 1.1.7 build sends no reset after its last write
+    # (see ``_end_mtk_run_successfully``), and nothing on the success path
+    # calls ``_reboot_after_mtk_success`` today.
+    reboot_after_success = False
 
     def __init__(self, package_path, pre_extracted_dir="", method="auto", model="",
                  parent=None, device_loss_hold=None, da_file="", auth_file="", is_rockbox=False,
@@ -3335,6 +3394,8 @@ class FlashWorker(QThread):
             self._tool_error = ""
             self._note_install_progress()
             self._touch_attempt()
+            if low.startswith("progress:"):
+                self._update_mtk_partition_action(text)
             m = re.search(r"(\d+(?:\.\d+)?)\s*%", text)
             if m:
                 try:
@@ -4650,8 +4711,27 @@ class FlashWorker(QThread):
         self._touch_attempt()
         self._hold_device_loss(MTK_WRITE_PROGRESS_USB_GRACE_SECONDS)
 
+    def _update_mtk_partition_action(self, line: str) -> None:
+        """Show the current partition's own percentage in the install subtitle."""
+        match = re.search(
+            r"Progress:\s*([\d.]+)%\s+Write\s+(.+?)\s+\(([\d.]+)MB/([\d.]+)MB\)",
+            line,
+            re.IGNORECASE,
+        )
+        if not match:
+            return
+        try:
+            pct = int(float(match.group(1)))
+        except ValueError:
+            return
+        task = layman_task_name(match.group(2).strip())
+        self.action_changed.emit(
+            tr("action_writing_task_fmt").format(task=task, pct=pct)
+        )
+
     def _note_mtk_partition_progress(self, line: str) -> None:
         """Refresh liveness only when the child reports a larger byte position."""
+        self._update_mtk_partition_action(line)
         match = re.search(
             r"Progress:\s*[\d.]+%\s+Write\s+(.+?)\s+\(([\d.]+)MB/([\d.]+)MB\)",
             line,
@@ -4972,9 +5052,13 @@ class FlashWorker(QThread):
             """
             _clear_mtk_state(extract_dir, Path.cwd())
             try:
+                # Reference sequence: init(None, None), then connect. The
+                # package's preloader image is not pushed as an override; the
+                # device's own preloader answers and the image is written with
+                # the other partitions.
                 session = mtk_api.init(
                     loader=self.da_file or None,
-                    preloader=preloader_path,
+                    preloader=None,
                     auth=self.auth_file or None,
                 )
             except BaseException as e:
@@ -5176,28 +5260,16 @@ class FlashWorker(QThread):
                 f"(partition {int(step.get('partition_size') or 0) / 1048576:.1f}MB)"
             )
 
-        # Synchronize / create partition table from scatter for GPT devices to ensure
-        # damaged partition tables are restored and valid before partition writes.
-        try:
-            self._sync_gpt_with_scatter(mtk, {}, scatter_file, create_when_missing=True)
-        except Exception as e:
-            logger.warning("Partition table sync warning: %s", e)
+        # The Chinese build issues no GPT sync before its writes (the reference
+        # sequence is init, connect, then one ``w`` per partition), so the
+        # package's own partition images are written as they are.
 
-        # Read the device's own MBR/EBR chain before writing, but only for a
-        # package that does not ship one. Every Innioasis/Timmkoo package
-        # carries its MBR/EBR images, and the 1.1.7 build writes those without
-        # reading the table back first. On this legacy DA a pre-write
-        # ``readflash`` is not answered: the DA stops responding and the player
-        # drops off the USB bus (seen on macOS right after Stage 2), so issuing
-        # it for a package that already describes its layout costs the run.
-        if should_probe_live_table(plan, getattr(mtk, "daloader", None)):
-            live_parts = self._read_live_partitions(mtk, extract_dir)
-        else:
-            live_parts = []
-            self._log(
-                "Legacy DA: writing the package layout without probing the "
-                "device table (the read is not answered after Stage 2)"
-            )
+        # The Chinese build reads nothing back before its writes: the reference
+        # sequence is init, connect, then one ``w`` per partition. On this
+        # legacy DA a pre-write ``readflash`` is not answered either (the DA
+        # stops responding and the player drops off the USB bus right after
+        # Stage 2), so the package's own layout is what gets written.
+        live_parts = []
         live_by_start = dict(live_parts or ())
         for step in plan:
             if step["parttype"] != "user" or step.get("offset") is None:

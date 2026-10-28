@@ -1,0 +1,55 @@
+{
+  "diskImage" : {
+    "autoopen" : true,
+    "background" : {
+      "image" : "backgroundImage",
+      "imageScaleOption" : 50,
+      "layoutObjects" : [
+
+      ],
+      "type" : 0
+    },
+    "finalFormat" : "ULMO",
+    "iconPreviewVisible" : false,
+    "iconSize" : 96,
+    "itemInfoVisible" : false,
+    "labelPosition" : 0,
+    "licenses" : [
+
+    ],
+    "nameFontSize" : 12,
+    "statusBarVisible" : false,
+    "suggestedDiskImageName" : "MediaTek Installer for macOS.dmg",
+    "toolbarVisible" : false,
+    "uid" : "xywmaxvouj",
+    "validationScheme" : 0,
+    "viewLayout" : 0,
+    "volumeIcon" : "volumeIcon",
+    "volumeName" : "Innioasis Updater for macOS",
+    "volumeSize" : 0,
+    "volumeSizeOption" : "Automatic",
+    "windowContentHeight" : 360,
+    "windowContents" : [
+      {
+        "filePath" : "\/Applications",
+        "iconSize" : 100,
+        "invisible" : false,
+        "isAnAlias" : true,
+        "location" : "{466, 202}",
+        "relativeFilePath" : "..\/..\/..\/..\/..\/..\/..\/..\/Applications"
+      },
+      {
+        "filePath" : "\/Users\/ryan\/Documents\/Workspaces\/UpdaterNeo\/updater-ce-neo\/dist\/macos\/MediaTek Installer.app",
+        "iconSize" : 100,
+        "invisible" : false,
+        "isAnAlias" : false,
+        "location" : "{134, 202}",
+        "relativeFilePath" : "..\/..\/dist\/macos\/MediaTek Installer.app"
+      }
+    ],
+    "windowContentWidth" : 600,
+    "windowLeft" : 200,
+    "windowTop" : 120
+  },
+  "version" : 4
+}

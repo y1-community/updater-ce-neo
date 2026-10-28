@@ -26,8 +26,10 @@ def downloads_dir():
         base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
         app_dir = "Updater CE"
     elif sys.platform == "darwin":
+        # macOS stores the app's own files in the shared Application Support
+        # folder — the pre-3.0 app's folder, kept as the app's home.
         base = Path.home() / "Library" / "Application Support"
-        app_dir = "Updater CE"
+        app_dir = "Innioasis Updater"
     else:
         base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
         app_dir = "updater-ce"
