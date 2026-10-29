@@ -73,6 +73,9 @@ class SettingsPage(QWidget):
     linux_prep_completed = Signal()
     advanced_settings_changed = Signal(bool)
     install_rockbox_themes_requested = Signal()
+    # The in-beta themes auto-install toggle flipped; the window starts or
+    # stops the passive sync to match.
+    themes_auto_install_changed = Signal(bool)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -636,6 +639,25 @@ class SettingsPage(QWidget):
 
         # --- Card: Install Rockbox 360p Themes ---
         self._install_themes_card = Card("settings_install_themes_group")
+        # Beta, one word, on the title line: the feature is a preview and the
+        # pill says so without spending a sentence on it.
+        self._themes_beta_pill = QLabel(tr("settings_themes_beta_pill"))
+        self._themes_beta_pill.setStyleSheet(
+            f"QLabel {{ color: {T().fg_muted}; border: 1px solid {T().border};"
+            " border-radius: 9px; padding: 1px 8px; font-size: 10px; font-weight: 600; }"
+        )
+        self._themes_beta_pill.setAccessibleName(tr("settings_themes_beta_pill"))
+        self._install_themes_card.put_widget_on_title_row(self._themes_beta_pill)
+        # Corner switch: the in-beta auto-install toggle, off by default.
+        self._cb_install_themes = self._add_title_row_switch(
+            self._install_themes_card,
+            "settings_install_themes_group",
+            tooltip=tr("settings_install_themes_desc"),
+        )
+        self._cb_install_themes.setStyleSheet("")  # no host style override
+        self._cb_install_themes.setAccessibleName(tr("settings_install_themes_group"))
+        self._cb_install_themes.toggled.connect(self._on_themes_auto_install_toggled)
+
         themes_layout = QVBoxLayout()
         themes_layout.setSpacing(8)
 
@@ -896,12 +918,12 @@ class SettingsPage(QWidget):
             # Windows is fixed by CPU: x86/x64 gets SP Flash Tool only, ARM64 MTKClient only.
             return (locked,)
         if not paths.IS_WINDOWS and not paths.IS_MAC:
-            # On Linux, SP Flash Tool is the default method (when arch is supported),
-            # with MTKClient as the second tool / fallback.
+            # On Linux, MTKClient is the default on every architecture. SP Flash
+            # Tool is offered as a backup / retry on x86/x86_64 hosts only.
             from .. import linux_sp_flash
             if not linux_sp_flash.arch_supported():
                 return (METHOD_MTK,)
-            return (METHOD_SP, METHOD_MTK)
+            return (METHOD_MTK, METHOD_SP)
         methods = [METHOD_SP]
         if advanced or not paths.IS_WINDOWS:
             methods.append(METHOD_MTK)
@@ -1366,6 +1388,14 @@ class SettingsPage(QWidget):
         # Rockbox release filters
         self._apply_filter_flags()
 
+        # In-beta themes auto-install toggle: reflects the persisted switch.
+        from ..theme_sync import themes_auto_install_enabled
+
+        if hasattr(self, "_cb_install_themes"):
+            self._cb_install_themes.blockSignals(True)
+            self._cb_install_themes.setChecked(themes_auto_install_enabled())
+            self._cb_install_themes.blockSignals(False)
+
         term_text = tr("settings_terminal_install_windows" if paths.IS_WINDOWS else "settings_terminal_install")
         self._set_switch_caption(self._cb_terminal_install, term_text)
         self._set_switch_caption(self._cb_guided_install, tr("settings_guided_install"))
@@ -1673,6 +1703,13 @@ class SettingsPage(QWidget):
 
     def _on_install_rockbox_themes_clicked(self):
         self.install_rockbox_themes_requested.emit()
+
+    def _on_themes_auto_install_toggled(self, checked: bool) -> None:
+        """Persist the in-beta toggle and tell the window to start/stop the sync."""
+        from ..theme_sync import set_themes_auto_install_enabled
+
+        set_themes_auto_install_enabled(bool(checked))
+        self.themes_auto_install_changed.emit(bool(checked))
 
     def _on_run_checker(self):
         """Prepare SP Flash Tool from this card, not from a window of its own.
@@ -1992,6 +2029,12 @@ class SettingsPage(QWidget):
             self._install_themes_card.retranslate()
         if hasattr(self, "_install_themes_desc"):
             self._install_themes_desc.setText(tr("settings_install_themes_desc"))
+        if hasattr(self, "_themes_beta_pill"):
+            self._themes_beta_pill.setText(tr("settings_themes_beta_pill"))
+            self._themes_beta_pill.setAccessibleName(tr("settings_themes_beta_pill"))
+        if hasattr(self, "_cb_install_themes"):
+            self._cb_install_themes.setToolTip(tr("settings_install_themes_desc"))
+            self._cb_install_themes.setAccessibleName(tr("settings_install_themes_group"))
         if hasattr(self, "_install_themes_btn"):
             self._install_themes_btn.setText(tr("settings_install_rockbox_themes_btn"))
             self._install_themes_btn.setIcon(get_symbol_icon("folder", 14, color=T().fg))

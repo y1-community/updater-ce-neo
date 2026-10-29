@@ -753,6 +753,7 @@ class AdbWatchWorker(QThread):
     found = Signal(str)  # serial
     timed_out = Signal()
     watch_progress = Signal(float)  # 0.0-1.0
+    multiple = Signal(int)  # more than one player attached: prompt the user
 
     def __init__(self, adb: str, timeout: float = 180, parent=None):
         super().__init__(parent)
@@ -768,6 +769,7 @@ class AdbWatchWorker(QThread):
                 timeout=self._timeout,
                 cancel_cb=self.isInterruptionRequested,
                 progress_cb=self.watch_progress.emit,
+                multi_cb=self.multiple.emit,
             )
         except Exception as e:
             logger.debug("ADB watch failed: %s", e)
@@ -778,6 +780,50 @@ class AdbWatchWorker(QThread):
             self.found.emit(serial)
         else:
             self.timed_out.emit()
+
+
+class AdbPresencePoller(QThread):
+    """Report the first moment exactly one player is attached over ADB.
+
+    The guidance steps can sit behind a modal folder picker, which starves the
+    Qt event loop but never a thread. Polling here keeps detection alive while
+    the user is being asked to act, so a player that appears wins over a stale
+    folder choice. Emits once and stops; ``timed_out`` is not part of this job.
+    """
+
+    found = Signal(str)
+    multiple = Signal(int)  # more than one attached: never pick one silently
+
+    POLL_INTERVAL_MS = 1000
+    ADB_CALL_TIMEOUT_S = 2.0
+
+    def __init__(self, adb: str, parent=None):
+        super().__init__(parent)
+        self._adb = adb
+        self._multi_reported = False
+
+    def run(self) -> None:
+        from . import adb as _adb
+
+        while not self.isInterruptionRequested():
+            try:
+                # A short bound keeps a stop request from waiting on adb.
+                serials = _adb.adb_devices(self._adb, timeout=self.ADB_CALL_TIMEOUT_S)
+            except Exception:
+                serials = []
+            if len(serials) == 1:
+                if not self.isInterruptionRequested():
+                    self.found.emit(serials[0])
+                return
+            if len(serials) > 1 and not self._multi_reported:
+                self._multi_reported = True
+                self.multiple.emit(len(serials))
+            elif len(serials) <= 1:
+                self._multi_reported = False
+            slept = 0
+            while slept < self.POLL_INTERVAL_MS and not self.isInterruptionRequested():
+                self.msleep(100)
+                slept += 100
 
 
 class AdbPushWorker(QThread):
@@ -902,20 +948,38 @@ class AdbPushWorker(QThread):
 
 
 class DirMergeWorker(QThread):
-    """Merge the combined theme dir into a USB-storage ``.rockbox`` folder."""
+    """Merge the combined theme payload into a USB-storage ``.rockbox`` folder.
+
+    Give it either a prepared directory (``src_dir``) or the normalized
+    themes+fonts archive (``zip_path``). The archive is the same payload the
+    ADB transfer pushes, so a manual USB-storage install places exactly what an
+    ADB install would.
+    """
 
     progress = Signal(int, int)
     finished = Signal(bool, str, int)  # success, error, count
 
-    def __init__(self, src_dir: Path, dst_dir: Path, parent=None):
+    def __init__(self, src_dir=None, dst_dir=None, parent=None, zip_path=None):
         super().__init__(parent)
-        self._src = Path(src_dir)
+        self._src = Path(src_dir) if src_dir else None
+        self._zip = Path(zip_path) if zip_path else None
         self._dst = Path(dst_dir)
 
     def run(self):
+        import tempfile
+
+        unpacked = None
         try:
+            src = self._src
+            if src is None and self._zip is not None:
+                unpacked = Path(tempfile.mkdtemp(prefix="rockbox_payload_"))
+                extract_theme_pack_zip(self._zip, unpacked)
+                src = unpacked
+            if src is None:
+                self.finished.emit(False, "No theme payload to copy", 0)
+                return
             count = merge_dirs(
-                self._src,
+                src,
                 self._dst,
                 progress_cb=self._on_progress,
                 cancel_cb=self.isInterruptionRequested,
@@ -924,6 +988,9 @@ class DirMergeWorker(QThread):
         except Exception as e:
             logger.exception("Theme merge failed: %s", e)
             self.finished.emit(False, str(e), 0)
+        finally:
+            if unpacked is not None:
+                shutil.rmtree(unpacked, ignore_errors=True)
 
     def _on_progress(self, curr: int, total: int):
         self.progress.emit(curr, total)
@@ -951,6 +1018,7 @@ class Rockbox360pSetupWizard(QDialog):
         self._retired_workers: set[QThread] = set()
         self._adb_binary: Optional[str] = None
         self._adb_serial: Optional[str] = None
+        self._adb_multi = False
         self._via_adb = False
         self._combined_dir: Optional[Path] = None
         self._work_dir: Optional[Path] = None
@@ -1148,12 +1216,19 @@ class Rockbox360pSetupWizard(QDialog):
             return
         self._adb_bar.setValue(0)
         self._adb_status.setText(tr("rockbox_wizard_adb_searching"))
+        self._adb_multi = False
         self._stop_watch()
         self._watch_worker = AdbWatchWorker(self._adb_binary, timeout=_adb.ADB_WATCH_TIMEOUT_SECONDS, parent=self)
         self._watch_worker.watch_progress.connect(lambda f: self._adb_bar.setValue(int(f * 100)))
         self._watch_worker.found.connect(self._on_adb_found)
         self._watch_worker.timed_out.connect(self._on_adb_timeout)
+        self._watch_worker.multiple.connect(self._on_adb_multiple_devices)
         self._watch_worker.start()
+
+    def _on_adb_multiple_devices(self, count: int) -> None:
+        """Two players share one serial: ask the user to disconnect one."""
+        self._adb_multi = True
+        self._adb_status.setText(tr("rockbox_stage_disconnect_extra"))
 
     def _retire_worker(self, worker: Optional[QThread]) -> None:
         if worker is None:
@@ -1180,6 +1255,10 @@ class Rockbox360pSetupWizard(QDialog):
         """
         try:
             if self._stack.currentIndex() != 1:
+                return False
+            # The watch is showing the "disconnect down to one player" prompt:
+            # that path owns the journey until a single player remains.
+            if getattr(self, "_adb_multi", False):
                 return False
             push = getattr(self, "_push_worker", None)
             if push is not None and push.isRunning():

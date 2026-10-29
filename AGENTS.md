@@ -82,3 +82,14 @@
 - On Linux, never hardcode `libusb-1.0.so` in PyUSB loaders; end-user distros only ship `libusb-1.0.so.0`. Always search `libusb-1.0.so.0` first.
 - On macOS, `libusb-1.0.dylib` in `Contents/Frameworks/` must remain Universal 2 (`x86_64` + `arm64`).
 
+## Rockbox themes/fonts stage: one owner for its state
+- `src/themes_journey.py` (`ThemesJourney`) owns the stage's decisions and state: transfer running,
+  placement failed, power-on prompt pending, ADB adoption, multiple-players, the presence watcher,
+  the open folder picker, and the stage-start rule (automatic starts obey the Settings switch).
+- `MainWindow.themes` is created before the install card and passed in as `FlashPage(journey=...)`, so
+  both widgets read the same object; a `FlashPage()` built on its own gets its own.
+- `themes.active` is the one answer to "is a themes run on?" for the window's install-run lock, its
+  device-lost guard and its close prompt; `themes.transfer_running` is the narrower question the card
+  asks about what it is drawing. Neither has a twin on `MainWindow`.
+- Add journey behaviour there, not as new `_theme_*` attributes on the two widgets. Widgets keep
+  their widgets, timers, Qt workers, callbacks and copy; they call in for the decisions.

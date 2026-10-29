@@ -4993,8 +4993,10 @@ def test_settings_platform_prep_cards():
     # platforms explicitly.
     orig_mac = paths.IS_MAC
     orig_win_for_linux = paths.IS_WINDOWS
+    orig_linux = paths.IS_LINUX
     paths.IS_MAC = False
     paths.IS_WINDOWS = False
+    paths.IS_LINUX = True
     try:
         page = SettingsPage()
         assert hasattr(page, "_btn_run_checker")  # Linux prep card on this host
@@ -5004,8 +5006,8 @@ def test_settings_platform_prep_cards():
         # A legacy platform-specific alias falls back to the platform default
         # instead of adding a second MTKClient choice.
         page.set_method("mtk_mac")
-        assert default_flash_method() == METHOD_SP
-        assert page.current_method() == METHOD_SP
+        assert default_flash_method() == METHOD_MTK
+        assert page.current_method() == METHOD_MTK
         assert page._method_combo.findData("mtk_mac") == -1
         page.set_method(METHOD_MTK)
         assert page._method_note.text() == ""
@@ -5028,6 +5030,7 @@ def test_settings_platform_prep_cards():
     finally:
         paths.IS_MAC = orig_mac
         paths.IS_WINDOWS = orig_win_for_linux
+        paths.IS_LINUX = orig_linux
 
     # On macOS (MTKClient only) the blurb is gone: nothing to explain.
     paths.IS_MAC = True
@@ -5907,9 +5910,14 @@ def test_windows_m_key_shortcut_and_method_defaults():
     app = QApplication.instance() or QApplication(sys.argv)
     orig_win = paths.IS_WINDOWS
     orig_mac = paths.IS_MAC
+    from unittest.mock import patch
+    machine = patch("platform.machine", return_value="AMD64")
     try:
         paths.IS_WINDOWS = True
         paths.IS_MAC = False
+        # The x86/x64 rule is keyed on the CPU, so pin it rather than
+        # inheriting the test host's architecture.
+        machine.start()
         sp = SettingsPage()
 
         # Windows default: SP Flash Tool only
@@ -5922,6 +5930,7 @@ def test_windows_m_key_shortcut_and_method_defaults():
 
         sp.deleteLater()
     finally:
+        machine.stop()
         paths.IS_WINDOWS = orig_win
         paths.IS_MAC = orig_mac
     app.processEvents()

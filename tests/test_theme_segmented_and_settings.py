@@ -159,9 +159,73 @@ def test_main_window_wires_install_themes_card():
             win._settings_page.install_rockbox_themes_requested.emit()
             app.processEvents()
             assert win._stack.currentIndex() == _PAGE_FLASH
-            assert win._rockbox_themes_flow_active
-            assert win._rockbox_power_on_pending
+            assert win.themes.active
+            assert win.themes.power_on_pending
     finally:
         win._force_quit = True
         win.close()
         app.processEvents()
+
+
+def test_segmented_pair_pushes_a_later_enable_to_the_native_control():
+    """A step that gains a back destination must not keep a dead chip.
+
+    The pair is built once; the leading chip is enabled later, when the journey
+    moves from "nothing to go back to" to a step that has one.
+    """
+    from src.ui.flash_page import FlashPage
+
+    app = _app()
+    page = FlashPage()
+    page.show()
+    app.processEvents()
+    try:
+        back, nxt = page._theme_back_btn, page._theme_step1_next_btn
+
+        class _FakeNative:
+            def __init__(self):
+                self.syncs = 0
+
+            def _sync_content(self):
+                self.syncs += 1
+
+        fake = _FakeNative()
+        back.set_segmented_pair(companion=nxt, is_leading=True)
+        back._segmented_native = fake
+        back.setEnabled(False)
+        back.setEnabled(True)
+        assert fake.syncs == 2
+        assert back._companion is nxt
+    finally:
+        page.close()
+        app.processEvents()
+
+
+def test_normalized_payload_keeps_the_fonts_pack_in_step(tmp_path):
+    """Fonts travel with the themes: one payload, both packs merged."""
+    from src import theme_pack as tp
+
+    fonts_zip = tmp_path / "fonts.zip"
+    themes_zip = tmp_path / "themes.zip"
+    with zipfile.ZipFile(fonts_zip, "w") as fz:
+        fz.writestr(".rockbox/fonts/35-Nimbus.fnt", b"FONT")
+        fz.writestr(".rockbox/fonts/COPYING-fonts.txt", b"LICENCE")
+    with zipfile.ZipFile(themes_zip, "w") as tz:
+        tz.writestr("themes-themepack/.rockbox/themes/cabbie.cfg", b"CFG")
+        tz.writestr("themes-themepack/.rockbox/wps/cabbie.wps", b"WPS")
+
+    target = tmp_path / "payload.zip"
+    with patch.object(tp, "bundled_fonts_pack_zip_path", return_value=fonts_zip), patch.object(
+        tp, "bundled_themepack_zip_path", return_value=themes_zip
+    ):
+        built = tp.ensure_normalized_theme_pack_zip(target, force_rebuild=True)
+
+    with zipfile.ZipFile(built) as z:
+        entries = set(z.namelist())
+        assert "fonts/35-Nimbus.fnt" in entries
+        assert "fonts/COPYING-fonts.txt" in entries
+        assert "themes/cabbie.cfg" in entries
+        assert "wps/cabbie.wps" in entries
+        # Nothing keeps a wrapper directory: this is unpacked straight into
+        # .rockbox on the player.
+        assert not any(e.startswith((".rockbox/", "themes-themepack/")) for e in entries)

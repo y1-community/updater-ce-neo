@@ -17,6 +17,8 @@ import shutil
 import subprocess
 import sys
 import time
+import zipfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -164,20 +166,64 @@ def _absolute_rockbox_path(relative_path: str) -> bool:
     return bool(path) and not path.startswith("/") and all(part not in ("", ".", "..") for part in path.split("/"))
 
 
-def adb_devices(adb: str) -> list[str]:
-    """Serials of ADB-attached devices in ``device`` state."""
+@dataclass(frozen=True)
+class AdbDevice:
+    """One attached player: its serial plus the transport that speaks for it.
+
+    The players ship a fixed serial (``STANDARD_Y_ADB_SERIAL``), so two
+    connected players cannot be told apart with ``-s`` — adb refuses such a
+    command outright ("more than one device with serial …"). The transport id
+    from ``adb devices -l`` is unique per attachment, so background code that
+    cannot prompt the user addresses each player with ``-t``.
+    """
+
+    serial: str
+    transport_id: str = ""
+    model: str = ""
+
+    def __str__(self) -> str:
+        return self.serial
+
+
+def _target(device: "AdbDevice | str") -> list[str]:
+    """adb selector for one device: its unique transport, else its serial."""
+    if isinstance(device, AdbDevice) and device.transport_id:
+        return ["-t", str(device.transport_id)]
+    return ["-s", str(device)]
+
+
+def adb_device_list(adb: str, timeout: float = 10) -> list[AdbDevice]:
+    """Every attached device in ``device`` state, from ``adb devices -l``."""
     try:
-        proc = _run_adb(adb, "devices", timeout=10)
+        proc = _run_adb(adb, "devices", "-l", timeout=timeout)
     except Exception as e:
-        logger.debug("adb devices failed: %s", e)
+        logger.debug("adb devices -l failed: %s", e)
         return []
     if proc.returncode != 0:
         return []
-    serials: list[str] = []
+    devices: list[AdbDevice] = []
     for line in (proc.stdout or "").splitlines()[1:]:
         parts = line.split()
-        if len(parts) >= 2 and parts[1] == "device":
-            serials.append(parts[0])
+        if len(parts) < 2 or parts[1] != "device":
+            continue
+        transport = ""
+        model = ""
+        for field in parts[2:]:
+            if field.startswith("transport_id:"):
+                transport = field.split(":", 1)[1]
+            elif field.startswith("model:"):
+                model = field.split(":", 1)[1]
+        devices.append(AdbDevice(serial=parts[0], transport_id=transport, model=model))
+    return devices
+
+
+def adb_devices(adb: str, timeout: float = 10) -> list[str]:
+    """Serials of ADB-attached devices in ``device`` state (one per device).
+
+    ``timeout`` bounds one ``adb devices`` call; a poller that has to stop
+    promptly passes a short one.
+    """
+    serials = [d.serial for d in adb_device_list(adb, timeout=timeout)]
     if STANDARD_Y_ADB_SERIAL in serials:
         serials.remove(STANDARD_Y_ADB_SERIAL)
         serials.insert(0, STANDARD_Y_ADB_SERIAL)
@@ -190,16 +236,34 @@ def wait_for_adb_device(
     poll_interval: float = 1.0,
     cancel_cb: Optional[Callable[[], bool]] = None,
     progress_cb: Optional[Callable[[float], None]] = None,
+    multi_cb: Optional[Callable[[int], None]] = None,
 ) -> Optional[str]:
-    """Poll ``adb devices`` until a device appears, the timeout lapses, or
-    ``cancel_cb`` returns True. Returns the first serial, or None."""
+    """Poll ``adb devices`` until exactly one device is attached, the timeout
+    lapses, or ``cancel_cb`` returns True. Returns its serial, or None.
+
+    With more than one player attached the players share one serial, so no
+    ``-s`` command could run: rather than picking one silently, ``multi_cb``
+    is told the count (once per entry into that state) and the watch keeps
+    waiting for the user to disconnect down to one — the UI uses it to ask
+    for exactly that.
+    """
     deadline = time.monotonic() + max(1.0, timeout)
+    reported_multi = False
     while True:
         if _cancelled(cancel_cb):
             return None
         serials = adb_devices(adb)
-        if serials:
+        if len(serials) == 1:
             return serials[0]
+        if len(serials) > 1:
+            if not reported_multi and multi_cb is not None:
+                try:
+                    multi_cb(len(serials))
+                except Exception:
+                    logger.debug("ADB multiple-device callback failed", exc_info=True)
+            reported_multi = True
+        else:
+            reported_multi = False
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             return None
@@ -211,7 +275,7 @@ def wait_for_adb_device(
         time.sleep(min(poll_interval, remaining))
 
 
-def adb_shell_ls(adb: str, serial: str, device_path: str) -> bool:
+def adb_shell_ls(adb: str, serial: "AdbDevice | str", device_path: str) -> bool:
     """True when ``device_path`` exists on the device.
 
     The host adb client does not forward the device shell's exit status, so the
@@ -219,7 +283,7 @@ def adb_shell_ls(adb: str, serial: str, device_path: str) -> bool:
     """
     try:
         proc = _run_adb(
-            adb, "-s", serial, "shell",
+            adb, *_target(serial), "shell",
             f"if [ -e {_shell_quote(device_path)} ]; then echo __ADB_EXISTS__; fi",
             timeout=15,
         )
@@ -234,14 +298,13 @@ def adb_find_rockbox_dir(adb: str, serial: str) -> Optional[str]:
     return found[0] if found else None
 
 
-def adb_find_all_rockbox_dirs(adb: str, serial: str) -> list[str]:
+def adb_find_all_rockbox_dirs(adb: str, serial: "AdbDevice | str") -> list[str]:
     """Every probed ``.rockbox`` directory on the device (passive merges hit all)."""
     found: list[str] = []
     try:
         proc = _run_adb(
             adb,
-            "-s",
-            serial,
+            *_target(serial),
             "shell",
             'for p in /storage/*/.rockbox /sdcard/.rockbox /mnt/*/.rockbox; do '
             '[ -d "$p" ] && (cd "$p" 2>/dev/null && pwd -P || readlink -f "$p" 2>/dev/null || echo "$p"); done',
@@ -269,7 +332,7 @@ def adb_find_all_rockbox_dirs(adb: str, serial: str) -> list[str]:
                 canon = None
                 try:
                     cproc = _run_adb(
-                        adb, "-s", serial, "shell", f'cd "{cand}" 2>/dev/null && pwd -P', timeout=5
+                        adb, *_target(serial), "shell", f'cd "{cand}" 2>/dev/null && pwd -P', timeout=5
                     )
                     if cproc.returncode == 0 and cproc.stdout.strip().startswith("/"):
                         canon = cproc.stdout.strip()
@@ -305,7 +368,7 @@ def _run_adb_push_with_progress(
     # adb push's remote path is an argv operand (adb escapes it for its own
     # device-shell command); shell quote marks here become literal filename
     # characters. Quote only paths passed as adb shell command strings.
-    args = [adb, "-s", serial, "push", *local_args, remote_path]
+    args = [adb, *_target(serial), "push", *local_args, remote_path]
 
     from .quiet_subprocess import hidden_window_kwargs
 
@@ -383,7 +446,7 @@ def _run_adb_push_with_progress(
 
 def adb_push_merge(
     adb: str,
-    serial: str,
+    serial: "AdbDevice | str",
     local_dir: str | Path,
     device_dir: str,
     progress_cb: Optional[Callable[[int, int], None]] = None,
@@ -417,7 +480,7 @@ def adb_push_merge(
             targets_str = " ".join(_shell_quote(f"{device_dir}/{d}") for d in chunk)
             try:
                 proc = _run_adb(
-                    adb, "-s", serial, "shell",
+                    adb, *_target(serial), "shell",
                     f"mkdir -p {_shell_quote(device_dir)} {targets_str} && echo __ADB_MKDIR_OK__",
                     timeout=25,
                 )
@@ -524,7 +587,7 @@ def adb_push_merge(
 def adb_reboot(adb: str, serial: str) -> bool:
     """Reboot the player over ADB. Returns True when the command was sent."""
     try:
-        proc = _run_adb(adb, "-s", serial, "reboot", timeout=15)
+        proc = _run_adb(adb, *_target(serial), "reboot", timeout=15)
         return proc.returncode == 0
     except Exception as e:
         logger.debug("adb reboot failed: %s", e)
@@ -536,8 +599,7 @@ def adb_enable_mass_storage(adb: str, serial: str) -> bool:
     try:
         proc = _run_adb(
             adb,
-            "-s",
-            serial,
+            *_target(serial),
             "shell",
             "setprop sys.usb.config mass_storage,adb 2>/dev/null || setprop sys.usb.config mass_storage 2>/dev/null || svc usb setFunctions mass_storage 2>/dev/null",
             timeout=10,
@@ -546,6 +608,75 @@ def adb_enable_mass_storage(adb: str, serial: str) -> bool:
     except Exception as e:
         logger.debug("adb enable mass storage skipped/failed: %s", e)
         return False
+
+
+def _adb_has_unzip(adb: str, serial: "AdbDevice | str") -> tuple[bool, str]:
+    """Whether the player can unpack an archive on-device."""
+    probe = (
+        "if command -v unzip >/dev/null 2>&1 || command -v busybox >/dev/null 2>&1 "
+        "|| command -v toybox >/dev/null 2>&1 || [ -x /system/bin/unzip ] "
+        "|| [ -x /system/xbin/unzip ] || [ -x /system/xbin/busybox ]; then "
+        "echo __ADB_UNZIP_OK__; else echo __ADB_NO_UNZIP__; fi"
+    )
+    try:
+        proc = _run_adb(adb, *_target(serial), "shell", probe, timeout=15)
+    except Exception as e:
+        return False, f"Could not check the player's unzip support: {e}"
+    if "__ADB_NO_UNZIP__" in (proc.stdout or ""):
+        return False, (
+            "The player has no unzip tool, so the theme pack cannot be unpacked "
+            "on the device"
+        )
+    return True, ""
+
+
+def _payload_entries(local_zip: Path) -> list[str]:
+    """The archive's own manifest: the files it places inside ``.rockbox``."""
+    try:
+        with zipfile.ZipFile(local_zip) as zf:
+            return [n for n in zf.namelist() if n and not n.endswith("/")]
+    except Exception as e:
+        logger.warning("Could not read the theme archive %s: %s", local_zip, e)
+        return []
+
+
+def _payload_missing_from(
+    adb: str, serial: "AdbDevice | str", device_dir: str, entries: list[str]
+) -> Optional[list[str]]:
+    """Which manifest entries are not on the device under ``device_dir``.
+
+    ``du -a`` is the recursive listing both busybox and toybox players provide
+    (Y2 has no ``find`` and no ``wc``); None means the device could not be read,
+    which is a failure to verify rather than a pass.
+    """
+    try:
+        proc = _run_adb(
+            adb,
+            *_target(serial),
+            "shell",
+            f"du -a {_shell_quote(device_dir)} 2>/dev/null",
+            timeout=180,
+        )
+    except Exception as e:
+        logger.warning("Could not list %s on the player: %s", device_dir, e)
+        return None
+    if proc.returncode != 0:
+        return None
+
+    prefix = device_dir.rstrip("/") + "/"
+    present: set[str] = set()
+    for line in (proc.stdout or "").splitlines():
+        line = line.rstrip("\r")
+        _size, sep, path = line.partition("\t")
+        if not sep:
+            parts = line.split(None, 1)
+            if len(parts) < 2:
+                continue
+            path = parts[1]
+        path = path.strip()
+        if path.startswith(prefix):
+            present.add(path[len(prefix):])
+    return [rel for rel in entries if rel not in present]
 
 
 def adb_push_and_unpack_zip(
@@ -560,8 +691,10 @@ def adb_push_and_unpack_zip(
 
     Pushes the archive as a single transfer to on-device temp storage, then uses
     adb shell to unpack directly into each candidate .rockbox folder using on-device
-    unzip (unzip / busybox / toybox). Cleans up the temporary zip when done.
-    Returns (True, message) on success, or (False, error) on failure.
+    unzip (unzip / busybox / toybox). Each destination is then checked against the
+    archive's own file list, so a partial extraction (a card that filled up) is a
+    failure for that destination rather than a success. Cleans up the temporary
+    zip when done. Returns (True, message) on success, or (False, error) on failure.
     """
     local_zip = Path(zip_path)
     if not local_zip.is_file() or local_zip.stat().st_size < 1024:
@@ -575,6 +708,17 @@ def adb_push_and_unpack_zip(
     if _cancelled(cancel_cb):
         return False, "Theme transfer cancelled"
 
+    # Ask once, before shipping an archive the player may be unable to open:
+    # ``adb shell`` does not pass a compound command's exit status through, so
+    # a missing unzip is reported by this marker, not by the return code.
+    ok, reason = _adb_has_unzip(adb, serial)
+    if not ok:
+        return False, reason
+
+    entries = _payload_entries(local_zip)
+    if not entries:
+        return False, f"Could not read the theme archive's file list: {local_zip}"
+
     _progress(progress_cb, 0, 100)
 
     # Store the archive with a unique name beside the selected .rockbox folder:
@@ -586,7 +730,7 @@ def adb_push_and_unpack_zip(
 
     def remove_remote_archive() -> None:
         try:
-            _run_adb(adb, "-s", serial, "shell", f"rm -f {_shell_quote(remote_tmp_zip)}", timeout=10)
+            _run_adb(adb, *_target(serial), "shell", f"rm -f {_shell_quote(remote_tmp_zip)}", timeout=10)
         except Exception:
             logger.warning("Could not clean up temporary Rockbox theme archive on player storage")
 
@@ -627,7 +771,7 @@ def adb_push_and_unpack_zip(
         # Prepare one target, then unpack the same normalized archive into it.
         try:
             mkdir_proc = _run_adb(
-                adb, "-s", serial, "shell",
+                adb, *_target(serial), "shell",
                 f"mkdir -p {_shell_quote(d_dir)} && echo __ADB_MKDIR_OK__",
                 timeout=20,
             )
@@ -657,20 +801,36 @@ def adb_push_and_unpack_zip(
         )
 
         try:
-            unpack_proc = _run_adb(adb, "-s", serial, "shell", cmd, timeout=180)
+            unpack_proc = _run_adb(adb, *_target(serial), "shell", cmd, timeout=180)
         except Exception as e:
             errors.append(f"{d_dir}: {e}")
             continue
         out = (unpack_proc.stdout or "").strip()
         err = (unpack_proc.stderr or "").strip()
 
-        # A successful shell exit only proves unzip ran. Verify expected
-        # payload content exists in this destination before claiming success.
-        has_fonts = adb_shell_ls(adb, serial, f"{d_dir}/fonts")
-        has_wps = adb_shell_ls(adb, serial, f"{d_dir}/wps")
-        has_themes = adb_shell_ls(adb, serial, f"{d_dir}/themes")
+        if "__ADB_NO_UNZIP__" in f"{out} {err}":
+            errors.append(f"{d_dir}: the player has no unzip tool")
+            continue
 
-        if unpack_proc.returncode == 0 and (has_fonts or has_wps or has_themes):
+        # A successful shell exit only proves unzip ran. Compare the archive's
+        # own manifest with what is actually there: a card that filled up
+        # mid-extract leaves the folders in place while files are missing, and
+        # that must fail so the per-file fallback takes over.
+        missing = (
+            _payload_missing_from(adb, serial, d_dir, entries)
+            if unpack_proc.returncode == 0
+            else None
+        )
+        if missing is None:
+            errors.append(
+                f"{d_dir}: could not verify the unpack ({err or out or 'unzip failed'})"
+            )
+        elif missing:
+            errors.append(
+                f"{d_dir}: {len(missing)} of {len(entries)} files are missing "
+                f"after unpacking (first: {missing[0]})"
+            )
+        else:
             unpacked_dirs.append(d_dir)
             if progress_cb is not None:
                 step = 65 + int((idx + 1) / len(device_dirs) * 30)
@@ -678,13 +838,11 @@ def adb_push_and_unpack_zip(
                     progress_cb(min(95, step), 100)
                 except Exception:
                     pass
-        else:
-            errors.append(f"{d_dir}: {err or out or 'unzip failed or tools missing'}")
 
     # Remove the temporary archive even when a destination failed.
     try:
         cleanup_proc = _run_adb(
-            adb, "-s", serial, "shell",
+            adb, *_target(serial), "shell",
             f"rm -f {_shell_quote(remote_tmp_zip)} && echo __ADB_CLEANUP_OK__",
             timeout=15,
         )

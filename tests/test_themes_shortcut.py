@@ -31,16 +31,16 @@ def test_ctrl_t_shortcut_registered_and_starts_prompt():
         win._themes_shortcut.activated.emit()
         app.processEvents()
         assert win._stack.currentIndex() == _PAGE_FLASH
-        assert win._rockbox_power_on_pending
-        assert win._rockbox_themes_flow_active
+        assert win.themes.power_on_pending
+        assert win.themes.active
         assert win._install_run_active()
-        assert win._rockbox_power_on_model in ("Y1", "Y2")
+        assert win.themes.power_on_model in ("Y1", "Y2")
 
         # Confirming power-on enters the themes stage proper.
         win._flash_page._theme_step1_next_btn.click()
         app.processEvents()
-        assert not getattr(win, "_rockbox_power_on_pending", False)
-        assert win._flash_page._themes_stage_active
+        assert not win.themes.power_on_pending
+        assert win._flash_page.themes.transfer_running
     finally:
         win._force_quit = True
         win.close()
@@ -52,7 +52,7 @@ def test_ctrl_t_ignored_while_install_running():
     try:
         win._download_active = True
         assert win.start_rockbox_themes_manually() is False
-        assert not getattr(win, "_rockbox_power_on_pending", False)
+        assert not win.themes.power_on_pending
     finally:
         win._download_active = False
         win._force_quit = True

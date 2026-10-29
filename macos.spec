@@ -59,6 +59,14 @@ if VENDOR_MTK.exists():
     compile_tree_if_stale([VENDOR_MTK], MTK_PRECOMPILED, strict=False)
     datas.append((str(MTK_PRECOMPILED), "mtkclient"))
 
+# Bare adb for the Rockbox theme/font flows. The vendored macOS binary is a
+# universal (arm64 + x86_64) build, so one copy at the generic
+# tools/adb/adb spot serves both architectures — that is the second lookup
+# candidate in src/adb.py:candidate_adb_paths(), before PATH.
+ADB_BINARY = PROJECT_ROOT / "tools" / "adb" / "macos-arm64" / "adb"
+if ADB_BINARY.is_file():
+    datas.append((str(ADB_BINARY), "tools/adb"))
+
 try:
     datas.extend(collect_data_files("libusb_package"))
 except Exception:

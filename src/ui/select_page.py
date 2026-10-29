@@ -1861,14 +1861,6 @@ class SelectPackagePage(QWidget):
         software = (self.current_software() or "").lower()
         return self.current_model().upper() == "Y1" and "rockbox" in software
 
-    def is_local_rockbox_themes_checked(self) -> bool:
-        """True if the user chose to install Rockbox 360p themes & fonts for local file."""
-        if is_mediatek_installer():
-            return False
-        if hasattr(self, "_local_rockbox_themes_cb"):
-            return self._local_rockbox_themes_cb.isVisible() and self._local_rockbox_themes_cb.isChecked()
-        return False
-
     def is_rockbox_y2_browsing(self) -> bool:
         """True when the Rockbox package for Y2 is the one being browsed."""
         software = (self.current_software() or "").lower()

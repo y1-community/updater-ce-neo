@@ -39,6 +39,7 @@ logger = logging.getLogger(__name__)
 _GROUP_THEME_SYNC = "rockbox_theme_sync"
 _KEY_TARGETS = "targets"
 _KEY_LAST_SYNC = "last_sync"
+_KEY_ENABLED = "enabled"
 
 #: Rockbox package slugs that carry the 360p family builds.
 ROCKBOX_360P_SLUGS = ("rockbox-y1", "rockbox-y2", "rockbox-a5")
@@ -84,7 +85,7 @@ def tracked_360p_rockbox_models(settings: Optional[QSettings] = None) -> list[st
         return []
     for model, rec in (installs or {}).items():
         try:
-            if is_rockbox_360p_record(rec):
+            if model == "Y1" and is_rockbox_360p_record(rec):
                 models.append(model)
         except Exception:
             continue
@@ -148,6 +149,22 @@ def last_theme_sync(model: str, settings: Optional[QSettings] = None) -> str:
         return str(_settings(settings).value(f"{_GROUP_THEME_SYNC}/{model}/{_KEY_LAST_SYNC}", "", type=str) or "")
     except Exception:
         return ""
+
+
+def themes_auto_install_enabled(settings: Optional[QSettings] = None) -> bool:
+    """The in-beta Settings toggle: off unless the user has turned it on."""
+    try:
+        return bool(_settings(settings).value(f"{_GROUP_THEME_SYNC}/{_KEY_ENABLED}", False, type=bool))
+    except Exception:
+        return False
+
+
+def set_themes_auto_install_enabled(enabled: bool, settings: Optional[QSettings] = None) -> None:
+    """Persist the in-beta auto-install toggle (Settings → Install Rockbox 360p Themes)."""
+    try:
+        _settings(settings).setValue(f"{_GROUP_THEME_SYNC}/{_KEY_ENABLED}", bool(enabled))
+    except Exception:
+        logger.debug("Could not persist themes auto-install toggle", exc_info=True)
 
 
 def theme_zip_path() -> Path:
@@ -317,29 +334,30 @@ class PassiveThemeSyncWorker(QThread):
         self._payload_parent = payload.parent
         merged_any = False
 
-        # 1. ADB: every serial, every probed .rockbox dir.
+        # 1. ADB: every attached player (by transport — the shared serial
+        # cannot tell two connected players apart), every probed .rockbox dir.
         try:
             adb_binary = _adb.find_adb_binary()
         except Exception:
             adb_binary = None
         if adb_binary:
             try:
-                serials = _adb.adb_devices(adb_binary)
+                devices = _adb.adb_device_list(adb_binary)
             except Exception:
-                serials = []
-            for serial in serials or []:
+                devices = []
+            for device in devices or []:
                 if self.isInterruptionRequested():
                     return merged_any
                 try:
-                    dirs = _adb.adb_find_all_rockbox_dirs(adb_binary, serial)
+                    dirs = _adb.adb_find_all_rockbox_dirs(adb_binary, device)
                 except Exception:
                     dirs = []
                 for device_dir in dirs or []:
-                    self.device_push_started.emit(model, serial)
+                    self.device_push_started.emit(model, str(device))
                     try:
                         ok, _msg = _adb.adb_push_merge(
-                            adb_binary, serial, payload, device_dir,
-                            progress_cb=lambda d, t, m=model: self.progress.emit(m, d, t, f"adb:{serial}"),
+                            adb_binary, device, payload, device_dir,
+                            progress_cb=lambda d, t, m=model: self.progress.emit(m, d, t, f"adb:{device}"),
                         )
                     except Exception:
                         ok = False
@@ -425,7 +443,9 @@ class ThemeSyncService(QObject):
                 pass
 
     def run_once(self) -> None:
-        """Start a silent pass if any model tracks a 360p Rockbox build."""
+        """Start a silent pass if the in-beta toggle is on and any model tracks a 360p build."""
+        if not themes_auto_install_enabled(self._settings):
+            return
         if self._worker is not None and self._worker.isRunning():
             return
         try:

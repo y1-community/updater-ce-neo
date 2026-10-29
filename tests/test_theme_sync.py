@@ -79,15 +79,20 @@ def test_remember_and_last_sync_roundtrip(tmp_path):
 
 
 def test_360p_success_opens_themes_stage_before_appeal():
-    """Install in Progress -> themes wizard -> completion/donation appeal."""
+    """Install in Progress -> power-on confirm -> themes wizard -> completion/donation appeal."""
     from PySide6.QtCore import QObject, Signal
 
     from src import player_update_check as tracking
+    from src import theme_sync as sync
     from src.ui.main_window import MainWindow
 
     app = _app()
     w = MainWindow()
     w.show()
+    # The post-flash stage is the in-beta switch's decision; this test is about
+    # the journey once it runs, so turn it on.
+    old_auto = sync.themes_auto_install_enabled()
+    sync.set_themes_auto_install_enabled(True)
     try:
         tracking.set_donation_install_prompt_disabled(False, w.settings)
         tracking.set_donation_ui_disabled(False, w.settings)
@@ -118,6 +123,13 @@ def test_360p_success_opens_themes_stage_before_appeal():
         w._package_path = "/tmp/rockbox_rom.zip"
         w._handle_flash_success()
         app.processEvents()
+        # SP Flash asks the user to disconnect & power on first; the themes
+        # stage — and with it the wizard — opens only after that confirmation.
+        assert shown == []
+        assert w.themes.power_on_pending
+        assert not w._flash_page._appeal.isVisible()
+        w._flash_page._theme_step1_next_btn.click()
+        app.processEvents()
         assert shown == [True]
         # Appeal waits for the wizard: install completed, themes stage first.
         assert not w._flash_page._appeal.isVisible()
@@ -130,6 +142,42 @@ def test_360p_success_opens_themes_stage_before_appeal():
         assert w._flash_page._appeal.isVisible()
     finally:
         paths.IS_MAC = old_mac
+        sync.set_themes_auto_install_enabled(old_auto)
+        w.close()
+        app.processEvents()
+
+
+def test_360p_success_with_the_toggle_off_finishes_like_any_other_install():
+    """The in-beta switch off means no themes stage and no locked window."""
+    from src import player_update_check as tracking
+    from src import theme_sync as sync
+    from src.ui.main_window import MainWindow
+
+    app = _app()
+    old_auto = sync.themes_auto_install_enabled()
+    sync.set_themes_auto_install_enabled(False)
+    w = MainWindow()
+    w.show()
+    started, prompted = [], []
+    w._flash_page.start_rockbox_themes_stage = lambda *a, **k: started.append(1)
+    w._show_rockbox_power_on_prompt = lambda *a, **k: prompted.append(1)
+    try:
+        tracking.set_donation_install_prompt_disabled(False, w.settings)
+        tracking.set_donation_ui_disabled(False, w.settings)
+        w._package_model = "Y1"
+        w._package_name = "Rockbox-0.6 rom.zip"
+        w._package_path = "/tmp/rockbox_rom.zip"
+        w._handle_flash_success()
+        app.processEvents()
+        assert started == []
+        assert prompted == []
+        assert w.themes.active is False
+        assert w._install_run_active() is False
+        # The install still ends on the ordinary completion screen.
+        assert w._flash_page._appeal.isVisible()
+        assert w._flash_page._complete_note.text()
+    finally:
+        sync.set_themes_auto_install_enabled(old_auto)
         w.close()
         app.processEvents()
 
@@ -159,6 +207,7 @@ def test_non_rockbox_success_keeps_immediate_appeal():
 
 
 def test_passive_worker_merges_silently(tmp_path):
+    from src import adb
     from src import theme_sync as sync
 
     _app()
@@ -178,13 +227,16 @@ def test_passive_worker_merges_silently(tmp_path):
     worker.done.connect(lambda m, ok: finished.append((m, ok)))
     with patch.object(sync, "ensure_combined_payload", return_value=payload):
         with patch("src.adb.find_adb_binary", return_value="/fake/adb"):
-            with patch("src.adb.adb_devices", return_value=["SER1"]):
+            with patch("src.adb.adb_device_list", return_value=[adb.AdbDevice("SER1", "1", "Y1")]):
                 with patch("src.adb.adb_find_all_rockbox_dirs", return_value=["/sdcard/.rockbox"]):
                     with patch("src.adb.adb_push_merge", side_effect=lambda *a, **k: (pushed.append(a), (True, ""))[1]):
                         with patch.object(sync, "find_removable_rockbox_dirs", return_value=[]):
                             worker.run()
     assert started == [("Y1", "SER1")]
-    assert pushed and pushed[0][1] == "SER1"
+    assert pushed and str(pushed[0][1]) == "SER1"
+    # Passive runs cannot prompt about two same-serial players: the push is
+    # addressed by the transport id, not the shared serial.
+    assert pushed[0][1].transport_id == "1"
     assert (target / "Themes" / "a.cfg").is_file()
     assert finished == [("Y1", True)]
     assert sync.last_theme_sync("Y1", qs) != ""
@@ -208,25 +260,29 @@ def test_passive_worker_silent_without_targets(tmp_path):
 
 def test_service_runs_only_for_tracked_360p(tmp_path):
     from src import player_update_check as tracking
+    from src import theme_sync as sync
     from src.theme_sync import ThemeSyncService
 
     app = _app()
     qs = _settings(tmp_path)
+    # The Settings toggle is the master gate; this test is about the
+    # tracked-360p gate, so turn the master one on for it.
+    sync.set_themes_auto_install_enabled(True, qs)
     service = ThemeSyncService(qs, parent=None)
     try:
-        made = []
         with patch("src.theme_sync.PassiveThemeSyncWorker") as worker_cls:
             service.run_once()
             assert worker_cls.call_count == 0
             tracking.record_device_install(
-                "Y2", "Rockbox", tag_name="1.0", release_label="1.0",
-                package_slug="rockbox-y2", settings=qs,
+                "Y1", "Rockbox", tag_name="1.0", release_label="1.0",
+                package_slug="rockbox-y1", settings=qs,
             )
             service.run_once()
             assert worker_cls.call_count == 1
-            assert worker_cls.call_args[0][0] == ["Y2"]
+            assert worker_cls.call_args[0][0] == ["Y1"]
     finally:
         service.stop()
+        sync.set_themes_auto_install_enabled(False, qs)
         app.processEvents()
 
 

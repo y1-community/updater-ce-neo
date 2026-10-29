@@ -513,10 +513,9 @@ def windows_only_method():
 def default_flash_method():
     """Method used until the user picks one.
 
-    SP Flash Tool is the default method on Linux (when the host architecture is
-    supported) and Windows x86/x64, with MTKClient as the fallback / second tool
-    attempted if an installation cannot proceed via SP Flash Tool. macOS and
-    ARM64 Linux/Windows use MTKClient.
+    MTKClient is the default on macOS and on every Linux architecture. SP Flash
+    Tool is the default on Windows x86/x64 only. SP Flash Tool stays selectable
+    on x86/x86_64 Linux as a backup, retry or user preference.
 
     ``paths.IS_MAC`` is read live rather than the module-level ``IS_MAC``
     snapshot so simulated macOS mode (and the tests that toggle it) is
@@ -528,7 +527,7 @@ def default_flash_method():
     if paths.IS_MAC:
         return METHOD_MTK
     if paths.IS_LINUX:
-        return METHOD_SP if linux_sp_flash.arch_supported() else METHOD_MTK
+        return METHOD_MTK
     return METHOD_SP
 
 

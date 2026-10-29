@@ -2,6 +2,7 @@
 
 import logging
 from pathlib import Path
+import re
 import sys
 
 logger = logging.getLogger(__name__)
@@ -21,6 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from .. import paths
+from ..themes_journey import ThemesJourney
 from .tab_focus import TabFocusManager
 from ..flash_service import (
     METHOD_MTK,
@@ -332,6 +334,36 @@ def _apply_card_text(label) -> None:
     label.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, False)
     label.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
     apply_explicit_foreground(label)
+
+
+def _software_without_model(software: str, model: str) -> str:
+    """The software name with a standalone model token removed.
+
+    Completion copy names the player ("… is installed on your {model}"), and a
+    release name can carry it too ("Rockbox for Y2"); filling both placeholders
+    read as "Rockbox for Y2 is installed on your Y2.". Only a standalone token
+    is dropped, so names like "Y2Player" are left alone, and a name that is
+    nothing but the model is kept rather than blanked.
+    """
+    text = str(software or "").strip()
+    token = str(model or "").strip()
+    if not text or not token:
+        return text
+    word = rf"(?<![0-9A-Za-z]){re.escape(token)}(?![0-9A-Za-z])"
+    if not re.search(word, text, re.IGNORECASE):
+        return text
+    # Drop the model together with the punctuation that framed it, so the
+    # remaining words keep their spacing: "(Y2)", "– Y2", "for Y2", "Y2 –".
+    stripped = text
+    for pattern, repl in (
+        (rf"[([\s]*{word}[)\]]\s*", " "),
+        (rf"\bfor\s+{word}", " "),
+        (rf"\s*[-–—·,:/]\s*{word}", " "),
+        (rf"{word}\s*[-–—·,:/]?\s*", " "),
+    ):
+        stripped = re.sub(pattern, repl, stripped, flags=re.IGNORECASE)
+    stripped = re.sub(r"\s{2,}", " ", stripped).strip(" -–—·,:()[]/")
+    return stripped or text
 
 
 def _style_card_heading(label) -> None:
@@ -1440,8 +1472,11 @@ class _SvgVectorWidget(QWidget):
 
 
 class FlashPage(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, journey=None):
         super().__init__(parent)
+        # One owner for the themes/fonts stage. The window passes its own in so
+        # both widgets read the same state; a page used on its own gets its own.
+        self.themes = journey if journey is not None else ThemesJourney()
         self._cancel_callback = None
         self._cancel_wait_callback = None
         self._cancel_download_callback = None
@@ -2450,8 +2485,10 @@ class FlashPage(QWidget):
 
     def stop_theme_workers(self) -> None:
         """Cancel and clean up any in-progress Rockbox theme background tasks."""
+        self.themes.settle_prompt()
         if hasattr(self, "_adb_watch_timer"):
             self._adb_watch_timer.stop()
+        self._close_theme_folder_dialog()
         for attr in ("_adb_watch_worker", "_adb_push_worker", "_dir_merge_worker"):
             w = getattr(self, attr, None)
             if w is not None:
@@ -2462,10 +2499,80 @@ class FlashPage(QWidget):
                 except Exception:
                     pass
                 setattr(self, attr, None)
+        self._stop_adb_presence_watch()
+
+    def _ensure_adb_presence_watch(self) -> None:
+        """Notice a player while a guidance step is waiting on the user.
+
+        Runs for as long as the step does, including behind the modal folder
+        picker, which starves Qt timers but not a thread. Starting it again on a
+        repeated prompt replaces the old watcher, so only one ever polls.
+        """
+        self._stop_adb_presence_watch()
+        from ..adb import find_adb_binary
+        from ..theme_pack import AdbPresencePoller
+
+        adb_bin = find_adb_binary()
+        if not adb_bin:
+            return
+        worker = AdbPresencePoller(adb_bin, parent=self)
+        worker.found.connect(self._on_adb_device_found)
+        worker.multiple.connect(self._on_adb_multiple_devices)
+        self.themes.attach_watch(worker)
+        worker.start()
+
+    def _stop_adb_presence_watch(self) -> None:
+        worker = self.themes.take_watch()
+        if worker is None:
+            return
+        try:
+            worker.found.disconnect()
+            worker.multiple.disconnect()
+        except Exception:
+            pass
+        worker.requestInterruption()
+        if worker.wait(1500):
+            return
+        # ``adb devices`` can sit in its own subprocess timeout while we ask the
+        # poller to stop. Dropping a running QThread makes Qt abort the process,
+        # so a slow one is retired and deleted once it exits by itself.
+        logger.debug("ADB presence watcher still stopping; retiring it")
+        self.themes.retire_watch(worker)
+        worker.finished.connect(lambda w=worker: self._retire_presence_worker(w))
+
+    def _retire_presence_worker(self, worker) -> None:
+        self.themes.forget_watch(worker)
+        worker.deleteLater()
+
+    def _request_user_attention(self) -> None:
+        """Bring the window forward: the user has something to do right now."""
+        win = self.window()
+        if win is None:
+            return
+        try:
+            win.raise_()
+            win.activateWindow()
+        except Exception:
+            logger.debug("Could not raise the window for a guidance step", exc_info=True)
 
     def closeEvent(self, event):  # noqa: N802 (Qt naming)
         self.stop_theme_workers()
+        self._drain_retired_presence_workers()
         super().closeEvent(event)
+
+    def _drain_retired_presence_workers(self, timeout_ms: int = 3000) -> None:
+        """Join pollers that were still finishing an ``adb devices`` call.
+
+        Only app shutdown pays this wait: a QThread destroyed while running
+        aborts the process, and the poller's own adb call is short.
+        """
+        for worker in list(self.themes.retired_watches):
+            try:
+                worker.wait(timeout_ms)
+            except Exception:
+                logger.debug("Could not join a retired ADB poller", exc_info=True)
+            if not worker.isRunning():
+                self.themes.forget_watch(worker)
 
     def clear_install_failure(self) -> None:
         self.dismiss_prompt_stop()
@@ -2603,12 +2710,14 @@ class FlashPage(QWidget):
     ) -> None:
         """Seamless in-card Rockbox 360p themes & fonts post-install flow."""
         self.dismiss_prompt_stop()
-        self._theme_stage_model = model
+        # A new stage owns detection from here: no watcher from the previous
+        # journey may answer for this one before its own step starts watching.
+        self._stop_adb_presence_watch()
+        self.themes.begin(model, automatic=automatic)
         self._theme_stage_done_cb = on_done
         self._theme_stage_recover_cb = on_troubleshoot or on_recover
         self._rockbox_power_on_continue_cb = None
         self._theme_log_cb = log_cb
-        self._themes_stage_active = True
         self._failed = False
         self._complete = False
         self.show_flashing()
@@ -2633,7 +2742,6 @@ class FlashPage(QWidget):
 
         model_str = (model or "Y1").upper()
         self._rockbox_already_powered_on = bool(already_powered_on)
-        self._theme_automatic = bool(automatic)
         self._log_theme(f"[Rockbox Themes] Starting 360p themes & fonts stage for {model_str}...")
 
         from ..adb import find_adb_binary, adb_devices
@@ -2645,13 +2753,21 @@ class FlashPage(QWidget):
 
         self._log_theme(f"[Rockbox Themes] Located ADB binary at: {adb_bin}")
 
-        # Seamless mode: check if an ADB device is already connected
+        # Seamless mode: only a single player can be addressed over ADB —
+        # with more than one attached they share one serial, so every -s
+        # command fails. Fall through to the watch instead, which asks the
+        # user to disconnect down to one before the transfer starts.
         existing_devices = adb_devices(adb_bin)
-        if existing_devices:
+        if len(existing_devices) == 1:
             serial = existing_devices[0]
             self._log_theme(f"[Rockbox Themes] Seamless match: ADB device {serial} already detected! Pushing themes silently...")
             self._on_adb_device_found(serial)
             return
+        if len(existing_devices) > 1:
+            self._log_theme(
+                f"[Rockbox Themes] {len(existing_devices)} players are connected over ADB; "
+                "asking the user to disconnect all but the one being installed."
+            )
 
         # If MTKClient's post-flash handoff already asked the user to boot the
         # player, go straight to the USB/ADB reconnect step instead of asking
@@ -2664,7 +2780,7 @@ class FlashPage(QWidget):
             self._show_theme_step1_disconnect_power_on()
 
     def _show_theme_step1_disconnect_power_on(self) -> None:
-        model_str = getattr(self, "_theme_stage_model", "Y1").upper()
+        model_str = self.themes.model.upper()
         button = tr("button_centre" if model_str == "Y1" else "button_power")
         step1_text = tr("rockbox_step1_power_on_button").format(
             model=model_str,
@@ -2693,8 +2809,13 @@ class FlashPage(QWidget):
         win = self.window()
         if win and hasattr(win, "_adjust_window_geometry"):
             win._adjust_window_geometry()
+        self._ensure_adb_presence_watch()
+        self._request_user_attention()
 
     def _start_theme_step2_connect_usb(self) -> None:
+        # This step runs its own countdown watch; two watchers would both claim
+        # the same player and start the push twice.
+        self._stop_adb_presence_watch()
         if hasattr(self, "_theme_step1_widget"):
             self._theme_step1_widget.setVisible(False)
         if hasattr(self, "_theme_fallback_widget"):
@@ -2710,12 +2831,13 @@ class FlashPage(QWidget):
         if win and hasattr(win, "_adjust_window_geometry"):
             win._adjust_window_geometry()
 
-        model_str = getattr(self, "_theme_stage_model", "Y1").upper()
+        model_str = self.themes.model.upper()
         from ..adb import ADB_WATCH_TIMEOUT_SECONDS
         self._adb_watch_seconds = ADB_WATCH_TIMEOUT_SECONDS
+        self.themes.clear_multiple()
         usb_prompt = tr("rockbox_step2_connect_usb").format(model=model_str)
         adb_status = tr("rockbox_stage_waiting_adb_fmt").format(remaining=self._adb_watch_seconds)
-        self._eta_label.setText("" if getattr(self, "_theme_automatic", False) else f"{usb_prompt}\n{adb_status}")
+        self._eta_label.setText("" if self.themes.automatic else f"{usb_prompt}\n{adb_status}")
         self._log_theme(f"[Rockbox Themes] Step 2: Waiting for USB connection and ADB handshake ({self._adb_watch_seconds}s timeout)...")
 
         from ..adb import find_adb_binary
@@ -2728,6 +2850,7 @@ class FlashPage(QWidget):
         self._adb_watch_worker = AdbWatchWorker(adb_bin, timeout=float(self._adb_watch_seconds), parent=self)
         self._adb_watch_worker.found.connect(self._on_adb_device_found)
         self._adb_watch_worker.timed_out.connect(self._show_theme_fallback_usb_mode)
+        self._adb_watch_worker.multiple.connect(self._on_adb_multiple_devices)
 
         self._adb_watch_timer = QTimer(self)
         self._adb_watch_timer.setInterval(1000)
@@ -2738,17 +2861,51 @@ class FlashPage(QWidget):
     def _on_adb_watch_tick(self) -> None:
         if getattr(self, "_adb_watch_seconds", 0) > 0:
             self._adb_watch_seconds -= 1
-            model_str = getattr(self, "_theme_stage_model", "Y1").upper()
-            usb_prompt = tr("rockbox_step2_connect_usb").format(model=model_str)
-            adb_status = tr("rockbox_stage_waiting_adb_fmt").format(remaining=self._adb_watch_seconds)
-            self._eta_label.setText("" if getattr(self, "_theme_automatic", False) else f"{usb_prompt}\n{adb_status}")
+            if self.themes.multiple_players:
+                # The disconnect prompt owns the copy until one player remains.
+                self._eta_label.setText(tr("rockbox_stage_disconnect_extra"))
+            else:
+                model_str = self.themes.model.upper()
+                usb_prompt = tr("rockbox_step2_connect_usb").format(model=model_str)
+                adb_status = tr("rockbox_stage_waiting_adb_fmt").format(remaining=self._adb_watch_seconds)
+                self._eta_label.setText("" if self.themes.automatic else f"{usb_prompt}\n{adb_status}")
             if self._adb_watch_seconds in (100, 80, 60, 40, 20, 10, 5):
                 self._log_theme(f"[Rockbox Themes] Waiting for ADB device... ({self._adb_watch_seconds}s remaining)")
         else:
             if hasattr(self, "_adb_watch_timer"):
                 self._adb_watch_timer.stop()
 
+    def _on_adb_multiple_devices(self, count: int) -> None:
+        """Two players share one serial: ask the user to disconnect one."""
+        self.themes.note_multiple()
+        self._log_theme(
+            f"[Rockbox Themes] {count} players are connected over ADB. "
+            "Waiting for the user to disconnect all but the one being installed."
+        )
+        self._eta_label.setText(tr("rockbox_stage_disconnect_extra"))
+
     def _on_adb_device_found(self, serial: str) -> None:
+        # A player answered: a picker open on a stale folder choice has lost.
+        self._close_theme_folder_dialog()
+        if self.themes.prompt_pending:
+            # The user was asked to power the player on; it answered instead.
+            # Pressing Continue for them keeps the stage's own wiring (watch,
+            # completion, donation screen) in charge of what happens next.
+            self.themes.settle_prompt()
+            self._stop_adb_presence_watch()
+            callback = getattr(self, "_rockbox_power_on_continue_cb", None)
+            self._log_theme(
+                f"[Rockbox Themes] Player detected over ADB ({serial}); continuing the stage."
+            )
+            if callable(callback):
+                callback()
+                return
+        # One player, one transfer: a second emitter must not push again.
+        # ADB is authoritative from here: a folder the user picked before the
+        # player answered must not be written to as well.
+        if not self.themes.take_player():
+            return
+        self._stop_adb_presence_watch()
         if hasattr(self, "_adb_watch_timer"):
             self._adb_watch_timer.stop()
         if hasattr(self, "_theme_row"):
@@ -2761,7 +2918,7 @@ class FlashPage(QWidget):
     def _start_adb_theme_push(self, serial: str) -> None:
         self._log_theme("[Rockbox Themes] Pushing 360p themes & fonts over ADB...")
         self._eta_label.setText(tr("rockbox_stage_pushing"))
-        self._theme_last_logged_curr = 0
+        self.themes.reset_progress()
         from ..adb import find_adb_binary
         from ..theme_pack import AdbPushWorker, ensure_normalized_theme_pack_zip
         adb_bin = find_adb_binary()
@@ -2796,9 +2953,7 @@ class FlashPage(QWidget):
             self._eta_label.setText(
                 tr("rockbox_stage_pushing_files_fmt").format(curr=curr, total=total)
             )
-        last_logged = getattr(self, "_theme_last_logged_curr", 0)
-        if curr == 1 or curr == total or (curr - last_logged) >= 25 or (total == 100 and (curr - last_logged) >= 20):
-            self._theme_last_logged_curr = curr
+        if self.themes.progress_log_due(curr, total):
             if total == 100:
                 self._log_theme(f"[Rockbox Themes] Theme pack transfer progress: {curr}%...")
             else:
@@ -2813,6 +2968,7 @@ class FlashPage(QWidget):
             self._show_theme_fallback_usb_mode()
 
     def _show_theme_fallback_usb_mode(self) -> None:
+        self.themes.settle_prompt()
         if hasattr(self, "_adb_watch_timer"):
             self._adb_watch_timer.stop()
         if hasattr(self, "_status_flow"):
@@ -2843,36 +2999,111 @@ class FlashPage(QWidget):
         win = self.window()
         if win and hasattr(win, "_adjust_window_geometry"):
             win._adjust_window_geometry()
+        # Keep looking for the player while the user is in USB storage mode and
+        # behind the folder picker: ADB can finish the job by itself.
+        self._ensure_adb_presence_watch()
+        self._request_user_attention()
 
     def _show_theme_manual_prompt(self) -> None:
         self._show_theme_fallback_usb_mode()
 
     def _on_theme_fallback_next_clicked(self) -> None:
+        """Open the folder picker without blocking the journey.
+
+        A blocking ``getExistingDirectory`` starves the event loop, so a player
+        that appears over ADB while the user is browsing would not be noticed
+        until the picker closed. Opening the dialog keeps this page live: the
+        presence watcher can dismiss it and take the transfer over.
+        """
         from PySide6.QtWidgets import QFileDialog
-        model = getattr(self, "_theme_stage_model", "Y1").upper()
+
         title = tr("rockbox_step_select_player_folder")
+        existing = self.themes.folder_dialog
+        if existing is not None:
+            existing.raise_()
+            existing.activateWindow()
+            return
         self._eta_label.setText(title)
         self._log_theme(f"[Rockbox Themes] Prompting user to select player drive/folder: {title}")
-        chosen = QFileDialog.getExistingDirectory(
-            self,
-            title,
-            "",
-            QFileDialog.ShowDirsOnly,
-        )
-        if not chosen:
+        dialog = QFileDialog(self, title)
+        dialog.setFileMode(QFileDialog.FileMode.Directory)
+        dialog.setOption(QFileDialog.Option.ShowDirsOnly, True)
+        dialog.setOption(QFileDialog.Option.DontResolveSymlinks, True)
+        dialog.fileSelected.connect(self._on_theme_folder_chosen)
+        dialog.finished.connect(self._on_theme_folder_dialog_finished)
+        self.themes.attach_folder_dialog(dialog)
+        dialog.open()
+
+    def _on_theme_folder_dialog_finished(self, *_args) -> None:
+        """Picked, cancelled or dismissed by detection: forget the dialog."""
+        dialog = self.themes.take_folder_dialog()
+        if dialog is not None:
+            dialog.deleteLater()
+
+    def _close_theme_folder_dialog(self) -> None:
+        """Dismiss an open picker (a player answered, or the stage ended)."""
+        dialog = self.themes.take_folder_dialog()
+        if dialog is None:
             return
-        from ..theme_pack import find_or_create_rockbox_dir, DirMergeWorker, bundled_rockbox_dir
+        try:
+            dialog.reject()
+        except Exception:
+            logger.debug("Could not dismiss the folder picker", exc_info=True)
+
+    def _on_theme_folder_chosen(self, chosen: str) -> None:
+        if not chosen:
+            # Cancelled. The presence watcher keeps running, so the user can
+            # retry or simply plug the player in.
+            return
+        if self.themes.player_taken:
+            self._log_theme(
+                "[Rockbox Themes] Player already answered over ADB; ignoring the picked folder."
+            )
+            return
+        # The picker is modal, so the watcher may have been a beat behind: ask
+        # once more before committing to the folder. ADB wins because it knows
+        # every .rockbox mount and unpacks on the device.
+        from ..adb import adb_devices, find_adb_binary
+
+        adb_bin = find_adb_binary()
+        live = adb_devices(adb_bin) if adb_bin else []
+        if self.themes.prefer_player(len(live)):
+            self._log_theme(
+                "[Rockbox Themes] Player appeared over ADB; using it instead of the picked folder."
+            )
+            self._on_adb_device_found(live[0])
+            return
+        from ..theme_pack import (
+            find_or_create_rockbox_dir,
+            DirMergeWorker,
+            ensure_normalized_theme_pack_zip,
+        )
         dest_dir = find_or_create_rockbox_dir(chosen)
-        src_dir = bundled_rockbox_dir()
         self._log_theme(f"[Rockbox Themes] Selected folder: {chosen}. Resolved target .rockbox: {dest_dir}")
-        self._log_theme(f"[Rockbox Themes] Merging bundled themes & fonts from {src_dir} into {dest_dir}...")
+        # Same payload the ADB transfer pushes: bundled themes + fonts pack +
+        # any cached remote refresh. The old bundled-directory source is not a
+        # real directory in a packaged build, so it copied nothing and sent the
+        # user straight to the give-up screen.
+        try:
+            payload_zip = ensure_normalized_theme_pack_zip()
+        except Exception as e:
+            self._log_theme(f"[Rockbox Themes] Could not prepare the themes payload: {e}")
+            self._giveup_rockbox_themes_stage(str(e))
+            return
+        self._log_theme(f"[Rockbox Themes] Merging themes & fonts payload into {dest_dir}...")
         if hasattr(self, "_theme_fallback_widget"):
             self._theme_fallback_widget.setVisible(False)
         self._hide_theme_wizard_chips()
         self._eta_label.setText(tr("rockbox_stage_pushing"))
-        self._theme_last_logged_curr = 0
+        self.themes.reset_progress()
+        # The folder choice is committed and the copy is about to run: a player
+        # appearing now must not start an ADB push into the same .rockbox. A
+        # failed merge re-enters USB guidance, which restarts the watcher.
+        self._stop_adb_presence_watch()
 
-        self._dir_merge_worker = DirMergeWorker(src_dir, dest_dir, parent=self)
+        self._dir_merge_worker = DirMergeWorker(
+            dst_dir=dest_dir, parent=self, zip_path=payload_zip
+        )
         self._dir_merge_worker.progress.connect(self._on_theme_push_progress)
         self._dir_merge_worker.finished.connect(
             lambda ok, err, count: self._on_dir_merge_finished(ok, err, count, str(dest_dir))
@@ -2885,14 +3116,41 @@ class FlashPage(QWidget):
             self._finish_rockbox_themes_stage(manual_count=count, dest=dest)
             return
         reason = err or "no theme files were copied"
-        self._log_theme(f"[Rockbox Themes] Merge into {dest} did not complete: {reason}. Showing USB storage guidance again.")
-        self._show_theme_fallback_usb_mode()
+        # The automation already retried (zip unpack, then per-file push), the
+        # guidance then named this folder pick as the last resort, and it still
+        # could not write. Looping the USB guidance would strand the user here:
+        # hand back to the completion screen with the try-again copy instead.
+        self._giveup_rockbox_themes_stage(reason)
+
+    def _giveup_rockbox_themes_stage(self, reason: str) -> None:
+        """Placement failed after the journey's retries: end on the completion
+        ``/`` donation screen once, carrying ``themes_placement_failed_note``."""
+        if not self.themes.transfer_running:
+            return  # already finished or given up — never route twice.
+        self._log_theme(
+            f"[Rockbox Themes] Unable to place the themes pack ({reason}). "
+            "Finishing with the completion screen."
+        )
+        self._stop_adb_presence_watch()
+        self.themes.mark_placement_failed()
+        if hasattr(self, "_adb_watch_timer"):
+            self._adb_watch_timer.stop()
+        if hasattr(self, "_status_flow"):
+            self._status_flow.set_forced_stacked(False)
+        if hasattr(self, "_theme_row"):
+            self._theme_row.setVisible(False)
+        self._hide_theme_wizard_chips()
+        self.stop_theme_workers()
+        cb = getattr(self, "_theme_stage_done_cb", None)
+        self._theme_stage_done_cb = None
+        if callable(cb):
+            cb()
 
     def _on_theme_yes_clicked(self) -> None:
         self._on_theme_fallback_next_clicked()
 
     def _on_theme_no_clicked(self) -> None:
-        model = getattr(self, "_theme_stage_model", "Y1").upper()
+        model = self.themes.model.upper()
         self._log_theme(f"[Rockbox Themes] User reported Rockbox is not yet running on {model}. Showing power-on troubleshoot help.")
         self._eta_label.setText(tr("rockbox_troubleshoot_desc").format(model=model))
         if hasattr(self, "_theme_step1_widget"):
@@ -2914,6 +3172,9 @@ class FlashPage(QWidget):
         win = self.window()
         if win and hasattr(win, "_adjust_window_geometry"):
             win._adjust_window_geometry()
+        # Powering the player on is exactly the moment ADB can answer for it.
+        self._ensure_adb_presence_watch()
+        self._request_user_attention()
 
     def _on_theme_browse_clicked(self) -> None:
         self._on_theme_fallback_next_clicked()
@@ -2926,14 +3187,14 @@ class FlashPage(QWidget):
             return
         win = self.window()
         if win and hasattr(win, "restore_original_software"):
-            model = getattr(self, "_theme_stage_model", "Y1")
-            win.restore_original_software(model)
+            win.restore_original_software(self.themes.model)
 
     def _finish_rockbox_themes_stage(self, manual_count=None, dest=None) -> None:
         if manual_count is not None:
             self._log_theme(f"[Rockbox Themes] Successfully merged {manual_count} theme & font files into {dest}!")
         self._log_theme("[Rockbox Themes] Rockbox 360p themes & fonts stage completed.")
-        self._themes_stage_active = False
+        self._stop_adb_presence_watch()
+        self.themes.finish()
         if hasattr(self, "_adb_watch_timer"):
             self._adb_watch_timer.stop()
         if hasattr(self, "_status_flow"):
@@ -2957,8 +3218,7 @@ class FlashPage(QWidget):
         """Keep the install card active while the user boots the flashed player."""
         self._failed = False
         self._complete = False
-        self._themes_stage_active = False
-        self._theme_stage_done_cb = None
+        self._themes_stage_done_cb = None
         self._theme_stage_recover_cb = on_recover
         self.stop_theme_workers()
         if hasattr(self, "_theme_row"):
@@ -2979,11 +3239,17 @@ class FlashPage(QWidget):
         if hasattr(self, "_status_flow"):
             self._status_flow.set_forced_stacked(True)
         self._rockbox_power_on_continue_cb = on_continue
+        self.themes.open_prompt()
         if hasattr(self, "_theme_step1_widget"):
             self._theme_step1_widget.setVisible(True)
         self._theme_step1_next_btn.setText(tr("dialog_pre_install_continue"))
         self._hide_theme_wizard_chips()
         self._theme_step1_next_btn.setVisible(True)
+        if hasattr(self, "_theme_back_btn"):
+            # Segmented back/next with the back side disabled: the firmware is
+            # already installed, so this step has nothing to go back to.
+            self._theme_back_btn.setEnabled(False)
+            self._theme_back_btn.setVisible(True)
         if hasattr(self, "_theme_row"):
             self._theme_row.setVisible(True)
         if hasattr(self, "_theme_fallback_widget"):
@@ -2993,8 +3259,13 @@ class FlashPage(QWidget):
         if hasattr(self, "_flash_head"):
             self._flash_head._sync_to_band()
         self._notify_geometry_change()
+        # A player that appears now still wins: the user may already have
+        # mirrored the wait by connecting it.
+        self._ensure_adb_presence_watch()
+        self._request_user_attention()
 
     def _on_rockbox_power_on_continue(self) -> None:
+        self.themes.settle_prompt()
         callback = getattr(self, "_rockbox_power_on_continue_cb", None)
         if callable(callback):
             callback()
@@ -3171,8 +3442,11 @@ class FlashPage(QWidget):
         language after an install still names the software that just finished
         instead of falling back to the generic project pitch.
         """
-        software = (getattr(self, "_package_name", "") or "").strip() or tr("flash_current_pkg")
         model = (getattr(self, "_model", "") or "").strip() or tr("device_fallback_word")
+        software = _software_without_model(
+            (getattr(self, "_package_name", "") or "").strip() or tr("flash_current_pkg"),
+            (getattr(self, "_model", "") or "").strip(),
+        )
         if hasattr(self, "_intro"):
             self._intro.retranslate(software=software, model=model)
             _apply_card_text(self._intro.headline)
@@ -3188,16 +3462,23 @@ class FlashPage(QWidget):
             self._appeal_dont.setText(self._dont_ask_html())
 
     def _render_completion_note(self) -> None:
-        software = self._complete_note_software or tr("flash_current_pkg")
         model = self._complete_note_model or tr("device_fallback_word")
+        software = _software_without_model(
+            self._complete_note_software or tr("flash_current_pkg"),
+            self._complete_note_model,
+        )
         from ..config import install_power_on_steps
 
         installed = tr("donate_completion_subtitle").format(
             software=software, model=model
         )
-        self._complete_note.setText(
-            f"{installed}\n{install_power_on_steps(model)}"
-        )
+        lines = [installed]
+        if self.themes.placement_failed:
+            # The one thing the reader needs after a give-up: what went wrong
+            # and where the retry lives.
+            lines.append(tr("themes_placement_failed_note"))
+        lines.append(install_power_on_steps(model))
+        self._complete_note.setText("\n".join(lines))
 
     def show_completion_note(self, visible: bool, software: str = "", model: str = "") -> None:
         """Explain the finished install when the donations appeal is hidden."""
@@ -3328,7 +3609,7 @@ class FlashPage(QWidget):
         """
         if getattr(self, "_failed", False) or getattr(self, "_complete", False):
             return False
-        return not getattr(self, "_themes_stage_active", False)
+        return not self.themes.transfer_running
 
     def set_device_done(self):
         self.update_partition_progress("")
@@ -3479,7 +3760,7 @@ class FlashPage(QWidget):
 
     def _action_apply_text(self, text):
         self._action_label.setText(text)
-        if text and not getattr(self, "_stop_open", False) and not getattr(self, "_failed", False) and not getattr(self, "_themes_stage_active", False):
+        if text and not getattr(self, "_stop_open", False) and not getattr(self, "_failed", False) and not self.themes.transfer_running:
             if hasattr(self, "_step_label"):
                 self._step_label.setText(text)
             flow = getattr(self, "_status_flow", None)

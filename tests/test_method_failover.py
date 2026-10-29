@@ -44,17 +44,19 @@ def test_simulated_macos_entry_does_not_pin_mtkclient():
     from src import paths
 
     real_mac = paths.IS_MAC
+    real_linux = paths.IS_LINUX
     try:
         paths.IS_MAC = False
-        # Linux defaults to SP Flash Tool; the legacy alias resolves to that
+        paths.IS_LINUX = True
+        # Linux defaults to MTKClient; the legacy alias resolves to that
         # platform default rather than pinning a backend of its own.
-        assert fs.default_flash_method() == fs.METHOD_SP
-        assert fs.normalise_method("mtk_mac") == fs.METHOD_SP
-        assert fs.backend_method("mtk_mac") == fs.METHOD_SP
+        assert fs.default_flash_method() == fs.METHOD_MTK
+        assert fs.normalise_method("mtk_mac") == fs.METHOD_MTK
+        assert fs.backend_method("mtk_mac") == fs.METHOD_MTK
         # The real choices are untouched.
         assert fs.normalise_method("sp") == fs.METHOD_SP
         assert fs.normalise_method("mtk") == fs.METHOD_MTK
-        assert fs.normalise_method("auto") == fs.METHOD_SP
+        assert fs.normalise_method("auto") == fs.METHOD_MTK
 
         # While the macOS flow is actually running, it is MTKClient.
         paths.IS_MAC = True
@@ -63,20 +65,24 @@ def test_simulated_macos_entry_does_not_pin_mtkclient():
         assert fs.backend_method("mtk_mac") == fs.METHOD_MTK
     finally:
         paths.IS_MAC = real_mac
+        paths.IS_LINUX = real_linux
 
 
 def test_settings_selector_has_one_platform_neutral_mtkclient_entry(monkeypatch):
     """Legacy aliases normalize away; only one MTKClient method is selectable."""
     from src import paths
+    from src import linux_sp_flash
     from src.ui.settings_page import SettingsPage
 
     app = _app()
     page = SettingsPage()
     monkeypatch.setattr(paths, "IS_MAC", False)
+    # SP Flash Tool is offered as a backup only on x86/x86_64 Linux hosts.
+    monkeypatch.setattr(linux_sp_flash, "arch_supported", lambda: True)
     try:
         page.reveal_advanced_methods()
         methods = page._available_methods()
-        assert methods == (fs.METHOD_SP, fs.METHOD_MTK)
+        assert methods == (fs.METHOD_MTK, fs.METHOD_SP)
         assert page._method_combo.findData("mtk_mac") == -1
         page.set_method("mtk_mac")
         assert page.current_method() == fs.default_flash_method()
@@ -392,18 +398,16 @@ def test_no_failover_without_a_second_backend(monkeypatch):
     from src import paths
 
     monkeypatch.setattr(paths, "IS_WINDOWS", False)
+    monkeypatch.setattr(paths, "IS_MAC", False)
     app = _app()
     window = MainWindow()
     try:
         window.show()
         window._flash_method = "sp"
-        real_mac = paths.IS_MAC
-        paths.IS_MAC = True
-        try:
-            assert window._other_method("sp") == ""
-            assert window._other_method("mtk") == ""
-        finally:
-            paths.IS_MAC = real_mac
+        monkeypatch.setattr(paths, "IS_MAC", True)
+        assert window._other_method("sp") == ""
+        assert window._other_method("mtk") == ""
+        monkeypatch.setattr(paths, "IS_MAC", False)
         assert window._other_method("sp") == "mtk"
         assert window._other_method("mtk") == "sp"
     finally:

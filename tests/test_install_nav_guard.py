@@ -153,7 +153,7 @@ def test_the_themes_stage_keeps_settings_and_select_closed():
     try:
         # The themes/fonts stage runs after the flash itself reported success,
         # so a completed flash must not unlock the window underneath it.
-        win._rockbox_themes_flow_active = True
+        win.themes.begin("Y1")
         win._install_complete = True
         win._sync_install_nav_entry()
         win._nav_to_page(_PAGE_FLASH)

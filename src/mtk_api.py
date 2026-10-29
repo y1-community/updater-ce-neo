@@ -393,9 +393,11 @@ def _apply_runtime_patches():
         def patched_close(self, reset=False):
             # device.reset() is a bus-wide USB reset on macOS: it drops every
             # other HID device on the host (keyboard, mouse). Close the port
-            # without it there, and keep the settle delay the reset path used.
-            if reset and sys.platform.startswith("darwin"):
-                install_macos_usb_reset_guard()
+            # without it on macOS and Linux (the same MTKClient close path on
+            # both), and keep the settle delay the reset path used.
+            if reset and sys.platform.startswith(("darwin", "linux")):
+                if sys.platform.startswith("darwin"):
+                    install_macos_usb_reset_guard()
                 orig_close(self, reset=False)
                 time.sleep(2)
                 return

@@ -214,18 +214,23 @@ def test_rockbox_themes_stage_with_adb_countdown():
         page._on_theme_step1_next_clicked()
         eta_text_step2 = page._eta_label.text()
         assert "connect your y1 by usb" in eta_text_step2.lower()
-        assert "90" in eta_text_step2
+        from src.adb import ADB_WATCH_TIMEOUT_SECONDS
+        assert str(ADB_WATCH_TIMEOUT_SECONDS) in eta_text_step2
 
         # Tick the timer
         page._on_adb_watch_tick()
         eta_text_tick = page._eta_label.text()
-        assert "89" in eta_text_tick
+        assert str(ADB_WATCH_TIMEOUT_SECONDS - 1) in eta_text_tick
 
         # For Y2
         page.start_rockbox_themes_stage(model="Y2")
         eta_text_y2 = page._eta_label.text()
         assert "power button" in eta_text_y2.lower()
         assert "your y2" in eta_text_y2.lower()
+
+        # The guidance steps watch for a player over ADB; a page left open
+        # would leave that poller running past the test.
+        page.stop_theme_workers()
 
 
 def test_mtkclient_watchdog_8min_and_touch_reset():
@@ -341,8 +346,12 @@ def test_rockbox_y2_triggers_themes_stage_and_logs():
 
     assert any("Rockbox Themes" in l for l in logs)
     assert any("Y2" in l for l in logs)
-    assert page._themes_stage_active
+    assert page.themes.transfer_running
     assert page._status_flow._forced_stacked
+    # Stage guidance watches for a player; end it so the poller stops.
+    page.stop_theme_workers()
+    page.close()
+    app.processEvents()
 
 
 def test_rockbox_post_flash_power_prompt_uses_model_specific_button_and_hides_nav(tmp_path):
@@ -350,6 +359,7 @@ def test_rockbox_post_flash_power_prompt_uses_model_specific_button_and_hides_na
     from PySide6.QtCore import QSettings
 
     from src import paths
+    from src import theme_sync as sync
     from src.ui.main_window import MainWindow, _PAGE_FLASH
 
     app = _app()
@@ -362,18 +372,20 @@ def test_rockbox_post_flash_power_prompt_uses_model_specific_button_and_hides_na
         with patch("src.theme_pack.AdbWatchWorker"):
             window = MainWindow()
             window.settings = settings
-            window._package_model = "Y2"
-            window._package_name = "Rockbox Y2"
-            window._package_path = "/tmp/rockbox_y2.zip"
+            # The post-flash themes journey starts only with the in-beta switch on.
+            sync.set_themes_auto_install_enabled(True, settings)
+            window._package_model = "Y1"
+            window._package_name = "Rockbox Y1"
+            window._package_path = "/tmp/rockbox_y1.zip"
             window._flash_method = "mtk"
-            window._flash_page.set_model("Y2")
+            window._flash_page.set_model("Y1")
             window._create_themes_wizard = lambda _model: None
             window.show()
             window._handle_flash_success()
             app.processEvents()
 
             assert window._stack.currentIndex() == _PAGE_FLASH
-            assert window._rockbox_power_on_pending
+            assert window.themes.power_on_pending
             assert window._install_run_active()
             assert window._settings_btn.isHidden()
             assert window._support_btn.isHidden()
@@ -384,13 +396,13 @@ def test_rockbox_post_flash_power_prompt_uses_model_specific_button_and_hides_na
             # Guided install chrome stays active until the player has booted;
             # the SP Flash Tool button is independent of that flow.
             assert window._install_run_active()
-            assert "disconnect the usb and power on your y2" in window._flash_page._eta_label.text().lower()
+            assert "disconnect the usb and power on your y1" in window._flash_page._eta_label.text().lower()
 
             window._flash_page._theme_step1_next_btn.click()
             app.processEvents()
-            assert not window._rockbox_power_on_pending
-            assert window._flash_page._themes_stage_active
-            assert "connect your y2 by usb" in window._flash_page._eta_label.text().lower()
+            assert not window.themes.power_on_pending
+            assert window._flash_page.themes.transfer_running
+            assert "connect your y1 by usb" in window._flash_page._eta_label.text().lower()
             assert "usb" not in window._flash_page._theme_row.accessibleName().lower()
     finally:
         paths.IS_MAC = old_mac
@@ -406,6 +418,7 @@ def test_sp_flash_rockbox_power_on_prompt(tmp_path):
     """SP Flash Tool also asks Y1/Y2 users to disconnect & power on, then connect USB, rather than bypassing with automatic=True."""
     from PySide6.QtCore import QSettings
     from src import paths
+    from src import theme_sync as sync
     from src.ui.main_window import MainWindow, _PAGE_FLASH
 
     app = _app()
@@ -418,6 +431,8 @@ def test_sp_flash_rockbox_power_on_prompt(tmp_path):
         with patch("src.theme_pack.AdbWatchWorker"):
             window = MainWindow()
             window.settings = settings
+            # The post-flash themes journey starts only with the in-beta switch on.
+            sync.set_themes_auto_install_enabled(True, settings)
             window._package_model = "Y1"
             window._package_name = "Rockbox Y1"
             window._package_path = "/tmp/rockbox_y1.zip"
@@ -429,7 +444,7 @@ def test_sp_flash_rockbox_power_on_prompt(tmp_path):
             app.processEvents()
 
             assert window._stack.currentIndex() == _PAGE_FLASH
-            assert window._rockbox_power_on_pending
+            assert window.themes.power_on_pending
             assert window._install_run_active()
 
             # Step 1: Disconnect & power on prompt, shared by both flash methods
@@ -438,8 +453,8 @@ def test_sp_flash_rockbox_power_on_prompt(tmp_path):
             # User presses the round Next button to confirm disconnect and power on
             window._flash_page._theme_step1_next_btn.click()
             app.processEvents()
-            assert not window._rockbox_power_on_pending
-            assert window._flash_page._themes_stage_active
+            assert not window.themes.power_on_pending
+            assert window._flash_page.themes.transfer_running
 
             # Step 2: Connect USB prompt
             assert "connect your y1 by usb" in window._flash_page._eta_label.text().lower()

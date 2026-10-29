@@ -121,6 +121,7 @@ from .glass import (
     ensure_window_maximize_enabled,
     set_window_close_button_enabled,
 )
+from ..themes_journey import ThemesJourney
 from .error_page import ErrorPage
 from .flash_page import FlashPage
 from .retry_page import RetryPage
@@ -720,7 +721,6 @@ class MainWindow(QMainWindow):
         self._sp_1013_seen = False
         self._reboot_suggestion_shown = False
         self._power_off_prompt = False
-        self._rockbox_themes_flow_active = False
         self._gui_handoff_prepare = False
         self._gui_handoff_ready = False
         self._gui_launch_when_ready = False
@@ -961,7 +961,10 @@ class MainWindow(QMainWindow):
         paint_window_surface(self._stack)
         self._select_page = SelectPackagePage()
         QTimer.singleShot(0, self._prefill_fw_package)
-        self._flash_page = FlashPage()
+        # The themes/fonts stage spans this window and the install card, so the
+        # same journey object owns its state for both.
+        self.themes = ThemesJourney()
+        self._flash_page = FlashPage(journey=self.themes)
         self._error_page = ErrorPage()
         self._retry_page = RetryPage()
         self._settings_page = SettingsPage()
@@ -1032,6 +1035,9 @@ class MainWindow(QMainWindow):
         )
         self._settings_page.install_rockbox_themes_requested.connect(
             self._on_settings_install_rockbox_themes
+        )
+        self._settings_page.themes_auto_install_changed.connect(
+            self._on_themes_auto_install_changed
         )
 
         self._donations = parse_donors_csv_text(load_donors_file([
@@ -2604,13 +2610,15 @@ class MainWindow(QMainWindow):
             self._append_log("Rockbox themes shortcut ignored: an install is already running.")
             return False
         model = self._manual_themes_model()
+        if model != "Y1":
+            self._append_log("Rockbox themes are not installed for Y2; the themes stage was not started.")
+            return False
         self._append_log(f"Rockbox themes & fonts stage started manually for {model}.")
         self._package_model = model
         self._install_complete = False
         self._install_failed = False
-        self._themes_stage_done = False
+        self.themes.reset_completion()
         self._compact_install_screen = False
-        self._rockbox_themes_flow_active = True
         self._is_360p_rockbox = True
         self._flash_page.set_model(model)
         self._nav_to_page(_PAGE_FLASH)
@@ -2645,18 +2653,9 @@ class MainWindow(QMainWindow):
         is_rockbox = "rockbox" in name or "rockbox" in path or "rockbox" in slug
         is_240p = any("240p" in value for value in (name, path, asset_name, release_label))
         is_240p = is_240p or str(info.get("selected_resolution", "")).lower() == "240p"
-        local_checked = bool(
-            getattr(page, "is_local_rockbox_themes_checked", lambda: False)()
-        )
-        bundled_rockbox = bool(getattr(self, "_bundled_rockbox_themes", False))
-        if not bundled_rockbox and getattr(self, "_package_path", None):
-            try:
-                from ..fw_package import has_rockbox_marker
-                p = Path(self._package_path)
-                bundled_rockbox = has_rockbox_marker(p.parent)
-            except Exception:
-                bundled_rockbox = False
-        return bool(bundled_rockbox or (is_rockbox and not is_240p) or (local_checked and model == "Y1")), model
+        # Themes are Y1-only, and only for a Rockbox-named, non-240p release.
+        # Bundled-marker and local-checkbox routes do not bypass this.
+        return bool(model == "Y1" and is_rockbox and not is_240p), model
 
     def _rockbox_240p_detected(self) -> bool:
         """Whether this run installs a 240p Rockbox ROM (theme-site note, no bundled push)."""
@@ -2698,8 +2697,7 @@ class MainWindow(QMainWindow):
         """Ask the user to boot the flashed player before ADB/theme setup."""
         self._install_complete = True
         self._install_failed = False
-        self._rockbox_power_on_pending = True
-        self._rockbox_power_on_model = model
+        self.themes.ask_power_on(model)
         prompt = tr(self._flash_page.rockbox_power_on_prompt_key(model)).format(model=model)
         self._flash_page.show_rockbox_power_on_prompt(
             prompt,
@@ -2713,10 +2711,10 @@ class MainWindow(QMainWindow):
 
     def _continue_rockbox_power_on(self) -> None:
         """Start the assets stage once the user has powered on the Rockbox player."""
-        if not getattr(self, "_rockbox_power_on_pending", False):
+        if not self.themes.power_on_pending:
             return
-        model = getattr(self, "_rockbox_power_on_model", "") or self._package_model
-        self._rockbox_power_on_pending = False
+        model = self.themes.power_on_model or self._package_model
+        self.themes.clear_power_on()
         donation_disabled = device_tracking.is_donation_install_prompt_disabled(self.settings)
         self._start_themes_stage(model, donation_disabled, already_powered_on=True)
 
@@ -2731,9 +2729,9 @@ class MainWindow(QMainWindow):
             return True
         if getattr(self, "_gui_handoff_prepare", False):
             return True
-        if getattr(self, "_rockbox_themes_flow_active", False):
+        if self.themes.active:
             return True
-        if getattr(self, "_rockbox_power_on_pending", False):
+        if self.themes.power_on_pending:
             return True
         if getattr(self, "_power_off_prompt", False):
             return True
@@ -3171,6 +3169,11 @@ class MainWindow(QMainWindow):
                 actual_chrome = (
                     status_h + (int(HEADER_CONTENT_HEIGHT) if getattr(self, "_title_bar", None) is not None else 0)
                 )
+                in_wait_connection = False
+                try:
+                    in_wait_connection = hasattr(self, "sm") and getattr(self.sm, "state") == FlashState.S2_WAIT_CONNECTION
+                except Exception:
+                    in_wait_connection = False
                 target_h = max(
                     compact_install_height(
                         page_h=page_h,
@@ -3184,8 +3187,12 @@ class MainWindow(QMainWindow):
                 # The rail counts during an install too: its community row
                 # (Discord, Reddit, GitHub) sits at the bottom and was clipped
                 # when only the progress card was measured.
-                if nav is not None:
+                if nav is not None and not in_wait_connection:
                     target_h = max(target_h, nav.sizeHint().height() + actual_chrome)
+                elif nav is not None and in_wait_connection:
+                    # During connection waiting, keep the window compact without
+                    # forcing extra height for the full nav/community row.
+                    target_h = min(target_h, page_h + prompt_h + actual_chrome + 24)
             else:
                 # The catalogue is still showing. The short install size is
                 # applied once the progress card is the page on screen. The
@@ -4226,7 +4233,7 @@ class MainWindow(QMainWindow):
                 return
             # ROM-bundled portable run: stay on the run's card (Retry or Quit), never Select.
             self._flash_page.stop_theme_workers()
-            self._rockbox_themes_flow_active = False
+            self.themes.finish()
             self._run_output_open = False
             self._download_active = False
             self._flash_page.show_completion_appeal(False)
@@ -4234,9 +4241,8 @@ class MainWindow(QMainWindow):
             return
         section = getattr(self, "_catalogue_section", "online") or "online"
         self._flash_page.stop_theme_workers()
-        self._rockbox_power_on_pending = False
-        self._rockbox_power_on_model = ""
-        self._rockbox_themes_flow_active = False
+        self.themes.clear_power_on()
+        self.themes.finish()
         self._run_output_open = False
         self._download_active = False
         self._reset_after_run()
@@ -4804,9 +4810,9 @@ class MainWindow(QMainWindow):
         if (
             self.sm.state is FlashState.S5_COMPLETE
             or getattr(self, "_install_complete", False)
-            or getattr(self, "_rockbox_themes_flow_active", False)
+            or self.themes.active
             or self._is_sp_complete_override()
-            or getattr(self, "_themes_stage_done", False)
+            or self.themes.completion_shown
         ):
             return
         if self.sm.state is FlashState.S4_FLASHING or getattr(self, "_past_usb_search", False):
@@ -4833,9 +4839,8 @@ class MainWindow(QMainWindow):
             error_code = ""
 
         if not ok:
-            self._rockbox_themes_flow_active = False
-            self._rockbox_power_on_pending = False
-            self._rockbox_power_on_model = ""
+            self.themes.finish()
+            self.themes.clear_power_on()
         # Success and failure end the install window the same way: every
         # backend this app started goes now, in the background so the result
         # (or a retry) is never held up by process cleanup.
@@ -4918,20 +4923,23 @@ class MainWindow(QMainWindow):
             eff_model = "Y2"
 
         is_360p_rockbox, eff_model = self._rockbox_themes_required()
-        pkg_low = (self._package_name or "").lower()
-        path_low = (self._package_path or "").lower()
-        is_target_rockbox = "rockbox" in pkg_low or "rockbox" in path_low
         is_240p_rockbox = self._rockbox_240p_detected()
 
         self._is_360p_rockbox = is_360p_rockbox
         self._is_240p_rockbox = is_240p_rockbox
-        self._rockbox_power_on_pending = False
-        self._rockbox_power_on_model = ""
+        self.themes.clear_power_on()
         self._download_active = False
 
-        if is_360p_rockbox or (is_target_rockbox and not is_240p_rockbox and eff_model in ("Y1", "Y2")):
+        # The in-beta Settings switch is the single owner of the automatic
+        # themes decision: off means the install finishes like any other
+        # firmware and the player is left alone. The Settings "Install Themes
+        # Now" button does not come through here.
+        from ..theme_sync import themes_auto_install_enabled
+
+        themes_auto = themes_auto_install_enabled(self.settings)
+        wants_themes = is_360p_rockbox
+        if wants_themes and themes_auto:
             self._nav_to_page(_PAGE_FLASH)
-            self._rockbox_themes_flow_active = True
             # Keep the completion screen's recorded success state while the
             # post-flash theme wizard runs. USB enumeration is expected to
             # change during the ADB handoff and is not a firmware failure.
@@ -4950,6 +4958,13 @@ class MainWindow(QMainWindow):
             else:
                 self._show_rockbox_power_on_prompt(eff_model)
         else:
+            # Includes a Rockbox install with the themes switch off: it ends on
+            # the ordinary completion screen, exactly like any other firmware.
+            if wants_themes:
+                self._append_log(
+                    "[Rockbox Themes] Themes and fonts auto-install is off in Settings; "
+                    "the install finishes without the themes stage."
+                )
             try:
                 from ..sleep_inhibit import release_sleep_inhibition
                 release_sleep_inhibition()
@@ -4995,11 +5010,20 @@ class MainWindow(QMainWindow):
         already_powered_on: bool = False,
         automatic: bool = False,
     ) -> None:
-        """Open the themes install stage after a 360p Rockbox install."""
-        self._themes_stage_done = False
-        self._rockbox_power_on_pending = False
-        self._rockbox_power_on_model = ""
-        self._rockbox_themes_flow_active = True
+        """Open the themes install stage after a 360p Rockbox install.
+
+        ``automatic`` marks a stage the app decided to run by itself; it is
+        refused while the in-beta Settings switch is off. The Settings button
+        starts the same stage by hand and is never gated.
+        """
+        allowed, reason = self.themes.should_start(automatic=automatic, settings=self.settings)
+        if not allowed:
+            self._append_log(reason)
+            return
+        self.themes.reset_completion()
+        # The window owns the entry to the stage, and a custom wizard never
+        # reaches the card's own begin(): mark the run from here.
+        self.themes.begin(model, automatic=automatic)
         self._sync_install_nav_entry()
         self._append_log(f"Starting Rockbox 360p themes & fonts post-install stage for {model}...")
         # Check if caller or test suite stubbed _create_themes_wizard
@@ -5035,12 +5059,10 @@ class MainWindow(QMainWindow):
         self._adjust_window_geometry()
 
     def _finish_themes_stage(self, donation_disabled: bool) -> None:
-        if getattr(self, "_themes_stage_done", False):
+        if self.themes.completion_shown:
             return
-        self._themes_stage_done = True
-        self._rockbox_themes_flow_active = False
-        self._rockbox_power_on_pending = False
-        self._rockbox_power_on_model = ""
+        self.themes.mark_completion_shown()
+        self.themes.finish()
         self._sync_install_nav_entry()
         try:
             from ..sleep_inhibit import release_sleep_inhibition
@@ -5063,15 +5085,22 @@ class MainWindow(QMainWindow):
             )
         model = self._package_model or ""
         software = self._package_name or "Firmware"
+        # A themes stage that gave up still lands on this screen, so its note
+        # must be shown even where the donations appeal would otherwise be the
+        # only block — the try-again copy is why the user is reading.
+        themes_failed = self.themes.placement_failed
         self._flash_page.show_completion_note(
-            donation_disabled, software=software, model=model
+            donation_disabled or themes_failed, software=software, model=model
         )
         self._adjust_window_geometry()
         self._sync_sp_history()
-        steps = install_power_on_steps(model)
-        self._show_status(
-            tr("status_install_ok_fmt").format(software=software, steps=steps), 60000
-        )
+        if themes_failed:
+            self._show_status(tr("themes_placement_failed_note"), 60000)
+        else:
+            steps = install_power_on_steps(model)
+            self._show_status(
+                tr("status_install_ok_fmt").format(software=software, steps=steps), 60000
+            )
         self._notify_task_complete(software, model)
 
     def _notify_task_complete(self, software: str, model: str) -> None:
@@ -5090,7 +5119,7 @@ class MainWindow(QMainWindow):
         eff_model = (
             model
             or getattr(self, "_package_model", "")
-            or getattr(getattr(self, "_flash_page", None), "_theme_stage_model", "")
+            or self.themes.model
             or getattr(getattr(self, "_flash_page", None), "_model", "")
             or self._select_page.current_model()
             or "Y1"
@@ -5109,10 +5138,8 @@ class MainWindow(QMainWindow):
         if hasattr(self, "_flash_page"):
             self._flash_page.stop_theme_workers()
             self._flash_page.clear_install_failure()
-        self._themes_stage_done = True
-        self._rockbox_themes_flow_active = False
-        self._rockbox_power_on_pending = False
-        self._rockbox_power_on_model = ""
+        self.themes.mark_completion_shown()
+        self.themes.finish()
         self._install_failed = False
         self._failure_title = ""
         self._power_off_prompt = False
@@ -5138,6 +5165,12 @@ class MainWindow(QMainWindow):
         """Start the passive 360p theme sync (self-gating; idle when untracked)."""
         if getattr(self, "_theme_sync_service", None) is not None:
             return
+        from ..theme_sync import themes_auto_install_enabled
+
+        if not themes_auto_install_enabled(self.settings):
+            # The in-beta toggle is off: no background sync is created at all.
+            # Turning it on later runs _on_themes_auto_install_changed.
+            return
         try:
             from ..theme_sync import ThemeSyncService
 
@@ -5147,12 +5180,24 @@ class MainWindow(QMainWindow):
         except Exception:
             logger.debug("Passive theme sync could not start", exc_info=True)
 
+    def _on_themes_auto_install_changed(self, enabled: bool) -> None:
+        """The in-beta Settings toggle owns the passive sync's run state."""
+        if enabled:
+            if getattr(self, "_theme_sync_service", None) is None:
+                self._ensure_theme_sync()
+            else:
+                self._theme_sync_service.start()
+        else:
+            service = getattr(self, "_theme_sync_service", None)
+            if service is not None:
+                service.stop()
+
     def _show_install_failure(self, message: str):
         """Failure stays on the install progress card. Retry is where Cancel was."""
         if hasattr(self, "_flash_page") and self._flash_page is not None:
             self._flash_page.dismiss_prompt_stop()
-        self._rockbox_themes_flow_active = False
-        self._rockbox_power_on_pending = False
+        self.themes.finish()
+        self.themes.clear_power_on()
         raw = str(message or "")
         low = raw.lower()
         if message == "CACHE_FILE_MISSING" or any(marker in low for marker in _CACHE_MISSING_MARKERS):
@@ -5689,9 +5734,8 @@ class MainWindow(QMainWindow):
 
     def _reset_after_run(self):
         self._pre_install_guided = False
-        self._rockbox_power_on_pending = False
-        self._rockbox_power_on_model = ""
-        self._rockbox_themes_flow_active = False
+        self.themes.clear_power_on()
+        self.themes.finish()
         self._install_complete = False
         self._install_failed = False
         self._power_off_prompt = False
@@ -5709,8 +5753,7 @@ class MainWindow(QMainWindow):
         self._package_name = ""
         self._flash_start_ts = 0.0
         self._settings_page.set_method_enabled(True)
-        self._rockbox_power_on_pending = False
-        self._rockbox_power_on_model = ""
+        self.themes.clear_power_on()
         self.service.stop_device_monitor()
         self._sync_install_nav_entry()
         self._nav_to_page(_PAGE_SELECT)
@@ -6335,8 +6378,6 @@ class MainWindow(QMainWindow):
                 self._select_page._current_package_model = package_model
                 if pkg.type:
                     self._select_page._selected_type = pkg.type
-                if pkg.has_rockbox and hasattr(self._select_page, "_local_rockbox_themes_cb"):
-                    self._select_page._local_rockbox_themes_cb.setChecked(True)
                 if hasattr(self._select_page, "_path_edit"):
                     self._select_page._path_edit.setText(str(pkg.folder))
                 if hasattr(self._select_page, "_details_package"):
@@ -6351,11 +6392,7 @@ class MainWindow(QMainWindow):
                     self._select_page._set_details_header(None, self._select_page._details_package)
 
             if pkg.has_rockbox:
-                self._bundled_rockbox_themes = True
                 self._is_360p_rockbox = True
-                self._rockbox_themes_flow_active = True
-            else:
-                self._bundled_rockbox_themes = False
 
             self._bundled_package_path = package_path
 
@@ -7141,7 +7178,7 @@ class MainWindow(QMainWindow):
             getattr(self, "_download_active", False)
             or getattr(self, "_prep_active", False)
             or (hasattr(self, "sm") and self.sm.state in (FlashState.S4_FLASHING, FlashState.S3_DEVICE_DETECTED))
-            or getattr(self, "_rockbox_themes_flow_active", False)
+            or self.themes.active
         ) and not (
             getattr(self, "_install_failed", False)
             or getattr(self, "_install_complete", False)

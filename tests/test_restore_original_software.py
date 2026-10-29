@@ -29,9 +29,15 @@ def test_flash_page_labels_and_recovery_trigger():
     assert page._theme_trouble_recover_btn.text() == "Device not starting? Restore the original software"
 
     recovered = []
-    page.start_rockbox_themes_stage(model="Y1", on_recover=lambda: recovered.append("Y1"))
-    page._on_theme_recover_clicked()
-    assert recovered == ["Y1"]
+    try:
+        page.start_rockbox_themes_stage(model="Y1", on_recover=lambda: recovered.append("Y1"))
+        page._on_theme_recover_clicked()
+        assert recovered == ["Y1"]
+    finally:
+        # The stage watches for a player while it guides; end it here.
+        page.stop_theme_workers()
+        page.close()
+        _get_app().processEvents()
 
 
 def test_main_window_restore_original_software_triggers_install():
@@ -44,14 +50,14 @@ def test_main_window_restore_original_software_triggers_install():
             # Mock select_page start_install_for_release
             win._select_page.start_install_for_release = MagicMock()
             win._package_model = "Y1"
-            win._rockbox_power_on_pending = True
-            win._rockbox_themes_flow_active = True
+            win.themes.ask_power_on("Y1")
+            win.themes.begin("Y1")
             win._install_failed = True
 
             win.restore_original_software("Y1")
 
-            assert not win._rockbox_power_on_pending
-            assert not win._rockbox_themes_flow_active
+            assert not win.themes.power_on_pending
+            assert not win.themes.active
             assert not win._install_failed
             assert not win._fallback_attempted
             assert win._flash_method == win._preferred_flash_method()
