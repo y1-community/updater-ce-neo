@@ -80,8 +80,8 @@ def test_settings_card_copy_pill_and_toggle_roundtrip():
         assert page._install_themes_btn.text() == "Install Themes Now"
         assert tr("settings_install_rockbox_themes_btn") == "Install Themes Now"
         assert page._install_themes_desc.text() == (
-            "When enabled, the 360p Rockbox themes pack will be installed "
-            "at the end of your Rockbox install"
+            "When enabled, Rockbox themes are automatically transferred to Y1 "
+            "after a successful Rockbox install."
         )
         assert page._install_themes_desc.text() == tr("settings_install_themes_desc")
 

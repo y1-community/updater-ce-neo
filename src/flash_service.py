@@ -141,7 +141,7 @@ import platform
 from . import linux_sp_flash, paths
 from .fw_package import prune_to_firmware_package
 from .i18n import tr
-from .progress_model import ThroughputEta, percent_of
+from .progress_model import ThroughputEta
 
 paths.ensure_mtkclient_importable()
 
@@ -4336,6 +4336,20 @@ class FlashWorker(QThread):
             self._sp_progress_hwm = scaled
             self.progress.emit(round(scaled, 1))
 
+    def _emit_mtk_write_progress(self, done, total):
+        """Map MTKClient image bytes across the whole firmware band.
+
+        Writes fill 20% up to the firmware's real end: 90% when a Rockbox themes
+        stage follows (its last 10% is that stage), otherwise 100%. The band is
+        already in bar units, so it is not scaled again.
+        """
+        from .progress_model import float_percent_of
+        ceiling = 90.0 if getattr(self, "_is_rockbox_flow", False) else 100.0
+        mapped = float_percent_of(done, total, 20, ceiling - 20)
+        if mapped > self._sp_progress_hwm:
+            self._sp_progress_hwm = mapped
+            self.progress.emit(round(mapped, 1))
+
     def _emit_eta(self, done, total):
         """Publish the measured time remaining (``-1`` while it is unknown)."""
         eta = self._eta.note(done, total)
@@ -5515,7 +5529,7 @@ class FlashWorker(QThread):
             current_done = completed_bytes + pos
             current_part_done = part_completed_bytes + pos
             if total_bytes > 0:
-                self._emit_progress(percent_of(current_done, total_bytes, 20, 75))
+                self._emit_mtk_write_progress(current_done, total_bytes)
                 # Install remaining, measured from this run's own write rate:
                 # the card scores it first and the Device Prep stage adds its
                 # half on top of the same number.
@@ -5797,7 +5811,7 @@ class FlashWorker(QThread):
                     if actual_len > part_completed_bytes:
                         completed_bytes += (actual_len - part_completed_bytes)
                     if total_bytes > 0:
-                        self._emit_progress(percent_of(completed_bytes, total_bytes, 20, 75))
+                        self._emit_mtk_write_progress(completed_bytes, total_bytes)
                         remaining = self._total_eta.note(completed_bytes, total_bytes)
                         self.eta_changed.emit(remaining if remaining > 0 else -1)
 

@@ -356,6 +356,7 @@ def _run_adb_push_with_progress(
     progress_cb: Optional[Callable[[int, int], None]] = None,
     cancel_cb: Optional[Callable[[], bool]] = None,
     timeout: float = 600,
+    log_cb: Optional[Callable[[str], None]] = None,
 ) -> subprocess.CompletedProcess:
     """Run one adb push while forwarding adb's percentage output to the UI."""
     import re
@@ -396,6 +397,13 @@ def _run_adb_push_with_progress(
                     break
                 output.extend(chunk)
                 data = tail + chunk
+                if log_cb is not None:
+                    for raw_line in chunk.decode("utf-8", "replace").replace("\r", "\n").splitlines():
+                        if raw_line.strip():
+                            try:
+                                log_cb(raw_line.strip())
+                            except Exception:
+                                pass
                 for match in re.finditer(rb"(?<!\d)(\d{1,3})%", data):
                     percent = min(100, int(match.group(1)))
                     if percent <= last_percent:
@@ -686,6 +694,7 @@ def adb_push_and_unpack_zip(
     device_dirs: list[str],
     progress_cb: Optional[Callable[[int, int], None]] = None,
     cancel_cb: Optional[Callable[[], bool]] = None,
+    log_cb: Optional[Callable[[str], None]] = None,
 ) -> tuple[bool, str]:
     """Transfer the themes/fonts zip to the device and unpack directly into target .rockbox locations.
 
@@ -744,6 +753,7 @@ def adb_push_and_unpack_zip(
             progress_cb=progress_cb,
             cancel_cb=cancel_cb,
             timeout=600,
+            log_cb=log_cb,
         )
     except Exception as e:
         remove_remote_archive()

@@ -129,6 +129,26 @@ def test_percent_is_the_byte_fraction_inside_its_slice():
     assert percent_of("x", "y", 20, 75) == 20
 
 
+def test_mtkclient_writes_fill_the_firmware_band_without_a_jump():
+    """MTKClient bytes map from 20% to the firmware's real end, not a 75% cap.
+
+    A standard install ends at 100%; a Rockbox install ends at 90%, its last
+    10% being the themes stage. Nothing is scaled twice.
+    """
+    for rockbox, ceiling in ((False, 100.0), (True, 90.0)):
+        worker = fs.FlashWorker("pkg.zip", method="mtkclient")
+        worker._log = lambda *a, **k: None
+        worker._is_rockbox_flow = rockbox
+        progress = []
+        worker.progress.connect(progress.append)
+        worker._emit_mtk_write_progress(0, 100)
+        worker._emit_mtk_write_progress(50, 100)
+        worker._emit_mtk_write_progress(100, 100)
+        assert progress[0] == 20.0
+        assert progress[-1] == ceiling, (rockbox, progress)
+        assert progress == sorted(progress), progress
+
+
 def test_the_tool_own_total_is_what_the_bar_follows():
     """SP reports its totals; the app must not outrun them.
 

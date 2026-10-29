@@ -2171,6 +2171,10 @@ class FlashPage(QWidget):
         """Guidance images during firmware installs are removed in favor of native UI."""
         pass
 
+    def begin_run(self) -> None:
+        """A new flash starts with the progress card up; donations apply at its end."""
+        self._donations_shown = False
+
     def show_preparing(self):
         self._complete = False
         self._switch_view(self._preparing_view)
@@ -2182,6 +2186,7 @@ class FlashPage(QWidget):
     def show_drop_check(self, name: str = "") -> None:
         """Indeterminate bar while a dropped package is checked. No tool names."""
         self._complete = False
+        self._donations_shown = False
         if name and hasattr(self, "_prep_pkg_label"):
             self._prep_pkg_label.setText(name)
         self._switch_view(self._preparing_view)
@@ -2373,7 +2378,7 @@ class FlashPage(QWidget):
     def show_flashing(self):
         if hasattr(self, "_complete_note"):
             self._complete_note.setVisible(False)
-        if hasattr(self, "_progress_card") and not getattr(self, "_donations_shown", False):
+        if hasattr(self, "_progress_card"):
             self._progress_card.setVisible(True)
         if getattr(self, "_wait_copy", "") in ("connect", "please_wait", "please_wait_connecting"):
             self._wait_copy = "stage"
@@ -2718,8 +2723,13 @@ class FlashPage(QWidget):
         on_troubleshoot=None,
         already_powered_on=False,
         automatic=False,
+        after_firmware=False,
     ) -> None:
-        """Seamless in-card Rockbox 360p themes & fonts post-install flow."""
+        """Seamless in-card Rockbox 360p themes & fonts post-install flow.
+
+        ``after_firmware`` is True when a Rockbox firmware install came first;
+        the bar then resumes at 90%. A standalone run starts from 0%.
+        """
         self.dismiss_prompt_stop()
         # A new stage owns detection from here: no watcher from the previous
         # journey may answer for this one before its own step starts watching.
@@ -2732,6 +2742,10 @@ class FlashPage(QWidget):
         self._failed = False
         self._complete = False
         self.show_flashing()
+        # The themes guidance lives inside the progress card. Donations hide that
+        # card only on the completion screen, so keep it up for this stage.
+        if hasattr(self, "_progress_card"):
+            self._progress_card.setVisible(True)
         self._warning.setVisible(False)
         if hasattr(self, "_appeal"):
             self._appeal.setVisible(False)
@@ -2749,7 +2763,7 @@ class FlashPage(QWidget):
             self._status_flow.set_forced_stacked(True)
 
         self.set_step(tr("rockbox_stage_installing"))
-        self._progress_bar.set_precise_value(90.0)
+        self._progress_bar.set_precise_value(90.0 if after_firmware else 0.0)
 
         model_str = (model or "Y1").upper()
         self._rockbox_already_powered_on = bool(already_powered_on)
@@ -2943,6 +2957,7 @@ class FlashPage(QWidget):
             zip_path=norm_zip,
         )
         self._adb_push_worker.progress.connect(self._on_theme_push_progress)
+        self._adb_push_worker.log.connect(self._log_theme)
         self._adb_push_worker.finished.connect(self._on_theme_push_finished)
         self._adb_push_worker.start()
 
@@ -3116,6 +3131,7 @@ class FlashPage(QWidget):
             dst_dir=dest_dir, parent=self, zip_path=payload_zip
         )
         self._dir_merge_worker.progress.connect(self._on_theme_push_progress)
+        self._dir_merge_worker.log.connect(self._log_theme)
         self._dir_merge_worker.finished.connect(
             lambda ok, err, count: self._on_dir_merge_finished(ok, err, count, str(dest_dir))
         )
@@ -3225,7 +3241,9 @@ class FlashPage(QWidget):
         is_y1 = (model or "").upper() == "Y1"
         return "rockbox_power_on_prompt_sp_y1" if is_y1 else "rockbox_power_on_prompt_sp_other"
 
-    def show_rockbox_power_on_prompt(self, prompt: str, on_continue=None, on_recover=None) -> None:
+    def show_rockbox_power_on_prompt(
+        self, prompt: str, on_continue=None, on_recover=None, after_firmware=False
+    ) -> None:
         """Keep the install card active while the user boots the flashed player."""
         self._failed = False
         self._complete = False
@@ -3241,10 +3259,12 @@ class FlashPage(QWidget):
         if hasattr(self, "_flash_retry_btn"):
             self._flash_retry_btn.setVisible(False)
         self.show_flashing()
+        if hasattr(self, "_progress_card"):
+            self._progress_card.setVisible(True)
         if hasattr(self, "_cancel_btn"):
             self._cancel_btn.setVisible(False)
         self.set_step(tr("rockbox_stage_installing"))
-        self._progress_bar.set_precise_value(90.0)
+        self._progress_bar.set_precise_value(90.0 if after_firmware else 0.0)
         self._eta_label.setText(prompt)
         self._eta_label.setWordWrap(True)
         if hasattr(self, "_status_flow"):
@@ -3466,15 +3486,17 @@ class FlashPage(QWidget):
         )
         if hasattr(self, "_intro"):
             self._intro.retranslate(software=software, model=model)
+            if not getattr(self, "_appeal_themes", False):
+                # The power-on steps belong on the "installed on your model"
+                # line itself, not at the foot of the donation copy.
+                from ..config import install_power_on_steps
+
+                steps = install_power_on_steps(model)
+                self._intro.subtitle.setText(f"{self._intro.subtitle.text()}\n{steps}")
             _apply_card_text(self._intro.headline)
             _apply_card_text(self._intro.subtitle)
         if hasattr(self, "_appeal_body"):
-            body = tr("donate_completion_body")
-            if not getattr(self, "_appeal_themes", False):
-                from ..config import install_power_on_steps
-
-                body = f"{body}\n\n{install_power_on_steps(model)}"
-            self._appeal_body.setText(body)
+            self._appeal_body.setText(tr("donate_completion_body"))
             _apply_card_text(self._appeal_body)
         if hasattr(self, "_coffee_btn"):
             self._coffee_btn.setText(tr("donate_completion_coffee"))
@@ -4173,7 +4195,15 @@ class FlashPage(QWidget):
                 warn_h = max(self._warning.sizeHint().height(), self._warning.heightForWidth(self.text_column_width())) + 8
             appeal_h = 0
             if hasattr(self, "_appeal") and self._appeal.isVisible():
-                appeal_h = self._appeal.sizeHint().height() + 8
+                # sizeHint() ignores word-wrap; the wrapped copy needs the
+                # height of the column it will actually be drawn in.
+                appeal_layout = self._appeal.layout()
+                wrapped_h = (
+                    appeal_layout.totalHeightForWidth(max(1, int(self.text_column_width())))
+                    if appeal_layout is not None
+                    else 0
+                )
+                appeal_h = max(self._appeal.sizeHint().height(), wrapped_h) + 8
             h = card_h + warn_h + appeal_h
         elif cur_view is self._waiting_view:
             card_h = self._wait_card.sizeHint().height()

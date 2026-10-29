@@ -664,7 +664,8 @@ def bundled_themepack_dir() -> Path:
 
 def merge_dirs(src_dir: str | Path, dst_dir: str | Path,
                progress_cb: Optional[Callable[[int, int], None]] = None,
-               cancel_cb: Optional[Callable[[], bool]] = None) -> int:
+               cancel_cb: Optional[Callable[[], bool]] = None,
+               log_cb: Optional[Callable[[str], None]] = None) -> int:
     """Merge ``src_dir`` into ``dst_dir``, overwriting same-name files.
 
     Only files are copied (directories are created as needed). Returns the
@@ -690,6 +691,11 @@ def merge_dirs(src_dir: str | Path, dst_dir: str | Path,
                 pass
         rel = src_file.relative_to(src)
         dest = dst / rel
+        if log_cb is not None:
+            try:
+                log_cb(f"Copying {rel.as_posix()} to {dst}")
+            except Exception:
+                pass
         try:
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src_file, dest)
@@ -830,6 +836,7 @@ class AdbPushWorker(QThread):
     """Push the combined theme dir to the player over ADB, then reboot it."""
 
     progress = Signal(int, int)
+    log = Signal(str)  # raw adb transfer output, for the install output log
     finished = Signal(bool, str)  # success, message
 
     def __init__(self, adb: str, serial: str, local_dir: Optional[Path] = None, parent=None, zip_path: Optional[Path] = None):
@@ -879,6 +886,7 @@ class AdbPushWorker(QThread):
                     device_dirs,
                     progress_cb=self._on_progress,
                     cancel_cb=self.isInterruptionRequested,
+                    log_cb=self.log.emit,
                 )
                 if ok:
                     self.finished.emit(True, msg)
@@ -957,6 +965,7 @@ class DirMergeWorker(QThread):
     """
 
     progress = Signal(int, int)
+    log = Signal(str)
     finished = Signal(bool, str, int)  # success, error, count
 
     def __init__(self, src_dir=None, dst_dir=None, parent=None, zip_path=None):
@@ -983,6 +992,7 @@ class DirMergeWorker(QThread):
                 self._dst,
                 progress_cb=self._on_progress,
                 cancel_cb=self.isInterruptionRequested,
+                log_cb=self.log.emit,
             )
             self.finished.emit(True, "", count)
         except Exception as e:

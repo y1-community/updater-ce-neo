@@ -2195,6 +2195,9 @@ class MainWindow(QMainWindow):
             self._chrome_watchdog.setInterval(self.CHROME_WATCHDOG_MS)
             self._chrome_watchdog.timeout.connect(self._verify_native_chrome)
             self._chrome_watchdog.start()
+        elif event.type() == QEvent.Type.Show:
+            # Coming back from the tray: the hidden window had paused these.
+            self._set_window_polling(True)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -2693,16 +2696,17 @@ class MainWindow(QMainWindow):
             name, path, slug, asset_name, release_label, *fw_names
         )
 
-    def _show_rockbox_power_on_prompt(self, model: str) -> None:
+    def _show_rockbox_power_on_prompt(self, model: str, *, after_firmware: bool = False) -> None:
         """Ask the user to boot the flashed player before ADB/theme setup."""
         self._install_complete = True
         self._install_failed = False
-        self.themes.ask_power_on(model)
+        self.themes.ask_power_on(model, after_firmware=after_firmware)
         prompt = tr(self._flash_page.rockbox_power_on_prompt_key(model)).format(model=model)
         self._flash_page.show_rockbox_power_on_prompt(
             prompt,
             on_continue=self._continue_rockbox_power_on,
             on_recover=lambda: self.restore_original_software(model),
+            after_firmware=after_firmware,
         )
         self._sync_install_nav_entry()
         self._adjust_window_geometry()
@@ -2714,9 +2718,12 @@ class MainWindow(QMainWindow):
         if not self.themes.power_on_pending:
             return
         model = self.themes.power_on_model or self._package_model
+        after_firmware = self.themes.power_on_after_firmware
         self.themes.clear_power_on()
         donation_disabled = device_tracking.is_donation_install_prompt_disabled(self.settings)
-        self._start_themes_stage(model, donation_disabled, already_powered_on=True)
+        self._start_themes_stage(
+            model, donation_disabled, already_powered_on=True, after_firmware=after_firmware
+        )
 
     def _install_run_active(self) -> bool:
         """True while an install flow owns the window, including prompts."""
@@ -4387,6 +4394,7 @@ class MainWindow(QMainWindow):
         self._usb_search_active = False
         self._last_progress = 0
         pre_extracted = completed_extract_dir(self._package_path)
+        self._flash_page.begin_run()
         if pre_extracted:
             # The connect sentence waits for the tool's own search line (see
             # _on_step_changed STEP_WAITING); until then it is only "please wait".
@@ -4951,9 +4959,15 @@ class MainWindow(QMainWindow):
                     "Notice: SP Flash Tool on Windows detected, starting automated Rockbox themes flow "
                     "(waiting 90-120s for ADB connection, no user interaction required)..."
                 )
-                self._start_themes_stage(eff_model, donation_disabled, already_powered_on=True, automatic=True)
+                self._start_themes_stage(
+                    eff_model,
+                    donation_disabled,
+                    already_powered_on=True,
+                    automatic=True,
+                    after_firmware=True,
+                )
             else:
-                self._show_rockbox_power_on_prompt(eff_model)
+                self._show_rockbox_power_on_prompt(eff_model, after_firmware=True)
         else:
             # Includes a Rockbox install with the themes switch off: it ends on
             # the ordinary completion screen, exactly like any other firmware.
@@ -5006,12 +5020,14 @@ class MainWindow(QMainWindow):
         *,
         already_powered_on: bool = False,
         automatic: bool = False,
+        after_firmware: bool = False,
     ) -> None:
         """Open the themes install stage after a 360p Rockbox install.
 
         ``automatic`` marks a stage the app decided to run by itself; it is
         refused while the in-beta Settings switch is off. The Settings button
-        starts the same stage by hand and is never gated.
+        starts the same stage by hand and is never gated. ``after_firmware``
+        is True when a Rockbox firmware install came first in this run.
         """
         allowed, reason = self.themes.should_start(automatic=automatic, settings=self.settings)
         if not allowed:
@@ -5052,6 +5068,7 @@ class MainWindow(QMainWindow):
             log_cb=self._append_log,
             already_powered_on=already_powered_on,
             automatic=automatic,
+            after_firmware=after_firmware,
         )
         self._adjust_window_geometry()
 
@@ -6140,8 +6157,9 @@ class MainWindow(QMainWindow):
             if chosen.get("kind") == "online" and not Path(chosen.get("dest") or "").is_file():
                 target = chosen
             else:
-                target = page.explicit_firmware() if page is not None else None
-                target = target or (page.focused_firmware() if page is not None else None)
+                on_screen = page is not None and not page.isHidden()
+                target = page.explicit_firmware() if on_screen else None
+                target = target or (page.focused_firmware() if on_screen else None)
                 target = target or chosen
 
         if hasattr(self, "service") and self.service:
@@ -6744,7 +6762,10 @@ class MainWindow(QMainWindow):
             self._update_offered_once = True
             self._pending_app_update = info
             self._sync_update_button()
-            self._offer_app_update(info)
+            if self._window_hidden_in_tray():
+                self._notify_app_update(info)
+            else:
+                self._offer_app_update(info)
         else:
             self._pending_app_update = None
             self._sync_update_button()
@@ -6811,6 +6832,23 @@ class MainWindow(QMainWindow):
                     tr("reminder_new_release_title"),
                     tr("settings_no_devices_tracked"),
                 )
+
+    def _window_hidden_in_tray(self) -> bool:
+        tray = getattr(self, "_background_tray", None)
+        return tray is not None and tray.is_visible() and not self.isVisible()
+
+    def _notify_app_update(self, info) -> None:
+        """Tray mode: the window is hidden, so the update is announced natively."""
+        import re
+        from ..notifications import show_completion_notification
+
+        version = str(getattr(info, "version", "") or "")
+        body = tr("update_available_fmt").format(new=version, current=APP_VERSION)
+        body = re.sub(r"<[^>]+>", "", body)
+        try:
+            show_completion_notification(tr("update_available"), body)
+        except Exception:
+            logger.debug("App update notification failed", exc_info=True)
 
     def _notify_device_updates(self, updates) -> None:
         """Post one system notification per device with a newer release.
@@ -7278,7 +7316,99 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
         self.cleanup_workers(sweep=False)
+
+        # Opt-in: with "Run in background" on, closing the window leaves the
+        # app in the menu bar. Otherwise the app quits with its window.
+        from ..tray import run_in_background_enabled
+
+        if (
+            run_in_background_enabled(self.settings)
+            and not getattr(self, "_force_quit", False)
+            and not getattr(self, "_tray_quit_pending", False)
+        ):
+            self._hide_to_tray(event)
+            return
+        self._closing_accepted = True
         super().closeEvent(event)
+
+    def _hide_to_tray(self, event) -> None:
+        """Close the window but keep the process and its tray icon alive."""
+        self.hide()
+        event.ignore()
+        self._ensure_background_tray().show()
+        self._start_background_update_timer()
+        self._set_window_polling(False)
+
+    def _set_window_polling(self, running: bool) -> None:
+        """Pause the window-only timers while it is hidden in the tray.
+
+        Nothing on screen reads them, so a hidden window stops polling. Only
+        the install and tray paths keep their own timers.
+        """
+        for name in ("_chrome_watchdog", "_sp_history_timer"):
+            timer = getattr(self, name, None)
+            if timer is None:
+                continue
+            if running:
+                timer.start()
+            else:
+                timer.stop()
+
+    def _hide_to_tray_at_launch(self) -> None:
+        """Start-at-login: the tray is up and the window is never shown."""
+        self._ensure_background_tray().show()
+        self._start_background_update_timer()
+
+    def _start_background_update_timer(self) -> None:
+        """While the tray keeps the app alive, re-check for updates every few hours."""
+        if getattr(self, "_background_update_timer", None) is not None:
+            return
+        timer = QTimer(self)
+        timer.setInterval(6 * 60 * 60 * 1000)
+        timer.timeout.connect(self._background_update_tick)
+        timer.start()
+        self._background_update_timer = timer
+
+    def _background_update_tick(self) -> None:
+        self._update_manual_pending = False
+        self._run_update_check()
+        self._check_device_firmware_updates(manual=False)
+
+    def _ensure_background_tray(self):
+        tray = getattr(self, "_background_tray", None)
+        if tray is None:
+            from PySide6.QtGui import QIcon
+            from ..tray import BackgroundTray
+
+            fallback = QIcon(str(paths.RESOURCES_DIR / "icon.png"))
+            tray = BackgroundTray(
+                QApplication.instance(),
+                self._show_from_tray,
+                self._quit_from_tray,
+                fallback,
+            )
+            self._background_tray = tray
+        return tray
+
+    def _show_from_tray(self) -> None:
+        from ..notifications import bring_window_to_front
+
+        bring_window_to_front(self)
+        self._set_window_polling(True)
+
+    def _quit_from_tray(self) -> None:
+        # Not _force_quit: that skips the install prompt. Quit goes through the
+        # same close guard as the window's close button, so an install in
+        # progress still asks first and can be declined.
+        self._closing_accepted = False
+        self._tray_quit_pending = True
+        self.close()
+        self._tray_quit_pending = False
+        if self._closing_accepted:
+            tray = getattr(self, "_background_tray", None)
+            if tray is not None:
+                tray.hide()
+            QApplication.quit()
 
 
 _METHOD_LABELS = {

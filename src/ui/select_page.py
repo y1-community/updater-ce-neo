@@ -430,9 +430,14 @@ class SelectPackagePage(QWidget):
         return None
 
     def gui_firmware_target(self) -> Optional[dict]:
-        """Selected package to prepare, or retained extract when nothing is selected."""
-        explicit = self.explicit_firmware()
-        focused = self.focused_firmware()
+        """Selected package to prepare, or retained extract when nothing is selected.
+
+        Only a page on screen can choose a release: off screen the focused or
+        explicit catalogue item is ignored so the most recent install is used.
+        """
+        on_screen = not self.isHidden()
+        explicit = self.explicit_firmware() if on_screen else None
+        focused = self.focused_firmware() if on_screen else None
         for target in (explicit, focused):
             ready = self._gui_target_if_ready(target)
             if ready:
@@ -452,7 +457,7 @@ class SelectPackagePage(QWidget):
         # A browsed local path takes precedence over the previous-install
         # cache, even when it is not a valid SP package. Never launch the old
         # firmware just because the new local selection cannot be used.
-        if self.catalogue_section() == "local" and getattr(self, "_current_package_path", ""):
+        if on_screen and self.catalogue_section() == "local" and getattr(self, "_current_package_path", ""):
             return None
         from .. import device_tracking
         from ..sp_flash_gui import cached_install_firmware, check_cached_firmware_readiness
@@ -1577,6 +1582,8 @@ class SelectPackagePage(QWidget):
         self._battery_toast.setVisible(False)
         if hasattr(self, "_toast_container"):
             self._toast_container.setVisible(False)
+        # The toast spot leaves the page's height, so the window must refit.
+        self.content_size_changed.emit()
     def reset_selection_and_filters(self) -> None:
         """Reset filters, selections, cached firmware display, and battery reminder toast back to initial defaults."""
         from PySide6.QtCore import QSettings
@@ -2552,8 +2559,9 @@ class SelectPackagePage(QWidget):
         dest = dest_dir / f"{pkg.slug}_{rel.get('tag_name', 'latest')}_{fname}"
         extract_dir = compute_extract_dir(dest)
 
-        # 1. Check if package is already downloaded and fully extracted:
-        if dest.is_file() and dest.stat().st_size > 0 and _is_extract_complete(extract_dir):
+        # 1. Reuse the extracted firmware. The archive is deleted once it is
+        # extracted, so a finished extract counts even when the zip is gone.
+        if _is_extract_complete(extract_dir):
             logger.info("Package %s already cached and extracted at %s, reusing immediately", dest.name, extract_dir)
             self._current_package_path = str(dest)
             self._current_package_name = self._install_card_title(pkg.name, rel, eff_model)

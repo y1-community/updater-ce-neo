@@ -100,6 +100,43 @@ def test_a_selected_unready_online_release_is_offered_for_preparation(window, mo
     assert target["release"]["tag_name"] == "v2.0"
 
 
+def test_a_focused_release_only_counts_while_select_software_is_on_screen(window, monkeypatch, tmp_path):
+    """Off the Select page the latest installed firmware is used, not the focused item."""
+    from src import device_tracking
+
+    page = window._select_page
+    rel = {
+        "tag_name": "v2.0",
+        "download_url": "https://example.invalid/release.zip",
+        "asset_name": "release.zip",
+    }
+    page._current_selected_rel = rel
+    page._current_package_path = ""
+    page._gui_explicit = page._firmware_target_for_release(rel)
+    monkeypatch.setattr(page, "_gui_target_if_ready", lambda target: None)
+    monkeypatch.setattr(page, "focused_firmware", lambda: page._gui_explicit)
+
+    root = tmp_path / "installed"
+    root.mkdir()
+    scatter = root / "MT6582_Android_scatter.txt"
+    monkeypatch.setattr(device_tracking, "get_latest_package", lambda settings: {"model": "Y1"})
+    monkeypatch.setattr("src.sp_flash_gui.cached_install_firmware", lambda latest: (scatter, root))
+    monkeypatch.setattr(
+        "src.sp_flash_gui.check_cached_firmware_readiness",
+        lambda **kwargs: (True, scatter, root, ""),
+    )
+
+    page.hide()
+    off = page.gui_firmware_target()
+    assert off is not None and off["kind"] == "cache"
+    assert Path(off["scatter"]) == scatter
+
+    page.show()
+    on = page.gui_firmware_target()
+    assert on is not None and on["kind"] == "online"
+    assert on["release"]["tag_name"] == "v2.0"
+
+
 def test_an_incomplete_local_package_is_refused_not_prepared(window, monkeypatch, tmp_path):
     """A local package with missing scatter images is never flashed or repaired."""
     from src.ui import main_window as mw_mod

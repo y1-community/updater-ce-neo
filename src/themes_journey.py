@@ -27,6 +27,7 @@ class ThemesJourney:
         self._prompt_pending = False
         self._power_on_pending = False
         self._power_on_model = ""
+        self._power_on_after_firmware = False
         self._player_taken = False
         self._multiple_players = False
         self._last_logged_progress = 0
@@ -90,6 +91,11 @@ class ThemesJourney:
         return self._power_on_model
 
     @property
+    def power_on_after_firmware(self) -> bool:
+        """The pending boot follows a firmware install in the same run."""
+        return self._power_on_after_firmware
+
+    @property
     def player_taken(self) -> bool:
         """A player answered over ADB: one player, one transfer from here."""
         return self._player_taken
@@ -109,6 +115,7 @@ class ThemesJourney:
         self._prompt_pending = False
         self._power_on_pending = False
         self._power_on_model = ""
+        self._power_on_after_firmware = False
         self._player_taken = False
         self._multiple_players = False
         self._last_logged_progress = 0
@@ -148,13 +155,15 @@ class ThemesJourney:
     def settle_prompt(self) -> None:
         self._prompt_pending = False
 
-    def ask_power_on(self, model: str) -> None:
+    def ask_power_on(self, model: str, *, after_firmware: bool = False) -> None:
         self._power_on_pending = True
         self._power_on_model = model or ""
+        self._power_on_after_firmware = bool(after_firmware)
 
     def clear_power_on(self) -> None:
         self._power_on_pending = False
         self._power_on_model = ""
+        self._power_on_after_firmware = False
 
     # ------------------------------------------------------------------
     # Detection

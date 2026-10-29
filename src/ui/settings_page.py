@@ -636,6 +636,25 @@ class SettingsPage(QWidget):
         )
         layout.addWidget(self._offline_mode_card)
 
+        # --- Card: Run in background (opt-in, off by default) ---
+        self._background_card = Card("settings_run_in_background_group")
+        bg_layout = QVBoxLayout()
+        bg_layout.setSpacing(8)
+        self._cb_run_in_background = self._add_title_row_switch(
+            self._background_card, "settings_run_in_background_group",
+            tooltip=tr("settings_run_in_background_desc"),
+        )
+        self._cb_run_in_background.setStyleSheet("")  # no host style override
+        from ..tray import run_in_background_enabled
+        self._cb_run_in_background.setChecked(run_in_background_enabled())
+        self._cb_run_in_background.toggled.connect(self._on_run_in_background_toggled)
+        self._background_desc = QLabel(tr("settings_run_in_background_desc"))
+        self._background_desc.setWordWrap(True)
+        self._background_desc.setProperty("cssClass", "dimmed")
+        bg_layout.addWidget(self._background_desc)
+        self._background_card.set_layout(bg_layout)
+        layout.addWidget(self._background_card)
+
         # --- Card: Install Rockbox 360p Themes ---
         self._install_themes_card = Card("settings_install_themes_group")
         # Beta, one word, on the title line: the feature is a preview and the
@@ -1459,6 +1478,12 @@ class SettingsPage(QWidget):
         # fixed at build time and never toggled by a settings checkbox.
         config.IS_OFFLINE_MODE = checked
         self.offline_mode_changed.emit(checked)
+
+    def _on_run_in_background_toggled(self, checked: bool):
+        from ..tray import RUN_IN_BACKGROUND_KEY
+        from ..login_item import set_login_item
+        QSettings("innioasis", "updater").setValue(RUN_IN_BACKGROUND_KEY, bool(checked))
+        set_login_item(bool(checked))
 
     def _sync_install_mode_switches(self) -> None:
         """One install choice at a time. Guided is the one that is on by default."""

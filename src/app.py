@@ -556,8 +556,23 @@ def main():
     # Before show(): the window must exist to be prepared for glass. After it:
     # every other piece of host chrome, each one guarded.
     _startup_step("prepare_window_for_glass", prepare_window_for_glass, window)
-    window.show()
-    _apply_native_chrome(window, dark=is_dark())
+    # --tray (start-at-login): stay in the menu bar; the window opens on click.
+    start_in_tray = "--tray" in sys.argv[1:]
+    if start_in_tray:
+        # The tray keeps the process alive with no window open.
+        app.setQuitOnLastWindowClosed(False)
+    if not start_in_tray:
+        window.show()
+        _apply_native_chrome(window, dark=is_dark())
+    else:
+        from .tray import run_in_background_enabled
+        if run_in_background_enabled():
+            window._hide_to_tray_at_launch()
+        else:
+            # Opt-in is off: a login launch with nothing to keep alive exits.
+            app.setQuitOnLastWindowClosed(True)
+            window.show()
+            _apply_native_chrome(window, dark=is_dark())
 
     # A previous run that crashed (or a tool the user started by hand) may still
     # be holding the USB port and SP Flash Tool's own settings files. Nothing is
