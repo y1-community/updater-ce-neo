@@ -1,4 +1,4 @@
-"""Error page — device connection, USB mid-flash disconnect, flash failure."""
+"""Error page, device connection, USB mid-flash disconnect, flash failure."""
 
 from PySide6.QtWidgets import (
     QHBoxLayout,

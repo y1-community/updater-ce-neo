@@ -605,7 +605,7 @@
  "dl_starting": "Ana fara saukewa…",
  "dl_resuming_fmt": "Ana ci gaba da saukewa daga {mb} MB...",
  "dl_progress_fmt": "{dl} MB / {tot} MB ({pct}%) - {speed} MB/s",
- "dl_progress_unknown_fmt": "{dl} MB — {speed} MB/s",
+ "dl_progress_unknown_fmt": "{dl} MB, {speed} MB/s",
  "dl_retry_fmt": "An katse haɗin. Ana sake gwadawa ({attempt}/{max})...",
  "linux_connecting_github": "Ana haɗawa zuwa GitHub...",
  "linux_engine_ready_msg": "injin walƙiya yana shirye.",

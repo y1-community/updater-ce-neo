@@ -906,7 +906,7 @@ def sp_brom_handshake_hint(value) -> str:
         return ""
     return (
         "Unplug the player, wait a few seconds, and plug it back in only once "
-        "the app is asking you to connect it — the tool has to be searching "
+        "the app is asking you to connect it, the tool has to be searching "
         "before the player is powered on."
     )
 
@@ -3120,10 +3120,9 @@ class _AttemptWatchdog(threading.Thread):
             if not self._armed:
                 return
             self._deadline = time.time() + self._timeout
-        try:
-            self._on_tick(int(math.ceil(self._timeout)))
-        except Exception:
-            pass
+        # No tick here: the run loop reports the remaining time on its next
+        # pass, so the countdown keeps counting down instead of jumping back
+        # to the full window each time the device is seen.
 
     def disarm(self):
         """Real progress began; the window no longer applies."""
@@ -4118,7 +4117,7 @@ class FlashWorker(QThread):
         self.error_hint = hint
         if hint:
             self._log(f"Hint: {hint}")
-            detail = f"{detail} — {hint}"
+            detail = f"{detail}, {hint}"
         self.finished.emit(False, str(detail))
 
     def _sp_console_search(self, spawn, log_root):

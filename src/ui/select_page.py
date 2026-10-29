@@ -1,4 +1,4 @@
-"""Select package page — online firmware listing + local file picker."""
+"""Select package page, online firmware listing + local file picker."""
 
 import logging
 import os
@@ -967,6 +967,17 @@ class SelectPackagePage(QWidget):
         self._translate_label.linkActivated.connect(self._on_translate_link_clicked)
         self._translate_label.setVisible(False)
         notes_l.addWidget(self._translate_label)
+        # English-only on purpose: the GitHub page itself is untranslated.
+        self._see_more_label = QLabel()
+        self._see_more_label.setObjectName("seeMoreReleaseNotes")
+        self._see_more_label.setAlignment(Qt.AlignCenter)
+        self._see_more_label.setStyleSheet("font-size: 11px; margin-top: 2px; background: transparent;")
+        self._see_more_label.setTextFormat(Qt.RichText)
+        self._see_more_label.setTextInteractionFlags(Qt.TextBrowserInteraction)
+        self._see_more_label.setOpenExternalLinks(False)
+        self._see_more_label.linkActivated.connect(self._on_see_more_clicked)
+        self._see_more_label.setVisible(False)
+        notes_l.addWidget(self._see_more_label)
         notes_l.addStretch(1)
 
         self._notes_group.set_layout(notes_l)
@@ -2352,9 +2363,27 @@ class SelectPackagePage(QWidget):
             html = f"<html><head>{css}</head><body>{html}</body></html>"
         return html
 
+    def _update_see_more_link(self):
+        rel = self._current_selected_rel
+        url = str((rel or {}).get("html_url") or "") if rel else ""
+        if not url:
+            self._see_more_label.setVisible(False)
+            self._see_more_label.setText("")
+            return
+        t = T()
+        self._see_more_label.setText(
+            f'<a href="{url}" style="color:{t.fg}; text-decoration:none; font-weight:700;">See More</a>'
+        )
+        self._see_more_label.setVisible(True)
+
+    def _on_see_more_clicked(self, link: str):
+        from ..browser import open_browser
+        open_browser(link)
+
     def _update_translate_link(self):
         rel = self._current_selected_rel
         lang = (translator().lang or "en").strip()
+        self._update_see_more_link()
         if not rel or is_english_language(lang):
             self._translate_label.setVisible(False)
             self._translate_label.setText("")

@@ -396,15 +396,15 @@ _STRINGS: dict = {
         "es": "El equipo está listo para conectarse al reproductor.",
     },
     "linux_prep_ready": {
-        "zh-CN": "就绪 — SP Flash Tool 已准备好。",
-        "en": "Ready — SP Flash Tool is prepared.",
-        "fr": "Prêt — SP Flash Tool est préparé.",
+        "zh-CN": "就绪, SP Flash Tool 已准备好。",
+        "en": "Ready, SP Flash Tool is prepared.",
+        "fr": "Prêt, SP Flash Tool est préparé.",
         "es": "Listo: SP Flash Tool está preparado.",
     },
     "linux_prep_connected_friendly": {
         "zh-CN": "已发现播放器，正在更新连接权限…",
-        "en": "Player found — refreshing connection access…",
-        "fr": "Lecteur détecté — actualisation des droits de connexion…",
+        "en": "Player found, refreshing connection access…",
+        "fr": "Lecteur détecté, actualisation des droits de connexion…",
         "es": "Reproductor detectado: actualizando el acceso de conexión…",
     },
     "linux_prep_not_connected_friendly": {
@@ -444,9 +444,9 @@ _STRINGS: dict = {
         "es": "Permitir acceso",
     },
     "linux_prep_needs_access": {
-        "zh-CN": "未获得授权 — 刷机需要此权限。",
-        "en": "Access was not granted — flashing needs it.",
-        "fr": "Accès non accordé — le flashage en a besoin.",
+        "zh-CN": "未获得授权, 刷机需要此权限。",
+        "en": "Access was not granted, flashing needs it.",
+        "fr": "Accès non accordé, le flashage en a besoin.",
         "es": "No se concedió el acceso; el flasheo lo necesita.",
     },
     "linux_prep_fixing": {
@@ -456,9 +456,9 @@ _STRINGS: dict = {
         "es": "Aplicando…",
     },
     "linux_prep_fixed": {
-        "zh-CN": "已授权 — SP Flash Tool 已就绪。",
-        "en": "Access granted — SP Flash Tool is ready.",
-        "fr": "Accès accordé — SP Flash Tool est prêt.",
+        "zh-CN": "已授权, SP Flash Tool 已就绪。",
+        "en": "Access granted, SP Flash Tool is ready.",
+        "fr": "Accès accordé, SP Flash Tool est prêt.",
         "es": "Acceso concedido: SP Flash Tool está listo.",
     },
     "linux_prep_fixed_friendly": {
@@ -481,15 +481,15 @@ _STRINGS: dict = {
     },
     "linux_prep_reboot_done_btn": {
         "zh-CN": "完成并关闭应用（以便重启电脑）",
-        "en": "Done — Close App to Restart Computer",
-        "fr": "Terminé — Fermer l'application pour redémarrer",
-        "es": "Listo — Cerrar aplicación para reiniciar",
-        "de": "Fertig — App schließen, um neu zu starten",
-        "it": "Fatto — Chiudi l'app per riavviare",
-        "pt-BR": "Concluído — Fechar aplicativo para reiniciar",
-        "ru": "Готово — закрыть приложение для перезагрузки",
-        "ja": "完了 — アプリを閉じて再起動する",
-        "ko": "완료 — 컴퓨터 재시작을 위해 앱 닫기",
+        "en": "Done, Close App to Restart Computer",
+        "fr": "Terminé, Fermer l'application pour redémarrer",
+        "es": "Listo, Cerrar aplicación para reiniciar",
+        "de": "Fertig, App schließen, um neu zu starten",
+        "it": "Fatto, Chiudi l'app per riavviare",
+        "pt-BR": "Concluído, Fechar aplicativo para reiniciar",
+        "ru": "Готово, закрыть приложение для перезагрузки",
+        "ja": "完了, アプリを閉じて再起動する",
+        "ko": "완료, 컴퓨터 재시작을 위해 앱 닫기",
     },
     "settings_checker_group": {
         "zh-CN": "准备电脑",
@@ -1171,9 +1171,9 @@ _STRINGS: dict = {
     },
     "sp_search_restart": {
         "zh-CN": "尚未检测到设备，重新开始搜索（第 {count} 次）…",
-        "en": "No device yet — searching again (attempt {count}). Keep the player powered off and connect it when prompted.",
-        "fr": "Aucun appareil détecté — nouvelle recherche (tentative {count}). Laissez le lecteur éteint et branchez-le quand l'invite apparaît.",
-        "es": "Aún no hay dispositivo — buscando de nuevo (intento {count}). Deja el reproductor apagado y conéctalo cuando se indique.",
+        "en": "No device yet, searching again (attempt {count}). Keep the player powered off and connect it when prompted.",
+        "fr": "Aucun appareil détecté, nouvelle recherche (tentative {count}). Laissez le lecteur éteint et branchez-le quand l'invite apparaît.",
+        "es": "Aún no hay dispositivo, buscando de nuevo (intento {count}). Deja el reproductor apagado y conéctalo cuando se indique.",
     },
     "sp_auth_missing_file": {
         "zh-CN": "找不到身份验证文件（{path}）；将在没有它的情况下刷机。",
@@ -1273,16 +1273,16 @@ _STRINGS: dict = {
         "es": "Archivos de firmware (*.zip *.rar *scatter*.txt *.txt);;Archivos (*.zip *.rar);;Archivos Scatter (*scatter*.txt *.txt);;Todos los archivos (*.*)",
     },
     "sel_only_local": {
-        "zh-CN": "选择本地的 .zip 或 .rar 刷机包即可离线刷机——无需联网，支持所有 Innioasis 和 Timmkoo 音频播放器。",
-        "en": "Pick a local .zip or .rar firmware package, or a folder / scatter .txt file, for offline installation — no internet needed. Works with every Innioasis and Timmkoo audio player.",
-        "fr": "Choisissez un paquet firmware local .zip ou .rar pour une installation hors ligne — aucune connexion requise. Compatible avec tous les lecteurs audio Innioasis et Timmkoo.",
+        "zh-CN": "选择本地的 .zip 或 .rar 刷机包即可离线刷机, , 无需联网，支持所有 Innioasis 和 Timmkoo 音频播放器。",
+        "en": "Pick a local .zip or .rar firmware package, or a folder / scatter .txt file, for offline installation, no internet needed. Works with every Innioasis and Timmkoo audio player.",
+        "fr": "Choisissez un paquet firmware local .zip ou .rar pour une installation hors ligne, aucune connexion requise. Compatible avec tous les lecteurs audio Innioasis et Timmkoo.",
         "es": "Elige un paquete de firmware local .zip o .rar para instalar sin conexión: no hace falta Internet. Funciona con todos los reproductores de audio Innioasis y Timmkoo.",
     },
     "sel_only_local_generic": {
-        "zh-CN": "选择本地固件包（.zip、.rar）或包含 scatter 文件的固件文件夹即可离线刷机——支持所有通用 MediaTek 设备。",
-        "en": "Pick a local firmware package (.zip, .rar) or a folder containing a scatter file for offline installation — works with generic MediaTek devices.",
-        "fr": "Choisissez un paquet de firmware local (.zip, .rar) ou un dossier contenant un fichier scatter pour une installation hors ligne — compatible avec les appareils MediaTek génériques.",
-        "es": "Selecciona un paquete de firmware local (.zip, .rar) o una carpeta que contenga un archivo scatter para una instalación sin conexión — compatible con dispositivos MediaTek genéricos.",
+        "zh-CN": "选择本地固件包（.zip、.rar）或包含 scatter 文件的固件文件夹即可离线刷机, , 支持所有通用 MediaTek 设备。",
+        "en": "Pick a local firmware package (.zip, .rar) or a folder containing a scatter file for offline installation, works with generic MediaTek devices.",
+        "fr": "Choisissez un paquet de firmware local (.zip, .rar) ou un dossier contenant un fichier scatter pour une installation hors ligne, compatible avec les appareils MediaTek génériques.",
+        "es": "Selecciona un paquete de firmware local (.zip, .rar) o una carpeta que contenga un archivo scatter para una instalación sin conexión, compatible con dispositivos MediaTek genéricos.",
     },
     "sel_offline_install": {
         "zh-CN": "可从 .zip 或 .rar 文件安装固件，适用于所有 Innioasis 和 Timmkoo 音频播放器。",
@@ -1422,8 +1422,8 @@ _STRINGS: dict = {
     },
     "sel_prepare_done": {
         "zh-CN": "软件包已就绪，可以开始刷机",
-        "en": "Package ready — start the install",
-        "fr": "Paquet prêt — démarrez l'installation",
+        "en": "Package ready, start the install",
+        "fr": "Paquet prêt, démarrez l'installation",
         "es": "Paquete listo: inicia la instalación",
     },
     "sel_prepare_failed": {
@@ -1693,9 +1693,9 @@ _STRINGS: dict = {
         "es": "Ejecutar como administrador",
     },
     "settings_run_as_admin_desc": {
-        "zh-CN": "开始安装时向 Windows 请求管理员权限。SP Flash Tool 与 MTKClient 将以完整权限运行——当驱动或端口无法打开时的排查途径。",
-        "en": "Ask Windows for administrator rights when an install starts. SP Flash Tool and MTKClient then run with full access — a troubleshooting route when a driver or port refuses to open.",
-        "fr": "Demander les droits d'administrateur à Windows au début d'une installation. SP Flash Tool et MTKClient disposent alors d'un accès complet — une piste de dépannage quand un pilote ou un port refuse de s'ouvrir.",
+        "zh-CN": "开始安装时向 Windows 请求管理员权限。SP Flash Tool 与 MTKClient 将以完整权限运行, , 当驱动或端口无法打开时的排查途径。",
+        "en": "Ask Windows for administrator rights when an install starts. SP Flash Tool and MTKClient then run with full access, a troubleshooting route when a driver or port refuses to open.",
+        "fr": "Demander les droits d'administrateur à Windows au début d'une installation. SP Flash Tool et MTKClient disposent alors d'un accès complet, une piste de dépannage quand un pilote ou un port refuse de s'ouvrir.",
         "es": "Pedir permisos de administrador a Windows al iniciar una instalación. SP Flash Tool y MTKClient tendrán acceso completo: una vía de diagnóstico cuando un controlador o un puerto no se abre.",
     },
     "settings_run_as_superuser": {
@@ -1947,9 +1947,9 @@ _STRINGS: dict = {
         "es": "Auto: SP Flash Tool en Windows y Linux, MTKClient en macOS. Puede cambiar manualmente en cualquier plataforma.",
     },
     "flash_method_note_sp": {
-        "zh-CN": "SP Flash Tool——联发科官方工具；在 Linux 上首次使用时自动下载并部署社区版。",
-        "en": "SP Flash Tool — MediaTek's official flasher. On Linux the community build is downloaded and staged on first use.",
-        "fr": "SP Flash Tool — l'outil officiel de MediaTek. Sous Linux, la version communautaire est téléchargée et installée lors de la première utilisation.",
+        "zh-CN": "SP Flash Tool, , 联发科官方工具；在 Linux 上首次使用时自动下载并部署社区版。",
+        "en": "SP Flash Tool, MediaTek's official flasher. On Linux the community build is downloaded and staged on first use.",
+        "fr": "SP Flash Tool, l'outil officiel de MediaTek. Sous Linux, la version communautaire est téléchargée et installée lors de la première utilisation.",
         "es": "SP Flash Tool, la herramienta oficial de MediaTek. En Linux, la versión comunitaria se descarga e instala en el primer uso.",
     },
     "flash_btn_open_sp_gui": {
@@ -1995,9 +1995,9 @@ _STRINGS: dict = {
         "es": "No se pudo iniciar la interfaz gráfica de SP Flash Tool:",
     },
     "sp_gui_preparing_firmware": {
-        "en": "The firmware package is incomplete — downloading and extracting it before opening SP Flash Tool.",
-        "zh-CN": "固件包不完整——正在下载并解压，然后打开 SP Flash Tool。",
-        "fr": "Le paquet de micrologiciel est incomplet — téléchargement et extraction avant d'ouvrir SP Flash Tool.",
+        "en": "The firmware package is incomplete, downloading and extracting it before opening SP Flash Tool.",
+        "zh-CN": "固件包不完整, , 正在下载并解压，然后打开 SP Flash Tool。",
+        "fr": "Le paquet de micrologiciel est incomplet, téléchargement et extraction avant d'ouvrir SP Flash Tool.",
         "es": "El paquete de firmware está incompleto: se descargará y extraerá antes de abrir SP Flash Tool.",
     },
     "install_needs_admin_title": {
@@ -2705,7 +2705,7 @@ _STRINGS: dict = {
     # cycle, and telling the user to replug the player would waste their time.
     "err_usb_bus_down_recovery": {
         "en": "macOS can't see any USB device right now, so your {model} can't be reached. Unplug the player and any USB hub or dock, then restart the Mac - the USB controller needs a power cycle before another install can start.",
-        "zh-CN": "macOS 目前无法识别任何 USB 设备，因此无法连接您的 {model}。请拔下播放器和所有 USB 集线器/扩展坞，然后重启 Mac——USB 控制器需要断电重启后才能再次安装。",
+        "zh-CN": "macOS 目前无法识别任何 USB 设备，因此无法连接您的 {model}。请拔下播放器和所有 USB 集线器/扩展坞，然后重启 Mac, , USB 控制器需要断电重启后才能再次安装。",
         "fr": "macOS ne détecte aucun périphérique USB pour le moment, votre {model} est donc inaccessible. Débranchez le lecteur ainsi que tout concentrateur ou dock USB, puis redémarrez le Mac - le contrôleur USB doit être remis sous tension avant une nouvelle installation.",
         "es": "macOS no detecta ningún dispositivo USB ahora mismo, así que no se puede acceder a tu {model}. Desconecta el reproductor y cualquier concentrador o base USB, y reinicia el Mac: el controlador USB necesita un ciclo de alimentación antes de otra instalación.",
         "de": "macOS erkennt derzeit kein USB-Gerät, daher ist Ihr {model} nicht erreichbar. Trennen Sie den Player sowie alle USB-Hubs und Docks, und starten Sie den Mac neu - der USB-Controller braucht einen Neustart der Stromversorgung, bevor eine weitere Installation beginnen kann.",
@@ -2750,11 +2750,11 @@ _STRINGS: dict = {
     # much better once the job is visibly done.
     "donate_completion_headline": {
         "zh-CN": "装好了，<span style='color:#ff5252; text-decoration:underline;'>谢谢你</span>。",
-        "en": "All done — thank <span style='color:#ff5252; text-decoration:underline;'>you</span>.",
-        "fr": "C'est fait — <span style='color:#ff5252; text-decoration:underline;'>merci</span> à vous.",
-        "es": "Listo — <span style='color:#ff5252; text-decoration:underline;'>gracias</span> a ti.",
-        "de": "Fertig — <span style='color:#ff5252; text-decoration:underline;'>danke</span> dir.",
-        "ja": "完了しました — <span style='color:#ff5252; text-decoration:underline;'>ありがとう</span>。",
+        "en": "All done, thank <span style='color:#ff5252; text-decoration:underline;'>you</span>.",
+        "fr": "C'est fait, <span style='color:#ff5252; text-decoration:underline;'>merci</span> à vous.",
+        "es": "Listo, <span style='color:#ff5252; text-decoration:underline;'>gracias</span> a ti.",
+        "de": "Fertig, <span style='color:#ff5252; text-decoration:underline;'>danke</span> dir.",
+        "ja": "完了しました, <span style='color:#ff5252; text-decoration:underline;'>ありがとう</span>。",
     },
     "donate_completion_subtitle": {
         "zh-CN": "{software} 已成功安装到你的 {model}。",
@@ -2765,11 +2765,11 @@ _STRINGS: dict = {
         "ja": "{model} に {software} をインストールしました。",
     },
     "donate_completion_body": {
-        "zh-CN": "更新程序 完全免费，没有广告，也不追踪你——它靠大家的小额捐助运行。如果它今天帮到了你，请我喝杯咖啡，就能让下载和服务器继续跑下去。",
-        "en": "Updater CE is free, has no ads and no tracking — it runs on small donations from people like you. If it saved you a job today, buying me a coffee keeps the downloads and the servers running.",
-        "fr": "Programme de mise à jour est gratuit, sans publicité ni suivi — il fonctionne grâce aux petits dons de gens comme vous. S'il vous a épargné du travail aujourd'hui, un café permet de payer les téléchargements et les serveurs.",
+        "zh-CN": "更新程序 完全免费，没有广告，也不追踪你, , 它靠大家的小额捐助运行。如果它今天帮到了你，请我喝杯咖啡，就能让下载和服务器继续跑下去。",
+        "en": "Updater CE is free, has no ads and no tracking, it runs on small donations from people like you. If it saved you a job today, buying me a coffee keeps the downloads and the servers running.",
+        "fr": "Programme de mise à jour est gratuit, sans publicité ni suivi, il fonctionne grâce aux petits dons de gens comme vous. S'il vous a épargné du travail aujourd'hui, un café permet de payer les téléchargements et les serveurs.",
         "es": "Actualizador es gratis, sin anuncios ni rastreo: funciona con pequeñas donaciones de gente como tú. Si hoy te ahorró trabajo, un café mantiene las descargas y los servidores en marcha.",
-        "de": "Updater ist kostenlos, ohne Werbung und ohne Tracking — es lebt von kleinen Spenden von Leuten wie dir. Wenn es dir heute Arbeit erspart hat, hält ein Kaffee die Downloads und Server am Laufen.",
+        "de": "Updater ist kostenlos, ohne Werbung und ohne Tracking, es lebt von kleinen Spenden von Leuten wie dir. Wenn es dir heute Arbeit erspart hat, hält ein Kaffee die Downloads und Server am Laufen.",
         "ja": "アップデーターは無料で、広告も追跡もありません。皆さんの少額の寄付で動いています。今日、手間が省けたなら、コーヒー一杯がダウンロードとサーバーを支えます。",
     },
     "donate_completion_coffee": {
@@ -2781,27 +2781,27 @@ _STRINGS: dict = {
         "ja": "コーヒーをおごる",
     },
     "donate_intro_success_mediatek": {
-        "zh-CN": "我们已将 <b>{software}</b> 安装到您的 <b>{model}</b>。<br><br>你好！我是 Ryan，MediaTek 安装工具的开发者。我自掏腰包承担托管和存储费用，以保持这个安装工具免费开放。如果它帮到了您，请考虑捐赠——这让项目能持续为大家服务。",
-        "en": "We've installed <b>{software}</b> on your <b>{model}</b>.<br><br>Hey! I'm Ryan, the developer behind MediaTek Installer. I cover hosting and storage costs out of pocket to keep this installer free and open. If it helped you, please consider donating — it keeps the project alive for everyone.",
-        "fr": "Nous avons installé <b>{software}</b> sur votre <b>{model}</b>.<br><br>Salut ! Je suis Ryan, le développeur derrière l'Installateur MediaTek. Je couvre les frais d'hébergement et de stockage de ma poche pour que cet installateur reste gratuit et ouvert. S'il vous a aidé, pensez à faire un don — cela maintient le projet en vie pour tout le monde.",
+        "zh-CN": "我们已将 <b>{software}</b> 安装到您的 <b>{model}</b>。<br><br>你好！我是 Ryan，MediaTek 安装工具的开发者。我自掏腰包承担托管和存储费用，以保持这个安装工具免费开放。如果它帮到了您，请考虑捐赠, , 这让项目能持续为大家服务。",
+        "en": "We've installed <b>{software}</b> on your <b>{model}</b>.<br><br>Hey! I'm Ryan, the developer behind MediaTek Installer. I cover hosting and storage costs out of pocket to keep this installer free and open. If it helped you, please consider donating, it keeps the project alive for everyone.",
+        "fr": "Nous avons installé <b>{software}</b> sur votre <b>{model}</b>.<br><br>Salut ! Je suis Ryan, le développeur derrière l'Installateur MediaTek. Je couvre les frais d'hébergement et de stockage de ma poche pour que cet installateur reste gratuit et ouvert. S'il vous a aidé, pensez à faire un don, cela maintient le projet en vie pour tout le monde.",
         "es": "Hemos instalado <b>{software}</b> en tu <b>{model}</b>.<br><br>¡Hola! Soy Ryan, el desarrollador detrás del Instalador MediaTek. Cubro los gastos de alojamiento y almacenamiento de mi bolsillo para mantener este instalador gratis y abierto. Si te ha ayudado, considera hacer una donación: mantiene el proyecto vivo para todos.",
     },
     "donate_intro_general_mediatek": {
-        "zh-CN": "你好！我是 Ryan，MediaTek 安装工具的开发者。我自掏腰包支付托管、工具和存储费用，以保持这个安装工具免费。每月维护费用约 200 美元——您的任何支持都能帮助它继续服务下一位用户。",
-        "en": "Hey! I'm Ryan, the developer behind MediaTek Installer. I pay for hosting, tooling and storage out of my own pocket to keep this installer free. Monthly upkeep comes to around $200 — any support you give helps keep it alive for the next user.",
-        "fr": "Salut ! Je suis Ryan, le développeur derrière l'Installateur MediaTek. Je paie l'hébergement, les outils et le stockage de ma poche pour que cet installateur reste gratuit. L'entretien mensuel s'élève à environ 200 $ — toute aide contribue à le garder en vie pour le prochain utilisateur.",
+        "zh-CN": "你好！我是 Ryan，MediaTek 安装工具的开发者。我自掏腰包支付托管、工具和存储费用，以保持这个安装工具免费。每月维护费用约 200 美元, , 您的任何支持都能帮助它继续服务下一位用户。",
+        "en": "Hey! I'm Ryan, the developer behind MediaTek Installer. I pay for hosting, tooling and storage out of my own pocket to keep this installer free. Monthly upkeep comes to around $200, any support you give helps keep it alive for the next user.",
+        "fr": "Salut ! Je suis Ryan, le développeur derrière l'Installateur MediaTek. Je paie l'hébergement, les outils et le stockage de ma poche pour que cet installateur reste gratuit. L'entretien mensuel s'élève à environ 200 $, toute aide contribue à le garder en vie pour le prochain utilisateur.",
         "es": "¡Hola! Soy Ryan, el desarrollador detrás del Instalador MediaTek. Pago el alojamiento, las herramientas y el almacenamiento de mi bolsillo para mantener este instalador gratis. El mantenimiento mensual ronda los 200 $; cualquier apoyo ayuda a mantenerlo vivo para el próximo usuario.",
     },
     "donate_intro_success": {
-        "zh-CN": "我们已将 <b>{software}</b> 安装到您的 <b>{model}</b>。<br><br>你好！我是 Ryan，更新程序、社区固件档案和主题画廊的开发者。我自掏腰包承担每月约 200 美元的服务器和存储费用，以保持一切免费和开放。如果这个工具帮助了您，请考虑捐赠——这能让这些资源持续为大家服务。",
-        "en": "We've installed <b>{software}</b> on your <b>{model}</b>.<br><br>Hey! I'm Ryan, the developer behind Updater CE, the Community Firmware Archive, and the Themes Gallery. I cover our ~$200 monthly server and storage costs out of pocket to keep everything free and open. If this tool helped you, please consider donating — it keeps these resources alive for everyone.",
-        "fr": "Nous avons installé <b>{software}</b> sur votre <b>{model}</b>.<br><br>Salut ! Je suis Ryan, le développeur derrière Programme de mise à jour, l'Archive Communautaire de Firmwares et la Galerie de Thèmes. Je couvre nos ~200 $ mensuels de serveur et de stockage de ma poche pour que tout reste gratuit et ouvert. Si cet outil vous a aidé, pensez à faire un don — cela maintient ces ressources en vie pour tout le monde.",
+        "zh-CN": "我们已将 <b>{software}</b> 安装到您的 <b>{model}</b>。<br><br>你好！我是 Ryan，更新程序、社区固件档案和主题画廊的开发者。我自掏腰包承担每月约 200 美元的服务器和存储费用，以保持一切免费和开放。如果这个工具帮助了您，请考虑捐赠, , 这能让这些资源持续为大家服务。",
+        "en": "We've installed <b>{software}</b> on your <b>{model}</b>.<br><br>Hey! I'm Ryan, the developer behind Updater CE, the Community Firmware Archive, and the Themes Gallery. I cover our ~$200 monthly server and storage costs out of pocket to keep everything free and open. If this tool helped you, please consider donating, it keeps these resources alive for everyone.",
+        "fr": "Nous avons installé <b>{software}</b> sur votre <b>{model}</b>.<br><br>Salut ! Je suis Ryan, le développeur derrière Programme de mise à jour, l'Archive Communautaire de Firmwares et la Galerie de Thèmes. Je couvre nos ~200 $ mensuels de serveur et de stockage de ma poche pour que tout reste gratuit et ouvert. Si cet outil vous a aidé, pensez à faire un don, cela maintient ces ressources en vie pour tout le monde.",
         "es": "Hemos instalado <b>{software}</b> en tu <b>{model}</b>.<br><br>¡Hola! Soy Ryan, el desarrollador detrás de Actualizador, el Archivo Comunitario de Firmwares y la Galería de Temas. Cubro nuestros ~200 $ mensuales de servidor y almacenamiento de mi propio bolsillo para mantener todo gratis y abierto. Si esta herramienta te ha ayudado, considera hacer una donación: mantiene estos recursos vivos para todos.",
     },
     "donate_intro_general": {
-        "zh-CN": "你好！我是 Ryan，更新程序、社区固件档案和主题画廊的开发者。我自掏腰包支付服务器托管、固件档案存储和域名续费，以保持一切免费。每月维护费用约 200 美元——您的任何支持都能帮助这些工具继续为下一位用户服务。",
-        "en": "Hey! I'm Ryan, the developer behind Updater CE, the Community Firmware Archive, and the Themes Gallery. I pay for server hosting, firmware archive storage, and domain renewals out of my own pocket to keep everything free. Monthly upkeep comes to around $200 — any support you give helps keep these tools alive for the next owner.",
-        "fr": "Salut ! Je suis Ryan, le développeur derrière Programme de mise à jour, l'Archive Communautaire de Firmwares et la Galerie de Thèmes. Je paie l'hébergement du serveur, le stockage des firmwares et les renouvellements de domaine de ma poche pour que tout reste gratuit. L'entretien mensuel s'élève à environ 200 $ — toute aide que vous apportez contribue à garder ces outils en vie pour le prochain utilisateur.",
+        "zh-CN": "你好！我是 Ryan，更新程序、社区固件档案和主题画廊的开发者。我自掏腰包支付服务器托管、固件档案存储和域名续费，以保持一切免费。每月维护费用约 200 美元, , 您的任何支持都能帮助这些工具继续为下一位用户服务。",
+        "en": "Hey! I'm Ryan, the developer behind Updater CE, the Community Firmware Archive, and the Themes Gallery. I pay for server hosting, firmware archive storage, and domain renewals out of my own pocket to keep everything free. Monthly upkeep comes to around $200, any support you give helps keep these tools alive for the next owner.",
+        "fr": "Salut ! Je suis Ryan, le développeur derrière Programme de mise à jour, l'Archive Communautaire de Firmwares et la Galerie de Thèmes. Je paie l'hébergement du serveur, le stockage des firmwares et les renouvellements de domaine de ma poche pour que tout reste gratuit. L'entretien mensuel s'élève à environ 200 $, toute aide que vous apportez contribue à garder ces outils en vie pour le prochain utilisateur.",
         "es": "¡Hola! Soy Ryan, el desarrollador detrás de Actualizador, el Archivo Comunitario de Firmwares y la Galería de Temas. Pago el alojamiento del servidor, el almacenamiento del archivo de firmwares y las renovaciones de dominio de mi bolsillo para mantener todo gratis. El mantenimiento mensual ronda los 200 $; cualquier apoyo que des ayuda a mantener estas herramientas vivas para el próximo usuario.",
     },
     "donate_supporter": {
@@ -3050,9 +3050,9 @@ _STRINGS: dict = {
     },
     "donate_ticker_fmt": {
         "zh-CN": "<b>{anchor}</b> {when} 通过 {method} 捐赠了 ${amount}",
-        "en": "<b>{anchor}</b> donated ${amount} by {method} — {when}",
+        "en": "<b>{anchor}</b> donated ${amount} by {method}, {when}",
         "fr": "<b>{anchor}</b> a donné ${amount} via {method} \u2014 {when}",
-        "es": "<b>{anchor}</b> donó ${amount} mediante {method} — {when}",
+        "es": "<b>{anchor}</b> donó ${amount} mediante {method}, {when}",
     },
     "donate_ticker_status_fmt": {
         "zh-CN": "<b>{anchor}</b> 捐赠了 ${amount}{when}",
@@ -3228,11 +3228,11 @@ _STRINGS: dict = {
         "ja": "皆様の寄付は、家族を支え、テスト用機器を購入するための大切な支援になります",
     },
     "donate_support_appeal_followup": {
-        "en": "that make this free service possible for everyone. If this tool saved you time or rescued your player today, please consider a small donation — it truly means the world to us.",
-        "zh-CN": "这些设备让这项免费服务得以惠及所有人。如果这个工具今天为您节省了时间或挽救了您的播放器，请考虑小额捐赠——这对我们意义重大。",
-        "fr": "qui rendent ce service gratuit possible pour tous. Si cet outil vous a fait gagner du temps ou a sauvé votre lecteur aujourd'hui, pensez à faire un petit don — cela compte énormément pour nous.",
+        "en": "that make this free service possible for everyone. If this tool saved you time or rescued your player today, please consider a small donation, it truly means the world to us.",
+        "zh-CN": "这些设备让这项免费服务得以惠及所有人。如果这个工具今天为您节省了时间或挽救了您的播放器，请考虑小额捐赠, , 这对我们意义重大。",
+        "fr": "qui rendent ce service gratuit possible pour tous. Si cet outil vous a fait gagner du temps ou a sauvé votre lecteur aujourd'hui, pensez à faire un petit don, cela compte énormément pour nous.",
         "es": "que hacen posible este servicio gratuito para todos. Si esta herramienta te ahorró tiempo o salvó tu reproductor hoy, considera hacer una pequeña donación: significa muchísimo para nosotros.",
-        "de": "die diesen kostenlosen Dienst für alle ermöglichen. Wenn dir dieses Tool heute Zeit gespart oder deinen Player gerettet hat, erwäge bitte eine kleine Spende — sie bedeutet uns sehr viel.",
+        "de": "die diesen kostenlosen Dienst für alle ermöglichen. Wenn dir dieses Tool heute Zeit gespart oder deinen Player gerettet hat, erwäge bitte eine kleine Spende, sie bedeutet uns sehr viel.",
         "ja": "それらが、誰もが利用できる無料サービスを支えています。このツールが今日、時間の節約やプレーヤーの復旧に役立ったなら、少額でもご寄付をご検討ください。皆様のご支援は私たちにとって何より大切です。",
     },
     "nav_help": {
@@ -3300,11 +3300,11 @@ _STRINGS: dict = {
         "ja": "企業ではなく一人の個人開発者が作っています。少額の寄付がサーバー費、検証用端末、そして家族の支えになります",
     },
     "donate_appeal_keep_going": {
-        "en": "If Updater CE saved your player today, consider donating — it pays for servers, test hardware, and puts food on our table",
-        "zh-CN": "如果本工具今天成功救回了您的播放器，请考虑支持一下——这能帮助支付服务器费用并维持全家生计",
+        "en": "If Updater CE saved your player today, consider donating, it pays for servers, test hardware, and puts food on our table",
+        "zh-CN": "如果本工具今天成功救回了您的播放器，请考虑支持一下, , 这能帮助支付服务器费用并维持全家生计",
         "fr": "Si Programme de mise à jour a sauvé votre appareil aujourd'hui, pensez à donner : cela paie les serveurs, le matériel et nourrit notre famille",
         "es": "Si Actualizador revivió tu reproductor hoy, considera apoyarnos: financia servidores, hardware de prueba y comida en nuestra mesa",
-        "de": "Wenn Updater deinen Player heute gerettet hat, denke über eine Spende nach — sie bezahlt Server, Hardware und unser Essen",
+        "de": "Wenn Updater deinen Player heute gerettet hat, denke über eine Spende nach, sie bezahlt Server, Hardware und unser Essen",
         "ja": "今日 アップデーターがお役に立てたなら、ぜひ温かいご支援を。サーバー代、検証機器代、そして日々の暮らしを支えます",
     },
     "donate_appeal_always_free": {
@@ -3647,9 +3647,9 @@ _STRINGS: dict = {
     },
     "update_available_fmt": {
         "zh-CN": "发现新版本 <b>{new}</b>，您当前使用的是 <b>{current}</b>。",
-        "en": "Version <b>{new}</b> is available — you are on <b>{current}</b>.",
-        "fr": "La version <b>{new}</b> est disponible — vous êtes sur la <b>{current}</b>.",
-        "es": "La versión <b>{new}</b> está disponible — tienes la <b>{current}</b>.",
+        "en": "Version <b>{new}</b> is available, you are on <b>{current}</b>.",
+        "fr": "La version <b>{new}</b> est disponible, vous êtes sur la <b>{current}</b>.",
+        "es": "La versión <b>{new}</b> está disponible, tienes la <b>{current}</b>.",
     },
     "update_notes": {
         "zh-CN": "更新内容",
@@ -3676,9 +3676,9 @@ _STRINGS: dict = {
         "es": "Descarga el {hint}, ábrelo y arrastra la app a tu carpeta de Aplicaciones.",
     },
     "update_install_linux": {
-        "zh-CN": "下载 {hint}，赋予执行权限并运行——它会替换旧版本。",
-        "en": "Download the {hint}, make it executable, and run it — it replaces the previous version.",
-        "fr": "Téléchargez le {hint}, rendez-le exécutable et lancez-le — il remplace la version précédente.",
+        "zh-CN": "下载 {hint}，赋予执行权限并运行, , 它会替换旧版本。",
+        "en": "Download the {hint}, make it executable, and run it, it replaces the previous version.",
+        "fr": "Téléchargez le {hint}, rendez-le exécutable et lancez-le, il remplace la version précédente.",
         "es": "Descarga el {hint}, hazlo ejecutable y ejecútalo: reemplaza la versión anterior.",
     },
     "update_install_generic": {
@@ -3707,8 +3707,8 @@ _STRINGS: dict = {
     },
     "update_up_to_date": {
         "zh-CN": "您已是最新版本 <b>{version}</b>。",
-        "en": "You're up to date — version <b>{version}</b> is the latest.",
-        "fr": "Vous êtes à jour — la version <b>{version}</b> est la dernière.",
+        "en": "You're up to date, version <b>{version}</b> is the latest.",
+        "fr": "Vous êtes à jour, la version <b>{version}</b> est la dernière.",
         "es": "Estás al día: la versión <b>{version}</b> es la más reciente.",
     },
     "update_check_failed": {
@@ -3821,10 +3821,10 @@ _STRINGS: dict = {
     },
     "settings_hide_donations_tip": {
         "zh-CN": "显示社区致谢和捐赠提示。关闭即可禁用；你仍可在设置中随时请喝咖啡。",
-        "en": "Shows community credits and donation prompts. Turn off to disable them — you can still buy a coffee from Settings any time.",
-        "fr": "Affiche les crédits communautaires et les invites de don. Désactivez pour les masquer — vous pouvez toujours offrir un café depuis les paramètres.",
+        "en": "Turn off to hide credits and donation prompts for a cleaner look.",
+        "fr": "Affiche les crédits communautaires et les invites de don. Désactivez pour les masquer, vous pouvez toujours offrir un café depuis les paramètres.",
         "es": "Muestra créditos comunitarios y solicitudes de donación. Desactívalo para inhabilitarlos: aún puedes invitar a un café desde Ajustes.",
-        "de": "Zeigt Community-Credits und Spendenhinweise. Ausschalten deaktiviert sie — Sie können jederzeit in den Einstellungen einen Kaffee spendieren.",
+        "de": "Zeigt Community-Credits und Spendenhinweise. Ausschalten deaktiviert sie, Sie können jederzeit in den Einstellungen einen Kaffee spendieren.",
         "ja": "コミュニティクレジットと寄付の案内を表示します。オフにすると無効になります（設定からいつでもコーヒーをご馳走できます）。",
     },
     "settings_donations_dismiss": {
@@ -4082,10 +4082,10 @@ _STRINGS: dict = {
         "es": "MTKClient (Mac)",
     },
     "flash_method_note_mtk_mac": {
-        "zh-CN": "模拟 macOS 模式：在本机运行 Mac 流程——仅使用 MTKClient，并显示 macOS 专属提示。仅供测试；应用将重启以生效。",
-        "en": "Simulated macOS mode: runs the Mac flow on this machine — MTKClient is the only backend and macOS-specific prompts are shown. For testing only; the app restarts to apply.",
-        "fr": "Mode macOS simulé : exécute le flux Mac sur cette machine — MTKClient est le seul moteur et les invites macOS sont affichées. Pour les tests uniquement ; l'application redémarre pour appliquer.",
-        "es": "Modo macOS simulado: ejecuta el flujo de Mac en esta máquina — MTKClient es el único motor y se muestran los avisos de macOS. Solo para pruebas; la aplicación se reinicia para aplicarlo.",
+        "zh-CN": "模拟 macOS 模式：在本机运行 Mac 流程, , 仅使用 MTKClient，并显示 macOS 专属提示。仅供测试；应用将重启以生效。",
+        "en": "Simulated macOS mode: runs the Mac flow on this machine, MTKClient is the only backend and macOS-specific prompts are shown. For testing only; the app restarts to apply.",
+        "fr": "Mode macOS simulé : exécute le flux Mac sur cette machine, MTKClient est le seul moteur et les invites macOS sont affichées. Pour les tests uniquement ; l'application redémarre pour appliquer.",
+        "es": "Modo macOS simulado: ejecuta el flujo de Mac en esta máquina, MTKClient es el único motor y se muestran los avisos de macOS. Solo para pruebas; la aplicación se reinicia para aplicarlo.",
     },
     "simulated_mac_title": {
         "zh-CN": "切换到模拟 macOS 模式",
@@ -4228,10 +4228,10 @@ _STRINGS: dict = {
         "es": "Actualizar el catálogo de software disponible",
     },
     "sel_releases_count_fmt": {
-        "zh-CN": "{count} 个版本 — 安装",
-        "en": "{count} release(s) — Install",
-        "fr": "{count} version(s) — Installer",
-        "es": "{count} versión(es) — Instalar",
+        "zh-CN": "{count} 个版本, 安装",
+        "en": "{count} release(s), Install",
+        "fr": "{count} version(s), Installer",
+        "es": "{count} versión(es), Instalar",
     },
     "device_type_help_title": {
         "zh-CN": "设备类型帮助",
@@ -4357,10 +4357,10 @@ _STRINGS: dict = {
         "es": "Instrucciones de instalación del software",
     },
     "sel_n_releases_fmt": {
-        "zh-CN": "{n} 个版本 — {action}",
-        "en": "{n} release(s) — {action}",
-        "fr": "{n} version(s) — {action}",
-        "es": "{n} versión(es) — {action}",
+        "zh-CN": "{n} 个版本, {action}",
+        "en": "{n} release(s), {action}",
+        "fr": "{n} version(s), {action}",
+        "es": "{n} versión(es), {action}",
     },
     "btn_power_lock": {
         "zh-CN": "电源/锁定键",
@@ -4387,16 +4387,16 @@ _STRINGS: dict = {
         "es": "Reanudando la descarga desde {mb} MB…",
     },
     "dl_progress_fmt": {
-        "zh-CN": "{dl} MB / {tot} MB（{pct}%）— {speed} MB/s",
-        "en": "{dl} MB / {tot} MB ({pct}%) — {speed} MB/s",
-        "fr": "{dl} Mo / {tot} Mo ({pct} %) — {speed} Mo/s",
-        "es": "{dl} MB / {tot} MB ({pct} %) — {speed} MB/s",
+        "zh-CN": "{dl} MB / {tot} MB（{pct}%）,  {speed} MB/s",
+        "en": "{dl} MB / {tot} MB ({pct}%), {speed} MB/s",
+        "fr": "{dl} Mo / {tot} Mo ({pct} %), {speed} Mo/s",
+        "es": "{dl} MB / {tot} MB ({pct} %), {speed} MB/s",
     },
     "dl_progress_unknown_fmt": {
-        "zh-CN": "{dl} MB — {speed} MB/s",
-        "en": "{dl} MB — {speed} MB/s",
-        "fr": "{dl} Mo — {speed} Mo/s",
-        "es": "{dl} MB — {speed} MB/s",
+        "zh-CN": "{dl} MB, {speed} MB/s",
+        "en": "{dl} MB, {speed} MB/s",
+        "fr": "{dl} Mo, {speed} Mo/s",
+        "es": "{dl} MB, {speed} MB/s",
     },
     "dl_retry_fmt": {
         "zh-CN": "连接中断，正在重试（{attempt}/{max}）…",
@@ -4552,19 +4552,19 @@ _STRINGS: dict = {
         "ja": "プレーヤーの再起動を待っています…",
     },
     "flash_watch_waiting_hint": {
-        "zh-CN": "请保持连接——Rockbox 正在启动，主题将自动添加。",
-        "en": "Keep it plugged in — Rockbox is starting up and its themes will be added automatically.",
-        "fr": "Laissez-le branché — Rockbox démarre et ses thèmes seront ajoutés automatiquement.",
+        "zh-CN": "请保持连接, , Rockbox 正在启动，主题将自动添加。",
+        "en": "Keep it plugged in, Rockbox is starting up and its themes will be added automatically.",
+        "fr": "Laissez-le branché, Rockbox démarre et ses thèmes seront ajoutés automatiquement.",
         "es": "Déjalo conectado: Rockbox se está iniciando y sus temas se añadirán automáticamente.",
-        "de": "Lass es angesteckt — Rockbox startet und seine Themes werden automatisch hinzugefügt.",
+        "de": "Lass es angesteckt, Rockbox startet und seine Themes werden automatisch hinzugefügt.",
         "ja": "接続したままにしてください。Rockbox が起動中で、テーマは自動的に追加されます。",
     },
     "flash_watch_found": {
-        "zh-CN": "已检测到播放器——正在添加 Rockbox 主题……",
-        "en": "Player detected — adding Rockbox themes…",
-        "fr": "Lecteur détecté — ajout des thèmes Rockbox…",
+        "zh-CN": "已检测到播放器, , 正在添加 Rockbox 主题……",
+        "en": "Player detected, adding Rockbox themes…",
+        "fr": "Lecteur détecté, ajout des thèmes Rockbox…",
         "es": "Reproductor detectado: añadiendo temas de Rockbox…",
-        "de": "Player erkannt — Rockbox-Themes werden hinzugefügt…",
+        "de": "Player erkannt, Rockbox-Themes werden hinzugefügt…",
         "ja": "プレーヤーを検出しました。Rockbox テーマを追加しています…",
     },
     "flash_watch_timeout": {
@@ -4577,11 +4577,11 @@ _STRINGS: dict = {
     },
     "flash_watch_timeout_hint": {
         "zh-CN": "请检查是否已连接并开机。若仍然黑屏，请用针按住复位孔，并按住中心按钮（Y1）或电源键（其他机型）重新启动。若仍无法启动，说明固件未成功刷入，请安装其他固件。",
-        "en": "Check that it is plugged in and switched on. If it stays dark, press a pin into the reset hole and hold the centre button (Y1) or the power button (other players) to restart it. If it still will not start, the firmware did not take — install another one.",
-        "en-US": "Check that it is plugged in and turned on. If it stays dark, press a pin into the reset hole and hold the center button (Y1) or the power button (other players) to restart it. If it still will not start, the firmware did not take — install another one.",
-        "fr": "Vérifiez qu'il est branché et allumé. S'il reste éteint, enfoncez une aiguille dans le trou de réinitialisation et maintenez le bouton central (Y1) ou le bouton d'alimentation (autres lecteurs) pour le redémarrer. S'il ne démarre toujours pas, le firmware n'a pas pris — installez-en un autre.",
+        "en": "Check that it is plugged in and switched on. If it stays dark, press a pin into the reset hole and hold the centre button (Y1) or the power button (other players) to restart it. If it still will not start, the firmware did not take, install another one.",
+        "en-US": "Check that it is plugged in and turned on. If it stays dark, press a pin into the reset hole and hold the center button (Y1) or the power button (other players) to restart it. If it still will not start, the firmware did not take, install another one.",
+        "fr": "Vérifiez qu'il est branché et allumé. S'il reste éteint, enfoncez une aiguille dans le trou de réinitialisation et maintenez le bouton central (Y1) ou le bouton d'alimentation (autres lecteurs) pour le redémarrer. S'il ne démarre toujours pas, le firmware n'a pas pris, installez-en un autre.",
         "es": "Comprueba que está conectado y encendido. Si sigue apagado, introduce un alfiler en el orificio de reinicio y mantén pulsado el botón central (Y1) o el botón de encendido (otros reproductores) para reiniciarlo. Si aún no arranca, el firmware no se aplicó: instala otro.",
-        "de": "Prüfe, ob es angesteckt und eingeschaltet ist. Bleibt es dunkel, stecke eine Nadel in das Reset-Loch und halte die mittlere Taste (Y1) bzw. die Power-Taste (andere Player) gedrückt, um es neu zu starten. Startet es weiterhin nicht, hat die Firmware nicht gegriffen — installiere eine andere.",
+        "de": "Prüfe, ob es angesteckt und eingeschaltet ist. Bleibt es dunkel, stecke eine Nadel in das Reset-Loch und halte die mittlere Taste (Y1) bzw. die Power-Taste (andere Player) gedrückt, um es neu zu starten. Startet es weiterhin nicht, hat die Firmware nicht gegriffen, installiere eine andere.",
         "ja": "接続と電源が入っているか確認してください。真っ暗なままなら、リセット穴にピンを差し、センターボタン（Y1）または電源ボタン（その他の機種）を押し続けて再起動します。それでも起動しない場合は、ファームウェアが入っていません。別のファームウェアをインストールしてください。",
     },
     "install_disconnect_guidance_fmt": {
@@ -4713,9 +4713,9 @@ _STRINGS: dict = {
         "es": "Desempaquetando {part}...",
     },
     "action_recover_powercycle": {
-        "zh-CN": "请将播放器断电重启（长按电源键约 10 秒），然后重新连接——正在重试…",
+        "zh-CN": "请将播放器断电重启（长按电源键约 10 秒），然后重新连接, , 正在重试…",
         "en": "Power-cycle the player (hold power ~10s), then reconnect it - retrying...",
-        "fr": "Redémarrez le lecteur (maintenez le bouton marche ~10 s), puis reconnectez-le — nouvelle tentative…",
+        "fr": "Redémarrez le lecteur (maintenez le bouton marche ~10 s), puis reconnectez-le, nouvelle tentative…",
         "es": "Apaga y enciende el reproductor (mantén el botón de encendido ~10 s) y reconéctalo: reintentando...",
     },
     "action_init_mtkclient": {
@@ -4737,15 +4737,15 @@ _STRINGS: dict = {
         "es": "El dispositivo dejó de responder mientras se configuraba el agente de descarga. Apágalo por completo, reconéctalo y reintenta.",
     },
     "action_detected_brom": {
-        "zh-CN": "已检测到设备（BROM 模式）——正在配置下载代理…",
+        "zh-CN": "已检测到设备（BROM 模式）, , 正在配置下载代理…",
         "en": "Device detected (BROM mode) - configuring download agent...",
-        "fr": "Appareil détecté (mode BROM) — configuration de l'agent de téléchargement…",
+        "fr": "Appareil détecté (mode BROM), configuration de l'agent de téléchargement…",
         "es": "Dispositivo detectado (modo BROM): configurando el agente de descarga...",
     },
     "action_detected_preloader": {
-        "zh-CN": "已检测到设备（preloader 模式）——正在配置下载代理…",
+        "zh-CN": "已检测到设备（preloader 模式）, , 正在配置下载代理…",
         "en": "Device detected (preloader mode) - configuring download agent...",
-        "fr": "Appareil détecté (mode preloader) — configuration de l'agent de téléchargement…",
+        "fr": "Appareil détecté (mode preloader), configuration de l'agent de téléchargement…",
         "es": "Dispositivo detectado (modo preloader): configurando el agente de descarga...",
     },
     "action_da_wait_back": {
@@ -4755,9 +4755,9 @@ _STRINGS: dict = {
         "es": "El reproductor dejó de responder al iniciar el agente de descarga. Esperando a que vuelva...",
     },
     "action_device_connected": {
-        "zh-CN": "设备已连接——正在准备写入命令…",
+        "zh-CN": "设备已连接, , 正在准备写入命令…",
         "en": "Device connected - preparing write commands...",
-        "fr": "Appareil connecté — préparation des commandes d'écriture…",
+        "fr": "Appareil connecté, préparation des commandes d'écriture…",
         "es": "Dispositivo conectado: preparando los comandos de escritura...",
     },
     "action_install_in_progress": {
@@ -4779,9 +4779,9 @@ _STRINGS: dict = {
         "es": "Reiniciando el reproductor en modo BROM...",
     },
     "log_install_writing": {
-        "zh-CN": "正在安装——正在写入固件镜像…",
+        "zh-CN": "正在安装, , 正在写入固件镜像…",
         "en": "Install in Progress - writing firmware images...",
-        "fr": "Installation en cours — écriture des images firmware…",
+        "fr": "Installation en cours, écriture des images firmware…",
         "es": "Instalación en curso: escribiendo las imágenes de firmware...",
     },
     "log_sparse_fmt": {
@@ -5325,9 +5325,9 @@ _STRINGS: dict = {
     },
     "rockbox_wizard_usb_desc": {
         "zh-CN": "1. 在播放器上启用 USB 存储模式，使其在电脑上显示为驱动器。\n2. 点击下方按钮，选择播放器上的任意文件夹（.rockbox、Music、Themes 或磁盘根目录均可；隐藏的 .rockbox 文件夹会自动定位）。\n3. 应用将把 360p 主题与字体合并进去，同名文件会被覆盖。",
-        "en": "1. Enable USB Storage Mode on the player so it appears as a drive.\n2. Pick ANY folder on the player below (.rockbox, Music, Themes, or the drive root — a hidden .rockbox folder is located automatically).\n3. The app merges the 360p themes and fonts in, overwriting same-name files.",
-        "fr": "1. Activez le mode stockage USB sur le lecteur pour qu'il apparaisse comme un lecteur.\n2. Choisissez N'IMPORTE QUEL dossier ci-dessous (.rockbox, Musique, Thèmes ou la racine — un dossier .rockbox masqué est localisé automatiquement).\n3. L'application y fusionne les thèmes et polices 360p, en écrasant les fichiers de même nom.",
-        "es": "1. Active el modo de almacenamiento USB en el reproductor para que aparezca como una unidad.\n2. Elija CUALQUIER carpeta de abajo (.rockbox, Música, Temas o la raíz — una carpeta .rockbox oculta se localiza automáticamente).\n3. La aplicación fusiona los temas y fuentes 360p, sobrescribiendo archivos del mismo nombre.",
+        "en": "1. Enable USB Storage Mode on the player so it appears as a drive.\n2. Pick ANY folder on the player below (.rockbox, Music, Themes, or the drive root, a hidden .rockbox folder is located automatically).\n3. The app merges the 360p themes and fonts in, overwriting same-name files.",
+        "fr": "1. Activez le mode stockage USB sur le lecteur pour qu'il apparaisse comme un lecteur.\n2. Choisissez N'IMPORTE QUEL dossier ci-dessous (.rockbox, Musique, Thèmes ou la racine, un dossier .rockbox masqué est localisé automatiquement).\n3. L'application y fusionne les thèmes et polices 360p, en écrasant les fichiers de même nom.",
+        "es": "1. Active el modo de almacenamiento USB en el reproductor para que aparezca como una unidad.\n2. Elija CUALQUIER carpeta de abajo (.rockbox, Música, Temas o la raíz, una carpeta .rockbox oculta se localiza automáticamente).\n3. La aplicación fusiona los temas y fuentes 360p, sobrescribiendo archivos del mismo nombre.",
     },
     "rockbox_wizard_done_title": {
         "zh-CN": "360p 主题与字体已安装！",
@@ -5671,8 +5671,8 @@ _STRINGS: dict = {
     },
     "legacy_cleanup_done_inline": {
         "zh-CN": "已移除，释放约 {size}。",
-        "en": "Removed — about {size} freed.",
-        "fr": "Supprimé — environ {size} libérés.",
+        "en": "Removed, about {size} freed.",
+        "fr": "Supprimé, environ {size} libérés.",
         "es": "Eliminado: se liberaron unos {size}.",
     },
 }

@@ -4471,7 +4471,9 @@ class MainWindow(QMainWindow):
             self._settings_page.set_method_enabled(False)
             self._enter_flashing_state()
         elif step == STEP_DONE:
-            self._flash_page.set_device_done()
+            self._flash_page.set_device_done(
+                donations_shown=not device_tracking.is_donation_install_prompt_disabled(self.settings)
+            )
 
     def _set_state(self, state):
         if self.sm.state is state:
@@ -4486,7 +4488,7 @@ class MainWindow(QMainWindow):
         self._sync_install_nav_entry()
 
     def _on_state_changed(self):
-        """Called when the state machine transitions — resize the window to fit."""
+        """Called when the state machine transitions, resize the window to fit."""
         self._adjust_window_geometry()
 
     def _enter_flashing_state(self):
@@ -4834,7 +4836,7 @@ class MainWindow(QMainWindow):
             self._kill_process_timer.stop()
 
         if self._is_sp_complete_override():
-            self._append_log("Notice: Flash finished handler confirmed 'all command exec' — classing as success.")
+            self._append_log("Notice: Flash finished handler confirmed 'all command exec', classing as success.")
             ok = True
             error_code = ""
 
@@ -4951,7 +4953,7 @@ class MainWindow(QMainWindow):
             )
             if is_sp_win:
                 self._append_log(
-                    "Notice: SP Flash Tool on Windows detected — starting automated Rockbox themes flow "
+                    "Notice: SP Flash Tool on Windows detected, starting automated Rockbox themes flow "
                     "(waiting 90-120s for ADB connection, no user interaction required)..."
                 )
                 self._start_themes_stage(eff_model, donation_disabled, already_powered_on=True, automatic=True)
@@ -4977,13 +4979,13 @@ class MainWindow(QMainWindow):
             self._download_active = False
             self._sync_install_nav_entry()
             self._flash_page.show_flashing()
-            self._flash_page.set_device_done()
+            self._flash_page.set_device_done(donations_shown=not donation_disabled)
             self._flash_page.set_rockbox_site_themes(is_240p_rockbox)
             self._flash_page.show_completion_appeal(False)
             self._flash_page.show_completion_note(
                 donation_disabled, software=software, model=model
             )
-            self._apply_release_icon(complete=True)
+            self._apply_release_icon(complete=donation_disabled)
             self._nav_to_page(_PAGE_FLASH)
             if not donation_disabled:
                 self._flash_page.show_completion_appeal(
@@ -5076,8 +5078,8 @@ class MainWindow(QMainWindow):
         self._download_active = False
         self._sync_install_nav_entry()
         self._flash_page.show_flashing()
-        self._flash_page.set_device_done()
-        self._apply_release_icon(complete=True)
+        self._flash_page.set_device_done(donations_shown=not donation_disabled)
+        self._apply_release_icon(complete=donation_disabled)
         self._nav_to_page(_PAGE_FLASH)
         if not donation_disabled:
             self._flash_page.show_completion_appeal(

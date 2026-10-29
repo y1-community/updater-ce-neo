@@ -1,4 +1,4 @@
-"""Donations modal — port of Updater CE's ``show_donation_dialog``."""
+"""Donations modal, port of Updater CE's ``show_donation_dialog``."""
 
 # PEP 810 (Python 3.15+): see src/ui/main_window.py for the convention. The
 # donor list is fetched on a worker thread after the window is up, and this is

@@ -1,4 +1,4 @@
-"""Flash page — modern OS software update in-progress display (macOS / iOS / Windows Fluent style)."""
+"""Flash page, modern OS software update in-progress display (macOS / iOS / Windows Fluent style)."""
 
 import logging
 from pathlib import Path
@@ -49,7 +49,12 @@ from .widgets import (
     StatusTag,
     fade_in,
 )
-from .dark import T, page_top_margin
+from .dark import T, link_html, page_top_margin
+
+
+def _themed_link(href: str, text: str) -> str:
+    """An in-app link in the theme foreground, with no visited or clicked tint."""
+    return link_html(text, bold=False).replace('href="#"', f'href="{href}"', 1)
 from .icons import get_symbol_icon, get_symbol_pixmap
 from .native_controls import (
     NativeRoundChip,
@@ -358,11 +363,11 @@ def _software_without_model(software: str, model: str) -> str:
     for pattern, repl in (
         (rf"[([\s]*{word}[)\]]\s*", " "),
         (rf"\bfor\s+{word}", " "),
-        (rf"\s*[-–—·,:/]\s*{word}", " "),
-        (rf"{word}\s*[-–—·,:/]?\s*", " "),
+        (rf"\s*[-–, ·,:/]\s*{word}", " "),
+        (rf"{word}\s*[-–, ·,:/]?\s*", " "),
     ):
         stripped = re.sub(pattern, repl, stripped, flags=re.IGNORECASE)
-    stripped = re.sub(r"\s{2,}", " ", stripped).strip(" -–—·,:()[]/")
+    stripped = re.sub(r"\s{2,}", " ", stripped).strip(" -–, ·,:()[]/")
     return stripped or text
 
 
@@ -1810,7 +1815,9 @@ class FlashPage(QWidget):
         fallback_box.setContentsMargins(0, 0, 0, 0)
         fallback_box.setSpacing(10)
 
-        self._theme_recover_link = QLabel(f'<a href="recover">{tr("rockbox_recover_troubleshoot")}</a>')
+        self._theme_recover_link = QLabel(
+            _themed_link("recover", tr("rockbox_recover_troubleshoot"))
+        )
         self._theme_recover_link.setTextFormat(Qt.TextFormat.RichText)
         self._theme_recover_link.setTextInteractionFlags(Qt.TextInteractionFlag.LinksAccessibleByMouse)
         self._theme_recover_link.setOpenExternalLinks(False)
@@ -2396,7 +2403,7 @@ class FlashPage(QWidget):
                 self._cancel_btn.setToolTip(tr("flash_btn_cancel"))
                 self._cancel_btn.setAccessibleName(tr("flash_btn_cancel"))
         if hasattr(self, "_done_mark"):
-            self._done_mark.setVisible(done)
+            self._done_mark.setVisible(done and not getattr(self, "_donations_shown", False))
             if done:
                 self._done_mark.setEnabled(True)
         if hasattr(self, "_flash_head") and hasattr(self._flash_head, "_sync_chips_pairing"):
@@ -3427,7 +3434,7 @@ class FlashPage(QWidget):
         self._update_paperclip_hint()
 
     def _dont_ask_html(self) -> str:
-        return f'<a href="dont-ask">{tr("donate_dont_ask_link")}</a>'
+        return _themed_link("dont-ask", tr("donate_dont_ask_link"))
 
     def _open_coffee_page(self) -> None:
         from ..browser import open_browser
@@ -3611,11 +3618,16 @@ class FlashPage(QWidget):
             return False
         return not self.themes.transfer_running
 
-    def set_device_done(self):
+    def set_device_done(self, donations_shown: bool = False):
+        """Finish the install card. With donations shown, the donation message says it is complete.
+
+        That message replaces the green check badge and the dismiss checkmark.
+        """
         self.update_partition_progress("")
         self.dismiss_prompt_stop()
         self._complete = True
         self._failed = False
+        self._donations_shown = bool(donations_shown)
         self._warning.setVisible(False)
         if hasattr(self, "_cancel_btn"):
             self._cancel_btn.setVisible(True)
@@ -3624,7 +3636,7 @@ class FlashPage(QWidget):
             self._cancel_btn.setToolTip("")
             self._cancel_btn.setAccessibleName("")
         if hasattr(self, "_done_mark"):
-            self._done_mark.setVisible(True)
+            self._done_mark.setVisible(not donations_shown)
             self._done_mark.setEnabled(True)
         if hasattr(self, "_flash_retry_btn"):
             self._flash_retry_btn.setVisible(False)
@@ -3632,7 +3644,7 @@ class FlashPage(QWidget):
             self._flash_head._sync_chips_pairing()
         source = getattr(self, "_release_source", None)
         if source is not None:
-            self.set_release_icon(source, complete=True)
+            self.set_release_icon(source, complete=not donations_shown)
         self._flash_banner.set_type("success")
         self._flash_banner.set_key("flash_banner_done")
         self._wait_status.set_status("complete")
@@ -3793,7 +3805,7 @@ class FlashPage(QWidget):
 
     def _refresh_eta_label(self, eta_str: str) -> None:
         friendly = self._format_eta_with_prep(eta_str)
-        self._eta_label.setText(f"— {friendly}" if friendly else "")
+        self._eta_label.setText(f",  {friendly}" if friendly else "")
         flow = getattr(self, "_status_flow", None)
         if flow is not None:
             flow.refresh()
@@ -3899,7 +3911,9 @@ class FlashPage(QWidget):
         if hasattr(self, "_theme_finish_btn"):
             self._theme_finish_btn.setText(tr("rockbox_btn_finish"))
         if hasattr(self, "_theme_recover_link"):
-            self._theme_recover_link.setText(f'<a href="recover">{tr("rockbox_recover_troubleshoot")}</a>')
+            self._theme_recover_link.setText(
+                _themed_link("recover", tr("rockbox_recover_troubleshoot"))
+            )
         if hasattr(self, "_theme_trouble_recover_btn"):
             self._theme_trouble_recover_btn.setText(tr("rockbox_recover_troubleshoot"))
         if hasattr(self, "_theme_back_btn"):

@@ -1,4 +1,4 @@
-"""Settings page — install method, release reminders and donation preferences."""
+"""Settings page, install method, release reminders and donation preferences."""
 
 import logging
 from pathlib import Path
@@ -451,6 +451,7 @@ class SettingsPage(QWidget):
         self._reminders_list_layout.setContentsMargins(0, 0, 0, 0)
         self._reminders_list_layout.setSpacing(4)
         self._reminder_switches: dict[str, QCheckBox] = {}
+        self._reminder_rows: list[QWidget] = []
         rem_layout.addWidget(self._reminders_list)
 
         self._reminders_card.set_layout(rem_layout)
@@ -511,13 +512,11 @@ class SettingsPage(QWidget):
         self._cb_hide_donations.setStyleSheet("")  # no host style override
         self._cb_hide_donations.toggled.connect(self._on_hide_donations_toggled)
 
-        # No explainer paragraph: the title already says what the switch does.
-        # The label still exists — hidden — because it is where that wording
-        # lives for the translations and for switch_caption().
+        # Short subtitle: says the card can be turned off for a cleaner look.
         self._lbl_hide_tip = QLabel(tr("settings_hide_donations_tip"), self._donations_card)
         self._lbl_hide_tip.setWordWrap(True)
         self._lbl_hide_tip.setProperty("cssClass", "dimmed")
-        self._lbl_hide_tip.setVisible(False)
+        don_layout.addWidget(self._lbl_hide_tip)
 
         # Backward compatibility aliases
         self._cb_skip_install_donations = self._cb_hide_donations
@@ -1257,10 +1256,19 @@ class SettingsPage(QWidget):
         """One reminder switch per tracked model, once there is more than one."""
         if not hasattr(self, "_reminders_list_layout"):
             return
+        # Remove the previous rows entirely (row widgets, not only the switches),
+        # otherwise each refresh leaves an empty or labelled row behind.
+        for row in getattr(self, "_reminder_rows", []):
+            row.setParent(None)
+            row.deleteLater()
         for switch in self._reminder_switches.values():
+            self._switch_rows.pop(switch, None)
             switch.setParent(None)
             switch.deleteLater()
+        self._reminder_rows = []
         self._reminder_switches = {}
+        # Once there is more than one tracked model, one row per model. A single
+        # tracked install is covered by the card's own switch.
         show = len(tracked) > 1
         self._reminders_list.setVisible(show)
         if not show:
@@ -1289,18 +1297,19 @@ class SettingsPage(QWidget):
             box.addWidget(caption_label, 1)
             box.addWidget(switch, 0, Qt.AlignRight | Qt.AlignVCenter)
             self._reminders_list_layout.addWidget(row)
+            self._reminder_rows.append(row)
             self._reminder_switches[model] = switch
             self._switch_rows[switch] = (row, caption_label)
             switch.text = caption
 
     def _on_model_reminder_toggled(self, model: str, checked: bool) -> None:
-        device_tracking.set_device_reminder_enabled(model, bool(checked))
-        any_enabled = any(
-            device_tracking.is_device_reminder_enabled(m) for m in DEVICE_MODELS
-        )
-        self._cb_reminders.blockSignals(True)
-        self._cb_reminders.setChecked(any_enabled)
-        self._cb_reminders.blockSignals(False)
+        # Unchecking a row removes that model's tracked install from the list.
+        if checked:
+            device_tracking.set_device_reminder_enabled(model, True)
+            self.refresh_settings()
+            return
+        device_tracking.clear_device_install(model)
+        self.refresh_settings()
 
     def _update_reminders_copy(self) -> None:
         """Describe reminder coverage from the installs actually tracked."""
@@ -1567,7 +1576,10 @@ class SettingsPage(QWidget):
         self._run_as_admin_restart_btn.setVisible(needs_restart)
 
     def _donations_dismiss_html(self) -> str:
-        return f'<a href="dismiss">{tr("settings_donations_dismiss")}</a>'
+        from .dark import link_html
+        return link_html(tr("settings_donations_dismiss"), bold=False).replace(
+            'href="#"', 'href="dismiss"', 1
+        )
 
     def _open_settings_coffee(self) -> None:
         from ..browser import open_browser
@@ -1763,7 +1775,7 @@ class SettingsPage(QWidget):
     def _on_sp_prep_progress(self, percent: int, message: str):
         line = f"{int(percent)}%"
         if message:
-            line = f"{line} — {message}"
+            line = f"{line}, {message}"
         self._show_checker_status(line)
 
     def _on_sp_prep_finished(self, ok: bool, message: str, report: dict):

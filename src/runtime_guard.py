@@ -140,7 +140,7 @@ def report_binding_health() -> None:
             version,
             platform.python_version(),
             drift,
-            "guarded by refcount pin" if _pinned else "NOT GUARDED — the app may abort",
+            "guarded by refcount pin" if _pinned else "NOT GUARDED, the app may abort",
         )
     else:
         logger.info("Qt binding: PySide6 %s on Python %s (refcount sound)", version, platform.python_version())
