@@ -216,7 +216,9 @@ def format_sp_history_ini(
     entries are guaranteed to be absolute paths.
     """
     scatter_abs = str(Path(scatter_path).resolve())
-    da_abs = str(Path(da_path).resolve())
+    # The download agent is the bare file name: SP Flash Tool resolves it
+    # beside its own binary, so an absolute path is not written here.
+    da_name = os.path.basename(str(da_path)) or DA_FILENAME
 
     history_entries = [scatter_abs]
     other_sections = []
@@ -278,7 +280,7 @@ def format_sp_history_ini(
 
     base = (
         f"[LastDAFilePath]\n"
-        f"lastDir={_ini_escape(da_abs)}\n\n"
+        f"lastDir={_ini_escape(da_name)}\n\n"
         f"[RecentOpenFile]\n"
         f"lastDir={_ini_escape(scatter_abs)}\n"
         f"scatterHistory={scatter_history_line}\n"
@@ -538,7 +540,7 @@ def pin_sp_flash_history(
     if not history.is_file():
         return False, da_abs, scatter_abs
     read_da, read_scatter, _history = read_history_paths(history)
-    if os.path.normcase(read_da) != os.path.normcase(da_abs):
+    if read_da != DA_FILENAME:
         return False, da_abs, scatter_abs
     if os.path.normcase(read_scatter) != os.path.normcase(scatter_abs):
         return False, da_abs, scatter_abs
@@ -579,7 +581,7 @@ def stage_history_before_launch(
     if not (tool_dir / HISTORY_INI).is_file():
         return False, "history.ini could not be read back."
     read_da, read_scatter, _history = read_history_paths(tool_dir / HISTORY_INI)
-    if os.path.normcase(read_da) != os.path.normcase(da_abs):
+    if read_da != DA_FILENAME:
         return False, "history.ini does not list the download agent."
     if os.path.normcase(read_scatter) != os.path.normcase(scatter_abs):
         return False, "history.ini does not list the scatter file."
@@ -794,7 +796,7 @@ def update_sp_history_ini(
 
         new_content = format_sp_history_ini(
             existing_text=existing_text,
-            da_path=da_abs,
+            da_path=DA_FILENAME,
             scatter_path=scatter_abs,
             sp_dir=sp_dir,
         )

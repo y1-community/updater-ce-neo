@@ -65,7 +65,7 @@ def test_downgrade_moves_circle_and_quiets_notices():
             if item.text().startswith("●"):
                 circled.append(rel["tag_name"])
         assert circled == ["v3.0.2"]
-        assert page._update_prompt.isHidden()
+        assert page._model_toasts == []
 
         device_tracking.record_device_install(
             "Y1", "Rockbox", "v1.0.0", release_label="1.0.0", settings=settings,

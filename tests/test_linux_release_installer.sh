@@ -30,6 +30,13 @@ grep -F 'Exec="' "$DESKTOP" | grep -F "$HOME/.local/bin/innioasis-updater" | gre
 grep -F 'Icon=innioasis-updater' "$DESKTOP"
 test "$("$LAUNCHER")" = updater-test
 
+# Settings are QSettings("innioasis", "updater") in ~/.config and must survive
+# an upgrade over an existing install.
+mkdir -p "$XDG_CONFIG_HOME/innioasis"
+printf '[General]\nlanguage=fr\n' > "$XDG_CONFIG_HOME/innioasis/updater.conf"
+bash "$ROOT/run_linux.sh" --file "$TMP/UpdaterCE.tar.gz"
+test "$(cat "$XDG_CONFIG_HOME/innioasis/updater.conf")" = "$(printf '[General]\nlanguage=fr')"
+
 # With no XDG_DATA_HOME, use the freedesktop default under ~/.local/share.
 HOME="$TMP/default-home"
 mkdir -p "$HOME"

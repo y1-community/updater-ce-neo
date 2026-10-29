@@ -5076,18 +5076,23 @@ class MainWindow(QMainWindow):
         self._flash_page.set_device_done(donations_shown=not donation_disabled)
         self._apply_release_icon(complete=donation_disabled)
         self._nav_to_page(_PAGE_FLASH)
+        # The themes stage only reaches this screen after its pack is placed,
+        # unless it gave up; a give-up keeps the power-on steps and try-again note.
+        themes_failed = self.themes.placement_failed
+        themes_installed = not themes_failed
         if not donation_disabled:
             self._flash_page.show_completion_appeal(
                 True, self._on_completion_dont_ask, self._on_completion_not_now,
+                themes_installed=themes_installed,
             )
         model = self._package_model or ""
         software = self._package_name or "Firmware"
         # A themes stage that gave up still lands on this screen, so its note
         # must be shown even where the donations appeal would otherwise be the
         # only block — the try-again copy is why the user is reading.
-        themes_failed = self.themes.placement_failed
         self._flash_page.show_completion_note(
-            donation_disabled or themes_failed, software=software, model=model
+            donation_disabled or themes_failed, software=software, model=model,
+            themes_installed=themes_installed,
         )
         self._adjust_window_geometry()
         self._sync_sp_history()
@@ -5664,8 +5669,9 @@ class MainWindow(QMainWindow):
         if hasattr(self, "_settings_page"):
             self._settings_page.refresh_settings()
         self._apply_donation_visibility(True)
-        self._highlight_nav(_PAGE_FLASH, True)
-        self._adjust_window_geometry()
+        # Leave the completed run the same way "Not now" does, so the user lands
+        # on Select Software instead of an empty completion card.
+        self._on_install_done()
 
     def _apply_release_icon(self, complete: bool = False) -> None:
         """Squircle until a release icon is cached, then that image. The check overlays either."""
@@ -6805,6 +6811,27 @@ class MainWindow(QMainWindow):
                     tr("reminder_new_release_title"),
                     tr("settings_no_devices_tracked"),
                 )
+
+    def _notify_device_updates(self, updates) -> None:
+        """Post one system notification per device with a newer release.
+
+        No window is passed, so the app is not brought to the front.
+        """
+        from ..notifications import show_completion_notification
+
+        title = tr("reminder_new_release_title")
+        for upd in updates or []:
+            software = str((upd or {}).get("software_name") or "")
+            model = str((upd or {}).get("model") or "")
+            if not software or not model:
+                continue
+            try:
+                show_completion_notification(
+                    title,
+                    tr("sel_update_available").format(software=software, model=model),
+                )
+            except Exception:
+                logger.debug("Device update notification failed", exc_info=True)
 
     def _check_legacy_installations(self):
         try:

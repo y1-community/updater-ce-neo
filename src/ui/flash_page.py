@@ -39,7 +39,7 @@ from ..flash_service import (
 )
 from ..i18n import tr, tr_brand
 from ..progress_model import format_eta_seconds
-from .support_appeal import COMPLETION_KEYS, SupportIntro
+from .support_appeal import COMPLETION_KEYS, THEMES_COMPLETION_KEYS, SupportIntro
 from .widgets import (
     Banner,
     Card,
@@ -1886,6 +1886,8 @@ class FlashPage(QWidget):
         self._complete_note.setVisible(False)
         self._complete_note_software = ""
         self._complete_note_model = ""
+        self._complete_note_themes = False
+        self._appeal_themes = False
         w_layout.addWidget(self._complete_note)
 
         self._appeal = QWidget()
@@ -3467,7 +3469,12 @@ class FlashPage(QWidget):
             _apply_card_text(self._intro.headline)
             _apply_card_text(self._intro.subtitle)
         if hasattr(self, "_appeal_body"):
-            self._appeal_body.setText(tr("donate_completion_body"))
+            body = tr("donate_completion_body")
+            if not getattr(self, "_appeal_themes", False):
+                from ..config import install_power_on_steps
+
+                body = f"{body}\n\n{install_power_on_steps(model)}"
+            self._appeal_body.setText(body)
             _apply_card_text(self._appeal_body)
         if hasattr(self, "_coffee_btn"):
             self._coffee_btn.setText(tr("donate_completion_coffee"))
@@ -3484,6 +3491,11 @@ class FlashPage(QWidget):
         )
         from ..config import install_power_on_steps
 
+        if self._complete_note_themes:
+            # Power-on already happened before the themes were placed.
+            lines = [tr("donate_completion_themes_subtitle").format(model=model)]
+            self._complete_note.setText("\n".join(lines))
+            return
         installed = tr("donate_completion_subtitle").format(
             software=software, model=model
         )
@@ -3495,15 +3507,20 @@ class FlashPage(QWidget):
         lines.append(install_power_on_steps(model))
         self._complete_note.setText("\n".join(lines))
 
-    def show_completion_note(self, visible: bool, software: str = "", model: str = "") -> None:
+    def show_completion_note(
+        self, visible: bool, software: str = "", model: str = "", themes_installed: bool = False
+    ) -> None:
         """Explain the finished install when the donations appeal is hidden."""
+        self._complete_note_themes = bool(themes_installed)
         self._complete_note_software = str(software or "").strip()
         self._complete_note_model = str(model or "").strip()
         self._render_completion_note()
         self._complete_note.setVisible(bool(visible))
         self._notify_geometry_change()
 
-    def show_completion_appeal(self, visible: bool, callback=None, on_not_now=None) -> None:
+    def show_completion_appeal(
+        self, visible: bool, callback=None, on_not_now=None, themes_installed: bool = False
+    ) -> None:
         """Coffee note under a finished install. Hidden when donations are already off.
 
         The wording leads with what just happened — the software is installed
@@ -3513,10 +3530,11 @@ class FlashPage(QWidget):
         """
         self._appeal_callback = callback
         self._appeal_not_now = on_not_now
+        self._appeal_themes = bool(themes_installed)
         if not hasattr(self, "_appeal"):
             return
         if hasattr(self, "_intro"):
-            self._intro.set_keys(COMPLETION_KEYS)
+            self._intro.set_keys(THEMES_COMPLETION_KEYS if themes_installed else COMPLETION_KEYS)
         self._render_appeal_copy()
         self._appeal.setVisible(bool(visible))
         self._notify_geometry_change()
@@ -3626,16 +3644,20 @@ class FlashPage(QWidget):
             return False
         return not self.themes.transfer_running
 
-    def set_device_done(self, donations_shown: bool = False):
+    def set_device_done(self, donations_shown: bool | None = None):
         """Finish the install card. With donations shown, the donation message says it is complete.
 
         That message replaces the green check badge and the dismiss checkmark.
+        ``None`` keeps the donations state the install already set, so a later
+        finish call (e.g. the Rockbox themes stage) cannot bring the card back.
         """
         self.update_partition_progress("")
         self.dismiss_prompt_stop()
         self._complete = True
         self._failed = False
-        self._donations_shown = bool(donations_shown)
+        if donations_shown is not None:
+            self._donations_shown = bool(donations_shown)
+        donations_shown = getattr(self, "_donations_shown", False)
         self._warning.setVisible(False)
         # The donations appeal already says the install is complete, so the
         # progress card (100% and its check) is redundant and hidden.

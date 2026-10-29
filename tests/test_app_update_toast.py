@@ -41,7 +41,7 @@ def test_app_update_toast_precedence_over_device_update():
 
     # Initially neither toast is shown
     assert not page._app_update_prompt.isVisible()
-    assert not page._update_prompt.isVisible()
+    assert not any(t.isVisible() for t in page._model_toasts)
 
     # 1. Device update arrives
     device_updates = [{
@@ -51,7 +51,8 @@ def test_app_update_toast_precedence_over_device_update():
         "latest_release": {"name": "Rockbox v1.2"},
     }]
     page.show_update_offers(device_updates)
-    assert page._update_prompt.isVisible()
+    app.processEvents()  # layout shows new child toasts on the next loop pass
+    assert [t.isVisible() for t in page._model_toasts] == [True]
     assert not page._app_update_prompt.isVisible()
 
     # 2. App update arrives while device update is showing
@@ -59,13 +60,14 @@ def test_app_update_toast_precedence_over_device_update():
     app_info = UpdateInfo(tag="v3.2.0")
     page.show_app_update(app_info)
     assert page._app_update_prompt.isVisible()
-    assert not page._update_prompt.isVisible()  # Hidden by precedence
+    assert not any(t.isVisible() for t in page._model_toasts)  # Hidden by precedence
 
     # 3. Dismiss app update toast
     # Device update is shown in that spot again!
     page._app_update_prompt.findChild(QPushButton, "appUpdateToastClose").click()
+    app.processEvents()
     assert not page._app_update_prompt.isVisible()
-    assert page._update_prompt.isVisible()
+    assert [t.isVisible() for t in page._model_toasts] == [True]
     page.close()
 
 

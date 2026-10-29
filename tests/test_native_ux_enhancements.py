@@ -1230,7 +1230,8 @@ def test_pin_sp_flash_history_uses_extract_scatter_and_tool_da():
         assert Path(da_abs) == da.resolve()
         da_read, scatter_read, _history = sp_flash_gui.read_history_paths(sp_dir / "history.ini")
         assert os.path.normcase(scatter_read) == os.path.normcase(scatter_abs)
-        assert os.path.normcase(da_read) == os.path.normcase(da_abs)
+        # The DA entry is the bare file name; SP Flash Tool resolves it beside itself.
+        assert da_read == sp_flash_gui.DA_FILENAME
         assert not (sp_dir / scatter.name).is_file()
 
 
@@ -1547,7 +1548,7 @@ def test_history_ini_absolute_paths_before_gui_launch():
             assert Path(launched[-1][0]).name == exe_name
             da_read, scatter_read, _history = sp_flash_gui.read_history_paths(sp_dir / "history.ini")
             assert os.path.normcase(scatter_read) == os.path.normcase(scatter_abs)
-            assert os.path.normcase(da_read) == os.path.normcase(da_abs)
+            assert da_read == sp_flash_gui.DA_FILENAME
             assert captured["scatter_exists"] is True
             assert captured["da_exists"] is True
     finally:

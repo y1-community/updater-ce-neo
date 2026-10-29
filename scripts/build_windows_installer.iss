@@ -770,6 +770,35 @@ const
 var
   PriorDesktopShortcut: Boolean;
   DriverInstalled: Boolean;
+  SettingsBackupFile: String;
+
+{ The app keeps its settings in HKCU\Software\innioasis (QSettings). Removing an
+  older copy wipes that key, so an upgrade saves it here first and puts it back
+  once the new files are in place. }
+procedure BackupSettings;
+var
+  ResultCode: Integer;
+begin
+  SettingsBackupFile := ExpandConstant('{tmp}\updater-settings.reg');
+  DeleteFile(SettingsBackupFile);
+  if RegKeyExists(HKEY_CURRENT_USER, 'Software\innioasis') then
+    Exec(ExpandConstant('{sys}\reg.exe'),
+      'export "HKCU\Software\innioasis" "' + SettingsBackupFile + '" /y',
+      '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
+procedure RestoreSettings;
+var
+  ResultCode: Integer;
+begin
+  if (SettingsBackupFile <> '') and FileExists(SettingsBackupFile) then
+  begin
+    Exec(ExpandConstant('{sys}\reg.exe'),
+      'import "' + SettingsBackupFile + '"',
+      '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    DeleteFile(SettingsBackupFile);
+  end;
+end;
 
 function IsArm64: Boolean;
 begin
@@ -1341,6 +1370,8 @@ begin
     StopProcess('python.exe');
     StopProcess('pythonw.exe');
 
+    BackupSettings;
+
     ShowStep('StepRemovingOld');
     RemoveOldInstalls;
 
@@ -1355,6 +1386,7 @@ begin
   end
   else if CurStep = ssPostInstall then
   begin
+    RestoreSettings;
     InstallBundledDriver;
   end
   else if CurStep = ssDone then

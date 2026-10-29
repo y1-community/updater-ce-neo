@@ -31,6 +31,8 @@ PORTRAIT_DIAMETER = 56
 # the post-install appeal uses the completion wording.
 INTRO_KEYS = ("donate_headline", "donate_subtitle")
 COMPLETION_KEYS = ("donate_completion_headline", "donate_completion_subtitle")
+# Firmware plus themes pack: the power-on steps already ran before placement.
+THEMES_COMPLETION_KEYS = ("donate_completion_headline", "donate_completion_themes_subtitle")
 
 
 def _fill(text: str, **fields) -> str:

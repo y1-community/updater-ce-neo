@@ -2764,6 +2764,14 @@ _STRINGS: dict = {
         "de": "{software} ist auf deinem {model} installiert.",
         "ja": "{model} に {software} をインストールしました。",
     },
+    "donate_completion_themes_subtitle": {
+        "zh-CN": "我们已在你的 {model} 上安装了 Rockbox 和主题包。",
+        "en": "We've installed Rockbox and the themes pack on your {model}.",
+        "fr": "Rockbox et le pack de thèmes sont installés sur votre {model}.",
+        "es": "Rockbox y el paquete de temas están instalados en tu {model}.",
+        "de": "Rockbox und das Themenpaket sind auf deinem {model} installiert.",
+        "ja": "{model} に Rockbox とテーマパックをインストールしました。",
+    },
     "donate_completion_body": {
         "zh-CN": "更新程序 完全免费，没有广告，也不追踪你, , 它靠大家的小额捐助运行。如果它今天帮到了你，请我喝杯咖啡，就能让下载和服务器继续跑下去。",
         "en": "Updater CE is free, has no ads and no tracking, it runs on small donations from people like you. If it saved you a job today, buying me a coffee keeps the downloads and the servers running.",

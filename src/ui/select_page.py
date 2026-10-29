@@ -72,7 +72,6 @@ from .widgets import (
     InstallProgress,
     NoticeToast,
     UpdateModelToast,
-    UpdateToast,
 )
 from .dark import T, link_html, page_margins
 from .scrollbars import configure_scroll_area, make_transparent
@@ -762,13 +761,8 @@ class SelectPackagePage(QWidget):
         self._app_update_info = None
         layout.addWidget(self._app_update_prompt)
 
-        self._update_prompt = UpdateToast()
-        self._update_prompt.install_clicked.connect(self._on_toast_install)
-        self._update_prompt.close_clicked.connect(self._on_toast_close)
-        self._update_prompt.model_clicked.connect(self._on_toast_model)
         self._update_offers = []
         self._toast_session_mute = set()
-        layout.addWidget(self._update_prompt)
 
         # One toast per device with a newer release, stacked in this column.
         # The column is hidden while empty so it takes no height.
@@ -1476,9 +1470,6 @@ class SelectPackagePage(QWidget):
 
         # Device offers are one toast per model (see _sync_model_toasts); the
         # single combined note is no longer used for them.
-        prompt = getattr(self, "_update_prompt", None)
-        if prompt is not None:
-            prompt.set_offers([])
         self._sync_model_toasts(suppressed=app_active)
 
     def _sync_model_toasts(self, suppressed: bool = False) -> None:
@@ -1487,7 +1478,11 @@ class SelectPackagePage(QWidget):
         Stacked toasts change the page height, so the window is told to refit.
         """
         for toast in getattr(self, "_model_toasts", []):
+            # Hide and unparent now: deleteLater alone keeps the old toast on
+            # screen and in the layout until the event loop runs again.
+            toast.hide()
             self._model_toast_column.removeWidget(toast)
+            toast.setParent(None)
             toast.deleteLater()
         self._model_toasts = []
         if not suppressed:
@@ -1529,53 +1524,6 @@ class SelectPackagePage(QWidget):
             release=release,
             package=offer.get("package") or self._package_for_selection(),
         )
-
-    def _on_toast_install(self) -> None:
-        offers = []
-        prompt = getattr(self, "_update_prompt", None)
-        if prompt is not None and hasattr(prompt, "offers"):
-            offers = prompt.offers()
-        offer = offers[0] if len(offers) == 1 else {}
-        release = offer.get("release")
-        if not release:
-            return
-        self.start_install_for_release(
-            model=str(offer.get("model") or self.current_model()),
-            software_name=str(offer.get("software") or self.current_software()),
-            tag_name=str(offer.get("tag") or ""),
-            release=release,
-            package=offer.get("package") or self._package_for_selection(),
-        )
-
-    def _on_toast_close(self) -> None:
-        """Hide every offer on the note until the next launch.
-
-        This does not store a notify ceiling or a skipped release.
-        """
-        self._toast_session_mute = set(getattr(self, "_toast_session_mute", set()))
-        for offer in list(getattr(self, "_update_offers", None) or []):
-            self._toast_session_mute.add((
-                offer.get("model"),
-                offer.get("software"),
-                str(offer.get("tag") or ""),
-            ))
-        self._present_update_offers()
-
-    def _on_toast_model(self, offer) -> None:
-        """Select that model and focus its release. Does not start an install."""
-        if not isinstance(offer, dict):
-            return
-        self.navigate_to_package(
-            str(offer.get("model") or ""),
-            str(offer.get("software") or ""),
-            tag_name=str(offer.get("tag") or "") or None,
-        )
-        release = offer.get("release")
-        if not release:
-            return
-        target = self._firmware_target_for_release(release)
-        if target:
-            self._gui_explicit = target
 
     def _set_online_banner(self, key, count=0):
         self._online_banner_key = key
@@ -1702,8 +1650,6 @@ class SelectPackagePage(QWidget):
             self._local_rockbox_themes_cb.setText(tr("sel_local_rockbox_themes_option"))
         self._start_btn.setText(tr("sel_btn_start"))
         self._apply_online_banner()
-        if hasattr(self, "_update_prompt"):
-            self._update_prompt.retranslate()
         self._apply_local_banner()
         self._type_combo.setItemText(0, tr("sel_type_a"))
         self._type_combo.setItemText(1, tr("sel_type_b"))
@@ -1772,8 +1718,6 @@ class SelectPackagePage(QWidget):
                 label.setText(self._link_html(key, bold=bold))
         if hasattr(self, "_install_btn"):
             self._install_btn.setIcon(self._install_restore_icon())
-        if hasattr(self, "_update_prompt") and hasattr(self._update_prompt, "refresh_theme"):
-            self._update_prompt.refresh_theme()
         if hasattr(self, "_battery_toast") and hasattr(self._battery_toast, "refresh_theme"):
             self._battery_toast.refresh_theme()
         rel = getattr(self, "_current_selected_rel", None)
