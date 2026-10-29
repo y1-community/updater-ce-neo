@@ -5289,7 +5289,10 @@ class MainWindow(QMainWindow):
         if current == METHOD_SP:
             return METHOD_MTK
         if current == METHOD_MTK:
-            return METHOD_SP
+            # SP Flash Tool ships for x86/x86_64 Linux only.
+            from .. import linux_sp_flash
+
+            return METHOD_SP if linux_sp_flash.arch_supported() else ""
         return ""
 
     def _return_to_power_off_stage(

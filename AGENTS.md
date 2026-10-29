@@ -82,6 +82,13 @@
 - On Linux, never hardcode `libusb-1.0.so` in PyUSB loaders; end-user distros only ship `libusb-1.0.so.0`. Always search `libusb-1.0.so.0` first.
 - On macOS, `libusb-1.0.dylib` in `Contents/Frameworks/` must remain Universal 2 (`x86_64` + `arm64`).
 
+## Flashing back-end: recorded as WORKING
+- The SP Flash Tool and MTKclient flash paths, method selection and failover (`MainWindow._other_method`,
+  `_offer_backend_failover`), and the USB close/reset handling in `src/flash_service.py`, `src/mtk_api.py`
+  and `src/linux_sp_flash.py` are the user-confirmed working back-end: installs complete without bricking
+  devices when the connection is not interrupted.
+- Preserve this logic. Change it only when the user explicitly asks for a change to it.
+
 ## Rockbox themes/fonts stage: one owner for its state
 - `src/themes_journey.py` (`ThemesJourney`) owns the stage's decisions and state: transfer running,
   placement failed, power-on prompt pending, ADB adoption, multiple-players, the presence watcher,

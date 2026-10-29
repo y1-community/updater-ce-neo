@@ -501,13 +501,14 @@ def test_a_table_that_reads_back_differently_blocks_the_preloader(tmp_path, monk
     assert preloader.exists()
 
 
-def test_macos_port_close_never_issues_a_bus_wide_device_reset(monkeypatch):
-    """device.reset() on macOS resets every USB device; closing must not call it."""
+@pytest.mark.parametrize("platform", ["darwin", "linux"])
+def test_port_close_never_issues_a_bus_wide_device_reset(monkeypatch, platform):
+    """device.reset() on macOS and Linux resets the host's USB bus; closing must not call it."""
     from src import mtk_api
     from mtkclient.Library.Connection import usblib
 
     mtk_api._ensure_imports()
-    monkeypatch.setattr(mtk_api.sys, "platform", "darwin")
+    monkeypatch.setattr(mtk_api.sys, "platform", platform)
     monkeypatch.setattr(mtk_api.time, "sleep", lambda s: None)
 
     class _Ctx:

@@ -396,9 +396,11 @@ def test_wrong_model_never_falls_back_to_the_other_backend():
 def test_no_failover_without_a_second_backend(monkeypatch):
     from src.ui.main_window import MainWindow
     from src import paths
+    from src import linux_sp_flash
 
     monkeypatch.setattr(paths, "IS_WINDOWS", False)
     monkeypatch.setattr(paths, "IS_MAC", False)
+    monkeypatch.setattr(linux_sp_flash, "arch_supported", lambda: True)
     app = _app()
     window = MainWindow()
     try:
@@ -410,6 +412,66 @@ def test_no_failover_without_a_second_backend(monkeypatch):
         monkeypatch.setattr(paths, "IS_MAC", False)
         assert window._other_method("sp") == "mtk"
         assert window._other_method("mtk") == "sp"
+    finally:
+        window.close()
+        app.processEvents()
+
+
+def test_arm_linux_offers_no_sp_fallback(monkeypatch):
+    from src.ui.main_window import MainWindow
+    from src import paths
+    from src import linux_sp_flash
+
+    monkeypatch.setattr(paths, "IS_WINDOWS", False)
+    monkeypatch.setattr(paths, "IS_MAC", False)
+    monkeypatch.setattr(linux_sp_flash, "arch_supported", lambda: False)
+    app = _app()
+    window = MainWindow()
+    window.service.cancel_flash = lambda: None
+    window.service.stop_device_monitor = lambda: None
+    try:
+        window.show()
+        window._flash_method = "mtk"
+        assert window._other_method("mtk") == ""
+        assert window._offer_backend_failover("S_COM_PORT_OPEN_FAIL (1013)") is False
+        assert window._flash_method == "mtk"
+        assert window._power_off_prompt is False
+        assert window._fallback_attempted is False
+    finally:
+        window.close()
+        app.processEvents()
+
+
+def test_x86_64_linux_mtkclient_failure_offers_sp_after_power_off(monkeypatch):
+    from src import paths
+    from src import linux_sp_flash
+    from src.ui.main_window import MainWindow
+
+    monkeypatch.setattr(paths, "IS_WINDOWS", False)
+    monkeypatch.setattr(paths, "IS_MAC", False)
+    monkeypatch.setattr(linux_sp_flash, "arch_supported", lambda: True)
+    app = _app()
+    window = MainWindow()
+    calls = []
+    window.service.start_flash = lambda pkg, pre="", method="auto", **kw: calls.append(method)
+    window.service.start_device_monitor = lambda: None
+    window.service.cancel_flash = lambda: None
+    window.service.stop_device_monitor = lambda: None
+    window._ensure_elevated_for_install = lambda: True
+    try:
+        window.show()
+        window._package_path = "/fake/rom.zip"
+        window._package_name = "Rockbox (Y1)"
+        window._package_model = "Y1"
+        window._flash_method = "mtk"
+        window._flash_page.set_method("mtk")
+
+        window._handle_flash_failure("MTK_INIT_FAILED")
+        assert window._flash_method == "sp"
+        assert window._power_off_prompt is True
+        assert calls == [], "the SP Flash Tool run must wait for the power-off confirmation"
+        window._on_power_off_continue()
+        assert calls[-1] == "sp"
     finally:
         window.close()
         app.processEvents()
