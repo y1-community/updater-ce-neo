@@ -4412,6 +4412,7 @@ class MainWindow(QMainWindow):
             logger.debug("Could not inspect scatter platform in _begin_flash_flow: %s", e)
         da_file, auth_file = self._flash_inputs()
         self._saw_all_command_exec = False
+        self._completion_notified = False
         self._used_sp_backend = (backend_method(self._flash_method) == METHOD_SP)
         if hasattr(self, "_failure_grace_timer") and self._failure_grace_timer.isActive():
             self._failure_grace_timer.stop()
@@ -4592,7 +4593,6 @@ class MainWindow(QMainWindow):
                     "correcting premature failure/disconnection state to success stage."
                 )
                 self._install_failed = False
-                self._handle_flash_success()
                 return
 
         if any(marker in low for marker in _CACHE_MISSING_MARKERS):
@@ -4834,11 +4834,6 @@ class MainWindow(QMainWindow):
         self._elapsed_timer.stop()
         if hasattr(self, "_kill_process_timer") and self._kill_process_timer.isActive():
             self._kill_process_timer.stop()
-
-        if self._is_sp_complete_override():
-            self._append_log("Notice: Flash finished handler confirmed 'all command exec', classing as success.")
-            ok = True
-            error_code = ""
 
         if not ok:
             self.themes.finish()
@@ -5107,6 +5102,9 @@ class MainWindow(QMainWindow):
 
     def _notify_task_complete(self, software: str, model: str) -> None:
         """Bring the window forward and post a native notification when a task finishes."""
+        if getattr(self, "_completion_notified", False):
+            return
+        self._completion_notified = True
         try:
             from ..notifications import bring_window_to_front, show_completion_notification
             title = tr("notify_install_complete_title")
@@ -6794,6 +6792,7 @@ class MainWindow(QMainWindow):
             # The note stays on Select Software. It does not change the
             # catalogue or remember a ceiling; the close button is session-only.
             self._select_page.show_update_offers(updates)
+            self._notify_device_updates(updates)
         elif manual:
             tracked = device_tracking.get_all_device_installs(self.settings)
             if tracked:

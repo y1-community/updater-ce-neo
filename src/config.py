@@ -139,13 +139,14 @@ UPDATE_TARGET_ASSETS = {
     "win32": ("installer.exe", "updaterce-setup.exe"),
     "darwin": ("innioasis.updater.for.mac.dmg",),
     "linux": (
-        "updaterce.appimage",
+        "UpdaterCE.appimage",
+        "UpdaterCE-arm64.appimage",
+        "UpdaterCE-Linux-Portable.tar.gz",
+        "UpdaterCE-Linux-Portable-arm64.tar.gz",
+        "UpdaterCE-Linux-Portable.zip",
+        "UpdaterCE-Linux-Portable-arm64.zip",
         "mediatek installer.appimage",
-        "updaterce.tar.gz",
         "mediatek installer.tar.gz",
-        "updaterce-linux-portable.zip",
-        "updater_ce_linux_portable.tar.gz",
-        "updater_ce_linux_portable.zip",
     ),
 }
 

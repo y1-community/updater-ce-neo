@@ -576,14 +576,19 @@ cp -f "$TARBALL_VERSIONED" "$TARBALL_LATEST"
 )
 # Stable aliases required by the end-user download page and run_linux.sh.
 if [ "$BRAND_SLUG" = "InnioasisUpdater" ]; then
-    cp -f "$OUTPUT_VERSIONED" "$DIST_DIR/UpdaterCE.appimage"
-    cp -f "$OUTPUT_VERSIONED" "$DIST_DIR/UpdaterCE.AppImage"
-    cp -f "$TARBALL_VERSIONED" "$DIST_DIR/UpdaterCE-${ARCH}.tar.gz"
-    cp -f "$TARBALL_VERSIONED" "$DIST_DIR/UpdaterCE.tar.gz"
+    # Stable names from docs/RELEASE_FILES.md: x86-64 is untagged, arm64 carries -arm64.
+    case "$ARCH" in
+        aarch64|arm64) ARM_SUFFIX="-arm64" ;;
+        *) ARM_SUFFIX="" ;;
+    esac
+    APPIMAGE_STABLE="$DIST_DIR/UpdaterCE${ARM_SUFFIX}.appimage"
+    TARBALL_STABLE="$DIST_DIR/UpdaterCE-Linux-Portable${ARM_SUFFIX}.tar.gz"
+    ZIP_STABLE="$DIST_DIR/UpdaterCE-Linux-Portable${ARM_SUFFIX}.zip"
+    cp -f "$OUTPUT_VERSIONED" "$APPIMAGE_STABLE"
+    cp -f "$TARBALL_VERSIONED" "$TARBALL_STABLE"
     install -m 0755 run_linux.sh "$DIST_DIR/run_linux.sh"
-    sha256sum "$DIST_DIR/UpdaterCE.appimage" > "$DIST_DIR/UpdaterCE.appimage.sha256"
-    sha256sum "$DIST_DIR/UpdaterCE.AppImage" > "$DIST_DIR/UpdaterCE.AppImage.sha256"
-    sha256sum "$DIST_DIR/UpdaterCE.tar.gz" > "$DIST_DIR/UpdaterCE.tar.gz.sha256"
+    sha256sum "$APPIMAGE_STABLE" > "$APPIMAGE_STABLE.sha256"
+    sha256sum "$TARBALL_STABLE" > "$TARBALL_STABLE.sha256"
     sha256sum "$DIST_DIR/run_linux.sh" > "$DIST_DIR/run_linux.sh.sha256"
 elif [ "$BRAND_SLUG" = "MediaTekInstaller" ]; then
     cp -f "$OUTPUT_VERSIONED" "$DIST_DIR/MediaTek Installer.appimage"
@@ -623,8 +628,8 @@ fi
     sha256sum "$(basename "$ZIP_VERSIONED")" > "$(basename "$ZIP_VERSIONED").sha256"
 )
 if [ "$BRAND_SLUG" = "InnioasisUpdater" ]; then
-    cp -f "$ZIP_VERSIONED" "$DIST_DIR/UpdaterCE-Linux-Portable.zip"
-    sha256sum "$DIST_DIR/UpdaterCE-Linux-Portable.zip" > "$DIST_DIR/UpdaterCE-Linux-Portable.zip.sha256"
+    cp -f "$ZIP_VERSIONED" "$ZIP_STABLE"
+    sha256sum "$ZIP_STABLE" > "$ZIP_STABLE.sha256"
 fi
 
 APPIMAGE_SIZE=$(du -sh "$OUTPUT_VERSIONED" 2>/dev/null | cut -f1 || echo "unknown")
@@ -642,9 +647,9 @@ echo "  Tarball Archive:  $TARBALL_VERSIONED ($TARBALL_SIZE)"
 echo "  Portable ZIP:     $ZIP_VERSIONED ($ZIP_SIZE)"
 echo "  Checksum File:    $OUTPUT_VERSIONED.sha256"
 if [ "$BRAND_SLUG" = "InnioasisUpdater" ]; then
-    echo "  Stable downloads: $DIST_DIR/UpdaterCE.appimage"
-    echo "                    $DIST_DIR/UpdaterCE.tar.gz"
-    echo "                    $DIST_DIR/UpdaterCE-Linux-Portable.zip"
+    echo "  Stable downloads: $APPIMAGE_STABLE"
+    echo "                    $TARBALL_STABLE"
+    echo "                    $ZIP_STABLE"
 else
     echo "  Stable downloads: $DIST_DIR/MediaTek Installer.appimage"
     echo "                    $DIST_DIR/MediaTek Installer.tar.gz"

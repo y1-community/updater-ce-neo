@@ -147,11 +147,12 @@ def test_main_window_catches_and_corrects_failure_on_all_command_exec():
         win._install_failed = True
         win.sm.force_state(FlashState.S5_USB_DISCONNECTED)
 
-        # When "all command exec" backend line arrives, it must correct itself
+        # The console line only records completion; the worker's final result
+        # decides success, so the window must not jump to the success state.
         win._handle_backend_line("[SP] All command exec done!")
         assert win._saw_all_command_exec is True
         assert win._install_failed is False
-        assert win.sm.state is FlashState.S5_COMPLETE
+        assert win.sm.state is not FlashState.S5_COMPLETE
     finally:
         win._force_quit = True
         win.close()

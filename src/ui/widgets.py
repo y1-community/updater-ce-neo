@@ -939,6 +939,82 @@ class UpdateToast(QFrame):
         _paint_bento_surface(self, event)
 
 
+class UpdateModelToast(QFrame):
+    """One toast per device with a newer release, in the battery toast's style.
+
+    A segmented pair on the right: X hides the toast until the next launch,
+    the check button installs the release now.
+    """
+
+    install_clicked = Signal(object)
+    later_clicked = Signal(object)
+
+    def __init__(self, offer, parent=None):
+        super().__init__(parent)
+        self.setObjectName("updateModelToast")
+        self.setProperty("cssClass", "card")
+        self.setAutoFillBackground(False)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.setMinimumHeight(38)
+        self._offer = dict(offer or {})
+        row = QHBoxLayout(self)
+        row.setContentsMargins(14, 8, 12, 8)
+        row.setSpacing(10)
+
+        self._label = QLabel("", self)
+        self._label.setWordWrap(True)
+        self._label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        font = self._label.font()
+        font.setPixelSize(12)
+        font.setWeight(QFont.Weight.Medium)
+        self._label.setFont(font)
+        _apply_banner_text(self._label)
+        row.addWidget(self._label, 1, Qt.AlignVCenter)
+
+        from .flash_page import _RoundNextButton
+
+        self._later = _RoundNextButton(symbol="cancel", accent=False)
+        self._later.setObjectName("updateModelLater")
+        self._later.clicked.connect(lambda: self.later_clicked.emit(self._offer))
+        self._install = _RoundNextButton(symbol="complete", accent=True)
+        self._install.setObjectName("updateModelInstall")
+        self._install.clicked.connect(lambda: self.install_clicked.emit(self._offer))
+        self._later.set_segmented_pair(companion=self._install, is_leading=True)
+        self._install.set_segmented_pair(companion=self._later, is_leading=False)
+        row.addWidget(self._later, 0, Qt.AlignVCenter)
+        row.addWidget(self._install, 0, Qt.AlignVCenter)
+        self._apply_copy()
+
+    def offer(self) -> dict:
+        return dict(self._offer)
+
+    def text(self) -> str:
+        return self._label.text()
+
+    def _apply_copy(self) -> None:
+        self._label.setText(tr("sel_update_available").format(
+            software=self._offer.get("software") or "",
+            model=self._offer.get("model") or "",
+        ))
+        _apply_banner_text(self._label)
+        self._later.setToolTip(tr("toast_dismiss"))
+        self._install.setToolTip(tr("toast_install"))
+
+    def retranslate(self) -> None:
+        self._apply_copy()
+
+    def refresh_theme(self) -> None:
+        _apply_banner_text(self._label)
+        for button in (self._later, self._install):
+            if hasattr(button, "refresh_theme"):
+                button.refresh_theme()
+        self.update()
+
+    def paintEvent(self, event):  # noqa: N802 (Qt naming)
+        """Paint the update toast with the battery toast's background material."""
+        _paint_bento_surface(self, event)
+
+
 class AppUpdateToast(QFrame):
     """One-line notification for application updates.
 

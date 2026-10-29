@@ -1,67 +1,34 @@
 # Release file names
 
-These names are read by three things:
+Every GitHub release is named by version tag. The app and the Linux installer
+read these exact file names to decide what to offer each machine.
 
-- the in-app updater (`src/updates.py`, `src/config.py`),
-- the first-time Linux installer (`run_linux.sh`),
-- the download page on innioasis.app.
+## Staggered releases
 
-Match them exactly, or updates and first-time installs will not find the file.
+A newer release does not have to ship files for every platform. The update
+check and `run_linux.sh` walk the releases newest first and use the first
+release that has a file for the machine's platform and architecture. A machine
+with no matching file in the newest release stays on the previous one.
 
-Asset matching is case-insensitive. Where a release has several candidates, the
-updater ranks arch-tagged names by token: `universal`, `x86_64`, `amd64`,
-`arm64`, `aarch64`, in that order. An untagged name ranks below all of them.
+## Approved names
 
-## Linux (`y1-community/updater-ce-neo`)
+| Platform | Architecture | File |
+|---|---|---|
+| Windows | x64 | `installer.exe` (also `UpdaterCE-Windows-Portable.zip`) |
+| macOS | Universal 2 | `Innioasis.Updater.for.Mac.dmg` (also `Innioasis.Updater.for.Mac.zip`, the app copy used by the firmware packer) |
+| Linux | x86-64 | `UpdaterCE.appimage`, `UpdaterCE-Linux-Portable.tar.gz`, `UpdaterCE-Linux-Portable.zip` |
+| Linux | arm64 | `UpdaterCE-arm64.appimage`, `UpdaterCE-Linux-Portable-arm64.tar.gz`, `UpdaterCE-Linux-Portable-arm64.zip` |
 
-| Purpose | File name | Architecture |
-| --- | --- | --- |
-| AppImage, first install and auto-update | `UpdaterCE.appimage` | x86-64 (Intel/AMD) |
-| AppImage, first install and auto-update | `UpdaterCE-arm64.appimage` | arm64 (aarch64) |
-| Portable archive, first install (no FUSE needed) | `UpdaterCE.tar.gz` | x86-64 |
-| Portable archive | `UpdaterCE-arm64.tar.gz` | arm64 (aarch64) |
-| Installer script | `run_linux.sh` | any |
+x86-64 names carry no architecture tag. arm64 names carry `-arm64`.
+Each file needs a matching `.sha256`.
 
-Also upload a `.sha256` file next to each download.
+The Linux installer script `run_linux.sh` is published alongside these files.
 
-### Known problems
+## Rules
 
-These are not fixed yet. Fix them before the next Linux release.
-
-1. **Exact-name match ignores arch (updater bug).** `updates.py` step 1 returns
-   an exact match for `updaterce.appimage` before it looks at arch tags. If a
-   release carries both `UpdaterCE.appimage` (x86-64) and
-   `UpdaterCE-arm64.appimage`, an arm64 install is offered the x86-64 file.
-   Until the code is fixed, do not publish an untagged `UpdaterCE.appimage`
-   together with an arm64 AppImage in the same release.
-2. **arm64 tar.gz name mismatch (installer script).** `run_linux.sh` hard-codes
-   `UpdaterCE-aarch64.tar.gz` as the arm64 fallback URL. This document uses
-   `UpdaterCE-arm64.tar.gz`. The script's search regex accepts both, but the
-   fallback URL only works with `-aarch64`. Pick one name and make the script
-   match it.
-3. **Build script overwrites the stable aliases.** `build_appimage.sh` copies
-   `UpdaterCE.appimage` and `UpdaterCE.tar.gz` for every `--arch`, so an arm64
-   build run replaces the x86-64 aliases. Build the arm64 files on their own
-   and rename them to `UpdaterCE-arm64.*` before upload.
-
-### Compatibility
-
-- The x86-64 AppImage must run on older CPUs such as Core 2 Duo under modern
-  distributions. Build it with an x86-64 baseline, with no newer-CPU-only
-  flags, and test it on a Core 2 Duo-class machine before release. This is not
-  yet verified.
-
-## Windows
-
-The updater accepts `installer.exe`, `updaterce-setup.exe`, or any `.exe`
-whose name starts with `installer` or contains `setup`. Use
-`UpdaterCE-Setup.exe` or `updaterce-setup.exe`.
-
-## macOS
-
-| Purpose | File name |
-| --- | --- |
-| Disk image | `innioasis.updater.for.mac.dmg` (case-insensitive) |
-
-The updater only offers a `.dmg` on macOS. Use the same name for Apple Silicon
-and Intel, or ship a universal2 build under this one name.
+- An arm64 build is offered only to arm64 machines. An x86-64 build is offered
+  only to x86-64 machines. Untagged Linux names are x86-64.
+- The AppImage is the preferred Linux download. The portable `.tar.gz` is used
+  when AppImage is not wanted (no FUSE).
+- The x86-64 build must run on older CPUs such as the Core 2 Duo. This has not
+  been tested yet.

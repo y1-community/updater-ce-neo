@@ -64,6 +64,30 @@ def _match_ext(name: str, exts) -> str:
     return ""
 
 
+def _host_is_arm64() -> bool:
+    import platform
+
+    return platform.machine().lower() in ("arm64", "aarch64")
+
+
+def _arch_ok(name: str, platform: str) -> bool:
+    """False when an arch-tagged asset does not match this machine.
+
+    An arm64 build is only offered to arm64 machines and an x86-64 build only
+    to x86-64 machines. Untagged names (and other platforms) are unaffected.
+    """
+    if platform != "linux":
+        return True
+    arm_tagged = "arm64" in name or "aarch64" in name
+    x86_tagged = "x86_64" in name or "amd64" in name
+    if arm_tagged:
+        return _host_is_arm64()
+    if x86_tagged:
+        return not _host_is_arm64()
+    # Untagged Linux names (UpdaterCE.appimage, UpdaterCE-Linux-Portable.tar.gz) are the x86-64 builds.
+    return not _host_is_arm64()
+
+
 def _is_linux_asset(name: str) -> bool:
     """False for names that belong to another OS (a Windows portable zip must
     never be offered to Linux, even when it contains the word "updater")."""
@@ -76,7 +100,7 @@ def pick_platform_asset(assets, platform=None):
     Target release asset names per platform:
     - macOS (darwin): Innioasis.Updater.for.Mac.dmg
     - Windows (win32): installer.exe
-    - Linux (linux): UpdaterCE.appimage, UpdaterCE.tar.gz, UpdaterCE-Linux-Portable.zip, run_linux.sh, updater_ce_linux_portable.tar.gz/.zip
+    - Linux (linux): UpdaterCE.appimage, UpdaterCE-Linux-Portable.tar.gz / .zip (arm64 names carry -arm64)
 
     If these specific target files exist, returns that asset. If not found, falls back
     to matching extensions/architecture priority with strict platform exclusions.
@@ -89,12 +113,14 @@ def pick_platform_asset(assets, platform=None):
     if isinstance(targets, str):
         targets = (targets,)
 
-    # 1. Exact or canonical name matches in priority order
+    # 1. Exact or canonical name matches in priority order. A target that
+    #    carries an architecture tag only matches a machine of that architecture,
+    #    so an arm64 install is never offered the x86-64 file of the same release.
     for target in targets:
         target_lower = target.lower()
         for a in assets:
             name = (a.get("name") or "").lower()
-            if name == target_lower:
+            if name == target_lower and _arch_ok(name, platform):
                 return a
 
     # 2. Relaxed target prefix/suffix match (e.g. installer*.exe or updaterce*.appimage)
@@ -149,7 +175,7 @@ def asset_hint(platform=None) -> str:
     return {
         "win32": "Windows installer (installer.exe)",
         "darwin": "macOS disk image (Innioasis.Updater.for.Mac.dmg)",
-        "linux": "Linux package (UpdaterCE.appimage / UpdaterCE.tar.gz)",
+        "linux": "Linux package (UpdaterCE.appimage / UpdaterCE-Linux-Portable.tar.gz)",
     }.get(platform, "release asset")
 
 

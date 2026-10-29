@@ -71,6 +71,7 @@ from .widgets import (
     CurrentPageStack,
     InstallProgress,
     NoticeToast,
+    UpdateModelToast,
     UpdateToast,
 )
 from .dark import T, link_html, page_margins
@@ -769,6 +770,14 @@ class SelectPackagePage(QWidget):
         self._toast_session_mute = set()
         layout.addWidget(self._update_prompt)
 
+        # One toast per device with a newer release, stacked in this column.
+        # The column is hidden while empty so it takes no height.
+        self._model_toasts = []
+        self._model_toast_column = QVBoxLayout()
+        self._model_toast_column.setSpacing(6)
+        self._model_toast_column.setContentsMargins(0, 0, 0, 0)
+        layout.addLayout(self._model_toast_column)
+
         self._notice_prompt = NoticeToast()
         layout.addWidget(self._notice_prompt)
 
@@ -1465,19 +1474,61 @@ class SelectPackagePage(QWidget):
         app_prompt = getattr(self, "_app_update_prompt", None)
         app_active = bool(app_prompt and app_prompt.isVisible() and self._app_update_info and getattr(self._app_update_info, "tag", None))
 
+        # Device offers are one toast per model (see _sync_model_toasts); the
+        # single combined note is no longer used for them.
         prompt = getattr(self, "_update_prompt", None)
-        if prompt is None:
-            return
-        if app_active:
-            prompt.setVisible(False)
-            return
+        if prompt is not None:
+            prompt.set_offers([])
+        self._sync_model_toasts(suppressed=app_active)
 
-        muted = getattr(self, "_toast_session_mute", set())
-        visible = [
-            offer for offer in (getattr(self, "_update_offers", None) or [])
-            if (offer.get("model"), offer.get("software"), str(offer.get("tag") or "")) not in muted
-        ]
-        prompt.set_offers(visible)
+    def _sync_model_toasts(self, suppressed: bool = False) -> None:
+        """Rebuild one toast per device with a newer release that is not muted.
+
+        Stacked toasts change the page height, so the window is told to refit.
+        """
+        for toast in getattr(self, "_model_toasts", []):
+            self._model_toast_column.removeWidget(toast)
+            toast.deleteLater()
+        self._model_toasts = []
+        if not suppressed:
+            muted = getattr(self, "_toast_session_mute", set())
+            for offer in getattr(self, "_update_offers", None) or []:
+                key = (offer.get("model"), offer.get("software"), str(offer.get("tag") or ""))
+                if key in muted:
+                    continue
+                toast = UpdateModelToast(offer, self)
+                toast.install_clicked.connect(self._on_model_toast_install)
+                toast.later_clicked.connect(self._on_model_toast_later)
+                self._model_toast_column.addWidget(toast)
+                self._model_toasts.append(toast)
+        self.content_size_changed.emit()
+
+    def _on_model_toast_later(self, offer) -> None:
+        """X on one device toast: hide that offer until the next launch."""
+        if not isinstance(offer, dict):
+            return
+        self._toast_session_mute = set(getattr(self, "_toast_session_mute", set()))
+        self._toast_session_mute.add((
+            offer.get("model"),
+            offer.get("software"),
+            str(offer.get("tag") or ""),
+        ))
+        self._present_update_offers()
+
+    def _on_model_toast_install(self, offer) -> None:
+        """Check on one device toast: install that device's release now."""
+        if not isinstance(offer, dict):
+            return
+        release = offer.get("release")
+        if not release:
+            return
+        self.start_install_for_release(
+            model=str(offer.get("model") or self.current_model()),
+            software_name=str(offer.get("software") or self.current_software()),
+            tag_name=str(offer.get("tag") or ""),
+            release=release,
+            package=offer.get("package") or self._package_for_selection(),
+        )
 
     def _on_toast_install(self) -> None:
         offers = []

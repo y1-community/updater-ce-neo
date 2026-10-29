@@ -2371,6 +2371,8 @@ class FlashPage(QWidget):
     def show_flashing(self):
         if hasattr(self, "_complete_note"):
             self._complete_note.setVisible(False)
+        if hasattr(self, "_progress_card") and not getattr(self, "_donations_shown", False):
+            self._progress_card.setVisible(True)
         if getattr(self, "_wait_copy", "") in ("connect", "please_wait", "please_wait_connecting"):
             self._wait_copy = "stage"
             if hasattr(self, "_wait_prompt_label"):
@@ -3432,6 +3434,12 @@ class FlashPage(QWidget):
     def refresh_theme(self):
         """Called when system theme or accent changes."""
         self._update_paperclip_hint()
+        if hasattr(self, "_appeal_dont"):
+            self._appeal_dont.setText(self._dont_ask_html())
+        if hasattr(self, "_theme_recover_link"):
+            self._theme_recover_link.setText(
+                _themed_link("recover", tr("rockbox_recover_troubleshoot"))
+            )
 
     def _dont_ask_html(self) -> str:
         return _themed_link("dont-ask", tr("donate_dont_ask_link"))
@@ -3629,6 +3637,10 @@ class FlashPage(QWidget):
         self._failed = False
         self._donations_shown = bool(donations_shown)
         self._warning.setVisible(False)
+        # The donations appeal already says the install is complete, so the
+        # progress card (100% and its check) is redundant and hidden.
+        if hasattr(self, "_progress_card"):
+            self._progress_card.setVisible(not donations_shown)
         if hasattr(self, "_cancel_btn"):
             self._cancel_btn.setVisible(True)
             self._cancel_btn.setEnabled(False)

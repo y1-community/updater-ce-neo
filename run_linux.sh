@@ -27,7 +27,9 @@
 set -euo pipefail
 
 REPO="y1-community/updater-ce-neo"
-LATEST_API="https://api.github.com/repos/${REPO}/releases/latest"
+# Newest first. The first release that has a package for this architecture is
+# installed, so a staggered release that is not yet for Linux is skipped.
+RELEASES_API="https://api.github.com/repos/${REPO}/releases?per_page=30"
 
 APP_FOLDER="InnioasisUpdater"
 APP_EXE="InnioasisUpdater"
@@ -199,7 +201,7 @@ uninstall() {
 fetch_asset_url() {
     local json="$1" arch_re
     case "$ARCH" in
-        x86_64|amd64) arch_re='(x86_64|amd64)' ;;
+        x86_64|amd64) arch_re='^(?!.*(aarch64|arm64))' ;;
         aarch64|arm64) arch_re='(aarch64|arm64)' ;;
         *) arch_re="$(printf '%s' "$ARCH" | sed 's/[.[\*^$]/\\&/g')" ;;
     esac
@@ -207,23 +209,25 @@ fetch_asset_url() {
     printf '%s' "$json" | python3 -c '
 import json, re, sys
 try:
-    data = json.load(sys.stdin)
+    releases = json.load(sys.stdin)
 except Exception:
     sys.exit(1)
-assets = data.get("assets") or []
+if isinstance(releases, dict):
+    releases = [releases]
 pattern = re.compile(sys.argv[1])
-# Prefer the portable archive for this architecture, then the generic stable alias.
-for wanted in ("UpdaterCE", "InnioasisUpdater"):
-    for asset in assets:
-        name = asset.get("name") or ""
-        if name.startswith(wanted) and name.lower().endswith(".tar.gz") and pattern.search(name):
-            print(asset.get("browser_download_url") or "")
-            sys.exit(0)
-for asset in assets:
-    name = asset.get("name") or ""
-    if name == "UpdaterCE.tar.gz":
-        print(asset.get("browser_download_url") or "")
-        sys.exit(0)
+# Newest release first. Within a release, prefer the portable archive for this
+# architecture, then the generic stable alias. Releases without a matching
+# package are skipped, so a staggered release never reaches the wrong machine.
+for release in releases:
+    if release.get("draft") or release.get("prerelease"):
+        continue
+    assets = release.get("assets") or []
+    for wanted in ("UpdaterCE", "InnioasisUpdater"):
+        for asset in assets:
+            name = asset.get("name") or ""
+            if name.startswith(wanted) and name.lower().endswith(".tar.gz") and pattern.search(name):
+                print(asset.get("browser_download_url") or "")
+                sys.exit(0)
 sys.exit(1)
 ' "$arch_re" 2>/dev/null || true
 }
@@ -234,23 +238,15 @@ download_latest() {
     command -v curl >/dev/null 2>&1 || command -v wget >/dev/null 2>&1 ||
         die "curl or wget is required to download $DISPLAY_NAME"
 
-    log "Looking up the newest $DISPLAY_NAME release"
+    log "Looking up the newest $DISPLAY_NAME release for $ARCH"
     if command -v curl >/dev/null 2>&1; then
-        json="$(curl -fsSL "$LATEST_API")" || die "Could not reach the GitHub releases API"
+        json="$(curl -fsSL "$RELEASES_API")" || die "Could not reach the GitHub releases API"
     else
-        json="$(wget -qO- "$LATEST_API")" || die "Could not reach the GitHub releases API"
+        json="$(wget -qO- "$RELEASES_API")" || die "Could not reach the GitHub releases API"
     fi
 
     url="$(fetch_asset_url "$json")"
-    if [ -z "$url" ]; then
-        # A stable fallback is published by every x86_64 Linux build.
-        case "$ARCH" in
-            x86_64|amd64) url="https://github.com/${REPO}/releases/latest/download/UpdaterCE.tar.gz" ;;
-            aarch64|arm64) url="https://github.com/${REPO}/releases/latest/download/UpdaterCE-aarch64.tar.gz" ;;
-            *) die "The latest release has no UpdaterCE portable archive for $ARCH" ;;
-        esac
-        warn "No matching asset in the release listing; trying $url"
-    fi
+    [ -n "$url" ] || die "No recent $DISPLAY_NAME release has a portable archive for $ARCH"
 
     name="$(basename "$url")"
     log "Downloading $name"

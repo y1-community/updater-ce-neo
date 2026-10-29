@@ -2067,6 +2067,8 @@ class SettingsPage(QWidget):
         """Re-fetch theme-colored icons after a system appearance change."""
         if hasattr(self, "_clear_cache_btn"):
             self._clear_cache_btn.setIcon(get_symbol_icon("trash", 14, color=T().fg))
+        if hasattr(self, "_dismiss_donations_link"):
+            self._dismiss_donations_link.setText(self._donations_dismiss_html())
         for name in ("discord", "reddit"):
             button = getattr(self, f"_settings_{name}_btn", None)
             if button is not None:
