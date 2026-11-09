@@ -236,6 +236,23 @@ def _find_linux_browser() -> Optional[str]:
 
 
 def open_browser(url: str, new_window: bool = True) -> bool:
+
+    # The donation interstitial paints in the visitor's accent before it
+    # forwards to Ko-fi/BMAC/Boosty. Carry the desktop accent and the donation
+    # choice so the site stores them, the same way the site-to-site handoff
+    # works; the page strips them from the address bar afterwards.
+    if "innioasis.app/donate.html" in url:
+        try:
+            from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
+            parts = urlsplit(url)
+            query = dict(parse_qsl(parts.query, keep_blank_values=True))
+            accent = _native_accent_hex()
+            if accent:
+                query.setdefault("accent", accent)
+            query.setdefault("donations", "true")
+            url = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
+        except Exception:
+            pass
     """Open a URL in an external browser, prioritizing a new focused window.
 
     Ensures that when users click links (e.g. Credits / Thanks, donation links,
