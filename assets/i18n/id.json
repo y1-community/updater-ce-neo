@@ -139,12 +139,7 @@
  "settings_filter_old_rockbox": "Tampilkan Rakitan Rockbox Lama",
  "settings_filter_nightly": "Tampilkan Rilis Pengembang Malam Hari",
  "settings_filter_240p": "Rilisan Rockbox 240p",
- "settings_240p_tip": "Menampilkan build yang zip ROM-nya merupakan varian 240p (rom…_240p.zip). Versi 240p tidak dapat digunakan pada Y1 yang dibeli baru setelah Mei 2026, atau pada Y1 yang disertakan dengan Perangkat Lunak Asli 3.0.7 atau lebih baru. Para pemain tersebut juga tidak dapat menggunakan versi Rockbox lama, jadi Tampilkan Versi Rockbox Lama diaktifkan dengan itu.",
- "settings_240p_warn_body": "Versi 240p tidak dapat digunakan pada Y1 yang dibeli baru setelah Mei 2026, atau pada Y1 yang disertakan dengan Perangkat Lunak Asli 3.0.7 atau lebih baru. Hanya instal satu di Y1 yang lebih lama.\n\nPara pemain tersebut juga tidak dapat menggunakan build Rockbox yang lebih lama, jadi build tersebut juga terdaftar.\n\nApakah Anda yakin ingin menampilkan rilis Rockbox 240p?",
- "sel_240p_warning": "Ini adalah versi 240p. Ini tidak dapat digunakan pada Y1 yang dibeli baru setelah Mei 2026, atau pada Y1 yang dilengkapi Perangkat Lunak Asli 3.0.7 atau lebih baru.",
- "link_240p_body": "Tautan yang Anda buka adalah untuk versi 240p. Versi 240p tidak dapat digunakan pada Y1 yang dibeli baru setelah Mei 2026, atau pada Y1 yang disertakan dengan Perangkat Lunak Asli 3.0.7 atau lebih baru, jadi build tersebut disembunyikan hingga Anda mengaktifkannya.\n\nApakah Anda yakin ingin menampilkan rilis Rockbox 240p?",
- "link_busy": "Selesaikan instalasi saat ini, lalu buka kembali tautannya.",
- "link_not_listed": "Perangkat lunak dalam tautan tersebut belum dirilis untuk pemutar ini.",
+ "settings_240p_tip": "Menampilkan build yang zip ROM-nya merupakan varian 240p (rom…_240p.zip). Build 240p tidak kompatibel dengan unit Y1 di Innioasis OS di bawah 3.0.7, jadi Show Old Rockbox Builds diaktifkan dengannya.",
  "settings_old_rockbox_warn_title": "Peringatan Kompatibilitas Rockbox",
  "settings_old_rockbox_warn_body": "Rilis Rockbox-Y1 sebelum 0.5 tidak kompatibel dengan unit Y1 yang dijual setelah Maret 2026 dengan Innioasis OS 3.0.7 pra-instal.\n\nMem-flash versi lama pada perangkat ini akan mencegah booting.\n\nApakah Anda yakin ingin menampilkan versi Rockbox lama?",
  "sel_refresh": "Menyegarkan",
@@ -931,9 +926,6 @@
  "rockbox_wizard_done_desc": "Anda sekarang dapat memutuskan sambungan pemutar dengan aman dan memilih tema di Rockbox (Pengaturan > Pengaturan Tema).",
  "sel_local_rockbox_themes_option": "Instal Tema Rockbox 360p + Fontpack",
  "rockbox_stage_installing": "Memasang Tema & Font Rockbox...",
- "rockbox_cleanup_step": "Menghapus pengaturan Rockbox lama...",
- "rockbox_cleanup_deleting": "Menghapus folder .rockbox dari pemutar...",
- "rockbox_cleanup_failed_note": "Perangkat lunak baru Anda telah diinstal, tetapi folder .rockbox lama tidak dapat dihapus. Hapus folder .rockbox pada pemutar dengan tangan jika Anda ingin awal yang bersih.",
  "rockbox_stage_waiting_adb_fmt": "Mencari pemain melalui ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Lebih dari satu pemain terhubung. Putuskan sambungan yang lain dan biarkan hanya satu yang diinstal.",
  "rockbox_stage_pushing": "Pemain terdeteksi. Menempatkan tema & font komunitas...",
@@ -1033,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Satu kopi kira-kira mencakup bandwidth unduhan. Hal ini membuat perbaikan berikutnya tetap dapat dijangkau.",
  "donate_family_appeal_expected": "Ryan dan pasangannya sedang menantikan bayi. Sumbangan untuk biaya operasional proyek dan keluarga baru kami sangat kami hargai.",
  "donate_family_appeal_new_arrival": "Ada pendatang baru dalam perjalanan ke rumah Ryan. Setiap donasi untuk server dan keluarga kami yang terus bertambah sangat berarti.",
- "donate_family_appeal_nursery": "Ryan dan rekannya sedang bersiap untuk anak mereka. Jika alat ini bermanfaat, donasi untuk biaya operasional dan pertumbuhan keluarga kami akan membantu lebih dari yang Anda tahu."
+ "donate_family_appeal_nursery": "Ryan dan rekannya sedang bersiap untuk anak mereka. Jika alat ini bermanfaat, donasi untuk biaya operasional dan pertumbuhan keluarga kami akan membantu lebih dari yang Anda tahu.",
+ "rockbox_cleanup_step": "Menghapus pengaturan Rockbox lama...",
+ "rockbox_cleanup_deleting": "Menghapus folder .rockbox dari pemutar...",
+ "rockbox_cleanup_failed_note": "Perangkat lunak baru Anda telah diinstal, tetapi folder .rockbox lama tidak dapat dihapus. Hapus folder .rockbox pada pemutar dengan tangan jika Anda ingin awal yang bersih."
 }

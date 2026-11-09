@@ -139,12 +139,7 @@
  "settings_filter_old_rockbox": "Pwarata ekkewe Rockbox mi nom .",
  "settings_filter_nightly": "Pwarata ekkewe Dev mi katowu iteiten pwinin .",
  "settings_filter_240p": "240p Ekkewe Rok mi Katou",
- "settings_240p_tip": "A pwarata ekkewe imw mi wor ar ROM mi 240p (rom..._240p.zip). 240p a forata ese tongeni aea won ew Y1 a kamo minefo mwirin May 2026, ika won ew a feito ren ewe Sopun 3.0.7 ika mwirin. Ekkena chon fiti rese tongeni aea ekkewe Rockbox mi nomw me nomw, ina minne Pwarata ekkewe Rockbox mi nomw me nomw a on ren.",
- "settings_240p_warn_body": "240p a forata ese tongeni aea won ew Y1 a kamo minefo mwirin May 2026, ika won ew a feito ren ewe Sopun 3.0.7 ika mwirin. Kopwe chok install ew won ew Y1 mi nomw.\n\nEkkena chon fiti rese tongeni aea ekkewe Rockbox mi nomw me nomw, ina minne ekkena ra pwan makketiw.\n\nKa fen sinei pwe ka mochen pwarata ekkewe 240p Rockbox mi katou?",
- "sel_240p_warning": "Iei ew 240p fitikoko. Ese tongeni epwe fis won ew Y1 mi kamo minefo mwirin May 2026, ika won ew mi feito ren ewe Sopweno ne fori 3.0.7 ika mwirin.",
- "link_240p_body": "Ewe link ka suki a fis ren ew 240p. 240p foruta rese tongeni aea won ew Y1 ka kamo minefo mwirin May 2026, ika won ew a feito ren ewe Softwer 3.0.7 ika mwirin, ina minne ra monota tori om kopwe suki.\n\nKa fen sinei pwe ka mochen pwarata ekkewe 240p Rockbox mi katou?",
- "link_busy": "Kopwe fini ewe install mi fis, iwe, kopwe suuki ewe link sefan.",
- "link_not_listed": "Ewe softwer non ena link ese mwo kawor ngeni ei chon fiti.",
+ "settings_240p_tip": "A pwarata ekkewe imw mi wor ar ROM mi 240p (rom..._240p.zip). 240p ekkewe foruta rese tipeew ngeni ekkewe Y1 unit won Innioasis OS fan 3.0.7, ina minne Pwarata ekkewe forun Rockbox mi nom a tongeni fis ren.",
  "settings_old_rockbox_warn_title": "Rockbox mi fiti ewe kapasen ourour .",
  "settings_old_rockbox_warn_body": "Ekkewe puken Rockbox-Y1 me mwen 0.5 rese tipeew ngeni ekkewe puken Y1 mi kamo mwirin March 2026 ren Innioasis OS 3.0.7 mi fen kawor me mwan.\n\nFlash ew build mi nomw won ekkei pisek epwe eppeti booting.\n\nKa nukuw pwe ka mochen pwarata ekkewe Rockbox mi nomw me nomw?",
  "sel_refresh": "Kopwe niwinsefaniti",
@@ -931,9 +926,6 @@
  "rockbox_wizard_done_desc": "Iei ka tongeni túmúnú pwe kopwe chék chéúfetál me filatá eú itelap lón Rockbox (Ekkewe kókkót > Ekkewe kókkótun itelap).",
  "sel_local_rockbox_themes_option": "Kopwe äeä ewe Rockbox 360p + ewe föün äsefich .",
  "rockbox_stage_installing": "Kopwe fori ekkewe itelap me ekkewe foun Rockbox...",
- "rockbox_cleanup_step": "Kopwe angei ekkewe pisekin Rockbox mi nom...",
- "rockbox_cleanup_deleting": "Kopwe angei ewe .rockbox seni ewe nenien urumot...",
- "rockbox_cleanup_failed_note": "Ewe minefoon softwer a fen fis, nge ewe .rockbox mi nom ese tongeni tou. Kopwe angei ewe .rockbox won ewe nenien urumot ren poum ika ka mochen ew poputan mi nimenimoch.",
  "rockbox_stage_waiting_adb_fmt": "Ka kutta chon fiti ren ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Lap seni emon chon fiti a fiti. Kopwe atai ekkewe ekkoch me likiti chok ewe emon mi install.",
  "rockbox_stage_pushing": "Pwarata a fis. Kopwe fori ekkewe itelap & font...",
@@ -1033,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Eú kofi a chék chéúfetál lón ewe bandwidth mi chéúfetál. A tumunu ewe fichifich mwirin pwe epwe tongeni tori.",
  "donate_family_appeal_expected": "Ryan me chienan we ra ekiekin nounou. Ekkewe asor ngeni monien angangen ewe project me ach we minefoon famini ra fokkun aucheani.",
  "donate_family_appeal_new_arrival": "A wor emon minefoon chon feito won ewe aan non imwen Ryan. Iteiten asor ngeni ekkewe chon angang me ach famini mi watteno a wewe ngeni ew watten mettoch.",
- "donate_family_appeal_nursery": "Ryan me chienan we ra ammólnatá fán iten néúr we. Ika ei pisekin angang a fen auchea, ew asor ren ekkewe monien run me ach famini mi watteno epwe anisi nap seni met ka sinei."
+ "donate_family_appeal_nursery": "Ryan me chienan we ra ammólnatá fán iten néúr we. Ika ei pisekin angang a fen auchea, ew asor ren ekkewe monien run me ach famini mi watteno epwe anisi nap seni met ka sinei.",
+ "rockbox_cleanup_step": "Kopwe angei ekkewe pisekin Rockbox mi nom...",
+ "rockbox_cleanup_deleting": "Kopwe angei ewe .rockbox seni ewe nenien urumot...",
+ "rockbox_cleanup_failed_note": "Ewe minefoon softwer a fen fis, nge ewe .rockbox mi nom ese tongeni tou. Kopwe angei ewe .rockbox won ewe nenien urumot ren poum ika ka mochen ew poputan mi nimenimoch."
 }

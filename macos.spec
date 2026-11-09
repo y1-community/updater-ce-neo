@@ -1,3 +1,24 @@
+def _read_app_version(default="2.5.4"):
+    """One source of truth: src/config.py's APP_VERSION."""
+    import re as _re
+    from pathlib import Path as _Path
+    bases = []
+    spec_path = globals().get("SPECPATH")
+    if spec_path:
+        bases.append(_Path(spec_path))
+    bases.append(_Path.cwd())
+    for base in bases:
+        target = base / "src" / "config.py"
+        if not target.exists():
+            continue
+        match = _re.search(r'APP_VERSION\s*=\s*"([^"]+)"', target.read_text())
+        if match:
+            return match.group(1)
+    return default
+
+
+APP_VERSION = _read_app_version()
+
 # -*- mode: python ; coding: utf-8 -*-
 # macos.spec — PyInstaller spec for macOS .app bundle
 # Usage: pyinstaller macos.spec
@@ -224,8 +245,8 @@ app = BUNDLE(
     bundle_identifier=BUNDLE_ID,
     info_plist={
         "CFBundleDisplayName": APP_DISPLAY_NAME,
-        "CFBundleShortVersionString": "2.5.3",
-        "CFBundleVersion": "2.5.3",
+        "CFBundleShortVersionString": APP_VERSION,
+        "CFBundleVersion": APP_VERSION,
         "CFBundleGetInfoString": f"{APP_DISPLAY_NAME} by {APP_AUTHOR}",
         "LSMinimumSystemVersion": "12.0",
         "NSHighResolutionCapable": True,
@@ -236,15 +257,6 @@ app = BUNDLE(
         "UIDesignRequiresCompatibility": True,
         "LSApplicationCategoryType": "public.app-category.utilities",
         "NSHumanReadableCopyright": APP_COPYRIGHT,
-        # innioasis-updater:// links from innioasis.app and themes.innioasis.app
-        # (src/site_links.py) arrive as a URL-open event. The MediaTek
-        # Installer has no online catalogue, so it does not claim them.
-        "CFBundleURLTypes": [] if IS_MEDIATEK_INSTALLER_BUILD else [
-            {
-                "CFBundleURLName": f"{BUNDLE_ID}.site-link",
-                "CFBundleURLSchemes": ["innioasis-updater"],
-            }
-        ],
         "CFBundleDocumentTypes": [
             {
                 "CFBundleTypeName": "Firmware Archive",
@@ -299,8 +311,8 @@ try:
             "CFBundleInfoDictionaryVersion": "6.0",
             "CFBundleName": APP_DISPLAY_NAME,
             "CFBundlePackageType": "APPL",
-            "CFBundleShortVersionString": "2.5.3",
-            "CFBundleVersion": "2.5.3",
+            "CFBundleShortVersionString": APP_VERSION,
+            "CFBundleVersion": APP_VERSION,
             "CFBundleGetInfoString": f"{APP_DISPLAY_NAME} by {APP_AUTHOR}",
             "LSApplicationCategoryType": "public.app-category.utilities",
             "LSMinimumSystemVersion": "12.0",

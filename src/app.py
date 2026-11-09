@@ -75,23 +75,15 @@ class _FileOpenFilter(QObject):
     is kept on the application for the process lifetime.
     """
 
-    def __init__(self, on_path, on_link=None):
+    def __init__(self, on_path):
         super().__init__()
         self._on_path = on_path
-        self._on_link = on_link
 
     def eventFilter(self, watched, event):  # noqa: N802
         if event.type() == QEvent.Type.FileOpen:
-            url = event.url()
-            path = url.toLocalFile() if url.isLocalFile() else ""
-            if not path and not url.isValid():
-                path = event.file()
+            path = event.url().toLocalFile()
             if path:
                 self._on_path(path)
-            elif self._on_link is not None and url.isValid():
-                # An ``innioasis-updater://`` link from a site arrives here
-                # on macOS, never as an argument.
-                self._on_link(url.toString())
             return True
         return False
 
@@ -604,8 +596,7 @@ def main():
 
     # A Dock/Finder open arrives as an event, not as an argument. Keep the
     # early paths queued until the window and its drop handler exist.
-    # Holds package paths and ``site_links.SiteLink`` requests, in arrival order.
-    external_drops: list = []
+    external_drops: list[Path] = []
 
     def _queue_external_drop(path: str) -> None:
         from .drop_install import classify_drop
@@ -618,18 +609,7 @@ def main():
         if flush is not None:
             flush()
 
-    def _queue_site_link(url: str) -> None:
-        from . import site_links
-
-        link = site_links.parse(url)
-        if link is None:
-            return
-        external_drops.append(link)
-        flush = getattr(app, "_flush_external_drops", None)
-        if flush is not None:
-            flush()
-
-    _file_open_filter = _FileOpenFilter(_queue_external_drop, _queue_site_link)
+    _file_open_filter = _FileOpenFilter(_queue_external_drop)
     app.installEventFilter(_file_open_filter)
     app._file_open_filter = _file_open_filter
 
@@ -691,11 +671,6 @@ def main():
     from .drop_install import external_package_from_arguments
 
     startup_drop = external_package_from_arguments(sys.argv[1:])
-    # A site's ``innioasis-updater://`` link arrives the same way on Windows
-    # and Linux; it is queued and forwarded exactly like a package.
-    from . import site_links
-
-    startup_link = None if startup_drop is not None else site_links.from_arguments(sys.argv[1:])
 
     # One copy at a time. Two windows would compete for the same USB device, SP
     # Flash Tool's settings files and the shared cache, so a second launch stops
@@ -709,9 +684,7 @@ def main():
 
     # A start-at-login launch must never raise a window: if another copy is
     # already running, this one leaves quietly instead of asking for the window.
-    start_in_tray = (
-        "--tray" in sys.argv[1:] and startup_drop is None and startup_link is None
-    )
+    start_in_tray = "--tray" in sys.argv[1:] and startup_drop is None
 
     # Capture the marker before the guard: one left by the launch that started
     # this one is stale, while one written during startup belongs to a second
@@ -739,11 +712,6 @@ def main():
         from .single_instance import request_drop
 
         if request_drop(startup_drop, timeout_ms=300):
-            sys.exit(0)
-    if startup_link is not None:
-        from .single_instance import request_link
-
-        if request_link(startup_link.raw, timeout_ms=300):
             sys.exit(0)
 
     # The window's theme is a QSS stylesheet plus a palette: roughly 10 MB of Qt
@@ -780,8 +748,6 @@ def main():
     agent = None
     if startup_drop is not None:
         external_drops.append(startup_drop)
-    if startup_link is not None:
-        external_drops.append(startup_link)
 
     def _forget_window() -> None:
         holder["window"] = None
@@ -872,11 +838,7 @@ def main():
                 return
         external_drop_attempts["count"] = 0
         while external_drops:
-            item = external_drops.pop(0)
-            if isinstance(item, site_links.SiteLink):
-                window.open_site_link(item)
-            else:
-                window.accept_local_package(item)
+            window.accept_local_package(external_drops.pop(0))
 
     app._flush_external_drops = _flush_external_drops
 
@@ -897,7 +859,6 @@ def main():
         if _focus_server is not None:
             _focus_server.focus_requested.connect(lambda: _show_main_window())
             _focus_server.drop_requested.connect(_deliver_external_drop)
-            _focus_server.link_requested.connect(_queue_site_link)
     except Exception:
         logging.getLogger(__name__).debug(
             "Single-instance focus channel could not start", exc_info=True

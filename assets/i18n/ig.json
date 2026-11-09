@@ -139,12 +139,7 @@
  "settings_filter_old_rockbox": "Gosi Old Rockbox ewuli",
  "settings_filter_nightly": "Gosi mwepụta Dev nke abalị",
  "settings_filter_240p": "240p Rockbox ewepụtara",
- "settings_240p_tip": "Na-egosi na-ewuli zip onye zip ROM bụ ụdị 240p (rom…_240p.zip). Enweghị ike iji wuo 240p na Y1 zụtara ọhụrụ ka Mee 2026 gachara, ma ọ bụ na nke sitere na Original Software 3.0.7 ma ọ bụ karịa. Ndị egwuregwu ahụ enweghị ike iji Rockbox ochie na-ewuli ya, yabụ na-agbanye ya na Show Old Rockbox Builds.",
- "settings_240p_warn_body": "Enweghị ike iji wuo 240p na Y1 zụtara ọhụrụ ka Mee 2026 gachara, ma ọ bụ na nke sitere na Original Software 3.0.7 ma ọ bụ karịa. Naanị tinye otu na Y1 ochie.\n\nNdị egwuregwu ahụ enweghị ike iji ụlọ Rockbox ochie, yabụ edepụtara aha ndị ahụ.\n\nỊ ji n'aka na ịchọrọ igosi mwepụta 240p Rockbox?",
- "sel_240p_warning": "Nke a bụ ihe nrụpụta 240p. Enweghị ike iji ya na Y1 zụtara ọhụrụ ka Mee 2026 gachara, ma ọ bụ nke bịara na Original Software 3.0.7 ma ọ bụ karịa.",
- "link_240p_body": "Njikọ ị meghere bụ maka nrụpụta 240p. Enweghị ike iji ụlọ 240p mee ihe na Y1 zụtara ọhụrụ mgbe Mee 2026 gasịrị, ma ọ bụ na nke sitere na Original Software 3.0.7 ma ọ bụ mgbe e mesịrị, ya mere a na-ezobe ha ruo mgbe ị gbanye ha.\n\nỊ ji n'aka na ịchọrọ igosi mwepụta 240p Rockbox?",
- "link_busy": "Mechaa nwụnye ugbu a, wee mepee njikọ ọzọ.",
- "link_not_listed": "Ngwanrọ dị na njikọ ahụ ewepụtabeghị maka ọkpụkpọ a.",
+ "settings_240p_tip": "Na-egosi na-ewuli zip nke ROM ya bụ ụdị 240p (rom…_240p.zip). Ihe nrụpụta 240p adabaghị na nkeji Y1 na Innioasis OS dị n'okpuru 3.0.7, yabụ na enyere ya aka na Show Old Rockbox Builds.",
  "settings_old_rockbox_warn_title": "Ịdọ aka ná ntị ndakọrịta Rockbox",
  "settings_old_rockbox_warn_body": "Mwepụta nke Rockbox-Y1 tupu 0.5 adabaghị na nkeji Y1 rere mgbe Machị 2026 nwere Innioasis OS 3.0.7 etinyegoro ya.\n\nỊkụnye ihe nrụnye ochie na ngwaọrụ ndị a ga-egbochi ịkwọ ụgbọ.\n\nỊ ji n'aka na ịchọrọ igosi ụlọ Rockbox ochie?",
  "sel_refresh": "Weghachite ume",
@@ -931,9 +926,6 @@
  "rockbox_wizard_done_desc": "Ị nwere ike kwụpụ ihe ọkpụkpọ ahụ n'enweghị nsogbu wee họrọ isiokwu na Rockbox (Ntọala> Ntọala isiokwu).",
  "sel_local_rockbox_themes_option": "Wụnye Rockbox 360p Gburugburu + Fontpack",
  "rockbox_stage_installing": "Ịwụnye Gburugburu Rockbox & Fonts...",
- "rockbox_cleanup_step": "Na-ewepụ ntọala Rockbox ochie...",
- "rockbox_cleanup_deleting": "Na-ewepụ folda .rockbox na ọkpọ ọkpọ...",
- "rockbox_cleanup_failed_note": "Awụnyere ngwanrọ ọhụrụ gị, mana enweghị ike iwepụ folda .rockbox ochie. Jiri aka hichapụ nchekwa .rockbox dị n'ihe ọkpụkpọ ma ọ bụrụ na ịchọrọ mmalite dị ọcha.",
  "rockbox_stage_waiting_adb_fmt": "Na-achọ ọkpụkpọ site na ADB ({remaining} s)...",
  "rockbox_stage_disconnect_extra": "Ejikọrọ ihe karịrị otu ọkpụkpọ. Kwupu njikọ ndị ọzọ wee hapụ naanị nke etinyere.",
  "rockbox_stage_pushing": "Achọpụtara onye ọkpụkpọ. Na-edobe gburugburu gburugburu & mkpụrụedemede...",
@@ -1033,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Otu kọfị na-ekpuchi ike nke bandwit nke nbudata. Ọ na-edobe nrụzi na-esote na iru eru.",
  "donate_family_appeal_expected": "Ryan na onye òtù ọlụlụ ya na-atụ anya nwa. A na-enwe ekele dị ukwuu n'onyinye maka ọnụ ahịa ọrụ a na-akwụ na ezinụlọ ọhụrụ anyị.",
  "donate_family_appeal_new_arrival": "Enwere onye mbata ọhụrụ n'ụzọ n'ụlọ Ryan. Onyinye ọ bụla maka sava na ezinụlọ anyị na-eto eto pụtara nnukwu ihe.",
- "donate_family_appeal_nursery": "Ryan na onye òtù ọlụlụ ya na-ejikere maka nwa ha. Ọ bụrụ na ngwá ọrụ a bara uru, onyinye maka ọnụ ahịa na-agba ọsọ na ezinụlọ anyị na-eto eto ga-enyere aka karịa ka ị maara."
+ "donate_family_appeal_nursery": "Ryan na onye òtù ọlụlụ ya na-ejikere maka nwa ha. Ọ bụrụ na ngwá ọrụ a bara uru, onyinye maka ọnụ ahịa na-agba ọsọ na ezinụlọ anyị na-eto eto ga-enyere aka karịa ka ị maara.",
+ "rockbox_cleanup_step": "Na-ewepụ ntọala Rockbox ochie...",
+ "rockbox_cleanup_deleting": "Na-ewepụ folda .rockbox na ọkpọ ọkpọ...",
+ "rockbox_cleanup_failed_note": "Awụnyere ngwanrọ ọhụrụ gị, mana enweghị ike iwepụ folda .rockbox ochie. Jiri aka hichapụ nchekwa .rockbox dị n'ihe ọkpụkpọ ma ọ bụrụ na ịchọrọ mmalite dị ọcha."
 }

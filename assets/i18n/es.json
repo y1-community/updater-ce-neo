@@ -139,12 +139,7 @@
  "settings_filter_old_rockbox": "Mostrar versiones antiguas de Rockbox",
  "settings_filter_nightly": "Mostrar versiones Nightly y de desarrollo",
  "settings_filter_240p": "Versiones de Rockbox 240p",
- "settings_240p_tip": "Muestra versiones cuyo zip ROM es una variante 240p (rom…_240p.zip). Las versiones 240p no se pueden usar en un Y1 comprado nuevo después de mayo de 2026, ni en uno que venía con el software original 3.0.7 o posterior. Esos reproductores tampoco pueden usar versiones antiguas de Rockbox, por lo que se activa junto con la opción de versiones antiguas.",
- "settings_240p_warn_body": "Las versiones 240p no se pueden usar en un Y1 comprado nuevo después de mayo de 2026, ni en uno que venía con el software original 3.0.7 o posterior. Instálalas solo en un Y1 más antiguo.\n\nEsos reproductores tampoco pueden usar versiones antiguas de Rockbox, así que también se mostrarán.\n\n¿Seguro que deseas mostrar las versiones de Rockbox 240p?",
- "sel_240p_warning": "Esta es una versión 240p. No se puede usar en un Y1 comprado nuevo después de mayo de 2026, ni en uno que venía con el software original 3.0.7 o posterior.",
- "link_240p_body": "El enlace que abriste es para una versión 240p. Las versiones 240p no se pueden usar en un Y1 comprado nuevo después de mayo de 2026, ni en uno que venía con el software original 3.0.7 o posterior, por lo que permanecen ocultas hasta que las actives.\n\n¿Seguro que deseas mostrar las versiones de Rockbox 240p?",
- "link_busy": "Termina la instalación actual y vuelve a abrir el enlace.",
- "link_not_listed": "El software de ese enlace aún no está disponible para este reproductor.",
+ "settings_240p_tip": "Muestra versiones cuyo zip ROM es una variante 240p (rom…_240p.zip). Las versiones 240p no son compatibles con unidades Y1 con Innioasis OS anterior a 3.0.7, por lo que se activa junto con la opción de versiones antiguas.",
  "settings_old_rockbox_warn_title": "Advertencia de compatibilidad de Rockbox",
  "settings_old_rockbox_warn_body": "Las versiones de Rockbox-Y1 anteriores a 0.5 no son compatibles con los dispositivos Y1 vendidos después de marzo de 2026 con Innioasis OS 3.0.7 preinstalado.\n\nFlashear una versión anterior impedirá que el dispositivo arranque.\n\n¿Seguro que deseas mostrar versiones anteriores de Rockbox?",
  "sel_refresh": "Actualizar",
@@ -931,9 +926,6 @@
  "rockbox_wizard_done_desc": "Ahora puede desconectar el reproductor con seguridad y elegir un tema en Rockbox (Ajustes > Ajustes de tema).",
  "sel_local_rockbox_themes_option": "Instalar temas y fuentes Rockbox 360p",
  "rockbox_stage_installing": "Instalando temas y fuentes de Rockbox...",
- "rockbox_cleanup_step": "Eliminando los ajustes antiguos de Rockbox...",
- "rockbox_cleanup_deleting": "Eliminando la carpeta .rockbox del reproductor...",
- "rockbox_cleanup_failed_note": "Tu nuevo software se instaló, pero no se pudo eliminar la carpeta .rockbox antigua. Elimínala manualmente en el reproductor si quieres empezar de cero.",
  "rockbox_stage_waiting_adb_fmt": "Buscando reproductor mediante ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Hay varios reproductores conectados. Desconecte los demás y deje solo el que se está instalando.",
  "rockbox_stage_pushing": "Reproductor detectado. Transfiriendo temas y fuentes comunitarias...",
@@ -1009,5 +1001,8 @@
  "settings_arm64_driver_note": "La compatibilidad con ARM64 para Windows no se ha probado. En las computadoras portátiles Snapdragon y RTX Spark, Zadig se puede usar con Driver Signature Enforcement deshabilitado para instalar WinUSB o libusb para el dispositivo MT6227 Preloader en el Administrador de dispositivos. Consulte la guía del controlador ARM64 para conocer los pasos.",
  "toast_update_version_fmt": "{app} v{version} está disponible.",
  "toast_update_fmt": "Hay una actualización disponible para {app}.",
- "install_card_title_fmt": "{software} para {model}"
+ "install_card_title_fmt": "{software} para {model}",
+ "rockbox_cleanup_step": "Eliminando los ajustes antiguos de Rockbox...",
+ "rockbox_cleanup_deleting": "Eliminando la carpeta .rockbox del reproductor...",
+ "rockbox_cleanup_failed_note": "Tu nuevo software se instaló, pero no se pudo eliminar la carpeta .rockbox antigua. Elimínala manualmente en el reproductor si quieres empezar de cero."
 }

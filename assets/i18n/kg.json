@@ -139,12 +139,7 @@
  "settings_filter_old_rockbox": "Monisa Bima ya Ntama ya Rockbox",
  "settings_filter_nightly": "Monisa Kubasika ya Dev ya Mpimpa",
  "settings_filter_240p": "240p Kubasika ya Rockbox",
- "settings_240p_tip": "Kumonisa kutunga yina zip ya ROM na yo kele mutindu ya 240p (rom..._240p.zip). 240p ke tunga lenda salama ve na Y1 ya bo me sumba ya mpa na nima ya Mayi 2026, to na yina me kwisa ti Software Original 3.0.7 to na nima. Bantu yina ke bulaka lenda sadila mpi ve bima ya ntama ya Rockbox, yo yina bo ke kangulaka Show Old Rockbox Builds ti yo.",
- "settings_240p_warn_body": "240p ke tunga lenda salama ve na Y1 ya bo me sumba ya mpa na nima ya Mayi 2026, to na yina me kwisa ti Software Original 3.0.7 to na nima. Tula kaka mosi na Y1 ya ntama.\n\nBa joueurs yina lenda sadila mpi ve ba builds ya ntama ya Rockbox, yo yina yina kele mpi na liste.\n\nKeti nge ke ndima nde nge ke zola kusonga mikanda ya Rockbox ya 240p?",
- "sel_240p_warning": "Yai kele 240p ya kutunga. Yo lenda salama ve na Y1 yina bo sumbaka ya mpa na nima ya Mayi 2026, to na yina kwisaka ti Logiciel Original 3.0.7 to na nima.",
- "link_240p_body": "Lien yina nge me kangula kele sambu na kutunga 240p. 240p builds lenda salama ve na Y1 ya bo me sumba ya mpa na nima ya Mayi 2026, to na yina me kwisa ti Original Software 3.0.7 to na nima, yo yina yo ke bumbanaka tii kuna nge ta kangula yo.\n\nKeti nge ke ndima nde nge ke zola kusonga mikanda ya Rockbox ya 240p?",
- "link_busy": "Manisa installation ya sesepi, na nima kangula diaka lien.",
- "link_not_listed": "E programa ina muna nzila yayina ke yavaikiswa ko muna nsaka zazi.",
+ "settings_240p_tip": "Kumonisa kutunga yina zip ya ROM na yo kele mutindu ya 240p (rom..._240p.zip). 240p kutunga ke wakana ve ti ba unités Y1 na Innioasis OS na nsi ya 3.0.7, yo yina Monisa Kutunga ya Rockbox ya Ntama kele ya kukangula ti yo.",
  "settings_old_rockbox_warn_title": "Lukebisu ya ke tadila kuwakana ya Rockbox",
  "settings_old_rockbox_warn_body": "Ba nsangu ya Rockbox-Y1 na ntwala ya 0.5 ke wakana ve ti ba unité ya Y1 yina bo tekaka na nima ya Marsi 2026 ti Innioasis OS 3.0.7 yina bo me tulaka na ntwala.\n\nKubula build ya ntama na ba apareyi yai ta kanga nzila na kuyantika.\n\nKeti nge ke ndima nde nge ke zola kusonga bifwanisu ya Rockbox ya ntama?",
  "sel_refresh": "Vutula",
@@ -931,9 +926,6 @@
  "rockbox_wizard_done_desc": "Ntangu yai nge lenda katula lecteur kukonda kigonsa mpi kupona ntu-dyambu mosi na Rockbox (Parametres > Paramètres du thème).",
  "sel_local_rockbox_themes_option": "Tula Bantu-Diambu ya Rockbox 360p + Kitini ya Bisono",
  "rockbox_stage_installing": "Kutula ba ntu-diambu ti ba fonte ya Rockbox...",
- "rockbox_cleanup_step": "Kukatula ba parametre ya ntama ya Rockbox...",
- "rockbox_cleanup_deleting": "Kukatula dossier .rockbox na lecteur...",
- "rockbox_cleanup_failed_note": "Bo tulaka logiciel na nge ya mpa, kansi bo lendaka ve kukatula dossier ya ntama .rockbox. Katula dossier .rockbox na lecteur na maboko kana nge ke zola luyantiku ya bunkete.",
  "rockbox_stage_waiting_adb_fmt": "Kusosa nsaka na nzila ya ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Ba joueur mingi ke vukanaka. Katula yina ya nkaka mpi bika kaka yina bo ke tula.",
  "rockbox_stage_pushing": "Joueur me monana. Kutula ba ntu-diambu ya kimvuka & ba fonts...",
@@ -1009,5 +1001,8 @@
  "settings_arm64_driver_note": "ARM64 Lusadisu ya Windows me mekamaka ve. Na ba ordinatere ya maboko ya Snapdragon mpi ya RTX Spark, bo lenda sadila Zadig ti nsiku ya kukanga nswa ya kusala kisalu sambu na kutula WinUSB to libusb sambu na kisadilu ya MT6227 Preloader na Gestionnaire des appareils. Tala mukanda ya ARM64 sambu na kuzaba mutindu ya kusala yo.",
  "toast_update_version_fmt": "{app} v{version} kele na zulu.",
  "toast_update_fmt": "Nsangu ya mpa ya {app} kele.",
- "install_card_title_fmt": "{software} sambu na {model}"
+ "install_card_title_fmt": "{software} sambu na {model}",
+ "rockbox_cleanup_step": "Kukatula ba parametre ya ntama ya Rockbox...",
+ "rockbox_cleanup_deleting": "Kukatula dossier .rockbox na lecteur...",
+ "rockbox_cleanup_failed_note": "Bo tulaka logiciel na nge ya mpa, kansi bo lendaka ve kukatula dossier ya ntama .rockbox. Katula dossier .rockbox na lecteur na maboko kana nge ke zola luyantiku ya bunkete."
 }

@@ -139,12 +139,7 @@
  "settings_filter_old_rockbox": "Fia Rockbox Xoxowo Tuwo",
  "settings_filter_nightly": "Fia Zã Sia Dev ƒe Ðeɖewo",
  "settings_filter_240p": "240p Rockbox ƒe Ðeɖewo",
- "settings_240p_tip": "Fia xɔ siwo ƒe ROM zip nye 240p ƒe tɔtrɔ (rom..._240p.zip). Womateŋu azã 240p builds ɖe Y1 si woƒle yeye le May 2026 megbe dzi o, alo le esi va kple Original Software 3.0.7 alo esi do ŋgɔ dzi o. Fefewɔla mawo hã mateŋu azã Rockbox xɔ xoxowo o, eyata woʋu Show Old Rockbox Builds kplii.",
- "settings_240p_warn_body": "Womateŋu azã 240p builds ɖe Y1 si woƒle yeye le May 2026 megbe dzi o, alo le esi va kple Original Software 3.0.7 alo esi do ŋgɔ dzi o. Ðeko nàda ɖeka ɖe Y1 xoxo aɖe dzi.\n\nFefewɔla mawo hã mate ŋu azã Rockbox ƒe xɔ xoxowo o, eyata woŋlɔ esiawo hã ŋkɔ.\n\nÈka ɖe edzi be yeadi be yeaɖe 240p Rockbox ƒe tatawo afiaa?",
- "sel_240p_warning": "Esia nye 240p ƒe xɔtutu. Womateŋu azãe ɖe Y1 si woƒle yeye le May 2026 megbe dzi o, alo le esi va kple Original Software 3.0.7 alo esiwo do ŋgɔ nɛ dzi o.",
- "link_240p_body": "Kadodo si nèʋu la nye 240p xɔtutu. Womateŋu azã 240p builds ɖe Y1 si woƒle yeye le May 2026 megbe dzi o, alo le esi va kple Original Software 3.0.7 alo esi do ŋgɔ dzi o, eyata woɣla wo vaseɖe esime nàʋu wo.\n\nÈka ɖe edzi be yeadi be yeaɖe 240p Rockbox ƒe tatawo afiaa?",
- "link_busy": "Wu install si nèwɔ fifia nu, emegbe nàgaʋu kadodoa ake.",
- "link_not_listed": "Womeɖe kɔmpiutadziɖoɖo si le kadodo ma me ɖe go na fefewɔla sia haɖe o.",
+ "settings_240p_tip": "Fia xɔ siwo ƒe ROM zip nye 240p ƒe tɔtrɔ (rom..._240p.zip). 240p xɔtutuwo mewɔ ɖeka kple Y1 units le Innioasis OS le 3.0.7 te o, eyata Show Old Rockbox Builds le dɔ wɔm kplii.",
  "settings_old_rockbox_warn_title": "Rockbox ƒe Nuxlɔ̃ame si sɔ kple wo nɔewo",
  "settings_old_rockbox_warn_body": "Rockbox-Y1 ƒe dodo do ŋgɔ na 0.5 mewɔ ɖeka kple Y1 unit siwo wodzra le March 2026 megbe kple Innioasis OS 3.0.7 si woɖo do ŋgɔ o.\n\nNe èklẽ xɔ xoxo aɖe le mɔ̃ siawo dzi la, axe mɔ ɖe gɔmedzedze nu.\n\nÈka ɖe edzi be yeadi be yeaɖe Rockbox ƒe xɔ xoxowo afiaa?",
  "sel_refresh": "Gbugbɔgadzɔ",
@@ -931,9 +926,6 @@
  "rockbox_wizard_done_desc": "Fifia àte ŋu aɖe kaƒomɔ̃a ɖa dedie eye nàtia tanya aɖe le Rockbox (Settings > Theme Settings) me.",
  "sel_local_rockbox_themes_option": "De Rockbox 360p Tanyawo + Fontpack",
  "rockbox_stage_installing": "Rockbox Tanyawo & Ŋɔŋlɔdzesiwo Dede...",
- "rockbox_cleanup_step": "Rockbox ƒe ɖoɖo xoxoawo ɖeɖeɖa...",
- "rockbox_cleanup_deleting": ".rockbox ƒe agbalẽdzraɖoƒea ɖeɖe ɖa le fefewɔla la me...",
- "rockbox_cleanup_failed_note": "Woda wò kɔmpiutadziɖoɖo yeyea ɖe wò kɔmpiuta dzi, gake womete ŋu ɖe .rockbox ƒe agbalẽdzraɖoƒe xoxoa ɖa o. Tsɔ asi tutu .rockbox ƒe agbalẽdzraɖoƒe si le fefewɔla la dzi ne èdi be yeadze egɔme dzadzɛ.",
  "rockbox_stage_waiting_adb_fmt": "Di fefewɔla to ADB ({remaining}s) dzi...",
  "rockbox_stage_disconnect_extra": "Fefewɔla siwo wu ɖeka do ƒome kple wo nɔewo. Ðe bubuawo ɖa eye nàgblẽ esi wole edem la ko ɖi.",
  "rockbox_stage_pushing": "Fefewɔla de dzesii. Nutoa me tanyawo & ŋɔŋlɔdzesiwo ɖoɖo...",
@@ -1033,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Kɔfi ɖeka xɔa kɔfi si woɖe ɖe go ƒe bandwidth teti. Enaa ɖɔɖɔɖo si kplɔe ɖo nɔa afisi woate ŋu aɖo.",
  "donate_family_appeal_expected": "Ryan kple eƒe zɔhɛ le mɔ kpɔm na vidzĩ. Wokpɔa ŋudzedze ɖe nudzɔdzɔ siwo wotsɔ xea fe ɖe dɔa wɔwɔ ƒe gazazãwo kple míaƒe ƒome yeyea ŋu la ŋu ŋutɔ.",
  "donate_family_appeal_new_arrival": "Ame yeye aɖe va le mɔ dzi le Ryan ƒe aƒeme. Nudzɔdzɔ ɖesiaɖe si woawɔ na nusubɔlawo kple míaƒe ƒome si le dzidzim ɖe edzi la fia nu gã aɖe ŋutɔ.",
- "donate_family_appeal_nursery": "Ryan kple eƒe zɔhɛ le dzadzram ɖo ɖe wo vi ŋu. Ne dɔwɔnu sia ɖe vi la, ke nudzɔdzɔ ɖe duƒuƒu ƒe gazazãwo kple míaƒe ƒome si le dzidzim ɖe edzi ŋu akpe ɖe ŋuwò wu alesi nènyae."
+ "donate_family_appeal_nursery": "Ryan kple eƒe zɔhɛ le dzadzram ɖo ɖe wo vi ŋu. Ne dɔwɔnu sia ɖe vi la, ke nudzɔdzɔ ɖe duƒuƒu ƒe gazazãwo kple míaƒe ƒome si le dzidzim ɖe edzi ŋu akpe ɖe ŋuwò wu alesi nènyae.",
+ "rockbox_cleanup_step": "Rockbox ƒe ɖoɖo xoxoawo ɖeɖeɖa...",
+ "rockbox_cleanup_deleting": ".rockbox ƒe agbalẽdzraɖoƒea ɖeɖe ɖa le fefewɔla la me...",
+ "rockbox_cleanup_failed_note": "Woda wò kɔmpiutadziɖoɖo yeyea ɖe wò kɔmpiuta dzi, gake womete ŋu ɖe .rockbox ƒe agbalẽdzraɖoƒe xoxoa ɖa o. Tsɔ asi tutu .rockbox ƒe agbalẽdzraɖoƒe si le fefewɔla la dzi ne èdi be yeadze egɔme dzadzɛ."
 }

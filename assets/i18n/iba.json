@@ -139,12 +139,7 @@
  "settings_filter_old_rockbox": "Tunjukka Rockbox Lama Digaga",
  "settings_filter_nightly": "Tunjukka Pengelepas Dev Malam",
  "settings_filter_240p": "Pemansut Rockbox 240p",
- "settings_240p_tip": "Ngayanka ngaga ti zip ROM iya nya varian 240p (rom..._240p.zip). 240p builds enda ulih dikena ba Y1 ti dibeli baru pengudah bulan Mei 2026, tauka ba siti ti datai enggau Perisian Asal 3.0.7 tauka ke baru agi. Bala pemain nya mega enda ulih ngena Rockbox ti lama agi, nya alai Show Old Rockbox Builds diidupka enggau iya.",
- "settings_240p_warn_body": "240p builds enda ulih dikena ba Y1 ti dibeli baru pengudah bulan Mei 2026, tauka ba siti ti datai enggau Perisian Asal 3.0.7 tauka ke baru agi. Semina masang siti ba Y1 ti lama agi.\n\nBala pemain nya mega enda ulih ngena build Rockbox ti lama agi, nya alai sida nya bisi dirintaika mega.\n\nKati nuan tentu deka mandangka 240p Rockbox ti dikeluarka?",
- "sel_240p_warning": "Tu iya nya 240p ngaga. Iya enda ulih dikena ba Y1 ti dibeli baru pengudah bulan Mei 2026, tauka ba siti ti datai enggau Original Software 3.0.7 tauka ke baru agi.",
- "link_240p_body": "Link ti dibuka nuan nya ungkup build 240p. 240p builds enda ulih dikena ba Y1 ti dibeli baru pengudah bulan Mei 2026, tauka ba siti ti datai enggau Original Software 3.0.7 tauka ke baru agi, nya alai sida dilalaika nyentukka nuan ngidupka sida.\n\nKati nuan tentu deka mandangka 240p Rockbox ti dikeluarka?",
- "link_busy": "Tembu install ke diatu, udah nya buka link nya baru.",
- "link_not_listed": "Software ba link nya bedau dikeluarka ungkup pemain tu.",
+ "settings_240p_tip": "Ngayanka ngaga ti zip ROM iya nya varian 240p (rom..._240p.zip). 240p ngaga enda serasi enggau unit Y1 ba Innioasis OS baruh ari 3.0.7, nya alai Tunjukka Rockbox Lama Ngaga diaktifka enggau iya.",
  "settings_old_rockbox_warn_title": "Jaku tangkan ke serasi Rockbox",
  "settings_old_rockbox_warn_body": "Pemansut Rockbox-Y1 sebedau 0.5 enda setipak enggau unit Y1 ti dijual pengudah bulan Mac 2026 enggau Innioasis OS 3.0.7 ti udah dipasang dulu.\n\nNgelap build ti lama agi ba perengka tu deka nagang booting.\n\nKati nuan tentu deka mandangka build Rockbox ti lama agi?",
  "sel_refresh": "Segar",
@@ -931,9 +926,6 @@
  "rockbox_wizard_done_desc": "Diatu nuan ulih enggau likun mutuska sambung pemain lalu milih tema dalam Rockbox (Pengatur > Pengatur Tema).",
  "sel_local_rockbox_themes_option": "Pasang Tema Rockbox 360p + Fontpak",
  "rockbox_stage_installing": "Masang Tema enggau Font Rockbox...",
- "rockbox_cleanup_step": "Ngeluarka atur Rockbox ti lama...",
- "rockbox_cleanup_deleting": "Ngeluarka folder .rockbox ari pemain...",
- "rockbox_cleanup_failed_note": "Software baru nuan udah dipasang, tang folder .rockbox lama enda ulih dibuai. Padamka folder .rockbox ba pemain ngena jari enti deka berengkah enggau beresi.",
  "rockbox_stage_waiting_adb_fmt": "Ngiga pemain nengah ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Lebih ari siku pemain ti disambung. Putuska sambung ke bukai lalu tinggalka semina ke benung dipasang aja.",
  "rockbox_stage_pushing": "Pemain udah ditemu. Ngengkahka tema enggau font komuniti...",
@@ -1033,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Siti kopi kira-kira mungkur bandwidth siti download. Iya ngasuh fix ti nangkanka nya ulih dijangkau.",
  "donate_family_appeal_expected": "Ryan enggau kaling iya benung ngadang anak mit. Pemeri nuju ungkus bejalaika projek enggau kami sebilik baru amat diberi basa.",
  "donate_family_appeal_new_arrival": "Bisi penatai baru ba jalai ba rumah Ryan. Tiap iti pemeri nuju bala pelayan enggau kami sebilik ti majak nambah mai reti ti besai.",
- "donate_family_appeal_nursery": "Ryan enggau kaling iya benung besiapka diri ke anak seduai iya. Enti perengka tu udah beguna, pemeri ke ungkus bejalai enggau kami sebilik ti majak nambah deka nulung lebih ari ti ditemu nuan."
+ "donate_family_appeal_nursery": "Ryan enggau kaling iya benung besiapka diri ke anak seduai iya. Enti perengka tu udah beguna, pemeri ke ungkus bejalai enggau kami sebilik ti majak nambah deka nulung lebih ari ti ditemu nuan.",
+ "rockbox_cleanup_step": "Ngeluarka atur Rockbox ti lama...",
+ "rockbox_cleanup_deleting": "Ngeluarka folder .rockbox ari pemain...",
+ "rockbox_cleanup_failed_note": "Software baru nuan udah dipasang, tang folder .rockbox lama enda ulih dibuai. Padamka folder .rockbox ba pemain ngena jari enti deka berengkah enggau beresi."
 }

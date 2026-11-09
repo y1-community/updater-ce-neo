@@ -139,12 +139,7 @@
  "settings_filter_old_rockbox": "K’ut li Najter Rockbox yiib’anb’il .",
  "settings_filter_nightly": "K’ut li xpuktesinkil li Dev chiru li q’ojyin .",
  "settings_filter_240p": "240p Xk’eeb’al chi elk li Rockbox",
- "settings_240p_tip": "Naxk’ut li k’uub’anb’il na’leb’ li xzip li ROM a’an jun li jalanil 240p (rom..._240p.zip). Eb’ li kab’lak 240p ink’a’ naru neke’oksiman sa’ jun li Y1 li loq’b’il chi ak’ chirix li po mayo re 2026, malaj sa’ jun li kichal rik’in li Software Original 3.0.7 malaj li ak’il. Eb’ laj b’atz’unel a’an ink’a’ neke’ru chiroksinkileb’ ajwi’ li najteril yiib’anb’il Rockbox, jo’kan naq li Show Old Rockbox Builds na’ok chi k’anjelak rik’in.",
- "settings_240p_warn_body": "Eb’ li kab’lak 240p ink’a’ naru neke’oksiman sa’ jun li Y1 li loq’b’il chi ak’ chirix li po mayo re 2026, malaj sa’ jun li kichal rik’in li Software Original 3.0.7 malaj li ak’il. Ka’ajwi’ taak’e jun sa’ jun li Y1 li ak’ chik.\n\nEb’ laj b’atz’unel a’an ink’a’ neke’ru chiroksinkileb’ ajwi’ li najteril yiib’anb’il Rockbox, jo’kan naq eb’ a’an tz’iib’anb’ileb’ ajwi’.\n\nMa ch’olch’o chawu naq taawaj xk’utb’al li 240p Rockbox?",
- "sel_240p_warning": "A’in jun li kab’lak 240p. Ink’a’ naru na’oksiman sa’ jun li Y1 li ak’ loq’b’il chirix li po mayo re 2026, malaj sa’ jun li kichal rik’in li Software Original 3.0.7 malaj li ak’il.",
- "link_240p_body": "Li link li xate a’an choq’ re jun li kab’lak 240p. Eb’ li kab’lak 240p ink’a’ naru neke’oksiman sa’ jun li Y1 li ak’ loq’b’il chirix li po mayo re 2026, malaj sa’ jun li kichal rik’in li Original Software 3.0.7 malaj li ak’il, jo’kan naq muqmukeb’ toj reetal naq nakak’e chi k’anjelak.\n\nMa ch’olch’o chawu naq taawaj xk’utb’al li 240p Rockbox?",
- "link_busy": "Xraqb’al li k’ojob’ank anajwan, toja’ naq taate wi’chik li b’e.",
- "link_not_listed": "Li software sa’ li link a’an toj maji’ na’el choq’ re li reproductor a’in.",
+ "settings_240p_tip": "Naxk’ut li k’uub’anb’il na’leb’ li xzip li ROM a’an jun li jalanil 240p (rom..._240p.zip). Eb’ li k’uub’anb’il na’leb’ 240p ink’a’ neke’xk’am rib’ rik’ineb’ li unidad Y1 sa’ Innioasis OS rub’el 3.0.7, jo’kan naq li K’utb’esink Najter Rockbox Builds na’ok chi k’anjelak rik’in.",
  "settings_old_rockbox_warn_title": "Xk’ulub’il li Rockbox",
  "settings_old_rockbox_warn_body": "Lix k’anjeleb’ li Rockbox-Y1 rub’elaj li 0.5 ink’a’ neke’xk’am rib’ rik’ineb’ li k’anjeleb’aal Y1 li neke’k’ayiman chirix li po marzo re 2026 rik’in li Innioasis OS 3.0.7 li ak k’eeb’il chaq.\n\nXlemtz’unkil jun li najteril kab’lak sa’eb’ li k’anjeleb’aal a’in tixram li b’atz’unk.\n\nMa ch’olch’o chawu naq taawaj xk’utb’aleb’ li najteril kab’lak re li Rockbox?",
  "sel_refresh": "Xk’eeb’al chi ak’ob’resiik",
@@ -931,9 +926,6 @@
  "rockbox_wizard_done_desc": "Anajwan naru taawisi li reproductor chi maak’a’ xxiw ut taasik’ ru jun li na’leb’ sa’ Rockbox (Xk’uub’ankil > Xk’uub’ankil li na’leb’).",
  "sel_local_rockbox_themes_option": "K’e li Rockbox 360p Temas + Paquete de Letras .",
  "rockbox_stage_installing": "Xk’eeb’al li Rockbox Temas & Fuentes...",
- "rockbox_cleanup_step": "Xrisinkileb’ li najteril k’uub’anb’il na’leb’ re li Rockbox...",
- "rockbox_cleanup_deleting": "Xrisinkil li k’uuleb’aal hu .rockbox sa’ li b’atz’unleb’aal...",
- "rockbox_cleanup_failed_note": "Kik’eeman laa ak’ software, a’b’an ink’a’ kiru risinkil li najteril k’uuleb’aal hu .rockbox. Xch’ajb’al li carpeta .rockbox sa’ li reproductor rik’in uq’ej wi taawaj jun xtiklajik chi saq ru.",
  "rockbox_stage_waiting_adb_fmt": "Naqasik’ aj b’atz’unel rik’in li ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Naq numenaq jun aj b’atz’unel naxk’am rib’. Xch’e’b’aleb’ li jun ch’ol chik ut xkanab’ankil ka’ajwi’ li jun li yoo chi k’eemank.",
  "rockbox_stage_pushing": "Li aj b’atz’unel x’ilman. Xk’eeb’al li na’leb’ re li komonil & li tz’iib’...",
@@ -1009,5 +1001,8 @@
  "settings_arm64_driver_note": "Li tenq’ re li Windows ARM64 ink’a’ x’ilman. Sa’eb’ li portátil Snapdragon ut RTX Spark, li Zadig naru na’oksiman rik’in li Xk’ulub’il li Firma re li B’eresinel li ink’a’ naru chi k’anjelak re xk’eeb’al li WinUSB malaj libusb choq’ re li k’anjeleb’aal Precargador MT6227 sa’ li Administrador de dispositivos. Il ru li k’utul re li b’eresinel ARM64 re li b’e.",
  "toast_update_version_fmt": "{app} v{version} wank.",
  "toast_update_fmt": "Wan jun li ak’ob’resink re {app}.",
- "install_card_title_fmt": "{software} choq’ re {model} ."
+ "install_card_title_fmt": "{software} choq’ re {model} .",
+ "rockbox_cleanup_step": "Xrisinkileb’ li najteril k’uub’anb’il na’leb’ re li Rockbox...",
+ "rockbox_cleanup_deleting": "Xrisinkil li k’uuleb’aal hu .rockbox sa’ li b’atz’unleb’aal...",
+ "rockbox_cleanup_failed_note": "Kik’eeman laa ak’ software, a’b’an ink’a’ kiru risinkil li najteril k’uuleb’aal hu .rockbox. Xch’ajb’al li carpeta .rockbox sa’ li reproductor rik’in uq’ej wi taawaj jun xtiklajik chi saq ru."
 }

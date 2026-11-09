@@ -139,12 +139,7 @@
  "settings_filter_old_rockbox": "Rockbox dingsa hpe madun u",
  "settings_filter_nightly": "Shana Dev Shapraw ai lam ni hpe madun u",
  "settings_filter_240p": "240p Rockbox hpe shapraw ai",
- "settings_240p_tip": "ROM zip gaw 240p n bung ai (rom..._240p.zip) re ai build ni hpe madun dan ai. 240p build ni hpe 2026 May shata ngut ai hpang nnan mari la ai Y1 hta n mai lang ai, shing nrai Original Software 3.0.7 (sh) dai hpang na Software hte rau sa ai Y1 hta mung n mai lang ai. Dai player ni mung moi na Rockbox build ni hpe n mai lang ai majaw, Show Old Rockbox Builds hpe mung dai hte rau hpaw da ai.",
- "settings_240p_warn_body": "240p build ni hpe 2026 May shata ngut ai hpang nnan mari la ai Y1 hta n mai lang ai, shing nrai Original Software 3.0.7 (sh) dai hpang na Software hte rau sa ai Y1 hta mung n mai lang ai. Y1 dingsa kaw langai sha install galaw u.\n\nDai player ni mung moi na Rockbox build ni hpe n mai lang ai majaw dai ni hpe mung list galaw da ai.\n\n240p Rockbox shapraw ai ni hpe madun mayu ai hpe kam ai kun?",
- "sel_240p_warning": "Ndai gaw 240p hte galaw da ai re. 2026 ning May shata ngut ai hpang nnan mari ai Y1 hta mung, Original Software 3.0.7 (sh) dai hpang na Software hte rau sa ai Y1 hta mung n mai lang ai.",
- "link_240p_body": "Nang hpaw da ai link gaw 240p build a matu re. 240p build ni hpe 2026 ning May shata ngut ai hpang nnan mari ai Y1 hta n mai lang ai, Original Software 3.0.7 (sh) dai hpang na Software hte sa ai Y1 hta mung n mai lang ai majaw, nang hpaw ai aten du hkra makoi da ai.\n\n240p Rockbox shapraw ai ni hpe madun mayu ai hpe kam ai kun?",
- "link_busy": "Ya na install hpe ngut hkra galaw ngut jang, link hpe bai hpaw dat u.",
- "link_not_listed": "Dai link kaw na software hpe ndai player a matu n shapraw shi ai.",
+ "settings_240p_tip": "ROM zip gaw 240p n bung ai (rom..._240p.zip) re ai build ni hpe madun dan ai. 240p build ni gaw 3.0.7 npu na Innioasis OS kaw na Y1 unit ni hte n htap htuk ai majaw, dai hte rau Show Old Rockbox Builds hpe mung hpaw da ai.",
  "settings_old_rockbox_warn_title": "Rockbox hte htuk manu ai sadi jaw ga",
  "settings_old_rockbox_warn_body": "0.5 garai n du shi yang shapraw ai Rockbox-Y1 ni gaw 2026 ning March shata hpang dut shabra ai Y1 unit ni hte Innioasis OS 3.0.7 hpe shawng nnan bang da ai hte n htap htuk ai.\n\nNdai device ni hta moi na build hpe flash galaw dat yang booting n galaw lu na re.\n\nRockbox build dingsa ni hpe madun mayu ai hpe kam ai kun?",
  "sel_refresh": "Refresh galaw u",
@@ -931,9 +926,6 @@
  "rockbox_wizard_done_desc": "Ya gaw player hpe shim lum ai hku garan kau nna Rockbox kaw na Theme langai hpe lata la mai sai (Settings > Theme Settings).",
  "sel_local_rockbox_themes_option": "Rockbox 360p ga baw ni hpe bang u",
  "rockbox_stage_installing": "Rockbox Ga baw ni hte Font ni hpe bang ai...",
- "rockbox_cleanup_step": "Rockbox dingsa hpe shaw kau ai...",
- "rockbox_cleanup_deleting": ".rockbox hpe player kaw na shaw kau ai...",
- "rockbox_cleanup_failed_note": "Na a software nnan hpe install galaw da sai raitim, .rockbox folder dingsa hpe n mai shaw kau ai. San seng ai hku hpang mayu yang player kaw na .rockbox folder hpe lata hte delete galaw kau u.",
  "rockbox_stage_waiting_adb_fmt": "ADB ({remaining}s) hku nna ginsup ai wa hpe tam nga ai...",
  "rockbox_stage_disconnect_extra": "Player langai hta jan nna matut mahkai nga ai. Kaga ni hpe gaw garan kau nna, install galaw nga ai hpe sha tawn da u.",
  "rockbox_stage_pushing": "Player hpe mu tam sai. Wuhpung wuhpawng a gabaw ni & font ni hpe tawn da ai...",
@@ -1009,5 +1001,8 @@
  "settings_arm64_driver_note": "ARM64 Windows hpe madi shadaw ai lam hpe n chyam yu shi ai. Snapdragon hte RTX Spark laptop ni hta, Zadig hpe Driver Signature Enforcement hpe pat da ai sha lang nna, Device Manager kaw MT6227 Preloader jak a matu WinUSB (sh) libusb hpe bang mai ai. Lahkam ni hpe ARM64 driver guide hpe yu u.",
  "toast_update_version_fmt": "{app} v{version} nga ai.",
  "toast_update_fmt": "{app} de update galaw da sai.",
- "install_card_title_fmt": "{model} a matu {software}"
+ "install_card_title_fmt": "{model} a matu {software}",
+ "rockbox_cleanup_step": "Rockbox dingsa hpe shaw kau ai...",
+ "rockbox_cleanup_deleting": ".rockbox hpe player kaw na shaw kau ai...",
+ "rockbox_cleanup_failed_note": "Na a software nnan hpe install galaw da sai raitim, .rockbox folder dingsa hpe n mai shaw kau ai. San seng ai hku hpang mayu yang player kaw na .rockbox folder hpe lata hte delete galaw kau u."
 }

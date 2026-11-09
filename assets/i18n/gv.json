@@ -139,12 +139,7 @@
  "settings_filter_old_rockbox": "Show Sean Toiggal Rockbox",
  "settings_filter_nightly": "Show Screeuyn Dev Oghrey",
  "settings_filter_240p": "240p Rockbox",
- "settings_240p_tip": "Ta'n ROM zip 240p (rom..._240p.zip). 240p builds cha nel eh ry-chlashtyn rish Y1 cheet stiagh 'sy vlein 2026, ny rish un 'sy vlein 2026. Ny clowanyn shen cha vod ad ymmyd y yannoo jeh sean-toiggal Rockbox, shen-y-fa ta Show Old Rockbox Builds ry-hoi rish.",
- "settings_240p_warn_body": "240p builds cha nel eh ry-chlashtyn rish Y1 cheet stiagh 'sy vlein 2026, ny rish un 'sy vlein 2026. Install un 'sy Y1 s'sean.\n\nNy clowanyn shen cha vod ad ymmyd y yannoo jeh builds Rockbox s'seose, shen-y-fa t'adsyn listaghey myrgeddin.\n\nTa shiu shickyr dy vel shiu dy voddagh shiu soilshaghey 240p Rockbox?",
- "sel_240p_warning": "Ta'n 240p 'sy 'build'. Cha nel eh ry-chlashtyn rish Y1 cheet stiagh 'sy vlein 2026, ny rish un t'er jeet magh lesh Software Original 3.0.7 ny s'jerree.",
- "link_240p_body": "Ta'n link t'ou er foshlit son build 240p. Cha nel builds 240p ry-chlashtyn rish Y1 cheet stiagh 'sy vlein 2026, ny rish un 'sy vlein 2026.\n\nTa shiu shickyr dy vel shiu dy voddagh shiu soilshaghey 240p Rockbox?",
- "link_busy": "Clasht rish y staydys t'ayn, as foshlit y linney reesht.",
- "link_not_listed": "Cha nel y software 'sy linney shen er ny chur magh son y player shoh foast.",
+ "settings_240p_tip": "Ta'n ROM zip 240p (rom..._240p.zip). Cha nel 240p-toiggal co-chrauee rish unityn Y1 er Innioasis OS fo 3.0.7, shen-y-fa ta Show Old Rockbox Builds ry-hoi rish.",
  "settings_old_rockbox_warn_title": "Raadaghey Co-chosney Rockbox",
  "settings_old_rockbox_warn_body": "Ta scansh Rockbox-Y1 roish 0.5 ry-gheddyn rish ymmyd Y1 ry-gheddyn lurg Mee ny Shalee 2026 lesh Innioasis OS 3.0.7 ry-gheddyn.\n\nFlash build s'seose er ny h-injinysyn shoh, cha jean eh booting y yannoo.\n\nTa shiu shickyr dy vel shiu er nyn goyrt gys buildyn Rockbox s'seose?",
  "sel_refresh": "Ashaghey",
@@ -931,9 +926,6 @@
  "rockbox_wizard_done_desc": "Ta'n player ry-gheddyn as ry-gheddyn theme ayns Rockbox (Soilshaghyn > Soilshaghyn Theme).",
  "sel_local_rockbox_themes_option": "Cur stiagh Themeyn Rockbox 360p + Fontpack",
  "rockbox_stage_installing": "S'installaghey Themeyn as Fontyn Rockbox...",
- "rockbox_cleanup_step": "Cur magh ny sean-soilshaghyn Rockbox...",
- "rockbox_cleanup_deleting": "Ta'n .rockbox ry-chur magh ass y chleayst...",
- "rockbox_cleanup_failed_note": "Va'n software jeh'n 'software' eu er ny s'install, agh cha b'ee'n sean .rockbox folder er ny chur magh. Smooinee er y .rockbox folder er y player lesh laue my shegin dhyt toshiaght glan.",
  "rockbox_stage_waiting_adb_fmt": "Ta mee shirrey clowan trooid ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Ta ny smoo na un chleayst ceaut. Disconnect ny reddyn elley as lhig da'n fer ta ry-install.",
  "rockbox_stage_pushing": "Player er ny mharkey. Cur themeyn & fontyn co-oibragh...",
@@ -1033,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Ta un coffee ry-hoi bandwidth y download. T'eh cur y fix ry-cheilley ayns reach.",
  "donate_family_appeal_expected": "Ta Ryan as e cho-obbree er-gerrey da'n lhiannoo. Ta'n coyrle son costasyn y phrojekt as ar teihll noa ry-gheddyn dy mooar.",
  "donate_family_appeal_new_arrival": "Ta ard-vooinjer noa er y raad ayns thie Ryan. Ta gagh coyrle da'n server as da'n teihll ain ta crooit, coontit myr red mooar.",
- "donate_family_appeal_nursery": "Ta Ryan as e cho-obbree gobbraghey son nyn lhiannoo. Mannagh vel y ghraih shoh er ve feohdagh, by vie da coyrle son ny costasyn reih as ar teihll ta crooit dy chur cooney da ny smoo na ta fys eu."
+ "donate_family_appeal_nursery": "Ta Ryan as e cho-obbree gobbraghey son nyn lhiannoo. Mannagh vel y ghraih shoh er ve feohdagh, by vie da coyrle son ny costasyn reih as ar teihll ta crooit dy chur cooney da ny smoo na ta fys eu.",
+ "rockbox_cleanup_step": "Cur magh ny sean-soilshaghyn Rockbox...",
+ "rockbox_cleanup_deleting": "Ta'n .rockbox ry-chur magh ass y chleayst...",
+ "rockbox_cleanup_failed_note": "Va'n software jeh'n 'software' eu er ny s'install, agh cha b'ee'n sean .rockbox folder er ny chur magh. Smooinee er y .rockbox folder er y player lesh laue my shegin dhyt toshiaght glan."
 }

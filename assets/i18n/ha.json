@@ -139,12 +139,7 @@
   "settings_filter_old_rockbox": "Nuna Gina Tsohon Rockbox",
   "settings_filter_nightly": "Nuna Filayen Dev na Dare",
   "settings_filter_240p": "240p Rockbox Sakin",
-  "settings_240p_tip": "Yana nuna ginawa wanda zip ɗin ROM ɗin sa shine bambance-bambancen 240p (rom…_240p.zip). Ba za a iya amfani da ginin 240p akan sabon Y1 da aka siya bayan Mayu 2026, ko kuma akan wanda yazo da Original Software 3.0.7 ko kuma daga baya. Waɗannan 'yan wasan ba za su iya amfani da tsofaffin ginin Rockbox ba, don haka Nuna Gina Tsohon Rockbox yana kunna tare da shi.",
-  "settings_240p_warn_body": "Ba za a iya amfani da ginin 240p akan sabon Y1 da aka siya bayan Mayu 2026, ko kuma akan wanda yazo da Original Software 3.0.7 ko kuma daga baya. Sanya ɗaya kawai akan tsohuwar Y1.\n\nWaɗannan 'yan wasan ba za su iya amfani da tsofaffin ginin Rockbox ba, don haka an jera waɗancan ma.\n\nShin kun tabbata kuna son nuna fitowar 240p Rockbox?",
-  "sel_240p_warning": "Wannan ginin 240p ne. Ba za a iya amfani da shi akan sabon Y1 da aka siya bayan Mayu 2026, ko kuma akan wanda yazo da Original Software 3.0.7 ko kuma daga baya.",
-  "link_240p_body": "Hanyar da kuka buɗe don gina 240p ne. Ba za a iya amfani da ginin 240p akan Y1 da aka siya sabo bayan Mayu 2026, ko kuma akan wanda yazo da Original Software 3.0.7 ko kuma daga baya, don haka ana ɓoye su har sai kun kunna su.\n\nShin kun tabbata kuna son nuna fitowar 240p Rockbox?",
-  "link_busy": "Kammala shigarwa na yanzu, sannan sake buɗe hanyar haɗin.",
-  "link_not_listed": "Har yanzu ba a fitar da software na wannan hanyar haɗin yanar gizon ba.",
+  "settings_240p_tip": "Yana nuna ginawa wanda zip ɗin ROM ɗin sa shine bambance-bambancen 240p (rom…_240p.zip). Gina 240p ba su dace da raka'a Y1 akan Innioasis OS da ke ƙasa 3.0.7 ba, don haka Nuna Tsohon Rockbox Gina yana kunna tare da shi.",
   "settings_old_rockbox_warn_title": "Gargadi Daidaituwar Rockbox",
   "settings_old_rockbox_warn_body": "Sakin Rockbox-Y1 kafin 0.5 bai dace da raka'o'in Y1 da aka sayar ba bayan Maris 2026 tare da Innioasis OS 3.0.7 da aka riga aka shigar.\n\nFilki tsohuwar gini akan waɗannan na'urori zai hana yin booting.\n\nShin kun tabbata kuna son nuna tsoffin ginin Rockbox?",
   "sel_refresh": "Sake sabuntawa",
@@ -931,9 +926,6 @@
   "rockbox_wizard_done_desc": "Yanzu zaku iya cire haɗin mai kunnawa cikin aminci kuma zaɓi jigo a cikin Rockbox (Saituna> Saitunan Jigo).",
   "sel_local_rockbox_themes_option": "Sanya Jigogi na Rockbox 360p + Fontpack",
   "rockbox_stage_installing": "Ana shigar da Jigogi na Rockbox & Fonts...",
-  "rockbox_cleanup_step": "Ana cire tsoffin saitunan Rockbox...",
-  "rockbox_cleanup_deleting": "Ana cire babban fayil .rockbox daga mai kunnawa...",
-  "rockbox_cleanup_failed_note": "An shigar da sabuwar software ɗin ku, amma ba a iya cire tsohuwar babban fayil ɗin .rockbox ba. Share babban fayil .rockbox akan mai kunnawa da hannu idan kuna son farawa mai tsabta.",
   "rockbox_stage_waiting_adb_fmt": "Neman mai kunnawa ta hanyar ADB ({remaining}s)...",
   "rockbox_stage_disconnect_extra": "An haɗa ɗan wasa fiye da ɗaya. Cire haɗin sauran kuma bar wanda ake sakawa kawai.",
   "rockbox_stage_pushing": "An gano mai kunnawa. Ajiye jigogi & fonts...",
@@ -1033,5 +1025,8 @@
   "donate_support_appeal_coffee_math": "Kofi ɗaya yana ɗaukar kusan bandwidth na zazzagewa. Yana kiyaye gyara na gaba cikin isarwa.",
   "donate_family_appeal_expected": "Ryan da abokin tarayya suna jiran jariri. Ba da gudummawa ga farashin tafiyar da aikin da sabon danginmu ana yabawa sosai.",
   "donate_family_appeal_new_arrival": "Akwai sabon shigowa akan hanya a gidan Ryan. Kowane gudummawa ga sabobin da dangin mu na girma yana da ma'ana mai girma.",
-  "donate_family_appeal_nursery": "Ryan da abokin tarayya suna shirye don ɗansu. Idan wannan kayan aikin ya kasance mai amfani, gudummawa don farashi mai gudana da danginmu masu girma zai taimaka fiye da yadda kuka sani."
+  "donate_family_appeal_nursery": "Ryan da abokin tarayya suna shirye don ɗansu. Idan wannan kayan aikin ya kasance mai amfani, gudummawa don farashi mai gudana da danginmu masu girma zai taimaka fiye da yadda kuka sani.",
+  "rockbox_cleanup_step": "Ana cire tsoffin saitunan Rockbox...",
+  "rockbox_cleanup_deleting": "Ana cire babban fayil .rockbox daga mai kunnawa...",
+  "rockbox_cleanup_failed_note": "An shigar da sabuwar software ɗin ku, amma ba a iya cire tsohuwar babban fayil ɗin .rockbox ba. Share babban fayil .rockbox akan mai kunnawa da hannu idan kuna son farawa mai tsabta."
 }

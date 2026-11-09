@@ -139,12 +139,7 @@
  "settings_filter_old_rockbox": "Näita vanu Rockboxi konstruktsioone",
  "settings_filter_nightly": "Näita igaõhtuseid arendusväljaandeid",
  "settings_filter_240p": "240p Rockboxi väljaanded",
- "settings_240p_tip": "Näitab järge, mille ROM-i zip on 240p variant (rom…_240p.zip). 240p järge ei saa kasutada Y1-l, mis osteti uuena pärast 2026. aasta maid, ega seadmel, mis oli kaasas originaaltarkvara 3.0.7 või uuema versiooniga. Need mängijad ei saa kasutada ka vanemaid Rockboxi versioone, nii et Show Old Rockboxi järgud on sellega sisse lülitatud.",
- "settings_240p_warn_body": "240p järge ei saa kasutada Y1-l, mis osteti uuena pärast 2026. aasta maid, ega seadmel, mis oli kaasas originaaltarkvara 3.0.7 või uuema versiooniga. Installige see ainult vanemale Y1-le.\n\nNeed mängijad ei saa kasutada ka vanemaid Rockboxi versioone, nii et need on samuti loetletud.\n\nKas olete kindel, et soovite näidata 240p Rockboxi väljaandeid?",
- "sel_240p_warning": "See on 240p konstruktsioon. Seda ei saa kasutada Y1-l, mis on ostetud uuena pärast 2026. aasta maid, ega seadmel, mis oli kaasas originaaltarkvara 3.0.7 või uuema versiooniga.",
- "link_240p_body": "Avatud link on 240p järgu jaoks. 240p järge ei saa kasutada Y1-l, mis osteti uuena pärast 2026. aasta maid, ega originaaltarkvara 3.0.7 või uuema versiooniga kaasas, seega on need peidetud, kuni need sisse lülitate.\n\nKas olete kindel, et soovite näidata 240p Rockboxi väljaandeid?",
- "link_busy": "Lõpetage praegune installimine ja avage link uuesti.",
- "link_not_listed": "Sellel lingil olev tarkvara pole selle mängija jaoks veel välja antud.",
+ "settings_240p_tip": "Näitab järge, mille ROM-i zip on 240p variant (rom…_240p.zip). 240p järgud ei ühildu Y1 üksustega Innioasis OS-is alla 3.0.7, seega on sellega lubatud Show Old Rockbox Builds.",
  "settings_old_rockbox_warn_title": "Rockboxi ühilduvuse hoiatus",
  "settings_old_rockbox_warn_body": "Rockbox-Y1 versioonid enne 0.5 ei ühildu Y1 seadmetega, mida müüakse pärast 2026. aasta märtsi ja millel on eelinstallitud Innioasis OS 3.0.7.\n\nNende seadmete vanema järgu vilkumine takistab käivitamist.\n\nKas olete kindel, et soovite näidata vanemaid Rockboxi versioone?",
  "sel_refresh": "Värskenda",
@@ -931,9 +926,6 @@
  "rockbox_wizard_done_desc": "Nüüd saate mängija turvaliselt lahti ühendada ja valida Rockboxis teema (Seaded > Teema sätted).",
  "sel_local_rockbox_themes_option": "Installige Rockbox 360p teemad + Fontpack",
  "rockbox_stage_installing": "Rockboxi teemade ja fontide installimine...",
- "rockbox_cleanup_step": "Rockboxi vanade seadete eemaldamine...",
- "rockbox_cleanup_deleting": "Kausta .rockbox eemaldamine pleierist...",
- "rockbox_cleanup_failed_note": "Teie uus tarkvara installiti, kuid vana .rockboxi kausta ei saanud eemaldada. Kui soovite puhast algust, kustutage pleierist käsitsi kaust .rockbox.",
  "rockbox_stage_waiting_adb_fmt": "Mängija otsimine ADB kaudu ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Ühendatud on rohkem kui üks mängija. Ühendage teised lahti ja jätke alles installitav.",
  "rockbox_stage_pushing": "Mängija tuvastati. Placing community themes & fonts...",
@@ -1033,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Üks kohv katab ligikaudu allalaaditava ribalaiuse. See hoiab järgmise paranduse käeulatuses.",
  "donate_family_appeal_expected": "Ryan ja tema elukaaslane ootavad last. Annetused projekti jooksvate kulude katteks ja meie uue pere jaoks on väga tänulikud.",
  "donate_family_appeal_new_arrival": "Ryani majja on teel uus tulija. Iga annetus serveritele ja meie kasvavale perekonnale tähendab väga palju.",
- "donate_family_appeal_nursery": "Ryan ja tema elukaaslane valmistuvad oma lapse jaoks. Kui sellest tööriistast on kasu olnud, aitaks annetus jooksvate kulude katteks ja meie kasvava pere jaoks rohkem, kui teate."
+ "donate_family_appeal_nursery": "Ryan ja tema elukaaslane valmistuvad oma lapse jaoks. Kui sellest tööriistast on kasu olnud, aitaks annetus jooksvate kulude katteks ja meie kasvava pere jaoks rohkem, kui teate.",
+ "rockbox_cleanup_step": "Rockboxi vanade seadete eemaldamine...",
+ "rockbox_cleanup_deleting": "Kausta .rockbox eemaldamine pleierist...",
+ "rockbox_cleanup_failed_note": "Teie uus tarkvara installiti, kuid vana .rockboxi kausta ei saanud eemaldada. Kui soovite puhast algust, kustutage pleierist käsitsi kaust .rockbox."
 }

@@ -139,12 +139,7 @@
  "settings_filter_old_rockbox": "古い Rockbox ビルドを表示する",
  "settings_filter_nightly": "毎晩の開発リリースを表示する",
  "settings_filter_240p": "240p ロックボックス リリース",
- "settings_240p_tip": "ROM zip が 240p バリアント (rom…_240p.zip) であるビルドを示します。 240p ビルドは、2026 年 5 月以降に新しく購入した Y1、またはオリジナル ソフトウェア 3.0.7 以降が付属していた Y1 では使用できません。これらのプレイヤーは古い Rockbox ビルドも使用できないため、「Show Old Rockbox Builds」がオンになっています。",
- "settings_240p_warn_body": "240p ビルドは、2026 年 5 月以降に新しく購入した Y1、またはオリジナル ソフトウェア 3.0.7 以降が付属していた Y1 では使用できません。古い Y1 には 1 つだけインストールしてください。\n\nこれらのプレイヤーは古い Rockbox ビルドも使用できないため、それらもリストに記載されています。\n\n240p Rockbox リリースを表示してもよろしいですか?",
- "sel_240p_warning": "これは 240p ビルドです。 2026 年 5 月以降に新しく購入した Y1、またはオリジナル ソフトウェア 3.0.7 以降が付属していた Y1 では使用できません。",
- "link_240p_body": "開いたリンクは 240p ビルド用です。 240p ビルドは、2026 年 5 月以降に新しく購入した Y1、またはオリジナル ソフトウェア 3.0.7 以降が付属していた Y1 では使用できないため、オンにするまで非表示になります。\n\n240p Rockbox リリースを表示してもよろしいですか?",
- "link_busy": "現在のインストールを終了してから、リンクを再度開きます。",
- "link_not_listed": "そのリンク内のソフトウェアは、このプレーヤー用にはまだリリースされていません。",
+ "settings_240p_tip": "ROM zip が 240p バリアント (rom…_240p.zip) であるビルドを示します。 240p ビルドは、3.0.7 より前の Innioasis OS 上の Y1 ユニットと互換性がないため、Show Old Rockbox Builds が有効になっています。",
  "settings_old_rockbox_warn_title": "Rockbox の互換性に関する警告",
  "settings_old_rockbox_warn_body": "Rockbox-Y1 0.5 より前のリリースは、2026 年 3 月以降に販売され、Innioasis OS 3.0.7 がプリインストールされた Y1 ユニットと互換性がありません。\n\nこれらのデバイスで古いビルドをフラッシュすると、起動できなくなります。\n\n古い Rockbox ビルドを表示してもよろしいですか?",
  "sel_refresh": "リフレッシュ",
@@ -931,9 +926,6 @@
  "rockbox_wizard_done_desc": "安全にプレイヤーを取り外して、Rockbox でテーマを選択できます（設定 > テーマ設定）。",
  "sel_local_rockbox_themes_option": "Rockbox 360p テーマとフォントパックをインストール",
  "rockbox_stage_installing": "Rockbox のテーマとフォントをインストール中…",
- "rockbox_cleanup_step": "古い Rockbox 設定を削除しています…",
- "rockbox_cleanup_deleting": "プレーヤーから .rockbox フォルダーを削除しています…",
- "rockbox_cleanup_failed_note": "新しいソフトウェアはインストールされましたが、古い .rockbox フォルダーを削除できませんでした。まっさらにしたい場合は、プレイヤー上の .rockbox フォルダーを手動で削除してください。",
  "rockbox_stage_waiting_adb_fmt": "ADB 経由でプレイヤーを検出中（残り {remaining} 秒）…",
  "rockbox_stage_disconnect_extra": "複数のプレイヤーが接続されています。他のプレイヤーを切り抜き、インストール中の一台のみ残してください。",
  "rockbox_stage_pushing": "プレイヤーを検出しました。コミュニティテーマとフォントを転送中…",
@@ -1033,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "コーヒー1杯でダウンロード約1回分の通信量を賄えます。次の修正を届ける力になります。",
  "donate_family_appeal_expected": "Ryan とパートナーに赤ちゃんが生まれます。プロジェクトの運用費と新しい家族のためのご支援を心から感謝します。",
  "donate_family_appeal_new_arrival": "Ryan の家に新しい家族がやってきます。サーバーと成長する家族へのご支援のひとつひとつが大きな力になります。",
- "donate_family_appeal_nursery": "Ryan とパートナーは子どもの誕生に備えています。このツールがお役に立ったなら、運用費と新しい家族のためのご支援が大きな支えになります。"
+ "donate_family_appeal_nursery": "Ryan とパートナーは子どもの誕生に備えています。このツールがお役に立ったなら、運用費と新しい家族のためのご支援が大きな支えになります。",
+ "rockbox_cleanup_step": "古い Rockbox 設定を削除しています…",
+ "rockbox_cleanup_deleting": "プレーヤーから .rockbox フォルダーを削除しています…",
+ "rockbox_cleanup_failed_note": "新しいソフトウェアはインストールされましたが、古い .rockbox フォルダーを削除できませんでした。まっさらにしたい場合は、プレイヤー上の .rockbox フォルダーを手動で削除してください。"
 }

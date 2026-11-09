@@ -139,12 +139,7 @@
   "settings_filter_old_rockbox": "Qhia Old Rockbox Tsim",
   "settings_filter_nightly": "Qhia Hmo Ntuj Dev tso",
   "settings_filter_240p": "240p Rockbox Tso Tawm",
-  "settings_240p_tip": "Qhia tsim nws ROM zip yog 240p variant (rom…_240p.zip). 240p tsim tsis tuaj yeem siv rau ntawm Y1 yuav tshiab tom qab lub Tsib Hlis 2026, lossis ntawm ib qho uas tuaj nrog Original Software 3.0.7 lossis tom qab ntawd. Cov neeg ua si tsis tuaj yeem siv Rockbox qub tsim ib qho, yog li Qhia Qub Rockbox Builds tau qhib nrog nws.",
-  "settings_240p_warn_body": "240p tsim tsis tuaj yeem siv rau ntawm Y1 yuav tshiab tom qab lub Tsib Hlis 2026, lossis ntawm ib qho uas tuaj nrog Original Software 3.0.7 lossis tom qab ntawd. Tsuas yog nruab ib qho ntawm Y1 qub.\n\nCov neeg ua si tsis tuaj yeem siv Rockbox qub tsim ib qho, yog li cov no tau teev dhau los.\n\nKoj puas paub tseeb tias koj xav qhia 240p Rockbox tso tawm?",
-  "sel_240p_warning": "Qhov no yog 240p tsim. Nws tsis tuaj yeem siv rau ntawm Y1 yuav tshiab tom qab lub Tsib Hlis 2026, lossis ntawm ib qho uas tuaj nrog Original Software 3.0.7 lossis tom qab ntawd.",
-  "link_240p_body": "Qhov txuas koj qhib yog rau 240p tsim. 240p tsim tsis tuaj yeem siv rau ntawm Y1 yuav tshiab tom qab lub Tsib Hlis 2026, lossis ntawm ib qho uas tuaj nrog Original Software 3.0.7 lossis tom qab, yog li lawv tau muab zais kom txog thaum koj qhib lawv.\n\nKoj puas paub tseeb tias koj xav qhia 240p Rockbox tso tawm?",
-  "link_busy": "Ua kom tiav qhov kev teeb tsa tam sim no, tom qab ntawd qhib qhov txuas dua.",
-  "link_not_listed": "Cov software hauv qhov txuas no tseem tsis tau tso tawm rau tus neeg ua si no.",
+  "settings_240p_tip": "Qhia tsim nws ROM zip yog 240p variant (rom…_240p.zip). 240p tsim tsis sib xws nrog Y1 units ntawm Innioasis OS hauv qab 3.0.7, yog li Show Old Rockbox Builds tau qhib nrog nws.",
   "settings_old_rockbox_warn_title": "Rockbox Compatibility ceeb toom",
   "settings_old_rockbox_warn_body": "Kev tso tawm ntawm Rockbox-Y1 ua ntej 0.5 tsis sib xws nrog Y1 units muag tom qab Lub Peb Hlis 2026 nrog Innioasis OS 3.0.7 pre-installed.\n\nFlashing ib qho qub tsim ntawm cov khoom siv no yuav tiv thaiv booting.\n\nKoj puas paub tseeb tias koj xav qhia cov qub Rockbox tsim?",
   "sel_refresh": "Hloov tshiab",
@@ -931,9 +926,6 @@
   "rockbox_wizard_done_desc": "Tam sim no koj tuaj yeem tshem tawm cov neeg ua si yam tsis muaj kev cuam tshuam thiab xaiv lub ntsiab lus hauv Rockbox (Chaw> Cov Ntsiab Lus).",
   "sel_local_rockbox_themes_option": "Nruab Rockbox 360p Cov Ntsiab Lus + Fontpack",
   "rockbox_stage_installing": "Txhim kho Rockbox ntxhais & Fonts...",
-  "rockbox_cleanup_step": "Tshem tawm cov qub Rockbox teeb tsa ...",
-  "rockbox_cleanup_deleting": "Tshem tawm .rockbox nplaub tshev los ntawm cov neeg uas ua ntawv...",
-  "rockbox_cleanup_failed_note": "Koj cov software tshiab tau teeb tsa, tab sis lub qub .rockbox folder tsis tuaj yeem raug tshem tawm. Rho tawm lub .rockbox nplaub tshev ntawm cov neeg uas ua ntawv los ntawm tes yog tias koj xav tau ib tug huv si pib.",
   "rockbox_stage_waiting_adb_fmt": "Nrhiav tus neeg ua si ntawm ADB ({remaining}s)...",
   "rockbox_stage_disconnect_extra": "Ntau tshaj ib tus neeg ua si txuas nrog. Disconnect lwm tus thiab tawm tsuas yog ib qho raug ntsia.",
   "rockbox_stage_pushing": "Player nrhiav pom. Muab cov ntsiab lus hauv zej zog & fonts ...",
@@ -1033,5 +1025,8 @@
   "donate_support_appeal_coffee_math": "Ib lub kas fes kwv yees npog qhov bandwidth ntawm kev rub tawm. Nws khaws cov kev kho tom ntej no kom ncav cuag.",
   "donate_family_appeal_expected": "Ryan thiab nws tus khub tab tom tos menyuam. Kev pub dawb rau cov nqi khiav haujlwm thiab peb tsev neeg tshiab tau txais txiaj ntsig zoo heev.",
   "donate_family_appeal_new_arrival": "Muaj ib qho tshiab tuaj txog ntawm txoj kev hauv Ryan lub tsev. Txhua qhov pub dawb rau cov servers thiab peb tsev neeg loj hlob txhais tau tias muaj txiaj ntsig zoo.",
-  "donate_family_appeal_nursery": "Ryan thiab nws tus khub tab tom npaj rau lawv tus menyuam. Yog tias cov cuab yeej no tau txais txiaj ntsig, kev pub dawb rau cov nqi khiav thiab peb tsev neeg loj hlob tuaj yeem pab ntau tshaj qhov koj paub."
+  "donate_family_appeal_nursery": "Ryan thiab nws tus khub tab tom npaj rau lawv tus menyuam. Yog tias cov cuab yeej no tau txais txiaj ntsig, kev pub dawb rau cov nqi khiav thiab peb tsev neeg loj hlob tuaj yeem pab ntau tshaj qhov koj paub.",
+  "rockbox_cleanup_step": "Tshem tawm cov qub Rockbox teeb tsa ...",
+  "rockbox_cleanup_deleting": "Tshem tawm .rockbox nplaub tshev los ntawm cov neeg uas ua ntawv...",
+  "rockbox_cleanup_failed_note": "Koj cov software tshiab tau teeb tsa, tab sis lub qub .rockbox folder tsis tuaj yeem raug tshem tawm. Rho tawm lub .rockbox nplaub tshev ntawm cov neeg uas ua ntawv los ntawm tes yog tias koj xav tau ib tug huv si pib."
 }

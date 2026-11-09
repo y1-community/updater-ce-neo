@@ -139,12 +139,7 @@
  "settings_filter_old_rockbox": "Eski Rokboks qurulışlarını köster",
  "settings_filter_nightly": "Gece inkişaf ettirüvlerniñ çıqışlarını köster",
  "settings_filter_240p": "240p Rokboks çıqışları",
- "settings_240p_tip": "ROM zipi 240p variantı olğan bildlerni köstere (rom..._240p.zip). 240p qurulışlarını 2026 senesi mayıs ayından soñ yañı satın alınğan Y1-de, ya da Original Software 3.0.7 ya da daa soñki versiyasınen beraber kelgeninde qullanmaq mümkün degil. O oyuncılar da eski Rockbox qurulışlarını qullana bilmeyler, şunıñ içün onıñnen beraber Show Old Rockbox Builds yaqıla.",
- "settings_240p_warn_body": "240p qurulışlarını 2026 senesi mayıs ayından soñ yañı satın alınğan Y1-de, ya da Original Software 3.0.7 ya da daa soñki versiyasınen beraber kelgeninde qullanmaq mümkün degil. Tek birini eski Y1-ge qoy.\n\nO oyuncılar da eski Rockbox qurulışlarını qullana bilmeyler, onıñ içün olar da qayd etilgen.\n\n240p Rockbox çıqışlarını köstermege istegeniñizge eminsiñizmi?",
- "sel_240p_warning": "Bu 240p qurulış. Onı 2026 senesi mayıs ayından soñ yañı satın alınğan Y1-de, ya da Original Software 3.0.7 ya da daa soñki versiyasınen beraber kelgende qullanmaq mümkün degil.",
- "link_240p_body": "Siz açqan ssılka 240p qurulış içün. 240p qurulışlarını 2026 senesi mayıs ayından soñ yañı satın alınğan Y1-de, ya da Original Software 3.0.7 ya da daa soñki versiyasınen beraber kelgeninde qullanmaq mümkün degil, şunıñ içün olarnı yaqmağance gizlidir.\n\n240p Rockbox çıqışlarını köstermege istegeniñizge eminsiñizmi?",
- "link_busy": "Şimdiki montajnı bitiriñiz, soñra bağlantını kene açıñız.",
- "link_not_listed": "O bağlantıdaki programma bu pleyer içün daa çıqmadı.",
+ "settings_240p_tip": "ROM zipi 240p variantı olğan bildlerni köstere (rom..._240p.zip). 240p cıyıntıqları 3.0.7-den aşağı olğan Innioasis OS-teki Y1 agregatlarınen kelişmey, şunıñ içün onıñnen Show Old Rockbox Builds çalışmaqta.",
  "settings_old_rockbox_warn_title": "Rockbox uyğunlığı aqqında haberdarlıq",
  "settings_old_rockbox_warn_body": "Rockbox-Y1 0.5-ten evelki çıqışları 2026 senesi mart ayından soñ satılğan Y1 agregatlarınen Innioasis OS 3.0.7 evelden yerleştirilgen alda kelişmey.\n\nBu mahsulatlarda eski bildni yaqıp çıqarmaq yüklenüvge mania olacaq.\n\nSiz eski Rockbox qurulışlarını köstermege istegeniñizge eminsiñizmi?",
  "sel_refresh": "Yañıdan yapıñız",
@@ -931,9 +926,6 @@
  "rockbox_wizard_done_desc": "Endi sen pleyerni aman-aman ayırıp, Rockbox programmasında (Parametrler > Mevzu parametrleri) mevzunı seçip almaq mümkünsiñ.",
  "sel_local_rockbox_themes_option": "Rockbox 360p mevzularını + şriftlerni yerleştiriñiz",
  "rockbox_stage_installing": "Rockbox mevzu ve şriftlerni yerleştirüv...",
- "rockbox_cleanup_step": "Eski Rockbox parametrlerini yoq etmek...",
- "rockbox_cleanup_deleting": "Pleyerden .rockbox papkasını çıqarmaq...",
- "rockbox_cleanup_failed_note": "Yañı programmañ yerleştirildi, amma eski .rockbox papkasını çıqarmaq mümkün olmadı. Eger temiz başlanğıç isteseñiz, pleyerdeki .rockbox papkasını elnen yoq etiñiz.",
  "rockbox_stage_waiting_adb_fmt": "ADB ({remaining}lar) vastasınen oyuncı qıdırıla...",
  "rockbox_stage_disconnect_extra": "Birden ziyade oyuncı bağlı. Qalğanlarını ayırıp, tek yerleştirilgenini qaldırıñız.",
  "rockbox_stage_pushing": "Oyuncı tapıldı. Cemaat mevzularını ve şriftlerni yerleştirüv...",
@@ -1033,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Bir qave yüklevniñ yol keçüv kenişligini qabaatlı şekilde qaplay. O, nevbetteki tüzetüvni el yetkizüv yerinde tuta.",
  "donate_family_appeal_expected": "Rayan ve onıñ ömür arqadaşı bala bekleyler. Proyektniñ çalışuv masraflarına ve bizim yañı qorantamızğa bahşışlar kütleviy sürette qıymet kesile.",
  "donate_family_appeal_new_arrival": "Rayannıñ evinde yolda yañı kelgen adam bar. Serverlerge ve ösken qorantamızğa er bir bahşış büyük bir şeyni añlata.",
- "donate_family_appeal_nursery": "Rayan ve onıñ ömür arqadaşı balasına azırlanalar. Eger bu alet faydalı olğan olsa, çalışuv masrafları ve bizim ösken qorantamız içün bahşış siz bilgenden ziyade yardım eter edi."
+ "donate_family_appeal_nursery": "Rayan ve onıñ ömür arqadaşı balasına azırlanalar. Eger bu alet faydalı olğan olsa, çalışuv masrafları ve bizim ösken qorantamız içün bahşış siz bilgenden ziyade yardım eter edi.",
+ "rockbox_cleanup_step": "Eski Rockbox parametrlerini yoq etmek...",
+ "rockbox_cleanup_deleting": "Pleyerden .rockbox papkasını çıqarmaq...",
+ "rockbox_cleanup_failed_note": "Yañı programmañ yerleştirildi, amma eski .rockbox papkasını çıqarmaq mümkün olmadı. Eger temiz başlanğıç isteseñiz, pleyerdeki .rockbox papkasını elnen yoq etiñiz."
 }

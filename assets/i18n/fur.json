@@ -139,12 +139,7 @@
  "settings_filter_old_rockbox": "Mostra lis vecjis costruzions di Rockbox",
  "settings_filter_nightly": "Mostra lis publicazions di svilup di gnot",
  "settings_filter_240p": "Emissions di Rockbox in 240p",
- "settings_240p_tip": "Al mostre compilazions che a àn une ROM zip une variante di 240p (rom..._240p.zip). Lis versions 240p no puedin jessi dopradis suntun Y1 comprât gnûf dopo Mai 2026, o suntun che al è vignût cul program origjinâl 3.0.7 o plui tart. Chei zuiadôrs a no puedin doprâ nancje lis vecjis compilazions di Rockbox, cussì Mostra lis vecjis compilazions di Rockbox al è accedût cun chel.",
- "settings_240p_warn_body": "Lis versions 240p no puedin jessi dopradis suntun Y1 comprât gnûf dopo Mai 2026, o suntun che al è vignût cul program origjinâl 3.0.7 o plui tart. Instalâ dome un suntun Y1 plui vecjo.\n\nChei zuiadôrs a no puedin doprâ nancje lis versions plui vecjis di Rockbox, cussì a son ancje chês elencadis.\n\nSigur che tu âs di mostrâ lis publicazions di Rockbox in 240p?",
- "sel_240p_warning": "Cheste e je une compilazion di 240p. Nol pues jessi doprât suntun Y1 comprât gnûf dopo Mai 2026, o suntun che al ven cul Program Origjinâl 3.0.7 o plui tart.",
- "link_240p_body": "Il link che tu âs viert al è par une build di 240p. Lis compilazions 240p no puedin jessi dopradis suntune Y1 comprade gnove dopo Mai 2026, o suntune che e je vignude cul Original Software 3.0.7 o plui tart, cussì a son scuindûts fintant che no lis cjalis sù.\n\nSigur che tu âs di mostrâ lis publicazions di Rockbox in 240p?",
- "link_busy": "Finî la instalazion corint, daspò vierzi di gnûf il leam.",
- "link_not_listed": "Il program in chel leam nol è ancjemò jessût par chest letôr.",
+ "settings_240p_tip": "Al mostre compilazions che a àn une ROM zip une variante di 240p (rom..._240p.zip). Lis compilazions 240p no son compatibilis cun lis unitâts Y1 sul sisteme operatîf Innioasis sot dal 3.0.7, duncje Mostra lis vecjis compilazions di Rockbox al è abilât cun chel.",
  "settings_old_rockbox_warn_title": "Avertiment di compatibilitât cun Rockbox",
  "settings_old_rockbox_warn_body": "Lis versions di Rockbox-Y1 prime di 0.5 no son compatibilis cun lis unitâts Y1 vendudis daspò Març dal 2026 cun Innioasis OS 3.0.7 preinstalât.\n\nLampegjâ une compilazion plui vecje su chescj dispositîfs al impedirà l’avviament.\n\nSigur che tu âs di mostrâ lis versions plui vecjis di Rockbox?",
  "sel_refresh": "Rifrescjâ",
@@ -931,9 +926,6 @@
  "rockbox_wizard_done_desc": "Cumò tu puedis disconeti in mût sigûr il letôr e sielzi un teme in Rockbox (Impostazions > Impostazions dal teme).",
  "sel_local_rockbox_themes_option": "Instalâ temis Rockbox 360p + caratars",
  "rockbox_stage_installing": "Instalâ temis e caratars Rockbox...",
- "rockbox_cleanup_step": "Eliminant lis vecjis impostazions di Rockbox...",
- "rockbox_cleanup_deleting": "Rimovi la cjarte .rockbox dal letôr...",
- "rockbox_cleanup_failed_note": "Il gnûf program al è stât instalât, ma la vecje cjarte .rockbox no si pues gjavâ vie. Elimina la cjarte .rockbox sul letôr a man se tu âs bisugne di un inizi net.",
  "rockbox_stage_waiting_adb_fmt": "Cirint un zuiadôr midiant di ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Plui di un zuiadôr al è leât. Disconeti i altris e lassâ dome chel che al è daûr a jessi instalât.",
  "rockbox_stage_pushing": "Il zuiadôr rilevât. Metint temis e caratars comunitaris...",
@@ -1033,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Un cafè al cuvierç cirche la largjece di bande di un scaricament. Al manten la prossime corezion a portât.",
  "donate_family_appeal_expected": "Ryan e il so compagn a stan sperant un beç. Lis donazions pai coscj di funzionament dal progjet e pe nestre gnove famee a son une vore apreciadis.",
  "donate_family_appeal_new_arrival": "Al è un gnûf rivât su la strade a cjase di Ryan. Ogni donazion viers i servidôrs e la nestre famee in cressite e vûl dî une vore.",
- "donate_family_appeal_nursery": "Ryan e il so compagn a si preparin pal lôr frut. Se chest strument al fos stât util, une donazion pai coscj di funzionament e la nestre famee in cressite e judarès plui di ce che tu cognossis."
+ "donate_family_appeal_nursery": "Ryan e il so compagn a si preparin pal lôr frut. Se chest strument al fos stât util, une donazion pai coscj di funzionament e la nestre famee in cressite e judarès plui di ce che tu cognossis.",
+ "rockbox_cleanup_step": "Eliminant lis vecjis impostazions di Rockbox...",
+ "rockbox_cleanup_deleting": "Rimovi la cjarte .rockbox dal letôr...",
+ "rockbox_cleanup_failed_note": "Il gnûf program al è stât instalât, ma la vecje cjarte .rockbox no si pues gjavâ vie. Elimina la cjarte .rockbox sul letôr a man se tu âs bisugne di un inizi net."
 }

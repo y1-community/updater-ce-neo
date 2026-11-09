@@ -139,12 +139,7 @@
  "settings_filter_old_rockbox": "Nyut jami macon ma ki gedo i Rockbox",
  "settings_filter_nightly": "Nyut gin ma ki cwalo i dyewor",
  "settings_filter_240p": "240p Rockbox Releases",
- "settings_240p_tip": "Nyutu jami ma ROM zip ne tye 240p (rom..._240p.zip). 240p builds pe kitwero tic kwede i kom Y1 ma ki wilo manyen inge dwe me abic mwaka 2026, onyo i kom ma obino ki Original Software 3.0.7 onyo ma lacen. Lutuku ni pe gitwero tic ki jami macon me Rockbox bene, ki dong nyutu jami macon me Rockbox ki yabo kwede.",
- "settings_240p_warn_body": "240p builds pe kitwero tic kwede i kom Y1 ma ki wilo manyen inge dwe me abic mwaka 2026, onyo i kom ma obino ki Original Software 3.0.7 onyo ma lacen. Ket acel keken i kom Y1 macon.\n\nLutuku ni pe gitwero tic ki jami macon me Rockbox bene, ki dong ki coyo gii bene.\n\nIn itye ki gen ni imito nyutu 240p Rockbox ma ki gonyo?",
- "sel_240p_warning": "Man tye 240p ma ki yubu. Pe kitwero tic kwede i kom Y1 ma ki wilo manyen inge dwe me abic mwaka 2026, onyo i kom ma obino ki Original Software 3.0.7 onyo ma lacen.",
- "link_240p_body": "Gin ma i yabo ni tye pi 240p ma ki yubu. 240p builds pe kitwero tic kwede i kom Y1 ma ki wilo manyen inge dwe me abic mwaka 2026, onyo i kom ma obino ki Original Software 3.0.7 onyo ma lacen, ki dong gi kano nio ka i yabo gi.\n\nIn itye ki gen ni imito nyutu 240p Rockbox ma ki gonyo?",
- "link_busy": "Tyeko keto ne i kare ni, ki i yabo gin ma ki keto ni.",
- "link_not_listed": "Gin ma ki lwongo ni software ma tye i link ni pwod pe ki gonyo pi latuku ni.",
+ "settings_240p_tip": "Nyutu jami ma ROM zip ne tye 240p (rom..._240p.zip). 240p builds pe rwate ki Y1 units i Innioasis OS ma tye piny 3.0.7, ki dong Show Old Rockbox Builds tye ka tic kwede.",
  "settings_old_rockbox_warn_title": "Rockbox Compatibility Warning",
  "settings_old_rockbox_warn_body": "Gin ma ki gonyo pa Rockbox-Y1 ma peya 0.5 pe rwate ki Y1 ma ki cato inge dwe me adek mwaka 2026 ki Innioasis OS 3.0.7 ma ki keto con.\n\nKeto gin macon i kom jami eni obi gengo yabo.\n\nIn itye ki gen ni imito nyutu jami macon me Rockbox?",
  "sel_refresh": "dwoko cen",
@@ -931,9 +926,6 @@
  "rockbox_wizard_done_desc": "Iromo kwanyo gin ma tuku ni labongo ayella ki iyero gin mo ki i Rockbox (Kabedo > Kit me keto gin ni).",
  "sel_local_rockbox_themes_option": "Ket Rockbox 360p Themes + Fontpack",
  "rockbox_stage_installing": "Keto Rockbox Themes & Fonts...",
- "rockbox_cleanup_step": "Kwanyo jami macon me Rockbox...",
- "rockbox_cleanup_deleting": "Kwanyo .rockbox ki i kom gin ma tuku ni...",
- "rockbox_cleanup_failed_note": "Gin manyen ni ki keto, ento .rockbox folda macon ni pi ki twero kwanyo ne. Kwany .rockbox ma tye i kom gin ma tuku ni ki cingi ka imito cako maber.",
  "rockbox_stage_waiting_adb_fmt": "Tye ka yenyo latuku ki ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Lutuku ma kato acel gikubbe. Kwany mukene ni ki iwek acel ma ki keto ni keken.",
  "rockbox_stage_pushing": "Latuku ma ki ngeyo. Keto jami ma mako lwak ki coc...",
@@ -1033,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Kawa acel romo pongo bandwidth me gin ma ki kwanyo. En gwoko gin ma lubo ni i cingi.",
  "donate_family_appeal_expected": "Ryan ki lawote gitye ka kuro latin. Miiyo kony me konyo yub man ki jo me ot wa manyen ni ki pwoyo tutwal.",
  "donate_family_appeal_new_arrival": "Tye ngat manyen ma tye ka bino i ot pa Ryan. Miiyo kony mo keken bot lutic ki jo me ot wa ma tye ka dongo tye gin ma pire tek.",
- "donate_family_appeal_nursery": "Ryan gin ki lawote gitye ka yubbe pi latin gi. Ka jami tic ni obedo me kony, miiyo kony pi wel cente me tic ki jo me ot wa ma tye ka dongo romo konyo makato kit ma ingeyo kwede."
+ "donate_family_appeal_nursery": "Ryan gin ki lawote gitye ka yubbe pi latin gi. Ka jami tic ni obedo me kony, miiyo kony pi wel cente me tic ki jo me ot wa ma tye ka dongo romo konyo makato kit ma ingeyo kwede.",
+ "rockbox_cleanup_step": "Kwanyo jami macon me Rockbox...",
+ "rockbox_cleanup_deleting": "Kwanyo .rockbox ki i kom gin ma tuku ni...",
+ "rockbox_cleanup_failed_note": "Gin manyen ni ki keto, ento .rockbox folda macon ni pi ki twero kwanyo ne. Kwany .rockbox ma tye i kom gin ma tuku ni ki cingi ka imito cako maber."
 }

@@ -1739,11 +1739,7 @@ class SelectPackagePage(QWidget):
                 )
             )
         elif key:
-            self._online_banner.set_type(
-                "warning"
-                if key in ("sel_offline", "sel_no_release", "sel_240p_warning")
-                else "info"
-            )
+            self._online_banner.set_type("warning" if key in ("sel_offline", "sel_no_release") else "info")
             self._online_banner.setText(tr(key))
         else:
             self._online_banner.setText("")
@@ -2006,9 +2002,15 @@ class SelectPackagePage(QWidget):
         combo = getattr(self, "_brand_combo", None)
         if combo is None:
             return
-        # Only brands with a released firmware: a model with nothing published
-        # has no row, so its brand would only lead to an empty model list.
+        from .. import device_models
+
         brands = catalog.brand_names()
+        # A brand the registry knows but no release has been published for yet
+        # (Timmkoo's A5, SR1, Q3, Q5, Q8) still needs its row: its models are
+        # selectable, and without the brand filter they could not be reached.
+        for name in device_models.brand_names():
+            if not any(name.casefold() == known.casefold() for known in brands):
+                brands.append(name)
         current = self.current_brand()
         combo.blockSignals(True)
         combo.clear()
@@ -2056,11 +2058,10 @@ class SelectPackagePage(QWidget):
     def _select_model_for_manual(self, model: str) -> None:
         """Point the device drop-down at a hand-imported package's model.
 
-        Only models with a released firmware have a row. A package for any
-        other model (one with nothing published yet, or one the registry does
-        not know) still reaches the prompts and the install through
-        ``_current_package_model``, so the list returns to its default row
-        rather than inventing one.
+        Every flashable registry model has a row (a G5 with no release yet
+        included). A model the registry does not know at all still reaches the
+        prompts and the install through ``_current_package_model``, so the list
+        returns to its default row rather than inventing one.
         """
         if not model:
             return
@@ -2723,9 +2724,12 @@ class SelectPackagePage(QWidget):
             selected_row = 0
             if target_tag:
                 self._target_tag_to_select = None
-                found = self._row_for_tag(target_tag)
-                if found >= 0:
-                    selected_row = found
+                for row in range(self._release_list.count()):
+                    it = self._release_list.item(row)
+                    r = it.data(Qt.UserRole)
+                    if r and r.get("tag_name") == target_tag:
+                        selected_row = row
+                        break
             self._release_list.setCurrentRow(selected_row)
             if target_tag:
                 selected_item = self._release_list.item(selected_row)
@@ -2742,51 +2746,16 @@ class SelectPackagePage(QWidget):
             if getattr(self, "_auto_install_tag", None):
                 target_auto = self._auto_install_tag
                 self._auto_install_tag = None
-                row = self._row_for_tag(target_auto)
-                it = self._release_list.item(row) if row >= 0 else None
-                r = it.data(Qt.UserRole) if it else None
-                if r:
-                    self._release_list.setCurrentRow(row)
-                    self._trigger_release_install(r)
+                for row in range(self._release_list.count()):
+                    it = self._release_list.item(row)
+                    r = it.data(Qt.UserRole) if it else None
+                    if r and (target_auto in ("latest", "") or r.get("tag_name") == target_auto):
+                        self._release_list.setCurrentRow(row)
+                        self._trigger_release_install(r)
+                        break
             self._fit_release_list_height()
             self.updateGeometry()
             self.content_size_changed.emit()
-
-    def _row_for_tag(self, tag_name) -> int:
-        """List row for ``tag_name`` (``latest`` = the newest row), or -1.
-
-        A tag can have a standard row and a 240p row. ``_target_resolution``
-        (set by a site link) picks between them; otherwise the standard build
-        wins and the 240p row is only taken when it is the tag's only row.
-        """
-        want_240p = getattr(self, "_target_resolution", "") == "240p"
-        latest = str(tag_name or "").lower() in ("", "latest")
-        fallback = -1
-        for row in range(self._release_list.count()):
-            it = self._release_list.item(row)
-            r = it.data(Qt.UserRole) if it else None
-            if not r:
-                continue
-            if not latest and r.get("tag_name") != tag_name:
-                continue
-            if catalog.release_is_240p(r) == want_240p:
-                return row
-            if fallback < 0:
-                fallback = row
-        return fallback
-
-    def _sync_240p_banner(self, rel) -> None:
-        """Warn under the list while a 240p row is selected, and put it back after."""
-        key = getattr(self, "_online_banner_key", None)
-        if catalog.release_is_240p(rel):
-            if key != "sel_240p_warning":
-                self._banner_before_240p = (key, getattr(self, "_online_banner_count", 0))
-            self._set_online_banner("sel_240p_warning")
-        elif key == "sel_240p_warning":
-            previous = getattr(self, "_banner_before_240p", None) or (
-                "releases", len(getattr(self, "_listed_releases", None) or [])
-            )
-            self._set_online_banner(*previous)
 
     def _asset_line(self, rel):
         assets = ", ".join(
@@ -2818,7 +2787,6 @@ class SelectPackagePage(QWidget):
                 self._gui_explicit = None
                 self._gui_previous_identity = None
             self._current_selected_rel = rel
-            self._sync_240p_banner(rel)
             self._details_package = self._package_for_selection()
             self._is_translated = False
             self._is_translating = False
@@ -2982,23 +2950,12 @@ class SelectPackagePage(QWidget):
         repo = str((rel or {}).get("source_repo") or "") or docs_source.repo_from_url(url)
         tag = str((rel or {}).get("tag_name") or "")
         model = self.current_model() if hasattr(self, "current_model") else ""
-        package = getattr(self, "_details_package", None)
-        # The site's Get it in Updater / Download Portable Zip buttons act on
-        # this exact build, so a 240p row sends its resolution along.
         target = (
             docs_source.release_notes_url(
                 repo,
                 tag,
                 name=str((rel or {}).get("name") or ""),
                 model=model,
-                software=str(getattr(package, "slug", "") or ""),
-                brand=self.current_brand() if hasattr(self, "current_brand") else "",
-                hw_type=(
-                    str(getattr(self, "_selected_type", "") or "")
-                    if model.upper() == "Y1"
-                    else ""
-                ),
-                resolution="240p" if catalog.release_is_240p(rel) else "",
                 lang=lang,
             )
             or docs_source.with_language(url, lang)
@@ -4462,60 +4419,28 @@ class SelectPackagePage(QWidget):
         return newest.get("tag_name") or ""
 
     def navigate_to_package(
-        self,
-        model: str,
-        software_name: str,
-        tag_name=None,
-        refresh_if_missing=False,
-        brand: str = "",
-        hw_type: str = "",
-        resolution: str = "",
+        self, model: str, software_name: str, tag_name=None, refresh_if_missing=False
     ):
-        """Switch to the catalogue, select specified model/software, highlight tag_name.
-
-        ``brand`` moves the brand filter first, since it scopes the model list;
-        ``hw_type`` picks the Y1 Type A/B filter and ``resolution`` ("240p")
-        which of a tag's builds is highlighted.
-        """
+        """Switch to the catalogue, select specified model/software, highlight tag_name."""
 
         self._show_online_view()
-        self._target_resolution = str(resolution or "").lower()
-        combo = getattr(self, "_brand_combo", None)
-        if brand and combo is not None and combo.isVisible():
-            b_idx = combo.findData(brand)
-            if b_idx < 0:
-                b_idx = next(
-                    (
-                        i for i in range(combo.count())
-                        if str(combo.itemData(i) or "").casefold() == brand.casefold()
-                    ),
-                    -1,
-                )
-            if b_idx >= 0 and b_idx != combo.currentIndex():
-                combo.setCurrentIndex(b_idx)
         m_idx = self._model_combo.findText(model)
         if m_idx >= 0 and m_idx != self._model_combo.currentIndex():
             self._model_combo.setCurrentIndex(m_idx)
         sw_idx = self._find_software_index(software_name)
         if sw_idx >= 0 and sw_idx != self._software_combo.currentIndex():
             self._software_combo.setCurrentIndex(sw_idx)
-        if hw_type and self._type_combo.isVisibleTo(self):
-            t_idx = self._type_combo.findData(hw_type)
-            if t_idx >= 0 and t_idx != self._type_combo.currentIndex():
-                self._type_combo.setCurrentIndex(t_idx)
         if tag_name:
             self._target_tag_to_select = tag_name
-            # If releases already loaded, select right now. A list still being
-            # fetched (the model or software just changed) is the old one, and
-            # the worker applies the pending tag when the new one lands.
-            worker = getattr(self, "_releases_worker", None)
-            refreshing = worker is not None and worker.isRunning()
-            row = -1 if refreshing else self._row_for_tag(tag_name)
-            if row >= 0:
+            # If releases already loaded, select right now
+            for row in range(self._release_list.count()):
                 it = self._release_list.item(row)
-                self._release_list.setCurrentRow(row)
-                self._release_list.scrollToItem(it)
-                self._target_tag_to_select = None
+                r = it.data(Qt.UserRole)
+                if r and r.get("tag_name") == tag_name:
+                    self._release_list.setCurrentRow(row)
+                    self._release_list.scrollToItem(it)
+                    self._target_tag_to_select = None
+                    break
             else:
                 # The tag is not in the current listing (a release outside the
                 # active filters, or a stale list). A running worker will apply
@@ -4536,20 +4461,10 @@ class SelectPackagePage(QWidget):
         release: Optional[dict] = None,
         package: Optional[catalog.FirmwarePackage] = None,
         keep_settings: bool = False,
-        brand: str = "",
-        hw_type: str = "",
-        resolution: str = "",
     ):
         """Navigate to package/release and initiate installation with current method."""
         self._keep_settings_default = bool(keep_settings)
-        self.navigate_to_package(
-            model,
-            software_name,
-            tag_name=tag_name,
-            brand=brand,
-            hw_type=hw_type,
-            resolution=resolution,
-        )
+        self.navigate_to_package(model, software_name, tag_name=tag_name)
         if release:
             self._trigger_release_install(release, package=package)
         else:
@@ -4560,13 +4475,13 @@ class SelectPackagePage(QWidget):
             )
             worker_running = self._releases_worker is not None and self._releases_worker.isRunning()
             if pkg_match and not worker_running and self._release_list.count() > 0:
-                row = self._row_for_tag(tag_name)
-                it = self._release_list.item(row) if row >= 0 else None
-                r = it.data(Qt.UserRole) if it else None
-                if r:
-                    self._release_list.setCurrentRow(row)
-                    self._trigger_release_install(r, package=package)
-                    return
+                for row in range(self._release_list.count()):
+                    it = self._release_list.item(row)
+                    r = it.data(Qt.UserRole) if it else None
+                    if r and (not tag_name or tag_name == "latest" or r.get("tag_name") == tag_name):
+                        self._release_list.setCurrentRow(row)
+                        self._trigger_release_install(r, package=package)
+                        return
             if not self._release_list.count() and not worker_running:
                 self._refresh_releases()
             self._auto_install_tag = tag_name or "latest"

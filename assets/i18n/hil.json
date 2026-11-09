@@ -139,12 +139,7 @@
  "settings_filter_old_rockbox": "Ipakita ang Daan nga mga Pagtukod sang Rockbox",
  "settings_filter_nightly": "Ipakita ang Nightly Dev Releases",
  "settings_filter_240p": "240p Rockbox Releases",
- "settings_240p_tip": "Nagapakita sang mga pagtukod nga ang ROM zip isa ka 240p nga variant (rom..._240p.zip). Ang 240p nga mga pagtukod indi magamit sa isa ka Y1 nga ginbakal nga bag-o pagkatapos sang Mayo 2026, ukon sa isa nga nag-upod sang Orihinal nga Software 3.0.7 ukon mas ulihi. Ang mga humalampang indi man makagamit sang daan nga mga Rockbox build, gani ang Show Old Rockbox Builds gina-on upod sini.",
- "settings_240p_warn_body": "Ang 240p nga mga pagtukod indi magamit sa isa ka Y1 nga ginbakal nga bag-o pagkatapos sang Mayo 2026, ukon sa isa nga nag-upod sang Orihinal nga Software 3.0.7 ukon mas ulihi. Mag-install lang sang isa sa mas daan nga Y1.\n\nYadtong mga humalampang indi man makagamit sang daan nga mga pagtukod sang Rockbox, gani yadtong mga nalista man.\n\nSigurado ka bala nga luyag mo ipakita ang 240p nga mga pagpaguwa sang Rockbox?",
- "sel_240p_warning": "Isa ini ka 240p nga pagtukod. Indi ini magamit sa Y1 nga ginbakal nga bag-o pagkatapos sang Mayo 2026, ukon sa isa nga nag-upod sang Orihinal nga Software 3.0.7 ukon mas bag-o.",
- "link_240p_body": "Ang link nga imo ginbuksan para sa 240p nga pagtukod. Ang 240p nga mga build indi magamit sa Y1 nga ginbakal nga bag-o pagkatapos sang Mayo 2026, ukon sa isa nga nag-upod sang Original Software 3.0.7 ukon mas bag-o, gani ginatago ini tubtob nga ma-on mo ini.\n\nSigurado ka bala nga luyag mo ipakita ang 240p nga mga pagpaguwa sang Rockbox?",
- "link_busy": "Taposa ang karon nga pag-instalar, dayon buksi liwat ang link.",
- "link_not_listed": "Ang software sa sina nga link wala pa ginpaguwa para sa sini nga humalampang.",
+ "settings_240p_tip": "Nagapakita sang mga pagtukod nga ang ROM zip isa ka 240p nga variant (rom..._240p.zip). Ang 240p builds indi compatible sa Y1 units sa Innioasis OS sa idalom sang 3.0.7, gani ang Show Old Rockbox Builds gina-enable upod sini.",
  "settings_old_rockbox_warn_title": "Paandam sa Pagkaangay sang Rockbox",
  "settings_old_rockbox_warn_body": "Ang mga pagpaguwa sang Rockbox-Y1 antes sang 0.5 indi nagakaigo sa mga yunit sang Y1 nga ginbaligya pagkatapos sang Marso 2026 nga may Innioasis OS 3.0.7 nga na-install na.\n\nAng pag-flash sang daan nga build sa sini nga mga device magapugong sang pag-boot.\n\nSigurado ka bala nga luyag mo ipakita ang mas daan nga mga build sang Rockbox?",
  "sel_refresh": "I-refresh",
@@ -931,9 +926,6 @@
  "rockbox_wizard_done_desc": "Mahimo mo na karon nga luwas nga i-disconnect ang player kag magpili sang tema sa Rockbox (Mga Setting > Mga Setting sang Tema).",
  "sel_local_rockbox_themes_option": "I-install ang Rockbox 360p Themes + Fontpack",
  "rockbox_stage_installing": "Pag-instalar sang mga Tema kag Font sang Rockbox...",
- "rockbox_cleanup_step": "Ginakuha ang daan nga mga setting sang Rockbox...",
- "rockbox_cleanup_deleting": "Pagkuha sang .rockbox folder gikan sa player...",
- "rockbox_cleanup_failed_note": "Ang imo bag-o nga software na-install, apang ang daan nga .rockbox folder indi makuha. Panason ang .rockbox folder sa player gamit ang kamot kon gusto mo sang matinlo nga pagsugod.",
  "rockbox_stage_waiting_adb_fmt": "Nagapangita sang humalampang paagi sa ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Kapin sa isa ka humalampang ang konektado. I-disconnect ang iban kag ibilin lang ang isa nga gina-install.",
  "rockbox_stage_pushing": "Natukiban ang humalampang. Pagbutang sang mga tema sang komunidad kag mga font...",
@@ -1033,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Ang isa ka kape halos nagasakop sang bandwidth sang isa ka pag-download. Ginahuptan sini ang masunod nga pag-ayo nga malab-ot.",
  "donate_family_appeal_expected": "Si Ryan kag ang iya partner nagapaabot sang isa ka lapsag. Ang mga donasyon para sa mga gasto sa pagpadalagan sang proyekto kag sa amon bag-o nga pamilya ginaapresyar gid.",
  "donate_family_appeal_new_arrival": "May bag-o nga abot sa balay ni Ryan. Ang tagsa ka donasyon para sa mga serbidor kag sa amon nagadaku nga pamilya nagakahulugan sing daku.",
- "donate_family_appeal_nursery": "Si Ryan kag ang iya partner nagahanda para sa ila bata. Kon ini nga gamit nangin mapuslanon, ang donasyon para sa mga gasto sa pagpadalagan kag sa amon nagadaku nga pamilya makabulig sing kapin pa sangsa nahibaluan mo."
+ "donate_family_appeal_nursery": "Si Ryan kag ang iya partner nagahanda para sa ila bata. Kon ini nga gamit nangin mapuslanon, ang donasyon para sa mga gasto sa pagpadalagan kag sa amon nagadaku nga pamilya makabulig sing kapin pa sangsa nahibaluan mo.",
+ "rockbox_cleanup_step": "Ginakuha ang daan nga mga setting sang Rockbox...",
+ "rockbox_cleanup_deleting": "Pagkuha sang .rockbox folder gikan sa player...",
+ "rockbox_cleanup_failed_note": "Ang imo bag-o nga software na-install, apang ang daan nga .rockbox folder indi makuha. Panason ang .rockbox folder sa player gamit ang kamot kon gusto mo sang matinlo nga pagsugod."
 }

@@ -139,12 +139,7 @@
  "settings_filter_old_rockbox": "Tunjukin Bangunan Rockbox Lama",
  "settings_filter_nightly": "Tunjukin Rilis Dev Malam",
  "settings_filter_240p": "240p Rilis Rockbox",
- "settings_240p_tip": "Nunjukin build yang ROM zip-nya varian 240p (rom..._240p.zip). 240p build kagak bisa dipake di Y1 yang dibeli baru setelah Mei 2026, atau di yang dateng dengan Original Software 3.0.7 atau lebih baru. Pemain-pemain itu juga kagak bisa make Rockbox yang lebih tua, jadi Show Old Rockbox Builds dinyalain.",
- "settings_240p_warn_body": "240p build kagak bisa dipake di Y1 yang dibeli baru setelah Mei 2026, atau di yang dateng dengan Original Software 3.0.7 atau lebih baru. Cuma pasang satu di Y1 yang lebih tua.\n\nPemain-pemain itu juga kagak bisa make Rockbox yang lebih tua, jadi mereka juga tercantum.\n\nLu yakin mau nunjukin rilisan Rockbox 240p?",
- "sel_240p_warning": "Ini adalah bangunan 240p. Itu kagak bisa dipake di Y1 yang dibeli baru setelah Mei 2026, atau di yang dateng dengan Perangkat Lunak Asli 3.0.7 atau lebih baru.",
- "link_240p_body": "Link yang lu buka itu buat build 240p. 240p build kagak bisa dipake di Y1 yang dibeli baru setelah Mei 2026, atau di yang dateng dengan Original Software 3.0.7 atau lebih baru, jadi mereka disembunyiin sampe lu nyalain mereka.\n\nLu yakin mau nunjukin rilisan Rockbox 240p?",
- "link_busy": "Selesaiin install yang sekarang, trus buka lagi linknya.",
- "link_not_listed": "Perangkat lunak di tautan itu belom dirilis buat pemain ini.",
+ "settings_240p_tip": "Nunjukin build yang ROM zip-nya varian 240p (rom..._240p.zip). 240p build kagak kompatibel dengan unit Y1 di Innioasis OS di bawah 3.0.7, jadi Show Old Rockbox Builds diaktifin dengan itu.",
  "settings_old_rockbox_warn_title": "Peringatan Kompatibilitas Rockbox",
  "settings_old_rockbox_warn_body": "Rilis Rockbox-Y1 sebelum 0.5 kagak kompatibel dengan unit Y1 yang dijual setelah Maret 2026 dengan Innioasis OS 3.0.7 yang udah dipasang.\n\nNgeflash build yang lebih tua di perangkat ini bakal mencegah booting.\n\nLu yakin mau nunjukin Rockbox yang lebih tua?",
  "sel_refresh": "Segerin",
@@ -931,9 +926,6 @@
  "rockbox_wizard_done_desc": "Sekarang lu bisa lepas pemain dengan aman dan milih tema di Rockbox (Pengaturan > Pengaturan Tema).",
  "sel_local_rockbox_themes_option": "Pasang Rockbox 360p Themes + Fontpack",
  "rockbox_stage_installing": "Masang Tema & Font Rockbox...",
- "rockbox_cleanup_step": "Ngilangin pengaturan Rockbox yang lama...",
- "rockbox_cleanup_deleting": "Ngilangin folder .rockbox dari pemain...",
- "rockbox_cleanup_failed_note": "Perangkat lunak baru lu udah diinstal, tapi folder .rockbox yang lama kagak bisa dihapus. Hapus folder .rockbox di pemain pake tangan kalo lu pengen awal yang bersih.",
  "rockbox_stage_waiting_adb_fmt": "Lagi nyari pemain lewat ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Lebih dari satu pemain terhubung. Lepas yang laen dan tinggalin yang lagi dipasang doang.",
  "rockbox_stage_pushing": "Pemain terdeteksi. Nempatin tema & font komunitas...",
@@ -1033,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Satu kopi kira-kira nutupin bandwidth dari unduhan. Itu ngejaga perbaikan selanjutnya tetep bisa dijangkau.",
  "donate_family_appeal_expected": "Ryan ama pasangannya lagi ngantri bayi. Sumbangan untuk biaya jalan proyek dan keluarga baru kami sangat dihargai.",
  "donate_family_appeal_new_arrival": "Ada yang baru dateng di rumah Ryan. Setiap sumbangan ke pelayan dan keluarga kita yang semakin berkembang berarti banget.",
- "donate_family_appeal_nursery": "Ryan sama pasangannya lagi siap-siap buat anak mereka. Kalo alat ini berguna, sumbangan untuk biaya operasional dan keluarga kita yang semakin berkembang akan membantu lebih dari yang lu tau."
+ "donate_family_appeal_nursery": "Ryan sama pasangannya lagi siap-siap buat anak mereka. Kalo alat ini berguna, sumbangan untuk biaya operasional dan keluarga kita yang semakin berkembang akan membantu lebih dari yang lu tau.",
+ "rockbox_cleanup_step": "Ngilangin pengaturan Rockbox yang lama...",
+ "rockbox_cleanup_deleting": "Ngilangin folder .rockbox dari pemain...",
+ "rockbox_cleanup_failed_note": "Perangkat lunak baru lu udah diinstal, tapi folder .rockbox yang lama kagak bisa dihapus. Hapus folder .rockbox di pemain pake tangan kalo lu pengen awal yang bersih."
 }

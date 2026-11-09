@@ -139,12 +139,7 @@
  "settings_filter_old_rockbox": "Alde Rockbox Builds sjen litte",
  "settings_filter_nightly": "Lit Nightly Dev Releases sjen",
  "settings_filter_240p": "240p Rockbox Releases",
- "settings_240p_tip": "Toant builds wêrfan de ROM-zip in 240p-fariant is (rom..._240p.zip). 240p builds kinne net brûkt wurde op in Y1 kocht nij nei maaie 2026, of op ien dy't kaam mei Original Software 3.0.7 of letter. Dy spilers kinne ek gjin gebrûk meitsje fan âldere Rockbox builds, dus Show Old Rockbox Builds is dêrmei ynskeakele.",
- "settings_240p_warn_body": "240p builds kinne net brûkt wurde op in Y1 kocht nij nei maaie 2026, of op ien dy't kaam mei Original Software 3.0.7 of letter. Ynstallearje allinich ien op in âldere Y1.\n\nDy spilers kinne ek gjin âldere Rockbox-builds brûke, dus dy wurde ek neamd.\n\nBinne jo wis dat jo 240p Rockbox-releases sjen litte wolle?",
- "sel_240p_warning": "Dit is in 240p build. It kin net brûkt wurde op in Y1 kocht nij nei maaie 2026, of op ien dy't kaam mei Original Software 3.0.7 of letter.",
- "link_240p_body": "De keppeling dy't jo iepene binne foar in 240p build. 240p builds kinne net brûkt wurde op in Y1 kocht nij nei maaie 2026, of op ien dy't kaam mei Original Software 3.0.7 of letter, dus se binne ferburgen oant jo se ynskeakelje.\n\nBinne jo wis dat jo 240p Rockbox-releases sjen litte wolle?",
- "link_busy": "Beëinigje de hjoeddeistige ynstallaasje, iepenje dan de keppeling opnij.",
- "link_not_listed": "De software yn dy keppeling is noch net frijjûn foar dizze spiler.",
+ "settings_240p_tip": "Toant builds wêrfan de ROM-zip in 240p-fariant is (rom..._240p.zip). 240p builds binne net kompatibel mei Y1-ienheden op Innioasis OS ûnder 3.0.7, dus Show Old Rockbox Builds is dermei ynskeakele.",
  "settings_old_rockbox_warn_title": "Warskôging foar kompatibiliteit fan Rockbox",
  "settings_old_rockbox_warn_body": "Releases fan Rockbox-Y1 foar 0.5 binne net kompatibel mei Y1-ienheden ferkocht nei maart 2026 mei Innioasis OS 3.0.7 foarôf ynstalleare.\n\nFlashing fan in âldere build op dizze apparaten sil it opstarten foarkomme.\n\nBinne jo wis dat jo âldere Rockbox-builds sjen litte wolle?",
  "sel_refresh": "Ferfarskje",
@@ -931,9 +926,6 @@
  "rockbox_wizard_done_desc": "Jo kinne de spiler no feilich loskeppelje en in tema kieze yn Rockbox (Ynstellings> Tema-ynstellings).",
  "sel_local_rockbox_themes_option": "Ynstallearje Rockbox 360p-tema's + Fontpack",
  "rockbox_stage_installing": "Rockbox-tema's en lettertypen ynstallearje ...",
- "rockbox_cleanup_step": "De âlde Rockbox-ynstellingen fuortsmite...",
- "rockbox_cleanup_deleting": "De .rockbox-map fuortsmite fan de spiler...",
- "rockbox_cleanup_failed_note": "Jo nije software is ynstallearre, mar de âlde .rockbox map koe net fuortsmiten wurde. Wiskje de .rockbox map op de spiler mei de hân as jo wolle in skjinne start.",
  "rockbox_stage_waiting_adb_fmt": "Op syk nei spiler fia ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Mear as ien spiler is ferbûn. Ferbine de oaren en lit allinich dejinge dy't ynstalleare wurdt.",
  "rockbox_stage_pushing": "Spiler ûntdutsen. Mienskipstema's en lettertypen pleatse ...",
@@ -1033,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Ien kofje beslacht rûchwei de bânbreedte fan in download. It hâldt de folgjende fix binnen berik.",
  "donate_family_appeal_expected": "Ryan en syn partner ferwachtsje in poppe. Donaasjes foar de rinnende kosten fan it projekt en ús nije famylje wurde massaal wurdearre.",
  "donate_family_appeal_new_arrival": "Der is in nije oankomst ûnderweis yn Ryan syn hûs. Elke donaasje oan 'e servers en ús groeiende famylje betsjut in protte.",
- "donate_family_appeal_nursery": "Ryan en syn partner meitsje har klear foar har bern. As dit ark nuttich west hat, soe in donaasje foar de rinnende kosten en ús groeiende famylje mear helpe dan jo witte."
+ "donate_family_appeal_nursery": "Ryan en syn partner meitsje har klear foar har bern. As dit ark nuttich west hat, soe in donaasje foar de rinnende kosten en ús groeiende famylje mear helpe dan jo witte.",
+ "rockbox_cleanup_step": "De âlde Rockbox-ynstellingen fuortsmite...",
+ "rockbox_cleanup_deleting": "De .rockbox-map fuortsmite fan de spiler...",
+ "rockbox_cleanup_failed_note": "Jo nije software is ynstallearre, mar de âlde .rockbox map koe net fuortsmiten wurde. Wiskje de .rockbox map op de spiler mei de hân as jo wolle in skjinne start."
 }

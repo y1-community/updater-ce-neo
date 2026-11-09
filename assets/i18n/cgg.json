@@ -139,12 +139,7 @@
  "settings_filter_old_rockbox": "Yoreka Rockbox eya ira eyombekirwe",
  "settings_filter_nightly": "Yoreka ebyashohozibwa bya Dev buri kiro",
  "settings_filter_240p": "240p Ebirikushohozibwa",
- "settings_240p_tip": "Okworeka ebyombeko ebi ROM yaabo eri omu muringo gwa 240p (rom..._240p.zip). 240p builds tizirikubaasa kukoresibwa aha Y1 eyaguriirwe nsya bwanyima ya Maaci 2026, nari aha emwe eyaizire na Original Software 3.0.7 nari bwanyima. Abazaani abo nabo tibarikubaasa kukoresa ebyombeko bya Rockbox ebya ira, n'ahabw'ekyo Yoreka ebyombeko bya Rockbox ebya ira nibikora nabyo.",
- "settings_240p_warn_body": "240p builds tizirikubaasa kukoresibwa aha Y1 eyaguriirwe nsya bwanyima ya Maaci 2026, nari aha emwe eyaizire na Original Software 3.0.7 nari bwanyima. Teekaho kimwe kyonka aha Y1 eya ira.\n\nAbazaani abo nabo tibarikubaasa kukoresa ebyombeko bya Rockbox ebya ira, n'ahabw'ekyo ebyo nabyo biri aha runyiriri.\n\nNohamya ngu noyenda kworeka ebishushani bya Rockbox ebya 240p?",
- "sel_240p_warning": "Ogu n'okwombeka kwa 240p. Tikirikubaasa kukoresibwa aha Y1 eyaguriirwe nsya bwanyima ya Maaci 2026, nari aha eyaizire na Original Software 3.0.7 nari bwanyima.",
- "link_240p_body": "Link ei okingire n'ey'okwombeka 240p. 240p builds tizirikubaasa kukoresibwa aha Y1 eyaguriirwe nsya bwanyima ya May 2026, nari aha eyaizire na Original Software 3.0.7 nari bwanyima, n'ahabw'ekyo nizishereka kuhitsya obu oraziteho.\n\nNohamya ngu noyenda kworeka ebishushani bya Rockbox ebya 240p?",
- "link_busy": "Manya okutaho hati, reero ogarukye oigure link.",
- "link_not_listed": "Sofutiweya eri omu link egyo tekashohoziibwe ahabw'omuzaani ogu.",
+ "settings_240p_tip": "Okworeka ebyombeko ebi ROM yaabo eri omu muringo gwa 240p (rom..._240p.zip). 240p ebyombeko tibirikuhikaana n’ebicweka bya Y1 aha Innioasis OS ahansi ya 3.0.7, n’ahabw’ekyo Yoreka ebyombeko bya Rockbox ebya ira nibishoboororwa nabyo.",
  "settings_old_rockbox_warn_title": "Okurabura aha kuhikaana kwa Rockbox",
  "settings_old_rockbox_warn_body": "Ebihandiiko bya Rockbox-Y1 ebitakahikire 0.5 tibirikuhikaana n’ebicweka bya Y1 ebyaguziibwe bwanyima ya Maaci 2026 na Innioasis OS 3.0.7 ebaire eteirweho.\n\nOkutaho build eya ira aha bikwato ebi nikiija kuzibira okutandika.\n\nNohamya ngu noyenda kworeka ebyombeko bya Rockbox ebya ira?",
  "sel_refresh": "Garuzaho",
@@ -931,9 +926,6 @@
  "rockbox_wizard_done_desc": "Hati noobaasa kusharaho omuzaani otaine kabi koona kandi otoore omutwe omu Rockbox (Eby’okutebeekanisa > Ebitebeekanisiibwe by’Omutwe).",
  "sel_local_rockbox_themes_option": "Taho Rockbox 360p Emitwe + Ekibokisi ky'Ebigambo",
  "rockbox_stage_installing": "Okutaho emitwe n'ebigambo bya Rockbox...",
- "rockbox_cleanup_step": "Okwihaho ebyatebekanisiibwe bya Rockbox ebya ira...",
- "rockbox_cleanup_deleting": "Okwihaho .rockbox folda kuruga omu muzaani...",
- "rockbox_cleanup_failed_note": "Sofutiweya yaawe ensya ekateebwamu, kwonka folda eya .rockbox eya ira ekaba etarikubaasa kwihwaho. Ihaho folda ya .rockbox aha player n'emikono waaba nooyenda okutandika okushemeire.",
  "rockbox_stage_waiting_adb_fmt": "Noronda omuzaani kurabira omuri ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Abazaani abarikurenga ahari omwe nibakwatanisa. Ebindi bikyekyeho orekyeho ekirikuteebwaho kyonka.",
  "rockbox_stage_pushing": "Omuzaani yashangwa. Okutaho emitwe y'ekyanga hamwe n'ebigambo...",
@@ -1033,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Omwani gumwe niguhika aha bandwidth y’okutunga. Nikigumya okutereeza okurikukurataho omu mwanya.",
  "donate_family_appeal_expected": "Ryan n’omukundwa we nibateekateeka kuzaara omwana. Ebiconco by’okuhwera purojekiti egi n’eka yaitu ensya nibisiimwa munonga.",
  "donate_family_appeal_new_arrival": "Hariho omusya orikwija omu muhanda omu nju ya Ryan. Buri kiconco ekirikuheebwayo aha baheereza n’eka yaitu erikweyongyera nikimanyisa bingi.",
- "donate_family_appeal_nursery": "Ryan n'omukundwa we bariyo nibeeteekateekyera omwana waabo. Ekikwato eki kyaba kyabaire eky’omugasho, okuhayo sente z’okugikoresa n’eka yaitu erikweyongyera kukaba nikuza kuhwera okukira oku orikumanya."
+ "donate_family_appeal_nursery": "Ryan n'omukundwa we bariyo nibeeteekateekyera omwana waabo. Ekikwato eki kyaba kyabaire eky’omugasho, okuhayo sente z’okugikoresa n’eka yaitu erikweyongyera kukaba nikuza kuhwera okukira oku orikumanya.",
+ "rockbox_cleanup_step": "Okwihaho ebyatebekanisiibwe bya Rockbox ebya ira...",
+ "rockbox_cleanup_deleting": "Okwihaho .rockbox folda kuruga omu muzaani...",
+ "rockbox_cleanup_failed_note": "Sofutiweya yaawe ensya ekateebwamu, kwonka folda eya .rockbox eya ira ekaba etarikubaasa kwihwaho. Ihaho folda ya .rockbox aha player n'emikono waaba nooyenda okutandika okushemeire."
 }

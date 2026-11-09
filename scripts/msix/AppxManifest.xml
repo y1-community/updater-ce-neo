@@ -67,12 +67,6 @@
         <desktop:Extension
             Category="windows.fullTrustProcess"
             Executable="@@EXECUTABLE@@" />
-        <!-- innioasis-updater:// links from the sites (src/site_links.py). -->
-        <uap:Extension Category="windows.protocol">
-          <uap:Protocol Name="innioasis-updater">
-            <uap:DisplayName>@@DISPLAY_NAME@@</uap:DisplayName>
-          </uap:Protocol>
-        </uap:Extension>
       </Extensions>
     </Application>
   </Applications>

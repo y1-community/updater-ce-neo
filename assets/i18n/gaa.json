@@ -139,12 +139,7 @@
  "settings_filter_old_rockbox": "Tsɔɔmɔ Rockbox Momo lɛ Mli",
  "settings_filter_nightly": "Tsɔɔmɔ Gbi Dev Nibii ni Ajieɔ lɛ kpo",
  "settings_filter_240p": "240p Rock Adeka ni Ajieɔ lɛ kpo",
- "settings_240p_tip": "Tsɔɔmɔ tsui ni ROM zip lɛ ji 240p henɔ (rom..._240p.zip). 240p tswaa lɛ nyɛŋ atsu nii yɛ Y1 ni ahe ehee yɛ May 2026 sɛɛ lɛ nɔ, loo nɔ ni kɛ Original Software 3.0.7 loo nɔ ni nyiɛ sɛɛ ba lɛ nɔ. Nakai shwɛlɔi lɛ hu nyɛŋ amɛkɛ Rockbox tsui momo lɛ atsu nii, no hewɔ lɛ, akɛtsu nii kɛtsu Show Old Rockbox Builds lɛ he nii.",
- "settings_240p_warn_body": "240p tswaa lɛ nyɛŋ atsu nii yɛ Y1 ni ahe ehee yɛ May 2026 sɛɛ lɛ nɔ, loo nɔ ni kɛ Original Software 3.0.7 loo nɔ ni nyiɛ sɛɛ ba lɛ nɔ. Kɛ eko pɛ awo Y1 momo nɔ.\n\nNakai shwɛlɔi lɛ hu nyɛŋ amɛkɛ Rockbox builds momoi lɛ atsu nii, no hewɔ lɛ aŋmala nomɛi hu awo mli.\n\nAni oyɛ nɔmimaa akɛ obaasumɔ ni ojie 240p Rockbox ni ajie lɛ kpo lɛ kpo?",
- "sel_240p_warning": "Enɛ ji 240p tsu. Anyɛɛɛ akɛtsu nii yɛ Y1 ni ahe ehee yɛ May 2026 sɛɛ lɛ nɔ, loo nɔ ni akɛ Original Software 3.0.7 loo nɔ ni nyiɛ sɛɛ ba lɛ nɔ.",
- "link_240p_body": "Link ni ogbele lɛ ji kɛha 240p build. 240p builds lɛ nyɛŋ atsu nii yɛ Y1 ni ahe ehee yɛ May 2026 sɛɛ lɛ nɔ, loo yɛ nɔ ni kɛ Original Software 3.0.7 loo nɔ ni nyiɛ sɛɛ ba lɛ nɔ, no hewɔ lɛ, akɛtee kɛyashi obaatsu amɛ.\n\nAni oyɛ nɔmimaa akɛ obaasumɔ ni ojie 240p Rockbox ni ajie lɛ kpo lɛ kpo?",
- "link_busy": "Gbe nɔ ni okɛwo mli amrɔ nɛɛ naa, ni ogbele link lɛ ekoŋŋ.",
- "link_not_listed": "Ajieee sɔftwɛɛ ni yɔɔ nakai link lɛ mli lɛ kpo kɛhaaa shwɛmɔ tsɔne nɛɛ lolo.",
+ "settings_240p_tip": "Tsɔɔmɔ tsui ni ROM zip lɛ ji 240p henɔ (rom..._240p.zip). 240p tsui lɛ kɛ Y1 nibii ni yɔɔ Innioasis OS ni yɔɔ 3.0.7 shishi lɛ kpãaa gbee, no hewɔ lɛ Tsɔɔmɔ Rockbox Tsui Momo lɛ etsu nii kɛtsu nii.",
  "settings_old_rockbox_warn_title": "Rockbox he kɔkɔbɔɔ",
  "settings_old_rockbox_warn_body": "Rockbox-Y1 ni ajie lɛ kpo dani 0.5 lɛ kɛ Y1 ni ahɔ̃ɔ yɛ March 2026 sɛɛ ni akɛ Innioasis OS 3.0.7 wo mli momo lɛ kpãaa gbee.\n\nKɛji ootswa build momo ko yɛ tsɔnei nɛɛ anɔ lɛ, ebaatsi booting naa.\n\nAni oyɛ nɔmimaa akɛ oosumɔ ni otsɔɔ Rockbox tsui ni etsɛ?",
  "sel_refresh": "Heemɔ",
@@ -931,9 +926,6 @@
  "rockbox_wizard_done_desc": "Amrɔ nɛɛ obaanyɛ ojie tsɔne ni akɛtswaa lala lɛ shweshweeshwe ni ohala saneyitso ko yɛ Rockbox lɛ mli (Shitooi > Saneyitso lɛ He Gbɛjianɔtoi).",
  "sel_local_rockbox_themes_option": "Kɛ Rockbox 360p Yitsoi + Niŋmaa lɛ awo mli",
  "rockbox_stage_installing": "Rockbox yitsei kɛ niŋmaa okadii awo mli...",
- "rockbox_cleanup_step": "Rockbox gbɛjianɔtoo momo lɛ jiemɔ...",
- "rockbox_cleanup_deleting": "Jiemɔ .rockbox wolotoohe lɛ kɛjɛ shwɛlɔ lɛ mli...",
- "rockbox_cleanup_failed_note": "Akɛ osɔftwɛɛ hee lɛ wo mli, shi anyɛɛɛ ajie .rockbox folda momo lɛ. Gbalamɔ .rockbox folda ni yɔɔ shwɛmɔ tsɔne lɛ nɔ lɛ kɛtsɔ onine nɔ kɛji oosumɔ shishijee ni he tse.",
  "rockbox_stage_waiting_adb_fmt": "Miitao shwɛlɔ kɛtsɔ ADB nɔ ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Shwɛlɔi ni fa fe ekome kɛ amɛhe ebɔ he. Gbalamɔ ekrokomɛi lɛ ni oshi nɔ ni akɛwoɔ mli lɛ pɛ.",
  "rockbox_stage_pushing": "Ana shwɛlɔ. Akutsoŋ saji otii kɛ niŋmaa okadii...",
@@ -1033,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Kɔfi kome haa bandwidth ni akɛwoɔ kɔmpiuta nɔ lɛ nɔ aaafee. Ehaa tsakemɔ ni nyiɛ sɛɛ lɛ hiɔ he ni anyɛɔ ashɛɔ he.",
  "donate_family_appeal_expected": "Ryan kɛ ehefatalɔ lɛ miikpa abifao gbɛ. Akɛ onia ni akɛhaa kɛha nitsumɔ lɛ he nyɔmɔwoo kɛ wɔweku hee lɛ hiɛ sɔɔ waa.",
  "donate_family_appeal_new_arrival": "Mɔ hee ko eba yɛ gbɛ nɔ yɛ Ryan shia. Oniatsumɔ fɛɛ onia ni akɛhaa sɛɛvai lɛ kɛ wɔweku ni miiya hiɛ lɛ tsɔɔ nɔ ko wulu.",
- "donate_family_appeal_nursery": "Ryan kɛ ehefatalɔ lɛ miisaa amɛhe kɛha amɛbi lɛ. Kɛji akɛ dɛŋdade nɛɛ eye ebua lɛ, oniatsumɔ kɛha nitsumɔ lɛ he nyɔmɔwoo kɛ wɔweku ni miiya hiɛ lɛ baaye abua babaoo fe bɔ ni ole."
+ "donate_family_appeal_nursery": "Ryan kɛ ehefatalɔ lɛ miisaa amɛhe kɛha amɛbi lɛ. Kɛji akɛ dɛŋdade nɛɛ eye ebua lɛ, oniatsumɔ kɛha nitsumɔ lɛ he nyɔmɔwoo kɛ wɔweku ni miiya hiɛ lɛ baaye abua babaoo fe bɔ ni ole.",
+ "rockbox_cleanup_step": "Rockbox gbɛjianɔtoo momo lɛ jiemɔ...",
+ "rockbox_cleanup_deleting": "Jiemɔ .rockbox wolotoohe lɛ kɛjɛ shwɛlɔ lɛ mli...",
+ "rockbox_cleanup_failed_note": "Akɛ osɔftwɛɛ hee lɛ wo mli, shi anyɛɛɛ ajie .rockbox folda momo lɛ. Gbalamɔ .rockbox folda ni yɔɔ shwɛmɔ tsɔne lɛ nɔ lɛ kɛtsɔ onine nɔ kɛji oosumɔ shishijee ni he tse."
 }

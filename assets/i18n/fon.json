@@ -139,12 +139,7 @@
  "settings_filter_old_rockbox": "Xlɛ́ Rockbox xóxó e è gbá lɛ é",
  "settings_filter_nightly": "Xlɛ́ Zǎnmɛ Dev sín Nǔɖexlɛ́mɛ lɛ",
  "settings_filter_240p": "240p Rockbox sín ɖiɖe lɛ",
- "settings_240p_tip": "É nɔ xlɛ́ xɔgbigbá e sín ROM zip nyí 240p sín alɔkpa ɖé é (rom..._240p.zip). 240p ɖiɖó lɛ sixu nyí Y1 e è xɔ yɔyɔ̌ ɖò 2026 sín sun atɔ́ɔ́ngɔ́ ɔ gudo é jí ǎ, alǒ ɖò ee wá kpo Software Original 3.0.7 alǒ ee bɔ d’ewu é jí ǎ. Ayihunmlimlixotɔ́ enɛ lɛ lɔ sixu zán Rockbox xóxó lɛ ǎ, enɛ wu ɔ, è nɔ hun Show Old Rockbox Builds kpo é kpo.",
- "settings_240p_warn_body": "240p ɖiɖó lɛ sixu nyí Y1 e è xɔ yɔyɔ̌ ɖò 2026 sín sun atɔ́ɔ́ngɔ́ ɔ gudo é jí ǎ, alǒ ɖò ee wá kpo Software Original 3.0.7 alǒ ee bɔ d’ewu é jí ǎ. Y1 xóxó ɖé jí kɛɖɛ wɛ a na sɔ́ ɖó.\n\nAyihunmlimlixotɔ́ enɛ lɛ lɔ sixu zán Rockbox builds xóxó lɛ ǎ, enɛ wu ɔ, è sɔ́ enɛ lɛ lɔmɔ̌ ɖó wěma mɛ.\n\nA ka ganjɛwu ɖɔ emi jló na xlɛ́ 240p Rockbox sín ɖiɖe lɛ à?",
- "sel_240p_warning": "240p sín xɔgbigbá ɖé wɛ nyí elɔ. È sixu zán ɖò Y1 e è xɔ yɔyɔ̌ ɖò 2026 sín sun atɔ́ɔ́ngɔ́ ɔ gudo é jí ǎ, alǒ ɖò ee è xɔ kpo Original Software 3.0.7 kpo alǒ ee bɔ d’ewu é jí ǎ.",
- "link_240p_body": "Link e a hun ɔ, 240p build tɔn wɛ. 240p builds lɛ sixu nɔ Y1 e è xɔ yɔyɔ ɖò 2026 sín sun atɔ́ɔ́ngɔ́ ɔ gudo é jí ǎ, alǒ ɖò ee wá kpo Original Software 3.0.7 alǒ ee bɔ d’ewu é kpo jí ǎ, enɛ wu ɔ, ye nɔ hwla kaka jɛ hwenu e a na hun ye é.\n\nA ka ganjɛwu ɖɔ emi jló na xlɛ́ 240p Rockbox sín ɖiɖe lɛ à?",
- "link_busy": "Fífó nǔ e è sɔ́ ɖó tɛn tɔn mɛ dìn é, enɛ gudo hǔn, lɛ́vɔ hun xójlawema ɔ.",
- "link_not_listed": "Lojisiyɛli e ɖò linki enɛ mɛ é ko tɔ́n nú nǔxixotɔ́ elɔ ǎ.",
+ "settings_240p_tip": "É nɔ xlɛ́ xɔgbigbá e sín ROM zip nyí 240p sín alɔkpa ɖé é (rom..._240p.zip). 240p sín ɖiɖe lɛ nɔ sɔgbe xá Y1 sín akpáxwé lɛ ɖò Innioasis OS e ɖò 3.0.7 glɔ é jí ǎ, enɛ wu ɔ, è nɔ bló bɔ Show Old Rockbox Builds nɔ w’azɔ̌ xá ɛ.",
  "settings_old_rockbox_warn_title": "Akpágbánúmɛ Rockbox Tɔn",
  "settings_old_rockbox_warn_body": "Rockbox-Y1 e è ɖetɔ́n jɛ nukɔn nú 0.5 é sɔgbe xá Y1 e è sà ɖò mars 2026 gudo bɔ Innioasis OS 3.0.7 ko ɖò mɔ̌to ɔ mɛ é ǎ.\n\nEnyi a nɔ xò build xóxó ɖé zlɛ ɖò nǔ enɛ lɛ jí ɔ, é na glɔ́n ali nú booting.\n\nA ka ganjɛwu ɖɔ emi jló na xlɛ́ Rockbox sín xɔgbigbá xóxó lɛ à?",
  "sel_refresh": "Mi vɔ́",
@@ -931,9 +926,6 @@
  "rockbox_wizard_done_desc": "Dìn ɔ, a sixu ɖè nǔxixo ɔ sín kàn ɔ jí kpo ayijayǐ kpo bo sɔ́ xota ɖé ɖò Rockbox mɛ (Nǔjlajla lɛ > Nǔjlajla Xóta ɔ Tɔn lɛ).",
  "sel_local_rockbox_themes_option": "Sɔ́ Rockbox 360p Xóta lɛ + Wemafɔ",
  "rockbox_stage_installing": "Rockbox sín xóta lɛ kpodó wemafɔ lɛ kpó ɖiɖó ɖ'ayǐ...",
- "rockbox_cleanup_step": "Rockbox sín tuto xóxó lɛ sísɔ́ síìn...",
- "rockbox_cleanup_deleting": "Mi ɖe .rockbox sin nuxotɔ ɔ mɛ...",
- "rockbox_cleanup_failed_note": "È sɔ́ mɔ̌to yɔyɔ̌ towe ɖó jí, amɔ̌, è sixu ɖè .rockbox xóxó ɔ síìn ǎ. Súnsún .rockbox sín folder e ɖò nǔxixotɔ́ ɔ jí é kpo alɔ kpo enyi a jló na bɛ́ nǔ lɛ ɖó mimɛ̌ jí ɔ nɛ.",
  "rockbox_stage_waiting_adb_fmt": "Mi ɖo ayihunmlimlixotɔ ba wɛ gbɔn ADB ji ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Ayihunmlimlixotɔ́ hú ɖokpo wɛ è cá. Mi ɖè ɖě lɛ sín kan jí bo jó ee è ɖò ɖiɖó wɛ é kɛɖɛ dó.",
  "rockbox_stage_pushing": "È mɔ ayihunmlimlixotɔ́. Mi ze xota gbɛta tɔn lɛ kpodo wemafɔ lɛ kpo...",
@@ -1033,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Kafée ɖokpo nɔ ɖibla sú bandwidth e è nɔ yí ɖò ɛntɛnɛti jí é. É nɔ hɛn nǔ e bɔ d’ewu é ɖó alɔ jí.",
  "donate_family_appeal_expected": "Ryan kpo mɛ e é da é kpo ɖò vǐ ɖé ɖó nukún wɛ. Nǔnina e è nɔ na dó kpé nukún dó azɔ̌ ɔ wu lɛ é kpo xwédo mǐtɔn yɔyɔ̌ ɔ kpo nɔ sù nukún mǐtɔn mɛ tawun.",
  "donate_family_appeal_new_arrival": "Mɛ yɔyɔ̌ ɖé ɖò ali jí ɖò Ryan sín xwégbe. Nǔnina ɖokpo ɖokpo e è nɔ na mɛ e nɔ hɛn nǔɖuɖu wá nú mɛ lɛ é kpo xwédo mǐtɔn e ɖò jijɛji wɛ é kpo é nɔ hɛn lè ɖaxó ɖé wá.",
- "donate_family_appeal_nursery": "Ryan kpo mɛ e é da é kpo ɖò nǔ sɔ́ wɛ nú vǐ yetɔn. Enyi azɔwanú enɛ ko hɛn lè wá ɔ, nùnina ɖé nú akwɛ e è na zán dó kpé nukún dó nǔ lɛ wu é kpo xwédo mǐtɔn e ɖò jijɛji wɛ é kpo na d’alɔ mɛ hú lee a tuùn gbɔn é."
+ "donate_family_appeal_nursery": "Ryan kpo mɛ e é da é kpo ɖò nǔ sɔ́ wɛ nú vǐ yetɔn. Enyi azɔwanú enɛ ko hɛn lè wá ɔ, nùnina ɖé nú akwɛ e è na zán dó kpé nukún dó nǔ lɛ wu é kpo xwédo mǐtɔn e ɖò jijɛji wɛ é kpo na d’alɔ mɛ hú lee a tuùn gbɔn é.",
+ "rockbox_cleanup_step": "Rockbox sín tuto xóxó lɛ sísɔ́ síìn...",
+ "rockbox_cleanup_deleting": "Mi ɖe .rockbox sin nuxotɔ ɔ mɛ...",
+ "rockbox_cleanup_failed_note": "È sɔ́ mɔ̌to yɔyɔ̌ towe ɖó jí, amɔ̌, è sixu ɖè .rockbox xóxó ɔ síìn ǎ. Súnsún .rockbox sín folder e ɖò nǔxixotɔ́ ɔ jí é kpo alɔ kpo enyi a jló na bɛ́ nǔ lɛ ɖó mimɛ̌ jí ɔ nɛ."
 }

@@ -139,12 +139,7 @@
  "settings_filter_old_rockbox": "Näytä vanhat Rockbox-rakenteet",
  "settings_filter_nightly": "Näytä Nightly Dev -julkaisut",
  "settings_filter_240p": "240p Rockbox -julkaisut",
- "settings_240p_tip": "Näyttää koontiversiot, joiden ROM-zip on 240p-versio (rom…_240p.zip). 240p-koontiversioita ei voi käyttää Y1:ssä, joka on ostettu uutena toukokuun 2026 jälkeen, tai sellaisessa, jonka mukana toimitettiin alkuperäinen ohjelmisto 3.0.7 tai uudempi. Nämä pelaajat eivät myöskään voi käyttää vanhempia Rockbox-koontiversioita, joten Show Old Rockbox Builds on päällä sen kanssa.",
- "settings_240p_warn_body": "240p-koontiversioita ei voi käyttää Y1:ssä, joka on ostettu uutena toukokuun 2026 jälkeen, tai sellaisessa, jonka mukana toimitettiin alkuperäinen ohjelmisto 3.0.7 tai uudempi. Asenna vain yksi vanhaan Y1:een.\n\nNämä pelaajat eivät myöskään voi käyttää vanhempia Rockbox-versioita, joten myös ne on listattu.\n\nHaluatko varmasti näyttää 240p Rockbox -julkaisut?",
- "sel_240p_warning": "Tämä on 240p-versio. Sitä ei voi käyttää Y1:ssä, joka on ostettu uutena toukokuun 2026 jälkeen, tai sellaisessa, jonka mukana toimitettiin alkuperäinen ohjelmisto 3.0.7 tai uudempi.",
- "link_240p_body": "Avaamasi linkki on 240p-koontiversiota varten. 240p-koontiversioita ei voi käyttää Y1:ssä, joka on ostettu uutena toukokuun 2026 jälkeen, tai alkuperäisessä ohjelmistoversiossa 3.0.7 tai uudemmassa, joten ne ovat piilossa, kunnes otat ne käyttöön.\n\nHaluatko varmasti näyttää 240p Rockbox -julkaisut?",
- "link_busy": "Viimeistele nykyinen asennus ja avaa linkki uudelleen.",
- "link_not_listed": "Linkin ohjelmistoa ei ole vielä julkaistu tälle soittimelle.",
+ "settings_240p_tip": "Näyttää koontiversiot, joiden ROM-zip on 240p-versio (rom…_240p.zip). 240p-koontiversiot eivät ole yhteensopivia Y1-yksiköiden kanssa Innioasis OS:ssä alle 3.0.7, joten Show Old Rockbox Builds on käytössä sen kanssa.",
  "settings_old_rockbox_warn_title": "Rockbox-yhteensopivuusvaroitus",
  "settings_old_rockbox_warn_body": "Rockbox-Y1:n julkaisut ennen versiota 0.5 eivät ole yhteensopivia maaliskuun 2026 jälkeen myytyjen Y1-laitteiden kanssa, joissa on esiasennettu Innioasis OS 3.0.7.\n\nVanhemman koontiversion vilkkuminen näissä laitteissa estää käynnistyksen.\n\nHaluatko varmasti näyttää vanhemmat Rockbox-versiot?",
  "sel_refresh": "Päivitä",
@@ -931,9 +926,6 @@
  "rockbox_wizard_done_desc": "Voit nyt katkaista soittimen turvallisesti ja valita teeman Rockboxissa (Asetukset > Teemaasetukset).",
  "sel_local_rockbox_themes_option": "Asenna Rockbox 360p Themes + Fontpack",
  "rockbox_stage_installing": "Asennetaan Rockbox-teemoja ja -fontteja...",
- "rockbox_cleanup_step": "Poistetaan vanhoja Rockbox-asetuksia...",
- "rockbox_cleanup_deleting": "Poistetaan .rockbox-kansiota soittimesta...",
- "rockbox_cleanup_failed_note": "Uusi ohjelmistosi asennettiin, mutta vanhaa .rockbox-kansiota ei voitu poistaa. Poista soittimen .rockbox-kansio käsin, jos haluat puhtaan alun.",
  "rockbox_stage_waiting_adb_fmt": "Etsitään pelaajaa ADB:n kautta ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Useampi kuin yksi pelaaja on yhdistetty. Irrota muut ja jätä vain asennettava.",
  "rockbox_stage_pushing": "Pelaaja havaittu. Sijoitetaan yhteisön teemoja ja kirjasimia...",
@@ -1033,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Yksi kahvi kattaa suunnilleen latauksen kaistanleveyden. Se pitää seuraavan korjauksen käden ulottuvilla.",
  "donate_family_appeal_expected": "Ryan ja hänen kumppaninsa odottavat lasta. Lahjoitukset projektin juokseviin kuluihin ja uudelle perheellemme ovat valtavasti tervetulleita.",
  "donate_family_appeal_new_arrival": "Ryanin taloon on tulossa uusi tulokas. Jokainen lahjoitus palvelimille ja kasvavalle perheellemme merkitsee paljon.",
- "donate_family_appeal_nursery": "Ryan ja hänen kumppaninsa valmistautuvat lastaan. Jos tästä työkalusta on ollut hyötyä, lahjoitus juokseviin kuluihin ja kasvavaan perheeseen auttaisi enemmän kuin tiedätkään."
+ "donate_family_appeal_nursery": "Ryan ja hänen kumppaninsa valmistautuvat lastaan. Jos tästä työkalusta on ollut hyötyä, lahjoitus juokseviin kuluihin ja kasvavaan perheeseen auttaisi enemmän kuin tiedätkään.",
+ "rockbox_cleanup_step": "Poistetaan vanhoja Rockbox-asetuksia...",
+ "rockbox_cleanup_deleting": "Poistetaan .rockbox-kansiota soittimesta...",
+ "rockbox_cleanup_failed_note": "Uusi ohjelmistosi asennettiin, mutta vanhaa .rockbox-kansiota ei voitu poistaa. Poista soittimen .rockbox-kansio käsin, jos haluat puhtaan alun."
 }

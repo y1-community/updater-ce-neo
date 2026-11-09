@@ -139,12 +139,7 @@
  "settings_filter_old_rockbox": "Dangos Old Rockbox Builds",
  "settings_filter_nightly": "Dangos Cyhoeddiadau Dev Nosweithiol",
  "settings_filter_240p": "Rhyddhau Rockbox 240p",
- "settings_240p_tip": "Yn dangos adeiladau y mae eu zip ROM yn amrywiad 240p (rom…_240p.zip). Ni ellir defnyddio adeiladau 240c ar B1 a brynwyd yn newydd ar ôl Mai 2026, nac ar un a ddaeth gyda Meddalwedd Gwreiddiol 3.0.7 neu ddiweddarach. Ni all y chwaraewyr hynny ddefnyddio adeiladau Rockbox hŷn ychwaith, felly mae Show Old Rockbox Builds wedi'i droi ymlaen ag ef.",
- "settings_240p_warn_body": "Ni ellir defnyddio adeiladau 240c ar B1 a brynwyd yn newydd ar ôl Mai 2026, nac ar un a ddaeth gyda Meddalwedd Gwreiddiol 3.0.7 neu ddiweddarach. Gosodwch un yn unig ar Y1 hŷn.\n\nNi all y chwaraewyr hynny ddefnyddio adeiladau Rockbox hŷn ychwaith, felly mae'r rheini wedi'u rhestru hefyd.\n\nYdych chi'n siŵr eich bod am ddangos datganiadau 240p Rockbox?",
- "sel_240p_warning": "Mae hwn yn adeilad 240p. Ni ellir ei ddefnyddio ar B1 a brynwyd yn newydd ar ôl Mai 2026, nac ar un a ddaeth gyda Meddalwedd Gwreiddiol 3.0.7 neu ddiweddarach.",
- "link_240p_body": "Mae'r ddolen a agorwyd gennych ar gyfer adeilad 240c. Ni ellir defnyddio adeiladau 240p ar B1 a brynwyd yn newydd ar ôl mis Mai 2026, nac ar un a ddaeth gyda Meddalwedd Gwreiddiol 3.0.7 neu ddiweddarach, felly cânt eu cuddio nes i chi eu troi ymlaen.\n\nYdych chi'n siŵr eich bod am ddangos datganiadau 240p Rockbox?",
- "link_busy": "Gorffennwch y gosodiad cyfredol, yna agorwch y ddolen eto.",
- "link_not_listed": "Nid yw'r feddalwedd yn y ddolen honno wedi'i rhyddhau ar gyfer y chwaraewr hwn eto.",
+ "settings_240p_tip": "Yn dangos adeiladau y mae eu zip ROM yn amrywiad 240p (rom…_240p.zip). Nid yw adeiladau 240p yn gydnaws ag unedau Y1 ar Innioasis OS o dan 3.0.7, felly mae Show Old Rockbox Builds wedi'i alluogi ag ef.",
  "settings_old_rockbox_warn_title": "Rhybudd Cydnawsedd Rockbox",
  "settings_old_rockbox_warn_body": "Nid yw datganiadau o Rockbox-Y1 cyn 0.5 yn gydnaws ag unedau Y1 a werthwyd ar ôl Mawrth 2026 gyda Innioasis OS 3.0.7 wedi'i osod ymlaen llaw.\n\nBydd fflachio adeilad hŷn ar y dyfeisiau hyn yn atal cychwyn.\n\nYdych chi'n siŵr eich bod am ddangos adeiladau Rockbox hŷn?",
  "sel_refresh": "Adnewyddu",
@@ -931,9 +926,6 @@
  "rockbox_wizard_done_desc": "Nawr gallwch chi ddatgysylltu'r chwaraewr yn ddiogel a dewis thema yn Rockbox (Gosodiadau> Gosodiadau Thema).",
  "sel_local_rockbox_themes_option": "Gosod Themâu Rockbox 360p + Fontpack",
  "rockbox_stage_installing": "Wrthi'n gosod Themâu a Ffontiau Rockbox...",
- "rockbox_cleanup_step": "Wrthi'n dileu'r hen osodiadau Rockbox...",
- "rockbox_cleanup_deleting": "Wrthi'n tynnu'r ffolder .rockbox o'r chwaraewr...",
- "rockbox_cleanup_failed_note": "Gosodwyd eich meddalwedd newydd, ond nid oedd modd tynnu'r hen ffolder .rockbox. Dileu'r ffolder .rockbox ar y chwaraewr â llaw os ydych chi eisiau cychwyn glân.",
  "rockbox_stage_waiting_adb_fmt": "Chwilio am chwaraewr trwy ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Mae mwy nag un chwaraewr yn gysylltiedig. Datgysylltwch y lleill a gadael dim ond yr un sy'n cael ei osod.",
  "rockbox_stage_pushing": "Canfod y chwaraewr. Wrthi'n gosod themâu a ffontiau cymunedol...",
@@ -1033,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Mae un coffi yn fras yn gorchuddio lled band llwytho i lawr. Mae'n cadw'r atgyweiriad nesaf o fewn cyrraedd.",
  "donate_family_appeal_expected": "Mae Ryan a'i bartner yn disgwyl babi. Gwerthfawrogir yn fawr y rhoddion tuag at gostau rhedeg y prosiect a'n teulu newydd.",
  "donate_family_appeal_new_arrival": "Mae yna ddyfodiad newydd ar y ffordd i dŷ Ryan. Mae pob rhodd tuag at y gweinyddion a'n teulu cynyddol yn golygu llawer iawn.",
- "donate_family_appeal_nursery": "Mae Ryan a'i bartner yn paratoi ar gyfer eu plentyn. Os yw'r offeryn hwn wedi bod yn ddefnyddiol, byddai rhodd ar gyfer y costau rhedeg a'n teulu sy'n tyfu yn helpu mwy nag y gwyddoch."
+ "donate_family_appeal_nursery": "Mae Ryan a'i bartner yn paratoi ar gyfer eu plentyn. Os yw'r offeryn hwn wedi bod yn ddefnyddiol, byddai rhodd ar gyfer y costau rhedeg a'n teulu sy'n tyfu yn helpu mwy nag y gwyddoch.",
+ "rockbox_cleanup_step": "Wrthi'n dileu'r hen osodiadau Rockbox...",
+ "rockbox_cleanup_deleting": "Wrthi'n tynnu'r ffolder .rockbox o'r chwaraewr...",
+ "rockbox_cleanup_failed_note": "Gosodwyd eich meddalwedd newydd, ond nid oedd modd tynnu'r hen ffolder .rockbox. Dileu'r ffolder .rockbox ar y chwaraewr â llaw os ydych chi eisiau cychwyn glân."
 }

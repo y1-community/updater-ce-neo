@@ -139,12 +139,7 @@
  "settings_filter_old_rockbox": "Mostrar antigas construcións de Rockbox",
  "settings_filter_nightly": "Mostrar lanzamentos de desenvolvedores nocturnos",
  "settings_filter_240p": "Lanzamentos de Rockbox 240p",
- "settings_240p_tip": "Mostra compilacións cuxo zip ROM é unha variante de 240p (rom…_240p.zip). As compilacións de 240p non se poden usar nun Y1 comprado novo despois de maio de 2026, nin nun que incluía o software orixinal 3.0.7 ou posterior. Eses xogadores tampouco poden usar versións antigas de Rockbox, polo que Mostrar versións antigas de Rockbox está activada con el.",
- "settings_240p_warn_body": "As compilacións de 240p non se poden usar nun Y1 comprado novo despois de maio de 2026, nin nun que incluía o software orixinal 3.0.7 ou posterior. Instala só un nun Y1 máis antigo.\n\nEses xogadores tampouco poden usar versións máis antigas de Rockbox, polo que tamén se enumeran.\n\nSeguro que queres mostrar lanzamentos de Rockbox en 240p?",
- "sel_240p_warning": "Esta é unha compilación de 240p. Non se pode usar nun Y1 comprado novo despois de maio de 2026, nin nun que viña co software orixinal 3.0.7 ou posterior.",
- "link_240p_body": "A ligazón que abriches é para unha compilación de 240p. As compilacións de 240p non se poden usar nun Y1 comprado novo despois de maio de 2026, nin nun que incluíse o software orixinal 3.0.7 ou posterior, polo que se ocultan ata que as acendas.\n\nSeguro que queres mostrar lanzamentos de Rockbox en 240p?",
- "link_busy": "Finaliza a instalación actual e, a continuación, abra a ligazón de novo.",
- "link_not_listed": "O software desta ligazón aínda non se lanzou para este reprodutor.",
+ "settings_240p_tip": "Mostra compilacións cuxo zip ROM é unha variante de 240p (rom…_240p.zip). As compilacións de 240p non son compatibles coas unidades Y1 do sistema operativo Innioasis inferior á versión 3.0.7, polo que está habilitado Mostrar versións antigas de Rockbox.",
  "settings_old_rockbox_warn_title": "Aviso de compatibilidade Rockbox",
  "settings_old_rockbox_warn_body": "As versións de Rockbox-Y1 anteriores á 0.5 non son compatibles coas unidades Y1 vendidas despois de marzo de 2026 con Innioasis OS 3.0.7 preinstalado.\n\nFlashear unha versión antiga nestes dispositivos impedirá o arranque.\n\nEstás seguro de que queres mostrar versións máis antigas de Rockbox?",
  "sel_refresh": "Actualizar",
@@ -931,9 +926,6 @@
  "rockbox_wizard_done_desc": "Agora podes desconectar o reprodutor con seguridade e escoller un tema en Rockbox (Configuración > Configuración do tema).",
  "sel_local_rockbox_themes_option": "Instala os temas Rockbox 360p + Fontpack",
  "rockbox_stage_installing": "Instalando temas e fontes de Rockbox...",
- "rockbox_cleanup_step": "Eliminando a configuración antiga de Rockbox...",
- "rockbox_cleanup_deleting": "Eliminando o cartafol .rockbox do reprodutor...",
- "rockbox_cleanup_failed_note": "O teu novo software instalouse, pero o cartafol .rockbox antigo non se puido eliminar. Elimina a man o cartafol .rockbox do reprodutor se queres comezar limpo.",
  "rockbox_stage_waiting_adb_fmt": "Buscando xogador a través de ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Máis dun xogador está conectado. Desconecta os demais e deixa só o que se está instalando.",
  "rockbox_stage_pushing": "Detectouse un xogador. Colocando temas e fontes da comunidade...",
@@ -1033,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Un café cobre aproximadamente o ancho de banda dunha descarga. Mantén a seguinte corrección ao seu alcance.",
  "donate_family_appeal_expected": "Ryan e a súa parella están esperando un bebé. As doazóns para os gastos de funcionamento do proxecto e da nosa nova familia son moi apreciadas.",
  "donate_family_appeal_new_arrival": "Hai unha nova chegada de camiño á casa de Ryan. Cada doazón para os servidores e a nosa familia en crecemento significa un gran negocio.",
- "donate_family_appeal_nursery": "Ryan e a súa parella prepáranse para o seu fillo. Se esta ferramenta foi útil, unha doazón para os gastos de funcionamento e a nosa familia en crecemento axudaría máis do que vostede sabe."
+ "donate_family_appeal_nursery": "Ryan e a súa parella prepáranse para o seu fillo. Se esta ferramenta foi útil, unha doazón para os gastos de funcionamento e a nosa familia en crecemento axudaría máis do que vostede sabe.",
+ "rockbox_cleanup_step": "Eliminando a configuración antiga de Rockbox...",
+ "rockbox_cleanup_deleting": "Eliminando o cartafol .rockbox do reprodutor...",
+ "rockbox_cleanup_failed_note": "O teu novo software instalouse, pero o cartafol .rockbox antigo non se puido eliminar. Elimina a man o cartafol .rockbox do reprodutor se queres comezar limpo."
 }

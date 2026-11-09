@@ -139,12 +139,7 @@
  "settings_filter_old_rockbox": "Kle Rockbox laa’n i kplanlɛ’n .",
  "settings_filter_nightly": "Kle ninnge nga be yi be kɔnguɛ kwlaa’n",
  "settings_filter_240p": "240p Rockbox i nglo yilɛ’n",
- "settings_240p_tip": "Ɔ kle kɛ be kplan ninnge nga be ROM zip’n ti 240p wafa’n (rom..._240p.zip). 240p builds be kwlá faman Y1 nga be toli i uflɛuflɛ kɛ Mɛ 2026 sinnin’n, annzɛ nga be fali logiciel 3.0.7 annzɛ i sin liɛ’n be bali’n, be su. Be nga be bo jue sɔ’n, be kwlá faman Rockbox i kplanlɛ laa’m be diman junman wie, ɔ maan be fa Show Old Rockbox Builds be bo i bo.",
- "settings_240p_warn_body": "240p builds be kwlá faman Y1 nga be toli i uflɛuflɛ kɛ Mɛ 2026 sinnin’n, annzɛ nga be fali logiciel 3.0.7 annzɛ i sin liɛ’n be bali’n, be su. Y1 laa kun su yɛ a fa kun ɔn.\n\nBe nga be bo jue sɔ’n, be kwlá faman Rockbox builds laa’m be diman junman wie, ɔ maan be klɛ be nga be o lɛ’n be dunman wie.\n\n?Amun lafi su kɛ amun kunndɛ kɛ amún klé Rockbox i nun ninnge nga be yili be 240p’n?",
- "sel_240p_warning": "I sɔ’n ti 240p kplanlɛ. Be kwlá faman Y1 nga be toli i uflɛuflɛ kɛ afuɛ 2026 Mɛ nun’n, annzɛ nga be fali logiciel Original 3.0.7 annzɛ i sin liɛ’n be bali’n, be su.",
- "link_240p_body": "Lien nga a tikeli’n, ɔ ti 240p build liɛ. 240p builds be kwlá faman Y1 nga be toli i uflɛuflɛ kɛ Mɛ 2026 sinnin’n, annzɛ nga be fali Original Software 3.0.7 annzɛ i sin liɛ’n be bali’n, be su, ɔ maan be fiali lele naan w’a kaci be.\n\n?Amun lafi su kɛ amun kunndɛ kɛ amún klé Rockbox i nun ninnge nga be yili be 240p’n?",
- "link_busy": "Wie instalɛ nga a su yo i dɔ nga su’n, kpɛkun tike lien’n su ekun.",
- "link_not_listed": "Be nin a yiman logiciel ng’ɔ o lien sɔ’n nun’n i nglo player sɔ’n i lika.",
+ "settings_240p_tip": "Ɔ kle kɛ be kplan ninnge nga be ROM zip’n ti 240p wafa’n (rom..._240p.zip). 240p i kplanlɛ’n nin Y1 i kplanlɛ’n be kɔman likawlɛ Innioasis OS m’ɔ o 3.0.7 i bo lɔ’n su, ɔ maan Kle Rockbox kplanlɛ laa’n, ɔ ti i liɛ.",
  "settings_old_rockbox_warn_title": "Rockbox i su ndɛ’n",
  "settings_old_rockbox_warn_body": "Rockbox-Y1 nga be yili be ka naan 0.5 w’a ju’n, be nin Y1 nga be yoli be atɛ afuɛ 2026 nun Marsi nun’n, mɔ be dun mmua fali Innioasis OS 3.0.7 be sieli be su’n, be kɔman likawlɛ.\n\nSɛ amun flash build laa kun su ninnge sɔ’m be su’n, ɔ su yoman naan b’a bo i bo.\n\n?Amun lafi su kɛ amun kunndɛ kɛ amún klé Rockbox i kplanlɛ laa mun?",
  "sel_refresh": "Refresh",
@@ -931,9 +926,6 @@
  "rockbox_wizard_done_desc": "Siɛn’n, a kwla kpɛ jue tofuɛ’n i nun naan w’a fa ndɛ kun Rockbox nun (Paramètres > Paramètres du thème).",
  "sel_local_rockbox_themes_option": "Fa Rockbox 360p i su ndɛ’m be sie i lika kun.",
  "rockbox_stage_installing": "Rockbox i ndɛ mma mun nin i nun ndɛ mma’m be siesielɛ...",
- "rockbox_cleanup_step": "Rockbox i nun ninnge laa’m be yilɛ...",
- "rockbox_cleanup_deleting": "Be yi .rockbox i dossier’n i jue tofuɛ’n nun...",
- "rockbox_cleanup_failed_note": "Be fali ɔ logiciel uflɛ’n be sieli i nun, sanngɛ b’a kwlá yiman .rockbox dossier laa’n. Sɛ amun kunndɛ kɛ amún bó i bo sanwun’n, amun suan .rockbox i dossier ng’ɔ o player’n su’n i sa nun.",
  "rockbox_stage_waiting_adb_fmt": "Be kunndɛ sran kun ADB su ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Be nga be bo jue’n be tra kun. Amun kpɛ onga’m be nun naan amun yaci nga be su fa sie i’n i ngunmin.",
  "rockbox_stage_pushing": "Be wunnin jue tofuɛ’n. Be fa sran’m be ndɛ mma mun nin be klɛ ndɛ mma mun...",
@@ -1033,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Kafe kun kwla kata bandwidth nga be fa tɛlɛ’n su. Ɔ yo maan like ng’ɔ́ bá lɛ’n, ɔ ka lɛ.",
  "donate_family_appeal_expected": "Ryan nin i wiengu’n be su minndɛ ba. Sran nga be man sika naan b’a fa di junman’n, ɔ nin e awlobo uflɛ’n, be si be su ye kpa.",
  "donate_family_appeal_new_arrival": "Sran uflɛ kun o atin’n su Ryan i awlo lɔ. Like kwlaa nga be man serveur mun nin e awlobo ng’ɔ su yo dan’n, ɔ ti like dan kpa.",
- "donate_family_appeal_nursery": "Ryan nin i wiengu’n be su siesie be wun be wa’n i lika. Sɛ junman dilɛ ninnge sɔ’n w’a yo ye’n, sika nga be fa di junman’n, ɔ nin e awlobo ng’ɔ su yo dan’n, ɔ́ úka e tra wafa nga amun si i’n."
+ "donate_family_appeal_nursery": "Ryan nin i wiengu’n be su siesie be wun be wa’n i lika. Sɛ junman dilɛ ninnge sɔ’n w’a yo ye’n, sika nga be fa di junman’n, ɔ nin e awlobo ng’ɔ su yo dan’n, ɔ́ úka e tra wafa nga amun si i’n.",
+ "rockbox_cleanup_step": "Rockbox i nun ninnge laa’m be yilɛ...",
+ "rockbox_cleanup_deleting": "Be yi .rockbox i dossier’n i jue tofuɛ’n nun...",
+ "rockbox_cleanup_failed_note": "Be fali ɔ logiciel uflɛ’n be sieli i nun, sanngɛ b’a kwlá yiman .rockbox dossier laa’n. Sɛ amun kunndɛ kɛ amún bó i bo sanwun’n, amun suan .rockbox i dossier ng’ɔ o player’n su’n i sa nun."
 }

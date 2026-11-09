@@ -1,4 +1,25 @@
 #!/usr/bin/env python3
+def _read_app_version(default="2.5.4"):
+    """One source of truth: src/config.py's APP_VERSION."""
+    import re as _re
+    from pathlib import Path as _Path
+    bases = []
+    spec_path = globals().get("SPECPATH")
+    if spec_path:
+        bases.append(_Path(spec_path))
+    bases.append(_Path.cwd())
+    for base in bases:
+        target = base / "src" / "config.py"
+        if not target.exists():
+            continue
+        match = _re.search(r'APP_VERSION\s*=\s*"([^"]+)"', target.read_text())
+        if match:
+            return match.group(1)
+    return default
+
+
+APP_VERSION = _read_app_version()
+
 """build_universal_app.py — Build a 100% self-contained macOS 12+ Universal 2 (Intel + Apple Silicon) .app bundle.
 
 Bundles:
@@ -808,8 +829,8 @@ def build():
         "CFBundleInfoDictionaryVersion": "6.0",
         "CFBundleName": APP_DISPLAY_NAME,
         "CFBundlePackageType": "APPL",
-        "CFBundleShortVersionString": "2.5.3",
-        "CFBundleVersion": "2.5.3",
+        "CFBundleShortVersionString": APP_VERSION,
+        "CFBundleVersion": APP_VERSION,
         "CFBundleGetInfoString": f"{APP_DISPLAY_NAME} by Ryan Specter",
         "LSApplicationCategoryType": "public.app-category.utilities",
         "LSMinimumSystemVersion": "12.0",
@@ -824,15 +845,6 @@ def build():
         "UIDesignRequiresCompatibility": True,
         "NSPrincipalClass": "NSApplication",
         "NSHumanReadableCopyright": "Copyright © 2024-2026 Ryan Specter. All rights reserved.",
-        # innioasis-updater:// links from innioasis.app and themes.innioasis.app
-        # (src/site_links.py) arrive as a URL-open event. The MediaTek
-        # Installer has no online catalogue, so it does not claim them.
-        "CFBundleURLTypes": [] if IS_MEDIATEK_INSTALLER_BUILD else [
-            {
-                "CFBundleURLName": f"{BUNDLE_ID}.site-link",
-                "CFBundleURLSchemes": ["innioasis-updater"],
-            }
-        ],
         "CFBundleDocumentTypes": [
             {
                 "CFBundleTypeName": "Firmware Package",

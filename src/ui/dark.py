@@ -306,12 +306,109 @@ def _hex_rgba(value: str, alpha: float) -> str:
 # Theme tokens
 # ---------------------------------------------------------------------------
 
+# GNOME stores a name, not a hex colour. These are the Adwaita accents that
+# name selects. Reading the setting does not ask the user for permission.
+_GNOME_ACCENT_NAMES = {
+    "blue": "#3584e4",
+    "teal": "#2190a4",
+    "green": "#3a944a",
+    "yellow": "#e5a50a",
+    "orange": "#ed5b00",
+    "red": "#e62d42",
+    "pink": "#d56199",
+    "purple": "#9141ac",
+    "slate": "#6f8396",
+}
+
+
+def _hex_from_rgb_triplet(text: str) -> str | None:
+    parts = [part.strip() for part in str(text or "").replace(" ", "").split(",")]
+    if len(parts) < 3:
+        return None
+    try:
+        channels = tuple(int(float(part)) for part in parts[:3])
+    except ValueError:
+        return None
+    if any(channel < 0 or channel > 255 for channel in channels):
+        return None
+    return "#{:02x}{:02x}{:02x}".format(*channels)
+
+
+def accent_from_desktop_config(text: str) -> str | None:
+    """Pull a hex accent out of a kdeglobals or gtk settings file.
+
+    Plasma writes ``AccentColor=61,174,233``. A file that also names a colour
+    (``accent-color=blue``) uses the GNOME name. Nothing here launches a
+    settings UI.
+    """
+    for line in str(text or "").splitlines():
+        raw = line.strip()
+        if not raw or raw.startswith(("#", ";", "[")) or "=" not in raw:
+            continue
+        key, value = raw.split("=", 1)
+        key = key.strip().lower()
+        value = value.strip().strip("'\"")
+        if key in ("accentcolor", "lastusedcustomaccentcolor", "decorationfocus"):
+            if re.fullmatch(r"#?[0-9a-fA-F]{6}", value):
+                return value.lower() if value.startswith("#") else f"#{value.lower()}"
+            parsed = _hex_from_rgb_triplet(value)
+            if parsed:
+                return parsed
+        if key in ("accent-color", "accent_color"):
+            named = _GNOME_ACCENT_NAMES.get(value.lower())
+            if named:
+                return named
+            if re.fullmatch(r"#?[0-9a-fA-F]{6}", value):
+                return value.lower() if value.startswith("#") else f"#{value.lower()}"
+    return None
+
+
+def _linux_declared_accent() -> str | None:
+    """The accent a Linux desktop wrote into its own config, or None.
+
+    The files are the user's. ``gsettings`` is only a local read of the same
+    GNOME key, used when the files do not name a colour.
+    """
+    home = os.path.expanduser("~")
+    for relative in (
+        os.path.join(".config", "kdeglobals"),
+        os.path.join(".config", "gtk-4.0", "settings.ini"),
+        os.path.join(".config", "gtk-3.0", "settings.ini"),
+    ):
+        try:
+            with open(os.path.join(home, relative), encoding="utf-8", errors="replace") as handle:
+                found = accent_from_desktop_config(handle.read())
+        except OSError:
+            continue
+        if found:
+            return found
+    try:
+        import subprocess
+
+        result = subprocess.run(
+            ["gsettings", "get", "org.gnome.desktop.interface", "accent-color"],
+            capture_output=True,
+            text=True,
+            timeout=1,
+        )
+        if result.returncode == 0:
+            name = result.stdout.strip().strip("'\"")
+            named = _GNOME_ACCENT_NAMES.get(name.lower())
+            if named:
+                return named
+            if re.fullmatch(r"#?[0-9a-fA-F]{6}", name):
+                return name if name.startswith("#") else f"#{name.lower()}"
+    except Exception:
+        pass
+    return None
+
+
 def _probe_native_accent(palette: QPalette | None = None) -> tuple[str, str] | None:
     """Return (accent_hex, accent_text_hex) from the host desktop, or None.
 
-    Queries AppKit controlAccentColor on macOS, QPalette.Accent (Qt 6.6+)
-    on Windows (DWM accent) and Linux (KDE/GNOME accent), strictly maintaining
-    WCAG AA text contrast.
+    Queries AppKit controlAccentColor on macOS, the DWM registry value on
+    Windows, and on Linux the desktop's own config (then Qt's palette).
+    None of these raise a permission dialog.
     """
     if sys.platform == "darwin":
         try:
@@ -373,6 +470,17 @@ def _probe_native_accent(palette: QPalette | None = None) -> tuple[str, str] | N
             return accent, text
         except Exception:
             pass
+
+    if IS_LINUX:
+        linux_accent = _linux_declared_accent()
+        if linux_accent:
+            value = linux_accent.lstrip("#")
+            r = int(value[0:2], 16)
+            g = int(value[2:4], 16)
+            b = int(value[4:6], 16)
+            luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0
+            text = "#000000" if luminance > 0.6 else "#ffffff"
+            return linux_accent, text
 
     if palette is not None and hasattr(QPalette.ColorRole, "Accent"):
         acc = palette.color(QPalette.ColorRole.Accent)

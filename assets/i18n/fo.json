@@ -139,12 +139,7 @@
  "settings_filter_old_rockbox": "Vís Gamla Rockbox byggir",
  "settings_filter_nightly": "Vís Náttarligu Dev-útgávur",
  "settings_filter_240p": "240p Rockbox útgávur",
- "settings_240p_tip": "Vísir byggingar, hvørs ROM-zip er ein 240p-variant (rom..._240p.zip). 240p byggingar kunnu ikki brúkast á einum Y1 keyptum nýggjum eftir mai 2026, ella á einum sum kom við Original Software 3.0.7 ella seinni. Teir spælararnir kunnu heldur ikki brúka eldri Rockbox bygningar, so Vís gamlar Rockbox bygningar er tendrað við tí.",
- "settings_240p_warn_body": "240p byggingar kunnu ikki brúkast á einum Y1 keyptum nýggjum eftir mai 2026, ella á einum sum kom við Original Software 3.0.7 ella seinni. Set bert ein upp á ein eldri Y1.\n\nTeir spælararnir kunnu heldur ikki brúka eldri Rockbox builds, so teir eru eisini listaðir.\n\nErt tú vísur í, at tú vilt vísa 240p Rockbox útgávur?",
- "sel_240p_warning": "Hetta er ein 240p bygging. Tað kann ikki brúkast á einum Y1 keyptum nýggjum eftir mai 2026, ella á einum sum kom við Original Software 3.0.7 ella seinni.",
- "link_240p_body": "Leinkjan tú opnaði er til ein 240p build. 240p builds kunnu ikki brúkast á einum Y1 keyptum nýggjum eftir mai 2026, ella á einum sum kom við Original Software 3.0.7 ella seinni, so teir eru fjaldir til tú tendrar teir.\n\nErt tú vísur í, at tú vilt vísa 240p Rockbox útgávur?",
- "link_busy": "Klára núverandi uppsetingina, og opna síðani leinkjuna aftur.",
- "link_not_listed": "Forritið í leinkjuni er ikki útgivið til hendan spælaran enn.",
+ "settings_240p_tip": "Vísir byggingar, hvørs ROM-zip er ein 240p-variant (rom..._240p.zip). 240p bygningar eru ikki kompatiblar við Y1 eindir á Innioasis OS undir 3.0.7, so Vís gamlar Rockbox bygningar er virkið við tí.",
  "settings_old_rockbox_warn_title": "Ávaring um samsvar við Rockbox",
  "settings_old_rockbox_warn_body": "Útgávur av Rockbox-Y1 áðrenn 0,5 eru ikki í samsvari við Y1 eindir, sum verða seldar eftir mars 2026 við Innioasis OS 3,0.7 forinnstillaðum.\n\nAt blinka eina eldri bygging á hesum tólum fer at forða fyri uppstarti.\n\nErt tú vísur í, at tú vilt vísa eldri Rockbox builds?",
  "sel_refresh": "Fríska upp",
@@ -931,9 +926,6 @@
  "rockbox_wizard_done_desc": "Tú kanst nú trygt loysa spælaran og velja eitt tema í Rockbox (Innstillingar > Temainnstillingar).",
  "sel_local_rockbox_themes_option": "Set upp Rockbox 360p Tema + Skriftpakka",
  "rockbox_stage_installing": "Seta upp Rockbox tema og skriftsløg...",
- "rockbox_cleanup_step": "Strika gomlu Rockbox innstillingarnar...",
- "rockbox_cleanup_deleting": "Strika .rockbox mappuna úr spælaranum...",
- "rockbox_cleanup_failed_note": "Tín nýggja forrit varð sett upp, men gamla .rockbox mappan kundi ikki strikast. Strika .rockbox mappuna á spælaranum við hond, um tú ynskir ​​eina reina byrjan.",
  "rockbox_stage_waiting_adb_fmt": "Leita eftir spælara umvegis ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Fleiri enn ein leikari er tengdur at. Kopla hini frá og lat bara tann, sum verður settur upp.",
  "rockbox_stage_pushing": "Spælari uppdagaður. Seta felagstema og skriftsløg...",
@@ -1033,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Eitt kaffi fevnir áleið um bandbreiddina á einum niðurtøku. Tað heldur næsta fix innan fyri røktina.",
  "donate_family_appeal_expected": "Ryan og maður hansara vænta eitt barn. Stuðul til rakstrarkostnaðin av verkætlanini og okkara nýggju familju er massivt virðismett.",
  "donate_family_appeal_new_arrival": "Tað er ein nýkomin á veg í húsinum hjá Ryan. Hvør gáva móti servarunum og okkara vaksandi familju merkir nógv.",
- "donate_family_appeal_nursery": "Ryan og maður hansara gera seg klár til barnið. Um hetta tólið hevur verið til gagns, so hevði ein gáva til rakstrarútreiðslurnar og okkara vaksandi familju hjálpt meira enn tú veitst."
+ "donate_family_appeal_nursery": "Ryan og maður hansara gera seg klár til barnið. Um hetta tólið hevur verið til gagns, so hevði ein gáva til rakstrarútreiðslurnar og okkara vaksandi familju hjálpt meira enn tú veitst.",
+ "rockbox_cleanup_step": "Strika gomlu Rockbox innstillingarnar...",
+ "rockbox_cleanup_deleting": "Strika .rockbox mappuna úr spælaranum...",
+ "rockbox_cleanup_failed_note": "Tín nýggja forrit varð sett upp, men gamla .rockbox mappan kundi ikki strikast. Strika .rockbox mappuna á spælaranum við hond, um tú ynskir ​​eina reina byrjan."
 }

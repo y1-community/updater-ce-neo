@@ -139,12 +139,7 @@
  "settings_filter_old_rockbox": "Kyerɛ Rockbox Dedaw a Wɔasisi",
  "settings_filter_nightly": "Kyerɛ Anadwo biara Dev Releases",
  "settings_filter_240p": "240p Rockbox a wɔayi no adi",
- "settings_240p_tip": "Kyerɛ adan a ne ROM zip yɛ 240p variant (rom..._240p.zip). 240p builds ntumi mfa nni dwuma wɔ Y1 a wɔatɔ foforo wɔ May 2026 akyi, anaasɛ nea ɛbae ne Original Software 3.0.7 anaa nea ɛba akyiri yi so. Saa agodifoɔ no nso ntumi mfa Rockbox adan dedaw nni dwuma, enti wɔde Show Old Rockbox Builds no asɔ.",
- "settings_240p_warn_body": "240p builds ntumi mfa nni dwuma wɔ Y1 a wɔatɔ foforo wɔ May 2026 akyi, anaasɛ nea ɛbae ne Original Software 3.0.7 anaa nea ɛba akyiri yi so. Fa biako hyɛ Y1 dedaw bi so nkutoo.\n\nSaa players no nso ntumi mfa Rockbox builds dedaw nni dwuma, enti wɔakyerɛw wɔn nso din.\n\nWogye di sɛ wopɛ sɛ wokyerɛ 240p Rockbox releases?",
- "sel_240p_warning": "Eyi yɛ 240p build. Wontumi mfa nni dwuma wɔ Y1 a wɔatɔ foforo wɔ May 2026 akyi, anaasɛ nea ɛbaa Original Software 3.0.7 anaa nea ɛba akyiri yi so.",
- "link_240p_body": "Link a wobuee no yɛ 240p build. 240p builds ntumi mfa nni dwuma wɔ Y1 a woatɔ foforo wɔ May 2026 akyi, anaasɛ nea ɛbaa Original Software 3.0.7 anaa nea ɛba akyiri yi so, enti wɔde asie kosi sɛ wobɛdan wɔn.\n\nWogye di sɛ wopɛ sɛ wokyerɛ 240p Rockbox releases?",
- "link_busy": "Wie mprempren instɔl no, afei bue link no bio.",
- "link_not_listed": "Software a ɛwɔ saa link no mu no nnya nyii no adi amma saa player yi.",
+ "settings_240p_tip": "Kyerɛ adan a ne ROM zip yɛ 240p variant (rom..._240p.zip). 240p builds no ne Y1 units a ɛwɔ Innioasis OS a ɛwɔ aseɛ 3.0.7 no nhyia, enti Show Old Rockbox Builds no yɛ adwuma wɔ so.",
  "settings_old_rockbox_warn_title": "Rockbox Compatibility Kɔkɔbɔ",
  "settings_old_rockbox_warn_body": "Rockbox-Y1 a wɔayi no adi ansa na 0.5 reba no ne Y1 units a wɔtɔn wɔ March 2026 akyi a wɔde Innioasis OS 3.0.7 adi kan ahyɛ mu no nhyia.\n\nSɛ wo flashing dedaw bi a wɔasisi wɔ saa mfiri yi so a, ɛbɛma woasiw boot ano.\n\nWogye di sɛ wopɛ sɛ wokyerɛ Rockbox adan dedaw?",
  "sel_refresh": "Fa foforo hyɛ mu",
@@ -931,9 +926,6 @@
  "rockbox_wizard_done_desc": "Afei wubetumi atwa player no mu dwoodwoo na woapaw asɛmti bi wɔ Rockbox (Nsiesiei > Asɛmti Nsiesiei).",
  "sel_local_rockbox_themes_option": "Fa Rockbox 360p Nsɛmti + Fontpack no hyɛ mu",
  "rockbox_stage_installing": "Rockbox Themes & Fonts a wɔde ahyɛ mu...",
- "rockbox_cleanup_step": "Woreyi Rockbox nhyehyɛe dedaw no afi hɔ...",
- "rockbox_cleanup_deleting": "Woreyi .rockbox folda no afi player no mu...",
- "rockbox_cleanup_failed_note": "Wɔde wo softwea foforo no ahyɛ mu, nanso wɔantumi annyi .rockbox folda dedaw no amfi hɔ. Fa nsa popa .rockbox folda a ɛwɔ player no so sɛ wopɛ sɛ wufi ase a ɛho tew a.",
  "rockbox_stage_waiting_adb_fmt": "Worehwehwɛ player via ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Wɔn a wɔbɔ bɔɔl bɛboro biako na ɛka bom. Twa afoforo no mu na gyaw nea wɔde rehyɛ mu no nkutoo.",
  "rockbox_stage_pushing": "Player a wɔahu. Mpɔtam hɔ nsɛmti & nkyerɛwde a wɔde besisi hɔ...",
@@ -1033,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Ɛkame ayɛ sɛ kɔfe biako kata bandwidth a ɛwɔ download bi so. Ɛma nsiesie a edi hɔ no kɔ so yɛ nea wobetumi adu ho.",
  "donate_family_appeal_expected": "Ryan ne ne hokafo rehwɛ akokoaa kwan. Yɛkyerɛ ntoboa a wɔde boa adwuma no mmirikatu ho ka ne yɛn abusua foforo no ho anisɔ kɛse.",
  "donate_family_appeal_new_arrival": "Ɔbaa foforo bi wɔ kwan so wɔ Ryan fie. Ntoboa biara a wɔde bɛma servers ne yɛn abusua a ɛrenya nkɔso no kyerɛ ade kɛse.",
- "donate_family_appeal_nursery": "Ryan ne ne hokafo no resiesie wɔn ho ama wɔn ba no. Sɛ mfaso aba saa adwinnade yi so a, ntoboa a yɛde bɛma de atua mmirikatu ho ka ne yɛn abusua a ɛrenya nkɔso no bɛboa kɛse asen sɛnea wunim."
+ "donate_family_appeal_nursery": "Ryan ne ne hokafo no resiesie wɔn ho ama wɔn ba no. Sɛ mfaso aba saa adwinnade yi so a, ntoboa a yɛde bɛma de atua mmirikatu ho ka ne yɛn abusua a ɛrenya nkɔso no bɛboa kɛse asen sɛnea wunim.",
+ "rockbox_cleanup_step": "Woreyi Rockbox nhyehyɛe dedaw no afi hɔ...",
+ "rockbox_cleanup_deleting": "Woreyi .rockbox folda no afi player no mu...",
+ "rockbox_cleanup_failed_note": "Wɔde wo softwea foforo no ahyɛ mu, nanso wɔantumi annyi .rockbox folda dedaw no amfi hɔ. Fa nsa popa .rockbox folda a ɛwɔ player no so sɛ wopɛ sɛ wufi ase a ɛho tew a."
 }

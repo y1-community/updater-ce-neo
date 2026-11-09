@@ -139,12 +139,7 @@
  "settings_filter_old_rockbox": "Mostra i Vecchi Rockbox Builds",
  "settings_filter_nightly": "Mostra e versioni di Dev di notte",
  "settings_filter_240p": "Versioni di Rockbox 240p",
- "settings_240p_tip": "Mostra builds chì u zip ROM hè una variante 240p (rom…_240p.zip). E custruzzioni 240p ùn ponu micca esse aduprate nantu à un Y1 cumpratu novu dopu à maghju 2026, o in quellu chì vene cù u Software Originale 3.0.7 o più tardi. Quelli ghjucadori ùn ponu micca aduprà e versioni più vechje di Rockbox, cusì Show Old Rockbox Builds hè attivatu cun ellu.",
- "settings_240p_warn_body": "E custruzzioni 240p ùn ponu micca esse aduprate nantu à un Y1 cumpratu novu dopu à maghju 2026, o in quellu chì vene cù u Software Originale 3.0.7 o più tardi. Installa solu unu in un vechju Y1.\n\nQuelli ghjucadori ùn ponu micca aduprà e versioni più vechje di Rockbox, cusì sò ancu listati.\n\nSè sicuru chì vulete mustrà e versioni di Rockbox 240p?",
- "sel_240p_warning": "Questu hè un build 240p. Ùn pò micca esse usatu in un Y1 cumpratu novu dopu à maghju 2026, o in quellu chì vene cù u Software originale 3.0.7 o più tardi.",
- "link_240p_body": "U ligame chì avete apertu hè per una build 240p. I build 240p ùn ponu micca esse aduprati nantu à un Y1 cumpratu novu dopu à maghju 2026, o in quellu chì vene cù u Software Originale 3.0.7 o più tardi, cusì sò oculati finu à chì l'avete attivatu.\n\nSè sicuru chì vulete mustrà e versioni di Rockbox 240p?",
- "link_busy": "Finite l'installazione attuale, dopu apre u ligame di novu.",
- "link_not_listed": "U software in quellu ligame ùn hè ancu liberatu per stu lettore.",
+ "settings_240p_tip": "Mostra builds chì u zip ROM hè una variante 240p (rom…_240p.zip). I build 240p ùn sò micca cumpatibili cù unità Y1 in Innioasis OS sottu 3.0.7, cusì Mostra Old Rockbox Builds hè attivatu cun ellu.",
  "settings_old_rockbox_warn_title": "Avvisu di Cumpatibilità Rockbox",
  "settings_old_rockbox_warn_body": "E versioni di Rockbox-Y1 prima di 0.5 ùn sò micca cumpatibili cù unità Y1 vendute dopu à marzu 2026 cù Innioasis OS 3.0.7 preinstallatu.\n\nFlashing una vechja build nantu à questi dispositi impediscenu l'avvio.\n\nSè sicuru chì vulete mustrà e custruzzioni di Rockbox più vechje ?",
  "sel_refresh": "Refresh",
@@ -931,9 +926,6 @@
  "rockbox_wizard_done_desc": "Pudete avà disconnect u lettore in modu sicuru è sceglie un tema in Rockbox (Settings> Theme Settings).",
  "sel_local_rockbox_themes_option": "Installa Temi Rockbox 360p + Fontpack",
  "rockbox_stage_installing": "Installazione di temi è fonti Rockbox...",
- "rockbox_cleanup_step": "Eliminazione di i vechji paràmetri di Rockbox...",
- "rockbox_cleanup_deleting": "Eliminà u cartulare .rockbox da u lettore...",
- "rockbox_cleanup_failed_note": "U vostru novu software hè statu stallatu, ma u vechju cartulare .rockbox ùn pò micca esse eliminatu. Sguassà u cartulare .rockbox nant'à u jocaturi a manu s'è vo vulete un principiu pulito.",
  "rockbox_stage_waiting_adb_fmt": "Cerchendu un ghjucatore via ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Più di un ghjucatore hè cunnessu. Disconnect l'altri è lasciate solu quellu chì hè stallatu.",
  "rockbox_stage_pushing": "U ghjucatore hà rilevatu. Pone temi è fonti di a cumunità...",
@@ -1033,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Un caffè copre quasi a larghezza di banda di una scaricata. Mantene a prossima correzione à portata.",
  "donate_family_appeal_expected": "Ryan è u so cumpagnu aspettanu un zitellu. E donazioni versu i costi di gestione di u prugettu è a nostra nova famiglia sò massivamente apprezzate.",
  "donate_family_appeal_new_arrival": "Ci hè un novu arrivatu in strada in a casa di Ryan. Ogni donazione versu i servitori è a nostra famiglia in crescita significa assai.",
- "donate_family_appeal_nursery": "Ryan è u so cumpagnu si preparanu per u so figliolu. Se sta strumentu hè stata utile, una donazione per i costi di gestione è a nostra famiglia in crescita aiuterebbe più di ciò chì sapete."
+ "donate_family_appeal_nursery": "Ryan è u so cumpagnu si preparanu per u so figliolu. Se sta strumentu hè stata utile, una donazione per i costi di gestione è a nostra famiglia in crescita aiuterebbe più di ciò chì sapete.",
+ "rockbox_cleanup_step": "Eliminazione di i vechji paràmetri di Rockbox...",
+ "rockbox_cleanup_deleting": "Eliminà u cartulare .rockbox da u lettore...",
+ "rockbox_cleanup_failed_note": "U vostru novu software hè statu stallatu, ma u vechju cartulare .rockbox ùn pò micca esse eliminatu. Sguassà u cartulare .rockbox nant'à u jocaturi a manu s'è vo vulete un principiu pulito."
 }

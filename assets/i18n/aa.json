@@ -139,12 +139,7 @@
  "settings_filter_old_rockbox": "uybulluy raagte xaahi sandugih xisne",
  "settings_filter_nightly": "Bar Dev Cabti Uybulluy",
  "settings_filter_240p": "240p Xaahi sandug Cabti",
- "settings_240p_tip": "uybulluy xisneh ROM alfenta 240p baxsa ( rom..._240p.alfenta). 240p xisne Y1 qusba xaamte May 2026 lakal, hinnay inkih tan Software 3.0.7 kee tohuk lakal temeete. too digir abeynit raagte Rockbox xisneena edde tantifiqem madudda, tonnal uybulluy raagte Rockbox xisne tet luk fakkimte.",
- "settings_240p_warn_body": "240p xisne Y1 qusba xaamte May 2026 lakal, hinnay inkih tan Software 3.0.7 kee tohuk lakal temeete. dubuk kib tiya raagte Y1 amol.\n\ntoo digir aba raagte Rockbox xisnet madoqaysimta, tonnal too roorimte kaxxam.\n\natu tasmite atu taybulleem faxxam 240p Rockbox cabti?",
- "sel_240p_warning": "Taham 240p xiso. toh edde tantifiqem madudda Y1 xaamime qusba May 2026 lakal, hinnay tiyay Asli Softiweer 3.0.7 hinnay tohuk lakal.",
- "link_240p_body": "Atu fakte yasgaarawi 240p xisne. 240p xisne Y1 May 2026 lakal qusba xaamte, hinnay Original Software 3.0.7 kee tohuk lakal temeete tiya, tohih taagah ken culsaanam fanah uqrat tan.\n\natu tasmite atu taybulleem faxxam 240p Rockbox cabti?",
- "link_busy": "Awayih kibnek gaba kal, tokkeek yasgaarawi qagitak fak.",
- "link_not_listed": "too yasgaarawih addat yan softi weer ta digirih macabinna.",
+ "settings_240p_tip": "uybulluy xisneh ROM alfenta 240p baxsa ( rom..._240p.alfenta). 240p xisne Y1 tiyah addat tan Innioasis OS 3.0.7 gubal tan, tohih taagah Show Old Rockbox xisneh addat tan.",
  "settings_old_rockbox_warn_title": "Rockbox ittalluk abit maabitina",
  "settings_old_rockbox_warn_body": "Rockbox-Y1 0.5 fanah yewqeh yan uddur, 2026 liggidih addat, Innioasis OS 3.0.7 lih qimmoh addah yewqeh yan Y1 qaynat lih angaaraw mali.\n\ntoo yahaazal raagte xisne ursaanam ugtumak waasele.\n\natu tasmite atu taybulleem faxxam raagte Rockbox xisne?",
  "sel_refresh": "Uqusbus",
@@ -931,9 +926,6 @@
  "rockbox_wizard_done_desc": "Atu away amaanah garuq digirtam kee ugussam ximmo Rock sandugih addat ( farmooma> ximmo farmooma).",
  "sel_local_rockbox_themes_option": "Rockbox 360p ximmooma + kutbeh alfenta xukkuta",
  "rockbox_stage_installing": "Rook sandugih ximmoomaa kee kutbeeba...",
- "rockbox_cleanup_step": "raage xaahih sandugih guddaaqa duugaanama...",
- "rockbox_cleanup_deleting": "Digir abek xaahi sandug folxer kalaanam...",
- "rockbox_cleanup_failed_note": "kok qusba softi weer kibbiimeh suge, takkay immay raagte . rockbox folxer duugumtam maduudumta. Bayis. xaahi sandugih folxer gabat digir abe atu saytun qimmo faxxek.",
  "rockbox_stage_waiting_adb_fmt": "ADB gitaak digir abeynit gorrisa ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "tiyaak daga takke digir abeynit yangooroweenih. gersi marak garuq kee dubuk tiya cab kibbimte.",
  "rockbox_stage_pushing": "Digir abeynit geytimte. Ayyuntiinô ximmoomaa kee kutbeeba daffeysaanam...",
@@ -1033,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "inki buni amolladih obsih bandiwixih reebisa. Ciggiltah tan massos gufneh addat dacrisa.",
  "donate_family_appeal_expected": "Rayan kee kay wakliiti alqi qambaalan. Cugayso gexsitih awqentittee kee ni qusba buxah marah tekke qokolitte kaxxam assakat le.",
  "donate_family_appeal_new_arrival": "Rayan qarih addat qusba num yamaate. Kulli qokol ayfaf yacee maraa kee ni dadalih yan buxah marah yaanam kaxxa mekla.",
- "donate_family_appeal_nursery": "Rayan kee kay wakliiti sinni baxah gulguluh yanin. ta silac xoqoysi yeellek, ardi awqenta kee ni buxah marih qokol atu taaxigeemik muxxi koo catele."
+ "donate_family_appeal_nursery": "Rayan kee kay wakliiti sinni baxah gulguluh yanin. ta silac xoqoysi yeellek, ardi awqenta kee ni buxah marih qokol atu taaxigeemik muxxi koo catele.",
+ "rockbox_cleanup_step": "raage xaahih sandugih guddaaqa duugaanama...",
+ "rockbox_cleanup_deleting": "Digir abek xaahi sandug folxer kalaanam...",
+ "rockbox_cleanup_failed_note": "kok qusba softi weer kibbiimeh suge, takkay immay raagte . rockbox folxer duugumtam maduudumta. Bayis. xaahi sandugih folxer gabat digir abe atu saytun qimmo faxxek."
 }

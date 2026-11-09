@@ -139,12 +139,7 @@
  "settings_filter_old_rockbox": "Prikaži Old Rockbox Builds",
  "settings_filter_nightly": "Prikaži Nightly Dev Releases",
  "settings_filter_240p": "240p Rockbox izdanja",
- "settings_240p_tip": "Prikazuje gradnje čiji je ROM zip varijanta od 240p (rom…_240p.zip). 240p verzije se ne mogu koristiti na Y1 kupljenom novom nakon maja 2026. ili na onom koji je došao s originalnim softverom 3.0.7 ili novijim. Ti igrači ne mogu koristiti ni starije Rockbox verzije, tako da je Show Old Rockbox Builds uključen s njim.",
- "settings_240p_warn_body": "240p verzije se ne mogu koristiti na Y1 kupljenom novom nakon maja 2026. ili na onom koji je došao s originalnim softverom 3.0.7 ili novijim. Instalirajte samo jedan na stariji Y1.\n\nNi ti igrači ne mogu koristiti starije Rockbox buildove, tako da su i oni navedeni.\n\nJeste li sigurni da želite prikazati 240p Rockbox izdanja?",
- "sel_240p_warning": "This is a 240p build. Ne može se koristiti na Y1 kupljenom novom nakon maja 2026. ili na onom koji je došao s originalnim softverom 3.0.7 ili novijim.",
- "link_240p_body": "Link koji ste otvorili je za 240p build. 240p verzije se ne mogu koristiti na Y1 kupljenom novom nakon maja 2026. ili na onom koji je došao s originalnim softverom 3.0.7 ili novijim, tako da su skrivene dok ih ne uključite.\n\nJeste li sigurni da želite prikazati 240p Rockbox izdanja?",
- "link_busy": "Završite trenutnu instalaciju, a zatim ponovo otvorite vezu.",
- "link_not_listed": "Softver na tom linku još nije objavljen za ovaj plejer.",
+ "settings_240p_tip": "Prikazuje gradnje čiji je ROM zip varijanta od 240p (rom…_240p.zip). 240p gradnje nisu kompatibilne sa Y1 jedinicama na Innioasis OS-u ispod 3.0.7, tako da je Show Old Rockbox Builds omogućen s njim.",
  "settings_old_rockbox_warn_title": "Upozorenje o kompatibilnosti Rockboxa",
  "settings_old_rockbox_warn_body": "Izdanja Rockbox-Y1 prije 0.5 nisu kompatibilna s Y1 jedinicama koje su prodate nakon marta 2026. s unaprijed instaliranim Innioasis OS 3.0.7.\n\nFlešovanje starije verzije na ovim uređajima će spriječiti pokretanje.\n\nJeste li sigurni da želite prikazati starije Rockbox verzije?",
  "sel_refresh": "Osvježi",
@@ -931,9 +926,6 @@
  "rockbox_wizard_done_desc": "Sada možete bezbedno da isključite plejer i izaberete temu u Rockboxu (Podešavanja > Podešavanja teme).",
  "sel_local_rockbox_themes_option": "Instalirajte Rockbox 360p teme + Fontpack",
  "rockbox_stage_installing": "Instaliranje Rockbox tema i fontova...",
- "rockbox_cleanup_step": "Uklanjanje starih postavki Rockboxa...",
- "rockbox_cleanup_deleting": "Uklanjanje foldera .rockbox iz plejera...",
- "rockbox_cleanup_failed_note": "Vaš novi softver je instaliran, ali stari folder .rockbox nije mogao biti uklonjen. Ručno izbrišite fasciklu .rockbox na plejeru ako želite čist početak.",
  "rockbox_stage_waiting_adb_fmt": "Tražim igrača preko ADB-a ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Više od jednog igrača je povezano. Isključite ostale i ostavite samo onaj koji se instalira.",
  "rockbox_stage_pushing": "Igrač je otkriven. Postavljanje tema i fontova zajednice...",
@@ -1033,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Jedna kafa otprilike pokriva propusni opseg preuzimanja. Drži sljedeću popravku na dohvat ruke.",
  "donate_family_appeal_expected": "Ryan i njegova partnerica čekaju bebu. Donacije za tekuće troškove projekta i našu novu porodicu su izuzetno cijenjene.",
  "donate_family_appeal_new_arrival": "Na putu je novi dolazak u Ryanovu kuću. Svaka donacija serverima i našoj rastućoj porodici znači mnogo.",
- "donate_family_appeal_nursery": "Ryan i njegova partnerica se spremaju za svoje dijete. Ako je ovaj alat bio koristan, donacija za tekuće troškove i našu rastuću porodicu bi pomogla više nego što znate."
+ "donate_family_appeal_nursery": "Ryan i njegova partnerica se spremaju za svoje dijete. Ako je ovaj alat bio koristan, donacija za tekuće troškove i našu rastuću porodicu bi pomogla više nego što znate.",
+ "rockbox_cleanup_step": "Uklanjanje starih postavki Rockboxa...",
+ "rockbox_cleanup_deleting": "Uklanjanje foldera .rockbox iz plejera...",
+ "rockbox_cleanup_failed_note": "Vaš novi softver je instaliran, ali stari folder .rockbox nije mogao biti uklonjen. Ručno izbrišite fasciklu .rockbox na plejeru ako želite čist početak."
 }

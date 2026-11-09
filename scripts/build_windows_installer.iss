@@ -705,16 +705,6 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 Name: "{autodesktop}\{cm:DesktopAppShortcutName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon; Check: ShouldInstallMainApp
 #endif
 
-[Registry]
-; innioasis-updater:// links from innioasis.app and themes.innioasis.app
-; (src/site_links.py). The MediaTek Installer has no online catalogue to act on.
-#ifndef MyIsMediaTek
-Root: HKA; Subkey: "Software\Classes\innioasis-updater"; ValueType: string; ValueName: ""; ValueData: "URL:{#MyAppName}"; Flags: uninsdeletekey; Check: ShouldInstallMainApp
-Root: HKA; Subkey: "Software\Classes\innioasis-updater"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""; Check: ShouldInstallMainApp
-Root: HKA; Subkey: "Software\Classes\innioasis-updater\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"",0"; Check: ShouldInstallMainApp
-Root: HKA; Subkey: "Software\Classes\innioasis-updater\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Check: ShouldInstallMainApp
-#endif
-
 [Run]
 ; Offer to launch the application after installation.
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent; Check: ShouldLaunchMainAppAfterInstall

@@ -139,12 +139,7 @@
  "settings_filter_old_rockbox": "Diskouez savadurioù Rockbox kozh",
  "settings_filter_nightly": "Diskouez embannadurioù noz an diorren",
  "settings_filter_240p": "Embannadurioù Rockbox 240p",
- "settings_240p_tip": "Diskouez a ra ar savadurioù gant ur zip ROM ur stumm 240p (rom..._240p.zip). N'haller ket implijout ar sevel 240p war un Y1 prenet nevez goude miz Mae 2026, pe war unan deuet gant ar meziant orin 3.0.7 pe diwezhatoc'h. Ne c'hall ket ar c'hoarierien-se implijout ar savadurioù Rockbox koshoc'h kennebeut, setu m'eo gweredekaet Diskouez ar savadurioù Rockbox kozh gantañ.",
- "settings_240p_warn_body": "N'haller ket implijout ar sevel 240p war un Y1 prenet nevez goude miz Mae 2026, pe war unan deuet gant ar meziant orin 3.0.7 pe diwezhatoc'h. Staliañ unan war un Y1 koshoc'h hepken.\n\nAr c'hoarierien-se ne c'hellont ket implijout ar savadurioù Rockbox koshoc'h kennebeut, setu m'int meneget ivez.\n\nHa sur oc'h e fell deoc'h diskouez embannadurioù Rockbox 240p ?",
- "sel_240p_warning": "Ur sevel 240p eo. Ne c'hall ket bezañ implijet war un Y1 prenet nevez goude miz Mae 2026, pe war unan deuet gant ar meziant orin 3.0.7 pe diwezhatoc'h.",
- "link_240p_body": "Al liamm hoc'h eus digoret a zo evit ur sevel 240p. N'haller ket implijout ar sevel 240p war un Y1 prenet nevez goude miz Mae 2026, pe war unan deuet gant ar meziant orin 3.0.7 pe nevesoc'h, setu e vezont kuzhet betek ma vo lakaet war-sav.\n\nHa sur oc'h e fell deoc'h diskouez embannadurioù Rockbox 240p ?",
- "link_busy": "Echuiñ ar staliadur bremanel, ha digeriñ al liamm en-dro.",
- "link_not_listed": "N'eo ket bet embannet ar meziantoù el liamm-se evit al lenner-mañ c'hoazh.",
+ "settings_240p_tip": "Diskouez a ra ar savadurioù gant ur zip ROM ur stumm 240p (rom..._240p.zip). N'eo ket kenglotus ar sevel 240p gant an unanennoù Y1 war Innioasis OS dindan 3.0.7, setu m'eo gweredekaet Diskouez ar sevel Rockbox kozh gantañ.",
  "settings_old_rockbox_warn_title": "Diwall ouzh kempoellded Rockbox",
  "settings_old_rockbox_warn_body": "N'eo ket kempoell embannadurioù Rockbox-Y1 a-raok 0.5 gant unanennoù Y1 gwerzhet goude miz Meurzh 2026 gant Innioasis OS 3.0.7 staliet en a-raok.\n\nPa vez flastret ur stumm koshoc'h war an dafariadoù-mañ e vo miret ouzh al loc'hañ.\n\nHa sur oc'h e fell deoc'h diskouez stummoù Rockbox koshoc'h ?",
  "sel_refresh": "Freskaat",
@@ -931,9 +926,6 @@
  "rockbox_wizard_done_desc": "Gallout a rit bremañ distagañ al lenner en un doare sur ha dibab un tem e Rockbox (Arventennoù > Arventennoù an tem).",
  "sel_local_rockbox_themes_option": "Staliañ temoù Rockbox 360p + Fontpack",
  "rockbox_stage_installing": "Staliañ temoù ha nodrezhioù Rockbox...",
- "rockbox_cleanup_step": "O lemel arventennoù Rockbox kozh...",
- "rockbox_cleanup_deleting": "O lemel an teuliad .rockbox diouzh al lenner...",
- "rockbox_cleanup_failed_note": "Staliet eo bet ho meziant nevez, met n'hall ket bezañ tennet an teuliad .rockbox kozh. Diverkañ an teuliad .rockbox war al lenner gant an dorn ma fell deoc'h kregiñ mat.",
  "rockbox_stage_waiting_adb_fmt": "O klask ur c'hoarier dre ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Muioc'h eget ur c'hoarier a zo kevreet. Distagañ ar re all ha lezel an hini o vezañ staliet hepken.",
  "rockbox_stage_pushing": "Detektet eo bet ar c'hoarier. Lakaat temoù ha nodrezhioù ar gumuniezh...",
@@ -1033,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Ur c'hafe a zalc'h war-dro ledander ur pellgargadenn. Derc'hel a ra ar reizhadenn da heul e-kichen.",
  "donate_family_appeal_expected": "Ryan hag e genseurt a zo o c'hortoz ur babig. Priziet e vez kalz ar skoazelloù evit koust mont en-dro ar raktres hag hor familh nevez.",
  "donate_family_appeal_new_arrival": "Ur c'hoarier nevez a zo war an hent e ti Ryan. Pep donezon d'ar servijerien ha d'hor familh o kreskiñ a dalvez kalz.",
- "donate_family_appeal_nursery": "Ryan hag e genlabourer a zo o prientiñ o bugel. Ma 'z eo bet talvoudus an ostilh-mañ, ur skodenn evit ar frejoù mont en-dro hag hor familh o kreskiñ a sikourfe muioc'h eget na ouzoc'h."
+ "donate_family_appeal_nursery": "Ryan hag e genlabourer a zo o prientiñ o bugel. Ma 'z eo bet talvoudus an ostilh-mañ, ur skodenn evit ar frejoù mont en-dro hag hor familh o kreskiñ a sikourfe muioc'h eget na ouzoc'h.",
+ "rockbox_cleanup_step": "O lemel arventennoù Rockbox kozh...",
+ "rockbox_cleanup_deleting": "O lemel an teuliad .rockbox diouzh al lenner...",
+ "rockbox_cleanup_failed_note": "Staliet eo bet ho meziant nevez, met n'hall ket bezañ tennet an teuliad .rockbox kozh. Diverkañ an teuliad .rockbox war al lenner gant an dorn ma fell deoc'h kregiñ mat."
 }

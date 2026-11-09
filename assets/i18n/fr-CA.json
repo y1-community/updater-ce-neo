@@ -139,12 +139,7 @@
  "settings_filter_old_rockbox": "Afficher les anciennes versions de Rockbox",
  "settings_filter_nightly": "Afficher les versions de développement nocturnes",
  "settings_filter_240p": "Sorties Rockbox 240p",
- "settings_240p_tip": "Affiche les builds dont le zip ROM est une variante 240p (rom…_240p.zip). Les versions 240p ne peuvent pas être utilisées sur un Y1 acheté neuf après mai 2026, ni sur un modèle fourni avec le logiciel d'origine 3.0.7 ou version ultérieure. Ces joueurs ne peuvent pas non plus utiliser les anciennes versions de Rockbox, donc Afficher les anciennes versions de Rockbox est activé avec.",
- "settings_240p_warn_body": "Les versions 240p ne peuvent pas être utilisées sur un Y1 acheté neuf après mai 2026, ni sur un modèle fourni avec le logiciel d'origine 3.0.7 ou version ultérieure. Installez-en un seulement sur un ancien Y1.\n\nCes joueurs ne peuvent pas non plus utiliser les anciennes versions de Rockbox, elles sont donc également répertoriées.\n\nÊtes-vous certain de vouloir afficher les versions 240p de Rockbox ?",
- "sel_240p_warning": "Il s'agit d'une version 240p. Il ne peut pas être utilisé sur un Y1 acheté neuf après mai 2026, ni sur un modèle fourni avec le logiciel d'origine 3.0.7 ou version ultérieure.",
- "link_240p_body": "Le lien que vous avez ouvert concerne une version 240p. Les versions 240p ne peuvent pas être utilisées sur un Y1 acheté neuf après mai 2026, ni sur celui fourni avec le logiciel d'origine 3.0.7 ou version ultérieure, elles sont donc masquées jusqu'à ce que vous les activiez.\n\nÊtes-vous certain de vouloir afficher les versions 240p de Rockbox ?",
- "link_busy": "Terminez l'installation en cours, puis ouvrez de nouveau le lien.",
- "link_not_listed": "Le logiciel dans ce lien n'est pas encore disponible pour ce lecteur.",
+ "settings_240p_tip": "Affiche les builds dont le zip ROM est une variante 240p (rom…_240p.zip). Les versions 240p ne sont pas compatibles avec les unités Y1 sur Innioasis OS inférieur à 3.0.7, donc Afficher les anciennes versions Rockbox est activé avec.",
  "settings_old_rockbox_warn_title": "Avertissement de compatibilité Rockbox",
  "settings_old_rockbox_warn_body": "Les versions de Rockbox-Y1 antérieures à la version 0.5 ne sont pas compatibles avec les unités Y1 vendues après mars 2026 avec Innioasis OS 3.0.7 préinstallé.\n\nLe flashage d'une ancienne version sur ces appareils empêchera le démarrage.\n\nÊtes-vous certain de vouloir afficher les anciennes versions de Rockbox ?",
  "sel_refresh": "Rafraîchir",
@@ -931,9 +926,6 @@
  "rockbox_wizard_done_desc": "Vous pouvez maintenant déconnecter le lecteur en toute sécurité et choisir un thème dans Rockbox (Paramètres > Paramètres du thème).",
  "sel_local_rockbox_themes_option": "Installer les thèmes Rockbox 360p + Fontpack",
  "rockbox_stage_installing": "Installation des thèmes et des polices Rockbox...",
- "rockbox_cleanup_step": "Suppression des anciens paramètres Rockbox...",
- "rockbox_cleanup_deleting": "Suppression du dossier .rockbox du lecteur...",
- "rockbox_cleanup_failed_note": "Votre nouveau logiciel a été installé, mais l'ancien dossier .rockbox n'a pas pu être supprimé. Supprimez manuellement le dossier .rockbox du lecteur si vous voulez un démarrage propre.",
  "rockbox_stage_waiting_adb_fmt": "Recherche du joueur via ADB ({remaining})...",
  "rockbox_stage_disconnect_extra": "Plus d'un joueur est connecté. Débranchez les autres et ne laissez que celui en cours d'installation.",
  "rockbox_stage_pushing": "Joueur détecté. Placer des thèmes et des polices communautaires...",
@@ -1033,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Un café couvre à peu près la bande passante d'un téléchargement. Cela permet de garder le prochain correctif à portée de la main.",
  "donate_family_appeal_expected": "Ryan et sa partenaire attendent un bébé. Les dons pour les frais de fonctionnement du projet et pour notre nouvelle famille sont grandement appréciés.",
  "donate_family_appeal_new_arrival": "Un nouveau venu arrive chez Ryan. Chaque don aux serveurs et à notre famille grandissante compte beaucoup.",
- "donate_family_appeal_nursery": "Ryan et son partenaire se préparent à accueillir leur enfant. Si cet outil a été utile, un don pour les frais de fonctionnement et notre famille grandissante aiderait plus que vous ne le pensez."
+ "donate_family_appeal_nursery": "Ryan et son partenaire se préparent à accueillir leur enfant. Si cet outil a été utile, un don pour les frais de fonctionnement et notre famille grandissante aiderait plus que vous ne le pensez.",
+ "rockbox_cleanup_step": "Suppression des anciens paramètres Rockbox...",
+ "rockbox_cleanup_deleting": "Suppression du dossier .rockbox du lecteur...",
+ "rockbox_cleanup_failed_note": "Votre nouveau logiciel a été installé, mais l'ancien dossier .rockbox n'a pas pu être supprimé. Supprimez manuellement le dossier .rockbox du lecteur si vous voulez un démarrage propre."
 }

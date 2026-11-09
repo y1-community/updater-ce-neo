@@ -79,4 +79,4 @@ Categories=Utility;AudioVideo;
 Keywords=innioasis;timmkoo;y1;y2;a5;mtk;flash;firmware;rockbox;solar;
 StartupWMClass=Updater CE
 X-AppImage-Author=Ryan Specter
-MimeType=application/zip;application/x-zip-compressed;application/vnd.rar;x-scheme-handler/innioasis-updater;
+MimeType=application/zip;application/x-zip-compressed;application/vnd.rar;

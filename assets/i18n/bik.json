@@ -139,12 +139,7 @@
  "settings_filter_old_rockbox": "Ipahiling an mga Lumang Rockbox Builds",
  "settings_filter_nightly": "Ipahiling an mga Nightly Dev Releases",
  "settings_filter_240p": "240p Rockbox Releases",
- "settings_240p_tip": "Nagpapahiling nin mga build na an ROM zip sarong 240p variant (rom..._240p.zip). An 240p na mga build dai pwedeng gamiton sa sarong Y1 na binakal na bago pagkatapos kan Mayo 2026, o sa saro na may kaibang Orihinal na Software 3.0.7 o mas bago pa. An mga parakawat na iyan dai man pwedeng gumamit nin mga lumang Rockbox build, kaya an Show Old Rockbox Builds naka-on kaini.",
- "settings_240p_warn_body": "An 240p na mga build dai pwedeng gamiton sa sarong Y1 na binakal na bago pagkatapos kan Mayo 2026, o sa saro na may kaibang Orihinal na Software 3.0.7 o mas bago pa. Magbugtak sana nin saro sa mas lumang Y1.\n\nAn mga parakawat na iyan dai man pwedeng gumamit nin mga lumang Rockbox build, kaya nakalista man idto.\n\nSigurado ka daw na gusto mong ipahiling an 240p na mga pagluwas kan Rockbox?",
- "sel_240p_warning": "Ini sarong 240p na pagtogdok. Dai ini pwedeng gamiton sa sarong Y1 na binakal na bago pagkatapos kan Mayo 2026, o sa saro na may kaibang Orihinal na Software 3.0.7 o mas bago pa.",
- "link_240p_body": "An link na saimong binuksan para sa 240p na paggibo. An mga 240p na pagtogdok dai pwedeng gamiton sa sarong Y1 na binakal bago pagkatapos kan Mayo 2026, o sa saro na may kaibang Orihinal na Software 3.0.7 o mas bago pa, kaya sinda nakatago sagkod na dai mo sinda i-on.\n\nSigurado ka daw na gusto mong ipahiling an 240p na mga pagluwas kan Rockbox?",
- "link_busy": "Tapuson an presenteng pag-instalar, dangan buksan giraray an link.",
- "link_not_listed": "An software sa link na iyan dai pa nailuwas para sa player na ini.",
+ "settings_240p_tip": "Nagpapahiling nin mga build na an ROM zip sarong 240p variant (rom..._240p.zip). An mga 240p build bakong compatible sa mga Y1 units sa Innioasis OS na mas hababa sa 3.0.7, kaya an Show Old Rockbox Builds pinagana kaini.",
  "settings_old_rockbox_warn_title": "Patanid sa Pagkakatugma kan Rockbox",
  "settings_old_rockbox_warn_body": "An mga pagluwas kan Rockbox-Y1 bago an 0.5 bakong compatible sa mga yunit kan Y1 na ipinabakal pagkatapos kan Marso 2026 na may Innioasis OS 3.0.7 na naka-install na.\n\nAn pag-flash nin mas lumang build sa mga aparatong ini makakaolang sa pag-boot.\n\nSigurado ka daw na gusto mong ipahiling an mga lumang Rockbox build?",
  "sel_refresh": "I-refresh",
@@ -931,9 +926,6 @@
  "rockbox_wizard_done_desc": "Pwede mo nang ligtas na idiskonekta an player asin magpili nin tema sa Rockbox (Mga Setting > Mga Setting kan Tema).",
  "sel_local_rockbox_themes_option": "Ibugtak an Rockbox 360p Themes + Fontpack",
  "rockbox_stage_installing": "Pag-instalar nin mga Tema asin Font kan Rockbox...",
- "rockbox_cleanup_step": "Paghahale kan lumang mga setting kan Rockbox...",
- "rockbox_cleanup_deleting": "Paghale kan .rockbox folder sa player...",
- "rockbox_cleanup_failed_note": "An saimong bagong software na-install, alagad an lumang .rockbox na folder dae nahahale. Buraon an .rockbox folder sa player gamit an kamot kun gusto mong malinig an pagpoon.",
  "rockbox_stage_waiting_adb_fmt": "Naghahanap nin parakawat sa paagi kan ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Labi sa sarong parakawat an konektado. Idiskonekta an iba asin iwalat sana an saro na pig-iinstalar.",
  "rockbox_stage_pushing": "Nadiskubre an parakawat. Pagbugtak nin mga tema asin font kan komunidad...",
@@ -1033,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "An sarong kape haros minasakop kan bandwidth kan sarong pag-download. Ini nagpapadanay kan masunod na paghusay sa laog kan abot.",
  "donate_family_appeal_expected": "Si Ryan asin an saiyang kapadis naglalaom nin omboy. An mga donasyon para sa mga gastos sa pagpadalagan kan proyekto asin sa samong bagong pamilya inaapresyar na gayo.",
  "donate_family_appeal_new_arrival": "May bagong abot na nagdadangadang sa harong ni Ryan. An lambang donasyon para sa mga serbidor asin sa samong nagdadakula na pamilya dakula an kahulugan.",
- "donate_family_appeal_nursery": "Si Ryan asin an saiyang kapadis nag-aandam para sa saindang aki. Kun an kasangkapan na ini nagin kapaki-pakinabang, an donasyon para sa mga gastos sa pagpadalagan asin sa samong nagdadakulang pamilya makakatabang nin orog pa sa aram mo."
+ "donate_family_appeal_nursery": "Si Ryan asin an saiyang kapadis nag-aandam para sa saindang aki. Kun an kasangkapan na ini nagin kapaki-pakinabang, an donasyon para sa mga gastos sa pagpadalagan asin sa samong nagdadakulang pamilya makakatabang nin orog pa sa aram mo.",
+ "rockbox_cleanup_step": "Paghahale kan lumang mga setting kan Rockbox...",
+ "rockbox_cleanup_deleting": "Paghale kan .rockbox folder sa player...",
+ "rockbox_cleanup_failed_note": "An saimong bagong software na-install, alagad an lumang .rockbox na folder dae nahahale. Buraon an .rockbox folder sa player gamit an kamot kun gusto mong malinig an pagpoon."
 }

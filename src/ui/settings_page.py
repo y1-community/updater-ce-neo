@@ -1119,39 +1119,18 @@ class SettingsPage(QWidget):
         self._apply_filter_flags(filters)
         self.release_filters_changed.emit()
 
-    def _confirm_240p(self) -> bool:
-        """Ask before listing 240p builds, which newer Y1 units cannot use."""
-        return self._rockbox_card.run_confirmation(
-            tr("settings_240p_warn_body"),
-            tr("dialog_pre_install_continue"),
-            tr("flash_btn_cancel"),
-        )
-
     def _on_240p_toggled(self, checked: bool):
         if self._filters_loading:
             return
-        # 240p builds, like pre-0.5 Rockbox builds, are only for Y1 units from
-        # before Original Software 3.0.7, so turning 240p on lists those older
-        # builds too. One warning covers both.
-        if checked and not self._confirm_240p():
-            self._apply_filter_flags()
-            return
+        if checked and not self._cb_old_rockbox.isChecked():
+            # 240p builds cannot run on Y1 units older than OS 3.0.7, so the
+            # older-builds option comes with them — confirmation included.
+            self._cb_old_rockbox.setChecked(True)
+            if not self._cb_old_rockbox.isChecked():
+                self._apply_filter_flags()
+                return
         filters = device_tracking.set_rockbox_release_filter(
             device_tracking.FILTER_240P, bool(checked)
-        )
-        self._apply_filter_flags(filters)
-        self.release_filters_changed.emit()
-
-    def allow_240p_listing(self) -> None:
-        """List 240p builds once the user agreed to the warning outside Settings.
-
-        The 240p switch lives behind Show Advanced Settings, so that is turned
-        on with it, the same as pressing both switches here.
-        """
-        if not self._advanced_shown():
-            self.reveal_advanced_methods()
-        filters = device_tracking.set_rockbox_release_filter(
-            device_tracking.FILTER_240P, True
         )
         self._apply_filter_flags(filters)
         self.release_filters_changed.emit()
@@ -2181,13 +2160,18 @@ class SettingsPage(QWidget):
         self._notifications_unavailable.setVisible(not supported)
         background = getattr(self, "_cb_notifications_background", None)
         if background is not None:
-            from ..tray import run_in_background_enabled
+            from ..tray import background_mode_supported, run_in_background_enabled
 
             background.blockSignals(True)
             background.setChecked(bool(run_in_background_enabled()))
             background.blockSignals(False)
             background.setEnabled(supported)
-            self._set_switch_row_visible(background, supported)
+            # A host without the background mode (macOS for now) never offers
+            # this switch, even though it can show notifications while the
+            # window is open. Resyncing used to re-show the row the build hid.
+            self._set_switch_row_visible(
+                background, supported and background_mode_supported()
+            )
 
     def _focus_background_card(self) -> None:
         """Take the reader from Notifications to the card that keeps the app open."""

@@ -139,12 +139,7 @@
  "settings_filter_old_rockbox": "Montri Malnovajn Rockbox Konstruaĵojn",
  "settings_filter_nightly": "Montru Noktajn Dev-Eldonojn",
  "settings_filter_240p": "240p Rockbox-Eldonoj",
- "settings_240p_tip": "Montras konstruaĵojn, kies ROM-zipo estas 240p varianto (rom..._240p.zip). 240p-konstruaĵoj ne povas esti uzataj sur Y1 aĉetita nova post majo 2026, aŭ sur unu kiu venis kun Originala Programaro 3.0.7 aŭ poste. Tiuj ludantoj ankaŭ ne povas uzi pli malnovajn Rockbox-konstruaĵojn, do Show Old Rockbox Builds estas ŝaltita kun ĝi.",
- "settings_240p_warn_body": "240p-konstruaĵoj ne povas esti uzataj sur Y1 aĉetita nova post majo 2026, aŭ sur unu kiu venis kun Originala Programaro 3.0.7 aŭ poste. Instalu nur unu sur pli malnova Y1.\n\nTiuj ludantoj ankaŭ ne povas uzi pli malnovajn Rockbox-konstruaĵojn, do ankaŭ tiuj estas listigitaj.\n\nĈu vi certas, ke vi volas montri 240p-ajn eldonojn de Rockbox?",
- "sel_240p_warning": "Ĉi tio estas 240p-konstruaĵo. Ĝi ne povas esti uzata sur Y1 aĉetita nova post majo 2026, aŭ sur unu kiu venis kun Originala Programaro 3.0.7 aŭ poste.",
- "link_240p_body": "La ligilo, kiun vi malfermis, estas por 240p-konstruaĵo. 240p-konstruaĵoj ne povas esti uzataj sur Y1 aĉetita nova post majo 2026, aŭ sur unu kiu venis kun Originala Programaro 3.0.7 aŭ poste, do ili estas kaŝitaj ĝis vi ŝaltas ilin.\n\nĈu vi certas, ke vi volas montri 240p-ajn eldonojn de Rockbox?",
- "link_busy": "Finu la nunan instaladon, poste malfermu la ligilon denove.",
- "link_not_listed": "La programaro en tiu ligilo ankoraŭ ne estas publikigita por ĉi tiu ludanto.",
+ "settings_240p_tip": "Montras konstruaĵojn kies ROM-zipo estas 240p varianto (rom..._240p.zip). 240p-konstruaĵoj ne kongruas kun Y1-unuoj sur Innioasis OS sub 3.0.7, do Montri Old Rockbox-Konstruaĵojn estas ebligita kun ĝi.",
  "settings_old_rockbox_warn_title": "Averto pri Kongruo de Rockbox",
  "settings_old_rockbox_warn_body": "Eldonoj de Rockbox-Y1 antaŭ 0.5 ne estas kongruaj kun Y1-unuoj venditaj post marto 2026 kun Innioasis OS 3.0.7 antaŭinstalita.\n\nEkbriligi pli malnovan konstruon sur ĉi tiuj aparatoj malhelpos lanĉon.\n\nĈu vi certas, ke vi volas montri pli malnovajn Rockbox-konstruaĵojn?",
  "sel_refresh": "Refreŝigi",
@@ -931,9 +926,6 @@
  "rockbox_wizard_done_desc": "Vi nun povas sekure malkonekti la ludanton kaj elekti temon en Rockbox (Agordoj > Temo-Agordoj).",
  "sel_local_rockbox_themes_option": "Instalu Rockbox 360p Temoj + Fontpack",
  "rockbox_stage_installing": "Instalante Rockbox-Temojn kaj Tiparojn...",
- "rockbox_cleanup_step": "Forigante la malnovajn agordojn de Rockbox...",
- "rockbox_cleanup_deleting": "Forigante la dosierujon .rockbox de la ludanto...",
- "rockbox_cleanup_failed_note": "Via nova programaro estis instalita, sed la malnova dosierujo .rockbox ne povus esti forigita. Forigu mane la dosierujon .rockbox sur la ludanto se vi volas puran komencon.",
  "rockbox_stage_waiting_adb_fmt": "Serĉante ludanton per ADB ({remaining}j)...",
  "rockbox_stage_disconnect_extra": "Pli ol unu ludanto estas konektita. Malkonektu la aliajn kaj lasu nur tiun instalitan.",
  "rockbox_stage_pushing": "Ludanto detektita. Metante komunumajn temojn kaj tiparojn...",
@@ -1033,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Unu kafo proksimume kovras la bendolarĝon de elŝuto. Ĝi tenas la sekvan riparon atingebla.",
  "donate_family_appeal_expected": "Ryan kaj lia partnero atendas bebon. Donacoj al la kurantaj kostoj de la projekto kaj nia nova familio estas amase aprezitaj.",
  "donate_family_appeal_new_arrival": "Estas nova alveno survoje en la domo de Ryan. Ĉiu donaco al la serviloj kaj nia kreskanta familio signifas grandan interkonsenton.",
- "donate_family_appeal_nursery": "Ryan kaj lia partnero prepariĝas por sia infano. Se ĉi tiu ilo estis utila, donaco por la kurantaj kostoj kaj nia kreskanta familio helpus pli ol vi scias."
+ "donate_family_appeal_nursery": "Ryan kaj lia partnero prepariĝas por sia infano. Se ĉi tiu ilo estis utila, donaco por la kurantaj kostoj kaj nia kreskanta familio helpus pli ol vi scias.",
+ "rockbox_cleanup_step": "Forigante la malnovajn agordojn de Rockbox...",
+ "rockbox_cleanup_deleting": "Forigante la dosierujon .rockbox de la ludanto...",
+ "rockbox_cleanup_failed_note": "Via nova programaro estis instalita, sed la malnova dosierujo .rockbox ne povus esti forigita. Forigu mane la dosierujon .rockbox sur la ludanto se vi volas puran komencon."
 }

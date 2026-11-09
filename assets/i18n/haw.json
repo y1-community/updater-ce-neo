@@ -139,12 +139,7 @@
  "settings_filter_old_rockbox": "Hōʻike i nā hale pahu pōhaku kahiko",
  "settings_filter_nightly": "Hōʻike i nā hoʻokuʻu ʻana o ka pō ʻo Dev",
  "settings_filter_240p": "Hoʻokuʻu ʻia ʻo 240p Rockbox",
- "settings_240p_tip": "Hōʻike i nā kūkulu nona ka ROM zip he ʻano 240p (rom…_240p.zip). ʻAʻole hiki ke hoʻohana ʻia nā kūkulu 240p ma kahi Y1 i kūʻai hou ʻia ma hope o Mei 2026, a i ʻole ma kahi i hele mai me Original Software 3.0.7 a i ʻole ma hope. ʻAʻole hiki i kēlā mau mea pāʻani ke hoʻohana i nā hale Rockbox kahiko, no laila ua hoʻāla ʻia ʻo Show Old Rockbox Builds me ia.",
- "settings_240p_warn_body": "ʻAʻole hiki ke hoʻohana ʻia nā kūkulu 240p ma kahi Y1 i kūʻai hou ʻia ma hope o Mei 2026, a i ʻole ma kahi i hele mai me Original Software 3.0.7 a i ʻole ma hope. Hoʻokomo wale i hoʻokahi ma kahi Y1 kahiko.\n\nʻAʻole hiki i kēlā mau mea pāʻani ke hoʻohana i nā hale Rockbox kahiko, no laila ua papa inoa pū kekahi.\n\nMakemake ʻoe e hōʻike i nā hoʻokuʻu 240p Rockbox?",
- "sel_240p_warning": "He hana 240p kēia. ʻAʻole hiki ke hoʻohana ʻia ma kahi Y1 i kūʻai hou ʻia ma hope o Mei 2026, a i ʻole ma kahi i hele mai me Original Software 3.0.7 a i ʻole.",
- "link_240p_body": "ʻO ka loulou āu i wehe ai no kahi kūkulu 240p. ʻAʻole hiki ke hoʻohana ʻia nā kūkulu 240p ma kahi Y1 i kūʻai hou ʻia ma hope o Mei 2026, a i ʻole ma kahi i hele mai me Original Software 3.0.7 a i ʻole ma hope, no laila ua hūnā ʻia lākou a hiki i kou hoʻohuli ʻana iā lākou.\n\nMakemake ʻoe e hōʻike i nā hoʻokuʻu 240p Rockbox?",
- "link_busy": "Hoʻopau i ka hoʻouka ʻana i kēia manawa, a laila wehe hou i ka loulou.",
- "link_not_listed": "ʻAʻole i hoʻokuʻu ʻia ka polokalamu ma ia loulou no kēia mea pāʻani.",
+ "settings_240p_tip": "Hōʻike i nā kūkulu nona ka ROM zip he ʻano 240p (rom…_240p.zip). ʻAʻole kūpono nā kūkulu 240p me nā ʻāpana Y1 ma Inniiasis OS ma lalo o 3.0.7, no laila hiki iā Show Old Rockbox Builds me ia.",
  "settings_old_rockbox_warn_title": "ʻO ka ʻōlelo aʻo hoʻohālikelike ʻo Rockbox",
  "settings_old_rockbox_warn_body": "ʻAʻole kūpono nā hoʻokuʻu o Rockbox-Y1 ma mua o 0.5 me nā ʻāpana Y1 i kūʻai ʻia ma hope o Malaki 2026 me Innioasis OS 3.0.7 i hoʻokomo mua ʻia.\n\nʻO ka hoʻolohi ʻana i kahi kūkulu kahiko ma kēia mau mea e pale ai i ka booting.\n\nMakemake ʻoe e hōʻike i nā kūkulu Rockbox kahiko?",
  "sel_refresh": "Hōʻano hou",
@@ -931,9 +926,6 @@
  "rockbox_wizard_done_desc": "Hiki iā ʻoe ke wehe palekana i ka mea pāʻani a koho i kahi kumumanaʻo ma Rockbox (Settings> Theme Settings).",
  "sel_local_rockbox_themes_option": "E hoʻouka i nā kumuhana Rockbox 360p + Fontpack",
  "rockbox_stage_installing": "Ke hoʻokomo nei i nā kumuhana Rockbox a me nā kikokikona...",
- "rockbox_cleanup_step": "Ke wehe nei i nā hoʻonohonoho Rockbox kahiko...",
- "rockbox_cleanup_deleting": "Ke wehe nei i ka waihona .rockbox mai ka mea hoʻokani...",
- "rockbox_cleanup_failed_note": "Ua hoʻokomo ʻia kāu polokalamu hou, akā ʻaʻole hiki ke wehe ʻia ka waihona .rockbox kahiko. Holoi i ka waihona .rockbox ma ka mea pāʻani ma ka lima inā makemake ʻoe i kahi hoʻomaka maʻemaʻe.",
  "rockbox_stage_waiting_adb_fmt": "Ke ʻimi nei i ka mea pāʻani ma o ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Hoʻohui ʻia ma mua o hoʻokahi mea pāʻani. Hoʻokaʻawale i nā mea ʻē aʻe a waiho wale i ka mea i hoʻokomo ʻia.",
  "rockbox_stage_pushing": "ʻIke ʻia ka mea pāʻani. Ke kau nei i nā kumumanaʻo a me nā font...",
@@ -1033,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Hoʻokahi kofe e uhi i ka bandwidth o kahi hoʻoiho. Mālama ia i ka hoʻoponopono hou aʻe i ka hiki.",
  "donate_family_appeal_expected": "Ke kali nei ʻo Ryan a me kāna hoa i kahi pēpē. Mahalo nui ʻia nā haʻawina e pili ana i nā kumukūʻai holo o ka papahana a me ko mākou ʻohana hou.",
  "donate_family_appeal_new_arrival": "Aia kahi hōʻea hou ma ke ala i ka hale o Ryan. ʻO kēlā me kēia hāʻawi i nā kikowaena a me ko mākou ʻohana e ulu nei he mea nui.",
- "donate_family_appeal_nursery": "Ke hoʻomākaukau nei ʻo Ryan a me kāna hoa no kā lāua keiki. Inā pono kēia mea hana, ʻoi aku ka maikaʻi o ka hāʻawi ʻana i nā kumukūʻai holo a me kā mākou ʻohana e ulu nei."
+ "donate_family_appeal_nursery": "Ke hoʻomākaukau nei ʻo Ryan a me kāna hoa no kā lāua keiki. Inā pono kēia mea hana, ʻoi aku ka maikaʻi o ka hāʻawi ʻana i nā kumukūʻai holo a me kā mākou ʻohana e ulu nei.",
+ "rockbox_cleanup_step": "Ke wehe nei i nā hoʻonohonoho Rockbox kahiko...",
+ "rockbox_cleanup_deleting": "Ke wehe nei i ka waihona .rockbox mai ka mea hoʻokani...",
+ "rockbox_cleanup_failed_note": "Ua hoʻokomo ʻia kāu polokalamu hou, akā ʻaʻole hiki ke wehe ʻia ka waihona .rockbox kahiko. Holoi i ka waihona .rockbox ma ka mea pāʻani ma ka lima inā makemake ʻoe i kahi hoʻomaka maʻemaʻe."
 }

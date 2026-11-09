@@ -139,12 +139,7 @@
  "settings_filter_old_rockbox": "显示旧版 Rockbox 固件",
  "settings_filter_nightly": "显示每夜版与开发版",
  "settings_filter_240p": "240p Rockbox 固件",
- "settings_240p_tip": "显示 ROM 压缩包为 240p 变体（rom…_240p.zip）的固件。240p 固件不能用于 2026 年 5 月之后购买的新 Y1，也不能用于出厂预装原版软件 3.0.7 或更高版本的 Y1。这些播放器同样不能使用旧版 Rockbox 固件，因此会同时启用“显示旧版 Rockbox 固件”。",
- "settings_240p_warn_body": "240p 固件不能用于 2026 年 5 月之后购买的新 Y1，也不能用于出厂预装原版软件 3.0.7 或更高版本的 Y1。请只在更早的 Y1 上安装。\n\n这些播放器同样不能使用旧版 Rockbox 固件，因此旧版固件也会一并显示。\n\n确定要显示 240p Rockbox 固件吗？",
- "sel_240p_warning": "这是 240p 固件。它不能用于 2026 年 5 月之后购买的新 Y1，也不能用于出厂预装原版软件 3.0.7 或更高版本的 Y1。",
- "link_240p_body": "您打开的链接指向 240p 固件。240p 固件不能用于 2026 年 5 月之后购买的新 Y1，也不能用于出厂预装原版软件 3.0.7 或更高版本的 Y1，因此默认隐藏。\n\n确定要显示 240p Rockbox 固件吗？",
- "link_busy": "请先完成当前的安装，然后再次打开该链接。",
- "link_not_listed": "该链接指向的软件尚未为此播放器发布。",
+ "settings_240p_tip": "显示 ROM 压缩包为 240p 变体（rom…_240p.zip）的固件。240p 固件不兼容 Innioasis OS 低于 3.0.7 的 Y1 设备，因此会同时启用“显示旧版 Rockbox 固件”。",
  "settings_old_rockbox_warn_title": "Rockbox 兼容性警告",
  "settings_old_rockbox_warn_body": "0.5 之前的 Rockbox-Y1 版本与 2026 年 3 月之后售出且预装 Innioasis OS 3.0.7 的 Y1 设备不兼容。\n\n在这些设备上刷入旧版本会导致无法开机。\n\n确定要显示旧版 Rockbox 固件吗？",
  "sel_refresh": "刷新列表",
@@ -931,9 +926,6 @@
  "rockbox_wizard_done_desc": "现在可以安全断开播放器，并在 Rockbox 中选择主题（设置 > 主题设置）。",
  "sel_local_rockbox_themes_option": "安装 Rockbox 360p 主题与字体包",
  "rockbox_stage_installing": "正在安装 Rockbox 主题与字体…",
- "rockbox_cleanup_step": "正在删除旧的 Rockbox 设置…",
- "rockbox_cleanup_deleting": "正在从播放器删除 .rockbox 文件夹…",
- "rockbox_cleanup_failed_note": "新软件已安装成功，但无法删除旧的 .rockbox 文件夹。如需全新的开始，请在播放器上手动删除 .rockbox 文件夹。",
  "rockbox_stage_waiting_adb_fmt": "正在通过 ADB 检测播放器（{remaining}秒）…",
  "rockbox_stage_disconnect_extra": "检测到多个播放器已连接。请断开其他播放器，只保留正在安装的这一台。",
  "rockbox_stage_pushing": "已检测到播放器，正在放置社区主题与字体…",
@@ -1009,5 +1001,8 @@
  "settings_arm64_driver_note": "ARM64 Windows 支持未经测试。在 Snapdragon 和 RTX Spark 笔记本电脑上，Zadig 可以在禁用驱动程序签名强制的情况下使用，以便在设备管理器中为 MT6227 预加载器设备安装 WinUSB 或 libusb。有关步骤，请参阅 ARM64 驱动程序指南。",
  "toast_update_version_fmt": "{app} v{version} 可用。",
  "toast_update_fmt": "{app} 已更新。",
- "install_card_title_fmt": "{software}（适用于 {model}）"
+ "install_card_title_fmt": "{software}（适用于 {model}）",
+ "rockbox_cleanup_step": "正在删除旧的 Rockbox 设置…",
+ "rockbox_cleanup_deleting": "正在从播放器删除 .rockbox 文件夹…",
+ "rockbox_cleanup_failed_note": "新软件已安装成功，但无法删除旧的 .rockbox 文件夹。如需全新的开始，请在播放器上手动删除 .rockbox 文件夹。"
 }

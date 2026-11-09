@@ -139,12 +139,7 @@
  "settings_filter_old_rockbox": "Peuleumah Bangunan Rockbox Tuha .",
  "settings_filter_nightly": "Peuleumah Rilis Dev Malam .",
  "settings_filter_240p": "240p Rockbox Peuteubiet",
- "settings_240p_tip": "Meutunyok bangunan nyang zip ROM jih nakeuh varian 240p (rom..._240p.zip). Build 240p hana jeuet geungui bak Y1 nyang geubloe baroe lheuh buleuen Mei 2026, atawa bak nyang teuka ngon Perangkat Lunak Asli 3.0.7 atawa nyang leubeh baroe. Peumaen nyan pih hanjeut geupakeek build Rockbox nyang ka tuha, jadi Show Old Rockbox Builds geuhidupkan ngon nyan.",
- "settings_240p_warn_body": "Build 240p hana jeuet geungui bak Y1 nyang geubloe baroe lheuh buleuen Mei 2026, atawa bak nyang teuka ngon Perangkat Lunak Asli 3.0.7 atawa nyang leubeh baroe. Cuma pasang saboh bak Y1 yang leubeh tuha.\n\nPeumaen nyan hanjeut pakek build Rockbox nyang leubeh tuha cit, jadi nyan pih terdaftar.\n\nKa yakin droeneuh neuk peuleumah rilis Rockbox 240p?",
- "sel_240p_warning": "Nyoe build 240p. Hana jeuet geungui bak Y1 nyang geubloe baroe lheuh buleuen Mei 2026, atawa bak Y1 nyang teuka ngon Software Asli 3.0.7 atawa nyang leubeh baroe.",
- "link_240p_body": "Link nyang neubuka nyan keu build 240p. Build 240p hana jeuet geungui bak Y1 nyang geubloe baroe lheuh buleuen Mei 2026, atawa bak nyang teuka ngon Original Software 3.0.7 atawa nyang leubeh baroe, jadi awaknyan jisom sampoe droeneuh neuhidupkan.\n\nKa yakin droeneuh neuk peuleumah rilis Rockbox 240p?",
- "link_busy": "Seuleusoe install jinoe, lheuh nyan buka lom link nyan.",
- "link_not_listed": "Software lam link nyan gohlom ji peugot keu player nyoe.",
+ "settings_240p_tip": "Meutunyok bangunan nyang zip ROM jih nakeuh varian 240p (rom..._240p.zip). Bangunan 240p hana cocok ngon unit Y1 bak Innioasis OS di miyup 3.0.7, jadi Peuleumah Bangunan Rockbox Tuha geuaktifkan ngon nyan.",
  "settings_old_rockbox_warn_title": "Peringatan keucocokan Rockbox",
  "settings_old_rockbox_warn_body": "Rilis Rockbox-Y1 sigohlom 0.5 hana cocok ngon unit Y1 nyang jipubloe lheuh buleuen Maret 2026 ngon Innioasis OS 3.0.7 nyang ka jipasang awai.\n\nMeu-flash build nyang ka tuha bak alat-alat nyoe akan mencegah booting.\n\nPeu na yakin droeneuh neuk peuleumah build Rockbox yang leubeh tuha?",
  "sel_refresh": "Segarkan",
@@ -931,9 +926,6 @@
  "rockbox_wizard_done_desc": "Jinoe jeut neu peuputoh peumaen ngon aman dan neu pileh saboh tema lam Rockbox (Pengaturan > Pengaturan Tema).",
  "sel_local_rockbox_themes_option": "Pasang Tema Rockbox 360p + Fontpak .",
  "rockbox_stage_installing": "Meupasang Tema & Font Rockbox...",
- "rockbox_cleanup_step": "Meu-ulang-ulang setting Rockbox jameun...",
- "rockbox_cleanup_deleting": "Meu-ulang folder .rockbox nibak peumaen...",
- "rockbox_cleanup_failed_note": "Software baroe droeneuh ka neupasang, tapi folder .rockbox jameun hana jeut neu peugadeh. Hapus folder .rockbox bak player ngon jaroe meunyo neuk neuk mulai gleh.",
  "rockbox_stage_waiting_adb_fmt": "Teungoh mita peumaen lewat ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Leubèh nibak sidroë ureuëng meu'èn nyang meuhubông. Peuputôh nyang laén dan tinggai mantong nyang teungoh tapeugot.",
  "rockbox_stage_pushing": "Peumaen ka jiteumee. Peuduek tema & font komunitas...",
@@ -1033,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Saboh kupi kira-kira jitop bandwidth saboh download. Nyan teutap perbaikan selanjut jih lam jangkauan.",
  "donate_family_appeal_expected": "Ryan ngon pasangan jih teungoh geupreh aneuk. Sumbangan keu biaya jalan proyek dan keluarga baroe kamoe dihargai secara massal.",
  "donate_family_appeal_new_arrival": "Na ureung baroe teuka lam perjalanan di rumoh Ryan. Tiëp-tiëp sumbangan keu server dan keuluarga geutanjoë njang ka meutamah rajek that meu-arti.",
- "donate_family_appeal_nursery": "Ryan ngon pasangan jih teungoh ji siap-siap keu aneuk awak nyan. Meunyo alat nyoe ka berguna, sumbangan untuk biaya jalan dan keluarga kamoe yang sedang berkembang akan membantu leubeh dari yang droneuh teupeu."
+ "donate_family_appeal_nursery": "Ryan ngon pasangan jih teungoh ji siap-siap keu aneuk awak nyan. Meunyo alat nyoe ka berguna, sumbangan untuk biaya jalan dan keluarga kamoe yang sedang berkembang akan membantu leubeh dari yang droneuh teupeu.",
+ "rockbox_cleanup_step": "Meu-ulang-ulang setting Rockbox jameun...",
+ "rockbox_cleanup_deleting": "Meu-ulang folder .rockbox nibak peumaen...",
+ "rockbox_cleanup_failed_note": "Software baroe droeneuh ka neupasang, tapi folder .rockbox jameun hana jeut neu peugadeh. Hapus folder .rockbox bak player ngon jaroe meunyo neuk neuk mulai gleh."
 }

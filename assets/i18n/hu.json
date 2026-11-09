@@ -139,12 +139,7 @@
  "settings_filter_old_rockbox": "Mutasd a régi Rockbox építményeket",
  "settings_filter_nightly": "Show Nightly Dev Releases",
  "settings_filter_240p": "240p Rockbox kiadások",
- "settings_240p_tip": "Olyan buildeket jelenít meg, amelyek ROM zipje 240p változat (rom…_240p.zip). A 240p-s buildek nem használhatók a 2026 májusa után újonnan vásárolt Y1-en, illetve az eredeti szoftver 3.0.7-es vagy újabb verziójával együtt. Azok a játékosok sem használhatnak régebbi Rockbox buildeket, így a Show Old Rockbox Builds be van kapcsolva vele.",
- "settings_240p_warn_body": "A 240p-s buildek nem használhatók a 2026 májusa után újonnan vásárolt Y1-en, illetve az eredeti szoftver 3.0.7-es vagy újabb verziójával együtt. Csak telepítsen egyet egy régebbi Y1-re.\n\nAzok a játékosok sem használhatnak régebbi Rockbox buildeket, ezért ezek is felsorolva vannak.\n\nBiztosan meg szeretnéd jeleníteni a 240p-s Rockbox kiadásokat?",
- "sel_240p_warning": "Ez egy 240p-s build. Nem használható a 2026 májusa után újonnan vásárolt Y1-en, illetve az eredeti szoftver 3.0.7-es vagy újabb verziójával.",
- "link_240p_body": "A megnyitott link egy 240p-s összeállításra vonatkozik. A 240p-s buildek nem használhatók a 2026 májusa után újonnan vásárolt Y1-en, illetve az eredeti szoftver 3.0.7-es vagy újabb verziójával együtt, ezért rejtve maradnak, amíg be nem kapcsolja őket.\n\nBiztosan meg szeretnéd jeleníteni a 240p-s Rockbox kiadásokat?",
- "link_busy": "Fejezze be az aktuális telepítést, majd nyissa meg újra a hivatkozást.",
- "link_not_listed": "A linkben szereplő szoftver még nem jelent meg ehhez a lejátszóhoz.",
+ "settings_240p_tip": "Olyan buildeket jelenít meg, amelyek ROM zipje 240p változat (rom…_240p.zip). A 240p-s buildek nem kompatibilisek az Y1 egységekkel az Innioasis OS 3.0.7 alatti verziójában, ezért a Show Old Rockbox Builds engedélyezve van vele.",
  "settings_old_rockbox_warn_title": "Rockbox kompatibilitási figyelmeztetés",
  "settings_old_rockbox_warn_body": "A Rockbox-Y1 0.5 előtti kiadásai nem kompatibilisek a 2026 márciusa után eladott Y1 egységekkel, amelyekben az Innioasis OS 3.0.7 előre telepítve van.\n\nHa egy régebbi buildet villog ezeken az eszközökön, az megakadályozza a rendszerindítást.\n\nBiztos, hogy meg szeretnéd jeleníteni a régebbi Rockbox buildeket?",
  "sel_refresh": "Frissítés",
@@ -931,9 +926,6 @@
  "rockbox_wizard_done_desc": "Most már biztonságosan leválaszthatja a lejátszót, és kiválaszthat egy témát a Rockboxban (Beállítások > Témabeállítások).",
  "sel_local_rockbox_themes_option": "Telepítse a Rockbox 360p Themes + Fontpack alkalmazást",
  "rockbox_stage_installing": "Rockbox témák és betűtípusok telepítése...",
- "rockbox_cleanup_step": "A régi Rockbox beállítások eltávolítása...",
- "rockbox_cleanup_deleting": "A .rockbox mappa eltávolítása a lejátszóból...",
- "rockbox_cleanup_failed_note": "Az új szoftver telepítve lett, de a régi .rockbox mappát nem sikerült eltávolítani. Ha tiszta kezdést szeretne, törölje kézzel a .rockbox mappát a lejátszón.",
  "rockbox_stage_waiting_adb_fmt": "Játékos keresése ADB-n keresztül ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Egynél több játékos csatlakozik. Válassza le a többit, és csak a telepítettet hagyja.",
  "rockbox_stage_pushing": "Játékos észlelve. Közösségi témák és betűtípusok elhelyezése...",
@@ -1033,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Egy kávé nagyjából lefedi a letöltés sávszélességét. Elérhető helyen tartja a következő javítást.",
  "donate_family_appeal_expected": "Ryan és párja babát várnak. Nagyra értékeljük a projekt működési költségeire és új családunkra fordított adományokat.",
  "donate_family_appeal_new_arrival": "Útközben egy új érkezett Ryan házába. Minden adomány a szervereknek és a növekvő családunknak nagyon sokat jelent.",
- "donate_family_appeal_nursery": "Ryan és párja gyermekükre készülnek. Ha ez az eszköz hasznos volt, a működési költségekre és a növekvő családunkra adományozott adomány többet segítene, mint gondolná."
+ "donate_family_appeal_nursery": "Ryan és párja gyermekükre készülnek. Ha ez az eszköz hasznos volt, a működési költségekre és a növekvő családunkra adományozott adomány többet segítene, mint gondolná.",
+ "rockbox_cleanup_step": "A régi Rockbox beállítások eltávolítása...",
+ "rockbox_cleanup_deleting": "A .rockbox mappa eltávolítása a lejátszóból...",
+ "rockbox_cleanup_failed_note": "Az új szoftver telepítve lett, de a régi .rockbox mappát nem sikerült eltávolítani. Ha tiszta kezdést szeretne, törölje kézzel a .rockbox mappát a lejátszón."
 }
