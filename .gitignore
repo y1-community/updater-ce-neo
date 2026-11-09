@@ -65,3 +65,6 @@ tools/windows/SP_Flash_Tool_v5.1904_Win/nd.ini
 tools/.DS_Store
 .DS_Store
 .DS_Store
+
+# Local agent coordination notes (never commit)
+.coord/
