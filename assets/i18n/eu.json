@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Kafe batek gutxi gorabehera deskarga baten banda-zabalera estaltzen du. Eskura mantentzen du hurrengo konponketa.",
  "donate_family_appeal_expected": "Ryan eta bere bikotea haur bat espero dute. Proiektuaren funtzionamendu-gastuetarako eta gure familia berrirako dohaintzak izugarri estimatzen dira.",
  "donate_family_appeal_new_arrival": "Ryanen etxera iritsi berri bat dago bidean. Zerbitzariei eta gero eta handiagoa den gure familiari egindako dohaintza bakoitzak asko esan nahi du.",
- "donate_family_appeal_nursery": "Ryan eta bere bikotea beren seme-alabentzako prestatzen ari dira. Tresna hau baliagarria izan bada, funtzionamendu-gastuetarako dohaintzak eta geroz eta handiagoa den gure familiak dakizuna baino gehiago lagunduko luke."
+ "donate_family_appeal_nursery": "Ryan eta bere bikotea beren seme-alabentzako prestatzen ari dira. Tresna hau baliagarria izan bada, funtzionamendu-gastuetarako dohaintzak eta geroz eta handiagoa den gure familiak dakizuna baino gehiago lagunduko luke.",
+ "rockbox_cleanup_step": "Rockbox ezarpen zaharrak kentzen...",
+ "rockbox_cleanup_deleting": ".rockbox karpeta erreproduzitzailetik kentzen...",
+ "rockbox_cleanup_failed_note": "Zure software berria instalatu da, baina ezin izan da kendu .rockbox karpeta zaharra. Ezabatu eskuz erreproduzigailuko .rockbox karpeta hasiera garbi bat nahi baduzu."
 }

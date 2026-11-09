@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "en kafe i kouver apepre bandwidth en download. i gard sa prosen solisyon dan son lanmen.",
  "donate_family_appeal_expected": "Ryan ek son partner pe ekspekte en pti baba. bann donasyon anver kou fonksyonnman proze e nou nouvo fanmir i ganny apresye masivman.",
  "donate_family_appeal_new_arrival": "I annan en nouvo larive lo semen dan lakaz Ryan. sak donasyon anver bann server ek nou fanmir ki pe grandi i vedir bokou.",
- "donate_family_appeal_nursery": "Ryan ek son partner pe prepar zot zanfan. si sa zouti in itil, en donasyon pou kou fonksyonnman e nou fanmir ki pe grandi ti pou ed plis ki ou konnen."
+ "donate_family_appeal_nursery": "Ryan ek son partner pe prepar zot zanfan. si sa zouti in itil, en donasyon pou kou fonksyonnman e nou fanmir ki pe grandi ti pou ed plis ki ou konnen.",
+ "rockbox_cleanup_step": "pe retir bann vye laranzman Rockbox...",
+ "rockbox_cleanup_deleting": "pe retir sa dosye .rockbox lo sa zwer...",
+ "rockbox_cleanup_failed_note": "ou nouvo lozisyel in ganny enstale, me sa vye dosye .rockbox pa'n kapab ganny retire. efas sa dosye .rockbox lo sa zwer par lanmen si ou anvi en bon komansman."
 }

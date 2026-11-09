@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Yon kafe apeprè kouvri Pleasant yon telechaje. Li kenbe pwochen ranje a nan rive.",
  "donate_family_appeal_expected": "Ryan ak patnè li ap tann yon ti bebe. Donasyon pou depans pou pwojè a ak nouvo fanmi nou an ap apresye anpil.",
  "donate_family_appeal_new_arrival": "Gen yon nouvo arive sou wout la nan kay Ryan a. Chak don anvè serveurs yo ak fanmi k ap grandi nou an vle di yon gwo zafè.",
- "donate_family_appeal_nursery": "Ryan ak patnè li ap prepare pou pitit yo. Si zouti sa a te itil, yon don pou depans kouri yo ak fanmi k ap grandi nou an ta ede plis pase ou konnen."
+ "donate_family_appeal_nursery": "Ryan ak patnè li ap prepare pou pitit yo. Si zouti sa a te itil, yon don pou depans kouri yo ak fanmi k ap grandi nou an ta ede plis pase ou konnen.",
+ "rockbox_cleanup_step": "Retire ansyen paramèt Rockbox yo...",
+ "rockbox_cleanup_deleting": "Retire dosye .rockbox nan jwè a...",
+ "rockbox_cleanup_failed_note": "Nouvo lojisyèl ou a te enstale, men ansyen katab .rockbox la pa t kapab retire. Efase folder nan .rockbox sou jwè a alamen si ou vle yon kòmanse pwòp."
 }

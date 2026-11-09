@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Un caffè copre quasi a larghezza di banda di una scaricata. Mantene a prossima correzione à portata.",
  "donate_family_appeal_expected": "Ryan è u so cumpagnu aspettanu un zitellu. E donazioni versu i costi di gestione di u prugettu è a nostra nova famiglia sò massivamente apprezzate.",
  "donate_family_appeal_new_arrival": "Ci hè un novu arrivatu in strada in a casa di Ryan. Ogni donazione versu i servitori è a nostra famiglia in crescita significa assai.",
- "donate_family_appeal_nursery": "Ryan è u so cumpagnu si preparanu per u so figliolu. Se sta strumentu hè stata utile, una donazione per i costi di gestione è a nostra famiglia in crescita aiuterebbe più di ciò chì sapete."
+ "donate_family_appeal_nursery": "Ryan è u so cumpagnu si preparanu per u so figliolu. Se sta strumentu hè stata utile, una donazione per i costi di gestione è a nostra famiglia in crescita aiuterebbe più di ciò chì sapete.",
+ "rockbox_cleanup_step": "Eliminazione di i vechji paràmetri di Rockbox...",
+ "rockbox_cleanup_deleting": "Eliminà u cartulare .rockbox da u lettore...",
+ "rockbox_cleanup_failed_note": "U vostru novu software hè statu stallatu, ma u vechju cartulare .rockbox ùn pò micca esse eliminatu. Sguassà u cartulare .rockbox nant'à u jocaturi a manu s'è vo vulete un principiu pulito."
 }

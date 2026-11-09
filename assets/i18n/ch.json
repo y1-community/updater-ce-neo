@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Un kape ha kubre i bandwidth gi un download. Ha na'siguru na siña un cho'gue i sigiente na inadilånto.",
  "donate_family_appeal_expected": "Si Ryan yan i asaguå-ña manma'espipiha un patgon. Manma agradesi i donasion siha para i gaston i prohekto yan i nuebu na familia-ta.",
  "donate_family_appeal_new_arrival": "Guaha un nuebu na taotao gi i gima' Ryan. Kada na donasion para i manma'gås-ta yan i familia-ta ni' dumudokdok, gof impottånte.",
- "donate_family_appeal_nursery": "Si Ryan yan i asaguå-ña manlisto para i patgon-ñiha. Yanggen ma'usa este na åmot, un donasion para i gaston cho'cho' yan i familia-ta ni' dumångkulu, siña ha ayuda mas ki un tungo'."
+ "donate_family_appeal_nursery": "Si Ryan yan i asaguå-ña manlisto para i patgon-ñiha. Yanggen ma'usa este na åmot, un donasion para i gaston cho'cho' yan i familia-ta ni' dumångkulu, siña ha ayuda mas ki un tungo'.",
+ "rockbox_cleanup_step": "Ma na'suha i antigu na setbisio Rockbox...",
+ "rockbox_cleanup_deleting": "Ma na'suha i .rockbox na folder ginen i atmas...",
+ "rockbox_cleanup_failed_note": "Ma inestotba i nuebu na softwer-mu, lao ti siña ma na'suha i antigu na .rockbox na folder. Na'suha i .rockbox na folder gi i atmas yanggen malago' hao na u maolek i tinituhon-mu."
 }

@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Kofi umo mupepi nafimba ubukulu bwa bandwidth iya kusenda. Ici cisunga ukulungika ukwakonkapo mupepi no kufikapo.",
  "donate_family_appeal_expected": "Ryan no munankwe baleenekela umwana. Ifya kusangwilako ku ndalama sha kubomfya uyu mulimo no lupwa lwesu ulupya filatashiwa nga nshi.",
  "donate_family_appeal_new_arrival": "Kuli umuntu upya uwaisa mu nshila mu ng’anda ya kwa Ryan. Ukusangwilako konse ku bapeela ifya kulya no lupwa lwesu ululekula kulapilibula ifingi nga nshi.",
- "donate_family_appeal_nursery": "Ryan no munankwe balepekanya umwana wabo. Nga ca kuti ici cibombelo cali icacindama, ukusangwilako ku ndalama sha kubomfya no lupwa lwesu ululekula kuti kwaafwa ukucila ifyo mwaishiba."
+ "donate_family_appeal_nursery": "Ryan no munankwe balepekanya umwana wabo. Nga ca kuti ici cibombelo cali icacindama, ukusangwilako ku ndalama sha kubomfya no lupwa lwesu ululekula kuti kwaafwa ukucila ifyo mwaishiba.",
+ "rockbox_cleanup_step": "Ukufumyapo imitantikile ya kale iya Rockbox...",
+ "rockbox_cleanup_deleting": "Ukufumya icibikilo ca .akabokoshi ka mabwe ukufuma ku cakutambisha...",
+ "rockbox_cleanup_failed_note": "Sofutiweya yenu iyipya naibikwa, lelo icikope ca .rockbox icakale tacafuminepo. Fumyeni icitabo ca .rockbox pa cakutambishishapo ne minwe nga mulefwaya ukutendeka ukwa busaka."
 }

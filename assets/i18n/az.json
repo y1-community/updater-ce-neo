@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Bir qəhvə yükləmənin bant genişliyini təxminən əhatə edir. O, növbəti düzəlişi əlçatan məsafədə saxlayır.",
  "donate_family_appeal_expected": "Rayan və onun ortağı uşaq gözləyir. Layihənin məsrəfləri və yeni ailəmiz üçün edilən ianələr çox yüksək qiymətləndirilir.",
  "donate_family_appeal_new_arrival": "Rayanın evinə yeni bir gəliş var. Serverlərə və böyüyən ailəmizə edilən hər bir ianə çox şey deməkdir.",
- "donate_family_appeal_nursery": "Rayan və ortağı uşaqları üçün hazırlaşır. Bu alət faydalı olsaydı, cari xərclər və böyüyən ailəmiz üçün ianə bildiyinizdən daha çox kömək edərdi."
+ "donate_family_appeal_nursery": "Rayan və ortağı uşaqları üçün hazırlaşır. Bu alət faydalı olsaydı, cari xərclər və böyüyən ailəmiz üçün ianə bildiyinizdən daha çox kömək edərdi.",
+ "rockbox_cleanup_step": "Köhnə Rockbox parametrləri silinir...",
+ "rockbox_cleanup_deleting": ".rockbox qovluğu pleyerdən silinir...",
+ "rockbox_cleanup_failed_note": "Yeni proqram təminatınız quraşdırıldı, lakin köhnə .rockbox qovluğunu silmək mümkün olmadı. Təmiz bir başlanğıc istəyirsinizsə, pleyerdəki .rockbox qovluğunu əl ilə silin."
 }

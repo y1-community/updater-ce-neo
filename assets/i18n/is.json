@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Eitt kaffi nær nokkurn veginn bandbreidd niðurhals. Það heldur næstu lagfæringu innan seilingar.",
  "donate_family_appeal_expected": "Ryan og félagi hans eiga von á barni. Framlög til rekstrarkostnaðar verkefnisins og nýju fjölskyldunnar okkar eru vel þegin.",
  "donate_family_appeal_new_arrival": "Það er nýkoma á leiðinni í húsi Ryans. Sérhver framlög til netþjónanna og vaxandi fjölskyldu okkar þýðir mikið.",
- "donate_family_appeal_nursery": "Ryan og félagi hans eru að búa sig undir barnið sitt. Ef þetta tól hefur verið gagnlegt myndi framlag fyrir rekstrarkostnað og vaxandi fjölskyldu okkar hjálpa fleiri en þú veist."
+ "donate_family_appeal_nursery": "Ryan og félagi hans eru að búa sig undir barnið sitt. Ef þetta tól hefur verið gagnlegt myndi framlag fyrir rekstrarkostnað og vaxandi fjölskyldu okkar hjálpa fleiri en þú veist.",
+ "rockbox_cleanup_step": "Fjarlægir gömlu Rockbox stillingarnar...",
+ "rockbox_cleanup_deleting": "Fjarlægir .rockbox möppuna úr spilaranum...",
+ "rockbox_cleanup_failed_note": "Nýi hugbúnaðurinn þinn var settur upp en ekki var hægt að fjarlægja gömlu .rockbox möppuna. Eyddu .rockbox möppunni á spilaranum með höndunum ef þú vilt hreina byrjun."
 }

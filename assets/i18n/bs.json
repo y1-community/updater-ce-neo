@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Jedna kafa otprilike pokriva propusni opseg preuzimanja. Drži sljedeću popravku na dohvat ruke.",
  "donate_family_appeal_expected": "Ryan i njegova partnerica čekaju bebu. Donacije za tekuće troškove projekta i našu novu porodicu su izuzetno cijenjene.",
  "donate_family_appeal_new_arrival": "Na putu je novi dolazak u Ryanovu kuću. Svaka donacija serverima i našoj rastućoj porodici znači mnogo.",
- "donate_family_appeal_nursery": "Ryan i njegova partnerica se spremaju za svoje dijete. Ako je ovaj alat bio koristan, donacija za tekuće troškove i našu rastuću porodicu bi pomogla više nego što znate."
+ "donate_family_appeal_nursery": "Ryan i njegova partnerica se spremaju za svoje dijete. Ako je ovaj alat bio koristan, donacija za tekuće troškove i našu rastuću porodicu bi pomogla više nego što znate.",
+ "rockbox_cleanup_step": "Uklanjanje starih postavki Rockboxa...",
+ "rockbox_cleanup_deleting": "Uklanjanje foldera .rockbox iz plejera...",
+ "rockbox_cleanup_failed_note": "Vaš novi softver je instaliran, ali stari folder .rockbox nije mogao biti uklonjen. Ručno izbrišite fasciklu .rockbox na plejeru ako želite čist početak."
 }

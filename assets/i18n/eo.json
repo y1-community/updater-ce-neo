@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Unu kafo proksimume kovras la bendolarĝon de elŝuto. Ĝi tenas la sekvan riparon atingebla.",
  "donate_family_appeal_expected": "Ryan kaj lia partnero atendas bebon. Donacoj al la kurantaj kostoj de la projekto kaj nia nova familio estas amase aprezitaj.",
  "donate_family_appeal_new_arrival": "Estas nova alveno survoje en la domo de Ryan. Ĉiu donaco al la serviloj kaj nia kreskanta familio signifas grandan interkonsenton.",
- "donate_family_appeal_nursery": "Ryan kaj lia partnero prepariĝas por sia infano. Se ĉi tiu ilo estis utila, donaco por la kurantaj kostoj kaj nia kreskanta familio helpus pli ol vi scias."
+ "donate_family_appeal_nursery": "Ryan kaj lia partnero prepariĝas por sia infano. Se ĉi tiu ilo estis utila, donaco por la kurantaj kostoj kaj nia kreskanta familio helpus pli ol vi scias.",
+ "rockbox_cleanup_step": "Forigante la malnovajn agordojn de Rockbox...",
+ "rockbox_cleanup_deleting": "Forigante la dosierujon .rockbox de la ludanto...",
+ "rockbox_cleanup_failed_note": "Via nova programaro estis instalita, sed la malnova dosierujo .rockbox ne povus esti forigita. Forigu mane la dosierujon .rockbox sur la ludanto se vi volas puran komencon."
 }

@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "An sarong kape haros minasakop kan bandwidth kan sarong pag-download. Ini nagpapadanay kan masunod na paghusay sa laog kan abot.",
  "donate_family_appeal_expected": "Si Ryan asin an saiyang kapadis naglalaom nin omboy. An mga donasyon para sa mga gastos sa pagpadalagan kan proyekto asin sa samong bagong pamilya inaapresyar na gayo.",
  "donate_family_appeal_new_arrival": "May bagong abot na nagdadangadang sa harong ni Ryan. An lambang donasyon para sa mga serbidor asin sa samong nagdadakula na pamilya dakula an kahulugan.",
- "donate_family_appeal_nursery": "Si Ryan asin an saiyang kapadis nag-aandam para sa saindang aki. Kun an kasangkapan na ini nagin kapaki-pakinabang, an donasyon para sa mga gastos sa pagpadalagan asin sa samong nagdadakulang pamilya makakatabang nin orog pa sa aram mo."
+ "donate_family_appeal_nursery": "Si Ryan asin an saiyang kapadis nag-aandam para sa saindang aki. Kun an kasangkapan na ini nagin kapaki-pakinabang, an donasyon para sa mga gastos sa pagpadalagan asin sa samong nagdadakulang pamilya makakatabang nin orog pa sa aram mo.",
+ "rockbox_cleanup_step": "Paghahale kan lumang mga setting kan Rockbox...",
+ "rockbox_cleanup_deleting": "Paghale kan .rockbox folder sa player...",
+ "rockbox_cleanup_failed_note": "An saimong bagong software na-install, alagad an lumang .rockbox na folder dae nahahale. Buraon an .rockbox folder sa player gamit an kamot kun gusto mong malinig an pagpoon."
 }

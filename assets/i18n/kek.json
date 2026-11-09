@@ -1001,5 +1001,8 @@
  "settings_arm64_driver_note": "Li tenq’ re li Windows ARM64 ink’a’ x’ilman. Sa’eb’ li portátil Snapdragon ut RTX Spark, li Zadig naru na’oksiman rik’in li Xk’ulub’il li Firma re li B’eresinel li ink’a’ naru chi k’anjelak re xk’eeb’al li WinUSB malaj libusb choq’ re li k’anjeleb’aal Precargador MT6227 sa’ li Administrador de dispositivos. Il ru li k’utul re li b’eresinel ARM64 re li b’e.",
  "toast_update_version_fmt": "{app} v{version} wank.",
  "toast_update_fmt": "Wan jun li ak’ob’resink re {app}.",
- "install_card_title_fmt": "{software} choq’ re {model} ."
+ "install_card_title_fmt": "{software} choq’ re {model} .",
+ "rockbox_cleanup_step": "Xrisinkileb’ li najteril k’uub’anb’il na’leb’ re li Rockbox...",
+ "rockbox_cleanup_deleting": "Xrisinkil li k’uuleb’aal hu .rockbox sa’ li b’atz’unleb’aal...",
+ "rockbox_cleanup_failed_note": "Kik’eeman laa ak’ software, a’b’an ink’a’ kiru risinkil li najteril k’uuleb’aal hu .rockbox. Xch’ajb’al li carpeta .rockbox sa’ li reproductor rik’in uq’ej wi taawaj jun xtiklajik chi saq ru."
 }

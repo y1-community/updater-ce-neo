@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Siti kopi kira-kira mungkur bandwidth siti download. Iya ngasuh fix ti nangkanka nya ulih dijangkau.",
  "donate_family_appeal_expected": "Ryan enggau kaling iya benung ngadang anak mit. Pemeri nuju ungkus bejalaika projek enggau kami sebilik baru amat diberi basa.",
  "donate_family_appeal_new_arrival": "Bisi penatai baru ba jalai ba rumah Ryan. Tiap iti pemeri nuju bala pelayan enggau kami sebilik ti majak nambah mai reti ti besai.",
- "donate_family_appeal_nursery": "Ryan enggau kaling iya benung besiapka diri ke anak seduai iya. Enti perengka tu udah beguna, pemeri ke ungkus bejalai enggau kami sebilik ti majak nambah deka nulung lebih ari ti ditemu nuan."
+ "donate_family_appeal_nursery": "Ryan enggau kaling iya benung besiapka diri ke anak seduai iya. Enti perengka tu udah beguna, pemeri ke ungkus bejalai enggau kami sebilik ti majak nambah deka nulung lebih ari ti ditemu nuan.",
+ "rockbox_cleanup_step": "Ngeluarka atur Rockbox ti lama...",
+ "rockbox_cleanup_deleting": "Ngeluarka folder .rockbox ari pemain...",
+ "rockbox_cleanup_failed_note": "Software baru nuan udah dipasang, tang folder .rockbox lama enda ulih dibuai. Padamka folder .rockbox ba pemain ngena jari enti deka berengkah enggau beresi."
 }

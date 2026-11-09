@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Ɛkame ayɛ sɛ kɔfe biako kata bandwidth a ɛwɔ download bi so. Ɛma nsiesie a edi hɔ no kɔ so yɛ nea wobetumi adu ho.",
  "donate_family_appeal_expected": "Ryan ne ne hokafo rehwɛ akokoaa kwan. Yɛkyerɛ ntoboa a wɔde boa adwuma no mmirikatu ho ka ne yɛn abusua foforo no ho anisɔ kɛse.",
  "donate_family_appeal_new_arrival": "Ɔbaa foforo bi wɔ kwan so wɔ Ryan fie. Ntoboa biara a wɔde bɛma servers ne yɛn abusua a ɛrenya nkɔso no kyerɛ ade kɛse.",
- "donate_family_appeal_nursery": "Ryan ne ne hokafo no resiesie wɔn ho ama wɔn ba no. Sɛ mfaso aba saa adwinnade yi so a, ntoboa a yɛde bɛma de atua mmirikatu ho ka ne yɛn abusua a ɛrenya nkɔso no bɛboa kɛse asen sɛnea wunim."
+ "donate_family_appeal_nursery": "Ryan ne ne hokafo no resiesie wɔn ho ama wɔn ba no. Sɛ mfaso aba saa adwinnade yi so a, ntoboa a yɛde bɛma de atua mmirikatu ho ka ne yɛn abusua a ɛrenya nkɔso no bɛboa kɛse asen sɛnea wunim.",
+ "rockbox_cleanup_step": "Woreyi Rockbox nhyehyɛe dedaw no afi hɔ...",
+ "rockbox_cleanup_deleting": "Woreyi .rockbox folda no afi player no mu...",
+ "rockbox_cleanup_failed_note": "Wɔde wo softwea foforo no ahyɛ mu, nanso wɔantumi annyi .rockbox folda dedaw no amfi hɔ. Fa nsa popa .rockbox folda a ɛwɔ player no so sɛ wopɛ sɛ wufi ase a ɛho tew a."
 }

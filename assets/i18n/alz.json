@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Kawa acel romo romo bandwidth pa piny ma jucwalo. Eketho yub mukende i cingi.",
  "donate_family_appeal_expected": "Ryan ku jadhoge gibekuru nyathin. Mio kony pi yub man juru ot mwa manyen jufoyo lee dit.",
  "donate_family_appeal_new_arrival": "Ng'atu moko manyen bino i ot pa Ryan. Mic moko ci ma jumiyo ni jutic man juru ot mwa ma ube medere ubedo piny madit.",
- "donate_family_appeal_nursery": "Ryan ku jadhoge gibe yube pi nyathin migi. Ka jam tic eni ubedo ber, kony pi tic man juru ot mwa ma ube medere bikonyo lee dit ma ingeyo."
+ "donate_family_appeal_nursery": "Ryan ku jadhoge gibe yube pi nyathin migi. Ka jam tic eni ubedo ber, kony pi tic man juru ot mwa ma ube medere bikonyo lee dit ma ingeyo.",
+ "rockbox_cleanup_step": "Wodhu piny macon mi Rockbox...",
+ "rockbox_cleanup_deleting": "Wodhu .rockbox folder kud i jam tugu...",
+ "rockbox_cleanup_failed_note": "Software peri manyen ju ketho, ento .rockbox folder macon jucopo wodhu ngo. Thum .rockbox folder iwi player ku cingi kan imito caku maleng."
 }

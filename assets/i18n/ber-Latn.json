@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Yiwet n lqahwa tettḍeggiɛ qrib bandwidth n yiwen n usnulfu. Yeṭṭef asenfar i d-iteddun deg ufus.",
  "donate_family_appeal_expected": "Ryan d umcic-is ttṛajun llufan. Tiwsiwin i lmend n tɣawsiwin n usseddu n usenfar-a d twacult-nneɣ tamaynut ttwaqadrent s waṭas.",
  "donate_family_appeal_new_arrival": "Yella yiwen n umdan amaynut deg ubrid deg wexxam n Ryan. Yal tikci sdat n yiqeddacen d twacult-nneɣ i d-yettnernin tesɛa azal meqqren.",
- "donate_family_appeal_nursery": "Ryan d umcic-is ttheyyin i mmi-tsen. Ma yella allal-agi yella-d d anfay, tukci n tɣawsiwin n uxeddim d twacult-nneɣ i d-yettnernin ad tɛiwen ugar n wayen tessneḍ."
+ "donate_family_appeal_nursery": "Ryan d umcic-is ttheyyin i mmi-tsen. Ma yella allal-agi yella-d d anfay, tukci n tɣawsiwin n uxeddim d twacult-nneɣ i d-yettnernin ad tɛiwen ugar n wayen tessneḍ.",
+ "rockbox_cleanup_step": "Tukksa n isefka iqburen n Rockbox...",
+ "rockbox_cleanup_deleting": "Tukksa n uḍris .rockbox seg umyurar...",
+ "rockbox_cleanup_failed_note": "Aselkim-ik amaynut yettwasbedd, maca aḍris .rockbox aqbur ur yezmir ara ad yettwakkes. Kkes aḍris .rockbox deg umyurar s ufus ma tebɣiḍ tazwara zeddigen."
 }

@@ -1001,5 +1001,8 @@
  "settings_arm64_driver_note": "ARM64 igalaat ikajuqsuiningit qaujisaqtausimanngittut. Snapdragon-mi amma RTX Spark-mi qaritaujaralaani, Zadig atuqtaujunnaqpuq aqutiup atiliurutinganut atuliqtittiniq nuqqaqtitausimatillugu aaqqiksinirmut WinUSB uvvaluunniit libusb-mut MT6227 sivurngagut qaritaujaralaanut qaritaujaralaanut aulattijimi. Takulugu ARM64 aqutimut atuagaq qanuiliuriaqarnirmut.",
  "toast_update_version_fmt": "{app} v{version} atuinnaujuq.",
  "toast_update_fmt": "Nutaannguriaqsimajuq {app}-mut atuinnaujuq.",
- "install_card_title_fmt": "{software} for {model}"
+ "install_card_title_fmt": "{software} for {model}",
+ "rockbox_cleanup_step": "Piijainiq pituqarnik raakpaaks aaqqiksimaninginnik...",
+ "rockbox_cleanup_deleting": "Piijainiq .rockbox paippaaqutimik pinnguarutimik...",
+ "rockbox_cleanup_failed_note": "Nutaaq qaritaujait aaqqiktaulauqtuq, kisiani pituqaq .rockbox paippaaquti piiqtaujunnalaunngilaq. Piijarlugu .rockbox paippaaqutinga pinnguarutimi aggakkut salumajumik pigiarutiqarumaguvit."
 }

@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Asiki kopi kirang langkung nglikubin bandwidth saking unduhan. Puniki ngawinang perbaikan selanturnyané prasida kajangkau.",
  "donate_family_appeal_expected": "Ryan lan timpalne sedeng ngajap-ajap pianak. Sumbangan nuju biaya pejalanan proyek lan kulawarga anyar iraga masif kaapresiasi.",
  "donate_family_appeal_new_arrival": "Ada anak baru teka di jalan di umahne Ryan. Sabilang sumbangan majeng ring para pelayan lan kulawarga iraga sane sayan nincap maartos ageng pisan.",
- "donate_family_appeal_nursery": "Ryan lan timpalne sedeng nyiapang pianakne. Yening piranti puniki sampun mawiguna, sumbangan antuk biaya pejalanan lan kulawarga iraga sane sayan nincap pacang ngwantu langkungan saking sane kauningin."
+ "donate_family_appeal_nursery": "Ryan lan timpalne sedeng nyiapang pianakne. Yening piranti puniki sampun mawiguna, sumbangan antuk biaya pejalanan lan kulawarga iraga sane sayan nincap pacang ngwantu langkungan saking sane kauningin.",
+ "rockbox_cleanup_step": "Ngicalang setélan Rockbox sané sampun sue...",
+ "rockbox_cleanup_deleting": "Ngicalang folder .rockbox saking pamuter...",
+ "rockbox_cleanup_failed_note": "Piranti lunak anyar Sameton sampun kapasang, nanging folder .rockbox sané lawas nénten prasida kaicalang. Icalang folder .rockbox ring pamuter antuk tangan yéning jagi ngawitin sané bersih."
 }

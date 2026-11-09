@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Satu kopi kira-kira mencakup bandwidth unduhan. Hal ini membuat perbaikan berikutnya tetap dapat dijangkau.",
  "donate_family_appeal_expected": "Ryan dan pasangannya sedang menantikan bayi. Sumbangan untuk biaya operasional proyek dan keluarga baru kami sangat kami hargai.",
  "donate_family_appeal_new_arrival": "Ada pendatang baru dalam perjalanan ke rumah Ryan. Setiap donasi untuk server dan keluarga kami yang terus bertambah sangat berarti.",
- "donate_family_appeal_nursery": "Ryan dan rekannya sedang bersiap untuk anak mereka. Jika alat ini bermanfaat, donasi untuk biaya operasional dan pertumbuhan keluarga kami akan membantu lebih dari yang Anda tahu."
+ "donate_family_appeal_nursery": "Ryan dan rekannya sedang bersiap untuk anak mereka. Jika alat ini bermanfaat, donasi untuk biaya operasional dan pertumbuhan keluarga kami akan membantu lebih dari yang Anda tahu.",
+ "rockbox_cleanup_step": "Menghapus pengaturan Rockbox lama...",
+ "rockbox_cleanup_deleting": "Menghapus folder .rockbox dari pemutar...",
+ "rockbox_cleanup_failed_note": "Perangkat lunak baru Anda telah diinstal, tetapi folder .rockbox lama tidak dapat dihapus. Hapus folder .rockbox pada pemutar dengan tangan jika Anda ingin awal yang bersih."
 }

@@ -360,6 +360,68 @@ def adb_find_all_rockbox_dirs(adb: str, serial: "AdbDevice | str") -> list[str]:
     return found
 
 
+def adb_delete_rockbox_dirs(
+    adb: str,
+    serial: "AdbDevice | str",
+    dirs: Optional[list[str]] = None,
+    *,
+    cancel_cb: Optional[Callable[[], bool]] = None,
+    log_cb: Optional[Callable[[str], None]] = None,
+) -> tuple[bool, str]:
+    """Delete the player's ``.rockbox`` folders over ADB.
+
+    Used by the install's cleanup step when Keep my settings is left unticked:
+    themes, fonts and Rockbox's own settings live in ``.rockbox`` rather than
+    on the user data partition, so keeping the partition is not the same as a
+    fresh start. Only paths whose final component is ``.rockbox`` are passed
+    to ``rm -rf``; each removal is verified, because a shell exit status alone
+    does not prove the directory is gone.
+    """
+    targets = list(dirs) if dirs is not None else adb_find_all_rockbox_dirs(adb, serial)
+    if not targets:
+        return True, "No .rockbox folder was found on the player"
+
+    removed: list[str] = []
+    failed: list[str] = []
+    for path in targets:
+        if _cancelled(cancel_cb):
+            return False, "Removing the old Rockbox folders was cancelled"
+        clean = str(path or "").strip().rstrip("/")
+        if not clean or not clean.endswith("/.rockbox"):
+            failed.append(f"{clean or '(empty path)'}: not a .rockbox folder")
+            continue
+        try:
+            proc = _run_adb(
+                adb,
+                *_target(serial),
+                "shell",
+                f"rm -rf {_shell_quote(clean)} && echo __ADB_RM_OK__",
+                timeout=180,
+            )
+        except Exception as e:
+            failed.append(f"{clean}: {e}")
+            continue
+        if proc.returncode != 0 or "__ADB_RM_OK__" not in (proc.stdout or ""):
+            failed.append(
+                f"{clean}: {(proc.stderr or proc.stdout or 'rm failed').strip()}"
+            )
+            continue
+        if adb_shell_ls(adb, serial, clean):
+            failed.append(f"{clean}: still present after removal")
+            continue
+        removed.append(clean)
+        if log_cb is not None:
+            try:
+                log_cb(f"Removed {clean}")
+            except Exception:
+                logger.debug("ADB cleanup log callback failed", exc_info=True)
+
+    if removed and failed:
+        return False, f"Removed {len(removed)}; issues: {'; '.join(failed[:3])}"
+    if failed:
+        return False, "; ".join(failed[:3])
+    return True, f"Removed {len(removed)} .rockbox folder(s)"
+
 
 def _run_adb_push_with_progress(
     adb: str,

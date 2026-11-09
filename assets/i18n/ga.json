@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Clúdaíonn caife amháin go garbh bandaleithead íoslódála. Coinníonn sé an chéad shocrú eile laistigh de bhaint amach.",
  "donate_family_appeal_expected": "Tá Ryan agus a pháirtí ag súil le leanbh. Táthar an-bhuíoch as síntiúis i dtreo chostais reatha an tionscadail agus lenár dteaghlach nua.",
  "donate_family_appeal_new_arrival": "Tá teacht nua ar an mbealach i dteach Ryan. Ciallaíonn gach deonachán do na freastalaithe agus ár dteaghlach atá ag fás go mór.",
- "donate_family_appeal_nursery": "Tá Ryan agus a pháirtí ag ullmhú dá leanbh. Má bhí an uirlis seo úsáideach, chabhródh síntiús le haghaidh na gcostas reatha agus ár dteaghlach atá ag fás níos mó ná mar is eol duit."
+ "donate_family_appeal_nursery": "Tá Ryan agus a pháirtí ag ullmhú dá leanbh. Má bhí an uirlis seo úsáideach, chabhródh síntiús le haghaidh na gcostas reatha agus ár dteaghlach atá ag fás níos mó ná mar is eol duit.",
+ "rockbox_cleanup_step": "Seanshocruithe Rockbox á mbaint...",
+ "rockbox_cleanup_deleting": "An fillteán .rockbox á bhaint den imreoir...",
+ "rockbox_cleanup_failed_note": "Suiteáladh do bhogearraí nua, ach níorbh fhéidir an seanfhillteán .rockbox a bhaint. Scrios an fillteán .rockbox ar an imreoir de láimh más mian leat tús glan."
 }

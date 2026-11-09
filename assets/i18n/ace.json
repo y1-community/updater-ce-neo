@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Saboh kupi kira-kira jitop bandwidth saboh download. Nyan teutap perbaikan selanjut jih lam jangkauan.",
  "donate_family_appeal_expected": "Ryan ngon pasangan jih teungoh geupreh aneuk. Sumbangan keu biaya jalan proyek dan keluarga baroe kamoe dihargai secara massal.",
  "donate_family_appeal_new_arrival": "Na ureung baroe teuka lam perjalanan di rumoh Ryan. Tiëp-tiëp sumbangan keu server dan keuluarga geutanjoë njang ka meutamah rajek that meu-arti.",
- "donate_family_appeal_nursery": "Ryan ngon pasangan jih teungoh ji siap-siap keu aneuk awak nyan. Meunyo alat nyoe ka berguna, sumbangan untuk biaya jalan dan keluarga kamoe yang sedang berkembang akan membantu leubeh dari yang droneuh teupeu."
+ "donate_family_appeal_nursery": "Ryan ngon pasangan jih teungoh ji siap-siap keu aneuk awak nyan. Meunyo alat nyoe ka berguna, sumbangan untuk biaya jalan dan keluarga kamoe yang sedang berkembang akan membantu leubeh dari yang droneuh teupeu.",
+ "rockbox_cleanup_step": "Meu-ulang-ulang setting Rockbox jameun...",
+ "rockbox_cleanup_deleting": "Meu-ulang folder .rockbox nibak peumaen...",
+ "rockbox_cleanup_failed_note": "Software baroe droeneuh ka neupasang, tapi folder .rockbox jameun hana jeut neu peugadeh. Hapus folder .rockbox bak player ngon jaroe meunyo neuk neuk mulai gleh."
 }

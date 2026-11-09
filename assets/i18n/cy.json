@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Mae un coffi yn fras yn gorchuddio lled band llwytho i lawr. Mae'n cadw'r atgyweiriad nesaf o fewn cyrraedd.",
  "donate_family_appeal_expected": "Mae Ryan a'i bartner yn disgwyl babi. Gwerthfawrogir yn fawr y rhoddion tuag at gostau rhedeg y prosiect a'n teulu newydd.",
  "donate_family_appeal_new_arrival": "Mae yna ddyfodiad newydd ar y ffordd i dŷ Ryan. Mae pob rhodd tuag at y gweinyddion a'n teulu cynyddol yn golygu llawer iawn.",
- "donate_family_appeal_nursery": "Mae Ryan a'i bartner yn paratoi ar gyfer eu plentyn. Os yw'r offeryn hwn wedi bod yn ddefnyddiol, byddai rhodd ar gyfer y costau rhedeg a'n teulu sy'n tyfu yn helpu mwy nag y gwyddoch."
+ "donate_family_appeal_nursery": "Mae Ryan a'i bartner yn paratoi ar gyfer eu plentyn. Os yw'r offeryn hwn wedi bod yn ddefnyddiol, byddai rhodd ar gyfer y costau rhedeg a'n teulu sy'n tyfu yn helpu mwy nag y gwyddoch.",
+ "rockbox_cleanup_step": "Wrthi'n dileu'r hen osodiadau Rockbox...",
+ "rockbox_cleanup_deleting": "Wrthi'n tynnu'r ffolder .rockbox o'r chwaraewr...",
+ "rockbox_cleanup_failed_note": "Gosodwyd eich meddalwedd newydd, ond nid oedd modd tynnu'r hen ffolder .rockbox. Dileu'r ffolder .rockbox ar y chwaraewr â llaw os ydych chi eisiau cychwyn glân."
 }

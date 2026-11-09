@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Bir qave yüklevniñ yol keçüv kenişligini qabaatlı şekilde qaplay. O, nevbetteki tüzetüvni el yetkizüv yerinde tuta.",
  "donate_family_appeal_expected": "Rayan ve onıñ ömür arqadaşı bala bekleyler. Proyektniñ çalışuv masraflarına ve bizim yañı qorantamızğa bahşışlar kütleviy sürette qıymet kesile.",
  "donate_family_appeal_new_arrival": "Rayannıñ evinde yolda yañı kelgen adam bar. Serverlerge ve ösken qorantamızğa er bir bahşış büyük bir şeyni añlata.",
- "donate_family_appeal_nursery": "Rayan ve onıñ ömür arqadaşı balasına azırlanalar. Eger bu alet faydalı olğan olsa, çalışuv masrafları ve bizim ösken qorantamız içün bahşış siz bilgenden ziyade yardım eter edi."
+ "donate_family_appeal_nursery": "Rayan ve onıñ ömür arqadaşı balasına azırlanalar. Eger bu alet faydalı olğan olsa, çalışuv masrafları ve bizim ösken qorantamız içün bahşış siz bilgenden ziyade yardım eter edi.",
+ "rockbox_cleanup_step": "Eski Rockbox parametrlerini yoq etmek...",
+ "rockbox_cleanup_deleting": "Pleyerden .rockbox papkasını çıqarmaq...",
+ "rockbox_cleanup_failed_note": "Yañı programmañ yerleştirildi, amma eski .rockbox papkasını çıqarmaq mümkün olmadı. Eger temiz başlanğıç isteseñiz, pleyerdeki .rockbox papkasını elnen yoq etiñiz."
 }

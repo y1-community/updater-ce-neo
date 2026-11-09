@@ -1001,5 +1001,8 @@
  "settings_arm64_driver_note": "ARM64 ᐃᒐᓛᓄᑦ ᐃᑲᔪᖅᓱᐃᓂᖅ ᖃᐅᔨᓴᖅᑕᐅᓯᒪᙱᑦᑐᖅ. Snapdragon ᐊᒻᒪ RTX Spark ᖃᕆᑕᐅᔭᕋᓛᓂ, Zadig ᐊᑐᖅᑕᐅᔪᓐᓇᖅᑐᖅ ᐊᖁᑎᐅᑉ ᐊᑎᓕᐅᕈᑎᖓᓄᑦ ᒪᓕᒃᑕᐅᑎᑦᑎᓂᖅ ᐋᖅᑭᒃᑕᐅᓯᒪᙱᑎᓪᓗᒍ ᐋᖅᑭᒃᓯᓂᕐᒧᑦ WinUSB ᐅᕝᕙᓘᓐᓃᑦ libusb MT6227 ᓯᕗᕐᖓᒍᑦ ᐋᖅᑭᒃᓱᐃᔨᒧᑦ ᖃᕆᑕᐅᔭᕐᒧᑦ ᖃᕆᑕᐅᔭᓄᑦ ᐊᐅᓚᑦᑎᔨᒥ. ᑕᑯᓗᒍ ARM64 ᐊᖁᑎᒧᑦ ᒪᓕᒃᑕᐅᔭᕆᐊᓕᒃ ᖃᓄᐃᓕᐅᕆᐊᖃᕐᒪᖔᖅᐱᑦ.",
  "toast_update_version_fmt": "{app} v{version} ᐊᑐᐃᓐᓇᐅᔪᖅ.",
  "toast_update_fmt": "ᓄᑖᙳᕆᐊᖅᑎᑕᐅᓯᒪᔪᖅ {app}-ᒧᑦ ᐊᑐᐃᓐᓇᐅᔪᖅ.",
- "install_card_title_fmt": "{software} {model}−ᒧᑦ"
+ "install_card_title_fmt": "{software} {model}−ᒧᑦ",
+ "rockbox_cleanup_step": "ᐲᔭᐃᓂᖅ ᐱᑐᖃᕐᓂᒃ ᕌᒃᐹᒃᔅ ᐋᖅᑭᒃᓯᒪᓂᖏᓐᓂᒃ...",
+ "rockbox_cleanup_deleting": "ᐲᔭᐃᓂᖅ .rockbox ᐸᐃᑉᐹᖁᑎᒥᒃ ᐱᙳᐊᕈᑎᒥᒃ...",
+ "rockbox_cleanup_failed_note": "ᓄᑖᖅ ᖃᕆᑕᐅᔭᐃᑦ ᐋᖅᑭᒃᑕᐅᓚᐅᖅᑐᖅ, ᑭᓯᐊᓂ ᐱᑐᖃᖅ .rockbox ᐸᐃᑉᐹᖁᑎ ᐲᖅᑕᐅᔪᓐᓇᓚᐅᙱᓚᖅ. ᐲᔭᕐᓗᒍ .rockbox ᐸᐃᑉᐹᖁᑎᖓ ᐱᙳᐊᕈᑎᒥ ᐊᒡᒐᒃᑯᑦ ᓴᓗᒪᔪᒥᒃ ᐱᒋᐊᕈᑎᖃᕈᒪᒍᕕᑦ."
 }

@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Eitt kaffi fevnir áleið um bandbreiddina á einum niðurtøku. Tað heldur næsta fix innan fyri røktina.",
  "donate_family_appeal_expected": "Ryan og maður hansara vænta eitt barn. Stuðul til rakstrarkostnaðin av verkætlanini og okkara nýggju familju er massivt virðismett.",
  "donate_family_appeal_new_arrival": "Tað er ein nýkomin á veg í húsinum hjá Ryan. Hvør gáva móti servarunum og okkara vaksandi familju merkir nógv.",
- "donate_family_appeal_nursery": "Ryan og maður hansara gera seg klár til barnið. Um hetta tólið hevur verið til gagns, so hevði ein gáva til rakstrarútreiðslurnar og okkara vaksandi familju hjálpt meira enn tú veitst."
+ "donate_family_appeal_nursery": "Ryan og maður hansara gera seg klár til barnið. Um hetta tólið hevur verið til gagns, so hevði ein gáva til rakstrarútreiðslurnar og okkara vaksandi familju hjálpt meira enn tú veitst.",
+ "rockbox_cleanup_step": "Strika gomlu Rockbox innstillingarnar...",
+ "rockbox_cleanup_deleting": "Strika .rockbox mappuna úr spælaranum...",
+ "rockbox_cleanup_failed_note": "Tín nýggja forrit varð sett upp, men gamla .rockbox mappan kundi ikki strikast. Strika .rockbox mappuna á spælaranum við hond, um tú ynskir ​​eina reina byrjan."
 }

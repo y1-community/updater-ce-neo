@@ -1001,5 +1001,8 @@
  "settings_arm64_driver_note": "ARM64 Windows hpe madi shadaw ai lam hpe n chyam yu shi ai. Snapdragon hte RTX Spark laptop ni hta, Zadig hpe Driver Signature Enforcement hpe pat da ai sha lang nna, Device Manager kaw MT6227 Preloader jak a matu WinUSB (sh) libusb hpe bang mai ai. Lahkam ni hpe ARM64 driver guide hpe yu u.",
  "toast_update_version_fmt": "{app} v{version} nga ai.",
  "toast_update_fmt": "{app} de update galaw da sai.",
- "install_card_title_fmt": "{model} a matu {software}"
+ "install_card_title_fmt": "{model} a matu {software}",
+ "rockbox_cleanup_step": "Rockbox dingsa hpe shaw kau ai...",
+ "rockbox_cleanup_deleting": ".rockbox hpe player kaw na shaw kau ai...",
+ "rockbox_cleanup_failed_note": "Na a software nnan hpe install galaw da sai raitim, .rockbox folder dingsa hpe n mai shaw kau ai. San seng ai hku hpang mayu yang player kaw na .rockbox folder hpe lata hte delete galaw kau u."
 }

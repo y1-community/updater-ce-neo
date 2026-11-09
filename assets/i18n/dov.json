@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Ikkofi yomwe ilakonzya kuvwumbilila bandwidth yakudonloda. Chibamba nzila imbi yakubambulula kuti ibe afwaafwi.",
  "donate_family_appeal_expected": "Ryan amweenzinyina bali mukulindila mwana. Zipego zyakugwasya mumulimo ooyu amukwasyi wesu mupya zilalumbaizyigwa loko.",
  "donate_family_appeal_new_arrival": "Kuli muntu mupya uuboola munzila muŋanda ya Ryan. Kugwasizya kuli koonse kuli basikugwasilizya amukwasyi wesu uukomena chaamba chintu chipati.",
- "donate_family_appeal_nursery": "Ryan amweenzinyina bali mukulibambila mwanaabo. Kuti eechi chibelesyo chagwasya, lugwasyo lwamali aakubelesya amukwasyi wesu uukomena inga lwagwasya kwiinda mbomuzyi."
+ "donate_family_appeal_nursery": "Ryan amweenzinyina bali mukulibambila mwanaabo. Kuti eechi chibelesyo chagwasya, lugwasyo lwamali aakubelesya amukwasyi wesu uukomena inga lwagwasya kwiinda mbomuzyi.",
+ "rockbox_cleanup_step": "Kugwisya mabambe aa Rockbox aakaindi...",
+ "rockbox_cleanup_deleting": "Kugwisya fooloda ya .rockbox kuzwa muchisobano...",
+ "rockbox_cleanup_failed_note": "Sofutiweya yako mpya yakabikkwa, asi folda yakaindi ya .rockbox tiiyakakonzya kugwisigwa pe. Zima fooloda ya .rockbox aachipekupeku amaanza kuti koyanda kutalika kabotu."
 }

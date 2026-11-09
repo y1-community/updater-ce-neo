@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Töŋ de kafe ee bandwidth de kë cï yök thöl. Ee kë bï bɛ̈n tueŋ cɔk tɔ̈ në thök yic.",
  "donate_family_appeal_expected": "Ryan ku raanden ë tɔ̈ ke yeen aa tɔ̈ ke ŋɔ̈ɔ̈th meth. Käk ë kuɔɔny tënë wëu ke luɔi ku baai yamda aye keek yök ke dït apɛi.",
  "donate_family_appeal_new_arrival": "Anɔŋ kë yam cï bɛ̈n në dhöl yic në ɣön de Ryan. Ayï wëu ye keek gaam tënë kɔc ke server ku paanda dït ee kë dït apɛi.",
- "donate_family_appeal_nursery": "Ryan ku raanden ë tɔ̈ kenë yen aa tɔ̈ ke cë röt guiir në mɛnhden. Na cï kën ë luɔi kënë luui, ke wëu ë kuɔɔny tënë wëu ë gɛ̈th ku paanda ë dït abï kuɔɔny dït apɛi awär kë ŋic yïn."
+ "donate_family_appeal_nursery": "Ryan ku raanden ë tɔ̈ kenë yen aa tɔ̈ ke cë röt guiir në mɛnhden. Na cï kën ë luɔi kënë luui, ke wëu ë kuɔɔny tënë wëu ë gɛ̈th ku paanda ë dït abï kuɔɔny dït apɛi awär kë ŋic yïn.",
+ "rockbox_cleanup_step": "Ku tɛ̈ɛ̈u ë kä thɛɛr ke Rockbox nyaai...",
+ "rockbox_cleanup_deleting": "Nyaai ë .rockbox ë tɔ̈ɔ̈u tënë kë ye pol...",
+ "rockbox_cleanup_failed_note": "Ajuɛɛr yam acï tääu thïn, ku .rockbox thɛɛr acïï lëu bï nyaai. Tääu ë .rockbox ë thäät ë thäät ë thäät ë thäät ë thäät ë thäät."
 }

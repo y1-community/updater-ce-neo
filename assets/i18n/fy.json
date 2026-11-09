@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Ien kofje beslacht rûchwei de bânbreedte fan in download. It hâldt de folgjende fix binnen berik.",
  "donate_family_appeal_expected": "Ryan en syn partner ferwachtsje in poppe. Donaasjes foar de rinnende kosten fan it projekt en ús nije famylje wurde massaal wurdearre.",
  "donate_family_appeal_new_arrival": "Der is in nije oankomst ûnderweis yn Ryan syn hûs. Elke donaasje oan 'e servers en ús groeiende famylje betsjut in protte.",
- "donate_family_appeal_nursery": "Ryan en syn partner meitsje har klear foar har bern. As dit ark nuttich west hat, soe in donaasje foar de rinnende kosten en ús groeiende famylje mear helpe dan jo witte."
+ "donate_family_appeal_nursery": "Ryan en syn partner meitsje har klear foar har bern. As dit ark nuttich west hat, soe in donaasje foar de rinnende kosten en ús groeiende famylje mear helpe dan jo witte.",
+ "rockbox_cleanup_step": "De âlde Rockbox-ynstellingen fuortsmite...",
+ "rockbox_cleanup_deleting": "De .rockbox-map fuortsmite fan de spiler...",
+ "rockbox_cleanup_failed_note": "Jo nije software is ynstallearre, mar de âlde .rockbox map koe net fuortsmiten wurde. Wiskje de .rockbox map op de spiler mei de hân as jo wolle in skjinne start."
 }

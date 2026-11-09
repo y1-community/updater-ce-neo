@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Kawa acel romo pongo bandwidth me gin ma ki kwanyo. En gwoko gin ma lubo ni i cingi.",
  "donate_family_appeal_expected": "Ryan ki lawote gitye ka kuro latin. Miiyo kony me konyo yub man ki jo me ot wa manyen ni ki pwoyo tutwal.",
  "donate_family_appeal_new_arrival": "Tye ngat manyen ma tye ka bino i ot pa Ryan. Miiyo kony mo keken bot lutic ki jo me ot wa ma tye ka dongo tye gin ma pire tek.",
- "donate_family_appeal_nursery": "Ryan gin ki lawote gitye ka yubbe pi latin gi. Ka jami tic ni obedo me kony, miiyo kony pi wel cente me tic ki jo me ot wa ma tye ka dongo romo konyo makato kit ma ingeyo kwede."
+ "donate_family_appeal_nursery": "Ryan gin ki lawote gitye ka yubbe pi latin gi. Ka jami tic ni obedo me kony, miiyo kony pi wel cente me tic ki jo me ot wa ma tye ka dongo romo konyo makato kit ma ingeyo kwede.",
+ "rockbox_cleanup_step": "Kwanyo jami macon me Rockbox...",
+ "rockbox_cleanup_deleting": "Kwanyo .rockbox ki i kom gin ma tuku ni...",
+ "rockbox_cleanup_failed_note": "Gin manyen ni ki keto, ento .rockbox folda macon ni pi ki twero kwanyo ne. Kwany .rockbox ma tye i kom gin ma tuku ni ki cingi ka imito cako maber."
 }

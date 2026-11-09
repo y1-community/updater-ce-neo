@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Ur c'hafe a zalc'h war-dro ledander ur pellgargadenn. Derc'hel a ra ar reizhadenn da heul e-kichen.",
  "donate_family_appeal_expected": "Ryan hag e genseurt a zo o c'hortoz ur babig. Priziet e vez kalz ar skoazelloù evit koust mont en-dro ar raktres hag hor familh nevez.",
  "donate_family_appeal_new_arrival": "Ur c'hoarier nevez a zo war an hent e ti Ryan. Pep donezon d'ar servijerien ha d'hor familh o kreskiñ a dalvez kalz.",
- "donate_family_appeal_nursery": "Ryan hag e genlabourer a zo o prientiñ o bugel. Ma 'z eo bet talvoudus an ostilh-mañ, ur skodenn evit ar frejoù mont en-dro hag hor familh o kreskiñ a sikourfe muioc'h eget na ouzoc'h."
+ "donate_family_appeal_nursery": "Ryan hag e genlabourer a zo o prientiñ o bugel. Ma 'z eo bet talvoudus an ostilh-mañ, ur skodenn evit ar frejoù mont en-dro hag hor familh o kreskiñ a sikourfe muioc'h eget na ouzoc'h.",
+ "rockbox_cleanup_step": "O lemel arventennoù Rockbox kozh...",
+ "rockbox_cleanup_deleting": "O lemel an teuliad .rockbox diouzh al lenner...",
+ "rockbox_cleanup_failed_note": "Staliet eo bet ho meziant nevez, met n'hall ket bezañ tennet an teuliad .rockbox kozh. Diverkañ an teuliad .rockbox war al lenner gant an dorn ma fell deoc'h kregiñ mat."
 }

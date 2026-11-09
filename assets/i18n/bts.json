@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Sada kopi hira-hira manlinggomi bandwidth ni sada unduhan. On mambahen perbaikan na mangihut boi idapot.",
  "donate_family_appeal_expected": "Si Ryan pakon pasanganni mangarapkon sada poso-poso. Sumbangan hubani biaya pardalanan proyek pakon keluarga baru nami sangat ihargai.",
  "donate_family_appeal_new_arrival": "Adong sada halak na baru roh i rumah ni si Ryan. Ganup sumbangan hubani pelayan pakon keluarga nami na lambin banggal mararti tumang.",
- "donate_family_appeal_nursery": "Si Ryan pakon pasanganni marsiap-siap laho manubuhon niombah ni sidea. Anggo alat on domma marguna, sumbangan untuk biaya pardalanan pakon keluarga nami na lambin banggal boi mangurupi lobih humbani na ibotoh nassiam."
+ "donate_family_appeal_nursery": "Si Ryan pakon pasanganni marsiap-siap laho manubuhon niombah ni sidea. Anggo alat on domma marguna, sumbangan untuk biaya pardalanan pakon keluarga nami na lambin banggal boi mangurupi lobih humbani na ibotoh nassiam.",
+ "rockbox_cleanup_step": "Manghapus pengaturan Rockbox na lama...",
+ "rockbox_cleanup_deleting": "Manghapus folder .rockbox humbani pemain...",
+ "rockbox_cleanup_failed_note": "Perangkat lunak na baru domma ipasang, tapi folder .rockbox na lama lang boi ipadaoh. Hapus ma folder .rockbox bani pemain ai marhitei tangan anggo sihol ham mamungkah na borsih."
 }

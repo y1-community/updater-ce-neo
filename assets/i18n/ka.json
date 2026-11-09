@@ -1001,5 +1001,8 @@
  "settings_arm64_driver_note": "ARM64 Windows-ის მხარდაჭერა გამოუცდელია. Snapdragon და RTX Spark ლეპტოპებზე, Zadig შეიძლება გამოყენებულ იქნას Driver Signature Enforcement გამორთულით, რათა დააინსტალიროთ WinUSB ან libusb MT6227 Preloader მოწყობილობისთვის Device Manager-ში. იხილეთ ARM64 დრაივერის სახელმძღვანელო ნაბიჯებისთვის.",
  "toast_update_version_fmt": "{app} v{version} ხელმისაწვდომია.",
  "toast_update_fmt": "{app}-ის განახლება ხელმისაწვდომია.",
- "install_card_title_fmt": "{software} {model}-ისთვის"
+ "install_card_title_fmt": "{software} {model}-ისთვის",
+ "rockbox_cleanup_step": "ძველი Rockbox პარამეტრების წაშლა...",
+ "rockbox_cleanup_deleting": "მიმდინარეობს .rockbox საქაღალდის ამოღება პლეერიდან...",
+ "rockbox_cleanup_failed_note": "თქვენი ახალი პროგრამული უზრუნველყოფა დაინსტალირებული იყო, მაგრამ ძველი .rockbox საქაღალდის წაშლა ვერ მოხერხდა. წაშალეთ .rockbox საქაღალდე პლეერზე ხელით, თუ გსურთ სუფთა დაწყება."
 }

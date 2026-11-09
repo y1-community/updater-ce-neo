@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Un cafè cobreix aproximadament l'ample de banda d'una descàrrega. Manté la següent solució a l'abast.",
  "donate_family_appeal_expected": "Ryan i la seva parella estan esperant un nadó. Les donacions per als costos de funcionament del projecte i la nostra nova família són molt apreciades.",
  "donate_family_appeal_new_arrival": "Hi ha una nova arribada de camí a casa d'en Ryan. Cada donació als servidors i a la nostra família en creixement significa molt.",
- "donate_family_appeal_nursery": "Ryan i la seva parella s'estan preparant per al seu fill. Si aquesta eina ha estat útil, una donació per als costos de funcionament i la nostra família en creixement ajudaria més del que saps."
+ "donate_family_appeal_nursery": "Ryan i la seva parella s'estan preparant per al seu fill. Si aquesta eina ha estat útil, una donació per als costos de funcionament i la nostra família en creixement ajudaria més del que saps.",
+ "rockbox_cleanup_step": "S'està eliminant la configuració antiga de Rockbox...",
+ "rockbox_cleanup_deleting": "S'està eliminant la carpeta .rockbox del reproductor...",
+ "rockbox_cleanup_failed_note": "El vostre programari nou s'ha instal·lat, però l'antiga carpeta .rockbox no s'ha pogut eliminar. Suprimiu la carpeta .rockbox del reproductor a mà si voleu un començament net."
 }

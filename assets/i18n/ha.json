@@ -1025,5 +1025,8 @@
   "donate_support_appeal_coffee_math": "Kofi ɗaya yana ɗaukar kusan bandwidth na zazzagewa. Yana kiyaye gyara na gaba cikin isarwa.",
   "donate_family_appeal_expected": "Ryan da abokin tarayya suna jiran jariri. Ba da gudummawa ga farashin tafiyar da aikin da sabon danginmu ana yabawa sosai.",
   "donate_family_appeal_new_arrival": "Akwai sabon shigowa akan hanya a gidan Ryan. Kowane gudummawa ga sabobin da dangin mu na girma yana da ma'ana mai girma.",
-  "donate_family_appeal_nursery": "Ryan da abokin tarayya suna shirye don ɗansu. Idan wannan kayan aikin ya kasance mai amfani, gudummawa don farashi mai gudana da danginmu masu girma zai taimaka fiye da yadda kuka sani."
+  "donate_family_appeal_nursery": "Ryan da abokin tarayya suna shirye don ɗansu. Idan wannan kayan aikin ya kasance mai amfani, gudummawa don farashi mai gudana da danginmu masu girma zai taimaka fiye da yadda kuka sani.",
+  "rockbox_cleanup_step": "Ana cire tsoffin saitunan Rockbox...",
+  "rockbox_cleanup_deleting": "Ana cire babban fayil .rockbox daga mai kunnawa...",
+  "rockbox_cleanup_failed_note": "An shigar da sabuwar software ɗin ku, amma ba a iya cire tsohuwar babban fayil ɗin .rockbox ba. Share babban fayil .rockbox akan mai kunnawa da hannu idan kuna son farawa mai tsabta."
 }

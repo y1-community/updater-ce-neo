@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Hoʻokahi kofe e uhi i ka bandwidth o kahi hoʻoiho. Mālama ia i ka hoʻoponopono hou aʻe i ka hiki.",
  "donate_family_appeal_expected": "Ke kali nei ʻo Ryan a me kāna hoa i kahi pēpē. Mahalo nui ʻia nā haʻawina e pili ana i nā kumukūʻai holo o ka papahana a me ko mākou ʻohana hou.",
  "donate_family_appeal_new_arrival": "Aia kahi hōʻea hou ma ke ala i ka hale o Ryan. ʻO kēlā me kēia hāʻawi i nā kikowaena a me ko mākou ʻohana e ulu nei he mea nui.",
- "donate_family_appeal_nursery": "Ke hoʻomākaukau nei ʻo Ryan a me kāna hoa no kā lāua keiki. Inā pono kēia mea hana, ʻoi aku ka maikaʻi o ka hāʻawi ʻana i nā kumukūʻai holo a me kā mākou ʻohana e ulu nei."
+ "donate_family_appeal_nursery": "Ke hoʻomākaukau nei ʻo Ryan a me kāna hoa no kā lāua keiki. Inā pono kēia mea hana, ʻoi aku ka maikaʻi o ka hāʻawi ʻana i nā kumukūʻai holo a me kā mākou ʻohana e ulu nei.",
+ "rockbox_cleanup_step": "Ke wehe nei i nā hoʻonohonoho Rockbox kahiko...",
+ "rockbox_cleanup_deleting": "Ke wehe nei i ka waihona .rockbox mai ka mea hoʻokani...",
+ "rockbox_cleanup_failed_note": "Ua hoʻokomo ʻia kāu polokalamu hou, akā ʻaʻole hiki ke wehe ʻia ka waihona .rockbox kahiko. Holoi i ka waihona .rockbox ma ka mea pāʻani ma ka lima inā makemake ʻoe i kahi hoʻomaka maʻemaʻe."
 }

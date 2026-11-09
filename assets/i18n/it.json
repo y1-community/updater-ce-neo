@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Un caffè copre all'incirca la larghezza di banda di un download. Mantiene la correzione successiva a portata di mano.",
  "donate_family_appeal_expected": "Ryan e la sua compagna aspettano un bambino. Le donazioni per i costi di gestione del progetto e per la nostra nuova famiglia sono molto apprezzate.",
  "donate_family_appeal_new_arrival": "C'è un nuovo arrivo in arrivo a casa di Ryan. Ogni donazione ai server e alla nostra famiglia in crescita significa molto.",
- "donate_family_appeal_nursery": "Ryan e la sua compagna si stanno preparando per il loro bambino. Se questo strumento è stato utile, una donazione per le spese di gestione e per la nostra famiglia in crescita aiuterebbe più di quanto pensi."
+ "donate_family_appeal_nursery": "Ryan e la sua compagna si stanno preparando per il loro bambino. Se questo strumento è stato utile, una donazione per le spese di gestione e per la nostra famiglia in crescita aiuterebbe più di quanto pensi.",
+ "rockbox_cleanup_step": "Rimozione delle vecchie impostazioni Rockbox...",
+ "rockbox_cleanup_deleting": "Rimozione della cartella .rockbox dal lettore...",
+ "rockbox_cleanup_failed_note": "Il nuovo software è stato installato, ma non è stato possibile rimuovere la vecchia cartella .rockbox. Elimina manualmente la cartella .rockbox sul lettore se desideri un avvio pulito."
 }

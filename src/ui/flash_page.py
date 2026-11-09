@@ -3228,7 +3228,12 @@ class FlashPage(QWidget):
         sim_timer = getattr(self, "_sim_theme_timer", None)
         if sim_timer is not None:
             sim_timer.stop()
-        for attr in ("_adb_watch_worker", "_adb_push_worker", "_dir_merge_worker"):
+        for attr in (
+            "_adb_watch_worker",
+            "_adb_push_worker",
+            "_dir_merge_worker",
+            "_rockbox_cleanup_worker",
+        ):
             w = getattr(self, attr, None)
             if w is not None:
                 try:
@@ -3464,17 +3469,22 @@ class FlashPage(QWidget):
         already_powered_on=False,
         automatic=False,
         after_firmware=False,
+        purpose="themes",
     ) -> None:
-        """Seamless in-card Rockbox 360p themes & fonts post-install flow.
+        """Seamless in-card Rockbox post-install flow.
 
         ``after_firmware`` is True when a Rockbox firmware install came first;
         the bar then resumes at 90%. A standalone run starts from 0%.
+        ``purpose`` is ``"themes"`` for the bundled 360p themes and fonts, or
+        ``"cleanup"`` to remove the player's old ``.rockbox`` folders when Keep
+        my settings was left unticked; the guidance, watcher and fallbacks are
+        the same for both.
         """
         self.dismiss_prompt_stop()
         # A new stage owns detection from here: no watcher from the previous
         # journey may answer for this one before its own step starts watching.
         self._stop_adb_presence_watch()
-        self.themes.begin(model, automatic=automatic)
+        self.themes.begin(model, automatic=automatic, purpose=purpose)
         self._theme_stage_done_cb = on_done
         self._theme_stage_recover_cb = on_troubleshoot or on_recover
         self._rockbox_power_on_continue_cb = None
@@ -3502,12 +3512,19 @@ class FlashPage(QWidget):
         if hasattr(self, "_status_flow"):
             self._status_flow.set_forced_stacked(True)
 
-        self.set_step(tr("rockbox_stage_installing"))
+        self.set_step(
+            tr("rockbox_cleanup_step" if self._cleanup_stage else "rockbox_stage_installing")
+        )
         self._progress_bar.set_precise_value(90.0 if after_firmware else 0.0)
 
         model_str = (model or "Y1").upper()
         self._rockbox_already_powered_on = bool(already_powered_on)
-        self._log_theme(f"[Rockbox Themes] Starting 360p themes & fonts stage for {model_str}...")
+        if self._cleanup_stage:
+            self._log_theme(
+                f"[Rockbox Cleanup] Starting .rockbox removal stage for {model_str}..."
+            )
+        else:
+            self._log_theme(f"[Rockbox Themes] Starting 360p themes & fonts stage for {model_str}...")
 
         from .. import simulation
 
@@ -3549,6 +3566,106 @@ class FlashPage(QWidget):
             self._start_theme_step2_connect_usb()
         else:
             self._show_theme_step1_disconnect_power_on()
+
+    @property
+    def _cleanup_stage(self) -> bool:
+        """This stage deletes the player's old ``.rockbox`` folders."""
+        return bool(getattr(self.themes, "is_cleanup", False))
+
+    def start_rockbox_cleanup_stage(
+        self,
+        model="Y1",
+        on_done=None,
+        on_recover=None,
+        log_cb=None,
+        already_powered_on=False,
+        automatic=False,
+        after_firmware=True,
+    ) -> None:
+        """Remove the player's old ``.rockbox`` folders as an install step.
+
+        Keep my settings unticked is the user asking for a fresh start, so the
+        Rockbox payload goes with the data partition. The guidance is the
+        themes stage's own (power on, USB, ADB, storage-mode fallback), which is
+        why this is that stage with a different purpose rather than a second
+        wizard.
+        """
+        self.start_rockbox_themes_stage(
+            model=model,
+            on_done=on_done,
+            on_recover=on_recover,
+            log_cb=log_cb,
+            already_powered_on=already_powered_on,
+            automatic=automatic,
+            after_firmware=after_firmware,
+            purpose="cleanup",
+        )
+
+    def _on_cleanup_progress(self, curr: int, total: int) -> None:
+        from ..progress_model import scale_theme_progress
+
+        if total <= 0:
+            return
+        self._progress_bar.set_precise_value(
+            scale_theme_progress((float(curr) / max(1.0, float(total))) * 100.0)
+        )
+        if curr < total:
+            self._eta_label.setText(tr("rockbox_cleanup_deleting"))
+
+    def _start_adb_cleanup(self, serial: str) -> None:
+        from ..adb import find_adb_binary
+        from ..rockbox_cleanup import AdbRockboxCleanupWorker
+
+        adb_bin = find_adb_binary()
+        if not adb_bin:
+            self._show_theme_fallback_usb_mode()
+            return
+        self.themes.reset_progress()
+        worker = AdbRockboxCleanupWorker(adb_bin, serial, parent=self)
+        self._rockbox_cleanup_worker = worker
+        worker.progress.connect(self._on_cleanup_progress)
+        worker.log.connect(self._log_theme)
+        worker.finished.connect(self._on_cleanup_finished)
+        worker.start()
+
+    def _on_cleanup_finished(self, ok: bool, msg: str) -> None:
+        if ok:
+            self._log_theme(f"[Rockbox Cleanup] {msg}.")
+            self._finish_rockbox_themes_stage()
+            return
+        self._log_theme(
+            f"[Rockbox Cleanup] {msg}. Falling back to USB storage guidance."
+        )
+        self._show_theme_fallback_usb_mode()
+
+    def _start_local_cleanup(self, chosen: str) -> None:
+        from ..rockbox_cleanup import LocalRockboxCleanupWorker
+
+        self._stop_adb_presence_watch()
+        self._log_theme(
+            f"[Rockbox Cleanup] Selected folder: {chosen}. Looking for .rockbox folders..."
+        )
+        if hasattr(self, "_theme_fallback_widget"):
+            self._theme_fallback_widget.setVisible(False)
+        self._hide_theme_wizard_chips()
+        self._eta_label.setText(tr("rockbox_cleanup_deleting"))
+        self.themes.reset_progress()
+        worker = LocalRockboxCleanupWorker(chosen, parent=self)
+        self._rockbox_cleanup_worker = worker
+        worker.progress.connect(self._on_cleanup_progress)
+        worker.log.connect(self._log_theme)
+        worker.finished.connect(self._on_local_cleanup_finished)
+        worker.start()
+
+    def _on_local_cleanup_finished(self, ok: bool, msg: str, count: int) -> None:
+        if ok:
+            self._log_theme(f"[Rockbox Cleanup] {msg}.")
+            self._finish_rockbox_themes_stage()
+            return
+        self._log_theme(
+            f"[Rockbox Cleanup] {msg}. Falling back to USB storage guidance."
+        )
+        self._show_theme_fallback_usb_mode()
 
     def _show_theme_step1_disconnect_power_on(self) -> None:
         model_str = self.themes.model.upper()
@@ -3687,6 +3804,14 @@ class FlashPage(QWidget):
             self._eta_label.setText(tr("rockbox_stage_installing"))
             self._start_adb_theme_push(serial)
             return
+        if self._cleanup_stage:
+            self._log_theme(
+                f"[Rockbox Cleanup] Player detected via ADB (serial: {serial}). "
+                "Removing the old .rockbox folders..."
+            )
+            self._eta_label.setText(tr("rockbox_cleanup_deleting"))
+            self._start_adb_cleanup(serial)
+            return
         self._log_theme(f"[Rockbox Themes] Player detected via ADB (serial: {serial}). Waiting {ROCKBOX_BOOT_WAIT_MS // 1000}s for Rockbox to populate .rockbox...")
         self._eta_label.setText(tr("rockbox_stage_pushing"))
         QTimer.singleShot(ROCKBOX_BOOT_WAIT_MS, lambda: self._start_adb_theme_push(serial))
@@ -3802,8 +3927,16 @@ class FlashPage(QWidget):
             self._adb_watch_timer.stop()
         if hasattr(self, "_status_flow"):
             self._status_flow.set_forced_stacked(True)
-        self._log_theme("[Rockbox Themes] Guiding user: Please enable USB storage mode.")
-        self.set_step(tr("rockbox_stage_installing"))
+        if self._cleanup_stage:
+            self._log_theme(
+                "[Rockbox Cleanup] Guiding user: Please enable USB storage mode to remove "
+                "the old .rockbox folders."
+            )
+        else:
+            self._log_theme("[Rockbox Themes] Guiding user: Please enable USB storage mode.")
+        self.set_step(
+            tr("rockbox_cleanup_step" if self._cleanup_stage else "rockbox_stage_installing")
+        )
         self._eta_label.setText(tr("rockbox_step_usb_storage_mode"))
         if hasattr(self, "_theme_row"):
             self._theme_row.setVisible(True)
@@ -3907,6 +4040,9 @@ class FlashPage(QWidget):
                 "[Rockbox Themes] Player appeared over ADB; using it instead of the picked folder."
             )
             self._on_adb_device_found(live[0])
+            return
+        if self._cleanup_stage:
+            self._start_local_cleanup(chosen)
             return
         if self.themes.is_apk_stage:
             import shutil
@@ -4042,7 +4178,10 @@ class FlashPage(QWidget):
     def _finish_rockbox_themes_stage(self, manual_count=None, dest=None) -> None:
         if manual_count is not None:
             self._log_theme(f"[Rockbox Themes] Successfully merged {manual_count} theme & font files into {dest}!")
-        self._log_theme("[Rockbox Themes] Rockbox 360p themes & fonts stage completed.")
+        if self._cleanup_stage:
+            self._log_theme("[Rockbox Cleanup] Removing the old .rockbox folders finished.")
+        else:
+            self._log_theme("[Rockbox Themes] Rockbox 360p themes & fonts stage completed.")
         self._stop_adb_presence_watch()
         self.themes.finish()
         if hasattr(self, "_adb_watch_timer"):
@@ -4376,10 +4515,16 @@ class FlashPage(QWidget):
         self._notify_geometry_change()
 
     def show_keep_data_confirmation(
-        self, question: str, hint: str = "", choices=(), selected: str = ""
+        self, question: str, hint: str = "", choices=(), selected: str = "", on_no=None
     ) -> None:
-        """Ask for the currently installed firmware on the same progress card."""
+        """Ask for the currently installed firmware on the same progress card.
+
+        With no ``choices`` this is a yes/no question about one compatible
+        software item; ``on_no`` is the answer to "no", because there the No
+        chip means "the player runs something else", not "stop the install".
+        """
         self._keep_data_confirm_active = True
+        self._keep_data_confirm_no_cb = on_no
         self._keep_data_erase_confirm_active = False
         self._wait_copy = "keep_data_confirm"
         self._keep_data_force_hidden = True
@@ -4784,6 +4929,7 @@ class FlashPage(QWidget):
 
     def clear_keep_data_confirmation(self) -> None:
         self._keep_data_confirm_active = False
+        self._keep_data_confirm_no_cb = None
         self._keep_data_erase_confirm_active = False
         self._format_all_confirm_active = False
         self._keep_data_force_hidden = False
@@ -5062,7 +5208,9 @@ class FlashPage(QWidget):
             software=getattr(self, "_package_name", "") or "",
             model=getattr(self, "_model", "") or "",
         )
-        return page or url
+        # A post_install that is a repository or release page (not a Markdown
+        # file) still belongs on the site's parser page for that project.
+        return page or docs_source.site_page_for_link(url) or url
 
     def _open_post_install_guide(self) -> None:
         """Globe: the firmware's setup steps, in the browser."""
@@ -6011,8 +6159,16 @@ class FlashPage(QWidget):
 
         At the power-off step the player has not been touched: the chip goes
         straight back to Select Software. Once a run is under way the same
-        chip asks first, because there the target is already mid-write.
+        chip asks first, because there the target is already mid-write. The
+        keep-data sanity check is the exception: its X reads "No", which means
+        the player is running different software, not that the install stops.
         """
+        if getattr(self, "_keep_data_confirm_active", False):
+            callback = getattr(self, "_keep_data_confirm_no_cb", None)
+            if callable(callback):
+                self._keep_data_confirm_no_cb = None
+                callback()
+                return
         if self._nothing_written_yet() or getattr(self, "_failed", False):
             callback = getattr(self, "_cancel_wait_callback", None) or getattr(self, "_cancel_callback", None)
             if callable(callback):

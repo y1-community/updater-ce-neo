@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "コーヒー1杯でダウンロード約1回分の通信量を賄えます。次の修正を届ける力になります。",
  "donate_family_appeal_expected": "Ryan とパートナーに赤ちゃんが生まれます。プロジェクトの運用費と新しい家族のためのご支援を心から感謝します。",
  "donate_family_appeal_new_arrival": "Ryan の家に新しい家族がやってきます。サーバーと成長する家族へのご支援のひとつひとつが大きな力になります。",
- "donate_family_appeal_nursery": "Ryan とパートナーは子どもの誕生に備えています。このツールがお役に立ったなら、運用費と新しい家族のためのご支援が大きな支えになります。"
+ "donate_family_appeal_nursery": "Ryan とパートナーは子どもの誕生に備えています。このツールがお役に立ったなら、運用費と新しい家族のためのご支援が大きな支えになります。",
+ "rockbox_cleanup_step": "古い Rockbox 設定を削除しています…",
+ "rockbox_cleanup_deleting": "プレーヤーから .rockbox フォルダーを削除しています…",
+ "rockbox_cleanup_failed_note": "新しいソフトウェアはインストールされましたが、古い .rockbox フォルダーを削除できませんでした。まっさらにしたい場合は、プレイヤー上の .rockbox フォルダーを手動で削除してください。"
 }

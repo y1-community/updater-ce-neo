@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Ang usa ka kape halos nagsakup sa bandwidth sa usa ka pag-download. Gipadayon niini ang sunod nga pag-ayo nga maabut.",
  "donate_family_appeal_expected": "Si Ryan ug ang iyang kauban nagpaabot sa usa ka bata. Ang mga donasyon alang sa gasto sa pagpadagan sa proyekto ug ang among bag-ong pamilya gipasalamatan pag-ayo.",
  "donate_family_appeal_new_arrival": "Adunay bag-ong naabot sa dalan sa balay ni Ryan. Ang matag donasyon para sa mga server ug sa among nagtubo nga pamilya dako kaayog kahulogan.",
- "donate_family_appeal_nursery": "Si Ryan ug ang iyang kauban nangandam na sa ilang anak. Kung kini nga himan mapuslanon, ang usa ka donasyon alang sa gasto sa pagpadagan ug ang among nagtubo nga pamilya makatabang labaw pa sa imong nahibal-an."
+ "donate_family_appeal_nursery": "Si Ryan ug ang iyang kauban nangandam na sa ilang anak. Kung kini nga himan mapuslanon, ang usa ka donasyon alang sa gasto sa pagpadagan ug ang among nagtubo nga pamilya makatabang labaw pa sa imong nahibal-an.",
+ "rockbox_cleanup_step": "Pagtangtang sa daan nga mga setting sa Rockbox...",
+ "rockbox_cleanup_deleting": "Pagtangtang sa .rockbox folder gikan sa player...",
+ "rockbox_cleanup_failed_note": "Ang imong bag-ong software na-install, apan ang daan nga .rockbox folder dili matangtang. Kuhaa ang .rockbox folder sa player pinaagi sa kamot kung gusto nimo ang usa ka limpyo nga pagsugod."
 }

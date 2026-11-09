@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Eú kofi a chék chéúfetál lón ewe bandwidth mi chéúfetál. A tumunu ewe fichifich mwirin pwe epwe tongeni tori.",
  "donate_family_appeal_expected": "Ryan me chienan we ra ekiekin nounou. Ekkewe asor ngeni monien angangen ewe project me ach we minefoon famini ra fokkun aucheani.",
  "donate_family_appeal_new_arrival": "A wor emon minefoon chon feito won ewe aan non imwen Ryan. Iteiten asor ngeni ekkewe chon angang me ach famini mi watteno a wewe ngeni ew watten mettoch.",
- "donate_family_appeal_nursery": "Ryan me chienan we ra ammólnatá fán iten néúr we. Ika ei pisekin angang a fen auchea, ew asor ren ekkewe monien run me ach famini mi watteno epwe anisi nap seni met ka sinei."
+ "donate_family_appeal_nursery": "Ryan me chienan we ra ammólnatá fán iten néúr we. Ika ei pisekin angang a fen auchea, ew asor ren ekkewe monien run me ach famini mi watteno epwe anisi nap seni met ka sinei.",
+ "rockbox_cleanup_step": "Kopwe angei ekkewe pisekin Rockbox mi nom...",
+ "rockbox_cleanup_deleting": "Kopwe angei ewe .rockbox seni ewe nenien urumot...",
+ "rockbox_cleanup_failed_note": "Ewe minefoon softwer a fen fis, nge ewe .rockbox mi nom ese tongeni tou. Kopwe angei ewe .rockbox won ewe nenien urumot ren poum ika ka mochen ew poputan mi nimenimoch."
 }

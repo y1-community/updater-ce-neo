@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Egy kávé nagyjából lefedi a letöltés sávszélességét. Elérhető helyen tartja a következő javítást.",
  "donate_family_appeal_expected": "Ryan és párja babát várnak. Nagyra értékeljük a projekt működési költségeire és új családunkra fordított adományokat.",
  "donate_family_appeal_new_arrival": "Útközben egy új érkezett Ryan házába. Minden adomány a szervereknek és a növekvő családunknak nagyon sokat jelent.",
- "donate_family_appeal_nursery": "Ryan és párja gyermekükre készülnek. Ha ez az eszköz hasznos volt, a működési költségekre és a növekvő családunkra adományozott adomány többet segítene, mint gondolná."
+ "donate_family_appeal_nursery": "Ryan és párja gyermekükre készülnek. Ha ez az eszköz hasznos volt, a működési költségekre és a növekvő családunkra adományozott adomány többet segítene, mint gondolná.",
+ "rockbox_cleanup_step": "A régi Rockbox beállítások eltávolítása...",
+ "rockbox_cleanup_deleting": "A .rockbox mappa eltávolítása a lejátszóból...",
+ "rockbox_cleanup_failed_note": "Az új szoftver telepítve lett, de a régi .rockbox mappát nem sikerült eltávolítani. Ha tiszta kezdést szeretne, törölje kézzel a .rockbox mappát a lejátszón."
 }

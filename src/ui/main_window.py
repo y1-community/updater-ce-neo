@@ -3340,7 +3340,9 @@ class MainWindow(QMainWindow):
             name, path, slug, asset_name, release_label, *fw_names
         )
 
-    def _show_rockbox_power_on_prompt(self, model: str, *, after_firmware: bool = False) -> None:
+    def _show_rockbox_power_on_prompt(
+        self, model: str, *, after_firmware: bool = False, on_continue=None
+    ) -> None:
         """Ask the user to boot the flashed player before ADB/theme setup."""
         self._install_complete = True
         self._install_failed = False
@@ -3348,7 +3350,7 @@ class MainWindow(QMainWindow):
         prompt = tr(self._flash_page.rockbox_power_on_prompt_key(model)).format(model=model)
         self._flash_page.show_rockbox_power_on_prompt(
             prompt,
-            on_continue=self._continue_rockbox_power_on,
+            on_continue=on_continue or self._continue_rockbox_power_on,
             on_recover=lambda: self.restore_original_software(model),
             after_firmware=after_firmware,
         )
@@ -4814,6 +4816,7 @@ class MainWindow(QMainWindow):
         self._format_all_required = False
         self._format_all_confirm_pending = False
         self._keep_data_pkg = None
+        self._rockbox_cleanup_started = False
         self._flash_method = self._preferred_flash_method()
         if hasattr(self, "_flash_page"):
             self._flash_page.set_method(self._flash_method)
@@ -5302,8 +5305,17 @@ class MainWindow(QMainWindow):
                         break
             self._keep_data_pkg = pkg
             self._apply_pmt_format_state(pkg, model)
+            # The tracked install is recorded per model and hardware type: a
+            # Y1 install must never be judged compatible from a Y2 record.
+            hardware = (
+                self._select_page.current_hardware_type()
+                if hasattr(self, "_select_page")
+                else ""
+            )
             self._flash_page.set_keep_data_available(
-                keep_data.keep_data_available(model, pkg, self.settings)
+                keep_data.keep_data_available(
+                    model, pkg, self.settings, hardware_type=hardware
+                )
                 and not self._format_all_required,
                 keep_data.keep_data_label(model),
             )
@@ -6168,6 +6180,13 @@ class MainWindow(QMainWindow):
         except Exception as e:
             logger.debug("Could not update SP history.ini on install complete: %s", e)
 
+        # Keep my settings off on a Rockbox install is a request for a clean
+        # start, and the old .rockbox folder is where Rockbox keeps its themes,
+        # fonts and presets. That step runs before the themes stage and before
+        # the completion screen; it re-enters this method when it is done.
+        if self._start_rockbox_cleanup_if_needed():
+            return
+
         donation_disabled = device_tracking.is_donation_install_prompt_disabled(self.settings)
         eff_model = (model or self._package_model or "").upper()
         pkg_low = (self._package_name or "").lower()
@@ -6325,6 +6344,116 @@ class MainWindow(QMainWindow):
             after_firmware=after_firmware,
         )
         self._adjust_window_geometry()
+
+    def _is_rockbox_install(self) -> bool:
+        """Whether the software being installed is a Rockbox build.
+
+        Detection cannot use the 360p themes helper: that one is Y1-only and
+        obeys the themes Settings switch, while the cleanup step applies to any
+        Rockbox install on any model.
+        """
+        values = [getattr(self, "_package_name", ""), getattr(self, "_package_path", "")]
+        page = getattr(self, "_select_page", None)
+        if page is not None:
+            info = {}
+            getter = getattr(page, "current_installed_release_info", None)
+            if callable(getter):
+                try:
+                    info = getter() or {}
+                except Exception:
+                    info = {}
+            for key in ("software_name", "package_slug", "release_label", "asset_name"):
+                values.append(info.get(key))
+            pkg = getattr(page, "_details_package", None)
+            if pkg is not None:
+                values.extend((getattr(pkg, "name", ""), getattr(pkg, "repo", "")))
+        return any("rockbox" in str(value or "").casefold() for value in values)
+
+    def _start_rockbox_cleanup_if_needed(self) -> bool:
+        """Run the old-.rockbox removal step, returning True when it started.
+
+        A Rockbox install with Keep my settings unticked asks for a fresh
+        start, so the stage removes the folders the flash step cannot reach.
+        Ticked means the user's themes and presets are kept and this is
+        skipped entirely.
+        """
+        from ..rockbox_cleanup import rockbox_install_needs_cleanup
+
+        if getattr(self, "_rockbox_cleanup_started", False):
+            return False
+        if not rockbox_install_needs_cleanup(
+            is_rockbox=self._is_rockbox_install(),
+            keep_data=bool(getattr(self, "_keep_data", False)),
+        ):
+            return False
+        apk_path, apk_url = self._apk_install_info()
+        if apk_path or apk_url:
+            return False
+
+        stage_model = (self._package_model or "").upper() or "Y1"
+        if "Y1" in stage_model:
+            stage_model = "Y1"
+        elif "Y2" in stage_model:
+            stage_model = "Y2"
+        self._rockbox_cleanup_started = True
+        self._nav_to_page(_PAGE_FLASH)
+        self._install_complete = True
+        self._install_failed = False
+        self._append_log(
+            "[Rockbox Cleanup] Keep my settings was not selected: removing the old "
+            f".rockbox folders from {stage_model} before finishing the install."
+        )
+        is_sp_win = paths.IS_WINDOWS and (
+            getattr(self, "_used_sp_backend", False)
+            or backend_method(getattr(self, "_flash_method", "")) == METHOD_SP
+        )
+        on_done = lambda: self._finish_rockbox_cleanup()  # noqa: E731
+        on_recover = lambda: self.restore_original_software(stage_model)  # noqa: E731
+        if is_sp_win:
+            # SP Flash reboots the player into the software just written, so
+            # the ADB watch finds it without a disconnect or power cycle.
+            self._flash_page.start_rockbox_cleanup_stage(
+                model=stage_model,
+                on_done=on_done,
+                on_recover=on_recover,
+                log_cb=self._append_log,
+                already_powered_on=True,
+                automatic=True,
+                after_firmware=True,
+            )
+        else:
+            # MTKclient hands back a powered-off player, so the cleanup waits
+            # for the user to boot it exactly like the themes stage does.
+            callback = lambda: self._flash_page.start_rockbox_cleanup_stage(  # noqa: E731
+                model=stage_model,
+                on_done=on_done,
+                on_recover=on_recover,
+                log_cb=self._append_log,
+                already_powered_on=True,
+                automatic=True,
+                after_firmware=True,
+            )
+            self._show_rockbox_power_on_prompt(
+                stage_model, after_firmware=True, on_continue=callback
+            )
+        self._sync_install_nav_entry()
+        self._adjust_window_geometry()
+        return True
+
+    def _finish_rockbox_cleanup(self) -> None:
+        """Continue the install journey after the cleanup stage ends."""
+        failed = bool(getattr(self.themes, "placement_failed", False))
+        self.themes.finish()
+        self._sync_install_nav_entry()
+        if failed:
+            self._append_log(
+                "[Rockbox Cleanup] The old .rockbox folders were not removed; the install "
+                "itself finished. The player's .rockbox folder can be deleted by hand."
+            )
+            self._show_status(tr("rockbox_cleanup_failed_note"), 60000)
+        # Re-enters the completion path with the cleanup step already marked as
+        # taken, so it runs the themes stage or the completion screen next.
+        self._handle_flash_success()
 
     def _refresh_online_data(self) -> None:
         """Replace stale online files and re-read notices without blocking the UI.
@@ -7103,10 +7232,25 @@ class MainWindow(QMainWindow):
         else:
             hint = tr("keep_data_only_compatible_hint_other")
         self._flash_page.show_keep_data_confirmation(
-            question, hint, choices
+            question,
+            hint,
+            choices,
+            selected=names[0] if names else "",
+            on_no=self._on_keep_data_not_compatible,
         )
         self._sync_install_nav_entry()
         self._adjust_window_geometry()
+
+    def _on_keep_data_not_compatible(self) -> None:
+        """The player is not running the one compatible software item.
+
+        Answering No to the sanity check means Keep Data is not safe for this
+        run, so the install explains that the player's settings cannot carry
+        over instead of silently keeping a partition the firmware may not read.
+        """
+        self._keep_data_confirm_pending = False
+        self._keep_data = False
+        self._begin_keep_data_erase_confirmation()
 
     def _begin_keep_data_erase_confirmation(self) -> None:
         """Explain that data cannot be kept with the current firmware, and ask whether to proceed."""

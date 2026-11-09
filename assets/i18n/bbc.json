@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Sada kopi hira-hira manutupi band lebar ni sada unduhan. Dijaga do perbaikan na mangihut asa boi didapot.",
  "donate_family_appeal_expected": "Si Ryan dohot dongan saripena manghirim posoposo. Sumbangan tu biaya jalan ni proyek dohot keluarga na baru dihargai secara massal.",
  "donate_family_appeal_new_arrival": "Adong do na baru ro di pardalanan di jabu ni si Ryan. Ganup sumbangan tu angka pelayan dohot keluarga nami na lam tu balgana, mansai balga do lapatanna.",
- "donate_family_appeal_nursery": "Si Ryan dohot dongan saripena marhobas laho manubuhon ianakhonna. Molo nunga marguna alat on, sumbangan tu biaya pardalanan dohot keluarganami na lam magodang boi do mangurupi lobi sian na binotomuna."
+ "donate_family_appeal_nursery": "Si Ryan dohot dongan saripena marhobas laho manubuhon ianakhonna. Molo nunga marguna alat on, sumbangan tu biaya pardalanan dohot keluarganami na lam magodang boi do mangurupi lobi sian na binotomuna.",
+ "rockbox_cleanup_step": "Manghapus pengaturan Kotak Batu na leleng...",
+ "rockbox_cleanup_deleting": "Manghapus map .kotak batu sian pemain...",
+ "rockbox_cleanup_failed_note": "Nunga dipasang hamu perangkat lunak na baru, alai ndang boi dihapus map .rockbox na leleng i. Hapus ma map .rockbox di pemain dohot tangan molo naeng ias mulai."
 }

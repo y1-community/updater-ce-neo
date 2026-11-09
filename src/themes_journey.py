@@ -14,6 +14,11 @@ workers and their copy; they call in here for the decisions.
 
 from __future__ import annotations
 
+#: Place the bundled 360p themes and fonts (the original stage).
+PURPOSE_THEMES = "themes"
+#: Delete the player's old ``.rockbox`` folders (Keep my settings unticked).
+PURPOSE_CLEANUP = "cleanup"
+
 
 class ThemesJourney:
     """State and rules for one Rockbox themes/fonts stage."""
@@ -33,6 +38,7 @@ class ThemesJourney:
         self._last_logged_progress = 0
         self._apk_path = ""
         self._apk_url = ""
+        self._purpose = PURPOSE_THEMES
         # Set once the completion screen has taken over from the stage.
         self.completion_shown = False
         # UI objects whose lifetime *is* journey state: the ADB presence
@@ -132,6 +138,16 @@ class ThemesJourney:
         return self._multiple_players
 
     @property
+    def purpose(self) -> str:
+        """What this stage does: place the theme pack, or remove old settings."""
+        return self._purpose
+
+    @property
+    def is_cleanup(self) -> bool:
+        """This stage deletes the player's old ``.rockbox`` folders."""
+        return self._purpose == PURPOSE_CLEANUP
+
+    @property
     def apk_path(self) -> str:
         """Local destination path for an ``apk_repo`` APK stage."""
         return self._apk_path
@@ -151,13 +167,20 @@ class ThemesJourney:
         self._apk_path = str(apk_path or "")
         self._apk_url = str(apk_url or "")
 
-    def begin(self, model: str, *, automatic: bool = False) -> None:
+    def begin(
+        self,
+        model: str,
+        *,
+        automatic: bool = False,
+        purpose: str = PURPOSE_THEMES,
+    ) -> None:
         """Start a stage from a clean slate."""
         # From here until finish() the stage may write to the player over ADB;
         # a host that suspends mid-transfer leaves a half-placed pack.
         self._hold_awake()
         self._model = (model or "Y1")
         self._automatic = bool(automatic)
+        self._purpose = PURPOSE_CLEANUP if purpose == PURPOSE_CLEANUP else PURPOSE_THEMES
         self._active = True
         self._transfer_running = True
         self._placement_failed = False
@@ -252,9 +275,11 @@ class ThemesJourney:
 
         An automatic start obeys the in-beta Settings switch; the Settings
         button starts the stage by hand and is never gated. APK stages are
-        required by the selected ``apk_repo`` package and always start.
+        required by the selected ``apk_repo`` package and always start. The
+        cleanup stage is part of the install's own Keep Data decision, so the
+        themes switch does not gate it.
         """
-        if self.is_apk_stage:
+        if self.is_apk_stage or self.is_cleanup:
             return True, ""
         if automatic and not self._auto_install_enabled(settings):
             return False, (

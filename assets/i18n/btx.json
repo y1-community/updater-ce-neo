@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Sada kopi kira-kira nutupi bandwidth sada download. Ia njaga perbaiken selanjutna i bas jangkauen.",
  "donate_family_appeal_expected": "Ryan ras teman geluhna sangana nimai sada anak. Sumbangen guna biaya pelaksanaan proyek ras keluarga kami si mbaru tuhu-tuhu ihargai.",
  "donate_family_appeal_new_arrival": "Lit kalak si mbaru reh i bas perdalanen ku rumah Ryan. Tep-tep sumbangan nandangi pelayan ras keluarganta si reh belinna mbelin kal ertina.",
- "donate_family_appeal_nursery": "Ryan ras teman geluhna sangana ersikap guna anakna. Adi alat enda enggo erguna, sumbangan guna biaya pelaksanaan ras keluarga kami si reh teremna banci nampati lebih asangken si itehndu."
+ "donate_family_appeal_nursery": "Ryan ras teman geluhna sangana ersikap guna anakna. Adi alat enda enggo erguna, sumbangan guna biaya pelaksanaan ras keluarga kami si reh teremna banci nampati lebih asangken si itehndu.",
+ "rockbox_cleanup_step": "Itangtangina pengaturen Rockbox si ndekah...",
+ "rockbox_cleanup_deleting": "Ibuatna folder .rockbox i bas pemain nari...",
+ "rockbox_cleanup_failed_note": "Perangkat lunak si mbaru enggo ipasangndu, tapi folder .rockbox si ndekah la banci itangtangi. Hapus folder .rockbox si lit bas pemain alu tan adi atendu mulai bersih."
 }

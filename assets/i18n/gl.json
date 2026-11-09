@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Un café cobre aproximadamente o ancho de banda dunha descarga. Mantén a seguinte corrección ao seu alcance.",
  "donate_family_appeal_expected": "Ryan e a súa parella están esperando un bebé. As doazóns para os gastos de funcionamento do proxecto e da nosa nova familia son moi apreciadas.",
  "donate_family_appeal_new_arrival": "Hai unha nova chegada de camiño á casa de Ryan. Cada doazón para os servidores e a nosa familia en crecemento significa un gran negocio.",
- "donate_family_appeal_nursery": "Ryan e a súa parella prepáranse para o seu fillo. Se esta ferramenta foi útil, unha doazón para os gastos de funcionamento e a nosa familia en crecemento axudaría máis do que vostede sabe."
+ "donate_family_appeal_nursery": "Ryan e a súa parella prepáranse para o seu fillo. Se esta ferramenta foi útil, unha doazón para os gastos de funcionamento e a nosa familia en crecemento axudaría máis do que vostede sabe.",
+ "rockbox_cleanup_step": "Eliminando a configuración antiga de Rockbox...",
+ "rockbox_cleanup_deleting": "Eliminando o cartafol .rockbox do reprodutor...",
+ "rockbox_cleanup_failed_note": "O teu novo software instalouse, pero o cartafol .rockbox antigo non se puido eliminar. Elimina a man o cartafol .rockbox do reprodutor se queres comezar limpo."
 }

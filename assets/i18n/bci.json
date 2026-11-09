@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Kafe kun kwla kata bandwidth nga be fa tɛlɛ’n su. Ɔ yo maan like ng’ɔ́ bá lɛ’n, ɔ ka lɛ.",
  "donate_family_appeal_expected": "Ryan nin i wiengu’n be su minndɛ ba. Sran nga be man sika naan b’a fa di junman’n, ɔ nin e awlobo uflɛ’n, be si be su ye kpa.",
  "donate_family_appeal_new_arrival": "Sran uflɛ kun o atin’n su Ryan i awlo lɔ. Like kwlaa nga be man serveur mun nin e awlobo ng’ɔ su yo dan’n, ɔ ti like dan kpa.",
- "donate_family_appeal_nursery": "Ryan nin i wiengu’n be su siesie be wun be wa’n i lika. Sɛ junman dilɛ ninnge sɔ’n w’a yo ye’n, sika nga be fa di junman’n, ɔ nin e awlobo ng’ɔ su yo dan’n, ɔ́ úka e tra wafa nga amun si i’n."
+ "donate_family_appeal_nursery": "Ryan nin i wiengu’n be su siesie be wun be wa’n i lika. Sɛ junman dilɛ ninnge sɔ’n w’a yo ye’n, sika nga be fa di junman’n, ɔ nin e awlobo ng’ɔ su yo dan’n, ɔ́ úka e tra wafa nga amun si i’n.",
+ "rockbox_cleanup_step": "Rockbox i nun ninnge laa’m be yilɛ...",
+ "rockbox_cleanup_deleting": "Be yi .rockbox i dossier’n i jue tofuɛ’n nun...",
+ "rockbox_cleanup_failed_note": "Be fali ɔ logiciel uflɛ’n be sieli i nun, sanngɛ b’a kwlá yiman .rockbox dossier laa’n. Sɛ amun kunndɛ kɛ amún bó i bo sanwun’n, amun suan .rockbox i dossier ng’ɔ o player’n su’n i sa nun."
 }

@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Ti maysa a kape ket agarup a mangsaklaw iti bandwidth ti maysa a download. Pagtalinaedenna a madanon ti sumaganad a panangtarimaan.",
  "donate_family_appeal_expected": "Namnamaen da Ryan ken ti kaduana ti maladaga. Dagiti donasion nga agturong iti gastos iti panagtaray ti proyekto ken ti baro a pamiliami ket dakkel ti maapresiar.",
  "donate_family_appeal_new_arrival": "Adda baro a sumangpet iti dalan iti balay ni Ryan. Tunggal donasion nga agturong kadagiti server ken dumakdakkel a pamiliatayo ket dakkel ti kaipapanan.",
- "donate_family_appeal_nursery": "Agsagsagana da Ryan ken ti kaduana para iti anakda. No nakatulong daytoy nga alikamen, ad-adda a makatulong ti donasion para kadagiti gastos iti panagtaray ken ti dumakdakkel a pamiliatayo ngem iti ammoyo."
+ "donate_family_appeal_nursery": "Agsagsagana da Ryan ken ti kaduana para iti anakda. No nakatulong daytoy nga alikamen, ad-adda a makatulong ti donasion para kadagiti gastos iti panagtaray ken ti dumakdakkel a pamiliatayo ngem iti ammoyo.",
+ "rockbox_cleanup_step": "Panangikkat kadagiti daan a setting ti Rockbox...",
+ "rockbox_cleanup_deleting": "Ti panangikkat ti .rockbox folder manipud iti player...",
+ "rockbox_cleanup_failed_note": "Nai-install ti baro a software-mo, ngem saan a maikkat ti daan a .rockbox folder. I-delete ti .rockbox folder iti player babaen ti ima no kayatmo ti nadalus a pangrugian."
 }

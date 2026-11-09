@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Kafe kelen be se ka tɛmɛ bandwidth min be se ka telesarse. A b’a to labɛn nata be se ka sɔrɔ.",
  "donate_family_appeal_expected": "Ryan n’a ka baarakɛɲɔgɔn be deen kɔnɔna. Nili minw be kɛ ka baara nin musakaw n’an ka denbaya kura sara, u be waleɲuman lɔn kosɔbɛ.",
  "donate_family_appeal_new_arrival": "Mɔgɔ kura dɔ be sira kan Ryan ka soo. Nilifɛn o bolomafara be di baarakɛlaw n’an ka denbaya ma min be yiriwara, o kɔrɔ ka bon kosɔbɛ.",
- "donate_family_appeal_nursery": "Ryan n’a ka baarakɛɲɔgɔn be labɛn kɛra u deen kama. N’o baarakɛminan ye nafa sɔrɔ, nili min kɛra an ka baara musakaw n’an ka denbaya min be yiriwara, o tun bena an dɛmɛ ka tɛmɛ i ka lɔnniya kan."
+ "donate_family_appeal_nursery": "Ryan n’a ka baarakɛɲɔgɔn be labɛn kɛra u deen kama. N’o baarakɛminan ye nafa sɔrɔ, nili min kɛra an ka baara musakaw n’an ka denbaya min be yiriwara, o tun bena an dɛmɛ ka tɛmɛ i ka lɔnniya kan.",
+ "rockbox_cleanup_step": "Rockbox ka paramɛtiri kɔrɔw bɔli...",
+ "rockbox_cleanup_deleting": "Ka .rockbox ka dosiye bɔ ​​tulonkɛlan kɔnɔ...",
+ "rockbox_cleanup_failed_note": "I ka porogramu kura tun donna, nka .rockbox kɔrɔ tun tɛ se ka bɔ yen. .rockbox min be sɔrɔ tulonkɛlan kan, i k’o jɔsi bolo la n’i b’a fɛ ka daminɛ cogo saniyanin na."
 }

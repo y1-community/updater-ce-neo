@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Tha aon chofaidh gu ìre mhòr a’ còmhdach leud-bann luchdachadh sìos. Bidh e a 'cumail an ath rèiteachadh taobh a-staigh ruigsinneachd.",
  "donate_family_appeal_expected": "Tha Ryan agus a chompanach an dùil ri leanabh. Thathas a’ cur luach mòr air tabhartasan a dh’ionnsaigh cosgaisean ruith a’ phròiseict agus an teaghlach ùr againn.",
  "donate_family_appeal_new_arrival": "Tha ruighinn ùr air an t-slighe gu taigh Ryan. Tha a h-uile tabhartas a dh’ ionnsaigh an luchd-frithealaidh agus an teaghlach againn a tha a’ fàs a’ ciallachadh tòrr.",
- "donate_family_appeal_nursery": "Tha Ryan agus a chompanach ag ullachadh airson an cuid chloinne. Ma tha an inneal seo air a bhith feumail, chuidicheadh ​​​​tabhartas airson na cosgaisean ruith agus an teaghlach againn a tha a’ fàs nas motha na tha fios agad."
+ "donate_family_appeal_nursery": "Tha Ryan agus a chompanach ag ullachadh airson an cuid chloinne. Ma tha an inneal seo air a bhith feumail, chuidicheadh ​​​​tabhartas airson na cosgaisean ruith agus an teaghlach againn a tha a’ fàs nas motha na tha fios agad.",
+ "rockbox_cleanup_step": "A' toirt air falbh seann roghainnean Rockbox...",
+ "rockbox_cleanup_deleting": "A' toirt air falbh am pasgan .rockbox on chluicheadair...",
+ "rockbox_cleanup_failed_note": "Chaidh am bathar-bog ùr agad a stàladh, ach cha b' urrainn dhuinn am pasgan .rockbox a thoirt air falbh. Sguab às am pasgan .rockbox air a 'chluicheadair le làimh ma tha thu ag iarraidh tòiseachadh glan."
 }

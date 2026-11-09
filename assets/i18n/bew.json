@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Satu kopi kira-kira nutupin bandwidth dari unduhan. Itu ngejaga perbaikan selanjutnya tetep bisa dijangkau.",
  "donate_family_appeal_expected": "Ryan ama pasangannya lagi ngantri bayi. Sumbangan untuk biaya jalan proyek dan keluarga baru kami sangat dihargai.",
  "donate_family_appeal_new_arrival": "Ada yang baru dateng di rumah Ryan. Setiap sumbangan ke pelayan dan keluarga kita yang semakin berkembang berarti banget.",
- "donate_family_appeal_nursery": "Ryan sama pasangannya lagi siap-siap buat anak mereka. Kalo alat ini berguna, sumbangan untuk biaya operasional dan keluarga kita yang semakin berkembang akan membantu lebih dari yang lu tau."
+ "donate_family_appeal_nursery": "Ryan sama pasangannya lagi siap-siap buat anak mereka. Kalo alat ini berguna, sumbangan untuk biaya operasional dan keluarga kita yang semakin berkembang akan membantu lebih dari yang lu tau.",
+ "rockbox_cleanup_step": "Ngilangin pengaturan Rockbox yang lama...",
+ "rockbox_cleanup_deleting": "Ngilangin folder .rockbox dari pemain...",
+ "rockbox_cleanup_failed_note": "Perangkat lunak baru lu udah diinstal, tapi folder .rockbox yang lama kagak bisa dihapus. Hapus folder .rockbox di pemain pake tangan kalo lu pengen awal yang bersih."
 }

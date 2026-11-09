@@ -1001,5 +1001,8 @@
  "settings_arm64_driver_note": "ARM64 Windows 支持未经测试。在 Snapdragon 和 RTX Spark 笔记本电脑上，Zadig 可以在禁用驱动程序签名强制的情况下使用，以便在设备管理器中为 MT6227 预加载器设备安装 WinUSB 或 libusb。有关步骤，请参阅 ARM64 驱动程序指南。",
  "toast_update_version_fmt": "{app} v{version} 可用。",
  "toast_update_fmt": "{app} 已更新。",
- "install_card_title_fmt": "{software}（适用于 {model}）"
+ "install_card_title_fmt": "{software}（适用于 {model}）",
+ "rockbox_cleanup_step": "正在删除旧的 Rockbox 设置…",
+ "rockbox_cleanup_deleting": "正在从播放器删除 .rockbox 文件夹…",
+ "rockbox_cleanup_failed_note": "新软件已安装成功，但无法删除旧的 .rockbox 文件夹。如需全新的开始，请在播放器上手动删除 .rockbox 文件夹。"
 }

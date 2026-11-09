@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Mä café ukax mä descarga ukan ancho de banda ukar mä juk’a ch’amanchatawa. Ukax jutir askichäwix jan jak’achasiñatakiw yanapt’i.",
  "donate_family_appeal_expected": "Ryan jilatampi masipampejj mä wawaw suyasipki. Proyecton apnaqañ qullqiparu ukhamarak machaq familiasar yanapt’awinakax wali jach’añchatawa.",
  "donate_family_appeal_new_arrival": "Ryan chachan utapan thakinx mä machaq puriniw utji. Sapa yanapt’awix servidores ukat jiwasan jilxatir familiasarux mä jach’a askiw sañ muni.",
- "donate_family_appeal_nursery": "Ryan jilatampi masipampejj wawapatak wakichtʼasipki. Aka herramientax askïspa ukhaxa, t’ijtäwitak qullqi churañataki ukhamarak jilxatir familiasatakix mä qullqi churañax jumat sipansa juk’amp yanapt’aspawa."
+ "donate_family_appeal_nursery": "Ryan jilatampi masipampejj wawapatak wakichtʼasipki. Aka herramientax askïspa ukhaxa, t’ijtäwitak qullqi churañataki ukhamarak jilxatir familiasatakix mä qullqi churañax jumat sipansa juk’amp yanapt’aspawa.",
+ "rockbox_cleanup_step": "Nayra Rockbox ukan utt’ayatanakap apsuña...",
+ "rockbox_cleanup_deleting": "Uka .rockbox carpeta ukax anatañat apsutawa...",
+ "rockbox_cleanup_failed_note": "Machaq software ukax uñstayatawa, ukampis nayra .rockbox carpeta ukax janiw apsutäkänti. .rockbox carpeta ukax anatañanx amparamp chhaqtayatawa, q’uma qalltañ munasmati."
 }

@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Ein Kaffee deckt ungefähr die Bandbreite eines Downloads. So bleibt der nächste Fix in Reichweite.",
  "donate_family_appeal_expected": "Ryan und seine Partnerin erwarten ein Baby. Spenden für die laufenden Kosten des Projekts und unsere neue Familie sind für uns von unschätzbarem Wert.",
  "donate_family_appeal_new_arrival": "Bei Ryan steht ein neues Familienmitglied an. Jede Spende für die Server und unsere wachsende Familie bedeutet uns sehr viel.",
- "donate_family_appeal_nursery": "Ryan und seine Partnerin bereiten sich auf ihr Kind vor. Wenn dir dieses Tool geholfen hat, würde uns eine Spende für die laufenden Kosten und unsere wachsende Familie mehr helfen, als du ahnst."
+ "donate_family_appeal_nursery": "Ryan und seine Partnerin bereiten sich auf ihr Kind vor. Wenn dir dieses Tool geholfen hat, würde uns eine Spende für die laufenden Kosten und unsere wachsende Familie mehr helfen, als du ahnst.",
+ "rockbox_cleanup_step": "Alte Rockbox-Einstellungen werden entfernt…",
+ "rockbox_cleanup_deleting": "Der Ordner .rockbox wird vom Player entfernt…",
+ "rockbox_cleanup_failed_note": "Deine neue Software wurde installiert, aber der alte Ordner .rockbox konnte nicht entfernt werden. Lösche den Ordner .rockbox auf dem Player von Hand, wenn du neu beginnen möchtest."
 }

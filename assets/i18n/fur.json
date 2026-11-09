@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Un cafè al cuvierç cirche la largjece di bande di un scaricament. Al manten la prossime corezion a portât.",
  "donate_family_appeal_expected": "Ryan e il so compagn a stan sperant un beç. Lis donazions pai coscj di funzionament dal progjet e pe nestre gnove famee a son une vore apreciadis.",
  "donate_family_appeal_new_arrival": "Al è un gnûf rivât su la strade a cjase di Ryan. Ogni donazion viers i servidôrs e la nestre famee in cressite e vûl dî une vore.",
- "donate_family_appeal_nursery": "Ryan e il so compagn a si preparin pal lôr frut. Se chest strument al fos stât util, une donazion pai coscj di funzionament e la nestre famee in cressite e judarès plui di ce che tu cognossis."
+ "donate_family_appeal_nursery": "Ryan e il so compagn a si preparin pal lôr frut. Se chest strument al fos stât util, une donazion pai coscj di funzionament e la nestre famee in cressite e judarès plui di ce che tu cognossis.",
+ "rockbox_cleanup_step": "Eliminant lis vecjis impostazions di Rockbox...",
+ "rockbox_cleanup_deleting": "Rimovi la cjarte .rockbox dal letôr...",
+ "rockbox_cleanup_failed_note": "Il gnûf program al è stât instalât, ma la vecje cjarte .rockbox no si pues gjavâ vie. Elimina la cjarte .rockbox sul letôr a man se tu âs bisugne di un inizi net."
 }

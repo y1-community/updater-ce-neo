@@ -1001,5 +1001,8 @@
  "settings_arm64_driver_note": "La prise en charge d'ARM64 Windows n'a pas été testée. Sur les ordinateurs portables Snapdragon et RTX Spark, Zadig peut être utilisé avec l'application de la signature du pilote désactivée pour installer WinUSB ou libusb pour le périphérique MT6227 Preloader dans le Gestionnaire de périphériques. Consultez le guide du pilote ARM64 pour les étapes.",
  "toast_update_version_fmt": "{app} v{version} est disponible.",
  "toast_update_fmt": "Une mise à jour vers {app} est disponible.",
- "install_card_title_fmt": "{software} pour {model}"
+ "install_card_title_fmt": "{software} pour {model}",
+ "rockbox_cleanup_step": "Suppression des anciens réglages Rockbox…",
+ "rockbox_cleanup_deleting": "Suppression du dossier .rockbox sur le lecteur…",
+ "rockbox_cleanup_failed_note": "Votre nouveau logiciel a bien été installé, mais l'ancien dossier .rockbox n'a pas pu être supprimé. Supprimez-le manuellement sur le lecteur si vous voulez repartir de zéro."
 }

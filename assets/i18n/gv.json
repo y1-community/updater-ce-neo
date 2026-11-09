@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Ta un coffee ry-hoi bandwidth y download. T'eh cur y fix ry-cheilley ayns reach.",
  "donate_family_appeal_expected": "Ta Ryan as e cho-obbree er-gerrey da'n lhiannoo. Ta'n coyrle son costasyn y phrojekt as ar teihll noa ry-gheddyn dy mooar.",
  "donate_family_appeal_new_arrival": "Ta ard-vooinjer noa er y raad ayns thie Ryan. Ta gagh coyrle da'n server as da'n teihll ain ta crooit, coontit myr red mooar.",
- "donate_family_appeal_nursery": "Ta Ryan as e cho-obbree gobbraghey son nyn lhiannoo. Mannagh vel y ghraih shoh er ve feohdagh, by vie da coyrle son ny costasyn reih as ar teihll ta crooit dy chur cooney da ny smoo na ta fys eu."
+ "donate_family_appeal_nursery": "Ta Ryan as e cho-obbree gobbraghey son nyn lhiannoo. Mannagh vel y ghraih shoh er ve feohdagh, by vie da coyrle son ny costasyn reih as ar teihll ta crooit dy chur cooney da ny smoo na ta fys eu.",
+ "rockbox_cleanup_step": "Cur magh ny sean-soilshaghyn Rockbox...",
+ "rockbox_cleanup_deleting": "Ta'n .rockbox ry-chur magh ass y chleayst...",
+ "rockbox_cleanup_failed_note": "Va'n software jeh'n 'software' eu er ny s'install, agh cha b'ee'n sean .rockbox folder er ny chur magh. Smooinee er y .rockbox folder er y player lesh laue my shegin dhyt toshiaght glan."
 }

@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "En kop kaffe dækker nogenlunde båndbredden af ​​en download. Det holder den næste rettelse inden for rækkevidde.",
  "donate_family_appeal_expected": "Ryan og hans partner venter en baby. Donationer til projektets driftsomkostninger og vores nye familie er enormt værdsat.",
  "donate_family_appeal_new_arrival": "Der er en ny ankomst på vej i Ryans hus. Hver donation til serverne og vores voksende familie betyder rigtig meget.",
- "donate_family_appeal_nursery": "Ryan og hans partner er ved at gøre klar til deres barn. Hvis dette værktøj har været nyttigt, ville en donation til driftsomkostningerne og vores voksende familie hjælpe mere, end du ved."
+ "donate_family_appeal_nursery": "Ryan og hans partner er ved at gøre klar til deres barn. Hvis dette værktøj har været nyttigt, ville en donation til driftsomkostningerne og vores voksende familie hjælpe mere, end du ved.",
+ "rockbox_cleanup_step": "Fjerner de gamle Rockbox-indstillinger...",
+ "rockbox_cleanup_deleting": "Fjerner .rockbox-mappen fra afspilleren...",
+ "rockbox_cleanup_failed_note": "Din nye software blev installeret, men den gamle .rockbox-mappe kunne ikke fjernes. Slet .rockbox-mappen på afspilleren i hånden, hvis du vil have en ren start."
 }

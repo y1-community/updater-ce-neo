@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Kafe gooto ina fotnoo suɗaade bandwidth ƴettugol. Ina jogoo fiɓnde aroore ndee e nder jokkere enɗam.",
  "donate_family_appeal_expected": "Ryan e sehil mum ina ɗaminii ɓiɗɗo. Dokke feewde e njoɓdi golle eɓɓoore ndee e galle amen keso ina njetta no feewi.",
  "donate_family_appeal_new_arrival": "Won garoowo keso e laawol to galle Ryan. Kala dokkal feewde e serwooɓe e ɓesngu men mawngu ina firta ko heewi.",
- "donate_family_appeal_nursery": "Ryan e sehil mum ina njuɓɓina ɓiɗɗo mum en. So tawii ngal kuutorgal ina waɗi nafoore, dokkal ngam njoɓdi doggol e ɓesngu men mawngu ina wallita ko ɓuri ko nganndu-ɗaa."
+ "donate_family_appeal_nursery": "Ryan e sehil mum ina njuɓɓina ɓiɗɗo mum en. So tawii ngal kuutorgal ina waɗi nafoore, dokkal ngam njoɓdi doggol e ɓesngu men mawngu ina wallita ko ɓuri ko nganndu-ɗaa.",
+ "rockbox_cleanup_step": "Ittude dottaaɗe Rockbox ɓooyɗe...",
+ "rockbox_cleanup_deleting": "Ittugol doggol .rockbox e nder pijirlooji...",
+ "rockbox_cleanup_failed_note": "Software maa keso oo sosaa, kono foldere .rockbox ɓooynde ndee waawaa ittude. Mumtu foldere .rockbox e dow pijirlooji ɗii e junngo so aɗa yiɗi fuɗɗoode laaɓnde."
 }

@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Coffee pakhat nih download pakhat i a bandwidth kha a khuh dih. A hnu remhnak kha na phak khawhnak hmun ah a chiah.",
  "donate_family_appeal_expected": "Ryan le a hawipa cu fa an ngei. Project kalnak man le kan chungkhar thar caah bawmhnak pekmi cu kan i lawm tuk.",
  "donate_family_appeal_new_arrival": "Ryan inn ah a thar in a phanmi pakhat a um. Server pawl le a karh cuahmahmi kan chungkhar caah bawmhnak pekmi paohpaoh nih sullam nganpi a ngei.",
- "donate_family_appeal_nursery": "Ryan le a hawipa cu an fa caah timhtuahnak an ngei. Hi thilri hi a ttha ahcun, a kalnak man le kan chungkhar a karh cuahmahmi caah bawmhnak nih na theihmi nakin a bawmh deuh lai."
+ "donate_family_appeal_nursery": "Ryan le a hawipa cu an fa caah timhtuahnak an ngei. Hi thilri hi a ttha ahcun, a kalnak man le kan chungkhar a karh cuahmahmi caah bawmhnak nih na theihmi nakin a bawmh deuh lai.",
+ "rockbox_cleanup_step": "Rockbox setting hlun pawl hloh...",
+ "rockbox_cleanup_deleting": "Player chungin .rockbox folder chuah...",
+ "rockbox_cleanup_failed_note": "Na software thar cu install a si cang, asinain .rockbox folder hlun cu hlonh khawh a si lo. A thiangmi thawk na duh ahcun player cung i .rockbox folder kha kut in hloh."
 }

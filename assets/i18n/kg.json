@@ -1001,5 +1001,8 @@
  "settings_arm64_driver_note": "ARM64 Lusadisu ya Windows me mekamaka ve. Na ba ordinatere ya maboko ya Snapdragon mpi ya RTX Spark, bo lenda sadila Zadig ti nsiku ya kukanga nswa ya kusala kisalu sambu na kutula WinUSB to libusb sambu na kisadilu ya MT6227 Preloader na Gestionnaire des appareils. Tala mukanda ya ARM64 sambu na kuzaba mutindu ya kusala yo.",
  "toast_update_version_fmt": "{app} v{version} kele na zulu.",
  "toast_update_fmt": "Nsangu ya mpa ya {app} kele.",
- "install_card_title_fmt": "{software} sambu na {model}"
+ "install_card_title_fmt": "{software} sambu na {model}",
+ "rockbox_cleanup_step": "Kukatula ba parametre ya ntama ya Rockbox...",
+ "rockbox_cleanup_deleting": "Kukatula dossier .rockbox na lecteur...",
+ "rockbox_cleanup_failed_note": "Bo tulaka logiciel na nge ya mpa, kansi bo lendaka ve kukatula dossier ya ntama .rockbox. Katula dossier .rockbox na lecteur na maboko kana nge ke zola luyantiku ya bunkete."
 }

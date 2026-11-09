@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Otu kọfị na-ekpuchi ike nke bandwit nke nbudata. Ọ na-edobe nrụzi na-esote na iru eru.",
  "donate_family_appeal_expected": "Ryan na onye òtù ọlụlụ ya na-atụ anya nwa. A na-enwe ekele dị ukwuu n'onyinye maka ọnụ ahịa ọrụ a na-akwụ na ezinụlọ ọhụrụ anyị.",
  "donate_family_appeal_new_arrival": "Enwere onye mbata ọhụrụ n'ụzọ n'ụlọ Ryan. Onyinye ọ bụla maka sava na ezinụlọ anyị na-eto eto pụtara nnukwu ihe.",
- "donate_family_appeal_nursery": "Ryan na onye òtù ọlụlụ ya na-ejikere maka nwa ha. Ọ bụrụ na ngwá ọrụ a bara uru, onyinye maka ọnụ ahịa na-agba ọsọ na ezinụlọ anyị na-eto eto ga-enyere aka karịa ka ị maara."
+ "donate_family_appeal_nursery": "Ryan na onye òtù ọlụlụ ya na-ejikere maka nwa ha. Ọ bụrụ na ngwá ọrụ a bara uru, onyinye maka ọnụ ahịa na-agba ọsọ na ezinụlọ anyị na-eto eto ga-enyere aka karịa ka ị maara.",
+ "rockbox_cleanup_step": "Na-ewepụ ntọala Rockbox ochie...",
+ "rockbox_cleanup_deleting": "Na-ewepụ folda .rockbox na ọkpọ ọkpọ...",
+ "rockbox_cleanup_failed_note": "Awụnyere ngwanrọ ọhụrụ gị, mana enweghị ike iwepụ folda .rockbox ochie. Jiri aka hichapụ nchekwa .rockbox dị n'ihe ọkpụkpọ ma ọ bụrụ na ịchọrọ mmalite dị ọcha."
 }

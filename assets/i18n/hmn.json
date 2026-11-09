@@ -1025,5 +1025,8 @@
   "donate_support_appeal_coffee_math": "Ib lub kas fes kwv yees npog qhov bandwidth ntawm kev rub tawm. Nws khaws cov kev kho tom ntej no kom ncav cuag.",
   "donate_family_appeal_expected": "Ryan thiab nws tus khub tab tom tos menyuam. Kev pub dawb rau cov nqi khiav haujlwm thiab peb tsev neeg tshiab tau txais txiaj ntsig zoo heev.",
   "donate_family_appeal_new_arrival": "Muaj ib qho tshiab tuaj txog ntawm txoj kev hauv Ryan lub tsev. Txhua qhov pub dawb rau cov servers thiab peb tsev neeg loj hlob txhais tau tias muaj txiaj ntsig zoo.",
-  "donate_family_appeal_nursery": "Ryan thiab nws tus khub tab tom npaj rau lawv tus menyuam. Yog tias cov cuab yeej no tau txais txiaj ntsig, kev pub dawb rau cov nqi khiav thiab peb tsev neeg loj hlob tuaj yeem pab ntau tshaj qhov koj paub."
+  "donate_family_appeal_nursery": "Ryan thiab nws tus khub tab tom npaj rau lawv tus menyuam. Yog tias cov cuab yeej no tau txais txiaj ntsig, kev pub dawb rau cov nqi khiav thiab peb tsev neeg loj hlob tuaj yeem pab ntau tshaj qhov koj paub.",
+  "rockbox_cleanup_step": "Tshem tawm cov qub Rockbox teeb tsa ...",
+  "rockbox_cleanup_deleting": "Tshem tawm .rockbox nplaub tshev los ntawm cov neeg uas ua ntawv...",
+  "rockbox_cleanup_failed_note": "Koj cov software tshiab tau teeb tsa, tab sis lub qub .rockbox folder tsis tuaj yeem raug tshem tawm. Rho tawm lub .rockbox nplaub tshev ntawm cov neeg uas ua ntawv los ntawm tes yog tias koj xav tau ib tug huv si pib."
 }

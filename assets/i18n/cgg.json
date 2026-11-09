@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Omwani gumwe niguhika aha bandwidth y’okutunga. Nikigumya okutereeza okurikukurataho omu mwanya.",
  "donate_family_appeal_expected": "Ryan n’omukundwa we nibateekateeka kuzaara omwana. Ebiconco by’okuhwera purojekiti egi n’eka yaitu ensya nibisiimwa munonga.",
  "donate_family_appeal_new_arrival": "Hariho omusya orikwija omu muhanda omu nju ya Ryan. Buri kiconco ekirikuheebwayo aha baheereza n’eka yaitu erikweyongyera nikimanyisa bingi.",
- "donate_family_appeal_nursery": "Ryan n'omukundwa we bariyo nibeeteekateekyera omwana waabo. Ekikwato eki kyaba kyabaire eky’omugasho, okuhayo sente z’okugikoresa n’eka yaitu erikweyongyera kukaba nikuza kuhwera okukira oku orikumanya."
+ "donate_family_appeal_nursery": "Ryan n'omukundwa we bariyo nibeeteekateekyera omwana waabo. Ekikwato eki kyaba kyabaire eky’omugasho, okuhayo sente z’okugikoresa n’eka yaitu erikweyongyera kukaba nikuza kuhwera okukira oku orikumanya.",
+ "rockbox_cleanup_step": "Okwihaho ebyatebekanisiibwe bya Rockbox ebya ira...",
+ "rockbox_cleanup_deleting": "Okwihaho .rockbox folda kuruga omu muzaani...",
+ "rockbox_cleanup_failed_note": "Sofutiweya yaawe ensya ekateebwamu, kwonka folda eya .rockbox eya ira ekaba etarikubaasa kwihwaho. Ihaho folda ya .rockbox aha player n'emikono waaba nooyenda okutandika okushemeire."
 }

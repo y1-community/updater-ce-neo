@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "Üks kohv katab ligikaudu allalaaditava ribalaiuse. See hoiab järgmise paranduse käeulatuses.",
  "donate_family_appeal_expected": "Ryan ja tema elukaaslane ootavad last. Annetused projekti jooksvate kulude katteks ja meie uue pere jaoks on väga tänulikud.",
  "donate_family_appeal_new_arrival": "Ryani majja on teel uus tulija. Iga annetus serveritele ja meie kasvavale perekonnale tähendab väga palju.",
- "donate_family_appeal_nursery": "Ryan ja tema elukaaslane valmistuvad oma lapse jaoks. Kui sellest tööriistast on kasu olnud, aitaks annetus jooksvate kulude katteks ja meie kasvava pere jaoks rohkem, kui teate."
+ "donate_family_appeal_nursery": "Ryan ja tema elukaaslane valmistuvad oma lapse jaoks. Kui sellest tööriistast on kasu olnud, aitaks annetus jooksvate kulude katteks ja meie kasvava pere jaoks rohkem, kui teate.",
+ "rockbox_cleanup_step": "Rockboxi vanade seadete eemaldamine...",
+ "rockbox_cleanup_deleting": "Kausta .rockbox eemaldamine pleierist...",
+ "rockbox_cleanup_failed_note": "Teie uus tarkvara installiti, kuid vana .rockboxi kausta ei saanud eemaldada. Kui soovite puhast algust, kustutage pleierist käsitsi kaust .rockbox."
 }

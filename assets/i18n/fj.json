@@ -1025,5 +1025,8 @@
  "donate_support_appeal_coffee_math": "E dua na kofi e rauta ni ubia na bandwidth ni dua na lavetaki. E maroroya na veivakadodonutaki e tarava ena loma ni kena rawati.",
  "donate_family_appeal_expected": "Erau sa namaka tiko o Ryan kei na nona itokani e dua na gone. Na cau ki na isau ni cici ni cakacaka kei na neitou matavuvale vou e vakavinavinakataki vakalevu.",
  "donate_family_appeal_new_arrival": "E dua na tamata vou e lako mai ena sala ena vale nei Ryan. Na cau kece sara kivei ira na dauveiqaravi kei na neitou matavuvale tubu tiko e kena ibalebale e dua na ka levu.",
- "donate_family_appeal_nursery": "Erau sa vakarautaki rau tiko o Ryan kei na nona itokani me baleta na luvedrau. Kevaka e sa yaga na iyaya ni cakacaka oqo, e dua na cau me baleta na isau ni cici kei na neitou matavuvale tubu tiko ena veivuke vakalevu cake mai na ka o kila."
+ "donate_family_appeal_nursery": "Erau sa vakarautaki rau tiko o Ryan kei na nona itokani me baleta na luvedrau. Kevaka e sa yaga na iyaya ni cakacaka oqo, e dua na cau me baleta na isau ni cici kei na neitou matavuvale tubu tiko ena veivuke vakalevu cake mai na ka o kila.",
+ "rockbox_cleanup_step": "Kauta laivi na ituvatuva makawa ni Rockbox...",
+ "rockbox_cleanup_deleting": "Kauta laivi na .rockbox na folder mai na dauqito...",
+ "rockbox_cleanup_failed_note": "Sa vakacurumi na nomu parokaramu vou, ia e sega ni rawa ni kau laivi na folder makawa ni .rockbox. Bokoca na .rockbox na folder ena dauqito ena liga kevaka o vinakata e dua na itekitekivu savasava."
 }
