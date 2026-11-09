@@ -278,18 +278,26 @@ def notice_has_page_url(url: str, notice_id: str = "") -> bool:
 
 
 def notice_see_more_url(url: str, lang: str | None = None) -> str:
-    """The See More target: the notice page, or its Google Translate view outside English."""
-    from urllib.parse import quote
+    """The notice page on innioasis.app, in the reader's language.
 
-    from ..i18n import current_language, is_english_language
+    The site translates the notice when ``lang`` is set. The link stays on
+    our host so accent, appearance and language are not dropped by a Google
+    Translate wrapper.
+    """
+    from ..docs_source import with_language
+    from ..i18n import current_language
 
+    page = (url or "").strip()
+    if not page:
+        return ""
     code = lang if lang is not None else current_language()
-    if not url or is_english_language(code):
-        return url
-    return (
-        "https://translate.google.com/translate?sl=auto&tl="
-        f"{quote(code, safe='')}&u={quote(url, safe='')}"
-    )
+    target = with_language(page, code)
+    try:
+        from ..browser import _with_site_preferences
+
+        return _with_site_preferences(target, lang=code)
+    except Exception:
+        return target
 
 
 def notice_read_more_url(notice) -> str:

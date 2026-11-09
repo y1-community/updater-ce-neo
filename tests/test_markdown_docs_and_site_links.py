@@ -250,7 +250,7 @@ def test_release_notes_link_names_the_site_page():
 
 
 def test_translated_release_notes_open_the_site_page():
-    """Google's view of the notes is our reader page, not a github.com page."""
+    """The notes open on our page, with the reader's language, not Google's proxy."""
     from src.translate import get_google_translate_release_url
 
     url = get_google_translate_release_url(
@@ -258,13 +258,13 @@ def test_translated_release_notes_open_the_site_page():
         "fi",
     )
     parts = urlsplit(url)
-    assert parts.netloc == "innioasis-app.translate.goog"
+    assert parts.netloc == "innioasis.app"
     assert parts.path == "/release_notes.html"
+    assert "translate.google" not in url and "translate.goog" not in url
     query = parse_qs(parts.query)
     assert query["repo"] == ["y1-community/y1-stock-rom"]
     assert query["tag"] == ["3.2.1"]
-    assert query["_x_tr_sl"] == ["auto"]
-    assert query["_x_tr_tl"] == ["fi"]
+    assert query["lang"] == ["fi"]
 
     # Without ``source_repo`` the release page still names its repository, and
     # the tag comes from the release URL itself.
@@ -274,7 +274,7 @@ def test_translated_release_notes_open_the_site_page():
     query = parse_qs(urlsplit(from_page).query)
     assert query["repo"] == ["jarvissax/rondo"]
     assert query["tag"] == ["v1.2.0"]
-    assert query["_x_tr_tl"] == ["de"]
+    assert query["lang"] == ["de"]
 
 
 def test_post_install_page_carries_the_document_and_its_section():
@@ -349,6 +349,9 @@ def test_site_preferences_url_variables(monkeypatch):
     parsed = parse_qs(urlsplit(url).query)
     assert parsed["model"] == ["Y1"]
     assert parsed["donations"] == ["false"]
-    assert parsed["privacy"] == ["all"]
+    # The app has no privacy screen, so it declares no consent: asserting one
+    # re-enabled feedback and nightly storage for readers who had turned them
+    # off on the site. The page keeps the answer it already stores.
+    assert "privacy" not in parsed
     assert parsed["lang"] == ["fr"]
     assert "theme" in parsed

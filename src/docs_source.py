@@ -42,7 +42,7 @@ import re
 import time
 from pathlib import Path
 from typing import Optional
-from urllib.parse import quote, unquote, urlencode, urljoin, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, quote, unquote, urlencode, urljoin, urlsplit, urlunsplit
 
 logger = logging.getLogger(__name__)
 
@@ -384,6 +384,24 @@ def normalize_repo(value) -> str:
     return f"{owner}/{name}" if owner and name else ""
 
 
+def with_language(url: str, lang: str = "") -> str:
+    """Add ``lang`` to an innioasis.app URL so the site translates the page.
+
+    Other hosts are left unchanged. An empty language leaves the URL alone.
+    """
+    code = str(lang or "").strip()
+    page = str(url or "").strip()
+    if not code or not page:
+        return page
+    parts = _parts(page)
+    host = (parts.hostname or "").lower()
+    if host != "innioasis.app" and not host.endswith(".innioasis.app"):
+        return page
+    params = [(key, value) for key, value in parse_qsl(parts.query, keep_blank_values=True) if key != "lang"]
+    params.append(("lang", code))
+    return urlunsplit((parts.scheme or "https", parts.netloc, parts.path, urlencode(params), parts.fragment))
+
+
 def release_notes_url(
     repo,
     tag,
@@ -394,6 +412,7 @@ def release_notes_url(
     brand: str = "",
     hw_type: str = "",
     resolution: str = "",
+    lang: str = "",
 ) -> str:
     """The site's release-notes page for one release of ``repo``.
 
@@ -404,7 +423,8 @@ def release_notes_url(
     download buttons; the website's reader accepts it alongside ``repo``.
     ``brand``, ``type`` and ``resolution`` are the names :mod:`src.site_links`
     reads back, so the page's Get it in Updater link can hand the same build
-    to the app and its portable download can pick the 240p zip.
+    to the app and its portable download can pick the 240p zip. ``lang`` is
+    the reader's language so the site translates the notes itself.
     """
     repo_name = normalize_repo(repo)
     release_tag = str(tag or "").strip()
@@ -423,6 +443,8 @@ def release_notes_url(
         params.append(("type", str(hw_type).strip().upper()))
     if str(resolution or "").strip().lower() in ("240p", "360p"):
         params.append(("resolution", str(resolution).strip().lower()))
+    if str(lang or "").strip():
+        params.append(("lang", str(lang).strip()))
     return f"{SITE}/release_notes.html?{urlencode(params)}"
 
 

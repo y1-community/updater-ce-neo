@@ -145,40 +145,14 @@ def _release_tag(rel: Optional[dict]) -> str:
     return ""
 
 
-def _translated_page_url(page: str, lang: str) -> str:
-    """Google's proxy view of ``page`` in ``lang`` (``""`` without a host)."""
-    parts = urllib.parse.urlsplit(str(page or ""))
-    host = parts.netloc.lower()
-    if not host:
-        return ""
-    params = urllib.parse.parse_qsl(parts.query, keep_blank_values=True)
-    params += [
-        ("_x_tr_sl", "auto"),
-        ("_x_tr_tl", lang),
-        ("_x_tr_hl", lang),
-        ("_x_tr_pto", "wapp"),
-    ]
-    return urllib.parse.urlunsplit(
-        (
-            parts.scheme or "https",
-            f"{host.replace('.', '-')}.translate.goog",
-            parts.path,
-            urllib.parse.urlencode(params),
-            parts.fragment,
-        )
-    )
-
-
 def get_google_translate_release_url(
     rel: Optional[dict] = None, target_lang: Optional[str] = None
 ) -> str:
-    """The Google Translate view of a release's notes on our own site.
+    """The site's release-notes page for this release, in the reader's language.
 
-    The page a reader lands on is ``innioasis.app/release_notes.html``, named
-    by ``repo`` and ``tag``: the site reads that release's title and notes and
-    renders them with our styling and its own download buttons. Google's proxy
-    serves that same page translated, so "View in browser" never opens a
-    github.com page either.
+    The page is ``innioasis.app/release_notes.html``. ``lang`` tells the site
+    which translation to show, so the browser opens our page directly. The
+    name is kept because existing callers use it for the "view in browser" link.
     """
     try:
         from .remote_flags import is_remote_flag_active
@@ -196,15 +170,17 @@ def get_google_translate_release_url(
         except Exception:
             lang = "en"
 
-    from .docs_source import release_notes_url
+    from .docs_source import release_notes_url, with_language
 
     page = release_notes_url(
         _release_repo(rel),
         _release_tag(rel),
         name=str((rel or {}).get("name") or ""),
+        lang=lang,
     )
-    # A release the site cannot name keeps its own page as the translated view.
-    return _translated_page_url(page or str((rel or {}).get("html_url") or ""), lang)
+    # A release the site cannot name keeps its own page. ``lang`` is only
+    # meaningful on innioasis.app, where the site translates the notes.
+    return page or with_language(str((rel or {}).get("html_url") or ""), lang)
 
 
 # --- Individual free no-auth translation providers --------------------------

@@ -2970,15 +2970,13 @@ class SelectPackagePage(QWidget):
         # this same release page in Google Translate ("View in browser"), so a
         # second link to it would offer the identical action twice.
         lang = (translator().lang or "en").strip()
-        if not url or not is_english_language(lang):
+        if not url:
             self._see_more_label.setVisible(False)
             self._see_more_label.setText("")
             return
-        # See More belongs on our own release-notes page: it reads this
-        # release's title and notes from GitHub and shows them with the site's
-        # styling and its own Get it in Updater / Download Portable Zip
-        # buttons. github.com is only the fallback for a release the site
-        # cannot name.
+        # See More opens our release-notes page with the reader's language.
+        # The site translates the notes; the app does not send the reader
+        # through a Google Translate URL.
         from .. import docs_source
 
         repo = str((rel or {}).get("source_repo") or "") or docs_source.repo_from_url(url)
@@ -3001,8 +2999,9 @@ class SelectPackagePage(QWidget):
                     else ""
                 ),
                 resolution="240p" if catalog.release_is_240p(rel) else "",
+                lang=lang,
             )
-            or url
+            or docs_source.with_language(url, lang)
         )
         t = T()
         # The release page's own words are not translated, but this link label

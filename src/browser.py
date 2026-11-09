@@ -47,9 +47,33 @@ def _with_donation_preference(url: str) -> str:
         logger.debug("Could not add the donations preference to %s", url, exc_info=True)
         return url
 
-def _with_site_preferences(url: str) -> str:
-    """Pass privacy, donations, theme, accessibility, and language preferences
-    to innioasis.app and themes.innioasis.app as URL variables."""
+def _native_accent_hex() -> str | None:
+    """The accent the desktop declares for this user, or None.
+
+    AppKit's control accent on macOS, the DWM accent on Windows, the desktop
+    palette's accent through Qt. ``None`` means the platform answered nothing,
+    which the site treats as "keep your own fallback".
+    """
+    try:
+        from PySide6.QtWidgets import QApplication
+
+        from .ui.dark import get_declared_accent_color
+
+        app = QApplication.instance()
+        return get_declared_accent_color(app.palette() if app is not None else None)
+    except Exception:
+        logger.debug("No desktop accent colour is available", exc_info=True)
+        return None
+
+
+def _with_site_preferences(url: str, lang: str | None = None) -> str:
+    """Pass privacy, donations, theme, accent, accessibility, and language
+    preferences to innioasis.app and themes.innioasis.app as URL variables.
+
+    ``lang`` overrides the app's current locale for the pages that show a
+    translated copy (a notice's Google Translate view, for instance), so the
+    site and the translation agree on the language.
+    """
     try:
         from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
         from . import player_update_check
@@ -75,22 +99,31 @@ def _with_site_preferences(url: str) -> str:
             "false" if player_update_check.is_donation_ui_disabled() else "true"
         )
 
-        # 2. Privacy preference (defaults to all enabled for optimal experience)
-        if "privacy" not in query_dict:
-            query_dict["privacy"] = "all"
+        # 2. Privacy consent is deliberately not asserted. The app has no
+        # privacy screen, so it has nothing to declare; sending `privacy=all`
+        # here re-enabled feedback prompts and nightly-build storage on every
+        # link the app opened, even for a reader who had turned both off on
+        # the site itself. Leaving the parameter out lets the page keep the
+        # answer it already stores.
 
         # 3. Language preference. Send the app's own locale code (``zh-CN``,
         # ``pt-BR``): the site normalises it, while a lowercased tag can lose
         # the region the reader actually chose.
         try:
-            from .i18n import translator
-            current_lang = (translator().lang or "").strip()
+            if lang is None:
+                from .i18n import translator
+                current_lang = (translator().lang or "").strip()
+            else:
+                current_lang = str(lang).strip()
             if current_lang and "lang" not in query_dict:
                 query_dict["lang"] = current_lang
         except Exception:
             pass
 
-        # 4. Theme preference
+        # 4. Theme preference. The gallery already gives `theme` another
+        # meaning (a theme page's own name), and its shell reads `site_theme`
+        # first for exactly that reason, so the appearance travels under the
+        # name that cannot collide.
         try:
             from .ui.dark import is_dark
             is_high_contrast = False
@@ -101,8 +134,9 @@ def _with_site_preferences(url: str) -> str:
                 except Exception:
                     pass
             theme = "high-contrast" if is_high_contrast else ("dark" if is_dark() else "light")
-            if "theme" not in query_dict:
-                query_dict["theme"] = theme
+            theme_key = "site_theme" if host == "themes.innioasis.app" else "theme"
+            if theme_key not in query_dict and "theme" not in query_dict and "site_theme" not in query_dict:
+                query_dict[theme_key] = theme
         except Exception:
             pass
 
@@ -114,19 +148,16 @@ def _with_site_preferences(url: str) -> str:
         except Exception:
             pass
 
-        # 6. Which app sent the visit, so the sites' analytics can tell app
-        # traffic (and the build behind it) from a browser visit. The same
-        # names come back on an ``innioasis-updater://`` link (src/site_links).
-        try:
-            from . import config
-
-            query_dict.setdefault(
-                "client",
-                "mediatek-installer" if config.is_mediatek_installer() else "updater-ce",
-            )
-            query_dict.setdefault("client_version", config.APP_VERSION)
-        except Exception:
-            pass
+        # 6. Accent colour, and the CE handoff. The site paints its accent
+        # tokens with this, so a page opened from the app arrives already
+        # matching the desktop. `ce=true` marks the handoff even when the
+        # desktop declares no accent, which is what lets the site offer to
+        # keep matching (falling back to the browser's own accent).
+        accent = _native_accent_hex()
+        if accent and "accent" not in query_dict:
+            query_dict["accent"] = accent
+        if "ce" not in query_dict:
+            query_dict["ce"] = "true"
 
         new_query = urlencode(list(query_dict.items()))
         return urlunsplit(

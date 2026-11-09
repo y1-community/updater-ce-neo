@@ -351,12 +351,30 @@ def test_notice_parses_content_full_content_and_url():
 
 def test_see_more_url_is_translated_outside_english():
     url = "https://innioasis.app/notice/hardware-revision.html"
-    assert notice_see_more_url(url, "en") == url
+    english = notice_see_more_url(url, "en")
+    assert english.startswith(url)
+    assert "lang=en" in english
+    assert "translate.google" not in english
     translated = notice_see_more_url(url, "de")
-    assert translated.startswith("https://translate.google.com/translate?")
-    assert "tl=de" in translated
-    assert "innioasis.app" in translated
+    assert translated.startswith("https://innioasis.app/notice/hardware-revision.html?")
+    assert "lang=de" in translated
+    assert "translate.google" not in translated
     assert notice_see_more_url("", "de") == ""
+
+
+def test_translated_notice_link_keeps_the_site_preferences(monkeypatch):
+    """The notice opens on our site, with the language and the desktop accent."""
+    from urllib.parse import parse_qs, urlsplit
+
+    from src import browser
+
+    monkeypatch.setattr(browser, "_native_accent_hex", lambda: "#a1b2c3")
+    url = "https://innioasis.app/notice/hardware-revision.html"
+    query = parse_qs(urlsplit(notice_see_more_url(url, "de")).query)
+    assert query["accent"] == ["#a1b2c3"]
+    assert query["ce"] == ["true"]
+    assert query["lang"] == ["de"]
+    assert query["theme"] in (["dark"], ["light"], ["high-contrast"])
 
 
 def test_notice_toast_shows_banner_content_not_full_content(qapp):

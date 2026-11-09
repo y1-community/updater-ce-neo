@@ -133,3 +133,56 @@ def test_site_links_always_carry_both_preferences(monkeypatch):
         ).query
     )
     assert disabled["donations"] == ["false"]
+
+
+def test_site_links_carry_the_computers_accent(monkeypatch):
+    from src import browser
+
+    monkeypatch.setattr(browser, "_native_accent_hex", lambda: "#a1b2c3")
+    query = parse_qs(
+        urlsplit(
+            _with_site_preferences("https://innioasis.app/firmware.html?model=Y1")
+        ).query
+    )
+    assert query["accent"] == ["#a1b2c3"]
+    assert query["ce"] == ["true"]
+
+
+def test_themes_links_carry_the_appearance_under_its_own_name(monkeypatch):
+    """`theme` already means a theme page on the gallery; `site_theme` is the shell's name."""
+    from src import browser
+
+    monkeypatch.setattr(browser, "_native_accent_hex", lambda: "#a1b2c3")
+    query = parse_qs(
+        urlsplit(
+            _with_site_preferences("https://themes.innioasis.app/theme_Lain.html")
+        ).query
+    )
+    assert query["site_theme"] in (["dark"], ["light"], ["high-contrast"])
+    assert "theme" not in query
+    assert query["accent"] == ["#a1b2c3"]
+
+    # A page that already names its appearance keeps that name.
+    kept = parse_qs(
+        urlsplit(
+            _with_site_preferences(
+                "https://themes.innioasis.app/?site_theme=light"
+            )
+        ).query
+    )
+    assert kept["site_theme"] == ["light"]
+
+
+def test_site_links_mark_the_handoff_without_a_system_accent(monkeypatch):
+    from src import browser
+
+    monkeypatch.setattr(browser, "_native_accent_hex", lambda: None)
+    query = parse_qs(
+        urlsplit(_with_site_preferences("https://themes.innioasis.app/")).query
+    )
+    assert "accent" not in query
+    assert query["ce"] == ["true"]
+    # A site that is not ours never learns the accent, or that CE sent you.
+    other = parse_qs(urlsplit(_with_site_preferences("https://example.test/notes")).query)
+    assert "accent" not in other
+    assert "ce" not in other
