@@ -19,6 +19,7 @@ from typing import Callable, Optional, Tuple
 from PySide6.QtCore import QThread, Signal
 
 from .i18n import is_english_language
+from .markdown_render import without_github_only
 
 logger = logging.getLogger(__name__)
 
@@ -440,7 +441,8 @@ def translate_release_notes(
     """Translate release name and body to the target language."""
     name = (rel or {}).get("name", "")
     body = (rel or {}).get("body", "")
-    body = strip_changes_header(body)
+    # Parts marked GitHub-only are never shown, so they are not translated either.
+    body = strip_changes_header(without_github_only(body))
 
     translated_name = (
         fetch_google_translation(name, target_lang, raise_on_error=raise_on_error)

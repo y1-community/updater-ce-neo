@@ -38,7 +38,7 @@ from PySide6.QtWidgets import (
 
 from .. import paths
 from ..config import install_power_on_steps, device_label_for_model
-from ..markdown_render import rewrite_legacy_discord_invite
+from ..markdown_render import rewrite_legacy_discord_invite, without_github_only
 # Lines kept in the text widget. The manager still retains the full log;
 # painting tens of thousands of blocks on the GUI thread is what froze the window.
 VISIBLE_LOG_LINES = 2000
@@ -2803,7 +2803,7 @@ def format_markdown_release_notes(
     if name:
         lines.append(f"### {name}")
         lines.append("")
-    clean_body = (body or tr("update_no_notes")).strip()
+    clean_body = (without_github_only(body) or tr("update_no_notes")).strip()
     lines.append(clean_body[:4000])
     raw_md = "\n".join(lines)
 

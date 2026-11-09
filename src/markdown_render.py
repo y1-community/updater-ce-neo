@@ -28,6 +28,19 @@ _DROPPED_DECLARATIONS = re.compile(
 
 _FRONT_MATTER = re.compile(r"\A\ufeff?---\r?\n.*?\r?\n---\r?\n", re.DOTALL)
 
+#: A project can mark parts of its release text as meant for its GitHub release
+#: page only, such as install steps for a flashing tool this app replaces, or the
+#: list of attached files::
+#:
+#:     <!-- github-only -->
+#:     ...
+#:     <!-- /github-only -->
+#:
+#: Each marker sits on a line of its own. GitHub hides the comments; the app
+#: leaves out what is between them (the site's docs-viewer.js does the same).
+_GITHUB_ONLY_OPEN = re.compile(r"^[ \t]*<!--\s*github-only\s*-->[ \t]*$")
+_GITHUB_ONLY_CLOSE = re.compile(r"^[ \t]*<!--\s*/github-only\s*-->[ \t]*$")
+
 #: The Discord invite documents were written against before the server move.
 #: Parsed documents still carry it, so every Markdown body is repointed here.
 LEGACY_DISCORD_INVITE = "https://discord.gg/3zbfaTNN7V"
@@ -156,3 +169,33 @@ def render_markdown_html(
     if "<head>" in html:
         return html.replace("<head>", f"<head>{css}", 1)
     return f"<html><head>{css}</head><body>{html}</body></html>"
+
+
+def without_github_only(text: str) -> str:
+    """Release notes without the parts their project marked as GitHub-only.
+
+    Text without markers comes back as it is, and so does text whose markers do
+    not pair up, so a mistake in a project's notes never hides anything. Call it
+    before the notes are shortened or translated, so neither works on text that
+    is never shown.
+    """
+    text = text or ""
+    if "github-only" not in text:
+        return text
+    kept = []
+    hiding = False
+    for line in text.split("\n"):
+        bare = line.rstrip("\r")
+        if _GITHUB_ONLY_OPEN.match(bare):
+            if hiding:
+                return text
+            hiding = True
+        elif _GITHUB_ONLY_CLOSE.match(bare):
+            if not hiding:
+                return text
+            hiding = False
+        elif not hiding:
+            kept.append(line)
+    if hiding:
+        return text
+    return re.sub(r"(?:\r?\n){3,}", "\n\n", "\n".join(kept))
