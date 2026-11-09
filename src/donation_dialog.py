@@ -681,7 +681,8 @@ class DonationStatusBar(QStatusBar):
                 return f'<a href="{url}" style="color:{t.fg}; font-weight:bold;">{short}</a>'
             return f'<b style="color:{t.fg};">{short}</b>'
 
-        def format_line(name: str, amt: float, methods: set[str], dt, url: str, is_top: bool) -> str:
+        def format_line(name: str, amt: float, methods: set[str], dt, url: str, is_top: bool,
+                        has_time: bool = False) -> str:
             raw_name = (name or "").strip()
             if is_generic_name(raw_name):
                 display_name = tr("donate_a_top_supporter") if is_top else tr("donate_a_supporter")
@@ -690,7 +691,7 @@ class DonationStatusBar(QStatusBar):
             else:
                 anchor = make_anchor(raw_name, url)
                 top_prefix = _supporter_prefix() if is_top else ""
-            when = format_donation_when(dt)
+            when = format_donation_when(dt, has_time=has_time)
             methods_norm = {m.lower() for m in methods}
             coffee_kinds = {coffee_method(m) for m in methods_norm}
             coffee_only = bool(coffee_kinds) and "" not in coffee_kinds
@@ -759,7 +760,8 @@ class DonationStatusBar(QStatusBar):
                 latest_d = max(d_list, key=lambda x: x.get("dt") or datetime.min)
                 url = next((x.get("url") for x in d_list if x.get("url")), "")
                 display_name = d_list[0].get("name") or norm_name.title()
-                line = format_line(display_name, total_amt, methods, latest_d.get("dt"), url, is_top=is_top)
+                line = format_line(display_name, total_amt, methods, latest_d.get("dt"), url, is_top=is_top,
+                                   has_time=latest_d.get("has_time", False))
                 raw_items.append((line, total_amt, latest_d.get("dt"), is_top))
                 processed_multi.add(norm_name)
 
@@ -773,7 +775,8 @@ class DonationStatusBar(QStatusBar):
             is_top = (amt >= 20.0)
             methods = {str(d.get("method") or "Donation").strip()}
             display_name = raw_name
-            line = format_line(display_name, amt, methods, d.get("dt"), d.get("url") or "", is_top=is_top)
+            line = format_line(display_name, amt, methods, d.get("dt"), d.get("url") or "", is_top=is_top,
+                               has_time=d.get("has_time", False))
             raw_items.append((line, amt, d.get("dt"), is_top))
 
         lines = _order_bar_slots(self, raw_items)
@@ -1199,7 +1202,7 @@ class DonationDialog(QDialog):
             amt_s = fx.money(amt, code)
             method = d.get("method", tr("donate_method_generic"))
             url = d.get("url", "")
-            when = relative_date(d.get("dt"))
+            when = relative_date(d.get("dt"), has_time=d.get("has_time", False))
             t = T()
             anchor = f'<a href="{url}" style="color:{t.fg}; font-weight:bold;">{name}</a>' if url else name
             line = tr("donate_ticker_fmt").replace("$", "").format(anchor=anchor, amount=amt_s, method=method, when=when)

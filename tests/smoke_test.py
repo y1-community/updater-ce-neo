@@ -6880,7 +6880,7 @@ def main():
     check("backend line classification", test_backend_line_classification)
     check("retry guidance and connect hint", test_retry_guidance_and_connect_hint)
     check("device model registry", test_device_model_registry)
-    check("model dropdown manifest filter", test_model_dropdown_manifest_filtered)
+    check("model dropdown lists registry models", test_model_dropdown_lists_registry_models)
     check("release notes translation", test_release_notes_translation)
     check("offline online tab toggling", test_offline_online_tab_toggling)
     check("windows m key shortcut and method defaults", test_windows_m_key_shortcut_and_method_defaults)

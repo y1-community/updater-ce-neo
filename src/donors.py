@@ -46,6 +46,36 @@ def is_anonymous_donor(name) -> bool:
     return low.startswith(("supporter", "anonymous", "someone"))
 
 
+def parse_donation_datetime(value):
+    """Parse a donors.csv date, with an optional clock time.
+
+    The feed has always used day-first dates (``08/11/2026``). A time may be
+    appended (``08/11/2026 14:32`` or with seconds), and ISO 8601 is accepted
+    too. Returns ``(datetime, has_time)``; ``has_time`` is True only when the
+    source actually carried a clock, so a date-only row keeps day-based
+    wording rather than pretending midnight was the moment of the gift.
+    """
+    raw = str(value or "").strip()
+    if not raw:
+        return None, False
+
+    has_time = bool(re.search(r"[T ]\d{1,2}:\d{2}", raw))
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if parsed.tzinfo is not None:
+            parsed = parsed.astimezone().replace(tzinfo=None)
+        return parsed, has_time
+    except ValueError:
+        pass
+
+    for fmt in ("%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(raw, fmt), "%H" in fmt
+        except ValueError:
+            continue
+    return None, False
+
+
 def parse_donors_csv_text(csv_text):
     if not csv_text:
         return []
@@ -67,12 +97,7 @@ def parse_donors_csv_text(csv_text):
             except (ValueError, IndexError):
                 amt = 0.0
             date_str = row[2].strip() if len(row) > 2 else ""
-            dt = None
-            if date_str:
-                try:
-                    dt = datetime.strptime(date_str.strip(), "%d/%m/%Y")
-                except Exception:
-                    dt = None
+            dt, has_time = parse_donation_datetime(date_str)
             url = row[3].strip() if len(row) > 3 else ""
             method = row[4].strip() if len(row) > 4 else "Donation"
             msg = row[5].strip() if len(row) > 5 else ""
@@ -81,6 +106,7 @@ def parse_donors_csv_text(csv_text):
                 "amount": amt,
                 "date_str": date_str,
                 "dt": dt,
+                "has_time": has_time,
                 "url": url,
                 "method": method,
                 "message": msg,
@@ -90,12 +116,24 @@ def parse_donors_csv_text(csv_text):
     return donations
 
 
-def relative_date(dt, now=None):
+def relative_date(dt, now=None, has_time=False):
     from .i18n import tr
 
     if not dt:
         return ""
     now = now or datetime.now()
+    if has_time:
+        seconds = max(0.0, (now - dt).total_seconds())
+        minutes = int(seconds // 60)
+        if minutes < 1:
+            return tr("donate_when_just_now")
+        if minutes < 60:
+            key = "donate_when_minute" if minutes == 1 else "donate_when_minutes"
+            return tr(key).format(count=minutes) if minutes != 1 else tr(key)
+        hours = minutes // 60
+        if hours < 24:
+            key = "donate_when_hour" if hours == 1 else "donate_when_hours"
+            return tr(key).format(count=hours) if hours != 1 else tr(key)
     today = now.date()
     dt_date = dt.date() if hasattr(dt, 'date') else dt
     delta = today - dt_date
@@ -121,12 +159,24 @@ def relative_date(dt, now=None):
         return tr('donate_when_year')
 
 
-def format_donation_when(dt, now=None) -> str:
+def format_donation_when(dt, now=None, has_time=False) -> str:
     from .i18n import tr
 
     if not dt:
         return ""
     now = now or datetime.now()
+    if has_time:
+        seconds = max(0.0, (now - dt).total_seconds())
+        minutes = int(seconds // 60)
+        if minutes < 1:
+            return tr("donate_when_just_now")
+        if minutes < 60:
+            key = "donate_when_minute" if minutes == 1 else "donate_when_minutes"
+            return tr(key).format(count=minutes) if minutes != 1 else tr(key)
+        hours = minutes // 60
+        if hours < 24:
+            key = "donate_when_hour" if hours == 1 else "donate_when_hours"
+            return tr(key).format(count=hours) if hours != 1 else tr(key)
     today = now.date()
     dt_date = dt.date() if hasattr(dt, "date") else dt
     delta = today - dt_date

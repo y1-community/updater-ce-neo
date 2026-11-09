@@ -85,7 +85,7 @@ def render_markdown_html(
     words (the release-notes card); a guide keeps its screenshots.
     """
     text = rewrite_legacy_discord_invite(
-        strip_front_matter(str(body or "").strip())
+        without_github_only(strip_front_matter(str(body or "").strip()))
     )
     if not allow_images:
         text = re.sub(r"!\[.*?\]\(.*?\)", "", text)
