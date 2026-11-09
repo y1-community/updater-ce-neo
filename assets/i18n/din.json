@@ -139,7 +139,12 @@
  "settings_filter_old_rockbox": "Nyuɔɔthë Yïŋ Thɛɛr de Rockbox",
  "settings_filter_nightly": "Nyuɔɔthë Dev ë Wakɔ̈u",
  "settings_filter_240p": "240p Rökböx Rïlësës",
- "settings_240p_tip": "Nyuɔɔthë yïŋ ë ROM ë 240p ë thäät (röm..._240p.zïp). 240p yïk acie thöŋ ke Y1 ë thäät ë Innioasis OS tɔ̈u piiny 3.0.7, këya Nyuɔɔthë Yïk Thɛɛr Rockbox acï tääu thïn.",
+ "settings_240p_tip": "Nyuɔɔthë yïŋ ë ROM ë 240p ë thäät (röm..._240p.zïp). 240p yïk acïï lëu bï luɔ̈ɔ̈i në Y1 cï ɣɔɔc yam në Pɛɛi Dhiëc 2026 cök, wala në töŋ cï bɛ̈n ke 3.0.7 ë thɛɛr wala thɛɛr. Kɔc ë pol käkë acïï lëu bïk yïŋ de Rockbox thɛɛr luɔ̈ɔ̈i aya, ku Nyuɔɔthë yïŋ de Rockbox thɛɛr acï tääu në yeen.",
+ "settings_240p_warn_body": "240p yïk acïï lëu bï luɔ̈ɔ̈i në Y1 cï ɣɔɔc yam në Pɛɛi Dhiëc 2026 cök, wala në töŋ cï bɛ̈n ke 3.0.7 ë thɛɛr wala thɛɛr. Tääu ë tök në Y1 thɛɛr yic.\n\nKɔc ë pol käkë acïï lëu bïk yïŋ de Rockbox thɛɛr luɔ̈ɔ̈i aya, ku keek aacï keek gɔ̈t ëya dɛ̈t.\n\nYe yïn ŋic lɔn wïc yïn ba 240p Rockbox ë thäät nyuɔɔth?",
+ "sel_240p_warning": "Yen ee 240p ë yïk. Acïï lëu bï ya luui në Y1 cï ɣɔɔc yam në Pɛɛi de Dhiëc 2026 cök, ka në töŋ cï bɛ̈n ke 3.0.7 ë thɛɛr.",
+ "link_240p_body": "Link cï yïn liep ee 240p yïk. 240p yïk acïï lëu bï luɔ̈ɔ̈i në Y1 cï ɣɔɔc yam në Pɛɛi de Dhiëc 2026 cök, wala në töŋ cï bɛ̈n ke 3.0.7 ë thɛɛr, ku keek aa cï thiaan agut cï bï yïn keek tääu në luɔi.\n\nYe yïn ŋic lɔn wïc yïn ba 240p Rockbox ë thäät nyuɔɔth?",
+ "link_busy": "Thöl ë tɛ̈ɛ̈u ë käŋ ëmɛn, ku liep ë thäät kɔ̈k.",
+ "link_not_listed": "Software tɔ̈ në ye thää kënë yic akëc bɛ̈n jäl në ye thää kënë yic.",
  "settings_old_rockbox_warn_title": "Tɔ̈ɔ̈ŋ de Rockbox",
  "settings_old_rockbox_warn_body": "Luɔi ë Rockbox-Y1 tueŋ 0.5 acïï thöŋ kek kä cï ɣaac wei në Pɛnëdiäk 2026 cök kenë Innioasis OS 3.0.7 cï kɔn tääu thïn.\n\nFlash ë yïk thɛɛr në kee käkë yiic abï gël bï jäl.\n\nYe yïn ŋic lɔn wïc yïn ba käk thɛɛr ke Rockbox nyuɔɔth?",
  "sel_refresh": "Cɔ̈kpiny",
@@ -926,6 +931,9 @@
  "rockbox_wizard_done_desc": "Yïn alëu ba thäät ë thäät ë thäät ë thäät ë thäät ku kuany thäät ë thäät ë Rockbox (Tɔ̈ɔ̈u > Tääu ë thäät).",
  "sel_local_rockbox_themes_option": "Tääu ë Rökböx 360p Thëmës + Föntpäck",
  "rockbox_stage_installing": "Tääu ë Rockbox Thëm & Gät...",
+ "rockbox_cleanup_step": "Ku tɛ̈ɛ̈u ë kä thɛɛr ke Rockbox nyaai...",
+ "rockbox_cleanup_deleting": "Nyaai ë .rockbox ë tɔ̈ɔ̈u tënë kë ye pol...",
+ "rockbox_cleanup_failed_note": "Ajuɛɛr yam acï tääu thïn, ku .rockbox thɛɛr acïï lëu bï nyaai. Tääu ë .rockbox ë thäät ë thäät ë thäät ë thäät ë thäät ë thäät.",
  "rockbox_stage_waiting_adb_fmt": "Kɔɔr raan pol në ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Kɔc juëc ke pol aye röt rek. Tääu ë kä kɔ̈k yiic ku pɛ̈l kë cï tääu thïn yetök.",
  "rockbox_stage_pushing": "Raan pol acï yök. Tääu ë wël ke akutnhom & gät...",
@@ -1025,8 +1033,5 @@
  "donate_support_appeal_coffee_math": "Töŋ de kafe ee bandwidth de kë cï yök thöl. Ee kë bï bɛ̈n tueŋ cɔk tɔ̈ në thök yic.",
  "donate_family_appeal_expected": "Ryan ku raanden ë tɔ̈ ke yeen aa tɔ̈ ke ŋɔ̈ɔ̈th meth. Käk ë kuɔɔny tënë wëu ke luɔi ku baai yamda aye keek yök ke dït apɛi.",
  "donate_family_appeal_new_arrival": "Anɔŋ kë yam cï bɛ̈n në dhöl yic në ɣön de Ryan. Ayï wëu ye keek gaam tënë kɔc ke server ku paanda dït ee kë dït apɛi.",
- "donate_family_appeal_nursery": "Ryan ku raanden ë tɔ̈ kenë yen aa tɔ̈ ke cë röt guiir në mɛnhden. Na cï kën ë luɔi kënë luui, ke wëu ë kuɔɔny tënë wëu ë gɛ̈th ku paanda ë dït abï kuɔɔny dït apɛi awär kë ŋic yïn.",
- "rockbox_cleanup_step": "Ku tɛ̈ɛ̈u ë kä thɛɛr ke Rockbox nyaai...",
- "rockbox_cleanup_deleting": "Nyaai ë .rockbox ë tɔ̈ɔ̈u tënë kë ye pol...",
- "rockbox_cleanup_failed_note": "Ajuɛɛr yam acï tääu thïn, ku .rockbox thɛɛr acïï lëu bï nyaai. Tääu ë .rockbox ë thäät ë thäät ë thäät ë thäät ë thäät ë thäät."
+ "donate_family_appeal_nursery": "Ryan ku raanden ë tɔ̈ kenë yen aa tɔ̈ ke cë röt guiir në mɛnhden. Na cï kën ë luɔi kënë luui, ke wëu ë kuɔɔny tënë wëu ë gɛ̈th ku paanda ë dït abï kuɔɔny dït apɛi awär kë ŋic yïn."
 }

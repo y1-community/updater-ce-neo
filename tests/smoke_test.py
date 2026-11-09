@@ -2815,8 +2815,11 @@ def test_rockbox_release_filters():
     emissions = []
     page.release_filters_changed.connect(lambda: emissions.append(True))
     page._confirm_old_rockbox = lambda: True
+    asked_240p = []
+    page._confirm_240p = lambda: asked_240p.append(True) or True
 
     page._cb_240p.setChecked(True)
+    assert asked_240p, "turning 240p on shows its own compatibility warning"
     assert page._cb_old_rockbox.isChecked(), "240p selection enables older builds"
     assert page.release_filters() == {
         device_tracking.FILTER_OLD_ROCKBOX: True,
@@ -2829,14 +2832,14 @@ def test_rockbox_release_filters():
     # Declining the compatibility warning leaves 240p off as well.
     page._cb_240p.setChecked(False)
     page._cb_old_rockbox.setChecked(False)
-    page._confirm_old_rockbox = lambda: False
+    page._confirm_240p = lambda: False
     page._cb_240p.setChecked(True)
     assert not page._cb_240p.isChecked()
     assert not page._cb_old_rockbox.isChecked()
     assert page.release_filters()[device_tracking.FILTER_240P] is False
 
     # Clearing the older-builds option clears 240p with it.
-    page._confirm_old_rockbox = lambda: True
+    page._confirm_240p = lambda: True
     page._cb_240p.setChecked(True)
     page._cb_old_rockbox.setChecked(False)
     assert not page._cb_240p.isChecked()
@@ -5781,28 +5784,26 @@ def test_device_model_registry():
     assert device_models.is_flashable("A5") is True
     assert device_models.is_flashable("G5") is True
 
-    # Every flashable registry model is offered, catalogue or not, in registry
+    # Only models the catalogue lists a release for are offered, in registry
     # order; an unknown catalogue model is appended rather than hidden.
     offered = device_models.selectable_models(["A5", "Y1"])
-    assert offered[:3] == ["Y1", "Y2", "A5"], offered
-    assert "G5" in offered and "Q8" in offered, offered
+    assert offered == ["Y1", "A5"], offered
+    assert "G5" not in offered and "Q8" not in offered, offered
     assert device_models.selectable_models(["ZZ9"])[-1] == "ZZ9"
-    assert device_models.selectable_models([], fallback=("Y1", "Y2"))[:2] == ["Y1", "Y2"]
-    # Brand scopes the list, so a Timmkoo player is reachable from its row even
-    # while the manifest lists no release for it.
-    assert device_models.selectable_models(brand="Timmkoo") == [
-        "A5", "SR1", "Q3", "Q5", "Q8"
-    ]
+    assert device_models.selectable_models([], fallback=("Y1", "Y2")) == ["Y1", "Y2"]
+    # Brand scopes the list; a brand with nothing released offers nothing.
+    assert device_models.selectable_models(["Q5", "Y1"], brand="Timmkoo") == ["Q5"]
+    assert device_models.selectable_models(brand="Timmkoo") == []
     assert device_models.brand_names() == ["Innioasis", "Timmkoo"]
 
 
-def test_model_dropdown_lists_registry_models():
-    """Every flashable model is selectable, catalogue release or not.
+def test_model_dropdown_lists_released_models_only():
+    """A model appears in the drop-down once a firmware is released for it.
 
-    A player the app can write to must be reachable from the drop-down. A model
-    whose firmware has not been published keeps its row and shows an empty
-    software list, instead of disappearing and leaving the reader unable to
-    pick the device in front of them.
+    A player whose firmware has not been published (the Q8 and A5 today) has
+    no row, so the reader is never offered a model with an empty software
+    list. A hand-imported package for such a model still installs: the list
+    falls back to its default row and the package carries its own model.
     """
     from PySide6.QtWidgets import QApplication
     from src import catalog
@@ -5818,15 +5819,13 @@ def test_model_dropdown_lists_registry_models():
 
         page = SelectPackagePage()
         items = [page._model_combo.itemText(i) for i in range(page._model_combo.count())]
-        assert "Y2" in items and "G5" in items, items
-        assert items[0] == "Y1", items
+        assert items == ["Y2"], items
 
-        # A model with nothing published keeps its row and an empty list.
+        # A model with nothing published has no row to move to.
         page._select_model_for_manual("G5")
-        assert page.current_model() == "G5"
-        assert page._software_combo.count() == 0
+        assert page.current_model() == "Y2"
         page.refresh_models()
-        assert page.current_model() == "G5"
+        assert page.current_model() == "Y2"
         page.deleteLater()
     finally:
         catalog.set_live_catalog(saved)
@@ -6880,7 +6879,7 @@ def main():
     check("backend line classification", test_backend_line_classification)
     check("retry guidance and connect hint", test_retry_guidance_and_connect_hint)
     check("device model registry", test_device_model_registry)
-    check("model dropdown lists registry models", test_model_dropdown_lists_registry_models)
+    check("model dropdown lists released models only", test_model_dropdown_lists_released_models_only)
     check("release notes translation", test_release_notes_translation)
     check("offline online tab toggling", test_offline_online_tab_toggling)
     check("windows m key shortcut and method defaults", test_windows_m_key_shortcut_and_method_defaults)

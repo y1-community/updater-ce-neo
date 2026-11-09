@@ -139,7 +139,12 @@
  "settings_filter_old_rockbox": "Montre Old Rockbox Builds",
  "settings_filter_nightly": "Montre Dev Releases chak sware",
  "settings_filter_240p": "240p Rockbox Release",
- "settings_240p_tip": "Montre bati ki gen postal ROM ki se yon variant 240p (rom…_240p.zip). Konstriksyon 240p yo pa konpatib ak inite Y1 sou Innioasis OS anba 3.0.7, kidonk Montre Old Rockbox Builds yo aktive avèk li.",
+ "settings_240p_tip": "Montre bati ki gen postal ROM se yon variant 240p (rom…_240p.zip). Konstriksyon 240p pa ka itilize sou yon Y1 ki te achte nouvo apre me 2026, oswa sou youn ki te vini ak Original Software 3.0.7 oswa pita. Jwè sa yo pa ka sèvi ak ansyen Rockbox builds tou, kidonk Montre Old Rockbox Builds limen avèk li.",
+ "settings_240p_warn_body": "Konstriksyon 240p pa ka itilize sou yon Y1 ki te achte nouvo apre me 2026, oswa sou youn ki te vini ak Original Software 3.0.7 oswa pita. Sèlman enstale youn sou yon Y1 ki pi gran.\n\nJwè sa yo pa ka itilize pi gran Rockbox bati tou, kidonk sa yo ki nan lis tou.\n\nÈske ou sèten ou vle montre 240p Rockbox lage?",
+ "sel_240p_warning": "Sa a se yon bati 240p. Li pa ka itilize sou yon Y1 te achte nouvo apre me 2026, oswa sou youn ki te vini ak Original Software 3.0.7 oswa pita.",
+ "link_240p_body": "Lyen ou louvri a se pou yon bati 240p. Konstriksyon 240p pa ka itilize sou yon Y1 ki te achte nouvo apre me 2026, oswa sou youn ki te vini ak Original Software 3.0.7 oswa pita, kidonk yo kache jiskaske ou limen yo.\n\nÈske ou sèten ou vle montre 240p Rockbox lage?",
+ "link_busy": "Fini enstalasyon aktyèl la, Lè sa a, louvri lyen an ankò.",
+ "link_not_listed": "Lojisyèl ki nan lyen sa a poko pibliye pou jwè sa a.",
  "settings_old_rockbox_warn_title": "Avètisman Konpatibilite Rockbox",
  "settings_old_rockbox_warn_body": "Release Rockbox-Y1 anvan 0.5 yo pa konpatib ak Y1 inite yo vann apre mas 2026 ak Innioasis OS 3.0.7 pre-enstale.\n\nFè flache yon ansyen bati sou aparèy sa yo ap anpeche demaraj.\n\nÈske w sèten ou vle montre ansyen konstriksyon Rockbox yo?",
  "sel_refresh": "Rafrechi",
@@ -926,6 +931,9 @@
  "rockbox_wizard_done_desc": "Kounye a ou ka dekonekte jwè a san danje epi chwazi yon tèm nan Rockbox (Anviwònman> Anviwònman Tèm).",
  "sel_local_rockbox_themes_option": "Enstale Rockbox 360p Themes + Fontpack",
  "rockbox_stage_installing": "Enstale Tèm Rockbox ak Polis...",
+ "rockbox_cleanup_step": "Retire ansyen paramèt Rockbox yo...",
+ "rockbox_cleanup_deleting": "Retire dosye .rockbox nan jwè a...",
+ "rockbox_cleanup_failed_note": "Nouvo lojisyèl ou a te enstale, men ansyen katab .rockbox la pa t kapab retire. Efase folder nan .rockbox sou jwè a alamen si ou vle yon kòmanse pwòp.",
  "rockbox_stage_waiting_adb_fmt": "Kap chèche jwè atravè ADB ({remaining} yo)...",
  "rockbox_stage_disconnect_extra": "Plis pase yon jwè konekte. Dekonekte lòt yo epi kite sèlman youn nan yo te enstale.",
  "rockbox_stage_pushing": "Jwè detekte. Mete tèm kominote ak polis...",
@@ -1025,8 +1033,5 @@
  "donate_support_appeal_coffee_math": "Yon kafe apeprè kouvri Pleasant yon telechaje. Li kenbe pwochen ranje a nan rive.",
  "donate_family_appeal_expected": "Ryan ak patnè li ap tann yon ti bebe. Donasyon pou depans pou pwojè a ak nouvo fanmi nou an ap apresye anpil.",
  "donate_family_appeal_new_arrival": "Gen yon nouvo arive sou wout la nan kay Ryan a. Chak don anvè serveurs yo ak fanmi k ap grandi nou an vle di yon gwo zafè.",
- "donate_family_appeal_nursery": "Ryan ak patnè li ap prepare pou pitit yo. Si zouti sa a te itil, yon don pou depans kouri yo ak fanmi k ap grandi nou an ta ede plis pase ou konnen.",
- "rockbox_cleanup_step": "Retire ansyen paramèt Rockbox yo...",
- "rockbox_cleanup_deleting": "Retire dosye .rockbox nan jwè a...",
- "rockbox_cleanup_failed_note": "Nouvo lojisyèl ou a te enstale, men ansyen katab .rockbox la pa t kapab retire. Efase folder nan .rockbox sou jwè a alamen si ou vle yon kòmanse pwòp."
+ "donate_family_appeal_nursery": "Ryan ak patnè li ap prepare pou pitit yo. Si zouti sa a te itil, yon don pou depans kouri yo ak fanmi k ap grandi nou an ta ede plis pase ou konnen."
 }

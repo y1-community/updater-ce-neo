@@ -139,7 +139,12 @@
  "settings_filter_old_rockbox": "Show Old Rockbox Builds",
  "settings_filter_nightly": "Show Nightly Dev Releases",
  "settings_filter_240p": "240p Rockbox Releases",
- "settings_240p_tip": "Shows builds whose ROM zip is a 240p variant (rom…_240p.zip). 240p builds are not compatible with Y1 units on Innioasis OS below 3.0.7, so Show Old Rockbox Builds is enabled with it.",
+ "settings_240p_tip": "Shows builds whose ROM zip is a 240p variant (rom…_240p.zip). 240p builds can't be used on a Y1 bought new after May 2026, or on one that came with Original Software 3.0.7 or later. Those players can't use older Rockbox builds either, so Show Old Rockbox Builds is turned on with it.",
+ "settings_240p_warn_body": "240p builds can't be used on a Y1 bought new after May 2026, or on one that came with Original Software 3.0.7 or later. Only install one on an older Y1.\n\nThose players can't use older Rockbox builds either, so those are listed too.\n\nAre you sure you want to show 240p Rockbox releases?",
+ "sel_240p_warning": "This is a 240p build. It can't be used on a Y1 bought new after May 2026, or on one that came with Original Software 3.0.7 or later.",
+ "link_240p_body": "The link you opened is for a 240p build. 240p builds can't be used on a Y1 bought new after May 2026, or on one that came with Original Software 3.0.7 or later, so they're hidden until you turn them on.\n\nAre you sure you want to show 240p Rockbox releases?",
+ "link_busy": "Finish the current install, then open the link again.",
+ "link_not_listed": "The software in that link isn't released for this player yet.",
  "settings_old_rockbox_warn_title": "Rockbox Compatibility Warning",
  "settings_old_rockbox_warn_body": "Releases of Rockbox-Y1 before 0.5 are not compatible with Y1 units sold after March 2026 with Innioasis OS 3.0.7 pre-installed.\n\nFlashing an older build on these devices will prevent booting.\n\nAre you sure you want to show older Rockbox builds?",
  "sel_refresh": "Refresh",
@@ -926,6 +931,9 @@
  "rockbox_wizard_done_desc": "You can now safely disconnect the player and pick a theme in Rockbox (Settings > Theme Settings).",
  "sel_local_rockbox_themes_option": "Install Rockbox 360p Themes + Fontpack",
  "rockbox_stage_installing": "Installing Rockbox Themes & Fonts...",
+ "rockbox_cleanup_step": "Removing the old Rockbox settings...",
+ "rockbox_cleanup_deleting": "Removing the .rockbox folder from the player...",
+ "rockbox_cleanup_failed_note": "Your new software was installed, but the old .rockbox folder could not be removed. Delete the .rockbox folder on the player by hand if you want a clean start.",
  "rockbox_stage_waiting_adb_fmt": "Looking for player via ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "More than one player is connected. Disconnect the others and leave only the one being installed.",
  "rockbox_stage_pushing": "Player detected. Placing community themes & fonts...",
@@ -1001,8 +1009,5 @@
  "settings_arm64_driver_note": "ARM64 Windows support is untested. On Snapdragon and RTX Spark laptops, Zadig can be used with Driver Signature Enforcement disabled to install WinUSB or libusb for the MT6227 Preloader device in Device Manager. See the ARM64 driver guide for the steps.",
  "toast_update_version_fmt": "{app} v{version} is available.",
  "toast_update_fmt": "An update to {app} is available.",
- "install_card_title_fmt": "{software} for {model}",
- "rockbox_cleanup_step": "Removing the old Rockbox settings...",
- "rockbox_cleanup_deleting": "Removing the .rockbox folder from the player...",
- "rockbox_cleanup_failed_note": "Your new software was installed, but the old .rockbox folder could not be removed. Delete the .rockbox folder on the player by hand if you want a clean start."
+ "install_card_title_fmt": "{software} for {model}"
 }

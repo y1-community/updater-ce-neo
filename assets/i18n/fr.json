@@ -139,7 +139,12 @@
  "settings_filter_old_rockbox": "Afficher les anciennes versions de Rockbox",
  "settings_filter_nightly": "Afficher les versions Nightly et Dev",
  "settings_filter_240p": "Versions Rockbox 240p",
- "settings_240p_tip": "Affiche les versions dont le zip ROM est une variante 240p (rom…_240p.zip). Les versions 240p ne sont pas compatibles avec les Y1 sous Innioasis OS antérieur à 3.0.7 : l'option des anciennes versions est donc activée en même temps.",
+ "settings_240p_tip": "Affiche les versions dont le zip ROM est une variante 240p (rom…_240p.zip). Les versions 240p ne peuvent pas être utilisées sur un Y1 acheté neuf après mai 2026, ni sur un Y1 livré avec le logiciel d'origine 3.0.7 ou ultérieur. Ces lecteurs ne peuvent pas non plus utiliser les anciennes versions de Rockbox : l'option des anciennes versions est donc activée en même temps.",
+ "settings_240p_warn_body": "Les versions 240p ne peuvent pas être utilisées sur un Y1 acheté neuf après mai 2026, ni sur un Y1 livré avec le logiciel d'origine 3.0.7 ou ultérieur. Ne les installez que sur un Y1 plus ancien.\n\nCes lecteurs ne peuvent pas non plus utiliser les anciennes versions de Rockbox, qui seront donc affichées aussi.\n\nÊtes-vous sûr de vouloir afficher les versions Rockbox 240p ?",
+ "sel_240p_warning": "Ceci est une version 240p. Elle ne peut pas être utilisée sur un Y1 acheté neuf après mai 2026, ni sur un Y1 livré avec le logiciel d'origine 3.0.7 ou ultérieur.",
+ "link_240p_body": "Le lien que vous avez ouvert concerne une version 240p. Les versions 240p ne peuvent pas être utilisées sur un Y1 acheté neuf après mai 2026, ni sur un Y1 livré avec le logiciel d'origine 3.0.7 ou ultérieur : elles restent donc masquées tant que vous ne les activez pas.\n\nÊtes-vous sûr de vouloir afficher les versions Rockbox 240p ?",
+ "link_busy": "Terminez l'installation en cours, puis rouvrez le lien.",
+ "link_not_listed": "Le logiciel de ce lien n'est pas encore disponible pour ce lecteur.",
  "settings_old_rockbox_warn_title": "Avertissement de compatibilité Rockbox",
  "settings_old_rockbox_warn_body": "Les versions de Rockbox-Y1 antérieures à 0.5 ne sont pas compatibles avec les appareils Y1 vendus après mars 2026 avec Innioasis OS 3.0.7 préinstallé.\n\nFlasher une ancienne version empêchera ces appareils de démarrer.\n\nÊtes-vous sûr de vouloir afficher les anciennes versions de Rockbox ?",
  "sel_refresh": "Actualiser",
@@ -926,6 +931,9 @@
  "rockbox_wizard_done_desc": "Vous pouvez déconnecter le lecteur en toute sécurité et choisir un thème dans Rockbox (Paramètres > Paramètres du thème).",
  "sel_local_rockbox_themes_option": "Installer les thèmes Rockbox 360p et le pack de polices",
  "rockbox_stage_installing": "Installation des thèmes et polices Rockbox…",
+ "rockbox_cleanup_step": "Suppression des anciens réglages Rockbox…",
+ "rockbox_cleanup_deleting": "Suppression du dossier .rockbox sur le lecteur…",
+ "rockbox_cleanup_failed_note": "Votre nouveau logiciel a bien été installé, mais l'ancien dossier .rockbox n'a pas pu être supprimé. Supprimez-le manuellement sur le lecteur si vous voulez repartir de zéro.",
  "rockbox_stage_waiting_adb_fmt": "Recherche de l'appareil via ADB ({remaining}s)…",
  "rockbox_stage_disconnect_extra": "Plusieurs lecteurs sont connectés. Débranchez les autres et ne laissez que celui que vous installez.",
  "rockbox_stage_pushing": "Appareil détecté. Transfert des thèmes et polices de la communauté…",
@@ -1001,8 +1009,5 @@
  "settings_arm64_driver_note": "La prise en charge d'ARM64 Windows n'a pas été testée. Sur les ordinateurs portables Snapdragon et RTX Spark, Zadig peut être utilisé avec l'application de la signature du pilote désactivée pour installer WinUSB ou libusb pour le périphérique MT6227 Preloader dans le Gestionnaire de périphériques. Consultez le guide du pilote ARM64 pour les étapes.",
  "toast_update_version_fmt": "{app} v{version} est disponible.",
  "toast_update_fmt": "Une mise à jour vers {app} est disponible.",
- "install_card_title_fmt": "{software} pour {model}",
- "rockbox_cleanup_step": "Suppression des anciens réglages Rockbox…",
- "rockbox_cleanup_deleting": "Suppression du dossier .rockbox sur le lecteur…",
- "rockbox_cleanup_failed_note": "Votre nouveau logiciel a bien été installé, mais l'ancien dossier .rockbox n'a pas pu être supprimé. Supprimez-le manuellement sur le lecteur si vous voulez repartir de zéro."
+ "install_card_title_fmt": "{software} pour {model}"
 }

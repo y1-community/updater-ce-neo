@@ -139,7 +139,12 @@
  "settings_filter_old_rockbox": "Rockbox hlun sakmi pawl langhter",
  "settings_filter_nightly": "Zan fatin Dev chuahmi pawl langhter",
  "settings_filter_240p": "240p Rockbox chuahmi",
- "settings_240p_tip": "ROM zip cu 240p phun (rom..._240p.zip) a ngeimi build pawl a langhter. 240p sermi hna cu 3.0.7 tang Innioasis OS ah Y1 unit pawl he aa tlak lo, cucaah Show Old Rockbox Builds cu a hei on.",
+ "settings_240p_tip": "ROM zip cu 240p phun (rom..._240p.zip) a ngeimi build pawl a langhter. 240p sermi cu May 2026 hnu ah a thar in cawkmi Y1 ah hman khawh a si lo, asiloah Original Software 3.0.7 asiloah a hnu deuh he a rami ah hman khawh a si lo. Cu players pawl nih cun Rockbox build hlun deuh zong an hman kho lo, cucaah Show Old Rockbox Builds cu a on.",
+ "settings_240p_warn_body": "240p sermi cu May 2026 hnu ah a thar in cawkmi Y1 ah hman khawh a si lo, asiloah Original Software 3.0.7 asiloah a hnu deuh he a rami ah hman khawh a si lo. Y1 hlun deuh ah pakhat lawng install tuah.\n\nCu players pawl nih cun Rockbox build hlun deuh zong an hman kho lo, cucaah cu hna zong cu an i tel ve.\n\n240p Rockbox chuahmi langhter na duh taktak maw?",
+ "sel_240p_warning": "Hihi 240p sermi a si. May 2026 hnu ah a thar in cawkmi Y1 ah hman khawh a si lo, asiloah Original Software 3.0.7 asiloah a hnu deuh he a rami ah hman khawh a si lo.",
+ "link_240p_body": "Na onmi link cu 240p sernak caah a si. 240p sermi cu May 2026 hnu ah a thar in cawkmi Y1 ah hman khawh a si lo, asiloah Original Software 3.0.7 asiloah a hnu deuh he a rami ah hman khawh a si lo, cucaah na on hlan tiang an thuh.\n\n240p Rockbox chuahmi langhter na duh taktak maw?",
+ "link_busy": "A tu install tuahmi kha lim law, cun link kha on tthan.",
+ "link_not_listed": "Cu link chung i software cu hi player caah chuah a si rih lo.",
  "settings_old_rockbox_warn_title": "Rockbox he aa tlaknak ralrin peknak",
  "settings_old_rockbox_warn_body": "Rockbox-Y1 0.5 hlan ah chuahmi hna cu Innioasis OS 3.0.7 chiah cia in March 2026 hnu ah zuarmi Y1 unit hna he aa tlak lo.\n\nHi thilri hna ah a hlun deuhmi sermi kha langhter ahcun boot a kham lai.\n\nRockbox hlun deuh pawl langhter na duh taktak maw?",
  "sel_refresh": "Refresh",
@@ -926,6 +931,9 @@
  "rockbox_wizard_done_desc": "Atu cu player kha him tein na thlen khawh cang i Rockbox (Settings > Theme Settings) ah theme pakhat na thim khawh cang.",
  "sel_local_rockbox_themes_option": "Rockbox 360p Themes + Fontpack kha install tuah",
  "rockbox_stage_installing": "Rockbox Themes le Font pawl chiah...",
+ "rockbox_cleanup_step": "Rockbox setting hlun pawl hloh...",
+ "rockbox_cleanup_deleting": "Player chungin .rockbox folder chuah...",
+ "rockbox_cleanup_failed_note": "Na software thar cu install a si cang, asinain .rockbox folder hlun cu hlonh khawh a si lo. A thiangmi thawk na duh ahcun player cung i .rockbox folder kha kut in hloh.",
  "rockbox_stage_waiting_adb_fmt": "ADB ({remaining}s) hmangin player kawl...",
  "rockbox_stage_disconnect_extra": "Player pakhat nak tam an i pehtlai. A dang pawl kha tthen hna law a ummi lawng kha chiah.",
  "rockbox_stage_pushing": "Player nih a hmuh. Khuachung tlangtar le cafang pawl chiah...",
@@ -1025,8 +1033,5 @@
  "donate_support_appeal_coffee_math": "Coffee pakhat nih download pakhat i a bandwidth kha a khuh dih. A hnu remhnak kha na phak khawhnak hmun ah a chiah.",
  "donate_family_appeal_expected": "Ryan le a hawipa cu fa an ngei. Project kalnak man le kan chungkhar thar caah bawmhnak pekmi cu kan i lawm tuk.",
  "donate_family_appeal_new_arrival": "Ryan inn ah a thar in a phanmi pakhat a um. Server pawl le a karh cuahmahmi kan chungkhar caah bawmhnak pekmi paohpaoh nih sullam nganpi a ngei.",
- "donate_family_appeal_nursery": "Ryan le a hawipa cu an fa caah timhtuahnak an ngei. Hi thilri hi a ttha ahcun, a kalnak man le kan chungkhar a karh cuahmahmi caah bawmhnak nih na theihmi nakin a bawmh deuh lai.",
- "rockbox_cleanup_step": "Rockbox setting hlun pawl hloh...",
- "rockbox_cleanup_deleting": "Player chungin .rockbox folder chuah...",
- "rockbox_cleanup_failed_note": "Na software thar cu install a si cang, asinain .rockbox folder hlun cu hlonh khawh a si lo. A thiangmi thawk na duh ahcun player cung i .rockbox folder kha kut in hloh."
+ "donate_family_appeal_nursery": "Ryan le a hawipa cu an fa caah timhtuahnak an ngei. Hi thilri hi a ttha ahcun, a kalnak man le kan chungkhar a karh cuahmahmi caah bawmhnak nih na theihmi nakin a bawmh deuh lai."
 }

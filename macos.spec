@@ -236,6 +236,15 @@ app = BUNDLE(
         "UIDesignRequiresCompatibility": True,
         "LSApplicationCategoryType": "public.app-category.utilities",
         "NSHumanReadableCopyright": APP_COPYRIGHT,
+        # innioasis-updater:// links from innioasis.app and themes.innioasis.app
+        # (src/site_links.py) arrive as a URL-open event. The MediaTek
+        # Installer has no online catalogue, so it does not claim them.
+        "CFBundleURLTypes": [] if IS_MEDIATEK_INSTALLER_BUILD else [
+            {
+                "CFBundleURLName": f"{BUNDLE_ID}.site-link",
+                "CFBundleURLSchemes": ["innioasis-updater"],
+            }
+        ],
         "CFBundleDocumentTypes": [
             {
                 "CFBundleTypeName": "Firmware Archive",

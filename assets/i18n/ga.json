@@ -139,7 +139,12 @@
  "settings_filter_old_rockbox": "Taispeáin Old Rockbox Builds",
  "settings_filter_nightly": "Taispeáin Eisiúintí Dev Oíche",
  "settings_filter_240p": "Eisiúint Rockbox 240p",
- "settings_240p_tip": "Taispeáin foirgnimh a bhfuil a zip ROM ina mhalairt de 240p (rom…_240p.zip). Níl tógáil 240p comhoiriúnach le haonaid Y1 ar Innioasis OS faoi bhun 3.0.7, mar sin tá Show Old Rockbox Builds cumasaithe leis.",
+ "settings_240p_tip": "Taispeáin foirgnimh a bhfuil a zip ROM ina mhalairt de 240p (rom…_240p.zip). Ní féidir tógálaí 240p a úsáid ar Y1 a ceannaíodh nua tar éis Bealtaine 2026, nó ar cheann a tháinig le Bogearraí Bunaidh 3.0.7 nó níos déanaí. Ní féidir leis na himreoirí sin foirgnimh Rockbox níos sine a úsáid ach an oiread, mar sin cuirtear Show Old Rockbox Builds ar siúl leis.",
+ "settings_240p_warn_body": "Ní féidir tógálaí 240p a úsáid ar Y1 a ceannaíodh nua tar éis Bealtaine 2026, nó ar cheann a tháinig le Bogearraí Bunaidh 3.0.7 nó níos déanaí. Ná shuiteáil ach ceann amháin ar Y1 níos sine.\n\nNí féidir leis na himreoirí sin foirgnimh Rockbox níos sine a úsáid ach an oiread, mar sin liostaítear iad sin freisin.\n\nAn bhfuil tú cinnte gur mhaith leat eisiúintí 240p Rockbox a thaispeáint?",
+ "sel_240p_warning": "Is tógáil 240p é seo. Ní féidir é a úsáid ar Y1 a ceannaíodh nua tar éis Bealtaine 2026, ná ar cheann a tháinig le Bun-Bogearraí 3.0.7 nó níos déanaí.",
+ "link_240p_body": "Tá an nasc a d’oscail tú le haghaidh tógáil 240p. Ní féidir tógálaí 240p a úsáid ar Y1 a ceannaíodh nua i ndiaidh Bealtaine 2026, nó ar cheann a tháinig le Bogearraí Bunaidh 3.0.7 nó níos déanaí, ionas go mbeidh siad i bhfolach go dtí go gcuirfidh tú ar siúl iad.\n\nAn bhfuil tú cinnte gur mhaith leat eisiúintí 240p Rockbox a thaispeáint?",
+ "link_busy": "Críochnaigh an suiteáil reatha, ansin oscail an nasc arís.",
+ "link_not_listed": "Níl na bogearraí sa nasc sin eisithe don imreoir seo fós.",
  "settings_old_rockbox_warn_title": "Rabhadh Comhoiriúnachta Rockbox",
  "settings_old_rockbox_warn_body": "Níl scaoileadh Rockbox-Y1 roimh 0.5 comhoiriúnach le haonaid Y1 a dhíoltar tar éis Márta 2026 le Innioasis OS 3.0.7 réamhshuiteáilte.\n\nMá dhéantar tógáil níos sine ar na gléasanna seo a ghealadh, cuirfear cosc ​​ar bhotún.\n\nAn bhfuil tú cinnte gur mhaith leat foirgnimh Rockbox níos sine a thaispeáint?",
  "sel_refresh": "Athnuaigh",
@@ -926,6 +931,9 @@
  "rockbox_wizard_done_desc": "Is féidir leat an t-imreoir a dhínascadh go sábháilte anois agus téama a phiocadh i Rockbox (Socruithe > Socruithe Téama).",
  "sel_local_rockbox_themes_option": "Suiteáil Rockbox 360p Themes + Fontpack",
  "rockbox_stage_installing": "Téamaí & Clónna Rockbox á suiteáil...",
+ "rockbox_cleanup_step": "Seanshocruithe Rockbox á mbaint...",
+ "rockbox_cleanup_deleting": "An fillteán .rockbox á bhaint den imreoir...",
+ "rockbox_cleanup_failed_note": "Suiteáladh do bhogearraí nua, ach níorbh fhéidir an seanfhillteán .rockbox a bhaint. Scrios an fillteán .rockbox ar an imreoir de láimh más mian leat tús glan.",
  "rockbox_stage_waiting_adb_fmt": "Imreoir á lorg trí ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Tá níos mó ná imreoir amháin ceangailte. Déan na cinn eile a dhícheangal agus ná fág ach an ceann atá á shuiteáil.",
  "rockbox_stage_pushing": "Braitheadh ​​imreoir. Téamaí pobail & clónna á gcur...",
@@ -1025,8 +1033,5 @@
  "donate_support_appeal_coffee_math": "Clúdaíonn caife amháin go garbh bandaleithead íoslódála. Coinníonn sé an chéad shocrú eile laistigh de bhaint amach.",
  "donate_family_appeal_expected": "Tá Ryan agus a pháirtí ag súil le leanbh. Táthar an-bhuíoch as síntiúis i dtreo chostais reatha an tionscadail agus lenár dteaghlach nua.",
  "donate_family_appeal_new_arrival": "Tá teacht nua ar an mbealach i dteach Ryan. Ciallaíonn gach deonachán do na freastalaithe agus ár dteaghlach atá ag fás go mór.",
- "donate_family_appeal_nursery": "Tá Ryan agus a pháirtí ag ullmhú dá leanbh. Má bhí an uirlis seo úsáideach, chabhródh síntiús le haghaidh na gcostas reatha agus ár dteaghlach atá ag fás níos mó ná mar is eol duit.",
- "rockbox_cleanup_step": "Seanshocruithe Rockbox á mbaint...",
- "rockbox_cleanup_deleting": "An fillteán .rockbox á bhaint den imreoir...",
- "rockbox_cleanup_failed_note": "Suiteáladh do bhogearraí nua, ach níorbh fhéidir an seanfhillteán .rockbox a bhaint. Scrios an fillteán .rockbox ar an imreoir de láimh más mian leat tús glan."
+ "donate_family_appeal_nursery": "Tá Ryan agus a pháirtí ag ullmhú dá leanbh. Má bhí an uirlis seo úsáideach, chabhródh síntiús le haghaidh na gcostas reatha agus ár dteaghlach atá ag fás níos mó ná mar is eol duit."
 }

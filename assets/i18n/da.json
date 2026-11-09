@@ -139,7 +139,12 @@
  "settings_filter_old_rockbox": "Vis gamle Rockbox-bygninger",
  "settings_filter_nightly": "Vis natlige udviklerudgivelser",
  "settings_filter_240p": "240p Rockbox-udgivelser",
- "settings_240p_tip": "Viser builds, hvis ROM-zip er en 240p-variant (rom..._240p.zip). 240p builds er ikke kompatible med Y1-enheder på Innioasis OS under 3.0.7, så Show Old Rockbox Builds er aktiveret med det.",
+ "settings_240p_tip": "Viser builds, hvis ROM-zip er en 240p-variant (rom..._240p.zip). 240p builds kan ikke bruges på en Y1 købt ny efter maj 2026, eller på en, der fulgte med original software 3.0.7 eller nyere. Disse spillere kan heller ikke bruge ældre Rockbox builds, så Show Old Rockbox Builds er slået til med det.",
+ "settings_240p_warn_body": "240p builds kan ikke bruges på en Y1 købt ny efter maj 2026, eller på en, der fulgte med original software 3.0.7 eller nyere. Installer kun en på en ældre Y1.\n\nDisse spillere kan heller ikke bruge ældre Rockbox-bygninger, så de er også opført.\n\nEr du sikker på, at du vil vise 240p Rockbox-udgivelser?",
+ "sel_240p_warning": "Dette er en 240p build. Det kan ikke bruges på en Y1 købt ny efter maj 2026, eller på en, der fulgte med original software 3.0.7 eller nyere.",
+ "link_240p_body": "Linket du åbnede er til en 240p build. 240p-builds kan ikke bruges på en Y1 købt ny efter maj 2026, eller på en, der fulgte med original software 3.0.7 eller nyere, så de er skjult, indtil du tænder dem.\n\nEr du sikker på, at du vil vise 240p Rockbox-udgivelser?",
+ "link_busy": "Afslut den aktuelle installation, og åbn derefter linket igen.",
+ "link_not_listed": "Softwaren i det link er ikke udgivet til denne afspiller endnu.",
  "settings_old_rockbox_warn_title": "Rockbox-kompatibilitetsadvarsel",
  "settings_old_rockbox_warn_body": "Udgivelser af Rockbox-Y1 før 0.5 er ikke kompatible med Y1-enheder solgt efter marts 2026 med Innioasis OS 3.0.7 forudinstalleret.\n\nFlash af en ældre build på disse enheder forhindrer opstart.\n\nEr du sikker på, at du vil vise ældre Rockbox-bygninger?",
  "sel_refresh": "Opfriske",
@@ -926,6 +931,9 @@
  "rockbox_wizard_done_desc": "Du kan nu sikkert frakoble afspilleren og vælge et tema i Rockbox (Indstillinger > Temaindstillinger).",
  "sel_local_rockbox_themes_option": "Installer Rockbox 360p Themes + Fontpack",
  "rockbox_stage_installing": "Installerer Rockbox-temaer og skrifttyper...",
+ "rockbox_cleanup_step": "Fjerner de gamle Rockbox-indstillinger...",
+ "rockbox_cleanup_deleting": "Fjerner .rockbox-mappen fra afspilleren...",
+ "rockbox_cleanup_failed_note": "Din nye software blev installeret, men den gamle .rockbox-mappe kunne ikke fjernes. Slet .rockbox-mappen på afspilleren i hånden, hvis du vil have en ren start.",
  "rockbox_stage_waiting_adb_fmt": "Søger spiller via ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Der er tilsluttet mere end én afspiller. Frakobl de andre og lad kun den installerede.",
  "rockbox_stage_pushing": "Afspiller fundet. Placering af fællesskabstemaer og skrifttyper...",
@@ -1025,8 +1033,5 @@
  "donate_support_appeal_coffee_math": "En kop kaffe dækker nogenlunde båndbredden af ​​en download. Det holder den næste rettelse inden for rækkevidde.",
  "donate_family_appeal_expected": "Ryan og hans partner venter en baby. Donationer til projektets driftsomkostninger og vores nye familie er enormt værdsat.",
  "donate_family_appeal_new_arrival": "Der er en ny ankomst på vej i Ryans hus. Hver donation til serverne og vores voksende familie betyder rigtig meget.",
- "donate_family_appeal_nursery": "Ryan og hans partner er ved at gøre klar til deres barn. Hvis dette værktøj har været nyttigt, ville en donation til driftsomkostningerne og vores voksende familie hjælpe mere, end du ved.",
- "rockbox_cleanup_step": "Fjerner de gamle Rockbox-indstillinger...",
- "rockbox_cleanup_deleting": "Fjerner .rockbox-mappen fra afspilleren...",
- "rockbox_cleanup_failed_note": "Din nye software blev installeret, men den gamle .rockbox-mappe kunne ikke fjernes. Slet .rockbox-mappen på afspilleren i hånden, hvis du vil have en ren start."
+ "donate_family_appeal_nursery": "Ryan og hans partner er ved at gøre klar til deres barn. Hvis dette værktøj har været nyttigt, ville en donation til driftsomkostningerne og vores voksende familie hjælpe mere, end du ved."
 }

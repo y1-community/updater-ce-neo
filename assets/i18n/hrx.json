@@ -139,7 +139,12 @@
  "settings_filter_old_rockbox": "Tsaych Alte Rockbox Bauen",
  "settings_filter_nightly": "Tsaych Nacht Dev-Releases",
  "settings_filter_240p": "240p Rockbox aus këwe",
- "settings_240p_tip": "Tsaycht paue woo een ROM-xpiichle is een 240p-variante (rom..._240p.zip). 240p paue sin net kompatibel mit Y1 eenheete uf Innioasis OS uner 3.0.7, soo tas Alte Rockbox paue tsayche is mit tëm inkexrip.",
+ "settings_240p_tip": "Tsaycht paue woo een ROM-xpiichle is een 240p-variante (rom..._240p.zip). 240p paue khëne net penutst wëre uf en Y1 woo nay kekhaaft kep waar noo mërts 2026, orer uf een woo mit Original Software 3.0.7 orer xpeeter khom is. Tii xpiiler khëne aach net alte Rockbox xpiile penutse, soo, is Show Old Rockbox xpiile mit tëm aan kefang.",
+ "settings_240p_warn_body": "240p paue khëne net penutst wëre uf en Y1 woo nay kekhaaft kep waar noo mërts 2026, orer uf een woo mit Original Software 3.0.7 orer xpeeter khom is. Instalier nur een op een elter Y1.\n\nTii xpiiler khëne aach net alte Rockbox xpiile penutse, tan sin tii aach kexrip.\n\nSin se sicher tas se 240p Rockbox puplikatsioone tsayche wole?",
+ "sel_240p_warning": "Tas is een 240p bouw. Es khan net penutst wëre uf een Y1 woo nay kekhaaft kep is noo mërts 2026, orer uf een woo mit Original Software 3.0.7 orer xpeeter khom is.",
+ "link_240p_body": "Te link woos tuu uf kemacht host is fer een 240p paue. 240p paue khëne net penutst wëre uf en Y1 woo nay kekhaaft kep waar noo Mee 2026, ore uf en woo mit Original Software 3.0.7 orer xpeeter khom is, soo tas se ferxtekelt sin pis tuu se aan fangst.\n\nSin se sicher tas se 240p Rockbox puplikatsioone tsayche wole?",
+ "link_busy": "Tuu ti aktuaal instaliirunge fërtich mache, tan tuu te link noch mool uf mache.",
+ "link_not_listed": "Ti softwaer in tëm link is noch nët fer tiise xpiiler aus këp.",
  "settings_old_rockbox_warn_title": "Rockbox kompatibiliteet waarnung",
  "settings_old_rockbox_warn_body": "Ti puplikatsioone fon Rockbox-Y1 foer 0,5 sin net kompatibel mit te Y1 woo noo mërts 2026 ferkhaaft kep sin mit Innioasis OS 3.0.7 foer kextëlt kep.\n\nFlash een elter build uf tiise apteelunge tuut boot ferhëngert.\n\nSin se sicher tas se alte Rockbox xpiile wole?",
  "sel_refresh": "Erfrische",
@@ -926,6 +931,9 @@
  "rockbox_wizard_done_desc": "Tuu khanst yets sicher te xpiiler aus lëye un een theema in te Rockbox raus suuche (Instellunge > Theema Instellunge).",
  "sel_local_rockbox_themes_option": "Instaliert Rockbox 360p Theema + Xriftpaket",
  "rockbox_stage_installing": "Instalierung fon Rockbox Theema un Xrifte...",
+ "rockbox_cleanup_step": "Ti alte Rockbox instellunge wech xafe...",
+ "rockbox_cleanup_deleting": "Entfernen Sie .rockbox-Falter aus dem Spieler...",
+ "rockbox_cleanup_failed_note": "Tayn nay softwaer is instaliirt kep, awer te alte .rockbox folëk khont net raus kehool wëre. Lëst ti .rockbox-folder uf te xpiiler mit te hant wëns tuu een sauwer aanfang wilst.",
  "rockbox_stage_waiting_adb_fmt": "Sucht noo een xpiiler torich ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Mee wii een xpiiler is ferpun. Tuu ti anere ap lënke un ploos tii woo instaliirt sin, lose.",
  "rockbox_stage_pushing": "Spieler is een entdeckt. Platzung fon te kemaynte theeme & xrifte...",
@@ -1025,8 +1033,5 @@
  "donate_support_appeal_coffee_math": "Een kaafe tuut runer ti bandbreite fon een download umfase. Es halt ti neekst fix in te richtung.",
  "donate_family_appeal_expected": "Ryan un sayn partner sin een khint am waarte. Ti kontripuytsioone fer tas proyekt un unser nay familye sin massiv petanklich.",
  "donate_family_appeal_new_arrival": "Es kept een nay aankhom uf em weech in Ryan sayn haus. Yeete kontripuytsioon fer ti serveere un unser waksende familye petayt fiil.",
- "donate_family_appeal_nursery": "Ryan un sayn partner sin sich am foer perayte fer sayn khint. Wën tas hilfs mitel nutslich kep waar, een kontripuytsioon fer ti leepens mitel khoste un unser waksende familye teet mee helfe wii teyer weest.",
- "rockbox_cleanup_step": "Ti alte Rockbox instellunge wech xafe...",
- "rockbox_cleanup_deleting": "Entfernen Sie .rockbox-Falter aus dem Spieler...",
- "rockbox_cleanup_failed_note": "Tayn nay softwaer is instaliirt kep, awer te alte .rockbox folëk khont net raus kehool wëre. Lëst ti .rockbox-folder uf te xpiiler mit te hant wëns tuu een sauwer aanfang wilst."
+ "donate_family_appeal_nursery": "Ryan un sayn partner sin sich am foer perayte fer sayn khint. Wën tas hilfs mitel nutslich kep waar, een kontripuytsioon fer ti leepens mitel khoste un unser waksende familye teet mee helfe wii teyer weest."
 }

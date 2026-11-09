@@ -139,7 +139,12 @@
  "settings_filter_old_rockbox": "Köhnə Rockbox quruluşlarını göstərin",
  "settings_filter_nightly": "Gecəlik İnkişaf Relizlərini göstərin",
  "settings_filter_240p": "240p Rockbox buraxılışları",
- "settings_240p_tip": "ROM zip-i 240p variantı olan quruluşları göstərir (rom…_240p.zip). 240p quruluşları 3.0.7-dən aşağı olan Innioasis ƏS-də Y1 konturları ilə uyğun gəlmir, ona görə də Köhnə Rockbox Quraşdırmalarını Göstər onunla aktivləşdirilib.",
+ "settings_240p_tip": "ROM zip-i 240p variantı olan konstruksiyaları göstərir (rom…_240p.zip). 240p quruluşları 2026-cı ilin may ayından sonra yeni alınmış Y1-də və ya Original Proqram təminatı 3.0.7 və ya daha sonrakı versiyalarda istifadə edilə bilməz. Həmin oyunçular köhnə Rockbox konstruksiyalarından da istifadə edə bilməzlər, ona görə də Köhnə Rockbox Quraşdırmalarını Göstər onunla birlikdə aktivdir.",
+ "settings_240p_warn_body": "240p quruluşları 2026-cı ilin may ayından sonra yeni alınmış Y1-də və ya Original Proqram təminatı 3.0.7 və ya daha sonrakı versiyalarda istifadə edilə bilməz. Yalnız birini köhnə Y1-də quraşdırın.\n\nHəmin oyunçular köhnə Rockbox konstruksiyalarından da istifadə edə bilməzlər, ona görə də bunlar da sadalanır.\n\n240p Rockbox buraxılışlarını göstərmək istədiyinizə əminsiniz?",
+ "sel_240p_warning": "Bu 240p quruluşdur. O, 2026-cı ilin may ayından sonra yeni alınmış Y1-də və ya Original Software 3.0.7 və ya daha sonrakı versiyalarla təchiz edilmiş Y1-də istifadə edilə bilməz.",
+ "link_240p_body": "Açdığınız link 240p quruluş üçündür. 240p quruluşları 2026-cı ilin may ayından sonra yeni alınmış Y1-də və ya Original Software 3.0.7 və ya daha yeni versiya ilə gələndə istifadə oluna bilməz, ona görə də siz onları yandırana qədər onlar gizlədilir.\n\n240p Rockbox buraxılışlarını göstərmək istədiyinizə əminsiniz?",
+ "link_busy": "Cari quraşdırmanı tamamlayın, sonra linki yenidən açın.",
+ "link_not_listed": "Həmin linkdəki proqram təminatı hələ bu oyunçu üçün buraxılmayıb.",
  "settings_old_rockbox_warn_title": "Rockbox Uyğunluğu Xəbərdarlığı",
  "settings_old_rockbox_warn_body": "Rockbox-Y1-in 0.5-dən əvvəlki buraxılışları əvvəlcədən quraşdırılmış Innioasis OS 3.0.7 ilə 2026-cı ilin martından sonra satılan Y1 vahidləri ilə uyğun gəlmir.\n\nBu cihazlarda köhnə quruluşun yanıb-sönməsi yüklənmənin qarşısını alacaq.\n\nKöhnə Rockbox quruluşlarını göstərmək istədiyinizə əminsiniz?",
  "sel_refresh": "Yeniləyin",
@@ -926,6 +931,9 @@
  "rockbox_wizard_done_desc": "İndi siz pleyeri təhlükəsiz şəkildə ayıra və Rockbox-da mövzu seçə bilərsiniz (Parametrlər > Mövzu Parametrləri).",
  "sel_local_rockbox_themes_option": "Rockbox 360p Mövzular + Fontpack quraşdırın",
  "rockbox_stage_installing": "Rockbox Mövzuları və Şriftləri Quraşdırılır...",
+ "rockbox_cleanup_step": "Köhnə Rockbox parametrləri silinir...",
+ "rockbox_cleanup_deleting": ".rockbox qovluğu pleyerdən silinir...",
+ "rockbox_cleanup_failed_note": "Yeni proqram təminatınız quraşdırıldı, lakin köhnə .rockbox qovluğunu silmək mümkün olmadı. Təmiz bir başlanğıc istəyirsinizsə, pleyerdəki .rockbox qovluğunu əl ilə silin.",
  "rockbox_stage_waiting_adb_fmt": "AİB ({remaining}lar) vasitəsilə oyunçu axtarılır...",
  "rockbox_stage_disconnect_extra": "Birdən çox oyunçu bağlıdır. Digərlərini ayırın və yalnız quraşdırılmış birini buraxın.",
  "rockbox_stage_pushing": "Oyunçu aşkar edildi. İcma mövzuları və şriftlər yerləşdirilir...",
@@ -1025,8 +1033,5 @@
  "donate_support_appeal_coffee_math": "Bir qəhvə yükləmənin bant genişliyini təxminən əhatə edir. O, növbəti düzəlişi əlçatan məsafədə saxlayır.",
  "donate_family_appeal_expected": "Rayan və onun ortağı uşaq gözləyir. Layihənin məsrəfləri və yeni ailəmiz üçün edilən ianələr çox yüksək qiymətləndirilir.",
  "donate_family_appeal_new_arrival": "Rayanın evinə yeni bir gəliş var. Serverlərə və böyüyən ailəmizə edilən hər bir ianə çox şey deməkdir.",
- "donate_family_appeal_nursery": "Rayan və ortağı uşaqları üçün hazırlaşır. Bu alət faydalı olsaydı, cari xərclər və böyüyən ailəmiz üçün ianə bildiyinizdən daha çox kömək edərdi.",
- "rockbox_cleanup_step": "Köhnə Rockbox parametrləri silinir...",
- "rockbox_cleanup_deleting": ".rockbox qovluğu pleyerdən silinir...",
- "rockbox_cleanup_failed_note": "Yeni proqram təminatınız quraşdırıldı, lakin köhnə .rockbox qovluğunu silmək mümkün olmadı. Təmiz bir başlanğıc istəyirsinizsə, pleyerdəki .rockbox qovluğunu əl ilə silin."
+ "donate_family_appeal_nursery": "Rayan və ortağı uşaqları üçün hazırlaşır. Bu alət faydalı olsaydı, cari xərclər və böyüyən ailəmiz üçün ianə bildiyinizdən daha çox kömək edərdi."
 }

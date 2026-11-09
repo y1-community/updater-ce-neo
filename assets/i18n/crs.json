@@ -139,7 +139,12 @@
  "settings_filter_old_rockbox": "montre bann vye bwat ros",
  "settings_filter_nightly": "montre bann lansman devlopman aswar",
  "settings_filter_240p": "240p Rockbox Releases",
- "settings_240p_tip": "montre bann build ki son ROM zip i en varyant 240p (rom…_240p.zip). bann konstriksyon 240p pa konpatib avek bann younit Y1 lo Innioasis OS anba 3.0.7, alor Show Old Rockbox Builds i ganny aktive avek li.",
+ "settings_240p_tip": "montre bann build ki son ROM zip i en varyant 240p (rom…_240p.zip). 240p builds pa kapab ganny servi lo en Y1 ki'n ganny aste nef apre Me 2026, oubyen lo enn ki'n vin avek Original Software 3.0.7 ou pli tar. sa bann zwer pa kapab servi bann vye Rockbox build non pli, alor Show Old Rockbox Builds i ganny aktive avek li.",
+ "settings_240p_warn_body": "240p builds pa kapab ganny servi lo en Y1 ki'n ganny aste nef apre Me 2026, oubyen lo enn ki'n vin avek Original Software 3.0.7 ou pli tar. enstal zis enn lo en vye Y1.\n\nsa bann zwer pa kapab servi bann vye Rockbox non pli, alor sa bann i osi ganny liste.\n\neski ou asire ou anvi montre bann laranzman 240p Rockbox?",
+ "sel_240p_warning": "sa i en konstriksyon 240p. i pa kapab ganny servi lo en Y1 ki'n ganny aste nef apre Me 2026, oubyen lo enn ki'n vin avek lozisyel orizinal 3.0.7 ou pli tar.",
+ "link_240p_body": "sa lyen ki ou'n ouver i pour en konstriksyon 240p. bann konstriksyon 240p pa kapab ganny servi lo en Y1 ki'n ganny aste nef apre Me 2026, oubyen lo enn ki'n vin avek Lozisyel Orizinal 3.0.7 ou pli tar, alor zot ganny kasyet ziska ler ou alim zot.\n\neski ou asire ou anvi montre bann laranzman 240p Rockbox?",
+ "link_busy": "fini lenstalasyon aktyel, apre ouver sa lyen ankor.",
+ "link_not_listed": "sa lozisyel dan sa lyen pa ankor ganny pibliye pour sa zwer.",
  "settings_old_rockbox_warn_title": "lavertisman konpatibilite rockbox",
  "settings_old_rockbox_warn_body": "bann versyon Rockbox-Y1 avan 0.5 pa konpatib avek bann younit Y1 ki'n ganny vann apre Mars 2026 avek Innioasis OS 3.0.7 pre-enstale.\n\nflash en vye konstriksyon lo sa bann laparey pou anpes demar.\n\neski ou asire ou anvi montre bann vye Rockbox build?",
  "sel_refresh": "Rafresi",
@@ -926,6 +931,9 @@
  "rockbox_wizard_done_desc": "ou kapab aprezan dekonekte sa zwer e swazir en tenm dan Rockbox (Settings > Theme Settings).",
  "sel_local_rockbox_themes_option": "enstal bann tenm Rockbox 360p + Fontpack",
  "rockbox_stage_installing": "pe enstal bann tenm ek font Rockbox...",
+ "rockbox_cleanup_step": "pe retir bann vye laranzman Rockbox...",
+ "rockbox_cleanup_deleting": "pe retir sa dosye .rockbox lo sa zwer...",
+ "rockbox_cleanup_failed_note": "ou nouvo lozisyel in ganny enstale, me sa vye dosye .rockbox pa'n kapab ganny retire. efas sa dosye .rockbox lo sa zwer par lanmen si ou anvi en bon komansman.",
  "rockbox_stage_waiting_adb_fmt": "pe rod zwer atraver ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "plis ki en zwer i konekte. dekonekte bann lezot e kit zis sa enn ki pe ganny enstale.",
  "rockbox_stage_pushing": "zwer in ganny detekte. pe plas bann tenm ek font kominoter...",
@@ -1025,8 +1033,5 @@
  "donate_support_appeal_coffee_math": "en kafe i kouver apepre bandwidth en download. i gard sa prosen solisyon dan son lanmen.",
  "donate_family_appeal_expected": "Ryan ek son partner pe ekspekte en pti baba. bann donasyon anver kou fonksyonnman proze e nou nouvo fanmir i ganny apresye masivman.",
  "donate_family_appeal_new_arrival": "I annan en nouvo larive lo semen dan lakaz Ryan. sak donasyon anver bann server ek nou fanmir ki pe grandi i vedir bokou.",
- "donate_family_appeal_nursery": "Ryan ek son partner pe prepar zot zanfan. si sa zouti in itil, en donasyon pou kou fonksyonnman e nou fanmir ki pe grandi ti pou ed plis ki ou konnen.",
- "rockbox_cleanup_step": "pe retir bann vye laranzman Rockbox...",
- "rockbox_cleanup_deleting": "pe retir sa dosye .rockbox lo sa zwer...",
- "rockbox_cleanup_failed_note": "ou nouvo lozisyel in ganny enstale, me sa vye dosye .rockbox pa'n kapab ganny retire. efas sa dosye .rockbox lo sa zwer par lanmen si ou anvi en bon komansman."
+ "donate_family_appeal_nursery": "Ryan ek son partner pe prepar zot zanfan. si sa zouti in itil, en donasyon pou kou fonksyonnman e nou fanmir ki pe grandi ti pou ed plis ki ou konnen."
 }

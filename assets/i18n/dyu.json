@@ -139,7 +139,12 @@
  "settings_filter_old_rockbox": "Rockbox kɔrɔ lɔli yira .",
  "settings_filter_nightly": "Sufɛ Dev bɔliw yira",
  "settings_filter_240p": "240p Rockbox bɔra",
- "settings_240p_tip": "A be boonw yira minw ka ROM zipu ye 240p yɛlɛmani ye (rom..._240p.zip). 240p lɔli tɛ bɛn ni Y1 yɔrɔw ye Innioasis OS kan min be 3.0.7 duguma, o kama Show Old Rockbox lɔli be se ka kɛ n’a ye.",
+ "settings_240p_tip": "A be boonw yira minw ka ROM zipu ye 240p yɛlɛmani ye (rom..._240p.zip). 240p builds tɛ se ka kɛ Y1 kan min sanna kura saan 2026 mɛkalo kɔ, wala min nana ni porogramu fɔlɔ 3.0.7 ye wala min bɔra o kɔ. O tulonkɛlaw fana tɛ se ka baara kɛ ni Rockbox kɔrɔw ye, o kama Show Old Rockbox Builds be yɛlɛ n’a ye.",
+ "settings_240p_warn_body": "240p builds tɛ se ka kɛ Y1 kan min sanna kura saan 2026 mɛkalo kɔ, wala min nana ni porogramu fɔlɔ 3.0.7 ye wala min bɔra o kɔ. Y1 kɔrɔ dɔ dɔrɔn lo kan.\n\nO tulonkɛlaw fana tɛ se ka baara kɛ ni Rockbox build kɔrɔw ye, o kama olu fana tɔgɔ sɛbɛra.\n\nYala i lanin b’a la ko i b’a fɛ ka 240p Rockbox bɔliw yira wa?",
+ "sel_240p_warning": "Nin ye 240p lɔli ye. A tɛ se ka kɛ Y1 kan min sanna kura saan 2026 mɛkalo kɔ, wala min nana ni porogramu fɔlɔ 3.0.7 wala min bɔra o kɔ.",
+ "link_240p_body": "I ye yɔrɔ min dayɛlɛ, o ye 240p lɔli ye. 240p builds tɛ se ka kɛ Y1 kan min sanna kura saan 2026 mɛkalo kɔ, wala min nana ni Original Software 3.0.7 wala kɔfɛ, o kama u dogonin lo fɔɔ i k’u lawuli.\n\nYala i lanin b’a la ko i b’a fɛ ka 240p Rockbox bɔliw yira wa?",
+ "link_busy": "I ka installation min be yen sisan, o ban, o kɔ, i ka lien dayɛlɛ tugun.",
+ "link_not_listed": "Lozisiyɛli min be o yɔrɔ la, o ma bɔ fɔlɔ o tulonkɛla kama.",
  "settings_old_rockbox_warn_title": "Rockbox bɛnbaliya lasɔmini",
  "settings_old_rockbox_warn_body": "Rockbox-Y1 min bɔra ka kɔn 0.5 ɲɛ, o ni Y1 minw feerera saan 2026 marisikalo kɔ ani Innioasis OS 3.0.7 tun kɔnna ka don u kɔnɔ, u tɛ bɛn.\n\nN’i ​​be build kɔrɔ dɔ yira o minanw na, o bena i bali ka baara daminɛ.\n\nYala i lanin b’a la ko i b’a fɛ ka Rockbox lɔli kɔrɔw yira wa?",
  "sel_refresh": "Lafiya",
@@ -926,6 +931,9 @@
  "rockbox_wizard_done_desc": "Sisan, i be se ka tulonkɛlan tigɛ hɛɛrɛ la ani ka barokun dɔ sugandi Rockbox kɔnɔ (Paramɛtiriw > Barokunw ka paramɛtiriw).",
  "sel_local_rockbox_themes_option": "Rockbox 360p barokunw + sɛbɛrikɛminanw don",
  "rockbox_stage_installing": "Rockbox ka barokunw n’a ka sɛbɛriw donni...",
+ "rockbox_cleanup_step": "Rockbox ka paramɛtiri kɔrɔw bɔli...",
+ "rockbox_cleanup_deleting": "Ka .rockbox ka dosiye bɔ ​​tulonkɛlan kɔnɔ...",
+ "rockbox_cleanup_failed_note": "I ka porogramu kura tun donna, nka .rockbox kɔrɔ tun tɛ se ka bɔ yen. .rockbox min be sɔrɔ tulonkɛlan kan, i k’o jɔsi bolo la n’i b’a fɛ ka daminɛ cogo saniyanin na.",
  "rockbox_stage_waiting_adb_fmt": "Ka tulonkɛla ɲini ADB sababu la ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Tulonkɛlaw ka ca ni kelen ye minw be ɲɔgɔn minɛ. Tɔɔw bɔ ɲɔgɔn na ani min be donna, o dɔrɔn to yen.",
  "rockbox_stage_pushing": "Tulonkɛla lɔnna. Ka sigida barokunw ni sɛbɛnniw bila...",
@@ -1025,8 +1033,5 @@
  "donate_support_appeal_coffee_math": "Kafe kelen be se ka tɛmɛ bandwidth min be se ka telesarse. A b’a to labɛn nata be se ka sɔrɔ.",
  "donate_family_appeal_expected": "Ryan n’a ka baarakɛɲɔgɔn be deen kɔnɔna. Nili minw be kɛ ka baara nin musakaw n’an ka denbaya kura sara, u be waleɲuman lɔn kosɔbɛ.",
  "donate_family_appeal_new_arrival": "Mɔgɔ kura dɔ be sira kan Ryan ka soo. Nilifɛn o bolomafara be di baarakɛlaw n’an ka denbaya ma min be yiriwara, o kɔrɔ ka bon kosɔbɛ.",
- "donate_family_appeal_nursery": "Ryan n’a ka baarakɛɲɔgɔn be labɛn kɛra u deen kama. N’o baarakɛminan ye nafa sɔrɔ, nili min kɛra an ka baara musakaw n’an ka denbaya min be yiriwara, o tun bena an dɛmɛ ka tɛmɛ i ka lɔnniya kan.",
- "rockbox_cleanup_step": "Rockbox ka paramɛtiri kɔrɔw bɔli...",
- "rockbox_cleanup_deleting": "Ka .rockbox ka dosiye bɔ ​​tulonkɛlan kɔnɔ...",
- "rockbox_cleanup_failed_note": "I ka porogramu kura tun donna, nka .rockbox kɔrɔ tun tɛ se ka bɔ yen. .rockbox min be sɔrɔ tulonkɛlan kan, i k’o jɔsi bolo la n’i b’a fɛ ka daminɛ cogo saniyanin na."
+ "donate_family_appeal_nursery": "Ryan n’a ka baarakɛɲɔgɔn be labɛn kɛra u deen kama. N’o baarakɛminan ye nafa sɔrɔ, nili min kɛra an ka baara musakaw n’an ka denbaya min be yiriwara, o tun bena an dɛmɛ ka tɛmɛ i ka lɔnniya kan."
 }

@@ -139,7 +139,12 @@
  "settings_filter_old_rockbox": "Ohechauka Rockbox Tuja Mopu’ã",
  "settings_filter_nightly": "Ohechauka Pyhare Dev Lanzamientos",
  "settings_filter_240p": "240p Rockbox Ñeguenohẽ",
- "settings_240p_tip": "Ohechauka umi ñemopuꞌa oguerekóva ROM zip haꞌehína peteĩ 240p variante (rom..._240p.zip). Umi 240p ñemopuꞌa ndojoajúi umi unidad Y1 ndive Innioasis OS-pe 3.0.7 guýpe, upévare Show Old Rockbox Builds oñembohapéva hendive.",
+ "settings_240p_tip": "Ohechauka umi ñemopuꞌa oguerekóva ROM zip haꞌehína peteĩ 240p variante (rom..._240p.zip). Umi 240p ñemopuꞌa ndaikatúi ojepuru peteĩ Y1 ojejoguáva pyahu jasypokõi 2026 rire, térã peteĩ oúva Software Original 3.0.7 ndive térã ipyahuvévape. Umi ñembosaráihárape ndaikatúi oipuru avei Rockbox ñemopuꞌa itujavéva, upévare Show Old Rockbox Builds oñembogue hendive.",
+ "settings_240p_warn_body": "Umi 240p ñemopuꞌa ndaikatúi ojepuru peteĩ Y1 ojejoguáva pyahu jasypokõi 2026 rire, térã peteĩ oúva Software Original 3.0.7 ndive térã ipyahuvévape. Emoĩ peteĩnte peteĩ Y1 itujavévape.\n\nUmi ñembosaráihárape ndaikatúi oipuru avei umi Rockbox ñemopuꞌa itujavéva, upévare umíva oñemoĩ avei.\n\n¿Eime seguro rehechaukaseha 240p Rockbox ñeguenohẽ?",
+ "sel_240p_warning": "Kóva ha’e peteĩ 240p ñemopu’ã. Ndaikatúi ojepuru peteĩ Y1 ojejoguáva pyahu jasypokõi 2026 rire, térã peteĩ oúva Software Original 3.0.7 ndive térã ipyahuvévape.",
+ "link_240p_body": "Pe enlace reipe’ava’ekue ha’e peteĩ 240p ñemopu’ãrã. Umi 240p ñemopuꞌa ndaikatúi ojepuru peteĩ Y1 ojejoguáva pyahu jasypokõi 2026 rire, térã peteĩ oúva Software Original 3.0.7 térã ipyahuvéva ndive, upévare oñeñomi remboguejy peve.\n\n¿Eime seguro rehechaukaseha 240p Rockbox ñeguenohẽ?",
+ "link_busy": "Emohu’ã instalación ko’áĝagua, upéi eipe’a jey pe enlace.",
+ "link_not_listed": "Pe software oĩva upe enlace-pe nosẽi gueteri ko jugador-pe g̃uarã.",
  "settings_old_rockbox_warn_title": "Rockbox Compatibilidad rehegua Ñe’ẽñemi",
  "settings_old_rockbox_warn_body": "Umi ñeguenohẽ Rockbox-Y1 0.5 mboyve ndojoajúi umi unidad Y1 oñevendéva marzo 2026 rire Innioasis OS 3.0.7 oñeinstaláva mboyve.\n\nOjepysóramo peteĩ ñemopu’ã itujavéva ko’ã tembipuru’ípe ojokóta ñepyrũrã.\n\n¿Eime seguro rehechaukaseha umi Rockbox ñemopu’ã itujavéva?",
  "sel_refresh": "Embopyahu",
@@ -926,6 +931,9 @@
  "rockbox_wizard_done_desc": "Ko’áĝa ikatu embogue seguridad reheve pe reproductor ha eiporavo peteĩ tema Rockbox-pe (Ñemboheko > Tema ñemboheko).",
  "sel_local_rockbox_themes_option": "Emoĩ Rockbox 360p Temas + Fontpack rehegua",
  "rockbox_stage_installing": "Oñemoĩvo Rockbox Temas & Fuentes...",
+ "rockbox_cleanup_step": "Ojepe’ávo umi Rockbox ñemboheko tuja...",
+ "rockbox_cleanup_deleting": "Ojepe’ávo .rockbox ryru ñembosaráiháragui...",
+ "rockbox_cleanup_failed_note": "Oñemoĩkuri ne software pyahu, ha katu ndaikatúi ojeipe’a pe .rockbox ryru tuja. Embogue nde po rupive .rockbox ryru reproductor-pe reipotáramo peteĩ ñepyrũ ipotĩva.",
  "rockbox_stage_waiting_adb_fmt": "Ojehekávo jugador ADB rupive ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Hetave peteĩ jugador-gui oñembojoaju. Embogue ambuekuéra ha eheja pe oñeinstaláva añoite.",
  "rockbox_stage_pushing": "Jugador ojehechakuaa. Oñemoĩvo umi tema & fuente komunida rehegua...",
@@ -1025,8 +1033,5 @@
  "donate_support_appeal_coffee_math": "Peteĩ káva ocubri aproximadamente pe banda ancho peteĩ descarga rehegua. Oñongatu pe arreglo oúva alcance-pe.",
  "donate_family_appeal_expected": "Ryan ha icompañero ohaʼarõ hína peteĩ mitã. Oñemomba'eguasu masiva umi donación umi costo de funcionamiento proyecto ha ore familia pyahu gotyo.",
  "donate_family_appeal_new_arrival": "Oĩ peteĩ og̃uahẽ pyahúva tapére Ryan rógape. Opa donación umi servidor ha ore familia okakuaáva gotyo he’ise tuicha mba’e.",
- "donate_family_appeal_nursery": "Ryan ha icompañero oñembosako’i hína imemby rehehápe. Ko tembiporu ideprovecho ramo, peteĩ donación umi gasto de carrera ha ore familia okakuaávape ĝuarã oipytyvõvéta peẽ peikuaávagui.",
- "rockbox_cleanup_step": "Ojepe’ávo umi Rockbox ñemboheko tuja...",
- "rockbox_cleanup_deleting": "Ojepe’ávo .rockbox ryru ñembosaráiháragui...",
- "rockbox_cleanup_failed_note": "Oñemoĩkuri ne software pyahu, ha katu ndaikatúi ojeipe’a pe .rockbox ryru tuja. Embogue nde po rupive .rockbox ryru reproductor-pe reipotáramo peteĩ ñepyrũ ipotĩva."
+ "donate_family_appeal_nursery": "Ryan ha icompañero oñembosako’i hína imemby rehehápe. Ko tembiporu ideprovecho ramo, peteĩ donación umi gasto de carrera ha ore familia okakuaávape ĝuarã oipytyvõvéta peẽ peikuaávagui."
 }

@@ -139,7 +139,12 @@
  "settings_filter_old_rockbox": "Takuksautittiniq pituqarnik raakpaaks sanajausimajunik",
  "settings_filter_nightly": "Takuksautittiniq unnukkut pivalliajulirinirmut saqqitauvaktunik",
  "settings_filter_240p": "240p raakpaaks saqqitauningit",
- "settings_240p_tip": "Takuksautittijut sanajausimajunik taikkua ROM-ngit 240p-ngullutik ajjigiinnginningit (rom..._240p.zip). 240p sanajausimajut tukilianngilat Y1 iglunut Innioasis OS-mi ataani 3.0.7, taimaimmat takuksautittiniq pituqarnik raakpaaks sanajausimajunik pijunnaqtitauvuq taassumunga.",
+ "settings_240p_tip": "Takuksautittijut sanajausimajunik taikkua ROM-ngit 240p-ngullutik ajjigiinnginningit (rom..._240p.zip). 240p sanajausimajut atuqtaujunnanngilat Y1-mi niuviqtausimajumi nutaami mai 2026 kinguniani, uvvaluunniit atausirmi tikititausimajumi qaritaujakkut 3.0.7 uvvaluunniit kinguniagut. Taikkua pinnguaqtiit aturunnanngilat pituqauniqsanik Rockbox sanajausimajuniktauq, taimaimmat takuksautittiniq pituqauniqsanik Rockbox sanajausimajunik ikitauvuq taimaittumut.",
+ "settings_240p_warn_body": "240p sanajausimajut atuqtaujunnanngilat Y1-mi niuviqtausimajumi nutaami mai 2026 kinguniani, uvvaluunniit atausirmi tikititausimajumi qaritaujakkut 3.0.7 uvvaluunniit kinguniagut. Aaqqiksilutit atausirmik pituqauniqsamut Y1-mut.\n\nTaikkua pinnguaqtiit aturunnanngilat pituqauniqsanik raakpaaks sanajausimajunik, taimaimmat taikkua titiraqtausimammijuttauq.\n\nTakuksautittijumallarikpiit 240p raakpaaks saqqitausimajunik?",
+ "sel_240p_warning": "Taanna 240p sanajausimajuq. Atuqtaujunnangittuq Y1-mi niuviqtausimajumi nutaami mai 2026 kinguniani, uvvaluunniit tikititausimajumi qaritaujakkut 3.0.7 uvvaluunniit kinguniagut.",
+ "link_240p_body": "Matuilauqtait 240p sanajauninganut. 240p sanajausimajut atuqtaujunnanngilat Y1-mi niuviqtausimajumi nutaami mai 2026 kinguniani, uvvaluunniit atausirmi tikititausimajumi qaritaujakkut 3.0.7 uvvaluunniit kinguniagut, taimaimmat ijiqsimavut ikittilaunnginnirni.\n\nTakuksautittijumallarikpiit 240p raakpaaks saqqitausimajunik?",
+ "link_busy": "Pijariirlugu maannaujuq aaqqiksiniq, matuikkannirlugu qaritaujakkut turaarutinga.",
+ "link_not_listed": "Qarasaujakkut tukisigiarutiksait tavvani saqqitausimanngilat suli taassumunga pinnguarutimut.",
  "settings_old_rockbox_warn_title": "Rockbox naammaksisimaninganut ujjiqsuqujiniq",
  "settings_old_rockbox_warn_body": "Saqqitausimajut Rockbox-Y1 sivuniani 0.5 naammanngilat Y1 iglunut niuviaksanut kinguniani maajji 2026 iniuasis OS 3.0.7 aaqqiktausimavagiiqtillugu.\n\nQaumatittiniq pituqauniqsamik sanajausimajumik taakkunani qaritaujani nuqqangatittiniaqtuq pigiaqtittinirmik.\n\nTakuksautittijumallarikpiit pituqauniqsanik raakpaaks sanajausimajunik?",
  "sel_refresh": "Nutaannguriaqtittiniq",
@@ -926,6 +931,9 @@
  "rockbox_wizard_done_desc": "Maanna attarnanngittukkut piiqsijunnaqsivutit pinnguarutimik niruarlutillu taiguusirmik Rockbox-mi (aaqqiksimaningit > taiguusiup aaqqiksimaningit).",
  "sel_local_rockbox_themes_option": "Aaqqiksilutit raakpaaks 360p taiguusirnik + titirausirnik",
  "rockbox_stage_installing": "Aaqqiksiniq raakpaaks taiguusinginnik amma titirausinginnik...",
+ "rockbox_cleanup_step": "Piijainiq pituqarnik raakpaaks aaqqiksimaninginnik...",
+ "rockbox_cleanup_deleting": "Piijainiq .rockbox paippaaqutimik pinnguarutimik...",
+ "rockbox_cleanup_failed_note": "Nutaaq qaritaujait aaqqiktaulauqtuq, kisiani pituqaq .rockbox paippaaquti piiqtaujunnalaunngilaq. Piijarlugu .rockbox paippaaqutinga pinnguarutimi aggakkut salumajumik pigiarutiqarumaguvit.",
  "rockbox_stage_waiting_adb_fmt": "Qiniqtunga pinnguaqtimik ADB-kutigut ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Atausiunngittuq pinnguaqti kasuqsimajuq. Asingit piijarlugit qimaktaulunilu atausituaq aaqqiktausimajuq.",
  "rockbox_stage_pushing": "Pinnguaqti nanijaujuq. Aaqqiksiniq nunalingni taiguusirnik amma titirausirnik...",
@@ -1001,8 +1009,5 @@
  "settings_arm64_driver_note": "ARM64 igalaat ikajuqsuiningit qaujisaqtausimanngittut. Snapdragon-mi amma RTX Spark-mi qaritaujaralaani, Zadig atuqtaujunnaqpuq aqutiup atiliurutinganut atuliqtittiniq nuqqaqtitausimatillugu aaqqiksinirmut WinUSB uvvaluunniit libusb-mut MT6227 sivurngagut qaritaujaralaanut qaritaujaralaanut aulattijimi. Takulugu ARM64 aqutimut atuagaq qanuiliuriaqarnirmut.",
  "toast_update_version_fmt": "{app} v{version} atuinnaujuq.",
  "toast_update_fmt": "Nutaannguriaqsimajuq {app}-mut atuinnaujuq.",
- "install_card_title_fmt": "{software} for {model}",
- "rockbox_cleanup_step": "Piijainiq pituqarnik raakpaaks aaqqiksimaninginnik...",
- "rockbox_cleanup_deleting": "Piijainiq .rockbox paippaaqutimik pinnguarutimik...",
- "rockbox_cleanup_failed_note": "Nutaaq qaritaujait aaqqiktaulauqtuq, kisiani pituqaq .rockbox paippaaquti piiqtaujunnalaunngilaq. Piijarlugu .rockbox paippaaqutinga pinnguarutimi aggakkut salumajumik pigiarutiqarumaguvit."
+ "install_card_title_fmt": "{software} for {model}"
 }

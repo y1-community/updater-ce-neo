@@ -139,7 +139,12 @@
  "settings_filter_old_rockbox": "Vakaraitaka na Rockbox makawa e tara",
  "settings_filter_nightly": "Vakaraitaka na veivakagalalataki ni Dev ena veibogi",
  "settings_filter_240p": "240p Kato ni Vatu Vakagalalataki",
- "settings_240p_tip": "Vakaraitaka na tara na zip ni ROM e dua na veisau 240p (rom ... _240p.zip). 240p tara e sega ni veiganiti kei na Y1 iuniti ena Innioasis OS ena ruku ni 3.0.7, sa vakatarai kina na Vakaraitaka na Rockbox makawa tara.",
+ "settings_240p_tip": "Vakaraitaka na tara na zip ni ROM e dua na veisau 240p (rom ... _240p.zip). 240p tara e sega ni rawa ni vakayagataki ena dua na Y1 voli vou ni oti na Me 2026, se ena dua e lako mai kei na parokaramu ni komipiuta taumada 3.0.7 se e muri. O ira na dauqito era sega ni rawa ni vakayagataka na Rockbox makawa tara talega, sa vakakina na Vakaraitaka na Rockbox makawa tara sa vakalivalivataki vata kei koya.",
+ "settings_240p_warn_body": "240p tara e sega ni rawa ni vakayagataki ena dua na Y1 voli vou ni oti na Me 2026, se ena dua e lako mai kei na parokaramu ni komipiuta taumada 3.0.7 se e muri. Vakacuruma ga e dua ena dua na Y1 makawa.\n\nO ira na dauqito era sega ni rawa ni vakayagataka na Rockbox makawa tara talega, o koya gona o ira era sa volai talega.\n\nO sa vakadeitaka ni o vinakata mo vakaraitaka na 240p Rockbox vakagalalataki?",
+ "sel_240p_warning": "Oqo e dua na 240p tara. E sega ni rawa ni vakayagataki ena dua na Y1 voli vou ni oti na Me 2026, se ena dua e lako mai kei na parokaramu ni komipiuta taumada 3.0.7 se e muri.",
+ "link_240p_body": "Na isema o dolava e baleta e dua na tara 240p. 240p tara e sega ni rawa ni vakayagataki ena dua na Y1 voli vou ni oti na Me 2026, se ena dua e lako mai kei na parokaramu ni komipiuta taumada 3.0.7 se e muri, me ra sa vuni tu me yacova ni o sa vakasukai ira.\n\nO sa vakadeitaka ni o vinakata mo vakaraitaka na 240p Rockbox vakagalalataki?",
+ "link_busy": "Vakaotia na vakacurumi ni gauna oqo, qai dolava tale na isema.",
+ "link_not_listed": "Na parokaramu ni komipiuta ena isema oqori e se bera ni vakagalalataki me baleta na dauqito oqo.",
  "settings_old_rockbox_warn_title": "ivakasala ni veiganiti ni Rockbox",
  "settings_old_rockbox_warn_body": "Vakagalalataki ni Rockbox-Y1 ni bera na 0.5 e sega ni salavata kei na iuniti ni Y1 volitaki ni oti na Maji 2026 kei na Innioasis OS 3.0.7 sa vakacurumi oti.\n\nNa kena vakararamataki e dua na tara makawa ena iyaya oqo ena tarova na booting.\n\nO sa vakadeitaka ni o vinakata mo vakaraitaka na tara ni Rockbox makawa?",
  "sel_refresh": "Vakavoui",
@@ -926,6 +931,9 @@
  "rockbox_wizard_done_desc": "Sa rawa mo vakabulabulataka na dauqito ka digitaka e dua na ulutaga ena Rockbox (Ituvatuva > ituvatuva ni ulutaga).",
  "sel_local_rockbox_themes_option": "Vakacuruma na Rockbox 360p Ulutaga + Matanivola",
  "rockbox_stage_installing": "Vakacuruma na ulutaga kei na matanivola ni Rockbox...",
+ "rockbox_cleanup_step": "Kauta laivi na ituvatuva makawa ni Rockbox...",
+ "rockbox_cleanup_deleting": "Kauta laivi na .rockbox na folder mai na dauqito...",
+ "rockbox_cleanup_failed_note": "Sa vakacurumi na nomu parokaramu vou, ia e sega ni rawa ni kau laivi na folder makawa ni .rockbox. Bokoca na .rockbox na folder ena dauqito ena liga kevaka o vinakata e dua na itekitekivu savasava.",
  "rockbox_stage_waiting_adb_fmt": "Vakasaqara na dauqito ena ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "E sivia e dua na dauqito e semati. Vakasuka na kena vo ka biuta ga na kena e vakacurumi tiko.",
  "rockbox_stage_pushing": "Sa kunei na dauqito. Biuta na ulutaga ni veivanua & matanivola...",
@@ -1025,8 +1033,5 @@
  "donate_support_appeal_coffee_math": "E dua na kofi e rauta ni ubia na bandwidth ni dua na lavetaki. E maroroya na veivakadodonutaki e tarava ena loma ni kena rawati.",
  "donate_family_appeal_expected": "Erau sa namaka tiko o Ryan kei na nona itokani e dua na gone. Na cau ki na isau ni cici ni cakacaka kei na neitou matavuvale vou e vakavinavinakataki vakalevu.",
  "donate_family_appeal_new_arrival": "E dua na tamata vou e lako mai ena sala ena vale nei Ryan. Na cau kece sara kivei ira na dauveiqaravi kei na neitou matavuvale tubu tiko e kena ibalebale e dua na ka levu.",
- "donate_family_appeal_nursery": "Erau sa vakarautaki rau tiko o Ryan kei na nona itokani me baleta na luvedrau. Kevaka e sa yaga na iyaya ni cakacaka oqo, e dua na cau me baleta na isau ni cici kei na neitou matavuvale tubu tiko ena veivuke vakalevu cake mai na ka o kila.",
- "rockbox_cleanup_step": "Kauta laivi na ituvatuva makawa ni Rockbox...",
- "rockbox_cleanup_deleting": "Kauta laivi na .rockbox na folder mai na dauqito...",
- "rockbox_cleanup_failed_note": "Sa vakacurumi na nomu parokaramu vou, ia e sega ni rawa ni kau laivi na folder makawa ni .rockbox. Bokoca na .rockbox na folder ena dauqito ena liga kevaka o vinakata e dua na itekitekivu savasava."
+ "donate_family_appeal_nursery": "Erau sa vakarautaki rau tiko o Ryan kei na nona itokani me baleta na luvedrau. Kevaka e sa yaga na iyaya ni cakacaka oqo, e dua na cau me baleta na isau ni cici kei na neitou matavuvale tubu tiko ena veivuke vakalevu cake mai na ka o kila."
 }

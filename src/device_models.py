@@ -3,10 +3,10 @@
 Two different questions must not be conflated:
 
 * **What the user may pick** — the Select Software device drop-down offers
-  every model the registry marks flashable, whether or not
-  ``slidia_manifest.xml`` lists a release for it yet: a player the app can
-  write to must be selectable, and one with nothing published shows an empty
-  software list instead of vanishing. See :func:`selectable_models`.
+  a flashable model only once the catalogue lists a released firmware for it.
+  A player with nothing published (the Q8 and A5 today) has no row until a
+  release appears; the catalogue decides, not this registry. See
+  :func:`selectable_models`.
 * **What the app can recognise** — guidance has to name the right player even
   for firmware the user dropped in by hand, including models with no catalogue
   entry yet. :func:`model_from_filename` maps an imported ``..._g5.zip`` onto
@@ -209,35 +209,36 @@ def model_from_filename(name: str, exclude=()) -> tuple:
 def selectable_models(available_ids=None, fallback=(), brand: str = "") -> list:
     """Model ids to offer in the device drop-down, in a stable order.
 
-    Every model the registry marks flashable is offered, whether or not
-    ``slidia_manifest.xml`` lists a release for it yet: a player the app can
-    write to must be selectable, and a model whose firmware has not been
-    published shows an empty software list rather than vanishing from the
-    drop-down entirely. Order follows the registry so the list never reshuffles
-    between launches; ``available_ids`` only decides where models the registry
-    has never heard of are appended, so a new release is never hidden by a
-    stale data file. ``brand`` scopes the list the same way the catalogue does.
+    Only models the catalogue lists a release for (``available_ids``) are
+    offered, so a player whose firmware has not been published yet (Timmkoo
+    Q8, A5) has no row until a release lands. Order follows the registry so the
+    list never reshuffles between launches; a catalogue model the registry has
+    never heard of is appended rather than hidden. ``fallback`` stands in only
+    when the catalogue offers nothing and no brand narrows the list.
     """
     wanted = str(brand or "").strip().casefold()
     offered = [str(i).strip() for i in (available_ids or []) if str(i).strip()]
-    if not offered:
+    if not offered and not wanted:
         offered = [str(i).strip() for i in fallback if str(i).strip()]
+    offered_upper = {mid.upper() for mid in offered}
     ordered = [
         model.id
         for model in all_models()
         if model.flashable
+        and model.id.upper() in offered_upper
         and (not wanted or str(model.brand or "").strip().casefold() == wanted)
     ]
-    ordered += [mid for mid in offered if mid not in ordered]
+    registry_ids = {model.id.upper() for model in all_models()}
+    ordered += [mid for mid in offered if mid.upper() not in registry_ids]
     return ordered
 
 
 def brand_names() -> list:
     """Brands the registry knows, Innioasis first, once each.
 
-    The catalogue only tags the brands its current manifest lists, so this is
-    what keeps a Timmkoo row (A5, SR1, Q3, Q5, Q8) in the Select Software brand
-    filter while no release for those players is published.
+    Every brand the registry knows, released or not. The Select Software brand
+    filter uses ``catalog.brand_names`` instead, which only names brands with a
+    released firmware.
     """
     names = []
     for model in all_models():

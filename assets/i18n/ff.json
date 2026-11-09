@@ -139,7 +139,12 @@
  "settings_filter_old_rockbox": "Hollit Rockbox ɓooyɗo Mahi",
  "settings_filter_nightly": "Hollit Jamma Dev Yalti",
  "settings_filter_240p": "240p Rockbox yaltini",
- "settings_240p_tip": "Hollitta ko mahdiiji ɗi zip ROM mum en woni 240p (rom..._240p.zip). Mahdiiji 240p njahdaani e yuɓɓooji Y1 e Innioasis OS les 3.0.7, ko ɗum waɗi Hollit Mahdiiji Rockbox ɓooyɗi ina softina ɗum.",
+ "settings_240p_tip": "Hollitta ko mahdiiji ɗi zip ROM mum en woni 240p (rom..._240p.zip). Mahdi 240p waawaa huutoreede e Y1 soodaaɗo keso caggal lewru mee 2026, walla e gooto garɗo e Software Original 3.0.7 walla caggal mum. Ɓeen fiyooɓe kadi mbaawaa huutoraade mahdiiji Rockbox ɓooyɗi, ko ɗum waɗi Show Old Rockbox Builds ina huɓɓi e maggal.",
+ "settings_240p_warn_body": "Mahdi 240p waawaa huutoreede e Y1 soodaaɗo keso caggal lewru mee 2026, walla e gooto garɗo e Software Original 3.0.7 walla caggal mum. Tan ko jolnu heen gooto e Y1 ɓooyɗo.\n\nƁeen fiyooɓe mbaawataa huutoraade Rockbox builds ɓooyɗi kadi, ko ɗum waɗi ɓeen ina limtee kadi.\n\nMbele aɗa yiɗi hollirde 240p Rockbox yaltinɗe?",
+ "sel_240p_warning": "Ko ɗum mahdi 240p. Nde waawaa huutoreede e Y1 coodaaɗo keso caggal lewru mee 2026, walla e gooto garɗo e Software Original 3.0.7 walla caggal mum.",
+ "link_240p_body": "Jokkorde nde uddit-ɗaa ndee ko ngam mahngo 240p. 240p builds waawaa huutoreede e Y1 coodaaɗo keso caggal lewru mee 2026, walla e gooto garɗo e Original Software 3.0.7 walla caggal mum, ko ɗum waɗi ɗi cuuɗaama haa nde udditaa ɗi.\n\nMbele aɗa yiɗi hollirde 240p Rockbox yaltinɗe?",
+ "link_busy": "Timmin install jooni oo, caggal ɗuum udditaa jokkorde ndee kadi.",
+ "link_not_listed": "Software gonɗo e oon jokkorde yaltinaaka tawo e ooɗoo pijirlooji.",
  "settings_old_rockbox_warn_title": "Jeertinaango jokkondire Rockbox",
  "settings_old_rockbox_warn_body": "Yarlitiiɓe Rockbox-Y1 ko adii 0.5 njahdaani e yuɓɓooji Y1 yeeyeteeɗi caggal lewru marse 2026 tawa Innioasis OS 3.0.7 ina joɗɗinaa ko adii.\n\nFlashing build ɓooyɗo e ɗeen kaɓirɗe maa haɗ booting.\n\nAɗa sikki aɗa yiɗi hollirde mahdiiji Rockbox ɓooyɗi?",
  "sel_refresh": "Hesɗitin",
@@ -926,6 +931,9 @@
  "rockbox_wizard_done_desc": "Jooni aɗa waawi seerndude pijirlooji ɗii e kisal, cuɓo-ɗaa tiitoonde e nder Rockbox (Cuɓe > Cuɓe Tiitoonde).",
  "sel_local_rockbox_themes_option": "Sos Rockbox 360p Teemedde + Fonte",
  "rockbox_stage_installing": "Sosde tiitooɗe e binndi Rockbox...",
+ "rockbox_cleanup_step": "Ittude dottaaɗe Rockbox ɓooyɗe...",
+ "rockbox_cleanup_deleting": "Ittugol doggol .rockbox e nder pijirlooji...",
+ "rockbox_cleanup_failed_note": "Software maa keso oo sosaa, kono foldere .rockbox ɓooynde ndee waawaa ittude. Mumtu foldere .rockbox e dow pijirlooji ɗii e junngo so aɗa yiɗi fuɗɗoode laaɓnde.",
  "rockbox_stage_waiting_adb_fmt": "Yiylaade joloowo e ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Ko ɓuri joloowo gooto ina jokkondiri. Seerndu heddiiɓe ɓee, accu tan ko liggorteeɗo oo.",
  "rockbox_stage_pushing": "Pijirlooji njiytaama. Waɗde tiitooɗe renndo & binndi...",
@@ -1025,8 +1033,5 @@
  "donate_support_appeal_coffee_math": "Kafe gooto ina fotnoo suɗaade bandwidth ƴettugol. Ina jogoo fiɓnde aroore ndee e nder jokkere enɗam.",
  "donate_family_appeal_expected": "Ryan e sehil mum ina ɗaminii ɓiɗɗo. Dokke feewde e njoɓdi golle eɓɓoore ndee e galle amen keso ina njetta no feewi.",
  "donate_family_appeal_new_arrival": "Won garoowo keso e laawol to galle Ryan. Kala dokkal feewde e serwooɓe e ɓesngu men mawngu ina firta ko heewi.",
- "donate_family_appeal_nursery": "Ryan e sehil mum ina njuɓɓina ɓiɗɗo mum en. So tawii ngal kuutorgal ina waɗi nafoore, dokkal ngam njoɓdi doggol e ɓesngu men mawngu ina wallita ko ɓuri ko nganndu-ɗaa.",
- "rockbox_cleanup_step": "Ittude dottaaɗe Rockbox ɓooyɗe...",
- "rockbox_cleanup_deleting": "Ittugol doggol .rockbox e nder pijirlooji...",
- "rockbox_cleanup_failed_note": "Software maa keso oo sosaa, kono foldere .rockbox ɓooynde ndee waawaa ittude. Mumtu foldere .rockbox e dow pijirlooji ɗii e junngo so aɗa yiɗi fuɗɗoode laaɓnde."
+ "donate_family_appeal_nursery": "Ryan e sehil mum ina njuɓɓina ɓiɗɗo mum en. So tawii ngal kuutorgal ina waɗi nafoore, dokkal ngam njoɓdi doggol e ɓesngu men mawngu ina wallita ko ɓuri ko nganndu-ɗaa."
 }

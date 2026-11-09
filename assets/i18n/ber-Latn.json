@@ -139,7 +139,12 @@
  "settings_filter_old_rockbox": "Sken-d lebni n Rockbox aqbur",
  "settings_filter_nightly": "Sken-d Tiẓrigin n Dev n Yiḍ",
  "settings_filter_240p": "240p n Rockbox",
- "settings_240p_tip": "Yettbeggin-d lebni s zip n ROM-is d aferdis n 240p (rom..._240p.zip). 240p lebni ur yettwaqbal ara s yiferdisen Y1 deg Innioasis OS ddaw n 3.0.7, ihi Ssekn lebni n Rockbox aqbur yettwasqedcen yid-s.",
+ "settings_240p_tip": "Yettbeggin-d lebni s zip n ROM-is d aferdis n 240p (rom..._240p.zip). Ur yezmir ara ad yettwaseqdec lebni n 240p deg Y1 i d-yesɣen amaynut deffir Mayu 2026, neɣ deg win i d-yusan s Uselkim Aẓuran 3.0.7 neɣ sdat-s. Imyurar-nni ur zmiren ara ad sqedcen ula d lebni n Rockbox aqbur, ihi Show Old Rockbox Builds yettwasbedd yid-s.",
+ "settings_240p_warn_body": "Ur yezmir ara ad yettwaseqdec lebni n 240p deg Y1 i d-yesɣen amaynut deffir Mayu 2026, neɣ deg win i d-yusan s Uselkim Aẓuran 3.0.7 neɣ sdat-s. Sbedd kan yiwen deg Y1 aqbur.\n\nImyurar-nni ur zmiren ara ad sqedcen ula d lebni n Rockbox aqbur, dɣa wid-nni ttwasemman ula d nutni.\n\nTḥeqqeḍ belli tebɣiḍ ad d-tessekneḍ tiẓrigin n Rockbox n 240p?",
+ "sel_240p_warning": "Wagi d lebni n 240p. Ur yezmir ara ad yettwaseqdec deg Y1 i d-yesɣen amaynut deffir Mayu 2026, neɣ deg win i d-yusan s Uselkim Aẓuran 3.0.7 neɣ sdat-s.",
+ "link_240p_body": "Ass-nni ay teldiḍ d win n lebni n 240p. 240p builds ur zmiren ara ad ttwaseqdacen deg Y1 i d-yesɣen d amaynut deffir Mayyu 2026, neɣ deg win i d-yusan s Original Software 3.0.7 neɣ sdat-s, ihi ffren alamma tessekcem-iten.\n\nTḥeqqeḍ belli tebɣiḍ ad d-tessekneḍ tiẓrigin n Rockbox n 240p?",
+ "link_busy": "Kemmel asras n tura, syen ldi-d assaɣ-nni tikkelt nniḍen.",
+ "link_not_listed": "Aselkim yellan deg usmel-nni ur d-yeffeɣ ara i umyurar-a.",
  "settings_old_rockbox_warn_title": "Awelleh n usdukkel n Rockbox",
  "settings_old_rockbox_warn_body": "Iḍrisen n Rockbox-Y1 uqbel 0.5 ur ttqadaren ara iferdisen n Y1 yettwazenzen deffir Meɣres 2026 s Innioasis OS 3.0.7 i d-yettwasbedden uqbel.\n\nAsekcem n lebni aqbur deg yigensaten-a ad yeḥbes aɛeddi.\n\nTḥeqqeḍ belli tebɣiḍ ad d-tessekneḍ lebni n Rockbox aqbur?",
  "sel_refresh": "Ssnefli",
@@ -926,6 +931,9 @@
  "rockbox_wizard_done_desc": "Tzemreḍ tura ad tfeḍ amrar s laman yerna ad tferneḍ asentel deg Rockbox (Islugnan > Islugnan n usentel).",
  "sel_local_rockbox_themes_option": "Sbedd Isentaalen n Rockbox 360p + Taqbuct n Tira",
  "rockbox_stage_installing": "Asersi n yisental d tifelwiyin n Rockbox...",
+ "rockbox_cleanup_step": "Tukksa n isefka iqburen n Rockbox...",
+ "rockbox_cleanup_deleting": "Tukksa n uḍris .rockbox seg umyurar...",
+ "rockbox_cleanup_failed_note": "Aselkim-ik amaynut yettwasbedd, maca aḍris .rockbox aqbur ur yezmir ara ad yettwakkes. Kkes aḍris .rockbox deg umyurar s ufus ma tebɣiḍ tazwara zeddigen.",
  "rockbox_stage_waiting_adb_fmt": "Ttnadiɣ ɣef umyurar s ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Ugar n yiwen n umyurar icudden. Qqen wiyaḍ ǧǧ kan win yettwasbedden.",
  "rockbox_stage_pushing": "Yettwassen umyurar. Asersi n yisental n tmetti d tira...",
@@ -1025,8 +1033,5 @@
  "donate_support_appeal_coffee_math": "Yiwet n lqahwa tettḍeggiɛ qrib bandwidth n yiwen n usnulfu. Yeṭṭef asenfar i d-iteddun deg ufus.",
  "donate_family_appeal_expected": "Ryan d umcic-is ttṛajun llufan. Tiwsiwin i lmend n tɣawsiwin n usseddu n usenfar-a d twacult-nneɣ tamaynut ttwaqadrent s waṭas.",
  "donate_family_appeal_new_arrival": "Yella yiwen n umdan amaynut deg ubrid deg wexxam n Ryan. Yal tikci sdat n yiqeddacen d twacult-nneɣ i d-yettnernin tesɛa azal meqqren.",
- "donate_family_appeal_nursery": "Ryan d umcic-is ttheyyin i mmi-tsen. Ma yella allal-agi yella-d d anfay, tukci n tɣawsiwin n uxeddim d twacult-nneɣ i d-yettnernin ad tɛiwen ugar n wayen tessneḍ.",
- "rockbox_cleanup_step": "Tukksa n isefka iqburen n Rockbox...",
- "rockbox_cleanup_deleting": "Tukksa n uḍris .rockbox seg umyurar...",
- "rockbox_cleanup_failed_note": "Aselkim-ik amaynut yettwasbedd, maca aḍris .rockbox aqbur ur yezmir ara ad yettwakkes. Kkes aḍris .rockbox deg umyurar s ufus ma tebɣiḍ tazwara zeddigen."
+ "donate_family_appeal_nursery": "Ryan d umcic-is ttheyyin i mmi-tsen. Ma yella allal-agi yella-d d anfay, tukci n tɣawsiwin n uxeddim d twacult-nneɣ i d-yettnernin ad tɛiwen ugar n wayen tessneḍ."
 }

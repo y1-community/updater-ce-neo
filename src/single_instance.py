@@ -61,6 +61,8 @@ TAKE_OVER_ARG = "--take-over"
 # A package dropped on the running copy's icon travels over the focus socket.
 # The NUL separator keeps paths with spaces (and other odd characters) intact.
 DROP_MESSAGE_PREFIX = b"drop\x00"
+# A site link (``innioasis-updater://…``) opened while a copy is running.
+LINK_MESSAGE_PREFIX = b"link\x00"
 
 _focus_server = None
 _windows_mutex = None
@@ -425,6 +427,7 @@ class FocusServer(QObject):
 
     focus_requested = Signal()
     drop_requested = Signal(str)
+    link_requested = Signal(str)
 
     def __init__(self, name: Optional[str] = None):
         super().__init__()
@@ -472,6 +475,10 @@ class FocusServer(QObject):
             path = os.fsdecode(data[len(DROP_MESSAGE_PREFIX):])
             if path:
                 self.drop_requested.emit(path)
+        elif data.startswith(LINK_MESSAGE_PREFIX):
+            url = data[len(LINK_MESSAGE_PREFIX):].decode("utf-8", "replace")
+            if url:
+                self.link_requested.emit(url)
         else:
             self.focus_requested.emit()
         try:
@@ -542,6 +549,13 @@ def request_drop(path, timeout_ms: int = 500) -> bool:
     """
     return _send_focus_payload(
         DROP_MESSAGE_PREFIX + os.fsencode(str(path)), timeout_ms
+    )
+
+
+def request_link(url: str, timeout_ms: int = 500) -> bool:
+    """Hand a site link to the running copy, as :func:`request_drop` does a package."""
+    return _send_focus_payload(
+        LINK_MESSAGE_PREFIX + str(url).encode("utf-8"), timeout_ms
     )
 
 

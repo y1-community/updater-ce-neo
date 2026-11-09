@@ -381,8 +381,9 @@ def set_hidden_mtk_options(enabled: bool, settings: Optional[QSettings] = None) 
 # Rockbox Release Listing Filters
 # ---------------------------------------------------------------------------
 # Set on the Settings screen; applied when browsing Rockbox releases for Y1.
-# 240p builds (rom*_240p.zip) are not compatible with Y1 units on Innioasis OS
-# 3.0.7 or older, so selecting them also selects the older-builds flag.
+# 240p builds (rom*_240p.zip) cannot be used on Y1 units bought new after May
+# 2026 or that came with Original Software 3.0.7 or later -- the same units the
+# older Rockbox builds exclude -- so selecting them also selects that flag.
 
 _KEY_SHOW_OLD_ROCKBOX = "show_old_rockbox_builds"
 _KEY_SHOW_NIGHTLY = "show_nightly_dev_releases"

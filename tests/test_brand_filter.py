@@ -66,25 +66,25 @@ def test_untagged_releases_are_innioasis_and_brands_are_innioasis_first():
         catalog.set_live_catalog(saved)
 
 
-def test_registry_brands_keep_the_brand_row_without_manifest_tags():
-    """The registry, not the manifest, decides which brands exist.
+def test_unreleased_models_and_brands_are_not_offered():
+    """Only released firmware decides what the drop-downs offer.
 
-    A manifest may tag nothing at all, yet the app can still flash every
-    registry model, so its brand row has to stay: without it a Timmkoo player's
-    models would be unreachable.
+    A Timmkoo player with nothing published (the Q8 and A5 today) has no model
+    row, and its brand has no row either, so the filter cannot lead to an empty
+    list. The registry still knows them for prompts and imported packages.
     """
     saved = list(catalog.LIVE_CATALOG)
     try:
         catalog.set_live_catalog([p for p in catalog.CATALOG if p.model == "Y1"])
         page = _page()
         try:
-            labels = [
-                page._brand_combo.itemText(i) for i in range(page._brand_combo.count())
+            assert page._brand_combo.count() == 0
+            assert not page._brand_combo.isVisibleTo(page)
+            models = [
+                page._model_combo.itemText(i) for i in range(page._model_combo.count())
             ]
-            assert labels == ["Innioasis", "Timmkoo"], labels
-            assert page._brand_label.isVisibleTo(page)
-            assert page._brand_combo.isVisibleTo(page)
-            assert page.current_brand() == "Innioasis"
+            assert models == ["Y1"], models
+            assert page.current_brand() == ""
             assert page.current_model() == "Y1"
         finally:
             page.deleteLater()
@@ -110,13 +110,11 @@ def test_brand_dropdown_defaults_to_innioasis_and_filters_the_listing():
 
             page._brand_combo.setCurrentIndex(page._brand_combo.findData("Timmkoo"))
             assert page.current_brand() == "Timmkoo"
-            # The brand's first registry model, which this manifest has no
-            # release for: the row exists, the software list is empty.
-            assert page.current_model() == "A5"
-            assert page.current_software() == ""
-            assert page.current_package() is None
-
-            page._select_model_for_manual("Q5")
+            # Only the brand's released model is listed: no A5 or Q8 row.
+            models = [
+                page._model_combo.itemText(i) for i in range(page._model_combo.count())
+            ]
+            assert models == ["Q5"], models
             assert page.current_model() == "Q5"
             assert page.current_software() == "Original Software"
             assert page.current_package().repo == "timmkoo/q5-stock"
@@ -167,7 +165,7 @@ def test_a_model_without_a_tag_keeps_its_registry_brand():
                 page._model_combo.itemText(i)
                 for i in range(page._model_combo.count())
             ]
-            assert models == ["A5", "SR1", "Q3", "Q5", "Q8"]
+            assert models == ["A5", "Q5"]
             assert page.current_model() == "A5"
             page._brand_combo.setCurrentIndex(page._brand_combo.findData("Innioasis"))
             assert page.current_model() == "Y1"
@@ -199,5 +197,54 @@ def test_a_brand_with_no_releases_is_not_offered():
         # Without a manifest the static table is the offline fallback; it has
         # no brand attributes, so there is still no Brand row.
         assert catalog.brand_names() == []
+    finally:
+        catalog.set_live_catalog(saved)
+
+
+def test_a_model_appears_once_a_release_is_listed():
+    """Nothing hardcodes the Q8 away: listing a release brings its row back."""
+    from src import device_models
+
+    saved = list(catalog.LIVE_CATALOG)
+    try:
+        catalog.set_live_catalog(manifest.parse_manifest_xml(BRANDED_XML))
+        offered = device_models.selectable_models(
+            catalog.available_models(brand="Timmkoo"), brand="Timmkoo"
+        )
+        assert offered == ["Q5"]
+        xml = BRANDED_XML.replace(
+            "</slidia>",
+            '<package name="Rockbox" repo="timmkoo/q8-rockbox" device="Q8"'
+            ' brand="Timmkoo" type="img" handler="Custom Firmware" /></slidia>',
+        )
+        catalog.set_live_catalog(manifest.parse_manifest_xml(xml))
+        offered = device_models.selectable_models(
+            catalog.available_models(brand="Timmkoo"), brand="Timmkoo"
+        )
+        assert offered == ["Q5", "Q8"]
+    finally:
+        catalog.set_live_catalog(saved)
+
+
+def test_offline_table_drops_models_the_snapshot_shows_unreleased(monkeypatch):
+    """Offline, the static A5 rows go when the snapshot lists no A5 zip."""
+    saved = list(catalog.LIVE_CATALOG)
+    try:
+        catalog.set_live_catalog([])
+        a5_repos = {
+            p.repo.lower(): [{"tag_name": "v1", "assets": [{"name": "rom.zip"}]}]
+            for p in catalog.CATALOG
+            if p.model == "A5"
+        }
+        monkeypatch.setattr(catalog, "_release_snapshot_rows", lambda: a5_repos)
+        assert "A5" not in catalog.available_models()
+        assert "Y1" in catalog.available_models()
+
+        released = {
+            repo: [{"tag_name": "v1", "assets": [{"name": "rom_a5.zip"}]}]
+            for repo in a5_repos
+        }
+        monkeypatch.setattr(catalog, "_release_snapshot_rows", lambda: released)
+        assert "A5" in catalog.available_models()
     finally:
         catalog.set_live_catalog(saved)

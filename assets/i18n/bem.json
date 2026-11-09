@@ -139,7 +139,12 @@
  "settings_filter_old_rockbox": "Langisheni Amabokoshi ya Kale aya Mabwe",
  "settings_filter_nightly": "Langisheni Ifyakufumya ifya Dev Ubushiku",
  "settings_filter_240p": "240p Ukufumya kwa Kabokoshi ka Mabwe",
- "settings_240p_tip": "Ifilanga ifikuulwa ifyo zip ya ROM yaba iyapusanako iya 240p. 240p ukupanga takwalinga ne fiputulwa fya Y1 pa Innioasis OS pe samba lya 3.0.7, eico Langisheni Ukupanga kwa Kale ukwa Rockbox kwasuminishiwa na yo.",
+ "settings_240p_tip": "Ifilanga ifikuulwa ifyo zip ya ROM yaba iyapusanako iya 240p. 240p ukukuula te kuti kubomfiwe pa Y1 iyashitilwe ipya pa numa ya May 2026, nelyo pali imo iyaishile ne Sofutiweya wa Kubalilapo 3.0.7 nelyo pa numa. Aba abakubelenga tekuti babomfye ifikuulwa fya kale ifya Rockbox nakabili, eico Langisheni ifikuulwa fya kale ifya Rockbox fyalibikwa pamo na yo.",
+ "settings_240p_warn_body": "240p ukukuula te kuti kubomfiwe pa Y1 iyashitilwe ipya pa numa ya May 2026, nelyo pali imo iyaishile ne Sofutiweya wa Kubalilapo 3.0.7 nelyo pa numa. Bikeni fye cimo pa Y1 iya kale.\n\nAbo abakubelenga tekuti babomfye ama Rockbox aya kale nakabili, eico abo balitantikwa na bo.\n\nBushe nashininkisha ukuti mulefwaya ukulanga ifyafuminemo ifya 240p?",
+ "sel_240p_warning": "Uku kupanga kwa 240p. Tacingabomfiwa pa Y1 iyashitilwe ipya panuma ya May 2026, nangu pali imo iyaishile ne Sofutiweya wa Kubalilapo 3.0.7 nangu pa numa.",
+ "link_240p_body": "Icisuntinkanyo ico mwaisula cakupanga 240p. 240p ukukuula te kuti kubomfiwe pa Y1 iyashitilwe ipya pa numa ya May 2026, nelyo pali imo iyaishile ne Sofutiweya wa Kubalilapo 3.0.7 nelyo pa numa, eico fyafisama ukufikila mwafibika pa mulilo.\n\nBushe nashininkisha ukuti mulefwaya ukulanga ifyafuminemo ifya 240p?",
+ "link_busy": "Pwisheni ukubika nomba, lyena funguleni ukusuntinkanya na kabili.",
+ "link_not_listed": "Sofutiweya uuli muli ilya linki tayafuminepo kuli uyu katamba.",
  "settings_old_rockbox_warn_title": "Ubusoko bwakulingana kwa kabokoshi ka mabwe",
  "settings_old_rockbox_warn_body": "Ukufumya kwa Rockbox-Y1 ilyo 0.5 tailafika takwaumfwana ne fipe fya Y1 ifyashitishiwe pa numa ya mweshi wa Machi 2026 ne fipe fyabikwapo kale.\n\nUkumwesha icakupanga ica kale pali ifi ifibombelo kukacingilila ukutendeka.\n\nBushe nashininkisha ukuti mulefwaya ukulanga ifikuulwa fya kale ifya Rockbox?",
  "sel_refresh": "Ukubwekeshapo",
@@ -926,6 +931,9 @@
  "rockbox_wizard_done_desc": "Kuti nomba mwafumyapo ukutamba no kusala umutwe mu Rockbox (Ifyakupanga > Ifyakupanga Umutwe).",
  "sel_local_rockbox_themes_option": "Bikeni Amabokoshi ya Mabwe 360p Imitwe + Icipe ca Malembo",
  "rockbox_stage_installing": "Ukubika imitwe ya mabwe na ma fonti...",
+ "rockbox_cleanup_step": "Ukufumyapo imitantikile ya kale iya Rockbox...",
+ "rockbox_cleanup_deleting": "Ukufumya icibikilo ca .akabokoshi ka mabwe ukufuma ku cakutambisha...",
+ "rockbox_cleanup_failed_note": "Sofutiweya yenu iyipya naibikwa, lelo icikope ca .rockbox icakale tacafuminepo. Fumyeni icitabo ca .rockbox pa cakutambishishapo ne minwe nga mulefwaya ukutendeka ukwa busaka.",
  "rockbox_stage_waiting_adb_fmt": "Ukufwaya umusambi ukupitila mu ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Abasambi ukucila pali umo balisuntinkanishiwa. Ukufumyapo fimbi no kuleka fye ifyo balebika.",
  "rockbox_stage_pushing": "Kateya asangwa. Ukubika imitwe ya cikaya na ma fonti...",
@@ -1025,8 +1033,5 @@
  "donate_support_appeal_coffee_math": "Kofi umo mupepi nafimba ubukulu bwa bandwidth iya kusenda. Ici cisunga ukulungika ukwakonkapo mupepi no kufikapo.",
  "donate_family_appeal_expected": "Ryan no munankwe baleenekela umwana. Ifya kusangwilako ku ndalama sha kubomfya uyu mulimo no lupwa lwesu ulupya filatashiwa nga nshi.",
  "donate_family_appeal_new_arrival": "Kuli umuntu upya uwaisa mu nshila mu ng’anda ya kwa Ryan. Ukusangwilako konse ku bapeela ifya kulya no lupwa lwesu ululekula kulapilibula ifingi nga nshi.",
- "donate_family_appeal_nursery": "Ryan no munankwe balepekanya umwana wabo. Nga ca kuti ici cibombelo cali icacindama, ukusangwilako ku ndalama sha kubomfya no lupwa lwesu ululekula kuti kwaafwa ukucila ifyo mwaishiba.",
- "rockbox_cleanup_step": "Ukufumyapo imitantikile ya kale iya Rockbox...",
- "rockbox_cleanup_deleting": "Ukufumya icibikilo ca .akabokoshi ka mabwe ukufuma ku cakutambisha...",
- "rockbox_cleanup_failed_note": "Sofutiweya yenu iyipya naibikwa, lelo icikope ca .rockbox icakale tacafuminepo. Fumyeni icitabo ca .rockbox pa cakutambishishapo ne minwe nga mulefwaya ukutendeka ukwa busaka."
+ "donate_family_appeal_nursery": "Ryan no munankwe balepekanya umwana wabo. Nga ca kuti ici cibombelo cali icacindama, ukusangwilako ku ndalama sha kubomfya no lupwa lwesu ululekula kuti kwaafwa ukucila ifyo mwaishiba."
 }
