@@ -1,5 +1,10 @@
-FROM debian:bookworm-slim
+FROM ubuntu:22.04
 
+# The frozen bundle must run on distributions older than the one that built it.
+# Ubuntu 22.04 is the oldest base with the Python 3.10 this code needs and a
+# glibc (2.35) matched by Ubuntu 22.04+, Debian 12+, Mint 21+, Fedora 36+,
+# SteamOS 3 and Raspberry Pi OS 64-bit. Debian Bookworm (glibc 2.36) produced
+# binaries that refused to start on Ubuntu 22.04 and older Mint installs.
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -22,10 +27,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     libusb-1.0-0 \
     libusb-1.0-0-dev \
+    libstdc++6 \
     curl \
     file \
     binutils \
     desktop-file-utils \
+    zip \
     ca-certificates \
     patchelf \
     && rm -rf /var/lib/apt/lists/*

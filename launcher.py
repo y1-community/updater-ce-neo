@@ -35,6 +35,16 @@ if "--simulate-macos" in sys.argv:
 # the M/D debug keys permanent, which turned SP Flash Tool into an unreachable
 # backend on Linux and pinned every later launch to MTKClient.
 
+# Pre-flight for a packaged bundle, run by the AppRun wrapper before it hands
+# over (see assets/linux-run.sh and scripts/verify_linux_bundle.py). The report
+# is printed and the exit status is the verdict; the app itself is not started,
+# so a bundle missing Qt or shiboken6 explains itself instead of dying in a
+# terminal the user never sees.
+if "--self-check" in sys.argv:
+    from src.bundle_selfcheck import main as _self_check
+
+    sys.exit(_self_check(sys.argv))
+
 if "--check-environment" in sys.argv or "--diagnostics" in sys.argv:
     from src import paths, flash_service, mtk_api
     print("=== Innioasis Updater Environment Diagnostics ===")
