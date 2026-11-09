@@ -824,6 +824,15 @@ def build():
         "UIDesignRequiresCompatibility": True,
         "NSPrincipalClass": "NSApplication",
         "NSHumanReadableCopyright": "Copyright © 2024-2026 Ryan Specter. All rights reserved.",
+        # innioasis-updater:// links from innioasis.app and themes.innioasis.app
+        # (src/site_links.py) arrive as a URL-open event. The MediaTek
+        # Installer has no online catalogue, so it does not claim them.
+        "CFBundleURLTypes": [] if IS_MEDIATEK_INSTALLER_BUILD else [
+            {
+                "CFBundleURLName": f"{BUNDLE_ID}.site-link",
+                "CFBundleURLSchemes": ["innioasis-updater"],
+            }
+        ],
         "CFBundleDocumentTypes": [
             {
                 "CFBundleTypeName": "Firmware Package",

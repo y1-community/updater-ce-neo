@@ -139,7 +139,12 @@
  "settings_filter_old_rockbox": "Tampilang Wangunan Rockbox Lawas",
  "settings_filter_nightly": "Tampilang Rilis Dev Wengi",
  "settings_filter_240p": "Rilis Rockbox 240p",
- "settings_240p_tip": "Nampilang wangunan sané zip ROMnyané marupa varian 240p (rom..._240p.zip). Wangunan 240p nenten kompatibel sareng unit Y1 ring Innioasis OS ring sor 3.0.7, dadosnyane Tampilang Wangunan Rockbox Lama kaaktifang sareng punika.",
+ "settings_240p_tip": "Nampilang wangunan sané zip ROMnyané marupa varian 240p (rom..._240p.zip). 240p wangunan nenten prasida kaanggen ring Y1 sane katumbas anyar sesampun Mei 2026, utawi ring sane rauh sareng Perangkat Lunak Asli 3.0.7 utawi sane anyaran. Pemain punika taler nénten prasida nganggén wangunan Rockbox sané sampun sue, punika mawinan Tampilang Wangunan Rockbox Lawas kaidupang sareng punika.",
+ "settings_240p_warn_body": "240p wangunan nenten prasida kaanggen ring Y1 sane katumbas anyar sesampun Mei 2026, utawi ring sane rauh sareng Perangkat Lunak Asli 3.0.7 utawi sane anyaran. Wantah pasang ring Y1 sané sampun sue.\n\nPemain punika taler nenten prasida nganggen wangunan Rockbox sane sampun sue, dadosnyane punika taler kadaftar.\n\nNapiké Sameton pastika jagi nyinahang rilis Rockbox 240p?",
+ "sel_240p_warning": "Puniki wantah wangunan 240p. Puniki nenten prasida kaanggen ring Y1 sane katumbas anyar sesampun Mei 2026, utawi ring sane rauh sareng Piranti Lunak Asli 3.0.7 utawi sane anyaran.",
+ "link_240p_body": "Cantélan sané kabukak Sameton wantah anggén wangunan 240p. 240p wangunan nenten prasida kaanggen ring Y1 sane katumbas anyar sesampun Mei 2026, utawi ring sane rauh sareng Piranti Lunak Asli 3.0.7 utawi salanturnyane, dadosnyane ipun kaengkebang ngantos semeton ngidupang.\n\nNapiké Sameton pastika jagi nyinahang rilis Rockbox 240p?",
+ "link_busy": "Puputin instalasi sané mangkin, raris bukak malih cantélan punika.",
+ "link_not_listed": "Piranti lunak ring cantélan punika durung kamedalang anggén pamuter puniki.",
  "settings_old_rockbox_warn_title": "Pakéling Kompatibilitas Kotak Batu",
  "settings_old_rockbox_warn_body": "Rilis Rockbox-Y1 sadurung 0,5 nenten kompatibel sareng unit Y1 sane kaadol sesampun Maret 2026 antuk Innioasis OS 3.0.7 sane sampun kapasang.\n\nNgidipang wangunan sané sampun sue ring piranti puniki pacang nyegah booting.\n\nNapiké Sameton pastika jagi nyinahang wangunan Rockbox sané sampun sue?",
  "sel_refresh": "Segerang",
@@ -926,6 +931,9 @@
  "rockbox_wizard_done_desc": "Mangkin Sameton prasida muputang sambungan pamuter antuk aman lan milih tema ring Rockbox (Setelan > Setelan Tema).",
  "sel_local_rockbox_themes_option": "Pasang Tema Rockbox 360p + Pak Font",
  "rockbox_stage_installing": "Masang Tema & Font Rockbox...",
+ "rockbox_cleanup_step": "Ngicalang setélan Rockbox sané sampun sue...",
+ "rockbox_cleanup_deleting": "Ngicalang folder .rockbox saking pamuter...",
+ "rockbox_cleanup_failed_note": "Piranti lunak anyar Sameton sampun kapasang, nanging folder .rockbox sané lawas nénten prasida kaicalang. Icalang folder .rockbox ring pamuter antuk tangan yéning jagi ngawitin sané bersih.",
  "rockbox_stage_waiting_adb_fmt": "Ngrereh pamuter saking ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Lebih saking asiki pamuter sané kasambungang. Putusang sane lianan lan tinggalin wantah sane sedeng kapasang.",
  "rockbox_stage_pushing": "Pamuter kadeteksi Ngenahang tema & font komunitas...",
@@ -1025,8 +1033,5 @@
  "donate_support_appeal_coffee_math": "Asiki kopi kirang langkung nglikubin bandwidth saking unduhan. Puniki ngawinang perbaikan selanturnyané prasida kajangkau.",
  "donate_family_appeal_expected": "Ryan lan timpalne sedeng ngajap-ajap pianak. Sumbangan nuju biaya pejalanan proyek lan kulawarga anyar iraga masif kaapresiasi.",
  "donate_family_appeal_new_arrival": "Ada anak baru teka di jalan di umahne Ryan. Sabilang sumbangan majeng ring para pelayan lan kulawarga iraga sane sayan nincap maartos ageng pisan.",
- "donate_family_appeal_nursery": "Ryan lan timpalne sedeng nyiapang pianakne. Yening piranti puniki sampun mawiguna, sumbangan antuk biaya pejalanan lan kulawarga iraga sane sayan nincap pacang ngwantu langkungan saking sane kauningin.",
- "rockbox_cleanup_step": "Ngicalang setélan Rockbox sané sampun sue...",
- "rockbox_cleanup_deleting": "Ngicalang folder .rockbox saking pamuter...",
- "rockbox_cleanup_failed_note": "Piranti lunak anyar Sameton sampun kapasang, nanging folder .rockbox sané lawas nénten prasida kaicalang. Icalang folder .rockbox ring pamuter antuk tangan yéning jagi ngawitin sané bersih."
+ "donate_family_appeal_nursery": "Ryan lan timpalne sedeng nyiapang pianakne. Yening piranti puniki sampun mawiguna, sumbangan antuk biaya pejalanan lan kulawarga iraga sane sayan nincap pacang ngwantu langkungan saking sane kauningin."
 }

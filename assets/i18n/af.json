@@ -139,7 +139,12 @@
  "settings_filter_old_rockbox": "Wys Old Rockbox Builds",
  "settings_filter_nightly": "Wys Nightly Dev Releases",
  "settings_filter_240p": "240p Rockbox-vrystellings",
- "settings_240p_tip": "Wys geboue waarvan die ROM-zip 'n 240p-variant is (rom…_240p.zip). 240p-bou is nie versoenbaar met Y1-eenhede op Innioasis OS onder 3.0.7 nie, so Wys ou Rockbox-bou is daarmee geaktiveer.",
+ "settings_240p_tip": "Wys geboue waarvan die ROM-zip 'n 240p-variant is (rom…_240p.zip). 240p-bou kan nie gebruik word op 'n Y1 wat na Mei 2026 nuut gekoop is, of op een wat saam met oorspronklike sagteware 3.0.7 of later gekom het nie. Daardie spelers kan ook nie ouer Rockbox-geboue gebruik nie, so Wys Ou Rockbox-bou is daarmee aangeskakel.",
+ "settings_240p_warn_body": "240p-bou kan nie gebruik word op 'n Y1 wat na Mei 2026 nuut gekoop is, of op een wat saam met oorspronklike sagteware 3.0.7 of later gekom het nie. Installeer net een op 'n ouer Y1.\n\nDaardie spelers kan ook nie ouer Rockbox-geboue gebruik nie, so dit word ook gelys.\n\nIs jy seker jy wil 240p Rockbox-vrystellings wys?",
+ "sel_240p_warning": "Dit is 'n 240p-bou. Dit kan nie gebruik word op 'n Y1 wat na Mei 2026 nuut gekoop is, of op een wat saam met oorspronklike sagteware 3.0.7 of later gekom het nie.",
+ "link_240p_body": "Die skakel wat jy oopgemaak het, is vir 'n 240p-bou. 240p-bou kan nie gebruik word op 'n Y1 wat na Mei 2026 nuut gekoop is, of op een wat saam met oorspronklike sagteware 3.0.7 of later gekom het nie, so hulle word versteek totdat jy dit aanskakel.\n\nIs jy seker jy wil 240p Rockbox-vrystellings wys?",
+ "link_busy": "Voltooi die huidige installasie, maak dan die skakel weer oop.",
+ "link_not_listed": "Die sagteware in daardie skakel is nog nie vir hierdie speler vrygestel nie.",
  "settings_old_rockbox_warn_title": "Rockbox-versoenbaarheidswaarskuwing",
  "settings_old_rockbox_warn_body": "Vrystellings van Rockbox-Y1 voor 0.5 is nie versoenbaar met Y1-eenhede wat ná Maart 2026 verkoop is met Innioasis OS 3.0.7 vooraf geïnstalleer nie.\n\nDeur 'n ouer weergawe op hierdie toestelle te flits, sal selflaai voorkom.\n\nIs jy seker jy wil ouer Rockbox-geboue wys?",
  "sel_refresh": "Verfris",
@@ -926,6 +931,9 @@
  "rockbox_wizard_done_desc": "Jy kan nou veilig die speler ontkoppel en 'n tema in Rockbox kies (Instellings > Tema-instellings).",
  "sel_local_rockbox_themes_option": "Installeer Rockbox 360p-temas + Fontpack",
  "rockbox_stage_installing": "Installeer tans Rockbox-temas en lettertipes...",
+ "rockbox_cleanup_step": "Verwyder tans die ou Rockbox-instellings...",
+ "rockbox_cleanup_deleting": "Verwyder tans die .rockbox-lêergids van die speler...",
+ "rockbox_cleanup_failed_note": "Jou nuwe sagteware is geïnstalleer, maar die ou .rockbox-lêergids kon nie verwyder word nie. Vee die .rockbox-lêergids op die speler met die hand uit as jy 'n skoon begin wil hê.",
  "rockbox_stage_waiting_adb_fmt": "Soek speler via ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Meer as een speler is gekoppel. Ontkoppel die ander en laat net die een wat geïnstalleer word.",
  "rockbox_stage_pushing": "Speler bespeur. Plaas tans gemeenskapstemas en lettertipes...",
@@ -1025,8 +1033,5 @@
  "donate_support_appeal_coffee_math": "Een koffie dek min of meer die bandwydte van 'n aflaai. Dit hou die volgende oplossing binne bereik.",
  "donate_family_appeal_expected": "Ryan en sy maat verwag 'n baba. Skenkings vir die projek se bedryfskoste en ons nuwe gesin word opreg waardeer.",
  "donate_family_appeal_new_arrival": "Daar is 'n nuwe aankomeling op pad in Ryan se huis. Elke skenking vir die bedieners en ons groeiende familie beteken baie.",
- "donate_family_appeal_nursery": "Ryan en sy maat maak gereed vir hul kind. As hierdie hulpmiddel nuttig was, sal 'n skenking vir die bedryfskoste en ons groeiende gesin meer help as wat jy weet.",
- "rockbox_cleanup_step": "Verwyder tans die ou Rockbox-instellings...",
- "rockbox_cleanup_deleting": "Verwyder tans die .rockbox-lêergids van die speler...",
- "rockbox_cleanup_failed_note": "Jou nuwe sagteware is geïnstalleer, maar die ou .rockbox-lêergids kon nie verwyder word nie. Vee die .rockbox-lêergids op die speler met die hand uit as jy 'n skoon begin wil hê."
+ "donate_family_appeal_nursery": "Ryan en sy maat maak gereed vir hul kind. As hierdie hulpmiddel nuttig was, sal 'n skenking vir die bedryfskoste en ons groeiende gesin meer help as wat jy weet."
 }

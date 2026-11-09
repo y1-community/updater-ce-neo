@@ -139,7 +139,12 @@
  "settings_filter_old_rockbox": "Cidahken Rockbox si ndekah si iban .",
  "settings_filter_nightly": "Cidahken Rilis Dev Berngi .",
  "settings_filter_240p": "240p Rilis Kotak Batu .",
- "settings_240p_tip": "Icidahkenna bangunen si zip ROM-na eme varian 240p (rom..._240p.zip). 240p membangun la cocok ras unit Y1 i Innioasis OS i teruh 3.0.7, emaka Tampilken Rockbox Lama Bangun iaktifken ras ia.",
+ "settings_240p_tip": "Icidahkenna bangunen si zip ROM-na eme varian 240p (rom..._240p.zip). 240p build la banci ipake i bas Y1 si itukur mbaru kenca Mei 2026, ntah pe i bas si reh ras Perangkat Lunak Asli 3.0.7 ntah pe si lebih mbaru. Pemain-pemain e pe la banci make bangunen Rockbox si lebih tua, emaka Tampilken bangunen Rockbox si ndekah i-on ras ia.",
+ "settings_240p_warn_body": "240p build la banci ipake i bas Y1 si itukur mbaru kenca Mei 2026, ntah pe i bas si reh ras Perangkat Lunak Asli 3.0.7 ntah pe si lebih mbaru. Pasang sada ngenca i bas Y1 si lebih tua.\n\nPemain-pemain e pe la banci make build Rockbox si lebih tua, emaka si e pe tercantum.\n\nYakin nge kam atendu ncidahken rilis Rockbox 240p?",
+ "sel_240p_warning": "Enda me sada bangunen 240p. La banci ipake i bas Y1 si itukur mbaru kenca bulan Mei 2026, ntah pe i bas si reh ras Perangkat Lunak Asli 3.0.7 ntah pe si mbaru.",
+ "link_240p_body": "Link si ibukandu e guna build 240p. 240p build la banci ipake i bas Y1 si itukur mbaru kenca bulan Mei 2026, ntah pe i bas si reh ras Perangkat Lunak Asli 3.0.7 ntah pe si mbaru, emaka ibuniken seh asa i-onndu.\n\nYakin nge kam atendu ncidahken rilis Rockbox 240p?",
+ "link_busy": "Selesaiken instalasi si gundari, kenca si e buka mulihi link e.",
+ "link_not_listed": "Perangkat lunak si lit bas link e lenga rilis guna pemain enda.",
  "settings_old_rockbox_warn_title": "Persinget kerna kesesuaien Rockbox .",
  "settings_old_rockbox_warn_body": "Rilis Rockbox-Y1 ope 0,5 la cocok ras unit Y1 si idayaken kenca bulan Maret 2026 alu Innioasis OS 3.0.7 si enggo ipasang.\n\nAdi i-flashndu build si lebih tua i bas perangkat-perangkat enda, banci icegahndu booting.\n\nYakin nge kam atendu ncidahken bangunen Rockbox si lebih tua?",
  "sel_refresh": "Segarken",
@@ -926,6 +931,9 @@
  "rockbox_wizard_done_desc": "Gundari banci iputuskenndu sambungen pemain alu aman janah ipilihndu sada tema bas Rockbox (Pengaturan > Pengaturan Tema).",
  "sel_local_rockbox_themes_option": "Pasanglah Tema Rockbox 360p + Paket Huruf .",
  "rockbox_stage_installing": "Ipasangna Tema ras Font Rockbox...",
+ "rockbox_cleanup_step": "Itangtangina pengaturen Rockbox si ndekah...",
+ "rockbox_cleanup_deleting": "Ibuatna folder .rockbox i bas pemain nari...",
+ "rockbox_cleanup_failed_note": "Perangkat lunak si mbaru enggo ipasangndu, tapi folder .rockbox si ndekah la banci itangtangi. Hapus folder .rockbox si lit bas pemain alu tan adi atendu mulai bersih.",
  "rockbox_stage_waiting_adb_fmt": "Ndarami pemain arah ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Lebih sada pemain si terhubung. Putusken si debanna janah tadingken saja si sangana ipasang.",
  "rockbox_stage_pushing": "Pemain si terdeteksi. Itamaken tema ras font komunitas...",
@@ -1025,8 +1033,5 @@
  "donate_support_appeal_coffee_math": "Sada kopi kira-kira nutupi bandwidth sada download. Ia njaga perbaiken selanjutna i bas jangkauen.",
  "donate_family_appeal_expected": "Ryan ras teman geluhna sangana nimai sada anak. Sumbangen guna biaya pelaksanaan proyek ras keluarga kami si mbaru tuhu-tuhu ihargai.",
  "donate_family_appeal_new_arrival": "Lit kalak si mbaru reh i bas perdalanen ku rumah Ryan. Tep-tep sumbangan nandangi pelayan ras keluarganta si reh belinna mbelin kal ertina.",
- "donate_family_appeal_nursery": "Ryan ras teman geluhna sangana ersikap guna anakna. Adi alat enda enggo erguna, sumbangan guna biaya pelaksanaan ras keluarga kami si reh teremna banci nampati lebih asangken si itehndu.",
- "rockbox_cleanup_step": "Itangtangina pengaturen Rockbox si ndekah...",
- "rockbox_cleanup_deleting": "Ibuatna folder .rockbox i bas pemain nari...",
- "rockbox_cleanup_failed_note": "Perangkat lunak si mbaru enggo ipasangndu, tapi folder .rockbox si ndekah la banci itangtangi. Hapus folder .rockbox si lit bas pemain alu tan adi atendu mulai bersih."
+ "donate_family_appeal_nursery": "Ryan ras teman geluhna sangana ersikap guna anakna. Adi alat enda enggo erguna, sumbangan guna biaya pelaksanaan ras keluarga kami si reh teremna banci nampati lebih asangken si itehndu."
 }

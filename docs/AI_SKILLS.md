@@ -68,6 +68,10 @@ mirrors, the website). Keep the shared facts identical:
 | Donation rule | once, only after a successful flash, never blocking, skipped when declined |
 | Install modes | Download Only (`-c download`, `<download-only/>`); never format |
 | Package contract | one scatter + every image it lists + optional `fw_package.ini` |
+| Site → app link | `innioasis-updater://open?what=firmware\|theme&software=&version=&model=&brand=&type=&resolution=&action=open\|install&id=` (+ `utm_*`, `ref`); spec in `src/site_links.py` |
+| App → site visit | adds `client=updater-ce&client_version=<APP_VERSION>` beside `donations`, `privacy`, `lang`, `theme`, `accessibility` |
+| Model listing | a model appears only once the catalogue lists a released firmware for it (no hardcoded hides) |
+| 240p builds | hidden by default; listed as `<version> (240p)`; never for a Y1 bought new after May 2026 or shipped with Original Software 3.0.7+ |
 
 If a sibling repository needs the same capabilities, copy its `SKILL.md` — or
 the whole `.agents/skills` tree plus this script — rather than writing a

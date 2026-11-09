@@ -139,7 +139,12 @@
  "settings_filter_old_rockbox": "Tondezya zintu zyakale zya Rockbox",
  "settings_filter_nightly": "Tondezya zintu zya Dev zyamasiku",
  "settings_filter_240p": "240p Rockbox Releases",
- "settings_240p_tip": "Chitondeezya ziyaka zili a ROM zip zili 240p (rom..._240p.zip). 240p zyakayakwa tazyeendelani a Y1 yuniti a Innioasis OS munsi a 3.0.7, aboobo Show Old Rockbox Builds zilazumizigwa anzizyo.",
+ "settings_240p_tip": "Chitondeezya zintu zili a ROM zip zili 240p (rom..._240p.zip). 240p kuyaka takukonzyi kubelesegwa kuli Y1 yakaulwa mpya musule lya May 2026, naakuti kuli yooyo wakaboola a Original Software 3.0.7 naakuti musule. Aabo basololi tabakonzyi kubelesya zibelesyo zyakaindi zya Rockbox, aboobo Show Old Rockbox Builds ilajalulwa.",
+ "settings_240p_warn_body": "240p kuyaka takukonzyi kubelesegwa kuli Y1 yakaulwa mpya musule lya May 2026, naakuti kuli yooyo wakaboola a Original Software 3.0.7 naakuti musule. Kobikka buyo yomwe aY1 yakaindi.\n\nAabo basololi tabakonzyi kubelesya zintu zyakale zya Rockbox, aboobo abalo balilembedwe.\n\nSena masimpe kuti uyanda kutondezya 240p Rockbox zyazwa?",
+ "sel_240p_warning": "Ooku nkuyaka kwa 240p. Tachikonzeki kubelesegwa kuli Y1 yakaulwa mupya musule lya May 2026, naakuti kuli yooyo wakaboola a Original Software 3.0.7 naakuti musule.",
+ "link_240p_body": "Linki njowakajalula njakuyaka kwa 240p. 240p tazikonzyi kubelesegwa kuli Y1 yakaulwa mupya musule lya May 2026, naakuti kuli yooyo wakaboola a Original Software 3.0.7 naakuti musule, aboobo zilasisidwe kusikila wazijula.\n\nSena masimpe kuti uyanda kutondezya 240p Rockbox zyazwa?",
+ "link_busy": "Maninzya kubikka kwalino, mpawo ujalule linki alimwi.",
+ "link_not_listed": "Sofutiweya iili mulinki eeyo tiiyakazwa kuli sikusobana ooyu pe.",
  "settings_old_rockbox_warn_title": "Kuchenjezya kwakuzuminana kwa Rockbox",
  "settings_old_rockbox_warn_body": "Kuzwa kwa Rockbox-Y1 kakutanaba 0.5 takubeleki antoomwe a Y1 yakasambalwa musule lya mwezi wa Nsondo 2026 Innioasis OS 3.0.7 yakabikkidwe kale.\n\nKubelesya zyintu zyakale zyakabambwa azibelesyo eezyi kuyoopa kuti kutabi kutalika.\n\nSena masimpe kuti uyanda kutondezya zintu zyakale zya Rockbox?",
  "sel_refresh": "Kubukulusya",
@@ -926,6 +931,9 @@
  "rockbox_wizard_done_desc": "Lino ulakonzya kugwisya chisobano kakunyina ntenda mpawo usale mutwe wamakani mu Rockbox (Mabambe > Mabambe amutwe wamakani).",
  "sel_local_rockbox_themes_option": "Bikka Rockbox 360p Themes + Fontpack",
  "rockbox_stage_installing": "Kubikka Rockbox Themes & Fonts...",
+ "rockbox_cleanup_step": "Kugwisya mabambe aa Rockbox aakaindi...",
+ "rockbox_cleanup_deleting": "Kugwisya fooloda ya .rockbox kuzwa muchisobano...",
+ "rockbox_cleanup_failed_note": "Sofutiweya yako mpya yakabikkwa, asi folda yakaindi ya .rockbox tiiyakakonzya kugwisigwa pe. Zima fooloda ya .rockbox aachipekupeku amaanza kuti koyanda kutalika kabotu.",
  "rockbox_stage_waiting_adb_fmt": "Kuyandaula sikusobana kwiinda mu ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Basikusobana bainda kumwi baliswaangenyi. Kogwisya zimwi mpawo usiye buyo eeyo iibikkwa.",
  "rockbox_stage_pushing": "Sikusobana wakajanwa. Kubikka mitwe yamakani yabantu boonse amabala...",
@@ -1025,8 +1033,5 @@
  "donate_support_appeal_coffee_math": "Ikkofi yomwe ilakonzya kuvwumbilila bandwidth yakudonloda. Chibamba nzila imbi yakubambulula kuti ibe afwaafwi.",
  "donate_family_appeal_expected": "Ryan amweenzinyina bali mukulindila mwana. Zipego zyakugwasya mumulimo ooyu amukwasyi wesu mupya zilalumbaizyigwa loko.",
  "donate_family_appeal_new_arrival": "Kuli muntu mupya uuboola munzila muŋanda ya Ryan. Kugwasizya kuli koonse kuli basikugwasilizya amukwasyi wesu uukomena chaamba chintu chipati.",
- "donate_family_appeal_nursery": "Ryan amweenzinyina bali mukulibambila mwanaabo. Kuti eechi chibelesyo chagwasya, lugwasyo lwamali aakubelesya amukwasyi wesu uukomena inga lwagwasya kwiinda mbomuzyi.",
- "rockbox_cleanup_step": "Kugwisya mabambe aa Rockbox aakaindi...",
- "rockbox_cleanup_deleting": "Kugwisya fooloda ya .rockbox kuzwa muchisobano...",
- "rockbox_cleanup_failed_note": "Sofutiweya yako mpya yakabikkwa, asi folda yakaindi ya .rockbox tiiyakakonzya kugwisigwa pe. Zima fooloda ya .rockbox aachipekupeku amaanza kuti koyanda kutalika kabotu."
+ "donate_family_appeal_nursery": "Ryan amweenzinyina bali mukulibambila mwanaabo. Kuti eechi chibelesyo chagwasya, lugwasyo lwamali aakubelesya amukwasyi wesu uukomena inga lwagwasya kwiinda mbomuzyi."
 }

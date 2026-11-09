@@ -170,6 +170,30 @@ def _catalog_packages():
     return list(LIVE_CATALOG) + fallback
 
 
+def _offerable_static_packages():
+    """The offline table, minus entries the release snapshot shows publish nothing.
+
+    The live manifest is already filtered this way (``filter_unavailable_packages``).
+    Offline, the hand-written table is all there is, and it names models whose
+    repositories have released no firmware for them yet (the A5 rows). The
+    snapshot decides, so the row returns as soon as a release is published; a
+    repository the snapshot does not cover stays offered.
+    """
+    snapshot = _release_snapshot_rows()
+    if snapshot is None:
+        return list(CATALOG)
+    offered = []
+    for package in CATALOG:
+        rows = snapshot.get(str(package.repo or "").strip().lower())
+        if rows is not None:
+            if not _rows_have_installable_release(package, rows):
+                continue
+        elif _cached_availability(package) is False:
+            continue
+        offered.append(package)
+    return offered
+
+
 CATALOG = [
     FirmwarePackage("original-y1", "Original Software", "Y1", "y1-community/y1-stock-rom", "rom.zip",
                     "The stock software for restoring an Innioasis Y1."),
@@ -236,7 +260,7 @@ def brand_names() -> list:
     Empty when no package carries a ``brand`` attribute: the Select Software
     brand drop-down only appears when the manifest actually tags releases.
     """
-    packages = LIVE_CATALOG or list(CATALOG)
+    packages = LIVE_CATALOG or _offerable_static_packages()
     if not any(str(getattr(p, "brand", "") or "").strip() for p in packages):
         return []
     names = []
@@ -276,7 +300,7 @@ def available_models(brand: str = ""):
     merges the static fallback in, which is right for looking up a package but
     wrong for deciding what to offer.
     """
-    packages = LIVE_CATALOG or list(CATALOG)
+    packages = LIVE_CATALOG or _offerable_static_packages()
     seen = []
     for pkg in packages:
         if pkg.model and _brand_matches(pkg, brand) and pkg.model not in seen:
@@ -1578,6 +1602,16 @@ def parse_clean_release_tag_label(rel, prefer_240p=False, version_only=False) ->
     return label
 
 
+def release_is_240p(rel) -> bool:
+    """Whether a listed row installs the 240p build (its own asset, not the filter)."""
+    if not isinstance(rel, dict):
+        return False
+    return (
+        rel.get("selected_resolution") == "240p"
+        or "240p" in str(rel.get("asset_name", "")).lower()
+    )
+
+
 def format_release_display_label(rel, prefer_240p=False):
     """Format release display label adhering to legacy firmware_downloader.py rules."""
     tag_name = (rel.get("tag_name") or "").strip()
@@ -1590,10 +1624,7 @@ def format_release_display_label(rel, prefer_240p=False):
     designations = list(version_info.get("designations") or [])
     # Append (240p) only when this row's own asset is the 240p variant.
     # Such rows only exist when the Settings toggle allows them.
-    is_240p = (
-        rel.get("selected_resolution") == "240p"
-        or "240p" in str(rel.get("asset_name", "")).lower()
-    )
+    is_240p = release_is_240p(rel)
     if is_240p:
         if not any("240p" in d.lower() for d in designations):
             designations.append("240p")

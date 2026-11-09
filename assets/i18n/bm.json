@@ -139,7 +139,12 @@
  "settings_filter_old_rockbox": "A jira ko Rockbox Builds kɔrɔw bɛ yen",
  "settings_filter_nightly": "A jira sufɛ Dev bɔlenw",
  "settings_filter_240p": "240p Rockbox Bɔli",
- "settings_240p_tip": "A bɛ jɔli jira minnu ka ROM zip ye 240p ɲɔgɔnna ye (rom..._240p.zip). 240p jɔli tɛ Bɛn ni Y1 unitw ye Innioasis OS kan 3.0.7 duguma, o la Show Old Rockbox Builds bɛ baara Kɛ n’a ye.",
+ "settings_240p_tip": "A bɛ jɔli jira minnu ka ROM zip ye 240p ɲɔgɔnna ye (rom..._240p.zip). 240p jɔli tɛ Se ka Kɛ Y1 san kura kan san 2026 mɛkalo kɔfɛ, walima min nana ni Original Software 3.0.7 ye walima o kɔfɛ. O ntolatannaw fana tɛ Se ka baara Kɛ ni Rockbox jɔli kɔrɔw ye, o la Show Old Rockbox Builds bɛ Dabɔ n'a ye.",
+ "settings_240p_warn_body": "240p jɔli tɛ Se ka Kɛ Y1 san kura kan san 2026 mɛkalo kɔfɛ, walima min nana ni Original Software 3.0.7 ye walima o kɔfɛ. Aw bɛ kelen dɔrɔn de bila Y1 kɔrɔ dɔ kan.\n\nO ntolatannaw fana tɛ Se ka baara Kɛ ni Rockbox jɔli kɔrɔw ye, o la olu fana bɛ Fɔ.\n\nYala aw dalen b’a la ko aw b’a fɛ ka 240p Rockbox bɔlenw jira wa?",
+ "sel_240p_warning": "Nin ye 240p jɔli ye. A tɛ Se ka Kɛ Y1 kan min sanna kura ye mɛkalo 2026 sàn kɔfɛ, walima min nana ni Original Software 3.0.7 ye walima o kɔfɛ.",
+ "link_240p_body": "I ye 'yɔrɔ min Dabɔ o ye 240p jɔli ye. 240p jɔli tɛ Se ka Kɛ Y1 kan min sanna kura ye mɛkalo 2026 sàn kɔfɛ, walima min nana ni Original Software 3.0.7 ye walima o kɔfɛ, o la u bɛ dogo fo n’i y’u Da.\n\nYala aw dalen b’a la ko aw b’a fɛ ka 240p Rockbox bɔlenw jira wa?",
+ "link_busy": "I ka sisan installation (dadon) ban, o kɔ, i ka link (yɔrɔ) da wuli tugun.",
+ "link_not_listed": "O 'jyɛnnatigɛ-sɛbɛn min bɛ o 'kɔnɔ, o ma Bɔ nin fɔlikɛla in na fɔlɔ.",
  "settings_old_rockbox_warn_title": "Rockbox bɛnkan Ladilikan",
  "settings_old_rockbox_warn_body": "Rockbox-Y1 bɔli ka kɔn 0.5 ɲɛ, olu tɛ bɛn Y1 unitw ma minnu feerela san 2026 marisikalo kɔfɛ ni Innioasis OS 3.0.7 bilalen don ka kɔn.\n\nNi i ye build kɔrɔ dɔ flash o minɛnw kan, o bɛna booting bali.\n\nYala aw dalen b’a la ko aw b’a fɛ ka Rockbox jɔli kɔrɔw jira wa?",
  "sel_refresh": "Lakurayali",
@@ -926,6 +931,9 @@
  "rockbox_wizard_done_desc": "Sisan, i bɛ se ka fɔlikɛlan tigɛ lafiya la ani ka barokun dɔ ta Rockbox kɔnɔ (Settings > Theme Settings).",
  "sel_local_rockbox_themes_option": "Rockbox 360p Themes + Fontpack sigi sen kan",
  "rockbox_stage_installing": "Rockbox Thèmes & Fonts sigili...",
+ "rockbox_cleanup_step": "Rockbox ka sigida kɔrɔw bɔli...",
+ "rockbox_cleanup_deleting": ".rockbox foli bɔli ka bɔ tulonkɛla la...",
+ "rockbox_cleanup_failed_note": "I ka porogaramu kura in bilala sen kan, nka .rockbox foli kɔrɔ ma se ka bɔ yen. .rockbox foli min bɛ fɔlikɛlan kan, o bɔ i bolo ni i b’a fɛ ka daminɛ saniyalen sɔrɔ.",
  "rockbox_stage_waiting_adb_fmt": "Ka ntolatanna ɲini ADB fɛ ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Tulonkɛla minnu ka ca ni kelen ye, olu ni ɲɔgɔn cɛsirilen don. Tɔɔw tigɛtigɛ ka kelen to min bɛ sigi sen kan.",
  "rockbox_stage_pushing": "Tulonkɛla detekti. Sigida barokunw & sɛbɛnnibolow bilali...",
@@ -1025,8 +1033,5 @@
  "donate_support_appeal_coffee_math": "Kafe kelen bɛ telesarsecogo dɔ ka bandwidth datugu cogo la min bɛ se ka kɛ. A bɛ labɛnni nata to a seko la.",
  "donate_family_appeal_expected": "Ryan n’a jɛɲɔgɔn bɛ den makɔnɔ. Bolomafara minnu bɛ kɛ ka ɲɛsin porozɛ in boli musakaw ma ani an ka denbaya kura ma, o bɛ waleɲumandɔn kosɛbɛ.",
  "donate_family_appeal_new_arrival": "Mɔgɔ kura dɔ bɛ sira kan Ryan ka so. Bolomafara kelen-kelen bɛɛ ka ɲɛsin baarakɛlaw ma ani an ka denbaya min bɛ ka bonya, o kɔrɔ ka bon kosɛbɛ.",
- "donate_family_appeal_nursery": "Ryan n’a jɛɲɔgɔn bɛ ka u labɛn u den kama. Ni nin baarakɛminɛn in nafa ka bon, bolomafara dɔ boli musakaw kama ani an ka denbaya min bɛ ka bonya, o bɛna dɛmɛ ka tɛmɛ i ka dɔnniya kan.",
- "rockbox_cleanup_step": "Rockbox ka sigida kɔrɔw bɔli...",
- "rockbox_cleanup_deleting": ".rockbox foli bɔli ka bɔ tulonkɛla la...",
- "rockbox_cleanup_failed_note": "I ka porogaramu kura in bilala sen kan, nka .rockbox foli kɔrɔ ma se ka bɔ yen. .rockbox foli min bɛ fɔlikɛlan kan, o bɔ i bolo ni i b’a fɛ ka daminɛ saniyalen sɔrɔ."
+ "donate_family_appeal_nursery": "Ryan n’a jɛɲɔgɔn bɛ ka u labɛn u den kama. Ni nin baarakɛminɛn in nafa ka bon, bolomafara dɔ boli musakaw kama ani an ka denbaya min bɛ ka bonya, o bɛna dɛmɛ ka tɛmɛ i ka dɔnniya kan."
 }

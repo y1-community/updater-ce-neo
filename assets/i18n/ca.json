@@ -139,7 +139,12 @@
  "settings_filter_old_rockbox": "Mostra les antigues construccions de Rockbox",
  "settings_filter_nightly": "Mostra els llançaments de desenvolupadors nocturns",
  "settings_filter_240p": "Estrenes de Rockbox a 240p",
- "settings_240p_tip": "Mostra les compilacions el zip de la ROM és una variant de 240p (rom…_240p.zip). Les compilacions de 240p no són compatibles amb les unitats Y1 del sistema operatiu Innioasis inferior a 3.0.7, per la qual cosa s'ha activat Mostra les versions antigues de Rockbox.",
+ "settings_240p_tip": "Mostra les compilacions el zip de la ROM és una variant de 240p (rom…_240p.zip). Les compilacions de 240p no es poden utilitzar en un Y1 comprat nou després del maig de 2026, ni en un que vingués amb el programari original 3.0.7 o posterior. Aquests jugadors tampoc poden utilitzar versions anteriors de Rockbox, de manera que Mostra les versions de Rockbox antigues està activada amb ella.",
+ "settings_240p_warn_body": "Les compilacions de 240p no es poden utilitzar en un Y1 comprat nou després del maig de 2026, ni en un que vingués amb el programari original 3.0.7 o posterior. Només instal·leu-ne un en un Y1 anterior.\n\nAquests jugadors tampoc poden utilitzar versions anteriors de Rockbox, de manera que també s'enumeren.\n\nConfirmes que vols mostrar les versions de Rockbox a 240p?",
+ "sel_240p_warning": "Aquesta és una construcció de 240p. No es pot utilitzar en un Y1 comprat nou després del maig de 2026, ni en un que vingui amb el programari original 3.0.7 o posterior.",
+ "link_240p_body": "L'enllaç que has obert és per a una compilació de 240p. Les compilacions de 240p no es poden utilitzar en un Y1 comprat nou després del maig de 2026, ni en un que va venir amb el programari original 3.0.7 o posterior, de manera que s'amaguen fins que les activeu.\n\nConfirmes que vols mostrar les versions de Rockbox a 240p?",
+ "link_busy": "Acabeu la instal·lació actual i torneu a obrir l'enllaç.",
+ "link_not_listed": "El programari d'aquest enllaç encara no s'ha publicat per a aquest reproductor.",
  "settings_old_rockbox_warn_title": "Avís de compatibilitat Rockbox",
  "settings_old_rockbox_warn_body": "Les versions de Rockbox-Y1 anteriors a la 0.5 no són compatibles amb les unitats Y1 venudes després del març de 2026 amb Innioasis OS 3.0.7 preinstal·lat.\n\nSi feu clic a una versió antiga en aquests dispositius, evitarà l'arrencada.\n\nEsteu segur que voleu mostrar les versions anteriors de Rockbox?",
  "sel_refresh": "Actualitza",
@@ -926,6 +931,9 @@
  "rockbox_wizard_done_desc": "Ara podeu desconnectar el reproductor amb seguretat i triar un tema a Rockbox (Configuració > Configuració del tema).",
  "sel_local_rockbox_themes_option": "Instal·leu Temes Rockbox 360p + Fontpack",
  "rockbox_stage_installing": "S'estan instal·lant els temes i els tipus de lletra de Rockbox...",
+ "rockbox_cleanup_step": "S'està eliminant la configuració antiga de Rockbox...",
+ "rockbox_cleanup_deleting": "S'està eliminant la carpeta .rockbox del reproductor...",
+ "rockbox_cleanup_failed_note": "El vostre programari nou s'ha instal·lat, però l'antiga carpeta .rockbox no s'ha pogut eliminar. Suprimiu la carpeta .rockbox del reproductor a mà si voleu un començament net.",
  "rockbox_stage_waiting_adb_fmt": "S'està buscant un jugador mitjançant ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Hi ha més d'un jugador connectat. Desconnecteu els altres i deixeu només el que s'està instal·lant.",
  "rockbox_stage_pushing": "S'ha detectat un jugador. S'estan col·locant els temes i els tipus de lletra de la comunitat...",
@@ -1025,8 +1033,5 @@
  "donate_support_appeal_coffee_math": "Un cafè cobreix aproximadament l'ample de banda d'una descàrrega. Manté la següent solució a l'abast.",
  "donate_family_appeal_expected": "Ryan i la seva parella estan esperant un nadó. Les donacions per als costos de funcionament del projecte i la nostra nova família són molt apreciades.",
  "donate_family_appeal_new_arrival": "Hi ha una nova arribada de camí a casa d'en Ryan. Cada donació als servidors i a la nostra família en creixement significa molt.",
- "donate_family_appeal_nursery": "Ryan i la seva parella s'estan preparant per al seu fill. Si aquesta eina ha estat útil, una donació per als costos de funcionament i la nostra família en creixement ajudaria més del que saps.",
- "rockbox_cleanup_step": "S'està eliminant la configuració antiga de Rockbox...",
- "rockbox_cleanup_deleting": "S'està eliminant la carpeta .rockbox del reproductor...",
- "rockbox_cleanup_failed_note": "El vostre programari nou s'ha instal·lat, però l'antiga carpeta .rockbox no s'ha pogut eliminar. Suprimiu la carpeta .rockbox del reproductor a mà si voleu un començament net."
+ "donate_family_appeal_nursery": "Ryan i la seva parella s'estan preparant per al seu fill. Si aquesta eina ha estat útil, una donació per als costos de funcionament i la nostra família en creixement ajudaria més del que saps."
 }

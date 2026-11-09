@@ -139,7 +139,12 @@
  "settings_filter_old_rockbox": "Zobrazit staré stavby Rockboxu",
  "settings_filter_nightly": "Zobrazit Nightly Dev Releases",
  "settings_filter_240p": "240p Rockbox verze",
- "settings_240p_tip": "Zobrazuje sestavení, jejichž ROM zip je varianta 240p (rom…_240p.zip). Sestavení 240p nejsou kompatibilní s jednotkami Y1 v systému Innioasis OS nižším než 3.0.7, takže Show Old Rockbox Builds je s ním povolena.",
+ "settings_240p_tip": "Zobrazuje sestavení, jejichž ROM zip je varianta 240p (rom…_240p.zip). Sestavení 240p nelze použít na Y1 zakoupeném novém po květnu 2026 nebo na tom, který byl dodán s původním softwarem 3.0.7 nebo novějším. Tito hráči také nemohou používat starší sestavení Rockboxu, takže se s ním zapíná Show Old Rockbox Builds.",
+ "settings_240p_warn_body": "Sestavení 240p nelze použít na Y1 zakoupeném novém po květnu 2026 nebo na tom, který byl dodán s původním softwarem 3.0.7 nebo novějším. Nainstalujte pouze jeden na starší Y1.\n\nTito hráči také nemohou používat starší sestavení Rockboxu, takže jsou uvedeny také.\n\nOpravdu chcete zobrazit 240p Rockbox vydání?",
+ "sel_240p_warning": "Toto je 240p sestavení. Nelze jej použít na zařízení Y1 zakoupeném jako nové po květnu 2026 ani na zařízení, které bylo dodáno s původním softwarem 3.0.7 nebo novějším.",
+ "link_240p_body": "Odkaz, který jste otevřeli, je pro sestavení 240p. Sestavení 240p nelze použít na Y1 zakoupeném jako nové po květnu 2026 nebo na tom, který byl dodán s původním softwarem 3.0.7 nebo novějším, takže jsou skryty, dokud je nezapnete.\n\nOpravdu chcete zobrazit 240p Rockbox vydání?",
+ "link_busy": "Dokončete aktuální instalaci a znovu otevřete odkaz.",
+ "link_not_listed": "Software v tomto odkazu ještě není pro tento přehrávač vydán.",
  "settings_old_rockbox_warn_title": "Upozornění na kompatibilitu Rockbox",
  "settings_old_rockbox_warn_body": "Vydání Rockbox-Y1 před verzí 0.5 nejsou kompatibilní s jednotkami Y1 prodanými po březnu 2026 s předinstalovaným OS Innioasis 3.0.7.\n\nFlashování staršího sestavení na těchto zařízeních zabrání bootování.\n\nOpravdu chcete ukázat starší sestavení Rockboxu?",
  "sel_refresh": "Obnovit",
@@ -926,6 +931,9 @@
  "rockbox_wizard_done_desc": "Nyní můžete bezpečně odpojit přehrávač a vybrat motiv v Rockboxu (Nastavení > Nastavení motivu).",
  "sel_local_rockbox_themes_option": "Nainstalujte si Rockbox 360p Themes + Fontpack",
  "rockbox_stage_installing": "Instalace motivů a písem Rockbox...",
+ "rockbox_cleanup_step": "Odstraňování starých nastavení Rockbox...",
+ "rockbox_cleanup_deleting": "Odebírání složky .rockbox z přehrávače...",
+ "rockbox_cleanup_failed_note": "Váš nový software byl nainstalován, ale starou složku .rockbox nelze odstranit. Pokud chcete čistý začátek, smažte ručně složku .rockbox v přehrávači.",
  "rockbox_stage_waiting_adb_fmt": "Hledám hráče přes ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Je připojeno více než jeden přehrávač. Odpojte ostatní a ponechte pouze nainstalovaný.",
  "rockbox_stage_pushing": "Byl zjištěn přehrávač. Umístění motivů a písem komunity...",
@@ -1025,8 +1033,5 @@
  "donate_support_appeal_coffee_math": "Jedna káva zhruba pokryje šířku pásma stahování. Udržuje další opravu na dosah.",
  "donate_family_appeal_expected": "Ryan a jeho partnerka čekají dítě. Velmi si vážíme darů na provozní náklady projektu a naší nové rodiny.",
  "donate_family_appeal_new_arrival": "V Ryanově domě je na cestě nový příjezd. Každý dar pro servery a naši rozrůstající se rodinu znamená hodně.",
- "donate_family_appeal_nursery": "Ryan a jeho partner se připravují na své dítě. Pokud byl tento nástroj užitečný, dar na provozní náklady a naši rozrůstající se rodinu by pomohl více, než tušíte.",
- "rockbox_cleanup_step": "Odstraňování starých nastavení Rockbox...",
- "rockbox_cleanup_deleting": "Odebírání složky .rockbox z přehrávače...",
- "rockbox_cleanup_failed_note": "Váš nový software byl nainstalován, ale starou složku .rockbox nelze odstranit. Pokud chcete čistý začátek, smažte ručně složku .rockbox v přehrávači."
+ "donate_family_appeal_nursery": "Ryan a jeho partner se připravují na své dítě. Pokud byl tento nástroj užitečný, dar na provozní náklady a naši rozrůstající se rodinu by pomohl více, než tušíte."
 }

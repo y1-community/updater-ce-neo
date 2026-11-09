@@ -385,7 +385,15 @@ def normalize_repo(value) -> str:
 
 
 def release_notes_url(
-    repo, tag, *, name: str = "", model: str = "", software: str = ""
+    repo,
+    tag,
+    *,
+    name: str = "",
+    model: str = "",
+    software: str = "",
+    brand: str = "",
+    hw_type: str = "",
+    resolution: str = "",
 ) -> str:
     """The site's release-notes page for one release of ``repo``.
 
@@ -394,6 +402,9 @@ def release_notes_url(
     buttons — which is why the app sends "See More" here rather than to
     github.com. ``software`` is the catalogue slug the page uses for its own
     download buttons; the website's reader accepts it alongside ``repo``.
+    ``brand``, ``type`` and ``resolution`` are the names :mod:`src.site_links`
+    reads back, so the page's Get it in Updater link can hand the same build
+    to the app and its portable download can pick the 240p zip.
     """
     repo_name = normalize_repo(repo)
     release_tag = str(tag or "").strip()
@@ -406,6 +417,12 @@ def release_notes_url(
         params.append(("model", str(model).strip().upper()))
     if str(software or "").strip():
         params.append(("software", str(software).strip()))
+    if str(brand or "").strip():
+        params.append(("brand", str(brand).strip()))
+    if str(hw_type or "").strip().upper() in ("A", "B"):
+        params.append(("type", str(hw_type).strip().upper()))
+    if str(resolution or "").strip().lower() in ("240p", "360p"):
+        params.append(("resolution", str(resolution).strip().lower()))
     return f"{SITE}/release_notes.html?{urlencode(params)}"
 
 

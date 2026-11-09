@@ -139,7 +139,12 @@
  "settings_filter_old_rockbox": "Patuduhon Kotak Batu Lama Bangun .",
  "settings_filter_nightly": "Patuduhon Rilis Dev Borngin .",
  "settings_filter_240p": "240p Rilis Kotak Batu .",
- "settings_240p_tip": "Dipatuduhon do bangunan na ROM zip na marvarian 240p (rom..._240p.zip). 240p bangunan ndang kompatibel dohot unit Y1 di OS Innioasis di toru ni 3.0.7, jadi Patuduhon Bangunan Kotak Batu Lama diaktifhon dohot i.",
+ "settings_240p_tip": "Dipatuduhon do bangunan na ROM zip na marvarian 240p (rom ... 240p.zip). 240p bangunan ndang boi dipangke di Y1 na tinuhor na baru dung Mei 2026, manang di na ro dohot Perangkat Lunak Asli 3.0.7 manang na baru. Angka pemain i pe ndang boi mamangke bangunan Rockbox na leleng, jadi Patuduhon Bangunan Rockbox Lama dihidupkan dohot i.",
+ "settings_240p_warn_body": "240p bangunan ndang boi dipangke di Y1 na tinuhor na baru dung Mei 2026, manang di na ro dohot Perangkat Lunak Asli 3.0.7 manang na baru. Holan pasang sada di Y1 na umtua.\n\nAngka pemain i pe ndang boi mamangke bangunan Rockbox na umtua, jadi angka i pe dicantumhon.\n\nYakin do hamu naeng patuduhon rilis Rockbox 240p?",
+ "sel_240p_warning": "On ma bangunan 240p. Ndang boi dipangke di Y1 na tinuhor na baru dung Mei 2026, manang di na ro dohot Perangkat Lunak Asli 3.0.7 manang na baru.",
+ "link_240p_body": "Link na dibuka hamu i ma tu bangunan 240p. 240p bangunan ndang boi dipangke di Y1 na tinuhor na baru dung Mei 2026, manang di na ro dohot Perangkat Lunak Asli 3.0.7 manang na baru, jadi ditabunihon do i sahat tu na dihidupkan hamu.\n\nYakin do hamu naeng patuduhon rilis Rockbox 240p?",
+ "link_busy": "Sidung ma pasang saonari, dung i bukka ma muse link i.",
+ "link_not_listed": "Perangkat lunak na di link i ndang dipalua dope tu pemain on.",
  "settings_old_rockbox_warn_title": "Peringatan Kecocokan Kotak Batu .",
  "settings_old_rockbox_warn_body": "Rilis ni Rockbox-Y1 andorang so 0,5 ndang hombar tu unit Y1 na dijual dung Maret 2026 dohot Innioasis OS 3.0.7 naung dipasang hian.\n\nMolo dikilap hamu bangunan na leleng di perangkat on, gabe ndang boi be dibuka.\n\nYakin do hamu naeng patuduhon bangunan Rockbox na umtua?",
  "sel_refresh": "Segar",
@@ -926,6 +931,9 @@
  "rockbox_wizard_done_desc": "Saonari, boi ma diputushon hamu sambungan ni pemutar jala dipillit hamu tema di Rockbox (Pengaturan > Pengaturan Tema).",
  "sel_local_rockbox_themes_option": "Pasang Tema Rockbox 360p + Fontpak .",
  "rockbox_stage_installing": "Mamasang Tema & Font Kotak Batu...",
+ "rockbox_cleanup_step": "Manghapus pengaturan Kotak Batu na leleng...",
+ "rockbox_cleanup_deleting": "Manghapus map .kotak batu sian pemain...",
+ "rockbox_cleanup_failed_note": "Nunga dipasang hamu perangkat lunak na baru, alai ndang boi dihapus map .rockbox na leleng i. Hapus ma map .rockbox di pemain dohot tangan molo naeng ias mulai.",
  "rockbox_stage_waiting_adb_fmt": "Dilului do pemain melalui ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Lobi sian sada pemain na mardomu. Putus ma sambungan na asing jala holan na dipasang i ma tadingkon.",
  "rockbox_stage_pushing": "Pemain na dideteksi. Mameakkon tema dohot huruf masyarakat...",
@@ -1025,8 +1033,5 @@
  "donate_support_appeal_coffee_math": "Sada kopi hira-hira manutupi band lebar ni sada unduhan. Dijaga do perbaikan na mangihut asa boi didapot.",
  "donate_family_appeal_expected": "Si Ryan dohot dongan saripena manghirim posoposo. Sumbangan tu biaya jalan ni proyek dohot keluarga na baru dihargai secara massal.",
  "donate_family_appeal_new_arrival": "Adong do na baru ro di pardalanan di jabu ni si Ryan. Ganup sumbangan tu angka pelayan dohot keluarga nami na lam tu balgana, mansai balga do lapatanna.",
- "donate_family_appeal_nursery": "Si Ryan dohot dongan saripena marhobas laho manubuhon ianakhonna. Molo nunga marguna alat on, sumbangan tu biaya pardalanan dohot keluarganami na lam magodang boi do mangurupi lobi sian na binotomuna.",
- "rockbox_cleanup_step": "Manghapus pengaturan Kotak Batu na leleng...",
- "rockbox_cleanup_deleting": "Manghapus map .kotak batu sian pemain...",
- "rockbox_cleanup_failed_note": "Nunga dipasang hamu perangkat lunak na baru, alai ndang boi dihapus map .rockbox na leleng i. Hapus ma map .rockbox di pemain dohot tangan molo naeng ias mulai."
+ "donate_family_appeal_nursery": "Si Ryan dohot dongan saripena marhobas laho manubuhon ianakhonna. Molo nunga marguna alat on, sumbangan tu biaya pardalanan dohot keluarganami na lam magodang boi do mangurupi lobi sian na binotomuna."
 }

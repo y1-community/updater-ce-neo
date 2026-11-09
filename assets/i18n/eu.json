@@ -139,7 +139,12 @@
  "settings_filter_old_rockbox": "Erakutsi Rockbox eraikuntza zaharrak",
  "settings_filter_nightly": "Erakutsi gaueko garatzaileen bertsioak",
  "settings_filter_240p": "240p Rockbox bertsioak",
- "settings_240p_tip": "ROM zip 240p-ko aldaera duten eraikuntzak erakusten ditu (rom…_240p.zip). 240p-ko eraikuntzak ez dira bateragarriak Innioasis OS-ko 3.0.7 bertsiotik beherako Y1 unitateekin, beraz, Show Old Rockbox Builds gaituta dago horrekin.",
+ "settings_240p_tip": "ROM zip 240p-ko aldaera duten eraikuntzak erakusten ditu (rom…_240p.zip). 240p-ko eraikuntzak ezin dira erabili 2026ko maiatzatik aurrera berria erositako Y1 batean, edo Jatorrizko Software 3.0.7 edo berriagoa den batean. Jokalari horiek ezin dituzte Rockbox eraikuntza zaharragoak erabili, beraz, Erakutsi Rockbox eraikuntza zaharrak aktibatuta dago horrekin.",
+ "settings_240p_warn_body": "240p-ko eraikuntzak ezin dira erabili 2026ko maiatzatik aurrera berria erositako Y1 batean, edo Jatorrizko Software 3.0.7 edo berriagoa den batean. Instalatu bakarra Y1 zaharrago batean.\n\nJokalari horiek ezin dituzte Rockbox eraikuntza zaharragoak erabili, beraz, horiek ere zerrendatuta daude.\n\nZiur 240p-ko Rockbox bertsioak erakutsi nahi dituzula?",
+ "sel_240p_warning": "Hau 240p-ko eraikuntza da. Ezin da erabili 2026ko maiatzatik aurrera berria erositako Y1 batean, edo Jatorrizko Software 3.0.7 edo berriagoa den batean.",
+ "link_240p_body": "Ireki duzun esteka 240p-ko eraikuntzarako da. 240p-ko eraikuntzak ezin dira erabili 2026ko maiatzatik aurrera berria erositako Y1 batean, edo Jatorrizko Software 3.0.7 edo berriagoa den batean, beraz, ezkutatuta egongo dira aktibatu arte.\n\nZiur 240p-ko Rockbox bertsioak erakutsi nahi dituzula?",
+ "link_busy": "Amaitu uneko instalazioa eta ireki berriro esteka.",
+ "link_not_listed": "Esteka horretako softwarea ez dago oraindik erreproduzitzaile honetarako kaleratu.",
  "settings_old_rockbox_warn_title": "Rockbox bateragarritasunaren abisua",
  "settings_old_rockbox_warn_body": "0.5 baino lehenagoko Rockbox-Y1-en bertsioak ez dira bateragarriak 2026ko martxotik aurrera Innioasis OS 3.0.7 aurrez instalatuta duten Y1 unitateekin.\n\nGailu hauetan eraikitze zaharrago bat keinutzeak abiaraztea eragotziko du.\n\nZiur Rockbox eraikuntza zaharragoak erakutsi nahi dituzula?",
  "sel_refresh": "Freskatu",
@@ -926,6 +931,9 @@
  "rockbox_wizard_done_desc": "Orain segurtasunez deskonekta dezakezu erreproduzitzailea eta gai bat hauta dezakezu Rockbox-en (Ezarpenak > Gaiaren ezarpenak).",
  "sel_local_rockbox_themes_option": "Instalatu Rockbox 360p Gaiak + Fontpack",
  "rockbox_stage_installing": "Rockbox gaiak eta letra-tipoak instalatzen...",
+ "rockbox_cleanup_step": "Rockbox ezarpen zaharrak kentzen...",
+ "rockbox_cleanup_deleting": ".rockbox karpeta erreproduzitzailetik kentzen...",
+ "rockbox_cleanup_failed_note": "Zure software berria instalatu da, baina ezin izan da kendu .rockbox karpeta zaharra. Ezabatu eskuz erreproduzigailuko .rockbox karpeta hasiera garbi bat nahi baduzu.",
  "rockbox_stage_waiting_adb_fmt": "Jokalari bila ADB bidez ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Jokalari bat baino gehiago konektatuta dago. Deskonektatu besteak eta utzi instalatuta dagoena bakarrik.",
  "rockbox_stage_pushing": "Jokalari detektatu da. Komunitatearen gaiak eta letra-tipoak jartzen...",
@@ -1025,8 +1033,5 @@
  "donate_support_appeal_coffee_math": "Kafe batek gutxi gorabehera deskarga baten banda-zabalera estaltzen du. Eskura mantentzen du hurrengo konponketa.",
  "donate_family_appeal_expected": "Ryan eta bere bikotea haur bat espero dute. Proiektuaren funtzionamendu-gastuetarako eta gure familia berrirako dohaintzak izugarri estimatzen dira.",
  "donate_family_appeal_new_arrival": "Ryanen etxera iritsi berri bat dago bidean. Zerbitzariei eta gero eta handiagoa den gure familiari egindako dohaintza bakoitzak asko esan nahi du.",
- "donate_family_appeal_nursery": "Ryan eta bere bikotea beren seme-alabentzako prestatzen ari dira. Tresna hau baliagarria izan bada, funtzionamendu-gastuetarako dohaintzak eta geroz eta handiagoa den gure familiak dakizuna baino gehiago lagunduko luke.",
- "rockbox_cleanup_step": "Rockbox ezarpen zaharrak kentzen...",
- "rockbox_cleanup_deleting": ".rockbox karpeta erreproduzitzailetik kentzen...",
- "rockbox_cleanup_failed_note": "Zure software berria instalatu da, baina ezin izan da kendu .rockbox karpeta zaharra. Ezabatu eskuz erreproduzigailuko .rockbox karpeta hasiera garbi bat nahi baduzu."
+ "donate_family_appeal_nursery": "Ryan eta bere bikotea beren seme-alabentzako prestatzen ari dira. Tresna hau baliagarria izan bada, funtzionamendu-gastuetarako dohaintzak eta geroz eta handiagoa den gure familiak dakizuna baino gehiago lagunduko luke."
 }

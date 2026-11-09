@@ -114,6 +114,20 @@ def _with_site_preferences(url: str) -> str:
         except Exception:
             pass
 
+        # 6. Which app sent the visit, so the sites' analytics can tell app
+        # traffic (and the build behind it) from a browser visit. The same
+        # names come back on an ``innioasis-updater://`` link (src/site_links).
+        try:
+            from . import config
+
+            query_dict.setdefault(
+                "client",
+                "mediatek-installer" if config.is_mediatek_installer() else "updater-ce",
+            )
+            query_dict.setdefault("client_version", config.APP_VERSION)
+        except Exception:
+            pass
+
         new_query = urlencode(list(query_dict.items()))
         return urlunsplit(
             (parts.scheme, parts.netloc, parts.path, new_query, parts.fragment)

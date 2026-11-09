@@ -139,7 +139,12 @@
  "settings_filter_old_rockbox": "Ipakita dagiti Daan a Rockbox Builds",
  "settings_filter_nightly": "Ipakita ti Rabii nga Dev Releases",
  "settings_filter_240p": "240p Dagiti Nairuar ti Rockbox",
- "settings_240p_tip": "Ipakitana dagiti build a ti ROM zip-na ket 240p a variant (rom..._240p.zip). Dagiti 240p a panagbangon ket saan a maitunos kadagiti Y1 a yunit iti Innioasis OS iti baba ti 3.0.7, isu a ti Show Old Rockbox Builds ket na-enable iti daytoy.",
+ "settings_240p_tip": "Ipakitana dagiti build a ti ROM zip-na ket 240p a variant (rom..._240p.zip). Saan a mausar dagiti 240p build iti Y1 a nagatang a baro kalpasan ti Mayo 2026, wenno iti maysa a dimteng a kadua ti Original Software 3.0.7 wenno naud-udi. Dagita nga agay-ayam ket saan met a makausar kadagiti daan a Rockbox build, isu a ti Show Old Rockbox Builds ket nailukat babaen iti daytoy.",
+ "settings_240p_warn_body": "Saan a mausar dagiti 240p build iti Y1 a nagatang a baro kalpasan ti Mayo 2026, wenno iti maysa a dimteng a kadua ti Original Software 3.0.7 wenno naud-udi. I-install laeng ti maysa iti daan a Y1.\n\nDagita a players ket saan met a makausar kadagiti daan a Rockbox builds, isu a dagidiay ket nailista met.\n\nSigurado ka kadi a kayatmo nga ipakita dagiti 240p Rockbox releases?",
+ "sel_240p_warning": "Daytoy ket 240p build. Saan a mausar daytoy iti Y1 a nagatang a baro kalpasan ti Mayo 2026, wenno iti maysa a dimteng a kadua ti Original Software 3.0.7 wenno naud-udi.",
+ "link_240p_body": "Ti link a linuktanmo ket para iti 240p build. Dagiti 240p builds ket saan a mabalin nga usaren iti Y1 a nagatang a baro kalpasan ti Mayo 2026, wenno iti maysa nga immay a kadua ti Original Software 3.0.7 wenno naud-udi, isu a nailemmeng dagitoy agingga nga i-on-mo dagitoy.\n\nSigurado ka kadi a kayatmo nga ipakita dagiti 240p Rockbox releases?",
+ "link_busy": "Leppasen ti agdama nga install, sa luktan manen ti link.",
+ "link_not_listed": "Saan pay a nairuar ti software iti dayta a link para iti daytoy a player.",
  "settings_old_rockbox_warn_title": "Pakdaar ti Panagtunos ti Rockbox",
  "settings_old_rockbox_warn_body": "Dagiti pannakairuar ti Rockbox-Y1 sakbay ti 0.5 ket saan a maitunos kadagiti Y1 a yunit a nailako kalpasan ti Marso 2026 nga addaan iti Innioasis OS 3.0.7 a nasakbay a naikabil.\n\nTi panangi-flash iti daan a build kadagitoy nga alikamen ket manglapped iti panag-boot.\n\nSigurado ka kadi a kayatmo nga ipakita dagiti daan a Rockbox build?",
  "sel_refresh": "Refresh ti",
@@ -926,6 +931,9 @@
  "rockbox_wizard_done_desc": "Mabalinmo itan a sitatalged nga isina ti player ken agpili iti tema iti Rockbox (Settings > Theme Settings).",
  "sel_local_rockbox_themes_option": "I-install dagiti Tema ti Rockbox 360p + Fontpack",
  "rockbox_stage_installing": "Panag-install kadagiti Tema & Font ti Rockbox...",
+ "rockbox_cleanup_step": "Panangikkat kadagiti daan a setting ti Rockbox...",
+ "rockbox_cleanup_deleting": "Ti panangikkat ti .rockbox folder manipud iti player...",
+ "rockbox_cleanup_failed_note": "Nai-install ti baro a software-mo, ngem saan a maikkat ti daan a .rockbox folder. I-delete ti .rockbox folder iti player babaen ti ima no kayatmo ti nadalus a pangrugian.",
  "rockbox_stage_waiting_adb_fmt": "Agsapsapul iti player babaen ti ADB ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Nasurok a maysa nga agay-ayam ti konektado. Ikkaten dagiti dadduma ket baybay-an laeng ti mai-install.",
  "rockbox_stage_pushing": "Naduktalan ti player. Panangikabil kadagiti tema & letra ti komunidad...",
@@ -1025,8 +1033,5 @@
  "donate_support_appeal_coffee_math": "Ti maysa a kape ket agarup a mangsaklaw iti bandwidth ti maysa a download. Pagtalinaedenna a madanon ti sumaganad a panangtarimaan.",
  "donate_family_appeal_expected": "Namnamaen da Ryan ken ti kaduana ti maladaga. Dagiti donasion nga agturong iti gastos iti panagtaray ti proyekto ken ti baro a pamiliami ket dakkel ti maapresiar.",
  "donate_family_appeal_new_arrival": "Adda baro a sumangpet iti dalan iti balay ni Ryan. Tunggal donasion nga agturong kadagiti server ken dumakdakkel a pamiliatayo ket dakkel ti kaipapanan.",
- "donate_family_appeal_nursery": "Agsagsagana da Ryan ken ti kaduana para iti anakda. No nakatulong daytoy nga alikamen, ad-adda a makatulong ti donasion para kadagiti gastos iti panagtaray ken ti dumakdakkel a pamiliatayo ngem iti ammoyo.",
- "rockbox_cleanup_step": "Panangikkat kadagiti daan a setting ti Rockbox...",
- "rockbox_cleanup_deleting": "Ti panangikkat ti .rockbox folder manipud iti player...",
- "rockbox_cleanup_failed_note": "Nai-install ti baro a software-mo, ngem saan a maikkat ti daan a .rockbox folder. I-delete ti .rockbox folder iti player babaen ti ima no kayatmo ti nadalus a pangrugian."
+ "donate_family_appeal_nursery": "Agsagsagana da Ryan ken ti kaduana para iti anakda. No nakatulong daytoy nga alikamen, ad-adda a makatulong ti donasion para kadagiti gastos iti panagtaray ken ti dumakdakkel a pamiliatayo ngem iti ammoyo."
 }

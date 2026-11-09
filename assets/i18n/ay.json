@@ -139,7 +139,12 @@
  "settings_filter_old_rockbox": "Nayra Rockbox luratanaka uñacht’ayaña",
  "settings_filter_nightly": "Uñacht’ayaña Arumax Dev Lanzamientos",
  "settings_filter_240p": "240p Rockbox ukax mä juk’a pachanakanwa",
- "settings_240p_tip": "Uñacht’ayiwa lurawinakapa khitinakan ROM zip ukax 240p variante (rom..._240p.zip). 240p lurawinakax janiw Y1 unidades ukanakamp Innioasis OS ukan 3.0.7 ukarjam uñt’ayatakiti, ukhamax Show Old Rockbox Builds ukax ukampiw ch’amanchata.",
+ "settings_240p_tip": "Uñacht’ayiwa lurawinakapa khitinakan ROM zip ukax 240p variante (rom..._240p.zip). 240p lurawinakax janiw mä Y1 machaq alasitax mayo phaxsit 2026 marat qhiparux apnaqatäkaspati, jan ukax mä Original Software 3.0.7 jan ukax qhipa uñstawimp jutatäki ukaruw apnaqatäkaspati. Uka anatirinakax janiw nayra Rockbox lurawinakamp apnaqapkaspati, ukhamax Show Old Rockbox Builds ukax ukampiw jist’antata.",
+ "settings_240p_warn_body": "240p lurawinakax janiw mä Y1 machaq alasitax mayo phaxsit 2026 marat qhiparux apnaqatäkaspati, jan ukax mä Original Software 3.0.7 jan ukax qhipa uñstawimp jutatäki ukaruw apnaqatäkaspati. Mä nayra Y1 ukar mäkiw uskt’añama.\n\nUka anatirinakax janiw nayra Rockbox lurawinakamp apnaqapkaspati, ukhamax ukanakx listat uñt’ayatarakiwa.\n\n¿Jumax 240p Rockbox ukan mistuwinakap uñacht’ayañ munasmati?",
+ "sel_240p_warning": "Akax 240p ukan luratawa. Janiw mä Y1 machaq alasita mayo phaxsit 2026 marat qhiparux apnaqañjamakiti, jan ukax mä Software Original 3.0.7 jan ukax qhipa uñstawimp jutki ukaruw apnaqañjamakiti.",
+ "link_240p_body": "Uka link ukax jist’aratawa 240p lurañataki. 240p lurawinakax janiw mä Y1 machaq alasitax mayo phaxsit 2026 marat qhiparux apnaqatäkaspati, jan ukax mä Original Software 3.0.7 jan ukax qhipa uñstawinakampi, ukhamax imantataw jist’antañkama.\n\n¿Jumax 240p Rockbox ukan mistuwinakap uñacht’ayañ munasmati?",
+ "link_busy": "Jichha instalación tukuyaña, ukatxa mayampi link jist’araña.",
+ "link_not_listed": "Uka link ukan software ukax janiw aka anatiritakix jichhakamax uñt’ayatäkiti.",
  "settings_old_rockbox_warn_title": "Rockbox Compatibilidad ukax mä juk’a pachanakanwa",
  "settings_old_rockbox_warn_body": "Rockbox-Y1 ukax 0.5 nayraqat apsutanakax janiw Y1 unidades ukanakamp chikachasiñakiti, ukax 2026 maran achuqa phaxsit qhipat aljatawa, Innioasis OS 3.0.7 ukax nayraqat instalatawa.\n\nUka dispositivonakan nayra lurawip qhant’ayañax arknaqañ jark’aqaniwa.\n\n¿Jumax nayra Rockbox lurawinakat uñacht’ayañ munasmati?",
  "sel_refresh": "Refresco luraña",
@@ -926,6 +931,9 @@
  "rockbox_wizard_done_desc": "Jichhax jan kuna usuniw anatañarux desconectasma ukat Rockbox (Configuración > Configuración de tema) ukan mä tema ajlliraksnawa.",
  "sel_local_rockbox_themes_option": "Rockbox 360p Temas + Fontpack ukar uñt’ayaña",
  "rockbox_stage_installing": "Rockbox Temas & Fuentes ukanakax uñstayatawa...",
+ "rockbox_cleanup_step": "Nayra Rockbox ukan utt’ayatanakap apsuña...",
+ "rockbox_cleanup_deleting": "Uka .rockbox carpeta ukax anatañat apsutawa...",
+ "rockbox_cleanup_failed_note": "Machaq software ukax uñstayatawa, ukampis nayra .rockbox carpeta ukax janiw apsutäkänti. .rockbox carpeta ukax anatañanx amparamp chhaqtayatawa, q’uma qalltañ munasmati.",
  "rockbox_stage_waiting_adb_fmt": "ADB tuqi anatiri thaqhaña ({remaining}s)...",
  "rockbox_stage_disconnect_extra": "Mä anatirit sipans juk’ampiruw uñt’ayasi. Mayninakax desconectatäñapawa ukat instalatäki ukaki jaytañawa.",
  "rockbox_stage_pushing": "Anatañanx uñt’atawa. Ayllun temas & fuentes ukanakap uñt’ayaña...",
@@ -1025,8 +1033,5 @@
  "donate_support_appeal_coffee_math": "Mä café ukax mä descarga ukan ancho de banda ukar mä juk’a ch’amanchatawa. Ukax jutir askichäwix jan jak’achasiñatakiw yanapt’i.",
  "donate_family_appeal_expected": "Ryan jilatampi masipampejj mä wawaw suyasipki. Proyecton apnaqañ qullqiparu ukhamarak machaq familiasar yanapt’awinakax wali jach’añchatawa.",
  "donate_family_appeal_new_arrival": "Ryan chachan utapan thakinx mä machaq puriniw utji. Sapa yanapt’awix servidores ukat jiwasan jilxatir familiasarux mä jach’a askiw sañ muni.",
- "donate_family_appeal_nursery": "Ryan jilatampi masipampejj wawapatak wakichtʼasipki. Aka herramientax askïspa ukhaxa, t’ijtäwitak qullqi churañataki ukhamarak jilxatir familiasatakix mä qullqi churañax jumat sipansa juk’amp yanapt’aspawa.",
- "rockbox_cleanup_step": "Nayra Rockbox ukan utt’ayatanakap apsuña...",
- "rockbox_cleanup_deleting": "Uka .rockbox carpeta ukax anatañat apsutawa...",
- "rockbox_cleanup_failed_note": "Machaq software ukax uñstayatawa, ukampis nayra .rockbox carpeta ukax janiw apsutäkänti. .rockbox carpeta ukax anatañanx amparamp chhaqtayatawa, q’uma qalltañ munasmati."
+ "donate_family_appeal_nursery": "Ryan jilatampi masipampejj wawapatak wakichtʼasipki. Aka herramientax askïspa ukhaxa, t’ijtäwitak qullqi churañataki ukhamarak jilxatir familiasatakix mä qullqi churañax jumat sipansa juk’amp yanapt’aspawa."
 }
