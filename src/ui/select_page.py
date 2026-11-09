@@ -3062,8 +3062,12 @@ class SelectPackagePage(QWidget):
             self._translate_current_release_in_app()
         elif url_str == "action:show_original":
             self._show_original_release_notes()
-        elif url_str.startswith(("http://", "https://", "mailto:")):
+        elif url_str.lower().startswith("mailto:"):
             open_browser(url_str)
+        elif url_str.startswith(("http://", "https://")):
+            from .. import docs_source
+
+            docs_source.open_site_link(url_str)
 
     def set_auto_translate_notes(self, enabled: bool):
         """Translate release notes from now on, starting with what is on screen.

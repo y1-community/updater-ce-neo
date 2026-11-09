@@ -384,13 +384,16 @@ def normalize_repo(value) -> str:
     return f"{owner}/{name}" if owner and name else ""
 
 
-def release_notes_url(repo, tag, *, name: str = "", model: str = "") -> str:
+def release_notes_url(
+    repo, tag, *, name: str = "", model: str = "", software: str = ""
+) -> str:
     """The site's release-notes page for one release of ``repo``.
 
     The page reads the release's title and notes from GitHub and renders them
     with our styling and our own Get it in Updater / Download Portable Zip
     buttons — which is why the app sends "See More" here rather than to
-    github.com.
+    github.com. ``software`` is the catalogue slug the page uses for its own
+    download buttons; the website's reader accepts it alongside ``repo``.
     """
     repo_name = normalize_repo(repo)
     release_tag = str(tag or "").strip()
@@ -401,6 +404,8 @@ def release_notes_url(repo, tag, *, name: str = "", model: str = "") -> str:
         params.append(("name", str(name).strip()))
     if str(model or "").strip():
         params.append(("model", str(model).strip().upper()))
+    if str(software or "").strip():
+        params.append(("software", str(software).strip()))
     return f"{SITE}/release_notes.html?{urlencode(params)}"
 
 
@@ -415,6 +420,8 @@ def post_install_page_url(
 
     Only a document we can parse has a page there; a firmware whose
     ``post_install`` is an ordinary guide page keeps that page as its target.
+    The site's reader calls the section ``anchor``; ``section`` is kept for the
+    older app-generated links the site still accepts.
     """
     source = markdown_source(url)
     if not source:
@@ -423,6 +430,7 @@ def post_install_page_url(
     section = markdown_anchor(url)
     if section:
         params.append(("section", section))
+        params.append(("anchor", section))
     repo_name = normalize_repo(repo) or repo_from_url(source)
     if repo_name:
         params.append(("repo", repo_name))
@@ -431,3 +439,142 @@ def post_install_page_url(
     if str(model or "").strip():
         params.append(("model", str(model).strip().upper()))
     return f"{SITE}/post_install.html?{urlencode(params)}"
+
+
+def _catalog_packages() -> list:
+    """Catalogue entries from ``slidia_manifest.xml`` (live copy first)."""
+    from . import catalog
+
+    return list(catalog.LIVE_CATALOG or catalog.CATALOG or [])
+
+
+def catalog_package_for_repo(repo):
+    """The catalogue entry whose repository is ``repo`` (``None`` when none).
+
+    ``slidia_manifest.xml`` is the shared source of truth: a repository that
+    lists a package there has a firmware page, a release-notes page and a guide
+    page on innioasis.app, so a link to GitHub can be handed to the parser
+    pages instead.
+    """
+    wanted = normalize_repo(repo)
+    if not wanted:
+        return None
+    for package in _catalog_packages():
+        if normalize_repo(getattr(package, "repo", "")) == wanted:
+            return package
+    return None
+
+
+def firmware_page_url(repo, *, model: str = "", software: str = "") -> str:
+    """The site's firmware page for a project repository (``""`` when unnamed)."""
+    package = catalog_package_for_repo(repo)
+    slug = str(software or getattr(package, "slug", "") or "").strip()
+    target_model = str(model or getattr(package, "model", "") or "").strip().upper()
+    if not slug and not target_model:
+        return ""
+    params = [(key, value) for key, value in (("model", target_model), ("software", slug)) if value]
+    return f"{SITE}/firmware.html?{urlencode(params)}"
+
+
+def _github_release_tag(url: str) -> str:
+    """The tag of a ``github.com/<owner>/<repo>/releases/tag/<tag>`` link."""
+    parts = _parts(url)
+    if not is_github_host((parts.hostname or "").lower()):
+        return ""
+    segments = _segments(parts)
+    if len(segments) >= 5 and segments[2] == "releases" and segments[3] == "tag":
+        return "/".join(segments[4:])
+    return ""
+
+
+def site_page_for_link(
+    url,
+    *,
+    model: str = "",
+    software: str = "",
+    name: str = "",
+) -> str:
+    """The innioasis.app page that renders ``url`` (``""`` when it has none).
+
+    Every Markdown document, repository and release the catalogue knows is
+    shown by one of the site's parser pages. Sending a reader there means the
+    document keeps our styling and download buttons, and the site applies the
+    visitor's language and donation preferences — a bare GitHub page has no way
+    to do either. Links the catalogue does not know, and every non-repository
+    GitHub page (an issue, a pull request, a commit), keep their own target.
+    """
+    raw = url.toString() if hasattr(url, "toString") else str(url or "")
+    raw = raw.strip()
+    parts = _parts(raw)
+    if parts.scheme not in ("http", "https"):
+        return ""
+    host = (parts.hostname or "").lower()
+    # Already on the site: the page is the destination.
+    if host == "innioasis.app" or host.endswith(".innioasis.app"):
+        return ""
+
+    source = markdown_source(raw)
+    package = catalog_package_for_repo(repo_from_url(source or raw))
+    if source:
+        page = post_install_page_url(
+            raw,
+            repo=repo_from_url(source),
+            software=software or getattr(package, "name", ""),
+            model=model or getattr(package, "model", ""),
+        )
+        if page:
+            return page
+
+    if not is_github_host(host):
+        return ""
+    segments = _segments(parts)
+    repo = repo_from_url(raw)
+    if not repo:
+        return ""
+    tag = _github_release_tag(raw)
+    if tag or (len(segments) >= 3 and segments[2] == "releases"):
+        page = release_notes_url(
+            repo,
+            tag,
+            name=name or getattr(package, "name", ""),
+            model=model or getattr(package, "model", ""),
+            software=getattr(package, "slug", "") or software,
+        )
+        if page:
+            return page
+    # A repository page (root, tree, README, a non-Markdown blob) is the
+    # project's firmware page. Issue/PR/commit links stay specific to GitHub.
+    if len(segments) >= 3 and segments[2] in (
+        "pull",
+        "issues",
+        "commit",
+        "compare",
+        "actions",
+        "wiki",
+        "discussions",
+        "security",
+        "pulse",
+        "graphs",
+    ):
+        return ""
+    page = firmware_page_url(
+        repo, model=model or getattr(package, "model", ""), software=software
+    )
+    return page
+
+
+def open_site_link(url, *, model: str = "", software: str = "", name: str = "") -> bool:
+    """Open ``url`` in the browser, through the site's parser page when it has one.
+
+    This is the single entry point for a link clicked inside the app's own
+    Markdown views (notices, release notes, guides), so those views cannot
+    bypass the site's reader or its language/donation preferences.
+    """
+    from .browser import open_browser
+
+    raw = url.toString() if hasattr(url, "toString") else str(url or "")
+    if not raw.strip():
+        return False
+    return open_browser(
+        site_page_for_link(raw, model=model, software=software, name=name) or raw
+    )

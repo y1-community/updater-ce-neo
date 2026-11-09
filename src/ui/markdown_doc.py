@@ -154,9 +154,9 @@ class MarkdownDocView(QTextBrowser):
             self.scroll_to_anchor(text[1:])
             return
         if text.startswith(("http://", "https://")):
-            from ..browser import open_browser
-
-            open_browser(text)
+            # A document, repository or release the catalogue knows opens on
+            # the site's parser page; anything else keeps its own target.
+            docs_source.open_site_link(text)
 
     def loadResource(self, resource_type, name):  # noqa: N802 (Qt naming)
         if resource_type == QTextDocument.ResourceType.ImageResource:

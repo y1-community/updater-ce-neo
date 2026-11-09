@@ -36,7 +36,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .. import paths
+from .. import docs_source, paths
 from ..config import install_power_on_steps, device_label_for_model
 from ..markdown_render import rewrite_legacy_discord_invite, without_github_only
 # Lines kept in the text widget. The manager still retains the full log;
@@ -1823,7 +1823,10 @@ class UpdateAvailableDialog(QDialog):
         self._notes.setHorizontalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff
         )
-        self._notes.setOpenExternalLinks(True)
+        # Links go through the site's parser pages, so a guide or release opens
+        # with our styling and the reader's language/donation preferences.
+        self._notes.setOpenExternalLinks(False)
+        self._notes.anchorClicked.connect(docs_source.open_site_link)
         self._notes.setMinimumHeight(170)
         self._notes.viewport().setAutoFillBackground(False)
         self._notes.viewport().setAttribute(Qt.WA_TranslucentBackground, False)
@@ -2238,13 +2241,17 @@ class UpdateAvailableDialog(QDialog):
             return
 
         if not target_asset:
-            open_browser(self._info.html_url if self._info else "https://innioasis.app/guide.html")
+            docs_source.open_site_link(
+                self._info.html_url if self._info else "https://innioasis.app/guide.html"
+            )
             self.accept()
             return
 
         url = target_asset.get("browser_download_url") or ""
         if not url:
-            open_browser(self._info.html_url or "https://innioasis.app/guide.html")
+            docs_source.open_site_link(
+                self._info.html_url or "https://innioasis.app/guide.html"
+            )
             self.accept()
             return
 
@@ -2992,7 +2999,8 @@ class ReleaseReminderDialog(QDialog):
 
             self._notes_view = QTextBrowser()
             self._notes_view.setObjectName("updateNotes")
-            self._notes_view.setOpenExternalLinks(True)
+            self._notes_view.setOpenExternalLinks(False)
+            self._notes_view.anchorClicked.connect(docs_source.open_site_link)
             self._notes_view.setMinimumHeight(130)
             self._notes_view.document().setDefaultStyleSheet(
                 f"a {{ color: {t.fg}; font-weight: 700; text-decoration: none; }}"

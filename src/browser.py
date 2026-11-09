@@ -56,25 +56,37 @@ def _with_site_preferences(url: str) -> str:
 
         parts = urlsplit(url)
         host = (parts.hostname or "").lower()
-        if host != "innioasis.app" and not host.endswith(".innioasis.app"):
+        # Google's proxy of the site is still the site: a translated reader
+        # page must apply the same preferences as the original.
+        on_site = (
+            host == "innioasis.app"
+            or host.endswith(".innioasis.app")
+            or host == "innioasis-app.translate.goog"
+        )
+        if not on_site:
             return url
 
         query_dict = dict(parse_qsl(parts.query, keep_blank_values=True))
 
-        # 1. Donations preference
-        if player_update_check.is_donation_ui_disabled():
-            query_dict["donations"] = "false"
+        # 1. Donations preference. Always explicit: the site stores it for the
+        # visitor on every page, so a reader who turned donation asks back on
+        # after turning them off must not keep the stored "off" state.
+        query_dict["donations"] = (
+            "false" if player_update_check.is_donation_ui_disabled() else "true"
+        )
 
         # 2. Privacy preference (defaults to all enabled for optimal experience)
         if "privacy" not in query_dict:
             query_dict["privacy"] = "all"
 
-        # 3. Language preference
+        # 3. Language preference. Send the app's own locale code (``zh-CN``,
+        # ``pt-BR``): the site normalises it, while a lowercased tag can lose
+        # the region the reader actually chose.
         try:
             from .i18n import translator
-            current_lang = translator().lang
+            current_lang = (translator().lang or "").strip()
             if current_lang and "lang" not in query_dict:
-                query_dict["lang"] = current_lang.lower()
+                query_dict["lang"] = current_lang
         except Exception:
             pass
 
@@ -88,7 +100,7 @@ def _with_site_preferences(url: str) -> str:
                     is_high_contrast = bool(NSWorkspace.sharedWorkspace().accessibilityDisplayShouldIncreaseContrast())
                 except Exception:
                     pass
-            theme = "high-contrast" if is_high_contrast else ("dark" if is_dark() else "dark")
+            theme = "high-contrast" if is_high_contrast else ("dark" if is_dark() else "light")
             if "theme" not in query_dict:
                 query_dict["theme"] = theme
         except Exception:
