@@ -8,7 +8,7 @@ This guide contains everything required for anyone to clone this repository and 
 
 ## 1. Prerequisites by Platform
 
-### macOS (13.0 Ventura through 26.0+ Golden Gate / Tahoe)
+### macOS (12.0 Monterey through 26.0+ Golden Gate / Tahoe)
 - **Python**: none needed up front — the first build finds or installs one (3.10+, preferring 3.12) and creates `.venv-build`
 - **Xcode Command Line Tools**: needed for `--arch universal2` (clang): `xcode-select --install`
 - **Architecture**: Supports Intel (`x86_64`), Apple Silicon (`arm64`), and Universal2 (`universal2`).

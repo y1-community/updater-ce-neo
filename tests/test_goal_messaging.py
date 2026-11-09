@@ -246,7 +246,7 @@ def test_the_closing_days_ask_for_today_while_today_and_the_week_are_short(monke
     )
 
 
-def test_the_closing_days_hand_over_to_the_month_once_today_or_the_week_is_covered(
+def test_the_closing_days_hand_over_to_the_month_once_today_is_covered(
     monkeypatch,
 ):
     from src.donors import get_goal_stats
@@ -254,13 +254,16 @@ def test_the_closing_days_hand_over_to_the_month_once_today_or_the_week_is_cover
     _pin_gbp(monkeypatch)
     now = datetime(2026, 11, 28, 12)
 
+    # When today is covered (>= £10), the closing days climb to the month
     covered_today = get_goal_stats([{"amount": 20, "dt": now}], now=now)
     assert covered_today["scope"] == "monthly"
 
-    covered_week = get_goal_stats(
+    # Even with a covered week, if today is short (< £10), the daily costs target
+    # is not met, so it displays daily.
+    short_today_covered_week = get_goal_stats(
         [{"amount": 100, "dt": datetime(2026, 11, 23, 9)}], now=now
     )
-    assert covered_week["scope"] == "monthly"
+    assert short_today_covered_week["scope"] == "daily"
 
 
 def test_the_first_and_last_day_lead_with_the_month_even_when_today_is_covered(
@@ -289,13 +292,16 @@ def test_the_last_day_still_names_today_when_the_month_is_met(monkeypatch):
     assert stats["scope"] == "daily"
 
 
-def test_zero_monthly_and_covered_goals_do_not_render_a_cold_dollar_line(monkeypatch):
+def test_zero_monthly_and_covered_goals_behavior(monkeypatch):
     from src.donors import format_goal_line, get_goal_stats
 
     _pin_gbp(monkeypatch)
     now = datetime(2026, 11, 1, 12)
 
-    assert format_goal_line(get_goal_stats([], now=now)) == ""
+    # With no donations raised today (< £10), the daily target of £10 is shown
+    assert format_goal_line(get_goal_stats([], now=now)) == (
+        "<b>You've helped us raise £0 of our £10 costs for today</b>"
+    )
     covered = get_goal_stats([{"amount": 300, "dt": now}], now=now)
     assert covered["covered"] is True
     assert format_goal_line(covered) == ""

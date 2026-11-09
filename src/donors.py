@@ -388,21 +388,27 @@ def get_goal_stats(donations, now=None):
     shown_month = fx.local(month_raised, code)
     raised_by = {"daily": shown_day, "weekly": shown_week, "monthly": shown_month}
     month_reached = shown_month >= targets["monthly"]
+    week_reached = shown_week >= targets["weekly"]
+    day_reached = shown_day >= targets["daily"]
 
     position = _goal_month_position(now)
     scope = None
-    if position == "closing" and not month_reached and shown_week >= targets["weekly"]:
-        # A covered week hands the closing days to the month even when today
-        # is still short: the closing stretch is about finishing the month.
-        scope = "monthly"
+    if not day_reached:
+        # On days where there are less than $10 in donations (or local currency equivalent),
+        # always display the daily costs target as it has not been met, even when weekly
+        # or monthly costs targets have been met.
+        scope = "daily"
     else:
-        for candidate in goal_ladder(now):
-            if month_reached and candidate != "daily":
-                # Today's ask is the one rung that survives a met month.
-                continue
-            if raised_by[candidate] < targets[candidate]:
-                scope = candidate
-                break
+        # When $10 or more has been raised today, users are shown the weekly or monthly goal
+        # if they have not been met.
+        if position in ("edge", "closing") and not month_reached:
+            scope = "monthly"
+        elif not week_reached:
+            scope = "weekly"
+        elif not month_reached:
+            scope = "monthly"
+        else:
+            scope = None
 
     stats = {
         "scope": scope,

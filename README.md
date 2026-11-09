@@ -61,7 +61,7 @@ build_windows.bat
 
 ### macOS (.app Bundle & .dmg Disk Image)
 
-Prerequisites: macOS 13+ (Ventura through Golden Gate), Python 3.11+ (Universal2 recommended), Xcode Command Line Tools (`xcode-select --install`).
+Prerequisites: macOS 12+ (Monterey through Golden Gate), Python 3.11+ (Universal2 recommended), Xcode Command Line Tools (`xcode-select --install`).
 
 ```bash
 # Make script executable
