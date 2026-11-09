@@ -306,8 +306,8 @@ def _hex_rgba(value: str, alpha: float) -> str:
 # Theme tokens
 # ---------------------------------------------------------------------------
 
-def get_native_accent_color(palette: QPalette | None = None) -> tuple[str, str]:
-    """Return (accent_hex, accent_text_hex) matching host OS / desktop environment.
+def _probe_native_accent(palette: QPalette | None = None) -> tuple[str, str] | None:
+    """Return (accent_hex, accent_text_hex) from the host desktop, or None.
 
     Queries AppKit controlAccentColor on macOS, QPalette.Accent (Qt 6.6+)
     on Windows (DWM accent) and Linux (KDE/GNOME accent), strictly maintaining
@@ -325,6 +325,33 @@ def get_native_accent_color(palette: QPalette | None = None) -> tuple[str, str]:
                 luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0
                 text = "#000000" if luminance > 0.6 else "#ffffff"
                 return accent, text
+        except Exception:
+            pass
+        # AppKit is not always importable. The accent index lives in the
+        # user's own defaults and reading it does not raise a permission dialog.
+        try:
+            import subprocess
+            res = subprocess.run(
+                ["defaults", "read", "-g", "AppleAccentColor"],
+                capture_output=True,
+                text=True,
+                timeout=1,
+            )
+            if res.returncode == 0:
+                named = {
+                    "-1": "#8e8e93",
+                    "0": "#ff3b30",
+                    "1": "#ff9500",
+                    "2": "#ffcc00",
+                    "3": "#34c759",
+                    "4": "#007aff",
+                    "5": "#af52de",
+                    "6": "#ff2d55",
+                }
+                accent = named.get(res.stdout.strip())
+                if accent:
+                    text = "#000000" if accent in ("#ffcc00", "#ff9500", "#34c759") else "#ffffff"
+                    return accent, text
         except Exception:
             pass
 
@@ -363,7 +390,23 @@ def get_native_accent_color(palette: QPalette | None = None) -> tuple[str, str]:
             text = "#000000" if luminance > 0.6 else "#ffffff"
             return hl.name(), text
 
-    return "#2563eb", "#ffffff"
+    return None
+
+
+def get_native_accent_color(palette: QPalette | None = None) -> tuple[str, str]:
+    """Return (accent_hex, accent_text_hex), falling back to the app blue."""
+    return _probe_native_accent(palette) or ("#2563eb", "#ffffff")
+
+
+def get_declared_accent_color(palette: QPalette | None = None) -> str | None:
+    """The accent the desktop actually declares, or None when it declares none.
+
+    Unlike ``get_native_accent_color`` this never invents a colour: the app
+    forwards it to the website as the visitor's PC accent, and a stand-in blue
+    would claim a match the desktop never made.
+    """
+    probe = _probe_native_accent(palette)
+    return probe[0].lower() if probe else None
 
 
 def is_system_dark_mode() -> bool:
