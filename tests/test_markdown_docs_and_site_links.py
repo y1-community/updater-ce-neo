@@ -336,3 +336,19 @@ def test_the_globe_opens_the_site_reader_for_a_markdown_guide(qapp, monkeypatch)
     assert opened and opened[-1].startswith("https://innioasis.app/post_install.html?")
     assert "first-start" in opened[-1]
     assert "donations=false" in opened[-1]
+
+
+def test_site_preferences_url_variables(monkeypatch):
+    from src.browser import _with_site_preferences
+    from src.i18n import translator
+
+    monkeypatch.setattr(player_update_check, "is_donation_ui_disabled", lambda: True)
+    translator().set_language("fr")
+
+    url = _with_site_preferences("https://innioasis.app/firmware-list.html?model=Y1")
+    parsed = parse_qs(urlsplit(url).query)
+    assert parsed["model"] == ["Y1"]
+    assert parsed["donations"] == ["false"]
+    assert parsed["privacy"] == ["all"]
+    assert parsed["lang"] == ["fr"]
+    assert "theme" in parsed

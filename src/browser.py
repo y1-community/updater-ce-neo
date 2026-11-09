@@ -47,6 +47,70 @@ def _with_donation_preference(url: str) -> str:
         logger.debug("Could not add the donations preference to %s", url, exc_info=True)
         return url
 
+def _with_site_preferences(url: str) -> str:
+    """Pass privacy, donations, theme, accessibility, and language preferences
+    to innioasis.app and themes.innioasis.app as URL variables."""
+    try:
+        from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+        from . import player_update_check
+
+        parts = urlsplit(url)
+        host = (parts.hostname or "").lower()
+        if host != "innioasis.app" and not host.endswith(".innioasis.app"):
+            return url
+
+        query_dict = dict(parse_qsl(parts.query, keep_blank_values=True))
+
+        # 1. Donations preference
+        if player_update_check.is_donation_ui_disabled():
+            query_dict["donations"] = "false"
+
+        # 2. Privacy preference (defaults to all enabled for optimal experience)
+        if "privacy" not in query_dict:
+            query_dict["privacy"] = "all"
+
+        # 3. Language preference
+        try:
+            from .i18n import translator
+            current_lang = translator().lang
+            if current_lang and "lang" not in query_dict:
+                query_dict["lang"] = current_lang.lower()
+        except Exception:
+            pass
+
+        # 4. Theme preference
+        try:
+            from .ui.dark import is_dark
+            is_high_contrast = False
+            if sys.platform == "darwin":
+                try:
+                    from AppKit import NSWorkspace
+                    is_high_contrast = bool(NSWorkspace.sharedWorkspace().accessibilityDisplayShouldIncreaseContrast())
+                except Exception:
+                    pass
+            theme = "high-contrast" if is_high_contrast else ("dark" if is_dark() else "dark")
+            if "theme" not in query_dict:
+                query_dict["theme"] = theme
+        except Exception:
+            pass
+
+        # 5. Accessibility preference
+        try:
+            from .ui.widgets import reduce_motion
+            if reduce_motion() and "accessibility" not in query_dict:
+                query_dict["accessibility"] = "reduce-motion"
+        except Exception:
+            pass
+
+        new_query = urlencode(list(query_dict.items()))
+        return urlunsplit(
+            (parts.scheme, parts.netloc, parts.path, new_query, parts.fragment)
+        )
+    except Exception:
+        logger.debug("Could not add site preferences to %s", url, exc_info=True)
+        return url
+
+
 def _portable_download(url: str) -> str:
     """Point a text link to a ROM zip at the package built for this machine.
 
@@ -135,6 +199,7 @@ def open_browser(url: str, new_window: bool = True) -> bool:
     if not url.startswith(("http://", "https://", "file://")):
         url = "https://" + url
     url = _with_donation_preference(url)
+    url = _with_site_preferences(url)
     url = _portable_download(url)
 
     # 1. Linux: prefer direct browser invocation with --new-window to guarantee
