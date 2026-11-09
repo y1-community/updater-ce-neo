@@ -51,6 +51,33 @@ def _stored(settings: QSettings) -> set[str]:
     return {str(value) for value in values if str(value).strip()}
 
 
+def _installed_same_software(
+    pkg=None, *, model: str = "", software: str = "", settings: Optional[QSettings] = None
+) -> bool:
+    """Whether the player's tracked install is this same software.
+
+    A package that declares ``PMT_format_needed`` needs Format All only when it
+    changes the partition table. Once that software is actually installed the
+    player already carries its partition layout, so installing it again is an
+    ordinary Download Only install: formatting internal storage again would
+    destroy settings (and, on Y2, media) for no benefit. This is what made
+    Classy refuse Keep Data to someone who already ran Classy.
+    """
+    try:
+        from .keep_data import tracked_is_same
+
+        return bool(
+            tracked_is_same(
+                model or str(getattr(pkg, "model", "") or ""),
+                pkg,
+                settings,
+            )
+        )
+    except Exception:
+        logger.debug("Could not compare the tracked install for PMT format", exc_info=True)
+        return False
+
+
 def pmt_format_required(
     pkg=None,
     *,
@@ -60,10 +87,17 @@ def pmt_format_required(
 ) -> bool:
     """True when this firmware must use Format All + Download.
 
-    The manifest's own flag is authoritative. A previously observed error 8502
-    is kept as a fallback for packages whose manifest entry has not been
-    updated yet.
+    The manifest's own flag is authoritative for a change of firmware. A
+    reinstall of the software already tracked for the player does not change
+    the partition table, so it is never forced through the destructive mode; a
+    genuine mismatch still surfaces as SP Flash error 8502 and asks then. A
+    previously observed 8502 is kept as a fallback for packages whose manifest
+    entry has not been updated yet, under the same same-software rule.
     """
+    if _installed_same_software(
+        pkg, model=model, software=software, settings=settings
+    ):
+        return False
     if bool(getattr(pkg, "pmt_format_needed", False)):
         return True
     wanted = _keys(pkg, model=model, software=software)
