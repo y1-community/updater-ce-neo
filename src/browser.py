@@ -235,6 +235,44 @@ def _find_linux_browser() -> Optional[str]:
     return None
 
 
+_DOWNLOAD_SUFFIXES = (
+    ".zip", ".7z", ".tar", ".gz", ".tgz", ".dmg", ".exe", ".msi",
+    ".apk", ".img", ".bin", ".iso", ".pkg", ".theme", ".rbtheme",
+)
+_DONATION_HOSTS = (
+    "ko-fi.com",
+    "buymeacoffee.com",
+    "boosty.to",
+    "paypal.me",
+    "patreon.com",
+    "revolut.me",
+)
+
+
+def interstitial_url(url: str, *, thank: bool = False) -> str:
+    """Send an off-site page through the site's interstitial.
+
+    Donation hosts, and a post_install2 page opened as a thank-you, use
+    donate.html. Everything else uses leaving.html. Pages already on
+    innioasis.app, and theme or firmware file downloads, are left alone.
+    """
+    from urllib.parse import quote, urlsplit
+
+    raw = str(url or "").strip()
+    parts = urlsplit(raw)
+    if parts.scheme not in ("http", "https"):
+        return raw
+    host = (parts.hostname or "").lower()
+    if host in ("innioasis.app", "localhost", "127.0.0.1") or host.endswith(".innioasis.app"):
+        return raw
+    path = (parts.path or "").lower()
+    if any(path.endswith(suffix) for suffix in _DOWNLOAD_SUFFIXES):
+        return raw
+    donation = thank or any(host == item or host.endswith("." + item) for item in _DONATION_HOSTS)
+    page = "donate.html" if donation else "leaving.html"
+    return "https://innioasis.app/" + page + "?to=" + quote(raw, safe="")
+
+
 def open_browser(url: str, new_window: bool = True) -> bool:
 
     # The donation interstitial paints in the visitor's accent before it
@@ -272,6 +310,7 @@ def open_browser(url: str, new_window: bool = True) -> bool:
     url = str(url).strip()
     if not url.startswith(("http://", "https://", "file://")):
         url = "https://" + url
+    url = interstitial_url(url)
     url = _with_donation_preference(url)
     url = _with_site_preferences(url)
     url = _portable_download(url)

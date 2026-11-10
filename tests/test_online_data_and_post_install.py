@@ -818,7 +818,9 @@ def test_post_install_completion_uses_a_globe_and_view_guide(qapp, monkeypatch):
         assert not page._view_guide_btn.isHidden()
         page._open_view_guide()
         page._open_coffee_page()
-        assert opened == ["https://example.test/steps", "https://example.test/guide"]
+        assert opened[0] == "https://example.test/steps"
+        assert opened[1].startswith("https://innioasis.app/donate.html?to=")
+        assert "https%3A%2F%2Fexample.test%2Fguide" in opened[1]
 
         # Without a second URL View Guide falls back to post_install and the
         # coffee button is the usual ko-fi page.

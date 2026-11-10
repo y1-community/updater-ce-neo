@@ -5230,7 +5230,7 @@ class FlashPage(QWidget):
 
     def _open_coffee_page(self) -> None:
         from .. import fx
-        from ..browser import open_browser, _with_donation_preference
+        from ..browser import interstitial_url, open_browser
         from ..config import DONATION_LINKS
 
         route = fx.donation_route()
@@ -5239,7 +5239,7 @@ class FlashPage(QWidget):
             return
         post_install_2 = getattr(self, "_post_install_url_2", "")
         if post_install_2:
-            open_browser(_with_donation_preference(post_install_2))
+            open_browser(interstitial_url(post_install_2, thank=True))
         else:
             open_browser(DONATION_LINKS["kofi"])
 
