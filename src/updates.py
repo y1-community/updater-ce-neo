@@ -97,6 +97,16 @@ def _is_linux_asset(name: str) -> bool:
     return not any(tok in name for tok in ("darwin", "mac", "win32", "windows")) and not name.endswith(".exe")
 
 
+def _is_text_session_archive(name: str) -> bool:
+    """The terminal payload is not a window update.
+
+    ``UpdaterCE-Lite.tar.gz`` is published on the same release as the AppImage
+    so the installer can download it. Offering it as the app update would
+    replace the window with the text-only archive.
+    """
+    return "lite" in name or "terminal" in name
+
+
 def pick_platform_asset(assets, platform=None):
     """Best download asset for ``platform`` (sys.platform when omitted).
 
@@ -183,6 +193,8 @@ def pick_platform_asset(assets, platform=None):
             if "updater" in name and name.endswith(".dmg"):
                 return a
         elif platform == "linux":
+            if _is_text_session_archive(name):
+                continue
             if _is_linux_asset(name) and _arch_ok(name, platform) and "updater" in name and (name.endswith(".appimage") or name.endswith(".tar.gz") or name.endswith(".zip")):
                 return a
             # Filenames with spaces (the branded AppImage/portable package) are
@@ -204,7 +216,7 @@ def pick_platform_asset(assets, platform=None):
             continue
         if platform == "darwin" and ("linux" in name or "win32" in name or "windows" in name or name.endswith(".exe")):
             continue
-        if platform == "linux" and not (_is_linux_asset(name) and _arch_ok(name, platform)):
+        if platform == "linux" and (_is_text_session_archive(name) or not (_is_linux_asset(name) and _arch_ok(name, platform))):
             continue
 
         arch_rank = len(UPDATE_ASSET_ARCH_PRIORITY)

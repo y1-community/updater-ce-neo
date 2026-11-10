@@ -24,6 +24,8 @@ Each file needs a matching `.sha256`.
 
 The Linux installer script `run_linux.sh` is published alongside these files.
 
+`UpdaterCE-Lite.tar.gz` is the text-only session, not a window package. It is an extra file on the 2.5.3 release. The update checker and `run_linux.sh` skip any asset whose name contains `lite` or `terminal`. How that release is kept, and when a newer Linux AppImage or portable archive may be added to it, is written in `docs/linux-setup.md`.
+
 ## Rules
 
 - An arm64 build is offered only to arm64 machines. An x86-64 build is offered

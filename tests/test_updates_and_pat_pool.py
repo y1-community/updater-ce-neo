@@ -89,6 +89,20 @@ def test_pick_platform_asset_isolation():
     assert pick_platform_asset(linux_assets, platform="win32") is None
 
 
+def test_linux_ignores_the_terminal_archive_on_the_same_release():
+    assets = [
+        {"name": "UpdaterCE-Lite.tar.gz", "browser_download_url": "https://example.com/lite.tar.gz", "size": 40000},
+        {"name": "UpdaterCE.appimage", "browser_download_url": "https://example.com/linux.appimage", "size": 300},
+        {"name": "installer.exe", "browser_download_url": "https://example.com/installer.exe", "size": 200},
+        {"name": "Innioasis.Updater.for.Mac.dmg", "browser_download_url": "https://example.com/mac.dmg", "size": 100},
+    ]
+    assert pick_platform_asset(assets, platform="linux")["name"] == "UpdaterCE.appimage"
+    assert pick_platform_asset(assets, platform="win32")["name"] == "installer.exe"
+    assert pick_platform_asset(assets, platform="darwin")["name"] == "Innioasis.Updater.for.Mac.dmg"
+    only_lite = [assets[0]]
+    assert pick_platform_asset(only_lite, platform="linux") is None
+
+
 def test_linux_picks_portable_package_not_installer_script():
     """Choose an installable app package, never the helper shell script."""
     windows_only = [
