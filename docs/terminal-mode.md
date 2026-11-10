@@ -153,7 +153,7 @@ so existing 2.5.3 window users are not told an update exists. The payload's
 `VERSION` file still records 2.5.4, which is what the terminal session reports.
 
 `run_linux_lite.sh` reads `/releases/tags/2.5.3` first, then falls back to any
-release that carries the archive, then to the copy on innioasis.app. Both
+release that carries the archive, then to the direct 2.5.3 download URL. Both
 `run_linux.sh` and `run_linux_lite.sh` ask whether to install the full app
 (recommended) or run once in the terminal; choosing the full app hands over to
 `run_linux.sh`, which installs the AppImage/tarball or lays the app out from the

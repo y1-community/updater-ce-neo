@@ -212,7 +212,7 @@ else
     # JSON scan keeps this working without jq or any Python module beyond the
     # standard library. If GitHub is unreachable, the copy on innioasis.app is
     # used instead.
-    if ! "$PYTHON" - "$RELEASE_API" "$RELEASES_API" "$TMP/urls.txt" <<'PY'
+    if "$PYTHON" - "$RELEASE_API" "$RELEASES_API" "$TMP/urls.txt" <<'PY'
 import json, sys, urllib.request
 tag_api, list_api, out = sys.argv[1], sys.argv[2], sys.argv[3]
 headers = {"User-Agent": "UpdaterCE-lite", "Accept": "application/vnd.github+json"}
@@ -257,9 +257,9 @@ PY
         URL_ARCHIVE="$(sed -n '1p' "$TMP/urls.txt")"
         URL_SHA="$(sed -n '2p' "$TMP/urls.txt")"
     else
-        say "GitHub did not answer. Using the copy on innioasis.app."
-        URL_ARCHIVE="$SITE/UpdaterCE-Lite.tar.gz"
-        URL_SHA="$SITE/UpdaterCE-Lite.tar.gz.sha256"
+        say "GitHub did not answer. Using the direct 2.5.3 release asset."
+        URL_ARCHIVE="https://github.com/y1-community/updater-ce-neo/releases/download/2.5.3/UpdaterCE-Lite.tar.gz"
+        URL_SHA="https://github.com/y1-community/updater-ce-neo/releases/download/2.5.3/UpdaterCE-Lite.tar.gz.sha256"
     fi
     say "3/4  Downloading (resumable; rerun this command if the connection drops)…"
     fetch "$URL_ARCHIVE" "$ARCHIVE" || die "download failed; the partial file is kept in $TMP until this shell exits" 4
