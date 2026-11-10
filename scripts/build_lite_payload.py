@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Package the terminal-only payload that ``run_linux_lite.sh`` installs.
 
-The lite payload is architecture independent on purpose: pure Python 3.8+ source
-with no wheels, so one file serves x86-64, i686, aarch64, armv7l and armv6l.
-That is what makes a Pi Zero or a 32-bit netbook a supported machine without a
-second build matrix.
+The Python is architecture independent, so one archive runs on x86-64, i686,
+aarch64, armv7l and armv6l. It also carries the flashing pieces the window
+already ships: the vendored MTKclient tree (the console flasher, including its
+Download Agents), adb for each platform that has a binary, and the Linux
+x86-64 SP Flash Tool. A 32-bit board uses MTKclient and does not run the
+x86-64 binaries.
 
     python3 scripts/build_lite_payload.py
     python3 scripts/build_lite_payload.py --out dist/linux-lite --site-dir ../Innioasis-Updater
@@ -63,16 +65,43 @@ def _add(tar: tarfile.TarFile, path: Path, arcname: str, mode: int = 0o644) -> N
     tar.addfile(info, io.BytesIO(data))
 
 
+# Trees the window already uses to flash. The Python session is useless for an
+# install without them. Binaries stay beside the source so a Pi still gets
+# MTKclient, and an x86-64 Linux machine also gets adb and SP Flash Tool.
+TOOL_TREES = (
+    ("vendor/mtkclient", "vendor/mtkclient"),
+    ("tools/adb", "tools/adb"),
+    ("tools/linux/SP_Flash_Tool_v5.1904_Linux", "tools/linux/SP_Flash_Tool_v5.1904_Linux"),
+    ("tools/linux/unrar", "tools/linux/unrar"),
+)
+
+
+def _reset_meta(info: tarfile.TarInfo) -> tarfile.TarInfo | None:
+    name = info.name
+    base = name.rsplit("/", 1)[-1]
+    if base in {".DS_Store", ".gitkeep"} or base.endswith((".pyc", ".pyo")):
+        return None
+    if "/__pycache__/" in f"/{name}/" or "/.git/" in f"/{name}/":
+        return None
+    info.mtime = 0
+    info.uid = info.gid = 0
+    info.uname = info.gname = "root"
+    return info
+
+
 def build(out_dir: Path, site_dir: Path | None) -> tuple[Path, Path]:
     missing = [name for name in PAYLOAD if not (REPO / name).is_file()]
     if missing:
         raise SystemExit("missing payload files: " + ", ".join(missing))
+    for source, _arc in TOOL_TREES:
+        if not (REPO / source).exists():
+            raise SystemExit(f"missing flashing tool: {source}")
 
     out_dir.mkdir(parents=True, exist_ok=True)
     archive = out_dir / "UpdaterCE-Lite.tar.gz"
+    raw_path = out_dir / ".UpdaterCE-Lite.tar"
 
-    raw = io.BytesIO()
-    with tarfile.open(fileobj=raw, mode="w") as tar:
+    with tarfile.open(raw_path, "w") as tar:
         for name in PAYLOAD + [name for name in OPTIONAL if (REPO / name).is_file()]:
             mode = 0o755 if name.endswith((".sh", ".py")) and name != "lite.py" else 0o644
             _add(tar, REPO / name, name, mode)
@@ -80,11 +109,14 @@ def build(out_dir: Path, site_dir: Path | None) -> tuple[Path, Path]:
         if readme.is_file():
             _add(tar, readme, "docs/terminal-mode.md")
         _add_bytes(tar, "VERSION", (version() + "\n").encode())
+        for source, arc in TOOL_TREES:
+            tar.add(REPO / source, arcname=arc, filter=_reset_meta)
 
     # gzip with mtime=0 so two builds of the same source are byte-identical.
-    with archive.open("wb") as handle:
+    with archive.open("wb") as handle, raw_path.open("rb") as src:
         with gzip.GzipFile(fileobj=handle, mode="wb", mtime=0) as gz:
-            gz.write(raw.getvalue())
+            shutil.copyfileobj(src, gz, length=1024 * 1024)
+    raw_path.unlink(missing_ok=True)
 
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
     checksum = out_dir / "UpdaterCE-Lite.tar.gz.sha256"

@@ -184,11 +184,22 @@ def find_bundled(component: Component, roots: Iterable[Path] | None = None, plat
         return None
     if component.key == "spflash":
         for root in search:
-            for relative in ("flash_tool", "SP_Flash_Tool/flash_tool", "linux_flash_tool/flash_tool"):
+            for relative in (
+                "flash_tool",
+                "SP_Flash_Tool/flash_tool",
+                "linux_flash_tool/flash_tool",
+                # The same tree the window build ships and looks up.
+                "tools/linux/SP_Flash_Tool_v5.1904_Linux/flash_tool",
+            ):
                 candidate = root / relative
                 if _large_file(candidate):
                     return candidate
         return None
+    if component.key == "unrar" and platform == "linux-x86_64":
+        for root in search:
+            candidate = root / "tools" / "linux" / "unrar"
+            if _large_file(candidate):
+                return candidate
     for root in search:
         for name in component.names:
             for candidate in (root / name, root / "tools" / name, root / "SP_Flash_Tool" / name):

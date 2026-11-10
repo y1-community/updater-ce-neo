@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Entry point of the lite payload.
 
-The lite tarball is only this file, ``src/console`` and the installer script.
-It has no Qt, no PySide6 and no compiled wheels, which is what lets it run on a
-Raspberry Pi Zero, an i686 netbook or any machine where pip has nothing to
-offer.
+The lite tarball is this file, ``src/console``, the vendored MTKclient tree,
+adb, and the Linux SP Flash Tool. It has no Qt and no PySide6, which is what
+lets the text session run on a Raspberry Pi Zero or an i686 netbook.
 """
 
 import sys

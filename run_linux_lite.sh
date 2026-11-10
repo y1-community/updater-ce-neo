@@ -1,10 +1,11 @@
 #!/bin/sh
 # Updater CE — lite installer for headless, old and 32-bit Linux.
 #
-#   curl -fsSLO https://innioasis.app/run_linux_lite.sh && sh run_linux_lite.sh
+#   curl -fsSL https://raw.githubusercontent.com/y1-community/updater-ce-neo/main/run_linux_lite.sh | INNIOASIS_CHOICE=terminal sh
 #
-# The lite install is the terminal front end only: no Qt, no PySide6, no
-# compiled wheels. It runs on any machine with Python 3.8 or newer, which
+# The lite install is the text session: no Qt and no PySide6. The archive
+# also carries MTKclient, adb, and the Linux SP Flash Tool. It runs on any
+# machine with Python 3.8 or newer, which
 # covers Raspberry Pi OS on a Pi Zero, 32-bit i686 netbooks, ARM NAS boxes and
 # servers. Firmware is downloaded with resume support so a slow or interrupted
 # connection does not start over, and flashing is handed to the console tools

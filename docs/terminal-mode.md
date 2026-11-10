@@ -15,8 +15,11 @@ There are two ways in, and both use the same code:
 
 ## What the lite install contains
 
-`UpdaterCE-Lite.tar.gz` is architecture independent: Python 3.8+ source. One
-file serves every machine below.
+`UpdaterCE-Lite.tar.gz` is one download for every machine below. The Python
+is the same source as the window. The archive also carries the vendored
+MTKclient tree, adb for the platforms that have a binary, and the Linux
+x86-64 SP Flash Tool. A 32-bit board uses MTKclient; it does not run those
+x86-64 binaries.
 
 | Machine | lite | GUI |
 | --- | --- | --- |
