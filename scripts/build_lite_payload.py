@@ -37,7 +37,11 @@ PAYLOAD = [
     "src/console/components.py",
     "src/console/download.py",
     "src/console/flash.py",
+    "src/console/releases.py",
+    "src/console/session.py",
+    "src/console/simulate.py",
     "src/console/tui.py",
+    "src/tui_session.py",
 ]
 OPTIONAL = ["LICENSE", "LICENSE.md"]
 

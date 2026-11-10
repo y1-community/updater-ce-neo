@@ -76,13 +76,22 @@ the safest first run on a new distribution.
 
 ## The TUI
 
-`innioasis-updater-lite tui` (or `--tui` on any build) lists models, then
-firmware, downloads with a progress bar, extracts the archive and offers to
-flash the folder with MTKClient. Keys: arrows or `j`/`k`, Enter to select,
-`q` to go back.
+`updater-ce --tui` (or `innioasis-updater-lite tui`) opens Select Software,
+the same screen as the window: Brand, Model, Type, Software, the release
+list, notes, Install, Install from a file, Settings, Support Us, Language
+and Credits. A mouse click and the keyboard select the same row. On a fast
+link (above 60 Mbps) missing tools are fetched before the menu; otherwise
+adb and, on Linux x86_64, SP Flash Tool are fetched at the install step, and
+a copy already in the bundle is not downloaded again. Headless machines and
+32-bit Linux stay on MTKclient (`mtk wl <folder>`) and do not start the Qt
+SP Flash Tool window.
 
-When the terminal cannot host curses — piped output, `TERM=dumb`, a serial
-console — the same entry point falls back to numbered prompts.
+`--simulate` (or `INNIOASIS_SIMULATE=1`) prints the install and Rockbox theme
+progress without calling mtk, adb or SP Flash Tool. It is not the default.
+
+When the terminal cannot host curses — Windows without a curses module,
+piped output, `TERM=dumb` — the same list is offered as numbered prompts,
+and a terminal that reports mouse clicks still selects a row.
 
 ## Updating and removing
 
@@ -109,3 +118,18 @@ Every failure it removes is one that has already been reported: a missing
 `libxcb-cursor` on a fresh install, a 32-bit netbook with no PySide6 wheel, a
 headless server where the window cannot open, and a slow SD-card connection
 where one interrupted download meant starting over.
+
+## Self-healing and the install flow
+
+The terminal session offers the same **Keep my data** choice as the window. It is passed to the
+flashing engine, which uses the firmware package's own preserve-data scatter from a hard-linked
+copy so the downloaded package is never modified. If a package does not ship that scatter the
+session stops before writing anything rather than erasing internal storage.
+
+MTKclient needs `pycryptodome`. If the interpreter running `mtk.py` cannot import it, the session
+installs `pycryptodome`/`pycryptodomex` into the user site (never the system), then retries. If that
+is impossible, it falls back to SP Flash Tool's console mode on Linux x86_64 before reporting a
+failure. Set `INNIOASIS_NO_AUTO_INSTALL=1` to opt out of the automatic install.
+
+After a successful install the post-install pages named by the catalogue are printed with the
+completion line. The Support Us screen lists the same donation methods as the window.

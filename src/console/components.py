@@ -79,8 +79,8 @@ class Component:
     executable: str = ""
     manual_hint: str = ""
 
-    def platform_urls(self) -> tuple[str, ...]:
-        return self.urls.get(platform_key(), ())
+    def platform_urls(self, platform: str | None = None) -> tuple[str, ...]:
+        return self.urls.get(platform or platform_key(), ())
 
 
 COMPONENTS: dict[str, Component] = {
@@ -90,14 +90,21 @@ COMPONENTS: dict[str, Component] = {
         description="Android platform tools, used to sideload and inspect the player.",
         names=("adb", "adb.exe"),
         urls={
+            # Official platform-tools zips are 64-bit. 32-bit Intel and 32-bit
+            # ARM must not be handed the x86_64 binary.
             "linux-x86_64": ("https://dl.google.com/android/repository/platform-tools-latest-linux.zip",),
-            "linux-i686": ("https://dl.google.com/android/repository/platform-tools-latest-linux.zip",),
             "macos-x86_64": ("https://dl.google.com/android/repository/platform-tools-latest-darwin.zip",),
             "macos-arm64": ("https://dl.google.com/android/repository/platform-tools-latest-darwin.zip",),
             "windows-x86_64": ("https://dl.google.com/android/repository/platform-tools-latest-windows.zip",),
         },
         executable="adb",
-        manual_hint="Install android-tools with your package manager.",
+        manual_hint=(
+            "32-bit Linux has no official platform-tools build here. "
+            "Debian/Ubuntu/Mint: sudo apt install adb. "
+            "Fedora: sudo dnf install android-tools. "
+            "Arch: sudo pacman -S android-tools. "
+            "Or place a binary built for this architecture on PATH."
+        ),
     ),
     "spflash": Component(
         key="spflash",
@@ -135,11 +142,57 @@ def _payload_roots() -> list[Path]:
     return roots
 
 
-def find_bundled(component: Component) -> Path | None:
-    for root in _payload_roots():
+# Directory names under tools/adb/. The x86_64 tree is never a match for
+# i686 or 32-bit ARM, even when that file happens to sit in the same checkout.
+VENDOR_DIRS = {
+    "linux-x86_64": "linux-x64",
+    "linux-arm64": "linux-arm64",
+    "macos-x86_64": "macos-x64",
+    "macos-arm64": "macos-arm64",
+    "windows-x86_64": "windows-x64",
+}
+MIN_TOOL_BYTES = 100_000
+
+
+def _large_file(path: Path) -> bool:
+    try:
+        return path.is_file() and path.stat().st_size >= MIN_TOOL_BYTES
+    except OSError:
+        return False
+
+
+def find_bundled(component: Component, roots: Iterable[Path] | None = None, platform: str | None = None) -> Path | None:
+    platform = platform or platform_key()
+    if component.key == "spflash" and platform != "linux-x86_64":
+        return None
+    search = list(roots) if roots is not None else _payload_roots()
+    if component.key == "adb":
+        vendor = VENDOR_DIRS.get(platform)
+        exe = "adb.exe" if platform.startswith("windows") else "adb"
+        if vendor:
+            for root in search:
+                for candidate in (
+                    root / "tools" / "adb" / vendor / exe,
+                    root / "adb" / vendor / exe,
+                ):
+                    if _large_file(candidate):
+                        return candidate
+        if roots is None:
+            found = shutil.which(exe)
+            if found and _large_file(Path(found)):
+                return Path(found)
+        return None
+    if component.key == "spflash":
+        for root in search:
+            for relative in ("flash_tool", "SP_Flash_Tool/flash_tool", "linux_flash_tool/flash_tool"):
+                candidate = root / relative
+                if _large_file(candidate):
+                    return candidate
+        return None
+    for root in search:
         for name in component.names:
             for candidate in (root / name, root / "tools" / name, root / "SP_Flash_Tool" / name):
-                if candidate.exists():
+                if candidate.exists() and candidate.is_file():
                     return candidate
     for name in component.names:
         found = shutil.which(name)
@@ -160,8 +213,11 @@ def find_cached(component: Component) -> Path | None:
     return None
 
 
-def resolve(component: Component) -> Path | None:
-    return find_bundled(component) or find_cached(component)
+def resolve(component: Component, roots: Iterable[Path] | None = None, platform: str | None = None) -> Path | None:
+    platform = platform or platform_key()
+    if component.key == "spflash" and platform != "linux-x86_64":
+        return None
+    return find_bundled(component, roots=roots, platform=platform) or find_cached(component)
 
 
 def _extract(component: Component, archive: Path, target: Path) -> Path:
@@ -199,19 +255,24 @@ def ensure(
     key: str,
     progress: Callable[[int, int | None], None] | None = None,
     verbose: bool = True,
+    roots: Iterable[Path] | None = None,
+    platform: str | None = None,
+    downloader: Callable[..., Path] | None = None,
 ) -> Path:
     component = COMPONENTS[key]
-    existing = resolve(component)
+    existing = resolve(component, roots=roots, platform=platform)
     if existing:
         if verbose:
             print(f"{component.label}: {existing}")
         return existing
 
-    urls = component.platform_urls()
+    urls = component.platform_urls(platform)
     if not urls:
         raise RuntimeError(
-            f"{component.label} is not available for {platform_key()}. {component.manual_hint}"
+            f"{component.label} is not available for {platform or platform_key()}. {component.manual_hint}"
         )
+    if downloader is not None:
+        return downloader(key)
 
     workdir = Path(tempfile.mkdtemp(prefix=f"innioasis-{key}-"))
     errors: list[str] = []
@@ -263,8 +324,12 @@ def status() -> list[dict]:
     return rows
 
 
-def measure_mbps(timeout: float = 8.0, sample_bytes: int = 1_000_000) -> float:
-    """Rough link speed so prefetching is only done when it is cheap."""
+def measure_mbps(timeout: float = 8.0, sample_bytes: int = 1_000_000) -> float | None:
+    """Rough link speed in decimal megabits (bits/second/1e6).
+
+    ``None`` means the probe failed. Callers treat that the same as a slow
+    link: nothing is prefetched.
+    """
     request = urllib.request.Request(
         SPEED_SAMPLE_URL, headers={"User-Agent": "UpdaterCE-lite", "Range": f"bytes=0-{sample_bytes - 1}"}
     )
@@ -278,21 +343,56 @@ def measure_mbps(timeout: float = 8.0, sample_bytes: int = 1_000_000) -> float:
                     break
                 got += len(block)
     except (urllib.error.URLError, OSError):
-        return 0.0
+        return None
+    if got <= 0:
+        return None
     elapsed = max(time.monotonic() - start, 0.001)
     return got * 8 / elapsed / 1_000_000
 
 
+def session_component_keys(platform: str | None = None, headless: bool = False) -> list[str]:
+    """Tools this temporary session may need, and only those this arch can use.
+
+    SP Flash Tool is the Linux x86_64 build. A headless machine and every
+    other architecture leave it out and stay on MTKclient. adb is included
+    when a matching vendored tree or a same-arch download exists.
+    """
+    platform = platform or platform_key()
+    keys: list[str] = []
+    if platform == "linux-x86_64" and not headless:
+        keys.append("spflash")
+    if platform in COMPONENTS["adb"].urls or platform in VENDOR_DIRS:
+        keys.append("adb")
+    return keys
+
+
+def prefetch_plan(mbps: float | None, needed: Iterable[str], present: Iterable[str]) -> list[str]:
+    """Components to fetch before the menu.
+
+    Above 60 Mbps the missing session tools are fetched. At 60, below 60, or
+    when the probe failed, the list is empty and each tool waits for its step.
+    """
+    if mbps is None or mbps <= PREFETCH_MBPS:
+        return []
+    have = set(present)
+    return [name for name in needed if name not in have]
+
+
 def prefetch(keys: Iterable[str] | None = None, threshold_mbps: float = PREFETCH_MBPS) -> dict[str, str]:
     estimate = measure_mbps()
-    if estimate < threshold_mbps:
-        return {"skipped": f"{estimate:.1f} Mbps < {threshold_mbps:.0f} Mbps"}
+    needed = list(keys) if keys is not None else session_component_keys()
+    present = [key for key in needed if key in COMPONENTS and resolve(COMPONENTS[key])]
+    plan = prefetch_plan(estimate, needed, present)
+    if not plan:
+        why = "probe failed" if estimate is None else f"{estimate:.1f} Mbps"
+        return {"skipped": why, "plan": []}
     fetched: dict[str, str] = {}
-    for key in keys or tuple(COMPONENTS):
+    for key in plan:
         try:
             fetched[key] = str(ensure(key))
         except RuntimeError as exc:
             fetched[key] = f"unavailable: {exc}"
+    fetched["plan"] = ",".join(plan)
     return fetched
 
 
