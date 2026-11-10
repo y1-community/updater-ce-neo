@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import sys
+import webbrowser
 from pathlib import Path
 
 from . import catalog, components, download as dl, flash
@@ -23,9 +24,11 @@ from .session import (
     BrowseState,
     activate,
     apply_saved_filters,
+    check_app_update,
     credits_lines,
     current_package,
     failover_text,
+    fetch_notices,
     fill_choices,
     interface_kind,
     keep_data_offered,
@@ -34,7 +37,9 @@ from .session import (
     language_lines,
     language_rows,
     remember_language,
+    menu_lines,
     move_index,
+    notices_lines,
     notes_for,
     parse_mouse_report,
     release_index_at,
@@ -43,6 +48,7 @@ from .session import (
     settings_lines,
     support_lines,
     toggle_setting,
+    update_lines,
 )
 from .simulate import install_progress, rockbox_themes
 
@@ -388,13 +394,15 @@ def _plain(state: BrowseState, items: list, refresh: bool, output: Path) -> int:
     if not _curses_ok():
         print(failover_text("curses"))
     while True:
+        if state.quit:
+            return 0
         if state.page == "software":
             print("\n".join(screen_lines(state, _version())))
             print()
             print(notes_for(state))
             print()
-            print("Number selects a row. i install, f file, h themes, r refresh,")
-            print("b brand, m model, t type, s software, g settings, u support, l language, c credits, q quit")
+            print("Number selects a row. i install, f file, h themes, n notices, v update, r refresh,")
+            print("b brand, m model, t type, s software, g settings, u support, l language, c credits, ? menu, q quit")
         elif state.page == "settings":
             print("\n".join(settings_lines(state)))
         elif state.page == "support":
@@ -403,6 +411,12 @@ def _plain(state: BrowseState, items: list, refresh: bool, output: Path) -> int:
             print("\n".join(language_lines(state)))
         elif state.page == "credits":
             print("\n".join(credits_lines(_version())))
+        elif state.page == "menu":
+            print("\n".join(menu_lines(state)))
+        elif state.page == "notices":
+            print("\n".join(notices_lines(state)))
+        elif state.page == "update":
+            print("\n".join(update_lines(state.update_result)))
         try:
             choice = input("> ").strip()
         except EOFError:
@@ -421,6 +435,15 @@ def _plain(state: BrowseState, items: list, refresh: bool, output: Path) -> int:
                 state.page = "software"
                 continue
             return 0
+        if state.page == "menu" and choice.isdigit():
+            _menu_choice(state, int(choice) - 1, items)
+            continue
+        if state.page in ("notices", "update") and lowered in {"r", "refresh"}:
+            if state.page == "notices":
+                _open_notices(state)
+            else:
+                _open_update(state)
+            continue
         if state.page == "settings":
             if choice == "1":
                 toggle_setting(state, "old")
@@ -471,6 +494,15 @@ def _plain(state: BrowseState, items: list, refresh: bool, output: Path) -> int:
         if lowered in {"h", "themes"}:
             state.status = _run_themes(state)
             print(state.status)
+            continue
+        if lowered in {"n", "notices"}:
+            _open_notices(state)
+            continue
+        if lowered in {"v", "update"}:
+            _open_update(state)
+            continue
+        if lowered in {"?", "menu"}:
+            state.page = "menu"
             continue
         if lowered in {"d", "keep"}:
             state.keep_data = not state.keep_data
@@ -550,10 +582,7 @@ def _curses_run(state: BrowseState, items: list, output: Path) -> int:
         version = _version()
         screen.addnstr(0, 0, f"Updater CE {version}    Select Software", width - 1, curses.A_BOLD)
         type_label = state.hardware_type or "—"
-        filters = (
-            f"Brand: {state.brand}  Model: {state.model}  Type: {type_label}  "
-            f"Software: {state.software or '—'}  Refresh"
-        )
+        filters = _filter_text(state)
         screen.addnstr(1, 0, filters, width - 1)
         list_width = max(24, min(36, width // 3))
         screen.addnstr(3, 0, "Available System Software", list_width - 1, curses.A_BOLD)
@@ -572,12 +601,9 @@ def _curses_run(state: BrowseState, items: list, output: Path) -> int:
         state.notes_scroll = max(0, min(state.notes_scroll, max_notes))
         for offset, line in enumerate(notes[state.notes_scroll:state.notes_scroll + list_height]):
             screen.addnstr(LIST_TOP + offset, list_width + 1, line[: width - list_width - 2], width - list_width - 2)
-        actions = "Install   Install from a file"
-        if state.software.casefold() == "rockbox":
-            actions += "   Themes"
-        screen.addnstr(height - 3, 0, actions, width - 1, curses.A_BOLD)
-        screen.addnstr(height - 2, 0, "Settings   Support Us   Language   Credits / Thanks", width - 1)
-        help_line = "↑↓ or click a row   wheel scrolls notes   i install   f file   h themes   q quit"
+        screen.addnstr(height - 3, 0, _action_text(state), width - 1, curses.A_BOLD)
+        screen.addnstr(height - 2, 0, _secondary_text(), width - 1)
+        help_line = "↑↓ row   i install   f file   n notices   v update   ? menu   q quit"
         screen.addnstr(height - 1, 0, (state.status or help_line)[: width - 1], width - 1, curses.A_DIM)
         screen.refresh()
         return list_height, list_width
@@ -597,6 +623,8 @@ def _curses_run(state: BrowseState, items: list, output: Path) -> int:
             return _ask_keep_data(screen, state, current)
 
         while True:
+            if state.quit:
+                return 0
             if state.page != "software":
                 _curses_page(screen, state, items)
                 continue
@@ -626,24 +654,35 @@ def _curses_run(state: BrowseState, items: list, output: Path) -> int:
                     continue
                 height, _width = screen.getmaxyx()
                 if y == height - 3:
-                    if x < 16:
+                    which = _segment_at(_action_text(state), x, ["Install", "Install from a file", "Themes"])
+                    if which == 0:
                         state.status = _run_install(state, output, report=report, ask_keep=ask_keep)
                         if state.result_lines:
                             state.page = "done"
                             state.page_scroll = 0
-                    elif state.software.casefold() == "rockbox" and x > 40:
+                    elif which == 2 and state.software.casefold() == "rockbox":
                         state.status = _run_themes(state)
-                    else:
+                    elif which == 1:
                         state.status = _ask_file(screen)
                 elif y == height - 2:
-                    if x < 12:
+                    which = _segment_at(
+                        _secondary_text(), x,
+                        ["Settings", "Support Us", "Language", "Notices", "Updates", "Credits", "Menu"],
+                    )
+                    if which == 0:
                         state.page = "settings"
-                    elif x < 26:
+                    elif which == 1:
                         state.page = "support"
-                    elif x < 40:
+                    elif which == 2:
                         state.page = "language"
-                    else:
+                    elif which == 3:
+                        _open_notices(state)
+                    elif which == 4:
+                        _open_update(state)
+                    elif which == 5:
                         state.page = "credits"
+                    elif which == 6:
+                        state.page = "menu"
                 elif y == 1:
                     _click_filter(state, items, x)
                 continue
@@ -672,6 +711,12 @@ def _curses_run(state: BrowseState, items: list, output: Path) -> int:
                 state.page = "language"
             elif key in (ord("c"),):
                 state.page = "credits"
+            elif key in (ord("?"), curses.KEY_F1):
+                state.page = "menu"
+            elif key in (ord("n"),):
+                _open_notices(state)
+            elif key in (ord("v"),):
+                _open_update(state)
             elif key in (ord("b"),):
                 state.brand = _cycle_brand(state)
                 fill_choices(state, items)
@@ -696,17 +741,96 @@ def _curses_run(state: BrowseState, items: list, output: Path) -> int:
     return curses.wrapper(body)
 
 
+def _filter_text(state: BrowseState) -> str:
+    return (
+        f"[ Brand: {state.brand} ]  [ Model: {state.model} ]  "
+        f"[ Type: {state.hardware_type or '—'} ]  [ Software: {state.software or '—'} ]  [ Refresh ]"
+    )
+
+
+def _action_text(state: BrowseState) -> str:
+    actions = "[ Install ]  [ Install from a file ]"
+    if state.software.casefold() == "rockbox":
+        actions += "  [ Themes ]"
+    return actions
+
+
+def _secondary_text() -> str:
+    return "[ Settings ] [ Support Us ] [ Language ] [ Notices ] [ Updates ] [ Credits ] [ Menu ]"
+
+
+def _segment_at(text: str, x: int, labels: list[str]) -> int | None:
+    starts = [text.find(f"[ {label}") for label in labels]
+    for index, start in enumerate(starts):
+        if start < 0:
+            continue
+        end = starts[index + 1] if index + 1 < len(starts) and starts[index + 1] > start else len(text)
+        if start <= x < end:
+            return index
+    return None
+
+
+def _open_notices(state: BrowseState) -> None:
+    state.notices_status = "Fetching notices…"
+    try:
+        state.notices = fetch_notices(model=state.model)
+    except RuntimeError as exc:
+        state.notices = []
+        state.notices_status = str(exc)
+    else:
+        state.notices_status = "" if state.notices else "There are no active notices right now."
+    state.page = "notices"
+    state.page_scroll = 0
+
+
+def _open_update(state: BrowseState) -> None:
+    try:
+        state.update_result = check_app_update()
+    except Exception as exc:  # the page must open even when the feed is odd
+        state.update_result = {
+            "current": _version(),
+            "latest": "",
+            "newer": False,
+            "failed": True,
+            "error": str(exc),
+        }
+    state.page = "update"
+    state.page_scroll = 0
+
+
+def _menu_choice(state: BrowseState, index: int, items: list) -> None:
+    if index == 0:
+        state.page = "software"
+    elif index == 1:
+        _open_notices(state)
+    elif index == 2:
+        _open_update(state)
+    elif index == 3:
+        state.page = "settings"
+    elif index == 4:
+        state.page = "support"
+    elif index == 5:
+        state.page = "language"
+    elif index == 6:
+        state.page = "credits"
+    elif index == 7:
+        state.quit = True
+
+
 def _click_filter(state: BrowseState, items: list, x: int) -> None:
-    if x < 22:
+    which = _segment_at(_filter_text(state), x, ["Brand", "Model", "Type", "Software", "Refresh"])
+    if which == 0:
         state.brand = _cycle_brand(state)
-    elif x < 38:
+    elif which == 1:
         state.model = _cycle_model(state)
-    elif x < 50 and state.types:
+    elif which == 2 and state.types:
         state.hardware_type = "B" if state.hardware_type == "A" else "A"
-    elif x < 78:
+    elif which == 3:
         state.software = _cycle_software(state)
+    elif which != 4:
+        return
     fill_choices(state, items)
-    state.status = _load_rows(state, items, x >= 78)
+    state.status = _load_rows(state, items, which == 4)
 
 
 def _ask_file(screen) -> str:
@@ -733,6 +857,12 @@ def _curses_page(screen, state: BrowseState, items: list) -> None:
     screen.erase()
     if state.page == "done":
         lines = state.result_lines or ["Nothing has been installed in this session."]
+    elif state.page == "menu":
+        lines = menu_lines(state)
+    elif state.page == "notices":
+        lines = notices_lines(state)
+    elif state.page == "update":
+        lines = update_lines(state.update_result)
     elif state.page == "settings":
         lines = settings_lines(state)
     elif state.page == "support":
@@ -766,12 +896,33 @@ def _curses_page(screen, state: BrowseState, items: list) -> None:
             index = y - 3 + state.page_scroll
             if 0 <= index < len(rows):
                 _choose_language(state, rows[index][0])
+        elif state.page == "menu" and 1 <= y <= 8:
+            _menu_choice(state, y - 1, items)
         return
     if key in (curses.KEY_UP, ord("k")):
         state.page_scroll = max(0, state.page_scroll - 1)
         return
     if key in (curses.KEY_DOWN, ord("j")):
         state.page_scroll = min(max_scroll, state.page_scroll + 1)
+        return
+    if state.page == "menu" and ord("1") <= key <= ord("8"):
+        _menu_choice(state, key - ord("1"), items)
+        return
+    if state.page in ("notices", "update") and key in (ord("r"),):
+        if state.page == "notices":
+            _open_notices(state)
+        else:
+            _open_update(state)
+        return
+    if state.page in ("notices", "update") and key in (ord("o"),):
+        target = ""
+        if state.page == "notices" and state.notices:
+            target = str(state.notices[0].get("url") or "")
+        elif state.page == "update":
+            target = str(state.update_result.get("release_url") or state.update_result.get("download") or "")
+        if target:
+            webbrowser.open(target)
+            state.status = f"Opened {target}"
         return
     if key in (ord("q"), 27, ord("\n"), curses.KEY_ENTER):
         state.page = "software"

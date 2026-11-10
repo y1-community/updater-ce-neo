@@ -161,3 +161,13 @@ release source when no Linux package matches the architecture.
 
 Do not put the archive in the repository. `dist/` is build output; the release
 asset is the distribution point.
+
+## Terminal navigation
+
+The text session mirrors the window's sidebar: `?` opens Menu, `n` opens
+Notices (fetched from `https://innioasis.app/notice.xml`), `v` checks the app
+release feed, and `g`, `u`, `l`, `c` open Settings, Support Us, Language and
+Credits. The update page shows the installed and published versions, the
+platform asset, the release notes and the download/release URLs; it never
+installs an app update silently. Notices, update results and completion URLs
+are read-only text pages, so the session works without a browser.

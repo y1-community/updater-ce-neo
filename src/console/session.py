@@ -9,12 +9,18 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import plistlib
 import re
 import sys
+import urllib.error
+import urllib.request
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 
+from . import catalog
 from .catalog import Package
 from .releases import (
     ReleaseRow,
@@ -58,6 +64,10 @@ class BrowseState:
     install_label: str = ""
     install_log: list[str] = field(default_factory=list)
     result_lines: list[str] = field(default_factory=list)
+    notices: list[dict] = field(default_factory=list)
+    notices_status: str = ""
+    update_result: dict = field(default_factory=dict)
+    quit: bool = False
 
 
 def read_gui_filters() -> dict:
@@ -266,8 +276,8 @@ def screen_lines(state: BrowseState, version: str = APP_VERSION) -> list[str]:
     lines = [
         f"Updater CE {version}    Select Software",
         (
-            f"Brand: {state.brand}    Model: {state.model}    "
-            f"Type: {type_label}    Software: {state.software or '—'}    Refresh"
+            f"[ Brand: {state.brand} ]  [ Model: {state.model} ]  "
+            f"[ Type: {type_label} ]  [ Software: {state.software or '—'} ]  [ Refresh ]"
         ),
         "Available System Software",
     ]
@@ -277,11 +287,11 @@ def screen_lines(state: BrowseState, version: str = APP_VERSION) -> list[str]:
         for offset, row in enumerate(state.releases):
             mark = ">" if offset == state.index else " "
             lines.append(f"{mark} {row.label}")
-    actions = "Install    Install from a file"
+    actions = "[ Install ]  [ Install from a file ]"
     if state.software.casefold() == "rockbox":
-        actions += "    Themes"
+        actions += "  [ Themes ]"
     lines.append(actions)
-    lines.append("Settings    Support Us    Language    Credits / Thanks")
+    lines.append("[ Settings ] [ Support Us ] [ Language ] [ Notices ] [ Updates ] [ Credits ] [ Menu ]")
     if state.status:
         lines.append(state.status)
     return lines
@@ -330,10 +340,10 @@ def settings_lines(state: BrowseState) -> list[str]:
 
     return [
         "Settings",
-        f"1  Old Rockbox builds: {on(state.show_old)}",
-        f"2  240p Rockbox releases: {on(state.show_240p)}",
-        f"3  Nightly releases: {on(state.show_nightly)}",
-        f"4  Keep my data during install: {on(state.keep_data)}",
+        f"1  [{'x' if state.show_old else ' '}] Old Rockbox builds",
+        f"2  [{'x' if state.show_240p else ' '}] 240p Rockbox releases",
+        f"3  [{'x' if state.show_nightly else ' '}] Nightly releases",
+        f"4  [{'x' if state.keep_data else ' '}] Keep my data during install",
         "5  Back",
         "Keep my data keeps photos, downloads and installed apps in internal storage.",
         "It is offered again before the write; a package without its preserve-data",
@@ -507,9 +517,14 @@ def _write_shared_language(code: str) -> None:
 def credits_lines(version: str = APP_VERSION) -> list[str]:
     return [
         f"Updater CE {version}",
-        "by Ryan Specter",
+        "by Ryan Specter and the Innioasis community",
         "Community catalogue and installer for Innioasis players.",
-        "Credits / Thanks",
+        "",
+        "Thanks to: MTKclient, Rockbox, Slidia, the theme authors,",
+        "the translators, the testers and everyone who donated.",
+        "",
+        "Credits and thanks  https://innioasis.app/credits.html?thank-you=1",
+        "Support Us         https://innioasis.app/support_devs.html",
         "Press Enter or q to go back.",
     ]
 
@@ -528,3 +543,289 @@ def toggle_setting(state: BrowseState, which: str) -> None:
     elif which == "keep_data":
         state.keep_data = not state.keep_data
     save_filters(state)
+
+
+APP_UPDATE_REPOS = ("y1-community/updater-ce-neo", "ryan-specter/updater-ce-neo")
+NOTICE_URL = "https://innioasis.app/notice.xml"
+
+
+def parse_version(tag: str):
+    """Normalise a release tag to ``(major, minor, patch)``."""
+    match = re.match(r"^\D*(\d+)\.(\d+)(?:\.(\d+))?", (tag or "").strip())
+    if not match:
+        return None
+    return tuple(int(part or 0) for part in match.groups())
+
+
+def is_newer(tag: str, current: str) -> bool:
+    new, cur = parse_version(tag), parse_version(current)
+    return bool(new and cur and new > cur)
+
+
+def _platform_name() -> str:
+    return sys.platform
+
+
+def app_update_asset(release: dict, system: str | None = None) -> dict | None:
+    """The release asset that updates this system, without the lite archive."""
+    system = system or _platform_name()
+    assets = [
+        asset for asset in (release.get("assets") or [])
+        if asset.get("name") and "lite" not in asset["name"].lower()
+        and "terminal" not in asset["name"].lower()
+    ]
+    if system == "darwin":
+        targets = ("innioasis.updater.for.mac.dmg",)
+        allowed = lambda low: low.endswith(".dmg")
+    elif system == "win32":
+        targets = ("installer.exe", "updaterce-setup.exe")
+        allowed = lambda low: low.endswith(".exe") and "installer" in low
+    else:
+        arm = platform.machine().lower() in ("aarch64", "arm64")
+        if arm:
+            targets = (
+                "updaterce-linux-portable-arm64.tar.gz",
+                "updaterce-arm64.appimage",
+                "updaterce-linux-portable-arm64.zip",
+            )
+        else:
+            targets = (
+                "updaterce-linux-portable.tar.gz",
+                "updaterce.appimage",
+                "updaterce-linux-portable.zip",
+            )
+        allowed = lambda low: (
+            low.endswith((".appimage", ".tar.gz", ".zip"))
+            and not any(tok in low for tok in ("darwin", "mac", "win32", "windows"))
+        )
+    for target in targets:
+        for asset in assets:
+            if (asset.get("name") or "").lower() == target and allowed(target):
+                return asset
+    for asset in assets:
+        low = (asset.get("name") or "").lower()
+        if allowed(low):
+            return asset
+    return None
+
+
+def check_app_update(current: str = APP_VERSION, timeout: float = 8.0) -> dict:
+    """Check the CE release feed with the same client the catalogue uses."""
+    last_error = ""
+    for repo in APP_UPDATE_REPOS:
+        try:
+            release = catalog.latest_release(repo, timeout=timeout)
+        except RuntimeError as exc:
+            last_error = str(exc)
+            continue
+        tag = str(release.get("tag_name") or "")
+        result = {
+            "current": current,
+            "latest": tag.lstrip("vV"),
+            "tag": tag,
+            "name": release.get("name") or "",
+            "body": release.get("body") or "",
+            "release_url": release.get("html_url") or "",
+            "newer": False,
+            "failed": False,
+        }
+        if not is_newer(tag, current):
+            return result
+        asset = app_update_asset(release)
+        if asset is None:
+            result["reason"] = "the newest release has no package for this system"
+            return result
+        result.update(
+            newer=True,
+            asset=asset.get("name") or "",
+            download=asset.get("browser_download_url") or "",
+        )
+        return result
+    return {
+        "current": current,
+        "latest": "",
+        "newer": False,
+        "failed": True,
+        "error": last_error or "the release feed could not be read",
+    }
+
+
+def update_lines(result: dict) -> list[str]:
+    if not result:
+        return ["App update", "Press r to check the release feed.", "q goes back."]
+    if result.get("failed"):
+        return [
+            "App update",
+            f"Installed: {result.get('current', APP_VERSION)}",
+            "Could not check for updates.",
+            str(result.get("error") or ""),
+            "The catalogue still works; check again later.",
+            "r retries   q goes back.",
+        ]
+    lines = [
+        "App update",
+        f"Installed: {result.get('current', APP_VERSION)}",
+        f"Published: {result.get('latest') or 'unknown'}",
+    ]
+    if result.get("newer"):
+        lines += [
+            "",
+            "A newer version is available for this system.",
+            f"Package: {result.get('asset') or 'release page'}",
+        ]
+        if result.get("download"):
+            lines.append(f"Download: {result['download']}")
+        if result.get("release_url"):
+            lines.append(f"Release:  {result['release_url']}")
+        body = [line.strip() for line in str(result.get("body") or "").splitlines() if line.strip()]
+        if body:
+            lines += ["", "Release notes:", *body[:12]]
+        lines += ["", "o opens the release page. q goes back."]
+        return lines
+    lines.append("")
+    lines.append("This is the newest published version for this system.")
+    if result.get("reason"):
+        lines.append(str(result["reason"]).capitalize() + ".")
+    lines.append("r checks again   q goes back.")
+    return lines
+
+
+def _normalise_platform(value: str) -> str:
+    low = (value or "").strip().lower()
+    if low in {"mac", "macos", "osx", "darwin"}:
+        return "darwin"
+    if low in {"win", "windows", "win32"}:
+        return "win32"
+    if low.startswith("linux"):
+        return "linux"
+    return low
+
+
+def _normalise_arch(value: str) -> str:
+    low = (value or "").strip().lower()
+    if low in {"aarch64", "arm64"}:
+        return "arm64"
+    if low in {"amd64", "x64", "x86_64"}:
+        return "x86_64"
+    if low in {"i386", "i486", "i586", "i686", "x86"}:
+        return "x86"
+    return low
+
+
+def _notice_date(value: str):
+    text = (value or "").strip()[:10]
+    try:
+        return date.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+def fetch_notices(model: str = "", timeout: float = 8.0) -> list[dict]:
+    """Fetch the same notice.xml the window reads, with the standard library."""
+    request = urllib.request.Request(
+        NOTICE_URL,
+        headers={"User-Agent": "UpdaterCE-terminal"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            raw = response.read()
+    except (urllib.error.URLError, OSError) as exc:
+        raise RuntimeError(f"the notice feed could not be read: {exc}") from exc
+    try:
+        root = ET.fromstring(raw)
+    except ET.ParseError as exc:
+        raise RuntimeError(f"the notice feed was not valid XML: {exc}") from exc
+
+    elements = [root] if root.tag == "notice" else root.findall(".//notice")
+    rows: list[dict] = []
+    today = date.today()
+    host_platform = _normalise_platform(sys.platform)
+    host_arch = _normalise_arch(platform.machine())
+    for element in elements:
+        title = (element.get("title") or "").strip()
+        if not title:
+            title_element = element.find("title")
+            title = (title_element.text or "").strip() if title_element is not None else ""
+        content = (element.get("content") or "").strip()
+        for tag in ("content", "body"):
+            if content:
+                break
+            child = element.find(tag)
+            content = (child.text or "").strip() if child is not None else ""
+        if not title and not content:
+            continue
+        until = _notice_date(element.get("until") or "")
+        if until and until < today:
+            continue
+        start = _notice_date(element.get("from") or "")
+        if start and start > today:
+            continue
+        platforms = {
+            _normalise_platform(part)
+            for part in f"{element.get('platform') or ''},{element.get('os') or ''}".split(",")
+            if part.strip()
+        }
+        if platforms and host_platform not in platforms:
+            continue
+        arches = {
+            _normalise_arch(part)
+            for part in (element.get("arch") or "").replace(";", ",").split(",")
+            if part.strip()
+        }
+        if arches and host_arch not in arches and "universal" not in arches:
+            continue
+        models = {part.strip().upper() for part in (element.get("models") or "").split(",") if part.strip()}
+        if models and model and model.upper() not in models and "ALL" not in models:
+            continue
+        url = (element.get("url") or "").strip()
+        if not url:
+            link = element.find("url")
+            if link is None:
+                link = element.find("link")
+            url = (link.text or "").strip() if link is not None else ""
+        rows.append({
+            "id": (element.get("id") or "").strip(),
+            "title": title or "Notice",
+            "content": content,
+            "url": url,
+            "from": element.get("from") or "",
+            "severity": (element.get("severity") or "info").lower(),
+            "persistent": (element.get("persistent") or "").lower() in {"true", "1", "yes"},
+        })
+    rows.sort(key=lambda row: row.get("from") or "", reverse=True)
+    return rows
+
+
+def notices_lines(state: BrowseState) -> list[str]:
+    lines = ["Notices", state.notices_status or ""]
+    if not state.notices:
+        lines += ["", "No active notices for this player and system.", "r checks again   q goes back."]
+        return lines
+    for index, notice in enumerate(state.notices, 1):
+        lines.append("")
+        lines.append(f"{index}. {notice.get('title') or 'Notice'}")
+        if notice.get("from"):
+            lines.append(f"   {notice['from']}")
+        for body_line in str(notice.get("content") or "").splitlines():
+            lines.append("   " + body_line.strip())
+        if notice.get("url"):
+            lines.append(f"   {notice['url']}")
+    lines += ["", "r refreshes   q goes back."]
+    return lines
+
+
+def menu_lines(state: BrowseState) -> list[str]:
+    return [
+        "Menu",
+        f"1  Select Software ({len(state.releases)} releases)",
+        "2  Notices",
+        "3  App update",
+        "4  Settings",
+        "5  Support Us",
+        "6  Language",
+        "7  Credits / Thanks",
+        "8  Quit",
+        "",
+        "The same destinations as the window's sidebar.",
+        "Number or click chooses. q goes back.",
+    ]
