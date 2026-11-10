@@ -105,6 +105,15 @@ build_windows.bat mediatek_installer    :: MediaTek Installer only
   is installed.
 - The setup wizard is compiled immediately after the portable folder is staged.
   A portable ZIP is not produced; archive the finished folder yourself if needed.
+- Every x64 run also stages **`dist\windows-legacy\SP_Flash_Tool\`**, a folder
+  that contains SP Flash Tool and nothing else (no updater, no Python runtime),
+  then zips it as `dist\windows-legacy\Innioasis-SP-Flash-Tool-windows-legacy.zip`
+  with `donate.txt` and `README.txt` beside it. That package is the only route
+  on Windows XP/Vista/7/8/8.1 and on 32-bit Windows, where Updater CE cannot
+  run; the firmware mirrors repack it beside a rom as
+  `<romzipname>-windows-legacy.zip` for the site's legacy download button.
+  Pass `-NoLegacy` (or `-NoLegacy` to the batch file) to skip it. ARM64 builds
+  skip it because SP Flash Tool is x86-only.
 - Architecture: pass `--arch arm64` / `-Arch arm64` or run the scripts with an **arm64** Python.
   On ARM64, MTKClient is packaged as the native flashing engine (SP Flash Tool is x86-only and omitted).
 - Both `build_windows.bat` and `build_windows.ps1` accept the brand, architecture, `-Clean`, `-NoInstaller`, and `-Msix`.

@@ -13,6 +13,10 @@ param(
     [switch]$Msix,
     [switch]$MsixOnly,
     [switch]$SkipPyInstaller,
+    # The SP Flash Tool-only folder (dist\windows-legacy) is what serves Windows
+    # XP/Vista/7/8/8.1 and 32-bit PCs, where Updater CE cannot run. Pass
+    # -NoLegacy to skip it; releases publish it as a separate ZIP.
+    [switch]$NoLegacy,
     # Local test certificate (.pfx) for the MSIX. The Store signs the upload
     # itself, so this is only for installing the package on a test machine.
     [string]$MsixSignCert = "",
@@ -426,6 +430,74 @@ try {
             Start-Process -FilePath "powershell.exe" -ArgumentList @("-NoProfile", "-WindowStyle", "Hidden", "-Command", $syncCmd)
         } elseif ($tempDistDir) {
             Remove-Item -Recurse -Force $tempDistDir -ErrorAction SilentlyContinue
+        }
+    }
+
+    # ------------------------------------------------------------------
+    # Legacy flash-tool package (Windows XP / Vista / 7 / 8 / 8.1, 32-bit)
+    #
+    # Updater CE needs 64-bit Windows 10 1809 or newer, so on an older or
+    # 32-bit PC the only route is SP Flash Tool on its own. This stages a
+    # folder that holds the flash tool and nothing else (no updater, no Python
+    # runtime), then zips it with donate.txt and a short README. Releases
+    # publish the ZIP as Innioasis-SP-Flash-Tool-windows-legacy.zip; the
+    # firmware mirrors repack it beside a rom as <romzipname>-windows-legacy.zip.
+    # ------------------------------------------------------------------
+    if (-not $NoLegacy) {
+        $LegacyRoot = Join-Path $ProjectRoot "dist\windows-legacy"
+        $LegacyToolDir = Join-Path $LegacyRoot "SP_Flash_Tool"
+        $SpFlashSource = Join-Path $ProjectRoot "tools\windows\SP_Flash_Tool_v5.1904_Win"
+        if ($isArm64) {
+            Write-Host "  -> ARM64 build: SP Flash Tool is x86-only, so the legacy flash-tool package is not produced here." -ForegroundColor Yellow
+        } elseif (-not (Test-Path $SpFlashSource)) {
+            Write-Warning "SP Flash Tool source not found at $SpFlashSource; the legacy Windows package was skipped."
+        } else {
+            Write-StepBanner ($totalSteps + 1) ($totalSteps + 1) "Staging Legacy Flash Tool Folder" "Copying SP Flash Tool only into dist\windows-legacy for Windows XP/7/8 and 32-bit PCs..."
+            if (Test-Path $LegacyToolDir) { Remove-Item -Recurse -Force $LegacyToolDir }
+            New-Item -ItemType Directory -Force -Path $LegacyToolDir | Out-Null
+            & robocopy $SpFlashSource $LegacyToolDir /E /R:1 /W:1 /NFL /NDL /NJH /NJS /NC /NS | Out-Null
+            if ($LASTEXITCODE -ge 8) {
+                throw "Could not copy SP Flash Tool into $LegacyToolDir (robocopy exit $LASTEXITCODE)"
+            }
+            # Flash history and developer logs must never travel to a reader.
+            foreach ($junk in @("history.ini", "flash_tool.log")) {
+                $junkPath = Join-Path $LegacyToolDir $junk
+                if (Test-Path $junkPath) { Remove-Item -Force $junkPath }
+            }
+
+            $DonateText = @"
+Innioasis Updater CE and the firmware archive are run by the community, for free.
+
+If this package saved your player, you can say thanks here:
+  https://innioasis.app/donate.html
+  https://ko-fi.com/teamslide
+  https://github.com/sponsors/y1-community
+"@
+            Set-Content -Path (Join-Path $LegacyRoot "donate.txt") -Value $DonateText -Encoding UTF8
+
+            $ReadmeText = @"
+Innioasis SP Flash Tool - portable package for Windows XP / Vista / 7 / 8 / 8.1 (32-bit and 64-bit)
+
+This folder contains SP Flash Tool and its MediaTek download agents, nothing else.
+Use it when Updater CE cannot run on your PC: Updater CE needs 64-bit Windows 10 (1809 or newer).
+
+How to use it:
+  1. Install the MediaTek USB driver from the Driver folder, then restart the PC.
+  2. Download the firmware package for your model from https://innioasis.app/firmware-list.html
+     and choose the Windows XP/7/8 (32/64-bit) package.
+  3. Unpack the firmware package beside this folder, then open flash_tool.exe.
+  4. Choose the scatter file from the firmware folder, press Download, then connect
+     the player while it is switched off.
+
+Full guide: https://innioasis.app/windows-legacy.html
+"@
+            Set-Content -Path (Join-Path $LegacyRoot "README.txt") -Value $ReadmeText -Encoding UTF8
+
+            $LegacyZip = Join-Path $LegacyRoot "Innioasis-SP-Flash-Tool-windows-legacy.zip"
+            if (Test-Path $LegacyZip) { Remove-Item -Force $LegacyZip }
+            Compress-Archive -Path $LegacyToolDir, (Join-Path $LegacyRoot "donate.txt"), (Join-Path $LegacyRoot "README.txt") -DestinationPath $LegacyZip -CompressionLevel Optimal
+            Write-Host "  -> Legacy flash-tool package: $LegacyZip" -ForegroundColor Green
+            Write-Host "     Folder with the flash tool only: $LegacyToolDir" -ForegroundColor Green
         }
     }
 } finally {

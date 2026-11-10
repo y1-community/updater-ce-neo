@@ -17,6 +17,7 @@ set "INSTALLER=0"
 set "MSIX=0"
 set "MSIXONLY=0"
 set "SKIT_PYI=0"
+set "NOLEGACY=0"
 set "VERSION=2.5.3"
 rem Output roots are chosen by build_windows.ps1 from the target architecture:
 rem x64 -> dist\windows, ARM64 -> dist\windows-arm64.
@@ -153,6 +154,16 @@ if /i "%~1"=="-PackageOnly" (
     shift
     goto :parse_args
 )
+if /i "%~1"=="-NoLegacy" (
+    set "NOLEGACY=1"
+    shift
+    goto :parse_args
+)
+if /i "%~1"=="--no-legacy" (
+    set "NOLEGACY=1"
+    shift
+    goto :parse_args
+)
 if /i "%~1"=="--brand" (
     set "BRAND=%~2"
     shift
@@ -182,6 +193,7 @@ if "%INSTALLER%"=="1" set "PS_ARGS=%PS_ARGS% -Installer"
 if "%MSIX%"=="1" set "PS_ARGS=%PS_ARGS% -Msix"
 if "%MSIXONLY%"=="1" set "PS_ARGS=%PS_ARGS% -MsixOnly"
 if "%SKIT_PYI%"=="1" set "PS_ARGS=%PS_ARGS% -SkipPyInstaller"
+if "%NOLEGACY%"=="1" set "PS_ARGS=%PS_ARGS% -NoLegacy"
 
 echo ================================================================================
 echo   Innioasis Updater CE / MediaTek Installer - Windows Build
@@ -193,6 +205,7 @@ echo   Clean previous:  %CLEAN%
 echo   Inno Setup:      %INSTALLER% (Skip: %NOINSTALLER%)
 echo   Store (MSIX):    %MSIX% (MSIX only: %MSIXONLY%)
 echo   Skip PyInstaller:%SKIT_PYI%
+echo   Legacy flash:    %NOLEGACY% skip (0 = build dist\windows-legacy)
 echo   Working folder:  %~dp0
 echo.
 echo   Launching PowerShell build engine (build_windows.ps1)...
@@ -203,7 +216,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0build_windows.ps1" %PS
 exit /b %ERRORLEVEL%
 
 :help
-echo Usage: build_windows.bat [updater_ce^|mediatek_installer] [--arch arm64^|x64] [-Clean] [-NoInstaller] [-Installer] [-Msix] [-MsixOnly] [-SkipPyInstaller]
+echo Usage: build_windows.bat [updater_ce^|mediatek_installer] [--arch arm64^|x64] [-Clean] [-NoInstaller] [-Installer] [-Msix] [-MsixOnly] [-SkipPyInstaller] [-NoLegacy]
 echo.
 echo Builds Updater CE and/or MediaTek Installer on Windows into dist\windows\ (x64)
 echo or dist\windows-arm64\ (--arch arm64). ARM64 needs Windows on ARM: PyInstaller
@@ -218,7 +231,14 @@ echo   -Installer         Ensure Inno Setup installer is compiled.
 echo   -Msix              Pack the Microsoft Store (MSIX) package.
 echo   -MsixOnly          Build/pack MSIX only (skips Inno Setup without requiring ISCC.exe).
 echo   -SkipPyInstaller   Package existing compiled folder without re-running PyInstaller.
+echo   -NoLegacy          Skip the SP Flash Tool-only package for Windows XP/7/8
+echo                      and 32-bit PCs (dist\windows-legacy).
 echo.
 echo Prerequisites: Python 3.10+, PyInstaller, and Inno Setup 6 (optional for the
 echo setup wizard). The app bundles SP Flash Tool from tools/windows/SP_Flash_Tool_v5.1904_Win.
+echo.
+echo An x64 build also writes dist\windows\SP_Flash_Tool\ and SP_Flash_Tool-Windows.zip:
+echo the tool without the app, for Windows XP/Vista/7/8/8.1 and 32-bit Windows,
+echo where Updater CE cannot run. Publish that zip as a release asset so the
+echo firmware packager can build rom-windows-legacy.zip packages.
 exit /b 0

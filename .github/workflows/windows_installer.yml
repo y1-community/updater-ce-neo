@@ -56,6 +56,43 @@ jobs:
           if (-not $ver) { $ver = "2.5" }
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion="$ver" scripts\build_windows_installer.iss
 
+      # Updater CE needs 64-bit Windows 10 1809 or newer. Windows XP/Vista/7/8/8.1
+      # and 32-bit PCs can only run SP Flash Tool, so ship that on its own: a
+      # folder holding nothing but the flash tool, zipped with donate.txt. The
+      # firmware mirrors take this ZIP and repack it beside a rom as
+      # <romzipname>-windows-legacy.zip for the site's legacy download button.
+      - name: Package Legacy Flash Tool (Windows XP/7/8, 32-bit)
+        shell: pwsh
+        run: |
+          $root = "dist/windows-legacy"
+          $tool = Join-Path $root "SP_Flash_Tool"
+          $source = "tools/windows/SP_Flash_Tool_v5.1904_Win"
+          if (-not (Test-Path $source)) { throw "SP Flash Tool source missing at $source" }
+          New-Item -ItemType Directory -Force -Path $tool | Out-Null
+          Copy-Item -Path (Join-Path $source "*") -Destination $tool -Recurse -Force
+          Remove-Item -Force (Join-Path $tool "history.ini") -ErrorAction SilentlyContinue
+          Remove-Item -Force (Join-Path $tool "flash_tool.log") -ErrorAction SilentlyContinue
+          @"
+          Innioasis Updater CE and the firmware archive are run by the community, for free.
+
+          If this package saved your player, you can say thanks here:
+            https://innioasis.app/donate.html
+            https://ko-fi.com/teamslide
+            https://github.com/sponsors/y1-community
+          "@ | Set-Content -Path (Join-Path $root "donate.txt") -Encoding utf8
+          @"
+          Innioasis SP Flash Tool - portable package for Windows XP / Vista / 7 / 8 / 8.1 (32-bit and 64-bit)
+
+          This folder contains SP Flash Tool and its MediaTek download agents, nothing else.
+          Use it when Updater CE cannot run on your PC (it needs 64-bit Windows 10 1809+).
+
+          Full guide: https://innioasis.app/windows-legacy.html
+          "@ | Set-Content -Path (Join-Path $root "README.txt") -Encoding utf8
+          Compress-Archive -Path $tool, (Join-Path $root "donate.txt"), (Join-Path $root "README.txt") `
+            -DestinationPath (Join-Path $root "Innioasis-SP-Flash-Tool-windows-legacy.zip") -Force
+          Write-Host "Legacy flash tool package:"
+          Get-ChildItem -Path $root | Select-Object Name, Length | Format-Table -AutoSize
+
       - name: Upload Installer Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -63,11 +100,19 @@ jobs:
           path: dist/windows/UpdaterCE-Setup-*.exe
           if-no-files-found: error
 
+      - name: Upload Legacy Flash Tool Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Innioasis-SP-Flash-Tool-windows-legacy
+          path: dist/windows-legacy/Innioasis-SP-Flash-Tool-windows-legacy.zip
+          if-no-files-found: error
+
       - name: Attach to Release (Optional)
         if: ${{ github.event.inputs.publish_release == 'true' }}
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/windows/UpdaterCE-Setup-*.exe
+          files: |
+            dist/windows/UpdaterCE-Setup-*.exe
+            dist/windows-legacy/Innioasis-SP-Flash-Tool-windows-legacy.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
