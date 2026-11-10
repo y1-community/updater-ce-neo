@@ -27,7 +27,10 @@
 set -u
 
 SITE="https://innioasis.app"
-RELEASE_API="https://api.github.com/repos/y1-community/updater-ce-neo/releases/latest"
+# The terminal archive is published on the 2.5.4 release, not as "latest"
+# (latest stays the release that has the window packages).
+RELEASE_API="https://api.github.com/repos/y1-community/updater-ce-neo/releases/tags/2.5.4"
+RELEASES_API="https://api.github.com/repos/y1-community/updater-ce-neo/releases?per_page=20"
 ASSET_NAME="UpdaterCE-Lite.tar.gz"
 DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 DEFAULT_DIR="$DATA_HOME/innioasis-updater/lite"
@@ -108,6 +111,51 @@ if [ "$MODE" = "uninstall" ]; then
     exit 0
 fi
 
+choose_or_install_full_app() {
+    if [ "$MODE" = "check" ] || [ "$MODE" = "uninstall" ] || [ -n "$LOCAL_FILE" ]; then
+        return 0
+    fi
+    if [ -z "${INNIOASIS_CHOICE:-}" ]; then
+        if [ -r /dev/tty ]; then
+            printf '%s\n' "What would you like to do?"
+            printf '%s\n' "  1) Install Innioasis Updater (full app)  [recommended]"
+            printf '%s\n' "  2) Run once in Terminal"
+            printf '%s' "Choice [1]: "
+            read -r _choice < /dev/tty || _choice="1"
+        else
+            _choice="1"
+        fi
+        case "$_choice" in
+            2|[Tt]|terminal|Terminal) INNIOASIS_CHOICE=terminal ;;
+            *) INNIOASIS_CHOICE=full ;;
+        esac
+    fi
+    if [ "$INNIOASIS_CHOICE" != "full" ]; then
+        return 0
+    fi
+    say "Installing the full app. This is the recommended choice."
+    _here=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+    if [ -f "$_here/run_linux.sh" ]; then
+        export INNIOASIS_CHOICE=full
+        exec sh "$_here/run_linux.sh"
+    fi
+    _full="${TMPDIR:-/tmp}/run_linux.$$.sh"
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL -o "$_full" https://raw.githubusercontent.com/y1-community/updater-ce-neo/main/run_linux.sh \
+            || curl -fsSL -o "$_full" https://innioasis.app/run_linux.sh \
+            || die "could not download the full-app installer" 4
+    elif command -v wget >/dev/null 2>&1; then
+        wget -qO "$_full" https://raw.githubusercontent.com/y1-community/updater-ce-neo/main/run_linux.sh \
+            || die "could not download the full-app installer" 4
+    else
+        die "curl or wget is required to download the full-app installer" 4
+    fi
+    export INNIOASIS_CHOICE=full
+    exec sh "$_full"
+}
+
+choose_or_install_full_app
+
 [ -n "$PYTHON" ] || die "Python 3.8+ is required. Install it first:
   Debian/Ubuntu/Mint: sudo apt install python3
   Fedora:             sudo dnf install python3
@@ -163,21 +211,44 @@ else
     # JSON scan keeps this working without jq or any Python module beyond the
     # standard library. If GitHub is unreachable, the copy on innioasis.app is
     # used instead.
-    if ! "$PYTHON" - "$RELEASE_API" "$TMP/urls.txt" <<'PY'
+    if ! "$PYTHON" - "$RELEASE_API" "$RELEASES_API" "$TMP/urls.txt" <<'PY'
 import json, sys, urllib.request
-api, out = sys.argv[1], sys.argv[2]
-req = urllib.request.Request(api, headers={"User-Agent": "UpdaterCE-lite"})
-with urllib.request.urlopen(req, timeout=30) as response:
-    release = json.loads(response.read())
+tag_api, list_api, out = sys.argv[1], sys.argv[2], sys.argv[3]
+headers = {"User-Agent": "UpdaterCE-lite", "Accept": "application/vnd.github+json"}
+
+def load(url):
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req, timeout=30) as response:
+        return json.loads(response.read())
+
+def pick(release):
+    found = {}
+    for asset in release.get("assets") or []:
+        name = asset.get("name") or ""
+        if name == "UpdaterCE-Lite.tar.gz":
+            found["archive"] = asset.get("browser_download_url") or ""
+        elif name == "UpdaterCE-Lite.tar.gz.sha256":
+            found["sha256"] = asset.get("browser_download_url") or ""
+    return found
+
 found = {}
-for asset in release.get("assets", []):
-    name = asset.get("name", "")
-    if name == "UpdaterCE-Lite.tar.gz":
-        found["archive"] = asset["browser_download_url"]
-    elif name == "UpdaterCE-Lite.tar.gz.sha256":
-        found["sha256"] = asset["browser_download_url"]
+try:
+    found = pick(load(tag_api))
+except Exception:
+    found = {}
 if "archive" not in found:
-    raise SystemExit("the newest release has no UpdaterCE-Lite.tar.gz asset")
+    try:
+        releases = load(list_api)
+    except Exception:
+        releases = []
+    if isinstance(releases, dict):
+        releases = [releases]
+    for release in releases:
+        found = pick(release)
+        if "archive" in found:
+            break
+if "archive" not in found:
+    raise SystemExit("no release publishes UpdaterCE-Lite.tar.gz")
 with open(out, "w", encoding="utf-8") as handle:
     handle.write(found["archive"] + "\n" + found.get("sha256", "") + "\n")
 PY

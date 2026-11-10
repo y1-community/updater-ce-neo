@@ -287,7 +287,12 @@ for release in releases:
     for wanted in ("UpdaterCE", "InnioasisUpdater"):
         for asset in assets:
             name = asset.get("name") or ""
-            if name.startswith(wanted) and name.lower().endswith(".tar.gz") and pattern.search(name):
+            low = name.lower()
+            # The terminal session archive is a different download. Treating it
+            # as the window package would install a text-only tree.
+            if "lite" in low or "terminal" in low:
+                continue
+            if name.startswith(wanted) and low.endswith(".tar.gz") and pattern.search(name):
                 print(asset.get("browser_download_url") or "")
                 sys.exit(0)
 sys.exit(1)
@@ -346,7 +351,7 @@ download_appimage() {
     fi
 
     url="$(fetch_appimage_url "$json")"
-    [ -n "$url" ] || die "No recent release publishes an AppImage for $ARCH; rerun with --tarball"
+    [ -n "$url" ] || return 1
 
     name="$(basename "$url")"
     log "Downloading $name"
@@ -409,7 +414,7 @@ download_latest() {
     fi
 
     url="$(fetch_asset_url "$json")"
-    [ -n "$url" ] || die "No recent $DISPLAY_NAME release has a portable archive for $ARCH"
+    [ -n "$url" ] || return 1
 
     name="$(basename "$url")"
     log "Downloading $name"
@@ -503,7 +508,7 @@ install_appimage_flow() {
     trap 'rm -rf "${tmp:-}"' EXIT
 
     if [ "$DOWNLOAD" -eq 1 ]; then
-        download_appimage "$tmp"
+        download_appimage "$tmp" || return 1
     fi
     [ -n "$FILE" ] || die "No AppImage to install"
     [ -f "$FILE" ] || die "No such file: $FILE"
@@ -561,19 +566,19 @@ repair_host() {
     # distribution uses.
     local pkgs="" cmd="" runner=""
     if command -v apt-get >/dev/null 2>&1; then
-        pkgs="libxcb-cursor0 libxcb-image0 libxcb-render-util0 libxcb-util1 libxkbcommon-x11-0 libgl1"
+        pkgs="libxcb-cursor0 libxcb-image0 libxcb-render-util0 libxcb-util1 libxkbcommon-x11-0 libgl1 libfuse2 fuse libusb-1.0-0 python3 python3-venv python3-pip"
         cmd="apt-get update && apt-get install -y $pkgs"
     elif command -v dnf >/dev/null 2>&1; then
-        pkgs="xcb-util-cursor xcb-util-image xcb-util-renderutil xcb-util libxkbcommon-x11 mesa-libGL"
+        pkgs="xcb-util-cursor xcb-util-image xcb-util-renderutil xcb-util libxkbcommon-x11 mesa-libGL fuse fuse-libs libusb1 python3 python3-pip"
         cmd="dnf install -y $pkgs"
     elif command -v zypper >/dev/null 2>&1; then
-        pkgs="libxcb-cursor0 xcb-util-image xcb-util-renderutil libxcb-util1 libxkbcommon-x11-0 libGL1"
+        pkgs="libxcb-cursor0 xcb-util-image xcb-util-renderutil libxcb-util1 libxkbcommon-x11-0 libGL1 fuse libfuse2 libusb-1_0-0 python3 python3-pip"
         cmd="zypper --non-interactive install $pkgs"
     elif command -v pacman >/dev/null 2>&1; then
-        pkgs="xcb-util-cursor xcb-util-image xcb-util-renderutil xcb-util libxkbcommon-x11 mesa"
+        pkgs="xcb-util-cursor xcb-util-image xcb-util-renderutil xcb-util libxkbcommon-x11 mesa fuse2 libusb python python-pip"
         cmd="pacman -S --needed --noconfirm $pkgs"
     elif command -v apk >/dev/null 2>&1; then
-        pkgs="xcb-util-cursor xcb-util-image xcb-util-renderutil xcb-util libxkbcommon-x11 mesa-gl"
+        pkgs="xcb-util-cursor xcb-util-image xcb-util-renderutil xcb-util libxkbcommon-x11 mesa-gl fuse libusb python3 py3-pip"
         cmd="apk add $pkgs"
     else
         die "No supported package manager found. Install libxcb-cursor0 (and xcb-util-image, xcb-util-renderutil, xcb-util, libxkbcommon-x11) with your system's package tool."
@@ -581,7 +586,11 @@ repair_host() {
 
     if [ "$ASSUME_YES" -ne 1 ]; then
         printf 'Install these packages with the system package manager?\n  %s\n  Command: %s\n[y/N] ' "$pkgs" "$cmd"
-        read -r answer || answer=""
+        if [ -r /dev/tty ]; then
+            read -r answer < /dev/tty || answer=""
+        else
+            read -r answer || answer=""
+        fi
         case "$answer" in
             y|Y|yes|YES) ;;
             *) echo "Not installed. The AppImage will fall back to the terminal interface."; return 1 ;;
@@ -603,6 +612,146 @@ repair_host() {
     success "Host libraries installed. Reopen Updater CE for the window."
 }
 
+offer_choice() {
+    if [ -n "${INNIOASIS_CHOICE:-}" ]; then
+        return 0
+    fi
+    if [ "$CHECK_HOST" -eq 1 ] || [ "$REPAIR" -eq 1 ] || [ "$UNINSTALL" -eq 1 ] || [ -n "$FILE" ] || [ -n "$RUN_FLAG" ]; then
+        return 0
+    fi
+    if [ -r /dev/tty ]; then
+        printf '%s\n' "What would you like to do?"
+        printf '%s\n' "  1) Install Innioasis Updater (full app)  [recommended]"
+        printf '%s\n' "  2) Run once in Terminal"
+        printf '%s' "Choice [1]: "
+        read -r _choice < /dev/tty || _choice="1"
+    else
+        _choice="1"
+    fi
+    case "$_choice" in
+        2|[Tt]|terminal|Terminal)
+            export INNIOASIS_CHOICE=terminal
+            log "Starting a one-time terminal session."
+            _here=$(dirname "$(readlink -f "$0")")
+            if [ -f "$_here/run_linux_lite.sh" ]; then
+                exec sh "$_here/run_linux_lite.sh"
+            fi
+            _tmp="${TMPDIR:-/tmp}/run_linux_lite.$$.sh"
+            if command -v curl >/dev/null 2>&1; then
+                curl -fsSL -o "$_tmp" https://raw.githubusercontent.com/y1-community/updater-ce-neo/main/run_linux_lite.sh \
+                    || curl -fsSL -o "$_tmp" https://innioasis.app/run_linux_lite.sh \
+                    || die "could not download the terminal installer"
+            else
+                wget -qO "$_tmp" https://raw.githubusercontent.com/y1-community/updater-ce-neo/main/run_linux_lite.sh \
+                    || die "could not download the terminal installer"
+            fi
+            exec sh "$_tmp"
+            ;;
+        *)
+            export INNIOASIS_CHOICE=full
+            log "Installing the full app. This is the recommended choice."
+            ;;
+    esac
+}
+
+prepare_for_window() {
+    check_host && return 0
+    if [ -r /dev/tty ]; then
+        printf '%s' "Install the missing system libraries now? [Y/n] "
+        read -r answer < /dev/tty || answer="Y"
+    else
+        answer="Y"
+    fi
+    case "$answer" in
+        n|N|no|NO)
+            warn "Continuing without them. If the window cannot open, the app starts in the terminal."
+            ;;
+        *)
+            ASSUME_YES=1
+            repair_host || warn "The system libraries were not installed."
+            ;;
+    esac
+}
+
+install_from_source() {
+    local tmp url top entry
+    log "No prebuilt package is published for $ARCH."
+    log "Laying the app out from the release source. It is the same Python the window is built from."
+    command -v python3 >/dev/null 2>&1 || die "python3 is required to lay the app out from source"
+    command -v curl >/dev/null 2>&1 || die "curl is required to download the source archive"
+    tmp="$(mktemp -d)"
+    url="$(python3 - <<'PY'
+import json, urllib.request
+headers = {"User-Agent": "UpdaterCE-installer", "Accept": "application/vnd.github+json"}
+repos = (
+    "y1-community/updater-ce-neo",
+    "y1-community/innioasis-updater",
+    "ryan-specter/innioasis-updater",
+)
+for repo in repos:
+    api = "https://api.github.com/repos/%s/releases?per_page=10" % repo
+    try:
+        req = urllib.request.Request(api, headers=headers)
+        with urllib.request.urlopen(req, timeout=30) as response:
+            releases = json.loads(response.read())
+    except Exception:
+        continue
+    for release in releases:
+        if release.get("draft") or release.get("prerelease"):
+            continue
+        zipball = release.get("zipball_url") or ""
+        if zipball:
+            print(zipball)
+            raise SystemExit(0)
+raise SystemExit(1)
+PY
+)" || die "Could not find a source archive for the app"
+    [ -n "$url" ] || die "Could not find a source archive for the app"
+    log "Downloading the source archive"
+    curl -fL --progress-bar -o "$tmp/source.zip" "$url" || die "Source download failed"
+    mkdir -p "$tmp/src"
+    python3 - "$tmp/source.zip" "$tmp/src" <<'PY' || die "Could not unpack the source archive"
+import sys, zipfile
+from pathlib import Path
+archive, dest = sys.argv[1], Path(sys.argv[2])
+dest.mkdir(parents=True, exist_ok=True)
+with zipfile.ZipFile(archive) as bundle:
+    for info in bundle.infolist():
+        name = info.filename
+        if name.startswith("/") or ".." in name.split("/"):
+            raise SystemExit("unsafe path in source archive")
+    bundle.extractall(dest)
+PY
+    top="$(find "$tmp/src" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+    if [ ! -f "$top/launcher.py" ] && [ ! -f "$top/firmware_downloader.py" ]; then
+        die "That source archive is not the Updater app"
+    fi
+    mkdir -p "$INSTALL_DIR"
+    rm -rf -- "$APP_DIR"
+    mv "$top" "$APP_DIR"
+    if [ ! -x "$APP_DIR/venv/bin/python" ]; then
+        python3 -m venv "$APP_DIR/venv" || die "python3-venv is required. Re-run and accept the system library install."
+    fi
+    if [ -f "$APP_DIR/requirements.txt" ]; then
+        "$APP_DIR/venv/bin/python" -m pip install --upgrade pip || true
+        "$APP_DIR/venv/bin/python" -m pip install -r "$APP_DIR/requirements.txt" \
+            || die "Could not install the app's Python requirements into its own environment"
+    fi
+    entry="launcher.py"
+    [ -f "$APP_DIR/launcher.py" ] || entry="firmware_downloader.py"
+    mkdir -p "$BIN_DIR"
+    cat > "$LAUNCHER" <<EOF
+#!/bin/sh
+cd "$APP_DIR" || exit 1
+exec "$APP_DIR/venv/bin/python" "$entry" "\$@"
+EOF
+    chmod 0755 "$LAUNCHER"
+    write_shortcut
+    success "$DISPLAY_NAME is installed from source in $APP_DIR"
+    success "Launch: $LAUNCHER"
+    rm -rf -- "$tmp"
+}
+
 main() {
     if [ "$REPAIR" -eq 1 ]; then
         repair_host
@@ -618,9 +767,16 @@ main() {
         return
     fi
 
+    offer_choice
+    prepare_for_window
+
     if [ "$PACKAGE_KIND" = "appimage" ]; then
-        install_appimage_flow
-        return
+        if install_appimage_flow; then
+            return
+        fi
+        warn "No AppImage is published for $ARCH. Trying the portable archive."
+        PACKAGE_KIND="tarball"
+        DOWNLOAD=1
     fi
 
     TMP_DIR="$(mktemp -d)"
@@ -635,7 +791,10 @@ main() {
     }
 
     if [ "$DOWNLOAD" -eq 1 ]; then
-        download_latest "$tmp"
+        if ! download_latest "$tmp"; then
+            install_from_source
+            return
+        fi
     fi
     [ -n "$FILE" ] || die "No package to install"
     [ -f "$FILE" ] || die "No such file: $FILE"
