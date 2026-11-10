@@ -105,6 +105,22 @@ while [ $# -gt 0 ]; do
             PACKAGE_KIND="tarball"
             shift
             ;;
+        --lite)
+            # Hand over to the terminal-only install: no Qt, no wheels, any
+            # architecture with Python 3.8+, resumable download.
+            _lite_dir=$(dirname "$(readlink -f "$0")")
+            if [ -x "$_lite_dir/run_linux_lite.sh" ]; then
+                exec "$_lite_dir/run_linux_lite.sh" "$@"
+            fi
+            echo "Fetching the lite installer..." >&2
+            _lite_tmp="${TMPDIR:-/tmp}/run_linux_lite.$$.sh"
+            if command -v curl >/dev/null 2>&1; then
+                curl -fsSL -o "$_lite_tmp" https://innioasis.app/run_linux_lite.sh || die "could not download the lite installer"
+            else
+                wget -qO "$_lite_tmp" https://innioasis.app/run_linux_lite.sh || die "could not download the lite installer"
+            fi
+            exec sh "$_lite_tmp" "$@"
+            ;;
         --update)
             DOWNLOAD=1
             shift

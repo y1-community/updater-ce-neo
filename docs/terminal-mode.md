@@ -1,0 +1,111 @@
+# Terminal mode on old, small and headless Linux machines
+
+The AppImage, the portable tarball and the portable zip all carry Qt. That is
+the right default, but it is not installable everywhere: PySide6 has no wheel
+for 32-bit ARM or 32-bit x86, a Pi Zero has no desktop to draw into, and a
+server you reach over SSH has no display at all. In each of those cases you
+still want to download firmware and flash a player.
+
+There are two ways in, and both use the same code:
+
+* the normal download started with `--tui` or `--cli` (Qt is imported only
+  after those flags have been handled, so it never loads), and
+* `run_linux_lite.sh`, which installs a small pure-Python payload with no Qt,
+  no PySide6 and no wheels at all.
+
+## What the lite install contains
+
+`UpdaterCE-Lite.tar.gz` is architecture independent: Python 3.8+ source. One
+file serves every machine below.
+
+| Machine | lite | GUI |
+| --- | --- | --- |
+| x86-64 | yes | yes |
+| i686 / 32-bit Intel | yes | no wheel |
+| aarch64 (Pi 3/4/5, server) | yes | yes, needs a desktop |
+| armv7l (Pi 2, Pi 3 in 32-bit OS) | yes | no wheel |
+| armv6l (Pi Zero, Pi 1) | yes | no wheel |
+
+## Install
+
+```sh
+curl -fsSLO https://innioasis.app/run_linux_lite.sh
+sh run_linux_lite.sh --check          # report python, tools, install state
+sh run_linux_lite.sh                  # install to ~/.local/share/innioasis-updater/lite
+sh run_linux_lite.sh --tui            # install, then open the terminal interface
+```
+
+The download resumes. If the connection drops, run the same command again: the
+partial file continues from where it stopped instead of starting over. The
+archive's SHA-256 is checked against the release asset before anything is
+unpacked.
+
+No root is used. The launcher is written to `~/.local/bin/innioasis-updater-lite`.
+
+## Commands
+
+```sh
+innioasis-updater-lite list --model Y1
+innioasis-updater-lite download Y1 --output ~/firmware --extract
+innioasis-updater-lite flash ~/firmware/rom_Y1 --dry-run
+innioasis-updater-lite flash ~/firmware/rom_Y1
+innioasis-updater-lite adb devices
+innioasis-updater-lite doctor
+innioasis-updater-lite tui
+```
+
+Every command accepts `--json` for scripts. `doctor` prints the Python version,
+architecture and which of `mtkclient`, `adb` and `unrar` were found, with the
+install command for the distribution it can infer.
+
+## Flashing
+
+The terminal path does not reimplement a flasher. It calls the tools' own
+command lines, which is what makes it usable on machines where Qt cannot run:
+
+* **MTKClient** — `mtk wl <folder>`, the console equivalent of the GUI's MTK
+  flow. Install with `pip install --user mtkclient`, or drop `mtk.py` into
+  `~/.local/share/innioasis-updater/tools/`.
+* **adb** — `adb devices`, `adb sideload <zip>` for Rockbox/stock packages.
+
+SP Flash Tool remains a GUI tool; its Linux build needs X. On a headless
+machine use MTKClient, which does the same write over BROM/Preloader.
+
+`flash --dry-run` prints the exact command without touching the player. That is
+the safest first run on a new distribution.
+
+## The TUI
+
+`innioasis-updater-lite tui` (or `--tui` on any build) lists models, then
+firmware, downloads with a progress bar, extracts the archive and offers to
+flash the folder with MTKClient. Keys: arrows or `j`/`k`, Enter to select,
+`q` to go back.
+
+When the terminal cannot host curses — piped output, `TERM=dumb`, a serial
+console — the same entry point falls back to numbered prompts.
+
+## Updating and removing
+
+```sh
+sh run_linux_lite.sh --update
+sh run_linux_lite.sh --uninstall
+```
+
+## Building the payload
+
+```sh
+python3 scripts/build_lite_payload.py --out dist/linux-lite \
+    --site-dir ../Innioasis-Updater
+```
+
+That writes `UpdaterCE-Lite.tar.gz`, its `.sha256`, and copies the installer
+into the website checkout so `https://innioasis.app/run_linux_lite.sh` serves
+the same script. `build_appimage.sh` runs it as part of a release, so the lite
+payload is never a separate hand-made artifact.
+
+## Why this exists
+
+Every failure it removes is one that has already been reported: a missing
+`libxcb-cursor` on a fresh install, a 32-bit netbook with no PySide6 wheel, a
+headless server where the window cannot open, and a slow SD-card connection
+where one interrupted download meant starting over.

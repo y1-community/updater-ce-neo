@@ -887,4 +887,16 @@ else
     echo "  Stable downloads: $DIST_DIR/MediaTek Installer.appimage"
     echo "                    $DIST_DIR/MediaTek Installer.tar.gz"
 fi
+
+# The terminal-only payload is architecture independent, so it is built once
+# here and published beside the GUI downloads. One tarball serves x86-64, i686,
+# aarch64, armv7l and armv6l; run_linux_lite.sh installs it from any of them.
+if [ -f scripts/build_lite_payload.py ]; then
+    LITE_DIR="$DIST_DIR/../linux-lite"
+    if "$PYTHON" scripts/build_lite_payload.py --out "$LITE_DIR"; then
+        echo "  Lite terminal:    $LITE_DIR/UpdaterCE-Lite.tar.gz"
+    else
+        echo "WARNING: the lite terminal payload could not be built." >&2
+    fi
+fi
 echo "================================================================================"

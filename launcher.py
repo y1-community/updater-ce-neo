@@ -40,6 +40,25 @@ if "--simulate-macos" in sys.argv:
 # is printed and the exit status is the verdict; the app itself is not started,
 # so a bundle missing Qt or shiboken6 explains itself instead of dying in a
 # terminal the user never sees.
+# The text session never imports Qt. Opening the AppImage, the tarball or the
+# zip with no flag still starts the window. --tui is the explicit text session,
+# and run_linux_lite.sh is the streamed way to reach the same entry.
+if "--tui" in sys.argv:
+    sys.argv = [arg for arg in sys.argv if arg != "--tui"]
+    from src.tui_session import main as _tui_main
+
+    sys.exit(_tui_main(sys.argv))
+
+
+# The console commands (catalogue, resumable download, MTKClient/adb) live in
+# src.console and import no Qt, so they work in the same AppImage on a machine
+# whose display stack is broken, and in the lite payload with no PySide6 at all.
+if "--cli" in sys.argv or "--lite" in sys.argv:
+    from src.console.cli import main as _console_main
+
+    _argv = [arg for arg in sys.argv[1:] if arg not in ("--cli", "--lite")]
+    sys.exit(_console_main(_argv or ["tui"]))
+
 if "--self-check" in sys.argv:
     from src.bundle_selfcheck import main as _self_check
 
@@ -102,6 +121,17 @@ if __name__ == "__main__":
         quiet_subprocess.install()
         from src.app import main
         main()
+    except ModuleNotFoundError as exc:
+        # A graphical bundle without Qt is still useful as a terminal build:
+        # do not dump a traceback, hand over to the console front end instead.
+        if (exc.name or "").split(".")[0] not in ("PySide6", "shiboken6"):
+            raise
+        sys.stderr.write(
+            "Updater CE: PySide6 is not available in this build; starting the terminal interface.\n"
+        )
+        from src.console.cli import main as _console_main
+
+        sys.exit(_console_main(["tui"] if sys.stdin.isatty() else ["--help"]))
     except Exception as exc:
         import traceback
         err_msg = traceback.format_exc()
