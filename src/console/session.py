@@ -54,6 +54,10 @@ class BrowseState:
     notes_scroll: int = 0
     page_scroll: int = 0
     package: object = None
+    install_percent: float = 0.0
+    install_label: str = ""
+    install_log: list[str] = field(default_factory=list)
+    result_lines: list[str] = field(default_factory=list)
 
 
 def read_gui_filters() -> dict:
@@ -331,7 +335,9 @@ def settings_lines(state: BrowseState) -> list[str]:
         f"3  Nightly releases: {on(state.show_nightly)}",
         f"4  Keep my data during install: {on(state.keep_data)}",
         "5  Back",
-        "Keep my data writes the firmware without erasing internal storage.",
+        "Keep my data keeps photos, downloads and installed apps in internal storage.",
+        "It is offered again before the write; a package without its preserve-data",
+        "scatter is installed normally rather than erased by guesswork.",
         "The window still opens when the app is started with no flag.",
     ]
 

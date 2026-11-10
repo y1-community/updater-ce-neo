@@ -27,9 +27,10 @@
 set -u
 
 SITE="https://innioasis.app"
-# The terminal archive is published on the 2.5.4 release, not as "latest"
-# (latest stays the release that has the window packages).
-RELEASE_API="https://api.github.com/repos/y1-community/updater-ce-neo/releases/tags/2.5.4"
+# The terminal archive is published on the existing 2.5.3 release, beside the
+# Windows and macOS packages, so "latest" and those installers stay untouched.
+# The payload itself is 2.5.4 source and reports its version from VERSION.
+RELEASE_API="https://api.github.com/repos/y1-community/updater-ce-neo/releases/tags/2.5.3"
 RELEASES_API="https://api.github.com/repos/y1-community/updater-ce-neo/releases?per_page=20"
 ASSET_NAME="UpdaterCE-Lite.tar.gz"
 DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
@@ -204,7 +205,7 @@ if [ -n "$LOCAL_FILE" ]; then
     cp "$LOCAL_FILE" "$ARCHIVE" || die "could not read $LOCAL_FILE" 4
     say "Using local archive: $LOCAL_FILE"
 else
-    say "Updater CE 2.5.4 — temporary terminal session"
+    say "Updater CE — temporary terminal session"
     say "1/4  Checking Python ($ARCH_NOTE)"
     say "2/4  Fetching the release index…"
     # The asset URL changes with every release, so ask the API. A hand-written

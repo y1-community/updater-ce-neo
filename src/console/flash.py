@@ -387,12 +387,70 @@ def discover_mtk_files(folder: Path) -> dict[str, Path | None]:
     return {"preloader": preloader, "da": da, "auth": auth}
 
 
-def _run(command: list[str], dry_run: bool = False) -> int:
+def parse_progress(line: str) -> tuple[float | None, str]:
+    """The window's install progress, read from a tool's output line.
+
+    Returns ``(percent, label)``. SP Flash Tool reports byte-weighted image
+    progress; MTKclient reports a percentage per partition. Lines that only
+    describe a stage (BROM connected, DA sent, partition written) return no
+    percentage but a label, which is the same guidance the window shows.
+    """
+    text = str(line or "").strip()
+    if not text:
+        return None, ""
+    low = text.lower()
+    image = re.search(
+        r"(\d+(?:\.\d+)?)%\s+of image data has been sent\s+\(([^)]+)\s+of\s+([^)]+)\)",
+        text,
+        re.IGNORECASE,
+    )
+    if image:
+        pct = max(0.0, min(100.0, float(image.group(1))))
+        return pct, f"Writing images — {image.group(2).strip()} of {image.group(3).strip()}"
+    if "of image data has been sent" in low:
+        simple = re.search(r"(\d+(?:\.\d+)?)%", text)
+        return (float(simple.group(1)) if simple else None), "Writing image data"
+    if "of da has been sent" in low:
+        pct = re.search(r"(\d+(?:\.\d+)?)%", text)
+        return (float(pct.group(1)) if pct else None), "Downloading the download agent"
+    if "of bootloader has been sent" in low:
+        pct = re.search(r"(\d+(?:\.\d+)?)%", text)
+        return (float(pct.group(1)) if pct else None), "Downloading the bootloader"
+    if "brom connected" in low or "usb port detected" in low or "usb port is obtained" in low:
+        return 0.0, "Player detected"
+    if "format succeeded" in low:
+        return 20.0, "Partition table formatted"
+    if "download ok" in low:
+        return None, "Partition written"
+    if "erasing" in low:
+        pct = re.search(r"(\d+(?:\.\d+)?)%", text)
+        return (float(pct.group(1)) if pct else None), "Erasing"
+    pct = re.search(r"(\d+(?:\.\d+)?)\s*%", text)
+    if pct:
+        value = max(0.0, min(100.0, float(pct.group(1))))
+        if "preloader" in low:
+            return value, "Writing the preloader"
+        if "boot" in low:
+            return value, "Writing the boot image"
+        if "system" in low:
+            return value, "Writing the system image"
+        if "userdata" in low:
+            return value, "Writing internal storage"
+        return value, "Writing firmware"
+    if "writing" in low or "write" in low:
+        return None, "Writing firmware"
+    return None, ""
+
+
+def _run(command: list[str], dry_run: bool = False, on_line=None) -> int:
     if os.environ.get("INNIOASIS_SIMULATE") == "1":
         print("simulation: not running " + " ".join(command), flush=True)
         return 0
     printable = " ".join(command)
-    print(f"$ {printable}", flush=True)
+    if on_line is None:
+        print(f"$ {printable}", flush=True)
+    else:
+        on_line(f"$ {printable}")
     if dry_run:
         return 0
     try:
@@ -409,8 +467,11 @@ def _run(command: list[str], dry_run: bool = False) -> int:
     assert process.stdout is not None
     missing: list[str] = []
     for line in process.stdout:
-        sys.stdout.write(line)
-        sys.stdout.flush()
+        if on_line is None:
+            sys.stdout.write(line)
+            sys.stdout.flush()
+        else:
+            on_line(line.rstrip("\n"))
         found = _MISSING_MODULE.search(line)
         if found:
             missing.append(found.group(1))
@@ -425,6 +486,7 @@ def flash_directory(
     auth: Path | None = None,
     dry_run: bool = False,
     keep_data: bool = False,
+    on_line=None,
 ) -> int:
     """Write every partition in ``folder`` with mtkclient.
 
@@ -471,7 +533,7 @@ def flash_directory(
                     da=da or found["da"],
                     auth=auth or found["auth"],
                 )
-                code = _run(command, dry_run=dry_run)
+                code = _run(command, dry_run=dry_run, on_line=on_line)
                 missed = [package_for_import(name) for name in getattr(_run, "last_missing", [])]
                 missed = [name for name in missed if name]
                 if code != 0 and missed and not dry_run:
@@ -480,7 +542,7 @@ def flash_directory(
                         flush=True,
                     )
                     if _pip_install(python, missed):
-                        code = _run(command, dry_run=dry_run)
+                        code = _run(command, dry_run=dry_run, on_line=on_line)
                 return code
             print(detail, file=sys.stderr)
         else:
@@ -491,7 +553,7 @@ def flash_directory(
                 file=sys.stderr,
             )
 
-        fallback = sp_flash_directory(folder, dry_run=dry_run)
+        fallback = sp_flash_directory(folder, dry_run=dry_run, on_line=on_line)
         if fallback is not None:
             return fallback
         return 2
@@ -500,7 +562,7 @@ def flash_directory(
             shutil.rmtree(staging, ignore_errors=True)
 
 
-def sp_flash_directory(folder: Path, dry_run: bool = False) -> int | None:
+def sp_flash_directory(folder: Path, dry_run: bool = False, on_line=None) -> int | None:
     """Fall back to SP Flash Tool's console download on Linux x86_64.
 
     ``None`` means the fallback is not available on this system, so the caller
@@ -533,7 +595,11 @@ def sp_flash_directory(folder: Path, dry_run: bool = False) -> int | None:
         print("SP Flash Tool's Download Agent was not found beside the tool.", file=sys.stderr)
         return None
     print("MTKclient could not start; using SP Flash Tool console mode.", flush=True)
-    return _run([tool, *sp_flash_tool_console_args(str(scatter), str(da))], dry_run=dry_run)
+    return _run(
+        [tool, *sp_flash_tool_console_args(str(scatter), str(da))],
+        dry_run=dry_run,
+        on_line=on_line,
+    )
 
 
 def reset_device(dry_run: bool = False) -> int:

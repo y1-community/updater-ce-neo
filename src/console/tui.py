@@ -145,28 +145,96 @@ def _progress_printer(label: str):
     return render
 
 
-def _run_install(state: BrowseState, output: Path) -> str:
+def _install_line(state: BrowseState, line: str, report) -> None:
+    """Feed one backend line through the window's progress parser."""
+    percent, label = flash.parse_progress(line)
+    if percent is not None and percent >= state.install_percent:
+        state.install_percent = percent
+    if label:
+        state.install_label = label
+    stripped = line.strip()
+    if stripped:
+        state.install_log = (state.install_log + [stripped])[-80:]
+    if report:
+        report(state.install_percent, state.install_label or "Installing firmware", stripped)
+
+
+def _install_success(state: BrowseState) -> str:
+    links = package_links(state.package)
+    message = "Flash complete! Disconnect USB and reboot."
+    state.result_lines = [message]
+    if links:
+        state.result_lines += ["", "Open next:", *links]
+        message += "  Next: " + "  ".join(links)
+    state.result_lines += [
+        "",
+        "Support Us  https://innioasis.app/support_devs.html",
+        "Press Enter or q to go back.",
+    ]
+    return message
+
+
+def _install_failure(state: BrowseState, message: str) -> str:
+    tail = [line for line in state.install_log[-8:] if line]
+    state.result_lines = [message]
+    if tail:
+        state.result_lines += ["", "Last output:", *tail]
+    state.result_lines += ["", "Press Enter or q to go back."]
+    return message
+
+
+def _run_install(state: BrowseState, output: Path, report=None, ask_keep=None) -> str:
+    state.install_percent = 0.0
+    state.install_label = "Preparing"
+    state.install_log = []
+    state.result_lines = []
     row = activate(state.releases, state.index)
     if row is None:
         return "Select a release first."
     if os.environ.get("INNIOASIS_SIMULATE") == "1":
         events = install_progress(sleep=0.04)
-        for event in events:
+        for index, event in enumerate(events):
+            if report:
+                report(index * 100.0 / max(1, len(events)), event["message"], "")
             print(event["message"], flush=True)
-        return events[-1]["message"]
+        return _install_success(state) if events[-1]["ok"] else _install_failure(state, events[-1]["message"])
     if not row.asset_url:
         return failover_text("download-failure", "this release has no firmware zip.")
     target = output / row.asset_name
+
+    def download_report(done: int, total: int | None) -> None:
+        if not report:
+            return
+        percent = (done * 100.0 / total) if total else 0.0
+        detail = f"{dl.human_bytes(done)} / {dl.human_bytes(total)}" if total else dl.human_bytes(done)
+        report(percent, "Downloading firmware", detail)
+
     try:
         if not target.exists():
-            dl.download(row.asset_url, target, progress=_progress_printer(row.asset_name))
+            if report:
+                report(0.0, "Downloading firmware", row.asset_name)
+            dl.download(row.asset_url, target, progress=download_report if report else _progress_printer(row.asset_name))
         folder = output / Path(row.asset_name).stem
+        if report:
+            report(0.0, "Unpacking firmware", target.name)
         dl.extract(target, folder)
     except (RuntimeError, OSError) as exc:
-        return failover_text("download-failure", str(exc))
-    keep = bool(state.keep_data) and keep_data_offered(state.package)
-    if state.keep_data and not keep:
-        print("Keep my data is not offered for this release; installing without it.", flush=True)
+        return _install_failure(state, failover_text("download-failure", str(exc)))
+
+    # The window only offers the tick when the catalogue allows it and the
+    # package actually carries a preserve-data scatter. Ask at install time,
+    # not only in Settings, exactly as the connect card does.
+    offered = keep_data_offered(state.package) and flash._preserve_scatter(folder) is not None
+    keep = False
+    if offered:
+        choice = ask_keep(state.keep_data) if ask_keep else state.keep_data
+        if choice is None:
+            return "Install cancelled."
+        keep = bool(choice)
+    elif state.keep_data:
+        state.keep_data = False
+        print("Keep my data is not available for this package; installing normally.", flush=True)
+
     system = {"linux": "linux", "darwin": "darwin", "win32": "windows"}.get(sys.platform, sys.platform)
     arch = components.platform_key().split("-", 1)[-1]
     engine, reason = flash.install_engine(system, arch, _headless())
@@ -174,7 +242,7 @@ def _run_install(state: BrowseState, output: Path) -> str:
         print(reason, flush=True)
     else:
         try:
-            tool = components.ensure("spflash", progress=_progress_printer("SP Flash Tool"))
+            tool = components.ensure("spflash", progress=download_report if report else _progress_printer("SP Flash Tool"))
         except RuntimeError as exc:
             print(failover_text("missing-component", str(exc)), flush=True)
             print(reason or "Using MTKclient instead: mtk wl <folder>.", flush=True)
@@ -184,21 +252,85 @@ def _run_install(state: BrowseState, output: Path) -> str:
             da = tool.parent / "MTK_AllInOne_DA.bin"
             if scatter and da.is_file():
                 args = flash.sp_flash_tool_console_args(str(scatter), str(da))
-                code = flash._run([str(tool), *args])
-                return "Flash complete! Disconnect USB and reboot." if code == 0 else f"SP Flash Tool exited {code}."
+                code = flash._run(
+                    [str(tool), *args],
+                    on_line=lambda line: _install_line(state, line, report),
+                )
+                if code == 0:
+                    if report:
+                        report(100.0, "Install complete", "")
+                    return _install_success(state)
+                return _install_failure(state, f"SP Flash Tool exited {code}.")
     if "rockbox" in state.software.casefold():
         try:
-            components.ensure("adb", progress=_progress_printer("adb"))
+            components.ensure("adb", progress=download_report if report else _progress_printer("adb"))
         except RuntimeError as exc:
             print(failover_text("missing-component", str(exc)), flush=True)
-    code = flash.flash_directory(folder, keep_data=keep)
+    code = flash.flash_directory(
+        folder,
+        keep_data=keep,
+        on_line=lambda line: _install_line(state, line, report),
+    )
     if code == 0:
-        message = "Flash complete! Disconnect USB and reboot."
-        links = package_links(state.package)
-        if links:
-            message += "  Next: " + "  ".join(links)
-        return message
-    return f"MTKclient exited {code}."
+        if report:
+            report(100.0, "Install complete", "")
+        return _install_success(state)
+    if report:
+        report(state.install_percent, "Install failed", f"MTKclient exited {code}.")
+    return _install_failure(state, f"MTKclient exited {code}.")
+
+
+def _draw_progress(screen, state: BrowseState, percent: float, label: str, detail: str) -> None:
+    """The window's install card, as text: stage, bar, byte detail, log tail."""
+    import curses
+
+    height, width = screen.getmaxyx()
+    screen.erase()
+    row = activate(state.releases, state.index)
+    title = row.label if row is not None else state.software or "Firmware"
+    screen.addnstr(0, 0, f"Updater CE {_version()}    Installing", width - 1, curses.A_BOLD)
+    screen.addnstr(1, 0, title[: width - 1], width - 1)
+    bar_width = max(8, width - 12)
+    filled = int(bar_width * max(0.0, min(100.0, percent)) / 100.0)
+    screen.addnstr(3, 0, "[" + "#" * filled + "-" * (bar_width - filled) + f"] {percent:3.0f}%", width - 1)
+    screen.addnstr(4, 0, label[: width - 1], width - 1, curses.A_BOLD)
+    screen.addnstr(5, 0, (detail or "")[: width - 1], width - 1, curses.A_DIM)
+    for offset, line in enumerate(state.install_log[-6:]):
+        screen.addnstr(7 + offset, 0, line[: width - 1], width - 1, curses.A_DIM)
+    screen.addnstr(height - 2, 0, "Keep the player connected. Ctrl+C stops the session.", width - 1, curses.A_DIM)
+    screen.refresh()
+
+
+def _ask_keep_data(screen, state: BrowseState, current: bool) -> bool | None:
+    """The connect card's Keep my data choice, asked before the write."""
+    import curses
+
+    height, width = screen.getmaxyx()
+    screen.erase()
+    screen.addnstr(0, 0, f"Updater CE {_version()}    Keep my data?", width - 1, curses.A_BOLD)
+    screen.addnstr(1, 0, (state.software or "Firmware")[: width - 1], width - 1)
+    lines = [
+        "Keep photos, downloads and installed apps in internal storage?",
+        "",
+        f"1  Yes, keep my data{'   (current setting)' if current else ''}",
+        "2  No, erase internal storage for a clean install",
+        "q  Cancel without writing anything",
+        "",
+        "The microSD card is never touched. Keeping data needs the package's",
+        "preserve-data scatter; this package has it, so nothing is guessed.",
+    ]
+    for offset, line in enumerate(lines[: height - 3]):
+        screen.addnstr(2 + offset, 0, line[: width - 1], width - 1)
+    screen.addnstr(height - 1, 0, "1/2 choose   q cancels", width - 1, curses.A_DIM)
+    screen.refresh()
+    while True:
+        key = screen.getch()
+        if key in (ord("1"), ord("y"), ord("Y")):
+            return True
+        if key in (ord("2"), ord("n"), ord("N"), ord("\n"), curses.KEY_ENTER):
+            return False
+        if key in (ord("q"), 27):
+            return None
 
 
 def _run_themes(state: BrowseState) -> str:
@@ -241,6 +373,15 @@ def _run_file(path_text: str) -> str:
 
 
 def _plain(state: BrowseState, items: list, refresh: bool, output: Path) -> int:
+    def ask_keep(current: bool) -> bool | None:
+        try:
+            answer = input("Keep my data during install? [y/N/q] ").strip().lower()
+        except EOFError:
+            return None
+        if answer in {"q", "cancel"}:
+            return None
+        return answer in {"y", "yes", "1"}
+
     print(failover_text("piped") if not sys.stdin.isatty() or not sys.stdout.isatty() else "", end="")
     if (os.environ.get("TERM") or "").lower() == "dumb":
         print(failover_text("term-dumb"))
@@ -316,7 +457,7 @@ def _plain(state: BrowseState, items: list, refresh: bool, output: Path) -> int:
                 print("That number is not a release.")
             continue
         if lowered in {"i", "install"}:
-            state.status = _run_install(state, output)
+            state.status = _run_install(state, output, ask_keep=ask_keep)
             print(state.status)
             continue
         if lowered in {"f", "file"}:
@@ -448,6 +589,13 @@ def _curses_run(state: BrowseState, items: list, output: Path) -> int:
             curses.mousemask(curses.ALL_MOUSE_EVENTS | curses.REPORT_MOUSE_POSITION)
         except curses.error:
             pass
+
+        def report(percent, label, detail):
+            _draw_progress(screen, state, percent, label, detail)
+
+        def ask_keep(current):
+            return _ask_keep_data(screen, state, current)
+
         while True:
             if state.page != "software":
                 _curses_page(screen, state, items)
@@ -478,9 +626,15 @@ def _curses_run(state: BrowseState, items: list, output: Path) -> int:
                     continue
                 height, _width = screen.getmaxyx()
                 if y == height - 3:
-                    state.status = _run_install(state, output) if x < 16 else (
-                        _run_themes(state) if state.software.casefold() == "rockbox" and x > 40 else _ask_file(screen)
-                    )
+                    if x < 16:
+                        state.status = _run_install(state, output, report=report, ask_keep=ask_keep)
+                        if state.result_lines:
+                            state.page = "done"
+                            state.page_scroll = 0
+                    elif state.software.casefold() == "rockbox" and x > 40:
+                        state.status = _run_themes(state)
+                    else:
+                        state.status = _ask_file(screen)
                 elif y == height - 2:
                     if x < 12:
                         state.page = "settings"
@@ -500,7 +654,10 @@ def _curses_run(state: BrowseState, items: list, output: Path) -> int:
             elif key in (curses.KEY_DOWN, ord("j")):
                 state.index = move_index(state.index, "down", len(state.releases))
             elif key in (ord("i"),):
-                state.status = _run_install(state, output)
+                state.status = _run_install(state, output, report=report, ask_keep=ask_keep)
+                if state.result_lines:
+                    state.page = "done"
+                    state.page_scroll = 0
             elif key in (ord("f"),):
                 state.status = _ask_file(screen)
             elif key in (ord("h"),):
@@ -574,7 +731,9 @@ def _ask_file(screen) -> str:
 def _curses_page(screen, state: BrowseState, items: list) -> None:
     import curses
     screen.erase()
-    if state.page == "settings":
+    if state.page == "done":
+        lines = state.result_lines or ["Nothing has been installed in this session."]
+    elif state.page == "settings":
         lines = settings_lines(state)
     elif state.page == "support":
         lines = support_lines()

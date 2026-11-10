@@ -133,3 +133,31 @@ failure. Set `INNIOASIS_NO_AUTO_INSTALL=1` to opt out of the automatic install.
 
 After a successful install the post-install pages named by the catalogue are printed with the
 completion line. The Support Us screen lists the same donation methods as the window.
+
+## Publishing the lite archive
+
+The terminal payload is built from the same Python tree as the window:
+
+```sh
+python3 scripts/build_lite_payload.py --out dist/linux-lite
+```
+
+That writes `UpdaterCE-Lite.tar.gz` and `UpdaterCE-Lite.tar.gz.sha256`. The
+archive is architecture independent (Python 3.8+ source, no Qt or wheels), so
+one file covers x86-64, i686, aarch64, armv7l and armv6l.
+
+The archive is attached to the **existing 2.5.3 GitHub release** in
+`y1-community/updater-ce-neo`, beside the Windows and macOS packages. Nothing
+about those packages is replaced, and the release is not retagged or promoted,
+so existing 2.5.3 window users are not told an update exists. The payload's
+`VERSION` file still records 2.5.4, which is what the terminal session reports.
+
+`run_linux_lite.sh` reads `/releases/tags/2.5.3` first, then falls back to any
+release that carries the archive, then to the copy on innioasis.app. Both
+`run_linux.sh` and `run_linux_lite.sh` ask whether to install the full app
+(recommended) or run once in the terminal; choosing the full app hands over to
+`run_linux.sh`, which installs the AppImage/tarball or lays the app out from the
+release source when no Linux package matches the architecture.
+
+Do not put the archive in the repository. `dist/` is build output; the release
+asset is the distribution point.
