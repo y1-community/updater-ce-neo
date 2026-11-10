@@ -15,6 +15,7 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 
+from .. import versioning
 from .catalog import Package, USER_AGENT, cache_dir
 
 _TYPE_B = ("_type_b", "-type-b", "type-b", " type b", "type_b", "typeb", "_b.zip", "-b.zip")
@@ -94,14 +95,15 @@ def hardware_types(model: str) -> list[str]:
     return ["A", "B"] if (model or "").upper() == "Y1" else []
 
 
-def version_tuple(text: str) -> tuple[int, ...] | None:
-    match = re.search(r"(?:^|[^\d])v?(\d+)\.(\d+)(?:\.(\d+))?", text or "", re.IGNORECASE)
-    if not match:
-        return None
-    parts = [int(match.group(1)), int(match.group(2))]
-    if match.group(3):
-        parts.append(int(match.group(3)))
-    return tuple(parts)
+def version_tuple(text: str, release_name: str = "") -> tuple[int, ...] | None:
+    """The version the window reads from a tag and its release title.
+
+    Y2Linux titles (``Y2Linux 1.0 Beta 9.3.20``) carry the product version
+    while their tags are build identifiers (``baseline-229``). The shared
+    parser is the one the window and the website use, so the TUI cannot pick
+    the leading ``1.0`` from the title instead.
+    """
+    return versioning.release_version_tuple(text, release_name=release_name or None)
 
 
 def _below_minimum(version: tuple[int, ...] | None, minimum: tuple[int, ...] = ROCKBOX_MIN) -> bool:
@@ -159,16 +161,15 @@ def _usable_assets(assets: list[dict]) -> list[dict]:
 
 
 def _label(tag: str, name: str, resolution: str, asset_name: str, prerelease: bool) -> str:
-    version = version_tuple(tag) or version_tuple(name)
-    if version:
-        text = ".".join(str(part) for part in version)
-    else:
-        text = (name or tag or asset_name).strip()
-    if resolution == "240p" and "240p" not in text.lower():
-        text += " (240p)"
-    if prerelease and "[preview]" not in text.lower():
-        text += "  [preview]"
-    return text
+    """Use the window's release-label rules for the text session too."""
+    rel = {
+        "tag_name": tag,
+        "name": name,
+        "prerelease": prerelease,
+        "asset_name": asset_name,
+        "selected_resolution": resolution,
+    }
+    return versioning.parse_clean_release_tag_label(rel) or (name or tag or asset_name).strip()
 
 
 def rows_from_releases(
@@ -198,7 +199,8 @@ def rows_from_releases(
             continue
         if release.get("prerelease") and not show_nightly and not y2_rockbox:
             continue
-        version = version_tuple(tag) or version_tuple(str(release.get("name") or ""))
+        release_name = str(release.get("name") or "")
+        version = version_tuple(tag, release_name)
         if gate and not show_old and _below_minimum(version):
             continue
         variants = []
@@ -226,9 +228,9 @@ def rows_from_releases(
         for asset, resolution, kind in chosen:
             rows.append(
                 ReleaseRow(
-                    label=_label(tag, str(release.get("name") or ""), resolution, str(asset.get("name") or ""), bool(release.get("prerelease"))),
+                    label=_label(tag, release_name, resolution, str(asset.get("name") or ""), bool(release.get("prerelease"))),
                     tag=tag,
-                    name=str(release.get("name") or tag),
+                    name=release_name or tag,
                     body=str(release.get("body") or ""),
                     asset_name=str(asset.get("name") or ""),
                     asset_url=str(asset.get("browser_download_url") or ""),
