@@ -22,6 +22,7 @@ from pathlib import Path
 
 from . import catalog
 from .catalog import Package
+from .controls import segment
 from .releases import (
     ReleaseRow,
     brand_names,
@@ -273,13 +274,21 @@ def failover_text(kind: str, detail: str = "") -> str:
 
 
 def screen_lines(state: BrowseState, version: str = APP_VERSION) -> list[str]:
+    """Select Software as buttons. The focused control is wrapped in « »."""
+    focused = state.focus
     type_label = state.hardware_type or "—"
+    filters = "  ".join(
+        (
+            segment(focused == "brand", f"Brand: {state.brand}"),
+            segment(focused == "model", f"Model: {state.model}"),
+            segment(focused == "type", f"Type: {type_label}"),
+            segment(focused == "software", f"Software: {state.software or '—'}"),
+            segment(focused == "refresh", "Refresh"),
+        )
+    )
     lines = [
         f"Updater CE {version}    Select Software",
-        (
-            f"[ Brand: {state.brand} ]  [ Model: {state.model} ]  "
-            f"[ Type: {type_label} ]  [ Software: {state.software or '—'} ]  [ Refresh ]"
-        ),
+        filters,
         "Available System Software",
     ]
     if not state.releases:
@@ -288,11 +297,27 @@ def screen_lines(state: BrowseState, version: str = APP_VERSION) -> list[str]:
         for offset, row in enumerate(state.releases):
             mark = ">" if offset == state.index else " "
             lines.append(f"{mark} {row.label}")
-    actions = "[ Install ]  [ Install from a file ]"
+    lines.append(segment(focused == "keep", "Keep my data: " + ("on" if state.keep_data else "off")))
+    actions = [
+        segment(focused == "install", "Install"),
+        segment(focused == "file", "Install from a file"),
+    ]
     if state.software.casefold() == "rockbox":
-        actions += "  [ Themes ]"
-    lines.append(actions)
-    lines.append("[ Settings ] [ Support Us ] [ Language ] [ Notices ] [ Updates ] [ Credits ] [ Menu ]")
+        actions.append(segment(focused == "themes", "Themes"))
+    lines.append("  ".join(actions))
+    lines.append(
+        " ".join(
+            (
+                segment(focused == "settings", "Settings"),
+                segment(focused == "support", "Support Us"),
+                segment(focused == "language", "Language"),
+                segment(focused == "notices", "Notices"),
+                segment(focused == "updates", "Updates"),
+                segment(focused == "credits", "Credits"),
+                segment(focused == "menu", "Menu"),
+            )
+        )
+    )
     if state.status:
         lines.append(state.status)
     return lines
@@ -323,16 +348,42 @@ def keep_data_offered(package) -> bool:
     return not bool(getattr(package, "do_not_keep_data", False))
 
 
-#: The same destinations the window's donation dialog offers. Kept here as
-#: plain URLs so the text session needs no Qt, network or browser module.
-DONATION_METHODS = (
-    ("Ko-fi", "https://innioasis.app/donate.html?method=kofi"),
-    ("Buy Me a Coffee", "https://innioasis.app/donate.html?method=bmc"),
-    ("Boosty", "https://innioasis.app/donate.html?method=boosty"),
-    ("PayPal", "https://paypal.me/ryanspecter282"),
-    ("Revolut", "https://revolut.me/rspecter"),
-    ("Patreon", "https://www.patreon.com/ryanspecter"),
+#: The same destinations ``config.DONATION_LINKS`` gives the window. Copied
+#: here so the lite payload does not import the GUI config module. A test
+#: checks the URLs still match.
+DONATION_LINKS = {
+    "kofi": "https://innioasis.app/donate.html?method=kofi",
+    "bmc": "https://innioasis.app/donate.html?method=bmc",
+    "boosty": "https://innioasis.app/donate.html?method=boosty",
+    "paypal": "https://paypal.me/ryanspecter282",
+    "revolut": "https://revolut.me/rspecter",
+    "patreon": "https://www.patreon.com/ryanspecter",
+    "honeygain": "https://join.honeygain.com/ITSRY2B5D7",
+}
+DONATION_CRYPTO = (
+    ("Bitcoin (BTC)", "bc1qv4gjkqczqy4wdl297k7ak5swtkusgaz5au6c6g"),
+    ("Ethereum / Arbitrum / Optimism", "0x5E902083ee1B3A05dd39d824012B39cB10FB80D3"),
+    ("SHIBA INU (ERC-20)", "0x5E902083ee1B3A05dd39d824012B39cB10FB80D3"),
 )
+DONATION_METHODS = (
+    ("Ko-fi", DONATION_LINKS["kofi"]),
+    ("Buy Me a Coffee", DONATION_LINKS["bmc"]),
+    ("PayPal", DONATION_LINKS["paypal"]),
+    ("Revolut", DONATION_LINKS["revolut"]),
+    ("Patreon", DONATION_LINKS["patreon"]),
+    ("Honeygain", DONATION_LINKS["honeygain"]),
+)
+
+
+def donation_methods(language: str = "") -> tuple[tuple[str, str], ...]:
+    """The method row the window shows for this language.
+
+    A Russian interface gets Boosty alone, which is the only page that takes
+    a Russian card. Everywhere else gets the worldwide row.
+    """
+    if (language or "").strip().lower().split("-")[0] == "ru":
+        return (("Boosty", DONATION_LINKS["boosty"]),)
+    return DONATION_METHODS
 
 
 def settings_lines(state: BrowseState) -> list[str]:
@@ -353,14 +404,18 @@ def settings_lines(state: BrowseState) -> list[str]:
     ]
 
 
-def support_lines() -> list[str]:
+def support_lines(language: str = "") -> list[str]:
     lines = [
         "Support Us",
         "Donations keep the catalogue and the builds available.",
         "",
         "Donate with:",
     ]
-    lines += [f"  {name:<16} {url}" for name, url in DONATION_METHODS]
+    lines += [f"  {name:<22} {url}" for name, url in donation_methods(language)]
+    if (language or "").strip().lower().split("-")[0] != "ru":
+        lines.append("")
+        lines.append("Crypto:")
+        lines += [f"  {name:<22} {address}" for name, address in DONATION_CRYPTO]
     lines += [
         "",
         "Support page   https://innioasis.app/support_devs.html",

@@ -15,6 +15,7 @@ from __future__ import annotations
 import os
 import sys
 import webbrowser
+import zipfile
 from pathlib import Path
 
 from . import catalog, components, download as dl, flash
@@ -53,6 +54,15 @@ from .session import (
 from .simulate import install_progress, rockbox_themes
 
 TITLE_VERSION = "2.5.4"
+
+# The same payload the window installs. Keeping these URLs here means the
+# text session does not import theme_pack.py, which imports PySide6 at module
+# level and would make the lite install depend on Qt again.
+THEME_PACK_URL = "https://github.com/rockbox-y1/themes/releases/download/for_the_gays_and_the_theys/themepack.zip"
+FONTS_PACK_URL = (
+    "https://raw.githubusercontent.com/y1-community/updater-ce-neo/main/"
+    "assets/360p/fonts-pack-merge-into-themes-pack.zip"
+)
 
 
 def _version() -> str:
@@ -167,7 +177,7 @@ def _install_line(state: BrowseState, line: str, report) -> None:
 
 def _install_success(state: BrowseState) -> str:
     links = package_links(state.package)
-    message = "Flash complete! Disconnect USB and reboot."
+    message = _tr("action_flash_complete")
     state.result_lines = [message]
     if links:
         state.result_lines += ["", "Open next:", *links]
@@ -182,7 +192,7 @@ def _install_success(state: BrowseState) -> str:
 
 def _install_failure(state: BrowseState, message: str) -> str:
     tail = [line for line in state.install_log[-8:] if line]
-    state.result_lines = [message]
+    state.result_lines = [line for line in message.splitlines() if line] or [message]
     if tail:
         state.result_lines += ["", "Last output:", *tail]
     state.result_lines += ["", "Press Enter or q to go back."]
@@ -231,15 +241,21 @@ def _run_install(state: BrowseState, output: Path, report=None, ask_keep=None) -
     # package actually carries a preserve-data scatter. Ask at install time,
     # not only in Settings, exactly as the connect card does.
     offered = keep_data_offered(state.package) and flash._preserve_scatter(folder) is not None
-    keep = False
-    if offered:
-        choice = ask_keep(state.keep_data) if ask_keep else state.keep_data
-        if choice is None:
-            return "Install cancelled."
-        keep = bool(choice)
-    elif state.keep_data:
+    if ask_keep:
+        choice = ask_keep(offered, state.keep_data)
+    else:
+        choice = _ask_ready_text(state, offered, state.keep_data)
+    if choice is None:
+        return "Install cancelled."
+    keep = bool(choice) if offered else False
+    if not offered and state.keep_data:
         state.keep_data = False
-        print("Keep my data is not available for this package; installing normally.", flush=True)
+        print(_tr("sel_keep_data_incompatible"), flush=True)
+    model = (state.model or "player").strip() or "player"
+    connect = _tr("flash_connect_device_prompt", model=model)
+    state.install_label = connect
+    if report:
+        report(0.0, connect, "")
 
     system = {"linux": "linux", "darwin": "darwin", "win32": "windows"}.get(sys.platform, sys.platform)
     arch = components.platform_key().split("-", 1)[-1]
@@ -264,9 +280,12 @@ def _run_install(state: BrowseState, output: Path, report=None, ask_keep=None) -
                 )
                 if code == 0:
                     if report:
-                        report(100.0, "Install complete", "")
+                        report(100.0, _tr("action_flash_complete"), "")
                     return _install_success(state)
-                return _install_failure(state, f"SP Flash Tool exited {code}.")
+                return _install_failure(
+                    state,
+                    _tr("flash_failed") + "\n\n" + _tr("err_usb_disconnected_recovery", model=model),
+                )
     if "rockbox" in state.software.casefold():
         try:
             components.ensure("adb", progress=download_report if report else _progress_printer("adb"))
@@ -279,11 +298,14 @@ def _run_install(state: BrowseState, output: Path, report=None, ask_keep=None) -
     )
     if code == 0:
         if report:
-            report(100.0, "Install complete", "")
+            report(100.0, _tr("action_flash_complete"), "")
         return _install_success(state)
     if report:
-        report(state.install_percent, "Install failed", f"MTKclient exited {code}.")
-    return _install_failure(state, f"MTKclient exited {code}.")
+        report(state.install_percent, _tr("flash_failed"), f"MTKclient exited {code}.")
+    return _install_failure(
+        state,
+        _tr("flash_failed") + "\n\n" + _tr("err_usb_disconnected_recovery", model=model),
+    )
 
 
 def _draw_progress(screen, state: BrowseState, percent: float, label: str, detail: str) -> None:
@@ -307,39 +329,160 @@ def _draw_progress(screen, state: BrowseState, percent: float, label: str, detai
     screen.refresh()
 
 
-def _ask_keep_data(screen, state: BrowseState, current: bool) -> bool | None:
-    """The connect card's Keep my data choice, asked before the write."""
+def _tr(key: str, **fields) -> str:
+    """The same sentence the window shows for this key, in the saved language."""
+    try:
+        from ..i18n import tr, translator
+        from .session import shared_language
+
+        code = shared_language()
+        if code:
+            translator().set_language(code)
+        text = tr(key)
+    except Exception:
+        text = key
+    if not fields:
+        return text
+    try:
+        return text.format(**fields)
+    except (KeyError, IndexError, ValueError):
+        return text
+
+
+def _install_card_lines(state: BrowseState, offered: bool, keep: bool) -> list[str]:
+    """The window's power-off card: disconnect, the paperclip tip, Keep my settings."""
+    model = (state.model or "player").strip() or "player"
+    lines = [
+        _tr("flash_connect_prompt", model=model),
+        "",
+        _tr("flash_connect_paperclip_prompt"),
+    ]
+    if offered:
+        mark = "x" if keep else " "
+        lines += [
+            "",
+            f"[{mark}]  {_tr('flash_keep_data_option')}",
+            _tr("flash_keep_data_tooltip"),
+        ]
+    lines += ["", _tr("btn_next"), "q  Cancel"]
+    return lines
+
+
+def _card_action_at(lines: list[str], index: int) -> str | None:
+    """The card control on one text row, or ``None`` for a plain row."""
+    if index < 0 or index >= len(lines):
+        return None
+    text = lines[index].strip()
+    if not text:
+        return None
+    if text == _tr("btn_next"):
+        return "next"
+    if text.casefold().startswith("q") and "cancel" in text.casefold():
+        return "cancel"
+    if text.startswith("[") and _tr("flash_keep_data_option") in text:
+        return "keep"
+    return None
+
+
+def _ask_ready_text(state: BrowseState, offered: bool, current: bool) -> bool | None:
+    """Numbered form of the power-off card. Enter continues, k toggles, q cancels."""
+    keep = bool(current) if offered else False
+    while True:
+        print("\n".join(_install_card_lines(state, offered, keep)), flush=True)
+        try:
+            answer = input("> ").strip().lower()
+        except EOFError:
+            return None
+        if answer in {"q", "quit", "cancel"}:
+            return None
+        if offered and answer in {"k", "1", "y", "yes"}:
+            keep = not keep
+            continue
+        if answer in {"", "next", "enter"}:
+            return keep
+    return keep
+
+
+def _ask_keep_data(screen, state: BrowseState, current: bool, offered: bool = True) -> bool | None:
+    """The window's power-off card. Enter or a click continues; k or a click toggles Keep my settings."""
     import curses
 
-    height, width = screen.getmaxyx()
-    screen.erase()
-    screen.addnstr(0, 0, f"Updater CE {_version()}    Keep my data?", width - 1, curses.A_BOLD)
-    screen.addnstr(1, 0, (state.software or "Firmware")[: width - 1], width - 1)
-    lines = [
-        "Keep photos, downloads and installed apps in internal storage?",
-        "",
-        f"1  Yes, keep my data{'   (current setting)' if current else ''}",
-        "2  No, erase internal storage for a clean install",
-        "q  Cancel without writing anything",
-        "",
-        "The microSD card is never touched. Keeping data needs the package's",
-        "preserve-data scatter; this package has it, so nothing is guessed.",
-    ]
-    for offset, line in enumerate(lines[: height - 3]):
-        screen.addnstr(2 + offset, 0, line[: width - 1], width - 1)
-    screen.addnstr(height - 1, 0, "1/2 choose   q cancels", width - 1, curses.A_DIM)
-    screen.refresh()
+    keep = bool(current) if offered else False
+    hover: str | None = None
+    click = getattr(curses, "BUTTON1_CLICKED", 0) | getattr(curses, "BUTTON1_PRESSED", 0)
     while True:
+        height, width = screen.getmaxyx()
+        screen.erase()
+        title = f"Updater CE {_version()}    {_tr('flash_guide_title')}"
+        screen.addnstr(0, 0, title[: width - 1], width - 1, curses.A_BOLD)
+        screen.addnstr(1, 0, (state.software or "Firmware")[: width - 1], width - 1)
+        lines = _install_card_lines(state, offered, keep)
+        visible = min(len(lines), max(0, height - 4))
+        for offset, line in enumerate(lines[:visible]):
+            action = _card_action_at(lines, offset)
+            attr = curses.A_REVERSE | curses.A_BOLD if action == hover else curses.A_NORMAL
+            screen.addnstr(3 + offset, 0, line[: width - 1], width - 1, attr)
+        hint = "Click or Enter continues   k toggles Keep my settings   q cancels" if offered else "Click or Enter continues   q cancels"
+        screen.addnstr(height - 1, 0, hint[: width - 1], width - 1, curses.A_DIM)
+        screen.refresh()
         key = screen.getch()
-        if key in (ord("1"), ord("y"), ord("Y")):
-            return True
-        if key in (ord("2"), ord("n"), ord("N"), ord("\n"), curses.KEY_ENTER):
-            return False
+        if key == curses.KEY_MOUSE:
+            try:
+                _id, _x, y, _z, bstate = curses.getmouse()
+            except curses.error:
+                continue
+            action = _card_action_at(lines, y - 3) if 3 <= y < 3 + visible else None
+            if bstate & click:
+                if action == "next":
+                    return keep
+                if action == "cancel":
+                    return None
+                if action == "keep":
+                    keep = not keep
+            hover = action
+            continue
         if key in (ord("q"), 27):
             return None
+        if offered and key in (ord("k"), ord("1"), ord("y"), ord("Y")):
+            keep = not keep
+            hover = None
+            continue
+        if key in (ord("\n"), curses.KEY_ENTER, 10, 13):
+            return keep
 
 
-def _run_themes(state: BrowseState) -> str:
+def _merge_theme_zip(archive: Path, target: Path, progress=None) -> int:
+    """Merge a theme/font pack into `.rockbox` using only the stdlib.
+
+    Archives in the wild wrap entries in `.rockbox/` or `themes-themepack/`.
+    Those wrappers are stripped so the files land where Rockbox reads them.
+    """
+    written = 0
+    with zipfile.ZipFile(archive) as bundle:
+        members = [info for info in bundle.infolist() if not info.is_dir()]
+        for index, info in enumerate(members):
+            parts = [part for part in info.filename.replace("\\", "/").split("/") if part not in ("", ".")]
+            while parts and parts[0] in (".rockbox", "themes-themepack"):
+                parts = parts[1:]
+            if not parts or any(part == ".." for part in parts):
+                continue
+            destination = target.joinpath(*parts)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            with bundle.open(info) as source, destination.open("wb") as sink:
+                while True:
+                    block = source.read(1 << 20)
+                    if not block:
+                        break
+                    sink.write(block)
+            written += 1
+            if progress and index % 25 == 0:
+                progress(index, len(members))
+    if progress:
+        progress(len(members), len(members))
+    return written
+
+
+def _run_themes(state: BrowseState, screen=None, report=None, ask_path=None) -> str:
     if state.software.casefold() != "rockbox":
         return "Themes are part of a Rockbox install."
     if os.environ.get("INNIOASIS_SIMULATE") == "1":
@@ -347,17 +490,56 @@ def _run_themes(state: BrowseState) -> str:
         for event in events:
             print(event["message"], flush=True)
         return events[-1]["message"]
+
+    if ask_path is None:
+        if screen is not None:
+            ask_path = lambda: _ask_line(
+                screen, "Player folder (USB storage mode)", flash.mount_point(Path("/"))
+            )
+        else:
+            ask_path = lambda: input("Player folder (USB storage mode): ").strip()
+    folder_text = ask_path()
+    if not folder_text:
+        return "Themes were cancelled."
+    folder = Path(folder_text).expanduser()
+    if not folder.is_dir():
+        return f"No such player folder: {folder}"
+    target = folder if folder.name == ".rockbox" or (folder / ".rockbox").is_dir() else folder / ".rockbox"
     try:
-        components.ensure("adb", progress=_progress_printer("adb"))
-    except RuntimeError as exc:
-        return failover_text("missing-component", str(exc))
-    code = flash.adb(["devices"])
-    if code != 0:
-        return "adb could not list devices."
-    return "adb is ready. Connect the player in USB debugging to push the theme pack."
+        target.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        return f"Could not open {target}: {exc}"
+
+    cache = Path.home() / ".cache" / "innioasis-updater"
+    sources = (
+        (THEME_PACK_URL, cache / "rockbox_360p_themepack.zip", "theme pack"),
+        (FONTS_PACK_URL, cache / "rockbox_360p_fonts.zip", "fonts"),
+    )
+    installed = 0
+    errors: list[str] = []
+    for url, archive, label in sources:
+        try:
+            def download_progress(done, total, _label=label):
+                if report:
+                    percent = (done * 100.0 / total) if total else 0.0
+                    report(percent, f"Downloading Rockbox {_label}", dl.human_bytes(done))
+            dl.download(url, archive, progress=download_progress if report else None)
+
+            def merge_progress(done, total):
+                if report:
+                    report(100.0 * done / max(1, total), "Installing Rockbox themes & fonts", target.name)
+            installed += _merge_theme_zip(archive, target, merge_progress if report else None)
+        except (RuntimeError, OSError, zipfile.BadZipFile) as exc:
+            errors.append(f"{label}: {exc}")
+    if not installed:
+        return "Theme install failed. " + "; ".join(errors)
+    message = f"Installed {installed} theme/font files into {target}."
+    if errors:
+        message += " Some sources failed: " + "; ".join(errors)
+    return message
 
 
-def _run_file(path_text: str) -> str:
+def _run_file(path_text: str, ask_keep=None) -> str:
     if os.environ.get("INNIOASIS_SIMULATE") == "1":
         events = install_progress(sleep=0.02)
         for event in events:
@@ -374,19 +556,28 @@ def _run_file(path_text: str) -> str:
             return failover_text("download-failure", str(exc))
     else:
         folder = path
-    code = flash.flash_directory(folder)
-    return "Flash complete! Disconnect USB and reboot." if code == 0 else f"MTKclient exited {code}."
+
+    # A local package gets the same preserve-data question as a catalogue
+    # package. Asking only when the package actually carries the scatter is
+    # what prevents a clean-write guess from erasing a player's storage.
+    offered = flash._preserve_scatter(folder) is not None
+    file_state = BrowseState(model="player", software="Firmware")
+    if ask_keep:
+        choice = ask_keep(offered, False)
+    else:
+        choice = _ask_ready_text(file_state, offered, False)
+    if choice is None:
+        return "Install cancelled."
+    keep = bool(choice) if offered else False
+    code = flash.flash_directory(folder, keep_data=keep)
+    if code == 0:
+        return _tr("action_flash_complete")
+    return _tr("flash_failed") + "\n\n" + _tr("err_usb_disconnected_recovery", model="player")
 
 
 def _plain(state: BrowseState, items: list, refresh: bool, output: Path) -> int:
-    def ask_keep(current: bool) -> bool | None:
-        try:
-            answer = input("Keep my data during install? [y/N/q] ").strip().lower()
-        except EOFError:
-            return None
-        if answer in {"q", "cancel"}:
-            return None
-        return answer in {"y", "yes", "1"}
+    def ask_keep(offered: bool, current: bool) -> bool | None:
+        return _ask_ready_text(state, offered, current)
 
     print(failover_text("piped") if not sys.stdin.isatty() or not sys.stdout.isatty() else "", end="")
     if (os.environ.get("TERM") or "").lower() == "dumb":
@@ -502,7 +693,7 @@ def _plain(state: BrowseState, items: list, refresh: bool, output: Path) -> int:
                 path_text = input("File or folder: ").strip()
             except EOFError:
                 return 0
-            state.status = _run_file(path_text)
+            state.status = _run_file(path_text, ask_keep=ask_keep)
             print(state.status)
             continue
         if lowered in {"h", "themes"}:
@@ -633,8 +824,8 @@ def _curses_run(state: BrowseState, items: list, output: Path) -> int:
         def report(percent, label, detail):
             _draw_progress(screen, state, percent, label, detail)
 
-        def ask_keep(current):
-            return _ask_keep_data(screen, state, current)
+        def ask_keep(offered, current):
+            return _ask_keep_data(screen, state, current, offered=offered)
 
         while True:
             if state.quit:
@@ -675,9 +866,9 @@ def _curses_run(state: BrowseState, items: list, output: Path) -> int:
                             state.page = "done"
                             state.page_scroll = 0
                     elif which == 2 and state.software.casefold() == "rockbox":
-                        state.status = _run_themes(state)
+                        state.status = _run_themes(state, screen=screen, report=report)
                     elif which == 1:
-                        state.status = _ask_file(screen)
+                        state.status = _ask_file(screen, state)
                 elif y == height - 2:
                     which = _segment_at(
                         _secondary_text(), x,
@@ -712,9 +903,9 @@ def _curses_run(state: BrowseState, items: list, output: Path) -> int:
                     state.page = "done"
                     state.page_scroll = 0
             elif key in (ord("f"),):
-                state.status = _ask_file(screen)
+                state.status = _ask_file(screen, state)
             elif key in (ord("h"),):
-                state.status = _run_themes(state)
+                state.status = _run_themes(state, screen=screen, report=report)
             elif key in (ord("r"),):
                 state.status = _load_rows(state, items, True)
             elif key in (ord("g"),):
@@ -877,23 +1068,33 @@ def _click_filter(state: BrowseState, items: list, x: int) -> None:
     state.status = _load_rows(state, items, which == 4)
 
 
-def _ask_file(screen) -> str:
+def _ask_line(screen, label: str, default: str = "") -> str:
+    """One line of input at the bottom of a curses page."""
     import curses
     curses.echo()
     curses.curs_set(1)
     height, width = screen.getmaxyx()
-    screen.addnstr(height - 1, 0, "File or folder: ".ljust(width - 1), width - 1)
+    prompt = f"{label} [{default}]: " if default else f"{label}: "
+    screen.addnstr(height - 1, 0, prompt.ljust(width - 1), width - 1)
     screen.refresh()
     try:
-        raw = screen.getstr(height - 1, 16, max(1, width - 18))
+        raw = screen.getstr(height - 1, len(prompt), max(1, width - len(prompt) - 1))
     except curses.error:
         raw = b""
     curses.noecho()
     curses.curs_set(0)
     text = raw.decode("utf-8", "replace").strip()
+    return text or default
+
+
+def _ask_file(screen, state: BrowseState | None = None) -> str:
+    text = _ask_line(screen, "File or folder")
     if not text:
         return "Install from a file was cancelled."
-    return _run_file(text)
+    ask_keep = None
+    if state is not None:
+        ask_keep = lambda offered, current: _ask_keep_data(screen, state, current, offered=offered)
+    return _run_file(text, ask_keep=ask_keep)
 
 
 def _curses_page(screen, state: BrowseState, items: list) -> None:

@@ -387,6 +387,217 @@ def discover_mtk_files(folder: Path) -> dict[str, Path | None]:
     return {"preloader": preloader, "da": da, "auth": auth}
 
 
+def _scatter_blocks(text: str) -> list[dict[str, str]]:
+    """Partition blocks in a MediaTek scatter, in file order."""
+    blocks: list[dict[str, str]] = []
+    current: dict[str, str] | None = None
+    for raw in text.splitlines():
+        stripped = raw.strip()
+        if stripped.startswith("- partition_index:") or stripped.startswith("partition_index:"):
+            if current:
+                blocks.append(current)
+            current = {}
+            continue
+        if current is None or ":" not in stripped:
+            continue
+        key, _, value = stripped.partition(":")
+        key = key.strip().lstrip("- ").lower()
+        current[key] = value.strip()
+    if current:
+        blocks.append(current)
+    return blocks
+
+
+def _downloaded_names(blocks: list[dict[str, str]]) -> list[str]:
+    names = []
+    for block in blocks:
+        if str(block.get("is_download") or "").lower() != "true":
+            continue
+        file_name = str(block.get("file_name") or "").strip()
+        if file_name.upper() in {"", "NONE"}:
+            continue
+        name = str(block.get("partition_name") or "").strip()
+        if name:
+            names.append(name)
+    return names
+
+
+def _partition_keeps_data(name: str, file_name: str = "") -> bool:
+    """The window's rule: a user/usr partition is what Keep my data leaves."""
+    for value in (name, file_name):
+        low = str(value or "").strip().lower()
+        if "user" in low or "usr" in low:
+            return True
+    return False
+
+
+def _find_preserve_scatter(scatter: Path, selected: set[str]) -> Path | None:
+    """The package scatter whose download set is a strict subset of ``selected``."""
+    if not selected or not scatter.is_file():
+        return None
+    best: tuple[Path, set[str]] | None = None
+    try:
+        siblings = [path for path in scatter.parent.iterdir() if path.is_file()]
+    except OSError:
+        return None
+    for candidate in siblings:
+        if candidate.resolve() == scatter.resolve():
+            continue
+        if candidate.suffix.lower() != ".txt" or "scatter" not in candidate.name.lower():
+            continue
+        stem = candidate.stem.lower()
+        if not any(tag in stem for tag in ("preserve", "keep_data", "keepdata", "nodata")):
+            continue
+        try:
+            names = set(_downloaded_names(_scatter_blocks(candidate.read_text(encoding="utf-8", errors="ignore"))))
+        except OSError:
+            continue
+        if not names or names == selected or not names.issubset(selected):
+            continue
+        if best is None or len(names) > len(best[1]):
+            best = (candidate, names)
+    return best[0] if best else None
+
+
+def rewrite_scatter_keeping_data(text: str) -> tuple[str, tuple[str, ...]]:
+    """Scatter text with user-data partitions set ``is_download: false``.
+
+    The original string is not the return value. An empty excluded tuple means
+    nothing needed masking, which is the window's "keep using the original" case.
+    """
+    excluded: list[str] = []
+    out: list[str] = []
+    mask = False
+    pending_name = ""
+    pending_file = ""
+    for line in text.splitlines(keepends=True):
+        stripped = line.strip()
+        if stripped.startswith("- partition_index:") or stripped.startswith("partition_index:"):
+            mask = False
+            pending_name = ""
+            pending_file = ""
+        else:
+            key, _, value = stripped.partition(":")
+            key = key.strip().lstrip("- ").lower()
+            value = value.strip()
+            if key == "partition_name" and not pending_name:
+                pending_name = value
+            elif key == "file_name" and not pending_file:
+                pending_file = value
+            if key in {"partition_name", "file_name"}:
+                mask = _partition_keeps_data(pending_name, pending_file)
+                if mask and pending_name and pending_name not in excluded:
+                    excluded.append(pending_name)
+        if mask and stripped.lower().startswith("is_download:"):
+            idx = line.lower().find("true")
+            if idx != -1:
+                ending = "\r\n" if line.endswith("\r\n") else ("\n" if line.endswith("\n") else "")
+                line = f"{line[:idx]}false{ending}"
+                if pending_name and pending_name not in excluded:
+                    excluded.append(pending_name)
+        out.append(line)
+    return "".join(out), tuple(excluded)
+
+
+class KeepPlan:
+    """How this install treats internal storage.
+
+    ``write-all`` writes every downloadable partition. ``preserve-scatter``
+    uses the package's own keep-data scatter. ``exclude-userdata`` is the
+    window's fallback: a copy of the scatter with user partitions not downloaded.
+    """
+
+    def __init__(self, enabled: bool, mode: str, scatter: str, downloaded: tuple[str, ...], excluded: tuple[str, ...], messages: tuple[str, ...]):
+        self.enabled = enabled
+        self.mode = mode
+        self.scatter = scatter
+        self.downloaded = downloaded
+        self.excluded = excluded
+        self.messages = messages
+
+    @property
+    def message(self) -> str:
+        return "\n".join(self.messages)
+
+
+def describe_keep_data(folder: Path, enabled: bool) -> KeepPlan:
+    """The window's keep-data decision for ``folder``, without writing anything."""
+    from .download import find_scatter
+    from .progress import KEEP_LEAVING, KEEP_USING
+
+    scatter = find_scatter(Path(folder))
+    if scatter is None or not scatter.is_file():
+        return KeepPlan(bool(enabled), "write-all", "", (), (), ())
+    try:
+        blocks = _scatter_blocks(scatter.read_text(encoding="utf-8", errors="ignore"))
+    except OSError:
+        return KeepPlan(bool(enabled), "write-all", str(scatter), (), (), ())
+    downloaded = tuple(_downloaded_names(blocks))
+    if not enabled:
+        return KeepPlan(False, "write-all", str(scatter), downloaded, (), ())
+    selected = set(downloaded)
+    preserve = _find_preserve_scatter(scatter, selected)
+    if preserve is not None:
+        kept_names = tuple(_downloaded_names(_scatter_blocks(preserve.read_text(encoding="utf-8", errors="ignore"))))
+        excluded = tuple(sorted(selected - set(kept_names)))
+        messages = [KEEP_USING.format(name=preserve.name)]
+        if excluded:
+            messages.append(KEEP_LEAVING.format(names=", ".join(excluded)))
+        return KeepPlan(True, "preserve-scatter", str(preserve), kept_names, excluded, tuple(messages))
+    _rewritten, excluded = rewrite_scatter_keeping_data(scatter.read_text(encoding="utf-8", errors="ignore"))
+    if not excluded:
+        return KeepPlan(True, "write-all", str(scatter), downloaded, (), ())
+    remaining = tuple(name for name in downloaded if name not in excluded)
+    return KeepPlan(
+        True,
+        "exclude-userdata",
+        str(scatter.parent / ".updater_keepdata.txt"),
+        remaining,
+        excluded,
+        (KEEP_LEAVING.format(names=", ".join(excluded)),),
+    )
+
+
+def stage_keep_data(folder: Path, enabled: bool) -> tuple[Path, KeepPlan]:
+    """A folder whose scatter matches :func:`describe_keep_data`.
+
+    The caller's folder is never modified. ``write-all`` returns it unchanged.
+    """
+    plan = describe_keep_data(folder, enabled)
+    if not enabled or plan.mode == "write-all":
+        return Path(folder), plan
+    staging = Path(tempfile.mkdtemp(prefix=".innioasis-keep-", dir=str(Path(folder).parent)))
+    try:
+        for item in Path(folder).iterdir():
+            target = staging / item.name
+            if item.is_dir():
+                shutil.copytree(item, target, copy_function=os.link)
+            elif item.is_file():
+                try:
+                    os.link(item, target)
+                except OSError:
+                    shutil.copy2(item, target)
+        from .download import find_scatter
+
+        staged_scatter = find_scatter(staging)
+        if staged_scatter is None:
+            raise OSError("the staged package has no scatter")
+        if plan.mode == "preserve-scatter":
+            shutil.copy2(plan.scatter, staged_scatter)
+            plan.scatter = str(staged_scatter)
+        else:
+            original = Path(folder) / staged_scatter.relative_to(staging)
+            rewritten, _excluded = rewrite_scatter_keeping_data(
+                original.read_text(encoding="utf-8", errors="ignore")
+            )
+            staged_scatter.write_text(rewritten, encoding="utf-8")
+            plan.scatter = str(staged_scatter)
+        return staging, plan
+    except OSError:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+
+
 def parse_progress(line: str) -> tuple[float | None, str]:
     """The window's install progress, read from a tool's output line.
 
@@ -398,6 +609,9 @@ def parse_progress(line: str) -> tuple[float | None, str]:
     text = str(line or "").strip()
     if not text:
         return None, ""
+    from .progress import status_from_tool_line
+
+    guided = status_from_tool_line(text)
     low = text.lower()
     image = re.search(
         r"(\d+(?:\.\d+)?)%\s+of image data has been sent\s+\(([^)]+)\s+of\s+([^)]+)\)",
@@ -406,20 +620,20 @@ def parse_progress(line: str) -> tuple[float | None, str]:
     )
     if image:
         pct = max(0.0, min(100.0, float(image.group(1))))
-        return pct, f"Writing images — {image.group(2).strip()} of {image.group(3).strip()}"
+        return pct, guided or f"Writing images — {image.group(2).strip()} of {image.group(3).strip()}"
     if "of image data has been sent" in low:
         simple = re.search(r"(\d+(?:\.\d+)?)%", text)
-        return (float(simple.group(1)) if simple else None), "Writing image data"
+        return (float(simple.group(1)) if simple else None), guided or "Writing firmware image... (0%)"
     if "of da has been sent" in low:
         pct = re.search(r"(\d+(?:\.\d+)?)%", text)
-        return (float(pct.group(1)) if pct else None), "Downloading the download agent"
+        return (float(pct.group(1)) if pct else None), guided or "Downloading DA to device..."
     if "of bootloader has been sent" in low:
         pct = re.search(r"(\d+(?:\.\d+)?)%", text)
-        return (float(pct.group(1)) if pct else None), "Downloading the bootloader"
+        return (float(pct.group(1)) if pct else None), guided or "Downloading Bootloader..."
     if "brom connected" in low or "usb port detected" in low or "usb port is obtained" in low:
-        return 0.0, "Player detected"
+        return 0.0, guided or "Device detected in BROM mode..."
     if "format succeeded" in low:
-        return 20.0, "Partition table formatted"
+        return 20.0, guided or "Flash format succeeded..."
     if "download ok" in low:
         return None, "Partition written"
     if "erasing" in low:
@@ -436,9 +650,11 @@ def parse_progress(line: str) -> tuple[float | None, str]:
             return value, "Writing the system image"
         if "userdata" in low:
             return value, "Writing internal storage"
-        return value, "Writing firmware"
+        return value, guided or "Writing firmware image... ({pct}%)".format(pct=int(value))
+    if guided:
+        return None, guided
     if "writing" in low or "write" in low:
-        return None, "Writing firmware"
+        return None, "Writing firmware image... (0%)"
     return None, ""
 
 
@@ -505,19 +721,21 @@ def flash_directory(
             print(event["message"], flush=True)
         return 0 if event["ok"] else 1
 
-    staging: Path | None = None
+    cleanup: Path | None = None
     if keep_data:
-        staging, preserve = _keep_data_copy(folder)
-        if staging is None:
-            print(
-                "Keep my data needs a preserve-data scatter shipped with this firmware "
-                "package; this one has none. Nothing was written. Use the graphical "
-                "installer for this package or install without Keep my data.",
-                file=sys.stderr,
-            )
+        try:
+            staged, plan = stage_keep_data(folder, True)
+        except OSError as exc:
+            print(f'Could not prepare "Keep my data": {exc}', file=sys.stderr)
+            print("No firmware images were written.", file=sys.stderr)
             return 2
-        print(f"Keep my data: using the package's {Path(preserve).name}", flush=True)
-        folder = staging
+        for message in plan.messages:
+            print(message, flush=True)
+            if on_line:
+                on_line(message)
+        if staged.resolve() != Path(folder).resolve():
+            cleanup = staged
+            folder = staged
 
     try:
         base = mtkclient_command()
@@ -558,8 +776,8 @@ def flash_directory(
             return fallback
         return 2
     finally:
-        if staging is not None:
-            shutil.rmtree(staging, ignore_errors=True)
+        if cleanup is not None:
+            shutil.rmtree(cleanup, ignore_errors=True)
 
 
 def sp_flash_directory(folder: Path, dry_run: bool = False, on_line=None) -> int | None:

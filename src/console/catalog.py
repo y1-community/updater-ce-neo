@@ -115,6 +115,9 @@ class Package:
     kind: str = "img"
     handler: str = "Custom Firmware"
     slug: str = ""
+    post_install: str = ""
+    post_install_2: str = ""
+    do_not_keep_data: bool = False
 
     @property
     def title(self) -> str:
@@ -160,6 +163,9 @@ def parse_manifest(data: bytes) -> list[Package]:
                 kind=_attr(element, "type", default="img"),
                 handler=_attr(element, "handler", default="Custom Firmware"),
                 slug=slug,
+                post_install=_attr(element, "post_install"),
+                post_install_2=_attr(element, "post_install_2", "post_install2"),
+                do_not_keep_data=_attr(element, "do_not_keep_data").lower() in {"1", "true", "yes"},
             )
         )
     return packages
