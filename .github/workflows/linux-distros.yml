@@ -3,8 +3,9 @@ name: Linux Distro Smoke Test
 # The Linux reports that mattered most were distribution-specific: Debian and
 # Mint missing libxcb-cursor0, older glibc rejecting a bundle frozen on Arch,
 # and Qt 6.10 refusing pre-SSE4.2 CPUs. Building on Ubuntu 22.04 is necessary
-# but not sufficient, so this job installs the published tarball and starts it
-# on each family we promise.
+# but not sufficient, so this job starts the published build on each family we
+# promise. A release may publish a tarball, an AppImage, or both; the workflow
+# extracts whichever is present (no FUSE in these containers).
 on:
   workflow_dispatch:
   schedule:
@@ -55,7 +56,6 @@ jobs:
               xcb-util-cursor xcb-util-image xcb-util-renderutil xcb-util \
               libxkbcommon-x11 mesa fontconfig dbus glib2 libusb file binutils
           fi
-          python3 --version
           cat /etc/os-release | head -3
 
       - name: Host library report
@@ -63,44 +63,63 @@ jobs:
           curl -fsSL https://innioasis.app/run_linux.sh -o /tmp/run_linux.sh
           bash /tmp/run_linux.sh --check || echo "check reported missing optional libraries"
 
-      - name: Download the published x86_64 tarball
+      - name: Fetch the newest x86_64 build
         run: |
           set -e
-          # Choose the first release that publishes an x86_64 tarball.
-          python3 - <<'PY' > /tmp/tarball_url
+          python3 - <<'PY' > /tmp/asset_url
           import json, urllib.request
           api = "https://api.github.com/repos/y1-community/updater-ce-neo/releases?per_page=20"
           req = urllib.request.Request(api, headers={"User-Agent": "linux-smoke"})
           releases = json.loads(urllib.request.urlopen(req, timeout=60).read())
+          wanted = []
           for release in releases:
               for asset in release.get("assets", []):
                   name = asset["name"].lower()
-                  if name.endswith(".tar.gz") and "x86_64" in name:
-                      print(asset["browser_download_url"])
-                      raise SystemExit(0)
-          raise SystemExit("no x86_64 tarball asset found")
+                  if not (name.endswith(".tar.gz") or name.endswith(".appimage")):
+                      continue
+                  if any(key in name for key in ("x86_64", "x86-64", "amd64")):
+                      wanted.append((name.endswith(".tar.gz"), asset["browser_download_url"]))
+          if not wanted:
+              raise SystemExit("no x86_64 Linux asset in the last 20 releases")
+          # Prefer the tarball: it needs no FUSE and no extraction tool.
+          wanted.sort(reverse=True)
+          print(wanted[0][1])
           PY
-          curl -fL --retry 3 -o /tmp/updater.tar.gz "$(cat /tmp/tarball_url)"
-          tar -xzf /tmp/updater.tar.gz -C /tmp
-          find /tmp -maxdepth 3 -name InnioasisUpdater -type f -print -quit
+          curl -fL --retry 3 -o /tmp/updater.asset "$(cat /tmp/asset_url)"
+          mkdir -p /tmp/updater
+          case "$(cat /tmp/asset_url)" in
+            *.AppImage|*.appimage)
+              chmod +x /tmp/updater.asset
+              cd /tmp/updater
+              /tmp/updater.asset --appimage-extract >/dev/null
+              echo "/tmp/updater/squashfs-root/AppRun" > /tmp/launcher_path
+              ;;
+            *)
+              tar -xzf /tmp/updater.asset -C /tmp/updater
+              find /tmp/updater -maxdepth 4 -name AppRun -type f -print -quit > /tmp/launcher_path
+              if [ ! -s /tmp/launcher_path ]; then
+                find /tmp/updater -maxdepth 4 -name InnioasisUpdater -type f -print -quit > /tmp/launcher_path
+              fi
+              ;;
+          esac
+          launcher="$(cat /tmp/launcher_path)"
+          [ -n "$launcher" ] || { echo "no launcher in the downloaded build"; exit 1; }
+          chmod +x "$launcher"
+          echo "launcher: $launcher"
 
       - name: Start the bundle headlessly
         run: |
           set -e
-          exe="$(find /tmp -maxdepth 3 -name InnioasisUpdater -type f -print -quit)"
-          [ -n "$exe" ] || { echo "no executable in the tarball"; exit 1; }
-          chmod +x "$exe"
-          # --self-check imports Qt, so a glibc or xcb failure shows up here.
-          QT_QPA_PLATFORM=offscreen QT_DEBUG_PLUGINS=1 "$exe" --self-check
+          launcher="$(cat /tmp/launcher_path)"
+          QT_QPA_PLATFORM=offscreen QT_DEBUG_PLUGINS=1 "$launcher" --self-check
           echo "self-check passed on $(. /etc/os-release; echo "$PRETTY_NAME")"
 
       - name: Terminal interface starts too
         run: |
           set -e
-          exe="$(find /tmp -maxdepth 3 -name InnioasisUpdater -type f -print -quit)"
-          # No display in the container: AppRun's fallback must reach the TUI.
-          "$exe" --tui --help
-          "$exe" --cli --version
+          launcher="$(cat /tmp/launcher_path)"
+          "$launcher" --tui --help
+          "$launcher" --cli --version
 
       - name: Lite installer check
         run: |

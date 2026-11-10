@@ -147,13 +147,22 @@ def reset_device(dry_run: bool = False) -> int:
 def adb(args: Iterable[str], dry_run: bool = False) -> int:
     tool = adb_command()
     if not tool:
-        print(
-            "adb is not installed. Install it with your package manager "
-            "(android-tools on Arch, adb on Debian/Ubuntu) or place it in "
-            "~/.local/share/innioasis-updater/tools/.",
-            file=sys.stderr,
-        )
-        return 2
+        # Fetch platform-tools only when an adb command is actually asked for.
+        # An AppImage/tarball that already carries adb lands here with a path.
+        try:
+            from .components import ensure as ensure_component
+
+            tool = str(ensure_component("adb"))
+        except (RuntimeError, OSError) as exc:
+            print(
+                "adb is not installed and could not be fetched.\n"
+                f"{exc}\n"
+                "Install it with your package manager (android-tools on Arch, "
+                "adb on Debian/Ubuntu) or place it in "
+                "~/.local/share/innioasis-updater/tools/.",
+                file=sys.stderr,
+            )
+            return 2
     return _run([tool] + [str(arg) for arg in args], dry_run=dry_run)
 
 
@@ -187,6 +196,12 @@ def mount_point(path: Path) -> str:
 def doctor() -> dict:
     """Everything a support reply needs, in one plain dictionary."""
     mtk = mtkclient_command()
+    try:
+        from .components import status as component_status
+
+        extra = {row["key"]: row["path"] for row in component_status() if row["available"]}
+    except Exception:  # the report must never fail because a probe did
+        extra = {}
     return {
         "python": platform.python_version(),
         "platform": platform.platform(),
@@ -196,5 +211,6 @@ def doctor() -> dict:
         "adb": adb_command() or "",
         "unrar": rar_command() or "",
         "mount": mount_point(Path("/")),
+        "components": extra,
         "env": {key: os.environ[key] for key in ("XDG_DATA_HOME", "APPIMAGE", "INNIOASIS_LITE") if os.environ.get(key)},
     }

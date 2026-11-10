@@ -19,7 +19,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import catalog, download as dl, flash
+from . import catalog, components, download as dl, flash
 
 
 def _version() -> str:
@@ -135,11 +135,39 @@ def cmd_adb(args: argparse.Namespace) -> int:
     return flash.adb(args.adb_args, dry_run=args.dry_run)
 
 
+def cmd_components(args: argparse.Namespace) -> int:
+    if args.action == "list":
+        rows = components.status()
+        if args.json:
+            print(json.dumps(rows, ensure_ascii=False), flush=True)
+        else:
+            for row in rows:
+                print(f"{row['label']:<14} {row['path'] or 'not installed'}")
+            print("\nFetch with: components fetch adb spflash")
+        return 0
+    if args.action == "prefetch":
+        result = components.prefetch(args.keys or None)
+        print(json.dumps(result, ensure_ascii=False))
+        return 0
+    failures = 0
+    for key in args.keys or tuple(components.COMPONENTS):
+        try:
+            print(components.ensure(key))
+        except RuntimeError as exc:
+            print(str(exc), file=sys.stderr)
+            failures += 1
+    return 1 if failures else 0
+
+
 def cmd_doctor(args: argparse.Namespace) -> int:
     info = flash.doctor()
     if args.json:
         print(json.dumps(info, ensure_ascii=False), flush=True)
         return 0
+
+    info["components"] = {
+        row["key"]: row["path"] for row in components.status() if row["available"]
+    }
     print("Updater CE terminal check")
     for key in ("python", "platform", "machine", "tty", "mtkclient", "adb", "unrar", "mount"):
         value = info.get(key) or "(not found)"
@@ -201,6 +229,11 @@ def build_parser() -> argparse.ArgumentParser:
     adb_parser.add_argument("adb_args", nargs=argparse.REMAINDER)
     adb_parser.add_argument("--dry-run", action="store_true")
     adb_parser.set_defaults(func=cmd_adb)
+
+    tools = sub.add_parser("components", help="show or fetch adb, SP Flash Tool, unrar")
+    tools.add_argument("action", nargs="?", choices=("list", "fetch", "prefetch"), default="list")
+    tools.add_argument("keys", nargs="*")
+    tools.set_defaults(func=cmd_components)
 
     doctor = sub.add_parser("doctor", help="report the tools this machine has")
     doctor.set_defaults(func=cmd_doctor)

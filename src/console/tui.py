@@ -11,6 +11,7 @@ Selection, keys: arrows or j/k, Enter to open, ``d`` download, ``f`` flash,
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -169,6 +170,16 @@ def _curses_run(refresh: bool = False) -> int:
                 + (f"Scatter: {scatter.name}" if scatter else "No scatter file found in this archive."),
             )
             if scatter:
+                # The install is the first task that needs a tool the lite
+                # session may not have. Fetch it here, between tasks, rather
+                # than at menu time: an AppImage already carries it, and a
+                # Pi Zero only pays for it if the user goes this far.
+                try:
+                    from .components import ensure as ensure_component
+
+                    ensure_component("spflash")
+                except RuntimeError:
+                    pass  # MTKClient remains the console flasher
                 answer = picker(screen, "Flash with MTKClient?", [("No, keep the files", "no"), ("Yes, write now", "yes")], str(folder))
                 if answer == 1:
                     curses.endwin()
@@ -179,6 +190,18 @@ def _curses_run(refresh: bool = False) -> int:
 
 def run(refresh: bool = False) -> int:
     try:
+        # On a fast link, fetch the tools a session may need up front. On a slow
+        # one nothing is downloaded until a task asks for it. Either way this is
+        # best effort: a failure must not stop the menu from opening.
+        if sys.stdin.isatty() and not os.environ.get("INNIOASIS_NO_PREFETCH"):
+            try:
+                from . import components
+
+                if components.measure_mbps() >= components.PREFETCH_MBPS:
+                    print("Fast link: prefetching session tools…", file=sys.stderr)
+                    components.prefetch()
+            except Exception:
+                pass
         if not sys.stdin.isatty() or not sys.stdout.isatty():
             return _plain(refresh)
         if (sys.platform != "win32") and (not sys.stdin.encoding):

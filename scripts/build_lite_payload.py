@@ -34,6 +34,7 @@ PAYLOAD = [
     "src/console/__init__.py",
     "src/console/catalog.py",
     "src/console/cli.py",
+    "src/console/components.py",
     "src/console/download.py",
     "src/console/flash.py",
     "src/console/tui.py",
