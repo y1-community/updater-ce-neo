@@ -12,7 +12,7 @@ import re
 DOWNLOADING = "Downloading firmware"
 EXTRACTING = "Extracting"
 UNPLUG = "Keep the device unplugged until the connect prompt appears."
-SEARCHING = "Searching for device (keep unplugged)..."
+SEARCHING = "Connect your player now — searching for it..."
 INIT_MTK = "Initializing mtkclient..."
 WAIT_MTK = "Waiting for MTK device... Power off device and connect USB."
 BROM = "Device detected in BROM mode..."
