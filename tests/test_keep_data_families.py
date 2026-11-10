@@ -1,11 +1,12 @@
-"""Keep Data eligibility when the catalogue declares no firmware family.
+"""Keep Data eligibility for Reborn (Y2Linux) and declared firmware families.
 
-Reborn (Y2Linux) has no ``derivative`` in ``slidia_manifest.xml`` and updates
-itself on the player, so Updater CE's tracked install can still name the
-firmware that came before it. That is not "unknown": a firmware with no
-family shares its data partition with itself only, so a player that came from
-another Y2Linux build (Y2Player, a pre-Reborn Y2Linux, stock) must not be
-offered Keep Data for it.
+Reborn (Y2Linux) always carries the player's data forward: whoever made the
+current install — Y2Player, Classy, stock, an older Y2Linux release — a Reborn
+install is never refused Keep Data. Only the catalogue can take that away,
+remotely, with ``no_keep_data``/``do_not_keep_data`` or
+``PMT_format_needed``. Every other firmware keeps the family rule: the same
+software or a declared derivative shares the data partition, a firmware with
+no family shares it with itself only.
 """
 
 from unittest.mock import patch
@@ -52,14 +53,31 @@ def _check(packages, recorded, pkg):
         )
 
 
-def test_a_player_coming_from_another_y2linux_build_gets_no_keep_data():
-    # The tracked record names Y2Player: a Y2Linux player without Reborn. The
-    # catalogue knows no family for either side, and Reborn can only carry
-    # data from Reborn forward.
-    compatible, available, confirm = _check([REBORN, Y2PLAYER, STOCK], "Y2Player", REBORN)
-    assert compatible is False
-    assert available is False
-    assert confirm is False
+def test_a_reborn_target_keeps_data_whatever_was_installed_before():
+    # Y2Player, Classy and stock are all systems a Reborn user may come from.
+    # Reborn carries the player's data forward, so the choice is always there
+    # and the player is not asked to confirm what was running.
+    for previous in ("Y2Player", "Classy"):
+        compatible, available, confirm = _check(
+            [REBORN, Y2PLAYER, STOCK], previous, REBORN
+        )
+        assert compatible is True
+        assert available is True
+        assert confirm is False
+
+
+def test_the_manifest_veto_wins_even_for_reborn():
+    from dataclasses import replace
+
+    for vetoed in (
+        replace(REBORN, do_not_keep_data=True),
+        replace(REBORN, pmt_format_needed=True),
+    ):
+        with patch("src.keep_data._packages", return_value=[REBORN, STOCK]), patch(
+            "src.keep_data.get_device_install", return_value=_recorded("Y2Player")
+        ):
+            assert keep_data.keep_data_available("Y2", vetoed) is False
+            assert keep_data.needs_confirmation("Y2", vetoed) is False
 
 
 def test_another_release_of_reborn_is_still_the_same_firmware():

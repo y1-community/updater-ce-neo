@@ -320,9 +320,23 @@ class KeepDataOfferTests(unittest.TestCase):
         record = {"software_name": "Reborn (Y2Linux)", "tag_name": "baseline-233"}
         self.assertTrue(self._offered(self._reborn(), record))
 
-    def test_a_player_coming_from_another_y2linux_build_gets_no_keep_data(self):
-        record = {"software_name": "Y2Player", "tag_name": "1.2.0"}
-        self.assertFalse(self._offered(self._reborn(), record))
+    def test_a_reborn_install_is_offered_whatever_came_before(self):
+        for previous in ("Y2Player", "Classy"):
+            record = {"software_name": previous, "tag_name": "1.2.0"}
+            self.assertTrue(self._offered(self._reborn(), record))
+
+    def test_the_manifest_veto_withholds_the_choice_even_for_reborn(self):
+        from dataclasses import replace
+
+        locked = replace(self._reborn(), do_not_keep_data=True)
+        self.assertFalse(
+            self._offered(locked, {"software_name": "Reborn (Y2Linux)"}, allow_any=True)
+        )
+
+        formatted = replace(self._reborn(), pmt_format_needed=True)
+        self.assertFalse(
+            self._offered(formatted, {"software_name": "Y2Player", "tag_name": "1.2.0"})
+        )
 
     def test_another_release_of_reborn_keeps_the_choice(self):
         record = {"software_name": "Y2Linux 1.0 Beta 9.2.13", "tag_name": "baseline-180"}

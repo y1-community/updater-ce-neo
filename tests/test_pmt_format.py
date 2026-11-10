@@ -101,6 +101,28 @@ def test_the_manifest_flag_blocks_keep_data_and_its_question():
     assert keep_data.needs_confirmation("Y1", pkg, settings) is False
 
 
+def test_the_no_keep_data_alias_is_parsed():
+    xml = (
+        '<slidia_manifest><package name="Locked" device="Y1" '
+        'repo="example/locked" no_keep_data="true" /></slidia_manifest>'
+    )
+    entries = manifest.parse_manifest_xml(xml)
+    assert entries[0].do_not_keep_data is True
+
+
+def test_the_terminal_catalogue_reads_both_manifest_vetoes():
+    from src.console import catalog as console_catalog
+
+    xml = (
+        b'<slidia_manifest><package name="Locked" device="Y1" '
+        b'repo="example/locked" no_keep_data="true" '
+        b'PMT_format_needed="true" /></slidia_manifest>'
+    )
+    pkg = console_catalog.parse_manifest(xml)[0]
+    assert pkg.do_not_keep_data is True
+    assert pkg.pmt_format_needed is True
+
+
 def test_an_8502_record_blocks_keep_data_for_that_software(tmp_path):
     path = tmp_path / "settings.ini"
     settings = QSettings(str(path), QSettings.Format.IniFormat)

@@ -118,6 +118,10 @@ class Package:
     post_install: str = ""
     post_install_2: str = ""
     do_not_keep_data: bool = False
+    #: The firmware must use SP Flash Tool's Format All + Download mode
+    #: (``PMT_format_needed``). Formatting storage makes Keep Data pointless,
+    #: so it is refused with the same veto as ``do_not_keep_data``.
+    pmt_format_needed: bool = False
     #: The repository of the firmware this one was built from, when the
     #: catalogue names it. Equal or related firmwares share a data partition,
     #: which is what Keep Data depends on (see ``src/keep_data.py``).
@@ -169,7 +173,8 @@ def parse_manifest(data: bytes) -> list[Package]:
                 slug=slug,
                 post_install=_attr(element, "post_install"),
                 post_install_2=_attr(element, "post_install_2", "post_install2"),
-                do_not_keep_data=_attr(element, "do_not_keep_data").lower() in {"1", "true", "yes"},
+                do_not_keep_data=_attr(element, "do_not_keep_data", "no_keep_data").lower() in {"1", "true", "yes"},
+                pmt_format_needed=_attr(element, "PMT_format_needed", "pmt_format_needed").lower() in {"1", "true", "yes"},
                 derivative=_attr(element, "derivative"),
             )
         )

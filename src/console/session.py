@@ -474,6 +474,22 @@ def _same_tracked_software(package, record: dict) -> bool:
     return bool(wanted & recorded)
 
 
+def _is_reborn_firmware(package) -> bool:
+    """True for the Reborn (Y2Linux) catalogue entry.
+
+    Reborn carries the player's data forward across every system it can be
+    installed over, so the session never withholds Keep Data for it unless the
+    catalogue vetoes it.
+    """
+    repo_name = str(getattr(package, "repo", "") or "").strip().rstrip("/").split("/")[-1]
+    if repo_name.casefold() == "y2linux":
+        return True
+    return any(
+        "y2linux" in _compact(getattr(package, field, ""))
+        for field in ("name", "slug")
+    )
+
+
 def keep_data_offered(
     package,
     allow_any: bool = False,
@@ -482,28 +498,35 @@ def keep_data_offered(
 ) -> bool:
     """Whether this firmware may offer Keep Data, without importing Qt.
 
-    The catalogue veto is the first rule. A package that forces Format All +
-    Download is also refused: its preserve-data scatter would be undone by the
-    format command. ``allow_any`` is the window's advanced override, and the
-    caller still requires the package's preserve-data scatter before asking.
+    The catalogue veto comes first: ``no_keep_data`` (stored as
+    ``do_not_keep_data``) refuses outright, and a package that must Format All
+    + Download refuses too unless that same software is already installed —
+    the same rule ``src/pmt_format.py`` uses for the window. ``allow_any`` is
+    the window's advanced override for a firmware mismatch, never for those
+    vetoes.
 
-    The window's compatibility rule applies too. Reinstalling the tracked
-    software may keep data, and so may another release of the same firmware;
-    another system must name the parent it was built from. A firmware with no
-    ``derivative`` — Reborn (Y2Linux) among them — shares its data partition
-    with itself only, so a player that came from Y2Player, Classy or stock is
-    not offered the choice here either.
+    Reborn (Y2Linux) is never withheld otherwise: it carries the player's data
+    forward whatever system came before, so a player tracked as Y2Player,
+    Classy or stock still gets the choice. Other firmware follows the window's
+    family rule: the tracked software itself, or a package that names the
+    parent it was built from, may keep data; a firmware with no ``derivative``
+    shares its data partition with itself only.
     """
     if package is None:
         return True
-    if getattr(package, "do_not_keep_data", False) and not allow_any:
+    if getattr(package, "do_not_keep_data", False):
         return False
     if getattr(package, "format_all", False) or getattr(package, "requires_format", False):
         return False
+    record = tracked_install(model or getattr(package, "model", ""), hardware_type)
+    same = bool(record) and _same_tracked_software(package, record)
+    if getattr(package, "pmt_format_needed", False) and not same:
+        return False
+    if _is_reborn_firmware(package):
+        return True
     if allow_any:
         return True
-    record = tracked_install(model or getattr(package, "model", ""), hardware_type)
-    if not record or _same_tracked_software(package, record) or _record_names_firmware(package, record):
+    if not record or same or _record_names_firmware(package, record):
         return True
     if not str(getattr(package, "derivative", "") or "").strip():
         return False

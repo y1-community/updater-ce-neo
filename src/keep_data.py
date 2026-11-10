@@ -7,6 +7,11 @@ software already tracked for the model is the same firmware or a relative of
 the incoming one. A firmware with no derivative is only compatible with
 itself.
 
+Reborn (Y2Linux) is the exception the catalogue cannot express: it carries
+the player's data forward whatever system it is installed over, so Keep Data
+is never refused for it. Only ``slidia_manifest.xml`` can take that away,
+with ``no_keep_data``/``do_not_keep_data`` or ``PMT_format_needed``.
+
 The helpers here are deliberately pure over ``FirmwarePackage`` objects so the
 same rules can be tested without a window or a device.
 """
@@ -66,6 +71,25 @@ def _record_names_firmware(pkg, record) -> bool:
         if needle in _compact(value):
             return True
     return False
+
+
+def is_reborn_firmware(pkg) -> bool:
+    """True for the Reborn (Y2Linux) catalogue entry.
+
+    Reborn installs over any system and carries the player's data forward, so
+    Keep Data is never refused for it. The repository names the firmware
+    (``schulzcode/y2linux``); the name keeps working for the older
+    ``Y2Reborn (Y2Linux)`` label and for local copies without a repository.
+    """
+    if pkg is None:
+        return False
+    repo_name = _norm(getattr(pkg, "repo", "")).split("/")[-1]
+    if repo_name == "y2linux":
+        return True
+    return any(
+        "y2linux" in _compact(getattr(pkg, field, ""))
+        for field in ("name", "slug")
+    )
 
 
 def _same_software_record(pkg, record) -> bool:
@@ -236,15 +260,24 @@ def declares_family(pkg) -> bool:
 def tracked_is_compatible(model: str, pkg, settings: Optional[QSettings] = None, hardware_type: str = "") -> Optional[bool]:
     """True/False for a tracked install, ``None`` when it cannot be known.
 
-    A reinstall of the software already tracked always shares the player's
-    data partition, and so does any member of its derivative family (stock,
-    Better-Y and Koensayr are one family because both mods declare stock as
-    ``derivative``). A firmware that declares no family shares it with itself
-    only, so it needs its own tracked install. Comparison stays inside one
-    model: a Y2 Rockbox is never compatible with a Y1 install.
+    Reborn (Y2Linux) may always carry data forward: whoever made the player's
+    current install — Y2Player, Classy, stock, an older Y2Linux release — Keep
+    Data is still safe for a Reborn install. The catalogue's
+    ``no_keep_data``/``PMT_format_needed`` vetoes are checked by the callers
+    first, so they win even here.
+
+    Every other firmware follows the family rule: a reinstall of the software
+    already tracked always shares the player's data partition, and so does any
+    member of its derivative family (stock, Better-Y and Koensayr are one
+    family because both mods declare stock as ``derivative``). A firmware that
+    declares no family shares it with itself only, so it needs its own tracked
+    install. Comparison stays inside one model: a Y2 Rockbox is never
+    compatible with a Y1 install.
     """
     if pkg is None:
         return False
+    if is_reborn_firmware(pkg):
+        return True
     record = get_device_install(model, hardware_type=hardware_type, settings=settings)
     if not record:
         return None
@@ -305,10 +338,11 @@ def incompatible_with_current(model: str, pkg, settings: Optional[QSettings] = N
 def keep_data_available(model: str, pkg, settings: Optional[QSettings] = None, hardware_type: str = "") -> bool:
     """Whether the Keep Data choice may be offered for this install.
 
-    Only two things take the choice away: the catalogue's ``do_not_keep_data``
-    attribute for this software, or a genuine partition-table change that needs
-    Format All + Download. A reinstall of the software already on the player is
-    always offered, and always defaults the tick on.
+    Only two things take the choice away: the catalogue's
+    ``no_keep_data``/``do_not_keep_data`` attribute for this software, or a
+    genuine partition-table change that needs Format All + Download. Reborn
+    (Y2Linux) is otherwise always offered, and a reinstall of the software
+    already on the player always defaults the tick on.
     """
     if pkg is not None and getattr(pkg, "do_not_keep_data", False):
         return False

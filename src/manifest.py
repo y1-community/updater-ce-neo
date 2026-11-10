@@ -176,6 +176,8 @@ def _packages_from_mapping(mapping: dict, description: str = "") -> list[Firmwar
         info_repo = str(mapping.get("info_repo") or "").strip()
         apk_repo = str(mapping.get("apk_repo") or "").strip()
         raw_dnkd = mapping.get("do_not_keep_data")
+        if raw_dnkd is None:
+            raw_dnkd = mapping.get("no_keep_data")
         if isinstance(raw_dnkd, bool):
             do_not_keep_data = raw_dnkd
         else:
