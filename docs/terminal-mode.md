@@ -13,6 +13,10 @@ There are two ways in, and both use the same code:
 * `run_linux_lite.sh`, which installs a small pure-Python payload with no Qt,
   no PySide6 and no wheels at all.
 
+For Windows on ARM and other WSL2 hosts, USB passthrough with `usbipd-win` is
+covered in [Flashing through WSL2](#flashing-through-wsl2-on-windows). The
+terminal session itself needs no Qt and no WSLg.
+
 ## What the lite install contains
 
 `UpdaterCE-Lite.tar.gz` is one download for every machine below. The Python
@@ -174,3 +178,131 @@ Credits. The update page shows the installed and published versions, the
 platform asset, the release notes and the download/release URLs; it never
 installs an app update silently. Notices, update results and completion URLs
 are read-only text pages, so the session works without a browser.
+
+## Flashing through WSL2 on Windows
+
+The terminal session has no native Windows requirement. On Windows on ARM,
+where there is no native SP Flash Tool and MTKclient's Windows USB path is not
+always usable, a WSL2 distro can run the same Python flasher against a player
+passed through with [usbipd-win](https://github.com/dorssel/usbipd-win).
+
+This is an advanced route. It adds a USB forwarding layer between MTKclient
+and the player, so a lost attachment is a lost flash. Test it with a player
+you can recover before relying on it.
+
+### What WSLg does and does not do
+
+WSLg runs Linux GUI applications on Windows. It does not pass USB devices to
+Linux. The GUI, with or without WSLg, still cannot see the player until
+`usbipd` attaches it. The terminal route is the one to use here: it does not
+need Qt, X11, Wayland or WSLg.
+
+Windows and macOS keep their normal, supported flashing paths. This section is
+only for the WSL fallback.
+
+### Requirements
+
+* Windows 10 21H2 or newer, or Windows 11, with WSL2.
+* A WSL2 distro, for example Ubuntu 22.04 or Debian 12. On Windows on ARM use
+  the arm64 distro; do not install an x86-64 distro under emulation.
+* `usbipd-win` installed on Windows.
+* The player's MediaTek USB device visible to Windows before it is attached.
+* MTKclient available inside the distro.
+
+Install the terminal payload inside WSL:
+
+```sh
+curl -fsSLO https://innioasis.app/run_linux_lite.sh
+sh run_linux_lite.sh --tui
+```
+
+The lite payload includes the vendored MTKclient tree. Check the host first:
+
+```sh
+innioasis-updater-lite doctor
+```
+
+`doctor` prints a **Windows Subsystem for Linux** block when it detects WSL,
+including whether `usbipd.exe` is on the interop `PATH`. The TUI also prints a
+short attach reminder when it starts inside WSL.
+
+### Attach the player
+
+Run these in an elevated **Windows** PowerShell or Command Prompt, not inside
+WSL:
+
+```powershell
+winget install --exact dorssel.usbipd-win
+usbipd list
+usbipd bind --busid <BUSID>
+```
+
+`bind` is persistent for that USB port and normally only needs to be done
+once. Put the player into download/BROM mode, confirm it still appears in
+`usbipd list`, then attach it:
+
+```powershell
+usbipd attach --wsl --busid <BUSID>
+```
+
+In WSL, check that Linux can see a MediaTek device:
+
+```sh
+lsusb
+```
+
+Then open the terminal interface and install:
+
+```sh
+innioasis-updater-lite tui
+```
+
+### The reset problem
+
+MTKclient's handshake makes the player reset its USB connection when it moves
+from BROM to the preloader/DA stage. A normal desktop flash keeps the same
+physical USB connection through that reset. `usbipd` does not: the attachment
+normally disappears and has to be re-established.
+
+Keep the Windows terminal ready and re-attach as soon as the player
+re-enumerates:
+
+```powershell
+usbipd list
+usbipd attach --wsl --busid <BUSID>
+```
+
+Some `usbipd-win` versions offer `--auto-attach`; if yours does, it can reduce
+the gap but does not make a dropped attachment safe. Watch the WSL `dmesg` and
+the TUI install log. If the log stops advancing immediately after the player
+resets, re-attach first; do not unplug and restart the whole flash.
+
+If the player is already in BROM mode before WSL starts, attach after WSL is
+running. If Windows shows the device but WSL does not, detach and attach again
+rather than binding a second time.
+
+The terminal session deliberately selects MTKclient inside WSL, even on an
+x86-64 distro. The Linux SP Flash Tool payload is x86-64 only, and a forwarded
+USB device is already a best-effort path; MTKclient is the engine with a chance
+of surviving the BROM reset this way.
+
+### Permissions
+
+A USB device forwarded into WSL is owned by `root` unless a udev rule says
+otherwise. Either install a rule for the MediaTek vendor ID (`0e8d`) or run
+the terminal session with the permissions your distro requires. Do not add a
+broad `0666` rule for every USB device.
+
+The Windows-side `usbipd bind` needs administrator rights. `usbipd attach`
+may also prompt unless the service is configured for the current user.
+
+### Troubleshooting
+
+| Symptom | Check |
+| --- | --- |
+| `usbipd: command not found` in WSL | Windows interop is disabled, or the Windows `PATH` was not inherited. Run `usbipd.exe` from PowerShell instead. |
+| `usbipd list` shows the player, `lsusb` does not | The device is bound but not attached to this distro. Run `usbipd attach --wsl --busid <BUSID>`. |
+| The attach succeeds, then disappears at the start of the flash | Expected reset. Re-attach while the flash is still running; the TUI keeps the attempt open. |
+| MTKclient says no device | Check `lsusb` for `MediaTek Inc.`; confirm the player is in BROM/download mode, then re-attach. |
+| `doctor` reports `usbipd.exe not on PATH` | WSL interop is off or Windows `PATH` is restricted. The flash can still work; run the Windows commands in PowerShell. |
+| The GUI does not start under WSLg | Use the TUI. WSLg and Qt are not part of the flashing path. |

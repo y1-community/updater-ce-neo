@@ -45,6 +45,7 @@ PAYLOAD = [
     "src/console/session.py",
     "src/console/simulate.py",
     "src/console/tui.py",
+    "src/console/wsl.py",
     "src/tui_session.py",
 ]
 OPTIONAL = ["LICENSE", "LICENSE.md"]

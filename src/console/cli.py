@@ -171,6 +171,14 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     for key in ("python", "platform", "machine", "tty", "mtkclient", "adb", "unrar", "mount"):
         value = info.get(key) or "(not found)"
         print(f"  {key:<10} {value}")
+    if info.get("wsl"):
+        print("\nWindows Subsystem for Linux")
+        if info.get("wsl_distro"):
+            print(f"  distro     {info['wsl_distro']}")
+        print(f"  usbipd     {info.get('usbipd') or 'usbipd.exe not on PATH'}")
+        print("  USB passthrough:")
+        for step in info.get("wsl_steps") or ():
+            print(f"    - {step}")
     missing = [name for name in ("mtkclient", "adb") if not info.get(name)]
     if missing:
         print("\nMissing: " + ", ".join(missing))

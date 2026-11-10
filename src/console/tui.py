@@ -18,7 +18,7 @@ import webbrowser
 import zipfile
 from pathlib import Path
 
-from . import catalog, components, download as dl, flash
+from . import catalog, components, download as dl, flash, wsl
 from .releases import fetch_releases, rows_from_releases
 from .session import (
     LIST_TOP,
@@ -259,7 +259,13 @@ def _run_install(state: BrowseState, output: Path, report=None, ask_keep=None) -
 
     system = {"linux": "linux", "darwin": "darwin", "win32": "windows"}.get(sys.platform, sys.platform)
     arch = components.platform_key().split("-", 1)[-1]
-    engine, reason = flash.install_engine(system, arch, _headless())
+    if wsl.is_wsl():
+        # The Linux SP Flash Tool is x86-64, and a forwarded USB device is
+        # already a best-effort path. MTKclient is the engine with a chance of
+        # surviving the BROM reset this way, so never auto-pick SP here.
+        engine, reason = "mtk", "WSL2: using MTKclient over usbipd."
+    else:
+        engine, reason = flash.install_engine(system, arch, _headless())
     if engine != "sp-console":
         print(reason, flush=True)
     else:
@@ -1206,6 +1212,10 @@ def _prepare_machine() -> None:
     """
     if os.environ.get("INNIOASIS_SIMULATE") == "1" or os.environ.get("INNIOASIS_SKIP_PREP") == "1":
         return
+    from .wsl import is_wsl, startup_note
+
+    if is_wsl():
+        print(startup_note(), flush=True)
     if getattr(sys, "frozen", False):
         print("Updater CE — this build already includes its tools.", flush=True)
         return

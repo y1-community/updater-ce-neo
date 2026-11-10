@@ -24,6 +24,8 @@ import tempfile
 from pathlib import Path
 from typing import Iterable
 
+from . import wsl
+
 # Where the lite payload may unpack the console tools. The full AppImage keeps
 # them beside the executable; a lite install keeps them in its own folder.
 TOOL_DIRS = (
@@ -770,6 +772,8 @@ def flash_directory(
                 "or put mtk.py in ~/.local/share/innioasis-updater/tools/.",
                 file=sys.stderr,
             )
+            if wsl.is_wsl():
+                print(wsl.no_backend_hint(), file=sys.stderr)
 
         fallback = sp_flash_directory(folder, dry_run=dry_run, on_line=on_line)
         if fallback is not None:
@@ -889,6 +893,7 @@ def doctor() -> dict:
         extra = {row["key"]: row["path"] for row in component_status() if row["available"]}
     except Exception:  # the report must never fail because a probe did
         extra = {}
+    wsl_report = wsl.report()
     return {
         "python": platform.python_version(),
         "platform": platform.platform(),
@@ -900,6 +905,10 @@ def doctor() -> dict:
         "adb": adb_command() or "",
         "unrar": rar_command() or "",
         "mount": mount_point(Path("/")),
+        "wsl": wsl_report["wsl"],
+        "wsl_distro": wsl_report["wsl_distro"],
+        "usbipd": wsl_report["usbipd"],
+        "wsl_steps": wsl_report["wsl_steps"],
         "components": extra,
         "env": {key: os.environ[key] for key in ("XDG_DATA_HOME", "APPIMAGE", "INNIOASIS_LITE") if os.environ.get(key)},
     }
