@@ -37,6 +37,7 @@ from .config import (
 from .network import requests_module  # noqa: E402  (kept below the config import)
 
 from . import portable
+from . import versioning
 
 logger = logging.getLogger(__name__)
 
@@ -747,258 +748,47 @@ def _with_portable_packages(package, rows, platform=None):
 # (Ported from firmware_downloader.py)
 # ---------------------------------------------------------------------------
 def _extract_tag_timestamp(tag_name: str) -> int:
-    """Extract a YYYYMMDD-HHMM timestamp from a tag name and return it as a sortable int.
-
-    Returns 0 when no such timestamp is found.
-    """
-    m = re.search(r'(\d{8})-(\d{4})\b', tag_name or "")
-    if m:
-        try:
-            return int(m.group(1)) * 10000 + int(m.group(2))
-        except ValueError:
-            pass
-    return 0
+    """Extract a YYYYMMDD-HHMM timestamp from a tag name as a sortable int."""
+    return versioning.extract_tag_timestamp(tag_name)
 
 
 def _parse_semver(version: str):
-    """Convert a dotted numeric version string into a tuple of ints. Return None if invalid."""
-    if version is None:
-        return None
-    version_str = str(version).strip()
-    if not version_str or not re.fullmatch(r'\d+(?:\.\d+)*', version_str):
-        return None
-    try:
-        parts = tuple(int(part) for part in version_str.split('.'))
-        if len(parts) == 1 and parts[0] >= 1000:
-            return None
-        return parts
-    except ValueError:
-        return None
+    """Convert a dotted numeric version string into a tuple of ints."""
+    return versioning.parse_semver(version)
 
 
 def detect_title_start_or_end_semver(title: str) -> str | None:
-    """Detect a semantic version at the start or end of a release notes title.
-
-    For software releases where a semantic version appears at the start or end
-    of the release notes title (e.g. '1.0.4 - Initial Release', 'Y1 Rockbox 0.6',
-    'Y2Linux 1.0 Beta 9.2.13', or '[v2.1.0] Notes'), this version can be used
-    in place of the release tag on the firmware list / site.
-    """
-    text = str(title or "").strip()
-    if not text:
-        return None
-
-    # 1. Check start of title (e.g. "1.0.4 - Release", "v2.1.0 Notes", "[0.6] Rockbox", "Release 2.0.4: Fixes")
-    m_start = re.match(
-        r"^(?:release\s+|version\s+)?(?:\[|\()?(?:v|v\.)?(\d+(?:\.\d+)+)(?:\]|\))?(?:$|[\s:\-_|,])",
-        text,
-        re.IGNORECASE,
-    )
-    if m_start:
-        return m_start.group(1)
-
-    # 2. Check end of title (e.g. "Y1 Rockbox 0.6", "Custom Firmware v3.1.2", "Y2Linux 1.0 Beta 9.2.13")
-    # Clean trailing non-version tokens like (Beta), (240p), [Preview], (ADB)
-    candidate = text
-    for _ in range(4):
-        cleaned = re.sub(
-            r'[\s\-_]*[\(\[](?:beta\d*|alpha\d*|rc\d*|preview|240p|360p|adb|wifi|wi-fi|root|magisk)[\)\]]\s*$',
-            '',
-            candidate,
-            flags=re.IGNORECASE,
-        )
-        if cleaned == candidate:
-            break
-        candidate = cleaned.strip()
-
-    m_end = re.search(
-        r"(?:^|[\s:\-_|,(\[])(?:v|v\.)?(\d+(?:\.\d+)+)(?:\]|\))?\s*$",
-        candidate,
-        re.IGNORECASE,
-    )
-    if m_end:
-        return m_end.group(1)
-
-    return None
+    """Detect a semantic version at the start or end of a release title."""
+    return versioning.detect_title_start_or_end_semver(title)
 
 
 def release_effective_tag(rel: dict) -> str:
-    """Return the effective release tag for display or tracking.
-
-    If a semantic version is detected at the start or end of the release notes
-    title, it is used in place of the raw release tag on the firmware list / site.
-    """
-    if not rel or not isinstance(rel, dict):
-        return ""
-    name = (rel.get("name") or "").strip()
-    title_semver = detect_title_start_or_end_semver(name)
-    if title_semver:
-        return title_semver
-    return (rel.get("tag_name") or "").strip()
+    """Return the effective release tag for display or tracking."""
+    return versioning.effective_tag(rel)
 
 
 def _semver_from_release_title(title: str):
-    """Read the product version from a release title when its tag has none.
-
-    Y2Linux titles look like ``Y2Linux 1.0 Beta 9.2.13`` while their tags are
-    build identifiers (``baseline-204``). The version at start or end, or
-    after Beta/Alpha/RC is the product version.
-    """
-    text = str(title or "").strip()
-    if not text:
-        return None
-    detected = detect_title_start_or_end_semver(text)
-    if detected:
-        return detected
-    after_prerelease = re.search(
-        r'\b(?:beta|alpha|rc)\s*v?(\d+(?:\.\d+)+)\b', text, re.IGNORECASE
-    )
-    if after_prerelease:
-        return after_prerelease.group(1)
-    versions = re.findall(r'(?<![\d.])(\d+\.\d+(?:\.\d+)+)(?![\d.])', text)
-    return versions[0] if len(versions) == 1 else None
+    """Read the product version from a release title when its tag has none."""
+    return versioning.semver_from_release_title(title)
 
 
 def parse_version_designations(version_name: str) -> dict:
-    """Parse version names and extract designations with flexible adjective handling."""
-    designations = []
-    adjectives = ['compatible', 'aware', 'supported', 'enabled', 'disabled', 'ready', 'optimized', 'enhanced']
-    excluded_parts = ['type', 'b', 'base', 'stable', 'koensayr', 'os']
+    """Parse version names and extract designations with flexible adjectives."""
+    from .i18n import tr
 
-    clean_version = re.sub(r'-[a-f0-9]{16,}!?$', '', version_name or '')
-    clean_version = clean_version.rstrip('-!')
-    extracted_version = None
-
-    timestamp_match = re.search(r'(\d{8})-(\d{4})\b', clean_version)
-    if timestamp_match:
-        extracted_version = f"{timestamp_match.group(1)}-{timestamp_match.group(2)}"
-
-    # Compound version check, e.g. 2.4.0-koensayr-3.0.2 or 2.0.4-os-3.0.2
-    if not extracted_version:
-        compound_m = re.search(
-            r"(?:^|[^\d.])(?:v|v\.)?(\d+\.\d+(?:\.\d+)?)[-_](?:[a-zA-Z0-9]+[-_]|os[-_])?v?(\d+\.\d+(?:\.\d+)?)(?:[^\d.]|$)",
-            clean_version,
-            re.IGNORECASE,
-        )
-        if compound_m:
-            extracted_version = compound_m.group(1)
-            from .i18n import tr
-            os_ver = compound_m.group(2)
-            designations.append(tr("label_for_os").format(version=os_ver))
-
-    if not extracted_version:
-        m_rel = re.search(r'\b(?:release|realease)\s*v?(\d+(?:\.\d+)*)\b', clean_version, re.IGNORECASE)
-        if m_rel:
-            extracted_version = m_rel.group(1)
-
-    if not extracted_version:
-        version_pattern = re.search(r'\bv(\d+(?:\.\d+)*)\b', clean_version, re.IGNORECASE)
-        if version_pattern:
-            extracted_version = version_pattern.group(1)
-
-    if not extracted_version:
-        m_dot = re.search(r'\b(\d+\.\d+(?:\.\d+)*)\b', clean_version)
-        if m_dot:
-            extracted_version = m_dot.group(1)
-
-    if not extracted_version and '-' in clean_version:
-        for part in clean_version.split('-'):
-            part_clean = part.lstrip('vV')
-            if re.match(r'^\d+(?:\.\d+)+$', part_clean):
-                extracted_version = part_clean
-                break
-
-    if extracted_version:
-        clean_version = extracted_version
-
-    parts = (version_name or '').split('-')
-    for i, part in enumerate(parts):
-        part_to_check = part[1:] if part.lower().startswith('v') and len(part) > 1 else part
-        if re.match(r'^[\d.]+$', part_to_check):
-            continue
-        if re.match(r'^[a-f0-9]{16,}!?$', part):
-            continue
-        if part.lower() in excluded_parts:
-            continue
-        if part.lower() == 'nightly':
-            designations.append('Nightly')
-            continue
-        elif part.lower() in ('dev', 'devel', 'development'):
-            designations.append('Dev')
-            continue
-        elif part.lower() in ('beta', 'alpha', 'rc'):
-            designations.append(part.upper() if len(part) <= 3 else part.title())
-            continue
-        elif part == '360p':
-            designations.append('360p / Y1 Theme Compatible')
-        elif part in ('wifi', 'wi-fi'):
-            designations.append('Wi-Fi')
-        elif part == 'rockbox':
-            designations.append('with Rockbox')
-        elif part.lower() in ('adb', 'usb', 'ethernet', 'hdmi', 'audio', 'video', 'camera', 'gps', 'nfc', 'lte', '5g', 'fm'):
-            designations.append(part.upper() if len(part) <= 4 else part.title())
-        elif part == 'ipod' and i + 1 < len(parts) and parts[i + 1] == 'theme':
-            if i + 2 < len(parts) and parts[i + 2] in adjectives:
-                adjective = parts[i + 2]
-                designations.append(f'iPod Classic/Video Rockbox Theme {adjective.title()}')
-            else:
-                designations.append('iPod Classic/Video (240p) Rockbox Themes')
-        elif part == 'theme' and i > 0 and parts[i - 1] == 'ipod':
-            continue
-        else:
-            if i + 1 < len(parts) and parts[i + 1] in adjectives:
-                adjective = parts[i + 1]
-                main_part = part.replace('-', ' ').title()
-                designations.append(f'{main_part} {adjective.title()}')
-            else:
-                if part not in adjectives:
-                    designations.append(part.replace('-', ' ').title())
-
-    return {
-        'clean_version': clean_version.strip(),
-        'designations': designations,
-    }
+    return versioning.parse_version_designations(
+        version_name, label_for_os=tr("label_for_os")
+    )
 
 
 def is_base_release_tag(tag_name) -> bool:
-    """True for base ROM tags, such as ``type-a-base``.
-
-    A base tag is the firmware tree the next builds are produced from, not a
-    build anyone installs or updates to, so it is kept out of every release
-    list: the catalogue rows, the latest-release lookup, cache files written
-    before this rule existed, and the app-update checks.
-
-    Only the whole word counts: ``database-3.1`` and ``baseband-2.0`` are not
-    base ROMs.
-    """
-    words = [word for word in re.split(r"[^a-z0-9]+", str(tag_name or "").lower()) if word]
-    return "base" in words
+    """True for base ROM tags, such as ``type-a-base``."""
+    return versioning.is_base_release_tag(tag_name)
 
 
 def release_version_tuple(tag_name, release_name=None):
-    """Dotted version a tag carries (``stable-v0.5`` → ``(0, 5)``), or ``None``
-    when the tag has no dotted version to read (nightlies, branch names)."""
-    title_ver = None
-    if release_name:
-        title_str = _semver_from_release_title(release_name)
-        if title_str:
-            title_ver = _parse_semver(title_str.lstrip('vV'))
-
-    clean = str(parse_version_designations(tag_name or '').get('clean_version') or '')
-    parsed = _parse_semver(clean.lstrip('vV'))
-
-    if parsed is None or (len(parsed) == 1 and parsed[0] >= 1000):
-        if title_ver is not None:
-            return title_ver
-        from_tag_title = _semver_from_release_title(tag_name)
-        if from_tag_title:
-            return _parse_semver(from_tag_title.lstrip('vV'))
-        return None
-
-    if title_ver is not None and len(title_ver) >= 2 and len(parsed) == 1:
-        return title_ver
-
-    return parsed
+    """Dotted version a release carries (``stable-v0.5`` → ``(0, 5)``)."""
+    return versioning.release_version_tuple(tag_name, release_name=release_name)
 
 
 def release_version_ok(
@@ -1012,60 +802,20 @@ def release_version_ok(
 ):
     """Whether a release from ``repo`` may be listed for ``model``.
 
-    Rockbox builds before 0.5 are NOT compatible with Y1 units sold after
-    March 2026 (shipping with Innioasis OS 3.0.7 pre-installed). Therefore,
-    for model == "Y1", releases before 0.5 are hidden unless show_old_rockbox
-    is True.
-
-    For Y2, A5, and other non-Y1 models, this gating is NEVER applied.
-    Y1 Type B units are exempt from the version cutoff too: they only ever
-    shipped Original Software from before 3.0.7, so the newer Type A bootloader
-    restriction does not describe them. Pass ``selected_type="B"`` for a Type B
-    browse; tags with no readable version stay hidden because they cannot be
-    proven to be a compatible build.
-
-    Tags that carry no semantic version and are nightlies (e.g. nightly-<sha>) are hidden unless
-    show_nightly is True. Repos without a pinned minimum are unrestricted.
+    The Rockbox < 0.5 gate, the Type B exemption and the model exemptions are
+    shared with the terminal session in ``src/versioning.py``.
     """
-    if not tag_name:
-        return False
-    is_nightly = "nightly" in str(tag_name or "").lower()
-    if is_nightly and not show_nightly:
-        return False
-
-    model_str = str(model or "").upper()
-    slug = (repo or "").strip()
-    if "github.com/" in slug:  # tolerate a full URL where a slug is expected
-        slug = slug.split("github.com/", 1)[1]
-    slug = slug.strip("/").removesuffix(".git")
-    resolved_repo = resolve_firmware_repo(slug)
-    is_non_y1 = bool(model) and model_str != "Y1" and "Y1" not in model_str
-    is_type_b = model_str == "Y1" and str(selected_type or "").upper() == "B"
-    if is_non_y1:
-        # Y2, A5, and non-Y1 models are completely exempt from the < 0.5 restriction
-        return True
-
-    minimum_str = REPO_MIN_RELEASE_VERSION.get(resolved_repo)
-    if not minimum_str or show_old_rockbox:
-        return True
-
-    minimum = _parse_semver(str(minimum_str).lstrip('vV'))
-    if minimum is None:
-        logger.warning("Invalid minimum version %r for %s; not gating", minimum_str, repo)
-        return True
-    version = release_version_tuple(tag_name, release_name=release_name)
-    if version is None:
-        return False
-    if is_type_b:
-        # Type B units predate the Type A hardware this cutoff protects. A
-        # versioned pre-0.5 build is safe for them; the unversioned case above
-        # still can't be proven compatible.
-        return True
-    # Pad so 0.5 and 0.5.0 compare equal, and (0, 4, 9) < (0, 5).
-    width = max(len(version), len(minimum))
-    version = version + (0,) * (width - len(version))
-    minimum = minimum + (0,) * (width - len(minimum))
-    return version >= minimum
+    return versioning.release_version_ok(
+        repo,
+        tag_name,
+        model=model,
+        show_old_rockbox=show_old_rockbox,
+        show_nightly=show_nightly,
+        release_name=release_name,
+        selected_type=selected_type,
+        minimums=REPO_MIN_RELEASE_VERSION,
+        resolve_repo=resolve_firmware_repo,
+    )
 
 
 def _release_safety_blocked(package, model, selected_type, rel):
@@ -1234,69 +984,13 @@ def classify_release_list(releases, installed_tag, installed_published="", notif
 
 
 def release_sort_key(release):
-    """Build a sortable 5-tier key so newer releases appear first in reverse sort."""
-    tag_name = (release or {}).get("tag_name", "")
-    name = (release or {}).get("name", "")
-    title_semver = detect_title_start_or_end_semver(name)
-
-    numeric_version = None
-    if title_semver:
-        numeric_version = _parse_semver(title_semver)
-
-    version_info = parse_version_designations(tag_name)
-    clean_version = str(version_info.get("clean_version", "")).lstrip("vV")
-
-    tag_timestamp = _extract_tag_timestamp(tag_name)
-    if not tag_timestamp and numeric_version is None:
-        numeric_version = _parse_semver(clean_version)
-        if numeric_version is None:
-            numeric_version = _parse_semver(
-                _semver_from_release_title(name)
-            )
-
-    published_at = (release or {}).get("published_at", "")
-    try:
-        published_timestamp = datetime.fromisoformat(published_at.replace("Z", "+00:00")).timestamp()
-    except Exception:
-        published_timestamp = 0.0
-
-    return (
-        1 if (tag_timestamp or numeric_version is not None) else 0,
-        tag_timestamp,
-        numeric_version or tuple(),
-        published_timestamp,
-        str(tag_name).lower(),
-    )
+    """Build a sortable 5-tier key so newer releases appear first."""
+    return versioning.release_sort_key(release)
 
 
 def _release_datestamp_label(raw: str) -> str | None:
-    """Human date for a tag, or None when the tag has no datestamp.
-
-    The list and the install card share this so they cannot disagree.
-    """
-    text = str(raw or "")
-    match = re.search(
-        r"(?<!\d)((?:19|20)\d{2})[-_./]?(0[1-9]|1[0-2])[-_./]?(0[1-9]|[12]\d|3[01])(?!\d)",
-        text,
-    )
-    year = month = day = None
-    if match:
-        year, month, day = (int(match.group(i)) for i in (1, 2, 3))
-    else:
-        short = re.search(
-            r"(?<!\d)(\d{2})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])(?!\d)",
-            text,
-        )
-        if not short:
-            return None
-        yy = int(short.group(1))
-        year = 2000 + yy if yy < 70 else 1900 + yy
-        month, day = int(short.group(2)), int(short.group(3))
-    try:
-        dt = datetime(year, month, day)
-    except ValueError:
-        return None
-    return f"{dt.strftime('%B')} {dt.day} {dt.year}"
+    """Human date for a tag, or None when the tag has no datestamp."""
+    return versioning.release_datestamp_label(raw)
 
 
 def parse_manufacturer_rom_info(name_or_path: str) -> dict | None:
@@ -1455,127 +1149,15 @@ def format_install_card_title(software: str, version_label: str = "", model: str
 
 
 def parse_clean_release_tag_label(rel, prefer_240p=False, version_only=False) -> str:
-    """Parse release tag to isolate semantic version or datestamp, followed by parenthesized verbs.
+    """The label beside a release row, matching the terminal session."""
+    from .i18n import tr
 
-    Adheres to user requirements:
-    - Removes everything except the semantic version (e.g. 3.0.7) or datestamp (e.g. 'January 3 2026').
-    - Any verbs listed in the release tag are placed after the version in separate parentheses,
-      e.g. 2.1.9-adb -> 2.1.9 (ADB)
-      1.8.2-adb-wifi or 1.8.2-adb-wi-fi -> 1.8.2 (ADB) (Wi-Fi)
-      Handles 'wi' and 'fi' permutations cleanly as 'Wi-Fi'.
-    """
-    tag_name = (rel.get("tag_name") or "").strip()
-    name = (rel.get("name") or "").strip()
-    is_prerelease = bool(rel.get("prerelease"))
-    raw = tag_name or name
-    if not raw:
-        return ""
-
-    # 1. Datestamp check. Same shapes the catalogue and GitHub tags use:
-    # YYYYMMDD, YYYY-MM-DD, YYYY.MM.DD, YYYY/MM/DD, YYMMDD, and the
-    # separated forms already accepted above.
-    date_str = _release_datestamp_label(raw)
-
-    # 2. Semantic version check (e.g. 3.1.2, 0.9.0, 1.8.2)
-    # Check compound version like 2.4.0-koensayr-3.0.2 or 2.0.4-os-3.0.2
-    compound_m = re.search(
-        r"(?:^|[^\d.])(?:v|v\.)?(\d+\.\d+(?:\.\d+)?)[-_](?:[a-zA-Z0-9]+[-_]|os[-_])?v?(\d+\.\d+(?:\.\d+)?)(?:[^\d.]|$)",
-        raw,
-        re.IGNORECASE,
+    return versioning.parse_clean_release_tag_label(
+        rel,
+        prefer_240p=prefer_240p,
+        version_only=version_only,
+        label_for_os=tr("label_for_os"),
     )
-    compound_os_version = None
-    if compound_m:
-        semver_str = compound_m.group(1)
-        compound_os_version = compound_m.group(2)
-    else:
-        v_match = re.search(r"(?:^|[^\d.])(?:v|v\.)?(\d+\.\d+(?:\.\d+)?(?:[a-zA-Z0-9]+)?)(?:[^\d.]|$)", raw, re.IGNORECASE)
-        semver_str = None
-        if v_match:
-            semver_str = v_match.group(1)
-
-    version_part = semver_str or date_str
-    title_semver = detect_title_start_or_end_semver(name)
-    # A tag that carries both a version and a build date shows both, the date
-    # beside the version (``2.0.4 (January 3 2026)``). A date-only tag still
-    # shows the date as its version, as before.
-    tag_date = date_str if (semver_str and date_str) else None
-    if title_semver:
-        version_part = title_semver
-    elif not version_part:
-        # Tags such as ``baseline-204`` identify a build, not a version. Their
-        # release titles carry the usable version (``Y2Linux 1.0 Beta 9.2.13``).
-        version_part = _semver_from_release_title(name)
-    if not version_part:
-        return "" if version_only else (name or raw)
-
-    # 3. Extract verbs from tag_name (and parenthesized flags in name)
-    lower_raw = raw.lower()
-    verbs = []
-
-    if name:
-        for paren in re.findall(r"\(([a-zA-Z0-9_\-\s]+)\)", name):
-            p_clean = paren.strip().lower()
-            if p_clean in ("adb", "wifi", "wi-fi", "root", "magisk", "240p", "360p"):
-                if "wi" in p_clean:
-                    v_str = "Wi-Fi"
-                elif p_clean in ("adb", "root"):
-                    v_str = p_clean.upper() if p_clean == "adb" else "Root"
-                elif "240p" in p_clean:
-                    v_str = "240p"
-                elif "360p" in p_clean:
-                    v_str = "360p"
-                else:
-                    v_str = paren.strip().title()
-                if v_str not in verbs:
-                    verbs.append(v_str)
-
-    if compound_os_version:
-        from .i18n import tr
-        os_label = tr("label_for_os").format(version=compound_os_version)
-        if os_label not in verbs:
-            verbs.append(os_label)
-
-    # ADB
-    if re.search(r"\badb\b", lower_raw) or "-adb" in lower_raw or "adb-" in lower_raw or "(adb)" in lower_raw:
-        verbs.append("ADB")
-
-    # Wi-Fi permutations: wifi, wi-fi, wi_fi, or "wi"
-    if re.search(r"\b(?:wi[-_]?fi|wifi|wi)\b", lower_raw):
-        verbs.append("Wi-Fi")
-
-    # 240p / 360p. The suffix follows the row's own asset/resolution only:
-    # a global prefer_240p flag must never mark 360p rows as 240p. Rows whose
-    # asset is a 240p variant only exist when the Settings toggle allows them.
-    is_240p = (
-        rel.get("selected_resolution") == "240p"
-        or "240p" in str(rel.get("asset_name", "")).lower()
-        or "240p" in lower_raw
-    )
-    if is_240p:
-        if "240p" not in verbs:
-            verbs.append("240p")
-    elif "360p" in lower_raw:
-        verbs.append("360p")
-
-    # Root / Magisk
-    if re.search(r"\b(?:root|magisk)\b", lower_raw):
-        verbs.append("Root")
-
-    # Beta / Alpha / RC
-    rc_m = re.search(r"\b(rc\d*|beta\d*|alpha\d*)\b", lower_raw)
-    if rc_m:
-        val = rc_m.group(1)
-        verbs.append(val.upper() if "rc" in val else val.title())
-
-    # The tag's own date reads next to the version, ahead of the other verbs.
-    if tag_date and not version_only and tag_date not in verbs:
-        verbs.insert(0, tag_date)
-
-    verb_suffix = " ".join(f"({v})" for v in verbs)
-    label = f"{version_part} {verb_suffix}".strip()
-    if is_prerelease and "[preview]" not in label.lower() and "(beta)" not in label.lower() and "(alpha)" not in label.lower():
-        label += "  [preview]"
-    return label
 
 
 def format_release_display_label(rel, prefer_240p=False):
