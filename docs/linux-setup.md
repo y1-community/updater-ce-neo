@@ -18,28 +18,64 @@ People should be able to download a portable zip, tarball, or AppImage and run i
 It tries, in order:
 
 1. The AppImage published for this architecture.
-2. The portable `.tar.gz` or `.zip` published for this architecture. A name containing `lite` or `terminal` is the text session, not this package.
-3. The source zip of the newest release that contains `launcher.py` or `firmware_downloader.py`. The repos, in order, are `y1-community/updater-ce-neo`, `y1-community/innioasis-updater`, and `ryan-specter/innioasis-updater`. The installer makes a per-user virtualenv and installs `requirements.txt` into it. `y1-community/innioasis-updater` is the website; its zip is used only when the tree is actually the app.
+2. The portable `.tar.gz`, then the portable `.zip`, published for this architecture. A name containing `lite` or `terminal` is the text session, not this package.
+3. The source zip of the newest release that contains `launcher.py` or `firmware_downloader.py`. The repos, in order, are `y1-community/updater-ce-neo`, `y1-community/innioasis-updater`, `ryan-specter/updater-ce-neo`, and `ryan-specter/innioasis-updater`. The installer makes a per-user virtualenv and installs `requirements.txt` into it. If the Qt front end has no wheel for that Python, it installs the rest of `requirements.txt` so the terminal interface still works. `y1-community/innioasis-updater` is the website; its zip is used only when the tree is actually the app.
+4. The terminal interface of whatever install exists, with a printed explanation of what is missing.
 
-Before the download it offers to install the libraries the window needs (xcb, FUSE, libusb, and a Python venv) with apt, dnf, zypper, pacman, or apk. The default answer is yes. Immutable images that cannot take those packages still get the prebuilt file when one is published.
+Before the download it offers to install the libraries the window needs (xcb, FUSE, libusb, and a Python venv) plus python3/curl when they are absent. It reads the package manager this machine actually has:
+
+| System | Manager used |
+|---|---|
+| Debian, Ubuntu, Mint, Pop!_OS, Zorin, Deepin, Kali | `apt-get` |
+| Fedora, RHEL, Rocky, AlmaLinux, Nobara | `dnf` (or `yum`) |
+| openSUSE, SLES | `zypper` |
+| Arch, CachyOS, Omarchy, Manjaro, EndeavourOS, SteamOS | `pacman` |
+| Alpine, postmarketOS | `apk` |
+| Void | `xbps-install` |
+| Gentoo, Funtoo | `emerge` |
+| Fedora Silverblue/Kinoite, Bazzite and other immutable images | `rpm-ostree` (reports the reboot it needs) |
+| NixOS and Guix | guidance for `appimage-run` / a `guix shell`, not a silent host change |
+| Any Linux with Homebrew, and macOS | `brew` |
+| macOS with MacPorts | `port` |
+
+The default answer is yes. A system with no recognised manager, an immutable image that cannot take the packages without a reboot, and a rootless account without sudo/pkexec/doas all get the exact commands printed, then the terminal interface — the installer no longer stops at `No supported package manager found`.
+
+## One script on Linux and macOS
+
+`run_linux.sh` and `run_mac.sh` accept the same options and hand over to each other: `run_linux.sh` on macOS runs `run_mac.sh`, and `run_mac.sh` on Linux runs `run_linux.sh`. One download link therefore works on either system, and a machine that gets the wrong script corrects itself instead of looking for apt on a Mac. `INNIOASIS_OPSYS=linux` or `INNIOASIS_OPSYS=darwin` chooses one explicitly; a second hand-off is refused rather than looping. See [macos-setup.md](macos-setup.md).
 
 ## Where files are published
 
 The archive is not stored in the git repository. `dist/` is build output.
 
-`UpdaterCE-Lite.tar.gz` and `UpdaterCE-Lite.tar.gz.sha256` are extra assets on the existing GitHub release **2.5.3** of `y1-community/updater-ce-neo`. These files on that release stay as they are:
+The Linux 2.5.4 window packages are published on the existing **2.5.3** release in both `y1-community/innioasis-updater` (first installs) and `y1-community/updater-ce-neo` (updates). These files on those releases stay as they are:
 
 - `Innioasis.Updater.for.Mac.dmg`
 - `installer.exe`
 - `UpdaterCE-Windows-Portable.zip`
-- `UpdaterCE.appimage`
+
+The Linux files beside them are replaced with the tested 2.5.4 build:
+`UpdaterCE.appimage`, `UpdaterCE-Linux-Portable.tar.gz`, `UpdaterCE-Linux-Portable.zip`,
+their arm64 equivalents, and matching `.sha256` files. The Windows and macOS
+files are never replaced by a Linux upload.
 
 There is no 2.5.4 release tag. Installed Windows and Mac copies compare release tags, and a higher tag that also contains their package would tell them an update exists. The source tree's version is 2.5.4, and that is what the terminal session reports. It is not a GitHub release.
 
-`run_linux_lite.sh` reads `/releases/tags/2.5.3` first, then any release that carries `UpdaterCE-Lite.tar.gz`, then the copy on innioasis.app. The update checker ignores asset names containing `lite` or `terminal`, so that archive cannot be selected as the Linux app update.
+`run_linux_lite.sh` chooses its source before downloading: a first install reads
+`y1-community/innioasis-updater`, while an existing terminal install or
+`--update` reads `y1-community/updater-ce-neo`. Each lookup falls back to the
+other repository. The update checker ignores asset names containing `lite` or
+`terminal`, so that archive cannot be selected as the Linux app update.
 
-## Later Linux builds
+## Linux build guarantees
 
-A newer Linux AppImage, portable zip, and portable tar.gz can be added to the **2.5.3** tag after they have been tested. They are added beside the files already there. The Windows and Mac files are not replaced, and the release is not retagged. Until that test, those packages are not uploaded. When none of them match the machine, the installer lays the app out from source.
+The Linux installer understands Homebrew on Linux too (`~/.linuxbrew`, `/home/linuxbrew/.linuxbrew`, `/opt/homebrew`): it is used only when no native manager exists, because the distribution's own packages are the safer fix.
+
+Both Linux architectures are built in Ubuntu 22.04 with Python 3.10. The bundle
+verifier rejects a glibc floor above 2.35, a Python newer than 3.10, a declared
+x86-64-v2/v3 requirement, or a missing Qt XCB client library. The AppImage,
+portable tar.gz and zip carry the same `_internal` tree and `run_linux.sh`, so
+the AppImage's repair path works without a separate download. When no package
+matches the machine, the installer still lays the app out from source.
 
 See `docs/RELEASE_FILES.md` and `docs/terminal-mode.md`.
