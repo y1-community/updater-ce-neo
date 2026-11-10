@@ -403,6 +403,57 @@ def _linux_declared_accent() -> str | None:
     return None
 
 
+#: macOS caches the accent this process resolved. A change in System Settings
+#: only reaches a process that observes the colour-preference notification, so
+#: that handler asks the next probe to read the user's default directly.
+_force_plist_accent = False
+
+_MACOS_ACCENT_NAMES = {
+    "-1": "#8e8e93",
+    "0": "#ff3b30",
+    "1": "#ff9500",
+    "2": "#ffcc00",
+    "3": "#34c759",
+    "4": "#007aff",
+    "5": "#af52de",
+    "6": "#ff2d55",
+}
+
+
+def note_macos_accent_changed() -> None:
+    """Read the accent from the user's default on the next probe.
+
+    Called when ``AppleColorPreferencesChangedNotification`` arrives. AppKit
+    keeps ``controlAccentColor`` cached per process otherwise, which is what
+    left the window on the previous accent after System Settings changed it
+    (Rosetta and frozen builds included).
+    """
+    global _force_plist_accent
+    _force_plist_accent = True
+
+
+def _macos_accent_from_defaults() -> tuple[str, str] | None:
+    """The accent index the user's own defaults name, or None."""
+    try:
+        import subprocess
+
+        res = subprocess.run(
+            ["defaults", "read", "-g", "AppleAccentColor"],
+            capture_output=True,
+            text=True,
+            timeout=1,
+        )
+    except Exception:
+        return None
+    if res.returncode != 0:
+        return None
+    accent = _MACOS_ACCENT_NAMES.get(res.stdout.strip())
+    if not accent:
+        return None
+    text = "#000000" if accent in ("#ffcc00", "#ff9500", "#34c759") else "#ffffff"
+    return accent, text
+
+
 def _probe_native_accent(palette: QPalette | None = None) -> tuple[str, str] | None:
     """Return (accent_hex, accent_text_hex) from the host desktop, or None.
 
@@ -411,6 +462,14 @@ def _probe_native_accent(palette: QPalette | None = None) -> tuple[str, str] | N
     None of these raise a permission dialog.
     """
     if sys.platform == "darwin":
+        global _force_plist_accent
+        if _force_plist_accent:
+            # AppKit has not processed the change yet; the user's own default
+            # is the only fresh answer.
+            _force_plist_accent = False
+            fresh = _macos_accent_from_defaults()
+            if fresh:
+                return fresh
         try:
             from AppKit import NSColor
             c = NSColor.controlAccentColor().colorUsingColorSpaceName_("NSCalibratedRGBColorSpace")
@@ -426,31 +485,9 @@ def _probe_native_accent(palette: QPalette | None = None) -> tuple[str, str] | N
             pass
         # AppKit is not always importable. The accent index lives in the
         # user's own defaults and reading it does not raise a permission dialog.
-        try:
-            import subprocess
-            res = subprocess.run(
-                ["defaults", "read", "-g", "AppleAccentColor"],
-                capture_output=True,
-                text=True,
-                timeout=1,
-            )
-            if res.returncode == 0:
-                named = {
-                    "-1": "#8e8e93",
-                    "0": "#ff3b30",
-                    "1": "#ff9500",
-                    "2": "#ffcc00",
-                    "3": "#34c759",
-                    "4": "#007aff",
-                    "5": "#af52de",
-                    "6": "#ff2d55",
-                }
-                accent = named.get(res.stdout.strip())
-                if accent:
-                    text = "#000000" if accent in ("#ffcc00", "#ff9500", "#34c759") else "#ffffff"
-                    return accent, text
-        except Exception:
-            pass
+        fresh = _macos_accent_from_defaults()
+        if fresh:
+            return fresh
 
     if IS_WINDOWS:
         try:
@@ -2397,6 +2434,7 @@ class ThemeWatcher(QObject):
         except Exception:
             pass
         self._installed = True
+        self._install_macos_accent_observer()
         self._poll_timer.start()
 
     def stop(self) -> None:
@@ -2415,6 +2453,49 @@ class ThemeWatcher(QObject):
             self._app.removeEventFilter(self)
         except Exception:
             pass
+        observer = getattr(self, "_macos_accent_observer", None)
+        if observer is not None:
+            try:
+                from AppKit import NSDistributedNotificationCenter
+
+                NSDistributedNotificationCenter.defaultCenter().removeObserver_(observer)
+            except Exception:
+                pass
+            self._macos_accent_observer = None
+
+    def _install_macos_accent_observer(self) -> None:
+        """Repaint when System Settings changes the accent colour.
+
+        macOS turns that into no Qt palette event, and AppKit keeps the accent
+        it resolved at startup until the process observes this notification —
+        which is why the window could stay on the old accent until a restart,
+        Rosetta or not.
+        """
+        if sys.platform != "darwin":
+            return
+        try:
+            from AppKit import NSDistributedNotificationCenter
+            from Foundation import NSOperationQueue
+        except Exception:
+            logger.debug(
+                "AppKit is unavailable for the accent notification", exc_info=True
+            )
+            return
+        try:
+            center = NSDistributedNotificationCenter.defaultCenter()
+            self._macos_accent_observer = center.addObserverForName_object_queue_usingBlock_(
+                "AppleColorPreferencesChangedNotification",
+                None,
+                NSOperationQueue.mainQueue(),
+                lambda _notification: self._macos_accent_changed(),
+            )
+        except Exception:
+            logger.debug("could not observe the macOS accent change", exc_info=True)
+
+    def _macos_accent_changed(self) -> None:
+        """Re-read the host accent and restyle every widget with it."""
+        note_macos_accent_changed()
+        self.schedule()
 
     def _on_palette_changed(self, palette=None) -> None:
         if not self._installed or self._applying:

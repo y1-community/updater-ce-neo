@@ -2,8 +2,10 @@
 
 Reborn (Y2Linux) has no ``derivative`` in ``slidia_manifest.xml`` and updates
 itself on the player, so Updater CE's tracked install can still name the
-firmware that came before it. That is an unknown — the install must offer Keep
-Data and ask which firmware is running, not hide the option.
+firmware that came before it. That is not "unknown": a firmware with no
+family shares its data partition with itself only, so a player that came from
+another Y2Linux build (Y2Player, a pre-Reborn Y2Linux, stock) must not be
+offered Keep Data for it.
 """
 
 from unittest.mock import patch
@@ -25,6 +27,7 @@ def _pkg(name, repo, derivative=""):
 
 REBORN = _pkg("Reborn (Y2Linux)", "schulzcode/y2linux")
 STOCK = _pkg("Original Software", "y1-community/y1-stock-rom")
+Y2PLAYER = _pkg("Y2Player", "schulzcode/Y2Player")
 ROCKBOX = _pkg("Rockbox", "spycemagic/y2-rockbox")
 KOENSAYR = _pkg(
     "Koensayr", "ryan-specter/koensayr-auto", derivative="y1-community/y1-stock-rom"
@@ -49,13 +52,34 @@ def _check(packages, recorded, pkg):
         )
 
 
-def test_reborn_players_are_offered_keep_data_and_asked_which_firmware_runs():
-    # The tracked record still names stock: Reborn was installed outside the
-    # app, so the catalogue knows no family for either side.
-    compatible, available, confirm = _check([REBORN, STOCK], "Original Software", REBORN)
-    assert compatible is None
+def test_a_player_coming_from_another_y2linux_build_gets_no_keep_data():
+    # The tracked record names Y2Player: a Y2Linux player without Reborn. The
+    # catalogue knows no family for either side, and Reborn can only carry
+    # data from Reborn forward.
+    compatible, available, confirm = _check([REBORN, Y2PLAYER, STOCK], "Y2Player", REBORN)
+    assert compatible is False
+    assert available is False
+    assert confirm is False
+
+
+def test_another_release_of_reborn_is_still_the_same_firmware():
+    # Reborn updates itself on the player, so the tracked record names the
+    # release (``Y2Linux 1.0 Beta 9.2.13``) rather than the catalogue row.
+    # Every Y2Linux release is the same system and may carry data forward.
+    compatible, available, confirm = _check(
+        [REBORN, STOCK], "Y2Linux 1.0 Beta 9.2.13", REBORN
+    )
+    assert compatible is True
     assert available is True
-    assert confirm is True
+    assert confirm is False
+
+
+def test_the_old_catalogue_name_is_still_the_same_firmware():
+    # The row used to be called ``Y2Reborn (Y2Linux)``; a player tracked
+    # under that name is on the same firmware, not another system.
+    compatible, available, _ = _check([REBORN, STOCK], "Y2Reborn (Y2Linux)", REBORN)
+    assert compatible is True
+    assert available is True
 
 
 def test_the_confirmation_names_reborn_itself():

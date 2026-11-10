@@ -240,7 +240,9 @@ def _run_install(state: BrowseState, output: Path, report=None, ask_keep=None) -
     # The window only offers the tick when the catalogue allows it and the
     # package actually carries a preserve-data scatter. Ask at install time,
     # not only in Settings, exactly as the connect card does.
-    offered = keep_data_offered(state.package) and flash._preserve_scatter(folder) is not None
+    offered = keep_data_offered(
+        state.package, model=state.model, hardware_type=state.hardware_type
+    ) and flash._preserve_scatter(folder) is not None
     if ask_keep:
         choice = ask_keep(offered, state.keep_data)
     else:

@@ -44,6 +44,30 @@ def _package_software_keys(pkg) -> set[str]:
     return keys
 
 
+def _compact(value) -> str:
+    return _key(value).replace(" ", "").replace("-", "").replace("_", "")
+
+
+def _record_names_firmware(pkg, record) -> bool:
+    """True when the tracked record names this package's own firmware.
+
+    Each release of a firmware is still that firmware. The catalogue has
+    called the same one ``Y2Reborn (Y2Linux)`` and then ``Reborn (Y2Linux)``,
+    while its releases are ``Y2Linux 1.0 Beta 9.3.x``, so a name comparison
+    alone would read every older version as a different system. The
+    repository's name is what identifies the firmware; another system
+    (``Y2Player``, ``Classy``) does not carry it.
+    """
+    repo_name = _norm(getattr(pkg, "repo", "")).split("/")[-1]
+    needle = _compact(repo_name)
+    if not needle:
+        return False
+    for value in (record.get("software_name"), record.get("package_slug")):
+        if needle in _compact(value):
+            return True
+    return False
+
+
 def _same_software_record(pkg, record) -> bool:
     """True when ``pkg`` is the software the tracked install names.
 
@@ -215,8 +239,9 @@ def tracked_is_compatible(model: str, pkg, settings: Optional[QSettings] = None,
     A reinstall of the software already tracked always shares the player's
     data partition, and so does any member of its derivative family (stock,
     Better-Y and Koensayr are one family because both mods declare stock as
-    ``derivative``). Comparison stays inside one model: a Y2 Rockbox is never
-    compatible with a Y1 install.
+    ``derivative``). A firmware that declares no family shares it with itself
+    only, so it needs its own tracked install. Comparison stays inside one
+    model: a Y2 Rockbox is never compatible with a Y1 install.
     """
     if pkg is None:
         return False
@@ -227,7 +252,20 @@ def tracked_is_compatible(model: str, pkg, settings: Optional[QSettings] = None,
     # even when the incoming copy is local and has no repository.
     if _same_software_record(pkg, record):
         return True
+    # Another release, or the older catalogue name, of the same firmware.
+    # Reborn (Y2Linux) carries its own data forward across its own versions.
+    if _record_names_firmware(pkg, record):
+        return True
     tracked = tracked_package(model, pkg, settings=settings, hardware_type=hardware_type)
+    # Neither side names a parent firmware, so nothing says their data
+    # partitions match. That used to read as "unknown": Keep Data was offered
+    # and the install asked which firmware was running. A firmware that
+    # declares no family is compatible with its own releases only, though, and
+    # the player that came from a different system — Y2Player, Classy, stock —
+    # must start on a fresh data partition. Asking after the box was already
+    # ticked offered it to exactly those players.
+    if not declares_family(pkg) and not declares_family(tracked):
+        return False
     if tracked is None:
         return None
     incoming_repo = _norm(getattr(pkg, "repo", ""))
@@ -237,15 +275,6 @@ def tracked_is_compatible(model: str, pkg, settings: Optional[QSettings] = None,
     packages = _model_packages(model or getattr(pkg, "model", ""))
     if family_repos(pkg, packages).intersection(family_repos(tracked, packages)):
         return True
-    # Neither package names the firmware it was built from, so the catalogue
-    # cannot say whether they share a data partition. That is unknown, not a
-    # refusal: Reborn (Y2Linux) installs and updates itself outside this app,
-    # so the tracked record can still name whatever came before it. The
-    # install asks which firmware is running (``needs_confirmation``) instead
-    # of hiding Keep Data. A declared family on either side *is* evidence, so
-    # a mismatch there stays incompatible.
-    if not declares_family(pkg) and not declares_family(tracked):
-        return None
     # A local copy carries no repository, so its family cannot be placed. That
     # is unknown rather than proof of a different data partition.
     if not incoming_repo or not tracked_repo:

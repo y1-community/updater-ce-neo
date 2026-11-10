@@ -139,6 +139,54 @@ def test_watcher_apply_now_runs_callback_and_restamps():
         app.processEvents()
 
 
+def test_macos_accent_preference_change_repaints_immediately(monkeypatch):
+    """The Mac accent change notifies no Qt signal, so the watcher listens itself."""
+    import types
+
+    from src.ui import dark
+
+    registered = []
+    called = []
+
+    class _Center:
+        def addObserverForName_object_queue_usingBlock_(self, name, obj, queue, block):
+            registered.append((name, block))
+            return "accent-observer"
+
+        def removeObserver_(self, observer):
+            registered.append(("removed", observer))
+
+    center = _Center()
+    appkit = types.ModuleType("AppKit")
+    appkit.NSDistributedNotificationCenter = type(
+        "NSDistributedNotificationCenter",
+        (),
+        {"defaultCenter": staticmethod(lambda: center)},
+    )
+    foundation = types.ModuleType("Foundation")
+    foundation.NSOperationQueue = type(
+        "NSOperationQueue", (), {"mainQueue": staticmethod(lambda: None)}
+    )
+    monkeypatch.setitem(sys.modules, "AppKit", appkit)
+    monkeypatch.setitem(sys.modules, "Foundation", foundation)
+    monkeypatch.setattr(dark.sys, "platform", "darwin")
+    monkeypatch.setattr(dark, "note_macos_accent_changed", lambda: called.append(True))
+
+    app = _app()
+    watcher = dark.ThemeWatcher(app)
+    watcher._installed = True
+    try:
+        watcher._install_macos_accent_observer()
+        assert registered[0][0] == "AppleColorPreferencesChangedNotification"
+        registered[0][1](None)
+        assert called == [True]
+        assert watcher._debounce.isActive()
+    finally:
+        watcher.stop()
+        app.processEvents()
+    assert ("removed", "accent-observer") in registered
+
+
 def test_page_refresh_hooks_run_clean():
     """Every persistent page exposes refresh_theme and runs it headless."""
     from src.ui.error_page import ErrorPage

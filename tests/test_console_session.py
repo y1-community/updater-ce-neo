@@ -11,6 +11,7 @@ import sys
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 REPO = Path(__file__).resolve().parents[1]
 if str(REPO) not in sys.path:
@@ -293,6 +294,62 @@ class SimulationTests(unittest.TestCase):
                 os.environ["INNIOASIS_SIMULATE"] = original
         self.assertEqual(code, 0)
         self.assertEqual(adb_code, 0)
+
+
+class KeepDataOfferTests(unittest.TestCase):
+    """The text session withholds Keep Data for the same players the window does."""
+
+    def _offered(self, package, record, allow_any=False):
+        from src.console import session as session_module
+
+        with mock.patch.object(session_module, "tracked_install", return_value=record):
+            return session_module.keep_data_offered(
+                package, allow_any, package.model, ""
+            )
+
+    def _reborn(self):
+        return Package(
+            name="Reborn (Y2Linux)",
+            brand="Innioasis",
+            model="Y2",
+            repo="schulzcode/y2linux",
+            package_name="Y2Linux.zip",
+        )
+
+    def test_a_reborn_install_is_offered_when_reborn_is_what_is_tracked(self):
+        record = {"software_name": "Reborn (Y2Linux)", "tag_name": "baseline-233"}
+        self.assertTrue(self._offered(self._reborn(), record))
+
+    def test_a_player_coming_from_another_y2linux_build_gets_no_keep_data(self):
+        record = {"software_name": "Y2Player", "tag_name": "1.2.0"}
+        self.assertFalse(self._offered(self._reborn(), record))
+
+    def test_another_release_of_reborn_keeps_the_choice(self):
+        record = {"software_name": "Y2Linux 1.0 Beta 9.2.13", "tag_name": "baseline-180"}
+        self.assertTrue(self._offered(self._reborn(), record))
+
+    def test_the_old_catalogue_name_keeps_the_choice(self):
+        record = {"software_name": "Y2Reborn (Y2Linux)", "tag_name": "baseline-200"}
+        self.assertTrue(self._offered(self._reborn(), record))
+
+    def test_a_firmware_that_names_its_parent_is_still_offered(self):
+        koensayr = Package(
+            name="Koensayr",
+            brand="Innioasis",
+            model="Y2",
+            repo="ryan-specter/koensayr-auto",
+            package_name="rom_Y2.zip",
+            derivative="y1-community/y1-stock-rom",
+        )
+        record = {"software_name": "Rockbox", "tag_name": "v1.0.0"}
+        self.assertTrue(self._offered(koensayr, record))
+
+    def test_an_untracked_player_keeps_the_choice(self):
+        self.assertTrue(self._offered(self._reborn(), {}))
+
+    def test_the_advanced_override_still_offers_it(self):
+        record = {"software_name": "Y2Player", "tag_name": "1.2.0"}
+        self.assertTrue(self._offered(self._reborn(), record, allow_any=True))
 
 
 class LauncherTests(unittest.TestCase):

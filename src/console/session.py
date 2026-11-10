@@ -343,9 +343,171 @@ def package_links(package) -> list[str]:
     return links
 
 
-def keep_data_offered(package) -> bool:
-    """The catalogue-level veto on Keep Data, without importing Qt."""
-    return not bool(getattr(package, "do_not_keep_data", False))
+#: The window's device-install records, one group per model. Written by
+#: ``player_update_check.record_device_install`` and read here without Qt, so
+#: the text session asks the same Keep Data question the window asks.
+INSTALLS_SECTION = "device_installs"
+
+
+def _settings_candidates() -> list[Path]:
+    return [
+        Path.home() / "Library" / "Preferences" / "com.innioasis.updater.plist",
+        Path.home() / ".config" / "innioasis" / "updater.conf",
+    ]
+
+
+def _flatten_settings(prefix: str, data: dict, out: dict) -> dict:
+    for key, value in (data or {}).items():
+        path = f"{prefix}/{key}" if prefix else str(key)
+        if isinstance(value, dict):
+            _flatten_settings(path, value, out)
+        elif isinstance(value, list):
+            continue
+        else:
+            out[path] = value
+    return out
+
+
+def _read_settings_ini(path: Path) -> dict:
+    """A QSettings INI with its groups kept as ``section/key``."""
+    data: dict = {}
+    section = ""
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return data
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            section = stripped[1:-1].strip()
+            continue
+        if "=" not in stripped or stripped.startswith(";"):
+            continue
+        key, value = stripped.split("=", 1)
+        key = key.strip()
+        data[f"{section}/{key}" if section else key] = value.strip()
+    return data
+
+
+def _window_settings() -> dict:
+    """Everything the window stores, as slash-separated keys."""
+    for path in _settings_candidates():
+        if not path.is_file():
+            continue
+        if path.suffix == ".plist":
+            try:
+                loaded = plistlib.loads(path.read_bytes())
+            except (OSError, plistlib.InvalidFileException):
+                continue
+            if isinstance(loaded, dict):
+                return _flatten_settings("", loaded, {})
+            continue
+        return _read_settings_ini(path)
+    return {}
+
+
+def _install_record(store: dict, group: str) -> dict:
+    prefix = group + "/"
+    record = {key[len(prefix):]: value for key, value in store.items() if key.startswith(prefix)}
+    # ``tag_name`` is written with every successful install; without it there
+    # is no record to judge.
+    return record if str(record.get("tag_name") or "").strip() else {}
+
+
+def tracked_install(model: str, hardware_type: str = "") -> dict:
+    """The firmware the window last recorded installing on this model."""
+    wanted = (model or "").strip().upper()
+    if not wanted:
+        return {}
+    store = _window_settings()
+    hw = str(hardware_type or "").replace("Type", "").strip().upper()
+    groups = ([f"{INSTALLS_SECTION}/{wanted}_{hw}"] if hw else []) + [f"{INSTALLS_SECTION}/{wanted}"]
+    for group in groups:
+        record = _install_record(store, group)
+        if record:
+            return record
+    # The same fallback as ``get_device_install``: a model tracked under one
+    # hardware type still describes this player.
+    for key in store:
+        parts = key.split("/")
+        if len(parts) >= 3 and parts[0] == INSTALLS_SECTION and parts[1].startswith(f"{wanted}_"):
+            record = _install_record(store, f"{INSTALLS_SECTION}/{parts[1]}")
+            if record:
+                return record
+    return {}
+
+
+def _compact(value) -> str:
+    return str(value or "").strip().casefold().replace(" ", "").replace("-", "").replace("_", "")
+
+
+def _record_names_firmware(package, record: dict) -> bool:
+    """True when the tracked record names this package's own firmware.
+
+    Each release of a firmware is still that firmware: the catalogue has
+    called the same one ``Y2Reborn (Y2Linux)`` and then ``Reborn (Y2Linux)``,
+    and its releases are ``Y2Linux 1.0 Beta 9.3.x``. The repository's name is
+    what identifies it; Y2Player and Classy do not carry it.
+    """
+    repo_name = str(getattr(package, "repo", "") or "").strip().rstrip("/").split("/")[-1]
+    needle = _compact(repo_name)
+    if not needle:
+        return False
+    for value in (record.get("software_name"), record.get("package_slug")):
+        if needle in _compact(value):
+            return True
+    return False
+
+
+def _same_tracked_software(package, record: dict) -> bool:
+    """True when ``package`` is the software the window recorded installing."""
+    wanted = {
+        str(getattr(package, "name", "") or "").strip().casefold(),
+        str(getattr(package, "slug", "") or "").strip().casefold(),
+    }
+    wanted.discard("")
+    recorded = {
+        str(record.get("software_name") or "").strip().casefold(),
+        str(record.get("package_slug") or "").strip().casefold(),
+    }
+    recorded.discard("")
+    return bool(wanted & recorded)
+
+
+def keep_data_offered(
+    package,
+    allow_any: bool = False,
+    model: str = "",
+    hardware_type: str = "",
+) -> bool:
+    """Whether this firmware may offer Keep Data, without importing Qt.
+
+    The catalogue veto is the first rule. A package that forces Format All +
+    Download is also refused: its preserve-data scatter would be undone by the
+    format command. ``allow_any`` is the window's advanced override, and the
+    caller still requires the package's preserve-data scatter before asking.
+
+    The window's compatibility rule applies too. Reinstalling the tracked
+    software may keep data, and so may another release of the same firmware;
+    another system must name the parent it was built from. A firmware with no
+    ``derivative`` — Reborn (Y2Linux) among them — shares its data partition
+    with itself only, so a player that came from Y2Player, Classy or stock is
+    not offered the choice here either.
+    """
+    if package is None:
+        return True
+    if getattr(package, "do_not_keep_data", False) and not allow_any:
+        return False
+    if getattr(package, "format_all", False) or getattr(package, "requires_format", False):
+        return False
+    if allow_any:
+        return True
+    record = tracked_install(model or getattr(package, "model", ""), hardware_type)
+    if not record or _same_tracked_software(package, record) or _record_names_firmware(package, record):
+        return True
+    if not str(getattr(package, "derivative", "") or "").strip():
+        return False
+    return True
 
 
 #: The same destinations ``config.DONATION_LINKS`` gives the window. Copied
