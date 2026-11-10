@@ -11,6 +11,7 @@ import json
 import os
 import plistlib
 import re
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -119,7 +120,7 @@ def apply_saved_filters(state: BrowseState, data: dict | None = None) -> None:
     state.show_240p = _flag(data, "show_240p_rockbox")
     state.show_old = _flag(data, "show_old_rockbox_builds") or state.show_240p
     state.show_nightly = _flag(data, "show_nightly_dev_releases")
-    language = str(data.get("language") or "").strip()
+    language = shared_language() or str(data.get("language") or "").strip()
     if language:
         state.language = language
 
@@ -135,6 +136,7 @@ def save_filters(state: BrowseState) -> None:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(payload), encoding="utf-8")
+        remember_language(state.language)
     except OSError:
         pass
 
@@ -351,17 +353,149 @@ def support_lines() -> list[str]:
     return lines
 
 
+_LANGUAGE_ROWS: list[tuple[str, str]] | None = None
+
+
+def language_rows() -> list[tuple[str, str]]:
+    """``(code, native name)`` in the same order as the window's language menu.
+
+    Reads ``assets/i18n/languages.json`` directly. The translation module is
+    not imported: it is large, and on Python older than 3.10 it cannot even
+    be loaded. The window reads the same file.
+    """
+    global _LANGUAGE_ROWS
+    if _LANGUAGE_ROWS is not None:
+        return _LANGUAGE_ROWS
+    rows: list[tuple[str, str]] = []
+    candidates = [
+        Path(__file__).resolve().parents[2] / "assets" / "i18n" / "languages.json",
+    ]
+    meipass = getattr(sys, "_MEIPASS", "")
+    if meipass:
+        candidates.insert(0, Path(meipass) / "assets" / "i18n" / "languages.json")
+        candidates.insert(0, Path(meipass) / "i18n" / "languages.json")
+    for path in candidates:
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(raw, dict):
+            continue
+        shipped = {
+            path.stem
+            for path in path.parent.glob("*.json")
+            if path.stem != "languages"
+        }
+        for code, entry in raw.items():
+            if shipped and str(code) not in shipped:
+                continue
+            if not isinstance(entry, dict):
+                continue
+            native = entry.get("native") or entry.get("english") or code
+            rows.append((str(code), str(native)))
+        if rows:
+            break
+    if not rows:
+        rows = [(code, code) for code in ("en", "en-GB", "en-US", "de", "fr", "es", "ja", "zh-CN")]
+    rows.sort(key=lambda row: row[1].casefold())
+    _LANGUAGE_ROWS = rows
+    return rows
+
+
 def language_lines(state: BrowseState) -> list[str]:
-    choices = ("en-GB", "en", "de", "fr", "es", "ja", "zh-CN")
-    lines = ["Language", f"Current: {state.language}"]
-    for index, code in enumerate(choices, 1):
+    lines = ["Language", f"Current: {state.language}", ""]
+    for index, (code, native) in enumerate(language_rows(), 1):
         mark = ">" if code == state.language else " "
-        lines.append(f"{mark} {index}  {code}")
-    lines.append("The window stores the same language key. This screen remembers the choice.")
+        lines.append(f"{mark} {index:>3}  {native}  ({code})")
+    lines.append("")
+    lines.append("Same list as the window. Enter or a click selects. q goes back.")
     return lines
 
 
-LANGUAGES = ("en-GB", "en", "de", "fr", "es", "ja", "zh-CN")
+def remember_language(code: str) -> None:
+    """Store a language where the window reads it, and in the text-session cache."""
+    code = (code or "").strip()
+    if not code:
+        return
+    _write_shared_language(code)
+
+
+def shared_language() -> str:
+    """The language the window last saved, if this account has one."""
+    if sys.platform == "win32":
+        try:
+            import winreg
+
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\innioasis\updater") as key:
+                value, _kind = winreg.QueryValueEx(key, "language")
+            return str(value or "").strip()
+        except OSError:
+            return ""
+    data = _read_gui_store()
+    return str(data.get("language") or "").strip()
+
+
+def _gui_store_path() -> Path | None:
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Preferences" / "com.innioasis.updater.plist"
+    if sys.platform.startswith("linux"):
+        return Path.home() / ".config" / "innioasis" / "updater.conf"
+    return None
+
+
+def _read_gui_store() -> dict:
+    path = _gui_store_path()
+    if path is None or not path.is_file():
+        return {}
+    if path.suffix == ".plist":
+        try:
+            loaded = plistlib.loads(path.read_bytes())
+        except (OSError, plistlib.InvalidFileException):
+            return {}
+        return loaded if isinstance(loaded, dict) else {}
+    return _read_ini(path)
+
+
+def _write_shared_language(code: str) -> None:
+    if sys.platform == "win32":
+        try:
+            import winreg
+
+            with winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\innioasis\updater") as key:
+                winreg.SetValueEx(key, "language", 0, winreg.REG_SZ, code)
+        except OSError:
+            pass
+        return
+    path = _gui_store_path()
+    if path is None:
+        return
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.suffix == ".plist":
+            raw = path.read_bytes() if path.is_file() else b""
+            data = plistlib.loads(raw) if raw else {}
+            if not isinstance(data, dict):
+                data = {}
+            data["language"] = code
+            fmt = plistlib.FMT_BINARY if raw.startswith(b"bplist") else plistlib.FMT_XML
+            path.write_bytes(plistlib.dumps(data, fmt=fmt))
+            return
+        lines = path.read_text(encoding="utf-8").splitlines() if path.is_file() else ["[General]"]
+        replaced = False
+        out = []
+        for line in lines:
+            if line.startswith("language="):
+                out.append(f"language={code}")
+                replaced = True
+            else:
+                out.append(line)
+        if not replaced:
+            if out and not out[0].startswith("["):
+                out.insert(0, "[General]")
+            out.append(f"language={code}")
+        path.write_text("\n".join(out) + "\n", encoding="utf-8")
+    except (OSError, plistlib.InvalidFileException, ValueError):
+        pass
 
 
 def credits_lines(version: str = APP_VERSION) -> list[str]:

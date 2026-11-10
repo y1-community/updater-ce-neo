@@ -11,7 +11,19 @@ import sys
 from io import BytesIO
 import time
 from datetime import datetime
-import colorama
+try:
+    import colorama
+except ImportError:
+    # Coloured logging only. A text session installs colorama before flashing;
+    # if that install cannot run, the flash still proceeds without colour.
+    class _NoColor:
+        def __getattr__(self, _name):
+            return ""
+
+    class colorama:  # type: ignore[no-redef]
+        Fore = _NoColor()
+        Style = _NoColor()
+
 import logging.config
 
 

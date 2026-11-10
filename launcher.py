@@ -7,7 +7,9 @@ through this tiny script that puts ``src`` on ``sys.path`` and calls
 """
 
 import os
+import subprocess
 import sys
+import urllib.request
 from pathlib import Path
 
 # Never write __pycache__ beside the shipped bytecode: the app bundle is
@@ -127,6 +129,71 @@ if "--check-environment" in sys.argv or "--diagnostics" in sys.argv:
 # macOS LaunchServices passes -psn_0_... when launching an .app bundle from Finder
 sys.argv = [arg for arg in sys.argv if not arg.startswith("-psn")]
 
+def _gui_cannot_open(exc: BaseException) -> bool:
+    """True when the window itself is what failed, not a later application error."""
+    if isinstance(exc, ModuleNotFoundError):
+        if (exc.name or "").split(".")[0] in ("PySide6", "shiboken6"):
+            return True
+    text = f"{type(exc).__name__}: {exc}"
+    return any(
+        bit in text
+        for bit in (
+            "Qt platform plugin",
+            "xcb-cursor",
+            "libqxcb",
+            "GLIBC_",
+            "shiboken",
+            "PySide6",
+            "Could not load the Qt",
+        )
+    )
+
+
+def _start_text_session() -> int:
+    from src.tui_session import main as _tui_main
+
+    argv = [arg for arg in sys.argv if arg != "--tui"]
+    return _tui_main(argv)
+
+
+def _repair_linux() -> bool:
+    """Ask run_linux.sh to install host libraries, once, then the caller retries."""
+    if not sys.platform.startswith("linux"):
+        return False
+    if os.environ.get("INNIOASIS_PREP_TRIED") == "1":
+        return False
+    candidates = [
+        Path(__file__).resolve().parent / "run_linux.sh",
+        Path(sys.executable).resolve().parent / "run_linux.sh",
+    ]
+    script = next((path for path in candidates if path.is_file()), None)
+    if script is None:
+        script = Path(os.environ.get("TMPDIR") or "/tmp") / "innioasis-run_linux.sh"
+        try:
+            urllib.request.urlretrieve("https://innioasis.app/run_linux.sh", script)
+            script.chmod(0o755)
+        except OSError as exc:
+            sys.stderr.write(f"Updater CE: could not download the Linux installer ({exc}).\n")
+            return False
+    sys.stderr.write("Updater CE: preparing this Linux install, then trying again.\n")
+    completed = subprocess.call(["sh", str(script), "--repair", "--yes"])
+    return completed == 0
+
+
+def _fall_back_from_window(exc: BaseException) -> int:
+    sys.stderr.write(
+        "Updater CE: the window cannot open on this computer. Starting the terminal interface.\n"
+    )
+    try:
+        return _start_text_session()
+    except Exception as text_exc:
+        sys.stderr.write(f"Updater CE: the terminal interface did not start ({text_exc}).\n")
+        if _repair_linux():
+            os.environ["INNIOASIS_PREP_TRIED"] = "1"
+            os.execv(sys.executable, [sys.executable, *sys.argv])
+        return 1
+
+
 if __name__ == "__main__":
     try:
         # Before anything else spawns a helper: a window that flashes open
@@ -138,17 +205,12 @@ if __name__ == "__main__":
         from src.app import main
         main()
     except ModuleNotFoundError as exc:
-        # A graphical bundle without Qt is still useful as a terminal build:
-        # do not dump a traceback, hand over to the console front end instead.
-        if (exc.name or "").split(".")[0] not in ("PySide6", "shiboken6"):
+        if not _gui_cannot_open(exc):
             raise
-        sys.stderr.write(
-            "Updater CE: PySide6 is not available in this build; starting the terminal interface.\n"
-        )
-        from src.console.cli import main as _console_main
-
-        sys.exit(_console_main(["tui"] if sys.stdin.isatty() else ["--help"]))
+        sys.exit(_fall_back_from_window(exc))
     except Exception as exc:
+        if _gui_cannot_open(exc):
+            sys.exit(_fall_back_from_window(exc))
         import traceback
         err_msg = traceback.format_exc()
         sys.stderr.write(f"Innioasis Updater CE Fatal Error:\n{err_msg}\n")

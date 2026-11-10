@@ -15,6 +15,7 @@ from __future__ import annotations
 import importlib.util
 import os
 import platform
+import re
 import shutil
 import site
 import subprocess
@@ -31,7 +32,20 @@ TOOL_DIRS = (
 )
 
 
+# Import name -> pip distribution. MTKclient loads these while it is still
+# starting, before it talks to a device. Cryptodome is the one the vendored
+# fork imports; Crypto is the name older copies use. One missing import aborts
+# the whole flash, which is the "No module named colorama" failure.
+MTK_PY_DEPS = (
+    ("colorama", "colorama"),
+    ("serial", "pyserial"),
+    ("usb", "pyusb"),
+    ("capstone", "capstone"),
+    ("Cryptodome", "pycryptodomex"),
+    ("Crypto", "pycryptodome"),
+)
 CRYPTO_MODULES = ("Crypto", "Cryptodome")
+_MISSING_MODULE = re.compile(r"No module named ['\"]([^'\"]+)['\"]")
 
 
 def _module_available(name: str) -> bool:
@@ -47,52 +61,143 @@ def cryptodome_status() -> dict:
     return {"available": bool(found), "modules": found}
 
 
-def ensure_cryptodome(verbose: bool = True) -> tuple[bool, str]:
-    """Install pycryptodome for the current user when MTKclient needs it.
+def package_for_import(name: str) -> str | None:
+    """The pip distribution that provides an import MTKclient failed on."""
+    root = (name or "").split(".", 1)[0]
+    for module, package in MTK_PY_DEPS:
+        if module == root:
+            return package
+    if root and root.isidentifier() and root not in {"mtkclient", "__main__"}:
+        return root
+    return None
 
-    The window and the AppImage already carry it. A lite session runs on a
-    system Python and may not, which is the ``No module named 'Crypto'``
-    failure. Installing into the user site keeps the system untouched and is
-    visible to the same interpreter that runs ``mtk.py``.
-    """
-    if cryptodome_status()["available"]:
-        return True, ""
-    if os.environ.get("INNIOASIS_NO_AUTO_INSTALL") == "1":
-        return False, "pycryptodome is missing and automatic installation is disabled (INNIOASIS_NO_AUTO_INSTALL=1)."
-    if getattr(sys, "frozen", False):
-        return False, (
-            "This frozen build is missing pycryptodome, so MTKclient cannot start. "
-            "Use the AppImage/tarball/zip, which bundle it, or install the distro package."
+
+def _python_for(command: list[str]) -> str:
+    """The interpreter that will actually import mtkclient."""
+    if not command:
+        return sys.executable
+    head = command[0]
+    if Path(head).name.lower().startswith("python"):
+        return head
+    try:
+        first = Path(head).read_text(encoding="utf-8", errors="replace").splitlines()[0]
+    except OSError:
+        return sys.executable
+    if first.startswith("#!") and "python" in first.lower():
+        return first[2:].strip().split()[0] or sys.executable
+    return sys.executable
+
+
+def _missing_imports(python: str, names: list[str]) -> list[str]:
+    if not names:
+        return []
+    if os.path.realpath(python) == os.path.realpath(sys.executable):
+        return [name for name in names if not _module_available(name)]
+    probe = (
+        "import importlib.util, sys\n"
+        "print('\\n'.join(name for name in sys.argv[1:] "
+        "if importlib.util.find_spec(name) is None))"
+    )
+    try:
+        process = subprocess.run(
+            [python, "-c", probe, *names],
+            capture_output=True,
+            text=True,
+            timeout=60,
         )
+    except (OSError, subprocess.SubprocessError):
+        return list(names)
+    if process.returncode != 0:
+        return list(names)
+    return [line.strip() for line in process.stdout.splitlines() if line.strip()]
 
+
+def _pip_install(python: str, packages: list[str]) -> bool:
+    if not packages:
+        return True
     attempts = [
-        [sys.executable, "-m", "pip", "install", "--user", "pycryptodome", "pycryptodomex"],
-        [sys.executable, "-m", "pip", "install", "--user", "--break-system-packages", "pycryptodome", "pycryptodomex"],
+        [python, "-m", "pip", "install", "--user", *packages],
+        [python, "-m", "pip", "install", "--user", "--break-system-packages", *packages],
     ]
-    if verbose:
-        print("MTKclient needs pycryptodome; installing it for this user…", flush=True)
+    installed = False
     for command in attempts:
         try:
             process = subprocess.run(command, capture_output=True, text=True)
         except OSError:
             continue
-        if process.returncode != 0:
-            for line in (process.stderr or process.stdout or "").strip().splitlines()[-3:]:
-                print(f"  {line}", file=sys.stderr)
-            continue
-        importlib.invalidate_caches()
-        if site.USER_SITE and site.USER_SITE not in sys.path:
-            sys.path.append(site.USER_SITE)
-        if cryptodome_status()["available"]:
-            return True, ""
-    return False, (
-        "pycryptodome could not be installed automatically.\n"
-        "  Debian/Ubuntu/Mint: sudo apt install python3-pycryptodome\n"
-        "  Fedora: sudo dnf install python3-pycryptodomex\n"
-        "  Arch/Manjaro: sudo pacman -S python-pycryptodome\n"
-        "  Any pip: python3 -m pip install --user pycryptodome pycryptodomex\n"
-        "Falling back to SP Flash Tool where it is available."
-    )
+        if process.returncode == 0:
+            installed = True
+            break
+        for line in (process.stderr or process.stdout or "").strip().splitlines()[-3:]:
+            print(f"  {line}", file=sys.stderr)
+    if not installed:
+        try:
+            subprocess.run([python, "-m", "ensurepip", "--user"], capture_output=True, text=True)
+            process = subprocess.run(attempts[0], capture_output=True, text=True)
+            installed = process.returncode == 0
+        except OSError:
+            installed = False
+    importlib.invalidate_caches()
+    if site.USER_SITE and site.USER_SITE not in sys.path:
+        sys.path.append(site.USER_SITE)
+    return installed
+
+
+def ensure_mtk_python(python: str | None = None, verbose: bool = True) -> tuple[bool, str]:
+    """Install the Python modules MTKclient imports, into the user's site.
+
+    The window and the AppImage already carry them. A text session uses
+    whatever Python launched it, which often has none of them. Installing
+    with ``--user`` leaves the system Python untouched and is visible to the
+    same interpreter that runs ``mtk.py``.
+    """
+    python = python or sys.executable
+    names = [module for module, _package in MTK_PY_DEPS]
+    missing = _missing_imports(python, names)
+    if not missing:
+        return True, ""
+    packages: list[str] = []
+    for module in missing:
+        package = package_for_import(module)
+        if package and package not in packages:
+            packages.append(package)
+    if os.environ.get("INNIOASIS_NO_AUTO_INSTALL") == "1":
+        return False, (
+            "MTKclient is missing " + ", ".join(packages)
+            + " and automatic installation is disabled (INNIOASIS_NO_AUTO_INSTALL=1)."
+        )
+    if getattr(sys, "frozen", False) and os.path.realpath(python) == os.path.realpath(sys.executable):
+        return False, (
+            "This build is missing " + ", ".join(missing)
+            + ", so MTKclient cannot start. Re-download the AppImage, tarball or zip."
+        )
+    if verbose:
+        print(
+            "MTKclient needs " + ", ".join(packages) + "; installing them for this user…",
+            flush=True,
+        )
+    _pip_install(python, packages)
+    still = _missing_imports(python, names)
+    if still:
+        still_packages = []
+        for module in still:
+            package = package_for_import(module)
+            if package and package not in still_packages:
+                still_packages.append(package)
+        return False, (
+            "Still missing after install: " + ", ".join(still_packages) + ".\n"
+            "  Debian/Ubuntu/Mint: sudo apt install python3-colorama python3-pycryptodome python3-serial python3-usb python3-capstone\n"
+            "  Fedora: sudo dnf install python3-colorama python3-pycryptodomex python3-pyserial python3-pyusb python3-capstone\n"
+            "  Arch/Manjaro: sudo pacman -S python-colorama python-pycryptodome python-pyserial python-pyusb python-capstone\n"
+            f"  Any pip: {python} -m pip install --user " + " ".join(still_packages) + "\n"
+            "Falling back to SP Flash Tool where it is available."
+        )
+    return True, ""
+
+
+def ensure_cryptodome(verbose: bool = True) -> tuple[bool, str]:
+    """Install pycryptodome, and the rest of the modules MTKclient imports."""
+    return ensure_mtk_python(verbose=verbose)
 
 
 def _spflash_path() -> str:
@@ -302,9 +407,14 @@ def _run(command: list[str], dry_run: bool = False) -> int:
         print(f"could not start {command[0]}: {exc}", file=sys.stderr)
         return 127
     assert process.stdout is not None
+    missing: list[str] = []
     for line in process.stdout:
         sys.stdout.write(line)
         sys.stdout.flush()
+        found = _MISSING_MODULE.search(line)
+        if found:
+            missing.append(found.group(1))
+    _run.last_missing = missing  # type: ignore[attr-defined]
     return process.wait()
 
 
@@ -350,7 +460,8 @@ def flash_directory(
     try:
         base = mtkclient_command()
         if base:
-            ready, detail = ensure_cryptodome()
+            python = _python_for(base)
+            ready, detail = ensure_mtk_python(python)
             if ready:
                 found = discover_mtk_files(folder)
                 command = mtk_write_command(
@@ -360,7 +471,17 @@ def flash_directory(
                     da=da or found["da"],
                     auth=auth or found["auth"],
                 )
-                return _run(command, dry_run=dry_run)
+                code = _run(command, dry_run=dry_run)
+                missed = [package_for_import(name) for name in getattr(_run, "last_missing", [])]
+                missed = [name for name in missed if name]
+                if code != 0 and missed and not dry_run:
+                    print(
+                        "MTKclient stopped because " + ", ".join(missed) + " was not installed. Installing it and trying again…",
+                        flush=True,
+                    )
+                    if _pip_install(python, missed):
+                        code = _run(command, dry_run=dry_run)
+                return code
             print(detail, file=sys.stderr)
         else:
             print(

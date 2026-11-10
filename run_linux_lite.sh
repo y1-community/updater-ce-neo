@@ -11,7 +11,8 @@
 # (mtkclient / adb) instead of a GUI.
 #
 # Options:
-#   --tui          install, then open the terminal interface
+#   --tui          install, then open the terminal interface (this is the default)
+#   --no-tui       install the launcher and stop, without opening the session
 #   --file PATH    install from a local UpdaterCE-Lite.tar.gz instead of the network
 #   --dir PATH     install location (default: ~/.local/share/innioasis-updater/lite)
 #   --bin PATH     where to write the launcher (default: ~/.local/bin)
@@ -33,7 +34,7 @@ DEFAULT_DIR="$DATA_HOME/innioasis-updater/lite"
 BIN_DIR="$HOME/.local/bin"
 TARGET_DIR="$DEFAULT_DIR"
 LOCAL_FILE=""
-OPEN_TUI=0
+OPEN_TUI=1
 VERIFY=1
 QUIET=0
 MODE="install"
@@ -45,6 +46,7 @@ die() { err "$1"; exit "${2:-1}"; }
 while [ $# -gt 0 ]; do
     case "$1" in
         --tui) OPEN_TUI=1 ;;
+        --no-tui) OPEN_TUI=0 ;;
         --file) shift; LOCAL_FILE="${1:-}" ;;
         --dir) shift; TARGET_DIR="${1:-$TARGET_DIR}" ;;
         --bin) shift; BIN_DIR="${1:-$BIN_DIR}" ;;
@@ -154,12 +156,14 @@ if [ -n "$LOCAL_FILE" ]; then
     cp "$LOCAL_FILE" "$ARCHIVE" || die "could not read $LOCAL_FILE" 4
     say "Using local archive: $LOCAL_FILE"
 else
-    say "Updater CE lite — $ARCH_NOTE, Python 3"
-    say "Fetching the release index…"
+    say "Updater CE 2.5.4 — temporary terminal session"
+    say "1/4  Checking Python ($ARCH_NOTE)"
+    say "2/4  Fetching the release index…"
     # The asset URL changes with every release, so ask the API. A hand-written
     # JSON scan keeps this working without jq or any Python module beyond the
-    # standard library.
-    "$PYTHON" - "$RELEASE_API" "$TMP/urls.txt" <<'PY' || die "could not read the release index (offline?)" 4
+    # standard library. If GitHub is unreachable, the copy on innioasis.app is
+    # used instead.
+    if ! "$PYTHON" - "$RELEASE_API" "$TMP/urls.txt" <<'PY'
 import json, sys, urllib.request
 api, out = sys.argv[1], sys.argv[2]
 req = urllib.request.Request(api, headers={"User-Agent": "UpdaterCE-lite"})
@@ -177,9 +181,15 @@ if "archive" not in found:
 with open(out, "w", encoding="utf-8") as handle:
     handle.write(found["archive"] + "\n" + found.get("sha256", "") + "\n")
 PY
-    URL_ARCHIVE="$(sed -n '1p' "$TMP/urls.txt")"
-    URL_SHA="$(sed -n '2p' "$TMP/urls.txt")"
-    say "Downloading (resumable; rerun this command if the connection drops)…"
+    then
+        URL_ARCHIVE="$(sed -n '1p' "$TMP/urls.txt")"
+        URL_SHA="$(sed -n '2p' "$TMP/urls.txt")"
+    else
+        say "GitHub did not answer. Using the copy on innioasis.app."
+        URL_ARCHIVE="$SITE/UpdaterCE-Lite.tar.gz"
+        URL_SHA="$SITE/UpdaterCE-Lite.tar.gz.sha256"
+    fi
+    say "3/4  Downloading (resumable; rerun this command if the connection drops)…"
     fetch "$URL_ARCHIVE" "$ARCHIVE" || die "download failed; the partial file is kept in $TMP until this shell exits" 4
     if [ "$VERIFY" -eq 1 ] && [ -n "$URL_SHA" ]; then
         fetch "$URL_SHA" "$TMP/sha256" 2>/dev/null || true
@@ -234,6 +244,7 @@ case ":$PATH:" in
 esac
 
 if [ "$OPEN_TUI" -eq 1 ]; then
+    say "4/4  Opening the terminal session."
     exec "$BIN_DIR/innioasis-updater-lite" tui
 fi
 exit 0

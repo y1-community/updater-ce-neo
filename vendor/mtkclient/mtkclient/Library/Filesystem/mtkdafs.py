@@ -79,8 +79,8 @@ try:
             return self.files[path]
 
 except ImportError:
-    print('fuse library not installed')
-
+    # Optional. Flashing does not mount the device as a disk. A text session
+    # would otherwise print this on every install, which looks like a failure.
     class MtkDaFS():
         def __init__(self, da_handler, rw=False):
             pass

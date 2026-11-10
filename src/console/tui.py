@@ -19,7 +19,6 @@ from pathlib import Path
 from . import catalog, components, download as dl, flash
 from .releases import fetch_releases, rows_from_releases
 from .session import (
-    LANGUAGES,
     LIST_TOP,
     BrowseState,
     activate,
@@ -33,6 +32,8 @@ from .session import (
     keep_visible,
     package_links,
     language_lines,
+    language_rows,
+    remember_language,
     move_index,
     notes_for,
     parse_mouse_report,
@@ -296,11 +297,11 @@ def _plain(state: BrowseState, items: list, refresh: bool, output: Path) -> int:
                 state.page = "software"
             continue
         if state.page == "language":
+            rows = language_rows()
             if choice.isdigit():
                 index = int(choice) - 1
-                if 0 <= index < len(LANGUAGES):
-                    state.language = LANGUAGES[index]
-                    save_filters(state)
+                if 0 <= index < len(rows):
+                    _choose_language(state, rows[index][0])
             state.page = "software"
             continue
         if state.page != "software":
@@ -451,7 +452,7 @@ def _curses_run(state: BrowseState, items: list, output: Path) -> int:
             if state.page != "software":
                 _curses_page(screen, state, items)
                 continue
-            list_height, _list_width = draw(screen)
+            list_height, list_width = draw(screen)
             key = screen.getch()
             if key == curses.KEY_MOUSE:
                 try:
@@ -592,29 +593,81 @@ def _curses_page(screen, state: BrowseState, items: list) -> None:
     key = screen.getch()
     if key == curses.KEY_MOUSE:
         try:
-            _id, _x, _y, _z, bstate = curses.getmouse()
+            _id, _x, y, _z, bstate = curses.getmouse()
         except curses.error:
             bstate = 0
+            y = -1
         up = getattr(curses, "BUTTON4_PRESSED", 0)
         down = getattr(curses, "BUTTON5_PRESSED", 0)
         if bstate & (up | down):
             state.page_scroll = max(0, min(max_scroll, state.page_scroll + (-3 if bstate & up else 3)))
+            return
+        if state.page == "language" and y >= 3:
+            rows = language_rows()
+            index = y - 3 + state.page_scroll
+            if 0 <= index < len(rows):
+                _choose_language(state, rows[index][0])
+        return
+    if key in (curses.KEY_UP, ord("k")):
+        state.page_scroll = max(0, state.page_scroll - 1)
+        return
+    if key in (curses.KEY_DOWN, ord("j")):
+        state.page_scroll = min(max_scroll, state.page_scroll + 1)
+        return
+    if key in (ord("q"), 27, ord("\n"), curses.KEY_ENTER):
+        state.page = "software"
+        state.page_scroll = 0
         return
     if state.page == "settings" and key in (ord("1"), ord("2"), ord("3"), ord("4")):
         toggle_setting(state, {ord("1"): "old", ord("2"): "240p", ord("3"): "nightly", ord("4"): "keep_data"}[key])
         state.status = _load_rows(state, items, False)
         return
-    if state.page == "language" and ord("1") <= key <= ord("7"):
-        index = key - ord("1")
-        if index < len(LANGUAGES):
-            state.language = LANGUAGES[index]
-            save_filters(state)
-    state.page = "software"
+    if state.page == "language" and ord("1") <= key <= ord("9"):
+        rows = language_rows()
+        index = state.page_scroll + (key - ord("1"))
+        if 0 <= index < len(rows):
+            _choose_language(state, rows[index][0])
+
+
+def _choose_language(state: BrowseState, code: str) -> None:
+    state.language = code
+    save_filters(state)
+    remember_language(code)
+    # The window applies this the next time it opens. Importing the
+    # translation module here would load the whole GUI string table, and on
+    # Python 3.9 that module cannot be imported at all.
+    state.status = f"Language: {code}. The window uses the same choice."
+
+
+def _prepare_machine() -> None:
+    """Stage what a flash needs before the menu accepts a key.
+
+    A frozen AppImage, tarball or zip already carries these modules, so it
+    does not download anything. A source checkout or a lite session does,
+    and it says so line by line. Qt is not imported.
+    """
+    if os.environ.get("INNIOASIS_SIMULATE") == "1" or os.environ.get("INNIOASIS_SKIP_PREP") == "1":
+        return
+    if getattr(sys, "frozen", False):
+        print("Updater CE — this build already includes its tools.", flush=True)
+        return
+    print("Updater CE — preparing this computer.", flush=True)
+    print("The menu opens when this finishes. The window's Qt libraries are not loaded.", flush=True)
+    from .flash import ensure_mtk_python
+
+    ok, detail = ensure_mtk_python()
+    if ok:
+        print("Python modules for MTKclient are ready.", flush=True)
+    else:
+        print(detail, flush=True)
+        print("The catalogue still opens. Install needs the modules named above.", flush=True)
+    print("Opening Select Software.", flush=True)
 
 
 def run(refresh: bool = False, simulate: bool = False) -> int:
     if simulate or os.environ.get("INNIOASIS_SIMULATE") == "1":
         os.environ["INNIOASIS_SIMULATE"] = "1"
+    _prepare_machine()
     if _headless():
         print(failover_text("no-display"), file=sys.stderr)
     state, items, _error = _prepare(refresh)
@@ -645,5 +698,5 @@ def run(refresh: bool = False, simulate: bool = False) -> int:
         if exc.__class__.__module__.startswith("curses") or isinstance(exc, ImportError):
             print(failover_text("curses"), file=sys.stderr)
             return _plain(state, items, refresh, output)
-        print(failover_text("download-failure", str(exc)), file=sys.stderr)
+        print(f"Updater CE stopped: {exc}", file=sys.stderr)
         return 1
