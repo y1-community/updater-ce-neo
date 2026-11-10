@@ -79,6 +79,12 @@ def _curses_run(refresh: bool = False) -> int:
     def picker(screen, title: str, rows: list[tuple[str, str]], subtitle: str = "") -> int:
         curses.curs_set(0)
         screen.keypad(True)
+        try:
+            # Mouse-aware terminals get click-to-select as well as the keys;
+            # a serial console simply reports no mouse events.
+            curses.mousemask(curses.ALL_MOUSE_EVENTS)
+        except curses.error:
+            pass
         position = 0
         while True:
             screen.erase()
@@ -103,6 +109,17 @@ def _curses_run(refresh: bool = False) -> int:
                 if rows[position][1] == "__quit__":
                     return -1
                 return position
+            elif key == curses.KEY_MOUSE:
+                try:
+                    _id, _x, my, _z, bstate = curses.getmouse()
+                except curses.error:
+                    continue
+                if 2 <= my < 2 + len(rows[start:start + view]):
+                    position = start + (my - 2)
+                if bstate & (curses.BUTTON1_CLICKED | curses.BUTTON1_DOUBLE_CLICKED):
+                    if rows[position][1] == "__quit__":
+                        return -1
+                    return position
             elif key in (ord("q"), 27):
                 return -1
 

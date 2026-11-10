@@ -161,13 +161,12 @@ def cmd_components(args: argparse.Namespace) -> int:
 
 def cmd_doctor(args: argparse.Namespace) -> int:
     info = flash.doctor()
-    if args.json:
-        print(json.dumps(info, ensure_ascii=False), flush=True)
-        return 0
-
     info["components"] = {
         row["key"]: row["path"] for row in components.status() if row["available"]
     }
+    if args.json:
+        print(json.dumps(info, ensure_ascii=False), flush=True)
+        return 0
     print("Updater CE terminal check")
     for key in ("python", "platform", "machine", "tty", "mtkclient", "adb", "unrar", "mount"):
         value = info.get(key) or "(not found)"
@@ -250,7 +249,12 @@ def main(argv: list[str] | None = None) -> int:
     if not argv or argv[0].startswith("-") and argv[0] not in ("--version",):
         argv = ["tui"] + argv if sys.stdin.isatty() else ["--help"] + argv
     parser = build_parser()
+    # --json is documented as usable after the command too, so accept it
+    # anywhere instead of only before the subcommand.
+    as_json = "--json" in argv
+    argv = [arg for arg in argv if arg != "--json"]
     args = parser.parse_args(argv)
+    args.json = as_json or getattr(args, "json", False)
     if not getattr(args, "func", None):
         parser.print_help()
         return 0
