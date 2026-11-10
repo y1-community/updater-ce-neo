@@ -10,15 +10,21 @@
 #      (its launcher, desktop entry / menu shortcut and the whole
 #      innioasis-updater folder), plus a copy installed by an older
 #      install_linux_release.sh, so no stale entry survives the upgrade.
-#   2. Downloads or accepts UpdaterCE.tar.gz, the portable PyInstaller build.
-#   3. Unpacks it to ${XDG_DATA_HOME:-~/.local/share}/innioasis-updater,
-#      installs a per-user launcher and XDG desktop/menu shortcut.
+#   2. Downloads the AppImage (default) or accepts UpdaterCE.tar.gz with
+#      --tarball / --file, verifying the published SHA-256.
+#   3. Installs it to ${XDG_DATA_HOME:-~/.local/share}/innioasis-updater with a
+#      per-user launcher and XDG desktop/menu shortcut. Re-running with
+#      --update replaces the file in place and keeps settings.
 #
 # No root password is needed: everything is per-user. The app asks for a
 # system password itself only if an SP Flash Tool fallback needs setup.
 #
 # Options:
-#   --file <path>   Install a local UpdaterCE.tar.gz instead of downloading
+#   --file <path>   Install a local AppImage or UpdaterCE.tar.gz
+#   --appimage      Install the AppImage (default)
+#   --tarball       Install the portable tar.gz instead of the AppImage
+#   --update        Reinstall the newest release over the current copy
+#   --check         Report missing host libraries and the commands that fix them
 #   --uninstall     Remove the installed copy, launcher and shortcut
 #   --no-shortcut   Do not create a desktop/menu shortcut
 #   -h, --help      Show this help
@@ -62,6 +68,11 @@ FILE=""
 DOWNLOAD=1
 MAKE_SHORTCUT=1
 UNINSTALL=0
+# The AppImage is the route we recommend: one file, no unpacked tree, and the
+# in-app updater can replace it atomically. The tarball stays for machines
+# without FUSE.
+PACKAGE_KIND="appimage"
+CHECK_HOST=0
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -85,6 +96,22 @@ while [ $# -gt 0 ]; do
             FILE="$2"
             DOWNLOAD=0
             shift 2
+            ;;
+        --appimage)
+            PACKAGE_KIND="appimage"
+            shift
+            ;;
+        --tarball)
+            PACKAGE_KIND="tarball"
+            shift
+            ;;
+        --update)
+            DOWNLOAD=1
+            shift
+            ;;
+        --check)
+            CHECK_HOST=1
+            shift
             ;;
         --uninstall)
             UNINSTALL=1
@@ -233,6 +260,107 @@ sys.exit(1)
 ' "$arch_re" 2>/dev/null || true
 }
 
+fetch_appimage_url() {
+    local json="$1" arch_re
+    case "$ARCH" in
+        x86_64|amd64) arch_re='^(?!.*(aarch64|arm64))' ;;
+        aarch64|arm64) arch_re='(aarch64|arm64)' ;;
+        *) arch_re="$(printf '%s' "$ARCH" | sed 's/[.[\*^$]/\\&/g')" ;;
+    esac
+
+    printf '%s' "$json" | python3 -c '
+import json, re, sys
+try:
+    releases = json.load(sys.stdin)
+except Exception:
+    sys.exit(1)
+if isinstance(releases, dict):
+    releases = [releases]
+pattern = re.compile(sys.argv[1])
+for release in releases:
+    if release.get("draft") or release.get("prerelease"):
+        continue
+    candidates = []
+    for asset in release.get("assets") or []:
+        name = asset.get("name") or ""
+        low = name.lower()
+        if not low.endswith(".appimage") or low.endswith(".sha256"):
+            continue
+        if not pattern.search(name):
+            continue
+        rank = 0 if name.lower().startswith("updaterce") else 1
+        candidates.append((rank, name, asset.get("browser_download_url") or ""))
+    if candidates:
+        candidates.sort()
+        print(candidates[0][2])
+        sys.exit(0)
+sys.exit(1)
+' "$arch_re" 2>/dev/null || true
+}
+
+download_appimage() {
+    local tmp="$1" json url name
+
+    command -v curl >/dev/null 2>&1 || command -v wget >/dev/null 2>&1 ||
+        die "curl or wget is required to download $DISPLAY_NAME"
+
+    log "Looking up the newest $DISPLAY_NAME AppImage for $ARCH"
+    if command -v curl >/dev/null 2>&1; then
+        json="$(curl -fsSL "$RELEASES_API")" || die "Could not reach the GitHub releases API"
+    else
+        json="$(wget -qO- "$RELEASES_API")" || die "Could not reach the GitHub releases API"
+    fi
+
+    url="$(fetch_appimage_url "$json")"
+    [ -n "$url" ] || die "No recent release publishes an AppImage for $ARCH; rerun with --tarball"
+
+    name="$(basename "$url")"
+    log "Downloading $name"
+    if command -v curl >/dev/null 2>&1; then
+        curl -fL --progress-bar -o "$tmp/$name" "$url" || die "Download failed: $url"
+        if curl -fsSL -o "$tmp/$name.sha256" "$url.sha256" 2>/dev/null; then
+            (cd "$tmp" && sha256sum -c "$name.sha256" >/dev/null) ||
+                die "Checksum mismatch for $name"
+            success "Checksum verified"
+        fi
+    else
+        wget -q --show-progress -O "$tmp/$name" "$url" || die "Download failed: $url"
+    fi
+    FILE="$tmp/$name"
+}
+
+# Report the host libraries Qt needs that the AppImage cannot carry (they must
+# match the running X server). Printing beats running a package manager on the
+# user's behalf without them watching.
+check_host() {
+    local missing="" pkg_cmd=""
+    for lib in libxcb-cursor.so.0 libxcb-image.so.0 libx11-xcb.so.1 libxkbcommon-x11.so.0; do
+        if ! (command -v ldconfig >/dev/null 2>&1 && ldconfig -p 2>/dev/null | grep -q "$lib") \
+           && ! find /usr/lib /usr/lib64 /usr/lib/*-linux-gnu -maxdepth 1 -name "$lib" -print -quit 2>/dev/null | grep -q .; then
+            missing="$missing $lib"
+        fi
+    done
+    if [ -z "$missing" ]; then
+        success "Host libraries for the Qt window are present"
+        return 0
+    fi
+    warn "Missing host libraries:$missing"
+    if command -v apt-get >/dev/null 2>&1; then
+        pkg_cmd="sudo apt install libxcb-cursor0 libxcb-image0 libx11-xcb1 libxkbcommon-x11-0"
+    elif command -v dnf >/dev/null 2>&1; then
+        pkg_cmd="sudo dnf install xcb-util-cursor xcb-util-image libxcb libxkbcommon-x11"
+    elif command -v pacman >/dev/null 2>&1; then
+        pkg_cmd="sudo pacman -S xcb-util-cursor xcb-util-image libxcb libxkbcommon-x11"
+    elif command -v zypper >/dev/null 2>&1; then
+        pkg_cmd="sudo zypper install libxcb-cursor0 xcb-util-image libxcb1 libxkbcommon-x11-0"
+    fi
+    if [ -n "$pkg_cmd" ]; then
+        printf '  Run: %s\n' "$pkg_cmd"
+    fi
+    printf '  Or use the terminal interface: %s --flash-cli --help\n' "$DISPLAY_NAME"
+    return 1
+}
+
 download_latest() {
     local tmp="$1" json url name
 
@@ -332,9 +460,79 @@ EOF
     refresh_caches
 }
 
+# Install or update the AppImage. One file in the per-user data directory, so
+# an update is a download plus an atomic rename: the running copy keeps working
+# until the swap, and nothing is half-extracted if the download dies.
+install_appimage_flow() {
+    local tmp src dest
+    tmp="$(mktemp -d)"
+    trap 'rm -rf "${tmp:-}"' EXIT
+
+    if [ "$DOWNLOAD" -eq 1 ]; then
+        download_appimage "$tmp"
+    fi
+    [ -n "$FILE" ] || die "No AppImage to install"
+    [ -f "$FILE" ] || die "No such file: $FILE"
+    FILE="$(readlink -f "$FILE")"
+    src="$FILE"
+
+    case "$(basename "$src")" in
+        *.AppImage|*.appimage) ;;
+        *) die "Not an AppImage: $(basename "$src") (use --tarball for the portable archive)" ;;
+    esac
+    head -c 4 "$src" | grep -q $'\x7fELF' || die "$(basename "$src") is not an ELF executable"
+
+    mkdir -p "$INSTALL_DIR" "$BIN_DIR"
+    dest="$INSTALL_DIR/UpdaterCE.appimage"
+    cp -f "$src" "$dest.new.$$"
+    chmod 0755 "$dest.new.$$"
+    mv -f "$dest.new.$$" "$dest"
+
+    # A previous tarball install would otherwise shadow the AppImage in the menu.
+    rm -rf -- "$APP_DIR"
+    if [ -n "$LEGACY_INSTALL_DIR" ]; then
+        rm -rf -- "$LEGACY_INSTALL_DIR"
+    fi
+    rm -rf -- "$HOME/.local/opt/innioasis-updater"
+
+    cat > "$LAUNCHER" <<EOF
+#!/bin/sh
+# Launches $DISPLAY_NAME from the installed AppImage (run_linux.sh).
+exec "$dest" "\$@"
+EOF
+    chmod 0755 "$LAUNCHER"
+
+    if [ -f "$INSTALL_DIR/innioasis-updater.png" ]; then
+        mkdir -p "$ICON_DIR"
+        install -m 0644 "$INSTALL_DIR/innioasis-updater.png" "$ICON_PATH"
+    fi
+    clean_old_shortcuts_only
+    write_shortcut
+    if [ "$MAKE_SHORTCUT" -eq 0 ]; then
+        rm -f "$DESKTOP_FILE"
+        refresh_caches
+    fi
+    if [ ! -e /dev/fuse ] && ! command -v fusermount >/dev/null 2>&1 && ! command -v fusermount3 >/dev/null 2>&1; then
+        warn "FUSE is not available; the AppImage can still run with APPIMAGE_EXTRACT_AND_RUN=1"
+    fi
+    check_host || true
+    success "$DISPLAY_NAME installed"
+    printf '\n  Launch: %s\n  Update: %s --update\n\n' "$LAUNCHER" "$LAUNCHER"
+}
+
 main() {
     if [ "$UNINSTALL" -eq 1 ]; then
         uninstall
+        return
+    fi
+
+    if [ "$CHECK_HOST" -eq 1 ]; then
+        check_host
+        return
+    fi
+
+    if [ "$PACKAGE_KIND" = "appimage" ]; then
+        install_appimage_flow
         return
     fi
 
