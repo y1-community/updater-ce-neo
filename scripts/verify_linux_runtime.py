@@ -40,6 +40,42 @@ XCB_REQUIRED = (
     "libxkbcommon.so.0",
 )
 
+# Instructions that only exist on x86-64-v2 (SSE4.2/POPCNT) or v3 (AVX/AVX2).
+# A Core 2 Duo (SSSE3) or an Athlon 64 (SSE2) aborts on the first POPCNT, so a
+# bundle that contains one cannot claim "any x86-64 Linux".
+X86_V2_INSN = re.compile(
+    r"\s(popcnt|pcmpistri|pcmpistrm|pcmpestri|pcmpestrm|crc32[bwlq]?)\s", re.I
+)
+X86_V3_INSN = re.compile(r"\s(vzeroupper|vzeroall|vmovdqu|vmovdqa|vfmadd\w*|vpermd)\s", re.I)
+
+
+def is_x86_64(path: Path) -> bool:
+    try:
+        out = subprocess.run(
+            ["readelf", "-h", str(path)], capture_output=True, text=True, timeout=60
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return "X86-64" in out
+
+
+def cpu_requirement(path: Path) -> str:
+    """'v1', 'v2' or 'v3' from the instructions actually present in the file."""
+    try:
+        disassembly = subprocess.run(
+            ["objdump", "-d", "--no-show-raw-insn", str(path)],
+            capture_output=True,
+            text=True,
+            timeout=600,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+    if X86_V3_INSN.search(disassembly):
+        return "v3"
+    if X86_V2_INSN.search(disassembly):
+        return "v2"
+    return "v1"
+
 
 def is_elf(path: Path) -> bool:
     try:
@@ -93,6 +129,11 @@ def main() -> int:
         help="highest GLIBC symbol version the bundle may require (default 2.35)",
     )
     parser.add_argument("--max-python", default="3.12", help="highest Python minor allowed")
+    parser.add_argument(
+        "--allow-cpu-v2",
+        action="store_true",
+        help="accept a bundle that needs SSE4.2/POPCNT (breaks Core 2 Duo/Athlon 64)",
+    )
     parser.add_argument("--quiet", action="store_true")
     args = parser.parse_args()
 
@@ -132,6 +173,27 @@ def main() -> int:
                 "ships that interpreter, and its wheels are linked against a newer libc"
             )
 
+    # Qt is the part that decides the CPU floor: PySide6 6.10+ ships Qt built
+    # for x86-64-v2, while the app's own code and CPython stay on the baseline.
+    cpu_notes: list[str] = []
+    if any(is_x86_64(path) for path in (root / "_internal").glob("libQt6Core.so*")):
+        for candidate in sorted((root / "_internal").glob("libQt6Core.so*")) + sorted(
+            (root / "_internal").glob("libpython3*.so*")
+        ):
+            if not is_x86_64(candidate):
+                continue
+            level = cpu_requirement(candidate)
+            if level in ("v2", "v3"):
+                if not args.allow_cpu_v2:
+                    problems.append(
+                        f"{candidate.name} uses x86-64-{level} instructions (SSE4.2/POPCNT or AVX); "
+                        "Core 2 Duo, Athlon 64 and other pre-2008 x86-64 CPUs abort at startup. "
+                        "Pin PySide6<6.10 (requirements.txt) and rebuild in the container."
+                    )
+                cpu_notes.append(f"{candidate.name}: {level} (allowed by --allow-cpu-v2)")
+            elif level == "v1":
+                cpu_notes.append(f"{candidate.name}: v1 (baseline)")
+
     internal = root / "_internal"
     for name in XCB_REQUIRED:
         if not (internal / name).exists():
@@ -146,6 +208,8 @@ def main() -> int:
             )
         if python_minor:
             print(f"  bundled Python: {python_minor[0]}.{python_minor[1]}")
+        if cpu_notes:
+            print(f"  CPU baseline: {', '.join(cpu_notes)}")
         print(f"  bundled Qt xcb libraries: {len(XCB_REQUIRED)} checked")
 
     if problems:

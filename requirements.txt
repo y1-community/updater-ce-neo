@@ -1,8 +1,14 @@
 # PySide6 6.12.0 drops a None reference per QPainter pen/font change; on Python
 # < 3.12 (mortal None) that aborts the app with "none_dealloc: deallocating None"
 # within a minute. scripts/check_pyside_refcount.py gates every build on this.
-PySide6>=6.5,<6.12; python_version < "3.12"
-PySide6>=6.5; python_version >= "3.12"
+#
+# PySide6 6.10 is also the first release whose Qt binaries require SSE4.2 and
+# POPCNT (x86-64-v2). Core 2 Duo, first-generation Athlon 64 and other machines
+# that users still run abort at import with "Incompatible processor". 6.9.x
+# keeps the traditional x86-64 baseline, so it is the ceiling for every Python
+# version until Qt releases a baseline build again.
+PySide6>=6.5,<6.10
+shiboken6>=6.5,<6.10
 requests>=2.31
 pyusb>=1.2
 pycryptodome>=3.19

@@ -25,6 +25,9 @@
 #   --tarball       Install the portable tar.gz instead of the AppImage
 #   --update        Reinstall the newest release over the current copy
 #   --check         Report missing host libraries and the commands that fix them
+#   --repair        Install the host libraries the Qt window needs (asks first)
+#   --yes           Do not ask before --repair installs packages
+#   --tui | --cli   Start the terminal interface / command line after installing
 #   --uninstall     Remove the installed copy, launcher and shortcut
 #   --no-shortcut   Do not create a desktop/menu shortcut
 #   -h, --help      Show this help
@@ -73,6 +76,9 @@ UNINSTALL=0
 # without FUSE.
 PACKAGE_KIND="appimage"
 CHECK_HOST=0
+REPAIR=0
+ASSUME_YES=0
+RUN_FLAG=""
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -127,6 +133,18 @@ while [ $# -gt 0 ]; do
             ;;
         --check)
             CHECK_HOST=1
+            shift
+            ;;
+        --repair)
+            REPAIR=1
+            shift
+            ;;
+        --yes|-y)
+            ASSUME_YES=1
+            shift
+            ;;
+        --tui|--cli)
+            RUN_FLAG="$1"
             shift
             ;;
         --uninstall)
@@ -536,7 +554,60 @@ EOF
     printf '\n  Launch: %s\n  Update: %s --update\n\n' "$LAUNCHER" "$LAUNCHER"
 }
 
+repair_host() {
+    # Install only the client-side XCB stack, and only after saying what will
+    # run. This is the fix for "Could not load the Qt platform plugin xcb" that
+    # does not require the user to know which of the four library names their
+    # distribution uses.
+    local pkgs="" cmd="" runner=""
+    if command -v apt-get >/dev/null 2>&1; then
+        pkgs="libxcb-cursor0 libxcb-image0 libxcb-render-util0 libxcb-util1 libxkbcommon-x11-0 libgl1"
+        cmd="apt-get update && apt-get install -y $pkgs"
+    elif command -v dnf >/dev/null 2>&1; then
+        pkgs="xcb-util-cursor xcb-util-image xcb-util-renderutil xcb-util libxkbcommon-x11 mesa-libGL"
+        cmd="dnf install -y $pkgs"
+    elif command -v zypper >/dev/null 2>&1; then
+        pkgs="libxcb-cursor0 xcb-util-image xcb-util-renderutil libxcb-util1 libxkbcommon-x11-0 libGL1"
+        cmd="zypper --non-interactive install $pkgs"
+    elif command -v pacman >/dev/null 2>&1; then
+        pkgs="xcb-util-cursor xcb-util-image xcb-util-renderutil xcb-util libxkbcommon-x11 mesa"
+        cmd="pacman -S --needed --noconfirm $pkgs"
+    elif command -v apk >/dev/null 2>&1; then
+        pkgs="xcb-util-cursor xcb-util-image xcb-util-renderutil xcb-util libxkbcommon-x11 mesa-gl"
+        cmd="apk add $pkgs"
+    else
+        die "No supported package manager found. Install libxcb-cursor0 (and xcb-util-image, xcb-util-renderutil, xcb-util, libxkbcommon-x11) with your system's package tool."
+    fi
+
+    if [ "$ASSUME_YES" -ne 1 ]; then
+        printf 'Install these packages with the system package manager?\n  %s\n  Command: %s\n[y/N] ' "$pkgs" "$cmd"
+        read -r answer || answer=""
+        case "$answer" in
+            y|Y|yes|YES) ;;
+            *) echo "Not installed. The AppImage will fall back to the terminal interface."; return 1 ;;
+        esac
+    fi
+
+    if command -v pkexec >/dev/null 2>&1; then
+        runner="pkexec sh -c"
+    elif command -v sudo >/dev/null 2>&1; then
+        runner="sudo sh -c"
+    elif [ "$(id -u)" -eq 0 ]; then
+        runner="sh -c"
+    else
+        die "This needs administrator rights, but neither pkexec nor sudo is available."
+    fi
+
+    # shellcheck disable=SC2086
+    $runner "$cmd" || die "The package manager did not finish; install the packages above manually."
+    success "Host libraries installed. Reopen Updater CE for the window."
+}
+
 main() {
+    if [ "$REPAIR" -eq 1 ]; then
+        repair_host
+        exit 0
+    fi
     if [ "$UNINSTALL" -eq 1 ]; then
         uninstall
         return
@@ -654,3 +725,10 @@ EOF
 }
 
 main "$@"
+
+# --tui / --cli ask for the terminal front end, using whatever install just
+# happened (or the existing one). This is how a desktop user can reach the same
+# journeys when the window cannot open.
+if [ -n "$RUN_FLAG" ] && [ -x "$LAUNCHER" ]; then
+    exec "$LAUNCHER" "$RUN_FLAG" "${@}"
+fi

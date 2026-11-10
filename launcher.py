@@ -43,6 +43,22 @@ if "--simulate-macos" in sys.argv:
 # The text session never imports Qt. Opening the AppImage, the tarball or the
 # zip with no flag still starts the window. --tui is the explicit text session,
 # and run_linux_lite.sh is the streamed way to reach the same entry.
+# A Linux machine with no display (server, SSH session, a desktop whose
+# compositor failed) cannot open a window. Start the terminal interface rather
+# than aborting inside Qt, unless a flag already chose a mode. This covers the
+# plain tarball/zip binary, which is launched directly and not through AppRun.
+if (
+    sys.platform.startswith("linux")
+    and not os.environ.get("DISPLAY")
+    and not os.environ.get("WAYLAND_DISPLAY")
+    and not any(
+        arg in sys.argv
+        for arg in ("--tui", "--cli", "--lite", "--self-check", "--flash-cli",
+                    "--mtk-reset", "--reset", "--help", "-h", "--version")
+    )
+):
+    sys.argv.append("--tui")
+
 if "--tui" in sys.argv:
     sys.argv = [arg for arg in sys.argv if arg != "--tui"]
     from src.tui_session import main as _tui_main
