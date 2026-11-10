@@ -1288,6 +1288,29 @@ class NoticeService(QObject):
         if not self._rotation_timer.isActive():
             self._rotation_timer.start()
 
+    def listed_notices(self) -> list[Notice]:
+        """Active notices that belong in the Notices list, tray and badge.
+
+        The list follows the reader like the card does: a notice written for
+        one model, hardware type, project or release only appears while
+        something they selected or own is covered by it, so compatibility
+        warnings do not pile up in front of people they cannot affect.
+        Untargeted announcements are for everyone and always stay.
+        """
+        contexts = self._contexts()
+        if not contexts:
+            # Nothing is known yet: hiding a warning would be worse than
+            # showing it for one launch.
+            return list(self.active_notices)
+        platform = current_platform()
+        listed: list[Notice] = []
+        for notice in self.active_notices:
+            if not notice.is_contextual or any(
+                notice.matches(context, platform) for context in contexts
+            ):
+                listed.append(notice)
+        return listed
+
     def _emit_next_notice(self) -> None:
         try:
             from .remote_flags import is_remote_flag_active
@@ -1298,10 +1321,10 @@ class NoticeService(QObject):
                 return
         except Exception:
             pass
-        # The list, pop-out and tray see every active notice; the card gets
-        # one notice, chosen for this reader and rotated through the rest.
+        # The list, pop-out and tray see the notices that fit this reader;
+        # the card gets one of them, chosen and rotated through the rest.
         visible = self.active_notices
-        self.notices_ready.emit(visible)
+        self.notices_ready.emit(self.listed_notices())
         candidates = self._banner_candidates(visible)
         if self._rotation_index >= len(candidates):
             self._rotation_index = 0
