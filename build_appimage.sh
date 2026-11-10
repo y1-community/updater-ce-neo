@@ -37,7 +37,12 @@ CLEAN_BUILD=0
 SKIP_PYINSTALLER=0
 BRAND_REQUESTED=""
 SPEC_FILE="InnioasisUpdater.spec"
-USE_CONTAINER="${USE_CONTAINER:-auto}"
+# The frozen bundle inherits the build host's glibc and Python. Freezing on a
+# rolling distro (glibc 2.44, Python 3.14) produced AppImages that every
+# Debian, Ubuntu, Mint and openSUSE user saw fail with "GLIBC_2.44 not found"
+# before a window appeared. The container is therefore the default: a host
+# build has to be asked for explicitly and is reported as unsupported.
+USE_CONTAINER="${USE_CONTAINER:-1}"
 
 FORWARD_ARGS=()
 while [[ $# -gt 0 ]]; do
@@ -257,21 +262,23 @@ if [ -n "$PYTHON" ] && [ -x "$PYTHON" ]; then
     trap 'rm -f src/_build_brand.py' EXIT
 fi
 
-# Decide whether to build inside Debian Bookworm container for pure x86-64-baseline
+# The container is the only supported shape of a release build: it pins the
+# glibc floor (Ubuntu 22.04, 2.35) and the interpreter, and it keeps
+# x86-64-v3/v4 host packages out of the bundle. --no-container stays available
+# for a local experiment, but says so and still runs the floor check.
 SHOULD_USE_CONTAINER=0
 if [ "$SKIP_PYINSTALLER" -eq 0 ]; then
     if [ "$USE_CONTAINER" = "1" ]; then
-        SHOULD_USE_CONTAINER=1
-    elif [ "$USE_CONTAINER" = "auto" ]; then
-        if command -v docker >/dev/null 2>&1; then
-            # If host system has v4/v3 packages in /usr/lib (like CachyOS or optimized distros), containerize to avoid SIGILL on Skylake/Ryzen
-            if readelf -n /usr/lib/libcrypto.so.3 2>/dev/null | grep -q "x86-64-v4" || \
-               readelf -n /usr/lib/libc.so.6 2>/dev/null | grep -q "x86-64-v4"; then
-                echo "  -> Notice: Host system uses x86-64-v4 optimized libraries."
-                echo "  -> Using Debian Bookworm container to guarantee pure x86-64 baseline for all CPUs."
-                SHOULD_USE_CONTAINER=1
-            fi
+        if ! command -v docker >/dev/null 2>&1; then
+            echo "ERROR: release builds must run in Dockerfile.linux_build (glibc 2.35 baseline)."
+            echo "       Install Docker (or colima on macOS) and run ./build_appimage_docker.sh."
+            echo "       For a throwaway local build only, pass --no-container."
+            exit 1
         fi
+        SHOULD_USE_CONTAINER=1
+    else
+        echo "  ! --no-container: the bundle inherits this host's glibc and Python."
+        echo "  ! Not suitable for a release; run ./build_appimage_docker.sh instead."
     fi
 fi
 
@@ -309,6 +316,7 @@ fi
 \$VENV_CMD/python3 scripts/check_pyside_refcount.py
 \$VENV_CMD/python3 scripts/set_build_brand.py '$BRAND'
 \$VENV_CMD/pyinstaller --clean --noconfirm --distpath '$DIST_DIR' --workpath '$BUILD_DIR' '$SPEC_FILE'
+\$VENV_CMD/python3 scripts/verify_linux_runtime.py --dist '$DIST_DIR/$APP_NAME' --max-glibc 2.35
 cp /usr/lib/*-linux-gnu/libusb-1.0.so* '$DIST_DIR/$APP_NAME/_internal/' 2>/dev/null || true
 chown -R $(id -u):$(id -g) '$DIST_DIR' '$BUILD_DIR' .cache 2>/dev/null || true
 rm -f src/_build_brand.py
@@ -326,6 +334,12 @@ rm -f src/_build_brand.py
             --workpath "$BUILD_DIR" \
             "$SPEC_FILE"
         echo "  -> PyInstaller compilation completed."
+        if command -v objdump >/dev/null 2>&1 || command -v readelf >/dev/null 2>&1; then
+            "$PYTHON" scripts/verify_linux_runtime.py --dist "$DIST_DIR/$APP_NAME" --max-glibc 2.35 \
+                || echo "  ! This bundle is above the glibc 2.35 release floor; do not ship it."
+        else
+            echo "  -> Note: no readelf/objdump here, so the glibc floor was not verified."
+        fi
     fi
 fi
 
@@ -408,6 +422,15 @@ bundle_xcb_client_libs() {
             echo "  -> Bundled Qt XCB dependency: $_so"
         fi
     done
+
+    # Qt 6.5+ cannot load libqxcb.so without libxcb-cursor0. Shipping a bundle
+    # that merely warns about it is how 2.5.1-2.5.4 reached Debian and Mint
+    # users with "could not load the Qt platform plugin xcb".
+    if [ ! -e "$_internal/libxcb-cursor.so.0" ] && [ ! -e "$_internal/libxcb-cursor.so" ]; then
+        echo "ERROR: libxcb-cursor.so.0 is missing; Qt 6.5+ cannot start without it."
+        echo "       Install libxcb-cursor0 in the build container (apt) and rebuild."
+        exit 1
+    fi
 }
 bundle_xcb_client_libs
 
@@ -643,6 +666,28 @@ trap 'rm -f "$RUN_MARKER"' EXIT HUP INT TERM
 INNIOASIS_STARTUP_MARKER="$RUN_MARKER"
 export INNIOASIS_STARTUP_MARKER
 
+# --- Self-heal the desktop stack ------------------------------------------
+# Qt 6.5+ loads libqxcb.so only when libxcb-cursor0 and its helpers are
+# present. The bundle ships them, but a tarball built before that rule (or an
+# AppImage on a machine with an old glibc) can still be missing a core one.
+# Name the packages instead of dying with "could not load the Qt platform
+# plugin xcb" and no way forward.
+_missing=""
+for _so in libxcb-cursor.so.0 libxcb-image.so.0 libxcb-render-util.so.0 libxcb-util.so.1 libxkbcommon-x11.so.0; do
+    if [ ! -e "$HERE/usr/bin/_internal/$_so" ] && [ ! -e "$HERE/usr/lib/$_so" ]; then
+        _missing="$_missing $_so"
+    fi
+done
+if [ -n "$_missing" ]; then
+    printf 'Updater CE: this bundle is missing:%s\n' "$_missing" >&2
+    printf 'Install the Qt XCB helpers, then run it again:\n' >&2
+    printf '  Debian/Ubuntu/Mint: sudo apt install libxcb-cursor0 libxcb-image0 libxcb-render-util0 libxcb-util1 libxkbcommon-x11-0\n' >&2
+    printf '  Fedora:             sudo dnf install xcb-util-cursor xcb-util-image xcb-util-renderutil xcb-util libxkbcommon-x11\n' >&2
+    printf '  Arch/Manjaro/CachyOS/SteamOS: sudo pacman -S xcb-util-cursor xcb-util-image xcb-util-renderutil xcb-util libxkbcommon-x11\n' >&2
+    printf '  openSUSE:           sudo zypper install libxcb-cursor0 xcb-util-image xcb-util-renderutil libxkbcommon-x11\n' >&2
+    printf 'The app also runs headless: %s --flash-cli --help\n' "$APP_BIN" >&2
+fi
+
 set +e
 "$APP_BIN" "$@"
 _status=$?
@@ -651,8 +696,13 @@ if [ -z "${INNIOASIS_SAFE_MODE:-}" ] && [ ! -e "$RUN_MARKER" ] && \
    { [ "$_status" -eq 134 ] || [ "$_status" -eq 139 ] || [ "$_status" -eq 132 ] || [ "$_status" -eq 135 ]; }; then
     echo "The Qt front end stopped during startup; retrying once in safe mode." >&2
     INNIOASIS_SAFE_MODE=1
-    export INNIOASIS_SAFE_MODE
+    QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-xcb}"
+    export INNIOASIS_SAFE_MODE QT_QPA_PLATFORM
     exec "$APP_BIN" "$@"
+fi
+if [ "$_status" -ne 0 ] && [ ! -e "$RUN_MARKER" ]; then
+    printf 'Updater CE did not open a window on this desktop. It still runs from a terminal:\n' >&2
+    printf '  %s --flash-cli --help\n' "$APP_BIN" >&2
 fi
 exit "$_status"
 EOF
