@@ -78,7 +78,7 @@ def startup_note() -> str:
     where = f" ({distro})" if distro else ""
     return (
         f"Windows Subsystem for Linux detected{where}. For flashing, attach the "
-        "player with usbipd-win; run 'innioasis-updater-lite doctor' for the steps."
+        "player with usbipd-win; run the terminal doctor for the attach steps."
     )
 
 
