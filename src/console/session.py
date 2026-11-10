@@ -67,6 +67,7 @@ class BrowseState:
     notices: list[dict] = field(default_factory=list)
     notices_status: str = ""
     update_result: dict = field(default_factory=dict)
+    update_downloaded: str = ""
     quit: bool = False
 
 
@@ -578,8 +579,9 @@ def app_update_asset(release: dict, system: str | None = None) -> dict | None:
         targets = ("innioasis.updater.for.mac.dmg",)
         allowed = lambda low: low.endswith(".dmg")
     elif system == "win32":
-        targets = ("installer.exe", "updaterce-setup.exe")
-        allowed = lambda low: low.endswith(".exe") and "installer" in low
+        arm = platform.machine().lower() in ("aarch64", "arm64")
+        targets = (("installer-arm64.exe",) if arm else ()) + ("installer.exe", "updaterce-setup.exe")
+        allowed = lambda low: low.endswith(".exe")
     else:
         arm = platform.machine().lower() in ("aarch64", "arm64")
         if arm:
@@ -650,7 +652,7 @@ def check_app_update(current: str = APP_VERSION, timeout: float = 8.0) -> dict:
     }
 
 
-def update_lines(result: dict) -> list[str]:
+def update_lines(result: dict, downloaded: str = "") -> list[str]:
     if not result:
         return ["App update", "Press r to check the release feed.", "q goes back."]
     if result.get("failed"):
@@ -680,13 +682,21 @@ def update_lines(result: dict) -> list[str]:
         body = [line.strip() for line in str(result.get("body") or "").splitlines() if line.strip()]
         if body:
             lines += ["", "Release notes:", *body[:12]]
-        lines += ["", "o opens the release page. q goes back."]
+        lines += [
+            "",
+            "d downloads the package to ~/Downloads (no silent install).",
+            "o opens the release page. q goes back.",
+        ]
+        if downloaded:
+            lines += ["", downloaded]
         return lines
     lines.append("")
     lines.append("This is the newest published version for this system.")
     if result.get("reason"):
         lines.append(str(result["reason"]).capitalize() + ".")
     lines.append("r checks again   q goes back.")
+    if downloaded:
+        lines += ["", downloaded]
     return lines
 
 
@@ -810,7 +820,7 @@ def notices_lines(state: BrowseState) -> list[str]:
             lines.append("   " + body_line.strip())
         if notice.get("url"):
             lines.append(f"   {notice['url']}")
-    lines += ["", "r refreshes   q goes back."]
+    lines += ["", "o opens the first notice   r refreshes   q goes back."]
     return lines
 
 

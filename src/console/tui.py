@@ -416,7 +416,7 @@ def _plain(state: BrowseState, items: list, refresh: bool, output: Path) -> int:
         elif state.page == "notices":
             print("\n".join(notices_lines(state)))
         elif state.page == "update":
-            print("\n".join(update_lines(state.update_result)))
+            print("\n".join(update_lines(state.update_result, state.update_downloaded)))
         try:
             choice = input("> ").strip()
         except EOFError:
@@ -437,6 +437,20 @@ def _plain(state: BrowseState, items: list, refresh: bool, output: Path) -> int:
             return 0
         if state.page == "menu" and choice.isdigit():
             _menu_choice(state, int(choice) - 1, items)
+            continue
+        if state.page == "update" and lowered in {"d", "download"}:
+            result = state.update_result or {}
+            if result.get("download"):
+                target = Path.home() / "Downloads" / Path(str(result.get("asset") or "update")).name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                try:
+                    dl.download(str(result["download"]), target, progress=_progress_printer(target.name))
+                except (RuntimeError, OSError) as exc:
+                    state.update_downloaded = f"Download failed: {exc}"
+                else:
+                    state.update_downloaded = f"Downloaded to {target}"
+            else:
+                state.update_downloaded = "There is no newer package to download."
             continue
         if state.page in ("notices", "update") and lowered in {"r", "refresh"}:
             if state.page == "notices":
@@ -783,7 +797,37 @@ def _open_notices(state: BrowseState) -> None:
     state.page_scroll = 0
 
 
+def _download_update(screen, state: BrowseState) -> None:
+    """Download the offered package with the live progress screen."""
+    result = state.update_result or {}
+    url = str(result.get("download") or "")
+    if not result.get("newer") or not url:
+        state.update_downloaded = "There is no newer package to download."
+        return
+    name = Path(str(result.get("asset") or url.split("?", 1)[0])).name or "UpdaterCE-update"
+    downloads = Path.home() / "Downloads"
+    try:
+        downloads.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        downloads = Path.cwd()
+    target = downloads / name
+
+    def report(done, total):
+        percent = (done * 100.0 / total) if total else 0.0
+        detail = f"{dl.human_bytes(done)} / {dl.human_bytes(total)}" if total else dl.human_bytes(done)
+        _draw_progress(screen, state, percent, "Downloading app update", detail)
+
+    try:
+        report(0, None)
+        dl.download(url, target, progress=report)
+    except (RuntimeError, OSError) as exc:
+        state.update_downloaded = f"Download failed: {exc}"
+    else:
+        state.update_downloaded = f"Downloaded to {target}"
+
+
 def _open_update(state: BrowseState) -> None:
+    state.update_downloaded = ""
     try:
         state.update_result = check_app_update()
     except Exception as exc:  # the page must open even when the feed is odd
@@ -862,7 +906,7 @@ def _curses_page(screen, state: BrowseState, items: list) -> None:
     elif state.page == "notices":
         lines = notices_lines(state)
     elif state.page == "update":
-        lines = update_lines(state.update_result)
+        lines = update_lines(state.update_result, state.update_downloaded)
     elif state.page == "settings":
         lines = settings_lines(state)
     elif state.page == "support":
@@ -907,6 +951,9 @@ def _curses_page(screen, state: BrowseState, items: list) -> None:
         return
     if state.page == "menu" and ord("1") <= key <= ord("8"):
         _menu_choice(state, key - ord("1"), items)
+        return
+    if state.page == "update" and key in (ord("d"),):
+        _download_update(screen, state)
         return
     if state.page in ("notices", "update") and key in (ord("r"),):
         if state.page == "notices":
