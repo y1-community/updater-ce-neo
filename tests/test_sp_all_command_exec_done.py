@@ -5,6 +5,7 @@ exception. The internal-log check used to match only lowercase text, so a
 real successful run was reported as failed.
 """
 
+import threading
 import time
 from pathlib import Path
 
@@ -153,6 +154,74 @@ def test_main_window_catches_and_corrects_failure_on_all_command_exec():
         assert win._saw_all_command_exec is True
         assert win._install_failed is False
         assert win.sm.state is not FlashState.S5_COMPLETE
+    finally:
+        win._force_quit = True
+        win.close()
+        app.processEvents()
+
+
+def test_a_log_tail_after_success_only_feeds_diagnostics(tmp_path):
+    """The log monitor must not move the card once the run has a result.
+
+    It reads QT_FLASH_TOOL.log a batch at a time, so a large package leaves it
+    one pass behind and it replays the final "100% of image data" line after
+    the worker has reported success. That replay used to emit STEP_WRITE and
+    put the install card back up at 95%, hiding the completion screen.
+    """
+    launch = _write_run(
+        tmp_path,
+        "99% of image data has been sent (1.58G of 1.59G)\n"
+        "100% of image data has been sent (1.59G of 1.59G)\n"
+        "All command exec done!\n",
+    )
+    worker = fs.FlashWorker("pkg.zip", method="sp")
+    worker._sp_outcome_decided = True
+    steps = []
+    forwarded = []
+    worker.step_changed.connect(steps.append)
+    # Spy on the sink the monitor forwards tool lines to; log_message itself
+    # needs a Qt event loop to reach a receiver.
+    worker._log = forwarded.append
+
+    stop = threading.Event()
+    monitor = threading.Thread(
+        target=worker._monitor_sp_log_file,
+        args=(stop, tmp_path, launch),
+        daemon=True,
+    )
+    monitor.start()
+    time.sleep(0.8)
+    stop.set()
+    monitor.join(timeout=3.0)
+
+    assert not monitor.is_alive()
+    assert steps == []
+    # The lines themselves still reach Diagnostics.
+    assert any("of image data has been sent" in line for line in forwarded)
+
+
+def test_a_late_sp_tail_cannot_reopen_the_completion_screen():
+    """A replayed tick after success must leave the finished card alone."""
+    from src.state import FlashState
+
+    app, win = _make_test_window()
+    try:
+        page = win._flash_page
+        win._install_complete = True
+        win.sm.force_state(FlashState.S5_COMPLETE)
+        for donations_shown in (False, True):
+            page.set_device_done(donations_shown=donations_shown)
+            assert page._progress_bar.value() == 100
+
+            win._on_step_changed(fs.STEP_WRITE)
+            win._on_progress(95.0)
+
+            assert page._complete is True
+            assert page._progress_bar.value() == 100
+            assert page._step_key == "step_done"
+            # Donations on hides the card behind the appeal; donations off
+            # keeps it. Neither may be replaced by the write view.
+            assert page._progress_card.isHidden() is donations_shown
     finally:
         win._force_quit = True
         win.close()

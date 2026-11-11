@@ -5572,6 +5572,13 @@ class MainWindow(QMainWindow):
         self.service.stop_device_monitor()
 
     def _on_step_changed(self, step):
+        # A finished run is final. The SP Flash Tool log monitor can flush the
+        # tail of QT_FLASH_TOOL.log after the worker has already reported
+        # success, and a late STEP_WRITE used to put the write card back up at
+        # its 95% ceiling, hiding the completion screen and its donations
+        # prompt. Nothing may reopen the card in that state.
+        if getattr(self, "_install_complete", False) or self.sm.state is FlashState.S5_COMPLETE:
+            return
         if step in (STEP_DETECT, STEP_DONE) or step in _WRITE_STEPS:
             self._past_usb_search = True
             self._usb_search_active = False
@@ -5700,6 +5707,10 @@ class MainWindow(QMainWindow):
             self._flash_page.update_partition_progress(text)
 
     def _on_progress(self, percent):
+        # Same rule as _on_step_changed: a coalesced or replayed tick from a
+        # finished run must not repaint the card behind the completion screen.
+        if getattr(self, "_install_complete", False) or self.sm.state is FlashState.S5_COMPLETE:
+            return
         if (
             getattr(self, "_step_now", "") in (STEP_PLEASE_WAIT, STEP_WAITING)
             and not getattr(self, "_past_usb_search", False)

@@ -4252,6 +4252,13 @@ class FlashWorker(QThread):
         # SP Flash Tool reported "Flash complete! Disconnect USB...": the write
         # is finished, so the trailing "Disconnect USB" is not a failure.
         self._sp_flash_complete = False
+        # Set once this run's result is decided. The internal-log monitor is a
+        # tail reader: on a big package it can still be flushing the last batch
+        # of QT_FLASH_TOOL.log when the tool exits, and that batch contains
+        # "100% of image data has been sent". Feeding it to the card after the
+        # worker has reported success re-entered the write view at 95% and hid
+        # the completion screen (Classy and the stock firmware did this).
+        self._sp_outcome_decided = False
         # Actionable one-liner for the failure this run ended with (only the
         # BROM handshake failures have one today), so the UI can explain a
         # failure without re-parsing the tool's message itself.
@@ -5146,6 +5153,7 @@ class FlashWorker(QThread):
 
             if log_success:
                 self._finished = True
+                self._sp_outcome_decided = True
                 self.step_changed.emit(STEP_DONE)
                 self.progress.emit(100)
                 self._log("Flash complete! Disconnect USB and reboot the device.")
@@ -5185,6 +5193,7 @@ class FlashWorker(QThread):
         string, so :func:`sp_error_name` / :func:`sp_error_code` and the error
         page's explanation keep working.
         """
+        self._sp_outcome_decided = True
         if self._sp_flash_complete:
             self._log(
                 "Notice: SP Flash Tool 'all command exec' completion overrides failure/exit detail: "
@@ -5550,9 +5559,19 @@ class FlashWorker(QThread):
                         f.seek(last_pos)
                         new_lines = f.readlines()
                         last_pos = f.tell()
+                    # The tail of the log is diagnostics, never install state,
+                    # once this run has a result. The card already showed the
+                    # completion screen; a late STEP_WRITE here would replace it
+                    # with the write view at its 95% ceiling.
+                    decided = (
+                        getattr(self, "_sp_outcome_decided", False)
+                        or getattr(self, "_finished", False)
+                    )
                     for ln in new_lines:
                         low = ln.lower()
-                        if "of image data has been sent" in low:
+                        if decided:
+                            pass
+                        elif "of image data has been sent" in low:
                             self._leave_usb_search()
                             self.step_changed.emit(STEP_WRITE)
                             self._update_sp_image_progress(ln)
