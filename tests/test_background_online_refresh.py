@@ -57,6 +57,11 @@ def test_the_background_agent_checks_notices_and_never_refreshes_everything(monk
         "_refresh_manifest",
         lambda self: fetched.append("manifest"),
     )
+    monkeypatch.setattr(
+        background_agent.BackgroundAgent,
+        "_refresh_all_releases",
+        lambda self: fetched.append("releases"),
+    )
     from src import notice_service
 
     monkeypatch.setattr(
@@ -68,16 +73,17 @@ def test_the_background_agent_checks_notices_and_never_refreshes_everything(monk
     agent = background_agent.BackgroundAgent(app, lambda: None)
     agent._refresh_online()
 
-    assert fetched == ["manifest", "notices"]
+    assert fetched == ["manifest", "releases", "notices"]
     agent.shutdown()
 
 
-def test_the_online_timer_is_more_frequent_than_the_release_timer():
-    assert background_agent.BACKGROUND_ONLINE_TICK_MS <= 2 * 60 * 1000
-    assert (
-        background_agent.BACKGROUND_ONLINE_TICK_MS
-        < background_agent.BACKGROUND_TICK_MS
-    )
+def test_the_online_timer_is_between_two_and_eight_minutes():
+    from src import online_refresh
+
+    assert online_refresh.MIN_INTERVAL_MS == 2 * 60 * 1000
+    assert online_refresh.MAX_INTERVAL_MS == 8 * 60 * 1000
+    assert online_refresh.MIN_INTERVAL_MS <= online_refresh.next_interval_ms() <= online_refresh.MAX_INTERVAL_MS
+    assert background_agent.BACKGROUND_ONLINE_TICK_MS == online_refresh.MIN_INTERVAL_MS
 
 
 def test_a_new_manifest_is_loaded_and_forces_a_device_check(monkeypatch):

@@ -863,9 +863,14 @@ class MainWindow(QMainWindow):
         # The refresh is ttl-gated and runs off the UI thread: free when the
         # cached copies are current, silent when the network is not there.
         self._online_refresh_timer = QTimer(self)
-        self._online_refresh_timer.setInterval(5 * 60 * 1000)
-        self._online_refresh_timer.timeout.connect(self._refresh_online_data)
-        self._online_refresh_timer.start()
+        self._online_refresh_timer.setSingleShot(True)
+        self._online_refresh_timer.timeout.connect(self._online_refresh_tick)
+        from ..online_refresh import next_interval_ms
+
+        self._online_refresh_timer.start(next_interval_ms())
+        # Only one all-repository sweep runs at a time; its result reloads the
+        # visible release list without another manifest fetch.
+        self._release_refresh_worker = None
         self._step_now = ""
         self._update_offered_once = False
         self._update_manual_pending = False
@@ -6532,11 +6537,11 @@ class MainWindow(QMainWindow):
             if background:
                 from ..online_data import BACKGROUND_FILES, refresh_files_async
 
-                refresh_files_async(BACKGROUND_FILES)
+                refresh_files_async(BACKGROUND_FILES, force=True)
             else:
                 from ..online_data import refresh_all_async
 
-                refresh_all_async()
+                refresh_all_async(force=True)
         except Exception:
             logger.debug("Online data refresh could not start", exc_info=True)
         # Downloading slidia_manifest.xml changes nothing by itself: the
@@ -6560,6 +6565,58 @@ class MainWindow(QMainWindow):
             NoticeService.instance().fetch_async()
         except Exception:
             logger.debug("Notice refresh could not start", exc_info=True)
+        if getattr(self, "_select_page", None) is not None:
+            try:
+                self._start_all_release_refresh()
+            except Exception:
+                logger.debug("Release cache refresh could not start", exc_info=True)
+
+    def _online_refresh_tick(self) -> None:
+        """Refresh once, then pick a fresh random delay for the next pass."""
+        try:
+            self._refresh_online_data()
+        finally:
+            if not getattr(self, "_force_quit", False):
+                from ..online_refresh import next_interval_ms
+
+                timer = getattr(self, "_online_refresh_timer", None)
+                if timer is not None:
+                    timer.start(next_interval_ms())
+
+    def _start_all_release_refresh(self) -> None:
+        """Force every catalogue repository's release cache off the UI thread."""
+        worker = getattr(self, "_release_refresh_worker", None)
+        if worker is not None and worker.isRunning():
+            return
+        try:
+            from ..online_refresh import AllReposRefreshWorker
+
+            worker = AllReposRefreshWorker(parent=self)
+            self._release_refresh_worker = worker
+            self._active_workers.add(worker)
+            worker.refreshed.connect(
+                lambda results: self._on_all_releases_refreshed(worker, results)
+            )
+            worker.start()
+        except Exception:
+            logger.debug("All-repository release refresh failed to start", exc_info=True)
+
+    def _on_all_releases_refreshed(self, worker, results) -> None:
+        """Re-read the visible Choose Software list from the refreshed cache."""
+        self._active_workers.discard(worker)
+        if worker is getattr(self, "_release_refresh_worker", None):
+            self._release_refresh_worker = None
+        if not results or self._install_run_active():
+            return
+        page = getattr(self, "_select_page", None)
+        if page is None or not page.isVisible():
+            return
+        try:
+            if hasattr(page, "_can_relist_quietly") and not page._can_relist_quietly():
+                return
+            page._refresh_releases_keep_selection(force_refresh=False)
+        except Exception:
+            logger.debug("Could not re-read the release list", exc_info=True)
 
     def _apply_post_install_urls(self) -> None:
         """Hand the selected firmware's post-install URLs to the completion screen.

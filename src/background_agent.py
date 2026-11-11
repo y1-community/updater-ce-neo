@@ -26,9 +26,9 @@ logger = logging.getLogger(__name__)
 
 #: How often the headless agent re-checks app/device releases while alone.
 BACKGROUND_TICK_MS = 5 * 60 * 1000
-#: How often it looks for a new firmware manifest. NoticeService has its own
-#: 60 s notice.xml poll; both files are checked far more often than releases so
-#: a new player build or notice reaches the user promptly.
+#: The online/manifest/all-repository sweep uses the shared randomized 2-8
+#: minute delay (``online_refresh.next_interval_ms``). This lower bound is kept
+#: for callers that describe the cadence.
 BACKGROUND_ONLINE_TICK_MS = 2 * 60 * 1000
 #: First check after a tray launch; late enough not to compete with startup.
 BACKGROUND_STARTUP_DELAY_MS = 8 * 1000
@@ -109,6 +109,7 @@ class BackgroundAgent(QObject):
         self._update_worker = None
         self._device_worker = None
         self._manifest_worker = None
+        self._release_worker = None
         self._manifest_signature = None
         self._online_timer = None
 
@@ -166,7 +167,12 @@ class BackgroundAgent(QObject):
     def shutdown(self) -> None:
         """Stop the timers and retire a check that is still in flight."""
         self._stop_timers()
-        for worker in (self._update_worker, self._device_worker, self._manifest_worker):
+        for worker in (
+            self._update_worker,
+            self._device_worker,
+            self._manifest_worker,
+            self._release_worker,
+        ):
             try:
                 if worker is not None and worker.isRunning():
                     worker.requestInterruption()
@@ -302,12 +308,14 @@ class BackgroundAgent(QObject):
             updates.setInterval(BACKGROUND_TICK_MS)
             updates.timeout.connect(self._tick)
             online = QTimer(self)
-            online.setInterval(BACKGROUND_ONLINE_TICK_MS)
-            online.timeout.connect(self._refresh_online)
+            online.setSingleShot(True)
+            online.timeout.connect(self._online_tick)
             self._timers = [updates, online]
             self._online_timer = online
         for timer in self._timers:
-            timer.start()
+            if timer is not self._online_timer:
+                timer.start()
+        self._schedule_online_tick()
 
     def _stop_timers(self) -> None:
         for timer in self._timers:
@@ -327,22 +335,57 @@ class BackgroundAgent(QObject):
         self._check_app_update()
         self._check_device_updates()
 
+    def _schedule_online_tick(self) -> None:
+        """Arm the next randomized online sweep."""
+        timer = getattr(self, "_online_timer", None)
+        if timer is None:
+            return
+        from .online_refresh import next_interval_ms
+
+        timer.start(next_interval_ms())
+
+    def _online_tick(self) -> None:
+        self._refresh_online()
+        self._schedule_online_tick()
+
     def _refresh_online(self) -> None:
         """Keep the files that can become a notification current.
 
         A windowless copy has no donation bar and no release feed on screen, so
-        donors.csv, the feed snapshots and the blocklist are not fetched at all.
-        The manifest is fetched here; notice.xml is refreshed by NoticeService,
-        which parses the feed and posts the system notification on its own
-        frequent timer.
+        donors.csv and the feed snapshots are not fetched at all. The manifest,
+        every catalogue repository's release cache and notice.xml are refreshed;
+        NoticeService parses the notice feed and posts the notification itself.
         """
         self._refresh_manifest()
+        self._refresh_all_releases()
         try:
             from .notice_service import NoticeService
 
             NoticeService.instance().fetch_async()
         except Exception:
             logger.debug("Background notice refresh failed", exc_info=True)
+
+    def _refresh_all_releases(self) -> None:
+        """Warm every repository's release cache while no window is open."""
+        worker = self._release_worker
+        if worker is not None and worker.isRunning():
+            return
+        try:
+            from .online_refresh import AllReposRefreshWorker
+
+            worker = AllReposRefreshWorker(parent=self)
+            self._release_worker = worker
+            worker.refreshed.connect(self._on_all_releases_refreshed)
+            worker.start()
+        except Exception:
+            logger.debug("Background release refresh failed", exc_info=True)
+
+    def _on_all_releases_refreshed(self, results) -> None:
+        if self._window is None or not results:
+            return
+        # A window may have been created while the sweep was in flight. It owns
+        # the list now; the next window refresh uses the cache this sweep wrote.
+        logger.debug("Background release refresh finished for %d repositories", len(results))
 
     def _refresh_manifest(self) -> None:
         worker = self._manifest_worker
