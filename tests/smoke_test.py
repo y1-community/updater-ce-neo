@@ -806,8 +806,8 @@ def test_rockbox_min_release_gate():
 
 
 def test_rockbox_min_release_gate_filters_listings():
-    """The gate applies to cached and freshly fetched listings alike, so a
-    cache written before the gate cannot resurface a hidden release."""
+    """The shared cache keeps pre-0.5 rows for Type B units, so the Type A
+    listing gate must hide them on both the cached and freshly fetched paths."""
     with tempfile.TemporaryDirectory() as td:
         client = ReleasesClient(cache_root=td)
         rom = {"asset": {"browser_download_url": "u", "name": "rom.zip", "size": 100},
@@ -819,17 +819,38 @@ def test_rockbox_min_release_gate_filters_listings():
              "rom_variants": [rom]}
             for t in tags
         ])
-        assert [r["tag_name"] for r in client.get_cached_releases("rockbox-y1/rockbox")] == ["stable-v0.5"]
-        assert [r["tag_name"] for r in client.get_all_releases("rockbox-y1/rockbox")] == ["stable-v0.5"]
+        # The cache is model-agnostic. Type B units need the pre-0.5 builds, so
+        # the cache must keep them; the Type A listing gate filters below.
+        cached_tags = ["stable-v0.5", "stable-v0.4", "stable-v0.3"]
+        assert [r["tag_name"] for r in client.get_cached_releases("rockbox-y1/rockbox")] == cached_tags
+        assert [r["tag_name"] for r in client.get_all_releases("rockbox-y1/rockbox")] == cached_tags
 
-        # Fresh fetch path: normalization drops the disallowed releases too.
+        from src.catalog import FirmwarePackage
+
+        package = FirmwarePackage(
+            slug="rockbox-y1", name="Rockbox", model="Y1",
+            repo="rockbox-y1/rockbox", package_name="rom.zip",
+        )
+        assert [
+            r["tag_name"] for r in client.releases_for_package(
+                package, "Y1", selected_type="A"
+            )
+        ] == ["stable-v0.5"]
+
+        # Fresh fetch path: normalization keeps the rows, the Type A listing
+        # gate still drops the pre-0.5 builds.
         raw = [{"tag_name": t, "name": t, "published_at": "2026-05-16T00:19:43Z",
                 "prerelease": False,
                 "assets": [{"name": "rom.zip", "browser_download_url": "u", "size": 100}]}
                for t in ("stable-v0.4", "stable-v0.5")]
         client._get_json = lambda url: raw
         fetched = client.get_all_releases("rockbox-y1/rockbox", force_refresh=True)
-        assert [r["tag_name"] for r in fetched] == ["stable-v0.5"]
+        assert [r["tag_name"] for r in fetched] == ["stable-v0.5", "stable-v0.4"]
+        assert [
+            r["tag_name"] for r in client.releases_for_package(
+                package, "Y1", selected_type="A"
+            )
+        ] == ["stable-v0.5"]
 
 
 def test_releases_client_network():
