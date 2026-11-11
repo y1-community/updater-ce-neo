@@ -267,6 +267,7 @@ fi
 # x86-64-v3/v4 host packages out of the bundle. --no-container stays available
 # for a local experiment, but says so and still runs the floor check.
 SHOULD_USE_CONTAINER=0
+BUNDLE_VERIFIED=0
 if [ "$SKIP_PYINSTALLER" -eq 0 ]; then
     if [ "$USE_CONTAINER" = "1" ]; then
         if ! command -v docker >/dev/null 2>&1; then
@@ -316,12 +317,22 @@ fi
 \$VENV_CMD/python3 scripts/check_pyside_refcount.py
 \$VENV_CMD/python3 scripts/set_build_brand.py '$BRAND'
 \$VENV_CMD/pyinstaller --clean --noconfirm --distpath '$DIST_DIR' --workpath '$BUILD_DIR' '$SPEC_FILE'
+_internal='$DIST_DIR/$APP_NAME/_internal'
+cp -L /usr/lib/*-linux-gnu/libusb-1.0.so.0 \$_internal/ 2>/dev/null || true
+for _so in libxcb-cursor.so.0 libxcb-icccm.so.4 libxcb-image.so.0 libxcb-keysyms.so.1 libxcb-render-util.so.0 libxcb-util.so.1 libxcb-xkb.so.1 libxkbcommon-x11.so.0 libxkbcommon.so.0; do
+    for _libdir in /usr/lib/*-linux-gnu /usr/lib64 /usr/lib; do
+        if [ -e \$_libdir/\$_so ] && [ ! -e \$_internal/\$_so ]; then
+            cp -L \$_libdir/\$_so \$_internal/\$_so
+            break
+        fi
+    done
+done
 \$VENV_CMD/python3 scripts/verify_linux_runtime.py --dist '$DIST_DIR/$APP_NAME' --max-glibc 2.35
-cp /usr/lib/*-linux-gnu/libusb-1.0.so* '$DIST_DIR/$APP_NAME/_internal/' 2>/dev/null || true
 chown -R $(id -u):$(id -g) '$DIST_DIR' '$BUILD_DIR' .cache 2>/dev/null || true
 rm -f src/_build_brand.py
 "
         echo "  -> Container PyInstaller compilation completed."
+        BUNDLE_VERIFIED=1
     else
         echo "  -> Running PyInstaller on host..."
         if ! "$PYTHON" scripts/check_pyside_refcount.py; then
@@ -334,12 +345,6 @@ rm -f src/_build_brand.py
             --workpath "$BUILD_DIR" \
             "$SPEC_FILE"
         echo "  -> PyInstaller compilation completed."
-        if command -v objdump >/dev/null 2>&1 || command -v readelf >/dev/null 2>&1; then
-            "$PYTHON" scripts/verify_linux_runtime.py --dist "$DIST_DIR/$APP_NAME" --max-glibc 2.35 \
-                || echo "  ! This bundle is above the glibc 2.35 release floor; do not ship it."
-        else
-            echo "  -> Note: no readelf/objdump here, so the glibc floor was not verified."
-        fi
     fi
 fi
 
@@ -403,9 +408,18 @@ bundle_xcb_client_libs() {
     [ -d "$_internal" ] || return 0
     for _so in \
         libxcb-cursor.so.0 \
+        libxcb-icccm.so.4 \
         libxcb-image.so.0 \
+        libxcb-keysyms.so.1 \
         libxcb-render-util.so.0 \
         libxcb-util.so.1 \
+        libxcb-xkb.so.1 \
+        libxcb-shape.so.0 \
+        libxcb-shm.so.0 \
+        libxcb-sync.so.1 \
+        libxcb-randr.so.0 \
+        libxcb-xfixes.so.0 \
+        libxcb-glx.so.0 \
         libxkbcommon-x11.so.0 \
         libxkbcommon.so.0; do
         _src=""
@@ -433,6 +447,18 @@ bundle_xcb_client_libs() {
     fi
 }
 bundle_xcb_client_libs
+
+# AppImage, tar.gz and zip are three wrappers of this one PyInstaller folder.
+# Python, PySide6 and the Qt helper libraries are already inside _internal.
+# Refuse to wrap a folder that still needs a newer glibc or a library the
+# build did not copy in. glibc itself stays on the machine: a private copy
+# does not start.
+if [ "$BUNDLE_VERIFIED" -eq 1 ]; then
+    echo "  -> Python, glibc and the Qt libraries were checked in the build container."
+elif ! "${PYTHON:-python3}" scripts/verify_linux_runtime.py --dist "$DIST_DIR/$APP_NAME" --max-glibc 2.35; then
+    echo "ERROR: the PyInstaller bundle is not portable. No AppImage, tar.gz or zip was packed."
+    exit 1
+fi
 
 # --- Step 3: Stage the bundled SP Flash Tool Linux payload --------------------
 log_step 3 "$TOTAL_STEPS" "Bundling SP Flash Tool Linux Payload" "Copying flash_tool executable, helper scripts, and libraries into package..."
@@ -624,6 +650,7 @@ fi
 # Create AppRun entry point
 cp -f assets/linux-run.sh "$APPDIR/AppRun"
 chmod +x "$APPDIR/AppRun"
+install -m 0755 run_linux.sh "$APPDIR/usr/bin/run_linux.sh"
 # ...and point it at this brand's executable.
 if [ "$APP_NAME" != "InnioasisUpdater" ]; then
     sed -i "s|/usr/bin/InnioasisUpdater|/usr/bin/$APP_NAME|" "$APPDIR/AppRun"
@@ -682,12 +709,46 @@ OUTPUT_VERSIONED="$DIST_DIR/${BRAND_SLUG}-${VERSION}-${ARCH}.AppImage"
 OUTPUT_LATEST="$DIST_DIR/${BRAND_SLUG}-${ARCH}.AppImage"
 log_step 6 "$TOTAL_STEPS" "Generating Standalone Linux AppImage" "Compressing AppDir into squashfs runtime ($OUTPUT_VERSIONED)..."
 
+# appimagetool itself is a static-PIE binary. On an Apple-silicon builder it
+# cannot execute under the x86 emulation layer, even though the x86 payload
+# compiles and runs there. A type-2 AppImage is just a runtime ELF followed by
+# a squashfs image, so package it directly with the official runtime when the
+# tool cannot run. This is also what makes the release reproducible on hosts
+# that do not ship appimagetool.
+package_with_type2_runtime() {
+    local appdir="$1" output="$2" runtime="$TOOLS_DIR/runtime-$ARCH" squash
+    if ! command -v mksquashfs >/dev/null 2>&1; then
+        echo "ERROR: mksquashfs is required to package the AppImage (install squashfs-tools)." >&2
+        return 1
+    fi
+    if [ ! -x "$runtime" ]; then
+        mkdir -p "$TOOLS_DIR"
+        echo "  -> Downloading AppImage type-2 runtime ($ARCH)..."
+        curl -fsSL "https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-$ARCH" -o "$runtime" || return 1
+        chmod +x "$runtime"
+    fi
+    squash="${TMPDIR:-/tmp}/updater-$ARCH.$$.squashfs"
+    rm -f "$squash" "$output"
+    echo "  -> Building squashfs and appending the runtime..."
+    mksquashfs "$appdir" "$squash" -noappend -no-progress -no-xattrs \
+        -comp gzip -b 131072 >/dev/null || { rm -f "$squash"; return 1; }
+    cat "$runtime" "$squash" > "$output" || { rm -f "$squash" "$output"; return 1; }
+    rm -f "$squash"
+    chmod +x "$output"
+}
+
 echo "  -> Creating AppImage with appimagetool..."
 # appimagetool mis-resolves a relative AppDir path ("no such file or directory"), so pass an absolute one.
 APPDIR_ABS="$(realpath "$APPDIR")"
 if ! ARCH="$ARCH" "$APPIMAGETOOL_BIN" "$APPDIR_ABS" "$OUTPUT_VERSIONED" >/dev/null 2>&1; then
     echo "  -> Notice: retrying with --no-appstream flag..."
-    ARCH="$ARCH" "$APPIMAGETOOL_BIN" --no-appstream "$APPDIR_ABS" "$OUTPUT_VERSIONED" >/dev/null 2>&1
+    if ! ARCH="$ARCH" "$APPIMAGETOOL_BIN" --no-appstream "$APPDIR_ABS" "$OUTPUT_VERSIONED" >/dev/null 2>&1; then
+        echo "  -> appimagetool cannot run on this builder; using the official type-2 runtime."
+        package_with_type2_runtime "$APPDIR_ABS" "$OUTPUT_VERSIONED" || {
+            echo "ERROR: could not package the AppImage." >&2
+            exit 1
+        }
+    fi
 fi
 
 # Create standard unversioned link/copy for auto-update and release naming
@@ -712,6 +773,9 @@ mkdir -p "$TAR_STAGE"
 cp -a "$DIST_DIR/$APP_NAME"/. "$TAR_STAGE/"
 cp "$APPDIR/innioasis-updater.png" "$TAR_STAGE/innioasis-updater.png"
 cp "$APPDIR/innioasis-updater.desktop" "$TAR_STAGE/innioasis-updater.desktop"
+cp -f assets/linux-run.sh "$TAR_STAGE/run.sh"
+chmod 0755 "$TAR_STAGE/run.sh"
+install -m 0755 run_linux.sh "$TAR_STAGE/run_linux.sh"
 if [ ! -x "$TAR_STAGE/$APP_NAME" ]; then
     echo "ERROR: $TAR_STAGE/$APP_NAME is not executable"
     exit 1
@@ -736,14 +800,23 @@ if [ "$BRAND_SLUG" = "InnioasisUpdater" ]; then
     cp -f "$OUTPUT_VERSIONED" "$APPIMAGE_STABLE"
     cp -f "$TARBALL_VERSIONED" "$TARBALL_STABLE"
     install -m 0755 run_linux.sh "$DIST_DIR/run_linux.sh"
-    sha256sum "$APPIMAGE_STABLE" > "$APPIMAGE_STABLE.sha256"
-    sha256sum "$TARBALL_STABLE" > "$TARBALL_STABLE.sha256"
-    sha256sum "$DIST_DIR/run_linux.sh" > "$DIST_DIR/run_linux.sh.sha256"
+    # Checksum sidecars must name the file the way the user downloads it.
+    # A container build would otherwise write /workspace/dist/... into them,
+    # and `sha256sum -c` in the download folder would fail.
+    (
+        cd "$DIST_DIR"
+        sha256sum "$(basename "$APPIMAGE_STABLE")" > "$(basename "$APPIMAGE_STABLE").sha256"
+        sha256sum "$(basename "$TARBALL_STABLE")" > "$(basename "$TARBALL_STABLE").sha256"
+        sha256sum run_linux.sh > run_linux.sh.sha256
+    )
 elif [ "$BRAND_SLUG" = "MediaTekInstaller" ]; then
     cp -f "$OUTPUT_VERSIONED" "$DIST_DIR/MediaTek Installer.appimage"
     cp -f "$OUTPUT_VERSIONED" "$DIST_DIR/MediaTekInstaller.AppImage"
-    sha256sum "$DIST_DIR/MediaTek Installer.appimage" > "$DIST_DIR/MediaTek Installer.appimage.sha256"
-    sha256sum "$DIST_DIR/MediaTekInstaller.AppImage" > "$DIST_DIR/MediaTekInstaller.AppImage.sha256"
+    (
+        cd "$DIST_DIR"
+        sha256sum "MediaTek Installer.appimage" > "MediaTek Installer.appimage.sha256"
+        sha256sum "MediaTekInstaller.AppImage" > "MediaTekInstaller.AppImage.sha256"
+    )
 fi
 
 # --- Step 8: Portable ZIP of the same folder ------------------------
@@ -778,7 +851,10 @@ fi
 )
 if [ "$BRAND_SLUG" = "InnioasisUpdater" ]; then
     cp -f "$ZIP_VERSIONED" "$ZIP_STABLE"
-    sha256sum "$ZIP_STABLE" > "$ZIP_STABLE.sha256"
+    (
+        cd "$DIST_DIR"
+        sha256sum "$(basename "$ZIP_STABLE")" > "$(basename "$ZIP_STABLE").sha256"
+    )
 fi
 
 APPIMAGE_SIZE=$(du -sh "$OUTPUT_VERSIONED" 2>/dev/null | cut -f1 || echo "unknown")

@@ -51,6 +51,7 @@ TOOLS_MANIFEST: Dict[str, ToolDefinition] = {
         primary_url="https://github.com/y1-community/updater-ce-neo/releases/download/v3.0.0-assets/SP_Flash_Tool_v5.1904_Win.zip",
         fallback_urls=[
             "https://github.com/y1-community/Innioasis-Updater/releases/download/flash_tool/SP_Flash_Tool_v5.1904_Win.zip",
+            "https://github.com/y1-community/supplemental-apks/releases/download/1.0/SP_Flash_Tool_v5.1904_Win.zip",
             "https://spflashtooldownload.com/wp-content/uploads/SP_Flash_Tool_v5.1904_Win.zip",
         ],
         expected_sha256=None,  # Verified against zip structure and size
@@ -66,6 +67,7 @@ TOOLS_MANIFEST: Dict[str, ToolDefinition] = {
         primary_url="https://github.com/y1-community/updater-ce-neo/releases/download/flash_tool/flash_tool_linux.zip",
         fallback_urls=[
             "https://github.com/y1-community/Innioasis-Updater/releases/download/flash_tool/flash_tool_linux.zip",
+            "https://github.com/y1-community/supplemental-apks/releases/download/1.0/flash_tool_linux.zip",
             "https://github.com/y1-community/updater-ce-neo/releases/download/v3.0.0-assets/SP_Flash_Tool_v5.1904_Linux.zip",
         ],
         expected_sha256=None,
@@ -80,6 +82,7 @@ TOOLS_MANIFEST: Dict[str, ToolDefinition] = {
         target_platform="darwin",
         primary_url="https://github.com/y1-community/updater-ce-neo/releases/download/v3.0.0-assets/libusb-1.0-universal2.dylib",
         fallback_urls=[
+            "https://github.com/y1-community/supplemental-apks/releases/download/1.0/libusb-1.0-universal2.dylib",
             "https://files.pythonhosted.org/packages/52/6f/26de4e9f858ab50e87931f0be268f3c1bbfce33e8584add60da857632142/libusb_package-1.0.30.0-py3-none-macosx_11_0_arm64.whl",
         ],
         expected_sha256=None,
@@ -94,6 +97,7 @@ TOOLS_MANIFEST: Dict[str, ToolDefinition] = {
         target_platform="windows",
         primary_url="https://github.com/y1-community/updater-ce-neo/releases/download/v3.0.0-assets/UnRAR.exe",
         fallback_urls=[
+            "https://github.com/y1-community/supplemental-apks/releases/download/1.0/UnRAR.exe",
             "https://www.rarlab.com/rar/unrar.exe",
         ],
         expected_sha256=None,

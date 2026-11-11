@@ -21,8 +21,10 @@
 
 set -euo pipefail
 
-REPO="y1-community/updater-ce-neo"
-LATEST_API="https://api.github.com/repos/${REPO}/releases/latest"
+INSTALL_REPO="y1-community/innioasis-updater"
+UPDATE_REPO="y1-community/updater-ce-neo"
+REPO="$INSTALL_REPO"
+LATEST_API=""
 
 APP_NAME="InnioasisUpdater"
 DISPLAY_NAME="Updater CE"
@@ -95,6 +97,15 @@ while [ $# -gt 0 ]; do
     esac
 done
 
+# A first install comes from the website repository, an existing install is an
+# update and comes from the app repository. Both publish the same Linux assets.
+if [ -e "$INSTALL_ROOT/app" ] || [ -e "$INSTALL_ROOT/$APP_NAME.AppImage" ] || [ -x "$LAUNCHER" ]; then
+    REPO="$UPDATE_REPO"
+else
+    REPO="$INSTALL_REPO"
+fi
+LATEST_API="https://api.github.com/repos/${REPO}/releases?per_page=30"
+
 refresh_desktop_caches() {
     command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$DESKTOP_DIR" >/dev/null 2>&1 || true
     command -v gtk-update-icon-cache >/dev/null 2>&1 && gtk-update-icon-cache -q "$HOME/.local/share/icons/hicolor" >/dev/null 2>&1 || true
@@ -136,11 +147,18 @@ download_latest() {
     command -v curl >/dev/null 2>&1 || die "curl is required for --download"
     log "Looking up the latest release of ${REPO}"
     json="$(curl -fsSL "$LATEST_API")" || die "Could not reach the GitHub releases API"
+    local arch_filter
+    if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
+        arch_filter="grep -E 'aarch64|arm64'"
+    else
+        # The stable x86-64 names are intentionally untagged (UpdaterCE.appimage).
+        arch_filter="grep -Ev 'aarch64|arm64'"
+    fi
     url="$(printf '%s\n' "$json" | grep -o '"browser_download_url": *"[^"]*"' | sed 's/.*"\(https[^"]*\)"/\1/' \
-        | grep -E "/${APP_NAME}[^/]*${ARCH}[^/]*\.AppImage$" | head -n 1 || true)"
+        | grep -E "/(UpdaterCE|${APP_NAME})[^/]*\.(AppImage|appimage)$" | eval "$arch_filter" | head -n 1 || true)"
     if [ -z "$url" ]; then
         url="$(printf '%s\n' "$json" | grep -o '"browser_download_url": *"[^"]*"' | sed 's/.*"\(https[^"]*\)"/\1/' \
-            | grep -E "/${APP_NAME}[^/]*${ARCH}[^/]*\.tar\.gz$" | head -n 1 || true)"
+            | grep -E "/(UpdaterCE|${APP_NAME})[^/]*\.tar\.gz$" | eval "$arch_filter" | head -n 1 || true)"
     fi
     [ -n "$url" ] || die "The latest release has no ${ARCH} AppImage or tar.gz for ${APP_NAME}"
     name="$(basename "$url")"

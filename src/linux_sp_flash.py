@@ -42,6 +42,12 @@ FLASH_TOOL_LINUX_URL = (
 FLASH_TOOL_LINUX_FALLBACK_URL = (
     "https://github.com/y1-community/Innioasis-Updater/releases/download/flash_tool/flash_tool_linux.zip"
 )
+# The supplemental repository is the long-lived host for the tools the app
+# repairs itself with. The two release URLs above are historical homes; a
+# release that is removed or renamed must not strand an install.
+FLASH_TOOL_LINUX_SUPPLEMENTAL_URL = (
+    "https://github.com/y1-community/supplemental-apks/releases/download/1.0/flash_tool_linux.zip"
+)
 FLASH_TOOL_LINUX_ZIP_NAME = "flash_tool_linux.zip"
 FLASH_TOOL_LINUX_BIN = "flash_tool"
 FLASH_TOOL_LINUX_ZIP_MIN_BYTES = 10 * 1024 * 1024  # ~67 MB full package
@@ -78,6 +84,12 @@ FLASH_TOOL_LINUX_REQUIRED_FILES = FLASH_TOOL_ZIP_REQUIRED_FILES + (
 
 LOG_DIR_NAME = "SP_FT_Logs"
 STAGE_SUBDIR = "linux_flash_tool"
+
+# A polkit/sudo password prompt is not a 30-second operation. The old short
+# timeout killed the prompt while the user was still typing, which looked like
+# setup silently returning to the previous screen. Five minutes is long enough
+# for a real password, and still bounds an abandoned authentication dialog.
+AUTH_TIMEOUT = 300
 
 # Standard udev rule filenames installed on the host system
 UDEV_RULE_FILENAME = "99-innioasis-mediatek.rules"
@@ -488,7 +500,11 @@ def zip_has_required_members(zip_path: Path) -> bool:
 
 def _download_zip(zip_path: Path, progress_cb=None) -> bool:
     """Download the SP Flash Tool archive, trying the primary URL then fallback."""
-    urls = [FLASH_TOOL_LINUX_URL, FLASH_TOOL_LINUX_FALLBACK_URL]
+    urls = [
+        FLASH_TOOL_LINUX_URL,
+        FLASH_TOOL_LINUX_FALLBACK_URL,
+        FLASH_TOOL_LINUX_SUPPLEMENTAL_URL,
+    ]
     headers = {"Accept": "application/vnd.github+json"}
 
     for url in urls:
@@ -1033,7 +1049,7 @@ def install_udev_rules() -> tuple:
                 # Check nopass first
                 chk = subprocess.run(["doas", "-n", "true"], capture_output=True, timeout=1, env=host_env())
                 if chk.returncode == 0:
-                    res = subprocess.run(["doas", "bash", str(script_path)], capture_output=True, text=True, timeout=30, env=host_env())
+                    res = subprocess.run(["doas", "bash", str(script_path)], capture_output=True, text=True, timeout=AUTH_TIMEOUT, env=host_env())
                 else:
                     askpass = get_askpass_helper()
                     if not askpass:
@@ -1054,7 +1070,7 @@ def install_udev_rules() -> tuple:
                     )
                     os.close(s_fd)
                     os.write(m_fd, f"{pw}\n".encode())
-                    out, err = proc.communicate(timeout=30)
+                    out, err = proc.communicate(timeout=AUTH_TIMEOUT)
                     os.close(m_fd)
                     if proc.returncode == 0:
                         return True, "System rules configured successfully via doas."
@@ -1064,7 +1080,7 @@ def install_udev_rules() -> tuple:
                     ["pkexec", "bash", str(script_path)],
                     capture_output=True,
                     text=True,
-                    timeout=30,
+                    timeout=AUTH_TIMEOUT,
                     env=host_env(),
                 )
             elif tool == "sudo":
@@ -1076,7 +1092,7 @@ def install_udev_rules() -> tuple:
                     ["sudo", "-A" if askpass else "-n", "bash", str(script_path)],
                     capture_output=True,
                     text=True,
-                    timeout=30,
+                    timeout=AUTH_TIMEOUT,
                     env=s_env,
                 )
             elif tool == "run0":
@@ -1084,7 +1100,7 @@ def install_udev_rules() -> tuple:
                     ["run0", "--pipe", "bash", str(script_path)],
                     capture_output=True,
                     text=True,
-                    timeout=30,
+                    timeout=AUTH_TIMEOUT,
                     env=host_env(),
                 )
             elif tool == "lxqt-sudo":
@@ -1092,7 +1108,7 @@ def install_udev_rules() -> tuple:
                     ["lxqt-sudo", "bash", str(script_path)],
                     capture_output=True,
                     text=True,
-                    timeout=30,
+                    timeout=AUTH_TIMEOUT,
                     env=host_env(),
                 )
             elif tool in ("kdesu", "kdesudo"):
@@ -1100,7 +1116,7 @@ def install_udev_rules() -> tuple:
                     [tool, "-c", f"bash {script_path}"],
                     capture_output=True,
                     text=True,
-                    timeout=30,
+                    timeout=AUTH_TIMEOUT,
                     env=host_env(),
                 )
             else:

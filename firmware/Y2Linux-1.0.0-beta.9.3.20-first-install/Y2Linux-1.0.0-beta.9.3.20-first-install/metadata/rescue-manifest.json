@@ -1,0 +1,794 @@
+{
+  ".": {
+    "mode": 16877,
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "dev": {
+    "mode": 16877,
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "proc": {
+    "mode": 16877,
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "sys": {
+    "mode": 16877,
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "run": {
+    "mode": 16877,
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "tmp": {
+    "mode": 16877,
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "newroot": {
+    "mode": 16877,
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "bin": {
+    "mode": 16877,
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "sbin": {
+    "mode": 16877,
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "dev/console": {
+    "mode": 8576,
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rdev": [
+      5,
+      1
+    ]
+  },
+  "dev/null": {
+    "mode": 8630,
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rdev": [
+      1,
+      3
+    ]
+  },
+  "init": {
+    "mode": 33261,
+    "bytes": 13283,
+    "sha256": "87a924bdc5a1251f591f0a75aea3d2771887ff2b0b5ee73d3c234d3a7cf86fcb",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "bin/busybox": {
+    "mode": 33261,
+    "bytes": 927380,
+    "sha256": "be11b49addcea20a9d10ebfe81479d76da490dc9ede5167deec2b8d0d4b9d268",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "lib": {
+    "mode": 16877,
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "lib/ld-linux-armhf.so.3": {
+    "mode": 33261,
+    "bytes": 203348,
+    "sha256": "807dd97707eff0ed7d0790294359a5e932be6c2eae6fcbb0ae8d75d25b78cd08",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "lib/libresolv.so.2": {
+    "mode": 33261,
+    "bytes": 46452,
+    "sha256": "07537f664463c372f3b8a14a5c16290a244bd355f547a04218496f81c3d45639",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "lib/libc.so.6": {
+    "mode": 33261,
+    "bytes": 1507396,
+    "sha256": "7497ab69ec3e014024e7b4a22e821441410f8b714feb6bd69923e9baa068ef5e",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "sbin/blkid": {
+    "mode": 33261,
+    "bytes": 120200,
+    "sha256": "fbb547b7b2d34b1db999655efdf22dbdf586b2969897ff544f33c9a23f52ec1a",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "lib/libblkid.so.1": {
+    "mode": 33261,
+    "bytes": 337704,
+    "sha256": "9671acdf77277cf9bf18553df36bdd2794bd9132f8e763f5964c0256dae68b2f",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "sbin/reborn-splash": {
+    "mode": 33261,
+    "bytes": 91508,
+    "sha256": "b32a88c43bac2fa22b5189e360d0c6979c8ee48a801fe8ee7bbbf38d1f5c09f3",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "usr": {
+    "mode": 16877,
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "usr/lib": {
+    "mode": 16877,
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "usr/lib/libdrm.so.2": {
+    "mode": 33261,
+    "bytes": 79100,
+    "sha256": "0c8975ac1de91a47f9932e2dfef55d8a30bd169dc35c3184506711ec657f9e44",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "sbin/y2-platform-start": {
+    "mode": 33261,
+    "bytes": 8300,
+    "sha256": "c3707ecfa8da2022118040e4fa42acb78ec5f954b75e940c58fc821b2b70123d",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "sbin/y2-offline-charge": {
+    "mode": 33261,
+    "bytes": 56028,
+    "sha256": "051f0ae2a2cbc8f6b7fbd957e7385350ce8fc4d2c2f9996b095482db085f129e",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "sbin/y2-status": {
+    "mode": 33261,
+    "bytes": 1554,
+    "sha256": "cd9895743a036e2e0e55838e1f696e8c0f31d80d5b0c0e09c0aba1e3d8b75e94",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "sbin/y2-usb-status": {
+    "mode": 33261,
+    "bytes": 8224,
+    "sha256": "c2e619c82b599dd3d739e3923fdf34f09d6f88e1e587d36b4875971bc7cf4846",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "sbin/e2fsck": {
+    "mode": 33261,
+    "bytes": 313036,
+    "sha256": "e97495a89711dfa3786f958ac42e0a64b35774b603ea18997c8cfe01c3707973",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "usr/lib/libext2fs.so.2": {
+    "mode": 33261,
+    "bytes": 383052,
+    "sha256": "11186762ffcd4d7b5297ac1223d023039d9a551598f0cf256445350890e80116",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "usr/lib/libcom_err.so.2": {
+    "mode": 33261,
+    "bytes": 9408,
+    "sha256": "29f62f4f335eee9f4b535de889963108ce07b9785c4b4db4195d101687a37ccd",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "lib/libuuid.so.1": {
+    "mode": 33261,
+    "bytes": 25948,
+    "sha256": "ec7e38901266840da747c61fe9c9b5f3d86e20881c3e1e9a4b09ca634470e920",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "usr/lib/libe2p.so.2": {
+    "mode": 33261,
+    "bytes": 31016,
+    "sha256": "f0ed8090ddcfa46f37579b808845165b6cd217546cc84333b5c8b2bfe90a7c7b",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "sbin/y2-update-core": {
+    "mode": 33261,
+    "bytes": 58752,
+    "sha256": "9b3e1592d84e6fd19aec7f8b9aba18e5d5bb4f8b250e1fb8d9549c7c6e4020fc",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "usr/lib/libsodium.so.26": {
+    "mode": 33261,
+    "bytes": 403952,
+    "sha256": "05f7e0089dd9660cafff2aaf52983be902c7767622751428c3bb50146edf2ade",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "usr/lib/libjson-c.so.5": {
+    "mode": 33261,
+    "bytes": 62908,
+    "sha256": "aaa596315210d2454a1c57725e3e9e43901e78329bc793c0fba283d253c69fab",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "lib/libm.so.6": {
+    "mode": 33261,
+    "bytes": 451936,
+    "sha256": "e5bce2b230f546f7178267fa365438529c146bc0416c48b08d6418a6b00ace70",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "usr/lib/libz.so.1": {
+    "mode": 33261,
+    "bytes": 83244,
+    "sha256": "1df1c780af78440b12c7d165366ff0b888216530f7bfce562d8fb7221756333f",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "etc": {
+    "mode": 16877,
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "etc/y2linux": {
+    "mode": 16877,
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "etc/y2linux/update-trust.json": {
+    "mode": 33188,
+    "bytes": 646,
+    "sha256": "07d2dbd081c255ca15bacf009722e4cff8762f7ed1d1eb66c74cc76f8815c703",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "etc/y2linux/update-compat.json": {
+    "mode": 33188,
+    "bytes": 303,
+    "sha256": "8ac5023a56bef49550f8094f8fcebc853e34859094a61b0a4b0f37d020de0bf7",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "etc/y2linux/recovery-update": {
+    "mode": 33188,
+    "bytes": 2,
+    "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "sbin/y2-recovery": {
+    "mode": 33188,
+    "bytes": 13703,
+    "sha256": "7b3e483d36fc6d41e2532a01d0c09b67c23062d59ec67658d74add3eec89b89a",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "sbin/y2-recovery-ui": {
+    "mode": 33261,
+    "bytes": 17764,
+    "sha256": "3117ec2362387dd600dd4ae6b7c69dcae8c21e7047641dd936e0df5e9db0fb89",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "sbin/y2-storage": {
+    "mode": 33188,
+    "bytes": 1338,
+    "sha256": "5d113b795ec52b979c2223c96c8015786f1016488ff12dc407c28e64544648a1",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "lib/firmware": {
+    "mode": 16877,
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "lib/firmware/regulatory.db": {
+    "mode": 33188,
+    "bytes": 6348,
+    "sha256": "7e236caecd939c8ec98be4870bf30422f28ffef2565a38aaaa2d9ddabd0c2641",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "lib/firmware/regulatory.db.p7s": {
+    "mode": 33188,
+    "bytes": 1085,
+    "sha256": "50332f0db09b8bcc719235ec4985c27377f2cc2f42abb7b5dcf951866c5a888a",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "usr/share": {
+    "mode": 16877,
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "usr/share/licenses": {
+    "mode": 16877,
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "usr/share/licenses/wireless-regdb": {
+    "mode": 16877,
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "usr/share/licenses/wireless-regdb/LICENSE": {
+    "mode": 33188,
+    "bytes": 880,
+    "sha256": "678b0df753c86198fc496d1f1033429bbd57f101472132ee7eaaf9f5e0a7fae1",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "sbin/y2-observer": {
+    "mode": 33261,
+    "bytes": 815660,
+    "sha256": "dbf1ce40b9d5b5a80bc987dafb9db27b738ed343193bcd0cda488df931e8edb4",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "sbin/y2-fbtest": {
+    "mode": 33261,
+    "bytes": 8200,
+    "sha256": "a0fa192644a44861f0539b7291de87c001498204cf176471dbe18410628e1070",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "sbin/y2-abi-check": {
+    "mode": 33261,
+    "bytes": 8560,
+    "sha256": "b33455eb0ac1c5994cabb4fc099a7473b3d386a36042214dacf272116fdbcf1e",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "display.ko": {
+    "mode": 33024,
+    "bytes": 169616,
+    "sha256": "12ae1a6b23fc52bd63ff85bc1f6087f587e71bdc7b7fc7021483de52affe67fb",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "boot-modules": {
+    "mode": 16877,
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "boot-modules/6.18.56-y2linux-1.0.0-beta.9.3.20": {
+    "mode": 16877,
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "boot-modules/6.18.56-y2linux-1.0.0-beta.9.3.20/kernel": {
+    "mode": 16877,
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "boot-modules/6.18.56-y2linux-1.0.0-beta.9.3.20/kernel/usb_f_ncm.ko": {
+    "mode": 33024,
+    "bytes": 21672,
+    "sha256": "1a399d63d595cf8f372526c0afc7617339fbc6f56eb501048bfcd709a827956f",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "boot-modules/6.18.56-y2linux-1.0.0-beta.9.3.20/kernel/g_ncm.ko": {
+    "mode": 33024,
+    "bytes": 9240,
+    "sha256": "a5b65d1ec15824f5746605a8930548f47d3edf072c5c09c598d2eb0dd1e97975",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "boot-modules/6.18.56-y2linux-1.0.0-beta.9.3.20/kernel/snd-hwdep.ko": {
+    "mode": 33024,
+    "bytes": 11376,
+    "sha256": "5d539ff4ecf9ba1af5aa5104c17e55116de596d81815ba8de01354640826be23",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "boot-modules/6.18.56-y2linux-1.0.0-beta.9.3.20/kernel/snd-rawmidi.ko": {
+    "mode": 33024,
+    "bytes": 34136,
+    "sha256": "d7b2e5a0a78fedd1739c60b377517f006e637238a82a2fc29d90d792b55fcb2b",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "boot-modules/6.18.56-y2linux-1.0.0-beta.9.3.20/kernel/snd-usb-audio.ko": {
+    "mode": 33024,
+    "bytes": 424256,
+    "sha256": "68cee06d8ebc5e5981c068a5d390db5f2ee55c93b9424b0491bba66e9206f1fd",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "boot-modules/6.18.56-y2linux-1.0.0-beta.9.3.20/kernel/snd-usbmidi-lib.ko": {
+    "mode": 33024,
+    "bytes": 29496,
+    "sha256": "85b14c43f26f4a776f1293947b0b313726c0cc69fbc4bc259195d8f44c5fa5ff",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "boot-modules/6.18.56-y2linux-1.0.0-beta.9.3.20/modules.dep": {
+    "mode": 33188,
+    "bytes": 226,
+    "sha256": "219301d378ef8e4f281ca3301de9a9e9dd8c5f22635a0fa42acfadba497b9d02",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "boot-modules/6.18.56-y2linux-1.0.0-beta.9.3.20/modules.alias": {
+    "mode": 33188,
+    "bytes": 22383,
+    "sha256": "a8306e3cbc9f35a6cb20f4f5c68a867a5337aa22e5cd33f78e97b7f5b8423a1b",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "bin/sh": {
+    "mode": 41471,
+    "bytes": 7,
+    "sha256": "9d75f0d7c398df565d7ac04c6819b62d6d8f9560f5eb4672596ecd8f7e96ae91",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "bin/mount": {
+    "mode": 41471,
+    "bytes": 7,
+    "sha256": "9d75f0d7c398df565d7ac04c6819b62d6d8f9560f5eb4672596ecd8f7e96ae91",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "bin/mkdir": {
+    "mode": 41471,
+    "bytes": 7,
+    "sha256": "9d75f0d7c398df565d7ac04c6819b62d6d8f9560f5eb4672596ecd8f7e96ae91",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "bin/mknod": {
+    "mode": 41471,
+    "bytes": 7,
+    "sha256": "9d75f0d7c398df565d7ac04c6819b62d6d8f9560f5eb4672596ecd8f7e96ae91",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "bin/sleep": {
+    "mode": 41471,
+    "bytes": 7,
+    "sha256": "9d75f0d7c398df565d7ac04c6819b62d6d8f9560f5eb4672596ecd8f7e96ae91",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "bin/readlink": {
+    "mode": 41471,
+    "bytes": 7,
+    "sha256": "9d75f0d7c398df565d7ac04c6819b62d6d8f9560f5eb4672596ecd8f7e96ae91",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "bin/chroot": {
+    "mode": 41471,
+    "bytes": 7,
+    "sha256": "9d75f0d7c398df565d7ac04c6819b62d6d8f9560f5eb4672596ecd8f7e96ae91",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "bin/umount": {
+    "mode": 41471,
+    "bytes": 7,
+    "sha256": "9d75f0d7c398df565d7ac04c6819b62d6d8f9560f5eb4672596ecd8f7e96ae91",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "bin/switch_root": {
+    "mode": 41471,
+    "bytes": 7,
+    "sha256": "9d75f0d7c398df565d7ac04c6819b62d6d8f9560f5eb4672596ecd8f7e96ae91",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "bin/kill": {
+    "mode": 41471,
+    "bytes": 7,
+    "sha256": "9d75f0d7c398df565d7ac04c6819b62d6d8f9560f5eb4672596ecd8f7e96ae91",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "bin/cat": {
+    "mode": 41471,
+    "bytes": 7,
+    "sha256": "9d75f0d7c398df565d7ac04c6819b62d6d8f9560f5eb4672596ecd8f7e96ae91",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "bin/dmesg": {
+    "mode": 41471,
+    "bytes": 7,
+    "sha256": "9d75f0d7c398df565d7ac04c6819b62d6d8f9560f5eb4672596ecd8f7e96ae91",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "bin/grep": {
+    "mode": 41471,
+    "bytes": 7,
+    "sha256": "9d75f0d7c398df565d7ac04c6819b62d6d8f9560f5eb4672596ecd8f7e96ae91",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "bin/tail": {
+    "mode": 41471,
+    "bytes": 7,
+    "sha256": "9d75f0d7c398df565d7ac04c6819b62d6d8f9560f5eb4672596ecd8f7e96ae91",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "bin/cp": {
+    "mode": 41471,
+    "bytes": 7,
+    "sha256": "9d75f0d7c398df565d7ac04c6819b62d6d8f9560f5eb4672596ecd8f7e96ae91",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "bin/uname": {
+    "mode": 41471,
+    "bytes": 7,
+    "sha256": "9d75f0d7c398df565d7ac04c6819b62d6d8f9560f5eb4672596ecd8f7e96ae91",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "bin/mv": {
+    "mode": 41471,
+    "bytes": 7,
+    "sha256": "9d75f0d7c398df565d7ac04c6819b62d6d8f9560f5eb4672596ecd8f7e96ae91",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "bin/sed": {
+    "mode": 41471,
+    "bytes": 7,
+    "sha256": "9d75f0d7c398df565d7ac04c6819b62d6d8f9560f5eb4672596ecd8f7e96ae91",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "bin/sync": {
+    "mode": 41471,
+    "bytes": 7,
+    "sha256": "9d75f0d7c398df565d7ac04c6819b62d6d8f9560f5eb4672596ecd8f7e96ae91",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "bin/poweroff": {
+    "mode": 41471,
+    "bytes": 7,
+    "sha256": "9d75f0d7c398df565d7ac04c6819b62d6d8f9560f5eb4672596ecd8f7e96ae91",
+    "rdev": [
+      0,
+      0
+    ]
+  },
+  "bin/reboot": {
+    "mode": 41471,
+    "bytes": 7,
+    "sha256": "9d75f0d7c398df565d7ac04c6819b62d6d8f9560f5eb4672596ecd8f7e96ae91",
+    "rdev": [
+      0,
+      0
+    ]
+  }
+}

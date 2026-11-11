@@ -1118,6 +1118,41 @@ def format_install_heading(software: str, model: str = "") -> str:
     return tr("flash_installing_software_on").format(model=device)
 
 
+_READY_HEADING_RE = re.compile(
+    r"^get\s+your\s+(?P<model>.+?)\s+ready\s+to\s+install\s+(?P<software>.+)$"
+    r"|^get\s+ready\s+to\s+install\s+(?P<software_alt>.+)$",
+    re.IGNORECASE,
+)
+
+
+def software_from_install_heading(text, model: str = "") -> str:
+    """The release name inside an install heading (``""`` when there is none).
+
+    The install card's title is a heading -- ``Get your Y2 ready to install
+    Rockbox 2.5`` -- and a completion screen that reads it as a release name
+    either says the heading back or falls back to "The software has been
+    installed on your Y2" while the name it needs is already known. This
+    unwraps the heading and drops a trailing model token the sentence names
+    separately.
+    """
+    heading = _READY_HEADING_RE.match(str(text or "").strip())
+    if heading is None:
+        return ""
+    software = (heading.group("software") or heading.group("software_alt") or "").strip()
+    if not software or software.casefold() == "software":
+        return ""
+    token = str(model or heading.group("model") or "").strip()
+    if token:
+        word = rf"(?<![0-9A-Za-z]){re.escape(token)}(?![0-9A-Za-z])"
+        stripped = re.sub(rf"\bfor\s+{word}", " ", software, flags=re.IGNORECASE)
+        stripped = re.sub(
+            rf"\s*[-\u2013,\u00b7:/]\s*{word}", " ", stripped, flags=re.IGNORECASE
+        ).strip(" -\u2013,\u00b7:/")
+        if stripped:
+            software = stripped
+    return software
+
+
 def format_install_card_title(software: str, version_label: str = "", model: str = "") -> str:
     """``{software} {version or date} for {model}``, omitting empty pieces.
 
@@ -2036,6 +2071,12 @@ class ReleasesClient:
 #: bounds re-checks for repositories the snapshot does not cover yet.
 RELEASE_AVAILABILITY_TTL_SECONDS = 30 * 60
 
+#: A release snapshot older than this is advisory: it may keep a source but
+#: never hide one by itself. ``releases_backup.json`` is a periodic export, so a
+#: repository added to the live manifest since the export has no row in it, and
+#: its first stable release may already be on GitHub.
+RELEASE_SNAPSHOT_HIDE_MAX_AGE_SECONDS = RELEASE_AVAILABILITY_TTL_SECONDS
+
 _SNAPSHOT_CACHE: tuple | None = None
 _AVAILABILITY_CACHE: dict = {}
 
@@ -2152,6 +2193,20 @@ def _remember_availability(package, usable) -> None:
     _AVAILABILITY_CACHE[_availability_key(package)] = (time.time(), bool(usable))
 
 
+def _release_snapshot_age():
+    """Age in seconds of the release snapshot used by the availability gate.
+
+    ``None`` means there is no snapshot (the gate then keeps every entry).
+    """
+    path = _release_snapshot_path()
+    if path is None:
+        return None
+    try:
+        return max(0.0, time.time() - path.stat().st_mtime)
+    except OSError:
+        return None
+
+
 def filter_unavailable_packages(entries, *, allow_network: bool = False, client=None):
     """Keep only catalogue entries that can list an installable release.
 
@@ -2173,6 +2228,14 @@ def filter_unavailable_packages(entries, *, allow_network: bool = False, client=
     snapshot = _release_snapshot_rows()
     if snapshot is None:
         return entries
+    # A repository added to the live manifest since the export has no row in
+    # it, and a newly published stable release may not be in it either. Only a
+    # fresh export may hide a source on its own.
+    snapshot_age = _release_snapshot_age()
+    snapshot_may_hide = (
+        snapshot_age is not None
+        and snapshot_age <= RELEASE_SNAPSHOT_HIDE_MAX_AGE_SECONDS
+    )
 
     network_client = client
     client_ready = client is not None
@@ -2192,25 +2255,36 @@ def filter_unavailable_packages(entries, *, allow_network: bool = False, client=
     for package in entries:
         repo = str(getattr(package, "repo", "") or "").strip()
         repo_key = repo.lower()
-        # The snapshot is the freshest local word (5 min TTL): when it covers
-        # the repository, its answer outranks an older live verdict, so a
-        # release published since the last check appears without waiting out
-        # RELEASE_AVAILABILITY_TTL_SECONDS.
+        # A fresh snapshot answers without a request; its "no" is confirmed
+        # against the release cache and, when allowed, the live API below.
         snapshot_rows = snapshot.get(repo_key)
+        snapshot_verdict = None
         if snapshot_rows is not None:
-            usable = _rows_have_installable_release(package, snapshot_rows)
+            snapshot_verdict = _rows_have_installable_release(package, snapshot_rows)
+            usable = snapshot_verdict
         else:
             usable = _cached_availability(package)
-        if usable is None:
+
+        # The per-repository release cache is written by a live fetch, so a
+        # usable row in it is newer evidence than the periodic export.
+        cached_rows = None
+        if usable is not True:
             cache_client = _client()
-            cached_rows = None
             if cache_client is not None:
                 try:
                     cached_rows = cache_client.get_cached_releases(repo)
                 except Exception:
                     cached_rows = None
-            if cached_rows:
-                usable = _rows_have_installable_release(package, cached_rows)
+        if cached_rows:
+            cached_usable = _rows_have_installable_release(package, cached_rows)
+            if cached_usable:
+                usable = True
+            elif usable is None:
+                usable = False
+        if usable is False and snapshot_verdict is False and not snapshot_may_hide:
+            # An old export must never hide a source by itself. Ask live below
+            # when that is allowed; otherwise fail open and keep the entry.
+            usable = None
         if usable is None and allow_network and repo:
             live_client = _client()
             if live_client is not None:

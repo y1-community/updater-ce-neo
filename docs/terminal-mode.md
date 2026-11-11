@@ -25,6 +25,10 @@ MTKclient tree, adb for the platforms that have a binary, and the Linux
 x86-64 SP Flash Tool. A 32-bit board uses MTKclient; it does not run those
 x86-64 binaries.
 
+The archive is about 220 MB because it carries the flashing tools themselves;
+the Python-only part is still the same source as the window. If you already
+have MTKclient, adb and the flash payload, use `--file` with a smaller archive.
+
 | Machine | lite | GUI |
 | --- | --- | --- |
 | x86-64 | yes | yes |
@@ -41,6 +45,17 @@ sh run_linux_lite.sh --check          # report python, tools, install state
 sh run_linux_lite.sh                  # install to ~/.local/share/innioasis-updater/lite
 sh run_linux_lite.sh --tui            # install, then open the terminal interface
 ```
+
+To install and open the interactive menu in one line, without saving the
+installer first:
+
+```sh
+INNIOASIS_CHOICE=terminal sh -c "$(curl -fsSL https://raw.githubusercontent.com/y1-community/updater-ce-neo/main/run_linux_lite.sh)"
+```
+
+The `sh -c` form is deliberate: it leaves the terminal on stdin, so curses can
+run. `curl ... | sh` also installs, but the pipe has no input left for the menu
+and the numbered fallback opens instead.
 
 The download resumes. If the connection drops, run the same command again: the
 partial file continues from where it stopped instead of starting over. The

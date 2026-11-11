@@ -68,7 +68,9 @@ SELF_CHECK_LOG="$LOG_DIR/bundle-selfcheck.log"
 # made before that rule, or a host that strips one, still gets the exact
 # package names for its distribution instead of a bare abort.
 _missing=""
-for _so in libxcb-cursor.so.0 libxcb-image.so.0 libxcb-render-util.so.0 libxcb-util.so.1 libxkbcommon-x11.so.0; do
+for _so in libxcb-cursor.so.0 libxcb-image.so.0 libxcb-render-util.so.0 libxcb-util.so.1 \
+           libxcb-shape.so.0 libxcb-shm.so.0 libxcb-sync.so.1 libxcb-randr.so.0 \
+           libxcb-xfixes.so.0 libxcb-glx.so.0 libxkbcommon-x11.so.0; do
     if [ ! -e "$APP_HOME/_internal/$_so" ] && [ ! -e "$HERE/usr/lib/$_so" ]; then
         _missing="$_missing $_so"
     fi
@@ -145,17 +147,17 @@ RUNTIME_LOG="$LOG_DIR/runtime.log"
 # POSIX sh has no PIPESTATUS: the app's status is written by the subshell that
 # ran it, while tee keeps the output visible and on disk.
 _STATUS_FILE="${TMPDIR:-/tmp}/innioasis-updater-status-$$"
-rm -f "$STATUS_FILE"
+rm -f "$_STATUS_FILE"
 set +e
-{ "$APP_BIN" "$@" 2>&1; echo "$?" > "$STATUS_FILE"; } | tee -a "$RUNTIME_LOG"
-_status=$(cat "$STATUS_FILE" 2>/dev/null || echo 0)
-rm -f "$STATUS_FILE"
+{ "$APP_BIN" "$@" 2>&1; echo "$?" > "$_STATUS_FILE"; } | tee -a "$RUNTIME_LOG"
+_status=$(cat "$_STATUS_FILE" 2>/dev/null || echo 0)
+rm -f "$_STATUS_FILE"
 set -e
 
 # Qt 6.5+ refuses to load libqxcb without libxcb-cursor0, and a distro Qt can
 # also be picked up by mistake. Either way the window cannot open, but the
 # terminal interface can: hand over rather than exiting with a core dump.
-if [ ! -e "$RUN_MARKER" ] && [ "_$status" -ne 0 ] && \
+if [ ! -e "$RUN_MARKER" ] && [ "$_status" -ne 0 ] && \
    grep -qE 'xcb-cursor0|Could not load the Qt platform plugin|no Qt platform plugin could be initialized' "$RUNTIME_LOG" 2>/dev/null; then
     echo "" >&2
     echo "Updater CE: Qt could not open a window on this system." >&2
@@ -164,6 +166,17 @@ if [ ! -e "$RUN_MARKER" ] && [ "_$status" -ne 0 ] && \
     echo "  Fedora:             sudo dnf install xcb-util-cursor" >&2
     echo "  openSUSE:           sudo zypper install libxcb-cursor0" >&2
     echo "  Arch/CachyOS:       sudo pacman -S xcb-util-cursor" >&2
+    # The AppImage and tarball carry run_linux.sh beside the payload so the
+    # same repair path works even when the user never ran the installer. It
+    # asks for the system password through the desktop's own polkit agent.
+    if [ -x "$APP_HOME/run_linux.sh" ] && [ -z "${INNIOASIS_REPAIR_TRIED:-}" ]; then
+        INNIOASIS_REPAIR_TRIED=1
+        export INNIOASIS_REPAIR_TRIED
+        echo "  Trying the one-time host-library repair now…" >&2
+        if "$APP_HOME/run_linux.sh" --repair --yes; then
+            exec "$APP_BIN" "$@"
+        fi
+    fi
     echo "  Starting the terminal interface instead; nothing is lost, and" >&2
     echo "  https://innioasis.app/run_linux.sh --repair fixes the window." >&2
     exec "$APP_BIN" --tui

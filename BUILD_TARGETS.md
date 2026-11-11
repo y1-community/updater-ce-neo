@@ -66,12 +66,14 @@ chmod +x build_macos.sh
 Verify a Universal 2 bundle really carries both slices before shipping:
 
 ```bash
-python3 scripts/audit_universal2.py "dist/macos/Updater CE.app"
+python3 scripts/audit_universal2.py "dist/macos/Innioasis Updater.app"
 ```
 
 The audit exits non-zero if any Mach-O is missing an `x86_64` or `arm64` slice
 or asks for a newer minimum macOS than 12.0 (Monterey). Override with
-`--max-minos 12.0`.
+`--max-minos 12.0`. It checks slices and minimum OS, not what each slice links
+against; the arm64/Rosetta link check and the checklist for an actual Intel Mac
+are in [BUILD_GUIDE.md](docs/BUILD_GUIDE.md) section 7.
 
 The macOS flash backend is MTKClient, which needs
 `vendor/mtkclient/mtkclient/Darwin/libusb-1.0.dylib`; `build_macos.sh` creates a

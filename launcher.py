@@ -55,7 +55,7 @@ if (
     and not os.environ.get("WAYLAND_DISPLAY")
     and not any(
         arg in sys.argv
-        for arg in ("--tui", "--cli", "--lite", "--self-check", "--flash-cli",
+        for arg in ("--tui", "--cli", "--lite", "--self-check", "--gui-probe", "--flash-cli",
                     "--mtk-reset", "--reset", "--help", "-h", "--version")
     )
 ):
@@ -81,6 +81,12 @@ if "--self-check" in sys.argv:
     from src.bundle_selfcheck import main as _self_check
 
     sys.exit(_self_check(sys.argv))
+
+# A GUI probe is a machine check, not a user session. It must never fall back
+# to the interactive terminal interface: the installer is waiting for an exit
+# status that says whether Qt could create the real window.
+if "--gui-probe" in sys.argv:
+    os.environ["INNIOASIS_GUI_PROBE"] = "1"
 
 if "--check-environment" in sys.argv or "--diagnostics" in sys.argv:
     from src import paths, flash_service, mtk_api
@@ -181,6 +187,9 @@ def _repair_linux() -> bool:
 
 
 def _fall_back_from_window(exc: BaseException) -> int:
+    if os.environ.get("INNIOASIS_GUI_PROBE") == "1":
+        sys.stderr.write(f"Updater CE: GUI probe failed: {type(exc).__name__}: {exc}\n")
+        return 1
     sys.stderr.write(
         "Updater CE: the window cannot open on this computer. Starting the terminal interface.\n"
     )

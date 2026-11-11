@@ -1,0 +1,166 @@
+{
+  "policy": "DEV-01",
+  "inputs": {
+    "z": 4626752,
+    "dtb": 15452,
+    "initramfs": 2934055,
+    "image": 10949920,
+    "kernel_bss": 630008,
+    "kernel_span": 11579928,
+    "restart": 276,
+    "wont_overwrite": 520,
+    "edata": 4626752,
+    "reloc_code_end": 2364,
+    "stack_top": 4630872,
+    "compressed_bss_start": 4626752,
+    "compressed_bss_end": 4626776,
+    "regular_file_bytes": 6820619
+  },
+  "ram": [
+    [
+      2147483648,
+      3187671040
+    ]
+  ],
+  "reserved": [
+    [
+      2147483648,
+      2147500032
+    ],
+    [
+      2172649472,
+      2214592512
+    ],
+    [
+      3186622464,
+      3221225472
+    ]
+  ],
+  "zimage": [
+    2147516416,
+    2152143168
+  ],
+  "appended_dtb": [
+    2152143168,
+    2152158624
+  ],
+  "image": [
+    2147516416,
+    2158466336
+  ],
+  "resident_kernel": [
+    2147516416,
+    2159096344
+  ],
+  "relocated_copy": [
+    2158468608,
+    2163110560
+  ],
+  "relocated_dtb": [
+    2163095104,
+    2163110560
+  ],
+  "compressed_bss": [
+    2163110560,
+    2163110592
+  ],
+  "stack_top": 2163114680,
+  "malloc": [
+    2163114680,
+    2163180216
+  ],
+  "initramfs": [
+    2214592512,
+    2217526567
+  ],
+  "lk_staging": [
+    2147515904,
+    2155097600
+  ],
+  "staged_initramfs": [
+    2152159232,
+    2155093287
+  ],
+  "bootimg_read_end": 7583744,
+  "relocation_delta": 10951936,
+  "relocation_code_allowance": 2304,
+  "adjusted_image_size": 10949920,
+  "workspace_end": 2163180216,
+  "allocator_before_kernel_bytes": 997179392,
+  "dt": {
+    "node_count": 114,
+    "bootargs": "rdinit=/init earlycon console=ttyS0,921600n8 console=tty0 loglevel=3 panic=0 log_buf_len=1M user_debug=31",
+    "memory": [
+      [
+        2147483648,
+        3187671040
+      ]
+    ],
+    "storage": "internal eMMC: guarded root/data; removable SD optional",
+    "evidence": "offline dependencies only"
+  },
+  "sleep_syscall": {
+    "number": 162,
+    "target": "sys_nanosleep_time32",
+    "entry": "0xc0099b24",
+    "sys_ni_syscall": "0xc0044480",
+    "compat_32bit_time": true,
+    "status": "PASS linked implementation, not ENOSYS"
+  },
+  "kernel_symbols": {
+    "_text": 3221258240,
+    "_edata": 3232208160,
+    "__bss_start": 3232208160,
+    "__bss_stop": 3232838168,
+    "_end": 3232838168
+  },
+  "artifacts": {
+    "Image": {
+      "bytes": 10949920,
+      "sha256": "1c7d6012ce60dc886ae011761eb36ca924419968b79ace60bb84c5f189a32e67"
+    },
+    "zImage": {
+      "bytes": 4626752,
+      "sha256": "29522d1bb0e1f9c111ef7ceff3c08a067679ef675ee5466995cfc21c58f1883b"
+    },
+    "y2.dtb": {
+      "bytes": 15452,
+      "sha256": "0dad51772d42d4968e25f4091278071431535492209edf9664bc33083ff1a05c"
+    },
+    "zImage-dtb": {
+      "bytes": 4642208,
+      "sha256": "a7186e59709d4cde11369aaf836731c561ccc0212a387f20b8203c6e4100cf12"
+    },
+    "initramfs.cpio.gz": {
+      "bytes": 2934055,
+      "sha256": "64b5c3084a7f72e263f53ec9b010871873fb115cc70ab5a93e90a6f4efc5741b"
+    },
+    "display.ko": {
+      "bytes": 169616,
+      "sha256": "12ae1a6b23fc52bd63ff85bc1f6087f587e71bdc7b7fc7021483de52affe67fb"
+    }
+  },
+  "status": "PASS offline integrated GPU candidate; physical Lima/Mesa qualification pending",
+  "bootimg": {
+    "bytes": 7583744,
+    "sha256": "99ab5cc8416474b175fdb3ecaf5683ce727283d0b7ff091858c3c58509a19269",
+    "android_id_sha1": "a9612ec1a19665bfbe20c2fc3e2f39d7d86b7042",
+    "partition_bytes": 16777216,
+    "kernel_wrapper_offset": 2048,
+    "ramdisk_wrapper_offset": 4644864,
+    "lk_complete_read_end": 7583744,
+    "zero_filled_read_tail_bytes": 4313,
+    "authentication": "unsigned image; offline checks do not establish this candidate hardware acceptance"
+  },
+  "recovery": {
+    "bytes": 7583744,
+    "sha256": "b7eddf11b3102ac26c397a1ac5f56037b1889564d928f29e498447e48803d774",
+    "android_id_sha1": "789992065ff3df91850235fada9dba4e090260ce",
+    "partition_bytes": 16777216,
+    "kernel_wrapper_offset": 2048,
+    "ramdisk_wrapper_offset": 4644864,
+    "lk_complete_read_end": 7583744,
+    "zero_filled_read_tail_bytes": 4313,
+    "authentication": "unsigned image; offline checks do not establish this candidate hardware acceptance"
+  }
+}

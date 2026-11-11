@@ -278,6 +278,11 @@ class NoticeContext:
         )
 
 
+def _notice_content_hash(text: str) -> str:
+    """Digest of one notice.xml document, used to skip unchanged refreshes."""
+    return hashlib.sha256((text or "").strip().encode("utf-8")).hexdigest()
+
+
 def notice_fingerprint(notice: Notice) -> str:
     """Stable digest of the words a reader sees in one notice.
 
@@ -673,6 +678,9 @@ class NoticeService(QObject):
         self._session_dismissed_fingerprints: dict[str, str] = {}
         self._banner_dismissed: set[str] = set()
         self._active_notices: list[Notice] = []
+        # Hash of the XML behind ``_active_notices``. A refresh that returns
+        # the same document must not translate and re-emit it a second time.
+        self._source_hash = ""
         self._local_notices: dict[str, Notice] = {}
         # The Select Software selection: model, hardware revision, and the
         # firmware the reader is looking at. Logged devices are read live from
@@ -696,6 +704,7 @@ class NoticeService(QObject):
                 self._active_notices = self._localised(
                     parse_notice_xml(snapshot), current_language(), cached_only=True
                 )
+                self._source_hash = _notice_content_hash(snapshot)
         except Exception:
             pass
 
@@ -838,6 +847,7 @@ class NoticeService(QObject):
                 self._active_notices = self._localised(
                     parse_notice_xml(snapshot), current_language(), cached_only=True
                 )
+                self._source_hash = _notice_content_hash(snapshot)
         except Exception as e:
             logger.debug("Failed re-parsing snapshot during reset_all_read_state: %s", e)
         self._emit_next_notice()
@@ -1077,6 +1087,7 @@ class NoticeService(QObject):
                 self._active_notices = self._localised(
                     parse_notice_xml(local_content), lang, cached_only=True
                 )
+                self._source_hash = _notice_content_hash(local_content)
             except Exception as e:
                 logger.debug("Local notice.xml could not be read: %s", e)
             self._emit_next_notice()
@@ -1097,6 +1108,13 @@ class NoticeService(QObject):
         if not remote_content:
             return
 
+        remote_hash = _notice_content_hash(remote_content)
+        if remote_hash == self._source_hash:
+            # The feed is byte-for-byte what is already on screen. Do not run
+            # translation again or emit a second identical notice list: a
+            # periodic poll and the connectivity refresh commonly overlap.
+            return
+
         content_changed = remote_content.strip() != local_content.strip()
         if content_changed:
             try:
@@ -1111,6 +1129,7 @@ class NoticeService(QObject):
 
         # Translate new or changed notices (cached per notice and language), then show them.
         self._active_notices = self._localised(parse_notice_xml(remote_content), lang)
+        self._source_hash = remote_hash
         self._emit_next_notice()
 
     def reload_translations(self) -> None:
@@ -1289,27 +1308,17 @@ class NoticeService(QObject):
             self._rotation_timer.start()
 
     def listed_notices(self) -> list[Notice]:
-        """Active notices that belong in the Notices list, tray and badge.
+        """Every active notice for the Notices list, tray and badge.
 
-        The list follows the reader like the card does: a notice written for
-        one model, hardware type, project or release only appears while
-        something they selected or own is covered by it, so compatibility
-        warnings do not pile up in front of people they cannot affect.
-        Untargeted announcements are for everyone and always stay.
+        ``active_notices`` already applies the date window plus the platform and
+        architecture filters in ``Notice.is_live``. The list must not also apply
+        the contextual model/revision/release targets: those narrow only the
+        Select Software card. Applying them here hid every compatibility
+        warning whenever the selected release was not one the warning named,
+        and the Notices page then reported zero even though the feed contained
+        live entries.
         """
-        contexts = self._contexts()
-        if not contexts:
-            # Nothing is known yet: hiding a warning would be worse than
-            # showing it for one launch.
-            return list(self.active_notices)
-        platform = current_platform()
-        listed: list[Notice] = []
-        for notice in self.active_notices:
-            if not notice.is_contextual or any(
-                notice.matches(context, platform) for context in contexts
-            ):
-                listed.append(notice)
-        return listed
+        return list(self.active_notices)
 
     def _emit_next_notice(self) -> None:
         try:

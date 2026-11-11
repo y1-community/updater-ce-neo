@@ -1,0 +1,160 @@
+{
+  "address_space": "physical_start_bytes are native EMMC_USER offsets, valid only when the backend explicitly selects EMMC_USER",
+  "observed_spft_mode": "For the retained MT6582 legacy DA (NUTL_ADDR_LOGICAL / EMMC_PART_UNKNOWN=0), use legacy_global_da_start_bytes instead",
+  "mode_control": "Verify a known BOOTIMG prefix and logged mode before interpreting any samples",
+  "preservation_ranges": [
+    {
+      "partition": "MBR",
+      "file": "MBR.bin",
+      "region": "EMMC_USER",
+      "physical_start_bytes": 12058624,
+      "stock_logical_start_bytes": 0,
+      "legacy_global_da_start_bytes": 20971520,
+      "size_bytes": 524288,
+      "stock_prefix_size_bytes": 512,
+      "stock_prefix_sha256": "4be9c92be18ba4169d4b050e18811c6650eab27a487f1c67f4a49efa01cd32a1"
+    },
+    {
+      "partition": "EBR1",
+      "file": "EBR1.bin",
+      "region": "EMMC_USER",
+      "physical_start_bytes": 12582912,
+      "stock_logical_start_bytes": 524288,
+      "legacy_global_da_start_bytes": 21495808,
+      "size_bytes": 524288,
+      "stock_prefix_size_bytes": 512,
+      "stock_prefix_sha256": "0eca0f26847ffd17426ffd7c9e976a7e28017cf6bc454d6478c68d3b2c52a64e"
+    },
+    {
+      "partition": "PRO_INFO",
+      "file": "PRO_INFO.bin",
+      "region": "EMMC_USER",
+      "physical_start_bytes": 13107200,
+      "stock_logical_start_bytes": 1048576,
+      "legacy_global_da_start_bytes": 22020096,
+      "size_bytes": 3145728
+    },
+    {
+      "partition": "NVRAM",
+      "file": "NVRAM.bin",
+      "region": "EMMC_USER",
+      "physical_start_bytes": 16252928,
+      "stock_logical_start_bytes": 4194304,
+      "legacy_global_da_start_bytes": 25165824,
+      "size_bytes": 5242880
+    },
+    {
+      "partition": "PROTECT_F",
+      "file": "PROTECT_F.bin",
+      "region": "EMMC_USER",
+      "physical_start_bytes": 21495808,
+      "stock_logical_start_bytes": 9437184,
+      "legacy_global_da_start_bytes": 30408704,
+      "size_bytes": 10485760
+    },
+    {
+      "partition": "PROTECT_S",
+      "file": "PROTECT_S.bin",
+      "region": "EMMC_USER",
+      "physical_start_bytes": 31981568,
+      "stock_logical_start_bytes": 19922944,
+      "legacy_global_da_start_bytes": 40894464,
+      "size_bytes": 10485760
+    },
+    {
+      "partition": "SECCFG",
+      "file": "SECCFG.bin",
+      "region": "EMMC_USER",
+      "physical_start_bytes": 42467328,
+      "stock_logical_start_bytes": 30408704,
+      "legacy_global_da_start_bytes": 51380224,
+      "size_bytes": 131072
+    },
+    {
+      "partition": "UBOOT",
+      "file": "UBOOT.bin",
+      "region": "EMMC_USER",
+      "physical_start_bytes": 42598400,
+      "stock_logical_start_bytes": 30539776,
+      "legacy_global_da_start_bytes": 51511296,
+      "size_bytes": 393216
+    },
+    {
+      "partition": "RECOVERY",
+      "file": "RECOVERY.bin",
+      "region": "EMMC_USER",
+      "physical_start_bytes": 59768832,
+      "stock_logical_start_bytes": 47710208,
+      "legacy_global_da_start_bytes": 68681728,
+      "size_bytes": 16777216
+    },
+    {
+      "partition": "SEC_RO",
+      "file": "SEC_RO.bin",
+      "region": "EMMC_USER",
+      "physical_start_bytes": 76546048,
+      "stock_logical_start_bytes": 64487424,
+      "legacy_global_da_start_bytes": 85458944,
+      "size_bytes": 6291456
+    },
+    {
+      "partition": "MISC",
+      "file": "MISC.bin",
+      "region": "EMMC_USER",
+      "physical_start_bytes": 82837504,
+      "stock_logical_start_bytes": 70778880,
+      "legacy_global_da_start_bytes": 91750400,
+      "size_bytes": 524288
+    },
+    {
+      "partition": "LOGO",
+      "file": "LOGO.bin",
+      "region": "EMMC_USER",
+      "physical_start_bytes": 83361792,
+      "stock_logical_start_bytes": 71303168,
+      "legacy_global_da_start_bytes": 92274688,
+      "size_bytes": 3145728
+    },
+    {
+      "partition": "EBR2",
+      "file": "EBR2.bin",
+      "region": "EMMC_USER",
+      "physical_start_bytes": 86507520,
+      "stock_logical_start_bytes": 74448896,
+      "legacy_global_da_start_bytes": 95420416,
+      "size_bytes": 524288,
+      "stock_prefix_size_bytes": 512,
+      "stock_prefix_sha256": "699e1e33054e944e7b1776a539cd41551f4a066abc51535ccfc3d50b44c4ffc7"
+    }
+  ],
+  "target_readbacks": [
+    {
+      "partition": "BOOTIMG",
+      "file": "BOOTIMG.bin",
+      "region": "EMMC_USER",
+      "physical_start_bytes": 42991616,
+      "stock_logical_start_bytes": 30932992,
+      "legacy_global_da_start_bytes": 51904512,
+      "size_bytes": 16777216
+    },
+    {
+      "partition": "ANDROID",
+      "file": "ANDROID.bin",
+      "region": "EMMC_USER",
+      "physical_start_bytes": 97517568,
+      "stock_logical_start_bytes": 85458944,
+      "legacy_global_da_start_bytes": 106430464,
+      "size_bytes": 859832320
+    },
+    {
+      "partition": "USRDATA",
+      "file": "USRDATA.bin",
+      "region": "EMMC_USER",
+      "physical_start_bytes": 1089470464,
+      "stock_logical_start_bytes": 1077411840,
+      "legacy_global_da_start_bytes": 1098383360,
+      "size_bytes": 838860800
+    }
+  ],
+  "special_regions": "PRELOADER hardware regions and BMTPOOL are not included or accessed"
+}

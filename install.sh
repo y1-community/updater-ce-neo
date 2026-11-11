@@ -121,6 +121,21 @@ esac
 
 WRAPPER_SCRIPT="$BIN_DIR/$BIN_NAME"
 
+# The full Linux application is now distributed as a precompiled AppImage or
+# portable archive, and run_linux.sh owns the cross-distro repair/probe path.
+# Keep this historical entry point as a thin bridge for a checkout, instead of
+# installing a second source tree with a different set of host dependencies.
+if [ "${BRAND:-updater_ce}" = "updater_ce" ]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)"
+    if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/run_linux.sh" ]; then
+        _args=()
+        [ "${FORCE_UPDATE:-0}" -eq 1 ] && _args+=(--update)
+        [ "${UNINSTALL:-0}" -eq 1 ] && _args+=(--uninstall)
+        [ "${SKIP_UDEV:-0}" -eq 1 ] && _args+=(--skip-udev)
+        exec bash "$SCRIPT_DIR/run_linux.sh" "${_args[@]}"
+    fi
+fi
+
 banner() {
     echo -e "${CYAN}${BOLD}"
     if [ "$BRAND" = "mediatek_installer" ]; then

@@ -873,3 +873,116 @@ def test_local_icon_found_beside_scatter_file(tmp_path):
     data = load_local_package_icon_bytes(folder / "MT6572_Android_scatter.txt", dark=False)
     assert data is not None and len(data) > 0
     assert load_local_package_icon_bytes(tmp_path / "missing_scatter.txt", dark=False) is None
+
+
+def test_ini_carries_the_catalogue_keep_data_veto(tmp_path):
+    """An offline copy that names its release is treated like the online entry.
+
+    ``no_keep_data`` and ``PMT_format_needed`` are what ``slidia_manifest.xml``
+    says about a release. Carried in ``fw_package.ini``, a downloaded copy of
+    that release offers the same choices and writes with the same mode.
+    """
+    from src import keep_data, pmt_format
+
+    _app()
+    folder = _firmware(
+        tmp_path / "pkg",
+        ini=(
+            "[Firmware]\nsoftware_name = Rockbox\nversion = 2.5\ntarget_model = Y2\n"
+            "do_not_keep_data = true\nPMT_format_needed = true\n"
+        ),
+    )
+    pkg = read_package(folder, require_ini=True)
+    assert pkg is not None
+    assert pkg.do_not_keep_data is True
+    assert pkg.pmt_format_needed is True
+    assert keep_data.keep_data_available("Y2", pkg) is False
+    assert pmt_format.pmt_format_required(pkg, model="Y2") is True
+
+
+def test_ini_without_the_vetoes_carries_no_veto(tmp_path):
+    from src import pmt_format
+
+    _app()
+    folder = _firmware(
+        tmp_path / "pkg",
+        ini="[Firmware]\nsoftware_name = Rockbox\nversion = 2.5\ntarget_model = Y2\n",
+    )
+    pkg = read_package(folder, require_ini=True)
+    assert pkg is not None
+    assert pkg.do_not_keep_data is False
+    assert pkg.pmt_format_needed is False
+    assert pmt_format.pmt_format_required(pkg, model="Y2") is False
+
+
+def test_find_bundled_firmware_in_a_numbered_flash_tool_folder(tmp_path, monkeypatch):
+    """A pack that numbers its folders for reading order still opens."""
+    monkeypatch.setattr(fw_package, "IS_MAC", False)
+    drivers = tmp_path / "1. Install Drivers and Reboot PC"
+    drivers.mkdir()
+    tool = tmp_path / "2. Open and run flash_tool"
+    _firmware(tool)
+    _ini(tmp_path, "[Firmware]\nsoftware_name = Rockbox\nversion = 2.5\ntarget_model = Y1\n")
+
+    pkg = fw_package.find_bundled_firmware(app_dir=tmp_path)
+    assert pkg is not None
+    assert pkg.folder == tool.resolve()
+    assert pkg.display_name == "Rockbox 2.5"
+
+
+def test_prune_keeps_the_release_icon_beside_its_ini(tmp_path):
+    """The icon at a portable pack's root is one level above its scatter."""
+    root = tmp_path / "pack"
+    root.mkdir()
+    _ini(root, "[Firmware]\nsoftware_name = Rockbox\nversion = 2.5\ntarget_model = Y1\n")
+    _png(root / "updater.png")
+    (root / "3. After Install Steps.url").write_text("[InternetShortcut]", encoding="utf-8")
+    _firmware(root / "SP_Flash_Tool")
+
+    prune_to_firmware_package(root)
+    assert (root / "updater.png").is_file()
+    assert (root / "fw_package.ini").is_file()
+    assert not (root / "3. After Install Steps.url").exists()
+
+
+def test_ini_derivative_puts_a_local_copy_in_its_catalogue_family(tmp_path):
+    """A downloaded copy that names its parent keeps the online Keep Data rule."""
+    from src import keep_data
+
+    _app()
+    folder = _firmware(
+        tmp_path / "pkg",
+        ini=(
+            "[Firmware]\nsoftware_name = Rockbox\nversion = 2.5\ntarget_model = Y2\n"
+            "derivative = Original Software, Rockbox\n"
+        ),
+    )
+    pkg = read_package(folder, require_ini=True)
+    assert pkg is not None
+    assert pkg.derivative == "Original Software, Rockbox"
+    assert keep_data.declares_family(pkg) is True
+
+
+def test_history_ini_is_relative_for_a_portable_flash_tool(tmp_path):
+    """The portable history.ini names its files and no paths.
+
+    A pack ships this file so SP Flash Tool opens with the package's scatter and
+    download agent already selected, on any drive letter or host.
+    """
+    sp_dir = tmp_path / "2. Open and run flash_tool"
+    sp_dir.mkdir()
+    scatter = sp_dir / "MT6582_Android_scatter.txt"
+    scatter.write_text("scatter", encoding="utf-8")
+    (sp_dir / "MTK_AllInOne_DA.bin").write_bytes(b"da")
+
+    fw_package.prime_sp_tool_history_ini(sp_dir, scatter)
+    text = (sp_dir / "history.ini").read_text(encoding="utf-8")
+    assert text == (
+        "[RecentOpenFile]\n"
+        "lastDir=\n"
+        "scatterHistory=MT6582_Android_scatter.txt\n\n"
+        "[LastDAFilePath]\n"
+        "downloadAgentHistory=MTK_AllInOne_DA.bin\n"
+        "lastDir=\n"
+    )
+    assert str(tmp_path) not in text

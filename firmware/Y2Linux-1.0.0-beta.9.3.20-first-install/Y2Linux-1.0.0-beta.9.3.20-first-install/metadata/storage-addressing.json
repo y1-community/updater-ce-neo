@@ -1,0 +1,61 @@
+{
+  "schema": "org.schulzcode.y2linux.stock-emmc-window/v1",
+  "logical_sector_bytes": 512,
+  "native_user_sectors": 15269888,
+  "logical_disk_sectors": 15203328,
+  "logical_to_native_user_offset_sectors": 23552,
+  "excluded_native_tail_sectors": 43008,
+  "required_ext_csd": {
+    "boot_size_mult": 32,
+    "rpmb_size_mult": 4,
+    "gp_size_mult": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "ext_csd_modified": false,
+  "translated_commands": [
+    17,
+    18,
+    24,
+    25
+  ],
+  "write_guard_address_space": "stock logical disk; before translation",
+  "payload_absolute_start_bytes_semantics": "stock logical disk / scatter physical_start_addr; not native EMMC_USER",
+  "legacy_da": {
+    "region": "EMMC_PART_UNKNOWN(0x00)",
+    "address_type": "NUTL_ADDR_LOGICAL",
+    "non_user_prefix_bytes": 8912896,
+    "logical_disk_origin_bytes": 20971520
+  },
+  "targets": {
+    "BOOTIMG": {
+      "logical_start_sector": 60416,
+      "length_sectors": 32768,
+      "native_user_start_bytes": 42991616,
+      "legacy_da_start_bytes": 51904512
+    },
+    "ANDROID": {
+      "logical_start_sector": 166912,
+      "length_sectors": 1679360,
+      "native_user_start_bytes": 97517568,
+      "legacy_da_start_bytes": 106430464
+    },
+    "USRDATA": {
+      "logical_start_sector": 2104320,
+      "length_sectors": 1638400,
+      "native_user_start_bytes": 1089470464,
+      "legacy_da_start_bytes": 1098383360
+    }
+  }
+}

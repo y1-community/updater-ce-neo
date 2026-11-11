@@ -5347,12 +5347,58 @@ class MainWindow(QMainWindow):
         self._run_output_open = False
         self._download_active = False
         self._release_install_cache()
+        self._drop_finished_install_firmware()
         self._reset_after_run()
         page = getattr(self, "_select_page", None)
         if page is not None and hasattr(page, "show_catalogue_section"):
             page.show_catalogue_section(section)
         self._sync_sp_gui_button_visibility()
         self._nav_to_page(_PAGE_SELECT)
+
+    def _drop_finished_install_firmware(self) -> None:
+        """A completed install needs no firmware copy on the host any more.
+
+        The extract exists so a failed run can retry without downloading
+        again. Once the install has finished nothing reads it (the SP Flash
+        Tool history is only written where that tool exists), so leaving it
+        behind just parks a multi-gigabyte image set on the user's disk.
+        """
+        try:
+            from ..downloads import clear_firmware_cache
+
+            count, freed = clear_firmware_cache()
+        except Exception:
+            logger.debug("Could not clear the finished install's firmware", exc_info=True)
+            return
+        if count:
+            self._append_log(
+                "Removed the finished install's firmware files "
+                f"({freed / (1024 * 1024):.1f} MB freed)."
+            )
+
+    def _refresh_online_data_after_storage_clear(self) -> None:
+        """Fetch the remote data again after Clear Firmware Cache removed it.
+
+        Notices and the catalogue listing live in the app cache, which the
+        clear button empties, so they are re-read from their online sources.
+        A run in progress owns the catalogue and is left alone.
+        """
+        try:
+            from ..notice_service import NoticeService
+
+            NoticeService.instance().fetch_async()
+        except Exception:
+            logger.debug("Could not refetch notices after clearing storage", exc_info=True)
+        if self._install_run_active():
+            return
+        page = getattr(self, "_select_page", None)
+        refresh = getattr(page, "_refresh_releases", None)
+        if not callable(refresh):
+            return
+        try:
+            refresh(force_refresh=True)
+        except Exception:
+            logger.debug("Could not refetch the catalogue after clearing storage", exc_info=True)
 
     def _show_install_output(self) -> None:
         """Small live terminal for the install tool. Closing it does not cancel."""
@@ -9040,7 +9086,11 @@ class MainWindow(QMainWindow):
     def _on_notices_ready(self, notices) -> None:
         """Follow the live notice list: rail row, notification, and routing."""
         self._notices_available = bool(notices)
-        logger.info("Notices: %d available", len(notices or []))
+        logger.info(
+            "Notices: %d available (%s)",
+            len(notices or []),
+            "; ".join(str(getattr(notice, "title", "") or "") for notice in notices or []),
+        )
         self._apply_notices_nav_visibility()
         self._notify_about_notices(notices)
         if (
@@ -9451,7 +9501,13 @@ class MainWindow(QMainWindow):
         dlg = QDialog(self)
         dlg.setWindowTitle(tr("nav_donate"))
         dlg.setModal(True)
-        page = SupportPage(dlg, donations=getattr(self, "_donations", None))
+        # SupportPage takes a parent only. The in-window page is built the same
+        # way; a page that can show the running total opts in with set_donations.
+        page = SupportPage(dlg)
+        donations = getattr(self, "_donations", None)
+        setter = getattr(page, "set_donations", None)
+        if donations is not None and callable(setter):
+            setter(donations)
         layout = QVBoxLayout(dlg)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.addWidget(page)

@@ -1,7 +1,11 @@
 #!/bin/sh
 # Updater CE — lite installer for headless, old and 32-bit Linux.
 #
-#   curl -fsSL https://raw.githubusercontent.com/y1-community/updater-ce-neo/main/run_linux_lite.sh | INNIOASIS_CHOICE=terminal sh
+#   INNIOASIS_CHOICE=terminal sh -c "$(curl -fsSL https://raw.githubusercontent.com/y1-community/updater-ce-neo/main/run_linux_lite.sh)"
+#
+# The sh -c form keeps the terminal on stdin, so the installed curses menu is
+# interactive. Piping straight into sh also works, but the pipe leaves stdin at
+# EOF and the numbered fallback is used instead.
 #
 # The lite install is the text session: no Qt and no PySide6. The archive
 # also carries MTKclient, adb, and the Linux SP Flash Tool. It runs on any
@@ -28,11 +32,13 @@
 set -u
 
 SITE="https://innioasis.app"
-# The terminal archive is published on the existing 2.5.3 release, beside the
-# Windows and macOS packages, so "latest" and those installers stay untouched.
-# The payload itself is 2.5.4 source and reports its version from VERSION.
-RELEASE_API="https://api.github.com/repos/y1-community/updater-ce-neo/releases/tags/2.5.3"
-RELEASES_API="https://api.github.com/repos/y1-community/updater-ce-neo/releases?per_page=20"
+# First installs count against the website repository; updates against the app
+# repository. Both carry the same terminal archive on the 2.5.3 release.
+INSTALL_REPO="y1-community/innioasis-updater"
+UPDATE_REPO="y1-community/updater-ce-neo"
+REPO="$INSTALL_REPO"
+RELEASE_API=""
+RELEASES_API=""
 ASSET_NAME="UpdaterCE-Lite.tar.gz"
 DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 DEFAULT_DIR="$DATA_HOME/innioasis-updater/lite"
@@ -65,6 +71,14 @@ while [ $# -gt 0 ]; do
     esac
     shift
 done
+
+if [ -d "$TARGET_DIR" ] || [ "$MODE" = "update" ] || [ -x "$BIN_DIR/innioasis-updater-lite" ]; then
+    REPO="$UPDATE_REPO"
+else
+    REPO="$INSTALL_REPO"
+fi
+RELEASE_API="https://api.github.com/repos/${REPO}/releases?per_page=30"
+RELEASES_API="https://api.github.com/repos/$([ "$REPO" = "$UPDATE_REPO" ] && echo "$INSTALL_REPO" || echo "$UPDATE_REPO")/releases?per_page=30"
 
 ARCH="$(uname -m 2>/dev/null || echo unknown)"
 case "$ARCH" in
@@ -225,6 +239,12 @@ def load(url):
 
 def pick(release):
     found = {}
+    if isinstance(release, list):
+        for item in release:
+            found = pick(item)
+            if "archive" in found:
+                return found
+        return found
     for asset in release.get("assets") or []:
         name = asset.get("name") or ""
         if name == "UpdaterCE-Lite.tar.gz":
@@ -259,8 +279,8 @@ PY
         URL_SHA="$(sed -n '2p' "$TMP/urls.txt")"
     else
         say "GitHub did not answer. Using the direct 2.5.3 release asset."
-        URL_ARCHIVE="https://github.com/y1-community/updater-ce-neo/releases/download/2.5.3/UpdaterCE-Lite.tar.gz"
-        URL_SHA="https://github.com/y1-community/updater-ce-neo/releases/download/2.5.3/UpdaterCE-Lite.tar.gz.sha256"
+        URL_ARCHIVE="https://github.com/${REPO}/releases/download/2.5.3/UpdaterCE-Lite.tar.gz"
+        URL_SHA="https://github.com/${REPO}/releases/download/2.5.3/UpdaterCE-Lite.tar.gz.sha256"
     fi
     say "3/4  Downloading (resumable; rerun this command if the connection drops)…"
     fetch "$URL_ARCHIVE" "$ARCHIVE" || die "download failed; the partial file is kept in $TMP until this shell exits" 4

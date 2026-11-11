@@ -7,6 +7,8 @@ Software, and Refresh.
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 import os
 import platform
@@ -17,7 +19,7 @@ import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 from . import catalog
@@ -53,6 +55,30 @@ class BrowseState:
     show_old: bool = False
     show_240p: bool = False
     show_nightly: bool = False
+    show_original_307: bool = False
+    show_donations: bool = True
+    advanced_settings: bool = False
+    allow_keep_data_any: bool = False
+    donation_prompt_disabled: bool = False
+    notifications: bool = True
+    notify_general: bool = True
+    notify_warning: bool = True
+    notify_player: bool = True
+    notify_app: bool = True
+    notify_background: bool = False
+    run_in_background: bool = False
+    offline_mode: bool = False
+    install_themes: bool = True
+    terminal_install: bool = False
+    sp_gui_install: bool = False
+    run_as_admin: bool = False
+    hidden_mtk_options: bool = False
+    flash_method: str = ""
+    sp_auth_file: str = ""
+    rockbox_filters_open: bool = False
+    settings_index: int = 0
+    settings_scroll: int = 0
+    settings_hover: int = -1
     language: str = "en"
     focus: str = "list"
     status: str = ""
@@ -63,6 +89,10 @@ class BrowseState:
     package: object = None
     install_percent: float = 0.0
     install_label: str = ""
+    install_error: str = ""
+    install_complete_seen: bool = False
+    detected_model: str = ""
+    hover: str = ""
     install_log: list[str] = field(default_factory=list)
     result_lines: list[str] = field(default_factory=list)
     notices: list[dict] = field(default_factory=list)
@@ -79,14 +109,6 @@ def read_gui_filters() -> dict:
     A text-session override in the cache wins after the reader changes a
     switch here, so the window's file is left alone.
     """
-    override = _filter_path()
-    if override.is_file():
-        try:
-            data = json.loads(override.read_text(encoding="utf-8"))
-            if isinstance(data, dict):
-                return data
-        except (OSError, ValueError):
-            pass
     candidates = [
         Path.home() / "Library" / "Preferences" / "com.innioasis.updater.plist",
         Path.home() / ".config" / "innioasis" / "updater.conf",
@@ -103,6 +125,16 @@ def read_gui_filters() -> dict:
                 return loaded
         else:
             return _read_ini(path)
+    # A cache written by an older lite session, or by a build that had no
+    # shared store, is the last resort. It never wins over the window.
+    override = _filter_path()
+    if override.is_file():
+        try:
+            data = json.loads(override.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
+        except (OSError, ValueError):
+            pass
     return {}
 
 
@@ -136,25 +168,123 @@ def apply_saved_filters(state: BrowseState, data: dict | None = None) -> None:
     state.show_240p = _flag(data, "show_240p_rockbox")
     state.show_old = _flag(data, "show_old_rockbox_builds") or state.show_240p
     state.show_nightly = _flag(data, "show_nightly_dev_releases")
+    # Same key the window writes. Off by default, so Y1 Type A units on 3.0.7
+    # never see Original Software older than 3.0.7 without an explicit opt-in.
+    state.show_original_307 = _flag(data, "show_original_y1_typea_pre_307")
+    state.show_donations = not _flag(data, "donation_ui_disabled")
+    state.advanced_settings = _flag(data, "advanced_settings")
+    state.allow_keep_data_any = _flag(data, "allow_keep_data_any_firmware")
+    state.donation_prompt_disabled = _flag(data, "donation_install_prompt_disabled")
+    state.notifications = _flag(data, "notifications_enabled")
+    state.notify_general = _flag(data, "notify_general_notices")
+    state.notify_warning = _flag(data, "notify_warning_notices")
+    state.notify_player = _flag(data, "notify_player_updates")
+    state.notify_app = _flag(data, "notify_app_updates")
+    state.notify_background = _flag(data, "notify_background")
+    state.run_in_background = _flag(data, "run_in_background")
+    state.offline_mode = _flag(data, "offline_mode")
+    if "rockbox_theme_sync/enabled" in data:
+        state.install_themes = _flag(data, "rockbox_theme_sync/enabled")
+    state.terminal_install = _flag(data, "terminal_install")
+    state.sp_gui_install = _flag(data, "sp_gui_install")
+    state.run_as_admin = _flag(data, "run_as_admin")
+    state.hidden_mtk_options = _flag(data, "hidden_mtk_options")
+    state.flash_method = str(data.get("flash_method") or "").strip().lower()
+    state.sp_auth_file = str(data.get("sp_auth_file") or "").strip()
     language = shared_language() or str(data.get("language") or "").strip()
     if language:
         state.language = language
 
 
 def save_filters(state: BrowseState) -> None:
-    path = _filter_path()
     payload = {
         "show_240p_rockbox": state.show_240p,
         "show_old_rockbox_builds": state.show_old,
         "show_nightly_dev_releases": state.show_nightly,
+        "show_original_y1_typea_pre_307": state.show_original_307,
+        "donation_ui_disabled": not state.show_donations,
+        "advanced_settings": state.advanced_settings,
+        "allow_keep_data_any_firmware": state.allow_keep_data_any,
+        "donation_install_prompt_disabled": state.donation_prompt_disabled,
+        "notifications_enabled": state.notifications,
+        "notify_general_notices": state.notify_general,
+        "notify_warning_notices": state.notify_warning,
+        "notify_player_updates": state.notify_player,
+        "notify_app_updates": state.notify_app,
+        "notify_background": state.notify_background,
+        "run_in_background": state.run_in_background,
+        "offline_mode": state.offline_mode,
+        "rockbox_theme_sync/enabled": state.install_themes,
+        "terminal_install": state.terminal_install,
+        "sp_gui_install": state.sp_gui_install,
+        "run_as_admin": state.run_as_admin,
+        "hidden_mtk_options": state.hidden_mtk_options,
+        "flash_method": state.flash_method,
+        "sp_auth_file": state.sp_auth_file,
         "language": state.language,
     }
+    _write_gui_filters(payload)
+    # Keep the small cache for a lite payload on a machine whose GUI settings
+    # live in a format this session cannot write (or has never been opened).
+    path = _filter_path()
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(payload), encoding="utf-8")
         remember_language(state.language)
     except OSError:
         pass
+
+
+def _write_ini_values(path: Path, values: dict) -> None:
+    """Update keys in a QSettings INI without dropping the other sections."""
+    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    pending = {key: ("true" if bool(value) else "false") if isinstance(value, bool) else str(value) for key, value in values.items()}
+    output: list[str] = []
+    section = ""
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            section = stripped[1:-1]
+            output.append(line)
+            continue
+        if "=" in line and section in ("", "General"):
+            key = line.split("=", 1)[0].strip()
+            if key in pending:
+                output.append(f"{key}={pending.pop(key)}")
+                continue
+        output.append(line)
+    if pending:
+        if "[General]" not in output:
+            output.insert(0, "[General]")
+        insert_at = output.index("[General]") + 1
+        for key, value in pending.items():
+            output.insert(insert_at, f"{key}={value}")
+            insert_at += 1
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(output) + "\n", encoding="utf-8")
+
+
+def _write_gui_filters(values: dict) -> None:
+    """Write the same switches the Settings screen writes."""
+    candidates = [
+        Path.home() / "Library" / "Preferences" / "com.innioasis.updater.plist",
+        Path.home() / ".config" / "innioasis" / "updater.conf",
+    ]
+    for path in candidates:
+        if not path.is_file():
+            continue
+        try:
+            if path.suffix == ".plist":
+                data = plistlib.loads(path.read_bytes())
+                if not isinstance(data, dict):
+                    return
+                data.update(values)
+                path.write_bytes(plistlib.dumps(data))
+            else:
+                _write_ini_values(path, values)
+            return
+        except (OSError, plistlib.InvalidFileException):
+            return
 
 
 def cycle(values: list[str], current: str, step: int) -> str:
@@ -297,7 +427,15 @@ def screen_lines(state: BrowseState, version: str = APP_VERSION) -> list[str]:
         for offset, row in enumerate(state.releases):
             mark = ">" if offset == state.index else " "
             lines.append(f"{mark} {row.label}")
-    lines.append(segment(focused == "keep", "Keep my data: " + ("on" if state.keep_data else "off")))
+    if keep_data_offered(
+        state.package,
+        state.allow_keep_data_any,
+        state.model,
+        state.hardware_type,
+    ):
+        lines.append(segment(focused == "keep", "Keep my data: " + ("on" if state.keep_data else "off")))
+    else:
+        lines.append("Keep my data: not supported by this firmware")
     actions = [
         segment(focused == "install", "Install"),
         segment(focused == "file", "Install from a file"),
@@ -320,7 +458,54 @@ def screen_lines(state: BrowseState, version: str = APP_VERSION) -> list[str]:
     )
     if state.status:
         lines.append(state.status)
+    lines.extend(donation_footer(state))
     return lines
+
+
+def donation_footer(state: BrowseState) -> list[str]:
+    """The window's Support Us / goal line, from the same donors CSV.
+
+    The graphical status bar rotates donor recognition and the current funding
+    target. A terminal has one stable line instead: the month total against the
+    same $200 goal, plus the newest recognised donor. It follows the window's
+    ``donation_ui_disabled`` setting and disappears when that is on.
+    """
+    if not getattr(state, "show_donations", True):
+        return []
+    raw = catalog.bundled_asset("donors.csv")
+    if not raw:
+        return []
+    rows = []
+    try:
+        for row in csv.DictReader(io.StringIO(raw.decode("utf-8", "replace"))):
+            amount = float(str(row.get("Amount") or "0").replace("$", "").replace(",", "") or 0)
+            if amount <= 0:
+                continue
+            when = None
+            for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d/%m/%y"):
+                try:
+                    when = datetime.strptime(str(row.get("Date") or "").strip(), fmt)
+                    break
+                except ValueError:
+                    continue
+            if when is None:
+                continue
+            rows.append((when, amount, str(row.get("Name") or "").strip(), str(row.get("Method") or "").strip()))
+    except (ValueError, csv.Error):
+        return []
+    now = datetime.now()
+    month_total = sum(amount for when, amount, _name, _method in rows if (when.year, when.month) == (now.year, now.month))
+    if not rows:
+        return []
+    latest = max(rows, key=lambda item: item[0])
+    goal = 200.0
+    line = f"Support Us  ·  this month ${month_total:g} of ${goal:g}"
+    if month_total >= goal:
+        line += "  ·  goal reached"
+    donor = f"Thanks, {latest[2]}" if latest[2] else "Thank you, supporters"
+    if latest[3]:
+        donor += f"  ·  ${latest[1]:g} on {latest[3]}"
+    return ["", line, donor]
 
 
 def notes_for(state: BrowseState) -> str:
@@ -571,22 +756,257 @@ def donation_methods(language: str = "") -> tuple[tuple[str, str], ...]:
     return DONATION_METHODS
 
 
-def settings_lines(state: BrowseState) -> list[str]:
-    def on(flag: bool) -> str:
-        return "on" if flag else "off"
+def settings_machine() -> str:
+    """The host architecture name the window uses in its method table."""
+    arch = platform.machine().lower()
+    if arch in ("aarch64", "arm64"):
+        return "arm64"
+    if arch in ("x86_64", "amd64"):
+        return "x86_64"
+    return arch or "unknown"
 
-    return [
-        "Settings",
-        f"1  [{'x' if state.show_old else ' '}] Old Rockbox builds",
-        f"2  [{'x' if state.show_240p else ' '}] 240p Rockbox releases",
-        f"3  [{'x' if state.show_nightly else ' '}] Nightly releases",
-        f"4  [{'x' if state.keep_data else ' '}] Keep my data during install",
-        "5  Back",
-        "Keep my data keeps photos, downloads and installed apps in internal storage.",
-        "It is offered again before the write; a package without its preserve-data",
-        "scatter is installed normally rather than erased by guesswork.",
-        "The window still opens when the app is started with no flag.",
+
+def available_flash_methods(state: BrowseState) -> list[str]:
+    """The install methods the window offers on this host.
+
+    The same rules as ``SettingsPage._available_methods``: macOS only has
+    MTKclient, Windows x86 defaults to SP Flash Tool, and the second method is
+    revealed by Advanced Settings. SP Flash Tool exists here only on Linux
+    x86_64; every other architecture uses MTKclient.
+    """
+    system = sys.platform
+    machine = settings_machine()
+    if system == "darwin":
+        return ["mtk"]
+    if system == "win32":
+        if state.advanced_settings:
+            return ["sp", "mtk"]
+        return ["sp"] if machine == "x86_64" else ["mtk"]
+    if system.startswith("linux"):
+        if state.advanced_settings and machine == "x86_64":
+            return ["mtk", "sp"]
+        return ["mtk"]
+    return ["mtk"]
+
+
+def current_flash_method(state: BrowseState) -> str:
+    methods = available_flash_methods(state)
+    wanted = (state.flash_method or "").strip().lower()
+    return wanted if wanted in methods else methods[0]
+
+
+def cycle_flash_method(state: BrowseState) -> str:
+    """Move to the next method the window offers and persist it."""
+    methods = available_flash_methods(state)
+    current = current_flash_method(state)
+    state.flash_method = methods[(methods.index(current) + 1) % len(methods)]
+    save_filters(state)
+    return state.flash_method
+
+
+def _setting_value(state: BrowseState, key: str) -> bool:
+    return bool(
+        {
+            "show_donations": state.show_donations,
+            "notifications": state.notifications,
+            "notify_general": state.notify_general,
+            "notify_warning": state.notify_warning,
+            "notify_player": state.notify_player,
+            "notify_app": state.notify_app,
+            "notify_background": state.notify_background,
+            "run_in_background": state.run_in_background,
+            "offline": state.offline_mode,
+            "install_themes": state.install_themes,
+            "advanced": state.advanced_settings,
+            "allow_keep_data": state.allow_keep_data_any,
+            "rockbox_open": state.rockbox_filters_open,
+            "old": state.show_old,
+            "nightly": state.show_nightly,
+            "240p": state.show_240p,
+            "original": state.show_original_307,
+            "guided": not state.terminal_install and not state.sp_gui_install,
+            "terminal": state.terminal_install,
+            "sp_gui": state.sp_gui_install,
+            "run_as_admin": state.run_as_admin,
+        }.get(key, False)
+    )
+
+
+def _toggle_row(key: str, label: str, state: BrowseState) -> dict:
+    return {
+        "key": key,
+        "label": label,
+        "kind": "toggle",
+        "value": _setting_value(state, key),
+    }
+
+
+def settings_sections(state: BrowseState) -> list[dict]:
+    """The window's Settings cards, in its column order.
+
+    Every toggle keeps the GUI's QSettings key, so opening the window after a
+    terminal change shows the same choice. Cards the window hides on this host
+    (macOS background mode, Linux SP Flash Tool on non-x86) are hidden here
+    too. Advanced Settings reveals the same cards it reveals in the window.
+    """
+    sections: list[dict] = []
+    sections.append({
+        "title": "Update reminders",
+        "rows": [
+            _toggle_row("notify_player", "Player update reminders", state),
+        ],
+    })
+    sections.append({
+        "title": "Show App Supporter Credits and Donations",
+        "rows": [
+            _toggle_row("show_donations", "Show supporter credits and donation asks", state),
+            {"key": "donate", "label": "Open the Support Us page", "kind": "action"},
+        ],
+    })
+    sections.append({
+        "title": "Firmware Storage & Cache",
+        "rows": [
+            {"key": "clear_cache", "label": "Clear downloaded firmware and documents", "kind": "action"},
+        ],
+    })
+    if sys.platform != "darwin":
+        sections.append({
+            "title": "Platform preparation",
+            "rows": [
+                {"key": "prep_check", "label": "Check the SP Flash Tool system prerequisites", "kind": "action"},
+            ],
+        })
+    sections.append({
+        "title": "Offline Mode",
+        "rows": [
+            _toggle_row("offline", "Work offline; hide the online catalogue", state),
+        ],
+    })
+    notification_rows = [_toggle_row("notifications", "Enable notifications", state)]
+    if state.notifications:
+        notification_rows += [
+            _toggle_row("notify_general", "General notices", state),
+            _toggle_row("notify_warning", "Warnings", state),
+            _toggle_row("notify_app", "App updates", state),
+        ]
+        if sys.platform != "darwin":
+            notification_rows.append(_toggle_row("notify_background", "Notify while running in the background", state))
+    sections.append({"title": "Notifications", "rows": notification_rows})
+    if sys.platform != "darwin":
+        sections.append({
+            "title": "Run in Background",
+            "rows": [_toggle_row("run_in_background", "Keep the app available when its window is closed", state)],
+        })
+    sections.append({
+        "title": "Install Rockbox 360p Themes",
+        "rows": [
+            _toggle_row("install_themes", "Install the 360p theme pack automatically", state),
+            {"key": "themes_install", "label": "Install the theme pack now", "kind": "action"},
+        ],
+    })
+    sections.append({
+        "title": "Advanced Settings",
+        "rows": [_toggle_row("advanced", "Show advanced settings and install options", state)],
+    })
+    if state.advanced_settings:
+        sections.append({
+            "title": "Keep Data for Any Firmware",
+            "rows": [
+                _toggle_row("allow_keep_data", "Always offer to keep my settings and media", state),
+            ],
+        })
+    if state.advanced_settings and not state.offline_mode:
+        rows = [_toggle_row("rockbox_open", "Filter the Rockbox release list", state)]
+        if state.rockbox_filters_open:
+            rows += [
+                _toggle_row("old", "Old Rockbox builds (before 0.5)", state),
+                _toggle_row("nightly", "Nightly releases", state),
+                _toggle_row("240p", "240p Rockbox releases", state),
+                _toggle_row("original", "Original Software before 3.0.7 for Y1 Type A", state),
+            ]
+        sections.append({"title": "Rockbox release filters", "rows": rows})
+    if state.advanced_settings:
+        mode_rows = [
+            _toggle_row("guided", "Guided install in this session", state),
+            _toggle_row("terminal", "Show the install command and run it in this terminal", state),
+        ]
+        methods = available_flash_methods(state)
+        if "sp" in methods:
+            mode_rows.append(_toggle_row("sp_gui", "Use the SP Flash Tool window", state))
+        mode_rows.append(_toggle_row("run_as_admin", "Run install tools with administrator rights", state))
+        sections.append({"title": "Installation mode", "rows": mode_rows})
+        if len(methods) > 1:
+            method_rows = [{
+                "key": "method",
+                "label": current_flash_method(state).upper(),
+                "kind": "method",
+            }]
+            if current_flash_method(state) == "sp":
+                method_rows.append({
+                    "key": "sp_auth",
+                    "label": state.sp_auth_file or "No SP Flash Tool authentication file",
+                    "kind": "info",
+                })
+            sections.append({"title": "Install method", "rows": method_rows})
+    return sections
+
+
+def settings_rows(state: BrowseState) -> list[dict]:
+    """Flattened settings rows, each carrying the section it belongs to."""
+    rows: list[dict] = []
+    for section in settings_sections(state):
+        for row in section["rows"]:
+            rows.append({**row, "section": section["title"]})
+    return rows
+
+
+def settings_row_at(state: BrowseState, index: int) -> dict | None:
+    rows = settings_rows(state)
+    if 0 <= index < len(rows):
+        return rows[index]
+    return None
+
+
+def settings_line_map(state: BrowseState) -> dict[int, int]:
+    """Screen line → flattened settings row, for mouse and keyboard focus."""
+    mapping: dict[int, int] = {}
+    line = 2  # "Settings" and the blank line after it
+    row = 0
+    for section in settings_sections(state):
+        line += 1  # section title
+        for _row in section["rows"]:
+            mapping[line] = row
+            line += 1
+            row += 1
+        line += 1  # blank line after the card
+    return mapping
+
+
+def settings_lines(state: BrowseState) -> list[str]:
+    """Settings rendered as the window's cards, with selectable rows."""
+    lines = ["Settings", ""]
+    number = 0
+    for section in settings_sections(state):
+        lines.append(section["title"].upper())
+        for row in section["rows"]:
+            number += 1
+            mark = "x" if row.get("value") else " "
+            selected = ">" if number - 1 == state.settings_index else " "
+            if row["kind"] == "toggle":
+                lines.append(f"{selected}{number:>2} [{mark}] {row['label']}")
+            elif row["kind"] == "method":
+                lines.append(f"{selected}{number:>2}  Method: {row['label']}")
+            elif row["kind"] == "info":
+                lines.append(f"{selected}{number:>2}  {row['label']}")
+            else:
+                lines.append(f"{selected}{number:>2}  {row['label']}")
+        lines.append("")
+    lines += [
+        "Enter or a click changes the focused row. Up/Down moves. 0 or q goes back.",
+        "Keep Data is offered only when the firmware supports its preserve-data",
+        "scatter; the advanced override allows it across incompatible firmware.",
     ]
+    return lines
 
 
 def support_lines(language: str = "") -> list[str]:
@@ -771,6 +1191,7 @@ def credits_lines(version: str = APP_VERSION) -> list[str]:
 
 
 def toggle_setting(state: BrowseState, which: str) -> None:
+    """Apply one Settings switch with the window's own invariants."""
     if which == "old":
         state.show_old = not state.show_old
         if not state.show_old:
@@ -781,8 +1202,66 @@ def toggle_setting(state: BrowseState, which: str) -> None:
             state.show_old = True
     elif which == "nightly":
         state.show_nightly = not state.show_nightly
+    elif which == "original":
+        state.show_original_307 = not state.show_original_307
     elif which == "keep_data":
         state.keep_data = not state.keep_data
+    elif which == "show_donations":
+        state.show_donations = not state.show_donations
+    elif which == "notifications":
+        state.notifications = not state.notifications
+    elif which == "notify_general":
+        state.notify_general = not state.notify_general
+    elif which == "notify_warning":
+        state.notify_warning = not state.notify_warning
+    elif which == "notify_player":
+        state.notify_player = not state.notify_player
+    elif which == "notify_app":
+        state.notify_app = not state.notify_app
+    elif which == "notify_background":
+        state.notify_background = not state.notify_background
+        if state.notify_background:
+            state.run_in_background = True
+    elif which == "run_in_background":
+        state.run_in_background = not state.run_in_background
+        if not state.run_in_background:
+            state.notify_background = False
+    elif which == "offline":
+        state.offline_mode = not state.offline_mode
+    elif which == "install_themes":
+        state.install_themes = not state.install_themes
+    elif which == "advanced":
+        state.advanced_settings = not state.advanced_settings
+        if not state.advanced_settings:
+            # The window reverts every advanced-only choice when the switch is
+            # turned off, so a hidden card can never keep changing installs.
+            state.terminal_install = False
+            state.sp_gui_install = False
+            state.run_as_admin = False
+            state.allow_keep_data_any = False
+            state.rockbox_filters_open = False
+            state.show_old = False
+            state.show_240p = False
+            state.show_nightly = False
+            state.show_original_307 = False
+            state.flash_method = ""
+    elif which == "allow_keep_data":
+        state.allow_keep_data_any = not state.allow_keep_data_any
+    elif which == "rockbox_open":
+        state.rockbox_filters_open = not state.rockbox_filters_open
+    elif which == "guided":
+        state.terminal_install = False
+        state.sp_gui_install = False
+    elif which == "terminal":
+        state.terminal_install = not state.terminal_install
+        if state.terminal_install:
+            state.sp_gui_install = False
+    elif which == "sp_gui":
+        state.sp_gui_install = not state.sp_gui_install
+        if state.sp_gui_install:
+            state.terminal_install = False
+    elif which == "run_as_admin":
+        state.run_as_admin = not state.run_as_admin
     save_filters(state)
 
 

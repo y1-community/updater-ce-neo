@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -32,6 +33,7 @@ CATALOG_URLS = (
 CACHE_TTL_SECONDS = 24 * 60 * 60
 RELEASE_TTL_SECONDS = 15 * 60
 USER_AGENT = "UpdaterCE-lite"
+BLOCKLIST_URL = "https://innioasis.app/release_blocklist.csv"
 
 
 def cache_dir() -> Path:
@@ -39,6 +41,29 @@ def cache_dir() -> Path:
     if not base:
         base = os.path.join(os.path.expanduser("~"), ".cache")
     return Path(base) / "innioasis-updater" / "catalog"
+
+
+def _bundled_path(name: str) -> Path | None:
+    """A copy of a catalogue asset shipped beside the app or in the payload."""
+    roots = [
+        Path(getattr(sys, "_MEIPASS", "")) / "assets" / "online",
+        Path(__file__).resolve().parents[2] / "assets" / "online",
+        Path(getattr(sys, "_MEIPASS", "")) / "online",
+    ]
+    for root in roots:
+        candidate = root / name
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def bundled_asset(name: str) -> bytes | None:
+    """Read a shipped catalogue CSV/XML, or ``None`` when it is not present."""
+    path = _bundled_path(name)
+    try:
+        return path.read_bytes() if path is not None else None
+    except OSError:
+        return None
 
 
 def _get(url: str, timeout: float = 20.0) -> bytes:
@@ -97,10 +122,53 @@ def fetch_manifest(force: bool = False, timeout: float = 20.0) -> bytes:
         pass
     if stale is not None:
         return stale
+    bundled = bundled_asset("slidia_manifest.xml")
+    if bundled is not None and b"<slidia" in bundled:
+        return bundled
     raise RuntimeError(
         "could not fetch the firmware catalogue (offline, and no cached copy): "
         + "; ".join(errors)
     )
+
+
+def fetch_blocklist(force: bool = False, timeout: float = 20.0) -> str:
+    """The release blocklist, from cache, the network, or the shipped copy."""
+    cache = cache_dir() / "release_blocklist.csv"
+    if not force:
+        cached = _read_cache(cache, CACHE_TTL_SECONDS)
+        if cached is not None:
+            return cached.decode("utf-8", "replace")
+    try:
+        data = _get(BLOCKLIST_URL, timeout=timeout)
+    except (urllib.error.URLError, OSError):
+        data = None
+    if data and b"software" in data.lower():
+        _write_cache(cache, data)
+        return data.decode("utf-8", "replace")
+    try:
+        stale = cache.read_text(encoding="utf-8")
+    except OSError:
+        stale = ""
+    if stale.strip():
+        return stale
+    bundled = bundled_asset("release_blocklist.csv")
+    return bundled.decode("utf-8", "replace") if bundled else ""
+
+
+_blocklist_cache: tuple[float, list] | None = None
+
+
+def blocklist_rules(force: bool = False) -> list:
+    """Parsed ``release_blocklist.csv`` rules, cached for this process."""
+    global _blocklist_cache
+    now = time.time()
+    if not force and _blocklist_cache and now - _blocklist_cache[0] < RELEASE_TTL_SECONDS:
+        return _blocklist_cache[1]
+    from .blocklist import parse_blocklist_csv
+
+    rules = parse_blocklist_csv(fetch_blocklist(force=force))
+    _blocklist_cache = (now, rules)
+    return rules
 
 
 @dataclass(frozen=True)

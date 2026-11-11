@@ -192,3 +192,61 @@ def test_a_background_refresh_queues_the_rotation_timer(qapp, monkeypatch):
     for _ in range(3):
         qapp.processEvents()
     assert made == [main_thread]
+
+
+def test_the_windows_launch_notice_is_windows_only():
+    """The Smart App Control notice is for Windows installs of Updater CE.
+
+    Mac and Linux still receive the other notices. The text session uses the
+    same platform attribute with its own names (darwin / win32 / linux).
+    """
+    from pathlib import Path
+
+    from src.console.session import _normalise_platform
+    from src.paths import REPO_ROOT
+
+    feed = (REPO_ROOT / "assets" / "online" / "notice.xml").read_text(encoding="utf-8")
+    notices = parse_notice_xml(feed)
+    launch = next(notice for notice in notices if notice.id == "2026-11-07-codesigning")
+    others = [notice for notice in notices if notice.id != launch.id]
+
+    assert launch.platforms == ("windows",)
+    assert launch.is_live(platform="windows") is True
+    assert launch.is_live(platform="mac") is False
+    assert launch.is_live(platform="linux") is False
+    assert others and all(notice.is_live(platform="mac") for notice in others)
+    assert all(notice.is_live(platform="windows") for notice in others)
+
+    site = Path(REPO_ROOT).parent / "Innioasis-Updater" / "notice.xml"
+    if site.is_file():
+        published = next(
+            notice
+            for notice in parse_notice_xml(site.read_text(encoding="utf-8"))
+            if notice.id == "2026-11-07-codesigning"
+        )
+        assert published.platforms == ("windows",)
+        assert published.is_live(platform="windows") is True
+        assert published.is_live(platform="mac") is False
+        assert published.is_live(platform="linux") is False
+
+    import xml.etree.ElementTree as ET
+
+    root = ET.fromstring(feed)
+    element = next(node for node in root.findall("notice") if node.get("id") == launch.id)
+    platforms = {
+        _normalise_platform(part)
+        for part in f"{element.get('platform') or ''},{element.get('os') or ''}".split(",")
+        if part.strip()
+    }
+    assert _normalise_platform("win32") in platforms
+    assert _normalise_platform("darwin") not in platforms
+    assert _normalise_platform("linux") not in platforms
+    for node in root.findall("notice"):
+        if node.get("id") == launch.id:
+            continue
+        untouched = {
+            part.strip()
+            for part in f"{node.get('platform') or ''},{node.get('os') or ''}".split(",")
+            if part.strip()
+        }
+        assert untouched == set()

@@ -138,6 +138,26 @@ def test_refresh_writes_only_a_usable_copy_and_keeps_the_previous_one(online_dir
     assert "fresh" in online_data.cached_text("notice.xml")
 
 
+def test_a_generic_refresh_leaves_notice_xml_to_its_service(monkeypatch):
+    """NoticeService is the only owner of the notice feed.
+
+    Refreshing it here as well as in NoticeService made one launch download
+    and log the same notice.xml twice.
+    """
+    calls = []
+    monkeypatch.setattr(
+        online_data,
+        "refresh_files",
+        lambda names, **kwargs: calls.append(tuple(names)) or {},
+    )
+
+    online_data.refresh_all()
+
+    assert calls
+    assert "notice.xml" not in calls[0]
+    assert "slidia_manifest.xml" in calls[0]
+
+
 def test_refresh_is_ttl_gated_until_stale(online_dirs):
     bundle, cache = online_dirs
     (bundle / "notice.xml").write_text("<notices/>", encoding="utf-8")

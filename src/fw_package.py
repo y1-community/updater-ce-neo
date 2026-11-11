@@ -56,7 +56,36 @@ MACOS_FIRMWARE_FOLDER = "Firmware"
 FIRMWARE_FOLDER_NAMES = ("Firmware", "firmware", "_Firmware", "_firmware")
 SP_TOOL_FOLDER_NAMES = ("SP_Flash_Tool", "sp_flash_tool", "_SP_flash_tool", "_sp_flash_tool")
 PACKAGE_SUBFOLDER_NAMES = FIRMWARE_FOLDER_NAMES + SP_TOOL_FOLDER_NAMES
+#: A portable pack may rename its flash-tool folder for reading order
+#: ("2. Open and run flash_tool"), so any immediate subfolder that names the
+#: tool counts as the package folder too.
+FLASH_TOOL_NAME_HINTS = ("flash_tool", "flash tool", "flashtool", "flash-tool")
 logger = logging.getLogger(__name__)
+
+
+def package_subfolders(root: Union[str, Path]) -> list:
+    """Immediate subfolders of ``root`` that may hold a portable package.
+
+    The canonical ``Firmware`` / ``SP_Flash_Tool`` names come first, then any
+    other subfolder whose name says it is the flash tool. A pack that numbers
+    its folders ("1. Install Drivers and Reboot PC", "2. Open and run
+    flash_tool") therefore still opens on the install screen, and the numbered
+    driver folder never counts as firmware because its name does not name the
+    tool.
+    """
+    root_p = Path(root)
+    found = [root_p / name for name in PACKAGE_SUBFOLDER_NAMES]
+    try:
+        children = sorted(p for p in root_p.iterdir() if p.is_dir())
+    except OSError:
+        return found
+    for child in children:
+        if child in found or child.name.startswith((".", "__")):
+            continue
+        lowered = child.name.lower()
+        if any(hint in lowered for hint in FLASH_TOOL_NAME_HINTS):
+            found.append(child)
+    return found
 
 
 @dataclass(frozen=True)
@@ -69,6 +98,12 @@ class FwIni:
     description: str = ""
     post_install: str = ""
     post_install_2: str = ""
+    # The catalogue's own reaction to this release, so an offline copy of it is
+    # treated exactly like the online entry: no Keep Data offer at all, and
+    # Format All + Download because the partition table has to be replaced
+    # (``no_keep_data`` / ``PMT_format_needed`` in ``slidia_manifest.xml``).
+    do_not_keep_data: bool = False
+    pmt_format_needed: bool = False
     # Firmware names this rom is a derivative of / compatible with ("Original
     # Software, Rockbox"), so the user can be asked whether that is what they
     # are running before a data-wiping install.
@@ -91,6 +126,14 @@ class FwPackage:
     has_preserve_data_scatter: bool = False
     post_install: str = ""
     post_install_2: str = ""
+    do_not_keep_data: bool = False
+    pmt_format_needed: bool = False
+    #: Firmware this release was built from, as its ini names it ("Original
+    #: Software, Rockbox"). Keep Data reads this exactly like the catalogue's
+    #: ``derivative``: a release that names its parent shares that data
+    #: partition, so an offline copy is offered the same choice as the online
+    #: entry instead of being treated as an unknown firmware.
+    derivative: str = ""
 
     @property
     def display_name(self) -> str:
@@ -194,6 +237,12 @@ def read_fw_package_ini(path: Union[str, Path]) -> FwIni:
     desc = get_first("description", "desc")
     post_install = get_first("post_install", "post install")
     post_install_2 = get_first("post_install2", "post_install_2", "post install 2")
+    do_not_keep_data = get_first("do_not_keep_data", "no_keep_data").lower() in (
+        "true", "1", "yes"
+    )
+    pmt_format_needed = get_first("pmt_format_needed", "format_all").lower() in (
+        "true", "1", "yes"
+    )
     derivatives_raw = get_first(
         "derivative",
         "derivatives",
@@ -215,6 +264,8 @@ def read_fw_package_ini(path: Union[str, Path]) -> FwIni:
         description=desc,
         post_install=post_install,
         post_install_2=post_install_2,
+        do_not_keep_data=do_not_keep_data,
+        pmt_format_needed=pmt_format_needed,
         derivatives=derivatives,
     )
 
@@ -726,6 +777,9 @@ def read_package(
         has_preserve_data_scatter=scatter_has_preserve_data_variant(folder_p),
         post_install=meta.post_install,
         post_install_2=meta.post_install_2,
+        do_not_keep_data=meta.do_not_keep_data,
+        pmt_format_needed=meta.pmt_format_needed,
+        derivative=", ".join(meta.derivatives),
     )
 
 
@@ -811,26 +865,21 @@ def find_bundled_firmware(app_dir=None) -> Optional[FwPackage]:
         # directly, and a dev checkout runs from the repo root.
         app_parent = _macos_app_parent(Path(sys.executable))
         if app_parent and app_parent.is_dir():
-            for sub in PACKAGE_SUBFOLDER_NAMES:
-                candidates.append(app_parent / sub)
+            candidates.extend(package_subfolders(app_parent))
             candidates.append(app_parent)
         base_app_parent = _macos_app_parent(base)
         if base_app_parent and base_app_parent.is_dir():
-            for sub in PACKAGE_SUBFOLDER_NAMES:
-                candidates.append(base_app_parent / sub)
+            candidates.extend(package_subfolders(base_app_parent))
             candidates.append(base_app_parent)
-        for sub in PACKAGE_SUBFOLDER_NAMES:
-            candidates.append(base / sub)
+        candidates.extend(package_subfolders(base))
     else:
         # Linux AppImage: check neighbouring Firmware or SP_Flash_Tool folder beside the AppImage
         if appimage_dir and appimage_dir.is_dir():
-            for sub in PACKAGE_SUBFOLDER_NAMES:
-                candidates.append((appimage_dir / sub).resolve())
+            candidates.extend(p.resolve() for p in package_subfolders(appimage_dir))
             candidates.append(appimage_dir.resolve())
 
         # Windows & Linux: check neighbouring Firmware or SP_Flash_Tool folder beside the binary
-        for sub in PACKAGE_SUBFOLDER_NAMES:
-            candidates.append((base / sub).resolve())
+        candidates.extend(p.resolve() for p in package_subfolders(base))
         candidates.append(base.resolve())
 
         # Check SP Flash Tool directory candidates
@@ -979,6 +1028,12 @@ def prune_to_firmware_package(extract_dir: Union[str, Path]) -> list[str]:
     for ini in root.rglob(FW_PACKAGE_INI):
         if ini.is_file():
             keep.add(ini.resolve())
+            # A portable pack keeps the release's own icon beside its ini, one
+            # folder above the scatter; pruning it left the install card blank.
+            for name in PACKAGE_ICON_NAMES:
+                icon_p = ini.parent / name
+                if icon_p.is_file():
+                    keep.add(icon_p.resolve())
     if (folder / FW_PACKAGE_INI).is_file():
         keep.add((folder / FW_PACKAGE_INI).resolve())
     if (folder / "manifest.json").is_file():

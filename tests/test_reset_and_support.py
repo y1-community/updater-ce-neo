@@ -650,3 +650,33 @@ def test_windows_legacy_shortcut_cleanup_never_deletes_user_files(tmp_path, monk
     assert user_song.exists()
 
 
+def test_install_donations_link_opens_support_as_a_modal(qapp):
+    """The lower donations text during an install must not leave the install.
+
+    It opens Support Us in a dialog. SupportPage does not take a donations
+    argument; passing one used to raise TypeError and the click did nothing.
+    """
+    from PySide6.QtWidgets import QWidget
+
+    host = QWidget()
+    host._donations = {"shown": True}
+    host._support_modal = None
+    try:
+        MainWindow._open_support_modal(host)
+        qapp.processEvents()
+        dialog = host._support_modal
+        assert dialog is not None
+        assert dialog.isVisible()
+        assert dialog.windowTitle()
+        page = dialog.findChild(SupportPage)
+        assert page is not None
+        assert page.content_height_hint(536) > 0
+    finally:
+        dialog = getattr(host, "_support_modal", None)
+        if dialog is not None:
+            dialog.close()
+            dialog.deleteLater()
+        host.deleteLater()
+        qapp.processEvents()
+
+

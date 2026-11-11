@@ -6,6 +6,8 @@ browsed is never deleted, and a missing downloaded archive still flashes the
 files already on disk.
 """
 
+import os
+import time
 import zipfile
 from pathlib import Path
 
@@ -165,3 +167,102 @@ def test_manifest_entries_bring_new_models_without_code_changes():
         assert rows and rows[0].name == "Stock"
     finally:
         catalog.set_live_catalog(original)
+
+
+def _cached_set(root: Path, stem: str, *, scatter: bool = True, old_seconds: float = 0.0):
+    """One firmware archive and the extract beside it, as the app caches them."""
+    archive = root / f"{stem}.zip"
+    archive.write_bytes(b"zip")
+    extract = root / f".{stem}_extracted"
+    package = extract / f"{stem}-content"
+    package.mkdir(parents=True)
+    if scatter:
+        (package / "MT6582_Android_scatter.txt").write_text("scatter", encoding="utf-8")
+    (package / "Y2ROOT.img").write_bytes(b"\0" * 1024)
+    if old_seconds:
+        stamp = time.time() - old_seconds
+        for cached in (package, extract, archive):
+            os.utime(cached, (stamp, stamp))
+    return archive, extract
+
+
+def test_retention_keeps_only_the_newest_flashable_set(downloads_root):
+    latest_archive, latest_extract = _cached_set(downloads_root, "Latest")
+    old_archive, old_extract = _cached_set(downloads_root, "Older", old_seconds=3600)
+    staged = downloads_root / "staged_firmware" / "stage_abc_MT6582_Android_scatter"
+    staged.mkdir(parents=True)
+    (staged / "Y2ROOT.img").write_bytes(b"\0")
+    part = downloads_root / "Something.zip.part"
+    part.write_bytes(b"part")
+    os.utime(part, (time.time() - 2 * 86400,) * 2)
+    theme_temp = downloads_root / "themepack_download_0.zip"
+    theme_temp.write_bytes(b"zip")
+
+    removed, freed = downloads.enforce_firmware_retention()
+
+    assert latest_extract.is_dir() and latest_archive.is_file()
+    assert not old_extract.exists(), "an older install's images are not kept"
+    assert not old_archive.exists()
+    assert not staged.exists(), "the flash's staged copy is rebuilt per install"
+    assert not part.exists() and not theme_temp.exists()
+    assert removed == 6 and freed > 0
+
+
+def test_retention_drops_an_extract_that_can_no_longer_flash(downloads_root):
+    # Exactly what a half-cleaned run leaves: every image, no scatter, no marker.
+    archive, extract = _cached_set(downloads_root, "Broken", scatter=False)
+
+    removed, _freed = downloads.enforce_firmware_retention()
+
+    assert not extract.exists()
+    assert not archive.exists(), "an archive whose extract is unusable is not a retry copy"
+    assert removed == 2
+
+
+def test_retention_keeps_the_set_the_run_named(downloads_root):
+    active_archive, active_extract = _cached_set(downloads_root, "Active", old_seconds=3600)
+    newer_archive, newer_extract = _cached_set(downloads_root, "Newer")
+
+    downloads.enforce_firmware_retention(keep_package_path=str(active_archive))
+
+    assert active_extract.is_dir() and active_archive.is_file()
+    assert not newer_extract.exists() and not newer_archive.exists()
+
+
+def test_clear_app_storage_clears_caches_and_logs_but_keeps_settings(tmp_path, monkeypatch):
+    from src import paths
+
+    support = tmp_path / "support"
+    downloads_root = support / "downloads"
+    downloads_root.mkdir(parents=True)
+    monkeypatch.setattr(downloads, "downloads_dir", lambda: downloads_root)
+    temp_root = tmp_path / "tmp"
+    temp_root.mkdir()
+    monkeypatch.setattr(downloads.tempfile, "gettempdir", lambda: str(temp_root))
+
+    cache_root = support / ".cache"
+    (cache_root / "releases").mkdir(parents=True)
+    (cache_root / "releases" / "repo.json").write_text("{}", encoding="utf-8")
+    lock = cache_root / "updater-ce-501.busy.json"
+    lock.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(paths, "app_cache_dir", lambda: cache_root)
+
+    log_dir = support / "logs"
+    log_dir.mkdir()
+    tool_log = log_dir / "mtkclient.log"
+    tool_log.write_text("x" * 4096, encoding="utf-8")
+    root_log = support / "updater.log"
+    root_log.write_text("y" * 2048, encoding="utf-8")
+    settings_file = support / "settings.ini"
+    settings_file.write_text("[app]", encoding="utf-8")
+    _cached_set(downloads_root, "Latest")
+
+    removed, freed = downloads.clear_app_storage()
+
+    assert removed >= 2 and freed > 0
+    assert not (downloads_root / ".Latest_extracted").exists()
+    assert not (cache_root / "releases").exists(), "remote data is fetched again"
+    assert lock.is_file(), "the single-instance marker is live bookkeeping"
+    assert settings_file.is_file(), "settings are never touched"
+    assert tool_log.is_file() and tool_log.read_text(encoding="utf-8") == ""
+    assert root_log.read_text(encoding="utf-8") == ""

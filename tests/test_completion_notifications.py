@@ -71,6 +71,51 @@ def test_completion_appeal_subtitle_names_the_model_once():
         app.processEvents()
 
 
+def test_completion_note_names_the_release_behind_the_install_heading():
+    """The card title is a heading; the note still has to name the release.
+
+    "Get your Y2 ready to install Rockbox 2.5" was read as a generic heading,
+    so the finished install said "The software has been installed on your Y2"
+    while the name it needed was already in the title.
+    """
+    from src.i18n import tr
+    from src.ui.flash_page import FlashPage
+
+    app = _app()
+    page = FlashPage()
+    try:
+        page.show_completion_note(
+            True, software="Get your Y2 ready to install Rockbox 2.5", model="Y2"
+        )
+        first = page._complete_note.text().splitlines()[0]
+        assert first == tr("donate_completion_subtitle").format(
+            software="Rockbox 2.5", model="Y2"
+        )
+    finally:
+        page.close()
+        app.processEvents()
+
+
+def test_completion_appeal_names_the_release_behind_the_install_heading():
+    from src.i18n import tr
+    from src.ui.flash_page import FlashPage
+
+    app = _app()
+    page = FlashPage()
+    try:
+        page._package_name = "Get your Y2 ready to install Rockbox 2.5"
+        page._model = "Y2"
+        page.show_completion_appeal(True)
+        # The subtitle carries the power-on steps on its second line.
+        first = page._intro.subtitle.text().splitlines()[0]
+        assert first == tr("donate_completion_subtitle").format(
+            software="Rockbox 2.5", model="Y2"
+        )
+    finally:
+        page.close()
+        app.processEvents()
+
+
 def test_completion_notification_routes_to_the_install_card(monkeypatch):
     from src import notifications
 

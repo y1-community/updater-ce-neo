@@ -16,6 +16,7 @@ import urllib.request
 from dataclasses import dataclass
 
 from .. import versioning
+from . import blocklist
 from .catalog import Package, USER_AGENT, cache_dir
 
 _TYPE_B = ("_type_b", "-type-b", "type-b", " type b", "type_b", "typeb", "_b.zip", "-b.zip")
@@ -125,6 +126,36 @@ def _asset_type(name: str) -> str:
     return "B" if any(token in lower for token in _TYPE_B) else "A"
 
 
+def _models_in_text(text: str) -> set[str]:
+    """Model names an asset or release title explicitly names."""
+    found = re.findall(r"(?<![A-Za-z0-9])(Y1|Y2|A5)(?![A-Za-z0-9])", text or "", re.IGNORECASE)
+    return {model.upper() for model in found}
+
+
+def _release_models(release: dict, repo: str) -> set[str]:
+    """Which models a release belongs to, strongest evidence first.
+
+    The Y1 stock repository also publishes ``rom_y2.zip`` in Y2-titled
+    releases. An unqualified ``rom.zip`` therefore inherits the model from the
+    release title, not from the repository name alone.
+    """
+    title_models = _models_in_text(str(release.get("name") or ""))
+    if title_models:
+        return title_models
+    repo_models = _models_in_text(repo)
+    return repo_models or set()
+
+
+def _asset_models(asset_name: str, release: dict, repo: str) -> set[str]:
+    asset_models = _models_in_text(asset_name)
+    if asset_models:
+        return asset_models
+    return _release_models(release, repo)
+
+def _original_software(package: Package | None) -> bool:
+    return bool(package is not None and "original software" in (package.name or "").casefold())
+
+
 def _asset_resolution(name: str) -> str:
     lower = name.lower()
     if "_240p" in lower or "240p" in lower:
@@ -178,16 +209,24 @@ def rows_from_releases(
     model: str,
     hardware_type: str,
     repo: str,
+    system_software: str = "",
+    show_original_pre_307: bool = False,
+    block_rules=(),
     show_old: bool = False,
     show_240p: bool = False,
     show_nightly: bool = False,
 ) -> list[ReleaseRow]:
-    """The Available System Software rows for one package."""
+    """The Available System Software rows for one package.
+
+    ``system_software`` is the package display name (for the Original Software
+    pre-3.0.7 gate); ``block_rules`` are rules from ``release_blocklist.csv``.
+    """
     model = (model or "").upper()
     hardware_type = (hardware_type or "").upper()
     rockbox = "rockbox" in (repo or "").lower()
     gate = rockbox and model == "Y1" and hardware_type != "B"
     y2_rockbox = model == "Y2" and rockbox
+    original = "original software" in (system_software or "").casefold()
     rows: list[ReleaseRow] = []
     for release in releases or []:
         if not isinstance(release, dict) or release.get("draft"):
@@ -195,19 +234,45 @@ def rows_from_releases(
         tag = str(release.get("tag_name") or "")
         if _is_base_tag(tag):
             continue
+        release_models = _release_models(release, repo)
+        if release_models and model not in release_models:
+            continue
         if "nightly" in tag.lower() and not show_nightly:
             continue
         if release.get("prerelease") and not show_nightly and not y2_rockbox:
             continue
         release_name = str(release.get("name") or "")
         version = version_tuple(tag, release_name)
-        if gate and not show_old and _below_minimum(version):
+        if gate and not show_old:
+            if version is None:
+                # A stable release whose tag uses a future naming scheme must
+                # not disappear behind the pre-0.5 cutoff.
+                if not versioning.is_stable_release(release):
+                    continue
+            elif _below_minimum(version):
+                continue
+        if (
+            original
+            and model == "Y1"
+            and hardware_type == "A"
+            and not show_original_pre_307
+            and version is not None
+            and version < (3, 0, 7)
+        ):
+            continue
+        is_nightly = version is None or bool(release.get("prerelease")) or "nightly" in tag.lower()
+        if blocklist.is_blocked(
+            block_rules, system_software, model, hardware_type, tag, is_nightly
+        ):
             continue
         variants = []
         for asset in _usable_assets(release.get("assets") or []):
             name = str(asset.get("name") or "")
             kind = _asset_type(name)
             if hardware_type in ("A", "B") and kind != hardware_type:
+                continue
+            asset_models = _asset_models(name, release, repo)
+            if asset_models and model not in asset_models:
                 continue
             variants.append((asset, _asset_resolution(name), kind))
         if not variants:

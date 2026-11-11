@@ -161,6 +161,37 @@ def _enable_native_crash_log():
         logger.debug("Native crash log unavailable", exc_info=True)
 
 
+def _prune_startup_storage() -> None:
+    """Drop firmware working files an earlier run left behind.
+
+    A failed or abandoned install keeps its extract so a retry does not have to
+    download again, but nothing bounded those copies across launches: every
+    test run parked a multi-gigabyte image set in the app's folder. This keeps
+    at most the most recent flashable set and runs off the GUI thread. It is
+    only reached once this process owns the app (``ensure_single_instance`` has
+    already returned), so it can never delete a running install's firmware.
+    """
+    import threading
+
+    def _run() -> None:
+        try:
+            from .downloads import enforce_firmware_retention
+
+            removed, freed = enforce_firmware_retention()
+            if removed:
+                logging.getLogger("innioasis.startup").info(
+                    "Removed %d stale firmware cache item(s) (%.1f MB)",
+                    removed,
+                    freed / (1024 * 1024),
+                )
+        except Exception:
+            logging.getLogger("innioasis.startup").debug(
+                "Startup firmware retention failed", exc_info=True
+            )
+
+    threading.Thread(target=_run, daemon=True, name="firmware-retention").start()
+
+
 def _mark_startup_complete() -> None:
     """Create the launcher's ready marker once Qt is running the app.
 
@@ -404,6 +435,14 @@ def _configure_qt_plugins() -> None:
 
 
 def main():
+    import os
+
+    # The Linux installer launches the real window once, minimized, then waits
+    # for a clean exit. That proves the host can create the Qt platform window
+    # (xcb, Wayland, GL) before the installer declares success. It is not a
+    # user-facing mode, so it never touches the catalogue, USB or flash state.
+    gui_probe = os.environ.get("INNIOASIS_GUI_PROBE") == "1" or "--gui-probe" in sys.argv[1:]
+
     # Windows: no helper process (adb, taskkill, powershell ...) may open a
     # black console window over the launch card. Install the guard before any
     # import below can spawn one; it is a no-op on other platforms.
@@ -699,6 +738,11 @@ def main():
 
     background = run_in_background_enabled()
     presentation = _startup_presentation(start_in_tray, background)
+    if gui_probe:
+        # An installer probe must build the window even when the user normally
+        # starts in the tray. It is a rendering check, not a session launch.
+        background = False
+        presentation = "window"
     if presentation == "exit":
         logging.getLogger("innioasis.startup").info(
             "Start-at-login launch skipped: background mode is off"
@@ -800,6 +844,11 @@ def main():
         )
         if presentation == "tray" and not getattr(app, "_startup_sweep_started", False):
             QTimer.singleShot(0, _sweep_on_startup)
+        if not getattr(app, "_retention_swept", False):
+            # Once per process, after the window exists: a later ``main()`` is
+            # a second launch and never gets this far.
+            app._retention_swept = True
+            QTimer.singleShot(2000, _prune_startup_storage)
         return window
 
     if background:
@@ -919,7 +968,7 @@ def main():
         app.setQuitOnLastWindowClosed(True)
 
     startup_splash = None
-    if _sys.platform.startswith("win") and presentation == "window":
+    if _sys.platform.startswith("win") and presentation == "window" and not gui_probe:
         try:
             from .ui.splash import show_startup_splash
 
@@ -956,7 +1005,12 @@ def main():
         # layout, fit and native chrome settle unseen; the reveal retires the
         # card. Without one -- macOS and Linux -- the window is the launch.
         concealed = startup_splash is not None and _conceal_window_under_splash(window)
-        if not concealed:
+        if gui_probe:
+            # Minimized: the display server still has to create and map the
+            # native window, but the probe must not steal focus or flash over
+            # the desktop while the installer is still running.
+            window.showMinimized()
+        elif not concealed:
             window.show()
         # The window is up: acknowledge a marker that was waiting at launch.
         # If a new request arrived meanwhile its stamp differs, so it stays for
@@ -973,7 +1027,19 @@ def main():
             splash = startup_splash
             startup_splash = None
             QTimer.singleShot(220, lambda: _reveal_launched_window(window, splash))
-        QTimer.singleShot(1500, _sweep_on_startup)
+        if gui_probe:
+            def _finish_gui_probe() -> None:
+                logging.getLogger("innioasis.startup").info(
+                    "GUI probe: window created and painted; exiting cleanly"
+                )
+                try:
+                    window.close()
+                finally:
+                    app.quit()
+
+            QTimer.singleShot(900, _finish_gui_probe)
+        else:
+            QTimer.singleShot(1500, _sweep_on_startup)
     else:
         # Start-at-login: the menu bar item is the whole app until it is asked
         # for a window.
@@ -1025,14 +1091,15 @@ def main():
                 "Weekly theme pack refresh could not start", exc_info=True
             )
 
-    QTimer.singleShot(0, _deferred_startup)
+    if not gui_probe:
+        QTimer.singleShot(0, _deferred_startup)
 
     # Match host appearance live: light/dark switches, desktop accent colours,
     # system font changes -- the same way native apps follow the OS. The window
     # normally brings the watcher with it (and registers it on the app); one is
     # installed here only when it did not, so the host is never watched twice.
     # A tray-built window installs its own when it is created.
-    if presentation == "window":
+    if presentation == "window" and not gui_probe:
         from .ui.dark import ThemeWatcher, is_dark
         from .ui.glass import (
             apply_glass,
@@ -1059,7 +1126,8 @@ def main():
 
     # One event-loop turn is not enough: let the first page paint before the
     # launcher's startup-crash window closes.
-    QTimer.singleShot(1500, _mark_startup_complete)
+    if not gui_probe:
+        QTimer.singleShot(1500, _mark_startup_complete)
 
     exit_code = app.exec()
     _leave_cleanly(holder["window"], exit_code)

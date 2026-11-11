@@ -233,3 +233,144 @@ The rule set is deliberately narrow so the existing tree is green. Widen `select
 one rule family at a time — `I` (import order) and `E501` (line length) would currently flag most of
 the legacy app, and reformatting it in one sweep is not a change anyone can review. `vendor/mtkclient`
 is excluded because it mirrors the shipped Chinese build (see `AGENTS.md`).
+
+---
+
+## 7. macOS Universal 2 and Intel verification
+
+`./build_macos.sh --arch universal2` produces one bundle carrying an `arm64` and
+an `x86_64` slice of every Mach-O it ships. The Apple Silicon slice is exercised
+by the normal development flow; the Intel slice is not, because the project does
+not run an Intel Mac day to day. A release that claims Intel support should be
+checked on Intel hardware before it ships.
+
+### 7.1 Checks that need no Intel hardware
+
+```bash
+APP="dist/macos/Innioasis Updater.app"
+python3 scripts/audit_universal2.py "$APP"
+codesign --verify --arch arm64  "$APP"
+codesign --verify --arch x86_64 "$APP"
+```
+
+Expected: `Scanned <n> Mach-O files; highest minos = 12.0`, then
+`RESULT: OK (all universal2, Monterey-compatible)`, then silence from both
+`codesign` calls. The audit names the offending file when a slice or the
+deployment target is wrong, but it does not look at what each slice links
+against. That link check decides whether the **arm64** slice can start on a Mac
+with no Rosetta, so run it when a release is cut:
+
+```bash
+python3 - "$APP" <<'PY'
+import subprocess, sys
+from pathlib import Path
+
+app = Path(sys.argv[1])
+magics = (b"\xca\xfe\xba\xbe", b"\xce\xfa\xed\xfe", b"\xcf\xfa\xed\xfe")
+
+def run(*args):
+    return subprocess.run(args, capture_output=True, text=True).stdout
+
+def is_macho(p):
+    with open(p, "rb") as fh:
+        return fh.read(4) in magics
+
+machos = [p for p in app.rglob("*") if p.is_file() and not p.is_symlink() and is_macho(p)]
+archs = {p: run("lipo", "-archs", str(p)).split() for p in machos}
+problems = []
+for p in machos:
+    if "arm64" not in archs[p]:
+        problems.append(f"{p.relative_to(app)}: no arm64 slice")
+        continue
+    own = {line.strip() for line in run("otool", "-arch", "arm64", "-D", str(p)).splitlines()[1:]}
+    for line in run("otool", "-arch", "arm64", "-L", str(p)).splitlines()[1:]:
+        dep = line.strip().split(" (compat")[0].strip()
+        if not dep or dep in own or dep.endswith("):"):
+            continue
+        if dep.startswith(("/usr/lib/", "/System/", "/Library/Apple/")):
+            continue
+        if dep.startswith("@"):
+            inside = [q for q in machos if q.name == Path(dep).name]
+            if any("arm64" in archs[q] for q in inside):
+                continue
+            problems.append(f"{p.relative_to(app)}: {dep} (no arm64 inside bundle)")
+        else:
+            problems.append(f"{p.relative_to(app)}: {dep} (outside the bundle)")
+print("\n".join(problems) if problems else "OK: every arm64 dependency resolves inside the bundle")
+PY
+```
+
+It prints `OK: every arm64 dependency resolves inside the bundle`, or the file
+and the dependency that is wrong.
+
+Do not substitute a raw `strings` grep for that check. Qt, shiboken and `unar`
+legitimately embed their own build paths (`/Users/qt/work/...`, `/Users/dag/...`),
+and the launcher embeds `/opt/homebrew/bin/python3` as a last-resort interpreter
+fallback; none of those can be loaded. A `strings` hit is not a defect, a hit in
+`otool -L` is.
+
+### 7.2 What has been exercised without Intel hardware
+
+On an Apple Silicon Mac the bundle's Intel slices were run end to end through
+Rosetta:
+
+```bash
+arch -x86_64 "$APP/Contents/MacOS/Innioasis Updater"
+```
+
+The process reported `Code Type: X86-64 (translated)` and started normally:
+`Qt binding: PySide6 6.9.3 on Python 3.11.16`, cached catalogue loaded,
+`notice.xml` refreshed from the network, no dyld errors. Importing
+`PySide6.QtWidgets`, `usb`, `Crypto` and `capstone` under `arch -x86_64`
+succeeded as well.
+
+That proves the Intel slices and their bundled dependencies resolve and start
+under emulation. It does not prove native execution on Intel silicon, and says
+nothing about Intel GPUs, Intel USB/IOKit behaviour, or Gatekeeper on the Intel
+macOS versions.
+
+### 7.3 What an Intel Mac must confirm
+
+1. Record the machine: `sw_vers`, `sysctl -n hw.model`, and
+   `system_profiler SPUSBDataType | grep -i -A3 mediatek` with the player attached.
+2. Launch through Gatekeeper from `/Applications`; for a downloaded copy run
+   `xattr -dr com.apple.quarantine "/Applications/Innioasis Updater.app"` first.
+   It must open with no "damaged", "cannot be opened" or "requires a newer
+   version of macOS" dialog.
+3. Confirm the slice. The launcher `execv`s the bundled interpreter, so the live
+   process is not `Contents/MacOS/Innioasis Updater`:
+
+   ```bash
+   pid=$(ps -Ao pid=,comm= | grep "Resources/python/bin/Innioasis Updater" | grep -v grep | awk '{print $1}' | head -1)
+   vmmap -summary "$pid" | grep "Code Type"
+   ```
+
+   On Intel this must print `X86-64`. An `ARM64` process means the wrong bundle
+   was shipped.
+4. Version and identity: `2.5.4` and `com.innioasis.updater`
+   (`/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier"` on the bundle's
+   `Info.plist`).
+5. UI pass on Intel Qt: native menus and window chrome, host tooltips,
+   scrollbars, light/dark switch without a relaunch, and the Software dropdown
+   selecting firmware by name in every supported language.
+6. Network: the release list populates (cached list plus a refresh from
+   `innioasis.app`), and the notice area renders.
+7. Flash: macOS has no SP Flash Tool, so MTKClient is the only backend here.
+   Detect a player, install one firmware package to completion, then a second
+   one. Watch for USB stalls or a disconnect mid-write.
+8. Themes and fonts: install a Rockbox theme or font pack. That flow spawns the
+   bundled `adb` and `unar`, which must run as `x86_64` from
+   `tools/adb/macos-arm64/adb` and `tools/macos/unar`.
+9. Notifications and login item: a finished install posts a banner under
+   "Innioasis Updater" (not Script Editor), and start-at-login launches the
+   bundle rather than `python3.11`.
+10. Quit and relaunch, including the single-instance hand-off when a second copy
+    is opened while the first is running.
+
+### 7.4 Reporting an Intel-only failure
+
+Attach `~/Library/Application Support/Innioasis Updater/logs/updater.log` and
+`mtkclient.log` (same content as the in-app log viewer), the
+`vmmap ... | grep "Code Type"` line, `sw_vers`, `sysctl -n hw.model`, and
+`otool -L` of the binary named in the error. Record the failure against the
+release rather than relabelling the bundle Apple Silicon only.

@@ -382,6 +382,11 @@ _refresh_thread: Optional[threading.Thread] = None
 #: directly from this module by the background agent.
 BACKGROUND_FILES = ("slidia_manifest.xml",)
 
+#: NoticeService owns the notice feed: it fetches the same cache through
+#: :func:`refresh` and then parses it. A generic refresh must leave the file
+#: alone, or one launch downloads and logs the same notice.xml twice.
+NOTICE_SERVICE_FILES = ("notice.xml",)
+
 
 def refresh_files(
     names: Iterable[str],
@@ -412,8 +417,15 @@ def refresh_files(
 
 
 def refresh_all(force: bool = False, timeout: float = REQUEST_TIMEOUT) -> dict[str, bool]:
-    """Refresh every stale file, sequentially, off any UI thread."""
-    return refresh_files(tuple(FILES), force=force, timeout=timeout)
+    """Refresh every stale file except the notice feed, sequentially.
+
+    ``notice.xml`` is deliberately left to NoticeService, which downloads it
+    through :func:`refresh` and then parses the result. Including it here made
+    the window refresh and the notice service fetch the same URL in the same
+    launch, producing duplicate ``Updated notice.xml`` log lines.
+    """
+    names = tuple(name for name in FILES if name not in NOTICE_SERVICE_FILES)
+    return refresh_files(names, force=force, timeout=timeout)
 
 
 def refresh_files_async(
@@ -446,13 +458,15 @@ def refresh_files_async(
 
 
 def refresh_all_async(force: bool = False, timeout: float = REQUEST_TIMEOUT) -> bool:
-    """Refresh every online file in the background (the window's policy).
+    """Refresh every online file except ``notice.xml`` in the background.
 
     Deliberately lazy: called after the first window is shown (and again when
     connectivity returns), so launch never waits for a byte from the network.
-    Returns True when a new worker was started.
+    NoticeService is the single owner of the notice feed. Returns True when a
+    new worker was started.
     """
-    return refresh_files_async(tuple(FILES), force=force, timeout=timeout)
+    names = tuple(name for name in FILES if name not in NOTICE_SERVICE_FILES)
+    return refresh_files_async(names, force=force, timeout=timeout)
 
 
 def wait_for_refresh(timeout: float = 0.0) -> None:

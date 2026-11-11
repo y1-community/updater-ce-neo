@@ -274,6 +274,9 @@ def _candidate_mtkclient() -> list[list[str]]:
                 candidates.append([str(path)])
     # A source checkout: the vendored fork's own entry point.
     repo = Path(__file__).resolve().parents[2]
+    runner = repo / "src" / "console" / "mtk_runner.py"
+    if runner.exists():
+        candidates.append([sys.executable, str(runner)])
     vendored = repo / "vendor" / "mtkclient" / "mtk.py"
     if vendored.exists():
         candidates.append([sys.executable, str(vendored)])

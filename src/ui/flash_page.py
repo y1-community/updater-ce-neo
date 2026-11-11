@@ -476,6 +476,26 @@ def _software_without_model(software: str, model: str) -> str:
     return stripped or text
 
 
+def _completion_software_name(name: str, model: str) -> str:
+    """The release name a completion screen may name, from a title or heading.
+
+    ``_package_name`` holds the install heading (``Get your Y2 ready to
+    install Rockbox 2.5``) or a plain release name. Unwrapping the heading has
+    to come first: stripping the model alone left ``Get your ready to install
+    Rockbox 2.5``, which matched the generic-heading check and made the screen
+    say "The software has been installed on your Y2" about a release it knew.
+    """
+    text = str(name or "").strip()
+    if not text:
+        return ""
+    from .. import catalog
+
+    heading_name = catalog.software_from_install_heading(text, model)
+    if heading_name:
+        return heading_name
+    return _software_without_model(text, model)
+
+
 def _style_card_heading(label) -> None:
     if label is None:
         return
@@ -5258,10 +5278,10 @@ class FlashPage(QWidget):
         instead of falling back to the generic project pitch.
         """
         model = (getattr(self, "_model", "") or "").strip() or tr("device_fallback_word")
-        software = _software_without_model(
-            (getattr(self, "_package_name", "") or "").strip() or tr("flash_current_pkg"),
+        software = _completion_software_name(
+            (getattr(self, "_package_name", "") or "").strip(),
             (getattr(self, "_model", "") or "").strip(),
-        )
+        ) or tr("flash_current_pkg")
         if hasattr(self, "_intro"):
             self._intro.retranslate(software=software, model=model)
             if not getattr(self, "_appeal_themes", False):
@@ -5300,10 +5320,9 @@ class FlashPage(QWidget):
 
     def _render_completion_note(self) -> None:
         model = self._complete_note_model or tr("device_fallback_word")
-        software = _software_without_model(
-            self._complete_note_software or tr("flash_current_pkg"),
-            self._complete_note_model,
-        )
+        software = _completion_software_name(
+            self._complete_note_software, self._complete_note_model
+        ) or tr("flash_current_pkg")
         from ..config import install_power_on_steps
 
         if self._complete_note_themes:

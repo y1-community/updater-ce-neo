@@ -33,21 +33,21 @@ PYTHON_DIR_RE = re.compile(r"(?:^|/)lib?python(\d)\.(\d+)(?:\.so|$)|(?:^|/)pytho
 # bundle, so a missing one is a packaging bug rather than a user problem.
 XCB_REQUIRED = (
     "libxcb-cursor.so.0",
+    "libxcb-icccm.so.4",
     "libxcb-image.so.0",
+    "libxcb-keysyms.so.1",
     "libxcb-render-util.so.0",
     "libxcb-util.so.1",
+    "libxcb-xkb.so.1",
+    "libxcb-shape.so.0",
+    "libxcb-shm.so.0",
+    "libxcb-sync.so.1",
+    "libxcb-randr.so.0",
+    "libxcb-xfixes.so.0",
+    "libxcb-glx.so.0",
     "libxkbcommon-x11.so.0",
     "libxkbcommon.so.0",
 )
-
-# Instructions that only exist on x86-64-v2 (SSE4.2/POPCNT) or v3 (AVX/AVX2).
-# A Core 2 Duo (SSSE3) or an Athlon 64 (SSE2) aborts on the first POPCNT, so a
-# bundle that contains one cannot claim "any x86-64 Linux".
-X86_V2_INSN = re.compile(
-    r"\s(popcnt|pcmpistri|pcmpistrm|pcmpestri|pcmpestrm|crc32[bwlq]?)\s", re.I
-)
-X86_V3_INSN = re.compile(r"\s(vzeroupper|vzeroall|vmovdqu|vmovdqa|vfmadd\w*|vpermd)\s", re.I)
-
 
 def is_x86_64(path: Path) -> bool:
     try:
@@ -60,20 +60,32 @@ def is_x86_64(path: Path) -> bool:
 
 
 def cpu_requirement(path: Path) -> str:
-    """'v1', 'v2' or 'v3' from the instructions actually present in the file."""
+    """The ISA level the ELF *declares* it needs, not every instruction in it.
+
+    Scanning a disassembly for AVX/SSE4 opcodes produces false positives: Qt
+    compiles runtime-dispatch paths for newer CPUs into the same library and
+    selects them only after CPUID. PySide6 6.9.3 is exactly that shape, so the
+    old scan rejected a library that still starts on a baseline CPU.
+
+    The GNU property note is the toolchain's own answer. An absent ISA note
+    means no level is required (the binary may still dispatch at runtime).
+    """
     try:
-        disassembly = subprocess.run(
-            ["objdump", "-d", "--no-show-raw-insn", str(path)],
+        notes = subprocess.run(
+            ["readelf", "-n", "--wide", str(path)],
             capture_output=True,
             text=True,
             timeout=600,
         ).stdout
     except (OSError, subprocess.SubprocessError):
         return "unknown"
-    if X86_V3_INSN.search(disassembly):
+    if "x86 ISA needed: x86-64-v3" in notes:
         return "v3"
-    if X86_V2_INSN.search(disassembly):
+    if "x86 ISA needed: x86-64-v2" in notes:
         return "v2"
+    if "x86 ISA needed: x86-64-baseline" in notes:
+        return "v1"
+    # No declaration: the compiler did not opt into a higher ISA floor.
     return "v1"
 
 
@@ -128,7 +140,11 @@ def main() -> int:
         default=".".join(str(part) for part in DEFAULT_MAX_GLIBC),
         help="highest GLIBC symbol version the bundle may require (default 2.35)",
     )
-    parser.add_argument("--max-python", default="3.12", help="highest Python minor allowed")
+    parser.add_argument(
+        "--max-python",
+        default="3.10",
+        help="highest Python minor allowed (release bundles use Ubuntu 22.04/Python 3.10)",
+    )
     parser.add_argument(
         "--allow-cpu-v2",
         action="store_true",
@@ -146,8 +162,10 @@ def main() -> int:
     problems: list[str] = []
     worst: tuple[int, int] | None = None
     worst_file: Path | None = None
+    saw_elf = False
 
     for path in elf_files(root):
+        saw_elf = True
         needed = required_glibc(path)
         if needed and (worst is None or needed > worst):
             worst, worst_file = needed, path
@@ -156,6 +174,12 @@ def main() -> int:
                 f"{path.relative_to(root)} requires GLIBC_{needed[0]}.{needed[1]}"
                 f" (ceiling {ceiling[0]}.{ceiling[1]})"
             )
+
+    if saw_elf and worst is None:
+        problems.append(
+            "GLIBC symbol versions could not be read (objdump or readelf from binutils is required). "
+            "A bundle that cannot be checked is not packed."
+        )
 
     if worst and worst > ceiling:
         problems.append(

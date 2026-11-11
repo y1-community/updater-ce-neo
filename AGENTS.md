@@ -134,6 +134,19 @@
   ends both when a run is abandoned. Do not add ad-hoc acquire/release pairs in the widgets, and do not hold
   anything while the app is idle or finished — the hold must disappear with the task.
 
+## Release visibility (Updater CE and the firmware archive)
+- A published stable release from a repository named in `slidia_manifest.xml` must be listed for its
+  model. Only `release_blocklist.csv` or the documented Rockbox `< 0.5` / Original Software `< 3.0.7`
+  gates may hide one; no tag-parsing, asset-name or snapshot rule may.
+- `releases_backup.json` is a periodic export, not the source of truth. It may answer the catalogue
+  availability check, but a stale copy must never hide a source by itself: a repository added to the
+  live manifest can have no row yet, and its first `stable-vX.Y` release may already be on GitHub.
+  Fail open, confirm with the per-repo release cache or a live check, and only hide on a fresh,
+  corroborated "nothing installable" answer.
+- A future release tag that cannot be read as a dotted version still counts as stable when GitHub
+  does not mark it prerelease/nightly; keep it visible rather than dropping it at a minimum-version
+  gate. `stable-v0.6` from `rockbox-y1/rockbox` is the regression shape (`tests/test_stable_release_visibility.py`).
+
 ## Rockbox themes/fonts stage: one owner for its state
 - `src/themes_journey.py` (`ThemesJourney`) owns the stage's decisions and state: transfer running,
   placement failed, power-on prompt pending, ADB adoption, multiple-players, the presence watcher,

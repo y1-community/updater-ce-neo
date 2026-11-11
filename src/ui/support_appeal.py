@@ -339,9 +339,16 @@ class SupportIntro(QWidget):
     def retranslate(self, software: str = "", model: str = "") -> None:
         headline_key, subtitle_key = self._keys
         self.headline.setText(tr(headline_key))
+        named = software
+        if subtitle_key == "donate_completion_subtitle":
+            from ..catalog import software_from_install_heading
+
+            # A caller that still holds the install heading gets its release
+            # name read back, rather than the placeholder sentence.
+            named = software_from_install_heading(software, model) or software
         if subtitle_key == "donate_completion_subtitle" and (
-            not software or software.startswith(("Get ready to install", "Installing software", "Get your"))
+            not named or named.startswith(("Get ready to install", "Installing software", "Get your"))
         ):
             self.subtitle.setText(_fill(tr("donate_completion_subtitle_the_software"), model=model))
         else:
-            self.subtitle.setText(_fill(tr(subtitle_key), software=software, model=model))
+            self.subtitle.setText(_fill(tr(subtitle_key), software=named, model=model))

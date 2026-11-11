@@ -17,6 +17,7 @@ REPO = Path(__file__).resolve().parents[1]
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
+from src.console import blocklist
 from src.console.catalog import Package
 from src.console.components import (
     COMPONENTS,
@@ -114,6 +115,71 @@ class CatalogueTests(unittest.TestCase):
             show_240p=True,
         )
         self.assertEqual([row.label for row in type_b], ["0.4"])
+
+    def test_y2_assets_do_not_leak_into_y1(self):
+        releases = [
+            dict(_release("3.2.1", [_asset("rom_y2.zip")]), name="System Software 3.2.1 for Innioasis Y2"),
+            dict(_release("3.1.2", [_asset("rom.zip")]), name="Original System Software 3.1.2 for Innioasis Y1"),
+        ]
+        y1 = rows_from_releases(
+            releases,
+            model="Y1",
+            hardware_type="A",
+            repo="y1-community/y1-stock-rom",
+            system_software="Original Software",
+        )
+        self.assertEqual([row.label for row in y1], ["3.1.2"])
+        y2 = rows_from_releases(
+            releases,
+            model="Y2",
+            hardware_type="",
+            repo="y1-community/y1-stock-rom",
+            system_software="Original Software",
+        )
+        self.assertEqual([row.label for row in y2], ["3.2.1"])
+
+    def test_original_pre_307_is_hidden_for_y1_type_a(self):
+        releases = [
+            _release("3.2.1", [_asset("rom.zip")]),
+            _release("3.0.7", [_asset("rom.zip")]),
+            _release("3.0.2", [_asset("rom.zip")]),
+            _release("2.8.2", [_asset("rom.zip")]),
+        ]
+        common = dict(
+            model="Y1",
+            hardware_type="A",
+            repo="y1-community/y1-stock-rom",
+            system_software="Original Software",
+        )
+        self.assertEqual([row.label for row in rows_from_releases(releases, **common)], ["3.2.1", "3.0.7"])
+        shown = rows_from_releases(releases, show_original_pre_307=True, **common)
+        self.assertEqual([row.label for row in shown], ["3.2.1", "3.0.7", "3.0.2", "2.8.2"])
+        type_b_releases = [
+            _release("3.0.2", [_asset("rom_type_b.zip")]),
+            _release("2.8.2", [_asset("rom_type_b.zip")]),
+        ]
+        type_b = rows_from_releases(
+            type_b_releases,
+            hardware_type="B",
+            show_original_pre_307=False,
+            **{k: v for k, v in common.items() if k != "hardware_type"},
+        )
+        self.assertEqual([row.label for row in type_b], ["3.0.2", "2.8.2"])
+
+    def test_release_blocklist_hides_matching_rows(self):
+        rules = blocklist.parse_blocklist_csv(
+            "software,model,type,version,except,reason\n"
+            "Original Software,Y1,A,<3.0.7,,bad bootloader\n"
+        )
+        rows = rows_from_releases(
+            [_release("3.2.1", [_asset("rom.zip")]), _release("3.0.2", [_asset("rom.zip")])],
+            model="Y1",
+            hardware_type="A",
+            repo="y1-community/y1-stock-rom",
+            system_software="Original Software",
+            block_rules=rules,
+        )
+        self.assertEqual([row.label for row in rows], ["3.2.1"])
 
     def test_screen_lists_real_rows_not_the_stub(self):
         state = BrowseState(brand="Innioasis", model="Y1", hardware_type="A", software="Rockbox")

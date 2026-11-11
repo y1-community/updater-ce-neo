@@ -261,6 +261,25 @@ def is_base_release_tag(tag_name) -> bool:
     return "base" in words
 
 
+def is_stable_release(release) -> bool:
+    """True for a published release that is neither nightly nor a preview.
+
+    GitHub's ``prerelease`` flag is authoritative, and a nightly/preview/beta
+    token in the tag or title is treated the same way. Everything else is a
+    stable release: the catalogue must not hide it because of a tag-parsing or
+    snapshot rule (only the explicit blocklist and minimum-version gates may).
+    """
+
+    if not isinstance(release, dict) or release.get("draft"):
+        return False
+    if release.get("prerelease"):
+        return False
+    if is_base_release_tag(release.get("tag_name")):
+        return False
+    label = f"{release.get('tag_name') or ''} {release.get('name') or ''}".lower()
+    return re.search(r"\b(?:nightly|preview|beta|alpha|rc\d*)\b", label) is None
+
+
 def release_version_tuple(tag_name, release_name=None):
     """Dotted version a release carries (``stable-v0.5`` → ``(0, 5)``).
 
@@ -346,7 +365,12 @@ def release_version_ok(
         return True
     version = release_version_tuple(tag_name, release_name=release_name)
     if version is None:
-        return False
+        # The minimum protects against old builds. A release the project
+        # publishes as stable is never hidden just because its tag does not
+        # use a dotted version: a future naming scheme must not make a
+        # published build disappear. Historical builds that do carry a
+        # version remain behind the cutoff.
+        return is_stable_release({"tag_name": tag_name, "name": release_name or ""})
     if is_type_b:
         # Type B units predate the Type A hardware this cutoff protects. A
         # versioned pre-0.5 build is safe for them.

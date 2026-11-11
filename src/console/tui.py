@@ -100,11 +100,18 @@ def _load_rows(state: BrowseState, items: list, refresh: bool) -> str:
     except RuntimeError as exc:
         state.releases = []
         return failover_text("download-failure", str(exc))
+    try:
+        rules = catalog.blocklist_rules()
+    except Exception:
+        rules = ()
     state.releases = rows_from_releases(
         payload,
         model=state.model,
         hardware_type=state.hardware_type,
         repo=package.repo,
+        system_software=package.name,
+        show_original_pre_307=state.show_original_307,
+        block_rules=rules,
         show_old=state.show_old,
         show_240p=state.show_240p,
         show_nightly=state.show_nightly,
@@ -241,7 +248,7 @@ def _run_install(state: BrowseState, output: Path, report=None, ask_keep=None) -
     # package actually carries a preserve-data scatter. Ask at install time,
     # not only in Settings, exactly as the connect card does.
     offered = keep_data_offered(
-        state.package, model=state.model, hardware_type=state.hardware_type
+        state.package, state.allow_keep_data_any, state.model, state.hardware_type
     ) and flash._preserve_scatter(folder) is not None
     if ask_keep:
         choice = ask_keep(offered, state.keep_data)
@@ -324,16 +331,16 @@ def _draw_progress(screen, state: BrowseState, percent: float, label: str, detai
     screen.erase()
     row = activate(state.releases, state.index)
     title = row.label if row is not None else state.software or "Firmware"
-    screen.addnstr(0, 0, f"Updater CE {_version()}    Installing", width - 1, curses.A_BOLD)
-    screen.addnstr(1, 0, title[: width - 1], width - 1)
+    _put(screen, 0, 0, f"Updater CE {_version()}    Installing", width - 1, curses.A_BOLD)
+    _put(screen, 1, 0, title[: width - 1], width - 1)
     bar_width = max(8, width - 12)
     filled = int(bar_width * max(0.0, min(100.0, percent)) / 100.0)
-    screen.addnstr(3, 0, "[" + "#" * filled + "-" * (bar_width - filled) + f"] {percent:3.0f}%", width - 1)
-    screen.addnstr(4, 0, label[: width - 1], width - 1, curses.A_BOLD)
-    screen.addnstr(5, 0, (detail or "")[: width - 1], width - 1, curses.A_DIM)
+    _put(screen, 3, 0, "[" + "#" * filled + "-" * (bar_width - filled) + f"] {percent:3.0f}%", width - 1)
+    _put(screen, 4, 0, label[: width - 1], width - 1, curses.A_BOLD)
+    _put(screen, 5, 0, (detail or "")[: width - 1], width - 1, curses.A_DIM)
     for offset, line in enumerate(state.install_log[-6:]):
-        screen.addnstr(7 + offset, 0, line[: width - 1], width - 1, curses.A_DIM)
-    screen.addnstr(height - 2, 0, "Keep the player connected. Ctrl+C stops the session.", width - 1, curses.A_DIM)
+        _put(screen, 7 + offset, 0, line[: width - 1], width - 1, curses.A_DIM)
+    _put(screen, height - 2, 0, "Keep the player connected. Ctrl+C stops the session.", width - 1, curses.A_DIM)
     screen.refresh()
 
 
@@ -422,16 +429,16 @@ def _ask_keep_data(screen, state: BrowseState, current: bool, offered: bool = Tr
         height, width = screen.getmaxyx()
         screen.erase()
         title = f"Updater CE {_version()}    {_tr('flash_guide_title')}"
-        screen.addnstr(0, 0, title[: width - 1], width - 1, curses.A_BOLD)
-        screen.addnstr(1, 0, (state.software or "Firmware")[: width - 1], width - 1)
+        _put(screen, 0, 0, title[: width - 1], width - 1, curses.A_BOLD)
+        _put(screen, 1, 0, (state.software or "Firmware")[: width - 1], width - 1)
         lines = _install_card_lines(state, offered, keep)
         visible = min(len(lines), max(0, height - 4))
         for offset, line in enumerate(lines[:visible]):
             action = _card_action_at(lines, offset)
             attr = curses.A_REVERSE | curses.A_BOLD if action == hover else curses.A_NORMAL
-            screen.addnstr(3 + offset, 0, line[: width - 1], width - 1, attr)
+            _put(screen, 3 + offset, 0, line[: width - 1], width - 1, attr)
         hint = "Click or Enter continues   k toggles Keep my settings   q cancels" if offered else "Click or Enter continues   q cancels"
-        screen.addnstr(height - 1, 0, hint[: width - 1], width - 1, curses.A_DIM)
+        _put(screen, height - 1, 0, hint[: width - 1], width - 1, curses.A_DIM)
         screen.refresh()
         key = screen.getch()
         if key == curses.KEY_MOUSE:
@@ -605,7 +612,7 @@ def _plain(state: BrowseState, items: list, refresh: bool, output: Path) -> int:
         elif state.page == "settings":
             print("\n".join(settings_lines(state)))
         elif state.page == "support":
-            print("\n".join(support_lines()))
+            print("\n".join(support_lines(state.language)))
         elif state.page == "language":
             print("\n".join(language_lines(state)))
         elif state.page == "credits":
@@ -668,6 +675,9 @@ def _plain(state: BrowseState, items: list, refresh: bool, output: Path) -> int:
                 toggle_setting(state, "nightly")
                 state.status = _load_rows(state, items, False)
             elif choice == "4":
+                toggle_setting(state, "original")
+                state.status = _load_rows(state, items, False)
+            elif choice == "5":
                 toggle_setting(state, "keep_data")
                 state.status = "Keep my data: " + ("on" if state.keep_data else "off")
             else:
@@ -786,6 +796,30 @@ def _curses_ok() -> bool:
     return True
 
 
+def _put(screen, y: int, x: int, text, limit: int, attr: int = 0) -> None:
+    """Write one terminal line without letting a resize or a wide glyph abort.
+
+    curses raises ``addnwstr() returned ERR`` when a write reaches the last
+    cell, when the terminal is resized between ``getmaxyx`` and the write, or
+    when a translated line contains a control character. A flash card must
+    never be replaced by a shell prompt because of a cosmetic write failure.
+    """
+    import curses
+
+    try:
+        height, width = screen.getmaxyx()
+        if y < 0 or y >= height or x < 0 or x >= width or limit <= 0:
+            return
+        value = str(text or "").replace("\r", " ").replace("\n", " ").replace("\t", " ")
+        available = min(int(limit), max(0, width - x - 1))
+        if available <= 0:
+            return
+        screen.addnstr(y, x, value, available, attr)
+    except curses.error:
+        # A cosmetic line is never worth losing the session or the flash.
+        pass
+
+
 def _curses_run(state: BrowseState, items: list, output: Path) -> int:
     import curses
 
@@ -793,13 +827,13 @@ def _curses_run(state: BrowseState, items: list, output: Path) -> int:
         height, width = screen.getmaxyx()
         screen.erase()
         version = _version()
-        screen.addnstr(0, 0, f"Updater CE {version}    Select Software", width - 1, curses.A_BOLD)
+        _put(screen, 0, 0, f"Updater CE {version}    Select Software", width - 1, curses.A_BOLD)
         type_label = state.hardware_type or "—"
         filters = _filter_text(state)
-        screen.addnstr(1, 0, filters, width - 1)
+        _put(screen, 1, 0, filters, width - 1)
         list_width = max(24, min(36, width // 3))
-        screen.addnstr(3, 0, "Available System Software", list_width - 1, curses.A_BOLD)
-        screen.addnstr(3, list_width + 1, state.software or "Release", width - list_width - 2, curses.A_BOLD)
+        _put(screen, 3, 0, "Available System Software", list_width - 1, curses.A_BOLD)
+        _put(screen, 3, list_width + 1, state.software or "Release", width - list_width - 2, curses.A_BOLD)
         list_height = max(1, height - 8)
         keep_visible(state, list_height)
         for offset in range(list_height):
@@ -808,16 +842,16 @@ def _curses_run(state: BrowseState, items: list, output: Path) -> int:
                 break
             row = state.releases[index]
             attr = curses.A_REVERSE if index == state.index else curses.A_NORMAL
-            screen.addnstr(LIST_TOP + offset, 0, row.label.ljust(list_width), list_width, attr)
+            _put(screen, LIST_TOP + offset, 0, row.label.ljust(list_width), list_width, attr)
         notes = notes_for(state).splitlines()
         max_notes = max(0, len(notes) - list_height)
         state.notes_scroll = max(0, min(state.notes_scroll, max_notes))
         for offset, line in enumerate(notes[state.notes_scroll:state.notes_scroll + list_height]):
-            screen.addnstr(LIST_TOP + offset, list_width + 1, line[: width - list_width - 2], width - list_width - 2)
-        screen.addnstr(height - 3, 0, _action_text(state), width - 1, curses.A_BOLD)
-        screen.addnstr(height - 2, 0, _secondary_text(), width - 1)
+            _put(screen, LIST_TOP + offset, list_width + 1, line[: width - list_width - 2], width - list_width - 2)
+        _put(screen, height - 3, 0, _action_text(state), width - 1, curses.A_BOLD)
+        _put(screen, height - 2, 0, _secondary_text(), width - 1)
         help_line = "↑↓ row   i install   f file   n notices   v update   ? menu   q quit"
-        screen.addnstr(height - 1, 0, (state.status or help_line)[: width - 1], width - 1, curses.A_DIM)
+        _put(screen, height - 1, 0, (state.status or help_line)[: width - 1], width - 1, curses.A_DIM)
         screen.refresh()
         return list_height, list_width
 
@@ -1083,7 +1117,7 @@ def _ask_line(screen, label: str, default: str = "") -> str:
     curses.curs_set(1)
     height, width = screen.getmaxyx()
     prompt = f"{label} [{default}]: " if default else f"{label}: "
-    screen.addnstr(height - 1, 0, prompt.ljust(width - 1), width - 1)
+    _put(screen, height - 1, 0, prompt.ljust(width - 1), width - 1)
     screen.refresh()
     try:
         raw = screen.getstr(height - 1, len(prompt), max(1, width - len(prompt) - 1))
@@ -1119,7 +1153,7 @@ def _curses_page(screen, state: BrowseState, items: list) -> None:
     elif state.page == "settings":
         lines = settings_lines(state)
     elif state.page == "support":
-        lines = support_lines()
+        lines = support_lines(state.language)
     elif state.page == "language":
         lines = language_lines(state)
     else:
@@ -1128,9 +1162,9 @@ def _curses_page(screen, state: BrowseState, items: list) -> None:
     max_scroll = max(0, len(lines) - (height - 1))
     state.page_scroll = max(0, min(state.page_scroll, max_scroll))
     for index, line in enumerate(lines[state.page_scroll:state.page_scroll + height - 1]):
-        screen.addnstr(index, 0, line[: width - 1], width - 1)
+        _put(screen, index, 0, line[: width - 1], width - 1)
     if max_scroll:
-        screen.addnstr(height - 1, 0, f"wheel or ↑↓ scrolls   q back   ({state.page_scroll + 1}/{max_scroll + 1})"[: width - 1], width - 1, curses.A_DIM)
+        _put(screen, height - 1, 0, f"wheel or ↑↓ scrolls   q back   ({state.page_scroll + 1}/{max_scroll + 1})"[: width - 1], width - 1, curses.A_DIM)
     screen.refresh()
     key = screen.getch()
     if key == curses.KEY_MOUSE:
@@ -1184,8 +1218,8 @@ def _curses_page(screen, state: BrowseState, items: list) -> None:
         state.page = "software"
         state.page_scroll = 0
         return
-    if state.page == "settings" and key in (ord("1"), ord("2"), ord("3"), ord("4")):
-        toggle_setting(state, {ord("1"): "old", ord("2"): "240p", ord("3"): "nightly", ord("4"): "keep_data"}[key])
+    if state.page == "settings" and key in (ord("1"), ord("2"), ord("3"), ord("4"), ord("5")):
+        toggle_setting(state, {ord("1"): "old", ord("2"): "240p", ord("3"): "nightly", ord("4"): "original", ord("5"): "keep_data"}[key])
         state.status = _load_rows(state, items, False)
         return
     if state.page == "language" and ord("1") <= key <= ord("9"):

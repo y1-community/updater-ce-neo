@@ -787,10 +787,14 @@ def test_rockbox_min_release_gate():
     for tag in ("stable-v0.4", "stable-v0.3", "v0.4.9", "0.2", "0.4"):
         assert not release_version_ok("rockbox-y1/rockbox", tag, model="Y1"), tag
 
-    # No readable version (nightlies, branch names) can't be proven new enough.
+    # Nightlies, base trees and empty tags still cannot be proven new enough.
     for tag in ("nightly-35e926bd6ea663ab0aac2f138c7f71ae744971f",
-                "type-a-base", "stock-menu", ""):
+                "type-a-base", ""):
         assert not release_version_ok("rockbox-y1/rockbox", tag, model="Y1"), tag
+    # A stable release tag that carries no dotted version now passes the
+    # minimum-version gate; the listing still drops it when it has no firmware
+    # asset (the stable-v0.6 visibility rule).
+    assert release_version_ok("rockbox-y1/rockbox", "stock-menu", model="Y1")
 
     # Other repos are untouched, and a full GitHub URL still matches the Y1 gate.
     assert release_version_ok("y1-community/y1-stock-rom", "v0.1", model="Y1")

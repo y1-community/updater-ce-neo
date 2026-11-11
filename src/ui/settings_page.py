@@ -2449,8 +2449,8 @@ class SettingsPage(QWidget):
         self._cb_hide_donations.setChecked(not checked)
 
     def _on_clear_firmware_cache(self):
-        from ..downloads import clear_firmware_cache
-        count, freed = clear_firmware_cache()
+        from ..downloads import clear_app_storage
+        count, freed = clear_app_storage()
         if freed >= 1024 * 1024:
             freed_str = f"{freed / (1024 * 1024):.1f} MB"
         elif freed >= 1024:
@@ -2459,6 +2459,16 @@ class SettingsPage(QWidget):
             freed_str = f"{freed} B"
         msg = tr("settings_cache_cleared_msg").format(count=count, size=freed_str)
         self._cache_status_lbl.setText(msg)
+        # The remote-data caches just went with the firmware, so the window
+        # fetches them again instead of leaving the lists empty until the next
+        # refresh button press.
+        window = self.window()
+        refresh = getattr(window, "_refresh_online_data_after_storage_clear", None)
+        if callable(refresh):
+            try:
+                refresh()
+            except Exception:
+                logger.debug("Could not refetch online data after clearing storage", exc_info=True)
         self.content_size_changed.emit()
 
     def set_themes_refreshing(self, refreshing: bool, status_text: str = "") -> None:

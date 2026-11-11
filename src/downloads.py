@@ -2,6 +2,7 @@
 
 import logging
 import os
+import shutil
 import sys
 import tempfile
 import time
@@ -132,6 +133,319 @@ def clear_firmware_cache(exclude=None) -> tuple[int, int]:
         except Exception as e:
             logger.warning("Failed to remove cached firmware item %s: %s", item, e)
     return count, bytes_freed
+
+
+#: Archive suffixes a firmware package arrives in. Its working copy is
+#: ``.<stem>_extracted`` beside the archive (see flash_service.compute_extract_dir).
+FIRMWARE_ARCHIVE_SUFFIXES = (".zip", ".rar")
+THEME_TEMP_PREFIX = "themepack_download_"
+#: An interrupted download is worth resuming for a day; after that it is junk.
+INTERRUPTED_PART_MAX_AGE = 24 * 60 * 60
+#: A temp staging folder younger than this may belong to a run in progress.
+TEMP_LEFTOVER_MAX_AGE = 2 * 60 * 60
+
+
+def _tree_size(path: Path) -> int:
+    """Bytes a file or directory tree occupies. Never raises."""
+    try:
+        if path.is_file() or path.is_symlink():
+            return path.stat().st_size
+        total = 0
+        for root, _dirs, files in os.walk(path):
+            for name in files:
+                try:
+                    total += (Path(root) / name).stat().st_size
+                except OSError:
+                    pass
+        return total
+    except OSError:
+        return 0
+
+
+def _holds_a_scatter(folder: Path) -> bool:
+    """True when an extracted package still names its partitions.
+
+    Every layout the app extracts puts the scatter at the package folder or
+    one level below it. An extract without one can never be flashed again, so
+    it is garbage however new it is.
+    """
+    try:
+        candidates = [folder, *(entry for entry in folder.iterdir() if entry.is_dir())]
+    except OSError:
+        return False
+    for candidate in candidates:
+        try:
+            entries = list(candidate.iterdir())
+        except OSError:
+            continue
+        for entry in entries:
+            name = entry.name.casefold()
+            if name.endswith(".txt") and "scatter" in name and entry.is_file():
+                return True
+    return False
+
+
+def _discard(path: Path, *, truncate: bool = False) -> int:
+    """Remove one file or tree, returning the bytes freed (0 when it failed)."""
+    size = _tree_size(path)
+    try:
+        if truncate and path.is_file() and not path.is_symlink():
+            # Log files are held open by a logging handler. O_APPEND writes at
+            # the new end of the same file, so emptying it frees the space and
+            # keeps later lines visible instead of pointing at an unlinked inode.
+            with open(path, "w", encoding="utf-8"):
+                pass
+        elif path.is_dir() and not path.is_symlink():
+            shutil.rmtree(path)
+        else:
+            path.unlink()
+    except OSError as exc:
+        logger.debug("Could not remove %s: %s", path, exc)
+        return 0
+    return size
+
+
+def _extract_archive_name(directory: Path, extract_name: str) -> str:
+    """The archive beside ``.<stem>_extracted``, when it is still there."""
+    stem = extract_name[1 : -len("_extracted")]
+    for ext in FIRMWARE_ARCHIVE_SUFFIXES:
+        if (directory / f"{stem}{ext}").is_file():
+            return f"{stem}{ext}"
+    return ""
+
+
+def enforce_firmware_retention(keep_package_path=None) -> tuple[int, int]:
+    """Bound how much firmware the app keeps between runs.
+
+    Settings and cached remote data live outside the downloads folder; what is
+    bounded here is the heavy working copy of a firmware package. At most the
+    most recent set survives: the extract a retry can still flash and its
+    archive. Everything else is what earlier runs left behind -- older
+    extracts, an extract that no longer holds a scatter, the staged copy a
+    flash made, interrupted ``.part`` files and theme-pack temp downloads.
+
+    With no ``keep_package_path`` (startup, after a finished run) the app keeps
+    the newest usable set, so restarting right after a failed install still
+    leaves something to retry. A caller that knows the run is over (a
+    successful install) clears the folder with :func:`clear_firmware_cache`
+    instead. Returns ``(items_removed, bytes_freed)``.
+    """
+    directory = downloads_dir()
+    if not directory.is_dir():
+        return 0, 0
+
+    keep_dir = ""
+    keep_archive = ""
+    keep_stage = None
+    if keep_package_path:
+        package = Path(str(keep_package_path))
+        try:
+            chain = (package, *package.parents)
+        except OSError:
+            chain = (package,)
+        for ancestor in chain:
+            name = ancestor.name
+            if ancestor.parent == directory and name.startswith(".") and name.endswith("_extracted"):
+                keep_dir = name
+                keep_archive = _extract_archive_name(directory, name)
+                break
+            if ancestor.parent == directory and ancestor.suffix.lower() in FIRMWARE_ARCHIVE_SUFFIXES:
+                keep_archive = name
+                keep_dir = f".{ancestor.stem}_extracted"
+                break
+            if (
+                ancestor.parent.name == "staged_firmware"
+                and ancestor.parent.parent == directory
+                and name.startswith("stage_")
+            ):
+                keep_stage = ancestor
+                break
+
+    extracts: list[Path] = []
+    archives: list[Path] = []
+    try:
+        entries = list(directory.iterdir())
+    except OSError:
+        return 0, 0
+    for entry in entries:
+        try:
+            if entry.is_dir() and entry.name.startswith(".") and entry.name.endswith("_extracted"):
+                extracts.append(entry)
+            elif entry.is_file() and entry.suffix.lower() in FIRMWARE_ARCHIVE_SUFFIXES:
+                archives.append(entry)
+        except OSError:
+            continue
+
+    if not keep_dir:
+        # The most recent extract that can still flash is the one worth
+        # keeping; a folder without a scatter is never a candidate.
+        usable = []
+        for extract in extracts:
+            if not _holds_a_scatter(extract):
+                continue
+            try:
+                usable.append((extract.stat().st_mtime, extract))
+            except OSError:
+                continue
+        if usable:
+            keep_dir = max(usable, key=lambda item: item[0])[1].name
+            keep_archive = _extract_archive_name(directory, keep_dir)
+
+    removed = 0
+    freed = 0
+    keep_dir_key = keep_dir.casefold()
+    keep_archive_key = keep_archive.casefold()
+
+    for extract in extracts:
+        if extract.name.casefold() == keep_dir_key and _holds_a_scatter(extract):
+            continue
+        logger.info("Pruning cached firmware extraction: %s", extract.name)
+        freed += _discard(extract)
+        removed += 1
+
+    for archive in archives:
+        if archive.name.casefold() == keep_archive_key:
+            continue
+        logger.info("Pruning cached firmware package: %s", archive.name)
+        freed += _discard(archive)
+        removed += 1
+
+    staged_root = directory / "staged_firmware"
+    if staged_root.is_dir():
+        try:
+            staged_items = list(staged_root.iterdir())
+        except OSError:
+            staged_items = []
+        keep_stage_key = ""
+        if keep_stage is not None:
+            try:
+                keep_stage_key = str(keep_stage.resolve()).casefold()
+            except OSError:
+                keep_stage_key = ""
+        for item in staged_items:
+            try:
+                if keep_stage_key and str(item.resolve()).casefold() == keep_stage_key:
+                    continue
+            except OSError:
+                pass
+            freed += _discard(item)
+            removed += 1
+        if not keep_stage_key:
+            freed += _discard(staged_root)
+            removed += 1
+
+    now = time.time()
+    try:
+        leftovers = [entry for entry in directory.iterdir() if entry.is_file()]
+    except OSError:
+        leftovers = []
+    for item in leftovers:
+        try:
+            age = now - item.stat().st_mtime
+        except OSError:
+            continue
+        low = item.name.casefold()
+        is_stale_part = low.endswith(".part") and age > INTERRUPTED_PART_MAX_AGE
+        is_theme_temp = low.startswith(THEME_TEMP_PREFIX)
+        is_stray_scatter = low.endswith(".txt") and "scatter" in low
+        if is_stale_part or is_theme_temp or is_stray_scatter:
+            logger.info("Pruning stale download-cache file: %s", item.name)
+            freed += _discard(item)
+            removed += 1
+
+    if removed:
+        logger.info(
+            "Firmware retention removed %d item(s) and freed %.1f MB",
+            removed,
+            freed / (1024 * 1024),
+        )
+    return removed, freed
+
+
+#: Names the single-instance and busy markers use. They are live bookkeeping,
+#: not cache data, so clearing storage must never remove them.
+_LIVE_BOOKKEEPING_HINTS = ("busy", "lock", "instance")
+
+
+def clear_app_storage() -> tuple[int, int]:
+    """Clear everything the app can download or rebuild.
+
+    Firmware working copies, the cached catalogue/notice data, cached icons and
+    docs, leftover staging folders and the logs are all removed. QSettings,
+    install records and update-reminder preferences are untouched: the caches
+    are fetched again from the online sources on next use. Returns
+    ``(items_removed, bytes_freed)``.
+    """
+    removed = 0
+    freed = 0
+
+    count, cache_freed = clear_firmware_cache()
+    removed += count
+    freed += cache_freed
+
+    directory = downloads_dir()
+    if directory.is_dir():
+        try:
+            leftovers = list(directory.iterdir())
+        except OSError:
+            leftovers = []
+        for item in leftovers:
+            freed += _discard(item)
+            removed += 1
+
+    try:
+        from .paths import app_cache_dir
+
+        cache_root = app_cache_dir()
+        if cache_root.is_dir():
+            for item in list(cache_root.iterdir()):
+                name = item.name.casefold()
+                if any(hint in name for hint in _LIVE_BOOKKEEPING_HINTS):
+                    continue
+                freed += _discard(item)
+                removed += 1
+    except Exception as exc:
+        logger.debug("Could not clear the app cache: %s", exc)
+
+    # Logs sit beside the downloads folder: the per-tool files in logs/ and the
+    # app's own rolling trace at the root.
+    support_dir = directory.parent
+    for log_dir in (support_dir / "logs", support_dir):
+        if not log_dir.is_dir():
+            continue
+        try:
+            log_files = [entry for entry in log_dir.iterdir() if entry.is_file() and "log" in entry.name.casefold()]
+        except OSError:
+            log_files = []
+        for log_file in log_files:
+            size = _discard(log_file, truncate=True)
+            if size:
+                freed += size
+                removed += 1
+
+    # Staging folders an interrupted or crashed run left in the temp directory.
+    temp_root = Path(tempfile.gettempdir())
+    now = time.time()
+    for pattern in ("innioasis-*", "innioasis-fw-*", "rockbox_*", "rockbox-*", ".innioasis-keep-*"):
+        try:
+            candidates = list(temp_root.glob(pattern))
+        except OSError:
+            continue
+        for item in candidates:
+            try:
+                if now - item.stat().st_mtime < TEMP_LEFTOVER_MAX_AGE:
+                    continue
+            except OSError:
+                continue
+            freed += _discard(item)
+            removed += 1
+
+    logger.info(
+        "Cleared app storage: %d item(s), %.1f MB freed",
+        removed,
+        freed / (1024 * 1024),
+    )
+    return removed, freed
 
 
 def ensure_disk_space_available(target_path=None, needed_bytes: int = 0) -> bool:

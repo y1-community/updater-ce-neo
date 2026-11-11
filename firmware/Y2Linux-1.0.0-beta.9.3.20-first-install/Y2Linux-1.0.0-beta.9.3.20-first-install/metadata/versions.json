@@ -1,0 +1,16 @@
+{
+  "release_version": "1.0.0-beta.9.3.20",
+  "rootfs_version": "2026.08-platform-v1.252",
+  "build_id": "Y2LINUX-1.0.0-BETA-9.3.20",
+  "platform_api_version": 1,
+  "feature_contract_version": 2,
+  "battery_profile_schema": 1,
+  "low_battery_policy_schema": 2,
+  "update_sequence": 15400,
+  "layout_version": 1,
+  "kernel_version": "6.18.56-y2linux-1.0.0-beta.9.3.20",
+  "data_schema_version": 1,
+  "reborn_version": "1.0.0-beta.9.3.20",
+  "build_git_commit": "d5403d0420beac6070925c20c42bea59196e5479",
+  "reborn_source_commit": "f6ba91342350333b88917d41bb359d1a7756751f"
+}

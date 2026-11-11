@@ -68,6 +68,12 @@ KNOWN_SUFFIXES = {
 
 _ARM64_MACHINES = ("arm64", "aarch64", "armv8", "armv8l")
 
+#: Platform keys a mirror publishes for machines that cannot run this app at
+#: all (32-bit Windows, Windows 7/8, 32-bit Intel Linux). Those packs exist for
+#: the website's legacy download buttons, so a host that is running the app must
+#: never be resolved onto one of them.
+LEGACY_PLATFORM_MARKER = "legacy"
+
 #: macOS packages are universal only across Apple silicon and 64-bit Intel.
 #: PowerPC and 32-bit Intel Macs have no build and keep the plain ROM zip.
 _MACOS_64_BIT_MACHINES = ("arm64", "aarch64", "x86_64", "amd64", "x64")
@@ -374,6 +380,8 @@ def platform_candidates(index, platform: Optional[str] = None) -> list[str]:
             continue
         entry_key = str(entry.get("key") or "")
         if not entry_key:
+            continue
+        if LEGACY_PLATFORM_MARKER in entry_key.lower():
             continue
         if str(entry.get("os") or "") != os_key:
             continue

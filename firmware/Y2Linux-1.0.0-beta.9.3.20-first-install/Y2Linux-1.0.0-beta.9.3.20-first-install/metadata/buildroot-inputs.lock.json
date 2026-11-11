@@ -1,0 +1,7 @@
+{
+  "version": "2026.08",
+  "url": "https://buildroot.org/downloads/buildroot-2026.08.tar.xz",
+  "sha256": "87aaca4164ea9d5c8085854953018263f7963f07c22e73a2a2185cc98c581c34",
+  "source_date_epoch": 1788543117,
+  "toolchain": "Bootlin armv7-eabihf glibc stable 2026.08-1 (GCC 15.3.0, glibc 2.44; hash pinned in tools/production/modernize_buildroot.py)"
+}

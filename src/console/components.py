@@ -43,6 +43,7 @@ SPEED_SAMPLE_URL = "https://dl.google.com/android/repository/repository2-1.xml"
 SPFLASH_LINUX_URLS = (
     "https://github.com/y1-community/updater-ce-neo/releases/download/flash_tool/flash_tool_linux.zip",
     "https://github.com/y1-community/Innioasis-Updater/releases/download/flash_tool/flash_tool_linux.zip",
+    "https://github.com/y1-community/supplemental-apks/releases/download/1.0/flash_tool_linux.zip",
     "https://github.com/y1-community/updater-ce-neo/releases/download/v3.0.0-assets/SP_Flash_Tool_v5.1904_Linux.zip",
 )
 

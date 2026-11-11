@@ -249,6 +249,20 @@ _DONATION_HOSTS = (
 )
 
 
+_BLOCKED_REDIRECT_WORDS = ("payment", "login", "auth")
+
+
+def refuses_interstitial(url: str) -> bool:
+    """True when this address must not be placed on our redirect page.
+
+    The words appear in real login and checkout links, and also in harmless
+    ones. Either way the interstitial would be a trusted innioasis.app address
+    that forwards the reader, which is the shape a phishing link wants.
+    """
+    haystack = str(url or "").lower()
+    return any(word in haystack for word in _BLOCKED_REDIRECT_WORDS)
+
+
 def interstitial_url(url: str, *, thank: bool = False) -> str:
     """Send an off-site page through the site's interstitial.
 
@@ -262,6 +276,8 @@ def interstitial_url(url: str, *, thank: bool = False) -> str:
     parts = urlsplit(raw)
     if parts.scheme not in ("http", "https"):
         return raw
+    if refuses_interstitial(raw):
+        return raw
     host = (parts.hostname or "").lower()
     if host in ("innioasis.app", "localhost", "127.0.0.1") or host.endswith(".innioasis.app"):
         return raw
@@ -270,7 +286,7 @@ def interstitial_url(url: str, *, thank: bool = False) -> str:
         return raw
     donation = thank or any(host == item or host.endswith("." + item) for item in _DONATION_HOSTS)
     page = "donate.html" if donation else "leaving.html"
-    return "https://innioasis.app/" + page + "?to=" + quote(raw, safe="")
+    return "https://innioasis.app/" + page + "?from=updater-ce&to=" + quote(raw, safe="")
 
 
 def open_browser(url: str, new_window: bool = True) -> bool:

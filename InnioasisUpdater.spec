@@ -86,6 +86,10 @@ if VENDOR_MTK.exists():
 # add a few hundred megabytes of unusable binaries that the runtime resolver
 # would then have to reject. Match src/linux_sp_flash.arch_supported().
 _X86_MACHINES = ("x86_64", "amd64", "x64", "i386", "i486", "i586", "i686", "x86")
+# The post-build payload staging below also needs the machine name. It used to
+# reference an undefined HOST_MACHINE, so the unrar copy was skipped by the
+# surrounding try/except on every Linux build.
+HOST_MACHINE = (os.environ.get("TARGET_ARCH") or platform.machine() or "").strip().lower()
 _env_target_arch = (os.environ.get("TARGET_ARCH") or os.environ.get("BUILD_ARCH") or "").strip().lower()
 if _env_target_arch:
     HOST_IS_X86 = _env_target_arch in _X86_MACHINES and _env_target_arch not in ("arm64", "aarch64")

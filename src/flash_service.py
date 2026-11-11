@@ -186,6 +186,12 @@ _WS_RE = re.compile(r"\s+")
 # thousands of lines and only the tail is interesting for a bug report.
 _SP_QT_LOG_MAX_LINES = 80000
 
+#: Seconds a completed flash may sit inside a still-running tool before the run
+#: is closed out. The write is finished at "All command exec done", but some
+#: builds keep their window alive afterwards; waiting for that exit is what left
+#: a finished install parked at 95% with no completion screen.
+_SP_COMPLETE_IDLE_SECONDS = 12.0
+
 
 _TOOL_LINE_PREFIXES = ("[LOG] ", "[SP] ", "[MTK] ", "[QT] ", "[TOOL] ")
 
@@ -2151,32 +2157,19 @@ def cleanup_previous_install_scatters(
     if is_sp_flash_tool_supported_for_host():
         return removed
 
+    # No SP Flash Tool on this host, so nothing reads the finished install's
+    # extracted folder afterwards (its history.ini only exists beside that
+    # tool). Deleting just the scatter and completion marker left every image
+    # in place: a multi-gigabyte folder that could never be flashed again and
+    # only looked like a cache.
     try:
-        from .downloads import downloads_dir
+        from .downloads import clear_firmware_cache
 
-        dd = downloads_dir()
-        if not dd.is_dir():
-            return removed
-        staged_root = dd / "staged_firmware"
-        if staged_root.is_dir():
-            shutil.rmtree(staged_root, ignore_errors=True)
-            removed.append(str(staged_root))
-        for item in list(dd.iterdir()):
-            if item.is_dir() and item.name.startswith(".") and item.name.endswith("_extracted"):
-                for sc in find_scatter_files(item):
-                    try:
-                        sc.unlink()
-                        removed.append(str(sc))
-                    except OSError:
-                        pass
-                marker = item / EXTRACT_COMPLETE_MARKER
-                if marker.is_file():
-                    try:
-                        marker.unlink()
-                    except OSError:
-                        pass
+        count, _freed = clear_firmware_cache()
+        if count:
+            removed.append(f"{count} firmware cache item(s)")
     except Exception as e:
-        logger.debug("Post-install scatter cleanup skipped: %s", e)
+        logger.debug("Post-install firmware cleanup skipped: %s", e)
     return removed
 
 
@@ -5545,6 +5538,7 @@ class FlashWorker(QThread):
             if log_file is None:
                 return
 
+            last_activity = time.time()
             while not stop_event.is_set():
                 time.sleep(0.5)
                 try:
@@ -5554,7 +5548,14 @@ class FlashWorker(QThread):
                     if size < last_pos:
                         last_pos = 0
                     if size <= last_pos:
+                        if (
+                            getattr(self, "_sp_flash_complete", False)
+                            and not getattr(self, "_cancelled", False)
+                            and time.time() - last_activity >= _SP_COMPLETE_IDLE_SECONDS
+                        ):
+                            self._close_completed_tool()
                         continue
+                    last_activity = time.time()
                     with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
                         f.seek(last_pos)
                         new_lines = f.readlines()
@@ -5618,6 +5619,35 @@ class FlashWorker(QThread):
                 self._flush_log()
             except Exception:
                 pass
+
+    def _close_completed_tool(self) -> None:
+        """Finish a flash the tool reported complete but has not exited from.
+
+        Called by the log monitor once ``All command exec``/``Flash complete``
+        has been seen and the tool has written nothing for
+        ``_SP_COMPLETE_IDLE_SECONDS``. Everything the run needed is on the
+        device at that point, so closing the tool lets the run's own success
+        branch (which checks ``_sp_flash_complete``) show the completion screen
+        instead of leaving the bar at its 95% cap.
+        """
+        process = getattr(self, "_process", None)
+        if process is None:
+            return
+        poll = getattr(process, "poll", None)
+        if callable(poll):
+            try:
+                if poll() is not None:
+                    return
+            except Exception:
+                pass
+        self._log(
+            "SP Flash Tool reported completion and has been idle; closing it so the "
+            "install can finish."
+        )
+        try:
+            process.terminate()
+        except Exception:
+            logger.debug("Could not close the completed SP Flash Tool process", exc_info=True)
 
     def _read_sp_log_result(self, launch_time, log_root=None):
         """Read the SP Flash Tool internal log to determine install result.

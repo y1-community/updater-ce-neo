@@ -68,6 +68,7 @@ mirrors, the website). Keep the shared facts identical:
 | Donation rule | once, only after a successful flash, never blocking, skipped when declined |
 | Install modes | Download Only (`-c download`, `<download-only/>`); never format |
 | Package contract | one scatter + every image it lists + optional `fw_package.ini` |
+| Release visibility | every published stable release from a repository in `slidia_manifest.xml` is listed; only `release_blocklist.csv` or the documented Rockbox `< 0.5` / Original Software `< 3.0.7` gates may hide one |
 
 If a sibling repository needs the same capabilities, copy its `SKILL.md` — or
 the whole `.agents/skills` tree plus this script — rather than writing a

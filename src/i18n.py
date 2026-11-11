@@ -13,6 +13,8 @@ read the first time its language is used, so shipping them all costs nothing at
 startup. ``tr()`` prefers the catalog, then the tables here, then English.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import os

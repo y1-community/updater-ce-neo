@@ -49,7 +49,6 @@ def _rows():
         model="Y2",
         hardware_type="",
         repo="schulzcode/y2linux",
-        system_software="Reborn (Y2Linux)",
     )
 
 

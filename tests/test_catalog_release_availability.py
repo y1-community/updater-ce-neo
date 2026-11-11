@@ -76,6 +76,12 @@ def _isolated_catalogue():
     catalog._AVAILABILITY_CACHE.clear()
 
 
+@pytest.fixture()
+def fresh_snapshot(monkeypatch):
+    """A release export young enough to hide a dead source on its own."""
+    monkeypatch.setattr(catalog, "_release_snapshot_age", lambda: 60.0)
+
+
 def test_snapshot_release_zip_keeps_an_entry(monkeypatch):
     monkeypatch.setattr(
         catalog,
@@ -94,7 +100,7 @@ def test_snapshot_release_zip_keeps_an_entry(monkeypatch):
     assert catalog.available_models() == ["G1"]
 
 
-def test_an_empty_release_list_is_a_definitive_answer(monkeypatch):
+def test_an_empty_release_list_is_a_definitive_answer(monkeypatch, fresh_snapshot):
     """A repository the snapshot knows with no releases needs no request."""
     monkeypatch.setattr(catalog, "_release_snapshot_rows", lambda: {"acme/g3-stock": []})
     client = _FakeClient({"acme/g3-stock": []})
@@ -107,7 +113,7 @@ def test_an_empty_release_list_is_a_definitive_answer(monkeypatch):
     assert client.asked == []
 
 
-def test_releases_without_a_firmware_zip_are_hidden(monkeypatch):
+def test_releases_without_a_firmware_zip_are_hidden(monkeypatch, fresh_snapshot):
     monkeypatch.setattr(catalog, "_release_snapshot_rows", lambda: {})
     client = _FakeClient({"acme/images": [_release("v1", "system.img", "boot.img")]})
 
@@ -163,7 +169,7 @@ def test_a_repository_cached_by_a_listing_avoids_the_network(monkeypatch):
     assert client.asked == []
 
 
-def test_static_fallback_does_not_resurrect_a_hidden_entry(monkeypatch):
+def test_static_fallback_does_not_resurrect_a_hidden_entry(monkeypatch, fresh_snapshot):
     """The offline table is merged per model; a hidden live row must stay gone."""
     monkeypatch.setattr(
         catalog, "_release_snapshot_rows", lambda: {"rockbox-y1/rockbox": []}
@@ -183,7 +189,7 @@ def test_static_fallback_does_not_resurrect_a_hidden_entry(monkeypatch):
     assert "Rockbox" not in names
 
 
-def test_refresh_catalog_installs_only_listable_entries(monkeypatch):
+def test_refresh_catalog_installs_only_listable_entries(monkeypatch, fresh_snapshot):
     entries = [
         _package("G1", "acme/g1-stock"),
         _package("G3", "acme/g3-stock"),

@@ -67,15 +67,16 @@ def test_type_b_is_exempt_from_the_rockbox_pre_05_gate():
     )
     assert not release_version_ok("rockbox-y1/rockbox", "stable-v0.4", model="Y1")
 
-    # The exemption only lifts the < 0.5 cutoff: a nightly stays hidden, and an
-    # unversioned tag still cannot be proven compatible.
+    # The exemption only lifts the < 0.5 cutoff: a nightly stays hidden. A
+    # stable unversioned tag is not a pre-0.5 build, so the cutoff cannot hide
+    # it; the listing still drops it when it has no firmware asset.
     assert not release_version_ok(
         "rockbox-y1/rockbox",
         "nightly-35e926bd6ea663ab0aac2f138c7f71ae744971f",
         model="Y1",
         selected_type="B",
     )
-    assert not release_version_ok(
+    assert release_version_ok(
         "rockbox-y1/rockbox", "stock-menu", model="Y1", selected_type="B"
     )
 

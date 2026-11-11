@@ -34,12 +34,14 @@ PAYLOAD = [
     "run_linux_lite.sh",
     "src/__init__.py",
     "src/console/__init__.py",
+    "src/console/blocklist.py",
     "src/console/catalog.py",
     "src/console/cli.py",
     "src/console/components.py",
     "src/console/controls.py",
     "src/console/download.py",
     "src/console/flash.py",
+    "src/console/mtk_runner.py",
     "src/console/progress.py",
     "src/console/releases.py",
     "src/console/session.py",
@@ -47,8 +49,15 @@ PAYLOAD = [
     "src/console/tui.py",
     "src/console/wsl.py",
     "src/tui_session.py",
+    "src/mtk_api.py",
+    "src/paths.py",
 ]
 OPTIONAL = ["LICENSE", "LICENSE.md"]
+ASSET_FILES = [
+    "assets/online/slidia_manifest.xml",
+    "assets/online/release_blocklist.csv",
+    "assets/online/donors.csv",
+]
 
 
 def version() -> str:
@@ -108,6 +117,9 @@ def build(out_dir: Path, site_dir: Path | None) -> tuple[Path, Path]:
         for name in PAYLOAD + [name for name in OPTIONAL if (REPO / name).is_file()]:
             mode = 0o755 if name.endswith((".sh", ".py")) and name != "lite.py" else 0o644
             _add(tar, REPO / name, name, mode)
+        for name in ASSET_FILES:
+            if (REPO / name).is_file():
+                _add(tar, REPO / name, name)
         readme = REPO / "docs" / "terminal-mode.md"
         if readme.is_file():
             _add(tar, readme, "docs/terminal-mode.md")
