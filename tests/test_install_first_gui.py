@@ -13,7 +13,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import pytest
 from PySide6.QtWidgets import QApplication
 
-from src import catalog, install_first as first, manifest
+from src import catalog, install_first as first, keep_data, manifest, player_update_check
 from src.i18n import tr
 from src.ui.flash_page import FlashPage
 from src.ui.main_window import MainWindow
@@ -39,6 +39,27 @@ def catalogue(monkeypatch):
 def qapp():
     app = QApplication.instance() or QApplication([])
     yield app
+
+
+@pytest.fixture(autouse=True)
+def isolated_settings(tmp_path, monkeypatch):
+    """Keep every tracking read/write in a throwaway store.
+
+    The window passes ``settings=None`` in these tests, which would otherwise
+    read the developer's real install history and change which question the
+    first prompt asks.
+    """
+    from PySide6.QtCore import QSettings
+
+    from src import player_update_check
+
+    store = QSettings(str(tmp_path / "settings.ini"), QSettings.IniFormat)
+    monkeypatch.setattr(
+        player_update_check,
+        "_get_settings",
+        lambda settings=None: settings if settings is not None else store,
+    )
+    return store
 
 
 @pytest.fixture()
@@ -94,6 +115,19 @@ class Harness:
     _guard_install_first = MainWindow._guard_install_first
     _guard_local_install_first = MainWindow._guard_local_install_first
     _local_fw_package_for_path = MainWindow._local_fw_package_for_path
+    _ask_install_first_software = MainWindow._ask_install_first_software
+    _install_first_hardware_type = MainWindow._install_first_hardware_type
+    _install_first_known_answer = MainWindow._install_first_known_answer
+    _same_software_name = staticmethod(MainWindow._same_software_name)
+    _on_install_first_running_no = MainWindow._on_install_first_running_no
+    _answer_install_first_running = MainWindow._answer_install_first_running
+    _remember_install_first_answer = MainWindow._remember_install_first_answer
+    _begin_keep_data_confirmation = MainWindow._begin_keep_data_confirmation
+    _on_keep_data_not_compatible = MainWindow._on_keep_data_not_compatible
+    _keep_data_tracking_context = MainWindow._keep_data_tracking_context
+    _remember_keep_data_answer = MainWindow._remember_keep_data_answer
+    _forget_keep_data_software = MainWindow._forget_keep_data_software
+    _record_completed_install = MainWindow._record_completed_install
     _on_install_first_continue = MainWindow._on_install_first_continue
     _ask_install_first_version = MainWindow._ask_install_first_version
     _on_install_first_version_no = MainWindow._on_install_first_version_no
@@ -482,3 +516,145 @@ def test_local_portable_without_pre_stage_downloads_the_base(page, tmp_path):
     assert select.fetched
     assert select.started and select.started[0][0]["download_url"].startswith("https://")
     assert window._install_first_prerequisite_run is True
+
+
+def test_the_menu_becomes_a_confirmation_when_the_base_is_tracked(page, isolated_settings):
+    target, _stock, _requirement, _items = reborn_and_stock()
+    select = FakeSelect(base=None)
+    window = make_window(page, select)
+    keep_data.note_running_software("Y2", "Original Software", window.settings, "A")
+
+    assert window._guard_install_first(target, TARGET_REL) is False
+    assert window._install_first_stage == "running"
+    assert page._keep_data_choice.isHidden()
+    assert window._install_first_running_answer == first.ANSWER_PREREQUISITE
+    assert select.started == []
+    assert window.navigated
+
+
+def test_confirming_the_tracked_base_skips_its_install(page, isolated_settings):
+    target, _stock, _requirement, _items = reborn_and_stock()
+    select = FakeSelect(base=None)
+    window = make_window(page, select)
+    keep_data.note_running_software("Y2", "Original Software", window.settings, "A")
+
+    assert window._guard_install_first(target, TARGET_REL) is False
+    window._on_install_first_continue()
+
+    # Straight to Reborn: no base download, and nothing to keep for it.
+    assert select.started == [(TARGET_REL, target, False)]
+    assert window._install_first_prerequisite_run is False
+    assert window._install_first_journey.answer == first.ANSWER_PREREQUISITE
+    assert window._install_first_journey.keep_data_allowed() is False
+    assert window._install_first_stage == ""
+
+
+def test_confirming_the_tracked_target_offers_keep_data(page, isolated_settings):
+    target, _stock, _requirement, _items = reborn_and_stock()
+    select = FakeSelect(base=None)
+    window = make_window(page, select)
+    keep_data.note_running_software("Y2", target.name, window.settings, "A")
+
+    assert window._guard_install_first(target, TARGET_REL) is False
+    assert window._install_first_running_answer == first.ANSWER_TARGET
+    window._on_install_first_continue()
+
+    assert select.started == [(TARGET_REL, target, False)]
+    assert window._install_first_journey.answer == first.ANSWER_TARGET
+    assert window._install_first_journey.keep_data_allowed() is True
+
+
+def test_denying_the_confirmation_returns_to_the_full_menu(page, isolated_settings):
+    target, _stock, _requirement, _items = reborn_and_stock()
+    window = make_window(page, FakeSelect(base=None))
+    keep_data.note_running_software("Y2", "Original Software", window.settings, "A")
+
+    assert window._guard_install_first(target, TARGET_REL) is False
+    assert window._install_first_stage == "running"
+    window._on_install_first_running_no()
+
+    assert window._install_first_stage == "software"
+    assert page._keep_data_choice.count() == 3
+    assert keep_data.known_running_software("Y2", window.settings, "A") == {}
+
+
+def test_the_answer_is_stored_without_a_version(isolated_settings):
+    keep_data.note_running_software("Y2", "Reborn (Y2Linux)", isolated_settings, "A")
+    known = keep_data.known_running_software("Y2", isolated_settings, "A")
+    assert known["software_name"] == "Reborn (Y2Linux)"
+    assert known["tag_name"] == ""
+    assert known["confirmed"] is True
+
+    keep_data.forget_running_software("Y2", isolated_settings, "A")
+    assert keep_data.known_running_software("Y2", isolated_settings, "A") == {}
+
+
+def test_keep_data_sanity_check_confirms_the_tracked_software(page, isolated_settings):
+    target, _stock, _requirement, _items = reborn_and_stock()
+    names = keep_data.compatible_software_names(target, "Y2")
+    assert names
+    window = make_window(page, FakeSelect(base=None))
+    window._keep_data_pkg = target
+    keep_data.note_running_software("Y2", names[-1], window.settings, "A")
+
+    window._begin_keep_data_confirmation()
+
+    # One name the player already runs: a yes/no, not a drop-down.
+    assert page._keep_data_choice.isHidden()
+    assert window._keep_data_confirm_known_name == names[-1]
+    assert window._keep_data_confirm_pending is True
+
+
+def test_answering_keep_data_tracks_the_chosen_software(page, isolated_settings):
+    target, _stock, _requirement, _items = reborn_and_stock()
+    window = make_window(page, FakeSelect(base=None))
+    window._keep_data_pkg = target
+
+    window._remember_keep_data_answer("Original Software 3.2.0+")
+
+    known = keep_data.known_running_software("Y2", window.settings, "A")
+    assert known["software_name"] == "Original Software 3.2.0+"
+    assert known["tag_name"] == ""
+
+
+def test_the_base_install_is_logged_as_the_models_firmware(page, isolated_settings, monkeypatch):
+    from src import notice_service
+
+    class _NoNotices:
+        @classmethod
+        def instance(cls):
+            raise RuntimeError("no notice service in tests")
+
+    monkeypatch.setattr(notice_service, "NoticeService", _NoNotices)
+    target, _stock, _requirement, _items = reborn_and_stock()
+
+    def base_release():
+        return {
+            "model": "Y2",
+            "software_name": "Original Software",
+            "tag_name": "stable-v3.2.0",
+            "release_label": "Original Software 3.2.0",
+            "package_slug": "y1-community/y1-stock-rom",
+            "hardware_type": "A",
+        }
+
+    select = FakeSelect(base=None)
+    select.current_installed_release_info = base_release
+    window = make_window(page, select)
+    window._install_first_prerequisite_run = True
+    window._install_first_after = (target, TARGET_REL)
+    window._install_first_journey = journey_for(target, _requirement, first.ANSWER_OTHER)
+
+    # Logged before the run continues, so stopping here still resumes later.
+    recorded = []
+    window._finish_install_first_prerequisite = lambda: recorded.append(True)
+    window._record_completed_install()
+
+    assert recorded == []
+
+    record = player_update_check.get_device_install("Y2", hardware_type="A", settings=window.settings)
+    assert record is not None
+    assert record["software_name"] == "Original Software"
+    assert record["tag_name"] == "stable-v3.2.0"
+    known = keep_data.known_running_software("Y2", window.settings, "A")
+    assert known["software_name"] == "Original Software"

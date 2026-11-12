@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 _GROUP_INSTALLS = "device_installs"
 _GROUP_PREFS = "preferences"
 _GROUP_LATEST_PACKAGE = "latest_package"
+_GROUP_RUNNING = "device_running"
 _KEY_REMINDER_PREFIX = "reminders_enabled_"
 _KEY_LAST_NOTIFIED_PREFIX = "last_notified_tag_"
 _KEY_DONATION_UI_DISABLED = "donation_ui_disabled"
@@ -196,6 +197,99 @@ def get_software_install(model: str, software_name: str, hardware_type: str = ""
     if stored and (stored == wanted or stored in wanted or wanted in stored):
         return rec
     return None
+
+
+def _running_group(model: str, hardware_type: str = "") -> str:
+    hw = _normalize_hw_type(hardware_type)
+    return f"{_GROUP_RUNNING}/{model}_{hw}" if hw else f"{_GROUP_RUNNING}/{model}"
+
+
+def set_running_software(
+    model: str,
+    software_name: str,
+    settings: Optional[QSettings] = None,
+    hardware_type: str = "",
+) -> None:
+    """Record that ``model`` is running ``software_name``, with no version.
+
+    This is an answer to "is your player still running X?", which is a
+    different claim from a finished install: the player is in use with that
+    software (it boots), but nothing here says which build it is. A later
+    install can therefore confirm the software instead of asking the whole
+    "which firmware?" question again, without pretending to know a version.
+    """
+    name = str(software_name or "").strip()
+    if not model or not name:
+        return
+    s = _get_settings(settings)
+    group = _running_group(model, hardware_type)
+    s.beginGroup(group)
+    try:
+        s.setValue("software_name", name)
+        s.setValue("confirmed_at", datetime.now().isoformat())
+    finally:
+        s.endGroup()
+    logger.info("Recorded running software for %s: %s", group, name)
+
+
+def get_running_software(
+    model: str,
+    hardware_type: str = "",
+    settings: Optional[QSettings] = None,
+) -> dict:
+    """What ``model`` is known to run: a confirmed answer, else the last install.
+
+    The confirmation carries no version, so the version and the rest of the
+    record are borrowed from the last recorded install of the same software.
+    ``confirmed`` says whether the user answered the question, rather than an
+    install record standing in for an answer.
+    """
+    if not model:
+        return {}
+    s = _get_settings(settings)
+    hw = _normalize_hw_type(hardware_type)
+    confirmed = ""
+    groups = [_running_group(model, hw)] if hw else []
+    groups.append(_running_group(model))
+    for group in groups:
+        s.beginGroup(group)
+        try:
+            confirmed = s.value("software_name", "", type=str)
+        finally:
+            s.endGroup()
+        if confirmed:
+            break
+    record = get_device_install(model, hardware_type=hw, settings=s)
+    if confirmed:
+        if record and _same_software(record.get("software_name") or "", confirmed):
+            return {**record, "software_name": confirmed, "confirmed": True}
+        return {
+            "model": model,
+            "software_name": confirmed,
+            "tag_name": "",
+            "release_label": "",
+            "package_slug": "",
+            "confirmed": True,
+        }
+    if record:
+        return {**record, "confirmed": False}
+    return {}
+
+
+def clear_running_software(
+    model: str,
+    hardware_type: str = "",
+    settings: Optional[QSettings] = None,
+) -> None:
+    """Forget what the player was said to be running, so it is asked again."""
+    if not model:
+        return
+    s = _get_settings(settings)
+    s.beginGroup(_running_group(model, hardware_type))
+    try:
+        s.remove("")
+    finally:
+        s.endGroup()
 
 
 def clear_device_install(model: str, hardware_type: str = "", settings: Optional[QSettings] = None) -> None:

@@ -252,6 +252,50 @@ def tracked_is_same(
     return _same_software_record(pkg, record)
 
 
+def known_running_software(
+    model: str,
+    settings: Optional[QSettings] = None,
+    hardware_type: str = "",
+) -> dict:
+    """What this model is known to run, ``{}`` when nothing is known.
+
+    An answer the user gave ("it is still running X") wins over the last
+    recorded install; both share one shape, with ``tag_name`` empty when only
+    an answer is known.
+    """
+    from .player_update_check import get_running_software
+
+    return get_running_software(
+        model, hardware_type=hardware_type, settings=settings
+    ) or {}
+
+
+def note_running_software(
+    model: str,
+    software_name: str,
+    settings: Optional[QSettings] = None,
+    hardware_type: str = "",
+) -> None:
+    """Store what an answer said this model runs, without claiming a version."""
+    from .player_update_check import set_running_software
+
+    set_running_software(
+        model, software_name, settings=settings, hardware_type=hardware_type
+    )
+
+
+def forget_running_software(
+    model: str,
+    settings: Optional[QSettings] = None,
+    hardware_type: str = "",
+) -> None:
+    """Clear the tracked software for this model, so the next run asks again."""
+    from .player_update_check import clear_device_install, clear_running_software
+
+    clear_running_software(model, hardware_type=hardware_type, settings=settings)
+    clear_device_install(model, hardware_type=hardware_type, settings=settings)
+
+
 def declares_family(pkg) -> bool:
     """True when the catalogue names the firmware ``pkg`` was built from."""
     return bool(_norm(getattr(pkg, "derivative", "")))

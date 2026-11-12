@@ -6345,11 +6345,53 @@ class MainWindow(QMainWindow):
                 return
             self._handle_flash_failure(error_code)
 
+    def _record_completed_install(self):
+        """Log the firmware that just finished writing as this model's firmware.
+
+        Both halves of a two-step install call this: the base is the model's
+        firmware as soon as it is on the player, and the target then replaces
+        it with the version it wrote.
+        """
+        model = self._package_model or ""
+        software = self._package_name or "Firmware"
+        rel_info = getattr(self._select_page, "current_installed_release_info", lambda: None)()
+        # Online catalogue installs only. A local file has no release tag, so
+        # it is not tracked and cannot drive an update prompt.
+        if not (rel_info and (rel_info.get("tag_name") or "").strip()):
+            return
+        latest_tag = ""
+        if hasattr(self._select_page, "catalogue_latest_tag"):
+            latest_tag = self._select_page.catalogue_latest_tag()
+        device_tracking.record_device_install(
+            model=rel_info.get("model") or model,
+            software_name=rel_info.get("software_name") or software,
+            tag_name=rel_info.get("tag_name") or "",
+            release_label=rel_info.get("release_label") or "",
+            package_slug=rel_info.get("package_slug") or "",
+            published_at=rel_info.get("published_at") or "",
+            settings=self.settings,
+            catalogue_latest=latest_tag,
+            hardware_type=rel_info.get("hardware_type") or rel_info.get("type_variant") or (self._select_page.current_hardware_type() if hasattr(self, "_select_page") else ""),
+        )
+        # The player has just joined the update-reminder list, so its model,
+        # firmware and repository can now bring notices to the card.
+        try:
+            from ..notice_service import NoticeService
+
+            NoticeService.instance().refresh_context()
+        except Exception as e:
+            logger.debug("Could not refresh the notice context after install: %s", e)
+
     def _handle_flash_success(self):
         if (
             getattr(self, "_install_first_prerequisite_run", False)
             and self._install_first_after
         ):
+            # The base is on the player now, so it is this model's firmware
+            # from this moment: log it before the run moves on, or a user who
+            # stops here would be asked which firmware is running all over
+            # again and Keep Data could not tell what the data belongs to.
+            self._record_completed_install()
             self._finish_install_first_prerequisite()
             return
         if hasattr(self, "_flash_page") and self._flash_page is not None:
@@ -6364,32 +6406,7 @@ class MainWindow(QMainWindow):
         steps = install_power_on_steps(model)
 
         # Record install for device tracking & future release reminders
-        rel_info = getattr(self._select_page, "current_installed_release_info", lambda: None)()
-        # Online catalogue installs only. A local file has no release tag, so
-        # it is not tracked and cannot drive an update prompt.
-        if rel_info and (rel_info.get("tag_name") or "").strip():
-            latest_tag = ""
-            if hasattr(self._select_page, "catalogue_latest_tag"):
-                latest_tag = self._select_page.catalogue_latest_tag()
-            device_tracking.record_device_install(
-                model=rel_info.get("model") or model,
-                software_name=rel_info.get("software_name") or software,
-                tag_name=rel_info.get("tag_name") or "",
-                release_label=rel_info.get("release_label") or "",
-                package_slug=rel_info.get("package_slug") or "",
-                published_at=rel_info.get("published_at") or "",
-                settings=self.settings,
-                catalogue_latest=latest_tag,
-                hardware_type=rel_info.get("hardware_type") or rel_info.get("type_variant") or (self._select_page.current_hardware_type() if hasattr(self, "_select_page") else ""),
-            )
-            # The player has just joined the update-reminder list, so its
-            # model, firmware and repository can now bring notices to the card.
-            try:
-                from ..notice_service import NoticeService
-
-                NoticeService.instance().refresh_context()
-            except Exception as e:
-                logger.debug("Could not refresh the notice context after install: %s", e)
+        self._record_completed_install()
         if hasattr(self, "_settings_page"):
             self._settings_page.mark_firmware_installed()
             self._settings_page.refresh_settings()
@@ -7452,10 +7469,15 @@ class MainWindow(QMainWindow):
             choice = self._flash_page.keep_data_confirm_choice()
             if choice and choice == tr("keep_data_choice_other"):
                 self._keep_data_confirm_pending = False
+                self._keep_data_confirm_known_name = ""
+                # "Other" is the user saying the track is wrong: forget it so
+                # the next run asks instead of assuming.
+                self._forget_keep_data_software()
                 self._begin_keep_data_erase_confirmation()
                 return
             self._keep_data_confirm_pending = False
             self._keep_data = True
+            self._remember_keep_data_answer(choice)
             self._flash_page.clear_keep_data_confirmation()
         elif getattr(self, "_keep_data_erase_confirm_pending", False):
             # The user confirmed continuing without Keep Data with Yes (checkmark)
@@ -7554,7 +7576,7 @@ class MainWindow(QMainWindow):
         answer that needs the base cannot waste bandwidth or disk.
         """
         try:
-            from .. import catalog, install_first, keep_data
+            from .. import install_first
         except Exception:
             return True
         model = str(getattr(pkg, "model", "") or self._package_model or "")
@@ -7598,29 +7620,8 @@ class MainWindow(QMainWindow):
             page.set_package_name(self._package_name)
             page.set_model(self._package_model)
             page.set_method(self._flash_method)
-        selected = journey.target_name
-        try:
-            tracked = keep_data.tracked_package(model, pkg, self.settings)
-            if tracked is not None and str(getattr(tracked, "name", "")) == requirement.software_name:
-                selected = requirement.label()
-        except Exception:
-            pass
-        self._install_first_stage = "software"
-        if page is not None:
-            page.show_install_first_prompt(
-                tr("keep_data_which_firmware_fmt").format(model=self._install_first_label()),
-                tr("install_first_hint").format(
-                    software=requirement.label(),
-                    model=self._install_first_label(),
-                    target=journey.target_name,
-                ),
-                (journey.target_name, requirement.label(), tr("keep_data_choice_other")),
-                selected=selected,
-                on_no=self._cancel_install_first,
-            )
+        self._ask_install_first_software(journey)
         self._nav_to_page(_PAGE_FLASH)
-        self._sync_install_nav_entry()
-        self._adjust_window_geometry()
         return False
 
     def _local_fw_package_for_path(self, path):
@@ -7670,7 +7671,7 @@ class MainWindow(QMainWindow):
         from dataclasses import replace
 
         try:
-            from .. import catalog, fw_package, install_first, keep_data
+            from .. import fw_package, install_first
         except Exception:
             return True
         page = getattr(self, "_select_page", None)
@@ -7732,16 +7733,84 @@ class MainWindow(QMainWindow):
             flash.set_package_name(self._package_name)
             flash.set_model(self._package_model)
             flash.set_method(self._flash_method)
+        self._ask_install_first_software(journey)
+        self._nav_to_page(_PAGE_FLASH)
+        return False
+
+    @staticmethod
+    def _same_software_name(left, right) -> bool:
+        """Loose name match: a tracked ``Reborn`` fits ``Reborn (Y2Linux)``."""
+        a = str(left or "").strip().casefold()
+        b = str(right or "").strip().casefold()
+        if not a or not b:
+            return False
+        return a == b or a in b or b in a
+
+    def _install_first_hardware_type(self) -> str:
+        return (
+            self._select_page.current_hardware_type()
+            if hasattr(self, "_select_page")
+            else ""
+        )
+
+    def _install_first_known_answer(self, journey, known) -> str:
+        """The answer a tracked software implies, or ``""`` when it implies none."""
+        from .. import install_first
+
+        name = str((known or {}).get("software_name") or "").strip()
+        if not name or journey.requirement is None:
+            return ""
+        if self._same_software_name(name, journey.requirement.software_name):
+            return install_first.ANSWER_PREREQUISITE
+        if self._same_software_name(name, journey.target_name):
+            return install_first.ANSWER_TARGET
+        return ""
+
+    def _ask_install_first_software(self, journey) -> None:
+        """Ask what the player runs — a confirmation when that is already known.
+
+        A tracked install or an earlier answer often says what this model runs.
+        The menu then becomes one question, "is it still running X?":
+        confirming the base goes straight to the target, and confirming the
+        target is what lets Keep Data carry the player's settings over. Saying
+        no forgets the answer and asks the full question instead.
+        """
+        from .. import keep_data
+
+        requirement = journey.requirement
+        page = getattr(self, "_flash_page", None)
+        model = self._install_first_model()
+        known = keep_data.known_running_software(
+            model, self.settings, self._install_first_hardware_type()
+        )
+        name = str((known or {}).get("software_name") or "").strip()
+        answer = self._install_first_known_answer(journey, known)
+        self._install_first_running_answer = answer
+        self._install_first_running_name = name if answer else ""
+        if answer:
+            self._install_first_stage = "running"
+            if page is not None:
+                page.show_install_first_prompt(
+                    tr("keep_data_running_fmt").format(
+                        software=name, model=self._install_first_label()
+                    ),
+                    tr("install_first_hint").format(
+                        software=requirement.label(),
+                        model=self._install_first_label(),
+                        target=journey.target_name,
+                    ),
+                    (),
+                    on_no=self._on_install_first_running_no,
+                )
+            self._sync_install_nav_entry()
+            self._adjust_window_geometry()
+            return
         selected = journey.target_name
-        try:
-            tracked = keep_data.tracked_package(model, target, self.settings)
-            if tracked is not None and str(getattr(tracked, "name", "")) == requirement.software_name:
-                selected = requirement.label()
-        except Exception:
-            pass
+        if name and self._same_software_name(name, requirement.software_name):
+            selected = requirement.label()
         self._install_first_stage = "software"
-        if flash is not None:
-            flash.show_install_first_prompt(
+        if page is not None:
+            page.show_install_first_prompt(
                 tr("keep_data_which_firmware_fmt").format(model=self._install_first_label()),
                 tr("install_first_hint").format(
                     software=requirement.label(),
@@ -7752,10 +7821,83 @@ class MainWindow(QMainWindow):
                 selected=selected,
                 on_no=self._cancel_install_first,
             )
-        self._nav_to_page(_PAGE_FLASH)
         self._sync_install_nav_entry()
         self._adjust_window_geometry()
-        return False
+
+    def _on_install_first_running_no(self) -> None:
+        """The player is not running what was tracked; ask the full question."""
+        from .. import keep_data
+
+        journey = getattr(self, "_install_first_journey", None)
+        self._install_first_running_answer = ""
+        self._install_first_running_name = ""
+        self._install_first_stage = ""
+        page = getattr(self, "_flash_page", None)
+        if page is not None:
+            page.clear_keep_data_confirmation()
+        if journey is None:
+            self._cancel_install_first()
+            return
+        keep_data.forget_running_software(
+            self._install_first_model(),
+            self.settings,
+            self._install_first_hardware_type(),
+        )
+        self._ask_install_first_software(journey)
+
+    def _answer_install_first_running(self, confirmed: bool) -> None:
+        """Answer the confirmation: keep the tracked software, or forget it."""
+        from .. import install_first, keep_data
+
+        journey = getattr(self, "_install_first_journey", None)
+        answer = getattr(self, "_install_first_running_answer", "")
+        name = getattr(self, "_install_first_running_name", "")
+        if journey is None or not answer:
+            self._cancel_install_first()
+            return
+        if not confirmed:
+            self._on_install_first_running_no()
+            return
+        model = self._install_first_model()
+        hardware = self._install_first_hardware_type()
+        known = keep_data.known_running_software(model, self.settings, hardware)
+        version = str(
+            (known or {}).get("release_label") or (known or {}).get("tag_name") or ""
+        ).strip()
+        keep_data.note_running_software(model, name, self.settings, hardware)
+        step = journey.choose(answer, version)
+        if step == install_first.ASK_VERSION:
+            # The confirmation is the answer: the player runs the base (or a
+            # build nothing ever versioned), so do not ask the same thing twice.
+            step = journey.confirm_version(True)
+        self._install_first_stage = ""
+        self._install_first_running_answer = ""
+        if step == install_first.PROCEED:
+            self._proceed_with_install_first_target()
+        else:
+            self._confirm_install_first_prerequisite()
+
+    def _remember_install_first_answer(self, journey, answer: str) -> None:
+        """Store what an answer said this model runs, without a version.
+
+        A working player is the evidence, not firmware sitting in flash: this
+        answer is what lets the next run ask "is it still running X?" instead
+        of the full menu, while a finished install is what records the build.
+        """
+        from .. import install_first, keep_data
+
+        model = self._install_first_model()
+        hardware = self._install_first_hardware_type()
+        if answer == install_first.ANSWER_PREREQUISITE:
+            keep_data.note_running_software(
+                model, journey.requirement.software_name, self.settings, hardware
+            )
+        elif answer == install_first.ANSWER_TARGET:
+            keep_data.note_running_software(
+                model, journey.target_name, self.settings, hardware
+            )
+        else:
+            keep_data.forget_running_software(model, self.settings, hardware)
 
     def _on_install_first_continue(self) -> None:
         """The card's Continue/tick: answer the stage that is on screen."""
@@ -7773,16 +7915,18 @@ class MainWindow(QMainWindow):
         if stage == "power_on":
             self._resume_install_first_target_after_power_on()
             return
+        if stage == "running":
+            self._answer_install_first_running(True)
+            return
         if stage == "version":
             step = journey.confirm_version(True)
         elif stage == "confirm":
             self._start_install_first_prerequisite()
             return
         else:
-            step = journey.choose(
-                self._install_first_selected_answer(),
-                self._install_first_record_version(),
-            )
+            answer = self._install_first_selected_answer()
+            step = journey.choose(answer, self._install_first_record_version())
+            self._remember_install_first_answer(journey, answer)
         if step == install_first.PROCEED:
             self._proceed_with_install_first_target()
         elif step == install_first.ASK_VERSION:
@@ -8124,15 +8268,34 @@ class MainWindow(QMainWindow):
         model_name = device_label_for_model(model) if model else tr("device_fallback_word")
         software = str(getattr(pkg, "name", "") or self._package_name or "").strip()
         names = keep_data.compatible_software_names(pkg, model) if pkg is not None else []
-        if len(names) > 1:
+        hw = self._select_page.current_hardware_type() if hasattr(self, "_select_page") else ""
+        known = keep_data.known_running_software(model, self.settings, hw)
+        known_name = str((known or {}).get("software_name") or "").strip()
+        self._keep_data_confirm_known_name = ""
+        if known_name and any(
+            known_name.casefold() == str(candidate).casefold() for candidate in names
+        ):
+            # The player's software is already tracked, so the sanity check is
+            # a confirmation of that one name rather than a menu: it is the
+            # same yes/no the single-compatible case asks, with the answer
+            # already filled in.
+            self._keep_data_confirm_known_name = known_name
+            question = tr("keep_data_running_fmt").format(
+                model=model_name, software=known_name
+            )
+            choices = ()
+            selected = known_name
+        elif len(names) > 1:
             question = tr("keep_data_which_firmware_fmt").format(model=model_name)
             choices = tuple(names) + (tr("keep_data_choice_other"),)
+            selected = names[0]
         else:
             software_label = names[0] if names else (software or tr("software_original"))
             question = tr("keep_data_running_fmt").format(
                 model=model_name, software=software_label
             )
             choices = ()
+            selected = names[0] if names else ""
         self._keep_data_confirm_pending = True
         y1_like = "Y1" in model.upper() or "A5" in model.upper()
         if y1_like:
@@ -8143,7 +8306,7 @@ class MainWindow(QMainWindow):
             question,
             hint,
             choices,
-            selected=names[0] if names else "",
+            selected=selected,
             on_no=self._on_keep_data_not_compatible,
         )
         self._sync_install_nav_entry()
@@ -8157,8 +8320,48 @@ class MainWindow(QMainWindow):
         over instead of silently keeping a partition the firmware may not read.
         """
         self._keep_data_confirm_pending = False
+        self._keep_data_confirm_known_name = ""
+        self._forget_keep_data_software()
         self._keep_data = False
         self._begin_keep_data_erase_confirmation()
+
+    def _keep_data_tracking_context(self):
+        """The model and hardware type the Keep Data answer is about."""
+        pkg = getattr(self, "_keep_data_pkg", None)
+        model = self._package_model or getattr(pkg, "model", "") or ""
+        hw = (
+            self._select_page.current_hardware_type()
+            if hasattr(self, "_select_page")
+            else ""
+        )
+        return model, hw
+
+    def _remember_keep_data_answer(self, choice: str) -> None:
+        """Store the software the user just confirmed as running, no version."""
+        from .. import keep_data
+
+        picked = str(choice or "").strip()
+        name = str(getattr(self, "_keep_data_confirm_known_name", "") or "").strip()
+        if picked and picked != tr("keep_data_choice_other"):
+            name = picked
+        self._keep_data_confirm_known_name = ""
+        if not name:
+            return
+        model, hw = self._keep_data_tracking_context()
+        try:
+            keep_data.note_running_software(model, name, self.settings, hw)
+        except Exception:
+            logger.debug("Could not record the confirmed software", exc_info=True)
+
+    def _forget_keep_data_software(self) -> None:
+        """Clear the tracked software: the answer said it is something else."""
+        from .. import keep_data
+
+        model, hw = self._keep_data_tracking_context()
+        try:
+            keep_data.forget_running_software(model, self.settings, hw)
+        except Exception:
+            logger.debug("Could not clear the tracked software", exc_info=True)
 
     def _begin_keep_data_erase_confirmation(self) -> None:
         """Explain that data cannot be kept with the current firmware, and ask whether to proceed."""
