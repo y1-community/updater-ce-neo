@@ -57,7 +57,7 @@ class _FakeClient:
         self.cached_rows = cached_rows or {}
         self.asked = []
 
-    def get_cached_releases(self, repo, ignore_ttl=False):
+    def get_cached_releases(self, repo, ignore_ttl=False, show_nightly=False):
         return self.cached_rows.get(repo.lower())
 
     def available_release_rows(self, repo):

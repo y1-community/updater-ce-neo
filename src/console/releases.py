@@ -183,8 +183,9 @@ def _usable_assets(assets: list[dict]) -> list[dict]:
     roms = [asset for asset in files if str(asset.get("name") or "").lower().startswith("rom")]
     if roms:
         return roms
-    # A release that only ships side files (voices, libs) is not a firmware row.
-    side = ("libs", "voices", "source", "legal")
+    # A release that only ships side files (voices, libs, Rockbox's on-device
+    # update.zip) is not a firmware row.
+    side = ("libs", "voice", "source", "legal", "update")
     firmware = [
         asset for asset in files
         if not any(token in str(asset.get("name") or "").lower() for token in side)
@@ -228,6 +229,19 @@ def rows_from_releases(
     gate = rockbox and model == "Y1" and hardware_type != "B"
     y2_rockbox = model == "Y2" and rockbox
     original = "original software" in (system_software or "").casefold()
+
+    def _listable_stable(item: dict) -> bool:
+        if not isinstance(item, dict) or item.get("draft"):
+            return False
+        if versioning.is_pre_release(item):
+            return False
+        models = _release_models(item, repo)
+        return not models or model in models
+
+    # A software product that publishes only pre-releases has nothing else to
+    # offer, so its nightlies/dev builds stay listed even with the show-dev
+    # filter off. With a stable release beside them, they are hidden as usual.
+    has_stable = any(_listable_stable(item) for item in releases or [])
     rows: list[ReleaseRow] = []
     for release in releases or []:
         if not isinstance(release, dict) or release.get("draft"):
@@ -238,9 +252,8 @@ def rows_from_releases(
         release_models = _release_models(release, repo)
         if release_models and model not in release_models:
             continue
-        if "nightly" in tag.lower() and not show_nightly:
-            continue
-        if release.get("prerelease") and not show_nightly and not y2_rockbox:
+        is_pre = versioning.is_pre_release(release)
+        if is_pre and not show_nightly and has_stable and not y2_rockbox:
             continue
         release_name = str(release.get("name") or "")
         version = version_tuple(tag, release_name)
@@ -261,7 +274,7 @@ def rows_from_releases(
             and version < (3, 0, 7)
         ):
             continue
-        is_nightly = version is None or bool(release.get("prerelease")) or "nightly" in tag.lower()
+        is_nightly = version is None or is_pre
         if blocklist.is_blocked(
             block_rules, system_software, model, hardware_type, tag, is_nightly
         ):

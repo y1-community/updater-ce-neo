@@ -823,7 +823,12 @@ def test_rockbox_min_release_gate_filters_listings():
         # the cache must keep them; the Type A listing gate filters below.
         cached_tags = ["stable-v0.5", "stable-v0.4", "stable-v0.3"]
         assert [r["tag_name"] for r in client.get_cached_releases("rockbox-y1/rockbox")] == cached_tags
-        assert [r["tag_name"] for r in client.get_all_releases("rockbox-y1/rockbox")] == cached_tags
+        # A listing read keeps the nightly row: whether a pre-release is shown
+        # is the listing's filter decision, not the cache's.
+        listed_tags = cached_tags + [
+            "nightly-35e926bd6ea663ab0aac2f138c7f71ae744971f"
+        ]
+        assert [r["tag_name"] for r in client.get_all_releases("rockbox-y1/rockbox")] == listed_tags
 
         from src.catalog import FirmwarePackage
 
@@ -2724,7 +2729,7 @@ def test_release_list_and_notes():
     labels = [page._release_list.item(i).text() for i in range(page._release_list.count())]
     # Clean parsed release tag is displayed in the available software list
     assert labels[0] == "1.0.0", labels
-    assert labels[1] == "0.9.0  [preview]", labels
+    assert labels[1] == "0.9.0 (Pre-release)", labels
 
     md = page._render_release_notes(releases[0])
     assert "## Solar" not in md, md

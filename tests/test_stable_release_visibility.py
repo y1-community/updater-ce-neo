@@ -59,7 +59,7 @@ class _Client:
         self.live = live
         self.asked = []
 
-    def get_cached_releases(self, repo, ignore_ttl=False):
+    def get_cached_releases(self, repo, ignore_ttl=False, show_nightly=False):
         return self.cached
 
     def available_release_rows(self, repo):

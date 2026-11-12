@@ -466,6 +466,24 @@ def _is_portable_bundle_name(name):
     return any(lower.endswith(suffix) for suffix in PORTABLE_BUNDLE_SUFFIXES)
 
 
+def _is_nonfirmware_zip_name(name):
+    """True for a zip a release publishes beside its firmware.
+
+    ``rockbox-y1/rockbox`` ships ``voices.zip`` (spoken menus) and
+    ``update.zip`` (Rockbox's on-device updater) next to ``rom.zip``, and also
+    publishes voice-file releases that carry nothing else. Neither file is a
+    flasher package, so a release whose only zips are these has no firmware to
+    install and must not become a catalogue row.
+    """
+    lower = str(name or "").strip().lower()
+    if not lower.endswith(".zip") or _is_rom_zip_name(lower):
+        return False
+    words = [word for word in re.split(r"[^a-z0-9]+", lower[:-4]) if word]
+    if any(word in ("voice", "voices", "lib", "libs") for word in words):
+        return True
+    return "update" in words
+
+
 def _without_portable_bundles(assets):
     """Drop portable mirror packages when the release also carries the plain zip.
 
@@ -511,8 +529,12 @@ def _release_rom_variants(assets, tag_name, repo, repo_has_rom=False, package=No
             variants = [_parse_rom_asset_variant(a, tag_name, repo, has_explicit_type_assets=has_b, package=package) for a in matched]
             return [v for v in variants if v]
 
-    rom_assets = [a for a in assets if _is_rom_zip_name(a.get("name"))]
-    target_assets = rom_assets if rom_assets else assets
+    # Voice files and Rockbox's ``update.zip`` are never a firmware candidate.
+    firmware_assets = [
+        a for a in assets if not _is_nonfirmware_zip_name(a.get("name"))
+    ]
+    rom_assets = [a for a in firmware_assets if _is_rom_zip_name(a.get("name"))]
+    target_assets = rom_assets if rom_assets else firmware_assets
     has_explicit = any(
         any(
             tok in (a.get("name") or "").lower()
@@ -533,7 +555,7 @@ def _release_rom_variants(assets, tag_name, repo, repo_has_rom=False, package=No
     # explicit asset_pattern (checked above) is how one is named. Portable
     # mirror bundles are build artifacts, not firmware, but a mirror release
     # that carries nothing else keeps them (see _without_portable_bundles).
-    zips = [a for a in assets if (a.get("name") or "").lower().endswith(".zip")]
+    zips = [a for a in firmware_assets if (a.get("name") or "").lower().endswith(".zip")]
     portable_only = bool(zips) and all(
         _is_portable_bundle_name(a.get("name")) for a in zips
     )
@@ -1216,9 +1238,18 @@ def format_release_display_label(rel, prefer_240p=False):
         # label so a suffix such as ``20261107-v2`` becomes
         # ``November 7 2026 (v2)`` here and in every other surface.
         return parse_clean_release_tag_label(rel, prefer_240p=prefer_240p)
+    # A nightly title names its build day while the tag is a commit hash, so
+    # the same label that reads a title's semantic version reads its date.
+    if (
+        name
+        and versioning.release_title_datestamp(name) is not None
+        and release_version_tuple(tag_name, release_name=name) is None
+        and not _release_datestamp_label(tag_name)
+    ):
+        return parse_clean_release_tag_label(rel, prefer_240p=prefer_240p)
     version_info = parse_version_designations(tag_name)
     published_date = rel.get("published_at", "")
-    is_prerelease = bool(rel.get("prerelease"))
+    is_prerelease = versioning.is_pre_release(rel)
     display_version = get_display_version(version_info, published_date, is_prerelease)
 
     designations = list(version_info.get("designations") or [])
@@ -1267,8 +1298,8 @@ def format_release_display_label(rel, prefer_240p=False):
     else:
         label = f"{tag_name}{designation_suffix}"
 
-    if is_prerelease and "[preview]" not in label.lower():
-        label += "  [preview]"
+    if is_prerelease and "pre-release" not in label.lower():
+        label += " (Pre-release)"
     return label
 
 
@@ -1297,10 +1328,16 @@ class ReleasesClient:
     def _cache_path(self, repo):
         return self.cache_dir / f"{repo.replace('/', '_')}.json"
 
-    def get_cached_releases(self, repo, ignore_ttl=False):
+    def get_cached_releases(self, repo, ignore_ttl=False, show_nightly=False):
         """Cached releases for ``repo``, with the repo's minimum-version gate
         applied so a cache written before the gate existed cannot resurface a
-        release users are no longer allowed to install."""
+        release users are no longer allowed to install.
+
+        ``show_nightly`` keeps dated/nightly rows in the cache for a listing;
+        the listing itself applies the show-dev filter. Cache files always hold
+        every row a fetch produced, so filtering them out here made nightlies
+        disappear as soon as a listing was served from disk.
+        """
         path = self._cache_path(repo)
         try:
             if path.exists() and (ignore_ttl or (time.time() - path.stat().st_mtime) < RELEASE_CACHE_TTL_SECONDS):
@@ -1309,10 +1346,20 @@ class ReleasesClient:
                     return [
                         r for r in data
                         if isinstance(r, dict)
-                        and release_version_ok(repo, r.get("tag_name", ""), show_old_rockbox=True, release_name=r.get("name"))
+                        and release_version_ok(
+                            repo,
+                            r.get("tag_name", ""),
+                            show_old_rockbox=True,
+                            show_nightly=show_nightly,
+                            release_name=r.get("name"),
+                        )
                         # A cache written before base tags were filtered out
                         # still holds them; they must never reach a list.
                         and not is_base_release_tag(r.get("tag_name", ""))
+                        # A listing read keeps pre-releases and lets the
+                        # listing's filter decide; other readers (the latest
+                        # release, app updates) keep normal builds only.
+                        and (show_nightly or not versioning.is_pre_release(r))
                     ]
         except Exception as e:
             logger.debug("Cache read failed for %s: %s", repo, e)
@@ -1629,7 +1676,7 @@ class ReleasesClient:
         self.last_used_backup = False
         self.last_fetch_failed = False
         if not force_refresh:
-            cached = self.get_cached_releases(repo)
+            cached = self.get_cached_releases(repo, show_nightly=True)
             if cached:
                 logger.info("Using %d cached releases for %s", len(cached), repo)
                 return sorted(cached, key=release_sort_key, reverse=True)[:100]
@@ -1650,7 +1697,7 @@ class ReleasesClient:
                 return releases
 
         # Fallback to cached releases if available
-        cached = self.get_cached_releases(repo, ignore_ttl=True)
+        cached = self.get_cached_releases(repo, ignore_ttl=True, show_nightly=True)
         if cached:
             self.last_used_backup = True
             logger.info("Using %d cached releases for %s after API fallback", len(cached), repo)
@@ -1787,7 +1834,7 @@ class ReleasesClient:
             "asset_size": preferred["asset"].get("size", 0),
             "assets": assets,
             "rom_variants": rom_variants,
-            "prerelease": bool(release.get("prerelease")),
+            "prerelease": versioning.is_pre_release(release),
             "source_repo": repo,
         }
         if release.get("icon_url"):
@@ -1810,9 +1857,7 @@ class ReleasesClient:
                 continue
             if not release_version_ok(repo, tag_name, show_nightly=True, show_old_rockbox=True, release_name=release.get("name")):
                 continue
-            is_prerelease = bool(release.get("prerelease"))
-            if "stable" in tag_name.lower():
-                is_prerelease = False
+            is_prerelease = versioning.is_pre_release(release)
             assets = release.get("assets", [])
             rom_variants = _release_rom_variants(assets, tag_name, repo, repo_has_rom)
             preferred = select_preferred_rom_asset(rom_variants)
@@ -1869,6 +1914,16 @@ class ReleasesClient:
                 show_safety_blocked=show_safety_blocked,
             )
         releases = self.get_all_releases(package.repo, force_refresh=force_refresh)
+        # A software product that publishes only pre-releases (a nightly-only
+        # tree, or a port still in development) has nothing else to offer, so
+        # hiding them would show an empty list. The show-dev filter only hides
+        # a pre-release when a normal release exists beside it.
+        has_stable = any(
+            isinstance(rel, dict)
+            and not versioning.is_pre_release(rel)
+            and _release_matches_model(model, rel, package, selected_type)
+            for rel in releases
+        )
         out = []
         for rel in releases:
             tag_name = rel.get("tag_name", "")
@@ -1893,7 +1948,7 @@ class ReleasesClient:
                 continue
             if not show_safety_blocked and _release_safety_blocked(package, model, selected_type, rel):
                 continue
-            if rel.get("prerelease") and not show_nightly:
+            if versioning.is_pre_release(rel) and not show_nightly and has_stable:
                 if not (package.slug == "rockbox-y2" or package.repo == "spycemagic/y2-rockbox" or (str(model or "").upper() == "Y2" and "rockbox" in package.slug)):
                     continue
             # Re-pick the preferred asset with the model filter so the
@@ -2289,7 +2344,9 @@ def filter_unavailable_packages(entries, *, allow_network: bool = False, client=
             cache_client = _client()
             if cache_client is not None:
                 try:
-                    cached_rows = cache_client.get_cached_releases(repo)
+                    cached_rows = cache_client.get_cached_releases(
+                        repo, show_nightly=True
+                    )
                 except Exception:
                     cached_rows = None
         if cached_rows:

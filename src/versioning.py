@@ -119,6 +119,87 @@ def semver_from_release_title(title: str):
     return versions[0] if len(versions) == 1 else None
 
 
+#: A date in a release title: ``Rockbox-Y1 Nightly-10-11-2026`` (day first) and
+#: ``Nightly 2026-11-10`` (ISO). Only a full four-digit year counts, so a dotted
+#: version such as ``9.2.13`` can never be read as a date.
+_TITLE_DATE_DMY_RE = re.compile(
+    r"(?<!\d)(?P<day>0?[1-9]|[12]\d|3[01])[-_./]"
+    r"(?P<month>0?[1-9]|1[0-2])[-_./]"
+    r"(?P<year>(?:19|20)\d{2})(?!\d)"
+)
+_TITLE_DATE_YMD_RE = re.compile(
+    r"(?<!\d)(?P<year>(?:19|20)\d{2})[-_./]"
+    r"(?P<month>0?[1-9]|1[0-2])[-_./]"
+    r"(?P<day>0?[1-9]|[12]\d|3[01])(?!\d)"
+)
+
+
+def release_title_datestamp(title: str) -> datetime | None:
+    """The build date written in a release title, or ``None``.
+
+    Rockbox names each nightly after its build day (``Rockbox-Y1
+    Nightly-10-11-2026``, day first) while the tag carries only a commit hash.
+    The title is then the only readable date, and reading it is what lets a
+    list show ``November 10 2026`` instead of the hash, exactly as a semantic
+    version in a title replaces a build-identifier tag.
+    """
+
+    text = str(title or "").strip()
+    if not text:
+        return None
+    for pattern in (_TITLE_DATE_YMD_RE, _TITLE_DATE_DMY_RE):
+        for match in pattern.finditer(text):
+            try:
+                return datetime(
+                    int(match.group("year")),
+                    int(match.group("month")),
+                    int(match.group("day")),
+                )
+            except ValueError:
+                continue
+    _match, parsed = _datestamp_match(text)
+    if parsed is not None:
+        return datetime(*parsed)
+    return None
+
+
+def release_title_datestamp_label(title: str) -> str | None:
+    """Human date for a release title, or ``None`` when it has none."""
+
+    parsed = release_title_datestamp(title)
+    if parsed is None:
+        return None
+    return f"{parsed.strftime('%B')} {parsed.day} {parsed.year}"
+
+
+_PRERELEASE_TOKEN_RE = re.compile(
+    r"\b(?:nightly|alpha\d*|dev|devel|development|preview|rc\d*)\b", re.IGNORECASE
+)
+_BETA_TOKEN_RE = re.compile(r"\bbeta\d*\b", re.IGNORECASE)
+_STABLE_TOKEN_RE = re.compile(r"\bstable\b", re.IGNORECASE)
+
+
+def is_pre_release(release) -> bool:
+    """Whether a release is a development build rather than a normal one.
+
+    GitHub's ``prerelease`` flag counts, and so does a nightly, alpha, dev,
+    preview or rc token in the tag or title — a repository that publishes
+    nightlies often leaves GitHub's flag unset. ``beta`` is deliberately not a
+    pre-release: beta builds are listed like any other build and get no
+    pre-release marker. A ``stable`` tag or title always names a normal
+    release.
+    """
+
+    if not isinstance(release, dict):
+        return False
+    label = f"{release.get('tag_name') or ''} {release.get('name') or ''}"
+    if _BETA_TOKEN_RE.search(label) or _STABLE_TOKEN_RE.search(label):
+        return False
+    if _PRERELEASE_TOKEN_RE.search(label):
+        return True
+    return bool(release.get("prerelease"))
+
+
 def parse_version_designations(version_name: str, label_for_os: str = "OS {version}") -> dict:
     """Parse a version name and extract its designations.
 
@@ -262,22 +343,20 @@ def is_base_release_tag(tag_name) -> bool:
 
 
 def is_stable_release(release) -> bool:
-    """True for a published release that is neither nightly nor a preview.
+    """True for a published release that is not a development build.
 
-    GitHub's ``prerelease`` flag is authoritative, and a nightly/preview/beta
-    token in the tag or title is treated the same way. Everything else is a
-    stable release: the catalogue must not hide it because of a tag-parsing or
+    The one classification is :func:`is_pre_release`: GitHub's ``prerelease``
+    flag, or a nightly/alpha/dev/preview/rc token in the tag or title, makes a
+    build a pre-release. A beta build is not one. Everything else is a stable
+    release: the catalogue must not hide it because of a tag-parsing or
     snapshot rule (only the explicit blocklist and minimum-version gates may).
     """
 
     if not isinstance(release, dict) or release.get("draft"):
         return False
-    if release.get("prerelease"):
-        return False
     if is_base_release_tag(release.get("tag_name")):
         return False
-    label = f"{release.get('tag_name') or ''} {release.get('name') or ''}".lower()
-    return re.search(r"\b(?:nightly|preview|beta|alpha|rc\d*)\b", label) is None
+    return not is_pre_release(release)
 
 
 def release_version_tuple(tag_name, release_name=None):
@@ -352,9 +431,6 @@ def release_version_ok(
 
     if not tag_name:
         return False
-    is_nightly = "nightly" in str(tag_name or "").lower()
-    if is_nightly and not show_nightly:
-        return False
 
     model_str = str(model or "").upper()
     slug = (repo or "").strip()
@@ -376,6 +452,12 @@ def release_version_ok(
         return True
     version = release_version_tuple(tag_name, release_name=release_name)
     if version is None:
+        # A nightly or dev build is made from the current tree and carries a
+        # date or commit hash instead of a version, so the pre-0.5 cutoff
+        # cannot describe it. Whether it is listed at all is the show-dev
+        # filter's decision.
+        if show_nightly:
+            return True
         # The minimum protects against old builds. A release the project
         # publishes as stable is never hidden just because its tag does not
         # use a dotted version: a future naming scheme must not make a
@@ -406,7 +488,16 @@ def effective_tag(rel: dict) -> str:
     title_semver = detect_title_start_or_end_semver(name)
     if title_semver:
         return title_semver
-    return (rel.get("tag_name") or "").strip()
+    tag_name = (rel.get("tag_name") or "").strip()
+    title_date = release_title_datestamp_label(name)
+    if (
+        title_date
+        and release_version_tuple(tag_name) is None
+        and release_datestamp_parts(tag_name) is None
+    ):
+        # A nightly title's date is its identity; the tag is only a hash.
+        return title_date
+    return tag_name
 
 
 _DATESTAMP_RE = re.compile(
@@ -531,7 +622,7 @@ def parse_clean_release_tag_label(
 
     tag_name = (rel.get("tag_name") or "").strip()
     name = (rel.get("name") or "").strip()
-    is_prerelease = bool(rel.get("prerelease"))
+    is_prerelease = is_pre_release(rel)
     raw = tag_name or name
     if not raw:
         return ""
@@ -580,6 +671,10 @@ def parse_clean_release_tag_label(
         # release titles carry the usable version (``Y2Linux 1.0 Beta 9.2.13``).
         version_part = semver_from_release_title(name)
     if not version_part:
+        # A nightly tag is a commit hash; its title names the build day
+        # (``Rockbox-Y1 Nightly-10-11-2026``), which is the release's version.
+        version_part = release_title_datestamp_label(name)
+    if not version_part:
         return "" if version_only else (name or raw)
 
     # 3. Extract verbs from tag_name (and parenthesized flags in name).
@@ -608,17 +703,21 @@ def parse_clean_release_tag_label(
         if os_label not in verbs:
             verbs.append(os_label)
 
-    # ADB
-    if (
-        re.search(r"\badb\b", lower_raw)
-        or "-adb" in lower_raw
-        or "adb-" in lower_raw
-        or "(adb)" in lower_raw
+    # Feature aliases a tag carries: ``-adb`` is ADB support, ``-fm`` is the FM
+    # radio build. They read as a short marker after the version.
+    for token, marker in (
+        ("adb", "ADB"),
+        ("fm", "FM"),
+        ("usb", "USB"),
+        ("ethernet", "Ethernet"),
+        ("hdmi", "HDMI"),
     ):
-        verbs.append("ADB")
+        if re.search(rf"(?:^|[^a-z0-9]){token}(?:[-_][a-z0-9]+)*(?:$|[^a-z0-9])", lower_raw):
+            if marker not in verbs:
+                verbs.append(marker)
 
     # Wi-Fi permutations: wifi, wi-fi, wi_fi, or "wi".
-    if re.search(r"\b(?:wi[-_]?fi|wifi|wi)\b", lower_raw):
+    if re.search(r"\b(?:wi[-_]?fi|wifi|wi)\b", lower_raw) and "Wi-Fi" not in verbs:
         verbs.append("Wi-Fi")
 
     # 240p / 360p. The suffix follows the row's own asset/resolution only: a
@@ -635,7 +734,7 @@ def parse_clean_release_tag_label(
         verbs.append("360p")
 
     # Root / Magisk
-    if re.search(r"\b(?:root|magisk)\b", lower_raw):
+    if re.search(r"\b(?:root|magisk)\b", lower_raw) and "Root" not in verbs:
         verbs.append("Root")
 
     # Beta / Alpha / RC
@@ -656,13 +755,13 @@ def parse_clean_release_tag_label(
 
     verb_suffix = " ".join(f"({verb})" for verb in verbs)
     label = f"{version_part} {verb_suffix}".strip()
-    if (
-        is_prerelease
-        and "[preview]" not in label.lower()
-        and "(beta)" not in label.lower()
-        and "(alpha)" not in label.lower()
+    # A pre-release is marked after its date or version, which is what keeps
+    # nightlies (shown by date) distinguishable from the stable builds beside
+    # them in the same list. A beta needs no marker.
+    if is_prerelease and not re.search(
+        r"(?:pre-release|\(alpha|\(rc|\(beta)", label, re.IGNORECASE
     ):
-        label += "  [preview]"
+        label += " (Pre-release)"
     return label
 
 
