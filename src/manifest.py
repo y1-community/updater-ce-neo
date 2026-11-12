@@ -175,6 +175,10 @@ def _packages_from_mapping(mapping: dict, description: str = "") -> list[Firmwar
                 derivative = ""
         info_repo = str(mapping.get("info_repo") or "").strip()
         apk_repo = str(mapping.get("apk_repo") or "").strip()
+        install_first = str(mapping.get("install_first") or "").strip()
+        install_first_version = str(
+            mapping.get("install_first_version") or ""
+        ).strip()
         raw_dnkd = mapping.get("do_not_keep_data")
         if raw_dnkd is None:
             raw_dnkd = mapping.get("no_keep_data")
@@ -240,6 +244,10 @@ def _packages_from_mapping(mapping: dict, description: str = "") -> list[Firmwar
                 asset_pattern=asset_pattern,
                 portable_zips=portable_zips,
                 brand=brand,
+                install_first=(
+                    resolve_firmware_repo(install_first) if install_first else ""
+                ),
+                install_first_version=install_first_version,
             )
         )
     return out
@@ -335,6 +343,8 @@ def cache_manifest(entries):
              "info_repo": getattr(e, "info_repo", "") or "",
              "apk_repo": getattr(e, "apk_repo", "") or "",
              "brand": getattr(e, "brand", "") or "",
+             "install_first": getattr(e, "install_first", "") or "",
+             "install_first_version": getattr(e, "install_first_version", "") or "",
              "do_not_keep_data": bool(getattr(e, "do_not_keep_data", False)),
              "PMT_format_needed": bool(getattr(e, "pmt_format_needed", False))}
             for e in entries
@@ -373,6 +383,8 @@ def load_cached_manifest():
                 info_repo=e.get("info_repo", "") or "",
                 apk_repo=e.get("apk_repo", "") or "",
                 brand=e.get("brand", "") or "",
+                install_first=e.get("install_first", "") or "",
+                install_first_version=e.get("install_first_version", "") or "",
                 do_not_keep_data=bool(e.get("do_not_keep_data", False)),
                 pmt_format_needed=bool(
                     e.get("PMT_format_needed", e.get("pmt_format_needed", False))

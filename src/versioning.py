@@ -287,6 +287,17 @@ def release_version_tuple(tag_name, release_name=None):
     read (nightlies, branch names).
     """
 
+    # A build date is not a semantic version.  In particular ``20261107-v2``
+    # must not be read as version 2 just because of its rebuild suffix.  A
+    # title such as ``1.0.4 - Initial Release`` on a ``build-20241010`` tag is
+    # still the product version, so it wins over the datestamp.
+    if release_datestamp_is_primary(tag_name):
+        if release_name:
+            title_str = semver_from_release_title(release_name)
+            if title_str:
+                return parse_semver(title_str.lstrip("vV"))
+        return None
+
     title_version = None
     if release_name:
         title_str = semver_from_release_title(release_name)
@@ -398,29 +409,109 @@ def effective_tag(rel: dict) -> str:
     return (rel.get("tag_name") or "").strip()
 
 
+_DATESTAMP_RE = re.compile(
+    r"(?<!\d)(?:"
+    r"(?P<year>(?:19|20)\d{2})[-_./]?(?P<month>0[1-9]|1[0-2])[-_./]?"
+    r"(?P<day>0[1-9]|[12]\d|3[01])"
+    r"|(?P<short_year>\d{2})(?P<short_month>0[1-9]|1[0-2])"
+    r"(?P<short_day>0[1-9]|[12]\d|3[01])"
+    r")(?!\d)"
+)
+
+
+def _datestamp_match(raw: str):
+    """The first date-looking span in ``raw`` and its parsed date parts."""
+
+    text = str(raw or "")
+    match = _DATESTAMP_RE.search(text)
+    if not match:
+        return None, None
+    if match.group("year"):
+        year = int(match.group("year"))
+        month = int(match.group("month"))
+        day = int(match.group("day"))
+    else:
+        yy = int(match.group("short_year"))
+        year = 2000 + yy if yy < 70 else 1900 + yy
+        month = int(match.group("short_month"))
+        day = int(match.group("short_day"))
+    try:
+        datetime(year, month, day)
+    except ValueError:
+        return match, None
+    return match, (year, month, day)
+
+
+def release_datestamp_parts(raw: str) -> tuple[int, int, str] | None:
+    """A tag's datestamp as ``(YYYYMMDD, HHMM, suffix)``.
+
+    The suffix is whatever follows the date (and an optional ``-HHMM`` time),
+    for example ``20261107-v2`` -> ``(20261107, 0, "v2")``.  This is only the
+    date portion: a tag such as ``v2.0.4-20260103`` still gets its semantic
+    version from the leading ``2.0.4``.
+    """
+
+    match, parsed = _datestamp_match(raw)
+    if match is None or parsed is None:
+        return None
+    year, month, day = parsed
+    date_key = year * 10000 + month * 100 + day
+
+    text = str(raw or "")
+    tail = text[match.end():]
+    time_key = 0
+    time_match = re.match(r"[-_./T ]?([01]\d|2[0-3])([0-5]\d)(?!\d)", tail)
+    if time_match:
+        time_key = int(time_match.group(1)) * 100 + int(time_match.group(2))
+        tail = tail[time_match.end():]
+    suffix = re.sub(r"^[-_./\s]+", "", tail).strip()
+    suffix = re.sub(r"[-_./\s]+$", "", suffix)
+    return date_key, time_key, suffix
+
+
+def release_datestamp_is_primary(raw: str) -> bool:
+    """Whether the datestamp is the release's version, not an extra date.
+
+    ``20261107-v2`` is a dated build. ``v2.0.4-20260103`` is semantic version
+    2.0.4 with a build date, so its dotted version still drives compatibility
+    and ordering; only the label shows the date.
+    """
+
+    match, parsed = _datestamp_match(raw)
+    if match is None or parsed is None:
+        return False
+    prefix = str(raw or "")[: match.start()]
+    return re.search(r"\d+\.\d+", prefix) is None
+
+
+def release_datestamp_suffix(raw: str) -> str:
+    """Display suffix after a primary datestamp (``v2`` for ``...-v2``)."""
+
+    parts = release_datestamp_parts(raw)
+    if not parts or not release_datestamp_is_primary(raw):
+        return ""
+    return re.split(r"[-_\s]+", parts[2], maxsplit=1)[0].strip()
+
+
+def _datestamp_suffix_key(suffix: str) -> tuple[int, ...]:
+    """Sort a dated sibling after its unsuffixed build and by suffix number."""
+
+    if not suffix:
+        return ()
+    numbers = tuple(int(value) for value in re.findall(r"\d+", suffix))
+    # Any suffix (including a word-only hotfix) is a rebuild of that date.
+    return numbers or (1,)
+
+
 def release_datestamp_label(raw: str) -> str | None:
     """Human date for a tag, or None when the tag has no datestamp."""
 
-    text = str(raw or "")
-    match = re.search(
-        r"(?<!\d)((?:19|20)\d{2})[-_./]?(0[1-9]|1[0-2])[-_./]?(0[1-9]|[12]\d|3[01])(?!\d)",
-        text,
-    )
-    year = month = day = None
-    if match:
-        year, month, day = (int(match.group(i)) for i in (1, 2, 3))
-    else:
-        short = re.search(
-            r"(?<!\d)(\d{2})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])(?!\d)",
-            text,
-        )
-        if not short:
-            return None
-        yy = int(short.group(1))
-        year = 2000 + yy if yy < 70 else 1900 + yy
-        month, day = int(short.group(2)), int(short.group(3))
+    parts = release_datestamp_parts(raw)
+    if parts is None:
+        return None
+    date_key = parts[0]
     try:
-        parsed = datetime(year, month, day)
+        parsed = datetime(date_key // 10000, date_key // 100 % 100, date_key % 100)
     except ValueError:
         return None
     return f"{parsed.strftime('%B')} {parsed.day} {parsed.year}"
@@ -448,6 +539,7 @@ def parse_clean_release_tag_label(
     # 1. Datestamp check. Same shapes the catalogue and GitHub tags use:
     # YYYYMMDD, YYYY-MM-DD, YYYY.MM.DD, YYYY/MM/DD, YYMMDD.
     date_str = release_datestamp_label(raw)
+    date_primary = release_datestamp_is_primary(raw)
 
     # 2. Semantic version check (e.g. 3.1.2, 0.9.0, 1.8.2). Check a compound
     # version like 2.4.0-koensayr-3.0.2 or 2.0.4-os-3.0.2 first.
@@ -468,6 +560,12 @@ def parse_clean_release_tag_label(
         )
         semver_str = v_match.group(1) if v_match else None
 
+    if date_primary:
+        # ``20261107-v2`` is a date, not version 2.  The suffix is handled as
+        # a rebuild marker below.
+        semver_str = None
+        compound_os_version = None
+
     version_part = semver_str or date_str
     title_semver = detect_title_start_or_end_semver(name)
     # A tag that carries both a version and a build date shows both, the date
@@ -475,6 +573,8 @@ def parse_clean_release_tag_label(
     tag_date = date_str if (semver_str and date_str) else None
     if title_semver:
         version_part = title_semver
+        # A title version is the product version, not the tag's build date.
+        date_primary = False
     elif not version_part:
         # Tags such as ``baseline-204`` identify a build, not a version. Their
         # release titles carry the usable version (``Y2Linux 1.0 Beta 9.2.13``).
@@ -548,6 +648,12 @@ def parse_clean_release_tag_label(
     if tag_date and not version_only and tag_date not in verbs:
         verbs.insert(0, tag_date)
 
+    # A same-date rebuild (``20261107-v2``) is newer than the first build and
+    # displays its suffix after the date: ``November 7 2026 (v2)``.
+    date_suffix = release_datestamp_suffix(raw) if date_primary else ""
+    if date_suffix and date_suffix not in verbs:
+        verbs.insert(0, date_suffix)
+
     verb_suffix = " ".join(f"({verb})" for verb in verbs)
     label = f"{version_part} {verb_suffix}".strip()
     if (
@@ -574,8 +680,14 @@ def release_sort_key(release):
     version_info = parse_version_designations(tag_name)
     clean_version = str(version_info.get("clean_version", "")).lstrip("vV")
 
-    tag_timestamp = extract_tag_timestamp(tag_name)
-    if not tag_timestamp and numeric_version is None:
+    date_parts = release_datestamp_parts(tag_name)
+    date_primary = release_datestamp_is_primary(tag_name) and not title_semver
+    if date_primary and date_parts is not None:
+        tag_timestamp = date_parts[0] * 10000 + date_parts[1]
+        numeric_version = _datestamp_suffix_key(date_parts[2])
+    else:
+        tag_timestamp = extract_tag_timestamp(tag_name)
+    if not date_primary and not tag_timestamp and numeric_version is None:
         numeric_version = parse_semver(clean_version)
         if numeric_version is None:
             numeric_version = parse_semver(semver_from_release_title(name))

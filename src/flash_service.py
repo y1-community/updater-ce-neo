@@ -139,7 +139,7 @@ from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal
 import platform
 
 from . import linux_sp_flash, paths
-from .fw_package import prune_to_firmware_package
+from .fw_package import is_pre_stage_folder, prune_to_firmware_package
 from .i18n import tr
 from .progress_model import ThroughputEta
 
@@ -2221,7 +2221,24 @@ class ExtractWorker(QThread):
                 self.finished.emit(False, "", "USER_CANCELLED")
                 return
             # Validate scatter discovery; surfaces MULTIPLE_SCATTERS early
-            sc = _find_scatter(extract_dir)
+            # A portable install-first package deliberately carries two
+            # scatters (the target and its pre_stage base). Resolve the pair
+            # first; only an ordinary folder with several unrelated scatters
+            # should still be rejected.
+            sc = None
+            try:
+                from .fw_package import locate_package
+
+                paired = locate_package(extract_dir, require_ini=False)
+                if paired is not None and (
+                    paired.install_first_package is not None
+                    or str(getattr(paired, "install_first", "") or "").strip()
+                ):
+                    sc = paired.scatter
+            except Exception:
+                sc = None
+            if sc is None:
+                sc = _find_scatter(extract_dir)
             if sc is None:
                 self.finished.emit(False, "", "NO_SCATTER_FILE")
                 return
@@ -2239,7 +2256,22 @@ class ExtractWorker(QThread):
         if is_scatter_file or p.is_dir():
             source_dir = p.parent if is_scatter_file else p
             from .sp_flash_gui import discard_firmware_history
-            sc = _find_scatter(source_dir, allow_raise=True)
+            # A portable folder or a selected pre_stage folder must open its
+            # target, not fail because both halves of the pair are present.
+            sc = None
+            try:
+                from .fw_package import resolve_selected_package
+
+                paired = resolve_selected_package(source_dir)
+                if paired is not None and (
+                    paired.install_first_package is not None
+                    or str(getattr(paired, "install_first", "") or "").strip()
+                ):
+                    sc = paired.scatter
+            except Exception:
+                sc = None
+            if sc is None:
+                sc = _find_scatter(source_dir, allow_raise=True)
             work_dir = sc.parent if sc else source_dir
             discard_firmware_history(work_dir)
             self.progress.emit(100)
@@ -2457,6 +2489,11 @@ def find_scatter_files(directory):
     d = Path(directory)
     if not d.exists():
         return []
+    # A target package may keep its prerequisite inside its own folder (the
+    # macOS Firmware/pre_stage layout). Those are two scatters but one target;
+    # a caller that starts at the target must not report an ambiguity. A
+    # caller that starts inside pre_stage still sees the base scatter.
+    root_is_prerequisite = any(is_pre_stage_folder(part) for part in d.parts)
     ignored = {
         "__MACOSX",
         ".git",
@@ -2481,6 +2518,7 @@ def find_scatter_files(directory):
             and not name.startswith(".")
             and not name.lower().endswith(".app")
             and not (root_name == "assets" and name.lower() == "compat")
+            and (root_is_prerequisite or not is_pre_stage_folder(name))
         ]
         for f in files:
             fl = f.lower()

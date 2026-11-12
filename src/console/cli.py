@@ -30,7 +30,7 @@ def _version() -> str:
                 return line.split("=", 1)[1].strip().strip("'\"")
     except OSError:
         pass
-    return "2.5.4"
+    return "2.5.5"
 
 
 def _emit(payload: dict, as_json: bool) -> None:

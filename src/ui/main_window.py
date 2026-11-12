@@ -884,6 +884,9 @@ class MainWindow(QMainWindow):
         self._pending_app_update = None
         self._install_failed = False
         self._saw_all_command_exec = False
+        # flash_tool's own completion line already finished this run's UI, so
+        # a late worker result must not repaint that completion screen.
+        self._sp_console_completion_done = False
         self._failure_title = ""
         self._cache_recovery_needed = False
         self._legacy_migration_checked = False
@@ -907,6 +910,17 @@ class MainWindow(QMainWindow):
         self._format_all_required = False
         self._format_all_confirm_pending = False
         self._keep_data_pkg = None
+        # Install Firmware First: a manifest ``install_first`` package must be
+        # put on the player before this overlay. The journey owns the answer
+        # and what comes next; the stage names the prompt on screen.
+        self._install_first_journey = None
+        self._install_first_stage = ""
+        self._install_first_after = None
+        self._install_first_prerequisite_run = False
+        # MTKclient leaves the player off after the base run, so the target's
+        # prep card only asks for a power-off: the player has just been
+        # powered on and disconnected by the preceding card.
+        self._install_first_power_off_only = False
         self._gui_handoff_prepare = False
         self._gui_handoff_ready = False
         self._gui_launch_when_ready = False
@@ -1283,6 +1297,7 @@ class MainWindow(QMainWindow):
         self._stack = CurrentPageStack()
         paint_window_surface(self._stack)
         self._select_page = SelectPackagePage()
+        self._select_page.set_install_guard(self._guard_install_first)
         QTimer.singleShot(0, self._prefill_fw_package)
         # The themes/fonts stage spans this window and the install card, so the
         # same journey object owns its state for both.
@@ -3397,6 +3412,8 @@ class MainWindow(QMainWindow):
             return True
         if getattr(self, "_keep_data_erase_confirm_pending", False):
             return True
+        if getattr(self, "_install_first_stage", ""):
+            return True
         if getattr(self, "_install_complete", False) or getattr(self, "_install_failed", False):
             return False
         return hasattr(self, "sm") and self.sm.state in _INSTALL_RUN_STATES
@@ -4307,6 +4324,13 @@ class MainWindow(QMainWindow):
             self._verify_native_chrome()
         if hasattr(self, "_schedule_caption_button_refresh"):
             self._schedule_caption_button_refresh()
+        # The last animated resize leaves the newly exposed strip to the page
+        # beneath the card. Only the card repaints itself on each percent, so
+        # that strip could stay unpainted; ask the client area for one full
+        # paint once the frame has settled.
+        central = self.centralWidget()
+        if central is not None:
+            central.update()
         self._hold_select_window_size()
         # The stage change hides sidebar entries while the window is still
         # resizing, so a focused entry can lose its widget after the UI state
@@ -4793,6 +4817,11 @@ class MainWindow(QMainWindow):
         return da, auth
 
     def _on_package_selected(self, path, name, model):
+        # A local package can declare an install_first prerequisite just like a
+        # catalogue release. The portability of the package must not bypass the
+        # question that keeps an overlay off an unprepared player.
+        if not self._guard_local_install_first(path):
+            return
         self._remember_catalogue_section()
         self._download_active = False
         self._prep_active = False
@@ -4805,7 +4834,9 @@ class MainWindow(QMainWindow):
         self._keep_settings_default = bool(taker()) if callable(taker) else False
         # Only the auto-started ROM-bundled run ends on Retry or Quit.
         self._bundled_firmware_run = bool(path) and path == getattr(self, "_bundled_package_path", None)
-        if not self._bundled_firmware_run:
+        if not self._bundled_firmware_run and not getattr(
+            self, "_install_first_prerequisite_run", False
+        ):
             self._bundled_rockbox = False
         if hasattr(self, "_flash_page"):
             self._flash_page.set_bundled_run(self._bundled_firmware_run)
@@ -5264,6 +5295,7 @@ class MainWindow(QMainWindow):
         self._flash_page.set_package_name(self._package_name)
         self._flash_page.set_model(self._package_model)
         self._flash_page.set_method(self._flash_method)
+        self._flash_page.set_power_off_only(self._install_first_power_off_only)
         keep_data_default = self._keep_data_default_for_install()
         try:
             from ..flash_service import completed_extract_dir, compute_extract_dir, _find_scatter, _parse_scatter_platform
@@ -5317,11 +5349,15 @@ class MainWindow(QMainWindow):
                 if hasattr(self, "_select_page")
                 else ""
             )
+            available = keep_data.keep_data_available(
+                model, pkg, self.settings, hardware_type=hardware
+            )
+            if self._install_first_already_on_target():
+                available = True
+            elif self._install_first_forces_no_keep_data():
+                available = False
             self._flash_page.set_keep_data_available(
-                keep_data.keep_data_available(
-                    model, pkg, self.settings, hardware_type=hardware
-                )
-                and not self._format_all_required,
+                available and not self._format_all_required,
                 keep_data.keep_data_label(model),
             )
         except Exception:
@@ -5486,6 +5522,10 @@ class MainWindow(QMainWindow):
             self._sp_1013_seen = False
         self._install_failed = False
         self._power_off_prompt = False
+        # The target's prep card has been answered by the time the flash starts;
+        # later retries use the ordinary power-off-and-disconnect wording.
+        self._install_first_power_off_only = False
+        self._flash_page.set_power_off_only(False)
         # The window in which a flash backend may run starts here, with the
         # guidance that asks for the device, and nothing may sweep the tools
         # away until the run reports its result.
@@ -5590,6 +5630,7 @@ class MainWindow(QMainWindow):
         )
         da_file, auth_file = self._flash_inputs()
         self._saw_all_command_exec = False
+        self._sp_console_completion_done = False
         self._completion_notified = False
         self._used_sp_backend = (backend_method(self._flash_method) == METHOD_SP)
         if self._used_sp_backend:
@@ -5633,6 +5674,7 @@ class MainWindow(QMainWindow):
         if step in (STEP_DETECT, STEP_DONE) or step in _WRITE_STEPS:
             self._past_usb_search = True
             self._usb_search_active = False
+        previous_step = getattr(self, "_step_now", None)
         self._step_now = step
         key = _STEP_KEY.get(step, "step_wait")
         self._flash_page.update_step(key)
@@ -5670,7 +5712,12 @@ class MainWindow(QMainWindow):
             self._settings_page.set_method_enabled(True)
             self._set_state(FlashState.S2_WAIT_CONNECTION)
         elif step in _WRITE_STEPS:
-            self._flash_page.show_flashing()
+            # SP Flash Tool reports a write step for every percent. The first
+            # one already put the card up; rebuilding it and refitting the
+            # window a hundred times during a slow write left the page surface
+            # behind the card unpainted, which read as a white band under it.
+            if previous_step not in _WRITE_STEPS:
+                self._flash_page.show_flashing()
             self._flash_page.set_device_flashing()
             self._settings_page.set_method_enabled(False)
             self._enter_flashing_state()
@@ -5841,13 +5888,14 @@ class MainWindow(QMainWindow):
     def _handle_backend_line(self, line):
         """React to raw backend output with the right amount of UI.
 
-        Only two kinds of line ever need a reaction (see
-        :func:`flash_service.classify_backend_line`):
+        Three kinds of line need a reaction:
 
         * mtkclient's ``Hint:`` block is not an error — it restates step 1 of
           the connection guide, so it just re-arms the waiting stage.
         * errno 2 / 5 mean the player is wedged and must be reset by hand, so
           they raise the retry-guidance dialog.
+        * SP Flash Tool's own completion line finishes a run whose console
+          process never exits (see :meth:`_maybe_finish_sp_console_run`).
 
         Everything else stays Diagnostics-only, which is where the raw output
         belongs.
@@ -5873,7 +5921,15 @@ class MainWindow(QMainWindow):
                     "correcting premature failure/disconnection state to success stage."
                 )
                 self._install_failed = False
-                return
+                self._failure_title = ""
+                if hasattr(self, "_flash_page"):
+                    # A failure card raised too early must not stay under the
+                    # completion screen the line is about to show.
+                    self._flash_page.clear_install_failure()
+            # The tool has finished its command. Some builds keep the console
+            # process alive after this line, so finish the install here rather
+            # than leaving the card at the last write percentage.
+            self._maybe_finish_sp_console_run()
 
         if any(marker in low for marker in _CACHE_MISSING_MARKERS):
             # A file disappearing from the extracted cache is not a player
@@ -6016,6 +6072,84 @@ class MainWindow(QMainWindow):
         """True only if an SP Flash Tool run confirmed completion via console."""
         is_sp = bool(getattr(self, "_used_sp_backend", False))
         return bool(is_sp and getattr(self, "_saw_all_command_exec", False))
+
+    def _sp_follow_up_stage_pending(self) -> bool:
+        """True when a post-flash guide stage still owns the end of this run.
+
+        An APK install (``apk_repo``) or the Rockbox themes/fonts transfer is a
+        follow-up stage the success path starts by itself. While one is
+        configured, flash_tool's own completion line is not the end of the
+        journey: the card must hand over to that stage instead.
+        """
+        apk_path, apk_url = self._apk_install_info()
+        if apk_path or apk_url:
+            return True
+        wants_themes, _model = self._rockbox_themes_required()
+        if not wants_themes:
+            return False
+        from ..theme_sync import themes_auto_install_enabled
+
+        return bool(themes_auto_install_enabled(self.settings))
+
+    def _maybe_finish_sp_console_run(self) -> None:
+        """Finish the journey on flash_tool's own completion line.
+
+        Some SP Flash Tool builds keep their console process alive after
+        "All command exec done!": the command is finished, but the process
+        blocks instead of exiting, so the worker never reports a result and the
+        card stays at the last write percentage (95% for a standard release)
+        with no completion screen. The worker treats that same line as success
+        when it does exit, so with no follow-up stage configured the run is
+        finished here: 100%, the cleanup a completed worker would have run, and
+        the ordinary completion screen (donations appeal or completion note).
+        The flash itself is untouched; only its end is recognised earlier.
+        """
+        if getattr(self, "_sp_console_completion_done", False):
+            return
+        if getattr(self, "_install_complete", False) or getattr(self, "_install_failed", False):
+            return
+        if not getattr(self, "_package_path", ""):
+            return
+        if self.themes.active or self.themes.power_on_pending:
+            return
+        if self._sp_follow_up_stage_pending():
+            return
+        self._sp_console_completion_done = True
+        self._append_log(
+            "SP Flash Tool reported 'All command exec done'; the install is complete."
+        )
+        self._last_progress = 100
+        self._drop_pending_progress()
+        self._flash_page.update_progress(100)
+        timer = getattr(self, "_elapsed_timer", None)
+        if timer is not None:
+            timer.stop()
+        if hasattr(self, "_kill_process_timer") and self._kill_process_timer.isActive():
+            self._kill_process_timer.stop()
+        # The tool has finished its command; close the console process that is
+        # still holding the port, and release the host-awake hold with it.
+        service = getattr(self, "service", None)
+        if service is not None:
+            try:
+                service.cancel_flash()
+                service.stop_device_monitor()
+            except Exception:
+                logger.debug("Could not close the SP Flash Tool session", exc_info=True)
+        self.themes.finish()
+        self.themes.clear_power_on()
+        from .. import process_guard
+
+        process_guard.end_install_session(reason="install complete", sweep=False)
+        process_guard.sweep_async(
+            reason="install complete", on_done=self.sweep_report.emit
+        )
+        try:
+            from ..diagnostics import DiagnosticsManager
+
+            DiagnosticsManager.instance().end_flash_session(True, "")
+        except Exception:
+            pass
+        self._handle_flash_success()
 
     def _on_flash_disconnected(self):
         """Handle abrupt USB disconnection during flash, wait 5s safety window before killing tasks."""
@@ -6189,11 +6323,30 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
         if ok:
+            if getattr(self, "_sp_console_completion_done", False):
+                # flash_tool's completion line already showed the completion
+                # screen; this result is only the run closing.
+                return
             self._handle_flash_success()
         else:
+            if getattr(self, "_sp_console_completion_done", False):
+                # A completed flash must not be reported as failed because of
+                # what the tool did after its own completion line (its exit
+                # code, a USB disconnect, or a console that never exits).
+                self._append_log(
+                    "Notice: ignoring a late SP Flash Tool failure after its "
+                    f"completion line: {error_code}"
+                )
+                return
             self._handle_flash_failure(error_code)
 
     def _handle_flash_success(self):
+        if (
+            getattr(self, "_install_first_prerequisite_run", False)
+            and self._install_first_after
+        ):
+            self._finish_install_first_prerequisite()
+            return
         if hasattr(self, "_flash_page") and self._flash_page is not None:
             self._flash_page.dismiss_prompt_stop()
         try:
@@ -7217,6 +7370,9 @@ class MainWindow(QMainWindow):
 
     def _on_power_off_continue(self):
         """The user confirmed the device is off and unplugged. Start the run."""
+        if getattr(self, "_install_first_stage", ""):
+            self._on_install_first_continue()
+            return
         if getattr(self, "_format_all_confirm_pending", False):
             # The destructive retry was accepted. Go back to the ordinary
             # power-off/pin-reset stage; Continue now starts the same SP
@@ -7271,6 +7427,576 @@ class MainWindow(QMainWindow):
         self._flash_page.leave_power_off_prompt()
         self._begin_flash_flow()
 
+    # ------------------------------------------------------------------
+    # Install Firmware First (manifest ``install_first``)
+    # ------------------------------------------------------------------
+    def _install_first_model(self) -> str:
+        journey = getattr(self, "_install_first_journey", None)
+        target = getattr(journey, "target", None)
+        return str(
+            self._package_model or getattr(target, "model", "") or ""
+        ).upper()
+
+    def _install_first_label(self) -> str:
+        from ..config import device_label_for_model
+
+        model = self._install_first_model()
+        return device_label_for_model(model) if model else tr("device_fallback_word")
+
+    def _install_first_record_version(self) -> str:
+        """The version the tracked install knows, used to skip the version ask."""
+        try:
+            from ..player_update_check import get_software_install
+
+            journey = getattr(self, "_install_first_journey", None)
+            requirement = getattr(journey, "requirement", None)
+            if requirement is None:
+                return ""
+            hardware = (
+                self._select_page.current_hardware_type()
+                if hasattr(self, "_select_page")
+                else ""
+            )
+            record = get_software_install(
+                self._install_first_model(),
+                requirement.software_name,
+                hardware_type=hardware,
+                settings=self.settings,
+            ) or {}
+            return str(
+                record.get("release_label") or record.get("tag_name") or ""
+            ).strip()
+        except Exception:
+            return ""
+
+    def _install_first_selected_answer(self) -> str:
+        from .. import install_first
+
+        journey = getattr(self, "_install_first_journey", None)
+        if journey is None:
+            return ""
+        choice = ""
+        page = getattr(self, "_flash_page", None)
+        if page is not None:
+            choice = page.keep_data_confirm_choice()
+        if choice and choice == journey.requirement.label():
+            return install_first.ANSWER_PREREQUISITE
+        if choice and choice.casefold() == journey.target_name.casefold():
+            return install_first.ANSWER_TARGET
+        return install_first.ANSWER_OTHER
+
+    def _guard_install_first(self, pkg, rel) -> bool:
+        """Run the prerequisite sanity check before any download starts.
+
+        This is the Select page's install guard: returning ``False`` stops the
+        normal install because the card is now asking which firmware the player
+        runs. Nothing has been downloaded or extracted at this point, so an
+        answer that needs the base cannot waste bandwidth or disk.
+        """
+        try:
+            from .. import catalog, install_first, keep_data
+        except Exception:
+            return True
+        model = str(getattr(pkg, "model", "") or self._package_model or "")
+        requirement = install_first.requirement_for(
+            pkg, model, packages=catalog.packages_for_model(model)
+        )
+        if requirement is None:
+            return True
+        existing = getattr(self, "_install_first_journey", None)
+        if (
+            existing is not None
+            and existing.target is pkg
+            and existing.answer
+            and not getattr(self, "_install_first_prerequisite_run", False)
+        ):
+            # A retry of this same target (a failed write, a missing cache)
+            # already has its answer; do not ask the same question again. A
+            # failed prerequisite leaves the flag set, so its retry does ask
+            # (and starts the base again) rather than trusting an answer about
+            # a base that was never written.
+            return True
+        if requirement.package is None:
+            self._show_status(
+                tr("install_first_missing").format(software=requirement.software_name),
+                15000,
+            )
+            return False
+        journey = install_first.InstallFirstJourney(
+            target=pkg,
+            target_rel=dict(rel or {}),
+            requirement=requirement,
+        )
+        self._install_first_journey = journey
+        self._install_first_after = None
+        self._install_first_prerequisite_run = False
+        self._package_name = str(getattr(pkg, "name", "") or self._package_name)
+        self._package_model = model
+        page = getattr(self, "_flash_page", None)
+        if page is not None:
+            page.set_package_name(self._package_name)
+            page.set_model(self._package_model)
+            page.set_method(self._flash_method)
+        selected = journey.target_name
+        try:
+            tracked = keep_data.tracked_package(model, pkg, self.settings)
+            if tracked is not None and str(getattr(tracked, "name", "")) == requirement.software_name:
+                selected = requirement.label()
+        except Exception:
+            pass
+        self._install_first_stage = "software"
+        if page is not None:
+            page.show_install_first_prompt(
+                tr("keep_data_which_firmware_fmt").format(model=self._install_first_label()),
+                tr("install_first_hint").format(
+                    software=requirement.label(),
+                    model=self._install_first_label(),
+                    target=journey.target_name,
+                ),
+                (journey.target_name, requirement.label(), tr("keep_data_choice_other")),
+                selected=selected,
+                on_no=self._cancel_install_first,
+            )
+        self._nav_to_page(_PAGE_FLASH)
+        self._sync_install_nav_entry()
+        self._adjust_window_geometry()
+        return False
+
+    def _local_fw_package_for_path(self, path):
+        """The parsed local package behind a selection, when it has one."""
+        try:
+            from pathlib import Path
+            from ..fw_package import locate_package
+            from ..paths import INSTALL_DIR
+        except Exception:
+            return None
+        if not path:
+            return None
+        p = Path(str(path))
+        page = getattr(self, "_select_page", None)
+        current = getattr(page, "_fw_package", None)
+        bundled = getattr(self, "_bundled_fw_package", None)
+        try:
+            if bundled is not None:
+                bundled_path = str(getattr(self, "_bundled_package_path", "") or "")
+                if str(p) == bundled_path or p.resolve() == Path(bundled.folder).resolve():
+                    return bundled
+            if current is not None:
+                target = p.parent if p.is_file() else p
+                if current.folder.resolve() == target.resolve():
+                    return current
+        except OSError:
+            pass
+        root = p if p.is_dir() else p.parent
+        try:
+            return locate_package(
+                root,
+                require_ini=False,
+                app_dir=INSTALL_DIR,
+                source_names=(p.name,),
+            )
+        except Exception:
+            return None
+
+    def _guard_local_install_first(self, path) -> bool:
+        """Ask the install-first question for a locally browsed package.
+
+        This mirrors :meth:`_guard_install_first`, but the target and its
+        prerequisite are local ``FwPackage`` objects. When the portable zip
+        carries ``pre_stage``, the journey uses it directly; otherwise the
+        ordinary catalogue release lookup remains available for the download.
+        """
+        from dataclasses import replace
+
+        try:
+            from .. import catalog, fw_package, install_first, keep_data
+        except Exception:
+            return True
+        page = getattr(self, "_select_page", None)
+        if page is None or getattr(page, "_current_installed_release_info", None):
+            return True
+        pkg = self._local_fw_package_for_path(path)
+        if pkg is None or not str(getattr(pkg, "install_first", "") or "").strip():
+            return True
+        model = str(getattr(pkg, "model", "") or self._package_model or "")
+        target = fw_package.package_as_catalogue(pkg)
+        requirement = install_first.requirement_for(
+            target, model, packages=catalog.packages_for_model(model)
+        )
+        if requirement is None:
+            return True
+        local_base = getattr(pkg, "install_first_package", None)
+        if local_base is not None:
+            requirement = replace(
+                requirement,
+                package=fw_package.package_as_catalogue(local_base),
+            )
+
+        existing = getattr(self, "_install_first_journey", None)
+        existing_target = getattr(existing, "target", None) if existing is not None else None
+        same_target = existing_target is target or bool(
+            getattr(existing_target, "slug", "")
+            and getattr(existing_target, "slug", "") == getattr(target, "slug", "")
+        )
+        if (
+            existing is not None
+            and same_target
+            and existing.answer
+            and not getattr(self, "_install_first_prerequisite_run", False)
+        ):
+            return True
+        if requirement.package is None:
+            self._show_status(
+                tr("install_first_missing").format(software=requirement.software_name),
+                15000,
+            )
+            return False
+
+        rel = fw_package.local_install_release(pkg)
+        if pkg is getattr(self, "_bundled_fw_package", None):
+            staged = str(getattr(self, "_bundled_package_path", "") or "")
+            if staged:
+                rel["local_install_path"] = staged
+        journey = install_first.InstallFirstJourney(
+            target=target,
+            target_rel=rel,
+            requirement=requirement,
+            local_prerequisite=local_base,
+        )
+        self._install_first_journey = journey
+        self._install_first_after = None
+        self._install_first_prerequisite_run = False
+        self._package_name = target.name or self._package_name
+        self._package_model = model
+        flash = getattr(self, "_flash_page", None)
+        if flash is not None:
+            flash.set_package_name(self._package_name)
+            flash.set_model(self._package_model)
+            flash.set_method(self._flash_method)
+        selected = journey.target_name
+        try:
+            tracked = keep_data.tracked_package(model, target, self.settings)
+            if tracked is not None and str(getattr(tracked, "name", "")) == requirement.software_name:
+                selected = requirement.label()
+        except Exception:
+            pass
+        self._install_first_stage = "software"
+        if flash is not None:
+            flash.show_install_first_prompt(
+                tr("keep_data_which_firmware_fmt").format(model=self._install_first_label()),
+                tr("install_first_hint").format(
+                    software=requirement.label(),
+                    model=self._install_first_label(),
+                    target=journey.target_name,
+                ),
+                (journey.target_name, requirement.label(), tr("keep_data_choice_other")),
+                selected=selected,
+                on_no=self._cancel_install_first,
+            )
+        self._nav_to_page(_PAGE_FLASH)
+        self._sync_install_nav_entry()
+        self._adjust_window_geometry()
+        return False
+
+    def _on_install_first_continue(self) -> None:
+        """The card's Continue/tick: answer the stage that is on screen."""
+        from .. import install_first
+
+        journey = getattr(self, "_install_first_journey", None)
+        if journey is None:
+            self._cancel_install_first()
+            return
+        stage = getattr(self, "_install_first_stage", "")
+        self._install_first_stage = ""
+        page = getattr(self, "_flash_page", None)
+        if page is not None:
+            page.clear_keep_data_confirmation()
+        if stage == "power_on":
+            self._resume_install_first_target_after_power_on()
+            return
+        if stage == "version":
+            step = journey.confirm_version(True)
+        elif stage == "confirm":
+            self._start_install_first_prerequisite()
+            return
+        else:
+            step = journey.choose(
+                self._install_first_selected_answer(),
+                self._install_first_record_version(),
+            )
+        if step == install_first.PROCEED:
+            self._proceed_with_install_first_target()
+        elif step == install_first.ASK_VERSION:
+            self._ask_install_first_version()
+        else:
+            self._confirm_install_first_prerequisite()
+
+    def _resume_install_first_target_after_power_on(self) -> None:
+        """The MTK base has been powered on once; start the target install."""
+        previous, rel = self._install_first_after or (None, None)
+        self._install_first_after = None
+        if previous is None or not rel:
+            self._cancel_install_first()
+            return
+        self._select_page.start_release_install(rel, previous, prompt=False)
+
+    def _ask_install_first_version(self) -> None:
+        from .. import install_first
+
+        journey = getattr(self, "_install_first_journey", None)
+        if journey is None:
+            self._cancel_install_first()
+            return
+        requirement = journey.requirement
+        version = (
+            requirement.version_range.label()
+            if requirement.version_range is not None
+            else requirement.version_text
+        )
+        self._install_first_stage = "version"
+        self._flash_page.show_install_first_prompt(
+            tr("install_first_version_fmt").format(
+                model=self._install_first_label(),
+                software=requirement.software_name,
+                version=version,
+            ),
+            tr("install_first_hint").format(
+                software=requirement.label(),
+                model=self._install_first_label(),
+                target=journey.target_name,
+            ),
+            (),
+            on_no=self._on_install_first_version_no,
+        )
+        self._sync_install_nav_entry()
+        self._adjust_window_geometry()
+
+    def _on_install_first_version_no(self) -> None:
+        from .. import install_first
+
+        journey = getattr(self, "_install_first_journey", None)
+        if journey is None:
+            self._cancel_install_first()
+            return
+        self._install_first_stage = ""
+        self._flash_page.clear_keep_data_confirmation()
+        if journey.confirm_version(False) == install_first.PROCEED:
+            self._proceed_with_install_first_target()
+        else:
+            self._confirm_install_first_prerequisite()
+
+    def _confirm_install_first_prerequisite(self) -> None:
+        journey = getattr(self, "_install_first_journey", None)
+        if journey is None:
+            self._cancel_install_first()
+            return
+        requirement = journey.requirement
+        self._install_first_stage = "confirm"
+        self._flash_page.show_install_first_prompt(
+            tr("install_first_need_title").format(
+                software=requirement.software_name, target=journey.target_name
+            ),
+            tr("install_first_need_body").format(
+                software=requirement.label(),
+                target=journey.target_name,
+                model=self._install_first_label(),
+            ),
+            (),
+            on_no=self._cancel_install_first,
+        )
+        self._sync_install_nav_entry()
+        self._adjust_window_geometry()
+
+    def _proceed_with_install_first_target(self) -> None:
+        journey = getattr(self, "_install_first_journey", None)
+        if journey is None:
+            return
+        self._install_first_stage = ""
+        self._install_first_power_off_only = False
+        self._flash_page.set_power_off_only(False)
+        self._flash_page.clear_keep_data_confirmation()
+        self._select_page.start_release_install(
+            journey.target_rel, journey.target, prompt=False
+        )
+
+    def _install_first_filter_rows(self, rows, requirement) -> list:
+        """Rows of the prerequisite release, newest first, honouring its range."""
+        from .. import catalog, versioning
+
+        usable = []
+        for rel in rows or []:
+            if requirement.version_range is None:
+                usable.append(rel)
+                continue
+            version = versioning.release_version_tuple(
+                rel.get("tag_name", ""), rel.get("name", "")
+            )
+            # A tag that cannot be read cannot be shown to satisfy the
+            # declared version, so it is not a candidate for the base. This
+            # matters most for an exact "=3.2.0": a newer build is not a
+            # substitute, and the old all-rows fallback silently installed one.
+            if version is not None and requirement.allows(version):
+                usable.append(rel)
+        return sorted(usable, key=catalog.release_sort_key, reverse=True)
+
+    def _start_install_first_prerequisite(self) -> None:
+        journey = getattr(self, "_install_first_journey", None)
+        if journey is None:
+            self._cancel_install_first()
+            return
+        requirement = journey.requirement
+        page = self._select_page
+        local_base = getattr(journey, "local_prerequisite", None)
+        if local_base is not None:
+            # The portable zip carries the base in pre_stage: use its own
+            # scatter and images instead of downloading and extracting a
+            # second copy of the same firmware.
+            self._install_first_after = (journey.target, journey.target_rel)
+            self._install_first_prerequisite_run = True
+            self._install_first_stage = ""
+            self._install_first_power_off_only = False
+            self._flash_page.set_power_off_only(False)
+            self._flash_page.clear_keep_data_confirmation()
+            self._keep_data = False
+            self._append_log(
+                tr("install_first_starting").format(
+                    software=requirement.software_name, target=journey.target_name
+                )
+            )
+            page.start_local_install(local_base, prompt=False)
+            return
+        try:
+            rows = page.client.releases_for_package(requirement.package, self._install_first_model())
+        except Exception as exc:
+            logger.debug("Install First: prerequisite releases failed: %s", exc)
+            rows = []
+        fetched_rows = list(rows or [])
+        rows = self._install_first_filter_rows(fetched_rows, requirement)
+        if not rows:
+            if fetched_rows:
+                version = (
+                    requirement.version_range.label()
+                    if requirement.version_range is not None
+                    else requirement.version_text
+                )
+                message = tr("install_first_version_unavailable").format(
+                    software=requirement.software_name, version=version
+                )
+            else:
+                message = tr("install_first_missing").format(
+                    software=requirement.software_name
+                )
+            self._show_status(message, 15000)
+            self._cancel_install_first()
+            return
+        self._install_first_after = (journey.target, journey.target_rel)
+        self._install_first_prerequisite_run = True
+        self._install_first_stage = ""
+        self._install_first_power_off_only = False
+        self._flash_page.set_power_off_only(False)
+        self._flash_page.clear_keep_data_confirmation()
+        self._keep_data = False
+        self._append_log(
+            tr("install_first_starting").format(
+                software=requirement.software_name, target=journey.target_name
+            )
+        )
+        page.start_release_install(rows[0], requirement.package, prompt=False)
+
+    def _finish_install_first_prerequisite(self) -> None:
+        """The base is installed: continue straight into the requested overlay."""
+        journey = getattr(self, "_install_first_journey", None)
+        previous, rel = self._install_first_after or (None, None)
+        self._install_first_prerequisite_run = False
+        self._install_first_after = None
+        # The prerequisite's own extraction is released with the journey when
+        # the target finishes; purging here would compare the target's selected
+        # release with the base's working directory and could remove the wrong
+        # cache entry.
+        self._flash_page.clear_keep_data_confirmation()
+        self._install_complete = False
+        self._install_failed = False
+        self._pre_install_guided = False
+        self._keep_data = False
+        self._format_all_required = False
+        if journey is not None:
+            self._append_log(
+                tr("install_first_base_done").format(
+                    software=journey.requirement.software_name,
+                    target=journey.target_name,
+                )
+            )
+        if previous is None or not rel:
+            return
+        if self._install_first_used_mtk():
+            # MTKclient finishes with the player off and disconnected. The
+            # first-time base needs one normal power-on before the overlay is
+            # flashed; SP Flash Tool powers the player on itself, so it keeps
+            # the ordinary target prep instead.
+            self._install_first_after = (previous, rel)
+            self._install_first_power_off_only = True
+            self._install_first_stage = "power_on"
+            self._flash_page.set_power_off_only(False)
+            self._flash_page.show_install_first_prompt(
+                tr("install_first_power_on_fmt").format(
+                    model=self._install_first_label()
+                ),
+                tr("install_first_power_on_hint"),
+                (),
+                on_no=self._cancel_install_first,
+            )
+            self._sync_install_nav_entry()
+            self._nav_to_page(_PAGE_FLASH)
+            self._adjust_window_geometry()
+            return
+        self._select_page.start_release_install(rel, previous, prompt=False)
+
+    def _install_first_used_mtk(self) -> bool:
+        """True when the firmware just written went through MTKclient."""
+        try:
+            method = str(self._flash_page.current_method() or "").strip().lower()
+        except Exception:
+            return False
+        return "mtk" in method
+
+    def _cancel_install_first(self) -> None:
+        self._install_first_journey = None
+        self._install_first_stage = ""
+        self._install_first_after = None
+        self._install_first_prerequisite_run = False
+        self._install_first_power_off_only = False
+        page = getattr(self, "_flash_page", None)
+        if page is not None:
+            page.set_power_off_only(False)
+            page.clear_keep_data_confirmation()
+        self._return_to_select_software()
+
+    def _install_first_already_on_target(self) -> bool:
+        from .. import install_first
+
+        journey = getattr(self, "_install_first_journey", None)
+        return bool(journey is not None and journey.answer == install_first.ANSWER_TARGET)
+
+    def _install_first_forces_no_keep_data(self) -> bool:
+        """True when the answer means this target starts on a fresh partition."""
+        from .. import catalog, install_first
+
+        journey = getattr(self, "_install_first_journey", None)
+        if getattr(self, "_install_first_prerequisite_run", False):
+            return True
+        if journey is None or journey.answer in ("", install_first.ANSWER_TARGET):
+            return False
+        try:
+            if install_first.related_by_derivative(
+                journey.target,
+                journey.requirement,
+                catalog.packages_for_model(self._install_first_model()),
+            ):
+                return False
+        except Exception:
+            pass
+        return True
+
     def _keep_data_default_for_install(self) -> bool:
         """True when this run should start with Keep my settings ticked.
 
@@ -7279,6 +8005,13 @@ class MainWindow(QMainWindow):
         already tracked is the same intent. A first install or a change to a
         different firmware still asks the user to opt in.
         """
+        if self._install_first_already_on_target():
+            # Reinstalling the firmware already on the player: its data is
+            # already on the right partition, even when the catalogue forbids
+            # Keep Data for a first install of this overlay.
+            return True
+        if self._install_first_forces_no_keep_data():
+            return False
         try:
             from .. import keep_data
 
@@ -7306,6 +8039,8 @@ class MainWindow(QMainWindow):
             return False
 
     def _keep_data_needs_confirmation(self) -> bool:
+        if self._install_first_already_on_target() or self._install_first_forces_no_keep_data():
+            return False
         if self._keep_data_default_for_install():
             # An update carries the player's data forward by definition; there
             # is no "which firmware is running?" question to answer.
@@ -7425,6 +8160,9 @@ class MainWindow(QMainWindow):
         self._nav_to_page(_PAGE_FLASH)
 
     def _on_cancel_wait(self):
+        if getattr(self, "_install_first_stage", ""):
+            self._cancel_install_first()
+            return
         if getattr(self, "_keep_data_confirm_pending", False):
             self._keep_data_confirm_pending = False
             self._begin_keep_data_erase_confirmation()
@@ -7677,7 +8415,12 @@ class MainWindow(QMainWindow):
         self._on_install_done()
 
     def _on_completion_dont_ask(self):
-        """Hide donations, then the compact completion screen without the appeal."""
+        """Stop the appeal for good, then leave the install journey.
+
+        Turning the prompt off is a preference, not a request to keep looking
+        at the install card: the run is already finished, so this ends the same
+        way Not now does and the catalogue is back where the user started.
+        """
         if getattr(self, "_bundled_firmware_run", False) and not self._portable_app_installed():
             # The card already explains why a portable run cannot keep this
             # preference; nothing may be written for a one-off run.
@@ -7685,15 +8428,20 @@ class MainWindow(QMainWindow):
         device_tracking.set_donation_ui_disabled(True, self.settings)
         device_tracking.set_donation_install_prompt_disabled(True, self.settings)
         self._flash_page.show_completion_appeal(False)
-        self._compact_install_screen = True
-        self._flash_page.show_completion_note(
-            True, software=self._package_name, model=self._package_model
-        )
-        self._apply_release_icon(complete=True)
         if hasattr(self, "_settings_page"):
             self._settings_page.refresh_settings()
         self._apply_donation_visibility(True)
-        self._adjust_window_geometry()
+        if getattr(self, "_bundled_firmware_run", False):
+            # A ROM-bundled portable run has no catalogue to return to; it
+            # keeps the compact completion card.
+            self._compact_install_screen = True
+            self._flash_page.show_completion_note(
+                True, software=self._package_name, model=self._package_model
+            )
+            self._apply_release_icon(complete=True)
+            self._adjust_window_geometry()
+            return
+        self._on_install_done()
 
     def _sync_install_app_button(self) -> None:
         """Offer the real install on a portable run's completion card."""
@@ -7931,8 +8679,14 @@ class MainWindow(QMainWindow):
         self._keep_data_confirm_pending = False
         self._keep_data_erase_confirm_pending = False
         self._format_all_confirm_pending = False
+        self._install_first_journey = None
+        self._install_first_stage = ""
+        self._install_first_after = None
+        self._install_first_prerequisite_run = False
+        self._install_first_power_off_only = False
         self._keep_data = False
         if hasattr(self, "_flash_page") and self._flash_page is not None:
+            self._flash_page.set_power_off_only(False)
             self._flash_page.clear_keep_data_confirmation()
         self._compact_install_screen = False
         self._download_active = False
@@ -8571,6 +9325,7 @@ class MainWindow(QMainWindow):
 
             self._portable_session = portable_run.PortableSession()
             self._bundled_firmware_run = True
+            self._bundled_fw_package = pkg
             if hasattr(self, "_settings_page"):
                 self._settings_page.set_portable_run(True)
             # 1. Parse scatter, stage firmware files into working directory
@@ -8582,6 +9337,7 @@ class MainWindow(QMainWindow):
             package_model = pkg.model or ""
 
             if hasattr(self, "_select_page") and self._select_page is not None:
+                self._select_page._fw_package = pkg
                 self._select_page._current_installed_release_info = None
                 self._select_page._current_package_path = package_path
                 self._select_page._current_package_name = package_name

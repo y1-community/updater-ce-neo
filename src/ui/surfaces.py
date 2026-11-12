@@ -146,19 +146,21 @@ def paint_window_surface(widget: QWidget) -> None:
     if glass_surfaces_enabled():
         show_glass_backdrop(widget)
         return
-    app = QApplication.instance()
-    surface = QColor()
-    if app is not None:
-        surface = app.palette().color(QPalette.ColorRole.Window)
-    if not surface.isValid() or surface.alpha() == 0:
-        try:
-            from .dark import T
+    # Match the QSS window surface, which is the theme token, not whatever the
+    # live application palette happens to hold. During an install those two can
+    # disagree (a stale palette after a palette change), and a page plate in the
+    # palette's still-light Window role then painted a white band under the
+    # card while the window itself stayed dark.
+    from .dark import T
 
-            surface = QColor(T().bg)
-        except Exception:
-            surface = QColor("#f8fafc")
-    surface = QColor(surface)
+    surface = QColor(T().bg)
+    if not surface.isValid():
+        app = QApplication.instance()
+        surface = QColor(app.palette().color(QPalette.ColorRole.Window)) if app is not None else QColor()
+    if not surface.isValid() or surface.alpha() == 0:
+        surface = QColor("#f8fafc")
     surface.setAlpha(255)
+    app = QApplication.instance()
     text = QColor()
     if app is not None:
         text = app.palette().color(QPalette.ColorRole.WindowText)
@@ -191,14 +193,15 @@ def harmonise_window_plates(root: QWidget) -> None:
     """
     if root is None or glass_surfaces_enabled():
         return
-    # The window paints the application palette's Window role; match that,
+    # The window paints the theme's window token (see _build_qss); match that,
     # not the card token, or the page plates would be skipped as already equal.
-    app = QApplication.instance()
-    surface = QColor(app.palette().color(QPalette.ColorRole.Window)) if app is not None else QColor()
-    if not surface.isValid():
-        from .dark import T
+    # A stale application palette must not hand these plates a white surface.
+    from .dark import T
 
-        surface = QColor(T().bg)
+    surface = QColor(T().bg)
+    if not surface.isValid():
+        app = QApplication.instance()
+        surface = QColor(app.palette().color(QPalette.ColorRole.Window)) if app is not None else QColor()
     surface.setAlpha(255)
     # Scroll views take the window surface on their Base too, so their
     # contents blend in; real text entry widgets keep their own Base.

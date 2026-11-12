@@ -94,6 +94,14 @@ class FirmwarePackage:
     # means the device registry's brand for the model applies; a model the
     # registry does not know yet is :data:`DEFAULT_BRAND`.
     brand: str = ""
+    # Repository of a firmware the player must already run before this one can
+    # be installed (``install_first`` in slidia_manifest.xml). Overlay builds
+    # rely on the base build's preloader, partition table and bootloader.
+    install_first: str = ""
+    # Minimum (or range) of that base firmware (``install_first_version``).
+    # A bare version is a minimum; prefix ``=`` pins it exactly. Empty means
+    # any version; see ``install_first.parse_version_constraint``.
+    install_first_version: str = ""
 
 
 def post_install_urls_for(*packages) -> tuple[str, str]:
@@ -1199,6 +1207,15 @@ def format_release_display_label(rel, prefer_240p=False):
     """Format release display label adhering to legacy firmware_downloader.py rules."""
     tag_name = (rel.get("tag_name") or "").strip()
     name = (rel.get("name") or "").strip()
+    if (
+        versioning.release_datestamp_is_primary(tag_name)
+        and not detect_title_start_or_end_semver(name)
+        and not _semver_from_release_title(name)
+    ):
+        # A dated build uses the date as its version; render that same shared
+        # label so a suffix such as ``20261107-v2`` becomes
+        # ``November 7 2026 (v2)`` here and in every other surface.
+        return parse_clean_release_tag_label(rel, prefer_240p=prefer_240p)
     version_info = parse_version_designations(tag_name)
     published_date = rel.get("published_at", "")
     is_prerelease = bool(rel.get("prerelease"))

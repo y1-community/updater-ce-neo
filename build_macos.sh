@@ -31,8 +31,8 @@ BRAND="$(printf '%s' "${BUILD_BRAND:-updater_ce}" | tr '[:upper:]-' '[:lower:]_'
 # The brand the caller asked for through the environment, before the default.
 # The brand plan below distinguishes "nothing asked for" from "updater_ce".
 BRAND_ENV="${BUILD_BRAND:-}"
-VERSION=$(sed -n 's/.*APP_VERSION[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' src/config.py 2>/dev/null || echo "2.5.3")
-[ -z "$VERSION" ] && VERSION="2.5.3"
+VERSION=$(sed -n 's/.*APP_VERSION[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' src/config.py 2>/dev/null || echo "2.5.5")
+[ -z "$VERSION" ] && VERSION="2.5.5"
 DIST_DIR="dist/macos"
 BUILD_DIR="build/macos"
 SPEC_FILE="macos.spec"

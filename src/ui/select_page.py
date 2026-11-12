@@ -50,6 +50,7 @@ from ..fw_package import (
     locate_package as locate_fw_package,
     read_package as read_fw_package,
     release_install_heading,
+    resolve_selected_package,
 )
 from ..paths import INSTALL_DIR
 from ..config import (
@@ -3185,12 +3186,44 @@ class SelectPackagePage(QWidget):
             self._set_notes_content(self._render_release_notes(self._current_selected_rel, as_html=True))
         self._update_translate_link()
 
-    def _trigger_release_install(self, rel, package=None, *, prompt=True):
+    def set_install_guard(self, guard) -> None:
+        """Window callback that may hold an install to ask a question first.
+
+        Returning ``False`` means the callback owns the flow and has not
+        started this install; ``True``/``None`` starts it normally.
+        """
+        self._install_guard = guard
+
+    def start_release_install(self, rel, package=None, *, prompt=False) -> None:
+        """Start an install the window chose (Install Firmware First)."""
+        self._trigger_release_install(rel, package=package, prompt=prompt, guard=False)
+
+    def _trigger_release_install(self, rel, package=None, *, prompt=True, guard=True):
+        local_pkg = (rel or {}).get("local_package")
+        if local_pkg is not None:
+            # The install-first journey can hand back a local prerequisite or
+            # target, not just a catalogue release. It has no download URL and
+            # must not enter the archive/extract path.
+            self.start_local_install(
+                local_pkg,
+                prompt=prompt,
+                install_path=(rel or {}).get("local_install_path"),
+            )
+            return
         if not rel or not rel.get("download_url"):
             return
         pkg = package or self.current_package()
         if pkg is None:
             return
+        callback = getattr(self, "_install_guard", None)
+        if guard and callable(callback) and callback(pkg, rel) is False:
+            return
+        # The guard may hand control to a prerequisite install, so the release
+        # and package that this run is about must be recorded by the run
+        # itself; the click handler's own selection is the target, not the
+        # prerequisite it may have started.
+        self._current_selected_rel = rel
+        self._pending_install_package = pkg
         self._details_package = pkg
 
         # Determine model and variant from original asset name / download URL:
@@ -3383,7 +3416,6 @@ class SelectPackagePage(QWidget):
         # A manual Install is a fresh choice, not the accepted update prompt.
         self._keep_settings_default = False
         self._trigger_release_install(rel)
-        self._current_selected_rel = rel
 
     def _on_download_progress(self, val: int):
         self._last_download_percent = int(val)
@@ -3404,14 +3436,17 @@ class SelectPackagePage(QWidget):
             return
         eff_model = getattr(self, "_current_package_model", "") or self.current_model()
         self._current_package_path = result
+        info = getattr(self, "_pending_install_release_info", None) or {}
         self._current_package_name = self._install_card_title(
-            self.current_software(),
+            info.get("software_name") or self.current_software(),
             getattr(self, "_current_selected_rel", None),
             eff_model,
         )
         self._current_package_model = eff_model
-        self._current_installed_release_info = getattr(self, "_pending_install_release_info", None)
-        self._details_package = self.current_package()
+        self._current_installed_release_info = info
+        self._details_package = (
+            getattr(self, "_pending_install_package", None) or self.current_package()
+        )
         self._set_details_header(self._current_selected_rel, self._details_package)
         self._prepare_package(result, self._on_online_prep_done)
 
@@ -3527,6 +3562,21 @@ class SelectPackagePage(QWidget):
             )
             if self._fw_package is not None:
                 self._apply_fw_package(self._fw_package)
+        if ok and self._fw_package is not None and extract_dir:
+            # A portable install-first zip has two scatters (the target and
+            # its pre_stage base). Flash from the target folder itself, never
+            # from the shared archive root where scatter discovery would see
+            # both and refuse the ambiguity.
+            target_folder = str(self._fw_package.folder)
+            current_path = Path(str(self._current_package_path or ""))
+            staged_scatter = current_path.is_file() and current_path.suffix.lower() == ".txt"
+            # Compare with the browsed path, not the worker's return value: a
+            # folder browse already extracts in place and would otherwise keep
+            # the portable root (with both scatters) as the flash path.
+            if not staged_scatter and Path(target_folder).resolve() != current_path.resolve():
+                extract_dir = target_folder
+                self._current_package_path = target_folder
+                self._path_edit.setText(target_folder)
         self._local_bar.setVisible(False)
         self.prep_finished.emit(bool(ok))
         if not ok:
@@ -3607,9 +3657,22 @@ class SelectPackagePage(QWidget):
             return
         p = Path(path)
         is_scatter = p.is_file() and (p.suffix.lower() == ".txt" or "scatter" in p.name.lower())
+        selected_pkg = None
         if is_scatter:
-            package_target = str(p.parent)
-            display_name = p.parent.name
+            selected_pkg = resolve_selected_package(
+                p.parent,
+                app_dir=INSTALL_DIR,
+                source_names=(p.name,),
+            )
+            if selected_pkg is not None and selected_pkg.folder != p.parent:
+                # Selecting the pre_stage scatter opens the target package it
+                # supports, with the base attached for the install-first step.
+                p = selected_pkg.folder
+                package_target = str(p)
+                display_name = p.name
+            else:
+                package_target = str(p.parent)
+                display_name = p.parent.name
         else:
             package_target = path
             display_name = p.name
@@ -3658,13 +3721,14 @@ class SelectPackagePage(QWidget):
             repo="",
             package_name="",
         )
+        self._fw_package = selected_pkg
         self._remember_gui_local(
             package_target, self._current_package_model, self._current_package_name
         )
         self._set_local_banner("sel_current_pkg", display_name)
         self._set_details_header(None, self._details_package)
         if is_scatter:
-            self._on_local_prep_done(True, str(p.parent), "")
+            self._on_local_prep_done(True, str(package_target), "")
             return
         self._start_btn.setEnabled(False)
         self._prepare_package(package_target, self._on_local_prep_done)
@@ -3714,8 +3778,11 @@ class SelectPackagePage(QWidget):
             slug="local-" + pkg.folder.name,
             name=self._current_package_name or pkg.folder.name,
             model=self._current_package_model or "",
-            repo="",
+            repo=pkg.repo or "",
             package_name="",
+            derivative=pkg.derivative or "",
+            do_not_keep_data=bool(pkg.do_not_keep_data),
+            pmt_format_needed=bool(pkg.pmt_format_needed),
             post_install=getattr(pkg, "post_install", "") or "",
             post_install_2=getattr(pkg, "post_install_2", "") or "",
         )
@@ -3762,8 +3829,21 @@ class SelectPackagePage(QWidget):
 
     def load_local_folder(self, folder: str) -> None:
         p = Path(folder)
+        resolved = resolve_selected_package(
+            p,
+            app_dir=INSTALL_DIR,
+            source_names=(p.name,),
+        )
+        if resolved is not None:
+            # A portable install-first package is entered from any of its
+            # folders. The target is the package that declares install_first;
+            # selecting pre_stage resolves to the target beside it.
+            p = resolved.folder
+            folder = str(p)
+            self._fw_package = resolved
+        else:
+            self._fw_package = read_fw_package(p, app_dir=INSTALL_DIR)
         display_name = p.name
-        self._fw_package = read_fw_package(p, app_dir=INSTALL_DIR)
 
         self._path_edit.setText(folder)
         self._current_package_path = folder
@@ -3819,8 +3899,14 @@ class SelectPackagePage(QWidget):
             package_name="",
         )
         self._set_details_header(None, self._details_package)
+        # A resolved portable package already names its target scatter. Using
+        # it avoids treating the sibling pre_stage scatter as a second layout.
+        scatter_file = None
+        if self._fw_package is not None and self._fw_package.scatter.is_file():
+            scatter_file = self._fw_package.scatter
         try:
-            scatter_file = _find_scatter(p, allow_raise=True)
+            if scatter_file is None:
+                scatter_file = _find_scatter(p, allow_raise=True)
         except ScatterDiscoveryError:
             self._local_status_key = ""
             self._local_status.setText(tr("sel_multiple_scatters_title"))
@@ -3838,6 +3924,37 @@ class SelectPackagePage(QWidget):
 
         self._start_btn.setEnabled(False)
         self._on_local_prep_done(False, "", "NO_SCATTER_FILE")
+
+    def start_local_install(self, pkg, *, prompt=False, install_path=None) -> None:
+        """Start a parsed local package without a catalogue or a download.
+
+        The install-first journey uses this for a prerequisite found in a
+        portable ``pre_stage`` folder. ``install_path`` lets the bundled target
+        keep flashing its already-staged copy while the package's metadata and
+        local base still come from the original portable folder.
+        """
+        if pkg is None:
+            return
+        target = Path(install_path) if install_path is not None else Path(pkg.folder)
+        folder = target if target.is_dir() else target.parent
+        eff_model = pkg.model or getattr(self, "_current_package_model", "")
+        eff_type = pkg.type or getattr(self, "_selected_type", None)
+        if prompt and self._should_prompt_pre_install():
+            if not self._prompt_pre_install(eff_model, eff_type):
+                return
+        self._stop_transfer_workers()
+        self._show_local_view()
+        self._fw_package = pkg
+        self._current_package_path = str(target)
+        self._current_installed_release_info = None
+        self._current_selected_rel = None
+        self._details_package = None
+        self._path_edit.setText(str(pkg.folder))
+        self._auto_detect_auth_file(str(folder))
+        self._apply_fw_package(pkg)
+        self._on_local_prep_done(True, str(folder), "")
+        if self._start_btn.isEnabled():
+            self._emit_ready()
 
     def _on_start_flash(self):
         if self._installer_mode and not self._installer_da:

@@ -69,6 +69,17 @@ def _no_release_fetch(monkeypatch):
     monkeypatch.setattr(SelectPackagePage, "_refresh_releases", lambda self, *a, **k: None)
 
 
+@pytest.fixture(autouse=True)
+def _no_global_history_write(monkeypatch):
+    # The local preview tests must not rewrite the tracked SP Flash Tool
+    # history.ini in the repository's tools folder.
+    import src.sp_flash_gui as sp_flash_gui
+    import src.ui.select_page as select_page
+
+    monkeypatch.setattr(sp_flash_gui, "update_sp_history_ini", lambda *a, **k: None)
+    monkeypatch.setattr(select_page, "update_sp_history_ini", lambda *a, **k: None)
+
+
 def test_bare_true_and_false_ini(tmp_path):
     assert read_fw_package_ini(_ini(tmp_path, "true\n")).enabled is True
     assert read_fw_package_ini(_ini(tmp_path, "false")).enabled is False
@@ -336,6 +347,40 @@ def test_browsed_zip_contents_fill_the_package_details(tmp_path, monkeypatch):
     assert page._current_package_name == "Get ready to install Stock 3.0"
     assert page._details_version.text() == "3.0"
     assert fw.exists()
+
+
+def test_browsing_a_portable_root_switches_the_page_to_its_target(tmp_path, monkeypatch):
+    """Browsing the root must not leave the two scatters as the flash path."""
+    _app()
+    root = tmp_path / "portable"
+    base = _firmware(
+        root / "pre_stage",
+        ini=(
+            "[fw_package]\nname = Original Software\nversion = 3.2.0\n"
+            "model = Y2\nrepo = y1-community/y1-stock-rom\n"
+        ),
+    )
+    target = _firmware(
+        root / "SP_Flash_Tool",
+        ini=(
+            "[fw_package]\nname = Reborn\nversion = 1.0\nmodel = Y2\n"
+            "repo = someone/reborn\n"
+            "install_first = y1-community/y1-stock-rom\n"
+            "install_first_version = 3.2.0=>\n"
+        ),
+    )
+    page = SelectPackagePage()
+    # This is a path-resolution test; keep the page from persisting its Y2
+    # choice into the shared settings of the next test.
+    monkeypatch.setattr(page, "_select_model_for_manual", lambda *_: None)
+    monkeypatch.setattr(page, "_remember_gui_local", lambda *a, **k: None)
+
+    page.load_local_folder(str(root))
+
+    assert page._fw_package is not None
+    assert page._fw_package.folder == target.resolve()
+    assert page._fw_package.install_first_package.folder == base.resolve()
+    assert Path(page._current_package_path).resolve() == target.resolve()
 
 
 def test_install_keeps_latest_archive_and_extract_and_drops_older_sets(tmp_path, monkeypatch):
@@ -745,6 +790,89 @@ def test_auto_start_bundled_firmware_navigates_to_flash_page(tmp_path, monkeypat
     finally:
         w.close()
         app.processEvents()
+
+
+def test_auto_start_install_first_portable_asks_before_flashing(tmp_path, monkeypatch):
+    """A portable target with pre_stage opens the question, not the flash."""
+    from src import downloads
+    from src.ui.main_window import MainWindow, _PAGE_FLASH
+
+    dl = tmp_path / "downloads"
+    dl.mkdir()
+    monkeypatch.setattr(downloads, "downloads_dir", lambda: dl)
+
+    root = tmp_path / "portable"
+    _firmware(
+        root / "pre_stage",
+        ini=(
+            "[fw_package]\nsoftware_name = Original Software\nversion = 3.2.0\n"
+            "target_model = Y2\nrepo = y1-community/y1-stock-rom\n"
+        ),
+    )
+    target = _firmware(
+        root / "SP_Flash_Tool",
+        ini=(
+            "[fw_package]\nsoftware_name = Reborn\nversion = 1.0\ntarget_model = Y2\n"
+            "repo = someone/reborn\ninstall_first = y1-community/y1-stock-rom\n"
+            "install_first_version = 3.2.0=>\n"
+        ),
+    )
+    (root / fw_package.FW_PACKAGE_INI).write_text(
+        (target / fw_package.FW_PACKAGE_INI).read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(fw_package, "find_bundled_firmware", lambda *a, **k: fw_package.locate_package(root))
+
+    app = _app()
+    w = MainWindow()
+    try:
+        w._prefill_fw_package()
+        app.processEvents()
+
+        assert w._stack.currentIndex() == _PAGE_FLASH
+        journey = w._install_first_journey
+        assert journey is not None
+        assert journey.local_prerequisite is not None
+        assert journey.local_prerequisite.folder == (root / "pre_stage").resolve()
+        assert w._flash_page._keep_data_choice.count() == 3
+        # Nothing has been flashed or downloaded; the question owns the flow.
+        assert w._install_first_stage == "software"
+    finally:
+        w.close()
+        app.processEvents()
+
+
+def test_browsing_pre_stage_folder_opens_the_target_package(tmp_path):
+    """macOS-style browsing of any contained folder lands on the target."""
+    _app()
+    root = tmp_path / "portable"
+    base = _firmware(
+        root / "pre_stage",
+        ini=(
+            "[fw_package]\nsoftware_name = Original Software\nversion = 3.2.0\n"
+            "target_model = Y2\nrepo = y1-community/y1-stock-rom\n"
+        ),
+    )
+    target = _firmware(
+        root / "Firmware",
+        ini=(
+            "[fw_package]\nsoftware_name = Reborn\nversion = 1.0\ntarget_model = Y2\n"
+            "repo = someone/reborn\ninstall_first = y1-community/y1-stock-rom\n"
+            "install_first_version = 3.2.0=>\n"
+        ),
+    )
+    page = SelectPackagePage()
+    try:
+        page.load_local_folder(str(base))
+
+        assert page._current_package_path == str(target.resolve())
+        assert page._current_package_model == "Y2"
+        assert page._details_name.text() == "Reborn"
+        assert page._fw_package.install_first_package is not None
+        assert page._fw_package.install_first_package.folder == base.resolve()
+        assert page._start_btn.isEnabled()
+    finally:
+        page.close()
 
 
 def test_cache_missing_failure_leaves_the_cache_to_the_recovery(tmp_path, monkeypatch):

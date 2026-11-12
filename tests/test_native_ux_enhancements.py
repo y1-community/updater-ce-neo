@@ -2399,13 +2399,8 @@ def test_post_install_support_appeal():
         # "Show …" is off once the user asked never to see the appeal again.
         assert not window._settings_page._cb_hide_donations.isChecked()
         assert not page._appeal.isVisible()
-        assert window._install_complete
-        assert window._stack.currentIndex() == _PAGE_FLASH
-        assert install.isChecked()
-        assert window._select_page._title.text() == "Install complete"
-
-        page._done_mark.click()
-        app.processEvents()
+        # The choice ends the journey the way Not now does: the catalogue is
+        # back, not a completion card the user has to dismiss as well.
         assert window._stack.currentIndex() == _PAGE_SELECT
         assert not window._install_complete
 

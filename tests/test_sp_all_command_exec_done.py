@@ -135,25 +135,94 @@ def _make_test_window():
     return app, win
 
 
-def test_main_window_catches_and_corrects_failure_on_all_command_exec():
+def test_main_window_finishes_the_install_on_all_command_exec():
+    """flash_tool's completion line ends a run whose console process never exits.
+
+    Some SP Flash Tool builds keep the process alive after the line, so the
+    worker never reports a result and the card stayed at the last write
+    percentage (95%) with no completion screen. With no themes/APK stage to
+    follow, the window must finish the journey itself: 100% and the ordinary
+    completion screen.
+    """
     from src.state import FlashState
+    from src.ui.main_window import _PAGE_FLASH
 
     app, win = _make_test_window()
     try:
+        win.settings.setValue("donation_ui_disabled", False)
+        win.settings.setValue("donation_install_prompt_disabled", False)
         win._package_path = "dummy.zip"
         win._package_model = "Y1"
         win._package_name = "Stock"
+        win._used_sp_backend = True
+        win._on_progress(95)
 
-        # Simulate MainWindow having declared a failure
+        # Simulate MainWindow having also declared a failure too early.
         win._install_failed = True
         win.sm.force_state(FlashState.S5_USB_DISCONNECTED)
 
-        # The console line only records completion; the worker's final result
-        # decides success, so the window must not jump to the success state.
         win._handle_backend_line("[SP] All command exec done!")
+        app.processEvents()
+
         assert win._saw_all_command_exec is True
+        assert win._sp_console_completion_done is True
         assert win._install_failed is False
-        assert win.sm.state is not FlashState.S5_COMPLETE
+        assert win._install_complete is True
+        assert win.sm.state is FlashState.S5_COMPLETE
+        assert win._stack.currentIndex() == _PAGE_FLASH
+        assert win._flash_page._progress_bar.value() == 100
+        assert win._flash_page._flash_banner.text() == "Install complete"
+    finally:
+        win._force_quit = True
+        win.close()
+        app.processEvents()
+
+
+def test_a_follow_up_themes_stage_owns_the_end_of_the_run(monkeypatch):
+    """A configured Rockbox themes stage still starts instead of completing."""
+    app, win = _make_test_window()
+    try:
+        win._package_path = "rockbox-y1.zip"
+        win._package_model = "Y1"
+        win._package_name = "Rockbox 0.5"
+        win._used_sp_backend = True
+        win._install_complete = False
+        win._rockbox_themes_required = lambda: (True, "Y1")
+        monkeypatch.setattr(
+            "src.theme_sync.themes_auto_install_enabled", lambda *a, **k: True
+        )
+
+        win._handle_backend_line("[SP] All command exec done!")
+        app.processEvents()
+
+        assert win._sp_console_completion_done is False
+        assert win._install_complete is False
+    finally:
+        win._force_quit = True
+        win.close()
+        app.processEvents()
+
+
+def test_a_late_failure_cannot_replace_a_finished_install():
+    """After the completion line, the run's own exit result is not a failure."""
+    app, win = _make_test_window()
+    try:
+        win.settings.setValue("donation_ui_disabled", False)
+        win.settings.setValue("donation_install_prompt_disabled", False)
+        win._package_path = "dummy.zip"
+        win._package_model = "Y1"
+        win._package_name = "Stock"
+        win._used_sp_backend = True
+        win._handle_backend_line("[SP] All command exec done!")
+        app.processEvents()
+
+        shown = []
+        win._handle_flash_failure = lambda code: shown.append(code)
+        win._on_flash_finished(False, "SP_EXIT_1")
+        app.processEvents()
+
+        assert shown == []
+        assert win._install_complete is True
     finally:
         win._force_quit = True
         win.close()
@@ -228,6 +297,34 @@ def test_a_late_sp_tail_cannot_reopen_the_completion_screen():
         app.processEvents()
 
 
+def test_repeated_write_steps_do_not_rebuild_the_card():
+    """SP reports a write step per percent; the card is built once.
+
+    Each show_flashing() bumps the page generation and asks the window to
+    refit, so rebuilding it for every percent of a multi-gigabyte write churned
+    the frame and left the page surface under the card unpainted on Windows.
+    """
+    app, win = _make_test_window()
+    try:
+        page = win._flash_page
+        win._install_complete = False
+        win._step_now = fs.STEP_DETECT
+        shown = []
+        page.show_flashing = lambda: shown.append(1)
+        page.set_device_flashing = lambda: None
+        win._enter_flashing_state = lambda: None
+        win._settings_page.set_method_enabled = lambda *_a, **_k: None
+
+        for _ in range(4):
+            win._on_step_changed(fs.STEP_WRITE)
+
+        assert len(shown) == 1
+    finally:
+        win._force_quit = True
+        win.close()
+        app.processEvents()
+
+
 def test_rockbox_flow_on_windows_sp_starts_automatically(monkeypatch):
     monkeypatch.setattr("src.paths.IS_WINDOWS", True)
     app, win = _make_test_window()
@@ -236,12 +333,15 @@ def test_rockbox_flow_on_windows_sp_starts_automatically(monkeypatch):
         win._package_model = "Y1"
         win._package_name = "Rockbox 0.5"
         win._used_sp_backend = True
+        # This test is about the themes stage, not the keep-data cleanup
+        # that now runs first for a Rockbox package.
+        win._start_rockbox_cleanup_if_needed = lambda: False
 
         started = []
         monkeypatch.setattr(
             win,
             "_start_themes_stage",
-            lambda model, donation_disabled, already_powered_on=False, automatic=False: started.append(
+            lambda model, donation_disabled, already_powered_on=False, automatic=False, after_firmware=False: started.append(
                 (model, already_powered_on, automatic)
             ),
         )

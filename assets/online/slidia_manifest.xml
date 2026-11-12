@@ -46,7 +46,7 @@
 
 <!-- <package name="Original Software" brand="Timmkoo" repo="y1-community/q5-stock-rom" device="Q3e" url="https://github.com/y1-community/q5-stock-rom" type="img" handler="Custom Firmware" package_name="rom_q5.zip" portable_zips="y1-community/q5-stock-rom-mirror" /> -->
 
-<package name="Reborn (Y2Linux)" brand="Innioasis" repo="schulzcode/y2linux" portable_zips="y1-community/y2linux-mirror" device="Y2" url="https://github.com/schulzcode/y2linux" type="img" post_install="https://innioasis.app/y2reborn_wifibt.html" handler="Custom Firmware" />
+<package name="Reborn (Y2Linux)" brand="Innioasis" repo="schulzcode/y2linux" portable_zips="y1-community/y2linux-mirror" install_first="y1-community/y1-stock-rom" install_first_version="3.2.0=>" device="Y2" url="https://github.com/schulzcode/y2linux" type="img" do_not_keep_data="true" post_install="https://innioasis.app/y2reborn_wifibt.html" handler="Custom Firmware" />
 
 <package name="Rockbox" brand="Innioasis" repo="rockbox-y1/rockbox" portable_zips="y1-community/rockbox-mirror" device="Y1" url="https://github.com/rockbox-y1/rockbox" type="img" icon="https://sc.filehippo.net/images/t_app-icon-l/p/c9b4d9fa-9b65-11e6-a6e7-00163ec9f5fa/2907264561/rockbox-icon.png" handler="Custom Firmware" />
 
@@ -62,12 +62,12 @@
 
 <package name="Please Update App To Continue" device_type="0" repo="Please-Click/Updates-Available" device="Y1" url="https://github.com/Please-Click/Updates-Available/releases/latest" type="img" handler="Custom Firmware" />
 
-<package name="inniclassic" brand="Innioasis" repo="FabianZettl/inniclassic" device="Y1" url="https://github.com/FabianZettl/inniclassic" type="img" handler="Custom Firmware"  />
+<package name="inniclassic" brand="Innioasis" repo="FabianZettl/inniclassic" device="Y1" url="https://github.com/FabianZettl/inniclassic" type="img" handler="Custom Firmware" portable_zips="y1-community/inniclassic-mirror" />
 
-<package name="Classy" brand="Innioasis" repo="ClassyPlayer/Classy" PMT_format_needed="true" device="Y2" url="https://github.com/ClassyPlayer/Classy" type="img" icon="https://github.com/ClassyPlayer/Classy/raw/main/docs/icons/icon.png" handler="Custom Firmware" />
-
-<package name="Classy" brand="Innioasis" repo="ClassyPlayer/Classy" PMT_format_needed="true" device="Y1" url="https://github.com/ClassyPlayer/Classy" type="img" icon="https://github.com/ClassyPlayer/Classy/raw/main/docs/icons/icon.png" handler="Custom Firmware" />
-
+<package name="Classy" brand="Innioasis" repo="ClassyPlayer/Classy" PMT_format_needed="true" device="Y2" url="https://github.com/ClassyPlayer/Classy" type="img" icon="https://github.com/ClassyPlayer/Classy/raw/main/docs/icons/icon.png" handler="Custom Firmware" portable_zips="y1-community/classy-mirror" />
+  <!--
+<package name="Classy" brand="Innioasis" repo="ClassyPlayer/Classy" PMT_format_needed="true" device="Y1" url="https://github.com/ClassyPlayer/Classy" type="img" icon="https://github.com/ClassyPlayer/Classy/raw/main/docs/icons/icon.png" handler="Custom Firmware" portable_zips="y1-community/classy-mirror" />
+  -->
 
 <package name="Y2Player" brand="Innioasis" repo="schulzcode/Y2Player" portable_zips="y1-community/y2player-mirror" device="Y2" url="https://github.com/schulzcode/Y2Player" type="img" handler="Custom Firmware" />
 

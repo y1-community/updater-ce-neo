@@ -36,6 +36,7 @@ class ReleaseRow:
     resolution: str
     html_url: str
     hardware_type: str
+    published_at: str = ""
 
 
 def effective_brand(item: Package) -> str:
@@ -303,9 +304,22 @@ def rows_from_releases(
                     resolution=resolution,
                     html_url=str(release.get("html_url") or ""),
                     hardware_type=kind,
+                    published_at=str(release.get("published_at") or ""),
                 )
             )
-    rows.sort(key=lambda row: (row.version, 0 if row.resolution != "240p" else -1), reverse=True)
+    rows.sort(
+        key=lambda row: (
+            versioning.release_sort_key(
+                {
+                    "tag_name": row.tag,
+                    "name": row.name,
+                    "published_at": row.published_at,
+                }
+            ),
+            0 if row.resolution != "240p" else -1,
+        ),
+        reverse=True,
+    )
     return rows
 
 

@@ -194,6 +194,11 @@ class Package:
     #: catalogue names it. Equal or related firmwares share a data partition,
     #: which is what Keep Data depends on (see ``src/keep_data.py``).
     derivative: str = ""
+    #: A firmware that must already be on the player before this one can be
+    #: installed (``install_first`` in ``slidia_manifest.xml``).
+    install_first: str = ""
+    #: The base version the player must be running (``install_first_version``).
+    install_first_version: str = ""
 
     @property
     def title(self) -> str:
@@ -244,6 +249,8 @@ def parse_manifest(data: bytes) -> list[Package]:
                 do_not_keep_data=_attr(element, "do_not_keep_data", "no_keep_data").lower() in {"1", "true", "yes"},
                 pmt_format_needed=_attr(element, "PMT_format_needed", "pmt_format_needed").lower() in {"1", "true", "yes"},
                 derivative=_attr(element, "derivative"),
+                install_first=_attr(element, "install_first"),
+                install_first_version=_attr(element, "install_first_version"),
             )
         )
     return packages

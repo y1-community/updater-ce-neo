@@ -36,7 +36,7 @@ from .releases import (
 )
 
 LIST_TOP = 4
-APP_VERSION = "2.5.4"
+APP_VERSION = "2.5.5"
 
 
 @dataclass
@@ -87,6 +87,11 @@ class BrowseState:
     notes_scroll: int = 0
     page_scroll: int = 0
     package: object = None
+    #: What the Install Firmware First question answered about this run, and
+    #: whether Keep Data may be offered for the target (``allow``/``block``).
+    install_first_answer: str = ""
+    install_first_keep: str = ""
+    install_ok: bool = False
     install_percent: float = 0.0
     install_label: str = ""
     install_error: str = ""

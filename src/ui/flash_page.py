@@ -4297,6 +4297,8 @@ class FlashPage(QWidget):
             return self._power_off_recovery_key or "err_usb_disconnected_recovery"
         if getattr(self, "_permission_prompt", False):
             return "install_linux_permission_prompt"
+        if getattr(self, "_power_off_only", False):
+            return "flash_power_off_only_fmt"
         return "flash_connect_prompt"
 
     def _power_off_prompt_text(self) -> str:
@@ -4583,6 +4585,24 @@ class FlashPage(QWidget):
         self._stack.setCurrentWidget(self._waiting_view)
         self.view_generation = getattr(self, "view_generation", 0) + 1
         self._notify_geometry_change()
+
+    def show_install_first_prompt(
+        self, question: str, hint: str = "", choices=(), selected: str = "", on_no=None
+    ) -> None:
+        """Ask the Install Firmware First question on the same progress card.
+
+        The prerequisite check is the Keep Data sanity check with a different
+        question: one in-card prompt, a drop-down of software names, and the
+        same X / tick chips. Sharing the renderer keeps the two journeys
+        visually and behaviourally identical.
+        """
+        self.show_keep_data_confirmation(
+            question, hint, choices, selected=selected, on_no=on_no
+        )
+        # Keep ``_wait_copy`` as the shared renderer set it: the Keep Data
+        # branch is what keeps this question in the wait band across a resize.
+        # The window's ``_install_first_stage`` is what makes it a prerequisite
+        # question rather than the ordinary "which firmware?" check.
 
     def show_keep_data_erase_confirmation(self, question: str, explainer: str = "") -> None:
         """Ask whether to install and erase settings (or settings + media)."""
@@ -5035,6 +5055,19 @@ class FlashPage(QWidget):
         """Record the install method chosen in Settings for this run."""
         self._raw_method = str(method or "").strip().lower()
         self._method = normalise_method(method)
+
+    def set_power_off_only(self, enabled: bool) -> None:
+        """Ask only for a power-off, for a player that was just turned on.
+
+        The install-first path uses this after an MTKclient base run: the
+        preceding card has already had the player disconnected and powered on,
+        so the next prep must not repeat the disconnect instruction.
+        """
+        self._power_off_only = bool(enabled)
+        if getattr(self, "_wait_copy", "") == "power_off" and hasattr(
+            self, "_wait_prompt_label"
+        ):
+            self._wait_prompt_label.setText(self._power_off_prompt_text())
 
     def set_bundled_run(self, enabled: bool) -> None:
         """Record that this run installs the firmware bundled next to the app."""

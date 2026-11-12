@@ -19,7 +19,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 export BUILD_BRAND="${BUILD_BRAND:-}"
-VERSION=$(grep -oP 'APP_VERSION\s*=\s*"\K[^"]+' src/config.py 2>/dev/null || echo "2.5.3")
+VERSION=$(grep -oP 'APP_VERSION\s*=\s*"\K[^"]+' src/config.py 2>/dev/null || echo "2.5.5")
 AUTHOR="Ryan Specter"
 # Default to the host architecture; appimagetool and the release names use aarch64, not arm64.
 case "$(uname -m)" in

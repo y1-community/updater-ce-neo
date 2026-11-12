@@ -40,7 +40,7 @@
   #endif
 #endif
 #ifndef MyAppVersion
-  #define MyAppVersion "2.5.3"
+  #define MyAppVersion "2.5.5"
 #endif
 #ifndef MyAppPublisher
   #define MyAppPublisher "Ryan Specter"

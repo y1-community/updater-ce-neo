@@ -2630,10 +2630,10 @@ def test_success_dialog_flow():
 
 
 def test_dont_ask_again_disables_donation_ui():
-    """The completion link turns on hide-donations and leaves the compact finish screen."""
+    """The completion link turns on hide-donations and returns to the catalogue."""
     from PySide6.QtWidgets import QApplication
     from src import device_tracking
-    from src.ui.main_window import MainWindow, _PAGE_FLASH
+    from src.ui.main_window import MainWindow, _PAGE_SELECT
 
     _reset_app_settings()
     app = QApplication.instance() or QApplication(sys.argv)
@@ -2643,7 +2643,9 @@ def test_dont_ask_again_disables_donation_ui():
     assert device_tracking.is_donation_ui_disabled(w.settings) is False
     assert w.statusBar().isVisible()
 
-    w._package_name = "Rockbox"
+    # A Stock package keeps this test on the donations appeal; a Rockbox
+    # package now starts the cleanup/keep-data stage first.
+    w._package_name = "Stock OS (Y1)"
     w._handle_flash_success()
     w._flash_page._appeal_dont.linkActivated.emit("dont-ask")
     app.processEvents()
@@ -2653,8 +2655,10 @@ def test_dont_ask_again_disables_donation_ui():
     assert not w.statusBar().isVisible(), "donor/goal bar must hide"
     assert w._settings_page._cb_hide_donations.isChecked() is False
     assert not w._flash_page._appeal.isVisible()
-    assert w._install_complete is True
-    assert w._stack.currentIndex() == _PAGE_FLASH
+    # The choice ends the journey the same way Not now does: the catalogue is
+    # back, not a completion card the user has to dismiss as well.
+    assert w._stack.currentIndex() == _PAGE_SELECT
+    assert w._install_complete is False
 
     w.close()
     app.processEvents()

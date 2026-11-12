@@ -32,12 +32,16 @@ Keys supported (case-insensitive):
 - ``target_model`` / ``model``: device model (e.g. ``Y1``, ``Y2``)
 - ``target_type`` / ``type``: hardware type (e.g. ``Type A``, ``Stock``)
 - ``description``: optional description of the release
+- ``repo``: this release's own ``owner/name`` repository
+- ``install_first`` / ``install_first_version``: the base firmware this release
+  needs and the optional version constraint (see ``docs/portable_install_first.md``)
 - ``enabled``: ``true`` / ``false`` (default true)
 """
 
 from __future__ import annotations
 
 import configparser
+import dataclasses
 import logging
 import os
 import re
@@ -56,6 +60,10 @@ MACOS_FIRMWARE_FOLDER = "Firmware"
 FIRMWARE_FOLDER_NAMES = ("Firmware", "firmware", "_Firmware", "_firmware")
 SP_TOOL_FOLDER_NAMES = ("SP_Flash_Tool", "sp_flash_tool", "_SP_flash_tool", "_sp_flash_tool")
 PACKAGE_SUBFOLDER_NAMES = FIRMWARE_FOLDER_NAMES + SP_TOOL_FOLDER_NAMES
+#: The local prerequisite of a portable install-first package sits in this
+#: folder beside the package that needs it. The spelling is deliberately
+#: narrow: this is a contract with the packager, not a guess at release names.
+PRE_STAGE_FOLDER_NAMES = ("pre_stage", "pre-stage", "prestage", "pre stage")
 #: A portable pack may rename its flash-tool folder for reading order
 #: ("2. Open and run flash_tool"), so any immediate subfolder that names the
 #: tool counts as the package folder too.
@@ -108,6 +116,16 @@ class FwIni:
     # Software, Rockbox"), so the user can be asked whether that is what they
     # are running before a data-wiping install.
     derivatives: tuple = ()
+    #: The release's own ``owner/repo`` handle, copied from the manifest when a
+    #: packager writes a portable package. A prerequisite's own ini uses this
+    #: to prove it is the repository the target's ``install_first`` names.
+    repo: str = ""
+    #: Repository of the firmware that must already be on the player before
+    #: this release can be installed (``install_first`` in the manifest).
+    install_first: str = ""
+    #: Optional version constraint for that base firmware. A bare version is a
+    #: minimum; see :func:`install_first.parse_version_constraint`.
+    install_first_version: str = ""
 
 
 @dataclass(frozen=True)
@@ -134,6 +152,16 @@ class FwPackage:
     #: partition, so an offline copy is offered the same choice as the online
     #: entry instead of being treated as an unknown firmware.
     derivative: str = ""
+    #: ``owner/repo`` of this release (from ``fw_package.ini``).
+    repo: str = ""
+    #: ``owner/repo`` of the firmware this release needs first.
+    install_first: str = ""
+    #: Version constraint for that firmware, as written in the ini.
+    install_first_version: str = ""
+    #: The prerequisite parsed from a sibling ``pre_stage`` folder when the
+    #: portable package carries it. ``None`` means the app must download it
+    #: through the ordinary install-first release flow.
+    install_first_package: Optional["FwPackage"] = None
 
     @property
     def display_name(self) -> str:
@@ -254,6 +282,26 @@ def read_fw_package_ini(path: Union[str, Path]) -> FwIni:
     derivatives = tuple(
         name.strip() for name in re.split(r"[,;|]", derivatives_raw) if name.strip()
     )
+    repo = get_first(
+        "repo",
+        "software_repo",
+        "source_repo",
+        "github_repo",
+        "repository",
+    )
+    install_first = get_first(
+        "install_first",
+        "install first",
+        "base_repo",
+        "prerequisite",
+        "requires",
+    )
+    install_first_version = get_first(
+        "install_first_version",
+        "install first version",
+        "base_version",
+        "prerequisite_version",
+    )
 
     return FwIni(
         enabled=enabled,
@@ -267,6 +315,9 @@ def read_fw_package_ini(path: Union[str, Path]) -> FwIni:
         do_not_keep_data=do_not_keep_data,
         pmt_format_needed=pmt_format_needed,
         derivatives=derivatives,
+        repo=repo,
+        install_first=install_first,
+        install_first_version=install_first_version,
     )
 
 
@@ -282,6 +333,318 @@ def package_derivatives(pkg) -> tuple:
     if not ini.is_file():
         return ()
     return read_fw_package_ini(ini).derivatives
+
+
+def is_pre_stage_folder(folder: Union[str, Path]) -> bool:
+    """True when ``folder`` is the portable package's ``pre_stage`` folder."""
+    name = Path(folder).name.strip().casefold()
+    return name.replace("-", "_").replace(" ", "_") == "pre_stage"
+
+
+def _inside_pre_stage(folder: Union[str, Path]) -> bool:
+    return any(is_pre_stage_folder(part) for part in Path(folder).parts)
+
+
+def _install_first_range(pkg):
+    """The parsed ``install_first_version`` of ``pkg``, or ``None`` for any."""
+    from .install_first import parse_version_constraint
+
+    return parse_version_constraint(getattr(pkg, "install_first_version", ""))
+
+
+def package_versions_match(target, base) -> bool:
+    """True when ``base`` satisfies ``target``'s declared base version.
+
+    A version constraint cannot be checked against a package that carries no
+    version at all, so that pair is rejected and the ordinary remote download
+    remains available. This keeps an exact ``=3.2.0`` from accepting an
+    unlabelled folder just because it happens to sit beside the target.
+    """
+    constraint = _install_first_range(target)
+    if constraint is None:
+        return True
+    version = str(getattr(base, "version", "") or "").strip()
+    return bool(version) and constraint.allows(version)
+
+
+def packages_are_pair(target, base) -> bool:
+    """Whether ``base`` is the prerequisite ``target`` names.
+
+    Repository identity is authoritative when both inis carry one. A
+    ``pre_stage`` folder written by the packager may omit its own ``repo`` (the
+    folder name and structural convention already say what it is), but when it
+    does name a different repository the pair is refused. The base's
+    ``target_model`` must match the target model whenever either side names
+    one; this is what stops a Y1 base from being paired with a Y2 overlay. The
+    version constraint is checked in the same way: a known version must
+    satisfy it, and an unknown one cannot be assumed to.
+    """
+    if target is None or base is None:
+        return False
+    from .install_first import normalize_repo
+
+    wanted = normalize_repo(getattr(target, "install_first", ""))
+    if not wanted:
+        return False
+    actual = normalize_repo(getattr(base, "repo", ""))
+    if actual and actual != wanted:
+        return False
+    target_repo = normalize_repo(getattr(target, "repo", ""))
+    if actual and target_repo and actual == target_repo:
+        return False
+    target_model = str(getattr(target, "model", "") or "").strip().upper()
+    base_model = str(getattr(base, "model", "") or "").strip().upper()
+    # A Y1 stock package is not a valid prerequisite for a Y2 overlay.  The
+    # packed base must name the same model as the target; missing metadata is
+    # not evidence that the pair is safe.
+    if (target_model or base_model) and base_model != target_model:
+        return False
+    return package_versions_match(target, base)
+
+
+def _local_package(folder: Path, browse_root: Optional[Path] = None):
+    """Read a package folder without letting the app's own ini describe it.
+
+    The target package uses the portable app's root ``fw_package.ini``. The
+    prerequisite must instead use only its own ini: otherwise the target's
+    metadata would be applied to the base and the version check would compare
+    the target with itself.
+    """
+    return read_package(
+        folder,
+        require_ini=False,
+        app_dir=folder,
+        browse_root=browse_root or folder,
+        app_ini=False,
+    )
+
+
+def _read_package_prefer_own(folder: Path, scope: Path) -> Optional[FwPackage]:
+    """Read a candidate from its own ini, falling back to the pack's ini.
+
+    Portable roots carry one ini for the app and legacy packs carry one per
+    numbered folder. A folder's own descriptive ini must win; only an absent
+    or contentless (``true``) one lets the pack's shared ini describe it.
+    """
+    own_ini = folder / FW_PACKAGE_INI
+    own_meta = read_fw_package_ini(own_ini) if own_ini.is_file() else None
+    if own_meta is not None and not own_meta.enabled:
+        return None
+    pkg = read_package(folder, require_ini=False, app_dir=folder)
+    own_is_descriptive = bool(
+        own_meta
+        and any(
+            (
+                own_meta.name,
+                own_meta.version,
+                own_meta.model,
+                own_meta.repo,
+                own_meta.install_first,
+            )
+        )
+    )
+    if pkg is None or not own_is_descriptive:
+        shared = read_package(folder, require_ini=False, app_dir=scope)
+        if shared is not None and shared.has_ini:
+            pkg = shared
+    return pkg
+
+
+def _pre_stage_dirs(pkg) -> list[Path]:
+    """The sibling ``pre_stage`` folders a target package could use."""
+    found: list[Path] = []
+    node = Path(getattr(pkg, "folder", ""))
+    for _ in range(4):
+        if not node or not node.exists():
+            break
+        for name in PRE_STAGE_FOLDER_NAMES:
+            candidate = node / name
+            if candidate.is_dir() and candidate != Path(getattr(pkg, "folder", "")):
+                if candidate not in found:
+                    found.append(candidate)
+        if node.parent == node:
+            break
+        node = node.parent
+    return found
+
+
+def find_local_prerequisite(pkg) -> Optional[FwPackage]:
+    """Return the ``pre_stage`` package paired with ``pkg``, if present.
+
+    Only fixed folder names are inspected, and only around the package and its
+    parent folders, so a browse cannot wander into unrelated storage.
+    """
+    if pkg is None or is_pre_stage_folder(Path(getattr(pkg, "folder", ""))):
+        return None
+    if not str(getattr(pkg, "install_first", "") or "").strip():
+        return None
+    candidates: list[FwPackage] = []
+    for folder in _pre_stage_dirs(pkg):
+        base = _local_package(folder, browse_root=folder)
+        if base is not None and packages_are_pair(pkg, base):
+            candidates.append(base)
+    # Legacy two-folder packs put the base in a numbered sibling folder rather
+    # than pre_stage. Its ini names the same repository, so the same pair check
+    # recognises it without assuming a folder name for those systems.
+    parent = Path(getattr(pkg, "folder", ""))
+    if parent.is_dir():
+        parent = parent.parent
+        sibling_folders = [*package_subfolders(parent)]
+        try:
+            sibling_folders.extend(sorted(p for p in parent.iterdir() if p.is_dir()))
+        except OSError:
+            pass
+        seen = {base.folder.resolve() for base in candidates}
+        for folder in sibling_folders:
+            try:
+                key = folder.resolve()
+            except OSError:
+                continue
+            if key in seen or key == Path(pkg.folder).resolve():
+                continue
+            seen.add(key)
+            base = _local_package(folder, browse_root=parent)
+            if base is not None and packages_are_pair(pkg, base):
+                candidates.append(base)
+    if not candidates:
+        return None
+    return max(candidates, key=lambda base: _version_key(base.version))
+
+
+def _version_key(value: str) -> tuple:
+    from .install_first import version_tuple
+
+    return version_tuple(value) or ()
+
+
+def attach_local_prerequisite(
+    pkg: Optional[FwPackage], root: Optional[Union[str, Path]] = None
+) -> Optional[FwPackage]:
+    """Attach a sibling ``pre_stage`` package, or resolve a base selection.
+
+    Browsing any folder in a portable install-first package is meant to reach
+    the target. If ``pkg`` is the base itself (the user opened ``pre_stage`` or
+    its scatter), the target beside it is returned instead. Otherwise the base
+    is attached to the target and the caller can skip the remote download.
+    """
+    if pkg is None:
+        return None
+    if getattr(pkg, "install_first_package", None) is not None:
+        return pkg
+    from .install_first import normalize_repo
+
+    if is_pre_stage_folder(pkg.folder) or (
+        not str(pkg.install_first or "").strip() and normalize_repo(pkg.repo)
+    ):
+        target = find_target_for_pre_stage(pkg, root=root)
+        if target is not None:
+            return target
+    base = find_local_prerequisite(pkg)
+    if base is None:
+        return pkg
+    return dataclasses.replace(pkg, install_first_package=base)
+
+
+def find_target_for_pre_stage(
+    base: Optional[FwPackage], root: Optional[Union[str, Path]] = None
+) -> Optional[FwPackage]:
+    """Find the package beside a ``pre_stage`` folder that needs ``base``."""
+    if base is None:
+        return None
+    scopes: list[Path] = []
+    if root is not None and Path(root).is_dir():
+        scopes.append(Path(root))
+    parent = base.folder.parent
+    if parent not in scopes:
+        scopes.append(parent)
+
+    matches: list[FwPackage] = []
+    seen: set[Path] = set()
+    for scope in scopes:
+        folders = [scope, *package_subfolders(scope)]
+        try:
+            folders.extend(sorted(p for p in scope.iterdir() if p.is_dir()))
+        except OSError:
+            pass
+        for folder in folders:
+            try:
+                key = folder.resolve()
+            except OSError:
+                continue
+            if key in seen or key == base.folder.resolve():
+                continue
+            seen.add(key)
+            pkg = _read_package_prefer_own(folder, scope)
+            if pkg is not None and packages_are_pair(pkg, base):
+                matches.append(pkg)
+    if not matches:
+        return None
+    target = max(matches, key=lambda p: (_version_key(p.version), bool(p.repo)))
+    return attach_local_prerequisite(target, root=root or target.folder.parent)
+
+
+def resolve_selected_package(
+    folder: Union[str, Path],
+    app_dir: Optional[Union[str, Path]] = None,
+    source_names: tuple[str, ...] = (),
+) -> Optional[FwPackage]:
+    """Resolve a browsed folder, scatter folder or portable root to its target.
+
+    A portable package is entered from any of its folders. The target is the
+    package that declares ``install_first``; the ``pre_stage`` folder is only
+    its prerequisite. Searching stays inside ``folder`` and the package's own
+    neighbouring folders, matching :func:`locate_package`.
+    """
+    root = Path(folder)
+    if not root.is_dir():
+        root = root.parent
+    pkg = locate_package(
+        root,
+        require_ini=False,
+        app_dir=app_dir,
+        source_names=source_names,
+    )
+    if pkg is None:
+        return None
+    return attach_local_prerequisite(pkg, root=root)
+
+
+def local_install_release(pkg: FwPackage, install_path: Union[str, Path, None] = None) -> dict:
+    """A release-shaped record the window's install-first journey can carry."""
+    folder = Path(install_path) if install_path is not None else Path(pkg.folder)
+    return {
+        "kind": "local",
+        "local_package": pkg,
+        "local_path": str(pkg.folder),
+        "local_install_path": str(folder),
+        "asset_name": pkg.scatter.name,
+        "tag_name": pkg.version or pkg.folder.name,
+        "name": pkg.display_name or pkg.name or pkg.folder.name,
+        "download_url": "local:" + str(pkg.folder),
+    }
+
+
+def package_as_catalogue(pkg: FwPackage):
+    """Present a local package to the catalogue-shaped install-first logic."""
+    from . import catalog
+
+    identity = str(pkg.repo or pkg.folder)
+    slug = "local-" + re.sub(r"[^A-Za-z0-9_.-]+", "-", identity).strip("-")
+    return catalog.FirmwarePackage(
+        slug=slug or "local-package",
+        name=pkg.name or pkg.folder.name,
+        model=pkg.model,
+        repo=pkg.repo,
+        package_name="",
+        description=pkg.description,
+        post_install=pkg.post_install,
+        post_install_2=pkg.post_install_2,
+        derivative=pkg.derivative,
+        do_not_keep_data=pkg.do_not_keep_data,
+        pmt_format_needed=pkg.pmt_format_needed,
+        install_first=pkg.install_first,
+        install_first_version=pkg.install_first_version,
+    )
 
 
 def _single_scatter(folder: Path) -> Optional[Path]:
@@ -576,6 +939,7 @@ def _release_ini(
     folder: Path,
     app_dir: Optional[Path] = None,
     browse_root: Optional[Path] = None,
+    app_ini: bool = True,
 ) -> Optional[Path]:
     """Return the ``fw_package.ini`` describing the release in ``folder``.
 
@@ -587,13 +951,14 @@ def _release_ini(
     the package-folder lookups when running bundled.
     """
     candidates: list[Path] = []
-    if app_dir is not None:
-        candidates.append(Path(app_dir) / FW_PACKAGE_INI)
-    elif not IS_MAC:
-        candidates.append(Path(INSTALL_DIR) / FW_PACKAGE_INI)
-    appimage_dir = get_appimage_dir()
-    if appimage_dir is not None:
-        candidates.append(appimage_dir / FW_PACKAGE_INI)
+    if app_ini:
+        if app_dir is not None:
+            candidates.append(Path(app_dir) / FW_PACKAGE_INI)
+        elif not IS_MAC:
+            candidates.append(Path(INSTALL_DIR) / FW_PACKAGE_INI)
+        appimage_dir = get_appimage_dir()
+        if appimage_dir is not None:
+            candidates.append(appimage_dir / FW_PACKAGE_INI)
     candidates.append(Path(folder) / FW_PACKAGE_INI)
     for scope_dir in _browse_scope(folder, browse_root):
         candidates.append(scope_dir / FW_PACKAGE_INI)
@@ -687,6 +1052,7 @@ def read_package(
     app_dir: Optional[Union[str, Path]] = None,
     source_names: tuple[str, ...] = (),
     browse_root: Optional[Union[str, Path]] = None,
+    app_ini: bool = True,
 ) -> Optional[FwPackage]:
     """Return the package in ``folder`` when it has exactly one scatter and all listed images exist.
 
@@ -704,6 +1070,7 @@ def read_package(
         folder_p,
         Path(app_dir) if app_dir is not None else None,
         browse_root=Path(browse_root) if browse_root is not None else None,
+        app_ini=app_ini,
     )
     has_ini = ini is not None
     if has_ini:
@@ -780,6 +1147,9 @@ def read_package(
         do_not_keep_data=meta.do_not_keep_data,
         pmt_format_needed=meta.pmt_format_needed,
         derivative=", ".join(meta.derivatives),
+        repo=meta.repo,
+        install_first=meta.install_first,
+        install_first_version=meta.install_first_version,
     )
 
 
@@ -793,41 +1163,73 @@ def locate_package(
 
     ``app_dir`` and ``source_names`` are passed to :func:`read_package` so the release name
     can come from the app's ``fw_package.ini`` or from the browsed file names.
+
+    A portable install-first package contains two valid packages. When the
+    target (the one whose ini declares ``install_first``) is present, it is
+    returned with its sibling ``pre_stage`` prerequisite attached instead of
+    whichever folder happens to sort first. A selected ``pre_stage`` folder
+    resolves upward to the target it belongs to.
     """
     root_p = Path(root)
     if not root_p.is_dir():
         return None
 
-    # Check root directly
-    pkg = read_package(
-        root_p, require_ini=require_ini, app_dir=app_dir,
-        source_names=source_names, browse_root=root_p,
-    )
-    if pkg is not None:
-        return pkg
+    seen: set[Path] = set()
+    candidates: list[FwPackage] = []
 
-    # Search subfolders with fw_package.ini
+    def add(folder: Path, *, nested: bool) -> None:
+        try:
+            key = folder.resolve()
+        except OSError:
+            return
+        if key in seen:
+            return
+        seen.add(key)
+        # A prerequisite is a package in its own right. Reading it through the
+        # portable app's root ini would overwrite its own name/version and
+        # make every base look like the target it is supposed to support.
+        if _inside_pre_stage(folder):
+            pkg = _local_package(folder, browse_root=root_p)
+        else:
+            pkg = read_package(
+                folder,
+                require_ini=require_ini,
+                app_dir=app_dir,
+                source_names=source_names,
+                browse_root=root_p,
+            )
+        if pkg is not None:
+            candidates.append(pkg)
+
+    # Check root directly, then any nested fw_package.ini and scatter folder.
+    add(root_p, nested=False)
     for ini in sorted(root_p.rglob(FW_PACKAGE_INI)):
         if is_ignored_scatter_path(ini, root_p):
             continue
-        pkg = read_package(
-            ini.parent, require_ini=require_ini, app_dir=app_dir,
-            source_names=source_names, browse_root=root_p,
-        )
-        if pkg is not None:
-            return pkg
-
+        add(ini.parent, nested=True)
     if not require_ini:
-        # Search subfolders with a single scatter
         for scatter in sorted(root_p.rglob("*.txt")):
             if "scatter" in scatter.name.lower() and not is_ignored_scatter_path(scatter, root_p):
-                pkg = read_package(
-                    scatter.parent, require_ini=False, app_dir=app_dir,
-                    source_names=source_names, browse_root=root_p,
-                )
-                if pkg is not None:
-                    return pkg
-    return None
+                add(scatter.parent, nested=True)
+
+    if not candidates:
+        return None
+
+    targets = [pkg for pkg in candidates if str(pkg.install_first or "").strip()]
+    if targets:
+        target = next(
+            (pkg for pkg in targets if pkg.install_first_package is not None),
+            targets[0],
+        )
+        return attach_local_prerequisite(target, root=root_p) or target
+
+    for pkg in candidates:
+        if is_pre_stage_folder(pkg.folder):
+            target = find_target_for_pre_stage(pkg, root=root_p)
+            if target is not None:
+                return target
+
+    return attach_local_prerequisite(candidates[0], root=root_p)
 
 
 def _macos_app_parent(start_path: Path) -> Optional[Path]:
@@ -896,6 +1298,7 @@ def find_bundled_firmware(app_dir=None) -> Optional[FwPackage]:
         candidates.append((REPO_ROOT / "tools" / "linux" / "SP_Flash_Tool_v5.1904_Linux").resolve())
 
     seen = set()
+    found: list[FwPackage] = []
     for cand in candidates:
         if not cand or not cand.is_dir():
             continue
@@ -904,12 +1307,45 @@ def find_bundled_firmware(app_dir=None) -> Optional[FwPackage]:
             continue
         seen.add(cand_resolved)
 
-        pkg = read_package(cand_resolved, require_ini=False, app_dir=base)
+        # A legacy two-folder pack carries a different ini in each folder. The
+        # folder's own ini must win over the portable app's root ini, or the
+        # base would be read as the target and the pair could never be found.
+        pkg = _read_package_prefer_own(cand_resolved, base)
         if pkg is not None:
-            logger.info("Found bundled firmware package at %s (scatter=%s)", cand_resolved, pkg.scatter.name)
-            return pkg
+            found.append(pkg)
 
-    return None
+    if not found:
+        return None
+
+    # Prefer the overlay over its prerequisite. A pack may put the target in a
+    # numbered folder after the base (legacy) or in SP_Flash_Tool (portable).
+    targets = [pkg for pkg in found if str(pkg.install_first or "").strip()]
+    for target in targets:
+        attached = attach_local_prerequisite(target, root=target.folder.parent) or target
+        if attached.install_first_package is not None:
+            logger.info(
+                "Found bundled install-first package at %s (scatter=%s)",
+                attached.folder,
+                attached.scatter.name,
+            )
+            return attached
+    if targets:
+        target = attach_local_prerequisite(targets[0], root=targets[0].folder.parent) or targets[0]
+        logger.info("Found bundled firmware package at %s (scatter=%s)", target.folder, target.scatter.name)
+        return target
+
+    for pkg in found:
+        attached = attach_local_prerequisite(pkg, root=pkg.folder.parent) or pkg
+        if attached.install_first or attached is not pkg:
+            logger.info(
+                "Found bundled install-first package at %s (scatter=%s)",
+                attached.folder,
+                attached.scatter.name,
+            )
+            return attached
+    pkg = attach_local_prerequisite(found[0], root=found[0].folder.parent) or found[0]
+    logger.info("Found bundled firmware package at %s (scatter=%s)", pkg.folder, pkg.scatter.name)
+    return pkg
 
 
 def find_installed_package(app_dir=None) -> Optional[FwPackage]:
@@ -1021,9 +1457,47 @@ def prune_to_firmware_package(extract_dir: Union[str, Path]) -> list[str]:
     if pkg is None:
         return []
 
-    scatter = pkg.scatter
-    folder = scatter.parent
-    keep = {scatter.resolve()}
+    packages = [pkg]
+    if getattr(pkg, "install_first_package", None) is not None:
+        # A portable install-first zip carries the target and its pre_stage
+        # prerequisite. Pruning only the target would delete the very files
+        # the journey is about to flash first.
+        packages.append(pkg.install_first_package)
+
+    folder = pkg.scatter.parent
+    keep: set[Path] = set()
+    keep_names_by_folder: dict[Path, set[str]] = {}
+    for package in packages:
+        scatter = package.scatter
+        package_folder = scatter.parent
+        keep.add(scatter.resolve())
+        if (package_folder / "manifest.json").is_file():
+            keep.add((package_folder / "manifest.json").resolve())
+        from .flash_service import find_preserve_data_scatter
+        preserve_scatter = find_preserve_data_scatter(scatter)
+        if preserve_scatter is not None and preserve_scatter.is_file():
+            keep.add(preserve_scatter.resolve())
+        keep_names = {
+            path.name.lower() for _name, path in _list_expected_images(scatter)
+        }
+        keep_names.add(scatter.name.lower())
+        keep_names_by_folder[package_folder.resolve()] = keep_names
+        for _name, img in _list_expected_images(scatter):
+            if img.exists():
+                keep.add(img.resolve())
+        for p in package_folder.glob("*.auth"):
+            keep.add(p.resolve())
+        for p in package_folder.glob("*rockbox*.txt"):
+            keep.add(p.resolve())
+        for name in PACKAGE_ICON_NAMES:
+            icon_p = package_folder / name
+            if icon_p.is_file():
+                keep.add(icon_p.resolve())
+        for da_name in ("MTK_AllInOne_DA.bin", "DA_SWSEC.bin"):
+            da_p = package_folder / da_name
+            if da_p.is_file():
+                keep.add(da_p.resolve())
+
     # Keep fw_package.ini in the package folder and beside the app executable (portable zips)
     for ini in root.rglob(FW_PACKAGE_INI):
         if ini.is_file():
@@ -1034,50 +1508,22 @@ def prune_to_firmware_package(extract_dir: Union[str, Path]) -> list[str]:
                 icon_p = ini.parent / name
                 if icon_p.is_file():
                     keep.add(icon_p.resolve())
-    if (folder / FW_PACKAGE_INI).is_file():
-        keep.add((folder / FW_PACKAGE_INI).resolve())
-    if (folder / "manifest.json").is_file():
-        keep.add((folder / "manifest.json").resolve())
-    from .flash_service import find_preserve_data_scatter
-    preserve_scatter = find_preserve_data_scatter(scatter)
-    if preserve_scatter is not None and preserve_scatter.is_file():
-        keep.add(preserve_scatter.resolve())
-    for _name, img in _list_expected_images(scatter):
-        if img.exists():
-            keep.add(img.resolve())
-
-    for p in folder.glob("*.auth"):
-        keep.add(p.resolve())
-
-    for p in folder.glob("*rockbox*.txt"):
-        keep.add(p.resolve())
-
-    for name in PACKAGE_ICON_NAMES:
-        icon_p = folder / name
-        if icon_p.is_file():
-            keep.add(icon_p.resolve())
-
-    for da_name in ("MTK_AllInOne_DA.bin", "DA_SWSEC.bin"):
-        da_p = folder / da_name
-        if da_p.is_file():
-            keep.add(da_p.resolve())
-
     # A scatter may name a file in a different case than the package stores it
     # (the player's storage is case-insensitive; a Linux host is not). Deleting
     # that file here is what later surfaced as CACHE_FILE_MISSING mid-flash.
     # Only match keep_names inside the firmware package folder itself so
     # duplicate reference scatters elsewhere (e.g. inside a bundled .app's
     # assets/compat/) are pruned rather than spared.
-    keep_names = {path.name.lower() for _name, path in _list_expected_images(scatter)}
-    keep_names.add(scatter.name.lower())
-    folder_resolved = folder.resolve()
-
     removed: list[str] = []
     for f in root.rglob("*"):
+        parent = f.parent.resolve()
         if (
             f.is_file()
             and f.resolve() not in keep
-            and not (f.parent.resolve() == folder_resolved and f.name.lower() in keep_names)
+            and not (
+                parent in keep_names_by_folder
+                and f.name.lower() in keep_names_by_folder[parent]
+            )
         ):
             try:
                 f.unlink()

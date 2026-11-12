@@ -41,12 +41,39 @@ for it — nothing in the code is per-model beyond display names.
 | `slug` | Stable identifier for links and saved installs; generated from name + model when empty |
 | `description` | Catalogue description (attribute value or element text) |
 | `do_not_keep_data` | `true` (also `1` / `yes`) marks a firmware that must not inherit user data |
+| `install_first` | Repo of the base firmware that must be installed before this entry (enables the Install Firmware First gate) |
+| `install_first_version` | Version constraint on that base; see the syntax table below |
 
 Aliases still accepted: `model` (`device`), `package` (`package_name`),
 `portable_zip` (`portable_zips`), `post_install_2` (`post_install2`),
 `min_app_version` (`min_version`) and `image_dark` (`icon_dark`). New entries
 should use the names above; `https://innioasis.app/developers.html` generates
 entries for every attribute and previews the result against the live file.
+
+### `install_first_version` syntax
+
+`install_first` names the base firmware's repo; `install_first_version`
+constrains the version already on the player. A bare version is a **minimum**,
+not an exact match. Omit the attribute to accept any version of that base.
+
+| Value | Required base version |
+|---|---|
+| `3.2.0` | 3.2.0 or newer |
+| `=3.2.0` | exactly 3.2.0 |
+| `&lt;3.2.0` | older than 3.2.0 (escape `<` in XML) |
+| `3.2.0>` | newer than 3.2.0 |
+| `3.2.0=>` | 3.2.0 or newer (`=>` includes 3.2.0) |
+| `2.3.0-3.0.0` | inclusive range (`2.3.0..3.0.0` also works) |
+| `>=3.2.0,&lt;4.0.0` | combined lower and upper bounds |
+
+Operators may lead or trail the version (`>=3.2.0`, `3.2.0>=`, `<=3.2.0`,
+`3.2.0<=`, `=<3.2.0`, `==3.2.0`), and `+` or “or later” are accepted minimums.
+`>` and `<` are strict; `=>`, `=<`, `>=` and `<=` are inclusive. Every `<`
+inside the XML attribute must be written as `&lt;`.
+
+When this constraint is present, the app installs a base release only if one
+satisfies it; otherwise it reports that the catalogue has releases but none
+matches the required version.
 
 Skipped automatically: `repo="Please-Click/Updates-Available"` (the app's own
 update placeholder), non-`img` types, handlers that are not firmware, and

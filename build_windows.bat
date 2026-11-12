@@ -18,7 +18,7 @@ set "MSIX=0"
 set "MSIXONLY=0"
 set "SKIT_PYI=0"
 set "NOLEGACY=0"
-set "VERSION=2.5.3"
+set "VERSION=2.5.5"
 rem Output roots are chosen by build_windows.ps1 from the target architecture:
 rem x64 -> dist\windows, ARM64 -> dist\windows-arm64.
 

@@ -85,8 +85,35 @@ def test_cards_and_battery_hint_paint_the_bento_surface_without_glass(no_glass):
 def test_window_surface_matches_the_live_theme():
     widget = QWidget()
     surfaces.paint_window_surface(widget)
-    app_window = _app.palette().color(QPalette.ColorRole.Window)
-    assert widget.palette().color(QPalette.ColorRole.Window).name() == app_window.name()
+    # The window's QSS paints the theme token, so the page plate must too.
+    assert widget.palette().color(QPalette.ColorRole.Window).name() == T().bg
+
+
+def test_page_surface_ignores_a_stale_light_app_palette(no_glass, monkeypatch):
+    """A leftover light palette must not paint a white plate under the card.
+
+    The application palette can lag behind a theme rebuild. When it did, every
+    page filled with the palette's light Window role while the window itself
+    stayed dark, which is the white band that appeared under the install card.
+    """
+    from PySide6.QtGui import QColor
+
+    stale = QPalette()
+    stale.setColor(QPalette.ColorRole.Window, QColor("#ffffff"))
+    stale.setColor(QPalette.ColorRole.WindowText, QColor("#000000"))
+
+    class _StaleApp:
+        def palette(self):
+            return stale
+
+    monkeypatch.setattr(
+        surfaces, "QApplication", type("StubQApplication", (), {"instance": staticmethod(lambda: _StaleApp())})
+    )
+    widget = QWidget()
+    surfaces.paint_window_surface(widget)
+
+    assert widget.palette().color(QPalette.ColorRole.Window).name() == T().bg
+    assert widget.palette().color(QPalette.ColorRole.Base).name() == T().bg
 
 
 def test_a_child_inside_a_card_erases_to_the_card_not_the_window(monkeypatch):

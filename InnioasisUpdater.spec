@@ -56,7 +56,7 @@ APP_DISPLAY_NAME = "MediaTek Installer" if IS_MEDIATEK_INSTALLER_BUILD else "Upd
 APP_SLUG = "MediaTekInstaller" if IS_MEDIATEK_INSTALLER_BUILD else "InnioasisUpdater"
 APP_AUTHOR = "Ryan Specter"
 APP_COPYRIGHT = f"Copyright (C) 2024-2026 {APP_AUTHOR}. All rights reserved."
-APP_VERSION = "2.5.3"
+APP_VERSION = "2.5.5"
 try:
     for _config_line in (PROJECT_ROOT / "src" / "config.py").read_text(encoding="utf-8").splitlines():
         if _config_line.strip().startswith("APP_VERSION"):

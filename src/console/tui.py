@@ -34,6 +34,7 @@ from .session import (
     interface_kind,
     keep_data_offered,
     keep_visible,
+    tracked_install,
     package_links,
     language_lines,
     language_rows,
@@ -53,7 +54,7 @@ from .session import (
 )
 from .simulate import install_progress, rockbox_themes
 
-TITLE_VERSION = "2.5.4"
+TITLE_VERSION = "2.5.5"
 
 # The same payload the window installs. Keeping these URLs here means the
 # text session does not import theme_pack.py, which imports PySide6 at module
@@ -183,6 +184,7 @@ def _install_line(state: BrowseState, line: str, report) -> None:
 
 
 def _install_success(state: BrowseState) -> str:
+    state.install_ok = True
     links = package_links(state.package)
     message = _tr("action_flash_complete")
     state.result_lines = [message]
@@ -198,6 +200,7 @@ def _install_success(state: BrowseState) -> str:
 
 
 def _install_failure(state: BrowseState, message: str) -> str:
+    state.install_ok = False
     tail = [line for line in state.install_log[-8:] if line]
     state.result_lines = [line for line in message.splitlines() if line] or [message]
     if tail:
@@ -206,7 +209,339 @@ def _install_failure(state: BrowseState, message: str) -> str:
     return message
 
 
-def _run_install(state: BrowseState, output: Path, report=None, ask_keep=None) -> str:
+def _install_first_pick_text(
+    title: str, options: list[str], selected: int = 0
+) -> int | None:
+    """Numbered form of the Install Firmware First question."""
+    print()
+    print(title)
+    for index, option in enumerate(options, 1):
+        print(f"  {index}. {option}")
+    try:
+        raw = input(f"> [{selected + 1}] ").strip()
+    except EOFError:
+        return None
+    if raw.lower() in {"q", "quit", "cancel"}:
+        return None
+    if not raw:
+        return selected
+    if raw.isdigit() and 1 <= int(raw) <= len(options):
+        return int(raw) - 1
+    return selected
+
+
+def _install_first_confirm_text(title: str, detail: str = "") -> bool | None:
+    print()
+    print(title)
+    if detail:
+        print(detail)
+    try:
+        raw = input("> [Y/n]: ").strip().lower()
+    except EOFError:
+        return None
+    if raw in {"q", "quit", "cancel"}:
+        return None
+    return raw not in {"n", "no"}
+
+
+def _install_first_pick(
+    screen, title: str, options: list[str], selected: int = 0
+) -> int | None:
+    """The same question as an arrow-key list on the curses screen."""
+    import curses
+
+    selected = max(0, min(int(selected), len(options) - 1))
+    while True:
+        height, width = screen.getmaxyx()
+        screen.erase()
+        _put(
+            screen,
+            0,
+            0,
+            f"Updater CE {_version()}    {_tr('install_first_title')}"[: width - 1],
+            width - 1,
+            curses.A_BOLD,
+        )
+        _put(screen, 2, 0, title[: width - 1], width - 1)
+        for offset, option in enumerate(options):
+            attr = curses.A_REVERSE | curses.A_BOLD if offset == selected else curses.A_NORMAL
+            _put(screen, 4 + offset, 0, f"  {offset + 1}. {option}"[: width - 1], width - 1, attr)
+        _put(
+            screen,
+            height - 1,
+            0,
+            "↑↓ choose   Enter select   1-9 pick   q cancel"[: width - 1],
+            width - 1,
+            curses.A_DIM,
+        )
+        screen.refresh()
+        key = screen.getch()
+        if key in (ord("q"), 27):
+            return None
+        if key in (curses.KEY_UP, ord("k")):
+            selected = (selected - 1) % len(options)
+        elif key in (curses.KEY_DOWN, ord("j")):
+            selected = (selected + 1) % len(options)
+        elif key in (ord("\n"), curses.KEY_ENTER, 10, 13):
+            return selected
+        elif ord("1") <= key <= ord("9") and key - ord("1") < len(options):
+            return key - ord("1")
+
+
+def _install_first_confirm(screen, title: str, detail: str = "") -> bool | None:
+    """Yes / no / cancel on the curses screen."""
+    import curses
+
+    while True:
+        height, width = screen.getmaxyx()
+        screen.erase()
+        _put(
+            screen,
+            0,
+            0,
+            f"Updater CE {_version()}    {_tr('install_first_title')}"[: width - 1],
+            width - 1,
+            curses.A_BOLD,
+        )
+        lines = [title, "", *detail.splitlines()]
+        for offset, line in enumerate(lines):
+            _put(screen, 2 + offset, 0, line[: width - 1], width - 1)
+        _put(
+            screen,
+            height - 1,
+            0,
+            "Enter / y continues   n says no   q cancels"[: width - 1],
+            width - 1,
+            curses.A_DIM,
+        )
+        screen.refresh()
+        key = screen.getch()
+        if key in (ord("q"), 27):
+            return None
+        if key in (ord("n"), ord("N")):
+            return False
+        if key in (ord("\n"), curses.KEY_ENTER, ord("y"), ord("Y"), 10, 13):
+            return True
+
+
+def _install_first_gate(
+    state: BrowseState, items, pick, confirm, output: Path, report, ask_keep
+) -> bool:
+    """Ask the manifest's prerequisite question before downloading anything.
+
+    Returns ``True`` when the requested install may continue as-is. ``False``
+    means the answer needs the base firmware first (and it has now been
+    installed), or the user cancelled, or the base itself failed. The same
+    function serves the curses and numbered sessions, so both routes obey the
+    catalogue and neither downloads the overlay before the check.
+    """
+    from .. import install_first
+
+    if activate(state.releases, state.index) is None:
+        return True
+    try:
+        requirement = install_first.requirement_for(
+            state.package, state.model, packages=items or []
+        )
+    except Exception:
+        return True
+    if requirement is None:
+        state.install_first_answer = ""
+        state.install_first_keep = ""
+        return True
+    state.install_first_answer = ""
+    state.install_first_keep = ""
+    if pick is None or confirm is None:
+        # A piped session cannot answer; flashing the overlay blind is what
+        # the catalogue exists to prevent.
+        print(_tr("install_first_needs_answer"), flush=True)
+        return False
+    model = state.model or "player"
+    options = [state.package.name, requirement.label(), _tr("keep_data_choice_other")]
+    stored = tracked_install(state.model, state.hardware_type) or {}
+    stored_name = str(stored.get("software_name") or "").strip().casefold()
+    wanted_name = requirement.software_name.strip().casefold()
+    same_software = bool(stored_name) and (
+        stored_name == wanted_name
+        or stored_name in wanted_name
+        or wanted_name in stored_name
+    )
+    selected = pick(
+        _tr("keep_data_which_firmware_fmt").format(model=model),
+        options,
+        selected=1 if same_software else 0,
+    )
+    if selected is None:
+        return False
+    answer = (
+        install_first.ANSWER_TARGET,
+        install_first.ANSWER_PREREQUISITE,
+        install_first.ANSWER_OTHER,
+    )[selected]
+    version = (
+        str(stored.get("release_label") or stored.get("tag_name") or "")
+        if same_software
+        else ""
+    )
+    journey = install_first.InstallFirstJourney(
+        target=state.package, target_rel={}, requirement=requirement
+    )
+    step = journey.choose(answer, version)
+    if step == install_first.ASK_VERSION:
+        version_text = (
+            requirement.version_range.label()
+            if requirement.version_range is not None
+            else requirement.version_text
+        )
+        decided = confirm(
+            _tr("install_first_version_fmt").format(
+                model=model, software=requirement.software_name, version=version_text
+            ),
+            _tr("install_first_hint").format(
+                software=requirement.label(),
+                model=model,
+                target=state.package.name,
+            ),
+        )
+        if decided is None:
+            return False
+        step = journey.confirm_version(bool(decided))
+    if step == install_first.PROCEED:
+        state.install_first_answer = answer
+        if answer == install_first.ANSWER_TARGET:
+            state.install_first_keep = "allow"
+        elif install_first.related_by_derivative(state.package, requirement, items or []):
+            state.install_first_keep = ""
+        else:
+            state.install_first_keep = "block"
+        return True
+    if requirement.package is None:
+        print(
+            _tr("install_first_missing").format(software=requirement.software_name),
+            flush=True,
+        )
+        return False
+    target_keep = (
+        ""
+        if install_first.related_by_derivative(state.package, requirement, items or [])
+        else "block"
+    )
+    decided = confirm(
+        _tr("install_first_need_title").format(
+            software=requirement.software_name, target=state.package.name
+        ),
+        _tr("install_first_need_body").format(
+            software=requirement.label(), target=state.package.name, model=model
+        ),
+    )
+    if not decided:
+        return False
+    try:
+        payload = fetch_releases(requirement.package.repo)
+        rules = catalog.blocklist_rules()
+    except Exception as exc:
+        print(failover_text("download-failure", str(exc)), flush=True)
+        return False
+    rows = rows_from_releases(
+        payload,
+        model=state.model,
+        hardware_type=state.hardware_type,
+        repo=requirement.package.repo,
+        system_software=requirement.package.name,
+        block_rules=rules,
+    )
+    usable = [
+        row
+        for row in rows
+        if requirement.version_range is None or requirement.allows(row.version)
+    ]
+    if not usable:
+        if rows:
+            version = (
+                requirement.version_range.label()
+                if requirement.version_range is not None
+                else requirement.version_text
+            )
+            message = _tr("install_first_version_unavailable").format(
+                software=requirement.software_name, version=version
+            )
+        else:
+            message = _tr("install_first_missing").format(
+                software=requirement.software_name
+            )
+        print(message, flush=True)
+        return False
+    saved = (
+        state.package,
+        state.releases,
+        state.index,
+        state.software,
+        state.install_first_answer,
+        state.install_first_keep,
+        state.keep_data,
+    )
+    state.package = requirement.package
+    state.releases = usable
+    state.index = 0
+    state.software = requirement.package.name
+    state.install_first_answer = ""
+    # A base install never keeps the overlay's or the old system's data.
+    state.install_first_keep = "block"
+    state.keep_data = False
+    try:
+        _run_install(
+            state,
+            output,
+            report=report,
+            ask_keep=ask_keep,
+            items=items,
+            ask_first_pick=pick,
+            ask_first_confirm=confirm,
+            _skip_install_first=True,
+        )
+        base_ok = state.install_ok
+    finally:
+        (
+            state.package,
+            state.releases,
+            state.index,
+            state.software,
+            state.install_first_answer,
+            state.install_first_keep,
+            state.keep_data,
+        ) = saved
+    # The answer belongs to the target, not to the temporary base run: restore
+    # it so the outer install's Keep Data question follows the journey rules.
+    state.install_first_answer = answer
+    state.install_first_keep = target_keep
+    if not base_ok:
+        return False
+    message = _tr("install_first_base_done").format(
+        software=requirement.software_name, target=state.package.name
+    )
+    if report:
+        state.status = message
+    else:
+        print(message, flush=True)
+    return True
+
+
+def _run_install(
+    state: BrowseState,
+    output: Path,
+    report=None,
+    ask_keep=None,
+    items=None,
+    ask_first_pick=None,
+    ask_first_confirm=None,
+    _skip_install_first: bool = False,
+) -> str:
+    state.install_ok = False
+    if not _skip_install_first:
+        if not _install_first_gate(
+            state, items, ask_first_pick, ask_first_confirm, output, report, ask_keep
+        ):
+            return "Install cancelled."
     state.install_percent = 0.0
     state.install_label = "Preparing"
     state.install_log = []
@@ -247,9 +582,14 @@ def _run_install(state: BrowseState, output: Path, report=None, ask_keep=None) -
     # The window only offers the tick when the catalogue allows it and the
     # package actually carries a preserve-data scatter. Ask at install time,
     # not only in Settings, exactly as the connect card does.
-    offered = keep_data_offered(
+    allowed = keep_data_offered(
         state.package, state.allow_keep_data_any, state.model, state.hardware_type
-    ) and flash._preserve_scatter(folder) is not None
+    )
+    if state.install_first_keep == "allow":
+        allowed = True
+    elif state.install_first_keep == "block":
+        allowed = False
+    offered = allowed and flash._preserve_scatter(folder) is not None
     if ask_keep:
         choice = ask_keep(offered, state.keep_data)
     else:
@@ -554,7 +894,102 @@ def _run_themes(state: BrowseState, screen=None, report=None, ask_path=None) -> 
     return message
 
 
-def _run_file(path_text: str, ask_keep=None) -> str:
+def _local_install_first_gate(folder, pick, confirm, ready=None):
+    """Ask the prerequisite question for a locally browsed package.
+
+    Returns ``None`` when the folder is not an install-first package, a string
+    when the install must stop, and ``True`` when the target may be flashed.
+    The local ``pre_stage`` package is flashed directly; if the packager did
+    not include it, the terminal reports the missing prerequisite and the GUI
+    remains the route for the catalogue download fallback.
+    """
+    from .. import install_first
+
+    try:
+        from ..fw_package import locate_package
+
+        pkg = locate_package(folder, require_ini=False)
+    except Exception:
+        return None
+    if pkg is None or not str(pkg.install_first or "").strip():
+        return None
+    try:
+        requirement = install_first.requirement_for(pkg, pkg.model, packages=[])
+    except Exception:
+        return None
+    if requirement is None:
+        return None
+    if pick is None or confirm is None:
+        return _tr("install_first_needs_answer")
+    model = pkg.model or "player"
+    target_name = pkg.name or pkg.folder.name
+    base = pkg.install_first_package
+    selected = 1 if base is not None else 0
+    choice = pick(
+        _tr("keep_data_which_firmware_fmt").format(model=model),
+        [target_name, requirement.label(), _tr("keep_data_choice_other")],
+        selected=selected,
+    )
+    if choice is None:
+        return "Install cancelled."
+    answer = (
+        install_first.ANSWER_TARGET,
+        install_first.ANSWER_PREREQUISITE,
+        install_first.ANSWER_OTHER,
+    )[choice]
+    journey = install_first.InstallFirstJourney(
+        target=pkg, requirement=requirement, local_prerequisite=base
+    )
+    reported = base.version if answer == install_first.ANSWER_PREREQUISITE and base else ""
+    step = journey.choose(answer, reported)
+    if step == install_first.ASK_VERSION:
+        version = (
+            requirement.version_range.label()
+            if requirement.version_range is not None
+            else requirement.version_text
+        )
+        decided = confirm(
+            _tr("install_first_version_fmt").format(
+                model=model, software=requirement.software_name, version=version
+            ),
+            _tr("install_first_hint").format(
+                software=requirement.label(), model=model, target=target_name
+            ),
+        )
+        if decided is None:
+            return "Install cancelled."
+        step = journey.confirm_version(bool(decided))
+    if step == install_first.PROCEED:
+        return True
+    if base is None:
+        return _tr("install_first_missing").format(software=requirement.software_name)
+    if ready is not None:
+        proceed = ready(False, False)
+        if proceed is None:
+            return "Install cancelled."
+    print(
+        _tr("install_first_starting").format(
+            software=requirement.software_name, target=target_name
+        ),
+        flush=True,
+    )
+    code = flash.flash_directory(str(base.folder), keep_data=False)
+    if code != 0:
+        return _tr("flash_failed") + "\n\n" + _tr(
+            "err_usb_disconnected_recovery", model=model
+        )
+    print(
+        _tr("install_first_base_done").format(
+            software=requirement.software_name, target=target_name
+        ),
+        flush=True,
+    )
+    return True
+
+
+def _run_file(
+    path_text: str, ask_keep=None, ask_first_pick=None, ask_first_confirm=None
+) -> str:
     if os.environ.get("INNIOASIS_SIMULATE") == "1":
         events = install_progress(sleep=0.02)
         for event in events:
@@ -571,6 +1006,24 @@ def _run_file(path_text: str, ask_keep=None) -> str:
             return failover_text("download-failure", str(exc))
     else:
         folder = path
+
+    # A portable install-first package carries its target metadata and, when
+    # the packager could include it, the prerequisite in its own folder. Ask
+    # the same question as the catalogue before touching the player, and
+    # flash the local prerequisite first when that is the answer.
+    gate = _local_install_first_gate(
+        folder, ask_first_pick, ask_first_confirm, ready=ask_keep
+    )
+    if isinstance(gate, str):
+        return gate
+    try:
+        from ..fw_package import locate_package
+
+        package = locate_package(folder, require_ini=False)
+    except Exception:
+        package = None
+    if package is not None and str(package.install_first or "").strip():
+        folder = str(package.folder)
 
     # A local package gets the same preserve-data question as a catalogue
     # package. Asking only when the package actually carries the scatter is
@@ -703,7 +1156,14 @@ def _plain(state: BrowseState, items: list, refresh: bool, output: Path) -> int:
                 print("That number is not a release.")
             continue
         if lowered in {"i", "install"}:
-            state.status = _run_install(state, output, ask_keep=ask_keep)
+            state.status = _run_install(
+                state,
+                output,
+                ask_keep=ask_keep,
+                items=items,
+                ask_first_pick=_install_first_pick_text,
+                ask_first_confirm=_install_first_confirm_text,
+            )
             print(state.status)
             continue
         if lowered in {"f", "file"}:
@@ -711,7 +1171,12 @@ def _plain(state: BrowseState, items: list, refresh: bool, output: Path) -> int:
                 path_text = input("File or folder: ").strip()
             except EOFError:
                 return 0
-            state.status = _run_file(path_text, ask_keep=ask_keep)
+            state.status = _run_file(
+                path_text,
+                ask_keep=ask_keep,
+                ask_first_pick=_install_first_pick_text,
+                ask_first_confirm=_install_first_confirm_text,
+            )
             print(state.status)
             continue
         if lowered in {"h", "themes"}:
@@ -869,6 +1334,12 @@ def _curses_run(state: BrowseState, items: list, output: Path) -> int:
         def ask_keep(offered, current):
             return _ask_keep_data(screen, state, current, offered=offered)
 
+        def ask_first_pick(title, options, selected=0):
+            return _install_first_pick(screen, title, options, selected=selected)
+
+        def ask_first_confirm(title, detail=""):
+            return _install_first_confirm(screen, title, detail)
+
         while True:
             if state.quit:
                 return 0
@@ -903,7 +1374,15 @@ def _curses_run(state: BrowseState, items: list, output: Path) -> int:
                 if y == height - 3:
                     which = _segment_at(_action_text(state), x, ["Install", "Install from a file", "Themes"])
                     if which == 0:
-                        state.status = _run_install(state, output, report=report, ask_keep=ask_keep)
+                        state.status = _run_install(
+                            state,
+                            output,
+                            report=report,
+                            ask_keep=ask_keep,
+                            items=items,
+                            ask_first_pick=ask_first_pick,
+                            ask_first_confirm=ask_first_confirm,
+                        )
                         if state.result_lines:
                             state.page = "done"
                             state.page_scroll = 0
@@ -940,7 +1419,15 @@ def _curses_run(state: BrowseState, items: list, output: Path) -> int:
             elif key in (curses.KEY_DOWN, ord("j")):
                 state.index = move_index(state.index, "down", len(state.releases))
             elif key in (ord("i"),):
-                state.status = _run_install(state, output, report=report, ask_keep=ask_keep)
+                state.status = _run_install(
+                    state,
+                    output,
+                    report=report,
+                    ask_keep=ask_keep,
+                    items=items,
+                    ask_first_pick=ask_first_pick,
+                    ask_first_confirm=ask_first_confirm,
+                )
                 if state.result_lines:
                     state.page = "done"
                     state.page_scroll = 0
@@ -1136,7 +1623,16 @@ def _ask_file(screen, state: BrowseState | None = None) -> str:
     ask_keep = None
     if state is not None:
         ask_keep = lambda offered, current: _ask_keep_data(screen, state, current, offered=offered)
-    return _run_file(text, ask_keep=ask_keep)
+    return _run_file(
+        text,
+        ask_keep=ask_keep,
+        ask_first_pick=lambda title, options, selected=0: _install_first_pick(
+            screen, title, options, selected
+        ),
+        ask_first_confirm=lambda title, detail="": _install_first_confirm(
+            screen, title, detail
+        ),
+    )
 
 
 def _curses_page(screen, state: BrowseState, items: list) -> None:
