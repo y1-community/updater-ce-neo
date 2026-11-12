@@ -6675,31 +6675,38 @@ class MainWindow(QMainWindow):
         # taken, so it runs the themes stage or the completion screen next.
         self._handle_flash_success()
 
-    def _refresh_online_data(self) -> None:
+    def refresh_everything(self) -> None:
+        """Refresh every remote source the app reads, as the Refresh button asks.
+
+        One click must not re-list only the software on screen: the manifest,
+        notices, donors, the release blocklist, ``config.ini``'s token pool and
+        every catalogue repository's releases are all forced, so the app behaves
+        as if its caches had been reset.         Nothing is cleared first -- each file
+        replaces its cache only after a usable download, and a failed release
+        fetch falls back to the cache it already has -- so an offline moment
+        can never blank the app.
+        """
+        self._refresh_online_data(force_update_check=True)
+
+    def _refresh_online_data(self, force_update_check: bool = False) -> None:
         """Replace stale online files and re-read notices without blocking the UI.
 
-        With no window on screen there is no donation bar and no release feed
-        to update, so only the manifest is fetched; the donors CSV and the feed
-        snapshots wait until the window is visible again. Notice.xml keeps its
-        own frequent poll either way.
+        Every file is refreshed whether or not the window is in front: the
+        donors CSV feeds the bar and the Support page, the feed snapshots drive
+        notifications, and a hidden window is exactly when a passive sweep has
+        nothing else to do. Notice.xml keeps its own poll (NoticeService owns
+        that file and posts the notification).
         """
         if self._install_run_active():
             # Never compete with a running download or flash for bandwidth.
             return
-        background = (
-            self._window_hidden_in_tray()
-            or not self.isVisible()
-            or self.isMinimized()
-        )
         try:
-            if background:
-                from ..online_data import BACKGROUND_FILES, refresh_files_async
+            from ..online_data import refresh_all_async
 
-                refresh_files_async(BACKGROUND_FILES, force=True)
-            else:
-                from ..online_data import refresh_all_async
-
-                refresh_all_async(force=True)
+            refresh_all_async(
+                force=True,
+                on_done=getattr(self, "_on_online_files_refreshed", None),
+            )
         except Exception:
             logger.debug("Online data refresh could not start", exc_info=True)
         # Downloading slidia_manifest.xml changes nothing by itself: the
@@ -6728,6 +6735,33 @@ class MainWindow(QMainWindow):
                 self._start_all_release_refresh()
             except Exception:
                 logger.debug("Release cache refresh could not start", exc_info=True)
+        if force_update_check:
+            # A click asks "is anything new?" about the app itself too. The
+            # check is the ordinary (non-manual) one, so a waiting build updates
+            # the update row and notifies without interrupting with a dialog.
+            try:
+                self._update_manual_pending = False
+                self._run_update_check()
+            except Exception:
+                logger.debug("App update check could not start", exc_info=True)
+
+    def _on_online_files_refreshed(self, updated) -> None:
+        """Pick up a freshly downloaded donors feed (this runs off the UI thread)."""
+        if not isinstance(updated, dict) or not updated.get("donors.csv"):
+            return
+        QTimer.singleShot(0, self._reload_donations)
+
+    def _reload_donations(self) -> None:
+        """Re-read the cached donors feed so the bar shows a new total."""
+        try:
+            from ..online_data import read_text
+
+            donations = parse_donors_csv_text(read_text("donors.csv") or "")
+        except Exception:
+            logger.debug("Donations reload failed", exc_info=True)
+            return
+        if donations:
+            self._on_donations_updated(donations)
 
     def _online_refresh_tick(self) -> None:
         """Refresh once, then pick a fresh random delay for the next pass."""
@@ -6768,6 +6802,12 @@ class MainWindow(QMainWindow):
             return
         self._release_refresh_pending = True
         self._reload_refreshed_releases()
+        # The release cache is the freshest it can be right now: this is where a
+        # newly published build for a tracked player becomes a notification.
+        try:
+            self._check_device_firmware_updates(manual=False)
+        except Exception:
+            logger.debug("Device firmware check could not start", exc_info=True)
 
     def _reload_refreshed_releases(self) -> None:
         """Apply a finished sweep when the catalogue can accept it.

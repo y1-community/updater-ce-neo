@@ -911,7 +911,7 @@ class SelectPackagePage(QWidget):
 
         self._refresh_btn = QPushButton(tr("sel_refresh"))
         self._refresh_btn.setToolTip(tr("sel_refresh_tooltip"))
-        self._refresh_btn.clicked.connect(lambda: self._refresh_releases(force_refresh=True))
+        self._refresh_btn.clicked.connect(self._refresh_everything)
         filter_layout.addWidget(self._refresh_btn, 2, 3)
 
         # Why Keep Data will not be offered, said next to the software name it
@@ -2299,6 +2299,24 @@ class SelectPackagePage(QWidget):
             )
         except Exception:
             logger.debug("Could not report the notice context", exc_info=True)
+
+    def _refresh_everything(self) -> None:
+        """The Refresh button refreshes the whole app, not only this listing.
+
+        The window owns the sources that are not this page's: the manifest,
+        notices, donors, the blocklist, ``config.ini``'s token pool and every
+        catalogue repository's release cache. Asking it first means a new
+        firmware, notice or app build appears from one click, while the listing
+        still re-reads itself last so the rows on screen are the newest ones.
+        """
+        window = self.window()
+        handler = getattr(window, "refresh_everything", None)
+        if callable(handler):
+            try:
+                handler()
+            except Exception:
+                logger.debug("Full refresh failed", exc_info=True)
+        self._refresh_releases(force_refresh=True)
 
     def _refresh_releases(self, force_refresh=False, *, refresh_manifest=True):
         # The manifest defines which models and software exist, so a refresh

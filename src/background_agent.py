@@ -349,13 +349,25 @@ class BackgroundAgent(QObject):
         self._schedule_online_tick()
 
     def _refresh_online(self) -> None:
-        """Keep the files that can become a notification current.
+        """Refresh every remote source, exactly like a Refresh click.
 
-        A windowless copy has no donation bar and no release feed on screen, so
-        donors.csv and the feed snapshots are not fetched at all. The manifest,
-        every catalogue repository's release cache and notice.xml are refreshed;
-        NoticeService parses the notice feed and posts the notification itself.
+        The manifest, the feed snapshots, donors, the blocklist and every
+        catalogue repository's release cache are all forced so a tray-only copy
+        is as current as an open window; NoticeService parses the notice feed
+        and posts the notification itself.
         """
+        try:
+            from .online_data import refresh_all_async
+
+            refresh_all_async(force=True)
+        except Exception:
+            logger.debug("Background online-file refresh failed", exc_info=True)
+        try:
+            from .release_blocklist import refresh_blocklist_async
+
+            refresh_blocklist_async()
+        except Exception:
+            logger.debug("Background blocklist refresh failed", exc_info=True)
         self._refresh_manifest()
         self._refresh_all_releases()
         try:

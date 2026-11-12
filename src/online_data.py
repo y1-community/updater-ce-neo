@@ -432,23 +432,33 @@ def refresh_files_async(
     names: Iterable[str],
     force: bool = False,
     timeout: float = REQUEST_TIMEOUT,
+    on_done: Optional[Callable[[dict], None]] = None,
 ) -> bool:
     """Start a background refresh of just ``names`` unless one is running.
 
     There is one refresh worker per process, whatever its file set: a window
     and the background agent asking at the same moment must not download the
-    same manifest twice.
+    same manifest twice. ``on_done`` receives the ``{name: updated}`` mapping on
+    the worker thread once the sweep finishes.
     """
     global _refresh_thread
     wanted = tuple(dict.fromkeys(str(name) for name in (names or ())))
     if not wanted:
         return False
+
+    def run() -> None:
+        updated = refresh_files(wanted, force=force, timeout=timeout)
+        if on_done is not None:
+            try:
+                on_done(updated)
+            except Exception:
+                logger.debug("online-data refresh callback failed", exc_info=True)
+
     with _refresh_lock:
         if _refresh_thread is not None and _refresh_thread.is_alive():
             return False
         thread = threading.Thread(
-            target=refresh_files,
-            kwargs={"names": wanted, "force": force, "timeout": timeout},
+            target=run,
             name="online-data-refresh",
             daemon=True,
         )
@@ -457,7 +467,11 @@ def refresh_files_async(
         return True
 
 
-def refresh_all_async(force: bool = False, timeout: float = REQUEST_TIMEOUT) -> bool:
+def refresh_all_async(
+    force: bool = False,
+    timeout: float = REQUEST_TIMEOUT,
+    on_done: Optional[Callable[[dict], None]] = None,
+) -> bool:
     """Refresh every online file except ``notice.xml`` in the background.
 
     Deliberately lazy: called after the first window is shown (and again when
@@ -466,7 +480,7 @@ def refresh_all_async(force: bool = False, timeout: float = REQUEST_TIMEOUT) -> 
     new worker was started.
     """
     names = tuple(name for name in FILES if name not in NOTICE_SERVICE_FILES)
-    return refresh_files_async(names, force=force, timeout=timeout)
+    return refresh_files_async(names, force=force, timeout=timeout, on_done=on_done)
 
 
 def wait_for_refresh(timeout: float = 0.0) -> None:
