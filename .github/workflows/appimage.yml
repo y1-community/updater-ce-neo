@@ -192,7 +192,11 @@ jobs:
         with:
           files: |
             dist/linux/*.AppImage
+            dist/linux/*.tar.gz
+            dist/linux/*.zip
             dist/linux/*.sha256
+            dist/linux/run_linux.sh
+            dist/linux/run_linux.sh.sha256
           generate_release_notes: true
           draft: false
           prerelease: false

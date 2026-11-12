@@ -558,7 +558,7 @@ mkdir -p "$APPDIR/usr/share/metainfo"
 mkdir -p "$APPDIR/usr/share/icons/hicolor/256x256/apps"
 
 # Copy binary payload & _internal
-cp -r "$DIST_DIR/$APP_NAME"/* "$APPDIR/usr/bin/"
+(cd "$DIST_DIR/$APP_NAME" && tar --exclude='.DS_Store' -cf - .) | tar -C "$APPDIR/usr/bin" -xf -
 
 if [ -d "$APPDIR/usr/bin/SP_Flash_Tool" ]; then
     chmod 0755 "$APPDIR/usr/bin/SP_Flash_Tool/flash_tool" \
@@ -780,7 +780,19 @@ if [ ! -x "$TAR_STAGE/$APP_NAME" ]; then
     echo "ERROR: $TAR_STAGE/$APP_NAME is not executable"
     exit 1
 fi
-tar -C "$BUILD_DIR/tarball" -czf "$TARBALL_VERSIONED" "$APP_NAME"
+set +e
+tar -C "$BUILD_DIR/tarball" --exclude='.DS_Store' -czf "$TARBALL_VERSIONED" "$APP_NAME"
+TAR_RC=$?
+set -e
+if [ "$TAR_RC" -ne 0 ] && [ "$TAR_RC" -ne 1 ]; then
+    echo "ERROR: tar failed with status $TAR_RC" >&2
+    exit "$TAR_RC"
+fi
+if [ "$TAR_RC" -eq 1 ]; then
+    # GNU tar exits 1 when Finder writes metadata into a directory while it is
+    # being read. The archive is still complete; only a real error is fatal.
+    echo "  -> note: payload metadata changed while archiving; archive is complete"
+fi
 cp -f "$TARBALL_VERSIONED" "$TARBALL_LATEST"
 (
     cd "$DIST_DIR"
@@ -827,7 +839,7 @@ log_step 8 "$TOTAL_STEPS" "Packaging Portable ZIP" "Creating the .zip portable a
 ZIP_VERSIONED="$DIST_DIR/${BRAND_SLUG}-${VERSION}-${ARCH}.zip"
 if command -v zip >/dev/null 2>&1; then
     rm -f "$ZIP_VERSIONED"
-    (cd "$BUILD_DIR/tarball" && zip -qry "$ZIP_VERSIONED" "$APP_NAME")
+    (cd "$BUILD_DIR/tarball" && zip -qry "$ZIP_VERSIONED" "$APP_NAME" -x '*.DS_Store')
 else
     echo "  -> 'zip' not found; writing the archive with Python instead"
     rm -f "$ZIP_VERSIONED"
@@ -841,6 +853,8 @@ root = os.environ["ARCHIVE_DIR"]
 with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
     for base, _dirs, files in os.walk(os.path.join(root, top)):
         for name in files:
+            if name == ".DS_Store":
+                continue
             full = os.path.join(base, name)
             zf.write(full, os.path.relpath(full, root))
 PY

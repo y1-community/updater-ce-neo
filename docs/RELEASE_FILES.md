@@ -29,10 +29,10 @@ still gets the right install. `run_linux.sh` is also copied inside the AppImage
 and portable archive so the same repair path is available after a direct
 download.
 
-The 2.5.4 Linux files live on the existing **2.5.3** releases in both
-`y1-community/innioasis-updater` (first installs) and
-`y1-community/updater-ce-neo` (updates). The Windows and macOS 2.5.3 files on
-those releases must not be replaced by a Linux upload.
+The Linux 2.5.5 files live on the **2.5.5** release in
+`y1-community/updater-ce-neo` (updates) and on the existing **2.5.3** release
+in `y1-community/innioasis-updater` (first installs). The Windows and macOS
+2.5.3 files on those releases must not be replaced by a Linux upload.
 
 `UpdaterCE-Lite.tar.gz` is the text-only session, not a window package. It is an
 extra file on the 2.5.3 releases and in `y1-community/supplemental-apks`. The

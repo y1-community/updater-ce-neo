@@ -871,6 +871,9 @@ class MainWindow(QMainWindow):
         # Only one all-repository sweep runs at a time; its result reloads the
         # visible release list without another manifest fetch.
         self._release_refresh_worker = None
+        # A sweep may finish while another page is open; the catalogue reloads
+        # when the user returns instead of waiting for the next random tick.
+        self._release_refresh_pending = False
         self._step_now = ""
         self._update_offered_once = False
         self._update_manual_pending = False
@@ -4680,6 +4683,8 @@ class MainWindow(QMainWindow):
             self._highlight_nav(self._stack.currentIndex(), self._install_run_active())
             return
         self._stack.setCurrentIndex(page_idx)
+        if page_idx == _PAGE_SELECT:
+            QTimer.singleShot(0, self._reload_refreshed_releases)
         if page_idx == _PAGE_FLASH:
             self._install_fit_generation = None
         # A row highlights itself when clicked, but navigation started anywhere
@@ -6761,12 +6766,27 @@ class MainWindow(QMainWindow):
             self._release_refresh_worker = None
         if not results or self._install_run_active():
             return
+        self._release_refresh_pending = True
+        self._reload_refreshed_releases()
+
+    def _reload_refreshed_releases(self) -> None:
+        """Apply a finished sweep when the catalogue can accept it.
+
+        A sweep that finishes while Settings or an install card is open must
+        not be lost: the flag survives until Select Software is visible and
+        idle, so the release rows show the refreshed cache on return.
+        """
+        if not getattr(self, "_release_refresh_pending", False):
+            return
+        if self._install_run_active():
+            return
         page = getattr(self, "_select_page", None)
         if page is None or not page.isVisible():
             return
         try:
             if hasattr(page, "_can_relist_quietly") and not page._can_relist_quietly():
                 return
+            self._release_refresh_pending = False
             page._refresh_releases_keep_selection(force_refresh=False)
         except Exception:
             logger.debug("Could not re-read the release list", exc_info=True)
@@ -10419,6 +10439,7 @@ class MainWindow(QMainWindow):
             getattr(self, "_manifest_worker", None),
             getattr(self, "_update_worker", None),
             getattr(self, "_device_update_worker", None),
+            getattr(self, "_release_refresh_worker", None),
             getattr(select_page, "_manifest_worker", None) if select_page else None,
             getattr(select_page, "_prep_worker", None) if select_page else None,
             getattr(select_page, "_translate_worker", None) if select_page else None,

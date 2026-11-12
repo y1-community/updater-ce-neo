@@ -121,8 +121,11 @@ def test_linux_picks_portable_package_not_installer_script():
     assert picked["name"] == "UpdaterCE.tar.gz"
 
 
-def test_update_checker_multiple_releases():
+def test_update_checker_multiple_releases(monkeypatch):
     """UpdateChecker evaluates all releases to find the newest that has assets for the OS."""
+    # The checker picks for the host platform. This test describes Windows, so
+    # do not let a macOS or Linux test runner change the expected release.
+    monkeypatch.setattr("src.updates.sys.platform", "win32")
     mock_client = MagicMock()
     mock_client.get_all_update_releases.return_value = [
         {
@@ -193,13 +196,46 @@ def test_linux_update_click_opens_guide():
     app.processEvents()
 
     opened_urls = []
-    with patch("src.browser.open_browser", lambda url: opened_urls.append(url)):
-        with patch("sys.platform", "linux"):
-            dlg._start_update_download()
+    with patch("src.updates.UpdateChecker.simulate_latest", return_value=info):
+        with patch("src.browser.open_browser", lambda url: opened_urls.append(url)):
+            with patch("sys.platform", "linux"):
+                dlg._start_update_download()
 
     assert "https://innioasis.app/guide.html" in opened_urls
     dlg.close()
     app.processEvents()
+
+
+def test_linux_update_replaces_running_appimage(tmp_path, monkeypatch):
+    """The AppImage update must swap the installed file, not just run a copy."""
+    from src import paths
+
+    target = tmp_path / "installed" / "UpdaterCE.appimage"
+    target.parent.mkdir()
+    target.write_bytes(b"old build")
+    source = tmp_path / "downloads" / "UpdaterCE.appimage"
+    source.parent.mkdir()
+    source.write_bytes(b"\x7fELF-new-build")
+
+    monkeypatch.setattr(paths, "get_appimage_path", lambda: target)
+
+    # The helper only needs the paths; construct no dialog and no Qt widgets.
+    result = UpdateAvailableDialog._replace_running_appimage(object(), source)
+
+    assert result == target
+    assert target.read_bytes() == b"\x7fELF-new-build"
+    assert target.stat().st_mode & 0o111
+
+
+def test_linux_update_falls_back_when_not_running_from_an_appimage(tmp_path, monkeypatch):
+    from src import paths
+
+    source = tmp_path / "UpdaterCE.appimage"
+    source.write_bytes(b"\x7fELF-new-build")
+    monkeypatch.setattr(paths, "get_appimage_path", lambda: None)
+
+    assert UpdateAvailableDialog._replace_running_appimage(object(), source) is None
+    assert source.read_bytes() == b"\x7fELF-new-build"
 
 
 def test_app_update_download_progress_advances_past_connecting():

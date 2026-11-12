@@ -48,18 +48,18 @@ The default answer is yes. A system with no recognised manager, an immutable ima
 
 The archive is not stored in the git repository. `dist/` is build output.
 
-The Linux 2.5.4 window packages are published on the existing **2.5.3** release in both `y1-community/innioasis-updater` (first installs) and `y1-community/updater-ce-neo` (updates). These files on those releases stay as they are:
+The Linux 2.5.5 window packages are published on the **2.5.5** release in `y1-community/updater-ce-neo` (updates) and on the existing **2.5.3** release in `y1-community/innioasis-updater` (first installs). These files on those releases stay as they are:
 
 - `Innioasis.Updater.for.Mac.dmg`
 - `installer.exe`
 - `UpdaterCE-Windows-Portable.zip`
 
-The Linux files beside them are replaced with the tested 2.5.4 build:
+The Linux files beside them are replaced with the tested 2.5.5 build:
 `UpdaterCE.appimage`, `UpdaterCE-Linux-Portable.tar.gz`, `UpdaterCE-Linux-Portable.zip`,
 their arm64 equivalents, and matching `.sha256` files. The Windows and macOS
 files are never replaced by a Linux upload.
 
-There is no 2.5.4 release tag. Installed Windows and Mac copies compare release tags, and a higher tag that also contains their package would tell them an update exists. The source tree's version is 2.5.4, and that is what the terminal session reports. It is not a GitHub release.
+The source tree's version is 2.5.5, and that is what the terminal session reports. The 2.5.5 tag is the Linux update release in `updater-ce-neo`; the older 2.5.3 tag remains the first-install location in `innioasis-updater`.
 
 `run_linux_lite.sh` chooses its source before downloading: a first install reads
 `y1-community/innioasis-updater`, while an existing terminal install or

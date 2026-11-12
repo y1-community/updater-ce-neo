@@ -2383,6 +2383,49 @@ class UpdateAvailableDialog(QDialog):
 
         QApplication.quit()
 
+    def _replace_running_appimage(self, source):
+        """Install ``source`` over the AppImage this process is running from.
+
+        Linux has no installer step for an AppImage. Swapping the file in place
+        (write a sibling, then ``os.replace``) is atomic: the running mount
+        stays valid, settings and caches stay where they are, and the next menu
+        launch opens the new build. If the app is not an AppImage or its folder
+        is read-only, return None so the caller can launch the download as a
+        portable copy.
+        """
+        import os
+        import shutil
+        from pathlib import Path
+
+        from .. import paths
+
+        target = paths.get_appimage_path()
+        if target is None:
+            return None
+        source_path = Path(source)
+        if not source_path.is_file():
+            return None
+        try:
+            target = Path(target)
+            if target.resolve() == source_path.resolve():
+                return target
+            temp = target.with_name(f".{target.name}.new-{os.getpid()}")
+            try:
+                shutil.copyfile(source_path, temp)
+                os.chmod(temp, 0o755)
+                os.replace(temp, target)
+            except OSError:
+                try:
+                    temp.unlink(missing_ok=True)
+                except OSError:
+                    pass
+                raise
+        except OSError as e:
+            logger.debug("Could not replace the running AppImage: %s", e)
+            return None
+        logger.info("Installed AppImage update over %s", target)
+        return target
+
     def _launch_installer(self):
         import os
         import subprocess
@@ -2390,11 +2433,13 @@ class UpdateAvailableDialog(QDialog):
 
         if self._dest_path and self._dest_path.is_file():
             if sys.platform.startswith("linux"):
-                # An AppImage is a program: make it executable and run it
-                # directly (no shell), then let this older build exit.
+                # An AppImage is a program: replace the installed copy in place
+                # when possible, then run the new build (no shell) and let this
+                # older process exit. A portable download is launched as-is.
                 try:
-                    self._dest_path.chmod(self._dest_path.stat().st_mode | 0o755)
-                    subprocess.Popen([str(self._dest_path)], start_new_session=True)
+                    launch_path = self._replace_running_appimage(self._dest_path) or self._dest_path
+                    launch_path.chmod(launch_path.stat().st_mode | 0o755)
+                    subprocess.Popen([str(launch_path)], start_new_session=True)
                 except Exception as e:
                     logger.error("Could not start the AppImage %s: %s", self._dest_path, e)
                     self._progress_label.setText(

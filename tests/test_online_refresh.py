@@ -104,6 +104,8 @@ def test_a_finished_sweep_reloads_the_visible_release_list(monkeypatch):
         _active_workers = {worker}
         _release_refresh_worker = worker
         _select_page = page
+        _release_refresh_pending = False
+        _reload_refreshed_releases = MainWindow._reload_refreshed_releases
 
         def _install_run_active(self):
             return False
@@ -112,6 +114,49 @@ def test_a_finished_sweep_reloads_the_visible_release_list(monkeypatch):
 
     assert calls == [False]
     assert worker not in _Host._active_workers
+
+
+def test_a_sweep_waits_until_the_catalogue_is_visible():
+    from src.ui.main_window import MainWindow
+
+    calls = []
+
+    class _Page:
+        visible = False
+
+        def isVisible(self):
+            return self.visible
+
+        def _can_relist_quietly(self):
+            return True
+
+        def _refresh_releases_keep_selection(self, force_refresh=False):
+            calls.append(force_refresh)
+
+    page = _Page()
+    worker = object()
+
+    class _Host:
+        _active_workers = {worker}
+        _release_refresh_worker = worker
+        _select_page = page
+        _release_refresh_pending = False
+        _reload_refreshed_releases = MainWindow._reload_refreshed_releases
+
+        def _install_run_active(self):
+            return False
+
+    host = _Host()
+    MainWindow._on_all_releases_refreshed(host, worker, {"owner/one": 2})
+
+    assert calls == []
+    assert host._release_refresh_pending is True
+
+    page.visible = True
+    MainWindow._reload_refreshed_releases(host)
+
+    assert calls == [False]
+    assert host._release_refresh_pending is False
 
 
 def test_a_window_refresh_forces_every_source(monkeypatch):
