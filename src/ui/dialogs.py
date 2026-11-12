@@ -2403,7 +2403,9 @@ class UpdateAvailableDialog(QDialog):
         if target is None:
             return None
         source_path = Path(source)
-        if not source_path.is_file():
+        # A portable archive is not a replacement AppImage: writing it over
+        # the running AppImage would destroy the installation.
+        if source_path.suffix.lower() != ".appimage" or not source_path.is_file():
             return None
         try:
             target = Path(target)

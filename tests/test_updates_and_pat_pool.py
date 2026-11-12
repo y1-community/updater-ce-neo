@@ -227,6 +227,22 @@ def test_linux_update_replaces_running_appimage(tmp_path, monkeypatch):
     assert target.stat().st_mode & 0o111
 
 
+@pytest.mark.parametrize("suffix", [".tar.gz", ".zip"])
+def test_linux_update_does_not_write_a_portable_archive_over_the_appimage(tmp_path, monkeypatch, suffix):
+    from src import paths
+
+    target = tmp_path / "installed" / "UpdaterCE.appimage"
+    target.parent.mkdir()
+    target.write_bytes(b"old build")
+    source = tmp_path / f"UpdaterCE-Linux-Portable{suffix}"
+    source.write_bytes(b"portable package")
+
+    monkeypatch.setattr(paths, "get_appimage_path", lambda: target)
+
+    assert UpdateAvailableDialog._replace_running_appimage(object(), source) is None
+    assert target.read_bytes() == b"old build"
+
+
 def test_linux_update_falls_back_when_not_running_from_an_appimage(tmp_path, monkeypatch):
     from src import paths
 
