@@ -283,6 +283,63 @@ def test_prune_keeps_only_scatter_listed_files_and_ini(tmp_path):
     assert len(removed) == 3
 
 
+def test_prune_keeps_a_declared_image_shipped_under_another_suffix(tmp_path):
+    """Lithium (Timmkoo Q3/Q5) declares SEC_RO as ``secro.img`` and ships ``secro.bin``.
+
+    Pruning by resolved path alone deleted ``secro.bin`` from the extract, and
+    the flash then failed mid-write. Only files the scatter never names are
+    extraneous.
+    """
+    root = tmp_path / "extract"
+    fw = root / "firmware"
+    fw.mkdir(parents=True)
+    (fw / "MT6582_Android_scatter.txt").write_text(
+        "- partition_index: SYS0\n"
+        "  partition_name: PRELOADER\n  file_name: preloader.bin\n  is_download: true\n"
+        "- partition_index: SYS1\n"
+        "  partition_name: SEC_RO\n  file_name: secro.img\n  is_download: true\n",
+        encoding="utf-8",
+    )
+    for name in ("preloader.bin", "secro.bin", "lk2.bin", "trustzone2.bin"):
+        (fw / name).write_bytes(b"x")
+    (fw / fw_package.FW_PACKAGE_INI).write_text("true\n", encoding="utf-8")
+
+    removed = prune_to_firmware_package(root)
+
+    remaining = sorted(p.name for p in root.rglob("*") if p.is_file())
+    assert remaining == [
+        "MT6582_Android_scatter.txt",
+        "fw_package.ini",
+        "preloader.bin",
+        "secro.bin",
+    ]
+    assert sorted(Path(p).name for p in removed) == ["lk2.bin", "trustzone2.bin"]
+    from src.flash_service import _missing_images
+
+    assert _missing_images(fw / "MT6582_Android_scatter.txt") == []
+
+
+def test_prune_keeps_a_declared_file_that_sits_in_another_folder(tmp_path):
+    """The scatter's own file names decide, wherever the archive put them."""
+    root = tmp_path / "extract"
+    fw = root / "firmware"
+    images = fw / "images"
+    images.mkdir(parents=True)
+    (fw / "MT6582_Android_scatter.txt").write_text(
+        "- partition_index: SYS0\n"
+        "  partition_name: LOGO\n  file_name: logo.bin\n  is_download: true\n",
+        encoding="utf-8",
+    )
+    (images / "logo.bin").write_bytes(b"x")
+    (images / "notes.txt").write_text("x", encoding="utf-8")
+
+    removed = prune_to_firmware_package(root)
+
+    assert (images / "logo.bin").is_file()
+    assert not (images / "notes.txt").exists()
+    assert sorted(Path(p).name for p in removed) == ["notes.txt"]
+
+
 def test_prune_keeps_updater_image(tmp_path):
     root = tmp_path / "extract"
     fw = _firmware(root / "firmware")

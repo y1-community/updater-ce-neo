@@ -7518,9 +7518,10 @@ class MainWindow(QMainWindow):
         except Exception:
             return True
         model = str(getattr(pkg, "model", "") or self._package_model or "")
-        requirement = install_first.requirement_for(
-            pkg, model, packages=catalog.packages_for_model(model)
-        )
+        # No packages list: the resolver reads the catalogue itself, which is
+        # what lets a base firmware listed under a sibling model (one build
+        # serving Q3 and Q5) still satisfy this model's declaration.
+        requirement = install_first.requirement_for(pkg, model)
         if requirement is None:
             return True
         existing = getattr(self, "_install_first_journey", None)
@@ -7640,9 +7641,7 @@ class MainWindow(QMainWindow):
             return True
         model = str(getattr(pkg, "model", "") or self._package_model or "")
         target = fw_package.package_as_catalogue(pkg)
-        requirement = install_first.requirement_for(
-            target, model, packages=catalog.packages_for_model(model)
-        )
+        requirement = install_first.requirement_for(target, model)
         if requirement is None:
             return True
         local_base = getattr(pkg, "install_first_package", None)

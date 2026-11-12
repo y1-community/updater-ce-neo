@@ -367,6 +367,13 @@ def package_versions_match(target, base) -> bool:
     return bool(version) and constraint.allows(version)
 
 
+def _models_can_share_a_source(left, right) -> bool:
+    """True when the catalogue may serve ``left`` and ``right`` one firmware."""
+    from .install_first import _models_can_share_a_source as share
+
+    return share(left, right)
+
+
 def packages_are_pair(target, base) -> bool:
     """Whether ``base`` is the prerequisite ``target`` names.
 
@@ -395,9 +402,12 @@ def packages_are_pair(target, base) -> bool:
     target_model = str(getattr(target, "model", "") or "").strip().upper()
     base_model = str(getattr(base, "model", "") or "").strip().upper()
     # A Y1 stock package is not a valid prerequisite for a Y2 overlay.  The
-    # packed base must name the same model as the target; missing metadata is
-    # not evidence that the pair is safe.
-    if (target_model or base_model) and base_model != target_model:
+    # packed base must name the same model as the target, or a model that runs
+    # the same firmware (Q3/Q5, G1/G3); missing metadata is not evidence that
+    # the pair is safe.
+    if base_model != target_model and not _models_can_share_a_source(
+        target_model, base_model
+    ):
         return False
     return package_versions_match(target, base)
 
@@ -1438,13 +1448,42 @@ def stage_bundled_firmware(pkg: FwPackage) -> Path:
     return staged_scatter
 
 
+def scatter_defined_names(scatter_path: Union[str, Path]) -> set[str]:
+    """Every ``file_name`` the scatter defines, as casefolded basenames.
+
+    The scatter is the firmware's own list of what it carries. A file it names
+    belongs to the package even when this app resolves that partition through a
+differently named image (``secro.bin`` shipped for a ``secro.img`` entry), and
+    even when it sits in another folder of the extracted archive.
+    """
+    try:
+        text = Path(scatter_path).read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return set()
+    names: set[str] = set()
+    for raw in text.splitlines():
+        line = raw.strip()
+        if line.startswith("#") or ":" not in line:
+            continue
+        key, _, value = line.partition(":")
+        if key.strip().lstrip("- ").strip().lower() != "file_name":
+            continue
+        declared = value.strip().strip("\"'").replace("\\", "/")
+        name = declared.rsplit("/", 1)[-1].strip()
+        if name and name.upper() != "NONE":
+            names.add(name.casefold())
+    return names
+
+
 def prune_to_firmware_package(extract_dir: Union[str, Path]) -> list[str]:
     """After extracting a zip that carries a scatter file, keep only the scatter,
-    the files it lists, fw_package.ini, rockbox markers, updater images, DA binaries,
-    and any *.auth file. Everything else is removed.
+    every file name the scatter defines, fw_package.ini, rockbox markers, updater
+    images, DA binaries, and any *.auth file. Everything else is removed.
 
-    Ensures that zip archives and extraneous non-flashing files are cleaned up while
-    retaining all components necessary for automated portable flashing.
+    The scatter is the only authority on what a firmware package contains: a file
+    it names by name is kept wherever the archive put it, and a file it never
+    names is extraneous. Discarding a named file is what made an install fail
+    mid-flash, so the name match is what decides.
     """
     root = Path(extract_dir)
     if not root.is_dir():
@@ -1466,7 +1505,7 @@ def prune_to_firmware_package(extract_dir: Union[str, Path]) -> list[str]:
 
     folder = pkg.scatter.parent
     keep: set[Path] = set()
-    keep_names_by_folder: dict[Path, set[str]] = {}
+    keep_names: set[str] = set()
     for package in packages:
         scatter = package.scatter
         package_folder = scatter.parent
@@ -1477,12 +1516,13 @@ def prune_to_firmware_package(extract_dir: Union[str, Path]) -> list[str]:
         preserve_scatter = find_preserve_data_scatter(scatter)
         if preserve_scatter is not None and preserve_scatter.is_file():
             keep.add(preserve_scatter.resolve())
-        keep_names = {
-            path.name.lower() for _name, path in _list_expected_images(scatter)
-        }
-        keep_names.add(scatter.name.lower())
-        keep_names_by_folder[package_folder.resolve()] = keep_names
+            keep_names.update(scatter_defined_names(preserve_scatter))
+        # Everything the scatter names, in any folder, whether or not this
+        # partition is written.
+        keep_names.update(scatter_defined_names(scatter))
+        keep_names.add(scatter.name.casefold())
         for _name, img in _list_expected_images(scatter):
+            keep_names.add(img.name.casefold())
             if img.exists():
                 keep.add(img.resolve())
         for p in package_folder.glob("*.auth"):
@@ -1509,21 +1549,16 @@ def prune_to_firmware_package(extract_dir: Union[str, Path]) -> list[str]:
                 if icon_p.is_file():
                     keep.add(icon_p.resolve())
     # A scatter may name a file in a different case than the package stores it
-    # (the player's storage is case-insensitive; a Linux host is not). Deleting
-    # that file here is what later surfaced as CACHE_FILE_MISSING mid-flash.
-    # Only match keep_names inside the firmware package folder itself so
-    # duplicate reference scatters elsewhere (e.g. inside a bundled .app's
-    # assets/compat/) are pruned rather than spared.
+    # (the player's storage is case-insensitive; a Linux host is not), or the
+    # archive may keep the images one folder below the scatter. Deleting such a
+    # file here is what later surfaced as CACHE_FILE_MISSING or INTERNAL_ERROR
+    # mid-flash, so the match is on the name the scatter defines.
     removed: list[str] = []
     for f in root.rglob("*"):
-        parent = f.parent.resolve()
         if (
             f.is_file()
             and f.resolve() not in keep
-            and not (
-                parent in keep_names_by_folder
-                and f.name.lower() in keep_names_by_folder[parent]
-            )
+            and f.name.casefold() not in keep_names
         ):
             try:
                 f.unlink()

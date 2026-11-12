@@ -133,6 +133,62 @@ def test_requirement_rejects_a_base_for_another_model():
     assert first.requirement_for(reborn, "Y2", packages=[unknown]).package is None
 
 
+def test_one_firmware_serving_two_models_resolves_the_shared_base():
+    """Q3 and Q5 ship the same build, so one base repository serves both.
+
+    ``slidia_manifest.xml`` names the base once per model. A firmware listed
+    for both models declares the base on each row, but only one of them may
+    have the base's own row; the other must still resolve it instead of
+    failing with "the catalogue has no installable release".
+    """
+    lithium_q3 = package(
+        "Lithium",
+        "NoahDomingues/Lithium",
+        model="Q3",
+        install_first="y1-community/q3-stock-rom",
+    )
+    lithium_q5 = package(
+        "Lithium",
+        "NoahDomingues/Lithium",
+        model="Q5",
+        install_first="y1-community/q3-stock-rom",
+    )
+    stock_q3 = package("Original Software", "y1-community/q3-stock-rom", model="Q3")
+    rows = [lithium_q3, lithium_q5, stock_q3]
+
+    for target in (lithium_q3, lithium_q5):
+        requirement = first.requirement_for(target, target.model, packages=rows)
+        assert requirement is not None
+        assert requirement.package is stock_q3
+        assert requirement.software_name == "Original Software"
+
+    shared = first.requirement_for(lithium_q5, "Q5", packages=rows)
+    assert shared.source_model == "Q3"
+    own = first.requirement_for(lithium_q3, "Q3", packages=rows)
+    assert own.source_model == ""
+
+
+def test_shared_source_still_refuses_a_base_from_another_family():
+    reborn = package(
+        "Reborn",
+        "schulzcode/y2linux",
+        model="Y2",
+        install_first="y1-community/y1-stock-rom",
+    )
+    stock_y1 = package("Original Software", "y1-community/y1-stock-rom", model="Y1")
+    rockbox_y2 = package("Rockbox", "spycemagic/y2-rockbox", model="Y2")
+
+    requirement = first.requirement_for(
+        reborn, "Y2", packages=[reborn, stock_y1, rockbox_y2]
+    )
+
+    assert requirement is not None and requirement.package is None
+    assert not first._models_can_share_a_source("Y1", "Y2")
+    assert not first._models_can_share_a_source("A5", "Y1")
+    assert not first._models_can_share_a_source("", "Q5")
+    assert first._models_can_share_a_source("Q3", "Q5")
+
+
 def test_requirement_absent_or_self_referential_is_not_a_gate():
     plain = package("Rockbox", "rockbox-y1/rockbox")
     assert first.requirement_for(plain, "Y1", packages=[plain]) is None

@@ -251,6 +251,62 @@ def test_6104_is_reported_as_a_secure_da_rejection():
     assert guidance and guidance != "err_sp_da_invalid_type"
 
 
+SECRO = ("SEC_RO", "secro.img", True, 0x5180000, 0x3D80000, 0x600000, "EMMC_USER")
+
+
+def test_an_image_shipped_under_another_container_suffix_is_still_detected(tmp_path):
+    """A scatter that declares ``secro.img`` still ships as ``secro.bin``.
+
+    Lithium (Timmkoo Q3/Q5) packs ``secro.bin`` beside a scatter whose SEC_RO
+    entry names ``secro.img``. The name is what says which partition a file
+    belongs to, so the container suffix must not make a present image read as
+    missing and hold the whole package back.
+    """
+    scatter = tmp_path / "MT6582_Android_scatter.txt"
+    scatter.write_text(_scatter(PRELOADER_DL, BOOTIMG, SECRO), encoding="utf-8")
+    _write_images(tmp_path, "preloader.bin", "BOOTIMG.img", "secro.bin")
+
+    assert fs._missing_images(scatter) == []
+    plan = {step["name"]: step for step in fs.build_mtk_write_plan(scatter, "")}
+    assert plan["SEC_RO"]["path"].name == "secro.bin"
+    assert plan["SEC_RO"]["offset"] == 0x3D80000
+
+    # SP Flash Tool reads the scatter itself, so the declared name is aliased
+    # beside the shipped image for it.
+    fs.align_scatter_disk_images(scatter)
+    assert (tmp_path / "secro.img").is_file()
+
+
+def test_an_image_in_a_subfolder_shipped_under_another_suffix_is_detected(tmp_path):
+    # Its own folder: _resolve_image_file() also scans the parent, and the
+    # tests in a session share that parent.
+    package = tmp_path / "package"
+    package.mkdir()
+    scatter = package / "MT6582_Android_scatter.txt"
+    scatter.write_text(_scatter(PRELOADER_DL, SECRO), encoding="utf-8")
+    images = package / "images"
+    images.mkdir()
+    _write_images(images, "preloader.bin", "secro.bin")
+    (package / "__MACOSX").mkdir()
+    (package / "__MACOSX" / "secro.img").write_bytes(b"resource fork")
+
+    assert fs._missing_images(scatter) == []
+    assert fs._list_expected_images(scatter)[1][1] == (images / "secro.bin").resolve()
+
+
+def test_a_package_file_named_after_a_partition_is_not_an_image(tmp_path):
+    """Only a real image satisfies the scatter, not a readme or checksum list."""
+    package = tmp_path / "package"
+    package.mkdir()
+    scatter = package / "MT6582_Android_scatter.txt"
+    scatter.write_text(_scatter(PRELOADER_DL, SECRO), encoding="utf-8")
+    _write_images(package, "preloader.bin")
+    (package / "secro.txt").write_text("notes about the partition", encoding="utf-8")
+    (package / "secro.sha256").write_text("deadbeef  secro.img\n", encoding="utf-8")
+
+    assert fs._missing_images(scatter) == ["SEC_RO"]
+
+
 def test_verified_boot_variants_take_precedence_over_unsigned_intermediates(tmp_path):
     """When a scatter declares unsigned filenames (e.g. boot.img, lk.img, logo.bin)
     and the package directory ships both the unsigned intermediate and the signed

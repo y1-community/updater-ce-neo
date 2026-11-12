@@ -2876,6 +2876,100 @@ def _write_scatter_without_preloader(scatter_path) -> Optional[Path]:
         return None
 
 
+#: Suffixes a partition image is packed with. A scatter entry whose name
+#: matches a file across these is the same image in another container, not a
+#: different file: several stock packages declare ``secro.img`` and ship
+#: ``secro.bin`` (Lithium on Timmkoo Q3/Q5, for example). The suffix is not
+#: what says which partition a file belongs to, and neither backend needs it:
+#: MTKclient writes the resolved path to the scatter's own partition, and
+#: :func:`align_scatter_disk_images` aliases the declared name beside it for SP
+#: Flash Tool.
+_IMAGE_SUFFIXES = (".img", ".bin", ".mbn", ".elf")
+#: Files that are never a partition image, whatever their stem says. Without
+#: this, ``secro.img`` would match a shipped ``secro.txt``/``secro.sha256``.
+_NON_IMAGE_SUFFIXES = frozenset({
+    ".txt", ".ini", ".cfg", ".conf", ".json", ".xml", ".csv", ".log",
+    ".md", ".pdf", ".html", ".htm", ".ver", ".sha256", ".sha1", ".md5",
+    ".sum", ".sig256", ".zip", ".rar", ".7z", ".tar", ".gz", ".tgz",
+    ".bz2", ".xz", ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp",
+    ".ico", ".exe", ".dll", ".bat", ".cmd", ".ps1", ".sh", ".command",
+    ".apk", ".jar", ".py", ".pyc",
+})
+
+
+def _image_stem_key(name) -> str:
+    """Comparison key for a partition image: its stem, without decoration.
+
+    ``secro.bin``, ``secro.img`` and ``secro-verified.img`` all key as
+    ``secro``; separators are dropped too, so ``sec-ro.bin`` still matches.
+    """
+    stem = os.path.splitext(str(name or ""))[0]
+    stem = re.sub(r"-(?:verified|sign|signed)$", "", stem, flags=re.IGNORECASE)
+    return re.sub(r"[^a-z0-9]+", "", stem.lower())
+
+
+def _is_noise_file(path: Path, root: Path) -> bool:
+    """True for a file the package's own folder does not offer as an image.
+
+    macOS resource forks (``._boot.img``), hidden folders and the app's own
+    ignored trees are skipped, so a scan for a partition image cannot pick a
+    stray copy out of ``__MACOSX``.
+    """
+    if path.name.startswith("._"):
+        return True
+    try:
+        parts = path.relative_to(root).parts[:-1]
+    except ValueError:
+        parts = path.parts[:-1]
+    if any(part.startswith((".", "__")) for part in parts):
+        return True
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return False
+    try:
+        from .fw_package import is_ignored_scatter_path
+
+        return is_ignored_scatter_path(path, root)
+    except Exception:
+        return False
+
+
+def _same_stem_image(folder: Path, stem_key: str, *, recursive: bool = False):
+    """A file under ``folder`` whose stem matches ``stem_key`` under another suffix.
+
+    Returns ``None`` when nothing matches, or when only non-image files do
+    (a readme, checksum list or archive named after the partition).
+    """
+    if not stem_key:
+        return None
+    try:
+        entries = folder.rglob("*") if recursive else folder.iterdir()
+        matches = [
+            p
+            for p in entries
+            if p.is_file()
+            and p.suffix.lower() not in _NON_IMAGE_SUFFIXES
+            and _image_stem_key(p.name) == stem_key
+            and not _is_noise_file(p, folder)
+        ]
+    except OSError:
+        return None
+    if not matches:
+        return None
+
+    def rank(path: Path):
+        suffix = path.suffix.lower()
+        order = (
+            _IMAGE_SUFFIXES.index(suffix)
+            if suffix in _IMAGE_SUFFIXES
+            else len(_IMAGE_SUFFIXES)
+        )
+        return (order, path.name.lower())
+
+    return sorted(matches, key=rank)[0].resolve()
+
+
 def _resolve_image_file(scatter_dir, fname):
     scatter_dir = Path(scatter_dir).resolve()
     clean_fname = Path(str(fname).replace("\\", "/")).name
@@ -2925,13 +3019,29 @@ def _resolve_image_file(scatter_dir, fname):
     for s_dir in search_dirs:
         try:
             for f in s_dir.rglob("*"):
-                if f.is_file():
+                # A macOS resource fork or an ignored tree is never the image:
+                # ``__MACOSX/secro.img`` is a few bytes of metadata, not SEC_RO.
+                if f.is_file() and not _is_noise_file(f, s_dir):
                     if f.name.lower() == fname_lower:
                         return f.resolve()
                     if f.stem.lower() in candidate_stems_lower and f.suffix.lower() == ext_lower:
                         return f.resolve()
         except Exception:
             pass
+
+    # The image is packed under another container suffix (``secro.bin`` for a
+    # scatter that declares ``secro.img``). The scatter still says which
+    # partition is written, so the file is present, not missing; the declared
+    # name is aliased beside it later for SP Flash Tool.
+    stem_key = _image_stem_key(clean_fname)
+    for s_dir in search_dirs:
+        found = _same_stem_image(s_dir, stem_key)
+        if found is not None:
+            return found
+    for s_dir in search_dirs:
+        found = _same_stem_image(s_dir, stem_key, recursive=True)
+        if found is not None:
+            return found
 
     return exact
 

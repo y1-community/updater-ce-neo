@@ -33,6 +33,15 @@ that build will do.
 
 A tag is read as its first dotted numeric version, so ``stable-v3.2.0`` and
 ``v3.2.0-beta.1`` both compare as ``3.2.0``.
+
+One firmware can serve several models: the same stock build ships for Timmkoo
+Q3 and Q5, and for Innioasis G1 and G3, and ``slidia_manifest.xml`` names its
+repository once per model. A prerequisite is therefore resolved against the
+target model's rows first and then against the same repository listed for a
+sibling model (see :func:`_models_can_share_a_source`). The families that must
+not mix (Y1, Y2, A5) are still refused, and whatever row is found is still
+filtered for the target model when its releases are listed, so a Y1 base can
+never be downloaded for a Y2 overlay.
 """
 
 from __future__ import annotations
@@ -353,6 +362,10 @@ class Requirement:
     version_range: Optional[VersionRange]
     package: object = None
     model: str = ""
+    #: The catalogue model the resolved base row is listed under when it is not
+    #: the target's own (one firmware serving several models). Empty when the
+    #: row matched the target model directly.
+    source_model: str = ""
 
     @property
     def software_name(self) -> str:
@@ -383,6 +396,73 @@ def _packages_for(model: str, packages: Optional[Iterable]) -> list:
         return list(catalog.packages_for_model(model))
     except Exception:
         return []
+
+
+def _catalogue_packages() -> list:
+    """Every catalogue row, whatever model it is listed for.
+
+    ``packages_for_model`` answers "what can be installed on this player"; a
+    shared base firmware is listed under another model, so resolving a
+    prerequisite has to see those rows too.
+    """
+    try:
+        from . import catalog
+
+        return list(catalog.LIVE_CATALOG or catalog.CATALOG)
+    except Exception:
+        return []
+
+
+#: Models whose stock firmware is the same build, so one catalogue repository
+#: can serve both. These players share MediaTek stock layouts and the catalogue
+#: lists one firmware for all of them (Timmkoo Q3 and Q5, Innioasis G1 and G3).
+#: Y1, Y2 and A5 are deliberately absent: their bases are not interchangeable,
+#: and pairing one with another model's overlay is the mistake the model check
+#: exists to stop.
+_SHARED_SOURCE_MODEL_TOKENS = ("Y1", "Y2", "A5")
+
+
+def _models_can_share_a_source(left, right) -> bool:
+    """True when two catalogue models may run the same firmware image.
+
+    An unknown (empty) model proves nothing and is never a wildcard.
+    """
+    left = str(left or "").strip().upper()
+    right = str(right or "").strip().upper()
+    if not left or not right:
+        return False
+    if left == right:
+        return True
+    if any(token in left for token in _SHARED_SOURCE_MODEL_TOKENS):
+        return False
+    if any(token in right for token in _SHARED_SOURCE_MODEL_TOKENS):
+        return False
+    return True
+
+
+def _shared_source_package(repo: str, model: str, packages: Optional[Iterable] = None):
+    """The catalogue row for ``repo`` when it is listed for a sibling model.
+
+    ``slidia_manifest.xml`` names one repository per model. When a firmware is
+    the same build for several models, its ``install_first`` names a base that
+    is only listed under one of them, and the model that has no base row of its
+    own must still resolve it: the catalogue declared that base for the
+    software this model is listed with, and a release that publishes a single
+    non-source zip is compatible with every model that package serves. The
+    model families that must not mix (Y1/Y2/A5) are still refused.
+    """
+    # An explicit ``packages`` list is the caller's whole catalogue (the
+    # console hands its own rows in); only the default lookup widens to every
+    # model the app's catalogue knows.
+    rows = list(packages) if packages is not None else _catalogue_packages()
+    for candidate in rows:
+        if normalize_repo(getattr(candidate, "repo", "")) != repo:
+            continue
+        candidate_model = str(getattr(candidate, "model", "") or "").strip().upper()
+        if not _models_can_share_a_source(model, candidate_model):
+            continue
+        return candidate, candidate_model
+    return None, ""
 
 
 def requirement_for(pkg, model: str = "", packages: Optional[Iterable] = None) -> Optional[Requirement]:
@@ -417,12 +497,16 @@ def requirement_for(pkg, model: str = "", packages: Optional[Iterable] = None) -
             continue
         prerequisite = candidate
         break
+    source_model = str(getattr(prerequisite, "model", "") or "").strip().upper() if prerequisite else ""
+    if prerequisite is None:
+        prerequisite, source_model = _shared_source_package(repo, model, packages)
     return Requirement(
         repo=repo,
         version_text=version_text,
         version_range=parse_version_constraint(version_text),
         package=prerequisite,
         model=model,
+        source_model=source_model if source_model != model else "",
     )
 
 
