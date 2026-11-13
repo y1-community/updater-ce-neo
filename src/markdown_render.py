@@ -171,6 +171,36 @@ def render_markdown_html(
     return f"<html><head>{css}</head><body>{html}</body></html>"
 
 
+#: The first line of a body GitHub Actions wrote for a build: the tag it was
+#: released as (``stable-v0.6.1``), a nightly with its commit, or a bare hash.
+_TAG_BANNER_RE = re.compile(
+    r"^(?:stable-v\d[\w.\-]*|nightly-[0-9a-f]{7,40}|[0-9a-f]{7,40})$", re.IGNORECASE
+)
+
+
+def strip_tag_banner(text: str, tag: str = "", name: str = "") -> str:
+    """Release notes without the tag or commit line written above them.
+
+    ``rockbox-y1/rockbox``'s workflow publishes the build's tag as the first
+    line of the body and the note underneath it (``stable-v0.6.1`` then
+    ``Fixes java build``; ``nightly-a8c63c04…`` then ``Adds proper wheel
+    acceleration``). The first line only repeats what the release heading
+    already says, so it is dropped and the plaintext underneath is kept — a
+    release with nothing but that line has no notes to show. Text whose first
+    line is not a banner is returned unchanged.
+    """
+    text = (text or "").strip()
+    if not text:
+        return ""
+    lines = text.splitlines()
+    first = lines[0].strip().strip("`*_ ")
+    banner = {str(tag or "").strip().lower(), str(name or "").strip().lower()}
+    banner.discard("")
+    if first.lower() not in banner and not _TAG_BANNER_RE.match(first):
+        return text
+    return "\n".join(lines[1:]).strip()
+
+
 def without_github_only(text: str) -> str:
     """Release notes without the parts their project marked as GitHub-only.
 

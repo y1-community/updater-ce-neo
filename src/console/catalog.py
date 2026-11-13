@@ -23,6 +23,7 @@ import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
+from fnmatch import fnmatch
 from pathlib import Path
 
 CATALOG_URLS = (
@@ -213,6 +214,29 @@ def _attr(element: ET.Element, *names: str, default: str = "") -> str:
     return default
 
 
+def _model_package_name(element: ET.Element, model: str) -> str:
+    """The archive this entry names for one player (``package_name_<model>``).
+
+    The terminal menus pick no hardware revision, so only the model-level and
+    brand-qualified names apply here; the GUI resolves the type-specific ones
+    too. The value may be a wildcard, as in ``pick_asset``.
+    """
+    if not model:
+        return ""
+    attributes = {
+        str(key).lower(): str(value).strip() for key, value in element.attrib.items()
+    }
+    brand = _attr(element, "brand").lower()
+    keys = []
+    if brand:
+        keys.append(f"package_name_{brand}_{model.lower()}")
+    keys.append(f"package_name_{model.lower()}")
+    for key in keys:
+        if attributes.get(key):
+            return attributes[key]
+    return ""
+
+
 def parse_manifest(data: bytes) -> list[Package]:
     root = ET.fromstring(data)
     packages: list[Package] = []
@@ -221,38 +245,46 @@ def parse_manifest(data: bytes) -> list[Package]:
         repo = _attr(element, "repo", "url").rstrip("/")
         if not repo or "/" not in repo:
             continue
-        model = _attr(element, "device", "model").upper()
+        # One entry may serve several models (``device="Y1,Y2,G5"``); the old
+        # single-model form is the same loop with one item in it.
+        raw_devices = _attr(element, "device", "model")
+        devices = [
+            part.strip().upper() for part in raw_devices.split(",") if part.strip()
+        ] or [""]
         name = _attr(element, "name", default="Firmware")
-        package_name = _attr(element, "package_name", "package")
-        if not package_name:
-            package_name = "rom_MODEL.zip" if model and model != "Y1" else "rom.zip"
-        package_name = package_name.replace("MODEL", model)
-        slug = _attr(element, "slug")
-        if not slug:
-            slug = f"{repo.split('/')[-1]}-{model}".lower().replace(" ", "-")
-        key = (name, model, repo)
-        if key in seen:
-            continue
-        seen.add(key)
-        packages.append(
-            Package(
-                name=name,
-                brand=_attr(element, "brand"),
-                model=model,
-                repo=repo,
-                package_name=package_name,
-                kind=_attr(element, "type", default="img"),
-                handler=_attr(element, "handler", default="Custom Firmware"),
-                slug=slug,
-                post_install=_attr(element, "post_install"),
-                post_install_2=_attr(element, "post_install_2", "post_install2"),
-                do_not_keep_data=_attr(element, "do_not_keep_data", "no_keep_data").lower() in {"1", "true", "yes"},
-                pmt_format_needed=_attr(element, "PMT_format_needed", "pmt_format_needed").lower() in {"1", "true", "yes"},
-                derivative=_attr(element, "derivative"),
-                install_first=_attr(element, "install_first"),
-                install_first_version=_attr(element, "install_first_version"),
+        for model in devices:
+            package_name = _model_package_name(element, model) or _attr(
+                element, "package_name", "package"
             )
-        )
+            if not package_name:
+                package_name = "rom_MODEL.zip" if model and model != "Y1" else "rom.zip"
+            package_name = package_name.replace("MODEL", model)
+            slug = _attr(element, "slug")
+            if not slug:
+                slug = f"{repo.split('/')[-1]}-{model}".lower().replace(" ", "-")
+            key = (name, model, repo)
+            if key in seen:
+                continue
+            seen.add(key)
+            packages.append(
+                Package(
+                    name=name,
+                    brand=_attr(element, "brand"),
+                    model=model,
+                    repo=repo,
+                    package_name=package_name,
+                    kind=_attr(element, "type", default="img"),
+                    handler=_attr(element, "handler", default="Custom Firmware"),
+                    slug=slug,
+                    post_install=_attr(element, "post_install"),
+                    post_install_2=_attr(element, "post_install_2", "post_install2"),
+                    do_not_keep_data=_attr(element, "do_not_keep_data", "no_keep_data").lower() in {"1", "true", "yes"},
+                    pmt_format_needed=_attr(element, "PMT_format_needed", "pmt_format_needed").lower() in {"1", "true", "yes"},
+                    derivative=_attr(element, "derivative"),
+                    install_first=_attr(element, "install_first"),
+                    install_first_version=_attr(element, "install_first_version"),
+                )
+            )
     return packages
 
 
@@ -298,11 +330,15 @@ def latest_release(repo: str, timeout: float = 20.0) -> dict:
 
 
 def pick_asset(release: dict, package_name: str) -> dict | None:
-    """The ROM zip for this package, preferring the manifest's own filename."""
+    """The ROM zip for this package, preferring the manifest's own filename.
+
+    The declared name may be a wildcard (``Y2Linux-*-first-install.zip``), so
+    it is matched as a glob rather than compared literally.
+    """
     assets = [a for a in (release.get("assets") or []) if a.get("name")]
     wanted = (package_name or "").lower()
     for asset in assets:
-        if asset["name"].lower() == wanted:
+        if wanted and fnmatch(asset["name"].lower(), wanted):
             return asset
     for asset in assets:
         name = asset["name"].lower()

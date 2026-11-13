@@ -71,6 +71,40 @@ def test_macos_agent_round_trips_a_path_with_an_ampersand(tmp_path, monkeypatch)
     assert not target.exists()
 
 
+def test_the_macos_agent_runs_in_the_gui_session(tmp_path, monkeypatch):
+    target = tmp_path / "com.innioasis.updater.plist"
+    monkeypatch.setattr(login_item, "_macos_path", lambda: target)
+    monkeypatch.setattr(
+        login_item,
+        "_launch_command",
+        lambda: [
+            "/Applications/Innioasis Updater.app/Contents/MacOS/Innioasis Updater",
+            "--tray",
+        ],
+    )
+    monkeypatch.setattr(sys, "platform", "darwin")
+
+    login_item.set_login_item(True)
+    payload = plistlib.loads(target.read_bytes())
+    # A menu bar app belongs to the logged-in GUI session; starting it in any
+    # other session leaves it with no status item to reach it by.
+    assert payload["LimitLoadToSessionType"] == "Aqua"
+    login_item.set_login_item(False)
+    assert not target.exists()
+
+
+def test_every_host_ships_the_background_mode():
+    """macOS keeps the menu bar mode; no host hides the switches any more."""
+    for host in ("darwin", "win32", "linux"):
+        assert tray.background_mode_supported(host) is True
+
+
+def test_menu_bar_only_is_a_no_op_off_macos(monkeypatch):
+    monkeypatch.setattr(tray.sys, "platform", "linux")
+    tray.set_menu_bar_only(True)
+    tray.set_menu_bar_only(False)
+
+
 def test_linux_entry_exists_only_while_enabled(tmp_path, monkeypatch):
     target = tmp_path / "autostart" / "innioasis-updater.desktop"
     launcher = str(tmp_path / "Updater CE.AppImage")

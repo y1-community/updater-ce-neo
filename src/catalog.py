@@ -102,6 +102,15 @@ class FirmwarePackage:
     # A bare version is a minimum; prefix ``=`` pins it exactly. Empty means
     # any version; see ``install_first.parse_version_constraint``.
     install_first_version: str = ""
+    # Archive names declared per player and hardware revision
+    # (``package_name_y2``, ``package_name_y1_type_b``,
+    # ``package_name_timmkoo_a5``), keyed by the attribute's own suffix after
+    # ``package_name_``. Empty means ``package_name`` covers every model the
+    # entry lists. Any suffix a manifest writes is kept as written, so a model
+    # added to the catalogue later needs no change here.
+    package_names: dict = dataclasses.field(
+        default_factory=dict, compare=False, hash=False, repr=False
+    )
 
 
 def post_install_urls_for(*packages) -> tuple[str, str]:
@@ -333,9 +342,55 @@ def packages_for_model_software(model: str, software: str, brand: str = ""):
 # ---------------------------------------------------------------------------
 # rom*.zip asset variant parsing (ported from firmware_downloader.py)
 # ---------------------------------------------------------------------------
+def _strip_repo_names(name, repo=""):
+    """An asset name with the repository's own name taken out of it.
+
+    Releases have long carried the repository name inside the zip name (a
+    ``y1-community`` prefix on a Y2 firmware, for instance), and reading that
+    text as a device marker handed the archive to the wrong model. The
+    repository is already known from the release itself, so its own name is
+    not evidence about which player the firmware is for.
+    """
+    lower = str(name or "").lower()
+    repo_lower = str(repo or "").strip().lower()
+    fragments = set()
+    if repo_lower:
+        fragments.add(repo_lower)
+        if "/" in repo_lower:
+            owner, _, leaf = repo_lower.partition("/")
+            fragments.update((owner, leaf))
+    for fragment in sorted((f for f in fragments if f), key=len, reverse=True):
+        lower = lower.replace(fragment, "-")
+    # "<owner>-community" is a GitHub organisation, not a player: a zip named
+    # "inniclassic-y1-community-2.0.zip" says where it was published, not that
+    # it is Y1 firmware.
+    lower = re.sub(r"[a-z0-9]+-community", "-", lower)
+    return lower
+
+
+def _registered_model_in(text):
+    """A model id from the device registry named in ``text``, else ``""``.
+
+    The wider lineup (G1, G5, Q3, Q5 ...) is recognised the same way the
+    local-file importer recognises it, so a firmware zip named after its player
+    keeps its model even when it is not a rom*.zip. Y1/Y2/A5 stay with the
+    rules below, which also read the release tag.
+    """
+    try:
+        from . import device_models
+
+        model, _variant = device_models.model_from_filename(
+            text, exclude=("Y1", "Y2", "A5")
+        )
+    except Exception:
+        logger.debug("Device registry lookup failed for %r", text, exc_info=True)
+        return ""
+    return model or ""
+
+
 def _classify_variant_model(name, tag_name="", repo=""):
-    """Classify a rom*.zip asset as Y1, Y2, A5, or dual (eligible for multiple)."""
-    lower = (name or "").lower()
+    """Classify a rom*.zip asset as Y1, Y2, A5, another model, or dual."""
+    lower = _strip_repo_names(name, repo)
     tag_lower = (tag_name or "").lower()
     repo_lower = (repo or "").lower()
     repo_name = repo_lower.split("/")[-1] if "/" in repo_lower else repo_lower
@@ -357,6 +412,12 @@ def _classify_variant_model(name, tag_name="", repo=""):
         return "Y2"
     if any(token in tag_lower for token in ("6582", "eastaeon", "mt6582")):
         return "Y2"
+    # Any other registered model named in the file name itself. A hardware
+    # revision is not a model: "type_b" / "_b" marks Type B below, never a
+    # device called B.
+    registered = _registered_model_in(lower)
+    if registered:
+        return registered
     if "y2" in tag_lower and "y1" not in tag_lower:
         return "Y2"
     if "y1" in tag_lower and "y2" not in tag_lower:
@@ -419,8 +480,9 @@ def _parse_rom_asset_variant(asset, tag_name="", repo="", has_explicit_type_asse
         # rom_y2.zip, and that unqualified zip must not win a tie just because
         # it comes first in the release.
         explicit_model = _classify_variant_model(name) in ("Y1", "Y2", "A5")
-        # If model is dual and package specifies a single model, inherit package model
-        if model == "dual" and package is not None and getattr(package, "model", "") in ("Y1", "Y2", "A5"):
+        # An unqualified archive belongs to the model the package is listed
+        # for: a rom.zip in a G5 repository is G5 firmware, not "dual".
+        if model == "dual" and package is not None and getattr(package, "model", ""):
             model = package.model
 
         return {
@@ -436,6 +498,126 @@ def _parse_rom_asset_variant(asset, tag_name="", repo="", has_explicit_type_asse
 
 def _is_rom_zip_name(name):
     return fnmatch((name or "").lower(), "rom*.zip")
+
+
+def package_names_for(package) -> dict:
+    """Per-model/type archive names a package declares, keyed by suffix.
+
+    ``package_name_y1_type_b="rom_type_b.zip"`` is stored as
+    ``{"y1_type_b": "rom_type_b.zip"}``. The suffix is not interpreted here,
+    so a manifest can name a model or brand this build has never heard of.
+    """
+    names = getattr(package, "package_names", None)
+    return dict(names) if isinstance(names, dict) else {}
+
+
+def package_name_for(package, model="", hw_type="") -> str:
+    """The archive name this package declares for ``model`` and ``hw_type``.
+
+    The most specific declaration wins: ``<brand>_<model>_type_<x>``, then
+    ``<model>_type_<x>``, then ``<brand>_<model>``, then ``<model>``, then the
+    plain ``package_name`` (rom.zip / rom_<model>.zip). The brand only takes
+    part when the entry declares one, which is how the same model number for
+    two brands stays two different archives.
+    """
+    fallback = (
+        str(getattr(package, "package_name", "") or "").strip()
+        if package is not None
+        else ""
+    )
+    names = package_names_for(package)
+    if not names:
+        return fallback
+    brand = str(getattr(package, "brand", "") or "").strip().lower()
+    model_key = (
+        str(model or "").strip()
+        or str(getattr(package, "model", "") or "").strip()
+    ).lower()
+    type_key = str(hw_type or "").strip().lower()
+    if model_key:
+        candidates = []
+        if type_key:
+            if brand:
+                candidates.append(f"{brand}_{model_key}_type_{type_key}")
+            candidates.append(f"{model_key}_type_{type_key}")
+        if brand:
+            candidates.append(f"{brand}_{model_key}")
+        candidates.append(model_key)
+        for key in candidates:
+            value = str(names.get(key) or "").strip()
+            if value:
+                return value
+    return fallback
+
+
+def _package_declares_non_rom_archive(package, model="", hw_type="") -> bool:
+    """Whether the archive this package declares is not a rom*.zip.
+
+    ``package_name`` (or a per-model/type ``package_name_*``) in
+    slidia_manifest.xml names the firmware archive its releases carry.
+    rom.zip / rom_<model>.zip is the standard, so a package that declares
+    another name is one whose releases never follow it (y2linux publishes
+    ``...-first-install.zip``), and it is the only kind that may list a
+    differently named zip as firmware. The name may be a literal filename or
+    a wildcard pattern.
+    """
+    if package is None:
+        return False
+    name = package_name_for(package, model, hw_type)
+    return bool(name) and not _is_rom_zip_name(name)
+
+
+def repo_is_single_model(repo, model="") -> bool:
+    """Whether the catalogue lists ``repo`` for exactly one player.
+
+    A repository that publishes firmware zips under its own names rather than
+    rom*.zip can only be read safely when it serves one model (y2linux serves
+    the Y2 and nothing else). A repository the manifest lists for two models
+    (solar is Y1 and Y2) could be handing over either one, so its non-rom zips
+    are not guessed at.
+    """
+    repo_lower = str(repo or "").strip().lower()
+    if not repo_lower:
+        return False
+    # The package being evaluated is itself a catalogue entry, so its model
+    # counts even when the live manifest has not loaded yet (a first offline
+    # run): what matters is whether another model is listed for the same repo.
+    models = set()
+    if str(model or "").strip():
+        models.add(str(model).strip().upper())
+    try:
+        entries = _catalog_packages()
+    except Exception:
+        logger.debug("Catalogue lookup failed for %s", repo, exc_info=True)
+        return False
+    for entry in entries or []:
+        if str(getattr(entry, "repo", "") or "").strip().lower() != repo_lower:
+            continue
+        entry_model = str(getattr(entry, "model", "") or "").strip().upper()
+        if entry_model:
+            models.add(entry_model)
+    return len(models) == 1
+
+
+def _release_accepts_other_zip_names(
+    package, repo_has_rom=False, model="", hw_type=""
+) -> bool:
+    """Whether a zip without ``rom`` in its name may be this package's firmware.
+
+    Three ways to qualify: the package's ``package_name`` declares an archive
+    that is not a rom*.zip name (a plain name or a wildcard such as
+    ``Y2Linux-*-first-install.zip``), or the repository publishes no rom*.zip
+    in any release and the manifest lists it for a single model, or no package
+    is known and the repository has no rom*.zip naming at all. Every firmware
+    normally published as rom.zip / rom_<model>.zip is filtered strictly: in
+    one of its releases a non-rom zip is a voice pack, an on-device updater or
+    another extra, never installable firmware.
+    """
+    if repo_has_rom:
+        return _package_declares_non_rom_archive(package, model, hw_type)
+    if package is None:
+        return True
+    return repo_is_single_model(package.repo, getattr(package, "model", ""))
 
 
 def _is_source_archive_name(name):
@@ -501,13 +683,17 @@ def _without_portable_bundles(assets):
     return plain or assets
 
 
-def _release_rom_variants(assets, tag_name, repo, repo_has_rom=False, package=None):
+def _release_rom_variants(
+    assets, tag_name, repo, repo_has_rom=False, package=None, model="", selected_type=None
+):
     """Variants a release offers: its rom*.zip assets, else its candidate firmware zips.
 
     A release that ships any rom*.zip follows the rom*.zip standard, so only
-    those assets are offered and the other zips are ignored. Other zips are
-    offered when the repository has no rom*.zip releases, or when an explicit
-    asset_pattern is declared in slidia_manifest.xml.
+    those assets are offered and the other zips are ignored. A zip without
+    ``rom`` in its name is a firmware candidate only for a repository whose
+    releases never use that name, or for a package whose ``package_name``
+    declares a different archive (see :func:`_release_accepts_other_zip_names`),
+    or when an explicit asset_pattern is declared in slidia_manifest.xml.
 
     A portable mirror release also carries ``rom-windows.zip``-style bundles
     beside the original asset; those are not firmware archives here (see
@@ -517,6 +703,24 @@ def _release_rom_variants(assets, tag_name, repo, repo_has_rom=False, package=No
         a for a in (assets or []) if not _is_source_archive_name(a.get("name"))
     ]
     assets = _without_portable_bundles(assets)
+    # A package_name that is not a rom*.zip name pins the archive itself, and
+    # may be a wildcard (y2linux publishes a differently numbered
+    # ...-first-install.zip per release). A per-model/type declaration
+    # (package_name_y1_type_b) answers for its own model and revision.
+    declared = (
+        package_name_for(package, model, str(selected_type or "")).strip().lower()
+        if package
+        else ""
+    )
+    if declared and not _is_rom_zip_name(declared):
+        matched = [a for a in assets if fnmatch((a.get("name") or "").lower(), declared)]
+        if matched:
+            pinned = [
+                _parse_rom_asset_variant(a, tag_name, repo, package=package)
+                for a in matched
+            ]
+            return [v for v in pinned if v]
+
     # Check if package specifies an asset_pattern shim
     pat = (getattr(package, "asset_pattern", "") or "").lower() if package else ""
     if pat:
@@ -549,12 +753,18 @@ def _release_rom_variants(assets, tag_name, repo, repo_has_rom=False, package=No
         variants = [_parse_rom_asset_variant(a, tag_name, repo, has_explicit_type_assets=has_explicit, package=package) for a in rom_assets]
         return [v for v in variants if v]
 
-    # A zip that is not named rom*.zip is only a firmware candidate when it is
-    # the sole zip the release offers. A release with several differently named
-    # zips gives no reliable way to tell the models apart; the manifest's
-    # explicit asset_pattern (checked above) is how one is named. Portable
-    # mirror bundles are build artifacts, not firmware, but a mirror release
-    # that carries nothing else keeps them (see _without_portable_bundles).
+    # A zip that is not named rom*.zip is a firmware candidate only for a
+    # package that may use one (see _release_accepts_other_zip_names), and only
+    # when it is the sole zip the release offers. A release with several
+    # differently named zips gives no reliable way to tell the models apart;
+    # the manifest's explicit asset_pattern (checked above) is how one is
+    # named. Portable mirror bundles are build artifacts, not firmware, but a
+    # mirror release that carries nothing else keeps them (see
+    # _without_portable_bundles).
+    if not _release_accepts_other_zip_names(
+        package, repo_has_rom, model, str(selected_type or "")
+    ):
+        return []
     zips = [a for a in firmware_assets if (a.get("name") or "").lower().endswith(".zip")]
     portable_only = bool(zips) and all(
         _is_portable_bundle_name(a.get("name")) for a in zips
@@ -659,6 +869,10 @@ def _model_ok_for_package(variant_model, package_model, repo, model):
     variant_model = (variant_model or "dual").upper()
     ed_model = str(model or "").upper()
     pd = str(package_model or "").upper()
+    # A variant named after the selected player is that player's firmware,
+    # whatever the package is: rom_g5.zip is G5 firmware for a G5 selection.
+    if variant_model and variant_model == ed_model:
+        return True
     selecting_a5 = "A5" in ed_model
     selecting_y2 = "Y2" in ed_model
     repo_name = (repo or "").lower().split("/")[-1]
@@ -702,7 +916,7 @@ def filter_rom_variants_for_model(variants, model, package_model=None, repo=""):
     enriched = []
     for v in variants:
         vm = (v.get("model") or "dual").upper()
-        if vm not in ("Y1", "Y2", "A5", "DUAL"):
+        if not vm:
             continue
         enriched.append(v)
     selecting_y2 = "Y2" in (model or "").upper()
@@ -1914,6 +2128,17 @@ class ReleasesClient:
                 show_safety_blocked=show_safety_blocked,
             )
         releases = self.get_all_releases(package.repo, force_refresh=force_refresh)
+        # Whether this repository publishes rom*.zip at all decides whether a
+        # differently named zip may stand in for firmware (see
+        # _release_accepts_other_zip_names). Read from every release, so one
+        # voice-file release cannot present a repo as a non-rom publisher.
+        repo_has_rom = any(
+            _is_rom_zip_name(asset.get("name"))
+            for rel in releases or []
+            if isinstance(rel, dict)
+            for asset in (rel.get("assets") or [])
+            if isinstance(asset, dict)
+        )
         # A software product that publishes only pre-releases (a nightly-only
         # tree, or a port still in development) has nothing else to offer, so
         # hiding them would show an empty list. The show-dev filter only hides
@@ -1958,12 +2183,16 @@ class ReleasesClient:
             # still contains the old rom_variants, which would keep pointing
             # at the wrong model's zip until the cache expired.
             raw_assets = rel.get("assets") or []
+            source_repo = rel.get("source_repo", "") or package.repo
             if raw_assets:
                 rom_variants = _release_rom_variants(
                     raw_assets,
                     tag_name,
-                    rel.get("source_repo", "") or package.repo,
+                    source_repo,
+                    repo_has_rom=repo_has_rom,
                     package=package,
+                    model=model,
+                    selected_type=selected_type,
                 )
                 if not rom_variants and not getattr(package, "asset_pattern", ""):
                     # Rows built by the APK path carry application assets, not
@@ -1971,6 +2200,14 @@ class ReleasesClient:
                     rom_variants = list(rel.get("rom_variants") or [])
             else:
                 rom_variants = list(rel.get("rom_variants") or [])
+            if not _release_accepts_other_zip_names(package, repo_has_rom):
+                # A row cached before its release stopped shipping rom*.zip
+                # must not keep offering the voice pack it was built from.
+                rom_variants = [
+                    v
+                    for v in rom_variants
+                    if _is_rom_zip_name(str((v.get("asset") or {}).get("name") or ""))
+                ]
             rom_variants = filter_rom_variants_for_model(
                 rom_variants,
                 model,
@@ -2238,6 +2475,7 @@ def _rows_have_installable_release(package, rows) -> bool:
             repo,
             repo_has_rom=repo_has_rom,
             package=package,
+            model=model,
         )
         if filter_rom_variants_for_model(variants, model, model, repo):
             return True

@@ -34,7 +34,11 @@ from PySide6.QtWidgets import (
 )
 
 from .. import catalog, downloads, device_tracking
-from ..markdown_render import rewrite_legacy_discord_invite, without_github_only
+from ..markdown_render import (
+    rewrite_legacy_discord_invite,
+    strip_tag_banner,
+    without_github_only,
+)
 from ..network import get_connectivity_monitor
 from ..worker_lifecycle import retire_worker
 from ..flash_service import (
@@ -2823,7 +2827,11 @@ class SelectPackagePage(QWidget):
 
     def _render_release_notes(self, rel, translated_body=None, translated_name=None, as_html: bool = False) -> str:
         from ..translate import strip_changes_header
-        raw_body = translated_body or without_github_only(rel.get("body") or "").strip()
+        raw_body = strip_tag_banner(
+            translated_body or without_github_only(rel.get("body") or "").strip(),
+            str(rel.get("tag_name") or ""),
+            str(rel.get("name") or ""),
+        )
         body = strip_changes_header(raw_body) or tr("update_no_notes")
         # No translation badge inside the notes: the control under them already
         # says the text was translated, and where to show the original.

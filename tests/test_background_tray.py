@@ -375,8 +375,11 @@ def test_macos_settings_hides_the_background_switches(monkeypatch):
     _app()
     page = SettingsPage()
     try:
+        # The switch lives in a caption row, so the row is what gets hidden.
         assert page._background_card.isHidden()
-        assert page._cb_notifications_background.isHidden()
+        row = page._switch_rows.get(page._cb_notifications_background)
+        assert row is not None
+        assert not row[0].isVisible()
     finally:
         _clear_opt_in()
         page.deleteLater()

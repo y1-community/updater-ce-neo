@@ -6,12 +6,25 @@
     https://innioasis.app/developers.html to build entries.
 
     Attributes: name, brand, repo, device, url, type="img",
-    handler="Custom Firmware", package_name, asset_pattern, type_a_asset,
-    type_b_asset, icon, icon_dark, image, image_dark, post_install,
-    post_install2, portable_zips, derivative, info_repo, apk_repo,
-    min_version, do_not_keep_data, slug, description.
+    handler="Custom Firmware", package_name, package_name_<model>,
+    package_name_<model>_type_<a|b>, package_name_<brand>_<model>[_type_<a|b>],
+    asset_pattern, type_a_asset, type_b_asset, icon, icon_dark, image,
+    image_dark, post_install, post_install2, portable_zips, derivative,
+    info_repo, apk_repo, min_version, do_not_keep_data, slug, description.
 
     package_name defaults to rom.zip on Y1 and rom_MODEL.zip on other models.
+    A package_name value may be a wildcard ("Y2Linux-*-first-install.zip").
+    package_name_<model> names the archive for one player of this entry, and
+    package_name_<model>_type_<a|b> for one hardware revision; put the brand
+    in front (package_name_<brand>_<model>) when two brands may use the same
+    model number, so each resolves to its own archive. The most specific
+    declaration wins and any suffix is accepted, so a new model needs no app
+    change.
+
+    device may list several models ("device=\"Y1,Y2,G5\""), so one repository
+    can serve every model it publishes for from a single <package/> entry; one
+    entry per model still works exactly as before, and the per-device
+    attributes above still apply to each.
     do_not_keep_data accepts true, 1 or yes. Legacy aliases still read:
     model, package, portable_zip, post_install_2, min_app_version, image_dark.
   -->
@@ -46,7 +59,7 @@
 
 <!-- <package name="Original Software" brand="Timmkoo" repo="y1-community/q5-stock-rom" device="Q3e" url="https://github.com/y1-community/q5-stock-rom" type="img" handler="Custom Firmware" package_name="rom_q5.zip" portable_zips="y1-community/q5-stock-rom-mirror" /> -->
 
-<package name="Reborn (Y2Linux)" brand="Innioasis" repo="schulzcode/y2linux" portable_zips="y1-community/y2linux-mirror" install_first="y1-community/y1-stock-rom" install_first_version="3.2.0=>" device="Y2" url="https://github.com/schulzcode/y2linux" type="img" do_not_keep_data="true" post_install="https://innioasis.app/y2reborn_wifibt.html" handler="Custom Firmware" />
+<package name="Reborn (Y2Linux)" brand="Innioasis" repo="schulzcode/y2linux" portable_zips="y1-community/y2linux-mirror" install_first="y1-community/y1-stock-rom" install_first_version="3.2.0=>" device="Y2" url="https://github.com/schulzcode/y2linux" type="img" do_not_keep_data="true" post_install="https://innioasis.app/y2reborn_wifibt.html" handler="Custom Firmware" package_name="Y2Linux-*-first-install.zip" />
 
 <package name="Rockbox" brand="Innioasis" repo="rockbox-y1/rockbox" portable_zips="y1-community/rockbox-mirror" device="Y1" url="https://github.com/rockbox-y1/rockbox" type="img" icon="https://sc.filehippo.net/images/t_app-icon-l/p/c9b4d9fa-9b65-11e6-a6e7-00163ec9f5fa/2907264561/rockbox-icon.png" handler="Custom Firmware" />
 

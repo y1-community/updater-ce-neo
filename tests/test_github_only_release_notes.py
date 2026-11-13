@@ -13,7 +13,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 
-from src.markdown_render import without_github_only
+from src.markdown_render import strip_tag_banner, without_github_only
 
 NOTES = (
     "**Y2Linux 1.0 Beta 9.3.19**: update notifications.\n\n"
@@ -59,3 +59,34 @@ def test_text_without_paired_markers_is_unchanged(text):
 
 def test_none_reads_as_empty():
     assert without_github_only(None) == ""
+
+
+# ---------------------------------------------------------------------------
+# The tag line a workflow writes above the notes
+# ---------------------------------------------------------------------------
+
+def test_the_tag_line_above_a_workflow_note_is_not_shown():
+    body = "stable-v0.6.1\r\n\r\nFixes java build"
+    assert (
+        strip_tag_banner(body, "stable-v0.6.1", "Rockbox-Y1 v0.6.1")
+        == "Fixes java build"
+    )
+
+
+def test_a_nightly_commit_hash_line_is_not_shown():
+    tag = "nightly-a8c63c04f0030dca6bc193a437767e1838067b67"
+    body = f"{tag}\n\nAdds proper wheel acceleration"
+    assert strip_tag_banner(body, tag) == "Adds proper wheel acceleration"
+
+
+def test_a_bare_commit_hash_line_is_not_shown():
+    assert strip_tag_banner("bc899a9\n\nFixes java build", "v0.6.1") == "Fixes java build"
+
+
+def test_a_body_that_is_only_the_tag_has_no_notes_left():
+    assert strip_tag_banner("stable-v0.6.1", "stable-v0.6.1") == ""
+
+
+def test_notes_without_a_tag_line_are_untouched():
+    body = "Fixes java build\n\n- wheel acceleration"
+    assert strip_tag_banner(body, "stable-v0.6.1") == body

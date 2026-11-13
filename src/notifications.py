@@ -62,6 +62,12 @@ def bring_window_to_front(window: Optional[QWidget]) -> None:
     if sys.platform == "darwin":
         try:
             from AppKit import NSApplication
+
+            # The window is the app again: give it back its Dock icon and menu
+            # bar after a stay as a menu-bar-only (accessory) process.
+            from .tray import set_menu_bar_only
+
+            set_menu_bar_only(False)
             app = NSApplication.sharedApplication()
             app.activateIgnoringOtherApps_(True)
         except Exception as e:

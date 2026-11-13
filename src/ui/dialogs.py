@@ -38,7 +38,11 @@ from PySide6.QtWidgets import (
 
 from .. import docs_source, paths
 from ..config import install_power_on_steps, device_label_for_model
-from ..markdown_render import rewrite_legacy_discord_invite, without_github_only
+from ..markdown_render import (
+    rewrite_legacy_discord_invite,
+    strip_tag_banner,
+    without_github_only,
+)
 # Lines kept in the text widget. The manager still retains the full log;
 # painting tens of thousands of blocks on the GUI thread is what froze the window.
 VISIBLE_LOG_LINES = 2000
@@ -1946,19 +1950,21 @@ class UpdateAvailableDialog(QDialog):
         from ..translate import strip_changes_header
 
         body_text = self._info.body.strip() if self._info else ""
+        tag = getattr(self._info, "tag", "") if self._info else ""
         fg = self.palette().color(QPalette.ColorRole.WindowText).name()
         if self._translated is not None:
             name, body = self._translated
             self._notes.setHtml(
                 format_markdown_release_notes(
-                    strip_changes_header(body), name, text_color=fg
+                    strip_changes_header(body), name, tag=tag, text_color=fg
                 )
             )
         elif body_text:
             # No version heading inside the notes: the subtitle above already
-            # says which release this is.
+            # says which release this is, and the tag line the workflow writes
+            # above the notes says nothing the subtitle does not.
             self._notes.setHtml(
-                format_markdown_release_notes(body_text, text_color=fg)
+                format_markdown_release_notes(body_text, tag=tag, text_color=fg)
             )
         else:
             self._notes.setPlainText(tr("update_no_notes"))
@@ -2854,7 +2860,7 @@ class LinuxSetupDialog(QDialog):
 
 
 def format_markdown_release_notes(
-    body: str, name: str = "", *, text_color: str | None = None
+    body: str, name: str = "", *, tag: str = "", text_color: str | None = None
 ) -> str:
     """Format release notes markdown into clean HTML with native fonts and typography."""
     t = T()
@@ -2865,7 +2871,9 @@ def format_markdown_release_notes(
     if name:
         lines.append(f"### {name}")
         lines.append("")
-    clean_body = (without_github_only(body) or tr("update_no_notes")).strip()
+    clean_body = (
+        strip_tag_banner(without_github_only(body), tag, name) or tr("update_no_notes")
+    ).strip()
     lines.append(clean_body[:4000])
     raw_md = "\n".join(lines)
 
@@ -3062,7 +3070,11 @@ class ReleaseReminderDialog(QDialog):
             )
             # Platform style and the live palette. No widget stylesheet:
             # that would replace the host scrollbar (see src/ui/scrollbars.py).
-            html = format_markdown_release_notes(notes_body, latest_rel.get("name", ""))
+            html = format_markdown_release_notes(
+                notes_body,
+                latest_rel.get("name", ""),
+                tag=latest_rel.get("tag_name", ""),
+            )
             self._notes_view.setHtml(html)
             layout.addWidget(self._notes_view, 1)
 

@@ -101,6 +101,10 @@ def _macos_payload() -> dict:
         "ProgramArguments": _launch_command(),
         "RunAtLoad": True,
         "ProcessType": "Background",
+        # A menu bar app belongs to the logged-in GUI session. Without this a
+        # background agent can start in a session with no window server and
+        # the app then has no menu bar item to reach it by.
+        "LimitLoadToSessionType": "Aqua",
     }
 
 

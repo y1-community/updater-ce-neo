@@ -157,6 +157,19 @@ def _packages_from_mapping(mapping: dict, description: str = "") -> list[Firmwar
         icon_dark = str(mapping.get("icon_dark") or mapping.get("image_dark") or "").strip()
         min_version = str(mapping.get("min_version") or mapping.get("min_app_version") or "").strip()
         raw_pkg_name = str(mapping.get("package_name") or mapping.get("package") or "").strip()
+        # Per-model and per-revision archive names: package_name_y2,
+        # package_name_y1_type_b, package_name_timmkoo_a5. The suffix is kept
+        # verbatim, so a model or brand a future manifest adds needs no parser
+        # change here; catalog.package_name_for() resolves it.
+        package_names = {}
+        for _key, _value in mapping.items():
+            _key_lower = str(_key or "").strip().lower()
+            if not _key_lower.startswith("package_name_") or _key_lower == "package_name":
+                continue
+            _suffix = _key_lower[len("package_name_") :].strip()
+            _text = str(_value or "").strip()
+            if _suffix and _text:
+                package_names[_suffix] = _text
         post_install = str(mapping.get("post_install") or "").strip()
         post_install_2 = str(
             mapping.get("post_install2") or mapping.get("post_install_2") or ""
@@ -228,6 +241,7 @@ def _packages_from_mapping(mapping: dict, description: str = "") -> list[Firmwar
                 model=device,
                 repo=resolve_firmware_repo(repo),
                 package_name=pkg_name,
+                package_names=dict(package_names),
                 description=desc,
                 icon=icon,
                 icon_dark=icon_dark,
@@ -329,7 +343,9 @@ def cache_manifest(entries):
 
         data = [
             {"name": e.name, "repo": e.repo, "device": e.model,
-             "package_name": e.package_name, "slug": e.slug,
+             "package_name": e.package_name,
+             "package_names": getattr(e, "package_names", {}) or {},
+             "slug": e.slug,
              "portable_zips": getattr(e, "portable_zips", "") or "",
              "asset_pattern": getattr(e, "asset_pattern", "") or "",
              "type_a_asset": getattr(e, "type_a_asset", "") or "",
@@ -370,6 +386,7 @@ def load_cached_manifest():
                 slug=e.get("slug", ""), name=e.get("name", ""),
                 model=e.get("device", ""), repo=e.get("repo", ""),
                 package_name=e.get("package_name", "rom.zip"),
+                package_names=dict(e.get("package_names") or {}),
                 portable_zips=e.get("portable_zips", "") or "",
                 asset_pattern=e.get("asset_pattern", "") or "",
                 type_a_asset=e.get("type_a_asset", "") or "",

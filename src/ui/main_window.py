@@ -10806,7 +10806,7 @@ class MainWindow(QMainWindow):
 
     def _hide_to_tray(self, event) -> None:
         """Close the window but keep the process and its tray icon alive."""
-        from ..tray import hold_off_automatic_termination
+        from ..tray import hold_off_automatic_termination, set_menu_bar_only
 
         self.hide()
         event.ignore()
@@ -10820,6 +10820,9 @@ class MainWindow(QMainWindow):
         # AppKit reaps an idle, windowless app within seconds and takes the
         # menu bar item with it; the hold stays until the window comes back.
         hold_off_automatic_termination(True)
+        # macOS: an accessory app is the one that lives in the menu bar alone,
+        # with no Dock icon for a window that is not there.
+        set_menu_bar_only(True)
         self._start_background_update_timer()
         self._set_window_polling(False)
         self._arm_idle_shed()
@@ -11004,10 +11007,11 @@ class MainWindow(QMainWindow):
 
     def _hide_to_tray_at_launch(self) -> None:
         """Start-at-login: the tray is up and the window is never shown."""
-        from ..tray import hold_off_automatic_termination
+        from ..tray import hold_off_automatic_termination, set_menu_bar_only
 
         self._ensure_background_tray().show()
         hold_off_automatic_termination(True)
+        set_menu_bar_only(True)
         self._start_background_update_timer()
 
     def _start_background_update_timer(self) -> None:

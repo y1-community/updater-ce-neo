@@ -31,11 +31,40 @@ _AUTOMATIC_TERMINATION_HELD = False
 def background_mode_supported(platform: Optional[str] = None) -> bool:
     """Whether this host ships the run-in-background / menu bar mode.
 
-    macOS builds temporarily ship without it: no menu bar item, no
-    start-at-login entry, and closing the window quits the app. Windows and
-    Linux keep the opt-in. One switch to turn it back on when macOS returns.
+    Every host ships it: macOS gets a real ``NSStatusItem`` in the menu bar,
+    Windows and Linux their system tray. The function is kept as the single
+    switch the settings page, the start-at-login entry and the window's close
+    behaviour all read, so a platform can be parked in one place if a host
+    regression ever needs it again.
     """
-    return (platform or sys.platform) != "darwin"
+    return True
+
+
+def set_menu_bar_only(hidden: bool) -> None:
+    """macOS: live in the menu bar alone while the window is away.
+
+    An app that keeps a Dock icon but no window is what AppKit treats as idle
+    and reaps, and it is also why a background copy looked like a second, stuck
+    copy in the Dock. An accessory app shows only its status item; the window
+    coming back restores the ordinary app. Other hosts have nothing to change.
+    """
+    if sys.platform != "darwin":
+        return
+    try:
+        from AppKit import (
+            NSApplication,
+            NSApplicationActivationPolicyAccessory,
+            NSApplicationActivationPolicyRegular,
+        )
+
+        policy = (
+            NSApplicationActivationPolicyAccessory
+            if hidden
+            else NSApplicationActivationPolicyRegular
+        )
+        NSApplication.sharedApplication().setActivationPolicy_(policy)
+    except Exception:
+        logger.debug("Could not change the macOS activation policy", exc_info=True)
 
 
 def run_in_background_setting(settings: Optional[QSettings] = None) -> bool:

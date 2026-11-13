@@ -1441,15 +1441,15 @@ begin
   end;
 end;
 
-procedure RegisterRunOnceStartup;
-var
-  ExePath: String;
+{ Older installers registered the app to open once at the next sign-in.
+  The app now only starts with Windows when the user turns on "Run in
+  Background", so that entry is removed instead of inherited. The app's
+  own HKCU Run value (written from that switch) is untouched. }
+procedure RemoveRunOnceStartup;
 begin
-  ExePath := '"' + ExpandConstant('{app}\{#MyAppExeName}') + '"';
-  { Register one-time launch on next reboot in both 64-bit and 32-bit registry views }
-  RegWriteStringValue(HKLM, 'Software\Microsoft\Windows\CurrentVersion\RunOnce', '{#MyAppName}', ExePath);
+  RegDeleteValue(HKLM, 'Software\Microsoft\Windows\CurrentVersion\RunOnce', '{#MyAppName}');
   if IsWin64 then
-    RegWriteStringValue(HKLM64, 'Software\Microsoft\Windows\CurrentVersion\RunOnce', '{#MyAppName}', ExePath);
+    RegDeleteValue(HKLM64, 'Software\Microsoft\Windows\CurrentVersion\RunOnce', '{#MyAppName}');
 end;
 
 { Runs at various stages of setup execution. }
@@ -1522,13 +1522,9 @@ begin
   begin
     RestoreSettings;
     SaveInstallLanguage;
+    RemoveRunOnceStartup;
   end
-  else if CurStep = ssDone then
-  begin
-    { Register RunOnce so the app launches on the next reboot. }
-    if ShouldInstallMainApp then
-      RegisterRunOnceStartup;
-  end;
+
 end;
 
 { Delete this installer file once the run finishes, so a downloaded copy
