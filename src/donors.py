@@ -244,6 +244,10 @@ def get_monthly_goal_stats(donations, now=None):
 GOAL_MONTHLY_OPENING_DAYS = 1
 GOAL_MONTHLY_CLOSING_DAYS = 3
 
+# Once this much of the month has arrived, the monthly figure is replaced by
+# the shortfall against the weekly costs: $200 - raised, shown against $50.
+GOAL_MONTHLY_HANDOVER_USD = 180.0
+
 WEEKLY_GOAL_USD = MONTHLY_GOAL_USD / 4.0
 DAILY_GOAL_USD = MONTHLY_GOAL_USD / 20.0
 
@@ -436,14 +440,25 @@ def get_goal_stats(donations, now=None):
     shown_day = fx.local(day_raised, code)
     shown_week = fx.local(week_raised, code)
     shown_month = fx.local(month_raised, code)
+    shown_rolling = fx.local(rolling_raised, code)
     raised_by = {"daily": shown_day, "weekly": shown_week, "monthly": shown_month}
     month_reached = shown_month >= targets["monthly"]
     week_reached = shown_week >= targets["weekly"]
     day_reached = shown_day >= targets["daily"]
+    rolling_reached = shown_rolling >= targets["weekly"]
 
     position = _goal_month_position(now)
     scope = None
-    if not day_reached:
+    # The month's own costs are met: a monthly line has nothing left to ask
+    # for, so the bar asks for today's costs instead. Only when the rolling
+    # week is covered as well is there nothing short to name at all.
+    month_covered = month_raised >= MONTHLY_GOAL_USD
+    full_day = False
+    if month_covered:
+        if not rolling_reached:
+            scope = "daily"
+            full_day = True
+    elif not day_reached:
         # On days where there are less than $10 in donations (or local currency equivalent),
         # always display the daily costs target as it has not been met, even when weekly
         # or monthly costs targets have been met.
@@ -459,6 +474,13 @@ def get_goal_stats(donations, now=None):
             scope = "monthly"
         else:
             scope = None
+    # Close to the month's target the monthly figure reads as "nearly there"
+    # with nothing to act on, so name the shortfall against the $50 week
+    # instead: a small ask that is still reachable is easier to answer than a
+    # large one that is almost done.
+    if not month_covered and scope == "monthly" and month_raised >= GOAL_MONTHLY_HANDOVER_USD:
+        scope = "weekly"
+        raised_by["weekly"] = fx.local(max(0.0, MONTHLY_GOAL_USD - month_raised), code)
 
     stats = {
         "scope": scope,
@@ -469,6 +491,7 @@ def get_goal_stats(donations, now=None):
         "period_start": None,
         "reached": scope is None,
         "covered": scope is None,
+        "appeal": "",
         "day_raised": day_raised,
         "week_raised": week_raised,
         "month_raised": month_raised,
@@ -481,17 +504,23 @@ def get_goal_stats(donations, now=None):
         "shown_percent": 0.0,
     }
     if scope is None:
+        # Nothing is short any more: no goal bar, just the running-costs ask.
+        stats.update(reached=False, covered=False, appeal="running_costs")
         return stats
 
     target = targets[scope]
     raised = raised_by[scope]
+    if full_day:
+        # Today's costs are covered too, but a covered month keeps naming them:
+        # cap the figure at the day's target so it reads "$10 of our $10".
+        raised = min(raised, target)
     stats.update(
         raised=raised,
         remaining=max(0.0, target - raised),
         percent=min(100.0, max(0.0, (raised / target) * 100.0)),
         target=target,
         period_start=goal_period_start(now, scope),
-        reached=raised >= target,
+        reached=False if full_day else raised >= target,
         shown_raised=raised,
         shown_target=target,
         shown_percent=fx.share(raised, target),
@@ -526,17 +555,21 @@ def format_goal_line(stats) -> str:
     same daily/weekly/monthly rung the support appeal is using. A quiet day
     still names today's smallest ask ("$0 of $10 costs for today"); a zero
     weekly/monthly summary stays silent rather than reading as a cold target.
-    An already-covered rung also returns an empty string.
+    A rung that is already past its target returns an empty string, except the
+    day's own rung which may be shown at its target once the month is covered.
+    With nothing short at all the line becomes the plain running-costs ask.
     """
     from .i18n import tr
 
     stats = stats or {}
+    if stats.get("appeal") == "running_costs":
+        return tr("donate_rely_on_you")
     key = GOAL_COPY_KEYS.get(stats.get("scope"))
     if not key or stats.get("reached") or stats.get("covered"):
         return ""
     raised = float(stats.get("shown_raised") or 0)
     target = float(stats.get("shown_target") or 0)
-    if target <= 0 or raised >= target:
+    if target <= 0 or raised > target:
         return ""
     if raised <= 0 and stats.get("scope") != "daily":
         return ""

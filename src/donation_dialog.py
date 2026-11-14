@@ -798,7 +798,9 @@ class DonationStatusBar(QStatusBar):
         else:
             self._showing_goal = True
             self._goal_label.setVisible(True)
-            self._goal_bar.setVisible(True)
+            # Covered costs leave no bar to fill: the line is the running-costs
+            # ask, not a target that is already past.
+            self._goal_bar.setVisible(not stats.get("appeal"))
             self._donor_label.setVisible(False)
             self._goal_label.setText(line)
             self._goal_bar.setValue(int(round(float(stats.get("shown_percent") or 0) * 10)))
@@ -850,7 +852,9 @@ class DonationStatusBar(QStatusBar):
         if show_goal:
             self._showing_goal = True
             self._goal_label.setVisible(True)
-            self._goal_bar.setVisible(True)
+            # Covered costs leave no bar to fill: the line is the running-costs
+            # ask, not a target that is already past.
+            self._goal_bar.setVisible(not stats.get("appeal"))
             self._donor_label.setVisible(False)
             self._goal_label.setText(line)
             self._goal_bar.setValue(int(round(float(stats.get("shown_percent") or 0) * 10)))
@@ -1245,6 +1249,8 @@ class DonationDialog(QDialog):
         else:
             self._goal_label.setText(line)
             self._goal_target = int(round(float(stats.get("shown_percent") or 0) * 10))
+            # A covered month/week shows the running-costs sentence with no bar.
+            self._goal_bar.setVisible(not stats.get("appeal"))
             self._goal_bar.setValue(self._goal_target)
 
     def _next_ticker_message(self) -> str:

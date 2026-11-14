@@ -203,16 +203,18 @@ def test_a_strong_rolling_week_does_not_skip_the_weekly_rung(monkeypatch):
     assert strong_stats["scope"] == "weekly"
 
 
-def test_a_completed_month_is_silent(monkeypatch):
+def test_a_covered_month_and_week_name_running_costs_instead_of_a_bar(monkeypatch):
     from src.donors import format_goal_line, get_goal_stats
 
     _pin_gbp(monkeypatch)
     now = datetime(2026, 11, 19, 12)
     stats = get_goal_stats([{"amount": 300, "dt": now}], now=now)
 
-    assert stats["covered"] is True
     assert stats["scope"] is None
-    assert format_goal_line(stats) == ""
+    assert stats["appeal"] == "running_costs"
+    assert format_goal_line(stats) == (
+        "Help us with our running costs, donate today."
+    )
 
 
 def test_a_short_day_still_names_today_after_the_month_is_met(monkeypatch):
@@ -230,6 +232,53 @@ def test_a_short_day_still_names_today_after_the_month_is_met(monkeypatch):
     assert stats["scope"] == "daily"
     assert format_goal_line(stats) == (
         "<b>You've helped us raise £2.50 of our £10 costs for today</b>"
+    )
+
+
+def test_a_covered_month_keeps_naming_today_until_the_week_is_covered(monkeypatch):
+    from src.donors import format_goal_line, get_goal_stats
+
+    _pin_gbp(monkeypatch)
+    now = datetime(2026, 11, 19, 12)
+    # $200 early in the month: the month is met, but the last seven days are not.
+    stats = get_goal_stats(
+        [{"amount": 200, "dt": datetime(2026, 11, 2, 9)}], now=now
+    )
+
+    assert stats["scope"] == "daily"
+    assert stats["reached"] is False
+    assert format_goal_line(stats) == (
+        "<b>You've helped us raise £0 of our £10 costs for today</b>"
+    )
+
+
+def test_a_covered_month_shows_today_at_its_target_once_it_is_paid(monkeypatch):
+    from src.donors import format_goal_line, get_goal_stats
+
+    _pin_gbp(monkeypatch)
+    now = datetime(2026, 11, 19, 12)
+    donations = [
+        {"amount": 200, "dt": datetime(2026, 11, 2, 9)},
+        {"amount": 20, "dt": now},
+    ]
+    stats = get_goal_stats(donations, now=now)
+
+    assert stats["scope"] == "daily"
+    assert format_goal_line(stats) == (
+        "<b>You've helped us raise £10 of our £10 costs for today</b>"
+    )
+
+
+def test_the_last_stretch_of_the_month_names_the_weekly_shortfall(monkeypatch):
+    from src.donors import format_goal_line, get_goal_stats
+
+    _pin_gbp(monkeypatch)
+    now = datetime(2026, 11, 1, 12)
+    stats = get_goal_stats([{"amount": 185, "dt": datetime(2026, 11, 1, 9)}], now=now)
+
+    assert stats["scope"] == "weekly"
+    assert format_goal_line(stats) == (
+        "<b>You've helped us raise £7.50 of our £50 costs for this week</b>"
     )
 
 
@@ -303,8 +352,10 @@ def test_zero_monthly_and_covered_goals_behavior(monkeypatch):
         "<b>You've helped us raise £0 of our £10 costs for today</b>"
     )
     covered = get_goal_stats([{"amount": 300, "dt": now}], now=now)
-    assert covered["covered"] is True
-    assert format_goal_line(covered) == ""
+    assert covered["appeal"] == "running_costs"
+    assert format_goal_line(covered) == (
+        "Help us with our running costs, donate today."
+    )
 
 
 def test_a_quiet_day_still_names_today(monkeypatch):

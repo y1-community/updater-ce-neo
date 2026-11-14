@@ -96,11 +96,14 @@ def test_donation_status_bar_goal_suppression(qapp, monkeypatch):
     assert not bar2._goal_bar.isHidden()
     assert not bar2._goal_label.isHidden()
 
-    # When raised is 250 (>= 200), goal bar is suppressed.
+    # When raised is 250 (>= 200), the month and the last seven days are both
+    # covered: no bar, and the running-costs sentence takes its place.
     bar3 = DonationStatusBar(donations=[{"amount": 250.0, "name": "Bob", "dt": now}])
     bar3._refresh_goal()
-    assert bar3._goal_suppressed is True
-    assert not bar3._goal_bar.isVisible()
+    assert bar3._goal_suppressed is False
+    assert bar3._goal_bar.isHidden()
+    assert not bar3._goal_label.isHidden()
+    assert "costs" in bar3._goal_label.text()
 
 
 def test_support_page_narratives_and_methods(qapp, monkeypatch):
