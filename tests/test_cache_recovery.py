@@ -67,6 +67,30 @@ def test_pruning_keeps_an_image_whose_name_differs_only_in_case(tmp_path):
     assert not (folder / "notes.txt").exists()
 
 
+def test_a_missing_archive_reaches_the_window_as_a_cache_failure():
+    """The re-download only runs for CACHE_FILE_MISSING, never INTERNAL_ERROR.
+
+    ``_do_flash`` raises the cache code when the archive and its extract are
+    both gone. Reporting that as INTERNAL_ERROR bypassed the recovery and left
+    the user on a card whose only retry used the same missing files.
+    """
+    from src.flash_service import FlashWorker, failure_code_for_exception
+
+    codes = []
+    worker = FlashWorker("/tmp/downloads/rondo_v1_rom.zip")
+
+    def _missing_cache():
+        raise RuntimeError("CACHE_FILE_MISSING")
+
+    worker._do_flash = _missing_cache
+    worker._start_usb_watchdog = lambda: None
+    worker.finished.connect(lambda ok, code: codes.append((ok, code)))
+    worker.run()
+
+    assert codes == [(False, "CACHE_FILE_MISSING")]
+    assert failure_code_for_exception(RuntimeError("boom")) == "INTERNAL_ERROR"
+
+
 def test_a_cache_failure_downloads_the_package_before_reporting_it():
     """The install card is not shown while the release is fetched again."""
     from src.ui.main_window import MainWindow

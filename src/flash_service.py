@@ -2301,6 +2301,14 @@ class ExtractWorker(QThread):
                 )
                 self.progress.emit(100)
                 return Path(usable)
+            # Logged, not queued on the worker's own log: this path is shared
+            # with ExtractWorker, which has no install log. FlashWorker.run()
+            # reports the same thing to the card when the error surfaces.
+            logger.warning(
+                "No firmware archive and no usable extracted copy are left on disk "
+                "for %s; the release has to be fetched again",
+                package_path,
+            )
             raise RuntimeError("CACHE_FILE_MISSING")
         # Wipe any previous or incomplete extract_dir before extracting so old
         # scatter files from an earlier run can never remain inside extract_dir.
@@ -4305,6 +4313,21 @@ class _AttemptWatchdog(threading.Thread):
 # ---------------------------------------------------------------------------
 # Flash worker
 # ---------------------------------------------------------------------------
+def failure_code_for_exception(error) -> str:
+    """The install failure code for an exception that escaped the pipeline.
+
+    ``_do_flash`` raises ``RuntimeError("CACHE_FILE_MISSING")`` when neither the
+    archived package nor a usable extracted copy is left on disk. That is a
+    cache problem: the window recovers it by downloading the release again, and
+    it can only do that when the failure is reported as CACHE_FILE_MISSING
+    rather than a bare INTERNAL_ERROR, which offers nothing but a retry of the
+    same missing files.
+    """
+    if str(error) == "CACHE_FILE_MISSING":
+        return "CACHE_FILE_MISSING"
+    return "INTERNAL_ERROR"
+
+
 class FlashWorker(QThread):
     """Background flash: extract → validate → dispatch to the platform backend."""
 
@@ -4826,10 +4849,17 @@ class FlashWorker(QThread):
                 # calls sys.exit()/SystemExit on several DA failure paths;
                 # surface them as a clean failure here, never crash the app.
                 logger.error("Flash pipeline crashed: %s", e, exc_info=True)
+                failure_code = failure_code_for_exception(e)
                 # Also surface the real cause in Diagnostics so frozen builds
                 # are diagnosable instead of a bare INTERNAL_ERROR.
                 try:
-                    self._log(f"Internal error: {type(e).__name__}: {e}")
+                    if failure_code == "CACHE_FILE_MISSING":
+                        self._log(
+                            "The firmware package and its extracted files are both gone; "
+                            "it has to be downloaded again."
+                        )
+                    else:
+                        self._log(f"Internal error: {type(e).__name__}: {e}")
                 except Exception:
                     pass
                 if is_disconnection_error(str(e), e) or (
@@ -4840,7 +4870,7 @@ class FlashWorker(QThread):
                     self.usb_disconnected.emit()
                     self.finished.emit(False, "USB_DISCONNECTED")
                 else:
-                    self.finished.emit(False, "INTERNAL_ERROR")
+                    self.finished.emit(False, failure_code)
             finally:
                 self._finished = True
                 self._flush_log()
