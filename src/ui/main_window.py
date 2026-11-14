@@ -122,7 +122,7 @@ from .dialogs import (
     RetryGuidanceDialog,
     UpdateAvailableDialog,
 )
-from .dark import T, ThemeWatcher, is_dark
+from .dark import T, ThemeWatcher, is_dark, theme_text_color
 from .glass import (
     HEADER_CONTENT_HEIGHT,
     apply_glass,
@@ -1575,9 +1575,8 @@ class MainWindow(QMainWindow):
         """Update author credit label text and styling according to current locale and theme."""
         if not hasattr(self, "_version_label") or self._version_label is None:
             return
-        t = T()
         by_word = tr("author_by")
-        author_color = t.fg or "#e5e7eb"
+        author_color = theme_text_color().name()
         author_link = f'<a href="https://ko-fi.com/teamslide" style="color: {author_color}; font-weight: 600; text-decoration: none;">Ryan Specter</a>'
         self._version_label.setText(
             tr("brand_author_by").format(by=by_word, author=author_link)
@@ -3370,7 +3369,9 @@ class MainWindow(QMainWindow):
         self._install_complete = True
         self._install_failed = False
         self.themes.ask_power_on(model, after_firmware=after_firmware)
-        prompt = tr(self._flash_page.rockbox_power_on_prompt_key(model)).format(model=model)
+        # One question for every model and both flash methods: only the button
+        # it names changes (the Y1's centre button, the power button elsewhere).
+        prompt = self._flash_page.rockbox_power_on_question(model)
         self._flash_page.show_rockbox_power_on_prompt(
             prompt,
             on_continue=on_continue or self._continue_rockbox_power_on,
@@ -6463,14 +6464,18 @@ class MainWindow(QMainWindow):
             # change during the ADB handoff and is not a firmware failure.
             self._install_complete = True
             self._install_failed = False
-            is_sp_win = paths.IS_WINDOWS and (
+            # SP Flash Tool reboots the player into the software it just wrote,
+            # so it turns up over ADB by itself: the themes stage waits for it
+            # with no question to answer, on every platform. MTKClient hands
+            # back a powered-off player, which only the user can boot.
+            is_sp_install = bool(
                 getattr(self, "_used_sp_backend", False)
                 or backend_method(getattr(self, "_flash_method", "")) == METHOD_SP
             )
-            if is_sp_win:
+            if is_sp_install:
                 self._append_log(
-                    "Notice: SP Flash Tool on Windows detected, starting automated Rockbox themes flow "
-                    "(waiting 90-120s for ADB connection, no user interaction required)..."
+                    "Notice: SP Flash Tool install detected, starting automated Rockbox themes flow "
+                    "(waiting for the player to appear over ADB, no user interaction required)..."
                 )
                 self._start_themes_stage(
                     eff_model,
@@ -6640,13 +6645,13 @@ class MainWindow(QMainWindow):
             "[Rockbox Cleanup] Keep my settings was not selected: removing the old "
             f".rockbox folders from {stage_model} before finishing the install."
         )
-        is_sp_win = paths.IS_WINDOWS and (
+        is_sp_install = bool(
             getattr(self, "_used_sp_backend", False)
             or backend_method(getattr(self, "_flash_method", "")) == METHOD_SP
         )
         on_done = lambda: self._finish_rockbox_cleanup()  # noqa: E731
         on_recover = lambda: self.restore_original_software(stage_model)  # noqa: E731
-        if is_sp_win:
+        if is_sp_install:
             # SP Flash reboots the player into the software just written, so
             # the ADB watch finds it without a disconnect or power cycle.
             self._flash_page.start_rockbox_cleanup_stage(
@@ -6660,14 +6665,15 @@ class MainWindow(QMainWindow):
             )
         else:
             # MTKclient hands back a powered-off player, so the cleanup waits
-            # for the user to boot it exactly like the themes stage does.
+            # for the user to boot it exactly like the themes stage does — and
+            # asks for the cable in the card, not by another dialog.
             callback = lambda: self._flash_page.start_rockbox_cleanup_stage(  # noqa: E731
                 model=stage_model,
                 on_done=on_done,
                 on_recover=on_recover,
                 log_cb=self._append_log,
                 already_powered_on=True,
-                automatic=True,
+                automatic=False,
                 after_firmware=True,
             )
             self._show_rockbox_power_on_prompt(

@@ -23,6 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from src.ui import dark
 from src.ui.dark import theme_text_color
 from src.ui.flash_page import FlashPage
 
@@ -72,6 +73,47 @@ def test_status_lines_follow_a_live_theme_change(page):
         app.setPalette(pal)
         page._failed = False
         page.refresh_theme()
+
+
+def test_completion_letter_and_prompt_links_follow_a_live_switch(page):
+    """The install-complete letter and its links take the new theme's colour.
+
+    Their copy bakes a colour when it is written (rich text cannot use a QSS
+    palette role), and the page's refresh hook used to be shadowed by a second
+    ``refresh_theme`` definition, so a live switch left the letter and the
+    "Don't ask me again" link in the previous theme's colour.
+    """
+    app = QApplication.instance()
+    pal = app.palette()
+    original = QColor(pal.color(QPalette.ColorRole.WindowText))
+    original_placeholder = QColor(pal.color(QPalette.ColorRole.PlaceholderText))
+    try:
+        page.show_completion_appeal(True, callback=lambda: None)
+        page.show_keep_data_erase_confirmation(
+            "Install and erase?",
+            'Settings reset. <a href="try-anyway">Try anyway</a>',
+        )
+        for colour in ("#1f6feb", "#f5f7fa"):
+            pal.setColor(QPalette.ColorRole.WindowText, QColor(colour))
+            pal.setColor(QPalette.ColorRole.PlaceholderText, QColor(colour))
+            app.setPalette(pal)
+            dark._restyle_existing_widgets(app)
+
+            for label in (
+                page._appeal_body,
+                page._appeal_signature,
+                page._intro.headline,
+                page._intro.subtitle,
+            ):
+                assert colour in label.styleSheet(), label.styleSheet()
+            assert colour in page._appeal_dont.text(), page._appeal_dont.text()
+            assert colour in page._keep_data_hint.text(), page._keep_data_hint.text()
+    finally:
+        pal.setColor(QPalette.ColorRole.WindowText, original)
+        pal.setColor(QPalette.ColorRole.PlaceholderText, original_placeholder)
+        app.setPalette(pal)
+        page._failed = False
+        dark._restyle_existing_widgets(app)
 
 
 def test_prompt_and_keep_data_questions_take_the_host_text_colour(page):

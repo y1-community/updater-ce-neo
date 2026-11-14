@@ -809,6 +809,21 @@ def build():
         except Exception:
             shutil.copy2(unar_src, tools_res / "unar")
 
+    # 5c. Bare adb, so the Rockbox themes/fonts stage can do the transfer over
+    # ADB itself instead of sending the user to pick a drive folder. Both Mac
+    # architectures ship in the universal bundle and ``adb.find_adb_binary``
+    # looks under ``tools/adb/<platform>/adb`` (see ``candidate_adb_paths``).
+    for plat in ("macos-arm64", "macos-x64"):
+        adb_src = ROOT / "tools" / "adb" / plat / "adb"
+        if not adb_src.is_file():
+            continue
+        for base in (RESOURCES / "tools", APP_CODE / "tools", FRAMEWORKS / "tools"):
+            dest_dir = base / "adb" / plat
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            dest = dest_dir / "adb"
+            shutil.copy2(adb_src, dest)
+            os.chmod(dest, 0o755)
+
     # 6. Icon
     icon_name = "icon_generic_mtk.icns" if IS_MEDIATEK_INSTALLER_BUILD else "icon.icns"
     icon_icns = ASSETS / icon_name

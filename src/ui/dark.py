@@ -1321,6 +1321,25 @@ def theme_text_color() -> QColor:
     return theme_foreground()
 
 
+def theme_placeholder_text_color() -> QColor:
+    """The host's secondary-text role, for copy that is dimmed on purpose."""
+    app = QApplication.instance()
+    if app is not None:
+        color = app.palette().color(QPalette.ColorRole.PlaceholderText)
+        if color.isValid() and color.alpha() > 0:
+            return QColor(color)
+    return theme_text_color()
+
+
+#: Property names that record an explicit foreground, so a live palette change
+#: can re-apply it: the stylesheet and widget palette written below are copies
+#: of the theme taken when the widget was built. The second is the exact sheet
+#: that was applied, which tells a theme-owned colour from one another caller
+#: replaced (a failure line, for instance).
+_EXPLICIT_FOREGROUND = "_themeExplicitForeground"
+_EXPLICIT_FOREGROUND_APPLIED = "_themeExplicitForegroundApplied"
+
+
 def apply_explicit_foreground(widget, extra: str = "") -> None:
     """Keep text on the host's text colour.
 
@@ -1328,12 +1347,18 @@ def apply_explicit_foreground(widget, extra: str = "") -> None:
     application stylesheet polish then writes white into the label palette,
     which is the unreadable progress line on a light card. An explicit color
     with no background survives that polish and does not paint a plate.
+
+    The call is remembered on the widget: :func:`_restyle_existing_widgets`
+    repeats it when the system appearance changes, so a completion letter or
+    a prompt keeps the previous theme's colour out of sight.
     """
     if widget is None:
         return
+    widget.setProperty(_EXPLICIT_FOREGROUND, extra or "")
     fg = theme_text_color()
     widget.setAutoFillBackground(False)
     widget.setStyleSheet(f"color: {fg.name()};{extra}")
+    widget.setProperty(_EXPLICIT_FOREGROUND_APPLIED, widget.styleSheet())
     pal = widget.palette()
     for group in (
         QPalette.ColorGroup.Active,
@@ -1786,7 +1811,7 @@ def link_html(text: str, *, bold: bool = True) -> str:
     """
     weight = " font-weight: 700;" if bold else ""
     return (
-        f'<a href="#" style="color: {_state.tokens.fg}; text-decoration: none;'
+        f'<a href="#" style="color: {theme_text_color().name()}; text-decoration: none;'
         f' border: none; background: transparent;{weight}">{text}</a>'
     )
 
@@ -2348,6 +2373,18 @@ def _restyle_existing_widgets(app: QApplication) -> None:
     """
     sync_cached_palettes(app)
     for widget in app.allWidgets():
+        # Labels that asked for an explicit foreground hold a copy of the old
+        # theme's colour. Re-apply it before the widget's own refresh hook, so
+        # copy built from translations and HTML follows a live switch too.
+        marker = widget.property(_EXPLICIT_FOREGROUND)
+        if marker is not None:
+            # Only rewrite the sheet this helper wrote. A widget that has
+            # since taken a semantic colour (the step line's failure red)
+            # keeps it until whoever set that colour asks for the theme one
+            # again.
+            applied = widget.property(_EXPLICIT_FOREGROUND_APPLIED)
+            if applied is None or widget.styleSheet() == applied:
+                apply_explicit_foreground(widget, str(marker))
         apply_native_scrollbar_policy(widget)
         hook = getattr(widget, "refresh_theme", None)
         if callable(hook):

@@ -37,7 +37,7 @@ from .donors import (
     relative_date,
 )
 from .i18n import tr, tr_brand
-from .ui.dark import T, is_dark
+from .ui.dark import T, is_dark, theme_text_color
 from .ui.glass import apply_dialog_theme
 
 logger = logging.getLogger(__name__)
@@ -341,10 +341,10 @@ class DonationStatusBar(QStatusBar):
         # No background rule. ``background: transparent`` is stored as a slab
         # and is the solid strip behind Credits / Thanks.
         btn.setStyleSheet(
-            f"QPushButton {{ color: {t.fg}; border: none;"
+            f"QPushButton {{ color: palette(window-text); border: none;"
             f" padding: 2px 4px; font-size: 12px; font-weight: 700; text-align: {side}; }}"
-            f"QPushButton:hover {{ color: {t.fg}; }}"
-            f"QPushButton:focus {{ color: {t.fg}; border: 1px solid {t.border_focus};"
+            "QPushButton:hover { color: palette(window-text); }"
+            "QPushButton:focus { color: palette(window-text); border: 1px solid palette(highlight);"
             f" border-radius: 5px; outline: none; }}"
         )
         btn.setCursor(Qt.ArrowCursor)
@@ -378,7 +378,7 @@ class DonationStatusBar(QStatusBar):
         if glass_surfaces_enabled():
             self.setStyleSheet(
                 "QStatusBar#donation_status_bar { background: transparent;"
-                f" color: {t.fg}; border: none; min-height: 30px; }}"
+                " color: palette(window-text); border: none; min-height: 30px; }"
             )
             self.setAutoFillBackground(False)
             self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
@@ -398,7 +398,7 @@ class DonationStatusBar(QStatusBar):
         else:
             self.setStyleSheet(
                 "QStatusBar#donation_status_bar { background: transparent;"
-                f" color: {t.fg}; border: none; min-height: 30px; }}"
+                " color: palette(window-text); border: none; min-height: 30px; }"
             )
             self.setAutoFillBackground(False)
             self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, False)
@@ -673,13 +673,13 @@ class DonationStatusBar(QStatusBar):
                 groups.setdefault(raw_name.lower(), []).append(d)
 
         lines = []
-        t = T()
+        colour = theme_text_color().name()
 
         def make_anchor(name: str, url: str) -> str:
             short = name if len(name) <= 24 else name[:23].rstrip() + "…"
             if url:
-                return f'<a href="{url}" style="color:{t.fg}; font-weight:bold;">{short}</a>'
-            return f'<b style="color:{t.fg};">{short}</b>'
+                return f'<a href="{url}" style="color:{colour}; font-weight:bold;">{short}</a>'
+            return f'<b style="color:{colour};">{short}</b>'
 
         def format_line(name: str, amt: float, methods: set[str], dt, url: str, is_top: bool,
                         has_time: bool = False) -> str:
@@ -1010,8 +1010,8 @@ class DonationDialog(QDialog):
         layout.setContentsMargins(20, 16, 20, 16)
         layout.setSpacing(10)
 
-        title_color = t.fg
-        intro_color = t.fg_dim
+        title_color = "palette(window-text)"
+        intro_color = "palette(text)"
 
         # 1. Goal bar / donor ticker card
         # Kept initialized as a hidden child widget for API / test compatibility,
@@ -1070,11 +1070,15 @@ class DonationDialog(QDialog):
                 tb_layout.setContentsMargins(14, 10, 14, 10)
                 tb_layout.setSpacing(4)
                 self._theme_title = QLabel(f"<b>{tr('themepack_card_title')}</b>")
-                self._theme_title.setStyleSheet(f"font-size: 13px; color: {t.fg}; border: none; background: transparent;")
+                self._theme_title.setStyleSheet(
+                    "font-size: 13px; color: palette(window-text); border: none; background: transparent;"
+                )
                 tb_layout.addWidget(self._theme_title)
                 self._theme_desc = QLabel(tr("themepack_card_desc"))
                 self._theme_desc.setWordWrap(True)
-                self._theme_desc.setStyleSheet(f"font-size: 11px; color: {intro_color}; border: none; background: transparent;")
+                self._theme_desc.setStyleSheet(
+                    f"font-size: 11px; color: {intro_color}; border: none; background: transparent;"
+                )
                 tb_layout.addWidget(self._theme_desc)
 
                 tb_row = QHBoxLayout()
@@ -1089,15 +1093,21 @@ class DonationDialog(QDialog):
         # 2. Developer header
         header_row = QHBoxLayout()
         title = QLabel(
-            f"<h2 style='margin:0; font-size:18px; font-weight:800; color:{title_color};'>"
+            "<h2 style='margin:0; font-size:18px; font-weight:800;'>"
             + tr("donate_headline") + "</h2>"
         )
         title.setTextFormat(Qt.RichText)
+        title.setStyleSheet(
+            "color: palette(window-text); background: transparent; border: none;"
+        )
         subtitle = QLabel(
-            f"<p style='margin:0; font-size:11px; font-weight:600; color:{intro_color};'>"
+            "<p style='margin:0; font-size:11px; font-weight:600;'>"
             + tr("donate_subtitle") + "</p>"
         )
         subtitle.setTextFormat(Qt.RichText)
+        subtitle.setStyleSheet(
+            "color: palette(text); background: transparent; border: none;"
+        )
         title_box = QVBoxLayout()
         title_box.setSpacing(1)
         title_box.addWidget(title)
@@ -1203,8 +1213,11 @@ class DonationDialog(QDialog):
             method = d.get("method", tr("donate_method_generic"))
             url = d.get("url", "")
             when = relative_date(d.get("dt"), has_time=d.get("has_time", False))
-            t = T()
-            anchor = f'<a href="{url}" style="color:{t.fg}; font-weight:bold;">{name}</a>' if url else name
+            anchor = (
+                f'<a href="{url}" style="color:{theme_text_color().name()}; font-weight:bold;">{name}</a>'
+                if url
+                else name
+            )
             line = tr("donate_ticker_fmt").replace("$", "").format(anchor=anchor, amount=amt_s, method=method, when=when)
             raw_items.append((line, amt, d.get("dt"), amt >= 20.0))
         lines = _order_bar_slots(self, raw_items)

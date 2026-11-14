@@ -65,7 +65,7 @@ from ..diagnostics import (
 )
 from ..i18n import is_english_language, tr, tr_brand, translator
 from ..updates import asset_hint, pick_platform_asset
-from .dark import T
+from .dark import T, theme_text_color
 from .glass import apply_dialog_theme
 from .scrollbars import configure_scroll_area
 from .widgets import InstallProgress as _InstallProgress
@@ -108,11 +108,15 @@ class FlashCompleteDialog(QDialog):
             tb_layout.setContentsMargins(14, 10, 14, 10)
             tb_layout.setSpacing(4)
             self._theme_title = QLabel(f"<b>{tr('themepack_card_title')}</b>")
-            self._theme_title.setStyleSheet(f"font-size: 13px; color: {t.fg}; border: none; background: transparent;")
+            self._theme_title.setStyleSheet(
+                "font-size: 13px; color: palette(window-text); border: none; background: transparent;"
+            )
             tb_layout.addWidget(self._theme_title)
             self._theme_desc = QLabel(tr("themepack_card_desc"))
             self._theme_desc.setWordWrap(True)
-            self._theme_desc.setStyleSheet(f"font-size: 11px; color: {t.fg}; border: none; background: transparent;")
+            self._theme_desc.setStyleSheet(
+                "font-size: 11px; color: palette(window-text); border: none; background: transparent;"
+            )
             tb_layout.addWidget(self._theme_desc)
 
             tb_row = QHBoxLayout()
@@ -234,7 +238,9 @@ class PreInstallGuidanceDialog(QDialog):
         body = QLabel(tip_text)
         body.setWordWrap(True)
         body.setTextFormat(Qt.PlainText)
-        body.setStyleSheet(f"font-size: 13px; line-height: 1.4; color: {t.fg};")
+        body.setStyleSheet(
+            "font-size: 13px; line-height: 1.4; color: palette(window-text);"
+        )
         layout.addWidget(body)
 
         layout.addStretch()
@@ -336,12 +342,15 @@ def notice_read_more_url(notice) -> str:
 
 
 def _style_notice_link_button(button) -> None:
-    """Give a text action the app's flat, accent-on-hover link treatment."""
-    t = T()
+    """Give a text action the app's flat, accent-on-hover link treatment.
+
+    The colours are palette roles, not copies of the theme: the host resolves
+    them again whenever the system appearance changes.
+    """
     button.setStyleSheet(
-        f"QPushButton {{ border: none; background: transparent; color: {t.fg};"
+        "QPushButton { border: none; background: transparent; color: palette(window-text);"
         " font-size: 13px; font-weight: 700; padding: 0; text-align: left; }"
-        f"QPushButton:hover {{ color: {t.accent}; }}"
+        "QPushButton:hover { color: palette(highlight); }"
     )
 
 
@@ -390,7 +399,7 @@ def format_notice_markdown(body: str, *, text_color: str | None = None) -> str:
     sits on the same card as the rest of the app.
     """
     t = T()
-    fg = text_color or t.fg
+    fg = text_color or theme_text_color().name()
     doc = QTextDocument()
     doc.setMarkdown(rewrite_legacy_discord_invite((body or "").strip()))
     html = doc.toHtml()
@@ -528,7 +537,7 @@ class NoticeDetailView(QWidget):
             or getattr(notice, "content", "")
             or ""
         )
-        self._body.set_markdown(body, text_color=T().fg)
+        self._body.set_markdown(body, text_color=theme_text_color().name())
         target_url = notice_read_more_url(notice)
         self._page_url = notice_see_more_url(target_url) if target_url else ""
         self._open_page.setVisible(bool(self._page_url))
@@ -560,7 +569,6 @@ class NoticesDialog(QDialog):
     def __init__(self, parent=None, notices=()):
         super().__init__(parent)
         apply_dialog_theme(self)
-        t = T()
         self.setWindowTitle(tr("notices_dialog_title"))
         self.setMinimumSize(520, 380)
         self.resize(560, 460)
@@ -569,7 +577,10 @@ class NoticesDialog(QDialog):
         layout.setSpacing(10)
         layout.setContentsMargins(20, 20, 20, 20)
 
-        heading = QLabel(f"<h3 style='color:{t.fg}; margin:0; padding:0;'>{tr('notices_dialog_title')}</h3>")
+        heading = QLabel(
+            f"<h3 style='color:{theme_text_color().name()}; margin:0; padding:0;'>"
+            f"{tr('notices_dialog_title')}</h3>"
+        )
         heading.setTextFormat(Qt.RichText)
         self._heading = heading
 
@@ -692,9 +703,9 @@ class NoticesPage(QWidget):
         self._how_btn.setFlat(True)
         self._how_btn.setCursor(Qt.PointingHandCursor)
         self._how_btn.setStyleSheet(
-            f"QPushButton {{ border: none; background: transparent; color: {T().fg_muted};"
+            "QPushButton { border: none; background: transparent; color: palette(placeholder-text);"
             " font-size: 12px; padding: 2px 4px; }"
-            f"QPushButton:hover {{ color: {T().fg}; }}"
+            "QPushButton:hover { color: palette(window-text); }"
         )
         self._how_btn.clicked.connect(self._open_how_notices_work)
         list_layout.addWidget(self._how_btn, 0, Qt.AlignHCenter)
@@ -864,7 +875,6 @@ class _NoticeRow(QFrame):
         self.setProperty("cssClass", "card")
         self.setAutoFillBackground(False)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-        t = T()
 
         col = QVBoxLayout(self)
         col.setContentsMargins(12, 10, 12, 10)
@@ -874,7 +884,9 @@ class _NoticeRow(QFrame):
         header.setContentsMargins(0, 0, 0, 0)
         header.setSpacing(8)
         title = QLabel(_notice_heading(notice), self)
-        title.setStyleSheet(f"font-weight: 600; color: {t.fg}; border: none; background: transparent;")
+        title.setStyleSheet(
+            "font-weight: 600; color: palette(window-text); border: none; background: transparent;"
+        )
         title.setWordWrap(True)
         header.addWidget(title, 1)
         if allow_dismiss:
@@ -892,7 +904,9 @@ class _NoticeRow(QFrame):
             posted_text = _notice_posted_text(notice)
             if posted_text:
                 dates = QLabel(posted_text, self)
-                dates.setStyleSheet(f"font-size: 12px; color: {t.fg_muted};")
+                dates.setStyleSheet(
+                    "font-size: 12px; color: palette(placeholder-text);"
+                )
                 col.addWidget(dates)
 
         # In Updater CE 2.5.2, notices show the short description from <content>
@@ -906,7 +920,7 @@ class _NoticeRow(QFrame):
         self._body.setMinimumHeight(40)
         self._body.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self._body.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self._body.set_markdown(body_text, text_color=t.fg)
+        self._body.set_markdown(body_text, text_color=theme_text_color().name())
         self._body.document().contentsChanged.connect(self._fit_body)
         # The first fit runs before the page has laid the card out, so the
         # viewport can still be only a few pixels wide. Re-fit once its real
@@ -918,7 +932,9 @@ class _NoticeRow(QFrame):
         self._page_url = notice_see_more_url(target_url) if target_url else ""
         self._open_page = QPushButton(self)
         self._open_page.setObjectName("noticesOpenPage")
-        self._open_page.setIcon(get_symbol_icon("globe", 16, color=t.fg))
+        self._open_page.setIcon(
+            get_symbol_icon("globe", 16, color=theme_text_color().name())
+        )
         self._open_page.setIconSize(QSize(16, 16))
         self._open_page.setFixedSize(24, 24)
         self._open_page.setFlat(True)
@@ -1136,7 +1152,9 @@ class DiagnosticsView(QWidget):
         header_row.setSpacing(8)
 
         self._header_lbl = QLabel(f"{tr('log_center')}:")
-        self._header_lbl.setStyleSheet(f"font-weight: 600; color: {t.fg};")
+        self._header_lbl.setStyleSheet(
+            "font-weight: 600; color: palette(window-text);"
+        )
         header_row.addWidget(self._header_lbl)
 
         self._category_combo = QComboBox()
@@ -1156,8 +1174,9 @@ class DiagnosticsView(QWidget):
 
         self._file_badge = QLabel()
         self._file_badge.setStyleSheet(
-            f"font-size: 11px; color: {t.fg}; background: {t.bg_card}; padding: 3px 8px;"
-            f" border-radius: 4px; border: 1px solid {t.border};"
+            "font-size: 11px; color: palette(window-text);"
+            " background: palette(alternate-base); padding: 3px 8px;"
+            " border-radius: 4px; border: 1px solid palette(mid);"
         )
         header_row.addWidget(self._file_badge)
         layout.addLayout(header_row)
@@ -1173,7 +1192,7 @@ class DiagnosticsView(QWidget):
         filter_row.setSpacing(8)
 
         self._session_lbl = QLabel(tr("log_session_label"))
-        self._session_lbl.setStyleSheet(f"color: {t.fg};")
+        self._session_lbl.setStyleSheet("color: palette(window-text);")
         filter_row.addWidget(self._session_lbl)
 
         self._session_combo = QComboBox()
@@ -1192,7 +1211,7 @@ class DiagnosticsView(QWidget):
         range_row.setSpacing(8)
 
         self._from_lbl = QLabel(tr("log_range_from"))
-        self._from_lbl.setStyleSheet(f"color: {t.fg};")
+        self._from_lbl.setStyleSheet("color: palette(window-text);")
         range_row.addWidget(self._from_lbl)
 
         self._from_edit = QDateTimeEdit()
@@ -1203,7 +1222,7 @@ class DiagnosticsView(QWidget):
         range_row.addWidget(self._from_edit, 1)
 
         self._to_lbl = QLabel(tr("log_range_to"))
-        self._to_lbl.setStyleSheet(f"color: {t.fg};")
+        self._to_lbl.setStyleSheet("color: palette(window-text);")
         range_row.addWidget(self._to_lbl)
 
         self._to_edit = QDateTimeEdit()
@@ -1972,6 +1991,7 @@ class UpdateAvailableDialog(QDialog):
     def refresh_theme(self) -> None:
         """Re-render notes after the host palette changes."""
         self._render_notes()
+        self._update_translate_label()
         self._make_notes_seamless()
         self._notes.viewport().update()
         self.update()
@@ -1985,7 +2005,7 @@ class UpdateAvailableDialog(QDialog):
             self._translate_label.setVisible(False)
             self._translate_throbber.stop()
             return
-        t = T()
+        fg = theme_text_color().name()
         lang = (translator().lang or "en").strip()
         # Dimmed + pin-hint while every provider is on cooldown; a dialog would
         # be far too much ceremony for a disabled link beside the notes.
@@ -2009,7 +2029,7 @@ class UpdateAvailableDialog(QDialog):
             lang,
         )
         open_txt = tr("open_in_google_translate")
-        link_style = f"color:{t.fg}; font-weight:700; text-decoration:none;"
+        link_style = f"color:{fg}; font-weight:700; text-decoration:none;"
         open_link = (
             f'<a href="{url}" style="{link_style}">{open_txt} \u2197</a>' if url else ""
         )
@@ -2038,7 +2058,7 @@ class UpdateAvailableDialog(QDialog):
             parts = [trans_link, open_link]
         sep = " &nbsp;\u00b7&nbsp; "
         text = sep.join(p for p in parts if p)
-        self._translate_label.setText(f'<span style="color:{t.fg};">{text}</span>')
+        self._translate_label.setText(f'<span style="color:{fg};">{text}</span>')
         self._translate_label.setVisible(True)
         from .widgets import install_pinned_hint
 
@@ -3180,13 +3200,17 @@ class LegacyMigrationDialog(QDialog):
 
         # Header Title
         title_lbl = QLabel(tr("legacy_cleanup_title"))
-        title_lbl.setStyleSheet(f"font-size: 16px; font-weight: 700; color: {t.fg};")
+        title_lbl.setStyleSheet(
+            "font-size: 16px; font-weight: 700; color: palette(window-text);"
+        )
         layout.addWidget(title_lbl)
 
         # Description
         desc_lbl = QLabel(tr("legacy_cleanup_desc"))
         desc_lbl.setWordWrap(True)
-        desc_lbl.setStyleSheet(f"font-size: 13px; color: {t.fg}; line-height: 1.4;")
+        desc_lbl.setStyleSheet(
+            "font-size: 13px; color: palette(window-text); line-height: 1.4;"
+        )
         layout.addWidget(desc_lbl)
 
         # Reclaim Space Badge / Label

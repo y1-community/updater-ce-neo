@@ -495,8 +495,9 @@ class ThemePackGuidanceDialog(QDialog):
         layout.setSpacing(14)
 
         # Header Title
-        title_lbl = QLabel(f"<h3 style='margin:0; color:{t.fg};'>{tr('themepack_dialog_title')}</h3>")
+        title_lbl = QLabel(f"<h3 style='margin:0;'>{tr('themepack_dialog_title')}</h3>")
         title_lbl.setTextFormat(Qt.RichText)
+        title_lbl.setStyleSheet("color: palette(window-text); background: transparent; border: none;")
         layout.addWidget(title_lbl)
 
         # Step 1: USB Storage instructions
@@ -510,12 +511,16 @@ class ThemePackGuidanceDialog(QDialog):
         s1_layout.setSpacing(6)
 
         s1_title = QLabel(f"<b>{tr('themepack_step1_title')}</b>")
-        s1_title.setStyleSheet(f"font-size: 13px; color: {t.fg}; border: none; background: transparent;")
+        s1_title.setStyleSheet(
+            "font-size: 13px; color: palette(window-text); border: none; background: transparent;"
+        )
         s1_layout.addWidget(s1_title)
 
         s1_desc = QLabel(tr("themepack_step1_desc"))
         s1_desc.setWordWrap(True)
-        s1_desc.setStyleSheet(f"font-size: 12px; color: {t.fg}; border: none; background: transparent; line-height: 1.4;")
+        s1_desc.setStyleSheet(
+            "font-size: 12px; color: palette(window-text); border: none; background: transparent; line-height: 1.4;"
+        )
         s1_layout.addWidget(s1_desc)
         layout.addWidget(self._step1_card)
 
@@ -530,12 +535,16 @@ class ThemePackGuidanceDialog(QDialog):
         s2_layout.setSpacing(8)
 
         s2_title = QLabel(f"<b>{tr('themepack_step2_title')}</b>")
-        s2_title.setStyleSheet(f"font-size: 13px; color: {t.fg}; border: none; background: transparent;")
+        s2_title.setStyleSheet(
+            "font-size: 13px; color: palette(window-text); border: none; background: transparent;"
+        )
         s2_layout.addWidget(s2_title)
 
         s2_desc = QLabel(tr("themepack_step2_desc"))
         s2_desc.setWordWrap(True)
-        s2_desc.setStyleSheet(f"font-size: 12px; color: {t.fg}; border: none; background: transparent; line-height: 1.4;")
+        s2_desc.setStyleSheet(
+            "font-size: 12px; color: palette(window-text); border: none; background: transparent; line-height: 1.4;"
+        )
         s2_layout.addWidget(s2_desc)
 
         action_row = QHBoxLayout()
@@ -548,7 +557,9 @@ class ThemePackGuidanceDialog(QDialog):
         action_row.addWidget(self._select_btn)
 
         self._folder_label = QLabel()
-        self._folder_label.setStyleSheet(f"font-size: 11px; color: {t.fg}; border: none; background: transparent;")
+        self._folder_label.setStyleSheet(
+            "font-size: 11px; color: palette(window-text); border: none; background: transparent;"
+        )
         self._folder_label.setWordWrap(True)
         action_row.addWidget(self._folder_label, 1)
         s2_layout.addLayout(action_row)
@@ -566,7 +577,9 @@ class ThemePackGuidanceDialog(QDialog):
 
         self._status_label = QLabel()
         self._status_label.setWordWrap(True)
-        self._status_label.setStyleSheet(f"font-size: 12px; font-weight: 500; color: {t.fg};")
+        self._status_label.setStyleSheet(
+            "font-size: 12px; font-weight: 500; color: palette(window-text);"
+        )
         self._status_label.setVisible(False)
         layout.addWidget(self._status_label)
 
@@ -644,7 +657,9 @@ class ThemePackGuidanceDialog(QDialog):
         self._progress_bar.setRange(0, 100)
         self._progress_bar.setValue(0)
         self._status_label.setVisible(True)
-        self._status_label.setStyleSheet(f"font-size: 12px; color: {t.fg};")
+        self._status_label.setStyleSheet(
+            "font-size: 12px; color: palette(window-text);"
+        )
         self._status_label.setText(tr("themepack_status_extracting"))
 
         self._install_worker = ThemePackInstallWorker(self._zip_path, self._target_dir, parent=self)
@@ -1288,8 +1303,9 @@ class Rockbox360pSetupWizard(QDialog):
         layout.setContentsMargins(20, 20, 20, 18)
         layout.setSpacing(14)
 
-        title_lbl = QLabel(f"<h3 style='margin:0; color:{t.fg};'>{tr('rockbox_wizard_title')}</h3>")
+        title_lbl = QLabel(f"<h3 style='margin:0;'>{tr('rockbox_wizard_title')}</h3>")
         title_lbl.setTextFormat(Qt.RichText)
+        title_lbl.setStyleSheet("color: palette(window-text); background: transparent; border: none;")
         layout.addWidget(title_lbl)
 
         self._stack = QStackedWidget()
@@ -1353,7 +1369,9 @@ class Rockbox360pSetupWizard(QDialog):
         box.addWidget(self._adb_bar)
         self._adb_status = QLabel(tr("rockbox_wizard_adb_searching"))
         self._adb_status.setWordWrap(True)
-        self._adb_status.setStyleSheet(f"font-size: 12px; color: {t.fg};")
+        self._adb_status.setStyleSheet(
+            "font-size: 12px; color: palette(window-text);"
+        )
         box.addWidget(self._adb_status)
         return page
 
@@ -1678,7 +1696,9 @@ class Rockbox360pSetupWizard(QDialog):
         self._usb_bar.setVisible(True)
         self._usb_bar.setValue(0)
         self._usb_status.setVisible(True)
-        self._usb_status.setStyleSheet(f"font-size: 12px; color: {t.fg};")
+        self._usb_status.setStyleSheet(
+            "font-size: 12px; color: palette(window-text);"
+        )
         self._usb_status.setText(tr("themepack_status_extracting"))
         self._merge_worker = DirMergeWorker(self._combined_dir, target, parent=self)
         self._merge_worker.progress.connect(self._on_usb_progress)

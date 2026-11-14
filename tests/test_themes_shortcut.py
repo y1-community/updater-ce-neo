@@ -16,7 +16,11 @@ def _window():
     from src.ui.main_window import MainWindow
 
     app = QApplication.instance() or QApplication(sys.argv)
-    with patch("src.theme_pack.AdbWatchWorker"):
+    # A player plugged into this machine must not answer the prompt for the
+    # test: the presence watcher would continue the stage by itself.
+    with patch("src.theme_pack.AdbWatchWorker"), patch(
+        "src.theme_pack.AdbPresencePoller"
+    ), patch("src.adb.adb_devices", return_value=[]):
         return app, MainWindow()
 
 

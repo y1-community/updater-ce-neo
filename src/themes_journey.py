@@ -33,6 +33,7 @@ class ThemesJourney:
         self._power_on_pending = False
         self._power_on_model = ""
         self._power_on_after_firmware = False
+        self._usb_asked = False
         self._player_taken = False
         self._multiple_players = False
         self._last_logged_progress = 0
@@ -128,6 +129,15 @@ class ThemesJourney:
         return self._power_on_after_firmware
 
     @property
+    def usb_asked(self) -> bool:
+        """The card has asked for the USB cable after the power-on answer.
+
+        The two questions are the same Next chip, so the card asks which one is
+        on screen here rather than keeping a step number of its own.
+        """
+        return self._usb_asked
+
+    @property
     def player_taken(self) -> bool:
         """A player answered over ADB: one player, one transfer from here."""
         return self._player_taken
@@ -188,6 +198,7 @@ class ThemesJourney:
         self._power_on_pending = False
         self._power_on_model = ""
         self._power_on_after_firmware = False
+        self._usb_asked = False
         self._player_taken = False
         self._multiple_players = False
         self._last_logged_progress = 0
@@ -240,6 +251,14 @@ class ThemesJourney:
         self._power_on_pending = False
         self._power_on_model = ""
         self._power_on_after_firmware = False
+
+    def ask_usb(self) -> None:
+        """The card now asks for the cable, before any ADB watch starts."""
+        self._usb_asked = True
+
+    def clear_usb(self) -> None:
+        """The cable question is answered (the watch owns the step from here)."""
+        self._usb_asked = False
 
     # ------------------------------------------------------------------
     # Detection

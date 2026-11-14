@@ -82,7 +82,7 @@ from .widgets import (
     NoticeToast,
     UpdateModelToast,
 )
-from .dark import T, link_html, page_margins
+from .dark import T, link_html, page_margins, theme_text_color
 from .scrollbars import configure_scroll_area, make_transparent
 from .icons import HELP_ICON_PX, get_help_pixmap, get_symbol_icon, get_symbol_pixmap, help_icon_source, tint_pixmap
 
@@ -742,10 +742,9 @@ class SelectPackagePage(QWidget):
         root.addWidget(self._scroll, 1)
 
     def _link_html(self, key: str, *, bold: bool = True) -> str:
-        t = T()
         weight = " font-weight: 700;" if bold else ""
         return (
-            f'<a href="#" style="color: {t.fg}; text-decoration: none;'
+            f'<a href="#" style="color: {theme_text_color().name()}; text-decoration: none;'
             f' border: none; background: transparent;{weight}">{tr(key)}</a>'
         )
 
@@ -1129,7 +1128,8 @@ class SelectPackagePage(QWidget):
         # document default blue-with-underline (document stylesheet, not a
         # widget stylesheet: the platform keeps the scrollbars).
         self._notes.document().setDefaultStyleSheet(
-            f"body {{ background: transparent; }} a {{ color: {T().fg}; font-weight: 700; text-decoration: none; }}"
+            "body { background: transparent; } a { color: "
+            f"{theme_text_color().name()}; font-weight: 700; text-decoration: none; }}"
         )
         # Host policies plus the live palette. No widget stylesheet on this
         # view: a matching rule would cost the host's overlay scrollbars
@@ -1859,7 +1859,8 @@ class SelectPackagePage(QWidget):
         # document default blue-with-underline (document stylesheet, not a
         # widget stylesheet: the platform keeps the scrollbars).
         self._notes.document().setDefaultStyleSheet(
-            f"body {{ background: transparent; }} a {{ color: {T().fg}; font-weight: 700; text-decoration: none; }}"
+            "body { background: transparent; } a { color: "
+            f"{theme_text_color().name()}; font-weight: 700; text-decoration: none; }}"
         )
         self._browse_btn.setText(tr("sel_browse"))
         if hasattr(self, "_browse_folder_btn"):
@@ -1922,7 +1923,8 @@ class SelectPackagePage(QWidget):
         self._apply_type_help_hint()
         if hasattr(self, "_notes"):
             self._notes.document().setDefaultStyleSheet(
-                f"body {{ background: transparent; }} a {{ color: {T().fg}; font-weight: 700; text-decoration: none; }}"
+                "body { background: transparent; } a { color: "
+                f"{theme_text_color().name()}; font-weight: 700; text-decoration: none; }}"
             )
         if hasattr(self, "_notes") and self._current_selected_rel:
             self._set_notes_content(self._render_release_notes(self._current_selected_rel, as_html=True))
@@ -2871,15 +2873,16 @@ class SelectPackagePage(QWidget):
         html = re.sub(r"color:\s*[^;\"']+;?", "", html, flags=re.IGNORECASE)
 
         t = T()
+        fg = theme_text_color().name()
         # 2. Re-style links: clickable, bold, same color as text (not blue #0000ff):
         html = re.sub(
             r'<span style="[^"]*color:#0000ff;[^"]*">',
-            f'<span style="color: {t.fg}; font-weight: bold; text-decoration: none;">',
+            f'<span style="color: {fg}; font-weight: bold; text-decoration: none;">',
             html,
         )
         html = re.sub(
             r'<a\s+href="([^"]+)">',
-            f'<a href="\\1" style="color: {t.fg}; font-weight: bold; text-decoration: none;">',
+            f'<a href="\\1" style="color: {fg}; font-weight: bold; text-decoration: none;">',
             html,
         )
         html = re.sub(r"<img[^>]*>", "", html, flags=re.IGNORECASE)
@@ -2890,7 +2893,7 @@ class SelectPackagePage(QWidget):
         css = f"""
         <style type="text/css">
         body, p, span, div, li, b, strong, em, i, a, code, pre, h1, h2, h3, h4, h5, h6 {{
-            color: {t.fg};
+            color: {fg};
             font-size: 13px;
             line-height: 1.45;
         }}
@@ -2907,7 +2910,7 @@ class SelectPackagePage(QWidget):
         p {{
             margin-top: 4px;
             margin-bottom: 6px;
-            color: {t.fg};
+            color: {fg};
             font-size: 13px;
         }}
         ul, ol {{
@@ -2917,19 +2920,19 @@ class SelectPackagePage(QWidget):
         }}
         li {{
             margin-bottom: 2px;
-            color: {t.fg};
+            color: {fg};
             font-size: 13px;
         }}
         code, pre {{
             font-family: Menlo, Monaco, Consolas, "Cascadia Code", "Courier New", monospace;
             font-size: 13px;
             background-color: {t.bg_hover};
-            color: {t.fg};
+            color: {fg};
             padding: 2px 4px;
             border-radius: 3px;
         }}
         a {{
-            color: {t.fg};
+            color: {fg};
             font-weight: bold;
             text-decoration: none;
             font-size: 13px;
@@ -2987,11 +2990,11 @@ class SelectPackagePage(QWidget):
             )
             or docs_source.with_language(url, lang)
         )
-        t = T()
         # The release page's own words are not translated, but this link label
         # belongs to the app UI and must follow the selected language.
         self._see_more_label.setText(
-            f'<a href="{target}" style="color:{t.fg}; text-decoration:none; font-weight:700;">{tr("notices_see_more")}</a>'
+            f'<a href="{target}" style="color:{theme_text_color().name()};'
+            f' text-decoration:none; font-weight:700;">{tr("notices_see_more")}</a>'
         )
         self._see_more_label.setVisible(True)
 
@@ -3010,7 +3013,7 @@ class SelectPackagePage(QWidget):
             self.content_size_changed.emit()
             return
 
-        t = T()
+        fg = theme_text_color().name()
         url = get_google_translate_release_url(rel, lang)
         self._translate_label.setVisible(True)
         # When every provider is on cooldown the control is dimmed and its hint
@@ -3027,17 +3030,17 @@ class SelectPackagePage(QWidget):
             msg = tr("translating_notes")
             open_txt = tr("open_in_google_translate")
             self._translate_label.setText(
-                f'<span style="color:{t.fg};">{msg} &nbsp;·&nbsp; '
-                f'<a href="{url}" style="color:{t.fg}; font-weight:700; text-decoration:none;">{open_txt} ↗</a></span>'
+                f'<span style="color:{fg};">{msg} &nbsp;·&nbsp; '
+                f'<a href="{url}" style="color:{fg}; font-weight:700; text-decoration:none;">{open_txt} ↗</a></span>'
             )
         elif self._is_translated:
             badge = tr("translated_with_google")
             show_orig = tr("show_original")
             open_txt = tr("open_in_google_translate")
             self._translate_label.setText(
-                f'<span style="color:{t.fg};">{badge}</span> &nbsp;·&nbsp; '
-                f'<a href="action:show_original" style="color:{t.fg}; font-weight:700; text-decoration:none;">{show_orig}</a> &nbsp;·&nbsp; '
-                f'<a href="{url}" style="color:{t.fg}; font-weight:700; text-decoration:none;">{open_txt} ↗</a>'
+                f'<span style="color:{fg};">{badge}</span> &nbsp;·&nbsp; '
+                f'<a href="action:show_original" style="color:{fg}; font-weight:700; text-decoration:none;">{show_orig}</a> &nbsp;·&nbsp; '
+                f'<a href="{url}" style="color:{fg}; font-weight:700; text-decoration:none;">{open_txt} ↗</a>'
             )
         else:
             trans_txt = tr("translate_notes")
@@ -3050,14 +3053,14 @@ class SelectPackagePage(QWidget):
                 globe_html = ""
             if translation_ready:
                 self._translate_label.setText(
-                    f'{globe_html}<a href="action:translate_in_app" style="color:{t.fg}; text-decoration:none; font-weight:700;">{trans_txt}</a> &nbsp;·&nbsp; '
-                    f'<a href="{url}" style="color:{t.fg}; text-decoration:none; font-weight:700;">{open_txt} ↗</a>'
+                    f'{globe_html}<a href="action:translate_in_app" style="color:{fg}; text-decoration:none; font-weight:700;">{trans_txt}</a> &nbsp;·&nbsp; '
+                    f'<a href="{url}" style="color:{fg}; text-decoration:none; font-weight:700;">{open_txt} ↗</a>'
                 )
             else:
                 # Same words, no link: disabled by the palette, with the pin hint.
                 self._translate_label.setText(
-                    f'<span style="color:{t.fg};">{globe_html}{trans_txt}</span> &nbsp;·&nbsp; '
-                    f'<a href="{url}" style="color:{t.fg}; text-decoration:none; font-weight:700;">{open_txt} ↗</a>'
+                    f'<span style="color:{fg};">{globe_html}{trans_txt}</span> &nbsp;·&nbsp; '
+                    f'<a href="{url}" style="color:{fg}; text-decoration:none; font-weight:700;">{open_txt} ↗</a>'
                 )
         from .widgets import install_pinned_hint
 

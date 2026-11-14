@@ -877,7 +877,7 @@ class SettingsPage(QWidget):
         # pill says so without spending a sentence on it.
         self._themes_beta_pill = QLabel(tr("settings_themes_beta_pill"))
         self._themes_beta_pill.setStyleSheet(
-            f"QLabel {{ color: {T().fg_muted}; border: 1px solid {T().border};"
+            "QLabel { color: palette(placeholder-text); border: 1px solid palette(mid);"
             " border-radius: 9px; padding: 1px 8px; font-size: 10px; font-weight: 600; }"
         )
         self._themes_beta_pill.setAccessibleName(tr("settings_themes_beta_pill"))

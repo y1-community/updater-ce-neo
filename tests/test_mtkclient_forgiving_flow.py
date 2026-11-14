@@ -181,10 +181,11 @@ def test_rockbox_themes_stage_power_on_and_fallback():
             on_troubleshoot=lambda: recover_called.append(True),
         )
 
-    # Because ADB is not found, falls back to USB storage mode prompt
+    # Because ADB is not found, falls back to USB storage mode guidance, which
+    # is the card's question and so takes the progress band's slot
     assert not page._theme_row.isHidden()
     assert not page._theme_fallback_widget.isHidden()
-    assert "usb storage mode" in page._eta_label.text().lower()
+    assert "usb storage mode" in page._flash_question_label.text().lower()
 
     # User clicks Finish / completes stage -> triggers on_done
     page._finish_rockbox_themes_stage()
@@ -200,6 +201,7 @@ def test_rockbox_themes_stage_with_adb_countdown():
 
     with patch("src.adb.find_adb_binary", return_value="/usr/bin/adb"), \
          patch("src.adb.adb_devices", return_value=[]), \
+         patch("src.theme_pack.AdbPresencePoller"), \
          patch("src.theme_pack.AdbWatchWorker") as mock_worker_cls:
         mock_worker = MagicMock()
         mock_worker_cls.return_value = mock_worker
@@ -207,15 +209,24 @@ def test_rockbox_themes_stage_with_adb_countdown():
         # Start stage - Step 1: Disconnect & power on
         page.start_rockbox_themes_stage(model="Y1")
 
-        eta_text = page._eta_label.text()
-        assert "disconnect usb, hold the centre button" in eta_text.lower()
+        # The question takes the band's slot, with the Next chip beside it,
+        # instead of sitting under a bar that has nothing to report yet.
+        question = page._flash_question_label.text()
+        assert "disconnect usb, hold the centre button" in question.lower()
+        assert page._flash_band_stack.currentWidget() is page._flash_question_label
         assert not page._theme_step1_widget.isHidden()
 
-        # Step 1 -> Next: advances to Step 2 (connect USB + countdown)
+        # Step 1 -> Next asks for the USB cable, as its own question.
         page._on_theme_step1_next_clicked()
-        eta_text_step2 = page._eta_label.text()
-        assert "connect your y1 by usb" in eta_text_step2.lower()
+        assert "connect your y1 by usb" in page._flash_question_label.text().lower()
+        assert page._eta_label.text() == ""
+
+        # Confirming the cable starts the ADB watch, whose countdown sits
+        # under the question rather than in place of it.
+        page._on_theme_step1_next_clicked()
         from src.adb import ADB_WATCH_TIMEOUT_SECONDS
+        assert "connect your y1 by usb" in page._flash_question_label.text().lower()
+        eta_text_step2 = page._eta_label.text()
         assert str(ADB_WATCH_TIMEOUT_SECONDS) in eta_text_step2
 
         # Tick the timer
@@ -223,11 +234,11 @@ def test_rockbox_themes_stage_with_adb_countdown():
         eta_text_tick = page._eta_label.text()
         assert str(ADB_WATCH_TIMEOUT_SECONDS - 1) in eta_text_tick
 
-        # For Y2
+        # For Y2 the same question names the power button instead.
         page.start_rockbox_themes_stage(model="Y2")
-        eta_text_y2 = page._eta_label.text()
-        assert "power button" in eta_text_y2.lower()
-        assert "your y2" in eta_text_y2.lower()
+        question_y2 = page._flash_question_label.text()
+        assert "power button" in question_y2.lower()
+        assert "your y2" in question_y2.lower()
 
         # The guidance steps watch for a player over ADB; a page left open
         # would leave that poller running past the test.
@@ -378,7 +389,12 @@ def test_rockbox_post_flash_power_prompt_uses_model_specific_button_and_hides_na
     try:
         paths.IS_MAC = False
         paths.IS_WINDOWS = False
-        with patch("src.theme_pack.AdbWatchWorker"):
+        # No player may answer for the prompt: the presence watcher would
+        # continue the stage and write to whatever is plugged into this machine.
+        with patch("src.theme_pack.AdbWatchWorker"), \
+             patch("src.theme_pack.AdbPresencePoller"), \
+             patch("src.adb.adb_devices", return_value=[]), \
+             patch.object(MainWindow, "_on_method_changed"):
             window = MainWindow()
             window.settings = settings
             # The post-flash themes journey starts only with the in-beta switch on.
@@ -405,13 +421,15 @@ def test_rockbox_post_flash_power_prompt_uses_model_specific_button_and_hides_na
             # Guided install chrome stays active until the player has booted;
             # the SP Flash Tool button is independent of that flow.
             assert window._install_run_active()
-            assert "disconnect the usb and power on your y1" in window._flash_page._eta_label.text().lower()
+            question = window._flash_page._flash_question_label.text().lower()
+            assert "disconnect usb, hold the centre button" in question
+            assert "your y1" in question
 
             window._flash_page._theme_step1_next_btn.click()
             app.processEvents()
             assert not window.themes.power_on_pending
             assert window._flash_page.themes.transfer_running
-            assert "connect your y1 by usb" in window._flash_page._eta_label.text().lower()
+            assert "connect your y1 by usb" in window._flash_page._flash_question_label.text().lower()
             assert "usb" not in window._flash_page._theme_row.accessibleName().lower()
     finally:
         paths.IS_MAC = old_mac
@@ -423,11 +441,17 @@ def test_rockbox_post_flash_power_prompt_uses_model_specific_button_and_hides_na
             pass
 
 
-def test_sp_flash_rockbox_power_on_prompt(tmp_path):
-    """SP Flash Tool also asks Y1/Y2 users to disconnect & power on, then connect USB, rather than bypassing with automatic=True."""
+def test_sp_flash_awaits_adb_without_asking_anything(tmp_path):
+    """SP Flash Tool reboots the player itself, so the stage only waits for ADB.
+
+    No disconnect/power-on question and no USB question: the player appears
+    over ADB on its own once the firmware install completes, and the folder
+    picker is the last resort after the watch window, never a step.
+    """
     from PySide6.QtCore import QSettings
     from src import paths
     from src import theme_sync as sync
+    from src.adb import ADB_WATCH_TIMEOUT_SECONDS
     from src.ui.main_window import MainWindow, _PAGE_FLASH
 
     app = _app()
@@ -437,7 +461,10 @@ def test_sp_flash_rockbox_power_on_prompt(tmp_path):
     try:
         paths.IS_MAC = False
         paths.IS_WINDOWS = False
-        with patch("src.theme_pack.AdbWatchWorker"):
+        # The stage must wait for ADB rather than find a player already here.
+        with patch("src.theme_pack.AdbWatchWorker"), \
+             patch("src.theme_pack.AdbPresencePoller"), \
+             patch("src.adb.adb_devices", return_value=[]):
             window = MainWindow()
             window.settings = settings
             # The post-flash themes journey starts only with the in-beta switch on.
@@ -453,20 +480,14 @@ def test_sp_flash_rockbox_power_on_prompt(tmp_path):
             app.processEvents()
 
             assert window._stack.currentIndex() == _PAGE_FLASH
-            assert window.themes.power_on_pending
             assert window._install_run_active()
-
-            # Step 1: Disconnect & power on prompt, shared by both flash methods
-            assert "disconnect the usb and power on your y1" in window._flash_page._eta_label.text().lower()
-
-            # User presses the round Next button to confirm disconnect and power on
-            window._flash_page._theme_step1_next_btn.click()
-            app.processEvents()
+            # SP reboots the player: no boot question to answer.
             assert not window.themes.power_on_pending
             assert window._flash_page.themes.transfer_running
-
-            # Step 2: Connect USB prompt
-            assert "connect your y1 by usb" in window._flash_page._eta_label.text().lower()
+            page = window._flash_page
+            assert page._flash_band_stack.currentWidget() is page._progress_bar
+            # The card reports the ADB wait instead of asking for anything.
+            assert str(ADB_WATCH_TIMEOUT_SECONDS) in page._eta_label.text()
     finally:
         paths.IS_MAC = old_mac
         paths.IS_WINDOWS = old_win

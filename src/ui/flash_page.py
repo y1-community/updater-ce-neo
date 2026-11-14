@@ -90,6 +90,29 @@ def _themed_link(href: str, text: str) -> str:
     return link_html(text, bold=False).replace('href="#"', f'href="{href}"', 1)
 
 
+def _styled_prompt_links(html: str) -> str:
+    """Give anchors in translated prompt copy the live host text colour.
+
+    A catalog string may carry a plain anchor (the Keep Data explainer's "Try
+    anyway"). Qt would paint that in the document's own link colour, which is
+    not the colour the sentence around it follows; an anchor that already has
+    a style keeps it.
+    """
+    from .dark import theme_text_color
+
+    if "<a " not in (html or ""):
+        return html or ""
+    style = (
+        f"color: {theme_text_color().name()}; font-weight: 700;"
+        " text-decoration: none; background: transparent;"
+    )
+    return re.sub(
+        r"<a\s+(?![^>]*\bstyle=)([^>]*)>",
+        lambda match: f'<a {match.group(1)} style="{style}">',
+        html,
+    )
+
+
 def _hint_text_link(href: str, text: str) -> str:
     """An action written into hint copy, dimmer than it and underlined.
 
@@ -98,10 +121,10 @@ def _hint_text_link(href: str, text: str) -> str:
     an affordance painted in the sentence's own colour and weight reads as the
     last words of the sentence.
     """
-    from .dark import T
+    from .dark import theme_placeholder_text_color
 
     try:
-        colour = T().fg_muted
+        colour = theme_placeholder_text_color().name()
     except Exception:
         colour = ""
     style = "text-decoration: underline; border: none; background: transparent;"
@@ -2227,10 +2250,28 @@ class FlashPage(QWidget):
         self._post_install_hint.setVisible(False)
         self._post_install_hint.linkActivated.connect(lambda _href: self._open_post_install_guide())
 
+        # The install card asks its own questions in the band's slot, the way
+        # the wait card does: a bar frozen at its last percentage while the
+        # user is being asked something reports nothing, and a question standing
+        # in the band sits on the row and the axis of the round chips that
+        # answer it. The bar returns the moment the stage reports progress.
+        self._flash_question_label = QLabel("")
+        self._flash_question_label.setWordWrap(True)
+        self._flash_question_label.setTextFormat(Qt.PlainText)
+        self._flash_question_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        _style_card_heading(self._flash_question_label)
+        self._flash_question_label.setVisible(False)
+        self._flash_band_stack = QStackedWidget()
+        self._flash_band_stack.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
+        self._flash_band_stack.addWidget(self._progress_bar)
+        self._flash_band_stack.addWidget(self._flash_question_label)
+        self._flash_band_stack.setCurrentWidget(self._progress_bar)
         self._progress_card, self._flash_head, copy = self._new_progress_card(
             self._flash_icon,
             self._flash_pkg_label,
-            self._progress_bar,
+            self._flash_band_stack,
             [
                 self._cancel_btn,
                 self._flash_retry_btn,
@@ -2797,6 +2838,7 @@ class FlashPage(QWidget):
 
     def show_waiting(self):
         self._complete = False
+        self.dismiss_flash_question()
         if hasattr(self, "_rockbox_site_widget"):
             self._rockbox_site_widget.setVisible(False)
         if hasattr(self, "_rockbox_site_btn"):
@@ -3052,6 +3094,7 @@ class FlashPage(QWidget):
         self._wait_copy = "stage"
         self._prompt_only = False
         self._sync_wait_band_page()
+        self.dismiss_flash_question()
         self._sync_keep_data_visibility()
         self._switch_view(self._flashing_view)
         failed = self._failed
@@ -3476,8 +3519,115 @@ class FlashPage(QWidget):
             self._rockbox_power_on_continue_cb = None
             callback()
             return
-        self._log_theme("[Rockbox Themes] User clicked Next on Step 1 (device powered on). Advancing to Step 2 (connect USB).")
-        self._start_theme_step2_connect_usb()
+        if self.themes.usb_asked:
+            # The cable is in: the watch, not the folder picker, is next.
+            self._start_theme_step2_connect_usb()
+            return
+        self._log_theme("[Rockbox Themes] User confirmed the player is powered on. Asking for the USB cable.")
+        self._show_theme_connect_usb_question()
+
+    def rockbox_power_on_question(self, model: str) -> str:
+        """The one power-on question, for every model and both flash methods.
+
+        Only the button differs per player: the Y1 wakes on its centre button,
+        every other model on the power button. One sentence means the MTKClient
+        handoff, the standalone themes run and the SP Flash Tool run all ask
+        the same thing instead of three near-copies of it.
+        """
+        from ..config import device_label_for_model
+
+        label = device_label_for_model(model)
+        button = tr(
+            "button_centre" if str(model or "").upper() == "Y1" else "button_power"
+        )
+        return tr("rockbox_step1_power_on_button").format(model=label, button=button)
+
+    def show_flash_question(self, text: str) -> None:
+        """Ask on the install card: the question takes the band's slot.
+
+        The round chips beside the band are the question's answers, so they
+        slide in to sit just past its words while it is up (see
+        ``_CardHead.set_band_inline``). Every path that reports progress again
+        calls :meth:`dismiss_flash_question`, so a question is never left
+        standing over a live run.
+        """
+        label = getattr(self, "_flash_question_label", None)
+        stack = getattr(self, "_flash_band_stack", None)
+        if label is None or stack is None:
+            return
+        if label.text() != (text or ""):
+            label.setText(text or "")
+        label.setVisible(True)
+        if stack.currentWidget() is not label:
+            stack.setCurrentWidget(label)
+        head = getattr(self, "_flash_head", None)
+        if head is not None:
+            head.set_band_inline(True, label)
+        # While the card is asking, the question is the only line it owes the
+        # user: the step title ("Installing Rockbox Themes & Fonts...") and any
+        # leftover run copy would sit under it saying what the prompt already
+        # says. They come back with the bar, once the stage is working again.
+        flow = getattr(self, "_status_flow", None)
+        if flow is not None:
+            flow.setVisible(False)
+        self._relayout_for_text()
+
+    def dismiss_flash_question(self) -> None:
+        """Hand the band's slot back to the progress bar."""
+        label = getattr(self, "_flash_question_label", None)
+        stack = getattr(self, "_flash_band_stack", None)
+        if label is None or stack is None:
+            return
+        if stack.currentWidget() is not self._progress_bar:
+            stack.setCurrentWidget(self._progress_bar)
+        label.setVisible(False)
+        head = getattr(self, "_flash_head", None)
+        if head is not None:
+            head.set_band_inline(False)
+        flow = getattr(self, "_status_flow", None)
+        if flow is not None:
+            flow.setVisible(True)
+
+    def _show_theme_connect_usb_question(self) -> None:
+        """Ask for the USB cable, and start the ADB watch only once it is in.
+
+        ADB is the route that can find every ``.rockbox`` mount and unpack on
+        the device itself, so the card asks for the cable as its own step and
+        gives the player a whole watch window to answer before a mass-storage
+        folder is offered. The presence watch still runs behind the question,
+        so a player that is already plugged in answers it for the user.
+        """
+        self._stop_adb_presence_watch()
+        self.themes.ask_usb()
+        model_str = self.themes.model.upper()
+        self._log_theme(
+            f"[Rockbox Themes] Step 2: Prompting user to connect {model_str} by USB."
+        )
+        self.show_flash_question(tr("rockbox_step2_connect_usb").format(model=model_str))
+        self._eta_label.setText("")
+        if hasattr(self, "_theme_row"):
+            self._theme_row.setVisible(True)
+        if hasattr(self, "_theme_step1_widget"):
+            self._theme_step1_widget.setVisible(True)
+        if hasattr(self, "_theme_fallback_widget"):
+            self._theme_fallback_widget.setVisible(True)
+        if hasattr(self, "_theme_trouble_widget"):
+            self._theme_trouble_widget.setVisible(False)
+        self._hide_theme_wizard_chips()
+        if hasattr(self, "_theme_back_btn"):
+            self._theme_back_btn.setEnabled(False)
+            self._theme_back_btn.setVisible(True)
+        if hasattr(self, "_theme_step1_next_btn"):
+            self._theme_step1_next_btn.setEnabled(True)
+            self._theme_step1_next_btn.setVisible(True)
+        if hasattr(self, "_flash_head"):
+            self._flash_head._sync_chips_pairing()
+            self._flash_head._sync_to_band()
+        win = self.window()
+        if win and hasattr(win, "_adjust_window_geometry"):
+            win._adjust_window_geometry()
+        self._ensure_adb_presence_watch()
+        self._request_user_attention()
 
     def start_rockbox_themes_stage(
         self,
@@ -3582,10 +3732,17 @@ class FlashPage(QWidget):
         # them to power it on a second time.
         # SP Flash installs never need the manual disconnect/power-on steps:
         # go straight to the silent ADB watch. MTKClient installs still do.
-        if automatic or already_powered_on:
+        if automatic:
+            # Nothing asked the user anything (SP Flash Tool reboots the player
+            # itself), so the watch is the whole step.
             self._start_theme_step2_connect_usb()
-        else:
-            self._show_theme_step1_disconnect_power_on()
+            return
+        if already_powered_on:
+            # The window already asked for the boot; this stage's own question
+            # is the cable that brings the player back.
+            self._show_theme_connect_usb_question()
+            return
+        self._show_theme_step1_disconnect_power_on()
 
     @property
     def _cleanup_stage(self) -> bool:
@@ -3689,13 +3846,13 @@ class FlashPage(QWidget):
 
     def _show_theme_step1_disconnect_power_on(self) -> None:
         model_str = self.themes.model.upper()
-        button = tr("button_centre" if model_str == "Y1" else "button_power")
-        step1_text = tr("rockbox_step1_power_on_button").format(
-            model=model_str,
-            button=button,
-        )
-        self._eta_label.setText(step1_text)
+        self.themes.clear_usb()
         self._log_theme(f"[Rockbox Themes] Step 1: Prompting user to disconnect and power on {model_str}.")
+        self._eta_label.setText("")
+        # Powering the player on is the question's subject, so it takes the
+        # band's slot with the Next chip beside it rather than sitting under a
+        # bar that has no percentage to report here.
+        self.show_flash_question(self.rockbox_power_on_question(model_str))
         if hasattr(self, "_theme_row"):
             self._theme_row.setVisible(True)
         if hasattr(self, "_theme_step1_widget"):
@@ -3743,9 +3900,29 @@ class FlashPage(QWidget):
         from ..adb import ADB_WATCH_TIMEOUT_SECONDS
         self._adb_watch_seconds = ADB_WATCH_TIMEOUT_SECONDS
         self.themes.clear_multiple()
+        self.themes.clear_usb()
         usb_prompt = tr("rockbox_step2_connect_usb").format(model=model_str)
         adb_status = tr("rockbox_stage_waiting_adb_fmt").format(remaining=self._adb_watch_seconds)
-        self._eta_label.setText("" if self.themes.automatic else f"{usb_prompt}\n{adb_status}")
+        # The question keeps the band while the watch runs, with the countdown
+        # as its explanation. Only the elapsed window hands the user a folder
+        # to pick: the Back chip has nowhere to go until then. An automatic
+        # stage asks nothing — SP Flash Tool already rebooted the player, so
+        # the card only reports the wait.
+        if self.themes.automatic:
+            self.dismiss_flash_question()
+        else:
+            self.show_flash_question(usb_prompt)
+        self._eta_label.setText(adb_status)
+        if hasattr(self, "_theme_step1_next_btn"):
+            self._theme_step1_next_btn.setVisible(False)
+        if hasattr(self, "_theme_fallback_next_btn"):
+            self._theme_fallback_next_btn.setVisible(False)
+        if hasattr(self, "_theme_back_btn"):
+            self._theme_back_btn.setEnabled(False)
+            self._theme_back_btn.setVisible(True)
+        if hasattr(self, "_flash_head"):
+            self._flash_head._sync_chips_pairing()
+            self._flash_head._sync_to_band()
         self._log_theme(f"[Rockbox Themes] Step 2: Waiting for USB connection and ADB handshake ({self._adb_watch_seconds}s timeout)...")
 
         from ..adb import find_adb_binary
@@ -3770,13 +3947,12 @@ class FlashPage(QWidget):
         if getattr(self, "_adb_watch_seconds", 0) > 0:
             self._adb_watch_seconds -= 1
             if self.themes.multiple_players:
-                # The disconnect prompt owns the copy until one player remains.
-                self._eta_label.setText(tr("rockbox_stage_disconnect_extra"))
+                # The disconnect prompt owns the copy until one player remains,
+                # and it is the card's question, so it takes the band.
+                self.show_flash_question(tr("rockbox_stage_disconnect_extra"))
             else:
-                model_str = self.themes.model.upper()
-                usb_prompt = tr("rockbox_step2_connect_usb").format(model=model_str)
                 adb_status = tr("rockbox_stage_waiting_adb_fmt").format(remaining=self._adb_watch_seconds)
-                self._eta_label.setText("" if self.themes.automatic else f"{usb_prompt}\n{adb_status}")
+                self._eta_label.setText("" if self.themes.automatic else adb_status)
             if self._adb_watch_seconds in (100, 80, 60, 40, 20, 10, 5):
                 self._log_theme(f"[Rockbox Themes] Waiting for ADB device... ({self._adb_watch_seconds}s remaining)")
         else:
@@ -3790,7 +3966,7 @@ class FlashPage(QWidget):
             f"[Rockbox Themes] {count} players are connected over ADB. "
             "Waiting for the user to disconnect all but the one being installed."
         )
-        self._eta_label.setText(tr("rockbox_stage_disconnect_extra"))
+        self.show_flash_question(tr("rockbox_stage_disconnect_extra"))
 
     def _on_adb_device_found(self, serial: str) -> None:
         # A player answered: a picker open on a stale folder choice has lost.
@@ -3814,6 +3990,8 @@ class FlashPage(QWidget):
         if not self.themes.take_player():
             return
         self._stop_adb_presence_watch()
+        # The player answered: the card is writing again, not asking.
+        self.dismiss_flash_question()
         if hasattr(self, "_adb_watch_timer"):
             self._adb_watch_timer.stop()
         if hasattr(self, "_theme_row"):
@@ -3957,7 +4135,10 @@ class FlashPage(QWidget):
         self.set_step(
             tr("rockbox_cleanup_step" if self._cleanup_stage else "rockbox_stage_installing")
         )
-        self._eta_label.setText(tr("rockbox_step_usb_storage_mode"))
+        self._eta_label.setText("")
+        # The storage-mode instruction is the card's current question, so it
+        # takes the band with the folder chip beside it.
+        self.show_flash_question(tr("rockbox_step_usb_storage_mode"))
         if hasattr(self, "_theme_row"):
             self._theme_row.setVisible(True)
         if hasattr(self, "_theme_step1_widget"):
@@ -4211,17 +4392,12 @@ class FlashPage(QWidget):
         if hasattr(self, "_theme_row"):
             self._theme_row.setVisible(False)
         self._hide_theme_wizard_chips()
+        self.dismiss_flash_question()
         self._progress_bar.set_precise_value(100.0)
         self.set_device_done()
         cb = getattr(self, "_theme_stage_done_cb", None)
         if callable(cb):
             cb()
-
-    def rockbox_power_on_prompt_key(self, model: str) -> str:
-        """One copy for both flash methods: the player may not have been powered
-        up by the flash tool, so the user powers it on before Next."""
-        is_y1 = (model or "").upper() == "Y1"
-        return "rockbox_power_on_prompt_sp_y1" if is_y1 else "rockbox_power_on_prompt_sp_other"
 
     def show_rockbox_power_on_prompt(
         self, prompt: str, on_continue=None, on_recover=None, after_firmware=False
@@ -4247,8 +4423,10 @@ class FlashPage(QWidget):
             self._cancel_btn.setVisible(False)
         self.set_step(tr("rockbox_stage_installing"))
         self._progress_bar.set_precise_value(90.0 if after_firmware else 0.0)
-        self._eta_label.setText(prompt)
-        self._eta_label.setWordWrap(True)
+        self._eta_label.setText("")
+        # The boot question takes the band's slot, with the Next chip that
+        # answers it beside the words.
+        self.show_flash_question(prompt)
         if hasattr(self, "_status_flow"):
             self._status_flow.set_forced_stacked(True)
         self._rockbox_power_on_continue_cb = on_continue
@@ -4623,7 +4801,8 @@ class FlashPage(QWidget):
             # settings and media" line would flatly contradict the question.
             self._keep_data_note.setText("")
             self._keep_data_note.setVisible(False)
-        self._keep_data_hint.setText(explainer or "")
+        self._keep_data_explainer = explainer or ""
+        self._keep_data_hint.setText(_styled_prompt_links(self._keep_data_explainer))
         self._keep_data_hint.setVisible(bool(explainer))
         if hasattr(self, "_keep_data_microsd_note"):
             # The erase explainer below already says media on the microSD is
@@ -5115,10 +5294,12 @@ class FlashPage(QWidget):
         self._apply_guide_highlight()
 
     def _apply_guide_highlight(self):
-        t = T()
+        from .dark import theme_text_color
+
+        colour = theme_text_color().name()
         for idx, (_key, label) in enumerate(self._guide_texts, start=1):
             if idx == self._guide_step:
-                label.setStyleSheet(f"color: {t.fg}; font-weight: 600;")
+                label.setStyleSheet(f"color: {colour}; font-weight: 600;")
             else:
                 label.setStyleSheet("")
 
@@ -5136,8 +5317,17 @@ class FlashPage(QWidget):
         self._platform = (platform or "").strip() or ""
         self._update_paperclip_hint()
 
-    def refresh_theme(self):
-        """Called when system theme or accent changes."""
+    def _refresh_copy_theme(self):
+        """Re-render copy whose markup carries a colour from the host palette.
+
+        Rich-text labels (the completion letter, the keep-data hints and the
+        in-app links) cannot use a QSS palette role, so their HTML is rebuilt
+        from the live palette whenever the system appearance changes. Called
+        from ``refresh_theme`` below.
+        """
+        self._apply_guide_highlight()
+        if getattr(self, "_keep_data_explainer", "") and hasattr(self, "_keep_data_hint"):
+            self._keep_data_hint.setText(_styled_prompt_links(self._keep_data_explainer))
         if hasattr(self, "_keep_data_microsd_note"):
             self._keep_data_microsd_note.setText(self._microsd_note_html())
         self._update_paperclip_hint()
@@ -5162,8 +5352,10 @@ class FlashPage(QWidget):
             # setting cannot be kept because a portable run stores nothing.
             from html import escape
 
-            muted = getattr(T(), "fg_muted", "") or ""
-            color = f"color:{muted}; " if muted else ""
+            from .dark import theme_placeholder_text_color
+
+            muted = theme_placeholder_text_color().name()
+            color = f"color:{muted}; "
             return (
                 f'<a href="portable-dont-ask" style="{color}text-decoration:none;">'
                 f'{escape(tr("donate_dont_ask_link"))}</a>'
@@ -5195,7 +5387,7 @@ class FlashPage(QWidget):
             f'<img src="{globe}" width="12" height="12" '
             'style="vertical-align: -1px;">'
         )
-        link = f'<a href="post-install">{tr("post_install_find_out_more")}</a>'
+        link = _themed_link("post-install", tr("post_install_find_out_more"))
         return tr("post_install_explain").format(
             globe=globe_html, find_out_more=link
         )
@@ -5780,6 +5972,9 @@ class FlashPage(QWidget):
             # card gets its software title back with it.
             self._prompt_only = False
             self._sync_wait_band_page()
+        if val > 0:
+            # A stage that reports again has answered its own question.
+            self.dismiss_flash_question()
         if val > 0 and getattr(self, "_wait_copy", "") == "please_wait":
             self._wait_copy = "stage"
         self._set_determinate(self._progress_bar, val)
@@ -6125,6 +6320,7 @@ class FlashPage(QWidget):
     def refresh_theme(self):
         from .dark import install_progress_readability
 
+        self._refresh_copy_theme()
         self._seal_status_labels()
         for bar_name in ("_prep_progress", "_wait_progress_bar", "_progress_bar", "_download_progress"):
             bar = getattr(self, bar_name, None)
