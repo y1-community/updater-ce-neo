@@ -163,7 +163,12 @@ def test_mtkclient_forgiving_handshake_and_progress_detection():
 
 def test_rockbox_themes_stage_power_on_and_fallback():
     """Rockbox post-flash flow begins with model-specific power-button guidance,
-    then falls back to asking if Rockbox is running if ADB is unavailable or times out."""
+    then the USB cable, and only then the USB storage/folder fallback.
+
+    Without an ADB client in the build the pack has to be placed by hand, but
+    the card still walks the user through unplugging, booting the player and
+    reconnecting it before it offers a drive to choose.
+    """
     from src.ui.flash_page import FlashPage
 
     app = _app()
@@ -181,15 +186,63 @@ def test_rockbox_themes_stage_power_on_and_fallback():
             on_troubleshoot=lambda: recover_called.append(True),
         )
 
-    # Because ADB is not found, falls back to USB storage mode guidance, which
-    # is the card's question and so takes the progress band's slot
-    assert not page._theme_row.isHidden()
-    assert not page._theme_fallback_widget.isHidden()
-    assert "usb storage mode" in page._flash_question_label.text().lower()
+        # Step 1 asks the boot question itself, in bold in the progress band,
+        # and the restore-original-software hint is not appropriate yet.
+        assert not page._theme_row.isHidden()
+        question = page._flash_question_label.text().lower()
+        assert "hold the centre button" in question
+        assert "your y1" in question
+        assert page._theme_fallback_widget.isHidden()
+        assert not page._theme_recover_link.isVisible()
+
+        # Step 2 asks for the cable: no drive can appear before it is in.
+        page._on_theme_step1_next_clicked()
+        assert "connect your y1 by usb" in page._flash_question_label.text().lower()
+        assert "storage mode" not in page._flash_question_label.text().lower()
+
+        # Only now does the storage-mode guidance take the band, and it names
+        # the drive the folder chip is for instead of a "Next" that is not
+        # there.
+        page._on_theme_step1_next_clicked()
+        assert not page._theme_fallback_widget.isHidden()
+        storage = page._flash_question_label.text().lower()
+        assert "usb storage mode" in storage
+        assert "choose the drive" in storage
 
     # User clicks Finish / completes stage -> triggers on_done
     page._finish_rockbox_themes_stage()
     assert done_called == [True]
+
+
+def test_cleanup_stage_asks_to_boot_before_claiming_removal():
+    """An MTKclient cleanup run asks for the boot first and does not claim to be
+    removing .rockbox while it is still waiting for the player."""
+    from src.ui.flash_page import FlashPage
+    from src.i18n import tr
+
+    app = _app()
+    page = FlashPage()
+    page.show()
+    try:
+        with patch("src.adb.find_adb_binary", return_value=None):
+            page.start_rockbox_cleanup_stage(model="Y1")
+
+            # Nothing is being removed: the question is the card's copy, and
+            # the cleanup step title must not stand over it.
+            assert page._step_label.text() != tr("rockbox_cleanup_step")
+            question = page._flash_question_label.text().lower()
+            assert "hold the centre button" in question
+            assert page._theme_fallback_widget.isHidden()
+
+            page._on_theme_step1_next_clicked()
+            assert "connect your y1 by usb" in page._flash_question_label.text().lower()
+            page._on_theme_step1_next_clicked()
+            assert page._step_label.text() != tr("rockbox_cleanup_step")
+            assert not page._theme_fallback_widget.isHidden()
+    finally:
+        page.stop_theme_workers()
+        page.close()
+        app.processEvents()
 
 
 def test_rockbox_themes_stage_with_adb_countdown():

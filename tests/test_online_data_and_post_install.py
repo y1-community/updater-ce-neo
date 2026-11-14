@@ -727,6 +727,36 @@ def test_keep_data_checkbox_follows_userdata_detection(qapp):
         page.deleteLater()
 
 
+def test_keep_data_warning_names_the_rockbox_settings_it_removes(qapp):
+    """A Rockbox install removes .rockbox too, so the warning has to say so."""
+    from src.i18n import tr
+    from src.ui.flash_page import FlashPage, _set_hint_dismissed
+
+    _set_hint_dismissed("keep_data_warning", False)
+    page = FlashPage()
+    try:
+        page.set_has_userdata(True)
+        page.set_model("Y1")
+        page.show_power_off_prompt()
+        page.set_keep_data_available(True)
+        page.set_rockbox_install(True)
+        page._on_keep_data_help()
+        assert page._keep_data_warning_sentence == tr(
+            "flash_keep_data_warning_rockbox_y1"
+        )
+        assert "Rockbox" in page._keep_data_warning.text()
+
+        page.set_model("Y2")
+        assert page._keep_data_warning_sentence == tr("flash_keep_data_warning_rockbox")
+
+        # A firmware install that is not Rockbox keeps the plain sentence.
+        page.set_rockbox_install(False)
+        assert page._keep_data_warning_sentence == tr("flash_keep_data_warning")
+    finally:
+        _set_hint_dismissed("keep_data_warning", False)
+        page.deleteLater()
+
+
 def test_keep_data_warning_is_model_appropriate(qapp):
     from src.i18n import tr
     from src.keep_data import keep_data_label

@@ -2083,6 +2083,10 @@ class FlashPage(QWidget):
         copy.insertWidget(copy.indexOf(self._keep_data_warning), self._keep_data_help_link)
         self._keep_data_cb.toggled.connect(self._update_keep_data_warning)
         self._keep_data_allowed = True
+        # Set by the window once it knows the package is Rockbox: the install's
+        # cleanup step removes .rockbox itself, so the Keep Data warning has to
+        # say that Rockbox settings go with it.
+        self._rockbox_install = False
         self._keep_data_confirm_active = False
         self._keep_data_erase_confirm_active = False
         self._keep_data_force_hidden = False
@@ -3682,9 +3686,10 @@ class FlashPage(QWidget):
         if hasattr(self, "_status_flow"):
             self._status_flow.set_forced_stacked(True)
 
-        self.set_step(
-            tr("rockbox_cleanup_step" if self._cleanup_stage else "rockbox_stage_installing")
-        )
+        # The cleanup stage names its removal when the removal starts (see
+        # ``_start_adb_cleanup``): at this point it is asking the user to boot
+        # the player, and nothing is being deleted yet.
+        self.set_step("" if self._cleanup_stage else tr("rockbox_stage_installing"))
         self._progress_bar.set_precise_value(90.0 if after_firmware else 0.0)
 
         model_str = (model or "Y1").upper()
@@ -3705,17 +3710,24 @@ class FlashPage(QWidget):
         from ..adb import find_adb_binary, adb_devices
         adb_bin = find_adb_binary()
         if not adb_bin:
-            self._log_theme("[Rockbox Themes] ADB binary not found on host/bundle. Guiding user via USB Storage Mode.")
-            self._show_theme_fallback_usb_mode()
-            return
+            # No ADB client in this build, so the pack has to be placed through
+            # USB storage mode. The guidance below still runs first — unplug,
+            # boot the player, reconnect the cable — and only the folder picker
+            # is left for the end. Opening with the folder would ask the user
+            # for a drive the powered-off player cannot show yet.
+            self._log_theme(
+                "[Rockbox Themes] No ADB client was found on this host; the player "
+                "is placed by hand after the power-on and USB steps."
+            )
+            existing_devices = []
+        else:
+            self._log_theme(f"[Rockbox Themes] Located ADB binary at: {adb_bin}")
 
-        self._log_theme(f"[Rockbox Themes] Located ADB binary at: {adb_bin}")
-
-        # Seamless mode: only a single player can be addressed over ADB —
-        # with more than one attached they share one serial, so every -s
-        # command fails. Fall through to the watch instead, which asks the
-        # user to disconnect down to one before the transfer starts.
-        existing_devices = adb_devices(adb_bin)
+            # Seamless mode: only a single player can be addressed over ADB —
+            # with more than one attached they share one serial, so every -s
+            # command fails. Fall through to the watch instead, which asks the
+            # user to disconnect down to one before the transfer starts.
+            existing_devices = adb_devices(adb_bin)
         if len(existing_devices) == 1:
             serial = existing_devices[0]
             self._log_theme(f"[Rockbox Themes] Seamless match: ADB device {serial} already detected! Pushing themes silently...")
@@ -3797,6 +3809,7 @@ class FlashPage(QWidget):
         if not adb_bin:
             self._show_theme_fallback_usb_mode()
             return
+        self.set_step(tr("rockbox_cleanup_step"))
         self.themes.reset_progress()
         worker = AdbRockboxCleanupWorker(adb_bin, serial, parent=self)
         self._rockbox_cleanup_worker = worker
@@ -3825,6 +3838,7 @@ class FlashPage(QWidget):
         if hasattr(self, "_theme_fallback_widget"):
             self._theme_fallback_widget.setVisible(False)
         self._hide_theme_wizard_chips()
+        self.set_step(tr("rockbox_cleanup_step"))
         self._eta_label.setText(tr("rockbox_cleanup_deleting"))
         self.themes.reset_progress()
         worker = LocalRockboxCleanupWorker(chosen, parent=self)
@@ -3878,6 +3892,20 @@ class FlashPage(QWidget):
         self._request_user_attention()
 
     def _start_theme_step2_connect_usb(self) -> None:
+        from ..adb import find_adb_binary
+
+        if not find_adb_binary():
+            # Nothing can be pushed without a client, so a countdown would only
+            # report a wait that can never end. The user has already been asked
+            # to boot the player and to connect it by cable (or SP Flash Tool
+            # rebooted it), so the drive that appears is the remaining route.
+            self._log_theme(
+                "[Rockbox Themes] No ADB client on this host; continuing with USB "
+                "storage mode."
+            )
+            self._show_theme_fallback_usb_mode()
+            return
+
         # This step runs its own countdown watch; two watchers would both claim
         # the same player and start the push twice.
         self._stop_adb_presence_watch()
@@ -3925,12 +3953,8 @@ class FlashPage(QWidget):
             self._flash_head._sync_to_band()
         self._log_theme(f"[Rockbox Themes] Step 2: Waiting for USB connection and ADB handshake ({self._adb_watch_seconds}s timeout)...")
 
-        from ..adb import find_adb_binary
         from ..theme_pack import AdbWatchWorker
         adb_bin = find_adb_binary()
-        if not adb_bin:
-            self._show_theme_fallback_usb_mode()
-            return
 
         self._adb_watch_worker = AdbWatchWorker(adb_bin, timeout=float(self._adb_watch_seconds), parent=self)
         self._adb_watch_worker.found.connect(self._on_adb_device_found)
@@ -4132,13 +4156,18 @@ class FlashPage(QWidget):
             )
         else:
             self._log_theme("[Rockbox Themes] Guiding user: Please enable USB storage mode.")
-        self.set_step(
-            tr("rockbox_cleanup_step" if self._cleanup_stage else "rockbox_stage_installing")
-        )
+        # A cleanup that has not started removing anything yet has no step to
+        # report: the card is asking for the player's drive, and "Removing the
+        # old Rockbox settings" would claim work that is not happening.
+        self.set_step("" if self._cleanup_stage else tr("rockbox_stage_installing"))
         self._eta_label.setText("")
         # The storage-mode instruction is the card's current question, so it
-        # takes the band with the folder chip beside it.
-        self.show_flash_question(tr("rockbox_step_usb_storage_mode"))
+        # takes the band with the folder chip beside it — and it names the drive
+        # as the thing to choose, because that chip is the folder picker.
+        model_str = self.themes.model.upper()
+        self.show_flash_question(
+            tr("rockbox_step_usb_storage_folder").format(model=model_str)
+        )
         if hasattr(self, "_theme_row"):
             self._theme_row.setVisible(True)
         if hasattr(self, "_theme_step1_widget"):
@@ -4570,6 +4599,29 @@ class FlashPage(QWidget):
             self._keep_data_cb.setChecked(self._has_userdata and bool(preserve_data_default))
         self._sync_keep_data_visibility()
 
+    def set_rockbox_install(self, rockbox: bool) -> None:
+        """Remember that this install lays down Rockbox.
+
+        Rockbox keeps its themes, fonts and presets in ``.rockbox``, which the
+        install removes when Keep my settings is unticked. The warning beside
+        the tick therefore has to name them, not only the firmware's own data.
+        """
+        rockbox = bool(rockbox)
+        if rockbox == getattr(self, "_rockbox_install", False):
+            return
+        self._rockbox_install = rockbox
+        self._update_keep_data_warning()
+
+    def _keep_data_warning_key(self, *, y1_like: bool) -> str:
+        """Which "if you continue without this" sentence fits this install."""
+        if getattr(self, "_rockbox_install", False):
+            return (
+                "flash_keep_data_warning_rockbox_y1"
+                if y1_like
+                else "flash_keep_data_warning_rockbox"
+            )
+        return "flash_keep_data_warning_y1" if y1_like else "flash_keep_data_warning"
+
     def set_keep_data_available(self, available: bool, label: str = "") -> None:
         """Gate the tick on the connect / power-off card.
 
@@ -4657,8 +4709,7 @@ class FlashPage(QWidget):
                 )
                 text = tr(key)
             elif not cb.isChecked():
-                key = "flash_keep_data_warning_y1" if y1_like else "flash_keep_data_warning"
-                text = tr(key)
+                text = tr(self._keep_data_warning_key(y1_like=y1_like))
         # Only the "if you continue without this" explanation waits behind a
         # link: an unavailable or format-all warning is news the reader needs
         # now and stays on the card. The link is the explanation's only door,

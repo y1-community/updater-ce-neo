@@ -2085,6 +2085,25 @@ _STRINGS: dict = {
         "fr": "Si vous continuez sans cette option, vos réglages et vos médias seront réinitialisés dans la mémoire interne du lecteur.",
         "es": "Si continúas sin esta opción, tus ajustes y archivos se restablecerán en el almacenamiento interno del reproductor.",
     },
+    # A Rockbox install also removes the player's .rockbox folder (themes,
+    # fonts and Rockbox's own presets) when Keep my settings is unticked, so
+    # that is what the warning beside the tick has to name.
+    "flash_keep_data_warning_rockbox_y1": {
+        "en": "If you continue without this, your Rockbox themes, fonts and settings will be removed. Your music and other media will stay on the player.",
+        "zh-CN": "如果不保留，您的 Rockbox 主题、字体和设置将被删除。音乐和其他媒体仍会保留在播放器上。",
+        "de": "Wenn Sie ohne diese Option fortfahren, werden Ihre Rockbox-Themes, Schriftarten und Einstellungen entfernt. Musik und andere Medien bleiben auf dem Player.",
+        "fr": "Si vous continuez sans cette option, vos thèmes, polices et réglages Rockbox seront supprimés. Votre musique et vos autres médias resteront sur le lecteur.",
+        "es": "Si continúas sin esta opción, se eliminarán tus temas, fuentes y ajustes de Rockbox. Tu música y otros archivos permanecerán en el reproductor.",
+        "ja": "このオプションを選ばずに続行すると、Rockbox のテーマ・フォント・設定が削除されます。音楽などのメディアはプレーヤーに残ります。",
+    },
+    "flash_keep_data_warning_rockbox": {
+        "en": "If you continue without this, your Rockbox themes, fonts and settings will be removed, and the player's internal storage will be reset.",
+        "zh-CN": "如果不保留，您的 Rockbox 主题、字体和设置将被删除，播放器的内部存储也会被重置。",
+        "de": "Wenn Sie ohne diese Option fortfahren, werden Ihre Rockbox-Themes, Schriftarten und Einstellungen entfernt und der interne Speicher des Players zurückgesetzt.",
+        "fr": "Si vous continuez sans cette option, vos thèmes, polices et réglages Rockbox seront supprimés et le stockage interne du lecteur sera réinitialisé.",
+        "es": "Si continúas sin esta opción, se eliminarán tus temas, fuentes y ajustes de Rockbox y se restablecerá el almacenamiento interno del reproductor.",
+        "ja": "このオプションを選ばずに続行すると、Rockbox のテーマ・フォント・設定が削除され、プレーヤーの内部ストレージも初期化されます。",
+    },
     "flash_keep_data_warning_y1": {
         "en": "If you continue without this, your settings will be reset. Your music and other media will stay on the player.",
         "zh-CN": "如果不保留，您的设置将被重置。音乐和其他媒体仍会保留在播放器上。",
@@ -6703,6 +6722,16 @@ _STRINGS: dict = {
         "fr": "Veuillez activer le mode stockage USB sur votre appareil et cliquer sur Suivant",
         "es": "Activa el modo de almacenamiento USB en tu dispositivo y haz clic en Siguiente",
         "ja": "デバイスで USB ストレージモードを有効にして、次へをクリックしてください",
+    },
+    # The folder chip is the answer to this one, so it says what to choose
+    # rather than "click Next": the chip is the picker, not a step forward.
+    "rockbox_step_usb_storage_folder": {
+        "en": "Please enable USB storage mode on your {model}, then choose the drive that appears",
+        "zh-CN": "请在您的 {model} 上开启 USB 存储模式，然后选择出现的磁盘",
+        "de": "Bitte aktivieren Sie den USB-Speichermodus auf Ihrem {model} und wählen Sie dann das angezeigte Laufwerk",
+        "fr": "Veuillez activer le mode stockage USB sur votre {model}, puis choisissez le disque qui apparaît",
+        "es": "Activa el modo de almacenamiento USB en tu {model} y elige la unidad que aparezca",
+        "ja": "{model} で USB ストレージモードを有効にしてから、表示されるドライブを選択してください",
     },
     "rockbox_step_select_player_folder": {
         "en": "Please select the player itself or one of the folders on it",

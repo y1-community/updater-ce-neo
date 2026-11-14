@@ -5302,6 +5302,9 @@ class MainWindow(QMainWindow):
         self._flash_page.set_model(self._package_model)
         self._flash_page.set_method(self._flash_method)
         self._flash_page.set_power_off_only(self._install_first_power_off_only)
+        # The Keep Data warning on this card has to name what the install's
+        # cleanup step removes: a Rockbox package loses its .rockbox folder.
+        self._flash_page.set_rockbox_install(self._is_rockbox_install())
         keep_data_default = self._keep_data_default_for_install()
         try:
             from ..flash_service import completed_extract_dir, compute_extract_dir, _find_scatter, _parse_scatter_platform
