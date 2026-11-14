@@ -1,4 +1,4 @@
-def _read_app_version(default="2.5.5"):
+def _read_app_version(default="2.5.6"):
     """One source of truth: src/config.py's APP_VERSION."""
     import re as _re
     from pathlib import Path as _Path

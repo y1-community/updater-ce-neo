@@ -54,7 +54,7 @@ from .session import (
 )
 from .simulate import install_progress, rockbox_themes
 
-TITLE_VERSION = "2.5.5"
+TITLE_VERSION = "2.5.6"
 
 # The same payload the window installs. Keeping these URLs here means the
 # text session does not import theme_pack.py, which imports PySide6 at module
