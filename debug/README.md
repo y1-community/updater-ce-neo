@@ -58,6 +58,39 @@ session: unplug it, power it off, and start over.
 6. Known-good reference: the same Rockbox ROM flashed with SP Flash Tool (Windows) boots; capture it
    with `readback` for comparison.
 
+## Archiving a firmware that has no scatter
+
+`y2_archive_readback.py` is the scatter-free variant: it takes a raw read-only snapshot and
+derives the layout from the device's own MBR/EBR chain.
+
+```
+python debug/y2_archive_readback.py capture debug/work/y2_324_capture \
+    --scatter <package>/MT6582_Android_scatter.txt   # per-partition read at the layout's addresses
+python debug/y2_archive_readback.py dump  debug/work/archive_y2_324           # raw snapshot + slice
+python debug/y2_archive_readback.py slice debug/work/archive_y2_324           # re-slice offline
+python debug/y2_archive_readback.py dump  debug/work/archive_y2_324 --print   # command only
+```
+
+`capture` is the one to use once a package scatter for the device family is available: it reads
+each partition at `physical_start_addr + 0xB80000` (the bias proven on a stock 3.2.4 Y2), exactly
+`partition_size` bytes, so every file is the size a real package carries. It self-checks by
+comparing the MBR it read against the package's own `MBR` image and refuses to write package
+metadata if they differ.
+
+It sends `ro` / `rf` only — there is no write or erase command in the file — and produces
+`user_area.raw`, `boot1_head.bin`, and an `archive/` folder with per-partition images, the raw
+preloader sliced out of EMMC_BOOT_1, a generated scatter, `fw_package.ini`, `SHA256SUMS` and
+`manifest.json`.
+
+The address trap it exists to avoid: a scatter's `physical_start_addr` is not a device address
+(the engine writes at `physical_start_addr + 0x800000` for Y2), so reading at the scatter's linear
+addresses is how an earlier session came back with an all-zero MBR. `slice` scans the first 32 MiB
+for 55AA sectors and keeps the base whose chain describes the most partitions — on a stock 3.2.4 Y2
+that is 0xB80000, and an EBR sector's 55AA is why it cannot simply take the first hit. The MBR/EBR
+chain describes only part of an MTK layout (no UBOOT/BOOTIMG/RECOVERY/LOGO), so the rest is filled
+in from the reference Y2 table after a content check, and each image records which of the two it
+came from in `manifest.json`. USRDATA/CACHE/FAT are skipped unless `--include-user-content`.
+
 ## Layout
 - `y2_mtk_test.py` — the harness. `--da tools/linux/SP_Flash_Tool_v5.1904_Linux/MTK_AllInOne_DA.bin`
   (the Innioasis DA) works as-is; it is copied to an `mt6590`-named temp file automatically.
