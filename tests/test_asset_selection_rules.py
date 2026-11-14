@@ -15,6 +15,7 @@ if str(ROOT) not in sys.path:
 
 from src import catalog, manifest  # noqa: E402
 from src.catalog import FirmwarePackage, ReleasesClient  # noqa: E402
+from src.config import detect_model_and_type_from_name  # noqa: E402
 
 REPO_Y2 = "JonaszPotoniec/inniclassic-y2"
 TAG = "v2.0.0"
@@ -132,6 +133,60 @@ def test_a_lone_non_rom_zip_is_still_a_firmware_candidatein_a_repo_without_rom_z
     assert [v["asset"]["name"] for v in variants] == [
         "Y2Linux-1.0-first-install.zip"
     ]
+
+
+# ---------------------------------------------------------------------------
+# A release that names its model / revision in each zip
+# ---------------------------------------------------------------------------
+
+CLASSY = "ClassyPlayer/Classy"
+CLASSY_ASSETS = (
+    "classy-y1-exp.2-type-a.zip",
+    "classy-y1-exp.2-type-b.zip",
+)
+
+
+def test_each_zip_naming_its_revision_is_readable_in_one_release():
+    """No rom*.zip at all: the names still say Y1 Type A and Y1 Type B."""
+    variants = catalog._release_rom_variants(
+        [_asset(name) for name in CLASSY_ASSETS], "exp.2-y1", CLASSY
+    )
+    assert [
+        (v["asset"]["name"], v["model"], v["type"], v["model_explicit"])
+        for v in variants
+    ] == [
+        ("classy-y1-exp.2-type-a.zip", "Y1", "A", True),
+        ("classy-y1-exp.2-type-b.zip", "Y1", "B", True),
+    ]
+
+
+def test_the_named_zip_rule_lands_on_the_chosen_revision():
+    """A Y1 Type B pick downloads the Type B archive from such a release."""
+    client = ReleasesClient.__new__(ReleasesClient)
+    release = _raw_release("exp.2-y1", CLASSY_ASSETS, "Y1 experimental 2")
+    client.get_all_releases = lambda repo, force_refresh=False: client._build_releases(
+        [release], repo
+    )
+    package = FirmwarePackage("classy-y1", "Classy", "Y1", CLASSY, "")
+    rows = client.releases_for_package(package, "Y1", selected_type="B")
+    assert [row["asset_name"] for row in rows] == ["classy-y1-exp.2-type-b.zip"]
+
+
+def test_one_unnamed_zip_leaves_the_release_unreadable():
+    """Guessing is still refused when an archive does not say what it is."""
+    variants = catalog._release_rom_variants(
+        [_asset("classy-y1-exp.2-type-b.zip"), _asset("aa11bb22cc33.zip")],
+        TAG,
+        CLASSY,
+    )
+    assert variants == []
+
+
+def test_a_type_revision_spelled_with_a_space_is_still_read():
+    assert detect_model_and_type_from_name("Classy Y1 Type B.zip") == ("Y1", "B")
+    assert detect_model_and_type_from_name("Classy-Y1-TypeB.zip") == ("Y1", "B")
+    # A word that merely contains "typeb" is not a revision marker.
+    assert detect_model_and_type_from_name("prototypebase.zip") == ("", None)
 
 
 # ---------------------------------------------------------------------------

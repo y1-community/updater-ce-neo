@@ -292,14 +292,43 @@ def is_y1_model(model: str) -> bool:
     return "Y1" in (model or "").upper()
 
 
+#: How a firmware file name spells its hardware revision. Only the Y1 ships
+#: two revisions, so a revision marker also names the model: a zip called
+#: ``classy-y1-exp.2-type-b.zip`` is Y1 Type B without ever saying "rom".
+#: Every separator a release author uses is accepted (``type_b``, ``type-b``,
+#: ``type b``, ``typeb``, and a numbered ``type_b2``), but the marker has
+#: to stand on its own: the word "prototypebase" is not a Type B. Revision B
+#: is tested first because it is the one that changes what gets flashed.
+HW_TYPE_IN_NAME = {
+    "B": re.compile(r"type[-_. ]?b(?![a-z])"),
+    "A": re.compile(r"type[-_. ]?a(?![a-z])"),
+}
+
+
+def hw_type_in_name(name: str) -> str | None:
+    """The hardware revision (``"A"`` / ``"B"``) a file name states, or ``None``.
+
+    One reader for every name-based rule: the local-file importer, the
+    catalogue's asset classifier and the release tag all ask this, so a naming
+    convention accepted in one place is accepted in all of them.
+    """
+    lower = str(name or "").lower().replace("\\", "/")
+    for revision in ("B", "A"):
+        if HW_TYPE_IN_NAME[revision].search(lower):
+            return revision
+    return None
+
+
 def detect_model_and_type_from_name(name_or_url: str) -> tuple[str, str | None]:
     """Detect device model (Y1, Y2, A5, etc.) and type variant (A or B)
     from the original file name, asset name, or download URL.
-    
+
     Examples:
       rom_y2.zip, *_y2*.zip -> ("Y2", None)
       rom_a5.zip, *_a5*.zip -> ("A5", None)
       rom_type_b.zip, *_type_b*.zip -> ("Y1", "B")
+      classy-y1-exp.2-type-a.zip -> ("Y1", "A")
+      Classy Y1 Type B.zip -> ("Y1", "B")
       rom.zip, rom_type_a.zip -> ("Y1", "A")
     """
     if not name_or_url:
@@ -334,20 +363,13 @@ def detect_model_and_type_from_name(name_or_url: str) -> tuple[str, str | None]:
     ):
         return "Y2", None
 
-    # 3. Type B (Y1 variant)
-    if (
-        "type_b" in base
-        or "type-b" in base
-        or "typeb" in base
-        or "rom_type_b" in base
-        or "rom-type-b" in base
-        or base.endswith(("_b.zip", "-b.zip"))
-    ):
-        return "Y1", "B"
-
-    # 4. Type A (Y1 variant)
-    if "type_a" in base or "type-a" in base or "rom_type_a" in base or "rom-type-a" in base:
-        return "Y1", "A"
+    # 3. Hardware revision (Y1 has both; every other model is unqualified).
+    #    The legacy "-b.zip" / "_b.zip" suffix still counts as Type B.
+    stated_type = hw_type_in_name(base)
+    if stated_type is None and base.endswith(("_b.zip", "-b.zip")):
+        stated_type = "B"
+    if stated_type:
+        return "Y1", stated_type
 
     # 5. Non-legacy registered models (G1/G3/G5, Q3E/Q5/Q8...). These have no
     #    catalogue entry yet, but firmware for them can still be imported by

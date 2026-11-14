@@ -31,6 +31,7 @@ from .config import (
     RELEASE_CACHE_TTL_SECONDS,
     REPO_MIN_RELEASE_VERSION,
     UPDATE_CACHE_TTL_SECONDS,
+    hw_type_in_name,
     resolve_firmware_repo,
 )
 
@@ -453,17 +454,9 @@ def _parse_rom_asset_variant(asset, tag_name="", repo="", has_explicit_type_asse
 
         tag_lower = (tag_name or "").lower()
         if hw_type is None:
-            is_explicit_b = any(
-                tok in lower for tok in (
-                    "_type_b", "-type-b", "type-b", " type b", "type_b", "typeb",
-                    "_b.zip", "-b.zip",
-                )
-            )
-            is_type_b = is_explicit_b
-            if not is_type_b and not has_explicit_type_assets and any(
-                tok in tag_lower for tok in ("type-b", "type_b", "type b", "typeb")
-            ):
-                is_type_b = True
+            is_type_b = _names_type_b(lower)
+            if not is_type_b and not has_explicit_type_assets:
+                is_type_b = hw_type_in_name(tag_lower) == "B"
             hw_type = "B" if is_type_b else "A"
 
         if "_360p" in lower:
@@ -648,6 +641,36 @@ def _is_portable_bundle_name(name):
     return any(lower.endswith(suffix) for suffix in PORTABLE_BUNDLE_SUFFIXES)
 
 
+def _names_type_b(name) -> bool:
+    """Whether a file name states the Type B hardware revision.
+
+    ``type_b`` / ``type-b`` / ``type b`` / ``typeb`` all count (see
+    :func:`config.hw_type_in_name`), as does the legacy ``-b.zip`` suffix the
+    pre-2.0 builds were published under.
+    """
+    lower = str(name or "").lower()
+    return hw_type_in_name(lower) == "B" or lower.endswith(("_b.zip", "-b.zip"))
+
+
+def _names_firmware_target(name) -> bool:
+    """Whether a zip's own name says which player it is for.
+
+    Releases that never adopted the ``rom*.zip`` convention name the model or
+    the hardware revision instead (``classy-y1-exp.2-type-a.zip`` beside
+    ``classy-y1-exp.2-type-b.zip``). Such a name ties the archive to a player,
+    which is what lets a release offer several of them at once; a zip whose
+    name says nothing about the hardware gives no way to tell them apart.
+    """
+    lower = str(name or "").strip().lower()
+    if not lower.endswith(".zip"):
+        return False
+    if hw_type_in_name(lower):
+        return True
+    if _classify_variant_model(name) in ("Y1", "Y2", "A5"):
+        return True
+    return bool(_registered_model_in(lower))
+
+
 def _is_nonfirmware_zip_name(name):
     """True for a zip a release publishes beside its firmware.
 
@@ -726,10 +749,7 @@ def _release_rom_variants(
     if pat:
         matched = [a for a in assets if fnmatch((a.get("name") or "").lower(), pat)]
         if matched:
-            has_b = any(
-                any(tok in (a.get("name") or "").lower() for tok in ("_type_b", "-type-b", "type-b", " type b", "type_b", "typeb", "_b.zip", "-b.zip"))
-                for a in matched
-            )
+            has_b = any(_names_type_b(a.get("name")) for a in matched)
             variants = [_parse_rom_asset_variant(a, tag_name, repo, has_explicit_type_assets=has_b, package=package) for a in matched]
             return [v for v in variants if v]
 
@@ -739,16 +759,7 @@ def _release_rom_variants(
     ]
     rom_assets = [a for a in firmware_assets if _is_rom_zip_name(a.get("name"))]
     target_assets = rom_assets if rom_assets else firmware_assets
-    has_explicit = any(
-        any(
-            tok in (a.get("name") or "").lower()
-            for tok in (
-                "_type_b", "-type-b", "type-b", " type b", "type_b", "typeb",
-                "_b.zip", "-b.zip",
-            )
-        )
-        for a in target_assets
-    )
+    has_explicit = any(_names_type_b(a.get("name")) for a in target_assets)
     if rom_assets:
         variants = [_parse_rom_asset_variant(a, tag_name, repo, has_explicit_type_assets=has_explicit, package=package) for a in rom_assets]
         return [v for v in variants if v]
@@ -769,6 +780,23 @@ def _release_rom_variants(
     portable_only = bool(zips) and all(
         _is_portable_bundle_name(a.get("name")) for a in zips
     )
+    # A project that names each archive after its player (model and/or hardware
+    # revision) has told us which zip is which, so several of them are readable
+    # in one release: classy ships classy-y1-exp.2-type-a.zip beside
+    # classy-y1-exp.2-type-b.zip and no rom*.zip at all. Every zip in the
+    # release has to carry such a name; one unnamed archive leaves the release
+    # to the single-archive rule below rather than guessing.
+    named = [a for a in zips if _names_firmware_target(a.get("name"))]
+    if len(named) > 1 and len(named) == len(zips):
+        variants = [
+            _parse_rom_asset_variant(
+                a, tag_name, repo, has_explicit_type_assets=has_explicit, package=package
+            )
+            for a in named
+        ]
+        variants = [v for v in variants if v]
+        if variants:
+            return variants
     if len(zips) == 1 or portable_only:
         variants = [_parse_rom_asset_variant(a, tag_name, repo, has_explicit_type_assets=has_explicit, package=package) for a in zips]
         variants = [v for v in variants if v]
