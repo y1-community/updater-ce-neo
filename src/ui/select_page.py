@@ -920,11 +920,12 @@ class SelectPackagePage(QWidget):
         # Why Keep Data will not be offered, said next to the software name it
         # applies to: the install card otherwise only asks once the device is
         # connected, and the answer is already known here.
-        self._keep_data_note = QLabel(tr("sel_keep_data_incompatible"))
-        self._keep_data_note.setWordWrap(True)
-        self._keep_data_note.setProperty("cssClass", "hint")
-        self._keep_data_note.setVisible(False)
-        filter_layout.addWidget(self._keep_data_note, 3, 0, 1, 4)
+        # Removed to prevent showing keep data notice on filters card.
+        # self._keep_data_note = QLabel(tr("sel_keep_data_incompatible"))
+        # self._keep_data_note.setWordWrap(True)
+        # self._keep_data_note.setProperty("cssClass", "hint")
+        # self._keep_data_note.setVisible(False)
+        # filter_layout.addWidget(self._keep_data_note, 3, 0, 1, 4)
 
         filter_layout.setColumnStretch(1, 1)
         filter_layout.setColumnStretch(3, 1)
@@ -957,6 +958,9 @@ class SelectPackagePage(QWidget):
         self._active_notices = []
         self._notice_prompt = NoticeToast()
         self._notice_prompt.list_requested.connect(self._open_notices_list)
+        # The banner is a row in this column, so showing or closing it changes
+        # how tall the page is: the window has to be measured again.
+        self._notice_prompt.dismissed.connect(self._on_notice_dismissed)
         layout.addWidget(self._notice_prompt)
 
         from ..notice_service import NoticeService
@@ -1840,8 +1844,8 @@ class SelectPackagePage(QWidget):
         self._model_label.setText(f"{tr('sel_model')}:")
         self._type_label.setText(f"{tr('sel_type')}:")
         self._software_label.setText(f"{tr('sel_software')}:")
-        if hasattr(self, "_keep_data_note"):
-            self._keep_data_note.setText(tr("sel_keep_data_incompatible"))
+        # if hasattr(self, "_keep_data_note"):
+        #     self._keep_data_note.setText(tr("sel_keep_data_incompatible"))
         self._refresh_btn.setText(tr("sel_refresh"))
         self._install_btn.setText(tr("sel_install"))
         if self._current_selected_rel:
@@ -2108,8 +2112,23 @@ class SelectPackagePage(QWidget):
         self._sync_notice_context()
 
     def _on_notice_ready(self, notice) -> None:
-        if hasattr(self, "_notice_prompt") and self._notice_prompt is not None:
-            self._notice_prompt.set_notice(notice)
+        if not (hasattr(self, "_notice_prompt") and self._notice_prompt is not None):
+            return
+        # isHidden() is the widget's own state; isVisible() is also false while
+        # an ancestor is off screen, which would miss the next real change.
+        was_hidden = self._notice_prompt.isHidden()
+        self._notice_prompt.set_notice(notice)
+        # A notice arrives after the catalogue is already on screen, and its
+        # row pushes the release card (Install / See more) down. Without a new
+        # measurement the window kept the height it fitted to before the
+        # banner existed, so the actions were clipped below the frame.
+        if was_hidden != self._notice_prompt.isHidden():
+            self.content_size_changed.emit()
+            QTimer.singleShot(100, lambda: self.window().adjustSize())
+
+    def _on_notice_dismissed(self) -> None:
+        """The banner left the column: give its height back to the cards."""
+        self.content_size_changed.emit()
 
     def _on_notices_ready(self, notices) -> None:
         self._active_notices = list(notices or [])
@@ -2259,31 +2278,8 @@ class SelectPackagePage(QWidget):
         self._update_keep_data_note()
 
     def _update_keep_data_note(self) -> None:
-        """Say in advance when the player's current firmware blocks Keep Data.
-
-        The catalogue already knows both firmware families, so the refusal is
-        certain before the device is connected. It belongs beside the Software
-        choice, not only on the install card after the player is plugged in.
-        """
-        note = getattr(self, "_keep_data_note", None)
-        if note is None:
-            return
-        try:
-            from .. import keep_data
-
-            blocked = keep_data.incompatible_with_current(
-                self.current_model(),
-                self.current_package(),
-                getattr(self, "settings", None),
-                hardware_type=self.current_hardware_type(),
-            )
-        except Exception:
-            logger.debug("Could not evaluate the Keep Data note", exc_info=True)
-            blocked = False
-        if note.isHidden() == (not blocked):
-            return
-        note.setVisible(bool(blocked))
-        self.content_size_changed.emit()
+        """Say in advance when the player's current firmware blocks Keep Data."""
+        pass
 
     def _sync_notice_context(self) -> None:
         """Report what the reader is looking at, so notices can be contextual.
@@ -2582,7 +2578,22 @@ class SelectPackagePage(QWidget):
                 if page_layout is not None:
                     self._invalidate_layout_tree(page_layout)
                     page_layout.activate()
-                hint_h = max(hint_h, notes_needed + 140)
+                # Re-measure rather than substituting a constant: the pinned
+                # minimums are now part of the layout, and every other row —
+                # the notice banner above all — has to be counted with them.
+                # A fixed ``notes_needed + 140`` used to stand in for the rest
+                # of the page, so a banner that appeared after the first fit
+                # could be swallowed whole and the window never grew.
+                if content is not None:
+                    hint_h = max(
+                        hint_h,
+                        content.sizeHint().height(),
+                        content.minimumSizeHint().height(),
+                    )
+                else:
+                    hint_h = max(
+                        hint_h, self.sizeHint().height(), self.minimumSizeHint().height()
+                    )
         return hint_h
 
     def content_width_hint(self) -> int:
@@ -2788,6 +2799,67 @@ class SelectPackagePage(QWidget):
         )
         return assets or ""
 
+    def _refresh_manifest_for_selection(self) -> None:
+        """Pick up manifest edits as soon as a firmware is chosen to install.
+
+        Which software needs a base, and from which systems, is decided entirely
+        by ``slidia_manifest.xml``, so a corrected manifest has to reach the
+        install that follows the click rather than the next launch.        The fetch is
+        off the UI thread and throttled to the manifest's own freshness window,
+        so clicking through rows costs one small request every few minutes at
+        most. Offline, the cached copy stays in use and this changes nothing.
+        """
+        import time
+
+        try:
+            from ..manifest import MANIFEST_CACHE_TTL_SECONDS
+            from ..online_data import age_seconds
+        except Exception:
+            return
+        window = self.window()
+        # Never re-list the catalogue under a running download or flash: the
+        # release it is installing is already captured, and the install card
+        # must keep the icon and name it started with.
+        if callable(getattr(window, "_install_run_active", None)):
+            try:
+                if window._install_run_active():
+                    return
+            except Exception:
+                pass
+        now = time.time()
+        last = float(getattr(self, "_selection_manifest_check_at", 0.0) or 0.0)
+        if now - last < MANIFEST_CACHE_TTL_SECONDS:
+            return
+        running = getattr(self, "_manifest_worker", None)
+        if running is not None and getattr(running, "isRunning", lambda: False)():
+            return
+        self._selection_manifest_check_at = now
+        age = age_seconds("slidia_manifest.xml", now=now)
+        # A cold cache is the startup and connectivity refresh's job: a click on
+        # a row must never be the first request. Past the freshness window the
+        # fetch runs here, off the UI thread, and only installs the entries into
+        # the catalogue (no re-list): the listing on screen keeps its selection
+        # and the install that follows reads the fresh attributes.
+        if age is None or age < MANIFEST_CACHE_TTL_SECONDS:
+            return
+        # A plain daemon thread, not a QThread: this only re-reads the manifest
+        # into the parsed catalogue (``refresh_catalog`` installs the entries
+        # itself), never the page's listing. Nothing on screen depends on when
+        # it finishes, and there is no worker to outlive the window. A failed
+        # fetch changes nothing: the catalogue already loaded stays in use.
+        try:
+            import threading
+
+            from ..manifest import refresh_catalog
+        except Exception:
+            return
+        threading.Thread(
+            target=refresh_catalog,
+            kwargs={"force_refresh": True},
+            name="manifest-refresh-for-selection",
+            daemon=True,
+        ).start()
+
     def _on_release_selected(self, current, _prev):
         self._install_btn.setEnabled(current is not None)
         if current is None:
@@ -2813,6 +2885,7 @@ class SelectPackagePage(QWidget):
                 self._gui_previous_identity = None
             self._current_selected_rel = rel
             self._details_package = self._package_for_selection()
+            self._refresh_manifest_for_selection()
             self._is_translated = False
             self._is_translating = False
             self._set_notes_content(self._render_release_notes(rel, as_html=True))
@@ -3223,9 +3296,16 @@ class SelectPackagePage(QWidget):
         """
         self._install_guard = guard
 
-    def start_release_install(self, rel, package=None, *, prompt=False) -> None:
-        """Start an install the window chose (Install Firmware First)."""
-        self._trigger_release_install(rel, package=package, prompt=prompt, guard=False)
+    def start_release_install(self, rel, package=None, *, prompt=False, guard=True) -> None:
+        """Start an install the window chose (Install Firmware First).
+
+        The install-first question is asked here too: this path used to skip
+        the guard, so a firmware declaring ``install_first`` was installed
+        without ever asking which software the player runs. The journey's own
+        continuations (the base step, the target after it) pass ``guard=False``
+        because their answer is already recorded.
+        """
+        self._trigger_release_install(rel, package=package, prompt=prompt, guard=guard)
 
     def _trigger_release_install(self, rel, package=None, *, prompt=True, guard=True):
         local_pkg = (rel or {}).get("local_package")

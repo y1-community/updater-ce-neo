@@ -58,6 +58,7 @@ from ..progress_model import format_eta_seconds
 from .support_appeal import (
     COMPLETION_BODY_KEYS,
     COMPLETION_KEYS,
+    ONE_MORE_THING_KEYS,
     THEMES_COMPLETION_KEYS,
     DeveloperPortrait,
     SupportIntro,
@@ -65,6 +66,7 @@ from .support_appeal import (
 from .widgets import (
     Banner,
     Card,
+    CollapsibleWidget,
     CurrentPageStack,
     InfoRow,
     InstallProgress,
@@ -85,9 +87,17 @@ _READY_HEADING = re.compile(
 )
 
 
-def _themed_link(href: str, text: str) -> str:
-    """An in-app link in the theme foreground, with no visited or clicked tint."""
-    return link_html(text, bold=False).replace('href="#"', f'href="{href}"', 1)
+def _themed_link(href: str, text: str, *, underline: bool = False) -> str:
+    """An in-app link in the theme foreground, with no visited or clicked tint.
+
+    ``underline`` is for a link that sits on its own line rather than inside a
+    sentence: the completion letter's "What to do if it doesn't start up" reads
+    as an action there, and the platform's link tint is already suppressed.
+    """
+    html = link_html(text, bold=False).replace('href="#"', f'href="{href}"', 1)
+    if underline:
+        html = html.replace("text-decoration: none;", "text-decoration: underline;", 1)
+    return html
 
 
 def _styled_prompt_links(html: str) -> str:
@@ -150,6 +160,24 @@ def _set_hint_dismissed(name: str, dismissed: bool = True, settings=None) -> Non
     """Remember, across launches, that ``name`` has been read."""
     store = settings if settings is not None else QSettings("innioasis", "updater")
     store.setValue(f"{_HINT_DISMISS_GROUP}/{name}", bool(dismissed))
+
+
+#: Settings group for hints that opened once without being asked for. It is
+#: kept apart from the dismissal key so a past Got it never re-triggers the
+#: one automatic showing, and the automatic showing never counts as a dismissal.
+_HINT_SEEN_GROUP = "seen_install_hints"
+
+
+def _hint_seen(name: str, settings=None) -> bool:
+    """True when ``name`` has already had its one automatic showing."""
+    store = settings if settings is not None else QSettings("innioasis", "updater")
+    return bool(store.value(f"{_HINT_SEEN_GROUP}/{name}", False, type=bool))
+
+
+def _set_hint_seen(name: str, seen: bool = True, settings=None) -> None:
+    """Remember, across launches, that ``name`` has been shown on its own once."""
+    store = settings if settings is not None else QSettings("innioasis", "updater")
+    store.setValue(f"{_HINT_SEEN_GROUP}/{name}", bool(seen))
 from .icons import get_symbol_data_uri, get_symbol_icon, get_symbol_pixmap
 from .native_controls import (
     NativeRoundChip,
@@ -1777,6 +1805,10 @@ class FlashPage(QWidget):
     view_generation = 0
     # The portable run's completion card offers to install this app properly.
     install_app_requested = Signal()
+    # The completion letter's start-up advice: put this model's Original
+    # Software back on the player, or open Select Software to browse instead.
+    install_original_requested = Signal()
+    browse_software_requested = Signal()
 
     def __init__(self, parent=None, journey=None):
         super().__init__(parent)
@@ -1818,6 +1850,20 @@ class FlashPage(QWidget):
         self._power_off_recovery_kwargs = {}
         self._install_retry_cb = None
         self._power_off_continue_cb = None
+        # The flash tool needs a moment to start its USB listener. Hold the
+        # connect sentence back for this window, so the first thing the user
+        # reads is "Getting ready…" rather than an instruction to plug in
+        # before the backend can answer the handshake.
+        self._connect_get_ready_active = False
+        self._connect_prompt_revealed = False
+        # A new backend search line gets a fresh handshake window even when
+        # the power-off card already put the connect sentence on screen and
+        # that early window expired while the tool was still starting.
+        self._connect_search_seen = False
+        self._connect_get_ready_timer = QTimer(self)
+        self._connect_get_ready_timer.setSingleShot(True)
+        self._connect_get_ready_timer.setInterval(3000)
+        self._connect_get_ready_timer.timeout.connect(self._reveal_connect_prompt)
         self._build_ui()
 
     def _build_ui(self):
@@ -1910,7 +1956,7 @@ class FlashPage(QWidget):
         self._prep_cancel_btn.setToolTip(tr("flash_btn_cancel_wait"))
         self._prep_cancel_btn.clicked.connect(self._on_cancel_wait)
 
-        self._prep_next_btn = _RoundNextButton(symbol="next", accent=True)
+        self._prep_next_btn = _RoundNextButton(symbol="arrow-right", accent=True)
         self._prep_next_btn.setObjectName("prepNextPlaceholderBtn")
         self._prep_next_btn.setEnabled(False)
         self._prep_next_btn.setVisible(True)
@@ -1972,14 +2018,14 @@ class FlashPage(QWidget):
         # and the tick, so those chips read as the question's two answers.
         self._wait_question_label = QLabel("")
         self._wait_question_label.setWordWrap(True)
-        self._wait_question_label.setTextFormat(Qt.PlainText)
+        self._wait_question_label.setTextFormat(Qt.TextFormat.RichText)
         self._wait_question_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         # The prompt's own line carries the tip's How? link as its last words.
         self._wait_question_label.setTextInteractionFlags(
             Qt.TextInteractionFlag.LinksAccessibleByMouse
         )
         self._wait_question_label.setOpenExternalLinks(False)
-        self._wait_question_label.linkActivated.connect(self._on_paperclip_help)
+        self._wait_question_label.linkActivated.connect(lambda href: self._on_paperclip_help(href))
         _style_card_heading(self._wait_question_label)
         self._wait_question_label.setVisible(False)
         self._wait_head_stack.addWidget(self._wait_question_label)
@@ -2019,7 +2065,9 @@ class FlashPage(QWidget):
         # "Keep my data": a tick on the connect / power-off card, off
         # unless the user asks for it. The state is read when Next is pressed,
         # so what the flash does is what the card showed at that moment.
+        self._keep_data_user_changed = False
         self._keep_data_cb = QCheckBox(tr("flash_keep_data_option"))
+        self._keep_data_cb.clicked.connect(lambda _checked=False: setattr(self, "_keep_data_user_changed", True))
         self._keep_data_cb.setCursor(Qt.ArrowCursor)
         self._keep_data_cb.setChecked(False)
         self._keep_data_cb.setToolTip(tr("flash_keep_data_tooltip"))
@@ -2083,12 +2131,19 @@ class FlashPage(QWidget):
         copy.insertWidget(copy.indexOf(self._keep_data_warning), self._keep_data_help_link)
         self._keep_data_cb.toggled.connect(self._update_keep_data_warning)
         self._keep_data_allowed = True
+        # Once the run's Keep Data answer is settled, every retry and backend
+        # failover reuses it: the checkbox is not shown again and no second
+        # compatibility question is asked. A distinct new install clears it.
+        self._keep_data_locked = False
+        self._keep_data_locked_value = False
         # Set by the window once it knows the package is Rockbox: the install's
         # cleanup step removes .rockbox itself, so the Keep Data warning has to
         # say that Rockbox settings go with it.
         self._rockbox_install = False
         self._keep_data_confirm_active = False
         self._keep_data_erase_confirm_active = False
+        # X on the card in front leaves the install (list answers, erase warning).
+        self._keep_data_cancel_leaves = False
         self._keep_data_force_hidden = False
         self._format_all_required = False
         self._format_all_confirm_active = False
@@ -2121,6 +2176,7 @@ class FlashPage(QWidget):
         self._keep_data_note.setVisible(False)
         # Right under the tick, above the microSD reassurance: what keeping data
         # means first, then the one thing that is never touched.
+        self._keep_data_note.setVisible(False)
         copy.insertWidget(copy.indexOf(self._keep_data_cb) + 1, self._keep_data_note)
 
         # Retained for attribute compatibility, but kept hidden and not added to layout
@@ -2182,6 +2238,24 @@ class FlashPage(QWidget):
         hint_layout.setSpacing(6)
         hint_layout.addWidget(self._paperclip_hint)
         hint_layout.addWidget(self._paperclip_img, 0, Qt.AlignmentFlag.AlignLeft)
+        
+        # New advice hints
+        self._charger_hint_label = QLabel(tr("flash_hint_wall_charger"))
+        self._charger_hint_label.setWordWrap(True)
+        self._charger_hint_label.setProperty("cssClass", "dimmed")
+        self._charger_hint_label.setStyleSheet(f"font-size: {_BODY_PX}px; margin-top: 2px;")
+        self._charger_hint_label.setVisible(False)
+        hint_layout.addWidget(self._charger_hint_label)
+
+        self._driver_hint_label = QLabel(tr("flash_hint_install_drivers"))
+        self._driver_hint_label.setWordWrap(True)
+        self._driver_hint_label.setProperty("cssClass", "dimmed")
+        self._driver_hint_label.setStyleSheet(f"font-size: {_BODY_PX}px; margin-top: 2px;")
+        self._driver_hint_label.setTextFormat(Qt.RichText)
+        self._driver_hint_label.setOpenExternalLinks(True)
+        self._driver_hint_label.setVisible(False)
+        hint_layout.addWidget(self._driver_hint_label)
+
         self._paperclip_hint_host.setVisible(False)
         # Above the tick, which sits below it: the hint says how to power the
         # player off, then the tick and its copy say what the install keeps.
@@ -2224,7 +2298,7 @@ class FlashPage(QWidget):
         self._install_done_cb = None
 
         # Round wizard navigation chips for the Rockbox post-install steps.
-        self._theme_step1_next_btn = _RoundNextButton(symbol="next", accent=True)
+        self._theme_step1_next_btn = _RoundNextButton(symbol="arrow-right", accent=True)
         self._theme_step1_next_btn.setText(tr("dialog_pre_install_continue"))
         self._theme_step1_next_btn.setVisible(False)
         self._theme_step1_next_btn.clicked.connect(self._on_theme_step1_next_clicked)
@@ -2394,16 +2468,44 @@ class FlashPage(QWidget):
         # Completion explanation for readers who turned the donations appeal
         # off: the appeal's headline/subtitle usually says what was installed,
         # so this note only appears when that block is hidden.
+        # The completion card note: installed software and post-install steps.
+        self._completion_note_container = QWidget()
+        self._completion_note_layout = QVBoxLayout(self._completion_note_container)
+        self._completion_note_layout.setContentsMargins(0, 0, 0, 0)
+        self._completion_note_layout.setSpacing(10)
+        
+        self._completion_title_label = QLabel()
+        self._completion_title_label.setWordWrap(True)
+        self._completion_title_label.setProperty("cssClass", "hint")
+        self._completion_note_layout.addWidget(self._completion_title_label)
+
+        # The installed-on sentence on its own. The two-line heading above is
+        # the visible form; this label keeps the plain sentence available to
+        # callers and tests that read the note's text.
         self._complete_note = QLabel()
         self._complete_note.setWordWrap(True)
-        self._complete_note.setAlignment(Qt.AlignCenter)
+        self._complete_note.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._complete_note.setProperty("cssClass", "hint")
         self._complete_note.setVisible(False)
+        self._completion_note_layout.addWidget(self._complete_note)
+        
+        self._completion_hint_widget = QWidget()
+        self._completion_hint_layout = QVBoxLayout(self._completion_hint_widget)
+        self._completion_hint_layout.setContentsMargins(0, 0, 0, 0)
+        self._completion_hint_layout.setSpacing(5)
+        
+        self._completion_collapsible = CollapsibleWidget(tr("completion_hints_title"), self._completion_hint_widget)
+        self._completion_note_layout.addWidget(self._completion_collapsible)
+        
+        self._completion_note_container.setVisible(False)
+        w_layout.addWidget(self._completion_note_container)
+        
         self._complete_note_software = ""
         self._complete_note_model = ""
         self._complete_note_themes = False
+        # The simple card's advice label, built by _render_completion_note.
+        self._completion_advice_label = None
         self._appeal_themes = False
-        w_layout.addWidget(self._complete_note)
 
         self._appeal = QWidget()
         self._appeal.setAutoFillBackground(False)
@@ -2437,6 +2539,9 @@ class FlashPage(QWidget):
         self._completion_guide_hint.setAutoFillBackground(False)
         self._completion_guide_hint.setStyleSheet("")
         _apply_card_text(self._completion_guide_hint)
+        # The sentence is read, not unfolded: it tells the reader why the
+        # install is not finished and sits directly above the button that
+        # finishes it. Collapsing belongs to the long help, not this line.
         self._completion_guide_hint.setVisible(False)
         appeal_layout.addWidget(self._completion_guide_hint)
 
@@ -2448,6 +2553,50 @@ class FlashPage(QWidget):
         self._view_guide_btn.clicked.connect(self._open_view_guide)
         self._view_guide_btn.setVisible(False)
         appeal_layout.addWidget(self._view_guide_btn, 0, Qt.AlignLeft)
+
+        # The one instruction the install still needs, at the size of an
+        # instruction rather than a footnote to the headline.
+        self._appeal_power_on = QLabel()
+        self._appeal_power_on.setWordWrap(True)
+        self._appeal_power_on.setAutoFillBackground(False)
+        self._appeal_power_on.setStyleSheet("")
+        _apply_card_text(self._appeal_power_on)
+        self._appeal_power_on.setVisible(False)
+        appeal_layout.addWidget(self._appeal_power_on)
+
+        self._start_help_hint = QLabel(
+            _themed_link(
+                "start-help", tr("completion_not_starting_hint"), underline=True
+            )
+        )
+        self._start_help_hint.setTextFormat(Qt.TextFormat.RichText)
+        self._start_help_hint.setTextInteractionFlags(
+            Qt.TextInteractionFlag.LinksAccessibleByMouse
+            | Qt.TextInteractionFlag.LinksAccessibleByKeyboard
+        )
+        self._start_help_hint.setOpenExternalLinks(False)
+        self._start_help_hint.setCursor(Qt.PointingHandCursor)
+        self._start_help_hint.setProperty("cssClass", "dimmed")
+        self._start_help_hint.linkActivated.connect(self._on_start_help_link)
+        self._start_help_hint.setVisible(False)
+        appeal_layout.addWidget(self._start_help_hint)
+
+        self._start_help_body = QWidget()
+        help_box = QVBoxLayout(self._start_help_body)
+        help_box.setContentsMargins(0, 2, 0, 4)
+        help_box.setSpacing(6)
+        self._start_help_advice = QLabel(self._start_help_text())
+        self._start_help_advice.setWordWrap(True)
+        self._start_help_advice.setProperty("cssClass", "dimmed")
+        self._start_help_advice.setTextFormat(Qt.TextFormat.RichText)
+        self._start_help_advice.setTextInteractionFlags(
+            Qt.TextInteractionFlag.LinksAccessibleByMouse
+            | Qt.TextInteractionFlag.LinksAccessibleByKeyboard
+        )
+        self._start_help_advice.setOpenExternalLinks(False)
+        help_box.addWidget(self._start_help_advice)
+        appeal_layout.addWidget(self._start_help_body)
+        self._start_help_body.setVisible(False)
 
         # One plain sentence under the headline: what the app is, and what a
         # coffee actually pays for. The appeal's own words, not the Support
@@ -2504,6 +2653,7 @@ class FlashPage(QWidget):
         actions.addWidget(self._not_now_btn)
         actions.addStretch(1)
         appeal_layout.addLayout(actions)
+        self._appeal_actions = actions
 
         self._appeal_dont = QLabel(self._dont_ask_html())
         self._appeal_dont.setTextFormat(Qt.TextFormat.RichText)
@@ -2520,6 +2670,30 @@ class FlashPage(QWidget):
         self._appeal.setVisible(False)
         self._appeal_callback = None
         w_layout.addWidget(self._appeal)
+
+        # "What to do if it doesn't start up": the completion screen's one
+        # piece of troubleshooting, kept as a hint so the letter stays short.
+        # Opening it names both routes back to a working player — this model's
+        # Original Software, or any other firmware in the catalogue — each a
+        # link the window handles rather than a page this card opens.
+        #
+        # Reading order, top to bottom: how to start the player, what to do if
+        # it still doesn't start (the advice opens directly under its own
+        # hint), why the install is not finished and the guide that finishes
+        # it, then the ask, signed. The advice used to be placed after the
+        # appeal copy, where it read as part of the donation note.
+        self._start_help_body.setVisible(False)
+        reading_order = (
+            self._appeal_power_on,
+            self._start_help_hint,
+            self._start_help_body,
+            self._completion_guide_hint,
+            self._view_guide_btn,
+        )
+        for widget in reading_order:
+            appeal_layout.removeWidget(widget)
+        for offset, widget in enumerate(reading_order):
+            appeal_layout.insertWidget(1 + offset, widget)
 
         # Dummy attributes for backward compatibility
         self._flash_img = QLabel()
@@ -2555,7 +2729,7 @@ class FlashPage(QWidget):
         self._download_cancel_btn.setToolTip(tr("flash_btn_cancel"))
         self._download_cancel_btn.clicked.connect(self._on_cancel_download)
 
-        self._download_next_btn = _RoundNextButton(symbol="next", accent=True)
+        self._download_next_btn = _RoundNextButton(symbol="arrow-right", accent=True)
         self._download_next_btn.setObjectName("downloadNextPlaceholderBtn")
         self._download_next_btn.setEnabled(False)
         self._download_next_btn.setVisible(False)
@@ -2595,7 +2769,7 @@ class FlashPage(QWidget):
         self._notify_geometry_change()
 
     def _update_paperclip_hint(self) -> None:
-        """Show how to press the hidden button at power-off or disconnect recovery.
+        """Show how to press the hidden button at power-off, connect, or disconnect recovery.
 
         Displays model-specific wording and the corresponding paperclip
         hardware illustration (A5, Y2, or generic/all) matching the active theme.
@@ -2603,6 +2777,8 @@ class FlashPage(QWidget):
         specific image if model is known) is displayed in the disconnect recovery scenario.
         In MediaTek Installer branding, paperclip hints are excluded in disconnect recovery.
         """
+        import sys
+
         host = getattr(self, "_paperclip_hint_host", None)
         label = getattr(self, "_paperclip_hint", None)
         img_label = getattr(self, "_paperclip_img", None)
@@ -2631,20 +2807,72 @@ class FlashPage(QWidget):
         )
         is_usb_disconnected = (
             copy == "usb_disconnected"
-            and not is_mtk
             and not getattr(self, "_stop_open", False)
         )
-        wanted = (is_power_off or is_usb_disconnected) and not _hint_dismissed("paperclip")
+        is_connect = (
+            copy == "connect"
+            and not getattr(self, "_stop_open", False)
+        )
+        wanted = (is_power_off or is_usb_disconnected or is_connect)
+        # The first install that reaches the power-off or dropped-USB card shows
+        # the tip open, because there the diagram *is* the instruction. After
+        # that one showing it waits behind its How? link. The connect card never
+        # opens by itself: its "not connecting? Try this" link is always on
+        # offer for a reader whose player is not being found.
+        if (
+            (is_power_off or is_usb_disconnected)
+            and not (is_mtk and is_usb_disconnected)
+            and not _hint_seen("paperclip")
+            and not getattr(self, "_stop_open", False)
+        ):
+            _set_hint_seen("paperclip")
+            self._paperclip_revealed = True
         revealed = bool(getattr(self, "_paperclip_revealed", False))
+        if _hint_dismissed("paperclip"):
+            revealed = False
+        # The connect card never opens its tip by itself: the sentence says
+        # what to do, and the \"not connecting?\" link below it is the door. A
+        # connect card that opened the diagram hid the ask behind it, and it
+        # also swallowed the link the reader is meant to follow.
         if not wanted or not revealed:
             host.setVisible(False)
+            self._charger_hint_label.setVisible(False)
+            self._driver_hint_label.setVisible(False)
             if img_label is not None:
                 img_label.setFixedSize(0, 0)
             host.setMinimumHeight(0)
             self._note_paperclip_visibility_change(was_hidden)
             return
 
-        if is_power_off:
+        self._charger_hint_label.setVisible(True)
+        self._driver_hint_label.setVisible(sys.platform == 'win32')
+
+        if is_connect:
+            from ..config import device_label_for_model, is_a5_model
+
+            # Show the connect hint. If the user has been here a while (or we want to be proactive), 
+            # we can show the "won't connect?" hint instead. 
+            # Let's show both or make it conditional.
+            # The user request suggests: "*model* won't connect? Try this"
+            
+            
+            key = (
+                "flash_connect_paperclip_prompt_a5"
+                if is_a5_model(model)
+                else "flash_connect_paperclip_prompt"
+            )
+            model_name = (
+                device_label_for_model(model) if model else tr("device_fallback_word")
+            )
+            self._paperclip_sentence = tr(key).format(model=model_name)
+            # One instruction on this card: where the hidden button is and
+            # how to press it, with the diagram. "Not connecting? Try this" is
+            # already the heading's own link, so repeating that sentence in the
+            # tip said the same thing twice.
+            label.setText(self._paperclip_hint_html(self._paperclip_sentence))
+            label.setVisible(True)
+            QTimer.singleShot(0, self._fit_paperclip_hint_height)
+        elif is_power_off:
             from ..config import device_label_for_model, is_a5_model
             model_name = device_label_for_model(model) if model else tr("device_fallback_word")
             is_a5 = is_a5_model(model)
@@ -2656,12 +2884,30 @@ class FlashPage(QWidget):
             # layout has run: the wrap column is narrower than the card, and
             # reserving for it left a gap between the sentence and the diagram.
             QTimer.singleShot(0, self._fit_paperclip_hint_height)
-        else:
-            # In disconnect recovery / failover, prompt label already carries the
-            # instructions; show only the paperclip diagram image without duplicate text.
+        elif is_mtk and is_usb_disconnected:
+            # The MediaTek Installer build keeps this card free of the tip: its
+            # own disconnect copy already carries the instructions.
             self._paperclip_sentence = ""
             label.setText("")
             label.setVisible(False)
+        else:
+            # Dropped USB before the write: the same hidden button fully powers
+            # the player down, and saying so beside the diagram is what makes
+            # the picture usable. Its Windows driver hint keeps its own line.
+            from ..config import device_label_for_model, is_a5_model
+
+            model_name = (
+                device_label_for_model(model) if model else tr("device_fallback_word")
+            )
+            key = (
+                "flash_paperclip_hint_a5"
+                if is_a5_model(model)
+                else "flash_paperclip_hint"
+            )
+            self._paperclip_sentence = tr(key).format(model=model_name)
+            label.setText(self._paperclip_hint_html(self._paperclip_sentence))
+            label.setVisible(True)
+            QTimer.singleShot(0, self._fit_paperclip_hint_height)
 
         if img_label is not None:
             from .icons import recolor_bright_pixels, render_svg_asset
@@ -2759,7 +3005,41 @@ class FlashPage(QWidget):
         if host is None or host.isHidden() == was_hidden:
             return
         self.view_generation = getattr(self, "view_generation", 0) + 1
+        self._relayout_wait_card()
         self._notify_geometry_change()
+
+    def _relayout_wait_card(self) -> None:
+        """Grow the wait card when its own content just grew.
+
+        The paperclip tip and the Keep settings rows live in the card's column,
+        and the tip's height is only known once it has been measured. Setting
+        that height changes the card's size hint after the card was laid out at
+        the smaller one, which left the card shorter than its own minimum and
+        squeezed the tick, its copy and the tip into each other's pixels. Qt
+        does not re-run an outer layout just because an inner child changed, so
+        the card asks for one.
+        """
+        card = getattr(self, "_wait_card", None)
+        if card is None:
+            return
+        layout = card.layout()
+        if layout is not None:
+            layout.invalidate()
+            layout.activate()
+        # The card reports a height-for-width, and the column above it sizes the
+        # card from that number rather than from its size hint. Once the tip has
+        # grown the card, that number is smaller than the rows need, and Qt
+        # squeezes them until they paint over each other. A minimum height is
+        # the one thing a layout may not go under, so the card holds it.
+        needed = card.minimumSizeHint().height()
+        if card.minimumHeight() != needed:
+            card.setMinimumHeight(needed)
+        card.updateGeometry()
+        parent = card.parentWidget()
+        parent_layout = parent.layout() if parent is not None else None
+        if parent_layout is not None:
+            parent_layout.invalidate()
+            parent_layout.activate()
 
     def show_downloading(self):
         val = self._package_name or "\u2014"
@@ -2793,7 +3073,11 @@ class FlashPage(QWidget):
 
     def begin_run(self) -> None:
         """A new flash starts with the progress card up; donations apply at its end."""
+        self._reset_connect_prompt_delay()
         self._donations_shown = False
+        # The row starts visible; only a completion render without the ask
+        # hides it, and that decision survives a retranslate.
+        self._donation_row_visible = True
         self._complete = False
         self._failed = False
         if hasattr(self, "_post_install_hint"):
@@ -2803,8 +3087,13 @@ class FlashPage(QWidget):
         self._post_install_url = ""
         self._post_install_url_2 = ""
         self._post_install_url_2_source = ""
+        # A ``post_install_once`` firmware can finish without the guide when
+        # the player is already running it (or the user just said so in the
+        # Keep Data question). The window decides that per run.
+        self._post_install_guide_suppressed = False
 
     def show_preparing(self):
+        self._reset_connect_prompt_delay()
         self._complete = False
         self._wait_copy = "preparing"
         self._sync_keep_data_visibility()
@@ -2868,6 +3157,9 @@ class FlashPage(QWidget):
         Used before the tool prints a USB search line, and again after a later
         line of real progress until a percent or stage takes over.
         """
+        # A handshake retry starts a new search, so its connect card gets its
+        # own getting-ready window rather than inheriting the previous one.
+        self._reset_connect_prompt_delay()
         self._failed = False
         self._complete = False
         self._prompt_only = False
@@ -2913,6 +3205,61 @@ class FlashPage(QWidget):
             self._wait_mode_hint.setVisible(False)
         self._apply_stop_hold()
 
+    def _arm_connect_prompt_delay(self) -> None:
+        """Start the getting-ready window unless this pass already has one.
+
+        The tool needs a moment to start its USB listener, so the connect
+        sentence is held back. Repeated search lines from the same pass must
+        not extend the window: only a new stage, or the first line after the
+        window expired, starts a fresh one.
+        """
+        timer = getattr(self, "_connect_get_ready_timer", None)
+        if timer is None or timer.isActive():
+            return
+        self._connect_get_ready_active = True
+        self._connect_prompt_revealed = False
+        timer.start(3000)
+
+    def _reset_connect_prompt_delay(self) -> None:
+        """Arm the getting-ready window for the next connect stage."""
+        timer = getattr(self, "_connect_get_ready_timer", None)
+        if timer is not None:
+            timer.stop()
+        self._connect_get_ready_active = False
+        self._connect_search_seen = False
+
+    def reset_connect_session(self) -> None:
+        """Reset the connect prompt state for a completely new install session."""
+        self._reset_connect_prompt_delay()
+        self._connect_prompt_revealed = False
+
+    def _finish_connect_prompt_delay(self) -> None:
+        """Stop the window once the device is detected or the stage moved on."""
+        timer = getattr(self, "_connect_get_ready_timer", None)
+        if timer is not None:
+            timer.stop()
+        self._connect_get_ready_active = False
+        self._connect_prompt_revealed = True
+
+    def _reveal_connect_prompt(self) -> None:
+        """Swap "Getting ready…" for the connect sentence after the window."""
+        self._connect_get_ready_timer.stop()
+        self._connect_get_ready_active = False
+        # A reveal means the engine is up, so it also ends the hold for the
+        # backend's own search line.
+        self._connect_search_seen = True
+        if getattr(self, "_wait_copy", "") != "connect":
+            return
+        if getattr(self, "_complete", False) or getattr(self, "_failed", False):
+            return
+        if self._stack.currentWidget() is not self._waiting_view:
+            return
+        self._connect_prompt_revealed = True
+        self.set_waiting_device()
+        self._sync_wait_band_page()
+        self.view_generation = getattr(self, "view_generation", 0) + 1
+        self._notify_geometry_change()
+
     def show_connect_search(self) -> None:
         """Connect sentence only while the flasher is searching for USB.
 
@@ -2924,10 +3271,21 @@ class FlashPage(QWidget):
         self._failed = False
         self._complete = False
         self._prompt_only = True
+        new_stage = getattr(self, "_wait_copy", "") != "connect"
+        first_backend_search = not getattr(self, "_connect_search_seen", False)
+        if new_stage or first_backend_search:
+            # A new pass through the connect stage gets its own handshake
+            # window, and repeated search lines in the same pass do not restart
+            # it. Asking for the player before the tool can answer wasted the
+            # first seconds of every connect stage.
+            self._arm_connect_prompt_delay()
+            self._connect_search_seen = True
         self._wait_copy = "connect"
+        # Every handshake starts with the tip closed: the card always shows the
+        # link below the sentence, and the diagram opens only when it is clicked.
+        self._paperclip_revealed = False
         self._switch_view(self._waiting_view)
         self.set_waiting_device()
-        self._set_determinate(self._wait_progress_bar, 0)
         self._sync_wait_band_page()
         if hasattr(self, "_wait_continue_btn"):
             self._wait_continue_btn.setVisible(True)
@@ -2964,25 +3322,31 @@ class FlashPage(QWidget):
             flow.refresh()
         self._notify_geometry_change()
 
+    def _connect_prompt_held(self) -> bool:
+        """True while the card should say "Getting ready…" instead of asking.
+
+        The hold belongs to the engine's own search line: the worker only puts
+        this card up once mtkclient has started, so the window is a moment for
+        the USB listener to come up, not a wait for the import. Every writer of
+        the connect sentence goes through ``_connect_prompt_text``, so a
+        countdown tick or a re-layout cannot put the ask back early.
+        """
+        return bool(getattr(self, "_connect_get_ready_active", False))
+
+    def _connect_prompt_text(self) -> str:
+        if self._connect_prompt_held():
+            return tr("flash_getting_ready")
+        return self._connect_device_prompt_text()
+
     def _connect_device_prompt_text(self) -> str:
-        prompt = tr("flash_connect_device_prompt").format(model=self._connect_model_text())
-        remaining = getattr(self, "_attempt_remaining", 0)
-        if remaining > 0 and getattr(self, "_wait_copy", "") in (
-            "connect",
-            "please_wait_connecting",
-        ):
-            return f"{prompt} ({remaining}s)"
-        return prompt
+        # No countdown here. A ticking number on the card reads as a deadline
+        # the user has to beat, and a connect attempt that runs out is not the
+        # end of anything: the power-off and disconnect card comes back with
+        # the way to try again.
+        return tr("flash_connect_device_prompt").format(model=self._connect_model_text())
 
     def _wait_connecting_prompt_text(self) -> str:
-        prompt = tr("flash_wait_connecting_prompt").format(model=self._connect_model_text())
-        remaining = getattr(self, "_attempt_remaining", 0)
-        if remaining > 0 and getattr(self, "_wait_copy", "") in (
-            "connect",
-            "please_wait_connecting",
-        ):
-            return f"{prompt} ({remaining}s)"
-        return prompt
+        return tr("flash_wait_connecting_prompt").format(model=self._connect_model_text())
 
     def _band_line_width(self) -> int:
         """One-line width of the band's copy, with the countdown at its widest.
@@ -3037,7 +3401,7 @@ class FlashPage(QWidget):
                     if remaining > 0:
                         self._wait_copy = "connect"
                     if self._wait_copy == "connect":
-                        text = self._connect_device_prompt_text()
+                        text = self._connect_prompt_text()
                     else:
                         text = ""
                 if remaining > 0:
@@ -3046,7 +3410,7 @@ class FlashPage(QWidget):
                     # tick that arrives before the tool's own search line must
                     # not put the software name back above the sentence.
                     self._prompt_only = True
-                if text:
+                if text and not getattr(self, "_connect_get_ready_active", False):
                     if getattr(self, "_stop_open", False):
                         saved = getattr(self, "_stop_saved", None)
                         if saved:
@@ -3060,6 +3424,7 @@ class FlashPage(QWidget):
 
     def show_real_stage(self, text: str) -> None:
         """Drop the connect sentence and the throbber once the tool moves on."""
+        self._finish_connect_prompt_delay()
         self._prompt_only = False
         self.set_attempt_timeout(0)
         self._wait_copy = "stage"
@@ -3086,10 +3451,12 @@ class FlashPage(QWidget):
                 btn.setEnabled(True)
 
     def show_flashing(self):
+        logger.info("show_flashing called, _complete=%s", getattr(self, "_complete", False))
+        self._finish_connect_prompt_delay()
         self._cleanup_mode = False
         self.show_install_app(False)
-        if hasattr(self, "_complete_note"):
-            self._complete_note.setVisible(False)
+        if hasattr(self, "_completion_note_container"):
+            self._completion_note_container.setVisible(False)
         if hasattr(self, "_progress_card"):
             self._progress_card.setVisible(True)
         if getattr(self, "_wait_copy", "") in ("connect", "please_wait", "please_wait_connecting"):
@@ -3212,9 +3579,9 @@ class FlashPage(QWidget):
         if hasattr(self, "_keep_data_cb"):
             self._keep_data_cb.setVisible(False)
         if hasattr(self, "_keep_data_warning"):
-            self._keep_data_warning.setVisible(False)
+            self._keep_data_warning.setVisible(True)
         if hasattr(self, "_keep_data_help_link"):
-            self._keep_data_help_link.setVisible(False)
+            self._keep_data_help_link.setVisible(True)
         self.show_flashing()
         self._warning.setVisible(False)
         if hasattr(self, "_appeal"):
@@ -3463,9 +3830,9 @@ class FlashPage(QWidget):
         if hasattr(self, "_keep_data_cb"):
             self._keep_data_cb.setVisible(False)
         if hasattr(self, "_keep_data_warning"):
-            self._keep_data_warning.setVisible(False)
+            self._keep_data_warning.setVisible(True)
         if hasattr(self, "_keep_data_help_link"):
-            self._keep_data_help_link.setVisible(False)
+            self._keep_data_help_link.setVisible(True)
         msg = self._power_off_prompt_text()
         self._wait_prompt_label.setText(msg)
         # The recovery sentence is the card's action line here, so it belongs
@@ -4546,6 +4913,7 @@ class FlashPage(QWidget):
         self.set_attempt_timeout(0)
         self.clear_install_failure()
         self.show_waiting()
+        self._reset_connect_prompt_delay()
         self.clear_keep_data_confirmation()
         self._set_yes_no_glyphs(False)
         prompt = self._power_off_prompt_text()
@@ -4567,7 +4935,12 @@ class FlashPage(QWidget):
         self._notify_geometry_change()
 
     def _keep_data_visible(self) -> bool:
-        """The tick is only for the power-off-and-disconnect prompt."""
+        """The tick is only for the power-off-and-disconnect prompt.
+
+        A release that cannot carry settings omits the tick entirely: offering
+        it beside "this install will reset your settings" would promise the
+        opposite of what the card says one line below.
+        """
         return bool(
             getattr(self, "_has_userdata", True)
             and getattr(self, "_keep_data_allowed", True)
@@ -4576,6 +4949,7 @@ class FlashPage(QWidget):
             and not getattr(self, "_permission_prompt", False)
             and not getattr(self, "_keep_data_confirm_active", False)
             and not getattr(self, "_keep_data_force_hidden", False)
+            and not getattr(self, "_keep_data_locked", False)
             and not getattr(self, "_complete", False)
             and not getattr(self, "_failed", False)
         )
@@ -4595,8 +4969,28 @@ class FlashPage(QWidget):
     def set_has_userdata(self, has_userdata: bool, preserve_data_default: bool = False) -> None:
         """Remember whether the package has user data and its default choice."""
         self._has_userdata = bool(has_userdata)
-        if hasattr(self, "_keep_data_cb"):
+        if hasattr(self, "_keep_data_cb") and not self._keep_data_user_changed:
             self._keep_data_cb.setChecked(self._has_userdata and bool(preserve_data_default))
+        self._sync_keep_data_visibility()
+
+    def reset_keep_data_preference(self) -> None:
+        self._keep_data_user_changed = False
+        self._keep_data_locked = False
+        self._keep_data_locked_value = False
+        if hasattr(self, "_keep_data_cb"):
+            self._keep_data_cb.setChecked(False)
+
+    def lock_keep_data(self, keep: bool) -> None:
+        """Freeze this run's Keep Data answer for retries and failovers.
+
+        The question has already been answered on the first attempt. A retry
+        must not show the checkbox or ask the compatibility question again,
+        whichever flash backend the retry uses; ``keep_data_checked`` keeps
+        returning the answer the user gave.
+        """
+        self._keep_data_locked = True
+        self._keep_data_locked_value = bool(keep)
+        self._keep_data_user_changed = True
         self._sync_keep_data_visibility()
 
     def set_rockbox_install(self, rockbox: bool) -> None:
@@ -4671,6 +5065,16 @@ class FlashPage(QWidget):
         microsd_note = getattr(self, "_keep_data_microsd_note", None)
         note = getattr(self, "_keep_data_note", None)
         if warning is None or cb is None:
+            return
+        if getattr(self, "_keep_data_locked", False):
+            warning.setVisible(False)
+            help_link = getattr(self, "_keep_data_help_link", None)
+            if help_link is not None:
+                help_link.setVisible(False)
+            if microsd_note is not None:
+                microsd_note.setVisible(False)
+            if note is not None:
+                note.setVisible(False)
             return
         model = str(getattr(self, "_model", "") or "").upper()
         y1_like = "Y1" in model or "A5" in model
@@ -4748,7 +5152,12 @@ class FlashPage(QWidget):
             # carries the explanation for the unchecked case instead.
             note_text = (
                 tr("flash_keep_data_tooltip")
-                if (visible and cb.isChecked() and not format_required)
+                if (
+                    visible
+                    and cb.isChecked()
+                    and not format_required
+                    and getattr(self, "_keep_data_allowed", True)
+                )
                 else ""
             )
             if note.text() != note_text:
@@ -4766,13 +5175,23 @@ class FlashPage(QWidget):
         self._notify_geometry_change()
 
     def show_keep_data_confirmation(
-        self, question: str, hint: str = "", choices=(), selected: str = "", on_no=None
+        self,
+        question: str,
+        hint: str = "",
+        choices=(),
+        selected: str = "",
+        on_no=None,
+        show_keep_data_explainer: bool = True,
     ) -> None:
         """Ask for the currently installed firmware on the same progress card.
 
         With no ``choices`` this is a yes/no question about one compatible
         software item; ``on_no`` is the answer to "no", because there the No
         chip means "the player runs something else", not "stop the install".
+
+        The tick never appears here: the user answered it on the power-off
+        card, and showing it beside a different question only asks again. The
+        explainer follows the same rule (the install-first question has none).
         """
         self._keep_data_confirm_active = True
         self._keep_data_confirm_no_cb = on_no
@@ -4784,10 +5203,14 @@ class FlashPage(QWidget):
         self._wait_prompt_label.setVisible(False)
         self._keep_data_cb.setVisible(False)
         if hasattr(self, "_keep_data_warning"):
-            self._keep_data_warning.setVisible(False)
+            self._keep_data_warning.setVisible(show_keep_data_explainer)
         if hasattr(self, "_keep_data_help_link"):
-            self._keep_data_help_link.setVisible(False)
+            self._keep_data_help_link.setVisible(show_keep_data_explainer)
         names = [str(c) for c in (choices or ()) if str(c).strip()]
+        # The X leaves the install when the card offers a list of answers:
+        # there it is the cancel chip beside an arrow, not a "no" answer. A
+        # single yes/no question keeps its X as "No, that is not what runs".
+        self._keep_data_cancel_leaves = len(names) > 1
         self._keep_data_choice.clear()
         self._keep_data_choice.addItems(names)
         if selected and selected in names:
@@ -4796,6 +5219,11 @@ class FlashPage(QWidget):
         self._show_wait_question(question or "")
         self._keep_data_hint.setText(hint or "")
         self._keep_data_hint.setVisible(bool(hint))
+        if hasattr(self, "_wait_pkg_label"):
+            self._wait_pkg_label.setVisible(False)
+        if hasattr(self, "_keep_data_note"):
+            self._keep_data_note.setText("")
+            self._keep_data_note.setVisible(False)
         if hasattr(self, "_keep_data_microsd_note"):
             # This question is about which software is on the player, not
             # about what an erase keeps; the reassurance belongs with the
@@ -4816,7 +5244,13 @@ class FlashPage(QWidget):
         self._notify_geometry_change()
 
     def show_install_first_prompt(
-        self, question: str, hint: str = "", choices=(), selected: str = "", on_no=None
+        self,
+        question: str,
+        hint: str = "",
+        choices=(),
+        selected: str = "",
+        on_no=None,
+        next_action: bool = False,
     ) -> None:
         """Ask the Install Firmware First question on the same progress card.
 
@@ -4826,8 +5260,22 @@ class FlashPage(QWidget):
         visually and behaviourally identical.
         """
         self.show_keep_data_confirmation(
-            question, hint, choices, selected=selected, on_no=on_no
+            question,
+            hint,
+            choices,
+            selected=selected,
+            on_no=on_no,
+            show_keep_data_explainer=False,
         )
+        # This question's X is an answer ("the player already runs the
+        # target"), not the cancel chip: leaving the journey is what the
+        # window's own ``_cancel_install_first`` does.
+        self._keep_data_cancel_leaves = False
+        if next_action:
+            # An instruction card ("power it on, then click Next"), not a
+            # question: its chip moves the install on, so it takes the Next
+            # arrow instead of the Yes tick a yes/no question gets.
+            self._set_yes_no_glyphs(False)
         # Keep ``_wait_copy`` as the shared renderer set it: the Keep Data
         # branch is what keeps this question in the wait band across a resize.
         # The window's ``_install_first_stage`` is what makes it a prerequisite
@@ -4836,6 +5284,9 @@ class FlashPage(QWidget):
     def show_keep_data_erase_confirmation(self, question: str, explainer: str = "") -> None:
         """Ask whether to install and erase settings (or settings + media)."""
         self._keep_data_erase_confirm_active = True
+        # X on the warning leaves the install: the user was asked to accept an
+        # erase and said no, so there is nothing left to ask them.
+        self._keep_data_cancel_leaves = True
         self._keep_data_confirm_active = False
         self._wait_copy = "keep_data_erase_confirm"
         self._keep_data_force_hidden = True
@@ -4976,8 +5427,13 @@ class FlashPage(QWidget):
         image = getattr(self, "_paperclip_img", None)
         if host is not None and image is not None and image.isVisible():
             wanted = int(image.height()) + label.sizeHint().height() + 4
+            if self._charger_hint_label.isVisible():
+                wanted += self._charger_hint_label.sizeHint().height() + 4
+            if self._driver_hint_label.isVisible():
+                wanted += self._driver_hint_label.sizeHint().height() + 4
             if host.minimumHeight() != wanted:
                 host.setMinimumHeight(wanted)
+                self._relayout_wait_card()
                 self._notify_geometry_change()
 
     def _paperclip_hint_html(self, sentence: str) -> str:
@@ -4988,36 +5444,59 @@ class FlashPage(QWidget):
 
     def _paperclip_help_html(self) -> str:
         """The link that opens the paperclip tip on a power-off card."""
-        return _hint_text_link("show-hint", tr("flash_paperclip_help"))
+        return _hint_text_link("show-hint", self._paperclip_help_text())
+
+    def _paperclip_help_text(self) -> str:
+        """The link text to open the paperclip tip."""
+        copy = getattr(self, "_wait_copy", "")
+        logger.debug("Paperclip help text: _wait_copy=%s", copy)
+        if copy == "connect":
+            from ..config import device_label_for_model
+
+            model = (self._model or "").strip()
+            name = (
+                device_label_for_model(model)
+                if model
+                else tr("device_fallback_word")
+            )
+            return tr("flash_not_connecting_help_fmt").format(model=name)
+        return tr("flash_paperclip_help")
 
     def _paperclip_help_wanted(self) -> bool:
         """Whether the prompt line should end in the tip's How? link."""
-        if _hint_dismissed("paperclip") or getattr(self, "_paperclip_revealed", False):
-            return False
         if getattr(self, "_stop_open", False):
             return False
-        copy = getattr(self, "_wait_copy", "")
-        if copy == "power_off":
-            return bool((getattr(self, "_model", "") or "").strip()) and getattr(
-                self, "_show_pin_tip", True
-            )
-        if copy == "usb_disconnected":
-            from ..branding import is_generic_mtk_brand
-
-            return not is_generic_mtk_brand()
-        return False
+        if getattr(self, "_paperclip_revealed", False) and getattr(self, "_wait_copy", "") != "connect":
+            # The link already opened the tip: offering it again beside the
+            # open tip says the same thing twice. The connect card is the
+            # exception: its "won't connect? try this" link is what names the
+            # reset sequence for a player the app has not reached.
+            return False
+        return True
 
     def _prompt_band_html(self, sentence: str) -> str:
-        """The prompt, with the tip's How? link as the end of its sentence."""
+        """The prompt, with the tip's How? link as a separate line below the sentence."""
         from html import escape
 
         text = escape(sentence)
         if self._paperclip_help_wanted():
-            text = f"{text} {self._paperclip_help_html()}"
+            text = f"{text}<br>{self._paperclip_help_html()}"
         return text
 
-    def _on_paperclip_help(self, _link: str = "") -> None:
-        """Open the paperclip tip: the diagram is shown when it is asked for."""
+    def _on_paperclip_help(self, link: str = "show-hint") -> None:
+        """Open the paperclip tip: the diagram is shown when it is asked for.
+
+        The link passes its own ``show-hint`` target; a direct call (the
+        card's own tests, or any other entry) means the same thing.
+        """
+        if link and link != "show-hint":
+            return
+        # Asking for the tip outranks a dismissal remembered from an earlier
+        # install. Without this the click set the reveal flag and the saved
+        # "Got it." turned it straight back off, so the link did nothing and
+        # then hid itself because the tip counted as already open.
+        if _hint_dismissed("paperclip"):
+            _set_hint_dismissed("paperclip", False)
         self._paperclip_revealed = True
         self._update_paperclip_hint()
         # The How? link has done its job: the prompt keeps its own words.
@@ -5025,8 +5504,9 @@ class FlashPage(QWidget):
         self._notify_geometry_change()
 
     def _on_paperclip_got_it(self, _link: str = "") -> None:
-        """Put the paperclip tip away for good: it is never shown again."""
+        """Put the paperclip tip away, but keep showing it."""
         _set_hint_dismissed("paperclip")
+        self._paperclip_revealed = False
         self._update_paperclip_hint()
         self._sync_wait_band_page()
         self._relayout_for_text()
@@ -5173,9 +5653,10 @@ class FlashPage(QWidget):
             # The head leads with the line the user has to act on. A prompt-only
             # stage has no title: "power off and disconnect" is about the player
             # in hand, and the run's software name costs a row the prompt needs.
-            # A keep-data question keeps the name it explains; its dropdown case
-            # gives that row to the question instead.
-            title.setVisible(not (dropdown or prompt_band))
+            # A question is about the player in hand too, and it already names
+            # the software, so the "<software> <version> for <model>" caption
+            # would only repeat version and model underneath it.
+            title.setVisible(not (asking or dropdown or prompt_band))
         # The band already carries the sentence, so the line under it would
         # repeat it. While the bar is reporting a real run, that line is the
         # card's status copy and stays.
@@ -5201,6 +5682,7 @@ class FlashPage(QWidget):
         self._keep_data_confirm_active = False
         self._keep_data_confirm_no_cb = None
         self._keep_data_erase_confirm_active = False
+        self._keep_data_cancel_leaves = False
         self._format_all_confirm_active = False
         self._keep_data_force_hidden = False
         self._set_yes_no_glyphs(False)
@@ -5227,9 +5709,9 @@ class FlashPage(QWidget):
         self._keep_data_force_hidden = True
         self._keep_data_cb.setVisible(False)
         if hasattr(self, "_keep_data_warning"):
-            self._keep_data_warning.setVisible(False)
+            self._keep_data_warning.setVisible(True)
         if hasattr(self, "_keep_data_help_link"):
-            self._keep_data_help_link.setVisible(False)
+            self._keep_data_help_link.setVisible(True)
         if hasattr(self, "_wait_mode_hint"):
             self._wait_mode_hint.setText(hint or "")
             self._wait_mode_hint.setVisible(False)
@@ -5238,6 +5720,8 @@ class FlashPage(QWidget):
         """Whether the user asked this run to leave their user data untouched."""
         if not getattr(self, "_has_userdata", True):
             return False
+        if getattr(self, "_keep_data_locked", False):
+            return bool(getattr(self, "_keep_data_locked_value", False))
         if getattr(self, "_format_all_required", False) or not getattr(
             self, "_keep_data_allowed", True
         ):
@@ -5259,6 +5743,9 @@ class FlashPage(QWidget):
             self._wait_cancel_btn.setVisible(True)
         if hasattr(self, "_wait_mode_hint"):
             self._wait_mode_hint.setVisible(False)
+        # The backend search line arms the handshake window; this card only
+        # keeps "Getting ready..." up until the tool has started.
+        self._reset_connect_prompt_delay()
         self.set_waiting_device()
         # SP Flash Tool's countdown starts on its "search usb" line (the worker
         # sends the seconds), so it is not started here. MTKClient keeps its own.
@@ -5444,49 +5931,181 @@ class FlashPage(QWidget):
         )
 
     def _completion_guide_html(self) -> str:
-        """The completion card's extra-steps sentence, as one link.
+        """The extra-steps sentence shown above the View Guide button."""
+        from html import escape
 
-        The View Guide button sits below this sentence; making the sentence
-        itself open the guide as well means the instruction is the action.
-        """
-        return _themed_link(
-            "post-install", tr("post_install_explain_completion")
-        )
+        return escape(tr("post_install_explain_completion"))
 
     def _apply_post_install_state(self) -> None:
         donations_shown = bool(getattr(self, "_donations_shown", False))
-        post_install = getattr(self, "_post_install_url", "")
         post_install_2 = getattr(self, "_post_install_url_2", "")
         is_complete = getattr(self, "_complete", False)
         if hasattr(self, "_done_mark"):
-            globe = bool(post_install) and not donations_shown
+            globe = self._has_post_install() and not donations_shown
             self._done_mark.set_symbol("www" if globe else "complete")
             self._done_mark.setToolTip(tr("post_install_globe_tooltip") if globe else "")
         if hasattr(self, "_post_install_hint"):
-            self._post_install_hint.setVisible(
-                bool(post_install) and not donations_shown and is_complete
-            )
+            # The compact one-line card is no longer a completion render: the
+            # letter carries the guide for both donation states.
+            self._post_install_hint.setVisible(False)
         if hasattr(self, "_view_guide_btn"):
-            if post_install and (not post_install_2 or post_install != post_install_2):
-                self._view_guide_btn.setText(tr("post_install_view_guide_btn"))
-                self._view_guide_btn.setVisible(donations_shown)
-            else:
-                self._view_guide_btn.setVisible(False)
+            self._view_guide_btn.setText(tr("post_install_view_guide_btn"))
+            self._view_guide_btn.setVisible(self._has_post_install() and is_complete)
         from .. import fx
 
         route = fx.donation_route()
         if hasattr(self, "_coffee_btn"):
             if route == "boosty":
                 self._coffee_btn.setText(tr("donate_boosty"))
-            elif post_install_2:
+            elif post_install_2 and self._has_post_install():
                 self._coffee_btn.setText(tr("donate_completion_coffee_guide"))
             else:
                 self._coffee_btn.setText(tr("donate_completion_coffee"))
         if hasattr(self, "_bmc_btn"):
             self._bmc_btn.setText(tr("donate_buy_me_a_coffee"))
             # Boosty is the only method offered in the Russian market, so the
-            # second coffee page is hidden rather than left as a dead end.
-            self._bmc_btn.setVisible(not route)
+            # second coffee page is hidden rather than left as a dead end; and
+            # a letter without the ask has hidden the whole row already.
+            self._bmc_btn.setVisible(
+                bool(getattr(self, "_donation_row_visible", True)) and not route
+            )
+        self._set_donation_row_visible(bool(getattr(self, "_donation_row_visible", True)))
+        from .. import donation_order
+
+        donation_order.place(
+            self._appeal_actions,
+            {"kofi": self._coffee_btn, "bmc": self._bmc_btn},
+            donation_order.completion_coffee_order(),
+        )
+        self._apply_start_help_state()
+
+    def _set_donation_row_visible(self, shown: bool) -> None:
+        """Show or retire the ask as one block.
+
+        A post-install completion keeps the letter when donations are off, so
+        the coffee buttons and the opt-out link leave together: an empty strip
+        under the signature would read as a missing picture, not as a choice.
+        """
+        from .. import fx
+
+        self._donation_row_visible = bool(shown)
+        for name in ("_coffee_btn", "_not_now_btn", "_appeal_dont"):
+            widget = getattr(self, name, None)
+            if widget is not None:
+                widget.setVisible(bool(shown))
+        if hasattr(self, "_bmc_btn"):
+            self._bmc_btn.setVisible(bool(shown) and not fx.donation_route())
+
+    def _has_post_install(self) -> bool:
+        """True when this software still has steps after the install card."""
+        if getattr(self, "_post_install_guide_suppressed", False):
+            return False
+        return bool(
+            getattr(self, "_post_install_url", "")
+            or getattr(self, "_post_install_url_2", "")
+        )
+
+    def _start_help_text(self) -> str:
+        """The start-up advice, naming the player this install ran on.
+
+        The two routes back sit inside the sentence itself — underlined links
+        sharing the explanation's paragraph, not buttons underneath it. A
+        translation that words the sentence without repeating one of the
+        action names still gets that route as an underlined tail, so no
+        language loses the action.
+        """
+        from html import escape
+
+        from ..config import device_label_for_model
+
+        model = (getattr(self, "_model", "") or "").strip()
+        label = device_label_for_model(model) if model else tr("device_fallback_word")
+        body = escape(tr("completion_not_starting_body").format(model=label))
+        missing: list[tuple[str, str]] = []
+        actions = (
+            ("install-original", tr("completion_install_original")),
+            ("other-software", tr("completion_other_software")),
+        )
+        for href, action in actions:
+            action_html = escape(action)
+            pattern = re.compile(re.escape(action_html), re.IGNORECASE)
+            if pattern.search(body):
+                body = pattern.sub(
+                    lambda match, href=href: _themed_link(
+                        href, match.group(0), underline=True
+                    ),
+                    body,
+                    count=1,
+                )
+            else:
+                missing.append((href, action_html))
+        if missing:
+            tail = " · ".join(
+                _themed_link(href, action, underline=True)
+                for href, action in missing
+            )
+            body = f"{body} {tail}"
+        return body
+
+    def _render_start_help(self) -> None:
+        """Re-write the start-up advice for this language and install."""
+        if hasattr(self, "_start_help_hint"):
+            self._start_help_hint.setText(
+                _themed_link(
+                "start-help", tr("completion_not_starting_hint"), underline=True
+            )
+            )
+        if hasattr(self, "_start_help_advice"):
+            self._start_help_advice.setText(self._start_help_text())
+
+    def toggle_start_help(self, expanded=None) -> None:
+        """Open or close the "doesn't start up" advice under its hint.
+
+        Two screens carry that hint — the completion letter and the simple
+        card without the ask — and each keeps its own advice label, so both
+        follow the one toggle.
+        """
+        targets = [
+            widget
+            for widget in (
+                getattr(self, "_start_help_body", None),
+                getattr(self, "_completion_advice_label", None),
+            )
+            if widget is not None
+        ]
+        if not targets:
+            return
+        show = (
+            not any(widget.isVisible() for widget in targets)
+            if expanded is None
+            else bool(expanded)
+        )
+        for widget in targets:
+            widget.setVisible(show)
+        self.view_generation = getattr(self, "view_generation", 0) + 1
+        self._notify_geometry_change()
+
+    def _on_start_help_link(self, href: str) -> None:
+        if href == "start-help":
+            self.toggle_start_help()
+        elif href == "install-original":
+            self.install_original_requested.emit()
+        elif href == "other-software":
+            self.browse_software_requested.emit()
+
+    def _apply_start_help_state(self) -> None:
+        """The hint belongs to a finished install, never to a live run."""
+        complete = bool(getattr(self, "_complete", False)) and not bool(
+            getattr(self, "_failed", False)
+        )
+        hint = getattr(self, "_start_help_hint", None)
+        if hint is not None:
+            hint.setVisible(
+                complete and not bool(getattr(self, "_cleanup_mode", False))
+            )
+        body = getattr(self, "_start_help_body", None)
+        if body is not None and not complete:
+            body.setVisible(False)
 
     # -- post-install guide -------------------------------------------------
 
@@ -5534,7 +6153,7 @@ class FlashPage(QWidget):
             open_browser(DONATION_LINKS["boosty"])
             return
         post_install_2 = getattr(self, "_post_install_url_2", "")
-        if post_install_2:
+        if post_install_2 and self._has_post_install():
             open_browser(interstitial_url(post_install_2, thank=True))
         else:
             open_browser(DONATION_LINKS["kofi"])
@@ -5558,23 +6177,35 @@ class FlashPage(QWidget):
             (getattr(self, "_package_name", "") or "").strip(),
             (getattr(self, "_model", "") or "").strip(),
         ) or tr("flash_current_pkg")
+        from html import escape
+
+        from ..config import install_power_on_steps
+
+        steps = install_power_on_steps(model)
+        has_guide = self._has_post_install()
         if hasattr(self, "_intro"):
             self._intro.retranslate(software=software, model=model)
-            if not getattr(self, "_appeal_themes", False):
-                # The power-on steps belong on the "installed on your model"
-                # line itself, not at the foot of the donation copy.
-                from ..config import install_power_on_steps
-
-                steps = install_power_on_steps(model)
-                self._intro.subtitle.setText(f"{self._intro.subtitle.text()}\n{steps}")
+            self._intro.subtitle.setVisible(not has_guide)
             _apply_card_text(self._intro.headline)
             _apply_card_text(self._intro.subtitle)
-        has_guide = bool(getattr(self, "_post_install_url_2", "") or getattr(self, "_post_install_url", ""))
+        if hasattr(self, "_appeal_power_on"):
+            # How to turn the player on after the write. MTKClient leaves it
+            # sitting in download mode, so every MTKClient completion says
+            # this, guide or not. SP Flash Tool starts the player itself, so
+            # it says nothing rather than explaining a step nobody needs.
+            self._appeal_power_on.setText(escape(steps))
+            self._appeal_power_on.setVisible(self._is_mtk_active())
+            _apply_card_text(self._appeal_power_on)
         if hasattr(self, "_completion_guide_hint"):
             self._completion_guide_hint.setText(self._completion_guide_html())
             self._completion_guide_hint.setVisible(has_guide)
             _apply_card_text(self._completion_guide_hint)
-        if getattr(self, "_active_appeal_key", None) not in COMPLETION_BODY_KEYS:
+        if self._has_post_install() and not getattr(self, "_appeal_themes", False):
+            # The completion letter for an install with a guide reads as the
+            # reference note: one fixed paragraph, not the rotating pitch used
+            # on the plain completion and support surfaces.
+            self._active_appeal_key = "donate_completion_body_small_hours"
+        elif getattr(self, "_active_appeal_key", None) not in COMPLETION_BODY_KEYS:
             import random
             self._active_appeal_key = random.choice(COMPLETION_BODY_KEYS)
         appeal_text = tr(self._active_appeal_key)
@@ -5588,47 +6219,189 @@ class FlashPage(QWidget):
         if hasattr(self, "_appeal_signature"):
             self._appeal_signature.setText(tr("donate_completion_signature"))
             _apply_card_text(self._appeal_signature)
+        self._render_start_help()
         self._apply_post_install_state()
         if hasattr(self, "_not_now_btn"):
             self._not_now_btn.setText(tr("donate_not_now"))
         if hasattr(self, "_appeal_dont"):
             self._appeal_dont.setText(self._dont_ask_html())
 
-    def _render_completion_note(self) -> None:
+    def _render_completion_note(self, post_install_once: bool = False) -> None:
+        """The completion card for readers whose donations appeal is off.
+
+        The simple view, with no ask anywhere on it: what finished — or, when
+        the firmware still needs its guide, only what is left to do — the
+        guide that finishes it, how to start the player when the method needs
+        it, and the start-up advice behind its own hint.
+        """
+        from html import escape
+
         model = self._complete_note_model or tr("device_fallback_word")
         software = _completion_software_name(
             self._complete_note_software, self._complete_note_model
         ) or tr("flash_current_pkg")
         from ..config import install_power_on_steps
 
-        if self._complete_note_themes:
-            # Power-on already happened before the themes were placed.
-            lines = [tr("donate_completion_themes_subtitle").format(model=model)]
-            self._complete_note.setText("\n".join(lines))
+        # Clear hints
+        while self._completion_hint_layout.count():
+            item = self._completion_hint_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        self._completion_advice_label = None
+        # The card's lines are the whole message, not something to unfold.
+        self._completion_collapsible.toggle_button.setVisible(False)
+        self._completion_collapsible.toggle(True)
+
+        if self._complete_note_themes and not self.themes.placement_failed:
+            installed = tr("donate_completion_themes_subtitle").format(model=model)
+            self._completion_title_label.setText(f"<b>{escape(installed)}</b>")
+            _apply_card_text(self._completion_title_label)
+            self._complete_note.setText(installed)
+            self._complete_note.setVisible(True)
             return
+
         if not software or software.startswith(("Get ready to install", "Installing software", "Get your")):
             installed = tr("donate_completion_subtitle_the_software").format(model=model)
         else:
             installed = tr("donate_completion_subtitle").format(
                 software=software, model=model
             )
-        lines = [installed]
         if self.themes.placement_failed:
-            # The one thing the reader needs after a give-up: what went wrong
-            # and where the retry lives.
-            lines.append(tr("themes_placement_failed_note"))
-        lines.append(install_power_on_steps(model))
-        self._complete_note.setText("\n".join(lines))
+            # The themes stage gave up: the note's job is the try-again copy,
+            # which is why the reader is on this screen at all.
+            installed = tr("themes_placement_failed_note")
+
+        # A firmware whose guide still has to run is not installed in the sense
+        # the sentence claims, so the card leaves the sentence out and says
+        # what is left to do instead.
+        has_guide = self._has_post_install() and not self.themes.placement_failed
+        if has_guide:
+            heading = f"<b>{escape(tr('completion_one_more_thing'))}</b>"
+        else:
+            # Nothing is left to do: the card opens with what finished.
+            heading = f"<b>{escape(installed)}</b>"
+        self._completion_title_label.setText(heading)
+        _apply_card_text(self._completion_title_label)
+        self._complete_note.setText(installed)
+        self._complete_note.setVisible(not has_guide)
+
+        if has_guide:
+            lbl = QLabel(self._post_install_hint_html())
+            lbl.setTextFormat(Qt.TextFormat.RichText)
+            lbl.setWordWrap(True)
+            lbl.setProperty("cssClass", "dimmed")
+            lbl.setOpenExternalLinks(False)
+            lbl.linkActivated.connect(lambda _href: self._open_post_install_guide())
+            _apply_card_text(lbl)
+            self._completion_hint_layout.addWidget(lbl)
+
+        if self._is_mtk_active():
+            # MTKClient leaves the player in download mode; SP Flash Tool
+            # starts it, so only MTKClient completions explain the button.
+            power_on = QLabel(escape(install_power_on_steps(model)))
+            power_on.setWordWrap(True)
+            _apply_card_text(power_on)
+            self._completion_hint_layout.addWidget(power_on)
+
+        hint_lbl = QLabel(
+            _themed_link(
+                "start-help",
+                escape(tr("completion_not_starting_hint")),
+                underline=True,
+            )
+        )
+        hint_lbl.setTextFormat(Qt.TextFormat.RichText)
+        hint_lbl.setOpenExternalLinks(False)
+        hint_lbl.linkActivated.connect(self._on_start_help_link)
+        _apply_card_text(hint_lbl)
+        self._completion_hint_layout.addWidget(hint_lbl)
+
+        # The start-up advice belongs under its own hint, closed until asked
+        # for, the same way the letter carries it.
+        advice = QLabel(self._start_help_text())
+        advice.setWordWrap(True)
+        advice.setTextFormat(Qt.TextFormat.RichText)
+        advice.setTextInteractionFlags(
+            Qt.TextInteractionFlag.LinksAccessibleByMouse
+            | Qt.TextInteractionFlag.LinksAccessibleByKeyboard
+        )
+        advice.setOpenExternalLinks(False)
+        advice.setProperty("cssClass", "dimmed")
+        advice.linkActivated.connect(self._on_start_help_link)
+        advice.setVisible(False)
+        _apply_card_text(advice)
+        self._completion_hint_layout.addWidget(advice)
+        self._completion_advice_label = advice
 
     def show_completion_note(
-        self, visible: bool, software: str = "", model: str = "", themes_installed: bool = False
+        self,
+        donations_enabled: bool,
+        software: str = "",
+        model: str = "",
+        themes_installed: bool = False,
+        post_install_once: bool = False,
+        post_install_suppressed: bool = False,
     ) -> None:
-        """Explain the finished install when the donations appeal is hidden."""
+        """Finish the screen, with the ask only where donations are enabled.
+
+        With donations on and a guide to run, the letter carries the finish:
+        what is left, the guide, and the coffee note signed by the maintainer.
+        With the ask off, the simple completion card is the whole screen — no
+        donation copy, no signature, no empty button row.
+        """
+        logger.info("show_completion_note called, software=%s, post_install_once=%s", software, post_install_once)
+        self._post_install_once = post_install_once
+        self._post_install_guide_suppressed = bool(post_install_suppressed)
         self._complete_note_themes = bool(themes_installed)
         self._complete_note_software = str(software or "").strip()
         self._complete_note_model = str(model or "").strip()
-        self._render_completion_note()
-        self._complete_note.setVisible(bool(visible))
+        # The letter reads the same two values the donation path uses, so the
+        # callers that name the finished install must set them here too.
+        if self._complete_note_software:
+            self._package_name = self._complete_note_software
+        if self._complete_note_model:
+            self._model = self._complete_note_model
+        self._donations_shown = False
+        self._completion_advice_label = None
+        themes_failed = bool(self.themes.placement_failed)
+        if donations_enabled and self._has_post_install() and hasattr(self, "_appeal"):
+            self._appeal_themes = bool(themes_installed)
+            if themes_failed:
+                # The letter is shown, but the stage that gave up still needs
+                # its try-again copy under it.
+                self._render_completion_note(post_install_once=post_install_once)
+                self._completion_note_container.setVisible(True)
+            else:
+                self._completion_note_container.setVisible(False)
+            if hasattr(self, "_post_install_hint"):
+                self._post_install_hint.setVisible(False)
+            if hasattr(self, "_progress_card"):
+                # The letter already says the install is done; the 100% card
+                # above it would repeat the same news in a second shape.
+                self._progress_card.setVisible(False)
+            if hasattr(self, "_intro"):
+                self._intro.set_keys(
+                    THEMES_COMPLETION_KEYS if themes_installed else ONE_MORE_THING_KEYS
+                )
+            # One fixed note for a guide install, the sentence in the
+            # reference completion screen: the ask can come and go around it,
+            # the letter does not change with the donation switch.
+            self._active_appeal_key = "donate_completion_body_small_hours"
+            self._render_appeal_copy()
+            self._set_donation_row_visible(False)
+            self._appeal.setVisible(donations_enabled)
+        else:
+            self._render_completion_note(post_install_once=post_install_once)
+            self._completion_note_container.setVisible(True)
+            if not donations_enabled and hasattr(self, "_appeal"):
+                # Without the ask the letter has nothing the simple card does
+                # not say, so it leaves the screen entirely: no donation copy,
+                # no signature, no empty button row.
+                self._appeal.setVisible(False)
+        # A suppressed guide changes the done mark (globe vs tick) and hides
+        # View Guide; those were rendered before ``show_completion_note`` knew
+        # this run's answer.
+        self._apply_post_install_state()
         self.view_generation = getattr(self, "view_generation", 0) + 1
         self._notify_geometry_change()
 
@@ -5645,13 +6418,28 @@ class FlashPage(QWidget):
         self._appeal_callback = callback
         self._appeal_not_now = on_not_now
         self._appeal_themes = bool(themes_installed)
+        self._donations_shown = bool(visible)
         if not hasattr(self, "_appeal"):
             return
         if hasattr(self, "_intro"):
-            self._intro.set_keys(THEMES_COMPLETION_KEYS if themes_installed else COMPLETION_KEYS)
+            if themes_installed:
+                self._intro.set_keys(THEMES_COMPLETION_KEYS)
+            elif self._has_post_install():
+                # The write is not the end of this install: the letter leads
+                # with the steps the guide still has to walk the user through.
+                self._intro.set_keys(ONE_MORE_THING_KEYS)
+            else:
+                self._intro.set_keys(COMPLETION_KEYS)
         import random
         self._active_appeal_key = random.choice(COMPLETION_BODY_KEYS)
         self._render_appeal_copy()
+        self._set_donation_row_visible(bool(visible))
+        if visible:
+            self._completion_note_container.setVisible(False)
+            if hasattr(self, "_post_install_hint"):
+                self._post_install_hint.setVisible(False)
+            if hasattr(self, "_progress_card"):
+                self._progress_card.setVisible(False)
         self._appeal.setVisible(bool(visible))
         self.view_generation = getattr(self, "view_generation", 0) + 1
         self._notify_geometry_change()
@@ -5679,7 +6467,7 @@ class FlashPage(QWidget):
             return True
 
     def _on_appeal_dont_ask(self) -> None:
-        """Turn donations off. The caller returns to the compact completion screen."""
+        """Turn donations off; the letter stays and its ask leaves."""
         if self._portable_storage_blocked():
             # A portable run cannot persist the choice, so the link explains
             # that instead of pretending to save it. Shown like the Type tip.
@@ -5715,8 +6503,8 @@ class FlashPage(QWidget):
         self._complete = False
         self._failed = False
         self.show_install_app(False)
-        if hasattr(self, "_complete_note"):
-            self._complete_note.setVisible(False)
+        if hasattr(self, "_completion_note_container"):
+            self._completion_note_container.setVisible(False)
         if hasattr(self, "_appeal"):
             self._appeal.setVisible(False)
         if hasattr(self, "_warning"):
@@ -5733,6 +6521,8 @@ class FlashPage(QWidget):
             "_theme_trouble_recover_btn",
             "_driver_action_row",
             "_post_install_hint",
+            "_start_help_hint",
+            "_start_help_body",
         ):
             widget = getattr(self, attr, None)
             if widget is not None:
@@ -5858,14 +6648,35 @@ class FlashPage(QWidget):
         # title-above-the-prompt card back.
         self._prompt_only = True
         self._wait_status.set_status("idle")
-        # The connect prompt is not the power-off prompt: no Keep Data tick.
+        if hasattr(self, "_wait_pkg_label"):
+            self._wait_pkg_label.setVisible(False)
+        # The connect prompt is not the power-off prompt: no Keep Data tick,
+        # and the paperclip advice belongs to power-off/recovery only.
         self._sync_keep_data_visibility()
-        prompt = self._connect_device_prompt_text()
+        self._update_paperclip_hint()
+        # Give the backend a moment to start its USB listener before asking
+        # the reader to plug in. The stage owns this window: the first search
+        # line re-arms it, and repeated lines in the same stage do not.
+        #
+        # MTKClient is held back until its own search line prints, not just for
+        # the window: loading pyusb, the bundled libusb and the vendored fork
+        # takes longer than any fixed countdown, and a player plugged in while
+        # that is still running has left its preloader window before the
+        # handshake can run. So "Please connect your <model>" waits for proof
+        # that the engine is listening.
+        getting_ready = self._connect_prompt_held()
+        prompt = self._connect_prompt_text()
         if hasattr(self, "_wait_prompt_label"):
             self._wait_prompt_label.setText(prompt)
         self._wait_banner.set_type("info")
-        self._wait_banner_key = "connect"
-        self._wait_banner.set_key("flash_connect_device_prompt", model=self._connect_model_text())
+        if getting_ready:
+            self._wait_banner_key = "getting_ready"
+            self._wait_banner.set_key("flash_getting_ready")
+        else:
+            self._wait_banner_key = "connect"
+            self._wait_banner.set_key(
+                "flash_connect_device_prompt", model=self._connect_model_text()
+            )
         self._conn_value_key = "flash_conn_waiting"
         self._conn_row.set_value(tr("flash_conn_waiting"))
         self._set_determinate(self._wait_progress_bar, 0)
@@ -5915,8 +6726,8 @@ class FlashPage(QWidget):
         self._failed = False
         self._donations_shown = False
         self._step_key = "flash_finishing"
-        if hasattr(self, "_complete_note"):
-            self._complete_note.setVisible(False)
+        if hasattr(self, "_completion_note_container"):
+            self._completion_note_container.setVisible(False)
         if hasattr(self, "_appeal"):
             self._appeal.setVisible(False)
         if hasattr(self, "_progress_card"):
@@ -6057,7 +6868,7 @@ class FlashPage(QWidget):
         if label is None:
             return
         text = str(text or "")
-        if not text:
+        if not text or "100.0%" in text or "100%" in text:
             label.clear()
             label.setVisible(False)
             self._notify_geometry_change()
@@ -6243,7 +7054,7 @@ class FlashPage(QWidget):
         elif hasattr(self, "_wait_prompt_label") and copy == "entering_password":
             self._wait_prompt_label.setText(tr("install_linux_entering_password"))
         elif hasattr(self, "_wait_prompt_label") and copy in ("connect", ""):
-            self._wait_prompt_label.setText(self._connect_device_prompt_text())
+            self._wait_prompt_label.setText(self._connect_prompt_text())
         elif hasattr(self, "_wait_prompt_label") and copy == "stage" and self._step_key:
             self._wait_prompt_label.setText(tr(self._step_key))
         if hasattr(self, "_wait_mode_hint"):
@@ -6312,8 +7123,8 @@ class FlashPage(QWidget):
             # must not turn a finished install's appeal back into the generic
             # project pitch.
             self._render_appeal_copy()
-        if hasattr(self, "_complete_note"):
-            self._render_completion_note()
+        if hasattr(self, "_completion_note_container"):
+            self._render_completion_note(post_install_once=getattr(self, "_post_install_once", False))
         self._style_done_button()
         self._apply_guide_highlight()
         if self._prep_step_key:
@@ -6372,6 +7183,15 @@ class FlashPage(QWidget):
         from .dark import install_progress_readability
 
         self._refresh_copy_theme()
+        # The completion hints bake the link colour into their markup, so they
+        # are rebuilt with the palette: a hint built before the theme applied
+        # kept a black link on the dark card, which read as missing text.
+        if hasattr(self, "_post_install_hint"):
+            self._post_install_hint.setText(self._post_install_hint_html())
+        if hasattr(self, "_completion_guide_hint"):
+            self._completion_guide_hint.setText(self._completion_guide_html())
+        if getattr(self, "_appeal", None) is not None and self._appeal.isVisible():
+            self._render_appeal_copy()
         self._seal_status_labels()
         for bar_name in ("_prep_progress", "_wait_progress_bar", "_progress_bar", "_download_progress"):
             bar = getattr(self, bar_name, None)
@@ -6436,14 +7256,22 @@ class FlashPage(QWidget):
 
         The power-off and USB-recovery cards are asking for a player to be
         brought back; nothing has been written on either, so leaving them needs
-        no stop confirmation. The connect card is different: the flasher is
-        already running and watching for the port, so its cancel chip still
-        asks first. This used to be spelled ``_prompt_only``, which made the
-        connect card lose its confirmation once it became a prompt-only card.
+        no stop confirmation. The same goes for the Keep Data question and its
+        erase warning: both are asked before the first write, and a user who
+        does not want to answer them does not want this run. The connect card
+        is different: the flasher is already running and watching for the port,
+        so its cancel chip still asks first. This used to be spelled
+        ``_prompt_only``, which made the connect card lose its confirmation once
+        it became a prompt-only card.
         """
         return bool(getattr(self, "_prompt_only", False)) and getattr(
             self, "_wait_copy", ""
-        ) in ("power_off", "usb_disconnected")
+        ) in (
+            "power_off",
+            "usb_disconnected",
+            "keep_data_confirm",
+            "keep_data_erase_confirm",
+        )
 
     def _on_cancel(self):
         if getattr(self, "_failed", False) or self._nothing_written_yet():
@@ -6462,7 +7290,10 @@ class FlashPage(QWidget):
         keep-data sanity check is the exception: its X reads "No", which means
         the player is running different software, not that the install stops.
         """
-        if getattr(self, "_keep_data_confirm_active", False):
+        if (
+            getattr(self, "_keep_data_confirm_active", False)
+            and not getattr(self, "_keep_data_cancel_leaves", False)
+        ):
             callback = getattr(self, "_keep_data_confirm_no_cb", None)
             if callable(callback):
                 self._keep_data_confirm_no_cb = None
@@ -6571,11 +7402,11 @@ class FlashPage(QWidget):
                 )
                 appeal_h = max(self._appeal.sizeHint().height(), wrapped_h) + 8
             complete_note_h = 0
-            if hasattr(self, "_complete_note") and self._complete_note.isVisible():
-                note_w = int(self._complete_note.width()) or page_measure_w
+            if hasattr(self, "_completion_note_container") and self._completion_note_container.isVisible():
+                note_w = int(self._completion_note_container.width()) or page_measure_w
                 complete_note_h = max(
-                    self._complete_note.sizeHint().height(),
-                    self._complete_note.heightForWidth(max(1, note_w)),
+                    self._completion_note_container.sizeHint().height(),
+                    self._completion_note_container.heightForWidth(max(1, note_w)),
                 ) + 8
             h = card_h + warn_h + appeal_h + complete_note_h
         elif cur_view is self._waiting_view:
@@ -6770,7 +7601,7 @@ class FlashPage(QWidget):
         actions = getattr(self, "_stop_actions", None)
         chips = int(actions.sizeHint().width()) if actions is not None else 0
         if total > 0:
-            available = total - _CARD_ICON_PX - _CARD_HEAD_GAP * 3 - chips - 8
+            available = total - _CARD_ICON_PX - _CARD_HEAD_GAP * 3 - chips - 2
             width = min(one_line, max(120, available))
         else:
             width = one_line
