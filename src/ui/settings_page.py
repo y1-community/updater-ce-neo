@@ -329,16 +329,13 @@ class SettingsPage(QWidget):
         """Height needed by the Settings page, hugging a solo card when focused."""
         card = getattr(self, "_solo_card", None)
         if card is not None:
-            # Measure the height without letting adjustSize() resize the card:
-            # it snaps the widget to its own size hint, and on a wide window
-            # that is about half the column. The focused card must keep the
-            # column's width while the window fits itself to the card.
-            width = int(card.width())
-            card.adjustSize()
-            if width > 0 and int(card.width()) != width:
-                card.resize(width, card.height())
+            width = max(int(card.width()), int(card.minimumWidth()))
+            if card.hasHeightForWidth() and width > 0:
+                card_h = card.heightForWidth(width)
+            else:
+                card_h = card.sizeHint().height()
             height = max(
-                int(card.sizeHint().height()),
+                card_h,
                 int(card.minimumSizeHint().height()),
             )
             layout = self.layout()
@@ -2100,9 +2097,6 @@ class SettingsPage(QWidget):
     def _on_add_device_model_changed(self, *_):
         model = self._add_device_model.currentText().strip()
         types = hardware_types_for_model(model)
-        has_types = len(types) > 1
-        self._add_device_type_label.setVisible(has_types)
-        self._add_device_type.setVisible(has_types)
         self._add_device_type.blockSignals(True)
         self._add_device_type.clear()
         for hw_type in types:
