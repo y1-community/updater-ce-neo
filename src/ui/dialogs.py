@@ -256,7 +256,7 @@ class PreInstallGuidanceDialog(QDialog):
         cancel_btn.clicked.connect(self.reject)
         btn_row.addWidget(cancel_btn, 0, Qt.AlignVCenter)
 
-        continue_btn = _RoundNextButton(symbol="next", accent=True)
+        continue_btn = _RoundNextButton(symbol="arrow-right", accent=True)
         continue_btn.setText(tr("dialog_pre_install_continue"))
         continue_btn.clicked.connect(self.accept)
         btn_row.addWidget(continue_btn, 0, Qt.AlignVCenter)
@@ -517,14 +517,26 @@ class NoticeDetailView(QWidget):
 
         self._body = _NoticeMarkdownView(self._panel)
         self._body.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self._body.setMinimumHeight(180)
+        self._body.setMinimumHeight(300)
         panel.addWidget(self._body, 1)
 
         self._open_page = _notice_link_button(tr("notices_open_page"), self._panel)
         self._open_page.clicked.connect(self._open_notice_page)
         panel.addWidget(self._open_page, 0, Qt.AlignLeft)
 
-        root.addWidget(self._panel, 1)
+        from PySide6.QtWidgets import QScrollArea
+        from .scrollbars import configure_scroll_area
+        from .surfaces import show_glass_backdrop
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setWidget(self._panel)
+        show_glass_backdrop(scroll.viewport())
+        show_glass_backdrop(self._panel)
+        configure_scroll_area(scroll)
+
+        root.addWidget(scroll, 1)
 
     def set_notice(self, notice) -> None:
         self._notice = notice
@@ -1936,7 +1948,7 @@ class UpdateAvailableDialog(QDialog):
         self._cancel_btn.clicked.connect(self._on_cancel_clicked)
         self._btn_row.addWidget(self._cancel_btn, 0, Qt.AlignVCenter)
 
-        self._action_btn = _RoundNextButton(symbol="next", accent=True)
+        self._action_btn = _RoundNextButton(symbol="arrow-right", accent=True)
         # Older callers and the update wiring tests address the primary chip as
         # the download button; it is the same widget.
         self._download_btn = self._action_btn

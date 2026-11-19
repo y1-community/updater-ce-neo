@@ -95,6 +95,10 @@ def _apply_native_chrome(window, *, dark=None):
 
     if dark is None:
         dark = _is_dark()
+    # Preparing the surface has to happen before the glass is painted, and it
+    # is here rather than in the window builder so the window can be mapped
+    # first: this import is the expensive one on macOS.
+    _startup_step("prepare_window_for_glass", glass.prepare_window_for_glass, window)
     _startup_step("apply_glass", glass.apply_glass, window, dark=dark)
     _startup_step("configure_traffic_lights", glass.configure_traffic_lights, window, x_offset=18)
     _startup_step("apply_windows_dark_titlebar", glass.apply_windows_dark_titlebar, window, dark)
@@ -576,7 +580,6 @@ def main():
 
         # The headless installer owns the same window as the guided one: no
         # tool may be left searching for a device after it exits.
-        process_guard.sweep_stray_tools(reason="before headless install")
         process_guard.begin_install_session(reason="headless install")
 
         result_emitted = False
@@ -822,8 +825,7 @@ def main():
 
     def _create_window():
         """Build the one window, with the host chrome it needs."""
-        from .ui.dark import apply_theme, is_dark
-        from .ui.glass import apply_windows_dark_titlebar, prepare_window_for_glass
+        from .ui.dark import apply_theme
         from .ui.main_window import MainWindow, apply_interface_direction
 
         apply_interface_direction(app)
@@ -831,17 +833,19 @@ def main():
             _startup_step("apply_theme", apply_theme, app, force_dark=None)
             app._theme_applied = True
         window = MainWindow()
-        holder["window"] = window
+        # First launch: the welcome journey owns the first screen so a player
+        # that was installed before this app existed can still be recorded for
+        # update reminders. A launch with a tracked player, or one that has
+        # already finished the journey, stays on the catalogue.
+        window.start_onboarding_if_needed()
         if agent is not None:
             window._background_agent = agent
             agent.adopt_window(window)
-        _startup_step("prepare_window_for_glass", prepare_window_for_glass, window)
-        _startup_step(
-            "apply_windows_dark_titlebar",
-            apply_windows_dark_titlebar,
-            window,
-            is_dark(),
-        )
+        # The host chrome (glass, traffic lights, dark title bar) is applied by
+        # ``_apply_native_chrome`` once the window is mapped. It reaches into
+        # pyobjc on macOS and DWM on Windows, and importing either of those
+        # before the window exists is time the launch spends with no window on
+        # screen. Nothing drawn before it depends on it.
         if presentation == "tray" and not getattr(app, "_startup_sweep_started", False):
             QTimer.singleShot(0, _sweep_on_startup)
         if not getattr(app, "_retention_swept", False):

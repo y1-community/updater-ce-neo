@@ -66,12 +66,19 @@ def downloads_root(tmp_path, monkeypatch):
     return tmp_path
 
 
-def test_extraction_disposes_of_the_downloaded_archive(downloads_root):
+def test_extraction_keeps_the_downloaded_archive_for_a_retry(downloads_root):
+    """A retry must not need a second download of a release it already has.
+
+    The archive used to be deleted as soon as the extract completed, which
+    made a retry that had to re-extract fail as CACHE_FILE_MISSING and fetch
+    the same firmware again. Retention clears old downloads at startup; the
+    install journey's own copy stays until then.
+    """
     archive = _package(downloads_root / "src")
     extracted = Path(ExtractWorker(str(archive))._extract(str(archive)))
 
     assert (extracted / "boot.img").is_file()
-    assert not archive.exists(), "the extracted folder is the retained copy"
+    assert archive.is_file(), "the download is the retry's copy of the release"
 
 
 def test_a_local_archive_is_never_deleted(tmp_path, monkeypatch):
@@ -89,7 +96,7 @@ def test_a_local_archive_is_never_deleted(tmp_path, monkeypatch):
 def test_a_missing_archive_uses_the_files_still_on_disk(downloads_root):
     archive = _package(downloads_root / "src")
     first = Path(ExtractWorker(str(archive))._extract(str(archive)))
-    assert not archive.exists()
+    archive.unlink()
 
     again = Path(ExtractWorker(str(archive))._extract(str(archive)))
 

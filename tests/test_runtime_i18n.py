@@ -221,7 +221,7 @@ def test_english_is_never_written_to_a_user_catalog(tmp_path, monkeypatch):
 
 
 _POWER_ON_TEMPLATE = (
-    "Unplug your {label}, then hold the {button} until it turns on."
+    "To turn your {label} on, unplug the USB and hold the {button}."
 )
 
 
@@ -255,7 +255,7 @@ def test_runtime_translator_matches_a_formatted_sentence_and_renders_its_values(
 
     box = QWidget()
     label = QLabel(
-        "Unplug your Y2, then hold the кнопка питания until it turns on.", box
+        "To turn your Y2 on, unplug the USB and hold the кнопка питания.", box
     )
     translator = RuntimeTranslator(
         cache_path=tmp_path / "template.json",
@@ -270,7 +270,7 @@ def test_runtime_translator_matches_a_formatted_sentence_and_renders_its_values(
         assert label.text() == (
             "Отключите Y2, затем удерживайте кнопка питания, пока он не включится."
         )
-        assert calls == ["Unplug your ⟦0⟧, then hold the ⟦1⟧ until it turns on."]
+        assert calls == ["To turn your Y2 on, unplug the USB and hold the кнопка питания."]
     finally:
         translator.stop()
         i18n._CATALOGS.pop("ru", None)
@@ -280,7 +280,7 @@ def test_a_template_translation_that_loses_a_placeholder_leaves_english(
     app, tmp_path, monkeypatch
 ):
     _patch_template_sources(monkeypatch, tmp_path)
-    original = "Unplug your Y2, then hold the кнопка питания until it turns on."
+    original = "To turn your Y2 on, unplug the USB and hold the кнопка питания."
 
     box = QWidget()
     label = QLabel(original, box)
@@ -344,7 +344,7 @@ def test_the_mixed_completion_sentence_is_translated_from_the_catalog(app, tmp_p
     calls = []
     box = QWidget()
     label = QLabel(
-        "Unplug your Y2, then hold the кнопка питания until it turns on.", box
+        "To turn your Y2 on, unplug the USB and hold the кнопка питания.", box
     )
     translator = RuntimeTranslator(
         cache_path=tmp_path / "catalog.json",

@@ -1667,8 +1667,9 @@ def test_title_row_switches_when_the_title_says_it_all():
     translator().set_language("en")
     page = SettingsPage()
     try:
+        # The players card has no title-row switch any more: reminders belong
+        # to each player on record, and the card offers Add Player instead.
         for card, switch, caption_key in (
-            (page._reminders_card, page._cb_reminders, "settings_reminders_enable"),
             (page._offline_mode_card, page._cb_offline_mode, "settings_offline_mode"),
         ):
             row = card._title_row

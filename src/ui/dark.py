@@ -554,14 +554,46 @@ def get_declared_accent_color(palette: QPalette | None = None) -> str | None:
     return probe[0].lower() if probe else None
 
 
+def _macos_appkit_dark() -> bool | None:
+    """The host appearance as AppKit reports it right now, or ``None``.
+
+    AppKit updates ``effectiveAppearance`` the moment macOS switches — the
+    sunset/sunrise switch in Auto included — while the ``AppleInterfaceStyle``
+    default can lag behind it. That makes this the first source, not the
+    fallback it used to be.
+    """
+    try:
+        from AppKit import NSApp
+    except Exception:
+        return None
+    try:
+        app = NSApp()
+        if not app:
+            return None
+        appearance = app.effectiveAppearance()
+        if not appearance:
+            return None
+        name = str(appearance.name()).lower()
+    except Exception:
+        return None
+    if "dark" in name:
+        return True
+    if "light" in name or "aqua" in name:
+        return False
+    return None
+
+
 def is_system_dark_mode() -> bool:
     """Accurately determine whether the host OS is currently in dark mode.
 
     Never relies on window surface colors (which can report #000000 when translucent).
     Queries the host platform first, Qt styleHints second, and standard palette last.
     """
-    # 1. macOS: AppleInterfaceStyle defaults / AppKit effectiveAppearance
+    # 1. macOS: AppKit's live appearance, then AppleInterfaceStyle defaults
     if sys.platform == "darwin":
+        appkit_dark = _macos_appkit_dark()
+        if appkit_dark is not None:
+            return appkit_dark
         try:
             import subprocess
             res = subprocess.run(
@@ -575,20 +607,6 @@ def is_system_dark_mode() -> bool:
             if res.returncode != 0:
                 # Key does not exist in light mode
                 return False
-        except Exception:
-            pass
-
-        try:
-            from AppKit import NSApp
-            app_inst = NSApp()
-            if app_inst:
-                appr = app_inst.effectiveAppearance()
-                if appr:
-                    name = str(appr.name()).lower()
-                    if "dark" in name:
-                        return True
-                    if "light" in name or "aqua" in name:
-                        return False
         except Exception:
             pass
 
@@ -2472,6 +2490,7 @@ class ThemeWatcher(QObject):
             pass
         self._installed = True
         self._install_macos_accent_observer()
+        self._install_macos_appearance_observer()
         self._poll_timer.start()
 
     def stop(self) -> None:
@@ -2499,6 +2518,17 @@ class ThemeWatcher(QObject):
             except Exception:
                 pass
             self._macos_accent_observer = None
+        appearance_observer = getattr(self, "_macos_appearance_observer", None)
+        if appearance_observer is not None:
+            try:
+                from AppKit import NSDistributedNotificationCenter
+
+                NSDistributedNotificationCenter.defaultCenter().removeObserver_(
+                    appearance_observer
+                )
+            except Exception:
+                pass
+            self._macos_appearance_observer = None
 
     def _install_macos_accent_observer(self) -> None:
         """Repaint when System Settings changes the accent colour.
@@ -2532,6 +2562,44 @@ class ThemeWatcher(QObject):
     def _macos_accent_changed(self) -> None:
         """Re-read the host accent and restyle every widget with it."""
         note_macos_accent_changed()
+        self.schedule()
+
+    def _install_macos_appearance_observer(self) -> None:
+        """Repaint when macOS switches light/dark, the Auto switch included.
+
+        Qt normally reports the switch through ``colorSchemeChanged``, but not
+        when the app has already given the window a palette of its own — which
+        this app does at startup — so the host notification is the reliable
+        path on macOS.
+        """
+        if sys.platform != "darwin":
+            return
+        try:
+            from AppKit import NSDistributedNotificationCenter
+            from Foundation import NSOperationQueue
+        except Exception:
+            logger.debug(
+                "AppKit is unavailable for the appearance notification",
+                exc_info=True,
+            )
+            return
+        try:
+            center = NSDistributedNotificationCenter.defaultCenter()
+            self._macos_appearance_observer = (
+                center.addObserverForName_object_queue_usingBlock_(
+                    "AppleInterfaceThemeChangedNotification",
+                    None,
+                    NSOperationQueue.mainQueue(),
+                    lambda _notification: self._macos_appearance_changed(),
+                )
+            )
+        except Exception:
+            logger.debug(
+                "could not observe the macOS appearance change", exc_info=True
+            )
+
+    def _macos_appearance_changed(self) -> None:
+        """The host flipped light/dark: restyle with the new appearance."""
         self.schedule()
 
     def _on_palette_changed(self, palette=None) -> None:

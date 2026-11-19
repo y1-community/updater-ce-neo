@@ -18,6 +18,24 @@ os.environ.setdefault("UPDATER_CURRENCY", "USD")
 
 
 @pytest.fixture(autouse=True)
+def _isolated_busy_marker(tmp_path_factory, monkeypatch):
+    """Never touch the per-user marker a flashing copy protects its tool with.
+
+    ``process_guard.begin_install_session`` publishes to that shared file, and
+    ``instance_marker.clear`` deletes it at exit. A test run that did so would
+    overwrite — and then remove — the marker of an Updater that is flashing on
+    this machine, after which another copy's sweep is free to terminate its
+    ``mtk.py`` / ``flash_tool`` mid-write (the app then reports the tool's
+    ``-15`` SIGTERM exit). Tests get their own file instead.
+    """
+    from src import instance_marker
+
+    path = tmp_path_factory.mktemp("busy-marker") / "busy.json"
+    monkeypatch.setattr(instance_marker, "marker_path", lambda: path)
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _forget_dismissed_install_hints():
     """A dismissed card hint is a user preference, not test state.
 
@@ -34,10 +52,13 @@ def _forget_dismissed_install_hints():
 
         settings = QSettings("innioasis", "updater")
         for name in ("paperclip", "microsd", "keep_data_warning"):
-            key = f"dismissed_install_hints/{name}"
-            if settings.contains(key):
-                saved[key] = bool(settings.value(key, False, type=bool))
-            settings.remove(key)
+            # Both the reader's "Got it." and the one automatic showing are
+            # preferences of whoever runs the app, never test state.
+            for group in ("dismissed_install_hints", "seen_install_hints"):
+                key = f"{group}/{name}"
+                if settings.contains(key):
+                    saved[key] = bool(settings.value(key, False, type=bool))
+                settings.remove(key)
         settings.sync()
     except Exception:
         settings = None

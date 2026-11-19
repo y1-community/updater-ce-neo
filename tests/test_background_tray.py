@@ -53,6 +53,17 @@ def _background_mode_available(monkeypatch):
     still ship it.
     """
     monkeypatch.setattr(tray, "background_mode_supported", lambda: True)
+    # The hold is a process-wide flag, and a window from the previous file can
+    # still have a queued close or reveal. Start every check from "not held"
+    # with an empty queue, and let that queue drain while this test's patches
+    # are still installed, so a late callback cannot record into the next one.
+    monkeypatch.setattr(tray, "_AUTOMATIC_TERMINATION_HELD", False, raising=False)
+    app = QApplication.instance()
+    if app is not None:
+        app.processEvents()
+    yield
+    if app is not None:
+        app.processEvents()
 
 
 def test_background_opt_in_defaults_to_off():

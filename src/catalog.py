@@ -74,6 +74,10 @@ class FirmwarePackage:
     apk_repo: str = ""
     # Whether Keep Data is completely blocked/disallowed for this firmware
     do_not_keep_data: bool = False
+    # If set to true, post_install guides are skipped when the player is
+    # already running this firmware, or the user confirmed that in the Keep
+    # Data / settings question.
+    post_install_once: bool = False
     # Whether this firmware needs SP Flash Tool's Format All + Download mode
     # because its partition table differs from the installed one
     # (``PMT_format_needed="true"`` in slidia_manifest.xml). That mode
@@ -103,6 +107,13 @@ class FirmwarePackage:
     # A bare version is a minimum; prefix ``=`` pins it exactly. Empty means
     # any version; see ``install_first.parse_version_constraint``.
     install_first_version: str = ""
+    # Systems this overlay needs its base when coming *from*
+    # (``install_first_when="a/classy,b/rondo"``, comma separated). Empty
+    # means the base is required whatever the player runs.
+    install_first_when: str = ""
+    # Skip the prerequisite question when the player already runs the base
+    # (``install_first_once``).
+    install_first_once: bool = False
     # Archive names declared per player and hardware revision
     # (``package_name_y2``, ``package_name_y1_type_b``,
     # ``package_name_timmkoo_a5``), keyed by the attribute's own suffix after

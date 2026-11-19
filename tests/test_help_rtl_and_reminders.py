@@ -136,6 +136,15 @@ def _tracking(monkeypatch, installs, enabled):
         "get_device_install",
         lambda model, settings=None: installs.get(model),
     )
+    # The card builds its per-player rows from every tracked install, and the
+    # record has to carry its model for the row caption and the copy.
+    monkeypatch.setattr(
+        tracking,
+        "get_all_device_installs",
+        lambda settings=None: {
+            model: {"model": model, **record} for model, record in installs.items()
+        },
+    )
     monkeypatch.setattr(
         tracking,
         "is_device_reminder_enabled",
@@ -163,7 +172,7 @@ def test_reminders_are_one_switch_per_tracked_model(monkeypatch):
     _tracking(monkeypatch, installs, enabled)
     page = SettingsPage()
     try:
-        assert page._reminders_card.title_label().text() == "Player Update Reminders"
+        assert page._reminders_card.title_label().text() == "Add your players"
         assert page._reminders_list.isVisible() or not page.isVisible()
         switches = page._reminder_switches
         assert set(switches) == {"Y1", "Y2"}
@@ -174,7 +183,9 @@ def test_reminders_are_one_switch_per_tracked_model(monkeypatch):
 
         switches["Y2"].setChecked(True)
         assert enabled["Y2"] is True
-        assert page._cb_reminders.isChecked() is True
+        # No master switch exists: each player carries its own reminder.
+        assert switches["Y2"].isChecked() is True
+        assert not hasattr(page, "_cb_reminders")
     finally:
         page.deleteLater()
         app.processEvents()
@@ -229,9 +240,11 @@ def test_a_single_tracked_install_names_its_software_in_the_copy(monkeypatch):
         assert page._reminders_desc.text() == (
             "We'll let you know when a new version of Rockbox is released for your Y1."
         )
-        # One tracked player keeps the single title-line switch.
-        assert page._reminder_switches == {}
-        assert page._reminders_list.isHidden()
+        # Every tracked player carries its own reminder checkbox: there is no
+        # master switch to fall back on.
+        assert set(page._reminder_switches) == {"Y1"}
+        assert not page._reminders_list.isHidden()
+        assert not hasattr(page, "_cb_reminders")
     finally:
         page.deleteLater()
         app.processEvents()

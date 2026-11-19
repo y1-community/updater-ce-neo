@@ -92,7 +92,8 @@ def test_already_on_target_allows_keep_data(state_and_items, monkeypatch):
     gate = tui._install_first_gate(
         state,
         items,
-        lambda title, options, selected=0: 0,
+        # The base opens the menu, so the target is the second row.
+        lambda title, options, selected=0: 1,
         lambda title, detail="": True,
         Path("."),
         None,
@@ -136,7 +137,8 @@ def test_prerequisite_unknown_version_asks_then_proceeds(state_and_items, monkey
     gate = tui._install_first_gate(
         state,
         items,
-        lambda title, options, selected=0: 1,
+        # Row 0 is the base: answering it asks for the base's version.
+        lambda title, options, selected=0: 0,
         confirm,
         Path("."),
         None,
@@ -161,7 +163,7 @@ def test_prerequisite_old_version_installs_the_base(state_and_items, monkeypatch
     gate = tui._install_first_gate(
         state,
         items,
-        lambda title, options, selected=1: 1,
+        lambda title, options, selected=0: 0,
         lambda title, detail="": True,
         Path("."),
         None,
@@ -254,7 +256,7 @@ def test_local_portable_gate_flashes_the_bundled_pre_stage(tmp_path, monkeypatch
 
     gate = tui._local_install_first_gate(
         target.folder,
-        lambda title, options, selected=0: 2,
+        lambda title, options, selected=0: len(options) - 1,
         lambda title, detail="": True,
         ready=lambda *a: True,
     )
@@ -280,7 +282,7 @@ def test_local_portable_gate_reports_a_missing_pre_stage(tmp_path, monkeypatch):
 
     gate = tui._local_install_first_gate(
         target.folder,
-        lambda title, options, selected=0: 2,
+        lambda title, options, selected=0: len(options) - 1,
         lambda title, detail="": True,
         ready=lambda *a: True,
     )

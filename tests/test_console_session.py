@@ -386,10 +386,12 @@ class KeepDataOfferTests(unittest.TestCase):
         record = {"software_name": "Reborn (Y2Linux)", "tag_name": "baseline-233"}
         self.assertTrue(self._offered(self._reborn(), record))
 
-    def test_a_reborn_install_is_offered_whatever_came_before(self):
+    def test_a_reborn_install_is_not_offered_for_an_unrelated_system(self):
+        # The manifest declares no Reborn -> Classy/Y2Player relationship, so
+        # those systems' data cannot be carried into Reborn.
         for previous in ("Y2Player", "Classy"):
             record = {"software_name": previous, "tag_name": "1.2.0"}
-            self.assertTrue(self._offered(self._reborn(), record))
+            self.assertFalse(self._offered(self._reborn(), record))
 
     def test_the_manifest_veto_withholds_the_choice_even_for_reborn(self):
         from dataclasses import replace

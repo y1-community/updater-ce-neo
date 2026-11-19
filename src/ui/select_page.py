@@ -66,7 +66,7 @@ from ..config import (
     is_mediatek_installer,
     is_offline_mode,
 )
-from ..i18n import is_english_language, tr, translator
+from ..i18n import device_type_help_tip, is_english_language, tr, translator
 from ..browser import open_browser
 from ..translate import (
     get_google_translate_release_url,
@@ -1550,10 +1550,7 @@ class SelectPackagePage(QWidget):
         rich-text document would need its own colours written into it — which
         is what made these tips look nothing like the host's own tooltips.
         """
-        body = tr("sel_type_help_body")
-        if not body or body == "sel_type_help_body":
-            body = tr("device_type_help_msg") or tr("sel_type_help_tooltip")
-        return (body or "").strip()
+        return device_type_help_tip()
 
     def _refresh_type_help_icon(self) -> None:
         """Same hover tip as the Type combo, on the platform information glyph beside it.
@@ -2062,9 +2059,50 @@ class SelectPackagePage(QWidget):
             # The selected model is no longer offered (the manifest changed):
             # back to the default row, and the software list follows it below.
             self._model_combo.setCurrentIndex(0)
+        preferred = False
+        if not current and self._model_combo.count() > 0:
+            # One player on record is not a choice. The app already knows
+            # which model it tracks, so the catalogue opens on that row rather
+            # than making the user find their own device again.
+            only = self._only_tracked_model()
+            preferred_idx = self._model_combo.findText(only) if only else -1
+            if preferred_idx > 0:
+                self._model_combo.setCurrentIndex(preferred_idx)
+                preferred = True
         self._model_combo.blockSignals(False)
-        if (reset or refresh_selection) and hasattr(self, "_software_combo"):
+        if (reset or refresh_selection or preferred) and hasattr(self, "_software_combo"):
             self._on_model_changed()
+
+    @staticmethod
+    def _only_tracked_model() -> str:
+        """The one model with a player on record, or "" when it is no answer.
+
+        Two players are a choice, and none is nothing to go on; a single
+        tracked model is the answer the app can give on the user's behalf.
+        """
+        try:
+            from .. import device_tracking
+
+            installs = device_tracking.get_all_device_installs()
+        except Exception:
+            return ""
+        models = {
+            str((record or {}).get("model") or "").strip().upper()
+            for record in (installs or {}).values()
+        }
+        models.discard("")
+        return models.pop() if len(models) == 1 else ""
+
+    def select_only_tracked_model(self) -> bool:
+        """Point the device list at the only player on record, if there is one."""
+        only = self._only_tracked_model()
+        if not only:
+            return False
+        idx = self._model_combo.findText(only)
+        if idx < 0 or idx == self._model_combo.currentIndex():
+            return False
+        self._model_combo.setCurrentIndex(idx)
+        return True
 
     def _select_model_for_manual(self, model: str) -> None:
         """Point the device drop-down at a hand-imported package's model.
@@ -2123,8 +2161,10 @@ class SelectPackagePage(QWidget):
         # measurement the window kept the height it fitted to before the
         # banner existed, so the actions were clipped below the frame.
         if was_hidden != self._notice_prompt.isHidden():
+            # The window measures the page again once the banner's row has been
+            # laid out; its own settle pass then grows the frame to the new
+            # column instead of leaving the actions below it.
             self.content_size_changed.emit()
-            QTimer.singleShot(100, lambda: self.window().adjustSize())
 
     def _on_notice_dismissed(self) -> None:
         """The banner left the column: give its height back to the cards."""

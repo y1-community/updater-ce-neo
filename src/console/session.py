@@ -664,22 +664,6 @@ def _same_tracked_software(package, record: dict) -> bool:
     return bool(wanted & recorded)
 
 
-def _is_reborn_firmware(package) -> bool:
-    """True for the Reborn (Y2Linux) catalogue entry.
-
-    Reborn carries the player's data forward across every system it can be
-    installed over, so the session never withholds Keep Data for it unless the
-    catalogue vetoes it.
-    """
-    repo_name = str(getattr(package, "repo", "") or "").strip().rstrip("/").split("/")[-1]
-    if repo_name.casefold() == "y2linux":
-        return True
-    return any(
-        "y2linux" in _compact(getattr(package, field, ""))
-        for field in ("name", "slug")
-    )
-
-
 def keep_data_offered(
     package,
     allow_any: bool = False,
@@ -695,12 +679,11 @@ def keep_data_offered(
     the window's advanced override for a firmware mismatch, never for those
     vetoes.
 
-    Reborn (Y2Linux) is never withheld otherwise: it carries the player's data
-    forward whatever system came before, so a player tracked as Y2Player,
-    Classy or stock still gets the choice. Other firmware follows the window's
-    family rule: the tracked software itself, or a package that names the
-    parent it was built from, may keep data; a firmware with no ``derivative``
-    shares its data partition with itself only.
+    Otherwise the window's family rule applies: the tracked software itself,
+    or a package that names the parent it was built from, may keep data. A
+    firmware with no ``derivative`` shares its data partition with itself and
+    its own releases only, so Reborn does not inherit Classy or Y2Player data
+    without a manifest relationship.
     """
     if package is None:
         return True
@@ -712,8 +695,6 @@ def keep_data_offered(
     same = bool(record) and _same_tracked_software(package, record)
     if getattr(package, "pmt_format_needed", False) and not same:
         return False
-    if _is_reborn_firmware(package):
-        return True
     if allow_any:
         return True
     if not record or same or _record_names_firmware(package, record):
@@ -1271,7 +1252,6 @@ def toggle_setting(state: BrowseState, which: str) -> None:
 
 
 APP_UPDATE_REPOS = ("y1-community/updater-ce-neo", "ryan-specter/updater-ce-neo")
-NOTICE_URL = "https://innioasis.app/notice.xml"
 
 
 def parse_version(tag: str):
@@ -1455,15 +1435,15 @@ def _notice_date(value: str):
 
 
 def fetch_notices(model: str = "", timeout: float = 8.0) -> list[dict]:
-    """Fetch the same notice.xml the window reads, with the standard library."""
-    request = urllib.request.Request(
-        NOTICE_URL,
-        headers={"User-Agent": "UpdaterCE-terminal"},
-    )
+    """Fetch the same notice.xml the window reads, with the standard library.
+
+    ``catalog.fetch_notice_xml`` asks the repository copy before the website,
+    then falls back to the last download and the copy shipped with the app, so
+    the terminal notices screen also works on a slow or absent connection.
+    """
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            raw = response.read()
-    except (urllib.error.URLError, OSError) as exc:
+        raw = catalog.fetch_notice_xml(timeout=timeout)
+    except RuntimeError as exc:
         raise RuntimeError(f"the notice feed could not be read: {exc}") from exc
     try:
         root = ET.fromstring(raw)

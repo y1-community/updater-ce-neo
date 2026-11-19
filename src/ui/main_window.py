@@ -113,7 +113,14 @@ from ..flash_service import (
     normalise_method,
     sp_error_code,
 )
-from ..i18n import initial_language, is_english_language, tr, tr_brand, translator
+from ..i18n import (
+    initial_language,
+    is_english_language,
+    is_supported_language,
+    tr,
+    tr_brand,
+    translator,
+)
 from ..state import FlashState, StateMachine
 from .dialogs import (
     DiagnosticsView,
@@ -151,6 +158,58 @@ from .sidebar import (
 
 logger = logging.getLogger(__name__)
 
+
+def _known_running_repo(window, model: str) -> str:
+    """The catalogue repository of the software this player is known to run."""
+    from .. import install_first
+
+    try:
+        return install_first.running_repo_for(
+            model,
+            getattr(window, "settings", None),
+            window._install_first_hardware_type(),
+        )
+    except Exception:
+        return ""
+
+def install_first_prerequisite_body(
+    journey, model_label: str, running_hint: str = ""
+) -> str:
+    """Why the base goes on first, in the terms this player has earned.
+
+    A target whose ``install_first_when`` names the system the player runs is
+    not making a cosmetic suggestion: installed straight over that system the
+    player will not start up properly, and the card has to say so. The copy
+    names that system whenever the app knows it — the answer given in this
+    journey, or what the player is tracked as running — instead of talking
+    about "the software already on your player".
+    """
+    requirement = journey.requirement
+    running = str(getattr(journey, "running_name", "") or "").strip()
+    if not running:
+        running = str(running_hint or "").strip()
+    if getattr(requirement, "when_repos", ()):
+        if not running:
+            # The user answered "Other": name the software it is on without
+            # pretending to know what that software is.
+            return tr("install_first_when_body_unnamed").format(
+                software=requirement.label(),
+                target=journey.target_name,
+                model=model_label,
+            )
+        return tr("install_first_when_body").format(
+            software=requirement.label(),
+            target=journey.target_name,
+            model=model_label,
+            running=running,
+        )
+    return tr("install_first_need_body").format(
+        software=requirement.label(),
+        target=journey.target_name,
+        model=model_label,
+    )
+
+
 _PAGE_SELECT = 0
 _PAGE_FLASH = 1
 _PAGE_ERROR = 2
@@ -184,6 +243,11 @@ MAXIMUM_WINDOW_WIDTH = 920
 # following and can hang off a small display. The diagnostics log is the one
 # page allowed past it, because there the log is the window.
 MAXIMUM_AUTO_FIT_HEIGHT = 620
+
+# Margin kept between the window and the display edge when a page is allowed
+# to grow past the fixed ceiling (the catalogue with a notice banner and a long
+# release note). The display's usable height, less this, is the real limit.
+SCREEN_EDGE_MARGIN = 24
 
 # Slack added to a page's own content height when the window hugs it, so the
 # last card's shadow and the status bar are never clipped.
@@ -289,9 +353,9 @@ _WRITE_STEPS = (STEP_DOWNLOAD_DA, STEP_DOWNLOAD_BL, STEP_WRITE)
 _RETRY_GUIDANCE_CODES = ("CONNECTION_FAILED", "MTK_INIT_FAILED")
 _CACHE_MISSING_MARKERS = ("filenotfounderror", "no such file or directory", "cannot find the file")
 
-# Failures the MTKClient engine reports on its own paths. The player is left
-# half-initialised by these, so the next attempt needs a real power cycle: the
-# card asks for it (with the paperclip reset tip) instead of showing a dead end.
+# Failures the MTKClient engine reports on its own paths. They are shown on
+# the ordinary install card: a fresh attempt is started from there, without a
+# power-cycle step.
 _MTK_FAILURE_CODES = frozenset(
     {
         "MTK_INIT_FAILED",
@@ -307,7 +371,7 @@ _MTK_FAILURE_CODES = frozenset(
 
 
 def _is_mtk_install_failure(error_code) -> bool:
-    """True for a failure that leaves the player needing a power cycle."""
+    """True for a failure code reported by the MTKClient engine."""
     text = str(error_code or "").strip().upper()
     if not text:
         return False
@@ -789,9 +853,26 @@ class MainWindow(QMainWindow):
         # How wide the rail is lives in one place; this holds its last answer.
         self._rail_width = SidebarWidth()
         self.settings = QSettings("innioasis", "updater")
-        translator().set_language(
-            initial_language(str(self.settings.value("language", "") or ""))
-        )
+        stored_language = str(self.settings.value("language", "") or "")
+        language = initial_language(stored_language)
+        translator().set_language(language)
+        if stored_language.strip() and stored_language.strip() != language:
+            # A value that is not a language (an older build stored a string
+            # id here) is replaced, so the picker and the copy on screen agree
+            # instead of the app running on a learned catalog it never chose.
+            self.settings.setValue("language", language)
+            logger.info(
+                "Replaced unusable stored language %r with %r",
+                stored_language,
+                language,
+            )
+        # Seed the catalogue from the on-disk copy before any page is built.
+        # The manifest worker fetches the live one immediately, but it cannot
+        # finish instantly, and until it does the static fallback names no
+        # install_first: a click in that window skipped the prerequisite
+        # question entirely. A parsed JSON read costs a few milliseconds, so
+        # this is free at startup and never waits for the network.
+        self._seed_catalog_from_cache()
         if sys.platform != "darwin":
             icon = paths.RESOURCES_DIR / "icon.ico"
             if not icon.exists():
@@ -862,12 +943,14 @@ class MainWindow(QMainWindow):
         # stays open, so a long-running window never shows last week's data.
         # The refresh is ttl-gated and runs off the UI thread: free when the
         # cached copies are current, silent when the network is not there.
+        #
+        # Defer the first refresh to avoid network-bound delays during launch.
         self._online_refresh_timer = QTimer(self)
         self._online_refresh_timer.setSingleShot(True)
         self._online_refresh_timer.timeout.connect(self._online_refresh_tick)
         from ..online_refresh import next_interval_ms
 
-        self._online_refresh_timer.start(next_interval_ms())
+        QTimer.singleShot(2000, lambda: self._online_refresh_timer.start(next_interval_ms()))
         # Only one all-repository sweep runs at a time; its result reloads the
         # visible release list without another manifest fetch.
         self._release_refresh_worker = None
@@ -900,9 +983,30 @@ class MainWindow(QMainWindow):
         self._sp_1013_seen = False
         self._reboot_suggestion_shown = False
         self._power_off_prompt = False
+        # A run the user left on purpose. A cancelled worker can still flush the
+        # tail of its output, and a late timeout/connect failure used to be
+        # handled as if the install were still going: the power-off card came
+        # back up on top of the catalogue the user had just returned to.
+        self._run_abandoned = False
         # "Keep my data", as read from the install card when the user
         # confirmed the player was off. Off means the firmware is written whole.
         self._keep_data = False
+        # Answered once per install: retries and backend failovers reuse it
+        # instead of showing the tick or asking the compatibility question again.
+        self._keep_data_choice_locked = False
+        # A tracked, known-incompatible firmware still gets the erase warning
+        # and its own confirmation before the first write.
+        self._keep_data_erase_required = False
+        # The Keep Data answer is also the user confirming what is running on
+        # the player. ``post_install_once`` uses it to decide whether the
+        # completion screen still needs the guide.
+        self._keep_data_confirmed_running = False
+        self._keep_data_try_anyway = False
+        # The completion guide state is captured before the new install is
+        # recorded, so a first install cannot look like a reinstall.
+        self._post_install_once = False
+        self._post_install_guides_suppressed = False
+        self._post_install_guide_state_captured = False
         # An accepted update notification asks for this explicitly; a reinstall
         # of the exact tracked firmware is treated the same way. This is read
         # when the prep card is built and stays with the run through retries.
@@ -934,6 +1038,9 @@ class MainWindow(QMainWindow):
         # would start a second SP Flash Tool fighting for the same device.
         self._gui_launch_in_flight = False
         self._linux_setup_flow_active = False
+        # First launch and R: the welcome journey that records players the
+        # user already owns, before the catalogue takes the screen.
+        self._onboarding_active = False
         self._diagnostics_session = False
         # A stalled connection makes the backend repeat the same errno line
         # many times over; this keeps the guidance dialog to once per attempt.
@@ -965,7 +1072,10 @@ class MainWindow(QMainWindow):
         self._manifest_worker = None
         is_headless = os.environ.get("QT_QPA_PLATFORM") == "offscreen" or bool(os.environ.get("INNIOASIS_HEADLESS"))
         if not is_headless:
-            QTimer.singleShot(250, self._start_manifest_worker)
+            # Immediately, not 250 ms from now: the catalogue this app enforces
+            # is the live one, and every millisecond without it is a click that
+            # could miss an install_first declaration.
+            QTimer.singleShot(0, self._start_manifest_worker)
             QTimer.singleShot(3000, self._check_remote_flags_startup)
             QTimer.singleShot(UPDATE_CHECK_STARTUP_DELAY_MS, self._start_auto_update_check)
             QTimer.singleShot(
@@ -2326,6 +2436,7 @@ class MainWindow(QMainWindow):
         self._settings_page.card_focus_finished.connect(self._on_card_focus_finished)
         self._settings_page.linux_prep_completed.connect(self._on_linux_prep_completed)
         self._settings_page.install_app_requested.connect(self._offer_portable_app_install)
+        self._settings_page.onboarding_finished.connect(self.finish_onboarding)
         # The app's own no-progress countdown, shown on the install card.
         self.service.attempt_timeout.connect(self._flash_page.set_attempt_timeout)
         # Time remaining, measured from the install's own write rate (the
@@ -2338,6 +2449,12 @@ class MainWindow(QMainWindow):
         self._flash_page.on_try_anyway(self._on_keep_data_try_anyway)
         self._flash_page.on_install_done(self._on_install_done)
         self._flash_page.install_app_requested.connect(self._install_portable_app)
+        self._flash_page.install_original_requested.connect(
+            self._on_completion_install_original
+        )
+        self._flash_page.browse_software_requested.connect(
+            self._on_completion_browse_software
+        )
         self._error_page.on_retry(self._on_progress_retry)
         self._error_page.on_reconnect(self._on_reconnect)
         self._error_page.on_reselect(lambda: self._nav_to_page(_PAGE_SELECT))
@@ -2862,7 +2979,13 @@ class MainWindow(QMainWindow):
             event.accept()
             return
         if event.key() == Qt.Key_R and event.modifiers() == Qt.NoModifier:
-            self.reset_all_configuration_and_caches()
+            if self.r_key_reset_allowed():
+                self.reset_all_configuration_and_caches()
+            else:
+                self._append_log(
+                    "Reset ignored: R works on Support us, Settings and Select "
+                    "Software, and never while an install or theme task is running."
+                )
             event.accept()
             return
         # Ctrl/⌘+G: hardware stages complete themselves so the interface can
@@ -2897,6 +3020,108 @@ class MainWindow(QMainWindow):
             else "Install simulation off: installs use the player again."
         )
         return on
+
+    # --- First-launch journey -------------------------------------------------
+    #
+    # A player that already runs software from before this app existed never
+    # passes through an install, so nothing would ever be recorded for it and
+    # the update reminders would have nothing to watch. The welcome journey is
+    # where such a player is added by hand. It is shown on a first launch (the
+    # flag is absent) and after R (which clears the flag), and never again once
+    # the user has answered it or finished an install.
+    ONBOARDING_KEY = "onboarding_completed"
+
+    def _onboarding_completed(self) -> bool:
+        return QSettings("innioasis", "updater").value(
+            self.ONBOARDING_KEY, False, type=bool
+        )
+
+    def start_onboarding(self) -> bool:
+        """Put the welcome journey on screen; ``False`` if this build has none."""
+        page = getattr(self, "_settings_page", None)
+        if page is None or self._install_run_active():
+            # A run owns the screen: its card is the one thing the user may
+            # finish, fail or cancel, and Settings is closed until then.
+            return False
+        self._nav_to_page(_PAGE_SETTINGS)
+        if not page.begin_onboarding():
+            return False
+        self._onboarding_active = True
+        # The row is the journey's name while it runs, and the rest of the rail
+        # waits: there is no other screen to open until this one is done.
+        self._sync_settings_nav_label()
+        self._set_onboarding_nav_lock(True)
+        self._update_header_title()
+        store = QSettings("innioasis", "updater")
+        # Written, not left absent: a launch that quits mid-journey has to come
+        # back to it rather than start over from the catalogue.
+        store.setValue(self.ONBOARDING_KEY, False)
+        store.sync()
+        return True
+
+    def start_onboarding_if_needed(self) -> bool:
+        """First launch: welcome the user only while nothing is tracked yet.
+
+        Called by the launch path, not by the constructor: a window built for
+        automation or for a second launch must not steal the screen. An
+        install already on record means the user has already told the app what
+        their player runs, so there is nothing to ask.
+        """
+        if self._onboarding_completed():
+            return False
+        try:
+            from .. import device_tracking
+
+            if device_tracking.get_all_device_installs():
+                return False
+        except Exception:
+            logger.debug("Could not read tracked installs for onboarding", exc_info=True)
+        return self.start_onboarding()
+
+    def finish_onboarding(self) -> None:
+        """The welcome journey is over: remember it and open the catalogue."""
+        self._onboarding_active = False
+        self._set_onboarding_nav_lock(False)
+        self._sync_settings_nav_label()
+        page = getattr(self, "_settings_page", None)
+        if page is not None:
+            page.end_onboarding()
+        store = QSettings("innioasis", "updater")
+        store.setValue(self.ONBOARDING_KEY, True)
+        store.sync()
+        self._nav_to_page(_PAGE_SELECT)
+        # The player just added is the player the catalogue should open on.
+        select_page = getattr(self, "_select_page", None)
+        if select_page is not None and hasattr(select_page, "select_only_tracked_model"):
+            select_page.select_only_tracked_model()
+
+    def r_key_reset_allowed(self) -> bool:
+        """Whether R may clear the app's configuration right now.
+
+        The reset throws away settings and caches, so it only answers on the
+        three surfaces that offer it: Support us, Settings and Select Software.
+        An install, a flash, a Rockbox themes/fonts stage or a theme pack
+        refresh owns the window instead; a reset there would pull the ground
+        out from under work already writing to the player.
+        """
+        stack = getattr(self, "_stack", None)
+        if stack is None:
+            return False
+        if stack.currentIndex() not in (_PAGE_SELECT, _PAGE_SETTINGS, _PAGE_SUPPORT):
+            return False
+        try:
+            if self._install_run_active():
+                return False
+        except Exception:
+            return False
+        worker = getattr(self, "_theme_update_worker", None)
+        try:
+            if worker is not None and worker.isRunning():
+                return False
+        except RuntimeError:
+            # A worker the C++ side already deleted cannot be running.
+            pass
+        return True
 
     def reset_all_configuration_and_caches(self):
         """Completely reset app config back to default, opt credits/donations back in, and clear caches."""
@@ -3060,7 +3285,11 @@ class MainWindow(QMainWindow):
             elif hasattr(self._select_page, "_check_battery_toast_visibility"):
                 self._select_page._check_battery_toast_visibility()
 
-        self._nav_to_page(_PAGE_SELECT)
+        # R is a first launch, so it ends where one does: the welcome journey,
+        # not the catalogue. The reset cleared the flag above, and this writes
+        # it back as "not done" so the journey is also waiting on next launch.
+        if not self.start_onboarding():
+            self._nav_to_page(_PAGE_SELECT)
         self.statusBar().showMessage(tr("status_app_reset_defaults"), 4000)
         self._append_log(tr("log_app_reset_defaults"))
 
@@ -3366,6 +3595,7 @@ class MainWindow(QMainWindow):
         self, model: str, *, after_firmware: bool = False, on_continue=None
     ) -> None:
         """Ask the user to boot the flashed player before ADB/theme setup."""
+        logger.debug("Showing Rockbox power-on prompt for model=%s", model)
         self._install_complete = True
         self._install_failed = False
         self.themes.ask_power_on(model, after_firmware=after_firmware)
@@ -3567,10 +3797,43 @@ class MainWindow(QMainWindow):
             if card_h > 0:
                 _, chrome_h = self._window_chrome()
                 floor = max(floor, card_h + chrome_h + CONTENT_FIT_SLACK)
+        # The rail's icons are content too: the window is never shorter than
+        # the sidebar's own rows (language, community, credits) plus the header
+        # and status bar. A finished install card used to hand back a frame
+        # measured without the rail, so the lower entries were cut off.
+        nav = getattr(self, "_nav_panel", None)
+        if nav is not None:
+            try:
+                _, chrome_h = self._window_chrome()
+                floor = max(floor, int(nav.minimumSizeHint().height()) + chrome_h)
+            except Exception:
+                logger.debug("Could not measure the navigation rail", exc_info=True)
         screen = self.screen()
         if screen is not None:
             floor = min(floor, int(screen.availableGeometry().height()))
         return int(floor)
+
+    def _auto_fit_height_ceiling(self) -> int:
+        """Tallest the window may size itself to on this display.
+
+        The fixed ceiling is a fallback, not a rule. The catalogue with a notice
+        banner above a long release note needs more than it, and cutting it
+        there is what left Install and "See more" below the fold with the page
+        scrolled to reach them. What the window may never do is take more of the
+        display than the page needs, so the limit is the display's usable
+        height less a margin off its edges.
+        """
+        screen = self.screen()
+        if screen is None:
+            return MAXIMUM_AUTO_FIT_HEIGHT
+        available = int(screen.availableGeometry().height())
+        if available <= 0:
+            return MAXIMUM_AUTO_FIT_HEIGHT
+        if available <= MAXIMUM_AUTO_FIT_HEIGHT:
+            # A display no taller than the fixed ceiling keeps its own height;
+            # the margin would only cut content that already fits.
+            return available
+        return max(MAXIMUM_AUTO_FIT_HEIGHT, available - SCREEN_EDGE_MARGIN)
 
     def _select_page_on_screen(self) -> bool:
         """True while the software catalogue owns the window."""
@@ -3600,7 +3863,27 @@ class MainWindow(QMainWindow):
         if not self._select_page_on_screen():
             return
         floor_h = self._content_floor_height()
-        if self.height() < floor_h:
+        # A frame tall enough for the two release rows can still be too short
+        # for the rest of the catalogue (the first-install banner, the original
+        # software card). Pinning such a frame is what left Select Software
+        # clipped after an install card handed the window back, so the page's
+        # own content — not just its floor — decides the height the hold may
+        # take.
+        need_h = floor_h
+        page = getattr(self, "_select_page", None)
+        if page is not None:
+            try:
+                _, chrome_h = self._window_chrome()
+                need_h = max(
+                    floor_h,
+                    int(self._page_content_height(page)) + chrome_h + CONTENT_FIT_SLACK,
+                )
+            except Exception:
+                logger.debug(
+                    "Could not measure the catalogue for the size hold", exc_info=True
+                )
+            need_h = min(need_h, int(self._auto_fit_height_ceiling()))
+        if self.height() < need_h:
             attempts = int(getattr(self, "_select_frame_refit_attempts", 0))
             if attempts < 4:
                 self._select_frame_refit_attempts = attempts + 1
@@ -3664,6 +3947,10 @@ class MainWindow(QMainWindow):
             if is_hugging
             else self._content_floor_height()
         )
+        # An open Settings form (the welcome journey, Add Player) is taller
+        # than the empty card's strip and grows as its rows arrive; its own
+        # height is the floor, not the strip.
+        min_floor = max(min_floor, self._settings_form_floor_height())
         max_h = max(min_floor, int(content_height) + chrome_h + CONTENT_FIT_SLACK)
         if is_hugging:
             # The rail's community row must stay on screen during an install too.
@@ -3683,10 +3970,56 @@ class MainWindow(QMainWindow):
         if not fill_height:
             # Nothing may be resized past the auto-fit ceiling, including by a
             # border drag: the page's overflow scrolls, so extra height would
-            # only leave an empty band. A page's own floor still wins.
-            max_h = max(min_floor, min(max_h, MAXIMUM_AUTO_FIT_HEIGHT))
+            # only leave an empty band. A page's own floor still wins. The
+            # catalogue is the one page whose cards (a banner over a long note)
+            # can need more than the fixed ceiling, so it takes the display's.
+            ceiling = MAXIMUM_AUTO_FIT_HEIGHT
+            if stack is not None and stack.currentIndex() == _PAGE_SELECT:
+                ceiling = self._auto_fit_height_ceiling()
+            max_h = max(min_floor, min(max_h, ceiling))
         if (max_w, max_h) != (self.maximumWidth(), self.maximumHeight()):
             self.setMaximumSize(max_w, max_h)
+
+    def _settings_form_floor_height(self) -> int:
+        """Least height that keeps an open Settings form whole.
+
+        The journey and the Add Player panel are forms, not paragraphs: the
+        Type row appears with the software chosen and the version list fills
+        in afterwards, so a frame fitted to an earlier measurement cut the
+        Save button off, and the frame could be dragged down to an empty
+        card's 168 px strip. Whenever a form is on screen its own height is
+        the floor, whether it was opened by the journey or by Add Player;
+        ``0`` otherwise.
+        """
+        page = getattr(self, "_settings_page", None)
+        stack = getattr(self, "_stack", None)
+        if page is None or stack is None or stack.currentWidget() is not page:
+            return 0
+        panel = getattr(page, "_add_device_panel", None)
+        form_open = bool(
+            getattr(self, "_onboarding_active", False)
+            or (panel is not None and panel.isVisible())
+            or page.focused_card() is not None
+        )
+        if not form_open:
+            return 0
+        _chrome_w, chrome_h = self._window_chrome()
+        need = 0
+        scroll = getattr(page, "_settings_scroll", None)
+        inner = scroll.widget() if scroll is not None else None
+        if inner is not None:
+            need = int(inner.sizeHint().height()) + 2 * int(scroll.frameWidth())
+        nav = getattr(self, "_nav_panel", None)
+        if nav is not None:
+            try:
+                need = max(need, int(nav.minimumSizeHint().height()))
+            except Exception:
+                logger.debug("Could not measure the navigation rail", exc_info=True)
+        need = max(need + chrome_h + CONTENT_FIT_SLACK, MINIMUM_WINDOW_HEIGHT)
+        screen = self.screen()
+        if screen is not None:
+            need = min(need, int(screen.availableGeometry().height()))
+        return int(need)
 
     def _fit_window_to_page(self, *_args) -> None:
         """Size the window to the page on screen — shrinking as well as growing.
@@ -3766,6 +4099,10 @@ class MainWindow(QMainWindow):
             nav = getattr(self, "_nav_panel", None)
             if nav is not None:
                 floor_h = max(floor_h, nav.minimumSizeHint().height() + chrome_h)
+        # The open form is the floor: the journey and the Add Player panel
+        # both need their rows, dropdowns and buttons on screen, focused card
+        # or not.
+        floor_h = max(floor_h, self._settings_form_floor_height())
         target_h = max(floor_h, target_h)
         # The width the user chose is kept: only a page that cannot be drawn in
         # it (long translated words, a wide form) makes the window wider.
@@ -3781,14 +4118,20 @@ class MainWindow(QMainWindow):
             target_h = min(target_h, max(DEFAULT_WINDOW_HEIGHT, max_settings_h))
         # No page grows the window past the ceiling on its own. Content that
         # needs more (the Notices list, a long appeal) scrolls instead; the
-        # page's floor still wins where it cannot be drawn any shorter.
-        target_h = max(floor_h, min(target_h, MAXIMUM_AUTO_FIT_HEIGHT))
+        # page's floor still wins where it cannot be drawn any shorter. The
+        # catalogue is measured by its cards, so a banner or a long note may
+        # legitimately need more than the fixed ceiling: it gets the display's.
+        ceiling = MAXIMUM_AUTO_FIT_HEIGHT
+        if stack.currentIndex() == _PAGE_SELECT:
+            ceiling = self._auto_fit_height_ceiling()
+        target_h = max(floor_h, min(target_h, ceiling))
         if stack.currentIndex() == _PAGE_SELECT and getattr(self, "_select_frame_guard", False):
-            # The frame was just handed back from an install card. This fit may
-            # have measured the page before it laid out at that size, so it can
-            # grow the window but never shrink it below the restored frame.
+            # The frame was just handed back from an install card. This fit owns
+            # the height again: the catalogue measures itself, so a card that
+            # was taller than the page must not be inherited. A measurement
+            # taken before the page has laid out is caught by the floor above
+            # and re-fitted by _refit_short_select_frame.
             self._select_frame_guard = False
-            target_h = max(target_h, self.height())
         self._apply_window_size_limits(target_h)
         floor_w = max(MINIMUM_WINDOW_WIDTH, min(floor_w, target_w))
         if target_w != self.width() or target_h != self.height():
@@ -3802,6 +4145,99 @@ class MainWindow(QMainWindow):
         if not getattr(self, "_size_animating", False):
             # An animation re-takes the hold in _finish_size_anim; taking it
             # now would freeze the window at the size it is about to leave.
+            self._hold_select_window_size()
+        if stack.currentIndex() == _PAGE_SELECT:
+            self._last_select_fit_need = int(content_h)
+            self._schedule_select_settle()
+
+    # Long enough for Qt to run the relayout the change itself asked for (a
+    # release's notes arrive a turn later, a banner's row is reserved on the
+    # next pass), short enough that the frame settles under the user's eyes.
+    SELECT_SETTLE_MS = 60
+
+    def _schedule_select_settle(self) -> None:
+        """Measure the catalogue once more, after its layout has caught up."""
+        if not self._select_page_on_screen():
+            return
+        timer = getattr(self, "_select_settle_timer", None)
+        if timer is None:
+            timer = QTimer(self)
+            timer.setSingleShot(True)
+            timer.setInterval(self.SELECT_SETTLE_MS)
+            timer.timeout.connect(self._settle_select_fit)
+            self._select_settle_timer = timer
+        timer.start()
+
+    def _settle_select_fit(self) -> None:
+        """The half of the fit the layout could not answer yet.
+
+        A fit runs from the signal that changed the page — a release picked, a
+        notice banner shown — and Qt reserves the new row on the *next* relayout
+        pass. That fit therefore measured the column as it was a moment before:
+        the window kept its shorter frame, and the hold taken right afterwards
+        pinned it there, so nothing measured again. The buttons under the
+        release card (Install, "See more") were left below the edge. Measure
+        here, once the layout has run, and grow only if the page really needs it.
+        """
+        if not self._select_page_on_screen():
+            return
+        page = self._select_page
+        if (
+            self.isMinimized()
+            or self.isMaximized()
+            or self.isFullScreen()
+            or bool(self.windowState() & (Qt.WindowMaximized | Qt.WindowFullScreen))
+            or self._install_run_active()
+        ):
+            return
+        attempts = int(getattr(self, "_select_settle_attempts", 0))
+        try:
+            need = int(self._page_content_height(page))
+        except Exception:
+            logger.debug("Select settle measurement failed", exc_info=True)
+            return
+        measured = getattr(self, "_last_select_fit_need", None)
+        if measured is not None and abs(need - int(measured)) > 1 and attempts < 3:
+            self._select_settle_attempts = attempts + 1
+            self._fit_window_to_page()
+            return
+        self._select_settle_attempts = 0
+        # A range left in the page's own bar is height the measurement missed;
+        # the frame takes it rather than asking the user to scroll for the
+        # actions below the cards.
+        self._clear_scrollbar_after_fit()
+
+    def _clear_scrollbar_after_fit(self) -> None:
+        """Grow the window out of the catalogue's own overflow.
+
+        The release-notes view and the release list scroll inside their cards by
+        design: their bars stay whatever the window does, so counting them grew
+        the frame by a bar's range on every pass. Only the page's own scroll
+        area says the window is too short for what it holds.
+        """
+        if not self._select_page_on_screen():
+            return
+        area = getattr(self._select_page, "_scroll", None)
+        if area is None or self.isMinimized() or self.isMaximized() or self.isFullScreen():
+            return
+        bar = area.verticalScrollBar()
+        overflow = int(bar.maximum()) - int(bar.minimum())
+        if overflow <= 0:
+            return
+        floor_h = self._content_floor_height()
+        target_h = int(self.height()) + overflow
+        screen = self.screen()
+        if screen is not None:
+            target_h = min(target_h, int(screen.availableGeometry().height()))
+        target_h = max(floor_h, min(target_h, self._auto_fit_height_ceiling()))
+        if target_h <= self.height():
+            return
+        self._release_select_window_size()
+        self._apply_window_size_limits(target_h)
+        self._animate_window_size(
+            self.width(), target_h, minimum=(self.minimumWidth(), floor_h)
+        )
+        if not getattr(self, "_size_animating", False):
             self._hold_select_window_size()
 
     def _visible_rail_height(self) -> int:
@@ -4017,11 +4453,12 @@ class MainWindow(QMainWindow):
                 and self._settings_page.focused_card() is not None
             )
             min_w = self._minimum_window_width()
-            min_h = (
+            base_h = (
                 COMPACT_INSTALL_MIN_HEIGHT_NO_DONATIONS
                 if solo_settings_card
                 else self._content_floor_height()
             )
+            min_h = max(base_h, self._settings_form_floor_height())
             self._hugging_install = False
             self.setMinimumSize(min_w, min_h)
             # Whatever page is on screen now owns the window size: leaving the
@@ -4181,14 +4618,21 @@ class MainWindow(QMainWindow):
             # lifted first: a resize is clamped by the maximum, so restoring
             # while the install cap is still in force would land short again.
             screen = self.screen()
-            max_w, max_h = MAXIMUM_WINDOW_WIDTH, MAXIMUM_AUTO_FIT_HEIGHT
+            max_w, max_h = MAXIMUM_WINDOW_WIDTH, self._auto_fit_height_ceiling()
             if screen is not None:
                 available = screen.availableGeometry()
                 max_w = min(max_w, int(available.width()))
                 max_h = min(max_h, int(available.height()))
             self.setMaximumSize(max_w, max_h)
             width = max(int(frame[0]), self._minimum_window_width())
-            height = max(int(frame[1]), self._content_floor_height())
+            # A frame saved while some other page had the window taller than
+            # the catalogue can use must not come back with that empty band:
+            # the height is held to the same ceiling as any other fit and
+            # re-measured from the page below.
+            height = max(
+                self._content_floor_height(),
+                min(int(frame[1]), self._auto_fit_height_ceiling()),
+            )
             self.setMinimumSize(self._minimum_window_width(), self._content_floor_height())
             self.resize(min(width, max_w), min(height, max_h))
             # A fit already queued from the catalogue's refill measures the page
@@ -4201,6 +4645,10 @@ class MainWindow(QMainWindow):
         # only after the layout that the navigation itself triggered.
         QTimer.singleShot(0, self._fit_window_to_select_content)
         QTimer.singleShot(0, self._fit_window_to_page)
+        # And once more after that layout settles: the section refill after a
+        # finished install restores its rows a turn later than the navigation,
+        # so the fits above can measure the list while it is still empty.
+        self._schedule_select_settle()
 
     def _fit_window_to_select_content(self):
         """Deferred half of _on_select_content_changed: measure and grow."""
@@ -4587,6 +5035,10 @@ class MainWindow(QMainWindow):
         install_active = self._install_run_active() or getattr(self, "_compact_install_screen", False)
         failed = getattr(self, "_install_failed", False)
         text = self._page_title(curr_idx, install_active)
+        if getattr(self, "_onboarding_active", False):
+            # The header and the renamed row say the same thing: the window is
+            # a welcome, not Settings, until the journey ends.
+            text = tr("nav_welcome")
         title.setText(text)
         self._align_page_title()
 
@@ -4674,6 +5126,11 @@ class MainWindow(QMainWindow):
             # highlight back on the page that is actually showing.
             self._highlight_nav(self._stack.currentIndex(), True)
             return
+        # The welcome journey owns the window until it is finished or skipped:
+        # nothing else is set up yet, so nothing else opens.
+        if getattr(self, "_onboarding_active", False) and page_idx != _PAGE_SETTINGS:
+            self._highlight_nav(_PAGE_SETTINGS, False)
+            return
         if getattr(self, "_linux_setup_flow_active", False) and page_idx != _PAGE_SETTINGS:
             self._highlight_nav(_PAGE_SETTINGS, False)
             return
@@ -4686,6 +5143,10 @@ class MainWindow(QMainWindow):
         self._stack.setCurrentIndex(page_idx)
         if page_idx == _PAGE_SELECT:
             QTimer.singleShot(0, self._reload_refreshed_releases)
+            # Entering the catalogue always re-measures it. A taller frame from
+            # Settings or from an install card is given back here, and nothing
+            # else is guaranteed to ask for a fit once the page has laid out.
+            QTimer.singleShot(0, self._fit_window_to_select_content)
         if page_idx == _PAGE_FLASH:
             self._install_fit_generation = None
         # A row highlights itself when clicked, but navigation started anywhere
@@ -4855,6 +5316,17 @@ class MainWindow(QMainWindow):
         self._sp_1013_seen = False
         # A new install starts with the tick off; the card can turn it on again.
         self._keep_data = False
+        self._keep_data_choice_locked = False
+        self._keep_data_erase_required = False
+        self._keep_data_confirmed_running = False
+        self._keep_data_try_anyway = False
+        self._post_install_once = False
+        self._post_install_guides_suppressed = False
+        self._post_install_guide_state_captured = False
+        if hasattr(self, "_flash_page"):
+            # A distinct new install starts from the catalogue, so the previous
+            # run's settled answer must not keep the tick hidden.
+            self._flash_page.reset_keep_data_preference()
         self._format_all_required = False
         self._format_all_confirm_pending = False
         self._keep_data_pkg = None
@@ -5293,6 +5765,7 @@ class MainWindow(QMainWindow):
         self._install_failed = False
         self._install_complete = False
         self._power_off_prompt = True
+        self._run_abandoned = False
         self.service.stop_device_monitor()
         try:
             self.service.take_primed_mtk()
@@ -5361,12 +5834,19 @@ class MainWindow(QMainWindow):
             available = keep_data.keep_data_available(
                 model, pkg, self.settings, hardware_type=hardware
             )
-            if self._install_first_already_on_target():
-                available = True
-            elif self._install_first_forces_no_keep_data():
-                available = False
+            # A tracked install that is known to be incompatible used to hide
+            # the tick and erase settings silently. Keep the choice hidden, but
+            # put the erase warning and its confirmation in front of the write.
+            self._keep_data_erase_required = bool(
+                not self._keep_data_choice_locked
+                and keep_data.incompatible_with_current(
+                    model, pkg, self.settings, hardware_type=hardware
+                )
+            )
+            # FIX: Only show checkbox if compatible, regardless of format requirement.
+            # Compatibility is already checked by keep_data_available.
             self._flash_page.set_keep_data_available(
-                available and not self._format_all_required,
+                available,
                 keep_data.keep_data_label(model),
             )
         except Exception:
@@ -5404,6 +5884,11 @@ class MainWindow(QMainWindow):
             page.show_catalogue_section(section)
         self._sync_sp_gui_button_visibility()
         self._nav_to_page(_PAGE_SELECT)
+        # The completion path refills the catalogue after _reset_after_run has
+        # already fitted it, so measure the page again now that its rows are
+        # back; otherwise the frame stays at the install card's height with the
+        # lower cards cut off.
+        self._refit_catalogue_after_install()
 
     def _drop_finished_install_firmware(self) -> None:
         """A completed install needs no firmware copy on the host any more.
@@ -5518,6 +6003,7 @@ class MainWindow(QMainWindow):
     def _begin_flash_flow(self):
         if not self._package_path:
             return
+        self._run_abandoned = False
         if not self._ensure_elevated_for_install():
             return
         if self._needs_linux_device_prep():
@@ -5646,6 +6132,7 @@ class MainWindow(QMainWindow):
             self._sp_flash_tool_tried = True
         if hasattr(self, "_failure_grace_timer") and self._failure_grace_timer.isActive():
             self._failure_grace_timer.stop()
+        self._lock_keep_data_for_retries()
         from .. import simulation
 
         if simulation.enabled():
@@ -5673,6 +6160,17 @@ class MainWindow(QMainWindow):
         self.service.stop_device_monitor()
 
     def _on_step_changed(self, step):
+        if getattr(self, "_run_abandoned", False):
+            # Output from a cancelled run: nothing may take the user back into
+            # the install they just left.
+            return
+        # The power-off card is the run's gate: until the user ticks it, no
+        # backend line may replace it. A tool that starts searching early (or a
+        # stale worker from the previous attempt) used to put the connect
+        # sentence up instead, so the ask that makes the install work never got
+        # read.
+        if getattr(self, "_power_off_prompt", False):
+            return
         # A finished run is final. The SP Flash Tool log monitor can flush the
         # tail of QT_FLASH_TOOL.log after the worker has already reported
         # success, and a late STEP_WRITE used to put the write card back up at
@@ -6162,8 +6660,17 @@ class MainWindow(QMainWindow):
 
     def _on_flash_disconnected(self):
         """Handle abrupt USB disconnection during flash, wait 5s safety window before killing tasks."""
+        if getattr(self, "_run_abandoned", False):
+            return
         service = getattr(self, "service", None)
         worker = getattr(service, "_flash_worker", None)
+        if getattr(worker, "_sp_mismatch", False):
+            # The player left USB because it failed the tool's chip check: it
+            # is the wrong model. Asking the user to reconnect the very player
+            # that cannot take this package is the wrong instruction.
+            self._append_log("Wrong player connected during install (chip mismatch).")
+            self._show_install_failure("DEVICE_PACKAGE_MISMATCH")
+            return
         if (
             worker is not None
             and getattr(worker, "_tool_tag", "") == "MTK"
@@ -6349,6 +6856,53 @@ class MainWindow(QMainWindow):
                 return
             self._handle_flash_failure(error_code)
 
+    def _capture_post_install_guide_state(self) -> None:
+        """Remember whether this run still needs its post-install guide.
+
+        Called before the new install is recorded, because ``post_install_once``
+        only suppresses the guide when the player was already running this
+        software (or the user just confirmed that in the Keep Data question).
+        Looking at the record afterwards would make every install look like a
+        reinstall and hide the guide on first installs too.
+        """
+        if getattr(self, "_post_install_guide_state_captured", False):
+            return
+        self._post_install_guide_state_captured = True
+        from .. import catalog, keep_data
+
+        model = self._package_model or ""
+        software = self._package_name or ""
+        package = None
+        try:
+            matches = catalog.packages_for_model_software(model, software)
+            package = matches[0] if matches else self._current_firmware_package()
+        except Exception:
+            logger.debug("Could not resolve package for post-install guide", exc_info=True)
+            package = self._current_firmware_package()
+        once = bool(getattr(package, "post_install_once", False))
+        tracked_same = False
+        if package is not None:
+            hardware = (
+                self._select_page.current_hardware_type()
+                if hasattr(self, "_select_page")
+                else ""
+            )
+            try:
+                tracked_same = keep_data.tracked_is_same(
+                    model, package, self.settings, hardware_type=hardware
+                )
+            except Exception:
+                logger.debug("Could not read tracked install for guide", exc_info=True)
+        self._post_install_once = once
+        self._post_install_guides_suppressed = bool(
+            once
+            and (
+                tracked_same
+                or self._keep_data_confirmed_running
+                or self._install_first_already_on_target()
+            )
+        )
+
     def _record_completed_install(self):
         """Log the firmware that just finished writing as this model's firmware.
 
@@ -6409,6 +6963,10 @@ class MainWindow(QMainWindow):
         software = self._package_name or "Firmware"
         steps = install_power_on_steps(model)
 
+        # Read this before recording the new install: ``post_install_once``
+        # must know what was on the player *before* this run, not the record
+        # this success handler is about to write.
+        self._capture_post_install_guide_state()
         # Record install for device tracking & future release reminders
         self._record_completed_install()
         if hasattr(self, "_settings_page"):
@@ -6461,6 +7019,7 @@ class MainWindow(QMainWindow):
         themes_auto = themes_auto_install_enabled(self.settings)
         wants_themes = is_360p_rockbox
         if wants_apk or (wants_themes and themes_auto):
+            logger.info("Completion block: entering themes/apk flow")
             self._nav_to_page(_PAGE_FLASH)
             # Keep the completion screen's recorded success state while the
             # post-flash theme wizard runs. USB enumeration is expected to
@@ -6498,6 +7057,7 @@ class MainWindow(QMainWindow):
                     "the install finishes without the themes stage."
                 )
             self._install_complete = True
+            logger.info("Completion block entered for install: %s, wants_themes=%s", software, wants_themes)
             self._compact_install_screen = False
             self._power_off_prompt = False
             self._prep_active = False
@@ -6508,9 +7068,32 @@ class MainWindow(QMainWindow):
             self._apply_post_install_urls()
             self._flash_page.set_rockbox_site_themes(is_240p_rockbox)
             self._flash_page.show_completion_appeal(False)
+            post_install_once = self._post_install_once
+
+            # ``device_tracking`` is a module import here: re-importing it
+            # inside this method made it a local name and the completion card's
+            # own ``device_tracking`` read above raised before it was bound.
+            keep_data = getattr(self, "_keep_data", False)
+            tracked_install = device_tracking.get_device_install(model)
+            confirmed_software = device_tracking.get_running_software(model)
+            answered_already = confirmed_software.get("confirmed", False)
+
+            suppress = self._post_install_guides_suppressed
+            # Only a ``post_install_once`` guide is retired by a reinstall: a
+            # firmware whose steps run every time (post_install without
+            # ``_once``) keeps its View Guide on a tracked, Keep Data install
+            # too, or the user is left without the steps that finish it.
+            if post_install_once and keep_data and (tracked_install or answered_already):
+                suppress = True
+
             self._flash_page.show_completion_note(
-                donation_disabled, software=software, model=model
+                not donation_disabled,
+                software=software,
+                model=model,
+                post_install_once=post_install_once,
+                post_install_suppressed=suppress,
             )
+            logger.debug("Completion note shown. donation_disabled=%s, software=%s, model=%s", donation_disabled, software, model)
             self._apply_release_icon(complete=donation_disabled)
             self._nav_to_page(_PAGE_FLASH)
             self._sync_install_app_button()
@@ -6878,6 +7461,39 @@ class MainWindow(QMainWindow):
             post_2 = str(getattr(fw_pkg, "post_install_2", "") or "")
         self._flash_page.set_post_install_urls(post, post_2)
 
+    def _on_completion_install_original(self) -> None:
+        """Start-up advice: install this model's Original Software again.
+
+        The player has just taken a firmware it may not boot, so the stock
+        release for the same model is what the advice offers. The install
+        begins at the catalogue's install flow like any other, with Keep my
+        settings on: the data on the player is not what failed.
+        """
+        page = getattr(self, "_select_page", None)
+        if page is None or not hasattr(page, "start_install_for_release"):
+            return
+        model = (self._package_model or "").strip() or page.current_model()
+        self._nav_to_page(_PAGE_SELECT)
+        page.start_install_for_release(
+            model=model, software_name="Original Software", keep_settings=True
+        )
+        self._append_log(
+            "Completion advice: starting an Original Software install for "
+            f"{model or 'the selected model'}."
+        )
+
+    def _on_completion_browse_software(self) -> None:
+        """Start-up advice: open Select Software to browse other firmware."""
+        page = getattr(self, "_select_page", None)
+        self._nav_to_page(_PAGE_SELECT)
+        if page is None:
+            return
+        if hasattr(page, "_show_online_view"):
+            page._show_online_view()
+        combo = getattr(page, "_software_combo", None)
+        if combo is not None:
+            combo.setFocus()
+
     def _finish_themes_stage(self, donation_disabled: bool) -> None:
         if self.themes.completion_shown:
             return
@@ -6911,8 +7527,10 @@ class MainWindow(QMainWindow):
         # must be shown even where the donations appeal would otherwise be the
         # only block — the try-again copy is why the user is reading.
         self._flash_page.show_completion_note(
-            donation_disabled or themes_failed, software=software, model=model,
+            not donation_disabled, software=software, model=model,
             themes_installed=themes_installed and not was_apk_stage,
+            post_install_once=self._post_install_once,
+            post_install_suppressed=self._post_install_guides_suppressed,
         )
         self._sync_install_app_button()
         self._adjust_window_geometry()
@@ -7109,6 +7727,8 @@ class MainWindow(QMainWindow):
         self._update_header_title()
 
     def _handle_flash_failure(self, error_code):
+        if getattr(self, "_run_abandoned", False):
+            return
         self._download_active = False
         from ..flash_service import (
             is_attempt_timeout_error,
@@ -7167,6 +7787,18 @@ class MainWindow(QMainWindow):
         if not cache_failure and is_pmt_format_required_error(error_code):
             self._handle_pmt_format_required(error_code)
             return
+        if not cache_failure and is_wrong_model_error(error_code):
+            # The connected player is not the one this package is for. No
+            # retry, engine switch or power-cycle recovery can change that, so
+            # the wrong-model card is the answer even when the tool also
+            # reported a USB drop on its way out.
+            self._append_log(f"Wrong player connected during install ({error_code}).")
+            try:
+                self.sm.transition_to(FlashState.S5_FAILED)
+            except ValueError:
+                self.sm.force_state(FlashState.S5_FAILED)
+            self._show_install_failure(str(error_code))
+            return
         is_sp_tool_error = str(error_code or "").startswith("SP_") or "S_" in str(error_code or "")
         if not cache_failure and not is_sp_tool_error and (
             error_code == "USB_DISCONNECTED"
@@ -7181,18 +7813,30 @@ class MainWindow(QMainWindow):
             self._on_flash_disconnected()
             return
         if is_attempt_timeout_error(error_code):
-            # The connect window ended with nothing attached. That is not a
-            # failed method, so the same engine is offered again: the user is
-            # sent back to the disconnect / power-off step, the killed run is
-            # already stopped, and Continue starts the same method afresh.
-            # Timeouts may repeat as often as needed; only a real install
-            # failure switches engines.
-            self._append_log(
-                f"No device inside the connect window ({error_code}); "
-                f"returning to the power-off step with {_method_label(self._flash_method)}."
-            )
-            self._return_to_power_off_stage(self._flash_method)
-            return
+            # The connect window ended with nothing attached. MTKclient is
+            # asked for the player only while it is waiting for one, so a miss
+            # is reported on the install card: Start Flash hands the same
+            # engine a fresh attempt without a power-cycle step. SP Flash Tool
+            # keeps its console window and its own re-arm on the power-off step.
+            from ..flash_service import is_mtk_method
+
+            if is_mtk_method(self._flash_method):
+                self._append_log(
+                    f"No player connected inside the connect window ({error_code})."
+                )
+            else:
+                # The connect window ended with nothing attached. That is not a
+                # failed method, so the same engine is offered again: the user
+                # is sent back to the disconnect / power-off step, the killed
+                # run is already stopped, and Continue starts the same method
+                # afresh. Timeouts may repeat as often as needed; only a real
+                # install failure switches engines.
+                self._append_log(
+                    f"No device inside the connect window ({error_code}); "
+                    f"returning to the power-off step with {_method_label(self._flash_method)}."
+                )
+                self._return_to_power_off_stage(self._flash_method)
+                return
         if not cache_failure and error_code == "MTK_CHECKSUM_STALLED":
             if hasattr(self, "_flash_page") and self._flash_page is not None:
                 self._flash_page.set_getting_ready(False)
@@ -7235,21 +7879,17 @@ class MainWindow(QMainWindow):
             and is_mtk_method(self._flash_method)
             and _is_mtk_install_failure(error_code)
         ):
-            from ..config import device_label_for_model
-
-            # The engine stopped with the player mid-download. Ask for the
-            # unplug / power-off (paperclip reset if needed) confirmation, then
-            # Continue starts a fresh run of the same method.
+            # A failed MTKClient run is reported on the install card. The
+            # player never has to be unplugged and powered off to read the
+            # result: Start Flash gives the same engine a fresh attempt.
             self._append_log(
-                f"MTKClient install failed ({error_code}); asking for a power cycle "
-                f"with {_method_label(self._flash_method)}."
+                f"{_method_label(self._flash_method)} install failed ({error_code})."
             )
-            self._return_to_power_off_stage(
-                self._flash_method,
-                recovery=True,
-                prompt_key="install_disconnect_guidance_fmt",
-                prompt_kwargs={"label": device_label_for_model(self._package_model)},
-            )
+            try:
+                self.sm.transition_to(FlashState.S5_FAILED)
+            except ValueError:
+                self.sm.force_state(FlashState.S5_FAILED)
+            self._show_install_failure(str(error_code))
             return
         if not cache_failure and getattr(self.service, "_mtk_stall_prompt_text", lambda: None)():
             self._show_mtk_stall_restart_prompt()
@@ -7314,6 +7954,10 @@ class MainWindow(QMainWindow):
         attempt left the player mid-download, so the step spells out how to
         put it back into flash mode instead of the plain power-off line.
         """
+        if getattr(self, "_run_abandoned", False):
+            # The user already left this run: its timeout or disconnect tail
+            # must not reopen the power-off card over the catalogue.
+            return
         self.service.cancel_flash()
         self.service.stop_device_monitor()
         # The killed command's children must be gone too: a leftover mtk.py /
@@ -7451,11 +8095,14 @@ class MainWindow(QMainWindow):
             self.sm.reset_for_retry()
         self._flash_page.set_model(self._package_model)
         self._apply_release_icon(complete=False)
-        self._flash_page.show_power_off_prompt(show_pin_tip=True)
+        from .settings_page import reboot_after_mtk_install_enabled
+        if not (self._flash_page._method == "mtk" and reboot_after_mtk_install_enabled()):
+            self._flash_page.show_power_off_prompt(show_pin_tip=True)
         self._nav_to_page(_PAGE_FLASH)
 
     def _on_power_off_continue(self):
         """The user confirmed the device is off and unplugged. Start the run."""
+        self._run_abandoned = False
         if getattr(self, "_install_first_stage", ""):
             self._on_install_first_continue()
             return
@@ -7466,6 +8113,10 @@ class MainWindow(QMainWindow):
             self._format_all_confirm_pending = False
             self._format_all_required = True
             self._keep_data = False
+            if hasattr(self._flash_page, "lock_keep_data"):
+                # The retry keeps this answer; it must not offer Keep Data after
+                # the format-all run has already replaced the partitions.
+                self._flash_page.lock_keep_data(False)
             self._flash_page.clear_keep_data_confirmation()
             self._return_to_power_off_stage(self._flash_method)
             self._flash_page.show_format_all_power_off_prompt()
@@ -7474,14 +8125,22 @@ class MainWindow(QMainWindow):
         # the user confirmed the player is off and unplugged, so the run that
         # follows has to obey what the card showed then.
         self._keep_data = self._flash_page.keep_data_checked()
+        # Which firmware the player runs is asked before any Keep Data branch,
+        # ticked or not and whatever the "Keep Data on any firmware" override
+        # says. A manifest that declares install_first cannot be judged without
+        # that answer, and the answer is not a Keep Data question: it decides
+        # whether the base has to be installed at all.
+        if self._install_first_gate_awaits_answer():
+            return
         if getattr(self, "_keep_data_confirm_pending", False):
             choice = self._flash_page.keep_data_confirm_choice()
             if choice and choice == tr("keep_data_choice_other"):
                 self._keep_data_confirm_pending = False
                 self._keep_data_confirm_known_name = ""
-                # "Other" is the user saying the track is wrong: forget it so
-                # the next run asks instead of assuming.
-                self._forget_keep_data_software()
+                # "Other" means Keep Data cannot be promised, not that the
+                # record of the last install is wrong: 2.5.5 warned about the
+                # erasure and carried on, and clearing the record here threw
+                # away the player's history mid-install.
                 self._begin_keep_data_erase_confirmation()
                 return
             self._keep_data_confirm_pending = False
@@ -7491,9 +8150,21 @@ class MainWindow(QMainWindow):
         elif getattr(self, "_keep_data_erase_confirm_pending", False):
             # The user confirmed continuing without Keep Data with Yes (checkmark)
             self._keep_data_erase_confirm_pending = False
+            self._keep_data_erase_required = False
             self._keep_data = False
             self._flash_page.clear_keep_data_confirmation()
-        elif self._keep_data and self._keep_data_needs_confirmation():
+        elif getattr(self, "_keep_data_erase_required", False):
+            # The tracked firmware is known to be incompatible with Keep Data.
+            # Say what will be erased before the first write, exactly as the
+            # "Other firmware" answer does; the tick itself stays hidden.
+            self._keep_data = False
+            self._begin_keep_data_erase_confirmation()
+            return
+        elif (
+            self._keep_data
+            and not getattr(self, "_keep_data_choice_locked", False)
+            and self._keep_data_needs_confirmation()
+        ):
             self._begin_keep_data_confirmation()
             return
         if getattr(self, "_linux_permission_pending", False):
@@ -7561,6 +8232,7 @@ class MainWindow(QMainWindow):
             return ""
 
     def _install_first_selected_answer(self) -> str:
+        """Map the drop-down row the user picked back to an answer."""
         from .. import install_first
 
         journey = getattr(self, "_install_first_journey", None)
@@ -7570,11 +8242,107 @@ class MainWindow(QMainWindow):
         page = getattr(self, "_flash_page", None)
         if page is not None:
             choice = page.keep_data_confirm_choice()
-        if choice and choice == journey.requirement.label():
-            return install_first.ANSWER_PREREQUISITE
-        if choice and choice.casefold() == journey.target_name.casefold():
-            return install_first.ANSWER_TARGET
-        return install_first.ANSWER_OTHER
+        repo = (getattr(self, "_install_first_choices", None) or {}).get(choice, "")
+        answer = install_first.answer_for_choice(
+            choice, repo, journey.target, journey.requirement
+        )
+        # A row picked from the catalogue names the system it is on, even when
+        # the catalogue requires the base from that system. The "Other" row
+        # itself names nothing, and that is the only answer without a name.
+        journey.running_name = (
+            str(choice or "").strip()
+            if repo
+            and answer in (install_first.ANSWER_FIRMWARE, install_first.ANSWER_OTHER)
+            else ""
+        )
+        return answer
+
+    def _manifest_fresh_package(self, pkg):
+        """The catalogue's current row for ``pkg``, by repository.
+
+        Every behaviour the install-first journey has comes from the manifest,
+        so the row that is read has to be the one the live catalogue holds now
+        rather than a copy taken when the list was built. A firmware whose
+        ``install_first`` or ``install_first_when`` was corrected minutes ago
+        then behaves as corrected on this install. A package with no catalogue
+        row (a local zip, a hand-imported package) is returned unchanged, and
+        an empty repository never matches by accident.
+        """
+        if pkg is None:
+            return pkg
+        try:
+            from .. import catalog, install_first
+        except Exception:
+            return pkg
+        repo = install_first.normalize_repo(getattr(pkg, "repo", ""))
+        if not repo:
+            return pkg
+        model = str(getattr(pkg, "model", "") or "").strip().upper()
+        rows = []
+        try:
+            if model:
+                rows = list(catalog.packages_for_model(model))
+        except Exception:
+            rows = []
+        try:
+            rows.extend(catalog.LIVE_CATALOG or [])
+            rows.extend(catalog.CATALOG or [])
+        except Exception:
+            pass
+        # The freshest row wins only when it actually declares something. A
+        # catalogue that has not caught up yet (a stale cached copy, a worker
+        # still fetching) must never strip the attributes the selected package
+        # already carries, which is how a gated firmware used to lose its gate
+        # and install straight over whatever the player was running.
+        found = None
+        for row in rows:
+            if install_first.normalize_repo(getattr(row, "repo", "")) != repo:
+                continue
+            if str(getattr(row, "install_first", "") or "").strip():
+                return row
+            found = found or row
+        if str(getattr(pkg, "install_first", "") or "").strip():
+            # The selected package already knows. Nothing may take that away.
+            return pkg
+        snapshot = MainWindow._snapshot_row_for(repo, install_first)
+        if snapshot is not None:
+            return snapshot
+        return found or pkg
+
+    def _seed_catalog_from_cache(self) -> None:
+        """Install the last parsed manifest before the UI exists.
+
+        A launch that cannot reach the network still enforces what the last
+        successful refresh learned, so the prerequisite question is asked on
+        the first click rather than only after a fetch completes.
+        """
+        try:
+            from .. import catalog, manifest
+
+            cached = manifest.load_cached_manifest(max_age=None)
+            if cached:
+                catalog.set_live_catalog(cached)
+        except Exception:
+            pass
+
+    @staticmethod
+    def _snapshot_row_for(repo: str, install_first):
+        """The build's own manifest row for ``repo`` when it declares a base.
+
+        Last resort for a package that arrived without attributes from a
+        catalogue older than the manifest shipped in the build.
+        """
+        try:
+            from .. import manifest
+
+            for row in manifest.load_snapshot_manifest() or []:
+                if install_first.normalize_repo(getattr(row, "repo", "")) != repo:
+                    continue
+                if str(getattr(row, "install_first", "") or "").strip():
+                    return row
+        except Exception:
+            pass
+        return None
 
     def _guard_install_first(self, pkg, rel) -> bool:
         """Run the prerequisite sanity check before any download starts.
@@ -7588,27 +8356,40 @@ class MainWindow(QMainWindow):
             from .. import install_first
         except Exception:
             return True
+        # Read the attributes from the catalogue's current row, not from the
+        # copy the page built its list with: a manifest refresh can land while
+        # the user is choosing a firmware, and install_first / install_first_when
+        # must take effect on the install that follows it, not on the next
+        # launch. Local packages have no catalogue row and keep their own.
+        pkg = self._manifest_fresh_package(pkg)
         model = str(getattr(pkg, "model", "") or self._package_model or "")
         # No packages list: the resolver reads the catalogue itself, which is
         # what lets a base firmware listed under a sibling model (one build
         # serving Q3 and Q5) still satisfy this model's declaration.
-        requirement = install_first.requirement_for(pkg, model)
+        requirement = install_first.requirement_for(
+            pkg, model, running_repo=_known_running_repo(self, model)
+        )
+        # Only a catalogue declaration is a reason to ask. With none, the run
+        # behaves exactly as 2.5.5 did: Keep Data is the only question, and it
+        # is decided from the tick and the tracked install.
         if requirement is None:
             return True
+
+        # A journey already answered for this very package (the base step of a
+        # two-step run included) has its answer: asking again is how the card
+        # ended up showing the same question twice.
         existing = getattr(self, "_install_first_journey", None)
         if (
             existing is not None
             and existing.target is pkg
             and existing.answer
-            and not getattr(self, "_install_first_prerequisite_run", False)
+            and (
+                existing.answer == install_first.ANSWER_TARGET
+                or getattr(self, "_install_first_prerequisite_run", False)
+            )
         ):
-            # A retry of this same target (a failed write, a missing cache)
-            # already has its answer; do not ask the same question again. A
-            # failed prerequisite leaves the flag set, so its retry does ask
-            # (and starts the base again) rather than trusting an answer about
-            # a base that was never written.
             return True
-        if requirement.package is None:
+        if requirement and requirement.package is None:
             self._show_status(
                 tr("install_first_missing").format(software=requirement.software_name),
                 15000,
@@ -7629,7 +8410,10 @@ class MainWindow(QMainWindow):
             page.set_package_name(self._package_name)
             page.set_model(self._package_model)
             page.set_method(self._flash_method)
-        self._ask_install_first_software(journey)
+        if not self._ask_install_first_software(journey):
+            # The tracked software settled it: no question to show, and the
+            # install runs exactly as if the answer had been given.
+            return True
         self._nav_to_page(_PAGE_FLASH)
         return False
 
@@ -7691,7 +8475,9 @@ class MainWindow(QMainWindow):
             return True
         model = str(getattr(pkg, "model", "") or self._package_model or "")
         target = fw_package.package_as_catalogue(pkg)
-        requirement = install_first.requirement_for(target, model)
+        requirement = install_first.requirement_for(
+            target, model, running_repo=_known_running_repo(self, model)
+        )
         if requirement is None:
             return True
         local_base = getattr(pkg, "install_first_package", None)
@@ -7711,7 +8497,7 @@ class MainWindow(QMainWindow):
             existing is not None
             and same_target
             and existing.answer
-            and not getattr(self, "_install_first_prerequisite_run", False)
+            and (existing.answer == install_first.ANSWER_TARGET or getattr(self, "_install_first_prerequisite_run", False))
         ):
             return True
         if requirement.package is None:
@@ -7742,7 +8528,10 @@ class MainWindow(QMainWindow):
             flash.set_package_name(self._package_name)
             flash.set_model(self._package_model)
             flash.set_method(self._flash_method)
-        self._ask_install_first_software(journey)
+        if not self._ask_install_first_software(journey):
+            # The tracked software settled it: no question to show, and the
+            # install runs exactly as if the answer had been given.
+            return True
         self._nav_to_page(_PAGE_FLASH)
         return False
 
@@ -7762,129 +8551,107 @@ class MainWindow(QMainWindow):
             else ""
         )
 
-    def _install_first_known_answer(self, journey, known) -> str:
-        """The answer a tracked software implies, or ``""`` when it implies none."""
-        from .. import install_first
+    def _ask_install_first_software(self, journey) -> bool:
+        """Answer, or ask, which software the player runs.
 
-        name = str((known or {}).get("software_name") or "").strip()
-        if not name or journey.requirement is None:
-            return ""
-        if self._same_software_name(name, journey.requirement.software_name):
-            return install_first.ANSWER_PREREQUISITE
-        if self._same_software_name(name, journey.target_name):
-            return install_first.ANSWER_TARGET
-        return ""
+        Every firmware the model has is an answer the user can give: the base
+        that has to be installed first, the target itself, another system and
+        "Other". What each answer means — install the base, recommend it, or go
+        straight on — is the journey's decision, so this question is never
+        narrowed to a yes/no about one firmware.
 
-    def _ask_install_first_software(self, journey) -> None:
-        """Ask what the player runs — a confirmation when that is already known.
-
-        A tracked install or an earlier answer often says what this model runs.
-        The menu then becomes one question, "is it still running X?":
-        confirming the base goes straight to the target, and confirming the
-        target is what lets Keep Data carry the player's settings over. Saying
-        no forgets the answer and asks the full question instead.
+        Returns ``True`` when a card was shown and the run stops there, ``False``
+        when the software the app already tracks answered it and the install can
+        go straight ahead.
         """
-        from .. import keep_data
+        from .. import install_first, keep_data
 
         requirement = journey.requirement
         page = getattr(self, "_flash_page", None)
         model = self._install_first_model()
+        choices = install_first.software_choices(journey.target, model, requirement)
+        self._install_first_choices = {label: repo for label, repo in choices}
+
+        # A tracked install is evidence, not a question: it preselects its own
+        # row. With nothing known the menu opens on the base, because that is
+        # the firmware the catalogue requires to be there, so the tick walks an
+        # unknown player through installing it.
+        selected = requirement.label() if requirement is not None else ""
         known = keep_data.known_running_software(
             model, self.settings, self._install_first_hardware_type()
         )
         name = str((known or {}).get("software_name") or "").strip()
-        answer = self._install_first_known_answer(journey, known)
-        self._install_first_running_answer = answer
-        self._install_first_running_name = name if answer else ""
-        if answer:
-            self._install_first_stage = "running"
-            if page is not None:
-                page.show_install_first_prompt(
-                    tr("keep_data_running_fmt").format(
-                        software=name, model=self._install_first_label()
-                    ),
-                    tr("install_first_hint").format(
-                        software=requirement.label(),
-                        model=self._install_first_label(),
-                        target=journey.target_name,
-                    ),
-                    (),
-                    on_no=self._on_install_first_running_no,
-                )
-            self._sync_install_nav_entry()
-            self._adjust_window_geometry()
-            return
-        selected = journey.target_name
-        if name and self._same_software_name(name, requirement.software_name):
-            selected = requirement.label()
+        if name:
+            for label, _repo in choices:
+                if self._same_software_name(name, label):
+                    selected = label
+                    break
+            # The app already knows what this player runs — the last completed
+            # install for this model, or an answer given on an earlier run — so
+            # the menu would put a question on screen whose answer is already on
+            # record, and the only new thing the user could do with it is
+            # contradict the record. Answer it from what is tracked and go on to
+            # whatever that answer asks for. A tracked *base* still gets the
+            # question: its version is what decides whether it is new enough.
+            tracked = ""
+            if self._same_software_name(
+                name, str(getattr(journey.target, "name", "") or "")
+            ):
+                tracked = install_first.ANSWER_TARGET
+            else:
+                repo = _known_running_repo(self, model)
+                if repo:
+                    tracked = install_first.answer_for_choice(
+                        name, repo, journey.target, requirement
+                    )
+            if tracked and tracked != install_first.ANSWER_PREREQUISITE:
+                journey.answer = tracked
+                if tracked == install_first.ANSWER_FIRMWARE:
+                    journey.running_name = name
+                step = journey.choose(tracked, self._install_first_record_version())
+                self._install_first_stage = ""
+                if step == install_first.PROCEED:
+                    # Nothing to ask: the player already runs what the catalogue
+                    # needs it to, and the install starts as if confirmed.
+                    return False
+                if step == install_first.ASK_VERSION:
+                    self._ask_install_first_version()
+                elif step == install_first.RECOMMEND_PREREQUISITE:
+                    self._confirm_install_first_recommendation()
+                else:
+                    self._confirm_install_first_prerequisite()
+                return True
+
         self._install_first_stage = "software"
         if page is not None:
-            page.show_install_first_prompt(
-                tr("keep_data_which_firmware_fmt").format(model=self._install_first_label()),
-                tr("install_first_hint").format(
+            if requirement is not None and not requirement.when_repos:
+                # No ``install_first_when``: the menu is only this firmware's
+                # required software, the target itself, and Other, so the copy
+                # can name them. One firmware with ``install_first_when`` can be
+                # reached from any number of systems, and naming them all would
+                # be a list, not an instruction.
+                hint = tr("install_first_hint").format(
                     software=requirement.label(),
                     model=self._install_first_label(),
                     target=journey.target_name,
+                )
+            else:
+                hint = tr("install_first_which_firmware_hint")
+            options = tuple(label for label, _repo in choices) + (
+                tr("keep_data_choice_other"),
+            )
+            page.show_install_first_prompt(
+                tr("install_first_which_firmware").format(
+                    model=self._install_first_label()
                 ),
-                (journey.target_name, requirement.label(), tr("keep_data_choice_other")),
+                hint,
+                options,
                 selected=selected,
                 on_no=self._cancel_install_first,
             )
         self._sync_install_nav_entry()
         self._adjust_window_geometry()
-
-    def _on_install_first_running_no(self) -> None:
-        """The player is not running what was tracked; ask the full question."""
-        from .. import keep_data
-
-        journey = getattr(self, "_install_first_journey", None)
-        self._install_first_running_answer = ""
-        self._install_first_running_name = ""
-        self._install_first_stage = ""
-        page = getattr(self, "_flash_page", None)
-        if page is not None:
-            page.clear_keep_data_confirmation()
-        if journey is None:
-            self._cancel_install_first()
-            return
-        keep_data.forget_running_software(
-            self._install_first_model(),
-            self.settings,
-            self._install_first_hardware_type(),
-        )
-        self._ask_install_first_software(journey)
-
-    def _answer_install_first_running(self, confirmed: bool) -> None:
-        """Answer the confirmation: keep the tracked software, or forget it."""
-        from .. import install_first, keep_data
-
-        journey = getattr(self, "_install_first_journey", None)
-        answer = getattr(self, "_install_first_running_answer", "")
-        name = getattr(self, "_install_first_running_name", "")
-        if journey is None or not answer:
-            self._cancel_install_first()
-            return
-        if not confirmed:
-            self._on_install_first_running_no()
-            return
-        model = self._install_first_model()
-        hardware = self._install_first_hardware_type()
-        known = keep_data.known_running_software(model, self.settings, hardware)
-        version = str(
-            (known or {}).get("release_label") or (known or {}).get("tag_name") or ""
-        ).strip()
-        keep_data.note_running_software(model, name, self.settings, hardware)
-        step = journey.choose(answer, version)
-        if step == install_first.ASK_VERSION:
-            # The confirmation is the answer: the player runs the base (or a
-            # build nothing ever versioned), so do not ask the same thing twice.
-            step = journey.confirm_version(True)
-        self._install_first_stage = ""
-        self._install_first_running_answer = ""
-        if step == install_first.PROCEED:
-            self._proceed_with_install_first_target()
-        else:
-            self._confirm_install_first_prerequisite()
+        return True
 
     def _remember_install_first_answer(self, journey, answer: str) -> None:
         """Store what an answer said this model runs, without a version.
@@ -7905,8 +8672,18 @@ class MainWindow(QMainWindow):
             keep_data.note_running_software(
                 model, journey.target_name, self.settings, hardware
             )
+        elif answer == install_first.ANSWER_FIRMWARE and journey.running_name:
+            keep_data.note_running_software(
+                model, journey.running_name, self.settings, hardware
+            )
         else:
-            keep_data.forget_running_software(model, self.settings, hardware)
+            # Another system (or "Other") is not the target and not the base,
+            # so the answer is not carried forward: accepting the base would
+            # make it stale the moment it is flashed. The install record
+            # itself stays — it is the player the user logged in Settings or
+            # the welcome journey, and its software name is what the install
+            # copy names.
+            keep_data.forget_running_answer(model, self.settings, hardware)
 
     def _on_install_first_continue(self) -> None:
         """The card's Continue/tick: answer the stage that is on screen."""
@@ -7924,8 +8701,8 @@ class MainWindow(QMainWindow):
         if stage == "power_on":
             self._resume_install_first_target_after_power_on()
             return
-        if stage == "running":
-            self._answer_install_first_running(True)
+        if stage == "recommend":
+            self._start_install_first_prerequisite()
             return
         if stage == "version":
             step = journey.confirm_version(True)
@@ -7940,6 +8717,8 @@ class MainWindow(QMainWindow):
             self._proceed_with_install_first_target()
         elif step == install_first.ASK_VERSION:
             self._ask_install_first_version()
+        elif step == install_first.RECOMMEND_PREREQUISITE:
+            self._confirm_install_first_recommendation()
         else:
             self._confirm_install_first_prerequisite()
 
@@ -7950,7 +8729,11 @@ class MainWindow(QMainWindow):
         if previous is None or not rel:
             self._cancel_install_first()
             return
-        self._select_page.start_release_install(rel, previous, prompt=False)
+        # This is the journey's own continuation: its answer already stands for
+        # the target, so the menu must not be asked again.
+        self._select_page.start_release_install(
+            rel, previous, prompt=False, guard=False
+        )
 
     def _ask_install_first_version(self) -> None:
         from .. import install_first
@@ -7997,6 +8780,85 @@ class MainWindow(QMainWindow):
         else:
             self._confirm_install_first_prerequisite()
 
+    def _confirm_install_first_recommendation(self) -> None:
+        """Recommend the base when the player runs a system that does not need it.
+
+        The catalogue does not require the base from this firmware, so the
+        choice stays with the user: the base gives the target a clean first
+        start, while installing straight over the old system may keep its
+        startup logo.
+        """
+        journey = getattr(self, "_install_first_journey", None)
+        if journey is None or journey.requirement is None:
+            self._cancel_install_first()
+            return
+        requirement = journey.requirement
+        self._install_first_stage = "recommend"
+        self._flash_page.show_install_first_prompt(
+            tr("install_first_recommend_title").format(
+                software=requirement.software_name
+            ),
+            tr("install_first_recommend_body").format(
+                software=requirement.label(),
+                running=journey.running_name or tr("keep_data_choice_other"),
+                target=journey.target_name,
+                model=self._install_first_label(),
+            ),
+            (),
+            on_no=self._decline_install_first_prerequisite,
+        )
+        self._sync_install_nav_entry()
+        self._adjust_window_geometry()
+
+    def _decline_install_first_prerequisite(self) -> None:
+        """Install the target over the other system, without carrying data."""
+        from .. import install_first
+
+        journey = getattr(self, "_install_first_journey", None)
+        if journey is None:
+            self._cancel_install_first()
+            return
+        self._install_first_stage = ""
+        page = getattr(self, "_flash_page", None)
+        if page is not None:
+            page.clear_keep_data_confirmation()
+        self._keep_data = False
+        if journey.decline_prerequisite() == install_first.PROCEED:
+            self._proceed_with_install_first_target()
+
+    def _install_first_running_name(self) -> str:
+        """What this player is known to run, for copy that can name it.
+
+        The journey's own answer wins. Failing that, the last install or answer
+        for this model is the best evidence the app has; a record that names
+        the target itself is not evidence about what is being replaced, so it
+        is left out rather than producing "X must not go over X". With nothing
+        tracked, the catalogue still names the system this model runs, from the
+        repositories ``install_first_when`` lists for it.
+        """
+        from .. import install_first, keep_data
+
+        journey = getattr(self, "_install_first_journey", None)
+        name = str(getattr(journey, "running_name", "") or "").strip()
+        if name:
+            return name
+        try:
+            known = keep_data.known_running_software(
+                self._install_first_model(),
+                self.settings,
+                self._install_first_hardware_type(),
+            )
+            name = str((known or {}).get("software_name") or "").strip()
+            target = str(getattr(getattr(journey, "target", None), "name", "") or "").strip()
+            if name and not (target and self._same_software_name(name, target)):
+                return name
+            requirement = getattr(journey, "requirement", None)
+            return install_first.when_software_name(
+                requirement, self._install_first_model()
+            )
+        except Exception:
+            return ""
+
     def _confirm_install_first_prerequisite(self) -> None:
         journey = getattr(self, "_install_first_journey", None)
         if journey is None:
@@ -8008,10 +8870,10 @@ class MainWindow(QMainWindow):
             tr("install_first_need_title").format(
                 software=requirement.software_name, target=journey.target_name
             ),
-            tr("install_first_need_body").format(
-                software=requirement.label(),
-                target=journey.target_name,
-                model=self._install_first_label(),
+            install_first_prerequisite_body(
+                journey,
+                self._install_first_label(),
+                self._install_first_running_name(),
             ),
             (),
             on_no=self._cancel_install_first,
@@ -8028,7 +8890,7 @@ class MainWindow(QMainWindow):
         self._flash_page.set_power_off_only(False)
         self._flash_page.clear_keep_data_confirmation()
         self._select_page.start_release_install(
-            journey.target_rel, journey.target, prompt=False
+            journey.target_rel, journey.target, prompt=False, guard=False
         )
 
     def _install_first_filter_rows(self, rows, requirement) -> list:
@@ -8113,7 +8975,9 @@ class MainWindow(QMainWindow):
                 software=requirement.software_name, target=journey.target_name
             )
         )
-        page.start_release_install(rows[0], requirement.package, prompt=False)
+        page.start_release_install(
+            rows[0], requirement.package, prompt=False, guard=False
+        )
 
     def _finish_install_first_prerequisite(self) -> None:
         """The base is installed: continue straight into the requested overlay."""
@@ -8156,12 +9020,17 @@ class MainWindow(QMainWindow):
                 tr("install_first_power_on_hint"),
                 (),
                 on_no=self._cancel_install_first,
+                # An instruction, not a question: the words say "click Next",
+                # so the chip has to be the Next arrow rather than a tick.
+                next_action=True,
             )
             self._sync_install_nav_entry()
             self._nav_to_page(_PAGE_FLASH)
             self._adjust_window_geometry()
             return
-        self._select_page.start_release_install(rel, previous, prompt=False)
+        self._select_page.start_release_install(
+            rel, previous, prompt=False, guard=False
+        )
 
     def _install_first_used_mtk(self) -> bool:
         """True when the firmware just written went through MTKclient."""
@@ -8198,6 +9067,16 @@ class MainWindow(QMainWindow):
             return True
         if journey is None or journey.answer in ("", install_first.ANSWER_TARGET):
             return False
+        # The answer itself can say the player already runs this firmware's
+        # family: the manifest's ``derivative`` link then carries the data
+        # partition, so nothing is starting fresh.
+        try:
+            if journey.keep_data_allowed(
+                catalog.packages_for_model(self._install_first_model())
+            ):
+                return False
+        except Exception:
+            pass
         try:
             if install_first.related_by_derivative(
                 journey.target,
@@ -8217,13 +9096,28 @@ class MainWindow(QMainWindow):
         already tracked is the same intent. A first install or a change to a
         different firmware still asks the user to opt in.
         """
-        if self._install_first_already_on_target():
-            # Reinstalling the firmware already on the player: its data is
-            # already on the right partition, even when the catalogue forbids
-            # Keep Data for a first install of this overlay.
-            return True
         if self._install_first_forces_no_keep_data():
+            # A first install of a base — or the base step of a two-step run —
+            # starts on a fresh partition, so its tick is never pre-ticked,
+            # whatever an earlier answer said.
             return False
+        journey = getattr(self, "_install_first_journey", None)
+        if journey is not None and str(getattr(journey, "answer", "") or ""):
+            # The answer to "which software is running?" is the evidence this
+            # needs: the target itself, or a firmware the manifest places in its
+            # derivative family. Both already own the data partition, so the
+            # tick starts on exactly as it does when the tracked firmware is the
+            # one being installed.
+            from .. import catalog
+
+            try:
+                rows = catalog.packages_for_model(self._install_first_model())
+            except Exception:
+                rows = None
+            if journey.keep_data_allowed(rows):
+                return True
+            if self._install_first_already_on_target():
+                return True
         try:
             from .. import keep_data
 
@@ -8250,12 +9144,50 @@ class MainWindow(QMainWindow):
             logger.debug("Could not evaluate the Keep Data default", exc_info=True)
             return False
 
+    def _lock_keep_data_for_retries(self) -> None:
+        """Freeze the run's Keep Data answer for retries and failovers.
+
+        The user answered on the first attempt. A retry, including an automatic
+        switch to the other flash backend, must act on that same answer without
+        showing the tick or asking which firmware is running again. A distinct
+        new install from Select Software clears the lock in
+        ``_on_package_selected``/``_reset_after_run``.
+
+        The same answer is the user telling us the player is running the
+        software whose data is being kept, which ``post_install_once`` uses.
+        """
+        self._keep_data_choice_locked = True
+        if not getattr(self, "_keep_data_try_anyway", False):
+            self._keep_data_confirmed_running = bool(self._keep_data)
+        page = getattr(self, "_flash_page", None)
+        if page is not None and hasattr(page, "lock_keep_data"):
+            page.lock_keep_data(bool(self._keep_data))
+
     def _keep_data_needs_confirmation(self) -> bool:
+        # The install-first journey has already asked which software is on the
+        # player (and has blocked Keep Data when its answer forbids it), so its
+        # run must not be asked the same thing again.
+        journey = getattr(self, "_install_first_journey", None)
+        if journey is not None and str(getattr(journey, "answer", "") or ""):
+            from .. import catalog
+
+            try:
+                rows = catalog.packages_for_model(self._install_first_model())
+            except Exception:
+                rows = None
+            # The answer already settled it: nothing is left to confirm.
+            if journey.keep_data_allowed(rows):
+                return False
         if self._install_first_already_on_target() or self._install_first_forces_no_keep_data():
             return False
-        if self._keep_data_default_for_install():
-            # An update carries the player's data forward by definition; there
-            # is no "which firmware is running?" question to answer.
+        if self._keep_data_default_for_install() and not getattr(
+            self, "_keep_settings_default", False
+        ):
+            # An update of a firmware the catalogue already tracks carries the
+            # player's data forward by definition, so there is no "which
+            # firmware is running?" question to answer. "Keep my settings" in
+            # the update prompt only pre-ticks this run; it does not say what
+            # the player runs, so 2.5.5 still asked before the connect stage.
             return False
         try:
             from .. import keep_data
@@ -8267,6 +9199,53 @@ class MainWindow(QMainWindow):
         except Exception:
             return False
 
+    def _install_first_gate_awaits_answer(self, pkg=None) -> bool:
+        """Ask which firmware the player runs before the Keep Data question.
+
+        A firmware that declares an ``install_first`` base cannot be judged by
+        "is it already installed?": that answer is what says whether the base
+        is required at all, and whether the player's data can be kept. So the
+        menu of firmwares is the question. The Select page asks it before the
+        download; a run that reaches the power-off card another way (a local
+        package, a resumed download) used to fall through to the Keep Data
+        yes/no, which is the question for the Keep settings path only.
+        """
+        journey = getattr(self, "_install_first_journey", None)
+        if pkg is None:
+            pkg = getattr(self, "_keep_data_pkg", None)
+        if pkg is None:
+            resolver = getattr(self, "_current_firmware_package", None)
+            if callable(resolver):
+                try:
+                    pkg = resolver()
+                except Exception:
+                    pkg = None
+        if pkg is None:
+            return False
+        # A row read before the manifest landed can be blind to a declaration
+        # the catalogue already carries: resolve the freshest one first, so a
+        # package that reached the power-off card still gets asked.
+        pkg = self._manifest_fresh_package(pkg)
+        if not str(getattr(pkg, "install_first", "") or "").strip():
+            return False
+        # An answer settles the firmware it was given for, not whichever
+        # firmware is selected next: a run that changes target has its own
+        # install_first and install_first_when to answer for.
+        if journey is not None and getattr(journey, "answer", ""):
+            if journey.target is pkg:
+                return False
+            try:
+                from .. import install_first
+
+                if install_first.normalize_repo(
+                    getattr(journey.target, "repo", "")
+                ) == install_first.normalize_repo(getattr(pkg, "repo", "")):
+                    return False
+            except Exception:
+                pass
+        rel = getattr(self, "_current_selected_rel", None) or {}
+        return self._guard_install_first(pkg, rel) is False
+
     def _begin_keep_data_confirmation(self) -> None:
         """Ask whether the player is currently running compatible firmware, in-card."""
         from .. import keep_data
@@ -8276,33 +9255,33 @@ class MainWindow(QMainWindow):
         model = self._package_model or getattr(pkg, "model", "") or ""
         model_name = device_label_for_model(model) if model else tr("device_fallback_word")
         software = str(getattr(pkg, "name", "") or self._package_name or "").strip()
+        if self._install_first_gate_awaits_answer(pkg):
+            return
         names = keep_data.compatible_software_names(pkg, model) if pkg is not None else []
-        hw = self._select_page.current_hardware_type() if hasattr(self, "_select_page") else ""
-        known = keep_data.known_running_software(model, self.settings, hw)
-        known_name = str((known or {}).get("software_name") or "").strip()
         self._keep_data_confirm_known_name = ""
-        if known_name and any(
-            known_name.casefold() == str(candidate).casefold() for candidate in names
-        ):
-            # The player's software is already tracked, so the sanity check is
-            # a confirmation of that one name rather than a menu: it is the
-            # same yes/no the single-compatible case asks, with the answer
-            # already filled in.
-            self._keep_data_confirm_known_name = known_name
-            question = tr("keep_data_running_fmt").format(
-                model=model_name, software=known_name
-            )
-            choices = ()
-            selected = known_name
-        elif len(names) > 1:
-            question = tr("keep_data_which_firmware_fmt").format(model=model_name)
+        # 2.5.5's question, restored: every software whose data partition this
+        # install can carry forward is offered by name, so the user answers
+        # about the player in hand rather than confirming a record.
+        if len(names) > 1:
+            # 2.5.5 spelled this key ``keep_data_which_firmware_fmt``; the
+            # sentence it carries is the one the install-first question uses
+            # now, so the two prompts cannot drift apart or lose their text.
+            question = tr("install_first_which_firmware").format(model=model_name)
             choices = tuple(names) + (tr("keep_data_choice_other"),)
             selected = names[0]
         else:
             software_label = names[0] if names else (software or tr("software_original"))
-            question = tr("keep_data_running_fmt").format(
-                model=model_name, software=software_label
-            )
+            # One compatible name is a yes/no that names that software, which
+            # is what 2.5.5 asked. The nameless sentence is only for a package
+            # the catalogue has no name for.
+            if names or software:
+                question = tr("keep_data_running_fmt").format(
+                    software=software_label, model=model_name
+                )
+            else:
+                question = tr("keep_data_running_fmt_no_name").format(
+                    model=model_name
+                )
             choices = ()
             selected = names[0] if names else ""
         self._keep_data_confirm_pending = True
@@ -8311,13 +9290,14 @@ class MainWindow(QMainWindow):
             hint = tr("keep_data_only_compatible_hint_y1")
         else:
             hint = tr("keep_data_only_compatible_hint_other")
-        self._flash_page.show_keep_data_confirmation(
-            question,
-            hint,
-            choices,
-            selected=selected,
-            on_no=self._on_keep_data_not_compatible,
-        )
+        if hasattr(self, "_flash_page"):
+            self._flash_page.show_keep_data_confirmation(
+                question,
+                hint,
+                choices,
+                selected=selected,
+                on_no=self._on_keep_data_not_compatible,
+            )
         self._sync_install_nav_entry()
         self._adjust_window_geometry()
 
@@ -8330,7 +9310,6 @@ class MainWindow(QMainWindow):
         """
         self._keep_data_confirm_pending = False
         self._keep_data_confirm_known_name = ""
-        self._forget_keep_data_software()
         self._keep_data = False
         self._begin_keep_data_erase_confirmation()
 
@@ -8386,9 +9365,26 @@ class MainWindow(QMainWindow):
             question = tr("keep_data_erase_prompt_other").format(model=model_name)
             explainer = tr("keep_data_erase_explainer_other")
         pkg = getattr(self, "_keep_data_pkg", None)
-        if getattr(pkg, "do_not_keep_data", False):
+        # Try Anyway is the advanced override, so it is only offered while that
+        # override is switched on: on every other install the warning explains
+        # the erase without inviting the user to fight a rule the app is not
+        # letting them bend. A package that forbids Keep Data outright keeps the
+        # warning without the link whatever the setting says.
+        try:
+            from .. import keep_data
+
+            allow_any = keep_data.allow_keep_data_any(self.settings)
+        except Exception:
+            allow_any = False
+        if not allow_any or getattr(pkg, "do_not_keep_data", False):
             import re
-            explainer = re.sub(r'<a\s+href=["\']try-anyway["\'].*?</a>', '', explainer, flags=re.IGNORECASE).strip()
+
+            explainer = re.sub(
+                r'<a\s+href=["\']try-anyway["\'].*?</a>',
+                "",
+                explainer,
+                flags=re.IGNORECASE,
+            ).strip()
         self._keep_data_erase_confirm_pending = True
         self._flash_page.show_keep_data_erase_confirmation(question, explainer)
         self._sync_install_nav_entry()
@@ -8397,6 +9393,10 @@ class MainWindow(QMainWindow):
     def _on_keep_data_try_anyway(self) -> None:
         """Subvert Keep Data restriction for this particular install."""
         self._keep_data = True
+        # This overrides a known mismatch; it is not the user saying the
+        # player already runs the target, so the post-install guide stays.
+        self._keep_data_try_anyway = True
+        self._keep_data_confirmed_running = False
         self._keep_data_confirm_pending = False
         self._keep_data_erase_confirm_pending = False
         self._flash_page.clear_keep_data_confirmation()
@@ -8435,13 +9435,32 @@ class MainWindow(QMainWindow):
             self._cancel_install_first()
             return
         if getattr(self, "_keep_data_confirm_pending", False):
+            page = getattr(self, "_flash_page", None)
+            if getattr(page, "_keep_data_cancel_leaves", False):
+                # X on a question that offered a list of answers leaves the
+                # install: nothing was written yet, and the user asked not to
+                # be asked. Stepping forward to the erase warning here read as
+                # ignoring the cancel.
+                self._keep_data_confirm_pending = False
+                self._keep_data_confirm_known_name = ""
+                self._keep_data = False
+                if page is not None:
+                    page.clear_keep_data_confirmation()
+                self._return_to_select_software()
+                return
             self._keep_data_confirm_pending = False
             self._begin_keep_data_erase_confirmation()
             return
         if getattr(self, "_keep_data_erase_confirm_pending", False):
+            # X on the erase warning is the run's answer: no erase, no install.
+            # It leaves for the catalogue instead of stepping back to the
+            # question the user had just declined to answer.
             self._keep_data_erase_confirm_pending = False
-            self._flash_page.clear_keep_data_confirmation()
-            self._show_device_prep()
+            self._keep_data_confirm_pending = False
+            self._keep_data = False
+            if hasattr(self, "_flash_page") and self._flash_page is not None:
+                self._flash_page.clear_keep_data_confirmation()
+            self._return_to_select_software()
             return
         self._return_to_select_software()
 
@@ -8599,6 +9618,10 @@ class MainWindow(QMainWindow):
             return
         if getattr(self, "_returning_to_select", False):
             return
+        # Whatever the stopped worker reports from here on belongs to a run the
+        # user has left. Recorded before the stop so a synchronous signal during
+        # cancellation is already covered.
+        self._run_abandoned = True
         self._returning_to_select = True
         try:
             self._stop_running_install()
@@ -8658,6 +9681,9 @@ class MainWindow(QMainWindow):
         if self._portable_cleanup_required():
             self._start_portable_cleanup()
             return
+        # The bundled run is leaving too: its stopped workers' tail output must
+        # not reopen the install card while the app is closing.
+        self._run_abandoned = True
         self._stop_running_install()
         self._force_quit = True
         self.close()
@@ -8707,7 +9733,7 @@ class MainWindow(QMainWindow):
             # keeps the compact completion card.
             self._compact_install_screen = True
             self._flash_page.show_completion_note(
-                True, software=self._package_name, model=self._package_model
+                False, software=self._package_name, model=self._package_model
             )
             self._apply_release_icon(complete=True)
             self._adjust_window_geometry()
@@ -8882,10 +9908,23 @@ class MainWindow(QMainWindow):
         # deliberately local browse) means the generic squircle: otherwise an
         # online release would lose its own updater.jpg the moment it was
         # unpacked, and the install card showed a placeholder instead.
-        is_local = (
-            release is None
-            or is_mediatek_installer()
-            or (page is not None and getattr(page, "catalogue_section", lambda: "")() == "local")
+        # The install-first base is a catalogue firmware in its own right, and
+        # its stage is where the user has to recognise it, so that stage never
+        # takes the local/SP-Flash squircle path: the card shows the base's own
+        # artwork so the run reads as "Original Software is being installed
+        # now" rather than as the firmware the user picked. Nothing here names
+        # a firmware: the base package and its release row are whatever the
+        # manifest's ``install_first`` resolved to.
+        base_stage = bool(getattr(self, "_install_first_prerequisite_run", False))
+        is_local = release is None or (
+            not base_stage
+            and (
+                is_mediatek_installer()
+                or (
+                    page is not None
+                    and getattr(page, "catalogue_section", lambda: "")() == "local"
+                )
+            )
         )
         dark = bool(is_dark())
         if is_local:
@@ -8956,7 +9995,15 @@ class MainWindow(QMainWindow):
         self._install_first_prerequisite_run = False
         self._install_first_power_off_only = False
         self._keep_data = False
+        self._keep_data_choice_locked = False
+        self._keep_data_erase_required = False
+        self._keep_data_confirmed_running = False
+        self._keep_data_try_anyway = False
+        self._post_install_once = False
+        self._post_install_guides_suppressed = False
+        self._post_install_guide_state_captured = False
         if hasattr(self, "_flash_page") and self._flash_page is not None:
+            self._flash_page.reset_keep_data_preference()
             self._flash_page.set_power_off_only(False)
             self._flash_page.clear_keep_data_confirmation()
         self._compact_install_screen = False
@@ -9115,20 +10162,71 @@ class MainWindow(QMainWindow):
         self._nav_to_page(prev)
 
     def _sync_settings_nav_label(self) -> None:
-        """The Settings row names the setup stage while that stage is open."""
+        """The Settings row names the stage that is open on it.
+
+        It is Welcome while the first-launch journey runs, Linux Setup while
+        that card is up, and Settings otherwise.
+        """
         button = getattr(self, "_settings_btn", None)
         if button is None:
             return
-        button.setText(
-            tr("nav_linux_setup")
-            if getattr(self, "_linux_setup_flow_active", False)
-            else tr("nav_settings")
-        )
+        if getattr(self, "_onboarding_active", False):
+            label = tr("nav_welcome")
+        elif getattr(self, "_linux_setup_flow_active", False):
+            label = tr("nav_linux_setup")
+        else:
+            label = tr("nav_settings")
+        button.setText(label)
         self._reapply_rail_width()
 
+    def _set_onboarding_nav_lock(self, locked: bool) -> None:
+        """While the welcome journey runs, the rail offers one way forward.
+
+        The rows stay where they are — the sidebar is not the subject of the
+        journey — but they open nothing until it is finished or skipped. Each
+        row's own enabled state comes back afterwards, because some of them
+        (SP Flash Tool, Linux setup, a waiting app update) are disabled or
+        hidden for reasons of their own.
+        """
+        if locked:
+            self._onboarding_nav_state = {}
+            buttons = [
+                self._nav_buttons.get(key, (None,))[0]
+                for key in ("nav_select_package", "nav_notices")
+            ]
+            buttons += [
+                getattr(self, name, None)
+                for name in (
+                    "_support_btn",
+                    "_log_btn",
+                    "_check_updates_btn",
+                    "_install_output_btn",
+                    "_linux_setup_btn",
+                    "_sp_flash_tool_btn",
+                )
+            ]
+            for button in buttons:
+                if button is None:
+                    continue
+                self._onboarding_nav_state[button] = button.isEnabled()
+                button.setEnabled(False)
+            return
+        for button, enabled in getattr(self, "_onboarding_nav_state", {}).items():
+            try:
+                button.setEnabled(enabled)
+            except RuntimeError:  # a row that was rebuilt and deleted
+                pass
+        self._onboarding_nav_state = {}
+
     def _on_settings_nav_clicked(self):
-        """Clicking the sidebar Settings button while it is temporarily renamed
-        to 'Linux Setup' keeps the user on the setup screen."""
+        """Opening the row under its temporary name keeps that stage on screen.
+
+        'Welcome' stays the journey, 'Linux Setup' stays the setup card; only
+        plain Settings opens the full column.
+        """
+        if getattr(self, "_onboarding_active", False):
+            self._highlight_nav(_PAGE_SETTINGS, False)
+            return
         if getattr(self, "_linux_setup_flow_active", False):
             self._highlight_nav(_PAGE_SETTINGS, False)
             return
@@ -9136,6 +10234,12 @@ class MainWindow(QMainWindow):
 
     def _show_full_settings(self):
         """Open the complete Settings column and highlight its navigation row."""
+        if getattr(self, "_onboarding_active", False):
+            # The journey is the only Settings there is until it is done: the
+            # full column would offer language, caches and install methods to
+            # someone who has not met the app yet.
+            self._highlight_nav(_PAGE_SETTINGS, False)
+            return
         if self._install_run_active():
             # Settings stays closed while an install, device prep or themes
             # stage owns the window; the install card is the only screen.
@@ -9743,6 +10847,16 @@ class MainWindow(QMainWindow):
 
     def _on_language_changed(self, index):
         lang = self._lang_combo.itemData(index)
+        if not is_supported_language(lang):
+            # Never store something that is not a language this build shows.
+            # Only the item data is a code; a label or a stray string is not a
+            # choice, so the picker goes back to the language in use.
+            current = translator().lang
+            restore = self._lang_combo.findData(current)
+            self._lang_combo.blockSignals(True)
+            self._lang_combo.setCurrentIndex(restore if restore >= 0 else 0)
+            self._lang_combo.blockSignals(False)
+            return
         runtime = getattr(self, "_runtime_i18n", None)
         if runtime is not None:
             # Restore anything the fallback had changed before the normal
@@ -10194,6 +11308,9 @@ class MainWindow(QMainWindow):
             getattr(self, "_notices_available", False)
             and not self._install_run_active()
             and not getattr(self, "_linux_setup_flow_active", False)
+            # A notice arriving during the welcome journey must not re-enable
+            # the row the journey locked: it opens on the next launch.
+            and not getattr(self, "_onboarding_active", False)
         )
         btn.setVisible(visible)
         btn.setEnabled(visible)
@@ -10563,7 +11680,13 @@ class MainWindow(QMainWindow):
         During an install run the page opens as a pop-out modal instead, so the
         install progress stays on screen underneath.
         """
-        if self._install_run_active() or getattr(self, "_compact_install_screen", False):
+        if (
+            self._install_run_active()
+            or getattr(self, "_compact_install_screen", False)
+            # The welcome journey keeps the window as it is, so Support Us is a
+            # pop-out here exactly as it is over a running install.
+            or getattr(self, "_onboarding_active", False)
+        ):
             self._open_support_modal()
             self._highlight_nav(
                 self._stack.currentIndex(),

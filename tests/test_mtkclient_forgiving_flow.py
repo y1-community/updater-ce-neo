@@ -49,6 +49,7 @@ def test_mtkclient_vs_sp_flash_prep_prompt():
 def test_mtkclient_paperclip_prompt_and_120s_timeout():
     """In MTK mode, connect prompt asks to connect device with 120s timeout and paperclip hint where applicable."""
     from src.ui.flash_page import FlashPage
+    from src.i18n import tr
 
     app = _app()
     page = FlashPage()
@@ -56,17 +57,31 @@ def test_mtkclient_paperclip_prompt_and_120s_timeout():
 
     # SP Flash: the countdown starts on the tool's "search usb" line, not here.
     page.set_method("sp")
+    page.show_power_off_prompt()
     page.leave_power_off_prompt()
     assert page._attempt_remaining == 0
+    # The connect sentence is the card's own line: it is what the user has to
+    # do next, and it is not held behind "Getting ready…" first.
+    assert "please connect your y1" in page._wait_prompt_label.text().lower()
+    page._reveal_connect_prompt()
     assert "please connect your y1" in page._wait_prompt_label.text().lower()
 
-    # MTKClient - Y1
+    # MTKClient - Y1. The card asks as soon as the stage moves on; the engine
+    # itself is loaded before this card is ever shown, so no early ask is
+    # possible. "Getting ready…" then belongs to the backend's search line.
     page.set_method("mtk")
+    page.show_power_off_prompt()
     page.leave_power_off_prompt()
     assert page._attempt_remaining == 120
     text_y1 = page._wait_prompt_label.text()
     assert "please connect your y1" in text_y1.lower()
-    assert "(120s)" in text_y1
+    page.show_connect_search()
+    assert page._wait_prompt_label.text() == tr("flash_getting_ready")
+    page._reveal_connect_prompt()
+    text_y1 = page._wait_prompt_label.text()
+    assert "please connect your y1" in text_y1.lower()
+    # The connect card no longer shows a ticking countdown.
+    assert "(120s)" not in text_y1
 
     # Paperclip hint is available for known models at the power-off step
     page.show()
@@ -92,7 +107,12 @@ def test_mtkclient_paperclip_prompt_and_120s_timeout():
     assert page._attempt_remaining == 120
     text_y2 = page._wait_prompt_label.text()
     assert "please connect your y2" in text_y2.lower()
-    assert "(120s)" in text_y2
+    page.show_connect_search()
+    assert page._wait_prompt_label.text() == tr("flash_getting_ready")
+    page._reveal_connect_prompt()
+    text_y2 = page._wait_prompt_label.text()
+    assert "please connect your y2" in text_y2.lower()
+    assert "(120s)" not in text_y2
 
 
 def test_mtkclient_forgiving_handshake_and_progress_detection():
@@ -340,6 +360,41 @@ def test_mtkclient_watchdog_is_one_minute_and_refills_once():
         w._stop_attempt_watchdog()
 
 
+def test_connect_countdown_does_not_reset_when_the_window_restarts():
+    """The connect phase has one deadline, not a fresh minute per restart.
+
+    MTKClient prints progress-shaped lines while it is still searching. Those
+    used to end the no-progress window; the next search line armed a new one
+    at the full minute, so the card's countdown kept jumping back to 60 and
+    the connect never timed out.
+    """
+    import time
+
+    from src.flash_service import FlashWorker
+
+    _app()
+    w = FlashWorker("dummy.zip", method="mtk", model="Y2")
+    w._search_started = True
+    w._past_usb_search = False
+    try:
+        first = w._start_attempt_watchdog()
+        assert first is not None
+        deadline = first._deadline
+        time.sleep(0.05)
+
+        # A progress-shaped line before the device answers is not a transfer.
+        w._note_install_progress()
+        assert w._attempt_watchdog is first
+        assert first._deadline == deadline
+
+        # If the window is restarted anyway, it continues the same deadline.
+        restarted = w._start_attempt_watchdog()
+        assert restarted is not first
+        assert restarted._deadline <= deadline + 0.01
+    finally:
+        w._stop_attempt_watchdog()
+
+
 def test_layman_subtitle_and_action_update():
     """Action updates live subtitle with layman task and partition percentage."""
     from src.ui.flash_page import FlashPage
@@ -397,9 +452,10 @@ def test_preloader_skipped_in_mtkclient():
     app = _app()
     w = FlashWorker("dummy.zip", method="mtk")
 
-    # If watchdog is active, _note_install_progress disarms it
+    # Once the player has answered, _note_install_progress disarms the window.
     dog = w._start_attempt_watchdog()
     assert dog._armed
+    w._past_usb_search = True
     w._note_install_progress()
     assert not dog._armed
 
@@ -555,6 +611,7 @@ def test_device_prep_confirmation_before_watch_and_flash(tmp_path):
 
     """Users are always prompted to power off and disconnect their model/device first.
     The flash worker and device monitor are NOT triggered until the user confirms (presses Next)."""
+    from src.i18n import tr
     from src.ui.main_window import MainWindow, _PAGE_FLASH
 
     app = _app()
@@ -597,6 +654,8 @@ def test_device_prep_confirmation_before_watch_and_flash(tmp_path):
     w._on_power_off_continue()
     assert w._power_off_prompt is False
     assert started_flash == [True], "Flash must be triggered upon user confirmation"
+    w._flash_page.show_connect_search()
+    w._flash_page._reveal_connect_prompt()
     assert "please connect your y2" in w._flash_page._wait_prompt_label.text().lower()
 
 
@@ -649,3 +708,130 @@ def test_errno_during_the_stage2_speed_reconnect_does_not_raise_the_reset_dialog
         app.processEvents()
 
 
+
+def test_the_mtk_session_keeps_the_forks_own_reconnect_setting():
+    """The reference build never overrides ``reconnect``; neither may we.
+
+    The vendored fork defaults it to True, and the Chinese 1.1.7 release's
+    ``mtk_api.py`` only calls ``DaHandler.connect`` + ``configure_da``. This
+    app forced it to False in both places it creates a session, which reached
+    ``daconfig.reconnect`` and the full-speed reconnection path — a behaviour
+    difference from the build whose installs work.
+    """
+    from types import SimpleNamespace
+
+    from src import mtk_api
+
+    config = SimpleNamespace(gpt_settings=object(), reconnect=True)
+    mtk = SimpleNamespace(config=config)
+    mtk_api.ensure_config_defaults(mtk)
+    assert config.reconnect is True
+
+    # And init() must not override it either.
+    import inspect
+
+    source = inspect.getsource(mtk_api.init)
+    assert "config.reconnect" not in source
+
+def test_mtkclient_is_loaded_before_the_card_asks_for_the_player(tmp_path, monkeypatch):
+    """The prompt is what makes a reader plug in, so the engine must be live.
+
+    A player that enumerates while pyusb, the bundled libusb and the vendored
+    fork are still importing has left its preloader window by the time the
+    handshake runs, and the first attempt then fails with mtkclient asking the
+    user to disconnect and reconnect. The worker therefore loads mtkclient
+    before it announces the wait card (which is what shows the connect prompt).
+    """
+    from src import flash_service, mtk_api
+
+    worker = flash_service.FlashWorker(package_path="", method="mtk")
+    worker._log = lambda *_a, **_k: None
+    order = []
+    worker._announce_please_wait = lambda: order.append("prompt")
+
+    class Stop(BaseException):
+        """Stands in for the rest of the flash, which needs a player."""
+
+    def warm_up():
+        order.append("warm")
+        raise Stop()
+
+    monkeypatch.setattr(mtk_api, "warm_up", warm_up)
+    worker._flash_via_mtkclient_core(tmp_path, tmp_path / "MTK_scatter.txt")
+
+    assert order == ["warm"], order
+
+
+def test_connect_prompt_follows_a_prepared_engine(tmp_path):
+    """\"Connect USB\" is asked only once mtkclient is ready to answer.
+
+    Building the session (port detection plus the DA metadata mtkclient loads
+    with it) costs a second or two. When the prompt went out first, a reader
+    who plugged the player in straight away lost the target's short preloader
+    window during that gap, and the first handshake answered "disconnect, start
+    mtkclient and reconnect" -- reported as a failed connection.
+    """
+    import src.flash_service as fs
+    import src.mtk_api as mtk_api
+
+    events = []
+
+    class FakeConfig:
+        gui = None
+
+    class FakeSession:
+        config = FakeConfig()
+
+    w = fs.FlashWorker("pkg.zip", method="mtk", pre_extracted_dir=str(tmp_path))
+    w._log = lambda line, *a, **k: events.append(("log", str(line)))
+
+    real = (
+        fs._parse_scatter,
+        fs._wait_for_mtk_mode,
+        fs.align_scatter_disk_images,
+        mtk_api.warm_up,
+        mtk_api.init,
+        mtk_api.handshake,
+    )
+    fs._parse_scatter = lambda scatter: [("system", Path("/tmp/system.img"))]
+    fs.align_scatter_disk_images = lambda *a, **k: None
+    fs._wait_for_mtk_mode = lambda *a, **k: False
+    mtk_api.warm_up = lambda: True
+    built = []
+
+    def fake_init(loader=None, preloader=None, **kw):
+        session = FakeSession()
+        built.append(session)
+        events.append(("init", session))
+        return session
+
+    def fake_handshake(session, directory="."):
+        events.append(("handshake", session))
+        return (None, None)
+
+    mtk_api.init = fake_init
+    mtk_api.handshake = fake_handshake
+    try:
+        w._flash_via_mtkclient_core(Path(tmp_path), Path("/tmp/scatter.txt"), "MT6572")
+    finally:
+        (
+            fs._parse_scatter,
+            fs._wait_for_mtk_mode,
+            fs.align_scatter_disk_images,
+            mtk_api.warm_up,
+            mtk_api.init,
+            mtk_api.handshake,
+        ) = real
+
+    prompt = next(
+        i
+        for i, event in enumerate(events)
+        if event[0] == "log" and "Waiting for MTK device" in event[1]
+    )
+    first_init = next(i for i, event in enumerate(events) if event[0] == "init")
+    first_handshake = next(i for i, event in enumerate(events) if event[0] == "handshake")
+    assert first_init < prompt < first_handshake, events
+    # The port opens on the session built before the prompt, with nothing
+    # between the prompt and the handshake.
+    assert events[first_handshake][1] is built[0]
+    assert prompt + 1 == first_handshake, events

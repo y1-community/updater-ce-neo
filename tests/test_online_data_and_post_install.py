@@ -849,16 +849,13 @@ def test_post_install_completion_uses_a_globe_and_view_guide(qapp, monkeypatch):
     try:
         page.set_post_install_urls("https://example.test/steps", "https://example.test/guide")
 
-        # No donations: the done mark is a globe and the hint carries the link.
+        # No donations: the done mark is a globe and the letter carries the
+        # guide; the old one-line hint card is retired.
         page.set_device_done(donations_shown=False)
         assert page._done_mark._symbol == "www"
-        assert not page._post_install_hint.isHidden()
-        hint = page._post_install_hint.text()
-        assert hint.count("<a ") == 1, hint
-        assert '<a href="post-install">' in hint, hint
-        assert "<img" in hint and "data:image/png;base64," in hint, hint
-        assert hint.count(tr("post_install_find_out_more")) == 1, hint
-        assert page._view_guide_btn.isHidden()
+        assert page._post_install_hint.isHidden()
+        assert not page._view_guide_btn.isHidden()
+        assert page._view_guide_btn.text() == tr("post_install_view_guide_btn")
 
         # Donations shown: View Guide points at the second URL, and the
         # coffee button opens that same post instead of the plain ko-fi page.
@@ -869,7 +866,7 @@ def test_post_install_completion_uses_a_globe_and_view_guide(qapp, monkeypatch):
         page._open_view_guide()
         page._open_coffee_page()
         assert opened[0] == "https://example.test/steps"
-        assert opened[1].startswith("https://innioasis.app/donate.html?to=")
+        assert opened[1].startswith("https://innioasis.app/donate.html?from=updater-ce&to=")
         assert "https%3A%2F%2Fexample.test%2Fguide" in opened[1]
 
         # Without a second URL View Guide falls back to post_install and the
@@ -885,34 +882,221 @@ def test_post_install_completion_uses_a_globe_and_view_guide(qapp, monkeypatch):
         page.deleteLater()
 
 
-def test_non_donations_completion_with_a_guide_stays_compact(qapp):
-    """A guide link must not grow the completion window back to a tall card."""
+def test_completion_letter_leads_with_one_more_thing_and_offers_a_route_back(qapp):
+    """A guide install says what is left; its advice offers both routes back."""
+    from src.i18n import tr
+    from src.ui.flash_page import FlashPage
+
+    page = FlashPage()
+    try:
+        page.set_model("Y2")
+        page.set_post_install_urls("https://example.test/steps", "")
+        page.set_device_done(donations_shown=True)
+        page.show_completion_appeal(True)
+        assert page._intro.headline.text() == tr("completion_one_more_thing")
+
+        # A firmware with no post-install steps keeps the ordinary thank-you.
+        page.set_post_install_urls("", "")
+        page.show_completion_appeal(True)
+        assert page._intro.headline.text() == tr("donate_completion_headline")
+
+        # The start-up advice stays closed behind its hint, then names both
+        # routes back and asks the window to act on either one.
+        emitted = []
+        page.install_original_requested.connect(lambda: emitted.append("original"))
+        page.browse_software_requested.connect(lambda: emitted.append("browse"))
+        assert not page._start_help_hint.isHidden()
+        assert page._start_help_body.isHidden()
+        page._on_start_help_link("start-help")
+        assert not page._start_help_body.isHidden()
+        advice = page._start_help_advice.text()
+        # Both routes are links inside the explanation itself, underlined so
+        # the sentence's actions read as actions; no separate button row.
+        assert 'href="install-original"' in advice
+        assert 'href="other-software"' in advice
+        assert advice.count("text-decoration: underline") >= 2
+        assert "Y2" in advice
+        assert not hasattr(page, "_install_original_link")
+        assert not hasattr(page, "_other_software_link")
+        page._on_start_help_link("install-original")
+        page._on_start_help_link("other-software")
+        assert emitted == ["original", "browse"]
+    finally:
+        page.deleteLater()
+
+
+def _guide_completion_window(qapp, donations_shown):
+    """A finished install with post-install steps, on screen."""
     from src.ui.main_window import MainWindow, _PAGE_FLASH
 
     window = MainWindow()
     window.show()
     qapp.processEvents()
-    try:
-        window._install_complete = True
-        page = window._flash_page
-        page.show_flashing()
-        page.set_post_install_urls(
-            "https://github.com/jarvissax/rondo/blob/main/docs/install.md#first-start", ""
-        )
-        page.set_device_done(donations_shown=False)
-        page.show_completion_note(True, software="Rondo", model="Y1")
-        window._nav_to_page(_PAGE_FLASH)
-        window._adjust_window_geometry()
-        for _ in range(3):
-            qapp.processEvents()
+    window._install_complete = True
+    page = window._flash_page
+    page.show_flashing()
+    # MTKClient is the method that needs the player started by hand.
+    page.set_method("mtk")
+    page.set_post_install_urls(
+        "https://github.com/jarvissax/rondo/blob/main/docs/install.md#first-start", ""
+    )
+    page.set_device_done(donations_shown=donations_shown)
+    if donations_shown:
+        page.show_completion_appeal(True, None, None)
+    else:
+        page.show_completion_note(False, software="Rondo", model="Y1")
+    window._nav_to_page(_PAGE_FLASH)
+    window._adjust_window_geometry()
+    for _ in range(3):
+        qapp.processEvents()
+    return window, page
 
-        assert page._post_install_hint.isVisible()
-        assert page._done_mark._symbol == "www"
-        assert not hasattr(page, "_post_install_doc")
-        assert window.height() < 400
+
+def test_post_install_completion_is_the_simple_card_without_donations(qapp):
+    """The 01.12 completion card is what a guide install renders without the ask.
+
+    None of the letter: no donation copy, no signature, no button row. The
+    card says what is left, offers the guide, tells the reader how to start
+    the player and keeps the start-up advice behind its own hint. The
+    installed-on line is gone because the guide's steps are still outstanding.
+    """
+    from src.i18n import tr
+
+    window, page = _guide_completion_window(qapp, donations_shown=False)
+    try:
+        assert page._completion_note_container.isVisible()
+        assert page._appeal.isHidden()
+        assert page._post_install_hint.isHidden()
+        assert tr("completion_one_more_thing") in page._completion_title_label.text()
+        # The install is not finished in the sense the sentence claims.
+        assert page._complete_note.isHidden()
+
+        labels = [
+            page._completion_hint_layout.itemAt(i).widget()
+            for i in range(page._completion_hint_layout.count())
+        ]
+        texts = [label.text() for label in labels if label is not None]
+        # The extra-steps sentence with its guide link, the power-on steps, the
+        # hint, and then the advice the hint opens.
+        assert len(texts) == 4
+        assert tr("post_install_find_out_more") in texts[0]
+        assert "unplug the USB" in texts[1]
+        assert 'href="start-help"' in texts[2]
+        assert "start up" in texts[2]
+        assert labels[3].isHidden()
+        page._on_start_help_link("start-help")
+        assert labels[3].isVisible()
+        assert 'href="install-original"' in labels[3].text()
+
+        # No ask anywhere: the coffee buttons and the opt-out are off screen.
+        assert not page._coffee_btn.isVisible()
+        assert not page._bmc_btn.isVisible()
+        assert not page._not_now_btn.isVisible()
+        assert not page._appeal_dont.isVisible()
+        assert not page._appeal_body.isVisible()
     finally:
+        window._force_quit = True
         window.close()
         qapp.processEvents()
+
+
+def test_post_install_completion_letter_keeps_the_donation_row(qapp):
+    """The same letter, with the coffee row when donations are enabled."""
+    from src.i18n import tr
+
+    window, page = _guide_completion_window(qapp, donations_shown=True)
+    try:
+        assert page._appeal.isVisible()
+        assert page._completion_note_container.isHidden()
+        assert tr("completion_one_more_thing") in page._intro.headline.text()
+        assert page._completion_guide_hint.isVisible()
+        assert page._view_guide_btn.isVisible()
+        assert page._appeal_power_on.isVisible()
+        assert page._appeal_body.text() == tr("donate_completion_body_small_hours")
+        assert page._intro.subtitle.isHidden()
+        assert page._coffee_btn.isVisible()
+        assert page._not_now_btn.isVisible()
+        assert page._appeal_dont.isVisible()
+    finally:
+        window._force_quit = True
+        window.close()
+        qapp.processEvents()
+
+
+def test_post_install_once_can_finish_without_the_guide(qapp):
+    """An already-running firmware finishes as an ordinary install."""
+    from src.ui.flash_page import FlashPage
+
+    page = FlashPage()
+    try:
+        page.set_model("Y1")
+        page.set_post_install_urls("https://example.test/steps", "")
+        page.set_device_done(donations_shown=False)
+        page.show_completion_note(
+            True,
+            software="Rondo",
+            model="Y1",
+            post_install_once=True,
+            post_install_suppressed=True,
+        )
+        assert not page._has_post_install()
+        assert page._view_guide_btn.isHidden()
+        assert not page._completion_note_container.isHidden()
+        assert page._appeal.isHidden()
+        assert "Rondo" in page._complete_note.text()
+        assert page._done_mark._symbol == "complete"
+    finally:
+        page.deleteLater()
+
+
+def test_post_install_once_uses_the_pre_install_record(monkeypatch):
+    """The tracked target and a Keep Data confirmation both skip the guide."""
+    from types import SimpleNamespace
+
+    from src import catalog, keep_data
+    from src.ui.main_window import MainWindow
+
+    pkg = catalog.FirmwarePackage(
+        slug="rondo",
+        name="Rondo",
+        model="Y1",
+        repo="jarvissax/rondo",
+        package_name="Rondo.zip",
+        post_install="https://example.test/steps",
+        post_install_once=True,
+    )
+    monkeypatch.setattr(catalog, "packages_for_model_software", lambda *a, **k: [pkg])
+    tracked = {"same": True}
+    monkeypatch.setattr(
+        keep_data,
+        "tracked_is_same",
+        lambda *a, **k: tracked["same"],
+    )
+
+    def window(confirmed=False):
+        return SimpleNamespace(
+            _package_model="Y1",
+            _package_name="Rondo",
+            settings=None,
+            _keep_data_confirmed_running=confirmed,
+            _select_page=SimpleNamespace(current_hardware_type=lambda: "A"),
+            _current_firmware_package=lambda: pkg,
+            _install_first_already_on_target=lambda: False,
+        )
+
+    tracked["same"] = True
+    win = window()
+    MainWindow._capture_post_install_guide_state(win)
+    assert win._post_install_guides_suppressed is True
+
+    tracked["same"] = False
+    win = window(confirmed=True)
+    MainWindow._capture_post_install_guide_state(win)
+    assert win._post_install_guides_suppressed is True
+
+    win = window()
+    MainWindow._capture_post_install_guide_state(win)
+    assert win._post_install_guides_suppressed is False
 
 
 def test_sp_flash_tool_console_arguments_are_always_download_only():
@@ -1047,6 +1231,8 @@ def test_guided_power_off_and_keep_data_flow(qapp):
         win._package_path = "/tmp/fake_rondo.zip"
         win._select_page._details_package = rondo_pkg
         win._select_page._current_selected_rel = {"tag_name": "v1.0.0", "html_url": "https://github.com/fake"}
+        # The prep card is what this test inspects; do not start a backend.
+        win._begin_flash_flow = lambda: None
 
         # Stage 1: Disconnect & Power Off
         win._show_device_prep()
@@ -1083,7 +1269,10 @@ def test_guided_power_off_and_keep_data_flow(qapp):
         # Cancel confirmation -> goes to erase confirmation
         win._on_cancel_wait()
         assert win._keep_data_erase_confirm_pending is True
-        assert "try-anyway" in fp._keep_data_hint.text()
+        # Try Anyway belongs to the "Keep Data on any firmware" override, which
+        # is off by default: the warning explains the erase without inviting the
+        # user to fight a rule the app is not otherwise bending.
+        assert "try-anyway" not in fp._keep_data_hint.text()
 
         # Try Anyway link subverts restriction
         win._on_keep_data_try_anyway()
@@ -1168,8 +1357,12 @@ def test_accepting_an_update_notification_prechecks_keep_data(qapp, tmp_path):
         assert win._flash_page._keep_data_cb.isChecked()
 
         win._on_power_off_continue()
+        # The pre-tick carries the data forward, but "Keep my settings" says
+        # nothing about what the player runs: 2.5.5 still confirms that between
+        # the power-off card and the connect stage.
         assert win._keep_data is True
-        assert win._keep_data_confirm_pending is False
+        assert win._keep_data_confirm_pending is True
+        assert win._flash_page._wait_copy == "keep_data_confirm"
     finally:
         win.close()
 
@@ -1192,6 +1385,8 @@ def test_reinstalling_the_tracked_firmware_prechecks_keep_data(qapp, tmp_path, m
         assert win._flash_page._keep_data_cb.isChecked()
 
         win._on_power_off_continue()
+        # 2.5.5's rule: reinstalling the firmware already tracked is an update
+        # of a player the catalogue can account for, so it asks nothing.
         assert win._keep_data is True
         assert win._keep_data_confirm_pending is False
     finally:
@@ -1227,6 +1422,7 @@ def test_select_page_release_notes_layout_no_overlap(qapp):
     from src.i18n import translator
 
     win = MainWindow()
+    previous = translator().lang
     try:
         win.show()
         translator().set_language("az")
@@ -1269,6 +1465,9 @@ def test_select_page_release_notes_layout_no_overlap(qapp):
         except Exception:
             pass
         win.close()
+        # The language is process-wide: leaving it on Azerbaijani made later
+        # tests read translated button copy and fail on English expectations.
+        translator().set_language(previous or "en")
 
 
 def test_notice_content_and_read_more_url(qapp, monkeypatch):

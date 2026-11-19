@@ -341,7 +341,10 @@ def _install_first_gate(
         return True
     try:
         requirement = install_first.requirement_for(
-            state.package, state.model, packages=items or []
+            state.package,
+            state.model,
+            packages=items or [],
+            running_repo=install_first.running_repo_for(state.model),
         )
     except Exception:
         return True
@@ -357,35 +360,42 @@ def _install_first_gate(
         print(_tr("install_first_needs_answer"), flush=True)
         return False
     model = state.model or "player"
-    options = [state.package.name, requirement.label(), _tr("keep_data_choice_other")]
+    choices = install_first.software_choices(
+        state.package, state.model, requirement, items or []
+    )
+    options = [label for label, _repo in choices] + [_tr("keep_data_choice_other")]
     stored = tracked_install(state.model, state.hardware_type) or {}
     stored_name = str(stored.get("software_name") or "").strip().casefold()
-    wanted_name = requirement.software_name.strip().casefold()
-    same_software = bool(stored_name) and (
-        stored_name == wanted_name
-        or stored_name in wanted_name
-        or wanted_name in stored_name
-    )
-    selected = pick(
+    # The tracked software preselects its row; otherwise the base does, because
+    # that is the firmware the catalogue requires to be there.
+    selected = 0
+    for index, (label, _repo) in enumerate(choices):
+        name = label.strip().casefold()
+        if stored_name and (
+            stored_name == name or stored_name in name or name in stored_name
+        ):
+            selected = index
+            break
+    chosen = pick(
         _tr("keep_data_which_firmware_fmt").format(model=model),
         options,
-        selected=1 if same_software else 0,
+        selected=selected,
     )
-    if selected is None:
+    if chosen is None:
         return False
-    answer = (
-        install_first.ANSWER_TARGET,
-        install_first.ANSWER_PREREQUISITE,
-        install_first.ANSWER_OTHER,
-    )[selected]
+    label = options[chosen]
+    repo = choices[chosen][1] if chosen < len(choices) else ""
+    answer = install_first.answer_for_choice(label, repo, state.package, requirement)
     version = (
         str(stored.get("release_label") or stored.get("tag_name") or "")
-        if same_software
+        if answer == install_first.ANSWER_PREREQUISITE
         else ""
     )
     journey = install_first.InstallFirstJourney(
         target=state.package, target_rel={}, requirement=requirement
     )
+    if answer == install_first.ANSWER_FIRMWARE:
+        journey.running_name = label
     step = journey.choose(answer, version)
     if step == install_first.ASK_VERSION:
         version_text = (
@@ -406,6 +416,25 @@ def _install_first_gate(
         if decided is None:
             return False
         step = journey.confirm_version(bool(decided))
+    if step == install_first.RECOMMEND_PREREQUISITE:
+        decided = confirm(
+            _tr("install_first_recommend_title").format(
+                software=requirement.software_name
+            ),
+            _tr("install_first_recommend_body").format(
+                software=requirement.label(),
+                running=label,
+                target=state.package.name,
+                model=model,
+            ),
+        )
+        if decided is None:
+            return False
+        step = (
+            install_first.NEED_PREREQUISITE
+            if decided
+            else journey.decline_prerequisite()
+        )
     if step == install_first.PROCEED:
         state.install_first_answer = answer
         if answer == install_first.ANSWER_TARGET:
@@ -914,7 +943,12 @@ def _local_install_first_gate(folder, pick, confirm, ready=None):
     if pkg is None or not str(pkg.install_first or "").strip():
         return None
     try:
-        requirement = install_first.requirement_for(pkg, pkg.model, packages=[])
+        requirement = install_first.requirement_for(
+            pkg,
+            pkg.model,
+            packages=[],
+            running_repo=install_first.running_repo_for(pkg.model),
+        )
     except Exception:
         return None
     if requirement is None:
@@ -924,22 +958,31 @@ def _local_install_first_gate(folder, pick, confirm, ready=None):
     model = pkg.model or "player"
     target_name = pkg.name or pkg.folder.name
     base = pkg.install_first_package
-    selected = 1 if base is not None else 0
-    choice = pick(
+    choices = install_first.software_choices(pkg, pkg.model, requirement)
+    options = [label for label, _repo in choices] + [_tr("keep_data_choice_other")]
+    # A bundled base preselects itself; otherwise the menu opens on the base
+    # row the catalogue requires, not on the target.
+    selected = 0
+    if base is not None:
+        for index, (option, _repo) in enumerate(choices):
+            if option == requirement.label():
+                selected = index
+                break
+    chosen = pick(
         _tr("keep_data_which_firmware_fmt").format(model=model),
-        [target_name, requirement.label(), _tr("keep_data_choice_other")],
+        options,
         selected=selected,
     )
-    if choice is None:
+    if chosen is None:
         return "Install cancelled."
-    answer = (
-        install_first.ANSWER_TARGET,
-        install_first.ANSWER_PREREQUISITE,
-        install_first.ANSWER_OTHER,
-    )[choice]
+    label = options[chosen]
+    repo = choices[chosen][1] if chosen < len(choices) else ""
+    answer = install_first.answer_for_choice(label, repo, pkg, requirement)
     journey = install_first.InstallFirstJourney(
         target=pkg, requirement=requirement, local_prerequisite=base
     )
+    if answer == install_first.ANSWER_FIRMWARE:
+        journey.running_name = label
     reported = base.version if answer == install_first.ANSWER_PREREQUISITE and base else ""
     step = journey.choose(answer, reported)
     if step == install_first.ASK_VERSION:
@@ -959,6 +1002,25 @@ def _local_install_first_gate(folder, pick, confirm, ready=None):
         if decided is None:
             return "Install cancelled."
         step = journey.confirm_version(bool(decided))
+    if step == install_first.RECOMMEND_PREREQUISITE:
+        decided = confirm(
+            _tr("install_first_recommend_title").format(
+                software=requirement.software_name
+            ),
+            _tr("install_first_recommend_body").format(
+                software=requirement.label(),
+                running=label,
+                target=target_name,
+                model=model,
+            ),
+        )
+        if decided is None:
+            return "Install cancelled."
+        step = (
+            install_first.NEED_PREREQUISITE
+            if decided
+            else journey.decline_prerequisite()
+        )
     if step == install_first.PROCEED:
         return True
     if base is None:

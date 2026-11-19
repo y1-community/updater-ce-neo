@@ -1,10 +1,12 @@
 import os
+from types import SimpleNamespace
 
 from PySide6.QtCore import QEvent, QSettings, Qt
 from PySide6.QtGui import QKeyEvent
 from PySide6.QtWidgets import QApplication
 
 from src import paths
+from src.ui.main_window import _PAGE_FLASH, _PAGE_SELECT, _PAGE_SETTINGS, _PAGE_SUPPORT
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -60,8 +62,16 @@ def test_r_key_resets_config_and_clears_caches(monkeypatch, tmp_path):
         assert device_tracking.hidden_mtk_options_enabled(s)
         w._show_diagnostics()
 
-        # Send R while the unlocked Diagnostics page is open.
+        # Diagnostics is not one of the surfaces that offers the reset: R
+        # there must be inert, leaving the unlocked state alone.
         assert w._stack.currentIndex() == 5
+        w.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_R, Qt.NoModifier))
+        assert device_tracking.is_donation_ui_disabled(w.settings) is True
+        assert w._settings_page._advanced_revealed is True
+
+        # Settings is one of the three surfaces that does offer it.
+        w._nav_to_page(_PAGE_SETTINGS)
+        assert w._stack.currentIndex() == _PAGE_SETTINGS
         w.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_R, Qt.NoModifier))
 
         # The reset re-hides the UI, clears the diagnostics preference, and
@@ -81,6 +91,80 @@ def test_r_key_resets_config_and_clears_caches(monkeypatch, tmp_path):
         from src.flash_service import default_flash_method
 
         assert s.value("flash_method") == default_flash_method()
+    finally:
+        if w is not None:
+            w.close()
+        for settings, saved in zip(settings_groups, saved_settings):
+            settings.clear()
+            for key, value in saved.items():
+                settings.setValue(key, value)
+
+
+def test_r_key_is_scoped_to_support_settings_and_select(monkeypatch, tmp_path):
+    """R clears config only on the surfaces that offer it, and never mid-task."""
+    _app()
+    from src import catalog, downloads, manifest
+    from src.ui.main_window import MainWindow
+
+    settings_groups = (
+        QSettings("innioasis", "updater"),
+        QSettings("Innioasis", "UpdaterCE"),
+        QSettings("Innioasis", "Innioasis Updater"),
+    )
+    saved_settings = [
+        {key: settings.value(key) for key in settings.allKeys()}
+        for settings in settings_groups
+    ]
+    monkeypatch.setattr(downloads, "clear_firmware_cache", lambda: None)
+    monkeypatch.setattr(downloads, "downloads_dir", lambda: tmp_path / "downloads")
+    monkeypatch.setattr(catalog, "_app_cache_dir", lambda: tmp_path / "app_cache")
+    monkeypatch.setattr(manifest, "_cache_root", lambda: tmp_path / "manifest_cache")
+
+    s = settings_groups[0]
+    s.clear()
+    s.setValue("advanced_settings", True)
+
+    def press():
+        return QKeyEvent(QEvent.KeyPress, Qt.Key_R, Qt.NoModifier)
+
+    def still_set():
+        return s.value("advanced_settings", False, type=bool) is True
+
+    w = None
+    try:
+        w = MainWindow()
+        # The install card writes to the player: R there is inert.
+        w._nav_to_page(_PAGE_FLASH)
+        w.keyPressEvent(press())
+        assert still_set()
+
+        # A running install or theme stage outranks an allowed page, and the
+        # settings page's own handler follows the same rule.
+        w._nav_to_page(_PAGE_SUPPORT)
+        w._prep_active = True
+        w.keyPressEvent(press())
+        assert still_set()
+        w._settings_page.keyPressEvent(press())
+        assert still_set()
+        w._prep_active = False
+
+        # A theme pack refresh is preparing themes even when idle on a page
+        # that otherwise offers the reset.
+        w._theme_update_worker = SimpleNamespace(isRunning=lambda: True)
+        w.keyPressEvent(press())
+        assert still_set()
+        w._theme_update_worker = None
+
+        # Select Software offers it; so does Support us, and Settings through
+        # its own key handler.
+        w._nav_to_page(_PAGE_SELECT)
+        w.keyPressEvent(press())
+        assert not still_set()
+
+        s.setValue("advanced_settings", True)
+        w._nav_to_page(_PAGE_SETTINGS)
+        w._settings_page.keyPressEvent(press())
+        assert not still_set()
     finally:
         if w is not None:
             w.close()

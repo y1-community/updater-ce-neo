@@ -1,12 +1,11 @@
 """Keep Data eligibility for Reborn (Y2Linux) and declared firmware families.
 
-Reborn (Y2Linux) always carries the player's data forward: whoever made the
-current install — Y2Player, Classy, stock, an older Y2Linux release — a Reborn
-install is never refused Keep Data. Only the catalogue can take that away,
-remotely, with ``no_keep_data``/``do_not_keep_data`` or
-``PMT_format_needed``. Every other firmware keeps the family rule: the same
-software or a declared derivative shares the data partition, a firmware with
-no family shares it with itself only.
+The manifest's ``derivative`` graph is the only evidence that two systems
+share a data partition. Reborn (Y2Linux) has no special exception: it keeps
+data across its own releases, but not from Classy, Y2Player or stock unless
+one names the other as its parent. Only the catalogue can remove the choice
+outright with ``no_keep_data``/``do_not_keep_data`` or
+``PMT_format_needed``.
 """
 
 from unittest.mock import patch
@@ -29,6 +28,7 @@ def _pkg(name, repo, derivative=""):
 REBORN = _pkg("Reborn (Y2Linux)", "schulzcode/y2linux")
 STOCK = _pkg("Original Software", "y1-community/y1-stock-rom")
 Y2PLAYER = _pkg("Y2Player", "schulzcode/Y2Player")
+CLASSY = _pkg("Classy", "ClassyPlayer/Classy")
 ROCKBOX = _pkg("Rockbox", "spycemagic/y2-rockbox")
 KOENSAYR = _pkg(
     "Koensayr", "ryan-specter/koensayr-auto", derivative="y1-community/y1-stock-rom"
@@ -53,17 +53,15 @@ def _check(packages, recorded, pkg):
         )
 
 
-def test_a_reborn_target_keeps_data_whatever_was_installed_before():
-    # Y2Player, Classy and stock are all systems a Reborn user may come from.
-    # Reborn carries the player's data forward, so the choice is always there
-    # and the player is not asked to confirm what was running.
-    for previous in ("Y2Player", "Classy"):
-        compatible, available, confirm = _check(
-            [REBORN, Y2PLAYER, STOCK], previous, REBORN
-        )
-        assert compatible is True
-        assert available is True
-        assert confirm is False
+def test_a_reborn_target_does_not_keep_data_from_an_unrelated_system():
+    # Reborn declares no derivative. Without a manifest relationship to
+    # Classy, Y2Player or stock, their data partition is not ours to carry.
+    packages = [REBORN, Y2PLAYER, CLASSY, STOCK]
+    for previous in ("Classy", "Y2Player", "Original Software"):
+        compatible, available, confirm = _check(packages, previous, REBORN)
+        assert compatible is False, previous
+        assert available is False, previous
+        assert confirm is False, previous
 
 
 def test_the_manifest_veto_wins_even_for_reborn():
@@ -89,6 +87,8 @@ def test_another_release_of_reborn_is_still_the_same_firmware():
     )
     assert compatible is True
     assert available is True
+    # 2.5.5's rule: a tracked Y2Linux player is comparable, so the update needs
+    # no "which firmware is running?" question.
     assert confirm is False
 
 
@@ -98,6 +98,15 @@ def test_the_old_catalogue_name_is_still_the_same_firmware():
     compatible, available, _ = _check([REBORN, STOCK], "Y2Reborn (Y2Linux)", REBORN)
     assert compatible is True
     assert available is True
+
+
+def test_keep_data_without_a_catalogue_match_offers_the_tick_unasked():
+    # A local file or an unmatched build still offers Keep Data. 2.5.5 could not
+    # compare it, so it did not build a sanity check out of nothing; the
+    # install-first question is what asks about those packages.
+    with patch("src.keep_data.get_device_install", return_value=_recorded("Y2Player")):
+        assert keep_data.keep_data_available("Y2", None) is True
+        assert keep_data.needs_confirmation("Y2", None) is False
 
 
 def test_the_confirmation_names_reborn_itself():
@@ -116,6 +125,7 @@ def test_a_declared_family_that_matches_is_compatible():
     compatible, available, confirm = _check([KOENSAYR, STOCK], "Original Software", KOENSAYR)
     assert compatible is True
     assert available is True
+    # A declared family is evidence, so 2.5.5 did not ask about it.
     assert confirm is False
 
 

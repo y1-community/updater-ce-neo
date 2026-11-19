@@ -157,6 +157,41 @@ def test_connect_failover_copy_names_both_engines_and_breaks_lines():
     )
 
 
+def test_a_chip_mismatch_is_a_wrong_model_and_not_a_disconnect():
+    """SP Flash Tool closes the port after its chip check; that is not a drop.
+
+    The tool prints the mismatch and then the cable-away lines in the same
+    breath. Reading the disconnect first turned a final "wrong player" result
+    into a reconnect card, and the user was asked to plug the same player back
+    in.
+    """
+    from types import SimpleNamespace
+
+    from src.flash_service import FlashWorker
+
+    events = []
+    worker = SimpleNamespace(
+        _sp_flash_complete=False,
+        _sp_mismatch=False,
+        _is_disconnected=False,
+        _past_usb_search=True,
+        _device_seen=True,
+        _search_timed_out=False,
+        _log=lambda *a, **k: None,
+        cancel=lambda: events.append("cancel"),
+        usb_disconnected=SimpleNamespace(emit=lambda: events.append("usb")),
+        step_changed=SimpleNamespace(emit=lambda *a: None),
+        progress=SimpleNamespace(emit=lambda *a: None),
+        action_changed=SimpleNamespace(emit=lambda *a: None),
+    )
+
+    FlashWorker._classify_sp_stdout(worker, "S_CHIP_TYPE_NOT_MATCH (3184)")
+
+    assert worker._sp_mismatch is True
+    assert worker._is_disconnected is False
+    assert events == []
+
+
 def test_wrong_model_errors_are_recognised():
     assert fs.is_wrong_model_error("S_CHIP_TYPE_NOT_MATCH (3184)")
     assert fs.is_wrong_model_error("DEVICE_PACKAGE_MISMATCH")

@@ -19,6 +19,9 @@ PORTRAIT_DIAMETER = 56
 INTRO_KEYS = ("donate_headline", "donate_subtitle")
 COMPLETION_KEYS = ("donate_completion_headline", "donate_completion_subtitle")
 THEMES_COMPLETION_KEYS = ("donate_completion_headline", "donate_completion_themes_subtitle")
+#: A firmware that has post-install steps is not finished when the write ends:
+#: its letter leads with what is left to do instead of thanking the reader.
+ONE_MORE_THING_KEYS = ("completion_one_more_thing", "donate_completion_subtitle")
 
 # One pool for every completion message. The picker, the re-render after a
 # language change and the tests all read this tuple, so a new variant can

@@ -126,6 +126,10 @@ class FwIni:
     #: Optional version constraint for that base firmware. A bare version is a
     #: minimum; see :func:`install_first.parse_version_constraint`.
     install_first_version: str = ""
+    #: Systems the base is required when coming from (``install_first_when``).
+    install_first_when: str = ""
+    #: Skip the prerequisite when the player already runs the base.
+    install_first_once: bool = False
 
 
 @dataclass(frozen=True)
@@ -158,6 +162,10 @@ class FwPackage:
     install_first: str = ""
     #: Version constraint for that firmware, as written in the ini.
     install_first_version: str = ""
+    #: Systems the base is required when coming from (``install_first_when``).
+    install_first_when: str = ""
+    #: Skip the prerequisite when the player already runs the base.
+    install_first_once: bool = False
     #: The prerequisite parsed from a sibling ``pre_stage`` folder when the
     #: portable package carries it. ``None`` means the app must download it
     #: through the ordinary install-first release flow.
@@ -302,6 +310,17 @@ def read_fw_package_ini(path: Union[str, Path]) -> FwIni:
         "base_version",
         "prerequisite_version",
     )
+    install_first_when = get_first(
+        "install_first_when",
+        "install first when",
+        "base_when",
+        "prerequisite_when",
+    )
+    install_first_once = get_first(
+        "install_first_once",
+        "install first once",
+        "base_once",
+    ).strip().lower() in ("1", "true", "yes")
 
     return FwIni(
         enabled=enabled,
@@ -318,6 +337,8 @@ def read_fw_package_ini(path: Union[str, Path]) -> FwIni:
         repo=repo,
         install_first=install_first,
         install_first_version=install_first_version,
+        install_first_when=install_first_when,
+        install_first_once=install_first_once,
     )
 
 
@@ -654,6 +675,8 @@ def package_as_catalogue(pkg: FwPackage):
         pmt_format_needed=pkg.pmt_format_needed,
         install_first=pkg.install_first,
         install_first_version=pkg.install_first_version,
+        install_first_when=pkg.install_first_when,
+        install_first_once=pkg.install_first_once,
     )
 
 
@@ -1160,6 +1183,8 @@ def read_package(
         repo=meta.repo,
         install_first=meta.install_first,
         install_first_version=meta.install_first_version,
+        install_first_when=meta.install_first_when,
+        install_first_once=meta.install_first_once,
     )
 
 

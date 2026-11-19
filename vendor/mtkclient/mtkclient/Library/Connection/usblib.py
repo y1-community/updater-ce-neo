@@ -506,7 +506,7 @@ class UsbClass(DeviceClass):
             sz = min(buflen, bytestoread)
             try:
                 if fast:
-                    rlen = epr(buffer, self.timeout)
+                    rlen = epr(buffer, timeout)
                     if rlen > sz:
                         self.warning("Buffer overflow")
                         q.put(buffer[rlen:])
@@ -521,7 +521,7 @@ class UsbClass(DeviceClass):
                 else:
                     # macOS libusb: 用 max packet size 读取避免 Overflow（小 buffer 会触发 USB Overflow 错误）
                     read_sz = max(sz, w_max_packet_size)
-                    dt = bytes(epr(read_sz, self.timeout))
+                    dt = bytes(epr(read_sz, timeout))
                     rlen = len(dt)
                     if rlen > sz:
                         # 多余字节放入 queue，供后续 usbread 消费
@@ -547,7 +547,7 @@ class UsbClass(DeviceClass):
                     print(f"[usbread] Overflow with sz={sz}, retrying with 4096",
                           file=_sys.stderr, flush=True)
                     try:
-                        dt = bytes(epr(4096, self.timeout))
+                        dt = bytes(epr(4096, timeout))
                         rlen = len(dt)
                         print(f"[usbread] Overflow retry got {rlen} bytes", file=_sys.stderr, flush=True)
                         if rlen > sz:
@@ -598,10 +598,10 @@ class UsbClass(DeviceClass):
         while len(res) < max_xml_data_length:
             try:
                 if self.fast:
-                    rlen = epr(buffer, self.timeout)
+                    rlen = epr(buffer, timeout)
                     extend(buffer[:rlen])
                 else:
-                    extend(epr(w_max_packet_size, self.timeout))
+                    extend(epr(w_max_packet_size, timeout))
             except usb.core.USBError as e:
                 error = str(e.strerror)
                 if "timed out" in error:

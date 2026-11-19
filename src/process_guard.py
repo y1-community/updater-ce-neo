@@ -474,7 +474,7 @@ def end_install_session(reason: str = "", sweep: bool = True) -> list:
         release_sleep("install session")
     except Exception:
         logger.debug("Could not release the system-awake hold", exc_info=True)
-    return sweep_stray_tools(reason=reason) if sweep else []
+    return []
 
 
 def last_sweep() -> list:
@@ -493,10 +493,11 @@ def describe(killed) -> str:
 def sweep_async(reason: str = "", on_done=None, force: bool = False) -> threading.Thread:
     """Sweep off the calling thread.
 
-    Listing processes and waiting out a SIGTERM grace period takes up to a few
-    seconds, which the GUI thread must never spend: a finished install has to
-    show its result — and a retry has to start — straight away.
+    Only allowed on startup to avoid killing active flashes in other instances.
     """
+    if reason != "startup":
+        logger.debug("Sweep skipped: only allowed on startup")
+        return None
 
     def _run():
         killed = sweep_stray_tools(force=force, reason=reason)

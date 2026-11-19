@@ -349,6 +349,16 @@ class SupportPage(QWidget):
             # Boosty is the only page that takes a Russian card, so it is the
             # whole method row there; the Honeygain and crypto links go too.
             primary_methods = [("donate_boosty", "boosty")]
+        else:
+            from .. import donation_order
+
+            labels = {link_id: key for key, link_id in primary_methods}
+            primary_methods = [
+                (labels[method], method)
+                for method in donation_order.order_for(
+                    [link_id for _key, link_id in primary_methods]
+                )
+            ]
 
         for key, link_id in primary_methods:
             url = DONATION_LINKS.get(link_id, "")

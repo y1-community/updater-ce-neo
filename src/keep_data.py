@@ -7,10 +7,11 @@ software already tracked for the model is the same firmware or a relative of
 the incoming one. A firmware with no derivative is only compatible with
 itself.
 
-Reborn (Y2Linux) is the exception the catalogue cannot express: it carries
-the player's data forward whatever system it is installed over, so Keep Data
-is never refused for it. Only ``slidia_manifest.xml`` can take that away,
-with ``no_keep_data``/``do_not_keep_data`` or ``PMT_format_needed``.
+Reborn (Y2Linux) has no special exception: it follows the same graph. A
+release of Reborn updates itself, but without a ``derivative`` link it does
+not inherit data from Classy, Y2Player, stock or any other system. Only
+``slidia_manifest.xml`` can add that relationship or veto Keep Data with
+``no_keep_data``/``do_not_keep_data`` or ``PMT_format_needed``.
 
 The helpers here are deliberately pure over ``FirmwarePackage`` objects so the
 same rules can be tested without a window or a device.
@@ -71,25 +72,6 @@ def _record_names_firmware(pkg, record) -> bool:
         if needle in _compact(value):
             return True
     return False
-
-
-def is_reborn_firmware(pkg) -> bool:
-    """True for the Reborn (Y2Linux) catalogue entry.
-
-    Reborn installs over any system and carries the player's data forward, so
-    Keep Data is never refused for it. The repository names the firmware
-    (``schulzcode/y2linux``); the name keeps working for the older
-    ``Y2Reborn (Y2Linux)`` label and for local copies without a repository.
-    """
-    if pkg is None:
-        return False
-    repo_name = _norm(getattr(pkg, "repo", "")).split("/")[-1]
-    if repo_name == "y2linux":
-        return True
-    return any(
-        "y2linux" in _compact(getattr(pkg, field, ""))
-        for field in ("name", "slug")
-    )
 
 
 def _same_software_record(pkg, record) -> bool:
@@ -296,6 +278,23 @@ def forget_running_software(
     clear_device_install(model, hardware_type=hardware_type, settings=settings)
 
 
+def forget_running_answer(
+    model: str,
+    settings: Optional[QSettings] = None,
+    hardware_type: str = "",
+) -> None:
+    """Clear the "it is still running X" answer, keeping the install record.
+
+    An answer is a claim the app asked for and can be contradicted by the next
+    one; the install record is the player's own entry in Settings and the
+    software name reminders and install copy read. Answering the install
+    menu with something else drops the claim, not the player.
+    """
+    from .player_update_check import clear_running_software
+
+    clear_running_software(model, hardware_type=hardware_type, settings=settings)
+
+
 def declares_family(pkg) -> bool:
     """True when the catalogue names the firmware ``pkg`` was built from."""
     return bool(_norm(getattr(pkg, "derivative", "")))
@@ -304,24 +303,19 @@ def declares_family(pkg) -> bool:
 def tracked_is_compatible(model: str, pkg, settings: Optional[QSettings] = None, hardware_type: str = "") -> Optional[bool]:
     """True/False for a tracked install, ``None`` when it cannot be known.
 
-    Reborn (Y2Linux) may always carry data forward: whoever made the player's
-    current install — Y2Player, Classy, stock, an older Y2Linux release — Keep
-    Data is still safe for a Reborn install. The catalogue's
+    The ``derivative`` graph is the only evidence that two systems share a
+    data partition. A reinstall of the software already tracked always shares
+    the player's data partition, and so does any member of its derivative
+    family (stock, Better-Y and Koensayr are one family because both mods
+    declare stock as ``derivative``). A firmware that declares no family
+    shares it with itself and its own releases only, so Reborn does not carry
+    Classy or Y2Player data merely because it is Reborn. The catalogue's
     ``no_keep_data``/``PMT_format_needed`` vetoes are checked by the callers
-    first, so they win even here.
-
-    Every other firmware follows the family rule: a reinstall of the software
-    already tracked always shares the player's data partition, and so does any
-    member of its derivative family (stock, Better-Y and Koensayr are one
-    family because both mods declare stock as ``derivative``). A firmware that
-    declares no family shares it with itself only, so it needs its own tracked
-    install. Comparison stays inside one model: a Y2 Rockbox is never
-    compatible with a Y1 install.
+    first, so they win even here. Comparison stays inside one model: a Y2
+    Rockbox is never compatible with a Y1 install.
     """
     if pkg is None:
         return False
-    if is_reborn_firmware(pkg):
-        return True
     record = get_device_install(model, hardware_type=hardware_type, settings=settings)
     if not record:
         return None
@@ -330,7 +324,6 @@ def tracked_is_compatible(model: str, pkg, settings: Optional[QSettings] = None,
     if _same_software_record(pkg, record):
         return True
     # Another release, or the older catalogue name, of the same firmware.
-    # Reborn (Y2Linux) carries its own data forward across its own versions.
     if _record_names_firmware(pkg, record):
         return True
     tracked = tracked_package(model, pkg, settings=settings, hardware_type=hardware_type)
@@ -382,11 +375,12 @@ def incompatible_with_current(model: str, pkg, settings: Optional[QSettings] = N
 def keep_data_available(model: str, pkg, settings: Optional[QSettings] = None, hardware_type: str = "") -> bool:
     """Whether the Keep Data choice may be offered for this install.
 
-    Only two things take the choice away: the catalogue's
-    ``no_keep_data``/``do_not_keep_data`` attribute for this software, or a
-    genuine partition-table change that needs Format All + Download. Reborn
-    (Y2Linux) is otherwise always offered, and a reinstall of the software
-    already on the player always defaults the tick on.
+    The catalogue's ``no_keep_data``/``do_not_keep_data`` attribute for this
+    software and a genuine partition-table change that needs Format All +
+    Download take the choice away. Otherwise the ``derivative`` graph must
+    show that the tracked software shares the data partition; a firmware with
+    no declared family is not offered Keep Data for a different system. An
+    untracked player is treated as unknown and asked to confirm its software.
     """
     if pkg is not None and getattr(pkg, "do_not_keep_data", False):
         return False
@@ -405,7 +399,12 @@ def keep_data_available(model: str, pkg, settings: Optional[QSettings] = None, h
 
 
 def needs_confirmation(model: str, pkg, settings: Optional[QSettings] = None, hardware_type: str = "") -> bool:
-    """True when the user must confirm the currently installed firmware."""
+    """True when the user must confirm the currently installed firmware.
+
+    2.5.5's rule, restored: the sanity check is for the player whose software
+    the app cannot know. A tracked install the catalogue can compare is
+    answered already, so the run does not add a question to it.
+    """
     if pkg is None or getattr(pkg, "do_not_keep_data", False) or allow_keep_data_any(settings):
         return False
     from .pmt_format import pmt_format_required

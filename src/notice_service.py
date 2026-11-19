@@ -1,7 +1,9 @@
-"""Remote notice fetching and caching service (innioasis.app/notice.xml).
+"""Remote notice fetching and caching service (notice.xml).
 
-Fetches announcements and public notices from https://innioasis.app/notice.xml,
-caches them locally, and determines which notices should be shown to the user.
+Fetches announcements and public notices through ``online_data``, which reads
+the ``notice.xml`` committed to the site's repository first and the
+innioasis.app copy after it, caches them locally, and determines which notices
+should be shown to the user.
 
 Notices support:
 - title: headline text
@@ -61,7 +63,6 @@ from .paths import app_cache_dir
 
 logger = logging.getLogger(__name__)
 
-NOTICE_URL = "https://innioasis.app/notice.xml"
 # One notice exists on the card at a time; several applicable notices take
 # turns on that card so a reader does not have to open the list to see them.
 NOTICE_ROTATION_MS = 12_000

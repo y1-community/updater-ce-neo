@@ -100,6 +100,8 @@ def test_round_button_paints_circular_focus_when_tab_active():
 
 
 def test_all_install_cards_continual_alignment():
+    from src.i18n import tr
+
     """All four cards are one shape: chips on the head row, copy under it.
 
     The chips used to be centred on the card as a whole, which put them level
@@ -109,6 +111,7 @@ def test_all_install_cards_continual_alignment():
     """
     app = _app()
     page = FlashPage()
+    page.set_model("Y1")
     page.set_package_name("Original Software 3.1.2 for Y1")
     page.resize(700, 450)
     page.show()
@@ -135,8 +138,8 @@ def test_all_install_cards_continual_alignment():
     assert top <= page._wait_continue_btn.geometry().center().y() <= bottom
     # Inside-card mode hint is hidden
     assert not page._wait_mode_hint.isVisible()
-    # Under-card paperclip hint opens from the prompt's own How? link
-    assert "How?" in page._wait_question_label.text()
+    # Under-card paperclip hint opens from the prompt's own hint link.
+    assert tr("flash_paperclip_help") in page._wait_question_label.text()
     page._on_paperclip_help()
     app.processEvents()
     assert page._paperclip_hint_host.isVisible()

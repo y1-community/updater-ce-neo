@@ -122,6 +122,7 @@ def test_cancel_revealed_on_back_confirmation(app):
 
     try:
         page.show_connect_search()
+        page._reveal_connect_prompt()
         page.set_attempt_timeout(35)
         app.processEvents()
         assert "35s" in page._wait_prompt_label.text()

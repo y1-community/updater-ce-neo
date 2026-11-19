@@ -165,6 +165,16 @@ def test_connect_sentence_and_please_wait_bar():
     assert "MTKClient" not in page._wait_prompt_label.text()
 
     page.show_connect_search()
+    # The tool needs a moment to start listening; the stage opens with a
+    # getting-ready message rather than asking for a connection too early.
+    assert page._wait_prompt_label.text() == tr("flash_getting_ready")
+    assert page._connect_get_ready_timer.isActive()
+    assert page._connect_get_ready_timer.interval() == 3000
+    assert page._paperclip_help_wanted()
+    # The connect stage's link asks about connecting, not about powering off.
+    assert tr("flash_not_connecting_help") in page._wait_question_label.text()
+    assert tr("flash_connect_device_prompt").split("{")[0].strip() not in page._wait_prompt_label.text()
+    page._reveal_connect_prompt()
     assert "Y1" in page._wait_prompt_label.text()
     assert tr("flash_connect_device_prompt").split("{")[0].strip() in page._wait_prompt_label.text()
     assert page._wait_progress_bar.maximum() == 100
@@ -182,6 +192,129 @@ def test_connect_sentence_and_please_wait_bar():
     assert "powered-off and disconnected" in page._wait_prompt_label.text()
     assert "power button" not in page._wait_prompt_label.text()
     page.set_model("Y1")
+
+
+def test_asking_for_the_tip_outranks_a_dismissed_reminder():
+    """"Not connecting? Try this" must open the tip even after an earlier Got it."""
+    from PySide6.QtWidgets import QApplication
+
+    from src.ui.flash_page import FlashPage, _set_hint_dismissed
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    page = FlashPage()
+    try:
+        page.set_model("Y2")
+        page.show_connect_search()
+        page._reveal_connect_prompt()
+        # A dismissal saved on the developer's machine (or from an earlier
+        # install) used to be enough to swallow the click.
+        _set_hint_dismissed("paperclip", True)
+        assert page._paperclip_hint_host.isHidden()
+
+        page._on_paperclip_help()
+        assert not page._paperclip_hint_host.isHidden()
+        assert "hidden button" in page._paperclip_sentence
+        assert "Y2" in page._paperclip_sentence
+    finally:
+        _set_hint_dismissed("paperclip", False)
+        page.deleteLater()
+        app.processEvents()
+
+
+def test_getting_ready_does_not_restart_on_repeated_search_lines():
+    """The handshake window belongs to the stage, not to each log line."""
+    from PySide6.QtWidgets import QApplication
+
+    from src.i18n import tr
+    from src.ui.flash_page import FlashPage
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    page = FlashPage()
+    page.set_model("Y2")
+    try:
+        page.show_connect_search()
+        page.set_attempt_timeout(60)
+        remaining = page._connect_get_ready_timer.remainingTime()
+        assert remaining > 0
+        # The watchdog ticks the countdown every second; that must not replace
+        # the handshake message before the window ends.
+        assert page._wait_prompt_label.text() == tr("flash_getting_ready")
+
+        page.show_connect_search()
+        assert page._wait_prompt_label.text() == tr("flash_getting_ready")
+        assert page._connect_get_ready_timer.isActive()
+        assert page._connect_get_ready_timer.remainingTime() <= remaining
+
+        page._reveal_connect_prompt()
+        assert page._connect_get_ready_timer.isActive() is False
+        assert page._wait_prompt_label.text().startswith(
+            tr("flash_connect_device_prompt").split("{")[0].strip()
+        )
+        # No countdown on the connect card: a ticking deadline is not shown.
+        assert "(60s)" not in page._wait_prompt_label.text()
+        assert page._attempt_remaining == 60
+    finally:
+        page.deleteLater()
+        app.processEvents()
+
+
+def test_a_release_that_cannot_keep_data_does_not_offer_the_tick():
+    """The tick and "this install will reset" must never share the card."""
+    from PySide6.QtWidgets import QApplication
+
+    from src.i18n import tr
+    from src.ui.flash_page import FlashPage
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    page = FlashPage()
+    page.set_model("Y2")
+    try:
+        page.show()
+        page.show_power_off_prompt()
+        page.set_keep_data_available(False)
+        app.processEvents()
+        # No tick means no "keeps your settings" line beside the reset notice.
+        assert page._keep_data_cb.isHidden()
+        assert page._keep_data_note.isHidden()
+        assert tr("flash_keep_data_unavailable") in page._keep_data_warning.text()
+    finally:
+        page.deleteLater()
+        app.processEvents()
+
+
+def test_getting_ready_rearms_after_the_backend_starts_searching():
+    """The handshake window belongs to the command, not just the power-off card."""
+    from PySide6.QtWidgets import QApplication
+
+    from src.i18n import tr
+    from src.ui.flash_page import FlashPage
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    page = FlashPage()
+    page.set_model("Y2")
+    try:
+        page.show_power_off_prompt()
+        page.leave_power_off_prompt()
+        # The tool can take longer to start than this early window. Once its
+        # first search line arrives, the user gets the full window again.
+        page._reveal_connect_prompt()
+        assert page._wait_prompt_label.text().startswith(
+            tr("flash_connect_device_prompt").split("{")[0].strip()
+        )
+
+        page.show_connect_search()
+        assert page._wait_prompt_label.text() == tr("flash_getting_ready")
+        assert page._connect_get_ready_timer.isActive()
+        assert page._connect_get_ready_timer.interval() == 3000
+        assert tr("flash_not_connecting_help") in page._wait_question_label.text()
+
+        # A second search line in the same pass only advances the same window.
+        remaining = page._connect_get_ready_timer.remainingTime()
+        page.show_connect_search()
+        assert page._connect_get_ready_timer.remainingTime() <= remaining
+    finally:
+        page.deleteLater()
+        app.processEvents()
 
 
 def test_power_off_step_offers_cancel_without_a_question():
@@ -239,14 +372,14 @@ def test_paperclip_hint_names_the_hidden_button_per_model():
         # arrives when it is followed.
         page.set_model("Y1")
         page.show_power_off_prompt()
-        assert "How?" in page._wait_question_label.text()
+        assert tr("flash_paperclip_help") in page._wait_question_label.text()
         assert page._paperclip_hint_host.isHidden()
 
         for model in ("Y1", "Y2"):
             page.set_model(model)
             page.show_power_off_prompt()
             page._on_paperclip_help()
-            assert "How?" not in page._wait_question_label.text(), model
+            assert tr("flash_paperclip_help") not in page._wait_question_label.text(), model
             assert not page._paperclip_hint_host.isHidden(), model
             assert page._paperclip_sentence == tr("flash_paperclip_hint").format(model=model), model
             assert "headphone" in page._paperclip_hint.text(), model
@@ -267,10 +400,32 @@ def test_paperclip_hint_names_the_hidden_button_per_model():
         assert "Got it" in page._paperclip_hint.text()
         assert page._paperclip_img.pixmap() is not None and not page._paperclip_img.pixmap().isNull()
 
-        # Not at the connect step: the player is already powered off by then.
+        # The connect step keeps the tip available: a failed handshake is
+        # exactly when the hidden-button advice is useful. It uses the connect
+        # wording rather than the power-off sentence.
         page.set_model("Y1")
+        page._paperclip_revealed = False
         page.show_connect_search()
         assert page._paperclip_hint_host.isHidden()
+        # The connect stage's link asks about connecting, not about powering off.
+        assert tr("flash_not_connecting_help") in page._wait_question_label.text()
+        page._on_paperclip_help()
+        assert not page._paperclip_hint_host.isHidden()
+        assert page._paperclip_sentence == tr("flash_connect_paperclip_prompt").format(
+            model="Y1"
+        )
+        assert "hidden button" in page._paperclip_hint.text()
+        assert "paperclip or pin" in page._paperclip_hint.text()
+        assert page._paperclip_img.pixmap() is not None and not page._paperclip_img.pixmap().isNull()
+
+        page.set_model("A5")
+        page._paperclip_revealed = False
+        page.show_connect_search()
+        page._on_paperclip_help()
+        assert page._paperclip_sentence == tr("flash_connect_paperclip_prompt_a5").format(
+            model="A5"
+        )
+        assert "power button" in page._paperclip_hint.text()
 
         # Once the install is past the power-off step, the hint goes away.
         page.set_model("Y1")
@@ -441,10 +596,11 @@ def _pump_window(app, window, predicate, seconds=3.0):
     return bool(predicate())
 
 
-def test_connect_card_drops_the_power_off_guide_height():
-    """The window shrinks when the connect card replaces the power-off guide."""
+def test_connect_card_keeps_the_paperclip_tip_and_height():
+    """The connect card keeps the paperclip tip; Please wait drops its height."""
     from PySide6.QtWidgets import QApplication
 
+    from src.i18n import tr
     from src.state import FlashState
     from src.ui.main_window import MainWindow, _PAGE_FLASH
 
@@ -459,11 +615,20 @@ def test_connect_card_drops_the_power_off_guide_height():
         window._set_state(FlashState.S2_WAIT_CONNECTION)
         window._nav_to_page(_PAGE_FLASH)
         page.show_power_off_prompt()
+        assert tr("flash_paperclip_help") in page._wait_question_label.text()
+        page._on_paperclip_help()
         assert _pump_window(app, window, lambda: page._paperclip_hint_host.isVisible())
         assert _pump_window(app, window, lambda: window.height() > 350)
         tall = window.height()
 
         page.show_connect_search()
+        assert _pump_window(app, window, lambda: page._paperclip_hint_host.isVisible())
+        assert _pump_window(app, window, lambda: window.height() >= tall - 20), (
+            tall,
+            window.height(),
+        )
+
+        page.show_please_wait()
         assert _pump_window(app, window, lambda: not page._paperclip_hint_host.isVisible())
         assert _pump_window(
             app, window, lambda: window.height() <= tall - 150

@@ -2555,7 +2555,7 @@ def test_language_switch_keeps_screen():
     assert w._flash_page._progress_bar.value() == 57, "progress must survive"
     assert w._flash_page._step_label.text() == "Escribiendo imagen"
     # New Settings strings translate in place too.
-    assert w._settings_page.switch_caption(w._settings_page._cb_reminders) == "Avísame de las nuevas actualizaciones de mi reproductor"
+    assert w._settings_page._reminders_card.title() == "Añade tus reproductores"
     exp_method_text = "SP Flash Tool" if not paths.IS_MAC else "MTKClient"
     assert w._settings_page._method_combo.itemText(0) == exp_method_text
 
@@ -4383,20 +4383,20 @@ def test_install_power_on_steps():
     from src.config import install_power_on_steps
 
     y1_steps = install_power_on_steps("Y1")
-    assert "Unplug your Y1" in y1_steps
+    assert "To turn your Y1 on" in y1_steps
     assert "centre (OK) button" in y1_steps
 
     y2_steps = install_power_on_steps("Y2")
-    assert "Unplug your Y2" in y2_steps
+    assert "To turn your Y2 on" in y2_steps
     assert "power button" in y2_steps
     assert "power/lock" not in y2_steps
 
     generic_steps = install_power_on_steps("")
-    assert "Unplug your device" in generic_steps
+    assert "To turn your device on" in generic_steps
     assert "power button" in generic_steps
 
     custom_steps = install_power_on_steps("CustomPlayer")
-    assert "Unplug your CustomPlayer" in custom_steps
+    assert "To turn your CustomPlayer on" in custom_steps
     assert "power button" in custom_steps
 
 
@@ -4424,7 +4424,7 @@ def test_donation_dialog_install_completion():
         joined = " ".join(text_content)
         assert "We've installed" in joined
         assert "Rockbox (Y1)" in joined
-        assert "Unplug your Y1" in joined
+        assert "To turn your Y1 on" in joined
         assert "centre (OK) button" in joined
         dlg.close()
 
@@ -5337,8 +5337,8 @@ def test_model_detection_and_install_guidance():
     from PySide6.QtWidgets import QApplication
     app = QApplication.instance() or QApplication(sys.argv)
     settings_page = SettingsPage()
-    # One opt-in covers every tracked device, plus the install-method selector.
-    assert hasattr(settings_page, "_cb_reminders")
+    # Players are added one at a time; reminders follow each one on record.
+    assert hasattr(settings_page, "_reminders_list")
     assert settings_page._method_combo.count() >= 1
 
     select_page = SelectPackagePage()

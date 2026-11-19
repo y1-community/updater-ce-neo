@@ -1,0 +1,115 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.12.16, pytest-9.2.0, pluggy-1.7.0
+PySide6 6.9.3 -- Qt runtime 6.9.3 -- Qt compiled 6.9.3
+rootdir: /Users/ryan/Documents/GitHub/updater-ce-neo
+configfile: pyproject.toml
+plugins: qt-4.5.0
+collected 9 items
+
+tests/test_select_list_sizing.py FF.......                               [100%]
+
+=================================== FAILURES ===================================
+___________________ test_release_list_hugs_contents_and_caps ___________________
+
+    def test_release_list_hugs_contents_and_caps():
+        from PySide6.QtWidgets import QApplication
+    
+        app = QApplication.instance() or QApplication(["--platform", "offscreen"])
+        page = SelectPackagePage()
+        app.processEvents()
+        lst = page._release_list
+        emitted = []
+        page.content_size_changed.connect(lambda: emitted.append(1))
+    
+        # Empty list keeps a small placeholder instead of collapsing.
+        page._on_releases_loaded([], "")
+        assert lst.count() == 0
+        assert lst.minimumHeight() == lst.maximumHeight() > 0
+    
+        for n in (1, 2, 5, MAX_VISIBLE_RELEASE_ROWS):
+            page._on_releases_loaded(_fake_releases(n), "")
+            assert lst.count() == n
+>           assert lst.minimumHeight() == lst.maximumHeight()
+E           assert 32 == 77
+E            +  where 32 = <built-in method minimumHeight of PySide6.QtWidgets.QListWidget object at 0x136c22b40>()
+E            +    where <built-in method minimumHeight of PySide6.QtWidgets.QListWidget object at 0x136c22b40> = <PySide6.QtWidgets.QListWidget(0x600001a98bd0, name="releaseList") at 0x136c22b40>.minimumHeight
+E            +  and   77 = <built-in method maximumHeight of PySide6.QtWidgets.QListWidget object at 0x136c22b40>()
+E            +    where <built-in method maximumHeight of PySide6.QtWidgets.QListWidget object at 0x136c22b40> = <PySide6.QtWidgets.QListWidget(0x600001a98bd0, name="releaseList") at 0x136c22b40>.maximumHeight
+
+tests/test_select_list_sizing.py:60: AssertionError
+----------------------------- Captured Qt messages -----------------------------
+QtWarningMsg: Populating font family aliases took 113 ms. Replace uses of missing font family "Sans Serif" with one that exists to avoid this cost. 
+____________________ test_window_follows_the_list_both_ways ____________________
+
+    def test_window_follows_the_list_both_ways():
+        from PySide6.QtWidgets import QApplication
+        from src.ui.main_window import MainWindow, MINIMUM_WINDOW_HEIGHT
+    
+        app = QApplication.instance() or QApplication(["--platform", "offscreen"])
+        w = MainWindow()
+        w.show()
+        assert _quiesce(app, w)
+        sp = w._select_page
+        restore_workers = _freeze_background_listing(w, sp)
+        try:
+            # Offscreen fonts are tiny, so rows would never outgrow the
+            # default window: use desktop-scale rows for the growth path.
+            _fill_big_rows(sp, 2)
+            assert _pump_until(app, lambda: True)
+            base_h = w.height()
+            assert base_h >= MINIMUM_WINDOW_HEIGHT
+    
+            _fill_big_rows(sp, MAX_VISIBLE_RELEASE_ROWS + 10)
+            assert _pump_until(app, lambda: w.height() > base_h), (base_h, w.height())
+            grown_h = w.height()
+    
+            # A shorter list gives the room back: the window shrinks to the fit
+            # instead of keeping a band of empty space under the button.
+            _fill_big_rows(sp, 1)
+>           assert _pump_until(app, lambda: w.height() < grown_h), (grown_h, w.height())
+E           AssertionError: (437, 539)
+E           assert False
+E            +  where False = _pump_until(<PySide6.QtWidgets.QApplication(0x6000028fd640) at 0x10ec08b80>, <function test_window_follows_the_list_both_ways.<locals>.<lambda> at 0x137bf5580>)
+
+tests/test_select_list_sizing.py:191: AssertionError
+----------------------------- Captured Qt messages -----------------------------
+QtWarningMsg: This plugin does not support propagateSizeHints()
+QtWarningMsg: This plugin does not support propagateSizeHints()
+QtWarningMsg: This plugin does not support propagateSizeHints()
+QtWarningMsg: This plugin does not support propagateSizeHints()
+QtInfoMsg: OpenType support missing for "Arial Unicode MS", script 66
+QtInfoMsg: OpenType support missing for ".AppleIndicFont", script 11
+QtWarningMsg: This plugin does not support propagateSizeHints()
+QtWarningMsg: This plugin does not support propagateSizeHints()
+QtWarningMsg: This plugin does not support propagateSizeHints()
+QtWarningMsg: This plugin does not support propagateSizeHints()
+QtWarningMsg: This plugin does not support propagateSizeHints()
+QtWarningMsg: This plugin does not support propagateSizeHints()
+QtWarningMsg: This plugin does not support propagateSizeHints()
+QtWarningMsg: This plugin does not support propagateSizeHints()
+QtWarningMsg: This plugin does not support propagateSizeHints()
+QtWarningMsg: This plugin does not support propagateSizeHints()
+QtWarningMsg: This plugin does not support propagateSizeHints()
+QtWarningMsg: This plugin does not support propagateSizeHints()
+QtWarningMsg: This plugin does not support propagateSizeHints()
+QtWarningMsg: This plugin does not support propagateSizeHints()
+QtWarningMsg: This plugin does not support propagateSizeHints()
+QtWarningMsg: This plugin does not support propagateSizeHints()
+QtWarningMsg: This plugin does not support propagateSizeHints()
+QtWarningMsg: This plugin does not support propagateSizeHints()
+QtWarningMsg: This plugin does not support propagateSizeHints()
+QtWarningMsg: This plugin does not support propagateSizeHints()
+QtWarningMsg: This plugin does not support propagateSizeHints()
+QtWarningMsg: This plugin does not support propagateSizeHints()
+QtWarningMsg: This plugin does not support propagateSizeHints()
+QtWarningMsg: This plugin does not support propagateSizeHints()
+=========================== short test summary info ============================
+FAILED tests/test_select_list_sizing.py::test_release_list_hugs_contents_and_caps
+FAILED tests/test_select_list_sizing.py::test_window_follows_the_list_both_ways
+=================== 2 failed, 7 passed in 118.34s (0:01:58) ====================
+Error calling Python override of QThread::run(): Traceback (most recent call last):
+  File "/Users/ryan/Documents/GitHub/updater-ce-neo/src/ui/release_icon.py", line 467, in run
+    if self.isInterruptionRequested():
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: Internal C++ object (ReleaseIconJob) already deleted.
+QThread: Destroyed while thread '' is still running

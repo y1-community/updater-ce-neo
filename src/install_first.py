@@ -56,11 +56,25 @@ ANSWER_TARGET = "target"
 ANSWER_PREREQUISITE = "prerequisite"
 #: The user says the player runs anything else.
 ANSWER_OTHER = "other"
+#: The user says the player runs another catalogue firmware that the manifest
+#: does not name in ``install_first_when``. The base is the cleanest route for
+#: this one but the catalogue does not require it, so the window recommends it
+#: and the user decides.
+ANSWER_FIRMWARE = "firmware"
 
 #: The next step the window must take.
 PROCEED = "proceed"
 ASK_VERSION = "ask_version"
 NEED_PREREQUISITE = "need_prerequisite"
+#: The base is recommended rather than required: offer it, and install the
+#: target anyway when the user says no.
+RECOMMEND_PREREQUISITE = "recommend_prerequisite"
+
+#: ``install_first_when`` is a CSV list. Split on the separators a catalogue
+#: editor can produce: ASCII commas and semicolons, plus the full-width forms
+#: a Chinese-market manifest is written with. Empty entries (a trailing comma,
+#: a doubled comma) are dropped, so a hand-edited list still parses.
+_WHEN_SPLIT_RE = re.compile(r"[,;，；]")
 
 _VERSION_RE = re.compile(r"(?<![\d.])(\d+(?:\.\d+)+)(?![\d.])")
 _REQUIRED_REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
@@ -72,6 +86,27 @@ def normalize_repo(value) -> str:
     if not text or not _REQUIRED_REPO_RE.match(text):
         return ""
     return text.casefold()
+
+
+def repo_key(value) -> str:
+    """Canonical ``owner/name`` with the catalogue's legacy names resolved.
+
+    ``install_first`` is mapped through ``config.resolve_firmware_repo`` when
+    the manifest is parsed, and ``install_first_when`` has to be mapped the
+    same way. A manifest that still spells a renamed repository the old way
+    (``y1-community/rockbox-y2-rom`` for today's ``spycemagic/y2-rockbox``)
+    would otherwise name a system that never matches the row it means, and that
+    row would stay on the menu as an answer that skips the base.
+    """
+    repo = normalize_repo(value)
+    if not repo:
+        return ""
+    try:
+        from .config import resolve_firmware_repo
+
+        return normalize_repo(resolve_firmware_repo(repo)) or repo
+    except Exception:
+        return repo
 
 
 def version_tuple(value) -> Optional[tuple[int, ...]]:
@@ -360,6 +395,16 @@ class Requirement:
     repo: str
     version_text: str
     version_range: Optional[VersionRange]
+    #: ``install_first_when``: the systems this overlay needs its base when
+    #: coming *from*. Empty means "from anything".
+    when_repos: tuple = ()
+    #: ``install_first_once``: the base only has to be installed the first
+    #: time this firmware goes on the player. It never removes the question.
+    once: bool = False
+    #: ``once`` and this firmware is the software the player is tracked as
+    #: running, so its base has already been installed once: the base is
+    #: offered, never required.
+    once_satisfied: bool = False
     package: object = None
     model: str = ""
     #: The catalogue model the resolved base row is listed under when it is not
@@ -456,7 +501,7 @@ def _shared_source_package(repo: str, model: str, packages: Optional[Iterable] =
     # model the app's catalogue knows.
     rows = list(packages) if packages is not None else _catalogue_packages()
     for candidate in rows:
-        if normalize_repo(getattr(candidate, "repo", "")) != repo:
+        if repo_key(getattr(candidate, "repo", "")) != repo:
             continue
         candidate_model = str(getattr(candidate, "model", "") or "").strip().upper()
         if not _models_can_share_a_source(model, candidate_model):
@@ -465,7 +510,37 @@ def _shared_source_package(repo: str, model: str, packages: Optional[Iterable] =
     return None, ""
 
 
-def requirement_for(pkg, model: str = "", packages: Optional[Iterable] = None) -> Optional[Requirement]:
+def running_repo_for(model: str, settings=None, hardware_type: str = "") -> str:
+    """The catalogue repository of the software ``model`` is known to run.
+
+    ``install_first_when`` and ``install_first_once`` decide on what the player
+    already runs, while the tracking stores a software *name*. Resolving it
+    here keeps the window and the terminal agreeing on when the gate applies.
+    """
+    from . import keep_data
+
+    try:
+        known = keep_data.known_running_software(model, settings, hardware_type)
+        name = str((known or {}).get("software_name") or "").strip().lower()
+        if not name:
+            return ""
+        for candidate in _catalogue_packages():
+            if str(getattr(candidate, "name", "")).strip().lower() != name:
+                continue
+            candidate_model = str(getattr(candidate, "model", "") or "").strip().upper()
+            if _models_can_share_a_source(model, candidate_model):
+                return normalize_repo(getattr(candidate, "repo", ""))
+        return ""
+    except Exception:
+        return ""
+
+
+def requirement_for(
+    pkg,
+    model: str = "",
+    packages: Optional[Iterable] = None,
+    running_repo: str = "",
+) -> Optional[Requirement]:
     """Resolve ``pkg``'s prerequisite against the catalogue for ``model``.
 
     Returns ``None`` when the firmware declares no prerequisite (or names
@@ -475,11 +550,39 @@ def requirement_for(pkg, model: str = "", packages: Optional[Iterable] = None) -
     """
     if pkg is None:
         return None
-    repo = normalize_repo(getattr(pkg, "install_first", ""))
+    repo = repo_key(getattr(pkg, "install_first", ""))
     if not repo:
         return None
-    if repo == normalize_repo(getattr(pkg, "repo", "")):
+    if repo == repo_key(getattr(pkg, "repo", "")):
         return None
+    # ``install_first_when="a/classy,b/rondo"`` names the systems this base is
+    # required *from*: the window still asks what the player runs, and the
+    # named systems are the answers that need the base installed first. The
+    # question is not skipped for a tracked player who runs something else —
+    # that system is exactly what the answer has to be able to say.
+    when_repos = tuple(
+        dict.fromkeys(
+            part
+            for part in (
+                repo_key(item)
+                for item in _WHEN_SPLIT_RE.split(
+                    str(getattr(pkg, "install_first_when", "") or "")
+                )
+            )
+            if part
+        )
+    )
+    running = normalize_repo(running_repo)
+    # ``install_first_once``: the base only has to be installed the first time
+    # this firmware goes on the player. It never suppresses the question — an
+    # untracked player, or one that has moved to another system since, needs the
+    # base exactly like a first install — and running the base says nothing
+    # about whether this overlay was ever installed. The only thing it changes
+    # is that the trackED firmware's own base is not required a second time.
+    once = bool(getattr(pkg, "install_first_once", False))
+    once_satisfied = bool(
+        once and running and running == repo_key(getattr(pkg, "repo", ""))
+    )
     model = str(model or getattr(pkg, "model", "") or "").strip().upper()
     version_text = str(getattr(pkg, "install_first_version", "") or "").strip()
     prerequisite = None
@@ -487,7 +590,7 @@ def requirement_for(pkg, model: str = "", packages: Optional[Iterable] = None) -
         if not model:
             # Without a target model the catalogue row cannot be proven safe.
             continue
-        if normalize_repo(getattr(candidate, "repo", "")) != repo:
+        if repo_key(getattr(candidate, "repo", "")) != repo:
             continue
         candidate_model = str(getattr(candidate, "model", "") or "").strip().upper()
         # The base must be the catalogue row for this player model.  An empty
@@ -502,6 +605,9 @@ def requirement_for(pkg, model: str = "", packages: Optional[Iterable] = None) -
         prerequisite, source_model = _shared_source_package(repo, model, packages)
     return Requirement(
         repo=repo,
+        when_repos=when_repos,
+        once=once,
+        once_satisfied=once_satisfied,
         version_text=version_text,
         version_range=parse_version_constraint(version_text),
         package=prerequisite,
@@ -561,6 +667,172 @@ def related_by_derivative(target, requirement: Requirement, packages: Optional[I
     return bool(target_root) and _family_root(prerequisite, candidates) == target_root
 
 
+def same_firmware_family(left, right, packages: Optional[Iterable] = None) -> bool:
+    """True when two catalogue rows share a ``derivative`` root.
+
+    A firmware with no ``derivative`` link is only itself; rows that climb to
+    the same root share a data partition. That relationship is the manifest's
+    own statement about Keep Data — ``install_first`` says nothing about it.
+    """
+    if left is None or right is None:
+        return False
+    left_repo = normalize_repo(getattr(left, "repo", ""))
+    right_repo = normalize_repo(getattr(right, "repo", ""))
+    if left_repo and left_repo == right_repo:
+        return True
+    model = str(getattr(right, "model", "") or getattr(left, "model", "") or "")
+    candidates = _packages_for(model, packages)
+    if left not in candidates:
+        candidates = [*candidates, left]
+    if right not in candidates:
+        candidates = [*candidates, right]
+    left_root = _family_root(left, candidates)
+    right_root = _family_root(right, candidates)
+    return bool(left_root) and left_root == right_root
+
+
+def when_software_name(
+    requirement: Optional[Requirement],
+    model: str,
+    packages: Optional[Iterable] = None,
+) -> str:
+    """The software ``model`` runs when ``install_first_when`` names one here.
+
+    ``install_first_when`` lists every system the base is required from, and
+    the catalogue lists a firmware once per model. Of that list, only the rows
+    listed for the model being installed to can be what the player is coming
+    from, so one them is a name the card can print instead of talking about
+    "the software already on your player". Two matches mean the catalogue has
+    not singled one out, and nothing is named.
+    """
+    if requirement is None:
+        return ""
+    wanted = {
+        repo_key(repo)
+        for repo in (getattr(requirement, "when_repos", ()) or ())
+        if repo_key(repo)
+    }
+    if not wanted:
+        return ""
+    menu_model = str(model or "").strip().upper()
+    names: list[str] = []
+    for row in _packages_for(model, packages):
+        if repo_key(getattr(row, "repo", "")) not in wanted:
+            continue
+        candidate_model = str(getattr(row, "model", "") or "").strip().upper()
+        if menu_model and candidate_model and candidate_model != menu_model:
+            continue
+        name = str(getattr(row, "name", "") or "").strip()
+        if name and name.casefold() not in {item.casefold() for item in names}:
+            names.append(name)
+    return names[0] if len(names) == 1 else ""
+
+
+def answer_for_choice(label, repo, target, requirement: Optional[Requirement]) -> str:
+    """What one drop-down row says the player is running.
+
+    The rows are built from the catalogue, so a row's repository is the
+    evidence; the label is only compared when it is all there is (a local
+    package can carry no repository). A repository named by
+    ``install_first_when`` needs the base exactly as "Other" does: that
+    attribute is the catalogue saying this system must not install the overlay
+    directly.
+    """
+    text = str(label or "").strip()
+    if not text:
+        return ANSWER_OTHER
+    normalized = normalize_repo(repo)
+    key = repo_key(repo)
+    if requirement is not None and requirement.repo:
+        if key and key == repo_key(requirement.repo):
+            return ANSWER_PREREQUISITE
+        if not normalized and text == requirement.label():
+            return ANSWER_PREREQUISITE
+    target_name = str(getattr(target, "name", "") or "").strip()
+    if target_name and text.casefold() == target_name.casefold():
+        return ANSWER_TARGET
+    target_repo = repo_key(getattr(target, "repo", ""))
+    if key and target_repo and key == target_repo:
+        return ANSWER_TARGET
+    if requirement is not None and key:
+        if key in requirement.when_repos:
+            return ANSWER_OTHER
+        # ``install_first_when`` names the systems this overlay may not be
+        # installed over. A catalogue firmware it does not name is exactly the
+        # case the attribute exists to allow, so the base is only recommended.
+        # A manifest that declares no ``install_first_when`` has named nothing:
+        # then only the base or the target itself can be vouched for, and every
+        # other system needs the base first.
+        return ANSWER_FIRMWARE if requirement.when_repos else ANSWER_OTHER
+    return ANSWER_OTHER
+
+
+def software_choices(
+    pkg, model: str, requirement: Optional[Requirement], packages: Optional[Iterable] = None
+) -> list[tuple[str, str]]:
+    """``(label, repo)`` rows for the "which software is running?" menu.
+
+    The base comes first, because it is the firmware the catalogue wants there
+    first, and the target second: those are the two answers that let the
+    install go ahead. The model's other firmwares follow by name — except the
+    ones this entry's ``install_first_when`` names, which must not be offered as
+    themselves because the catalogue says the base has to be installed before
+    this one can go over them. Those are what "Other" covers, and the caller
+    appends its translated row last. Rows are built from repositories, so a
+    firmware the manifest starts or stops naming changes this menu with no code
+    change.
+    """
+    rows = _packages_for(model or str(getattr(pkg, "model", "") or ""), packages)
+    choices: list[tuple[str, str]] = []
+    seen: set[str] = set()
+
+    def add(label, repo) -> None:
+        text = str(label or "").strip()
+        normalized = normalize_repo(repo)
+        keys = {f"name:{text.casefold()}"}
+        if normalized:
+            keys.add(f"repo:{normalized}")
+        if not text or keys & seen:
+            return
+        seen.update(keys)
+        choices.append((text, normalized))
+
+    blocked = {
+        repo_key(repo)
+        for repo in (getattr(requirement, "when_repos", ()) or ())
+    } if requirement is not None else set()
+    if requirement is not None:
+        add(requirement.label(), requirement.repo)
+    add(str(getattr(pkg, "name", "") or ""), getattr(pkg, "repo", ""))
+    if requirement is not None and not blocked:
+        # No ``install_first_when``: the catalogue named no system this overlay
+        # may be installed over, so the base and the target are the only
+        # answers that can go ahead. Every other system is "Other", which the
+        # caller appends; listing them as themselves would duplicate that row
+        # with a label that then behaves exactly like it.
+        return choices
+    menu_model = str(model or getattr(pkg, "model", "") or "").strip().upper()
+    for candidate in sorted(
+        rows, key=lambda item: str(getattr(item, "name", "") or "").casefold()
+    ):
+        # The question is what this player runs: a row listed for another model
+        # is not an answer about it, even when the caller handed in the whole
+        # catalogue (a Y2 player never runs Y1's Android 4.2 build). Rows with
+        # no model at all are kept: a local package cannot prove otherwise.
+        candidate_model = str(getattr(candidate, "model", "") or "").strip().upper()
+        if menu_model and candidate_model and candidate_model != menu_model:
+            continue
+        candidate_repo = normalize_repo(getattr(candidate, "repo", ""))
+        if candidate_repo and repo_key(candidate_repo) in blocked:
+            # ``install_first_when`` says the base is required from this system,
+            # so the menu must not offer it as an answer that proceeds: the
+            # user with that system answers "Other" like any other firmware the
+            # catalogue did not clear.
+            continue
+        add(str(getattr(candidate, "name", "") or ""), getattr(candidate, "repo", ""))
+    return choices
+
+
 def answer_label(choice: str, target_name: str, requirement: Requirement) -> str:
     """Map a dropdown row back to an :data:`ANSWER_*` value.
 
@@ -587,6 +859,9 @@ class InstallFirstJourney:
     local_prerequisite: object = None
     answer: str = ""
     version_ok: Optional[bool] = None
+    #: The software the user said is running when it is another catalogue
+    #: firmware. Used by the recommendation, and stored as what the player runs.
+    running_name: str = ""
 
     @property
     def target_name(self) -> str:
@@ -605,6 +880,16 @@ class InstallFirstJourney:
         and a known older one goes straight to the prerequisite install.
         """
         self.answer = answer
+        if self.requirement is not None and self.requirement.once_satisfied:
+            # ``install_first_once``: this firmware was installed on the player
+            # before, so its base has already been put down once. The answer is
+            # still recorded — the player may have moved to another system
+            # since — but it can only offer the base, never require it.
+            self.version_ok = None
+            if answer in (ANSWER_TARGET, ANSWER_PREREQUISITE):
+                self.version_ok = True
+                return PROCEED
+            return RECOMMEND_PREREQUISITE
         if answer == ANSWER_TARGET:
             self.version_ok = True
             return PROCEED
@@ -617,8 +902,24 @@ class InstallFirstJourney:
                 self.version_ok = bool(self.requirement.allows(known))
                 return PROCEED if self.version_ok else NEED_PREREQUISITE
             return ASK_VERSION
+        if answer == ANSWER_FIRMWARE:
+            # The catalogue does not name this system, so the target may be
+            # installed over it. The base is still the cleanest route, and the
+            # window asks whether to take it.
+            self.version_ok = None
+            return RECOMMEND_PREREQUISITE
         self.version_ok = False
         return NEED_PREREQUISITE
+
+    def decline_prerequisite(self) -> str:
+        """The user chose the target over another system: install it as asked.
+
+        The answer stays :data:`ANSWER_FIRMWARE` so Keep Data can see the
+        player came from a different system, and the run goes on without the
+        base.
+        """
+        self.version_ok = None
+        return PROCEED
 
     def confirm_version(self, ok: bool) -> str:
         """Record the answer to the "3.2.0 or later?" question."""
@@ -626,14 +927,38 @@ class InstallFirstJourney:
         return PROCEED if ok else NEED_PREREQUISITE
 
     def needs_prerequisite(self) -> bool:
-        return self.answer not in ("", ANSWER_TARGET) and not self.version_ok
+        """True when the base is required, not merely recommended."""
+        if self.answer in ("", ANSWER_TARGET, ANSWER_FIRMWARE):
+            return False
+        return not self.version_ok
 
-    def keep_data_allowed(self) -> bool:
-        """Keep Data is only safe when the player already runs the target.
+    def keep_data_allowed(self, packages: Optional[Iterable] = None) -> bool:
+        """True when the answer says the player's data belongs to this target.
 
-        The target may be an overlay that carries the player's data forward
-        only when that data already belongs to it. A player coming from the
-        base (or anything else) starts the target on a fresh data partition,
-        matching the existing Keep Data rules for a switch between systems.
+        The target itself always keeps its own data. Another catalogue firmware
+        keeps it only when the manifest puts both in one ``derivative`` family:
+        that shared root is what makes the data partition readable, and it is
+        the relationship the catalogue declares for exactly this question. The
+        ``install_first`` attribute is never evidence here — it only says what
+        has to be installed first.
         """
-        return self.answer == ANSWER_TARGET
+        if self.answer == ANSWER_TARGET:
+            return True
+        if self.answer != ANSWER_FIRMWARE or not self.running_name:
+            return False
+        model = str(getattr(self.target, "model", "") or "")
+        if self.requirement is not None and self.requirement.model:
+            model = self.requirement.model
+        rows = _packages_for(model, packages)
+        wanted = str(self.running_name).strip().casefold()
+        running = next(
+            (
+                row
+                for row in rows
+                if str(getattr(row, "name", "")).strip().casefold() == wanted
+            ),
+            None,
+        )
+        if running is None:
+            return False
+        return same_firmware_family(running, self.target, rows)

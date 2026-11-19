@@ -112,6 +112,7 @@ class BackgroundAgent(QObject):
         self._release_worker = None
         self._manifest_signature = None
         self._online_timer = None
+        self._startup_timer = None
 
     # -- tray ---------------------------------------------------------------
     def ensure_tray(self):
@@ -162,11 +163,20 @@ class BackgroundAgent(QObject):
         # Do not wait two minutes for the first manifest: the catalogue that a
         # tray launch starts with may already be older than the repo.
         self._refresh_online()
-        QTimer.singleShot(BACKGROUND_STARTUP_DELAY_MS, self._startup_tick)
+        # Owned rather than a bare singleShot: a delayed tick that outlived
+        # shutdown used to land in whatever ran next (a later test, or the
+        # user's next window) and act on an agent that was already retired.
+        if self._startup_timer is None:
+            self._startup_timer = QTimer(self)
+            self._startup_timer.setSingleShot(True)
+            self._startup_timer.timeout.connect(self._startup_tick)
+        self._startup_timer.start(BACKGROUND_STARTUP_DELAY_MS)
 
     def shutdown(self) -> None:
         """Stop the timers and retire a check that is still in flight."""
         self._stop_timers()
+        if self._startup_timer is not None:
+            self._startup_timer.stop()
         for worker in (
             self._update_worker,
             self._device_worker,

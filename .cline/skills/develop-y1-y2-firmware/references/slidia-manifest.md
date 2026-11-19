@@ -43,6 +43,8 @@ for it — nothing in the code is per-model beyond display names.
 | `do_not_keep_data` | `true` (also `1` / `yes`) marks a firmware that must not inherit user data |
 | `install_first` | Repo of the base firmware that must be installed before this entry (enables the Install Firmware First gate) |
 | `install_first_version` | Version constraint on that base; see the syntax table below |
+| `install_first_when` | Comma-separated repos the base is required *from*; coming from anything else only recommends it |
+| `install_first_once` | `true` (also `1` / `yes`) skips the gate for a player already running the base, without asking |
 
 Aliases still accepted: `model` (`device`), `package` (`package_name`),
 `portable_zip` (`portable_zips`), `post_install_2` (`post_install2`),
@@ -55,6 +57,25 @@ entries for every attribute and previews the result against the live file.
 `install_first` names the base firmware's repo; `install_first_version`
 constrains the version already on the player. A bare version is a **minimum**,
 not an exact match. Omit the attribute to accept any version of that base.
+
+Two optional attributes change what the gate does. The app asks which software
+the player runs and offers every firmware the model has, so the answer — not a
+tracked record — decides what happens next.
+
+```xml
+<package name="Y2Player" repo="someone/y2player" device="Y2"
+         install_first="y1-community/y1-stock-rom"
+         install_first_when="ClassyPlayer/Classy,jarvissax/rondo"
+         install_first_once="true" />
+```
+
+- `install_first_when` names the systems the base is required *from*: naming
+  Classy or Rondo makes those answers install the base first, while another
+  firmware (Rockbox, Y2Player) is offered the base as the cleanest route and
+  may install the target directly.
+- `install_first_once` skips the question entirely when the player already
+  runs the base. Keeping settings still asks which firmware the player runs
+  once it is switched off, exactly as for any other data-preserving install.
 
 | Value | Required base version |
 |---|---|

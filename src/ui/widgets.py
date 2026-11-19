@@ -40,7 +40,35 @@ from PySide6.QtWidgets import (
     QStyle,
     QVBoxLayout,
     QWidget,
+    QToolButton,
 )
+
+class CollapsibleWidget(QWidget):
+    def __init__(self, title, content_widget, parent=None):
+        super().__init__(parent)
+        self.layout = QVBoxLayout(self)
+        self.layout.setContentsMargins(0, 0, 0, 0)
+        self.layout.setSpacing(0)
+
+        self.toggle_button = QToolButton()
+        self.toggle_button.setText(title)
+        self.toggle_button.setCheckable(True)
+        self.toggle_button.setChecked(False)
+        self.toggle_button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        self.toggle_button.setArrowType(Qt.RightArrow)
+        self.toggle_button.setStyleSheet("border: none; font-weight: bold;")
+        self.toggle_button.clicked.connect(self.toggle)
+        
+        self.layout.addWidget(self.toggle_button)
+        self.content_widget = content_widget
+        self.content_widget.setVisible(False)
+        self.layout.addWidget(self.content_widget)
+
+    def toggle(self, checked):
+        self.content_widget.setVisible(checked)
+        self.toggle_button.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
+        self.parentWidget().layout().activate()
+
 
 # Qt's QWIDGETSIZE_MAX. PySide6 does not re-export the macro.
 _WIDGET_SIZE_MAX = (1 << 24) - 1

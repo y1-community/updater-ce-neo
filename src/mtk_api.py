@@ -722,6 +722,28 @@ def is_mtkclient_available() -> bool:
         return False
 
 
+def warm_up() -> bool:
+    """Load mtkclient, pyusb and the bundled libusb before anyone is asked
+    to plug a player in.
+
+    The cold import is the slow part of an MTK session: pyusb, the shared
+    libusb backend and the vendored fork's modules all load here. Done after
+    the card has said "Please connect your <model>", the player is already
+    enumerating while the engine is still importing, its preloader window
+    closes in the meantime, and the handshake that finally runs has nothing
+    to talk to -- which is reported as mtkclient asking the user to
+    disconnect and reconnect. The worker calls this first so the prompt is
+    only shown once the engine can answer it.
+
+    Returns True when mtkclient is importable.
+    """
+    try:
+        _ensure_imports()
+    except BaseException:
+        return False
+    return bool(_imports_done)
+
+
 def init(loader=None, preloader=None, serialport=None, loglevel=logging.INFO, auth=None):
     """Initialise an MTK connection context.
 
@@ -739,7 +761,9 @@ def init(loader=None, preloader=None, serialport=None, loglevel=logging.INFO, au
 
     config = _MtkConfig(loglevel=loglevel, gui=None, guiprogress=None)
     config.loader = loader
-    config.reconnect = False
+    # ``reconnect`` stays at the fork's default (True), exactly as the Chinese
+    # 1.1.7 build leaves it: forcing it off here changed the DA stage's
+    # reconnection behaviour against the release that flashes reliably.
     if preloader and os.path.exists(preloader):
         config.preloader_filename = preloader
         config.preloader = open(config.preloader_filename, "rb").read()
@@ -763,16 +787,17 @@ def ensure_config_defaults(mtk):
     only creates it in its argparse path, so an embedded session must create
     it or partition reads fail with ``NoneType`` errors.
 
-    ``reconnect`` is explicitly disabled so ``dalegacy_lib.py`` does not
-    issue a USB bus reset (port.close(reset=True)) after Stage 2 DA upload,
-    matching reference Chinese build behavior and preventing macOS/Linux hangs.
+    ``reconnect`` is deliberately left alone. The vendored fork defaults it to
+    True, and the Chinese 1.1.7 build's ``mtk_api.py`` (``init`` + ``connect``,
+    nothing else) never assigns it, so forcing it off here made this app behave
+    differently from the release whose flashing is known to work: it reaches
+    ``daconfig.reconnect`` and the full-speed reconnection path. A session that
+    needs the default kept is not ours to change from the app side.
     """
     if getattr(mtk.config, "gpt_settings", None) is None:
         from mtkclient.Library.Partitions.gpt import GptSettings  # type: ignore
 
         mtk.config.gpt_settings = GptSettings(0, 0, 0)
-    if hasattr(mtk.config, "reconnect"):
-        mtk.config.reconnect = False
     return mtk
 
 
@@ -791,10 +816,14 @@ def handshake(mtk, directory="."):
     ensure_config_defaults(mtk)
 
     da_handler = _DaHandler(mtk, logging.INFO)
+    session = mtk
     mtk = da_handler.connect(mtk, directory)
-    if mtk is None:
-        return (None, None)
-    if getattr(mtk.config, "target_config", None) is None:
+    if mtk is None or getattr(mtk.config, "target_config", None) is None:
+        # A target that was already plugged in when the port opened answers the
+        # probe but never completes the handshake, and mtkclient returns None
+        # with the interface still held. Releasing it here is what lets the
+        # next attempt open the player instead of failing on a busy port.
+        close_port(session)
         return (None, None)
     try:
         mtk._da_handler = da_handler
@@ -870,6 +899,8 @@ def arm_brom_boot(mtk):
 def trigger_reset(mtk):
     """Reset the target by enabling its watchdog (mtkclient's meta recipe)."""
     wdg_addr, _value = mtk.config.get_watchdog_addr()
+    logger.info("Watchdog reset: addr=%s, key=%s", hex(wdg_addr), hex(0x1209))
+    mtk.preloader.write32(wdg_addr, 0x22000064)
     return bool(mtk.preloader.write32(wdg_addr + 0x14, 0x00001209))
 
 

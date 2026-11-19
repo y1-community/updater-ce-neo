@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 from .. import catalog, device_tracking, fx, paths, shortcut_manager
 from ..config import (
     DEVICE_MODELS,
+    default_hardware_type,
     device_label_for_model,
     hardware_types_for_model,
     is_mediatek_installer,
@@ -35,7 +36,7 @@ from ..flash_service import (
     normalise_method,
     windows_only_method,
 )
-from ..i18n import tr, tr_brand
+from ..i18n import device_type_help_tip, tr, tr_brand
 from .dark import T, page_margins
 from .icons import get_symbol_icon
 from .scrollbars import configure_scroll_area
@@ -69,6 +70,20 @@ logger = logging.getLogger(__name__)
 MEDIATEK_DRIVERS_URL = "https://innioasis.app/guide.html"
 # ARM64 Windows (native or x86-64 under Prism) needs a different driver guide.
 MEDIATEK_DRIVERS_ARM64_URL = "https://armsdr.com/drivers.html"
+
+# Y1 units on Original Software report their firmware version, and that version
+# is the only revision question a stock player needs: builds before 1.9.7 are
+# Type B units, newer ones are Type A. This is why the Add Player form never
+# asks for Type on Original Software.
+ORIGINAL_TYPE_A_MIN_VERSION = (1, 9, 7)
+
+
+def original_software_hardware_type(version) -> str:
+    """``"A"``/``"B"`` for an Original Software version, or ``""`` if unknown."""
+    parsed = catalog.release_version_tuple(version)
+    if not parsed:
+        return ""
+    return "B" if parsed < ORIGINAL_TYPE_A_MIN_VERSION else "A"
 
 # Install-method identifiers are owned by flash_service; platform routing
 # chooses the available flash engine without exposing platform-specific aliases.
@@ -123,6 +138,9 @@ class SettingsPage(QWidget):
     card_focus_finished = Signal()
     linux_prep_completed = Signal()
     advanced_settings_changed = Signal(bool)
+    # The first-launch journey (welcome, add the players you already own) is
+    # over: the window can hand the catalogue back and remember it is done.
+    onboarding_finished = Signal()
     install_rockbox_themes_requested = Signal()
     refresh_themes_requested = Signal()
     # The in-beta themes auto-install toggle flipped; the window starts or
@@ -148,6 +166,9 @@ class SettingsPage(QWidget):
         # other card stays hidden whatever its own rule says.
         self._solo_card = None
         self._sp_gui_available = False
+        # First launch and reset: the same reminders card, worn as a welcome so
+        # a player installed before this app existed can be recorded.
+        self._onboarding = False
         self._build_ui()
         self.refresh_settings()
 
@@ -308,7 +329,14 @@ class SettingsPage(QWidget):
         """Height needed by the Settings page, hugging a solo card when focused."""
         card = getattr(self, "_solo_card", None)
         if card is not None:
+            # Measure the height without letting adjustSize() resize the card:
+            # it snaps the widget to its own size hint, and on a wide window
+            # that is about half the column. The focused card must keep the
+            # column's width while the window fits itself to the card.
+            width = int(card.width())
             card.adjustSize()
+            if width > 0 and int(card.width()) != width:
+                card.resize(width, card.height())
             height = max(
                 int(card.sizeHint().height()),
                 int(card.minimumSizeHint().height()),
@@ -548,17 +576,23 @@ class SettingsPage(QWidget):
         rem_layout = QVBoxLayout()
         rem_layout.setSpacing(8)
 
-        # The title describes the opt-in action; explanatory copy below is
-        # specific to any device/software pair already being tracked.
-        self._cb_reminders = self._add_title_row_switch(
-            self._reminders_card, "settings_reminders_enable",
-        )
-        self._cb_reminders.setStyleSheet("")  # no host style override
-        self._cb_reminders.toggled.connect(self._on_reminders_toggled)
+        # No master switch: reminders follow the players on record, and
+        # removing a player is how its reminders stop. The per-player rows
+        # below do that, one device at a time.
         self._reminders_desc = QLabel("")
         self._reminders_desc.setWordWrap(True)
         self._reminders_desc.setProperty("cssClass", "subtitle")
         rem_layout.addWidget(self._reminders_desc)
+
+        # The onboarding journey lives in this card because this is where a
+        # player is recorded: the card title becomes the welcome heading, this
+        # body says why it is worth doing, and the form below opens with the
+        # journey. Every piece of it steps aside outside the journey.
+        self._onboarding_body = QLabel(tr("onboarding_body"))
+        self._onboarding_body.setWordWrap(True)
+        self._onboarding_body.setProperty("cssClass", "subtitle")
+        self._onboarding_body.setVisible(False)
+        rem_layout.addWidget(self._onboarding_body)
 
         # One switch per model once software has been installed on more than
         # one player: releases are tracked per model, but only one unit of a
@@ -572,6 +606,15 @@ class SettingsPage(QWidget):
         self._reminder_rows: list[QWidget] = []
         rem_layout.addWidget(self._reminders_list)
 
+        # Once a player is on record the journey stops introducing itself and
+        # says what it now does for the players listed above, then how to
+        # finish. It sits below the list so the copy reads around it.
+        self._onboarding_footer = QLabel(tr("onboarding_after_add_footer"))
+        self._onboarding_footer.setWordWrap(True)
+        self._onboarding_footer.setProperty("cssClass", "subtitle")
+        self._onboarding_footer.setVisible(False)
+        rem_layout.addWidget(self._onboarding_footer)
+
         # Add Player: records a player's installed software without a flash,
         # so Player Update Reminders can track it. Opens inline, not as a dialog.
         self._add_device_button = QPushButton(tr("settings_add_device"))
@@ -581,6 +624,29 @@ class SettingsPage(QWidget):
         self._add_device_panel = self._build_add_device_panel()
         self._add_device_panel.setVisible(False)
         rem_layout.addWidget(self._add_device_panel)
+        # One-time Windows step before the form: the MediaTek drivers and the
+        # restart they need. Shown in place of the form until confirmed.
+        self._drivers_gate = self._build_drivers_gate()
+        self._drivers_gate.setVisible(False)
+        rem_layout.addWidget(self._drivers_gate)
+
+        # The journey's own row: Done once a player is logged, and one more
+        # round. The way out is the quiet word beside Save in the form above.
+        self._onboarding_actions = QWidget()
+        onb_buttons = QHBoxLayout(self._onboarding_actions)
+        onb_buttons.setContentsMargins(0, 0, 0, 0)
+        onb_buttons.setSpacing(8)
+        self._onboarding_done = QPushButton(tr("onboarding_done"))
+        self._onboarding_done.setCursor(Qt.PointingHandCursor)
+        self._onboarding_done.clicked.connect(self._finish_onboarding)
+        onb_buttons.addWidget(self._onboarding_done)
+        self._onboarding_more = QPushButton(tr("onboarding_add_another"))
+        self._onboarding_more.setCursor(Qt.PointingHandCursor)
+        self._onboarding_more.clicked.connect(self._add_another_player)
+        onb_buttons.addWidget(self._onboarding_more)
+        onb_buttons.addStretch(1)
+        self._onboarding_actions.setVisible(False)
+        rem_layout.addWidget(self._onboarding_actions)
 
         self._reminders_card.set_layout(rem_layout)
         self._update_reminders_copy()
@@ -709,6 +775,8 @@ class SettingsPage(QWidget):
         actions.addWidget(self._settings_reddit_btn, 0, Qt.AlignVCenter)
         actions.addStretch(1)
         don_layout.addWidget(self._donations_actions, alignment=Qt.AlignLeft)
+        self._donations_actions_layout = actions
+        self._layout_donation_buttons()
         self._sync_donation_methods()
         # This opt-out link only appears after donations are disabled. Keep it
         # on its own row so it cannot widen the entire Settings scroll area
@@ -1412,7 +1480,11 @@ class SettingsPage(QWidget):
         if event.key() == Qt.Key_R and event.modifiers() == Qt.NoModifier:
             win = self.window()
             if win is not None and hasattr(win, "reset_all_configuration_and_caches"):
-                win.reset_all_configuration_and_caches()
+                # Settings is one of the three surfaces that offers the reset,
+                # but a running install or theme task still outranks the page.
+                allowed = getattr(win, "r_key_reset_allowed", None)
+                if allowed is None or allowed():
+                    win.reset_all_configuration_and_caches()
                 event.accept()
                 return
         super().keyPressEvent(event)
@@ -1723,11 +1795,6 @@ class SettingsPage(QWidget):
         self._reminders_desc.setText(text)
         self._rebuild_reminder_switches(tracked)
 
-    def _on_reminders_toggled(self, checked: bool):
-        for model in DEVICE_MODELS:
-            device_tracking.set_device_reminder_enabled(model, bool(checked))
-        self.refresh_settings()
-
     def _on_clear_install(self, model: str):
         device_tracking.clear_device_install(model)
         self.refresh_settings()
@@ -1747,6 +1814,14 @@ class SettingsPage(QWidget):
         self._add_device_type.setVisible(False)
         self._add_device_software = QComboBox()
         self._add_device_version = QComboBox()
+        # A version the release list cannot name: "not known", or a build the
+        # user typed from the player's About screen. It is what the reminder
+        # checker compares against, so it has to be recorded as typed.
+        self._add_device_version_manual = QLineEdit()
+        self._add_device_version_manual.setPlaceholderText(
+            tr("settings_add_device_version_placeholder")
+        )
+        self._add_device_version_manual.setVisible(False)
         self._add_device_status = QLabel("")
         self._add_device_status.setWordWrap(True)
         self._add_device_status.setProperty("cssClass", "dimmed")
@@ -1758,12 +1833,47 @@ class SettingsPage(QWidget):
             ("settings_add_device_version", self._add_device_version),
         ):
             label = QLabel(tr(caption_key))
-            form.addWidget(label)
-            form.addWidget(combo)
             if combo is self._add_device_type:
+                # Type needs explaining before it is chosen: the hint button
+                # shares its label row, and the explanation it opens sits under
+                # that row. The row hides with the selector when the model has
+                # only one revision.
                 self._add_device_type_label = label
                 label.setVisible(False)
+                label_row = QWidget()
+                label_row_layout = QHBoxLayout(label_row)
+                label_row_layout.setContentsMargins(0, 0, 0, 0)
+                label_row_layout.setSpacing(8)
+                label_row_layout.addWidget(label)
+                self._add_device_type_hint_btn = QPushButton(
+                    tr("settings_add_device_type_hint_btn")
+                )
+                self._add_device_type_hint_btn.setFlat(True)
+                self._add_device_type_hint_btn.setCursor(Qt.PointingHandCursor)
+                # The catalogue's Type mark and this hint answer the same
+                # question, so they carry the same tip: hovering shows it, and
+                # a click keeps it up, exactly as the mark beside the Type
+                # filter behaves. Nothing is revealed inside the card.
+                self._add_device_type_hint_btn.setToolTip(device_type_help_tip())
+                self._add_device_type_hint_btn.clicked.connect(
+                    self._show_add_device_type_tip
+                )
+                label_row_layout.addWidget(self._add_device_type_hint_btn)
+                label_row_layout.addStretch(1)
+                self._add_device_type_label_row = label_row
+                form.addWidget(label_row)
+            else:
+                form.addWidget(label)
+            form.addWidget(combo)
 
+        # The version is printed by the player itself, which is the one thing
+        # someone recording a stock device cannot guess.
+        self._add_device_version_hint = QLabel(tr("onboarding_version_hint"))
+        self._add_device_version_hint.setWordWrap(True)
+        self._add_device_version_hint.setProperty("cssClass", "dimmed")
+        self._add_device_version_hint.setVisible(False)
+        form.addWidget(self._add_device_version_hint)
+        form.addWidget(self._add_device_version_manual)
         form.addWidget(self._add_device_status)
 
         buttons = QHBoxLayout()
@@ -1773,9 +1883,19 @@ class SettingsPage(QWidget):
         self._add_device_cancel = QPushButton(tr("settings_add_device_cancel"))
         self._add_device_cancel.setCursor(Qt.PointingHandCursor)
         self._add_device_cancel.clicked.connect(self._hide_add_device_panel)
+        # Nothing is open to cancel back to until a player is on record.
+        self._add_device_cancel.setVisible(False)
         buttons.addWidget(self._add_device_save)
         buttons.addWidget(self._add_device_cancel)
         buttons.addStretch(1)
+        # Leaving the welcome journey is a quiet word at the end of the form's
+        # own row, not a second button under it: it sits to the right of Save
+        # and reads as text until it is hovered.
+        self._onboarding_skip = QPushButton(tr("onboarding_skip"))
+        self._onboarding_skip.setFlat(True)
+        self._onboarding_skip.setCursor(Qt.PointingHandCursor)
+        self._onboarding_skip.clicked.connect(self._finish_onboarding)
+        buttons.addWidget(self._onboarding_skip)
         form.addLayout(buttons)
 
         self._add_device_workers = []
@@ -1783,22 +1903,147 @@ class SettingsPage(QWidget):
         self._add_device_model.currentIndexChanged.connect(self._on_add_device_model_changed)
         self._add_device_type.currentIndexChanged.connect(self._on_add_device_software_changed)
         self._add_device_software.currentIndexChanged.connect(self._on_add_device_software_changed)
+        self._add_device_version.currentIndexChanged.connect(
+            self._on_add_device_version_changed
+        )
         return panel
 
     def _toggle_add_device_panel(self):
         if self._add_device_panel.isVisible():
             self._hide_add_device_panel()
             return
+        self._open_add_device_panel()
+
+    # -- drivers, once, before the form ---------------------------------
+    DRIVERS_CONFIRMED_KEY = "windows_drivers_confirmed"
+
+    def _drivers_gate_needed(self) -> bool:
+        """True on x86 Windows until the driver install and restart is confirmed.
+
+        ARM64 Windows has no MediaTek USB driver to install (MTKClient is the
+        engine there), so the ask does not apply. Once confirmed, the card goes
+        straight to the form on every later visit.
+        """
+        if not paths.IS_WINDOWS:
+            return False
+        if windows_only_method() == METHOD_MTK:
+            return False
+        return not QSettings("innioasis", "updater").value(
+            self.DRIVERS_CONFIRMED_KEY, False, type=bool
+        )
+
+    def _build_drivers_gate(self) -> QWidget:
+        """The one-time Windows question asked before player details."""
+        gate = QWidget()
+        layout = QVBoxLayout(gate)
+        layout.setContentsMargins(0, 4, 0, 0)
+        layout.setSpacing(6)
+        self._drivers_gate_title = QLabel(tr("settings_drivers_gate_title"))
+        self._drivers_gate_title.setWordWrap(True)
+        layout.addWidget(self._drivers_gate_title)
+        self._drivers_gate_body = QLabel(tr("settings_drivers_gate_body"))
+        self._drivers_gate_body.setWordWrap(True)
+        self._drivers_gate_body.setProperty("cssClass", "subtitle")
+        layout.addWidget(self._drivers_gate_body)
+        buttons = QHBoxLayout()
+        self._drivers_gate_get = QPushButton(tr("settings_drivers_gate_get"))
+        self._drivers_gate_get.setCursor(Qt.PointingHandCursor)
+        self._drivers_gate_get.clicked.connect(self._open_drivers_page)
+        buttons.addWidget(self._drivers_gate_get)
+        self._drivers_gate_done = QPushButton(tr("settings_drivers_gate_done"))
+        self._drivers_gate_done.setCursor(Qt.PointingHandCursor)
+        self._drivers_gate_done.clicked.connect(self._confirm_drivers_installed)
+        buttons.addWidget(self._drivers_gate_done)
+        buttons.addStretch(1)
+        self._drivers_gate_cancel = QPushButton(tr("settings_drivers_gate_cancel"))
+        self._drivers_gate_cancel.setFlat(True)
+        self._drivers_gate_cancel.setCursor(Qt.PointingHandCursor)
+        self._drivers_gate_cancel.clicked.connect(self._cancel_drivers_gate)
+        buttons.addWidget(self._drivers_gate_cancel)
+        layout.addLayout(buttons)
+        return gate
+
+    def _open_drivers_page(self) -> None:
+        from ..browser import open_browser
+
+        open_browser(MEDIATEK_DRIVERS_URL)
+
+    def _show_drivers_gate(self) -> None:
+        self._drivers_gate.setVisible(True)
+        self._add_device_panel.setVisible(False)
+        self._add_device_button.setVisible(False)
+        self.content_size_changed.emit()
+
+    def _confirm_drivers_installed(self) -> None:
+        QSettings("innioasis", "updater").setValue(
+            self.DRIVERS_CONFIRMED_KEY, True
+        )
+        self._drivers_gate.setVisible(False)
+        self._open_add_device_panel()
+
+    def _cancel_drivers_gate(self) -> None:
+        self._drivers_gate.setVisible(False)
+        if self._onboarding:
+            # There is nothing else to do in the journey without a player, so
+            # declining the drivers is the same choice as skipping.
+            self._finish_onboarding()
+            return
+        self._add_device_button.setVisible(True)
+        self.content_size_changed.emit()
+
+    def _show_add_device_type_tip(self) -> None:
+        """Show the Type tip on a click, the way the catalogue's mark does.
+
+        One event-loop turn later on purpose: Qt tears a tooltip down on the
+        very mouse release that asked for it, so showing it inline made the
+        tip vanish before it could be read.
+        """
+        btn = getattr(self, "_add_device_type_hint_btn", None)
+        if btn is None:
+            return
+        tip = btn.toolTip()
+        if not tip:
+            return
+
+        def _show() -> None:
+            from PySide6.QtWidgets import QToolTip
+
+            QToolTip.showText(
+                btn.mapToGlobal(btn.rect().bottomLeft()), tip, btn, btn.rect()
+            )
+
+        QTimer.singleShot(0, _show)
+
+    def _open_add_device_panel(self):
+        """Show the inline form, offering every player the catalogue knows."""
+        if self._drivers_gate_needed():
+            self._show_drivers_gate()
+            return
         self._add_device_model.blockSignals(True)
         self._add_device_model.clear()
         self._add_device_model.addItems(catalog.available_models() or list(DEVICE_MODELS))
         self._add_device_model.blockSignals(False)
         self._on_add_device_model_changed()
+        self._sync_add_device_cancel_visibility()
         self._add_device_panel.setVisible(True)
+        self._sync_onboarding_controls()
+        self.content_size_changed.emit()
+
+    def _add_another_player(self) -> None:
+        """Onboarding: turn the form over for the next player, not away."""
+        self._add_device_status.setText("")
+        self._open_add_device_panel()
 
     def _hide_add_device_panel(self):
         self._add_device_panel.setVisible(False)
+        gate = getattr(self, "_drivers_gate", None)
+        if gate is not None:
+            gate.setVisible(False)
         self._add_device_status.setText("")
+        if self._onboarding:
+            # Adding a player closes the form; the journey offers the form
+            # again rather than dropping back to the ordinary card.
+            self._sync_onboarding_controls()
 
     def _on_add_device_model_changed(self, *_):
         model = self._add_device_model.currentText().strip()
@@ -1810,9 +2055,8 @@ class SettingsPage(QWidget):
                 device_tracking.hardware_type_label(hw_type), hw_type
             )
         self._add_device_type.blockSignals(False)
-        show_type = len(types) > 1
-        self._add_device_type_label.setVisible(show_type)
-        self._add_device_type.setVisible(show_type)
+        # Whether Type is asked depends on the Software chosen below, so the
+        # row is synced once the Software list has been refilled.
         self._add_device_software.blockSignals(True)
         self._add_device_software.clear()
         self._add_device_software.addItems(catalog.software_names_for_model(model))
@@ -1825,17 +2069,54 @@ class SettingsPage(QWidget):
         packages = catalog.packages_for_model_software(model, software)
         return packages[0] if packages else None
 
+    def _add_device_form_state(self):
+        """``(model, software, types, is_original)`` for the open form."""
+        model = self._add_device_model.currentText().strip()
+        software = self._add_device_software.currentText().strip()
+        types = hardware_types_for_model(model)
+        return model, software, types, self._is_original_software(software)
+
+    def _sync_add_device_type_visibility(self) -> None:
+        """Ask for Type only for non-Original Software with more than one.
+
+        Original Software turns the question into a version question: its
+        releases for both revisions share one list, and the version the player
+        reports says which revision it is. A model with only one revision never
+        asks either way.
+        """
+        _model, _software, types, is_original = self._add_device_form_state()
+        show = len(types) > 1 and not is_original
+        self._add_device_type_label.setVisible(show)
+        # The hint button shares the Type label row, so it steps aside with it.
+        row = getattr(self, "_add_device_type_label_row", None)
+        if row is not None:
+            row.setVisible(show)
+        self._add_device_type.setVisible(show)
+        # The row appears and disappears with the software chosen, which changes
+        # how tall the form is: the window measures it again rather than
+        # leaving the next row just below the edge.
+        if getattr(self, "_add_device_type_row_shown", None) != show:
+            self._add_device_type_row_shown = show
+            self.content_size_changed.emit()
+
+    def _sync_add_device_cancel_visibility(self) -> None:
+        """Cancel only when a player is already on record to return to."""
+        self._add_device_cancel.setVisible(bool(self._tracked_installs()))
+
     def _on_add_device_software_changed(self, *_):
         """Fill Version from the live release list, fetched off the UI thread."""
+        model, _software, types, is_original = self._add_device_form_state()
+        self._sync_add_device_type_visibility()
         package = self._add_device_package()
         self._add_device_version.clear()
         if package is None:
             return
-        model = self._add_device_model.currentText().strip()
-        selected_type = (
-            self._add_device_type.currentData()
-            if len(hardware_types_for_model(model)) > 1 else None
-        )
+        # Original Software asks for every revision at once, so the Type A and
+        # Type B versions share one Version list. Other software keeps the
+        # revision filter.
+        selected_type = None
+        if not is_original and len(types) > 1:
+            selected_type = self._add_device_type.currentData() or None
         self._add_device_status.setText(tr("settings_add_device_loading"))
         self._add_device_version.addItem(tr("settings_add_device_loading"), "")
         request_id = object()
@@ -1861,8 +2142,17 @@ class SettingsPage(QWidget):
         for rel in releases:
             label = catalog.parse_clean_release_tag_label(rel, version_only=True)
             self._add_device_version.addItem(label, rel)
+        self._add_device_version.addItem(tr("settings_add_device_other"), "OTHER")
         if not releases:
             self._add_device_status.setText(tr("settings_add_device_no_versions"))
+
+    def _on_add_device_version_changed(self, *_):
+        """The manual box is only shown for a version the list cannot name."""
+        data = self._add_device_version.currentData()
+        manual = data == "OTHER"
+        self._add_device_version_manual.setVisible(bool(manual))
+        if not manual:
+            self._add_device_version_manual.clear()
 
     def _save_add_device(self):
         package = self._add_device_package()
@@ -1872,21 +2162,41 @@ class SettingsPage(QWidget):
             self._add_device_status.setText(tr("settings_add_device_pick_version"))
             return
         model = self._add_device_model.currentText().strip()
-        hw_type = (
-            self._add_device_type.currentData()
-            if len(hardware_types_for_model(model)) > 1 else ""
-        )
-        tag_name = rel.get("tag_name", "")
+        if rel == "OTHER":
+            # "Other" and "not known" are the same answer: the user types what
+            # the player reports, and that text is what reminders compare.
+            tag_name = self._add_device_version_manual.text().strip()
+            if not tag_name:
+                self._add_device_status.setText(tr("settings_add_device_pick_version"))
+                self._add_device_version_manual.setFocus()
+                return
+            version_label = tag_name
+        else:
+            tag_name = rel.get("tag_name", "")
+            version_label = catalog.parse_clean_release_tag_label(rel, version_only=True)
         if not tag_name:
             self._add_device_status.setText(tr("settings_add_device_pick_version"))
             return
+        types = hardware_types_for_model(model)
+        software = self._add_device_software.currentText().strip()
+        if len(types) > 1 and self._is_original_software(software):
+            # Original Software has no Type to pick: the version the player
+            # reports names the revision (older builds are Type B units).
+            hw_type = (
+                original_software_hardware_type(tag_name)
+                or default_hardware_type(model)
+            )
+        elif len(types) > 1:
+            hw_type = self._add_device_type.currentData() or ""
+        else:
+            hw_type = ""
         device_tracking.record_device_install(
             model=model,
             software_name=package.name,
             tag_name=tag_name,
-            release_label=catalog.parse_clean_release_tag_label(rel, version_only=True),
+            release_label=version_label,
             package_slug=package.slug,
-            published_at=rel.get("published_at", "") or "",
+            published_at=rel.get("published_at", "") if rel != "OTHER" else "",
             settings=QSettings("innioasis", "updater"),
             hardware_type=hw_type,
         )
@@ -1900,6 +2210,82 @@ class SettingsPage(QWidget):
             logger.debug("Could not refresh the notice context after adding a device", exc_info=True)
         self._hide_add_device_panel()
         self.refresh_settings()
+
+    def begin_onboarding(self) -> bool:
+        """Open the welcome journey: record players installed before this app.
+
+        The reminders card is shown on its own, because it is the one place a
+        player can be recorded without installing anything, and the window
+        sizes itself to the single card. Returns ``False`` on a build whose
+        Settings column never carries that card, so the caller can leave the
+        catalogue up instead of staring at an empty page.
+        """
+        if is_mediatek_installer() or not hasattr(self, "_reminders_card"):
+            return False
+        self._onboarding = True
+        self._sync_onboarding_controls()
+        self._reminders_card.setVisible(True)
+        # The journey is a form, not a paragraph: the card takes a real column
+        # so the dropdowns, the version hint and the buttons read as one block
+        # instead of a strip with empty space beside it.
+        self._reminders_card.setMinimumWidth(640)
+        self.show_card_alone(self._reminders_card)
+        # The form is already open: the journey is asking for an answer, so it
+        # should not need a second click to show where to give one.
+        self._open_add_device_panel()
+        self.content_size_changed.emit()
+        return True
+
+    def end_onboarding(self) -> None:
+        """Leave the welcome journey and give the Settings column back."""
+        if not self._onboarding:
+            return
+        self._onboarding = False
+        self._hide_add_device_panel()
+        self._sync_onboarding_controls()
+        # The ordinary card hugs its copy again once the form is gone.
+        self._reminders_card.setMinimumWidth(0)
+        self.clear_card_focus()
+
+    def _finish_onboarding(self) -> None:
+        """Done: the journey is over, whoever it was shown to."""
+        self.end_onboarding()
+        self.onboarding_finished.emit()
+
+    def _sync_onboarding_controls(self) -> None:
+        """Show the journey's copy and buttons, and hide the ordinary card."""
+        if not hasattr(self, "_onboarding_done"):
+            return
+        on = self._onboarding
+        # One heading, not two: the card title carries the call to action for
+        # the journey, so the reminders switch and its coverage line stand
+        # down until the journey ends.
+        self._reminders_desc.setVisible(not on)
+        if on:
+            self._reminders_card.setTitle(tr("onboarding_title"))
+        else:
+            self._reminders_card.retranslate()
+        tracked = bool(self._tracked_installs()) if on else False
+        self._onboarding_body.setVisible(on)
+        # Before a player exists the journey explains why it is worth doing;
+        # afterwards it says what the reminders cover for the players above.
+        self._onboarding_body.setText(
+            tr("onboarding_after_add_body") if tracked else tr("onboarding_body")
+        )
+        self._onboarding_footer.setVisible(on and tracked)
+        # Done and "Add another player" belong to a player already on record:
+        # before the first save the form (with its Skip) is the whole journey,
+        # and after it the two ways forward appear together.
+        self._onboarding_actions.setVisible(on and tracked)
+        self._onboarding_done.setVisible(on and tracked)
+        self._onboarding_more.setVisible(on and tracked)
+        self._onboarding_skip.setVisible(on)
+        self._add_device_version_hint.setVisible(on)
+        # Add Player is the ordinary card's way in; the journey opens the form
+        # itself and keeps it open for the next player.
+        self._add_device_button.setVisible(not on)
+        self._onboarding_done.setEnabled(tracked)
+        self._sync_add_device_cancel_visibility()
 
     def _sync_add_device_button_visibility(self):
         """Keep Add Player button available in Player Update Reminders."""
@@ -1942,13 +2328,6 @@ class SettingsPage(QWidget):
         # Install method selector
         self.set_method(self._persisted_method())
 
-        # Single reminder opt-in: on if any tracked device is still enabled.
-        any_enabled = any(
-            device_tracking.is_device_reminder_enabled(m) for m in DEVICE_MODELS
-        )
-        self._cb_reminders.blockSignals(True)
-        self._cb_reminders.setChecked(any_enabled)
-        self._cb_reminders.blockSignals(False)
         self._update_reminders_copy()
 
         # Single donation opt-out switch
@@ -2003,6 +2382,12 @@ class SettingsPage(QWidget):
         # SP Flash Tool authentication file
         self._refresh_sp_auth_value()
         self._update_sp_auth_visibility()
+        if self._onboarding:
+            # Adding a player on the journey ends in refresh_settings(), and
+            # the ordinary per-card rules would put the rest of the column
+            # back behind the welcome: the journey keeps its card alone.
+            self._sync_onboarding_controls()
+            self.show_card_alone(self._reminders_card)
         self.content_size_changed.emit()
 
     def apply_brand_mode(self, mediatek_installer: bool):
@@ -2315,6 +2700,16 @@ class SettingsPage(QWidget):
             open_browser(DONATION_LINKS["boosty"])
         else:
             open_browser(DONATION_LINKS["kofi"])
+
+    def _layout_donation_buttons(self) -> None:
+        """Place the coffee pair in this render's order (see donation_order)."""
+        from .. import donation_order
+
+        donation_order.place(
+            self._donations_actions_layout,
+            {"kofi": self._settings_coffee_btn, "bmc": self._settings_bmc_btn},
+            donation_order.coffee_order(),
+        )
 
     def _open_settings_bmc(self) -> None:
         from ..browser import open_browser
@@ -2774,7 +3169,17 @@ class SettingsPage(QWidget):
                 tr("settings_allow_keep_data_any_desc")
             )
         self._reminders_card.retranslate()
-        self._set_switch_caption(self._cb_reminders, tr("settings_reminders_enable"))
+        if hasattr(self, "_add_device_type_hint_btn"):
+            self._add_device_type_hint_btn.setText(
+                tr("settings_add_device_type_hint_btn")
+            )
+            self._add_device_type_hint_btn.setToolTip(device_type_help_tip())
+        if hasattr(self, "_drivers_gate_get"):
+            self._drivers_gate_title.setText(tr("settings_drivers_gate_title"))
+            self._drivers_gate_body.setText(tr("settings_drivers_gate_body"))
+            self._drivers_gate_get.setText(tr("settings_drivers_gate_get"))
+            self._drivers_gate_done.setText(tr("settings_drivers_gate_done"))
+            self._drivers_gate_cancel.setText(tr("settings_drivers_gate_cancel"))
         if hasattr(self, "_add_device_button"):
             self._add_device_button.setText(tr("settings_add_device"))
         self._update_reminders_copy()

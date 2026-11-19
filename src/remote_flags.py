@@ -21,8 +21,10 @@ from .network import requests_module
 logger = logging.getLogger(__name__)
 
 FLAG_SOURCES = (
-    "https://innioasis.app/",
+    # Repository copies first: GitHub serves a committed flag file immediately,
+    # while the Pages site behind innioasis.app can trail it by a CDN interval.
     "https://raw.githubusercontent.com/y1-community/innioasis-updater/refs/heads/main/",
+    "https://innioasis.app/",
     "https://raw.githubusercontent.com/y1-community/updater-ce-neo/refs/heads/main/",
     "https://raw.githubusercontent.com/ryan-specter/innioasis-updater/refs/heads/main/",
     "https://raw.githubusercontent.com/ryan-specter/updater-ce-neo/refs/heads/main/",

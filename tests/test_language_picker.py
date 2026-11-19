@@ -180,3 +180,54 @@ def test_switching_language_retranslates_the_window_without_a_brand_label():
         w.close()
         app.processEvents()
         translator().set_language(previous)
+
+
+def test_a_string_id_saved_as_a_language_is_never_accepted():
+    """A string id is not a language: not offered, not chosen, and not kept.
+
+    An old fill run left catalogs and language-list entries named after string
+    ids, so one could be picked in the menu and saved. The app then ran on a
+    learned catalog it never chose while the picker claimed a language.
+    """
+    from PySide6.QtCore import QSettings
+
+    from src.i18n import (
+        catalog_codes,
+        initial_language,
+        is_supported_language,
+        system_language,
+        translator,
+    )
+
+    junk = "completion_other_software"
+    assert junk not in catalog_codes()
+    assert is_supported_language(junk) is False
+    assert initial_language(junk) == system_language()
+
+    app = _app()
+    from src.ui.main_window import MainWindow
+
+    settings = QSettings("innioasis", "updater")
+    original = settings.value("language")
+    previous = translator().lang
+    settings.setValue("language", junk)
+    w = None
+    try:
+        w = MainWindow()
+        stored = str(settings.value("language", "") or "")
+        # The startup repair replaces the unusable value with the language the
+        # app actually runs, and the picker follows the translator.
+        assert stored != junk
+        assert is_supported_language(stored), stored
+        assert translator().lang == stored
+        assert w._lang_combo.itemData(w._lang_combo.currentIndex()) == stored
+    finally:
+        if original is None:
+            settings.remove("language")
+        else:
+            settings.setValue("language", original)
+        translator().set_language(previous)
+        if w is not None:
+            w._force_quit = True
+            w.close()
+        app.processEvents()

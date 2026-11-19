@@ -169,12 +169,13 @@ def test_keep_data_with_tracked_permutations(temp_settings):
         derivative="y1-community/y1-stock-rom",
     )
 
-    # With hardware_type="A", tracked package is compatible -> no confirmation needed
+    # With hardware_type="A" the tracked package is compatible, so 2.5.5's
+    # sanity check has nothing to ask: an update carries the data forward.
     with patch("src.keep_data._packages", return_value=[orig_pkg, rockbox_pkg]):
         assert keep_data.tracked_is_compatible("Y1", orig_pkg, settings=temp_settings, hardware_type="A") is True
         assert keep_data.needs_confirmation("Y1", orig_pkg, settings=temp_settings, hardware_type="A") is False
 
-        # But on Type B (nothing tracked yet), confirmation is needed
+        # On Type B nothing is tracked, so the question is asked.
         assert keep_data.tracked_is_compatible("Y1", orig_pkg, settings=temp_settings, hardware_type="B") is None
         assert keep_data.needs_confirmation("Y1", orig_pkg, settings=temp_settings, hardware_type="B") is True
 
@@ -299,15 +300,16 @@ def test_completion_screen_layout_and_post_install_buttons(app, monkeypatch):
         assert fp._coffee_btn.text() == "View Guide + Donate"
         assert not fp._view_guide_btn.isHidden()
         assert not fp._completion_guide_hint.isHidden()
-        # The sentence announcing the extra steps is itself the guide link.
-        assert 'href="post-install"' in fp._completion_guide_hint.text()
+        # The sentence announces the extra steps; the button is the action.
+        assert 'href="post-install"' not in fp._completion_guide_hint.text()
+        assert tr("post_install_explain_completion") in fp._completion_guide_hint.text()
         opened.clear()
-        fp._completion_guide_hint.linkActivated.emit("post-install")
+        fp._view_guide_btn.click()
         assert opened[-1] == "https://innioasis.app/guide/reborn"
         # One letter layout: the message stays above the signature, guide or not.
         assert not fp._appeal_body.isHidden()
         assert not fp._appeal_signature_row.isHidden()
-        assert fp._appeal_signature.text() == "- Ryan - Maintainer of Updater CE"
+        assert fp._appeal_signature.text() == "~ Ryan · Maintainer of Updater CE"
         # The heading carries the firmware icon (or its squircle stand-in).
         assert fp._intro.icon is not None
         assert not fp._intro.icon.pixmap().isNull()

@@ -285,12 +285,28 @@ def is_sp_usb_search_line(line) -> bool:
     )
 
 
+# mtkclient's Port.py and meta.py print these while the handshake window is
+# open. "Status: Waiting for PreLoader VCOM, please connect mobile" is the
+# first thing it says when it is ready for the player, so it — not the
+# process starting and not its import chatter — is what the connect ask and
+# the connect window hang off.
+_MTK_WAIT_MARKERS = (
+    "waiting for preloader vcom",
+    "waiting for preloader",
+    "please reconnect mobile",
+    "please connect mobile",
+    "power off the phone",
+)
+
+
 def is_mtk_usb_search_line(line) -> bool:
-    """MTKClient search state: a hint line, ``Port - Hint``, or a line of dots.
+    """True while MTKClient is waiting for the player to appear.
 
     After the log token and surrounding whitespace are removed, a search line
-    starts with ``...`` or, case-insensitively, ``hint``. ``Port - Hint:``
-    does not start with ``hint``, so that prefix is a search line too.
+    starts with ``...`` or, case-insensitively, ``hint``, carries the Port.py
+    ``Status: Waiting for PreLoader VCOM`` sentence, or is the ``Port - Hint:``
+    banner. ``Port - Hint:`` does not start with ``hint``, so that prefix is
+    matched too.
     """
     text = tool_line_body(line)
     if not text:
@@ -302,7 +318,25 @@ def is_mtk_usb_search_line(line) -> bool:
     low = text.lower()
     if low.startswith("port - hint"):
         return True
-    return "power off the phone" in low
+    return any(marker in low for marker in _MTK_WAIT_MARKERS)
+
+
+# The install's own completion record: the worker logs one line per partition
+# it has written, and the last index is what says every image is on the
+# device. The backend's exit code and the tail of its log are not that signal.
+_WRITTEN_PARTITION_RE = re.compile(r"^Written\s+.+?\s\((\d+)/(\d+)\)$", re.IGNORECASE)
+
+
+def partition_write_complete(line) -> bool:
+    """True when ``line`` reports the last partition of the plan as written."""
+    match = _WRITTEN_PARTITION_RE.search(tool_line_body(line))
+    if not match:
+        return False
+    try:
+        done, total = int(match.group(1)), int(match.group(2))
+    except ValueError:
+        return False
+    return total > 0 and done >= total
 
 
 # Tool-reported failures. mtkclient catches its own DA errors and still exits
@@ -1098,7 +1132,7 @@ MTK_STALL_WARN_SECONDS = 90
 # stall watcher (which reports when the target stops answering). It covers a
 # different failure: the backend keeps printing, but the same BROM bring-up
 # stall line has been on screen for too long with no change.
-MTK_OUTPUT_STALL_WINDOW = 20.0
+MTK_OUTPUT_STALL_WINDOW = 90.0
 # The checksum / DRAM configuration stage can take a minute or two to respond;
 # if stuck on a line beginning with Checksum: for 2 minutes, declare a failure.
 MTK_CHECKSUM_STALL_WINDOW = 120.0
@@ -1164,6 +1198,9 @@ ATTEMPT_PROGRESS_TIMEOUT = 60.0
 # device was usually power-cycled by hand first. A window that reaches zero now
 # ends the attempt and hands the player back to the power-off step, so the same
 # method can be tried again (or the other engine after a real failure).
+# Parity with 2.5.3/2.5.4, which connected reliably: one minute per MTK attempt,
+# refilled once. 120 s left a player that never answered parked for two minutes
+# before the card offered the reconnect guidance.
 ATTEMPT_PROGRESS_TIMEOUT_MTK = 60.0
 # The target re-enumerates while being restarted into BROM; the USB monitor
 # must not read that as the player being unplugged mid-flash.
@@ -1312,7 +1349,7 @@ _VERIFY_BLOCK_ALIGN = 512
 # so a big transfer still leaves room for the device to answer between chunks.
 # Never raise these: a larger chunk is exactly what makes a slow preloader-mode
 # target miss its ACK window mid-partition.
-LEGACY_WRITE_CHUNK_BYTES = 524288  # 512 KiB
+LEGACY_WRITE_CHUNK_BYTES = 262144  # 256 KiB
 LEGACY_WRITE_CHUNK_BYTES_LARGE = 262144  # 256 KiB, images >= 1536 MB
 LEGACY_WRITE_CHUNK_LARGE_IMAGE_BYTES = 1536 * 1024 * 1024
 
@@ -2282,9 +2319,12 @@ class ExtractWorker(QThread):
         if not force and _is_extract_complete(extract_dir):
             self.progress.emit(100)
             discard_firmware_history(extract_dir)
-            # Older builds kept the download as a retry copy. The extract is
-            # complete, so the archive is now a duplicate.
-            discard_downloaded_archive(p, extract_dir)
+            # The downloaded archive stays as this journey's retry copy. It used
+            # to be deleted here as a duplicate, and that turned a retry into
+            # CACHE_FILE_MISSING the moment the extracted files changed under
+            # it: a retry must be able to re-extract the release it already
+            # downloaded instead of fetching it again. Retention clears it once
+            # the install journey is over.
             prune_extracted_cache(keep_package_path=package_path)
             return extract_dir
         # The archive may be gone once it has been extracted, so an incomplete
@@ -2336,10 +2376,10 @@ class ExtractWorker(QThread):
         prune_to_firmware_package(extract_dir)
         discard_firmware_history(extract_dir)
         _mark_extract_complete(extract_dir)
-        # The extracted working directory is now the install's source. Keeping
-        # the download as well used twice the space and was never needed by a
-        # retry, which reads the extract.
-        discard_downloaded_archive(p, extract_dir)
+        # The extracted working directory is the install's source, and the
+        # download stays beside it until retention runs: a retry that has to
+        # re-extract (a file went missing from the working copy) then needs no
+        # second download of a release that is already on disk.
         # Cache hygiene is prune_extracted_cache's job, not extraction's.
         # Only now, with the new firmware on disk, may older extractions be replaced.
         prune_extracted_cache(keep_package_path=package_path)
@@ -4451,6 +4491,10 @@ class FlashWorker(QThread):
         # device, so the tool's own two-minute timeout does not end the install.
         self._search_started = False
         self._search_timed_out = False
+        # One deadline for the whole connect phase. A watchdog restarted while
+        # the tool is still searching continues this window instead of handing
+        # the card a fresh minute, which made the countdown jump back to 60.
+        self._connect_deadline = 0.0
         self._device_seen = False
         self._is_disconnected = False
         self._finished = False
@@ -4563,7 +4607,12 @@ class FlashWorker(QThread):
         seen and ``_note_install_progress`` switches it off once the download
         agent or the images start moving.
         """
-        self._stop_attempt_watchdog()
+        # Stop the previous window without emitting 0: a restart mid-search
+        # must not blank the countdown the card is already showing.
+        previous = getattr(self, "_attempt_watchdog", None)
+        self._attempt_watchdog = None
+        if previous is not None:
+            previous.stop()
         self._attempt_expired = False
         if timeout is None:
             is_mtk = (
@@ -4571,6 +4620,13 @@ class FlashWorker(QThread):
                 or getattr(self, "_tool_tag", "") == "MTK"
             )
             timeout = ATTEMPT_PROGRESS_TIMEOUT_MTK if is_mtk else ATTEMPT_PROGRESS_TIMEOUT
+            now = time.time()
+            if self._search_started and not self._past_usb_search:
+                deadline = getattr(self, "_connect_deadline", 0.0)
+                if deadline <= now:
+                    deadline = now + float(timeout)
+                    self._connect_deadline = deadline
+                timeout = max(1.0, deadline - now)
         try:
             watchdog = _AttemptWatchdog(
                 self.attempt_timeout.emit,
@@ -4601,8 +4657,16 @@ class FlashWorker(QThread):
             watchdog.touch()
 
     def _note_install_progress(self):
-        """Real transfer began: the no-progress window no longer applies."""
+        """Real transfer began: the no-progress window no longer applies.
+
+        Only once the player has answered. A progress-shaped line that arrives
+        while the tool is still searching is not a transfer: ending the window
+        there let the next search line start a fresh minute, so the connect
+        countdown kept jumping back to 60 instead of reaching zero.
+        """
         self._last_install_progress_time = time.time()
+        if not getattr(self, "_past_usb_search", False):
+            return
         watchdog = getattr(self, "_attempt_watchdog", None)
         if watchdog is not None:
             watchdog.disarm()
@@ -4616,6 +4680,7 @@ class FlashWorker(QThread):
         if getattr(self, "_attempt_expired", False):
             return
         self._attempt_expired = True
+        self._connect_deadline = 0.0
         timeout_val = getattr(getattr(self, "_attempt_watchdog", None), "_timeout", ATTEMPT_PROGRESS_TIMEOUT)
         self._log(
             tr("err_attempt_timeout").format(seconds=int(timeout_val))
@@ -4643,6 +4708,12 @@ class FlashWorker(QThread):
         self._usb_search_active = True
         self._tool_wait_phase = PHASE_CONNECT
         if not getattr(self, "_attempt_watchdog", None) and not getattr(self, "_attempt_expired", False):
+            self._start_attempt_watchdog()
+        elif not already and not getattr(self, "_connect_window_armed", False):
+            # The spawned backend was armed before it printed its wait line,
+            # so that timer counted the import and loader setup as part of the
+            # connect window. Restart it here: the minute belongs to the ask.
+            self._connect_window_armed = True
             self._start_attempt_watchdog()
         if already:
             return
@@ -4674,6 +4745,9 @@ class FlashWorker(QThread):
         # The player answered, so the connect sentence is finished: mark the
         # phase here rather than letting the next unrelated tool line decide.
         self._tool_wait_phase = PHASE_PLEASE_WAIT
+        # The connect window is over: the next attempt gets its own minute.
+        self._connect_deadline = 0.0
+        self._connect_window_armed = False
         # The device answered: the app's window starts over instead of ending
         # the run the moment it was making progress.
         self._touch_attempt()
@@ -5523,6 +5597,15 @@ class FlashWorker(QThread):
                 "Format All + Download is required."
             )
             return
+        text = (line or "").lower()
+        if "s_chip_type_not_match" in text:
+            # The tool's own chip check is the answer to "is this the right
+            # player?", and it closes the port straight afterwards. Deciding it
+            # here, before the disconnect line that follows, keeps the run a
+            # wrong-model result instead of a USB drop the user is asked to
+            # reconnect.
+            self._sp_mismatch = True
+            return
         if is_disconnection_error(line):
             # The tool has already reported the command finished: the cable
             # going away now is the device rebooting, not a failed install.
@@ -5544,9 +5627,7 @@ class FlashWorker(QThread):
             # The console search gave up ("Connect BROM failed: S_TIMEOUT
             # (1042)" follows). Only a restart can still catch a late player.
             self._search_timed_out = True
-        if "s_chip_type_not_match" in low:
-            self._sp_mismatch = True
-        elif (
+        if (
             "brom connected" in low
             or "da high speed usb port detected" in low
             or "usb port is obtained" in low
@@ -6081,6 +6162,7 @@ class FlashWorker(QThread):
             )
             self._mtk_output_stall_detector = stall_detector
             stall_detector.start()
+            self._all_partitions_written = False
             for line in iter(self._process.stdout.readline, ""):
                 line = line.rstrip()
                 if not line:
@@ -6127,6 +6209,8 @@ class FlashWorker(QThread):
                     final_msg = parts[1] if len(parts) > 1 else ""
                 else:
                     self._log(line)
+                    if partition_write_complete(line):
+                        self._all_partitions_written = True
                     # When running in subprocess mode, [PROGRESS] lines emitted from
                     # the child worker's byte-level tracking drive the overall progress bar.
                     # Raw partition progress lines must not overwrite it, but they do
@@ -6146,6 +6230,16 @@ class FlashWorker(QThread):
             # USB disappear before the child exits; do not let that expected
             # re-enumeration override the explicit success record.
             if final_ok is True:
+                self.finished.emit(True, "")
+                return
+            if getattr(self, "_all_partitions_written", False):
+                # Every image in the plan is on the device. A legacy DA can
+                # drop its final ACK, print a late error or exit non-zero after
+                # the last write; none of that makes the install incomplete.
+                self._log(
+                    "Every partition was written; the install is complete even "
+                    "though the backend did not report a result."
+                )
                 self.finished.emit(True, "")
                 return
             if self._is_disconnected or is_disconnection_error(self._tool_error) or is_disconnection_error(final_msg):
@@ -6206,6 +6300,8 @@ class FlashWorker(QThread):
         is_partition_progress = str(payload).lstrip().lower().startswith("progress:")
         if is_partition_progress:
             self._note_mtk_partition_progress(payload)
+        if partition_write_complete(payload):
+            self._all_partitions_written = True
         self._log(payload)
         # Per-partition byte progress must not be interpreted as global flash
         # progress; the child already sends the aggregate [PROGRESS] signal.
@@ -6436,6 +6532,22 @@ class FlashWorker(QThread):
     def _flash_via_mtkclient_core(self, extract_dir, scatter_file, platform="", da_file="", auth_file=""):
         # Raw output printed while this backend runs comes from MTKClient.
         self._tool_tag = "MTK"
+        # Engine first, prompt second. "Please connect your <model>" is what
+        # makes a reader plug the player in, and the preloader window that
+        # opens then is short. Importing pyusb, the bundled libusb and the
+        # vendored fork takes seconds on a cold start and used to happen after
+        # the wait card was already up, so the handshake began only once the
+        # window had closed and mtkclient answered by asking the user to
+        # disconnect and reconnect. Nothing is announced until this finishes.
+        try:
+            from . import mtk_api
+
+            mtk_api.warm_up()
+        except BaseException as e:
+            self._log(f"mtkclient import failed: {type(e).__name__}: {e}")
+            logger.error("mtkclient import failed", exc_info=True)
+            self.finished.emit(False, "MTK_IMPORT_FAILED")
+            return
         # Set once the USER partition tables have been read back and matched;
         # the completion gate below only re-verifies when this is still False.
         self._legacy_tables_verified = False
@@ -6502,10 +6614,6 @@ class FlashWorker(QThread):
         elif self.auth_file:
             self._log(f"Auth file not found, continuing without one: {self.auth_file}")
             self.auth_file = ""
-
-        self._announce_please_wait()
-        self.action_changed.emit(tr("action_wait_mtk"))
-        self._log("Waiting for MTK device... Power off the device and connect USB.")
 
         # Surface mtkclient's own phase messages and flag a device that stops
         # answering mid-DA instead of letting the UI look frozen. Repeats are
@@ -6574,28 +6682,34 @@ class FlashWorker(QThread):
                 except Exception:
                     pass
 
-        def _open_session():
+        def _open_session(prepared=None):
             """One session bring-up: init, handshake, and BROM mode if needed.
 
             A target that answers in preloader mode will accept the stage-2 DA
             upload and then never answer it, so nothing is ever written (see
             ``_restart_in_brom``). Restarting it into BROM first is what makes
-            the download agent actually run. Returns the session or ``None``.
+            the download agent actually run. ``prepared`` is a session built
+            before the reader was asked to connect, so the first attempt opens
+            the port the moment that prompt appears. Returns the session or
+            ``None``.
             """
-            _clear_mtk_state(extract_dir, Path.cwd())
-            try:
-                # Reference sequence: init(None, None), then connect. The
-                # package's preloader image is not pushed as an override; the
-                # device's own preloader answers and the image is written with
-                # the other partitions.
-                session = mtk_api.init(
-                    loader=self.da_file or None,
-                    preloader=None,
-                    auth=self.auth_file or None,
-                )
-            except BaseException as e:
-                self._log(f"mtkclient init failed: {type(e).__name__}: {e}")
-                return None
+            if prepared is not None:
+                session = prepared
+            else:
+                _clear_mtk_state(extract_dir, Path.cwd())
+                try:
+                    # Reference sequence: init(None, None), then connect. The
+                    # package's preloader image is not pushed as an override;
+                    # the device's own preloader answers and the image is
+                    # written with the other partitions.
+                    session = mtk_api.init(
+                        loader=self.da_file or None,
+                        preloader=None,
+                        auth=self.auth_file or None,
+                    )
+                except BaseException as e:
+                    self._log(f"mtkclient init failed: {type(e).__name__}: {e}")
+                    return None
             if hasattr(session, "config"):
                 session.config.gui = _MtkMessageBridge(_on_mtk_message)
             session, _da = mtk_api.handshake(session, directory=str(extract_dir))
@@ -6675,8 +6789,38 @@ class FlashWorker(QThread):
             res_mtk = da_handler.configure_da(primed_session)
             if res_mtk is None:
                 self._log("DA upload failed")
+                # The primed session still owns the USB interface. Leaving it
+                # open made the very next attempt fail instantly with a busy
+                # port, which the card reported as a failed connection.
+                try:
+                    primed_session.port.close(reset=True)
+                except Exception:
+                    pass
                 return None, None
             return res_mtk, da_handler
+
+        # Engine first, prompt second. Building the session (port detection and
+        # the DA metadata mtkclient loads with it) takes a second or two. Done
+        # after the "Power off the device and connect USB" line, a reader who
+        # plugged in straight away landed in that gap: the target's preloader
+        # only answers for a moment, so the handshake opened a port that was no
+        # longer in flash mode and mtkclient gave up on the first attempt with
+        # its "disconnect, start mtkclient and reconnect" answer. Prepared
+        # here, the prompt is followed by the handshake itself.
+        prepared = None
+        try:
+            _clear_mtk_state(extract_dir, Path.cwd())
+            prepared = mtk_api.init(
+                loader=self.da_file or None,
+                preloader=None,
+                auth=self.auth_file or None,
+            )
+        except BaseException as e:
+            self._log(f"mtkclient init failed: {type(e).__name__}: {e}")
+            prepared = None
+        self._announce_please_wait()
+        self.action_changed.emit(tr("action_wait_mtk"))
+        self._log("Waiting for MTK device... Power off the device and connect USB.")
 
         watcher.start()
         mtk_output_stall_detector = _MtkOutputStallDetector(
@@ -6696,7 +6840,8 @@ class FlashWorker(QThread):
                     mtk, da_handler = _attach_primed_mtk(self._primed_mtk)
                     self._primed_mtk = None
                 else:
-                    mtk = _open_session()
+                    mtk = _open_session(prepared)
+                    prepared = None
                     if mtk is not None:
                         try:
                             self.step_changed.emit(STEP_DOWNLOAD_DA)
@@ -6910,6 +7055,7 @@ class FlashWorker(QThread):
 
         total = len(plan)
         total_bytes = sum(int(step["length"]) for step in plan)
+        written_parts = []
         completed_bytes = 0
         part_completed_bytes = 0
         cur_part_name = ""
@@ -7234,18 +7380,40 @@ class FlashWorker(QThread):
                         self._emit_mtk_write_progress(completed_bytes, total_bytes)
                         remaining = self._total_eta.note(completed_bytes, total_bytes)
                         self.eta_changed.emit(remaining if remaining > 0 else -1)
+                written_parts.append(part_name)
+                # Relayed to the app as-is: this per-partition record is what
+                # decides completion, both here and in the parent process.
+                self._log(f"Written {part_name} ({len(written_parts)}/{total})")
 
             if self._cancelled:
                 self.finished.emit(False, "USER_CANCELLED")
                 return
-            if self._tool_error:
-                # The tool said a command failed and then stopped; the player
-                # is very likely half written. Say so instead of "complete".
-                self._log(f"Install failed: {self._tool_error}")
+            written = len(written_parts)
+            if written < total:
+                if self._tool_error:
+                    # The tool said a command failed and then stopped; the
+                    # player is very likely half written. Say so instead of
+                    # "complete".
+                    self._log(f"Install failed: {self._tool_error}")
+                    self.step_changed.emit(STEP_WRITE)
+                    self.finished.emit(False, "TOOL_ERROR")
+                    return
+                self._log(
+                    f"Install incomplete: {written} of {total} partition(s) were written."
+                )
                 self.step_changed.emit(STEP_WRITE)
-                self.finished.emit(False, "TOOL_ERROR")
+                self.finished.emit(False, "WRITE_INCOMPLETE")
                 return
-
+            # Every image in the plan is on the device. That — not the tool's
+            # exit code or the tail of its log — is what says the install
+            # finished: a legacy DA fails its own final ACK after writing the
+            # last partition, which used to be announced as a failed install.
+            if self._tool_error:
+                self._log(
+                    "The backend reported an error after the last partition was "
+                    f"written ({self._tool_error}); every image is on the device."
+                )
+            self._log(f"All {total} partition(s) written and verified.")
             if not self._verify_partition_tables_before_completion(mtk, legacy_tables):
                 return
             self._end_mtk_run_successfully(mtk, da_handler)

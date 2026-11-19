@@ -129,6 +129,8 @@ def record_device_install(
     if not model or not tag_name or str(tag_name).strip().casefold() == "local":
         return
     hw = _normalize_hw_type(hardware_type)
+    if not hw:
+        hw = default_hardware_type(model)
     group_name = f"{model}_{hw}" if hw else model
     s = _get_settings(settings)
     previous = get_device_install(model, hardware_type=hw, settings=s)
@@ -143,6 +145,8 @@ def record_device_install(
             ceiling = previous.get("notify_ceiling") or ""
     now_iso = datetime.now().isoformat()
     s.remove(f"{_GROUP_INSTALLS}/{group_name}")
+    if hw == default_hardware_type(model):
+        s.remove(f"{_GROUP_INSTALLS}/{model}")
     _write_install_fields(
         s,
         f"{_GROUP_INSTALLS}/{group_name}",
@@ -166,13 +170,19 @@ def get_device_install(model: str, hardware_type: str = "", settings: Optional[Q
         return None
     s = _get_settings(settings)
     hw = _normalize_hw_type(hardware_type)
-    if hw:
+    if not hw:
+        hw = default_hardware_type(model)
         res = _read_install_fields(s, f"{_GROUP_INSTALLS}/{model}_{hw}", model)
         if res:
             return res
-    res = _read_install_fields(s, f"{_GROUP_INSTALLS}/{model}", model)
-    if res:
-        return res
+        res = _read_install_fields(s, f"{_GROUP_INSTALLS}/{model}", model)
+        if res:
+            return res
+    else:
+        res = _read_install_fields(s, f"{_GROUP_INSTALLS}/{model}_{hw}", model)
+        if res:
+            return res
+
     if not hw:
         s.beginGroup(_GROUP_INSTALLS)
         subgroups = list(s.childGroups())
@@ -320,12 +330,30 @@ def get_all_device_installs(settings: Optional[QSettings] = None) -> dict:
     s.beginGroup(_GROUP_INSTALLS)
     subgroups = list(s.childGroups())
     s.endGroup()
-    keys = subgroups if subgroups else list(DEVICE_MODELS)
-    for k in keys:
-        base_model = k.split("_")[0]
-        rec = _read_install_fields(s, f"{_GROUP_INSTALLS}/{k}", base_model)
-        if rec:
-            out[k] = rec
+    
+    for group in subgroups:
+        # We need to know which model this group belongs to.
+        # The key in _GROUP_INSTALLS is {model}_{hw} or {model}.
+        # Let's try to infer model from the group name.
+        # This is a bit brittle, but the existing code used `k.split("_")[0]`.
+        base_model = group.split("_")[0]
+        rec = _read_install_fields(s, f"{_GROUP_INSTALLS}/{group}", base_model)
+        if not rec:
+            continue
+        
+        hw = _normalize_hw_type(rec.get("hardware_type", ""))
+        if not hw:
+            hw = default_hardware_type(base_model)
+        
+        unified_key = f"{base_model}_{hw}" if hw else base_model
+        
+        # If we already have a record for this key, keep the latest
+        if unified_key in out:
+            existing = out[unified_key]
+            if rec.get("installed_at", "") > existing.get("installed_at", ""):
+                out[unified_key] = rec
+        else:
+            out[unified_key] = rec
     return out
 
 

@@ -194,6 +194,11 @@ _STRINGS: dict = {
         "de": "{version} holen",
         "ja": "{version} を取得",
     },
+    # The Settings row carries the journey's name while the journey runs.
+    "nav_welcome": {
+        "zh-CN": "欢迎",
+        "en": "Welcome",
+    },
     "nav_settings": {
         "zh-CN": "设置",
         "en": "Settings",
@@ -1320,6 +1325,54 @@ _STRINGS: dict = {
         "de": "Typ",
         "ja": "タイプ",
     },
+    "settings_add_device_type_hint_btn": {
+        "en": "What type do I have?",
+        "zh-CN": "我的设备是什么类型？",
+        "fr": "Quel est mon type ?",
+        "es": "¿Qué tipo tengo?",
+        "de": "Welchen Typ habe ich?",
+        "ja": "自分のタイプはどれですか？",
+    },
+    "settings_add_device_type_hint": {
+        "en": (
+            "Type is the player's hardware revision. Players of the same model "
+            "can be built in more than one revision — for example Type A and "
+            "Type B — and software is made for one of them. Check the sticker "
+            "on the back of the player; if it does not name a type, leave the "
+            "first choice."
+        ),
+        "zh-CN": (
+            "类型是播放器的硬件版本。同一型号可能有多个硬件版本（例如 Type A 和 "
+            "Type B），软件是为其中一个版本制作的。请查看播放器背面的标签；"
+            "如果标签上没有写类型，请保留第一个选项。"
+        ),
+        "fr": (
+            "Le type est la révision matérielle du lecteur. Un même modèle peut "
+            "exister en plusieurs révisions (Type A, Type B) et un logiciel est "
+            "fait pour l'une d'elles. Vérifiez l'étiquette au dos du lecteur ; "
+            "si aucun type n'est indiqué, gardez le premier choix."
+        ),
+        "es": (
+            "El tipo es la revisión de hardware del reproductor. Un mismo modelo "
+            "puede fabricarse en varias revisiones (Tipo A, Tipo B) y el "
+            "software está hecho para una de ellas. Mira la etiqueta de la "
+            "parte trasera del reproductor; si no indica un tipo, deja la "
+            "primera opción."
+        ),
+        "de": (
+            "Der Typ ist die Hardware-Revision des Players. Dasselbe Modell "
+            "kann in mehreren Revisionen gebaut sein (Typ A, Typ B), und "
+            "Software ist für eine davon gemacht. Prüfe den Aufkleber auf der "
+            "Rückseite des Players; steht dort kein Typ, lass die erste Auswahl "
+            "stehen."
+        ),
+        "ja": (
+            "タイプはプレーヤーのハードウェア改版です。同じモデルでも複数の改版"
+            "（Type A、Type B）があり、ソフトウェアはそのうちの1つ向けに作られて"
+            "います。プレーヤー背面のラベルを確認してください。タイプの記載が"
+            "なければ最初の選択のままで構いません。"
+        ),
+    },
     "settings_add_device_software": {
         "en": "Software",
         "zh-CN": "软件",
@@ -1351,6 +1404,21 @@ _STRINGS: dict = {
         "es": "Cancelar",
         "de": "Abbrechen",
         "ja": "キャンセル",
+    },
+    "settings_add_device_other": {
+        "en": "Other (manual version)",
+        "zh-CN": "其他 (手动版本)",
+        "fr": "Autre (version manuelle)",
+        "es": "Otro (versión manual)",
+        "de": "Andere (manuelle Version)",
+    },
+    "settings_add_device_version_placeholder": {
+        "en": "Type the version, or 'not known'",
+        "zh-CN": "输入版本号，或输入“未知”",
+        "fr": "Saisissez la version, ou « inconnue »",
+        "es": "Escribe la versión, o «desconocida»",
+        "de": "Version eingeben oder „unbekannt“",
+        "ja": "バージョンを入力（不明な場合は「不明」）",
     },
     "settings_add_device_loading": {
         "en": "Loading versions…",
@@ -1983,11 +2051,41 @@ _STRINGS: dict = {
     },
     "flash_paperclip_help": {
         "en": "How?",
-        "zh-CN": "怎么做？",
+        "zh-CN": "如何连接?",
         "de": "Wie?",
-        "fr": "Comment ?",
+        "fr": "Comment faire ?",
         "es": "¿Cómo?",
-        "ja": "どうやるの？",
+        "ja": "接続方法",
+    },
+    "flash_not_connecting_help_fmt": {
+        "en": "{model} not connecting? Try this",
+        "zh-CN": "{model} 无法连接？试试这个",
+        "fr": "{model} ne se connecte pas ? Essayez ceci",
+        "es": "¿{model} no se conecta? Prueba esto",
+        "de": "{model} verbindet nicht? Versuch das",
+        "ja": "{model}が接続されませんか？こちらをお試しください",
+    },
+    "flash_not_connecting_help": {
+        "en": "Not connecting? Try this",
+        "zh-CN": "无法连接？尝试此方法",
+        "de": "Verbindet nicht? Versuchen Sie dies",
+        "fr": "Ne se connecte pas ? Essayez ceci",
+        "es": "¿No se conecta? Prueba esto",
+        "ja": "接続できませんか？こちらをお試しください",
+    },
+    "flash_paperclip_explanation": {
+        "en": "Disconnect the USB cable and use a paperclip or pin to press the reset button, then try connecting again.",
+        "zh-CN": "断开USB连接，使用回形针/针按下重置按钮，然后再次尝试连接。",
+        "de": "Trennen Sie das USB-Kabel und drücken Sie mit einer Büroklammer oder Nadel die Reset-Taste, dann versuchen Sie es erneut.",
+        "fr": "Débranchez le câble USB et utilisez un trombone ou une épingle pour appuyer sur le bouton de réinitialisation, puis réessayez de vous connecter.",
+        "es": "Desconecta el cable USB y usa un clip o alfiler para presionar el botón de reinicio, luego intenta conectar de nuevo.",
+        "ja": "USBケーブルを外し、クリップやピンでリセットボタンを押してから、もう一度接続してみてください。",
+    },
+    "flash_hint_wall_charger": {
+        "en": "• It is recommended to connect the player to a wall charger for 30 minutes to an hour before trying to connect.",
+    },
+    "flash_hint_install_drivers": {
+        "en": "• If you are on Windows, ensure you have <a href='https://innioasis.app/guide.html'>Installed the Drivers</a>.",
     },
     "flash_keep_data_option": {
         "en": "Keep my settings",
@@ -2013,13 +2111,37 @@ _STRINGS: dict = {
         "es": "¿{software} ya está instalado en tu {model}?",
         "ja": "{model} にはすでに {software} がインストールされていますか？",
     },
-    "keep_data_which_firmware_fmt": {
+    "keep_data_running_fmt_no_name": {
+        "en": "Is the software already installed on your {model}?",
+        "zh-CN": "软件是否已安装在您的 {model} 上？",
+        "de": "Ist die Software bereits auf deinem {model} installiert?",
+        "fr": "Le logiciel est-il déjà installé sur votre {model} ?",
+        "es": "¿El software ya está instalado en tu {model}?",
+        "ja": "{model} にはすでにソフトウェアがインストールされていますか？",
+    },
+    "install_first_which_firmware": {
         "en": "Which software is currently running on your {model}?",
         "zh-CN": "您的 {model} 当前运行的是什么软件？",
         "de": "Welche Software läuft derzeit auf deinem {model}?",
         "fr": "Quel logiciel fonctionne actuellement sur votre {model} ?",
         "es": "¿Qué software se ejecuta actualmente en tu {model}?",
         "ja": "{model} では現在どのソフトウェアが動作していますか？",
+    },
+    "install_first_which_firmware_hint": {
+        "en": "If you are not sure, select 'Other' or the software you think is installed.",
+        "zh-CN": "如果不确定，请选择“其他”或您认为已安装的软件。",
+        "de": "Wenn du dir nicht sicher bist, wähle 'Andere' oder die Software, von der du glaubst, dass sie installiert ist.",
+        "fr": "Si vous n'êtes pas sûr, sélectionnez 'Autre' ou le logiciel que vous pensez être installé.",
+        "es": "Si no estás seguro, selecciona 'Otro' o el software que crees que está instalado.",
+        "ja": "不明な場合は、「その他」またはインストールされていると思われるソフトウェアを選択してください。",
+    },
+    "install_first_prerequisite_hint": {
+        "en": "To continue with this install, please confirm if your {model} is already running the required software ({software}).",
+        "zh-CN": "为了继续安装，请确认您的 {model} 是否已运行所需的基础软件 ({software})。",
+        "de": "Um mit der Installation fortzufahren, bestätige bitte, ob auf deinem {model} bereits die erforderliche Basis-Software ({software}) läuft.",
+        "fr": "Pour continuer cette installation, veuillez confirmer si votre {model} exécute déjà le logiciel de base requis ({software}).",
+        "es": "Para continuar con esta instalación, confirma si tu {model} ya ejecuta el software base necesario ({software}).",
+        "ja": "インストールを続行するには、{model} で必要なベースソフトウェア ({software}) が実行されているかを確認してください。",
     },
     "keep_data_only_compatible_hint": {
         "en": "We can only keep your settings and media when the player is already running this software or a compatible version.",
@@ -2138,12 +2260,12 @@ _STRINGS: dict = {
         "ja": "{model} の内部ストレージを再フォーマットしますか？",
     },
     "format_all_confirm_body": {
-        "en": "For {software} we need to reformat your {model}'s internal storage before we can proceed. Then another SP Flash Tool attempt will be tried, but in Format All + Download mode via the XML console-mode run.\n\n{data_effect}",
-        "zh-CN": "安装 {software} 前，我们需要重新格式化您的 {model} 内部存储。随后将通过 XML 控制台模式再次尝试 SP Flash Tool，并使用“全部格式化 + 下载”模式。\n\n{data_effect}",
-        "de": "Für {software} müssen wir den internen Speicher deines {model} neu formatieren, bevor wir fortfahren können. Danach wird ein weiterer SP Flash Tool-Versuch im Modus „Alles formatieren + Herunterladen“ über den XML-Konsolenlauf gestartet.\n\n{data_effect}",
-        "fr": "Pour {software}, nous devons reformater le stockage interne de votre {model} avant de continuer. Une nouvelle tentative de SP Flash Tool sera ensuite lancée en mode « Tout formater + Télécharger » via l'exécution XML en mode console.\n\n{data_effect}",
-        "es": "Para {software} debemos reformatear el almacenamiento interno de tu {model} antes de continuar. Después se intentará de nuevo con SP Flash Tool en el modo «Formatear todo + Descargar» mediante la ejecución XML en modo consola.\n\n{data_effect}",
-        "ja": "{software} をインストールする前に、{model} の内部ストレージを再フォーマットする必要があります。その後、XML コンソールモードで SP Flash Tool を「すべてフォーマット + ダウンロード」モードでもう一度実行します。\n\n{data_effect}",
+        "en": "To install {software}, we need to format your {model}'s internal storage. {data_effect}",
+        "zh-CN": "为了安装 {software}，我们需要格式化您的 {model} 内部存储。{data_effect}",
+        "de": "Um {software} zu installieren, müssen wir den internen Speicher deines {model} formatieren. {data_effect}",
+        "fr": "Pour installer {software}, nous devons formater le stockage interne de votre {model}. {data_effect}",
+        "es": "Para instalar {software}, debemos formatear el almacenamiento interno de tu {model}. {data_effect}",
+        "ja": "{software} をインストールするには、{model} の内部ストレージをフォーマットする必要があります。{data_effect}",
     },
     "format_all_recovery": {
         "en": "Disconnect USB, then insert a paperclip or pin into the reset pinhole on your {model}. Click Next to try again in Format All + Download mode.",
@@ -2171,14 +2293,14 @@ _STRINGS: dict = {
     },
     "install_first_title": {
         "en": "Install Firmware First",
-        "zh-CN": "先安装基础固件",
-        "fr": "Installer d'abord le firmware de base",
-        "es": "Instalar primero el firmware base",
-        "de": "Zuerst die Basis-Firmware installieren",
-        "ja": "先にベースファームウェアをインストール",
+        "zh-CN": "先安装指定固件",
+        "fr": "Installer d'abord le firmware requis",
+        "es": "Instalar primero el firmware requerido",
+        "de": "Zuerst die erforderliche Firmware installieren",
+        "ja": "先に必要なファームウェアをインストール",
     },
     "install_first_hint": {
-        "en": "Before setting up {target} for the first time, your {model} needs to be running {software} — or {target} itself, if it is already installed and working.",
+        "en": "{target} works best when you start with {software}. Tell us what your {model} is running now — {software}, or {target} itself if it is already installed and working.",
         "zh-CN": "首次设置 {target} 前，您的 {model} 需要运行 {software}，或者已经安装并可正常运行的 {target}。",
         "fr": "Avant de configurer {target} pour la première fois, votre {model} doit exécuter {software} — ou {target} lui-même s'il est déjà installé et fonctionne.",
         "es": "Antes de configurar {target} por primera vez, tu {model} debe ejecutar {software}, o {target} si ya está instalado y funciona.",
@@ -2202,12 +2324,12 @@ _STRINGS: dict = {
         "ja": "USB を外し、{model} の電源を入れてから「次へ」をクリックしてください。",
     },
     "install_first_power_on_hint": {
-        "en": "Let the player start once on the base firmware, then power it off for the next install.",
-        "zh-CN": "让播放器在基础固件上启动一次，然后关机以进行下一次安装。",
-        "fr": "Laissez le lecteur démarrer une fois sur le firmware de base, puis éteignez-le pour l'installation suivante.",
-        "es": "Deja que el reproductor arranque una vez con el firmware base y luego apágalo para la siguiente instalación.",
-        "de": "Lass den Player einmal mit der Basis-Firmware starten und schalte ihn dann für die nächste Installation aus.",
-        "ja": "プレーヤーをベースファームウェアで一度起動し、次のインストールのために電源を切ってください。",
+        "en": "Let the player start once on what you just installed, then power it off for the next install.",
+        "zh-CN": "让播放器先用刚安装的固件启动一次，然后关机以进行下一次安装。",
+        "fr": "Laissez le lecteur démarrer une fois sur ce que vous venez d'installer, puis éteignez-le pour l'installation suivante.",
+        "es": "Deja que el reproductor arranque una vez con lo que acabas de instalar y luego apágalo para la siguiente instalación.",
+        "de": "Lass den Player einmal mit der eben installierten Firmware starten und schalte ihn dann für die nächste Installation aus.",
+        "ja": "プレーヤーを、いまインストールしたファームウェアで一度起動してから、次のインストールのために電源を切ってください。",
     },
     "install_first_need_title": {
         "en": "Install {software} first?",
@@ -2218,20 +2340,44 @@ _STRINGS: dict = {
         "ja": "先に {software} をインストールしますか？",
     },
     "install_first_need_body": {
-        "en": "{software} is the base firmware for {target}. It will be installed on your {model} first, then {target} follows automatically. Keep the player connected and do not unplug it.",
-        "zh-CN": "{software} 是 {target} 的基础固件。将先在您的 {model} 上安装它，然后自动继续安装 {target}。请保持播放器连接，不要拔出。",
-        "fr": "{software} est le firmware de base de {target}. Il sera installé d'abord sur votre {model}, puis {target} suivra automatiquement. Gardez le lecteur connecté et ne le débranchez pas.",
-        "es": "{software} es el firmware base de {target}. Se instalará primero en tu {model} y después {target} continuará automáticamente. Mantén el reproductor conectado y no lo desenchufes.",
-        "de": "{software} ist die Basis-Firmware für {target}. Sie wird zuerst auf deinem {model} installiert, danach folgt {target} automatisch. Lass den Player angeschlossen und ziehe ihn nicht ab.",
-        "ja": "{software} は {target} のベースファームウェアです。先に {model} へインストールし、その後 {target} を自動で続けます。プレーヤーを接続したままにしてください。",
+        "en": "{target} works best when you start with {software} on your {model}. We will install {software} first, then continue to {target} automatically. Keep the player connected and do not unplug it.",
+        "zh-CN": "在 {model} 上先安装 {software} 时，{target} 的体验最好。将先安装 {software}，然后自动继续安装 {target}。请保持播放器连接，不要拔出。",
+        "fr": "{target} fonctionne au mieux lorsque vous commencez par {software} sur votre {model}. Nous installerons d'abord {software}, puis {target} suivra automatiquement. Gardez le lecteur connecté et ne le débranchez pas.",
+        "es": "{target} funciona mejor cuando empiezas con {software} en tu {model}. Instalaremos primero {software} y después {target} continuará automáticamente. Mantén el reproductor conectado y no lo desenchufes.",
+        "de": "{target} funktioniert am besten, wenn du auf deinem {model} mit {software} beginnst. Wir installieren zuerst {software}, danach folgt {target} automatisch. Lass den Player angeschlossen und ziehe ihn nicht ab.",
+        "ja": "{model} で {software} から始めると、{target} が最もうまく動作します。先に {software} をインストールし、その後 {target} を自動で続けます。プレーヤーを接続したままにしてください。",
+    },
+    "install_first_when_body": {
+        "en": "{target} must not be installed straight over {running}. On your {model} the player will not start up properly afterwards. Installing {software} first is the safe route, and {target} then follows automatically. Keep the player connected and do not unplug it.",
+        "zh-CN": "不要直接把 {target} 安装到 {running} 之上：在您的 {model} 上，这样做之后播放器将无法正常启动。先安装 {software} 才是安全的做法，随后会自动安装 {target}。请保持播放器连接，不要拔出。",
+    },
+    "install_first_when_body_unnamed": {
+        "en": "{target} must not be installed straight over the software already on your {model}: the player will not start up properly afterwards. Installing {software} first is the safe route, and {target} then follows automatically. Keep the player connected and do not unplug it.",
+        "zh-CN": "不要直接把 {target} 安装到 {model} 上现有的软件之上：这样做之后播放器将无法正常启动。先安装 {software} 才是安全的做法，随后会自动安装 {target}。请保持播放器连接，不要拔出。",
+    },
+    "install_first_recommend_title": {
+        "en": "Install {software} first?",
+        "zh-CN": "先安装 {software}？",
+        "de": "Zuerst {software} installieren?",
+        "fr": "Installer d'abord {software} ?",
+        "es": "¿Instalar primero {software}?",
+        "ja": "先に {software} をインストールしますか？",
+    },
+    "install_first_recommend_body": {
+        "en": "Your {model} is running {running}. Installing {target} over it may keep {running}'s startup logo and custom device logos. Installing {software} first is the cleanest route: {target} then follows automatically. Yes installs {software} first; No installs {target} now with fresh settings and media.",
+        "zh-CN": "您的 {model} 正在运行 {running}，直接安装 {target} 可能会保留 {running} 的开机标志。先安装 {software} 是最干净的方式，随后会自动安装 {target}。选择“是”先安装 {software}，选择“否”现在就用全新的设置和媒体安装 {target}。",
+        "de": "Auf deinem {model} läuft {running}, daher kann eine Installation von {target} darüber das Startlogo von {running} behalten. Zuerst {software} zu installieren ist der sauberste Weg, danach folgt {target} automatisch. Wähle Ja, um zuerst {software} zu installieren, oder Nein, um {target} jetzt mit frischen Einstellungen und Medien zu installieren.",
+        "fr": "Votre {model} exécute {running}, donc installer {target} par-dessus peut conserver le logo de démarrage de {running}. Installer d'abord {software} est la voie la plus propre, puis {target} suit automatiquement. Choisissez Oui pour installer d'abord {software}, ou Non pour installer {target} maintenant avec des réglages et médias neufs.",
+        "es": "Tu {model} ejecuta {running}, así que instalar {target} encima puede conservar el logo de inicio de {running}. Instalar primero {software} es la ruta más limpia y después {target} continúa automáticamente. Elige Sí para instalar primero {software}, o No para instalar {target} ahora con ajustes y archivos nuevos.",
+        "ja": "{model} では {running} が動作しているため、その上に {target} をインストールすると {running} の起動ロゴが残る場合があります。先に {software} をインストールするのが最も確実で、その後 {target} が自動的に続きます。「はい」で先に {software} をインストールし、「いいえ」で {target} を新しい設定とメディアで今すぐインストールします。",
     },
     "install_first_starting": {
-        "en": "Installing the required base firmware {software} before {target}.",
-        "zh-CN": "正在安装 {target} 所需的基础固件 {software}。",
-        "fr": "Installation du firmware de base requis {software} avant {target}.",
-        "es": "Instalando el firmware base necesario {software} antes de {target}.",
-        "de": "Die erforderliche Basis-Firmware {software} wird vor {target} installiert.",
-        "ja": "{target} の前に必要なベースファームウェア {software} をインストールしています。",
+        "en": "Installing {software} first — {target} works best when you start with it.",
+        "zh-CN": "正在先安装 {software}，因为 {target} 从它开始效果最好。",
+        "fr": "Installation de {software} d'abord : {target} fonctionne au mieux en partant de là.",
+        "es": "Instalando primero {software}: {target} funciona mejor si empiezas por ahí.",
+        "de": "{software} wird zuerst installiert – {target} funktioniert am besten, wenn du damit beginnst.",
+        "ja": "まず {software} をインストールします。{target} はそこから始めると最もうまく動作します。",
     },
     "install_first_base_done": {
         "en": "{software} is installed. Continuing with {target}.",
@@ -2242,7 +2388,7 @@ _STRINGS: dict = {
         "ja": "{software} をインストールしました。続いて {target} に進みます。",
     },
     "install_first_missing": {
-        "en": "This firmware requires {software} first, but the catalogue has no installable release of {software}.",
+        "en": "This firmware works best when you start with {software}, but the catalogue has no installable release of {software}.",
         "zh-CN": "此固件需要先安装 {software}，但目录中没有可安装的 {software} 版本。",
         "fr": "Ce firmware nécessite d'abord {software}, mais le catalogue n'a aucune version installable de {software}.",
         "es": "Este firmware requiere primero {software}, pero el catálogo no tiene ninguna versión instalable de {software}.",
@@ -2250,7 +2396,7 @@ _STRINGS: dict = {
         "ja": "このファームウェアには先に {software} が必要ですが、カタログにインストール可能な {software} がありません。",
     },
     "install_first_version_unavailable": {
-        "en": "This firmware requires {software} {version}, but no release in the catalogue matches that requirement.",
+        "en": "This firmware works best with {software} {version}, but no release in the catalogue matches that.",
         "zh-CN": "此固件需要 {software} {version}，但目录中没有符合该要求的版本。",
         "fr": "Ce firmware nécessite {software} {version}, mais aucune version du catalogue ne répond à cette exigence.",
         "es": "Este firmware requiere {software} {version}, pero ninguna versión del catálogo cumple ese requisito.",
@@ -2258,12 +2404,12 @@ _STRINGS: dict = {
         "ja": "このファームウェアには {software} {version} が必要ですが、カタログにその要件を満たすリリースがありません。",
     },
     "install_first_needs_answer": {
-        "en": "This firmware requires a base firmware check, which needs an interactive terminal.",
-        "zh-CN": "此固件需要检查基础固件，因此需要交互式终端。",
-        "fr": "Ce firmware nécessite une vérification du firmware de base, qui requiert un terminal interactif.",
-        "es": "Este firmware requiere una comprobación del firmware base, que necesita un terminal interactivo.",
-        "de": "Diese Firmware erfordert eine Prüfung der Basis-Firmware, die ein interaktives Terminal braucht.",
-        "ja": "このファームウェアにはベースファームウェアの確認が必要で、対話型ターミナルを要します。",
+        "en": "This firmware works best when you start with another firmware, and that choice needs an interactive terminal.",
+        "zh-CN": "此固件在开始前需要先确认另一个固件，因此需要交互式终端。",
+        "fr": "Ce firmware demande de confirmer un autre firmware avant de commencer, ce qui nécessite un terminal interactif.",
+        "es": "Este firmware requiere confirmar otro firmware antes de empezar, lo que necesita un terminal interactivo.",
+        "de": "Diese Firmware verlangt vor dem Start die Bestätigung einer anderen Firmware, wofür ein interaktives Terminal nötig ist.",
+        "ja": "このファームウェアは開始前に別のファームウェアの確認が必要で、対話型ターミナルを要します。",
     },
     "keep_data_microsd_reassurance": {
         "en": "Your media on your microSD always stays in place",
@@ -2326,6 +2472,14 @@ _STRINGS: dict = {
         "es": "Espera un momento",
         "de": "Bitte warten",
         "ja": "しばらくお待ちください",
+    },
+    "flash_getting_ready": {
+        "zh-CN": "正在准备…",
+        "en": "Getting ready…",
+        "fr": "Préparation…",
+        "es": "Preparando…",
+        "de": "Wird vorbereitet…",
+        "ja": "準備しています…",
     },
     "flash_wait_connecting_prompt": {
         "zh-CN": "请稍候，正在连接您的 {model}",
@@ -2391,19 +2545,25 @@ _STRINGS: dict = {
     },
     "flash_connect_paperclip_prompt": {
         "zh-CN": "请用卡针/回形针按下耳机插孔旁边的按钮（若未开始请再次按下，直到安装进度开始）。",
-        "en": "Tip: Power off the device by pressing the hidden button beside the headphone jack with a paperclip or pin.",
+        "en": "To put {model} into firmware update mode, press the hidden button between the headphone and USB ports with a paperclip or pin, then plug the USB cable back in.",
         "fr": "Astuce : éteignez l'appareil en appuyant avec un trombone ou une aiguille sur le bouton caché à côté de la prise casque.",
         "es": "Consejo: apague el dispositivo pulsando con un clip o una aguja el botón oculto junto a la toma de auriculares.",
     },
     "flash_connect_paperclip_prompt_a5": {
         "zh-CN": "请用卡针/回形针按下电源键附近的隐藏按钮（若未开始请再次按下，直到安装进度开始）。",
-        "en": "Tip: Power off your A5 by pressing the hidden button beside the power button with a clip using a paperclip or pin..",
+        "en": "To put your A5 into firmware update mode, press the hidden button beside the power button with a paperclip or pin, then plug the USB cable back in.",
         "fr": "Astuce : éteignez votre A5 en appuyant avec un trombone ou une aiguille sur le bouton caché à côté du bouton d'alimentation en utilisant un trombone ou un épingle.",
         "es": "Consejo: apague su A5 pulsando con un clip o una aguja el botón oculto junto al botón de encendido usando un clip o una aguja..",
     },
+    "flash_connect_failed_hint": {
+        "zh-CN": "{model} 无法连接？尝试此操作：断开 USB，使用回形针或大头针按压重置按钮，然后重新连接 USB 线。",
+        "en": "{model} won't connect? Try this: Disconnect the USB, use a paperclip or pin to press the reset button, then connect the USB cable again.",
+        "fr": "{model} ne se connecte pas ? Essayez ceci : débranchez l'USB, utilisez un trombone ou une épingle pour appuyer sur le bouton de réinitialisation, puis rebranchez le câble USB.",
+        "es": "¿{model} no se conecta? Prueba esto: desconecta el USB, usa un clip o alfiler para presionar el botón de reinicio y luego vuelve a conectar el cable USB.",
+    },
     "flash_paperclip_hint": {
         "zh-CN": "用卡针或回形针按下耳机接口和 USB 接口之间的隐藏按钮以完全关闭您的 {model}。",
-        "en": "You can completely power off your {model} by pressing the hidden button between the headphone and USB ports using a paperclip or pin.",
+        "en": "Fully power off your {model} by pressing the hidden button between the headphone and USB ports with a paperclip or pin.",
         "fr": "Éteignez complètement votre {model} en appuyant sur le bouton caché entre la prise casque et le port USB à l'aide d'un trombone ou d'une aiguille.",
         "es": "Apaga completamente tu {model} presionando el botón oculto entre el puerto de auriculares y el puerto USB con un clip o alfiler.",
         "de": "Schalten Sie Ihr {model} vollständig aus, indem Sie die versteckte Taste zwischen Kopfhörer- und USB-Anschluss mit einer Büroklammer oder Nadel drücken.",
@@ -2411,11 +2571,17 @@ _STRINGS: dict = {
     },
     "flash_paperclip_hint_a5": {
         "zh-CN": "用卡针或回形针按下电源键旁边的隐藏按钮以完全关闭您的 A5。",
-        "en": "You can completely power off your A5 by pressing the hidden button beside the power button with a clip using a paperclip or pin.",
+        "en": "Fully power off your A5 by pressing the hidden button beside the power button with a paperclip or pin.",
         "fr": "Éteignez complètement votre A5 en appuyant sur le bouton caché à côté du bouton d'alimentation à l'aide d'un trombone ou d'une aiguille.",
         "es": "Apaga completamente tu A5 presionando el botón oculto al lado del botón de encendido con un clip o alfiler.",
         "de": "Schalten Sie Ihr A5 vollständig aus, indem Sie die versteckte Taste neben dem Ein-/Ausschalter mit einer Büroklammer oder Nadel drücken.",
         "ja": "クリップまたはピンを使用して、電源ボタンの横にある隠しボタンを押して、A5の電源を完全に切ってください。",
+    },
+    "flash_paperclip_driver_hint": {
+        "en": "If it still doesn't connect, you may need to install the {link}.",
+    },
+    "drivers": {
+        "en": "Drivers",
     },
     "flash_y1_preloader_hint": {
         "zh-CN": "提示：用回形针或卡针按下耳机插孔旁边的隐藏按钮关机，关机后直接连接 USB 即可（无需长按按键）。",
@@ -2808,6 +2974,46 @@ _STRINGS: dict = {
         "es": "Este software necesita algunos pasos adicionales después de instalarlo. Siga la guía para completar la instalación.",
         "de": "Diese Software benötigt nach der Installation einige zusätzliche Schritte. Folgen Sie der Anleitung, um die Installation abzuschließen.",
         "ja": "このソフトウェアはインストール後にいくつかの追加手順が必要です。ガイドに従ってインストールを完了してください。",
+    },
+    "completion_one_more_thing": {
+        "en": "Just one more thing to do…",
+        "zh-CN": "还有一件事要做…",
+        "fr": "Encore une chose à faire…",
+        "es": "Solo queda una cosa por hacer…",
+        "de": "Es ist nur noch eine Sache zu tun…",
+        "ja": "あと1つだけやることがあります…",
+    },
+    "completion_not_starting_hint": {
+        "en": "What to do if it doesn't start up",
+        "zh-CN": "如果无法开机怎么办",
+        "fr": "Que faire s'il ne démarre pas",
+        "es": "Qué hacer si no arranca",
+        "de": "Was tun, wenn es nicht startet",
+        "ja": "起動しないときは",
+    },
+    "completion_not_starting_body": {
+        "en": "If your {model} doesn't turn on after an install, install Original Software for it again, or pick another software from the list.",
+        "zh-CN": "如果安装后{model}无法开机，请重新安装适用于它的原厂软件，或从列表中选择其他软件。",
+        "fr": "Si votre {model} ne s'allume pas après une installation, réinstallez son logiciel d'origine ou choisissez un autre logiciel dans la liste.",
+        "es": "Si tu {model} no se enciende después de una instalación, vuelve a instalar su software original o elige otro software de la lista.",
+        "de": "Wenn sich Ihr {model} nach einer Installation nicht einschaltet, installieren Sie erneut die Originalsoftware dafür oder wählen Sie eine andere Software aus der Liste.",
+        "ja": "インストール後に{model}が起動しない場合は、そのモデルのオリジナルソフトウェアを入れ直すか、一覧から別のソフトウェアを選んでください。",
+    },
+    "completion_install_original": {
+        "en": "Install Original Software",
+        "zh-CN": "安装原厂软件",
+        "fr": "Installer le logiciel d'origine",
+        "es": "Instalar el software original",
+        "de": "Originalsoftware installieren",
+        "ja": "オリジナルソフトウェアをインストール",
+    },
+    "completion_other_software": {
+        "en": "Another software",
+        "zh-CN": "其他软件",
+        "fr": "Un autre logiciel",
+        "es": "Otro software",
+        "de": "Andere Software",
+        "ja": "別のソフトウェア",
     },
     "post_install_doc_loading": {
         "en": "Getting the setup steps…",
@@ -3777,7 +3983,7 @@ _STRINGS: dict = {
     # is the appeal's, not the heading's: it belongs to the personal note.
     "donate_completion_signature": {
         "zh-CN": "- Ryan - Updater CE 维护者",
-        "en": "- Ryan - Maintainer of Updater CE",
+        "en": "~ Ryan · Maintainer of Updater CE",
         "fr": "- Ryan - Mainteneur d'Updater CE",
         "es": "- Ryan - Mantenedor de Updater CE",
         "de": "- Ryan - Maintainer von Updater CE",
@@ -4932,12 +5138,78 @@ _STRINGS: dict = {
         "es": "Ajustes y preferencias",
     },
     "settings_reminders_group": {
-        "zh-CN": "播放器更新提醒",
-        "en": "Player Update Reminders",
-        "fr": "Rappels de mise à jour du lecteur",
-        "es": "Recordatorios de actualización del reproductor",
-        "de": "Update-Erinnerungen für Player",
-        "ja": "プレーヤーのアップデート通知",
+        "zh-CN": "添加您的播放器",
+        "en": "Add your players",
+        "fr": "Ajouter vos lecteurs",
+        "es": "Añade tus reproductores",
+        "de": "Player hinzufügen",
+        "ja": "プレーヤーを追加",
+    },
+    "settings_drivers_gate_title": {
+        "zh-CN": "添加播放器之前",
+        "en": "Before you add a player",
+        "fr": "Avant d'ajouter un lecteur",
+        "es": "Antes de añadir un reproductor",
+        "de": "Bevor du einen Player hinzufügst",
+        "ja": "プレーヤーを追加する前に",
+    },
+    "settings_drivers_gate_body": {
+        "zh-CN": (
+            "安装 MediaTek USB 驱动是一次性步骤，而且 Windows 需要重启后才能识别它们。"
+            "两者都完成之前，应用在开始安装时可能找不到您的播放器。"
+        ),
+        "en": (
+            "Installing the MediaTek USB drivers is a one-time step, and "
+            "Windows only picks them up after a restart. Until both are done, "
+            "the app may not find your player when an install starts."
+        ),
+        "fr": (
+            "L'installation des pilotes USB MediaTek ne se fait qu'une fois, "
+            "et Windows ne les prend en compte qu'après un redémarrage. Tant "
+            "que les deux ne sont pas faits, l'app peut ne pas trouver votre "
+            "lecteur au début d'une installation."
+        ),
+        "es": (
+            "Instalar los controladores USB de MediaTek es un paso único, y "
+            "Windows solo los reconoce después de reiniciar. Hasta que ambas "
+            "cosas estén hechas, la app puede no encontrar tu reproductor al "
+            "iniciar una instalación."
+        ),
+        "de": (
+            "Die MediaTek-USB-Treiber werden einmal installiert, und Windows "
+            "erkennt sie erst nach einem Neustart. Bis beides erledigt ist, "
+            "findet die App deinen Player beim Start einer Installation "
+            "möglicherweise nicht."
+        ),
+        "ja": (
+            "MediaTek USB ドライバーのインストールは一度だけの作業で、Windows は"
+            "再起動後にはじめて認識します。どちらも済んでいないと、インストール"
+            "開始時にプレーヤーが見つからないことがあります。"
+        ),
+    },
+    "settings_drivers_gate_get": {
+        "zh-CN": "获取驱动",
+        "en": "Get Drivers",
+        "fr": "Obtenir les pilotes",
+        "es": "Obtener controladores",
+        "de": "Treiber herunterladen",
+        "ja": "ドライバーを入手",
+    },
+    "settings_drivers_gate_done": {
+        "zh-CN": "我已安装并重启",
+        "en": "I've installed them and restarted",
+        "fr": "Je les ai installés et j'ai redémarré",
+        "es": "Los he instalado y he reiniciado",
+        "de": "Installiert und neu gestartet",
+        "ja": "インストールして再起動しました",
+    },
+    "settings_drivers_gate_cancel": {
+        "zh-CN": "以后再说",
+        "en": "Not now",
+        "fr": "Plus tard",
+        "es": "Ahora no",
+        "de": "Später",
+        "ja": "あとで",
     },
     "settings_reminders_desc": {
         "zh-CN": "当播放器有新软件版本发布时，我们会通知您。",
@@ -5204,6 +5476,52 @@ _STRINGS: dict = {
         "en": "Try Again",
         "fr": "Réessayer",
         "es": "Reintentar",
+    },
+
+    # Settings — first-launch journey. It asks for the software already on the
+    # player, which is what makes reminders, keep-data and install help work
+    # before the first install through this app.
+    "onboarding_title": {
+        "zh-CN": "让我们来设置 Innioasis Updater",
+        "en": "Let's set up Innioasis Updater",
+    },
+    "onboarding_after_add_body": {
+        "en": "We'll notify you about updates and issues reported by the community for the software on these models:",
+    },
+    "onboarding_after_add_footer": {
+        "en": "Knowing what software your device has ensures that installs are carried out correctly for all the software available in the app.\n\nIf you're finished adding devices, simply click Done to begin using Updater.",
+    },
+    "onboarding_body": {
+        "zh-CN": (
+            "告诉我们每个播放器当前运行的软件，我们就能在有更新时通知您"
+            "、在重装时帮您保留设置，并在安装出问题时提供帮助。"
+            "现在就添加您的播放器，从第一次安装起就能获得这些保障。"
+        ),
+        "en": (
+            "Tell us what software each player is running, and we'll let you "
+            "know when updates are out, keep your settings safe and help if an "
+            "install goes wrong. Add your player now so all of that starts "
+            "working from the first install."
+        ),
+    },
+    "onboarding_version_hint": {
+        "zh-CN": "不确定版本？使用原厂软件时，可在播放器的 设置 › 关于 中查看。",
+        "en": (
+            "Not sure which version? On Original Software it is under "
+            "Settings › About on the player."
+        ),
+    },
+    "onboarding_add_another": {
+        "zh-CN": "添加另一个播放器",
+        "en": "Add another player",
+    },
+    "onboarding_done": {
+        "zh-CN": "完成",
+        "en": "Done",
+    },
+    "onboarding_skip": {
+        "zh-CN": "以后再说",
+        "en": "Not now",
     },
 
     # Settings — single release-reminder opt-in
@@ -5513,7 +5831,7 @@ _STRINGS: dict = {
     },
     "install_power_on_steps_fmt": {
         "zh-CN": "拔下您的 {label}，然后按住{button}直到开机。",
-        "en": "Unplug your {label}, then hold the {button} until it turns on.",
+        "en": "To turn your {label} on, unplug the USB and hold the {button}.",
         "fr": "Débranchez votre {label}, puis maintenez le {button} jusqu'à ce qu'il s'allume.",
         "es": "Desconecta tu {label}, luego mantén presionado el {button} hasta que se encienda.",
     },
@@ -5754,7 +6072,7 @@ _STRINGS: dict = {
     },
     "install_power_on_steps_fmt": {
         "zh-CN": "请拔下您的 {label}，然后按住{button}直到开机。",
-        "en": "Unplug your {label}, then hold the {button} until it turns on.",
+        "en": "To turn your {label} on, unplug the USB and hold the {button}.",
         "fr": "Débranchez votre {label}, puis maintenez le {button} enfoncé jusqu'à ce qu'il s'allume.",
         "es": "Desconecta tu {label} y mantén pulsado el {button} hasta que se encienda.",
         "de": "Trennen Sie Ihr {label} und halten Sie die {button} gedrückt, bis es sich einschaltet.",
@@ -7166,6 +7484,20 @@ def _user_catalog(code: str) -> dict:
     }
 
 
+#: A language tag, not a string id: ``en``, ``en-GB``, ``zh-Hans-CN``. The
+#: catalog directory and the shipped language list are written by hand and by
+#: tooling alike, so a file whose name is a string id must never become a
+#: selectable language (an old fill run left five of those behind, and one of
+#: them could be saved as the reader's language).
+_LANGUAGE_CODE = re.compile(r"^[A-Za-z]{2,3}(?:[-_][A-Za-z0-9]{2,8})*$")
+
+
+def is_language_code(code: str | None) -> bool:
+    """Whether ``code`` looks like a language tag rather than a string id."""
+    text = (code or "").strip()
+    return bool(text) and text != "languages" and bool(_LANGUAGE_CODE.match(text))
+
+
 def languages() -> dict:
     """``{code: {"native": ..., "english": ...}}`` as shipped in languages.json."""
     if "table" not in _LANGUAGES:
@@ -7177,7 +7509,7 @@ def languages() -> dict:
             data = {
                 str(code): entry
                 for code, entry in (raw or {}).items()
-                if isinstance(entry, dict)
+                if isinstance(entry, dict) and is_language_code(code)
             }
         except Exception:
             logger.debug("Language list unavailable", exc_info=True)
@@ -7197,7 +7529,7 @@ def shipped_catalog_codes() -> tuple:
     if directory.is_dir():
         for path in sorted(directory.glob("*.json")):
             code = path.stem
-            if code != "languages" and code not in found:
+            if is_language_code(code) and code not in found:
                 found.append(code)
     return tuple(found)
 
@@ -7214,7 +7546,7 @@ def catalog_codes() -> tuple:
     if learned is not None and learned.is_dir():
         for path in sorted(learned.glob("*.json")):
             code = path.stem
-            if code != "languages" and code not in found:
+            if is_language_code(code) and code not in found:
                 found.append(code)
     return tuple(found)
 
@@ -7376,6 +7708,21 @@ def is_english_language(code: str | None = None) -> bool:
     return lang.strip().split("-")[0].lower() == "en"
 
 
+def is_supported_language(code: str | None) -> bool:
+    """Whether ``code`` names a language this build can actually display.
+
+    The saved setting and the picker both hold a language code, and a value
+    that is not one (an older build could write a string id there, leaving the
+    app on a learned catalog while the picker claimed a language) must never
+    be treated as a choice.
+    """
+    chosen = (code or "").strip()
+    return (
+        is_language_code(chosen)
+        and chosen in set(catalog_codes()) | set(_SUPPORTED) | set(languages())
+    )
+
+
 def initial_language(stored: str = "") -> str:
     """The user's chosen language, or else the system's.
 
@@ -7383,9 +7730,8 @@ def initial_language(stored: str = "") -> str:
     is stored for a detected language, so the app keeps following the system
     until the user picks one in the app.
     """
-    chosen = (stored or "").strip()
-    if chosen and chosen in set(catalog_codes()) | set(_SUPPORTED) | set(languages()):
-        return chosen
+    if is_supported_language(stored):
+        return stored.strip()
     return system_language()
 
 
@@ -7461,7 +7807,7 @@ class _Translator:
 
     def set_language(self, lang: str):
         code = (lang or "").strip()
-        if code and (code in catalog_codes() or code in _SUPPORTED):
+        if is_supported_language(code):
             self._lang = code
 
     def t(self, key: str) -> str:
@@ -7504,6 +7850,11 @@ def english_sources() -> dict[str, tuple]:
                 keys = grouped.setdefault(value, [])
                 if key not in keys:
                     keys.append(key)
+        if not grouped:
+            # A caller that asks during a partial state (a patched table, a
+            # module still importing) must not leave the cache empty for the
+            # rest of the run: an empty answer is recomputed next time.
+            return {}
         _ENGLISH_SOURCES = {text: tuple(keys) for text, keys in grouped.items()}
     return _ENGLISH_SOURCES
 
@@ -7514,8 +7865,8 @@ _ENGLISH_TEMPLATES: tuple[str, ...] | None = None
 def english_templates() -> tuple[str, ...]:
     """English UI strings carrying ``{placeholders}``, most specific first.
 
-    A sentence built from a template ("Unplug your Y2, then hold the кнопка
-    питания until it turns on.") never equals the template it came from, so the
+    A sentence built from a template ("To turn your Y2 on, unplug the USB
+    and hold the кнопка питания.") never equals the template it came from, so the
     runtime gap-filler cannot match it exactly. Matching it structurally needs
     the source templates, ordered by how much literal copy they carry: a short
     generic pattern must never win over the sentence that actually produced the
@@ -7532,6 +7883,10 @@ def english_templates() -> tuple[str, ...]:
                 -len(text),
             )
         )
+        if not templates:
+            # Same rule as english_sources: an empty answer is not the answer,
+            # so it is never cached.
+            return ()
         _ENGLISH_TEMPLATES = tuple(templates)
     return _ENGLISH_TEMPLATES
 
@@ -7633,6 +7988,19 @@ def translator() -> _Translator:
 
 def tr(key: str) -> str:
     return _global_translator.t(key)
+
+
+def device_type_help_tip() -> str:
+    """The Type explanation, one string for every screen that offers it.
+
+    Select Software's Type mark and the welcome journey's Type hint describe
+    the same hardware revision, so both hover tips are built here rather than
+    each screen keeping a copy that can drift apart.
+    """
+    body = tr("sel_type_help_body")
+    if not body or body == "sel_type_help_body":
+        body = tr("device_type_help_msg") or tr("sel_type_help_tooltip")
+    return (body or "").strip()
 
 
 def current_language() -> str:

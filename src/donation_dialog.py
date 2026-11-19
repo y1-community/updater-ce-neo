@@ -1161,7 +1161,18 @@ class DonationDialog(QDialog):
         if route == "boosty":
             links = [("donate_boosty", "boosty")]
         else:
-            links = [("donate_buy_coffee", "kofi"), ("donate_buy_me_a_coffee", "bmc")]
+            from . import donation_order
+
+            # The post-install dialog keeps Ko-fi in the slot the guide's
+            # reader was just sent to; the other surfaces alternate.
+            labels = {
+                "kofi": "donate_buy_coffee",
+                "bmc": "donate_buy_me_a_coffee",
+            }
+            links = [
+                (labels[method], method)
+                for method in donation_order.completion_coffee_order(post_setup=True)
+            ]
         for key, link in links:
             btn = QPushButton(tr(key))
             btn.setCursor(Qt.ArrowCursor)

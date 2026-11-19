@@ -315,7 +315,10 @@ def test_completion_screen_links_the_guide_instead_of_embedding_it(qapp):
             page.set_post_install_urls(url, "")
             page.set_device_done(donations_shown=False)
 
-            assert not page._post_install_hint.isHidden()
+            # The letter carries the guide now (View Guide + its own sentence);
+            # the retired one-line hint card is not what links it.
+            assert page._post_install_hint.isHidden()
+            assert not page._view_guide_btn.isHidden()
             assert page._done_mark._symbol == "www"
             assert not hasattr(page, "_post_install_doc")
         finally:
@@ -343,15 +346,21 @@ def test_site_preferences_url_variables(monkeypatch):
     from src.i18n import translator
 
     monkeypatch.setattr(player_update_check, "is_donation_ui_disabled", lambda: True)
+    # The language is process-wide. Leaving it on French made a later file's
+    # English settings-card assertions fail on translated copy, so this test
+    # puts the previous language back whatever happens here.
+    previous = translator().lang
     translator().set_language("fr")
-
-    url = _with_site_preferences("https://innioasis.app/firmware-list.html?model=Y1")
-    parsed = parse_qs(urlsplit(url).query)
-    assert parsed["model"] == ["Y1"]
-    assert parsed["donations"] == ["false"]
-    # The app has no privacy screen, so it declares no consent: asserting one
-    # re-enabled feedback and nightly storage for readers who had turned them
-    # off on the site. The page keeps the answer it already stores.
-    assert "privacy" not in parsed
-    assert parsed["lang"] == ["fr"]
-    assert "theme" in parsed
+    try:
+        url = _with_site_preferences("https://innioasis.app/firmware-list.html?model=Y1")
+        parsed = parse_qs(urlsplit(url).query)
+        assert parsed["model"] == ["Y1"]
+        assert parsed["donations"] == ["false"]
+        # The app has no privacy screen, so it declares no consent: asserting one
+        # re-enabled feedback and nightly storage for readers who had turned them
+        # off on the site. The page keeps the answer it already stores.
+        assert "privacy" not in parsed
+        assert parsed["lang"] == ["fr"]
+        assert "theme" in parsed
+    finally:
+        translator().set_language(previous or "en")

@@ -262,78 +262,90 @@ def _frame_and_expectation(win):
     return frame, expected_h
 
 
-def test_cancelling_returns_the_window_to_the_frame_it_had_before():
-    """The catalogue's frame is what a cancelled run gives back.
+def test_cancelling_returns_the_catalogue_at_its_own_height():
+    """A cancelled run gives back the catalogue, not the card or a tall frame.
 
     Measuring the catalogue after the install card has hugged the window
     describes the squeezed page, so the window came back short with the release
-    rows cut off. The frame from before the run is restored instead.
+    rows cut off. Restoring the pre-run frame fixed that but also brought back
+    a frame taller than the page needs, leaving an empty band under the cards.
+    The page's own measurement is the height, whatever frame the run saved.
     """
     app, win = _window()
     try:
+        _settle(app, win)
+        catalogue_h = win.height()
+        assert catalogue_h >= win._content_floor_height()
+
         win._on_download_started("Rockbox 0.5 for Y1", "Y1")
         _settle(app, win)
-        compact_h = win.height()
+        assert win.height() < catalogue_h, "the card should hug a compact frame"
 
-        frame, expected_h = _frame_and_expectation(win)
-        assert expected_h > compact_h, "the frame must be taller than the card"
+        frame, _expected_h = _frame_and_expectation(win)
+        assert frame[1] > catalogue_h, "the saved frame must be the taller one"
         win._pre_install_frame = frame
         win._return_to_select_software()
         _settle(app, win)
 
         assert win._stack.currentIndex() == _PAGE_SELECT
-        assert win.height() == expected_h
+        assert win.height() == catalogue_h, (catalogue_h, win.height())
     finally:
         _close(win)
 
 
-def test_cancelling_while_a_keep_data_question_is_pending_restores_the_frame():
+def test_cancelling_while_a_keep_data_question_is_pending_restores_the_catalogue():
     app, win = _window()
     try:
+        _settle(app, win)
+        catalogue_h = win.height()
+
         win._on_download_started("Original Software 3.1.2 for Y1", "Y1")
         _settle(app, win)
         win._keep_data_confirm_pending = True
         win._flash_page.show_keep_data_confirmation("Keep Data?")
         _settle(app, win)
-        compact_h = win.height()
 
-        frame, expected_h = _frame_and_expectation(win)
-        assert expected_h > compact_h
+        frame, _expected_h = _frame_and_expectation(win)
+        assert frame[1] > catalogue_h
         win._pre_install_frame = frame
         win._return_to_select_software()
         _settle(app, win)
 
         assert win._stack.currentIndex() == _PAGE_SELECT
         assert not win._keep_data_confirm_pending
-        assert win.height() == expected_h
+        assert win.height() == catalogue_h, (catalogue_h, win.height())
     finally:
         _close(win)
 
 
-def test_a_fit_after_the_restore_cannot_squeeze_the_catalogue_again():
-    """A queued measurement may grow the window but not shrink it back."""
+def test_a_fit_after_the_restore_keeps_the_catalogue_hug():
+    """A queued measurement after the restore must inherit the card's frame."""
     app, win = _window()
     try:
+        _settle(app, win)
+        catalogue_h = win.height()
+
         win.themes.begin("Y1")
         win._install_complete = True
         win._sync_install_nav_entry()
         win._nav_to_page(_PAGE_FLASH)
         _settle(app, win)
 
-        frame, expected_h = _frame_and_expectation(win)
+        frame, _expected_h = _frame_and_expectation(win)
         win._pre_install_frame = frame
         win._return_to_select_software()
         _settle(app, win)
-        restored_h = win.height()
-        assert restored_h == expected_h
+        assert win.height() == catalogue_h, (catalogue_h, win.height())
 
         # The guard stands for the fit that lands before the page has laid out
-        # at the restored size, so it may grow the window but never squeeze it.
+        # at the restored size: it re-measures the catalogue like any other fit
+        # instead of holding on to whatever frame the install card left.
         win._select_frame_guard = True
         win._fit_window_to_page()
         _settle(app, win)
 
-        assert win.height() >= restored_h
+        assert win.height() == catalogue_h, (catalogue_h, win.height())
+        assert win.height() >= win._content_floor_height()
     finally:
         _close(win)
 
@@ -421,5 +433,26 @@ def test_a_late_compact_install_frame_cannot_freeze_the_catalogue():
         assert win.height() >= floor_h, "the catalogue was frozen at the card's height"
         assert win.minimumHeight() >= floor_h
         assert win._select_size_hold is None or win.height() >= floor_h
+    finally:
+        _close(win)
+
+
+def test_coming_back_from_settings_gives_the_catalogue_its_own_height():
+    """Settings is taller than the catalogue; leaving it must not keep the band."""
+    app, win = _window()
+    try:
+        _settle(app, win)
+        catalogue_h = win.height()
+
+        win._nav_to_page(_PAGE_SETTINGS)
+        _settle(app, win)
+        assert win.height() >= catalogue_h
+
+        win._nav_to_page(_PAGE_SELECT)
+        _settle(app, win)
+
+        assert win._stack.currentIndex() == _PAGE_SELECT
+        assert win.height() == catalogue_h, (catalogue_h, win.height())
+        assert win.height() >= win._content_floor_height()
     finally:
         _close(win)

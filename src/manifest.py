@@ -109,6 +109,58 @@ def _dedupe_duplicate_attributes(xml_text: str) -> str:
     return _START_TAG_RE.sub(repair_tag, xml_text)
 
 
+#: Comments, CDATA, declarations and ordinary start/end/self-closing tags.
+_MARKUP_RE = re.compile(
+    r"<!--.*?-->|<!\[CDATA\[.*?\]\]>|<\?.*?\?>|"
+    r"<(?P<closing>/)?(?P<name>[A-Za-z0-9_:.-]+)"
+    r"(?P<attrs>(?:'[^']*'|\"[^\"]*\"|[^>])*?)(?P<selfclose>/)?>",
+    re.S,
+)
+
+
+def _close_unterminated_elements(xml_text: str) -> str:
+    """Self-close the start tags a manifest wrote without their ``/>``.
+
+    The live ``slidia_manifest.xml`` has shipped a ``<package/>`` row written
+    with a bare ``>``. XML cannot represent that (the closing root tag then
+    does not match) and the whole catalogue used to be discarded, which is
+    what left a stale bundled copy deciding which systems a dropdown offered.
+    Every row after the broken one is complete on its own, so the repair closes
+    the stray start tag where a closing tag proves it was never finished and
+    reparses. A document whose own closing tags all match is returned
+    untouched, and nothing here invents content for a truncated file.
+    """
+    stack: list[tuple[str, int]] = []
+    #: Index of the ``>`` of each start tag that turned out unterminated.
+    fixes: list[int] = []
+    for match in _MARKUP_RE.finditer(xml_text):
+        name = match.group("name")
+        if not name:
+            continue  # comment, CDATA or declaration
+        if match.group("closing"):
+            if not stack:
+                continue
+            if stack[-1][0] == name:
+                stack.pop()
+                continue
+            for index in range(len(stack) - 1, -1, -1):
+                if stack[index][0] != name:
+                    continue
+                fixes.extend(end for _name, end in stack[index + 1:])
+                del stack[index:]
+                break
+            continue
+        if match.group("selfclose"):
+            continue
+        stack.append((name, match.end() - 1))
+    if not fixes:
+        return xml_text
+    repaired = xml_text
+    for position in sorted(set(fixes), reverse=True):
+        repaired = f"{repaired[:position]}/{repaired[position:]}"
+    return repaired
+
+
 def parse_manifest_xml(xml_text: str):
     """Parse ``<package/>`` entries into ``FirmwarePackage`` objects.
 
@@ -120,18 +172,27 @@ def parse_manifest_xml(xml_text: str):
     try:
         root = ET.fromstring(xml_text)
     except ET.ParseError as e:
-        repaired = _dedupe_duplicate_attributes(xml_text)
-        if repaired == xml_text:
-            logger.error("slidia_manifest.xml parse failed: %s", e)
-            return entries
-        try:
-            root = ET.fromstring(repaired)
+        parse_error = e
+        root = None
+        deduped = _dedupe_duplicate_attributes(xml_text)
+        for candidate, note in (
+            (deduped, "duplicate attributes"),
+            (_close_unterminated_elements(deduped), "unterminated elements"),
+        ):
+            if candidate == xml_text:
+                continue
+            try:
+                root = ET.fromstring(candidate)
+            except ET.ParseError:
+                continue
             logger.warning(
-                "slidia_manifest.xml had duplicate attributes; parsed repaired copy: %s",
-                e,
+                "slidia_manifest.xml did not parse (%s); parsed repaired copy (%s)",
+                parse_error,
+                note,
             )
-        except ET.ParseError as repaired_error:
-            logger.error("slidia_manifest.xml parse failed: %s", repaired_error)
+            break
+        if root is None:
+            logger.error("slidia_manifest.xml parse failed: %s", parse_error)
             return entries
     for node in root.iter():
         local_name = node.tag.split("}", 1)[-1].split(":", 1)[-1] if node.tag else ""
@@ -192,6 +253,16 @@ def _packages_from_mapping(mapping: dict, description: str = "") -> list[Firmwar
         install_first_version = str(
             mapping.get("install_first_version") or ""
         ).strip()
+        install_first_when = str(mapping.get("install_first_when") or "").strip()
+        raw_ifo = mapping.get("install_first_once")
+        if isinstance(raw_ifo, bool):
+            install_first_once = raw_ifo
+        else:
+            install_first_once = str(raw_ifo or "").strip().lower() in (
+                "true",
+                "1",
+                "yes",
+            )
         raw_dnkd = mapping.get("do_not_keep_data")
         if raw_dnkd is None:
             raw_dnkd = mapping.get("no_keep_data")
@@ -199,6 +270,13 @@ def _packages_from_mapping(mapping: dict, description: str = "") -> list[Firmwar
             do_not_keep_data = raw_dnkd
         else:
             do_not_keep_data = str(raw_dnkd or "").strip().lower() in ("true", "1", "yes")
+        
+        raw_pio = mapping.get("post_install_once")
+        if isinstance(raw_pio, bool):
+            post_install_once = raw_pio
+        else:
+            post_install_once = str(raw_pio or "").strip().lower() in ("true", "1", "yes")
+
         raw_pmt = mapping.get("PMT_format_needed", mapping.get("pmt_format_needed"))
         if isinstance(raw_pmt, bool):
             pmt_format_needed = raw_pmt
@@ -252,6 +330,7 @@ def _packages_from_mapping(mapping: dict, description: str = "") -> list[Firmwar
                 info_repo=resolve_firmware_repo(info_repo) if info_repo else "",
                 apk_repo=apk_repo,
                 do_not_keep_data=do_not_keep_data,
+                post_install_once=post_install_once,
                 pmt_format_needed=pmt_format_needed,
                 type_a_asset=type_a_asset,
                 type_b_asset=type_b_asset,
@@ -262,6 +341,8 @@ def _packages_from_mapping(mapping: dict, description: str = "") -> list[Firmwar
                     resolve_firmware_repo(install_first) if install_first else ""
                 ),
                 install_first_version=install_first_version,
+                install_first_when=install_first_when,
+                install_first_once=install_first_once,
             )
         )
     return out
@@ -361,7 +442,10 @@ def cache_manifest(entries):
              "brand": getattr(e, "brand", "") or "",
              "install_first": getattr(e, "install_first", "") or "",
              "install_first_version": getattr(e, "install_first_version", "") or "",
+             "install_first_when": getattr(e, "install_first_when", "") or "",
+             "install_first_once": bool(getattr(e, "install_first_once", False)),
              "do_not_keep_data": bool(getattr(e, "do_not_keep_data", False)),
+             "post_install_once": bool(getattr(e, "post_install_once", False)),
              "PMT_format_needed": bool(getattr(e, "pmt_format_needed", False))}
             for e in entries
         ]
@@ -372,13 +456,21 @@ def cache_manifest(entries):
         logger.debug("Manifest cache write failed: %s", e)
 
 
-def load_cached_manifest():
-    """Restore the last parsed manifest from disk (None when stale/missing)."""
+def load_cached_manifest(max_age=MANIFEST_CACHE_TTL_SECONDS):
+    """Restore the last parsed manifest from disk (None when stale/missing).
+
+    ``max_age=None`` ignores the freshness window: the window seeds its
+    catalogue from this copy before the UI is built, where an old catalogue is
+    still better than none (the worker replaces it as soon as it has the live
+    one, and every attribute it carries applies to the first click).
+    """
     try:
         import json
 
         path = _cache_root() / "packages.json"
-        if not path.exists() or (time.time() - path.stat().st_mtime) > MANIFEST_CACHE_TTL_SECONDS:
+        if not path.exists():
+            return None
+        if max_age is not None and (time.time() - path.stat().st_mtime) > max_age:
             return None
         data = json.loads(path.read_text(encoding="utf-8"))
         return [
@@ -402,7 +494,10 @@ def load_cached_manifest():
                 brand=e.get("brand", "") or "",
                 install_first=e.get("install_first", "") or "",
                 install_first_version=e.get("install_first_version", "") or "",
+                install_first_when=e.get("install_first_when", "") or "",
+                install_first_once=bool(e.get("install_first_once", False)),
                 do_not_keep_data=bool(e.get("do_not_keep_data", False)),
+                post_install_once=bool(e.get("post_install_once", False)),
                 pmt_format_needed=bool(
                     e.get("PMT_format_needed", e.get("pmt_format_needed", False))
                 ),

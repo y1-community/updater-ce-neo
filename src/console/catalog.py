@@ -34,7 +34,20 @@ CATALOG_URLS = (
 CACHE_TTL_SECONDS = 24 * 60 * 60
 RELEASE_TTL_SECONDS = 15 * 60
 USER_AGENT = "UpdaterCE-lite"
-BLOCKLIST_URL = "https://innioasis.app/release_blocklist.csv"
+
+#: Website data files, freshest copy first. GitHub serves a committed file the
+#: moment it lands, while the Pages CDN behind innioasis.app trails it; the
+#: maintainer's fork answers last if the organisation repository is gone.
+NOTICE_URLS = (
+    "https://raw.githubusercontent.com/y1-community/innioasis-updater/refs/heads/main/notice.xml",
+    "https://innioasis.app/notice.xml",
+    "https://raw.githubusercontent.com/ryan-specter/innioasis-updater/refs/heads/main/notice.xml",
+)
+BLOCKLIST_URLS = (
+    "https://raw.githubusercontent.com/y1-community/innioasis-updater/refs/heads/main/release_blocklist.csv",
+    "https://innioasis.app/release_blocklist.csv",
+    "https://raw.githubusercontent.com/ryan-specter/innioasis-updater/refs/heads/main/release_blocklist.csv",
+)
 
 
 def cache_dir() -> Path:
@@ -132,6 +145,40 @@ def fetch_manifest(force: bool = False, timeout: float = 20.0) -> bytes:
     )
 
 
+def fetch_notice_xml(timeout: float = 20.0) -> bytes:
+    """The notice feed, repository copy first, with offline copies behind it.
+
+    Every source is tried before giving up; the last download is used next, so
+    a terminal on a slow or absent connection still has notices to read.
+    """
+    cache = cache_dir() / "notice.xml"
+    errors: list[str] = []
+    for url in NOTICE_URLS:
+        try:
+            data = _get(url, timeout=timeout)
+        except (urllib.error.URLError, OSError) as exc:
+            errors.append(f"{url}: {exc}")
+            continue
+        if b"<notice" not in data:
+            errors.append(f"{url}: not a notice document")
+            continue
+        _write_cache(cache, data)
+        return data
+    try:
+        stale = cache.read_bytes()
+    except OSError:
+        stale = None
+    if stale and b"<notice" in stale:
+        return stale
+    shipped = bundled_asset("notice.xml")
+    if shipped and b"<notice" in shipped:
+        return shipped
+    raise RuntimeError(
+        "could not fetch the notices (offline, and no cached copy): "
+        + "; ".join(errors)
+    )
+
+
 def fetch_blocklist(force: bool = False, timeout: float = 20.0) -> str:
     """The release blocklist, from cache, the network, or the shipped copy."""
     cache = cache_dir() / "release_blocklist.csv"
@@ -139,11 +186,16 @@ def fetch_blocklist(force: bool = False, timeout: float = 20.0) -> str:
         cached = _read_cache(cache, CACHE_TTL_SECONDS)
         if cached is not None:
             return cached.decode("utf-8", "replace")
-    try:
-        data = _get(BLOCKLIST_URL, timeout=timeout)
-    except (urllib.error.URLError, OSError):
-        data = None
-    if data and b"software" in data.lower():
+    data = None
+    for url in BLOCKLIST_URLS:
+        try:
+            candidate = _get(url, timeout=timeout)
+        except (urllib.error.URLError, OSError):
+            continue
+        if candidate and b"software" in candidate.lower():
+            data = candidate
+            break
+    if data:
         _write_cache(cache, data)
         return data.decode("utf-8", "replace")
     try:
@@ -200,6 +252,10 @@ class Package:
     install_first: str = ""
     #: The base version the player must be running (``install_first_version``).
     install_first_version: str = ""
+    #: Systems the base is required when coming from (``install_first_when``).
+    install_first_when: str = ""
+    #: Skip the prerequisite when the player already runs the base.
+    install_first_once: bool = False
 
     @property
     def title(self) -> str:
@@ -283,6 +339,9 @@ def parse_manifest(data: bytes) -> list[Package]:
                     derivative=_attr(element, "derivative"),
                     install_first=_attr(element, "install_first"),
                     install_first_version=_attr(element, "install_first_version"),
+                    install_first_when=_attr(element, "install_first_when"),
+                    install_first_once=_attr(element, "install_first_once").lower()
+                    in {"1", "true", "yes"},
                 )
             )
     return packages

@@ -41,6 +41,87 @@ def test_both_backends_say_the_same_wrong_model_sentence():
     assert "×" in tr("err_sp_wrong_model")
 
 
+def test_the_power_off_card_is_not_replaced_by_a_backend_step(app):
+    """Nothing may take the power-off card until the user has answered it."""
+    from src.flash_service import STEP_WAITING
+    from src.ui.main_window import MainWindow
+
+    window = MainWindow()
+    try:
+        page = window._flash_page
+        page.set_model("Y2")
+        page.show_power_off_prompt()
+        window._power_off_prompt = True
+
+        window._on_step_changed(STEP_WAITING)
+
+        assert page._wait_copy == "power_off"
+
+        # Once the user confirms, the same line is allowed to move the card on.
+        window._power_off_prompt = False
+        window._on_step_changed(STEP_WAITING)
+        assert page._wait_copy == "connect"
+    finally:
+        window._force_quit = True
+        window.close()
+        app.processEvents()
+
+
+def test_cancel_returns_to_select_and_ignores_the_abandoned_run(app):
+    """Cancelling leaves for the catalogue; the killed run's tail must not re-arm it."""
+    from src.ui.main_window import MainWindow, _PAGE_SELECT
+
+    window = MainWindow()
+    try:
+        window.show()
+        window._package_path = "/tmp/cancelled_run.zip"
+        window._package_name = "Cancelled Run"
+        window._package_model = "Y2"
+        window._show_device_prep()
+        app.processEvents()
+        assert window._power_off_prompt is True
+
+        window._on_cancel_wait()
+        app.processEvents()
+        assert window._power_off_prompt is False
+        assert window._stack.currentIndex() == _PAGE_SELECT
+
+        # The stopped worker still reports a connect timeout as it unwinds.
+        window._return_to_power_off_stage("sp")
+        window._on_step_changed(0)
+        app.processEvents()
+        assert window._power_off_prompt is False
+        assert window._stack.currentIndex() == _PAGE_SELECT
+    finally:
+        window._force_quit = True
+        window.close()
+        app.processEvents()
+
+
+def test_a_wrong_model_failure_is_never_routed_to_a_reconnect_step(app):
+    """A chip mismatch is final: no reconnect card, no backend switch."""
+    from src.ui.main_window import MainWindow
+
+    window = MainWindow()
+    calls = []
+    try:
+        window._show_install_failure = lambda message: calls.append(message)
+        window._on_flash_disconnected = lambda: calls.append("reconnect")
+        window._offer_backend_failover = lambda code: calls.append(
+            f"failover:{code}"
+        ) or True
+        window._recover_missing_firmware = lambda code: calls.append("cache") or True
+        window._cache_recovery_needed = False
+
+        window._handle_flash_failure("DEVICE_PACKAGE_MISMATCH")
+
+        assert calls == ["DEVICE_PACKAGE_MISMATCH"]
+    finally:
+        window._force_quit = True
+        window.close()
+        app.processEvents()
+
+
 def test_wrong_model_failure_offers_cancel_and_not_retry(app):
     from src.ui.flash_page import FlashPage
 

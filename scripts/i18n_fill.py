@@ -336,6 +336,7 @@ def fill_language(
 ) -> dict:
     """Translate one language, reusing whatever its catalog already has."""
     existing = read_catalog(code)
+    on_disk = dict(existing)
     for key, value in curated_strings(code).items():
         if force or not (existing.get(key) or "").strip():
             existing[key] = value
@@ -356,6 +357,11 @@ def fill_language(
     else:
         wanted = [key for key in source if not (existing.get(key) or "").strip()]
     if not wanted:
+        # A catalog is complete on paper before the hand-checked copy has been
+        # written to it: reviewed wording that only fills a gap still has to
+        # reach the file, or the bundled catalog keeps serving the old text.
+        if existing != on_disk:
+            write_catalog(code, existing, source)
         print(f"{code}: complete ({len(source)} strings)")
         return existing
     print(f"{code}: {len(wanted)} of {len(source)} strings to translate")
