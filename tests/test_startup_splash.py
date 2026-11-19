@@ -45,8 +45,9 @@ def test_launch_card_names_the_product(monkeypatch):
 def test_portable_launch_names_the_firmware(monkeypatch):
     monkeypatch.setattr(config, "is_mediatek_installer", lambda: False)
     assert splash._splash_title(portable_fw=True, firmware_name="Rockbox") == "Rockbox"
-    assert splash._splash_title(portable_fw=True, firmware_name="  ") == "Install Firmware"
-    assert splash._splash_title(portable_fw=True) == "Install Firmware"
+    # Updater CE says software; only the MediaTek Installer says firmware.
+    assert splash._splash_title(portable_fw=True, firmware_name="  ") == "Install Software"
+    assert splash._splash_title(portable_fw=True) == "Install Software"
     assert splash._splash_title(portable_fw=True) != splash._DEFAULT_TITLE
 
 
@@ -85,15 +86,15 @@ def test_portable_subtitle_is_the_package_version(qapp):
         card.deleteLater()
 
 
-def test_portable_status_asks_to_install_the_firmware():
+def test_portable_status_asks_to_install_the_software():
     from src import i18n
 
     previous = i18n.current_language()
     i18n.translator().set_language("en")
     try:
         assert i18n.tr("startup_splash_firmware") == (
-            "Getting ready to install your firmware…"
+            "Getting ready to install your software…"
         )
-        assert i18n.tr("startup_splash_install_firmware") == "Install Firmware"
+        assert i18n.tr("startup_splash_install_firmware") == "Install Software"
     finally:
         i18n.translator().set_language(previous)

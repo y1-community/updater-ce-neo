@@ -1084,5 +1084,11 @@
  "donate_support_appeal_coffee_math": "E dua na kofi e rauta ni ubia na bandwidth ni dua na lavetaki. E maroroya na veivakadodonutaki e tarava ena loma ni kena rawati.",
  "donate_family_appeal_expected": "Erau sa namaka tiko o Ryan kei na nona itokani e dua na gone. Na cau ki na isau ni cici ni cakacaka kei na neitou matavuvale vou e vakavinavinakataki vakalevu.",
  "donate_family_appeal_new_arrival": "E dua na tamata vou e lako mai ena sala ena vale nei Ryan. Na cau kece sara kivei ira na dauveiqaravi kei na neitou matavuvale tubu tiko e kena ibalebale e dua na ka levu.",
- "donate_family_appeal_nursery": "Erau sa vakarautaki rau tiko o Ryan kei na nona itokani me baleta na luvedrau. Kevaka e sa yaga na iyaya ni cakacaka oqo, e dua na cau me baleta na isau ni cici kei na neitou matavuvale tubu tiko ena veivuke vakalevu cake mai na ka o kila."
+ "donate_family_appeal_nursery": "Erau sa vakarautaki rau tiko o Ryan kei na nona itokani me baleta na luvedrau. Kevaka e sa yaga na iyaya ni cakacaka oqo, e dua na cau me baleta na isau ni cici kei na neitou matavuvale tubu tiko ena veivuke vakalevu cake mai na ka o kila.",
+ "settings_track_multiple_toggle": "Remind me about multiple releases on a single model",
+ "settings_track_multiple_desc": "Keeps a record of every release installed on the same model. With more than one on record the app cannot tell your players apart, so an install asks which software is running and whether to keep your settings and media. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_body": "With more than one release tracked for a model, every install for that model asks which software is on the player and whether to keep your settings and media, because the app cannot tell one player from another. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_accept": "Turn on",
+ "settings_add_device_dont_know": "I don't know",
+ "software_unknown": "Unknown Software"
 }

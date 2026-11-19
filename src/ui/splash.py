@@ -106,7 +106,9 @@ def _splash_title(portable_fw: bool, firmware_name: str = "") -> str:
                 return label
         except Exception:
             pass
-        return "Install Firmware"
+        from ..i18n import software_word
+
+        return f"Install {software_word()}"
     try:
         from .. import config
 

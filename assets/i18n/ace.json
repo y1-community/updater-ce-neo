@@ -1084,5 +1084,11 @@
  "donate_support_appeal_coffee_math": "Saboh kupi kira-kira jitop bandwidth saboh download. Nyan teutap perbaikan selanjut jih lam jangkauan.",
  "donate_family_appeal_expected": "Ryan ngon pasangan jih teungoh geupreh aneuk. Sumbangan keu biaya jalan proyek dan keluarga baroe kamoe dihargai secara massal.",
  "donate_family_appeal_new_arrival": "Na ureung baroe teuka lam perjalanan di rumoh Ryan. Tiëp-tiëp sumbangan keu server dan keuluarga geutanjoë njang ka meutamah rajek that meu-arti.",
- "donate_family_appeal_nursery": "Ryan ngon pasangan jih teungoh ji siap-siap keu aneuk awak nyan. Meunyo alat nyoe ka berguna, sumbangan untuk biaya jalan dan keluarga kamoe yang sedang berkembang akan membantu leubeh dari yang droneuh teupeu."
+ "donate_family_appeal_nursery": "Ryan ngon pasangan jih teungoh ji siap-siap keu aneuk awak nyan. Meunyo alat nyoe ka berguna, sumbangan untuk biaya jalan dan keluarga kamoe yang sedang berkembang akan membantu leubeh dari yang droneuh teupeu.",
+ "settings_track_multiple_toggle": "Remind me about multiple releases on a single model",
+ "settings_track_multiple_desc": "Keeps a record of every release installed on the same model. With more than one on record the app cannot tell your players apart, so an install asks which software is running and whether to keep your settings and media. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_body": "With more than one release tracked for a model, every install for that model asks which software is on the player and whether to keep your settings and media, because the app cannot tell one player from another. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_accept": "Turn on",
+ "settings_add_device_dont_know": "I don't know",
+ "software_unknown": "Unknown Software"
 }

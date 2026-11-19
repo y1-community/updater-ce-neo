@@ -1084,5 +1084,11 @@
  "donate_support_appeal_coffee_math": "Yon kafe apeprè kouvri Pleasant yon telechaje. Li kenbe pwochen ranje a nan rive.",
  "donate_family_appeal_expected": "Ryan ak patnè li ap tann yon ti bebe. Donasyon pou depans pou pwojè a ak nouvo fanmi nou an ap apresye anpil.",
  "donate_family_appeal_new_arrival": "Gen yon nouvo arive sou wout la nan kay Ryan a. Chak don anvè serveurs yo ak fanmi k ap grandi nou an vle di yon gwo zafè.",
- "donate_family_appeal_nursery": "Ryan ak patnè li ap prepare pou pitit yo. Si zouti sa a te itil, yon don pou depans kouri yo ak fanmi k ap grandi nou an ta ede plis pase ou konnen."
+ "donate_family_appeal_nursery": "Ryan ak patnè li ap prepare pou pitit yo. Si zouti sa a te itil, yon don pou depans kouri yo ak fanmi k ap grandi nou an ta ede plis pase ou konnen.",
+ "settings_track_multiple_toggle": "Remind me about multiple releases on a single model",
+ "settings_track_multiple_desc": "Keeps a record of every release installed on the same model. With more than one on record the app cannot tell your players apart, so an install asks which software is running and whether to keep your settings and media. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_body": "With more than one release tracked for a model, every install for that model asks which software is on the player and whether to keep your settings and media, because the app cannot tell one player from another. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_accept": "Turn on",
+ "settings_add_device_dont_know": "I don't know",
+ "software_unknown": "Unknown Software"
 }

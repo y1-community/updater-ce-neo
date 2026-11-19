@@ -1084,5 +1084,11 @@
  "donate_support_appeal_coffee_math": "Un cafè al cuvierç cirche la largjece di bande di un scaricament. Al manten la prossime corezion a portât.",
  "donate_family_appeal_expected": "Ryan e il so compagn a stan sperant un beç. Lis donazions pai coscj di funzionament dal progjet e pe nestre gnove famee a son une vore apreciadis.",
  "donate_family_appeal_new_arrival": "Al è un gnûf rivât su la strade a cjase di Ryan. Ogni donazion viers i servidôrs e la nestre famee in cressite e vûl dî une vore.",
- "donate_family_appeal_nursery": "Ryan e il so compagn a si preparin pal lôr frut. Se chest strument al fos stât util, une donazion pai coscj di funzionament e la nestre famee in cressite e judarès plui di ce che tu cognossis."
+ "donate_family_appeal_nursery": "Ryan e il so compagn a si preparin pal lôr frut. Se chest strument al fos stât util, une donazion pai coscj di funzionament e la nestre famee in cressite e judarès plui di ce che tu cognossis.",
+ "settings_track_multiple_toggle": "Remind me about multiple releases on a single model",
+ "settings_track_multiple_desc": "Keeps a record of every release installed on the same model. With more than one on record the app cannot tell your players apart, so an install asks which software is running and whether to keep your settings and media. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_body": "With more than one release tracked for a model, every install for that model asks which software is on the player and whether to keep your settings and media, because the app cannot tell one player from another. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_accept": "Turn on",
+ "settings_add_device_dont_know": "I don't know",
+ "software_unknown": "Unknown Software"
 }

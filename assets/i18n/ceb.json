@@ -1084,5 +1084,11 @@
  "donate_support_appeal_coffee_math": "Ang usa ka kape halos nagsakup sa bandwidth sa usa ka pag-download. Gipadayon niini ang sunod nga pag-ayo nga maabut.",
  "donate_family_appeal_expected": "Si Ryan ug ang iyang kauban nagpaabot sa usa ka bata. Ang mga donasyon alang sa gasto sa pagpadagan sa proyekto ug ang among bag-ong pamilya gipasalamatan pag-ayo.",
  "donate_family_appeal_new_arrival": "Adunay bag-ong naabot sa dalan sa balay ni Ryan. Ang matag donasyon para sa mga server ug sa among nagtubo nga pamilya dako kaayog kahulogan.",
- "donate_family_appeal_nursery": "Si Ryan ug ang iyang kauban nangandam na sa ilang anak. Kung kini nga himan mapuslanon, ang usa ka donasyon alang sa gasto sa pagpadagan ug ang among nagtubo nga pamilya makatabang labaw pa sa imong nahibal-an."
+ "donate_family_appeal_nursery": "Si Ryan ug ang iyang kauban nangandam na sa ilang anak. Kung kini nga himan mapuslanon, ang usa ka donasyon alang sa gasto sa pagpadagan ug ang among nagtubo nga pamilya makatabang labaw pa sa imong nahibal-an.",
+ "settings_track_multiple_toggle": "Remind me about multiple releases on a single model",
+ "settings_track_multiple_desc": "Keeps a record of every release installed on the same model. With more than one on record the app cannot tell your players apart, so an install asks which software is running and whether to keep your settings and media. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_body": "With more than one release tracked for a model, every install for that model asks which software is on the player and whether to keep your settings and media, because the app cannot tell one player from another. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_accept": "Turn on",
+ "settings_add_device_dont_know": "I don't know",
+ "software_unknown": "Unknown Software"
 }

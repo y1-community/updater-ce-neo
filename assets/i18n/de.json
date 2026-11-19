@@ -1084,5 +1084,11 @@
  "donate_support_appeal_servers": "Server, Speicher und Domains werden aus eigener Tasche bezahlt. Ein Kaffee hält die Downloads für den nächsten Besitzer online.",
  "donate_support_appeal_small_change": "Schon ein paar Euro bewirken hier viel: Sie decken die Bandbreite für hunderte Installationen.",
  "donate_support_appeal_testbench": "Spenden finanzieren die Testplayer und Kabel, mit denen jedes Release geprüft wird, bevor es jemand flasht.",
- "settings_run_in_background_desc": "Lassen Sie die App in der Menüleiste oder in der Taskleiste, nachdem das Fenster geschlossen wurde, damit Sie weiterhin Benachrichtigungen über App- und Player-Firmware-Updates erhalten. Aus: Durch Schließen des Fensters wird die App beendet."
+ "settings_run_in_background_desc": "Lassen Sie die App in der Menüleiste oder in der Taskleiste, nachdem das Fenster geschlossen wurde, damit Sie weiterhin Benachrichtigungen über App- und Player-Firmware-Updates erhalten. Aus: Durch Schließen des Fensters wird die App beendet.",
+ "settings_track_multiple_toggle": "An mehrere Releases eines Modells erinnern",
+ "settings_track_multiple_desc": "Merkt sich jede auf demselben Modell installierte Version. Sind mehrere erfasst, kann die App deine Player nicht auseinanderhalten: Jede Installation fragt, welche Software läuft und ob Einstellungen und Medien bleiben sollen. Update-Erinnerungen funktionieren weiterhin.",
+ "settings_track_multiple_warn_body": "Sind für ein Modell mehrere Versionen erfasst, fragt jede Installation, welche Software auf dem Player läuft und ob Einstellungen und Medien bleiben sollen, weil die App zwei Player desselben Modells nicht unterscheiden kann. Update-Erinnerungen funktionieren weiterhin.",
+ "settings_track_multiple_warn_accept": "Einschalten",
+ "settings_add_device_dont_know": "Ich weiß es nicht",
+ "software_unknown": "Unbekannte Software"
 }

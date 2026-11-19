@@ -1084,5 +1084,11 @@
  "donate_support_appeal_coffee_math": "एक कॉफी अदमासाक डाउनलोडाची बँडविड्थ कव्हर करता. फुडलो फिक्स हाता भितर दवरता.",
  "donate_family_appeal_expected": "रायन आनी ताचो जोडीदार भुरग्याची अपेक्षा दवरतात. प्रकल्पाच्या चलपाच्या खर्चा कडेन आनी आमच्या नव्या कुटुंबा कडेन दिल्ल्या देणग्यांची व्हड प्रमाणांत तोखणाय जाता.",
  "donate_family_appeal_new_arrival": "रायनाच्या घरांत वाटेर एक नवो आगमन आसा. सर्वरां कडेन आनी आमच्या वाडत वचपी कुटुंबा कडेन दरेक देणगी म्हणल्यार व्हड अर्थ.",
- "donate_family_appeal_nursery": "रायन आनी ताचो जोडीदार आपल्या भुरग्या खातीर तयार जातात. हें साधन उपेगी पडलां जाल्यार चलपाच्या खर्चा खातीर आनी आमच्या वाडत वचपी कुटुंबाक देणगी दिल्यार तुमकां खबर आशिल्ल्या परस चड मदत जातली."
+ "donate_family_appeal_nursery": "रायन आनी ताचो जोडीदार आपल्या भुरग्या खातीर तयार जातात. हें साधन उपेगी पडलां जाल्यार चलपाच्या खर्चा खातीर आनी आमच्या वाडत वचपी कुटुंबाक देणगी दिल्यार तुमकां खबर आशिल्ल्या परस चड मदत जातली.",
+ "settings_track_multiple_toggle": "Remind me about multiple releases on a single model",
+ "settings_track_multiple_desc": "Keeps a record of every release installed on the same model. With more than one on record the app cannot tell your players apart, so an install asks which software is running and whether to keep your settings and media. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_body": "With more than one release tracked for a model, every install for that model asks which software is on the player and whether to keep your settings and media, because the app cannot tell one player from another. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_accept": "Turn on",
+ "settings_add_device_dont_know": "I don't know",
+ "software_unknown": "Unknown Software"
 }

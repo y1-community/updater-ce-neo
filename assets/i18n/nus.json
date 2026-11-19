@@ -1061,5 +1061,11 @@
  "toast_update_version_fmt": "{app} v{version} ɛ mi̱ te thi̱n.",
  "toast_update_fmt": "Ɛn update kä {app} cɛ te thi̱n.",
  "install_card_title_fmt": "{software} kɛ kui̱ {model}",
- "keep_data_which_firmware_fmt": "Ɛ thɔpwɛɛr ŋukä min lät kä {model} du?"
+ "keep_data_which_firmware_fmt": "Ɛ thɔpwɛɛr ŋukä min lät kä {model} du?",
+ "settings_track_multiple_toggle": "Remind me about multiple releases on a single model",
+ "settings_track_multiple_desc": "Keeps a record of every release installed on the same model. With more than one on record the app cannot tell your players apart, so an install asks which software is running and whether to keep your settings and media. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_body": "With more than one release tracked for a model, every install for that model asks which software is on the player and whether to keep your settings and media, because the app cannot tell one player from another. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_accept": "Turn on",
+ "settings_add_device_dont_know": "I don't know",
+ "software_unknown": "Unknown Software"
 }

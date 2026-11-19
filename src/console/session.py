@@ -440,7 +440,7 @@ def screen_lines(state: BrowseState, version: str = APP_VERSION) -> list[str]:
     ):
         lines.append(segment(focused == "keep", "Keep my data: " + ("on" if state.keep_data else "off")))
     else:
-        lines.append("Keep my data: not supported by this firmware")
+        lines.append("Keep my data: not supported by this software")
     actions = [
         segment(focused == "install", "Install"),
         segment(focused == "file", "Install from a file"),
@@ -850,9 +850,9 @@ def settings_sections(state: BrowseState) -> list[dict]:
         ],
     })
     sections.append({
-        "title": "Firmware Storage & Cache",
+        "title": "Software Storage & Cache",
         "rows": [
-            {"key": "clear_cache", "label": "Clear downloaded firmware and documents", "kind": "action"},
+            {"key": "clear_cache", "label": "Clear downloaded software and documents", "kind": "action"},
         ],
     })
     if sys.platform != "darwin":
@@ -896,7 +896,7 @@ def settings_sections(state: BrowseState) -> list[dict]:
     })
     if state.advanced_settings:
         sections.append({
-            "title": "Keep Data for Any Firmware",
+            "title": "Keep Data for Any Software",
             "rows": [
                 _toggle_row("allow_keep_data", "Always offer to keep my settings and media", state),
             ],
@@ -989,8 +989,8 @@ def settings_lines(state: BrowseState) -> list[str]:
         lines.append("")
     lines += [
         "Enter or a click changes the focused row. Up/Down moves. 0 or q goes back.",
-        "Keep Data is offered only when the firmware supports its preserve-data",
-        "scatter; the advanced override allows it across incompatible firmware.",
+        "Keep Data is offered only when the software supports its preserve-data",
+        "scatter; the advanced override allows it across incompatible software.",
     ]
     return lines
 

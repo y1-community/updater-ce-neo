@@ -1084,5 +1084,11 @@
  "donate_support_appeal_coffee_math": "Satu kopi kira-kira nutupin bandwidth dari unduhan. Itu ngejaga perbaikan selanjutnya tetep bisa dijangkau.",
  "donate_family_appeal_expected": "Ryan ama pasangannya lagi ngantri bayi. Sumbangan untuk biaya jalan proyek dan keluarga baru kami sangat dihargai.",
  "donate_family_appeal_new_arrival": "Ada yang baru dateng di rumah Ryan. Setiap sumbangan ke pelayan dan keluarga kita yang semakin berkembang berarti banget.",
- "donate_family_appeal_nursery": "Ryan sama pasangannya lagi siap-siap buat anak mereka. Kalo alat ini berguna, sumbangan untuk biaya operasional dan keluarga kita yang semakin berkembang akan membantu lebih dari yang lu tau."
+ "donate_family_appeal_nursery": "Ryan sama pasangannya lagi siap-siap buat anak mereka. Kalo alat ini berguna, sumbangan untuk biaya operasional dan keluarga kita yang semakin berkembang akan membantu lebih dari yang lu tau.",
+ "settings_track_multiple_toggle": "Remind me about multiple releases on a single model",
+ "settings_track_multiple_desc": "Keeps a record of every release installed on the same model. With more than one on record the app cannot tell your players apart, so an install asks which software is running and whether to keep your settings and media. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_body": "With more than one release tracked for a model, every install for that model asks which software is on the player and whether to keep your settings and media, because the app cannot tell one player from another. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_accept": "Turn on",
+ "settings_add_device_dont_know": "I don't know",
+ "software_unknown": "Unknown Software"
 }

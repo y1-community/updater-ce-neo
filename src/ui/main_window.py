@@ -117,6 +117,7 @@ from ..i18n import (
     initial_language,
     is_english_language,
     is_supported_language,
+    software_word,
     tr,
     tr_brand,
     translator,
@@ -6911,7 +6912,7 @@ class MainWindow(QMainWindow):
         it with the version it wrote.
         """
         model = self._package_model or ""
-        software = self._package_name or "Firmware"
+        software = self._package_name or software_word()
         rel_info = getattr(self._select_page, "current_installed_release_info", lambda: None)()
         # Online catalogue installs only. A local file has no release tag, so
         # it is not tracked and cannot drive an update prompt.
@@ -6930,7 +6931,13 @@ class MainWindow(QMainWindow):
             settings=self.settings,
             catalogue_latest=latest_tag,
             hardware_type=rel_info.get("hardware_type") or rel_info.get("type_variant") or (self._select_page.current_hardware_type() if hasattr(self, "_select_page") else ""),
+            manual=False,
         )
+        if hasattr(self, "_select_page") and hasattr(self._select_page, "refresh_software_list"):
+            try:
+                self._select_page.refresh_software_list()
+            except Exception:
+                pass
         # The player has just joined the update-reminder list, so its model,
         # firmware and repository can now bring notices to the card.
         try:
@@ -6960,7 +6967,7 @@ class MainWindow(QMainWindow):
             self.sm.force_state(FlashState.S5_COMPLETE)
 
         model = self._package_model or ""
-        software = self._package_name or "Firmware"
+        software = self._package_name or software_word()
         steps = install_power_on_steps(model)
 
         # Read this before recording the new install: ``post_install_once``
@@ -7522,7 +7529,7 @@ class MainWindow(QMainWindow):
                 themes_installed=themes_installed,
             )
         model = self._package_model or ""
-        software = self._package_name or "Firmware"
+        software = self._package_name or software_word()
         # A themes stage that gave up still lands on this screen, so its note
         # must be shown even where the donations appeal would otherwise be the
         # only block — the try-again copy is why the user is reading.
@@ -8214,20 +8221,30 @@ class MainWindow(QMainWindow):
             requirement = getattr(journey, "requirement", None)
             if requirement is None:
                 return ""
-            hardware = (
-                self._select_page.current_hardware_type()
-                if hasattr(self, "_select_page")
-                else ""
-            )
+            hardware = self._install_first_hardware_type()
+            model = self._install_first_model()
             record = get_software_install(
-                self._install_first_model(),
+                model,
                 requirement.software_name,
                 hardware_type=hardware,
                 settings=self.settings,
             ) or {}
-            return str(
+            ver = str(
                 record.get("release_label") or record.get("tag_name") or ""
             ).strip()
+            if ver and ver.casefold() != "unknown":
+                return ver
+            from .. import keep_data
+            known = keep_data.known_running_software(
+                model, self.settings, hardware
+            )
+            if known:
+                k_ver = str(
+                    known.get("release_label") or known.get("tag_name") or known.get("version") or ""
+                ).strip()
+                if k_ver and k_ver.casefold() != "unknown":
+                    return k_ver
+            return ""
         except Exception:
             return ""
 
@@ -8252,7 +8269,12 @@ class MainWindow(QMainWindow):
         journey.running_name = (
             str(choice or "").strip()
             if repo
-            and answer in (install_first.ANSWER_FIRMWARE, install_first.ANSWER_OTHER)
+            and answer
+            in (
+                install_first.ANSWER_FIRMWARE,
+                install_first.ANSWER_FAMILY,
+                install_first.ANSWER_OTHER,
+            )
             else ""
         )
         return answer
@@ -8545,6 +8567,10 @@ class MainWindow(QMainWindow):
         return a == b or a in b or b in a
 
     def _install_first_hardware_type(self) -> str:
+        model = self._install_first_model()
+        from ..config import hardware_types_for_model
+        if not hardware_types_for_model(model):
+            return ""
         return (
             self._select_page.current_hardware_type()
             if hasattr(self, "_select_page")
@@ -8586,6 +8612,13 @@ class MainWindow(QMainWindow):
                 if self._same_software_name(name, label):
                     selected = label
                     break
+        # Several firmwares on record mean the app cannot know which one is
+        # running: the question has to be asked, and the last install is only
+        # the preselected row.
+        ambiguous = keep_data.tracked_is_ambiguous(
+            model, self.settings, self._install_first_hardware_type()
+        )
+        if name and not ambiguous:
             # The app already knows what this player runs — the last completed
             # install for this model, or an answer given on an earlier run — so
             # the menu would put a question on screen whose answer is already on
@@ -8604,9 +8637,12 @@ class MainWindow(QMainWindow):
                     tracked = install_first.answer_for_choice(
                         name, repo, journey.target, requirement
                     )
-            if tracked and tracked != install_first.ANSWER_PREREQUISITE:
+            if tracked:
                 journey.answer = tracked
-                if tracked == install_first.ANSWER_FIRMWARE:
+                if tracked in (
+                    install_first.ANSWER_FIRMWARE,
+                    install_first.ANSWER_FAMILY,
+                ):
                     journey.running_name = name
                 step = journey.choose(tracked, self._install_first_record_version())
                 self._install_first_stage = ""
@@ -8672,7 +8708,10 @@ class MainWindow(QMainWindow):
             keep_data.note_running_software(
                 model, journey.target_name, self.settings, hardware
             )
-        elif answer == install_first.ANSWER_FIRMWARE and journey.running_name:
+        elif answer in (
+            install_first.ANSWER_FIRMWARE,
+            install_first.ANSWER_FAMILY,
+        ) and journey.running_name:
             keep_data.note_running_software(
                 model, journey.running_name, self.settings, hardware
             )
@@ -9116,8 +9155,35 @@ class MainWindow(QMainWindow):
                 rows = None
             if journey.keep_data_allowed(rows):
                 return True
+            if not self._install_first_forces_no_keep_data():
+                # The answer already settled it: the player runs this
+                # firmware's family, so its data partition carries over and
+                # the Keep Data question must not be asked a second time.
+                return True
             if self._install_first_already_on_target():
                 return True
+        try:
+            from .. import keep_data as _tracked
+
+            tracked_pkg = getattr(self, "_keep_data_pkg", None)
+            if tracked_pkg is None:
+                resolver = getattr(self, "_current_firmware_package", None)
+                tracked_pkg = resolver() if callable(resolver) else None
+            tracked_model = self._package_model or getattr(tracked_pkg, "model", "") or ""
+            tracked_hw = (
+                self._select_page.current_hardware_type()
+                if hasattr(self, "_select_page")
+                else ""
+            )
+            if _tracked.tracked_is_ambiguous(
+                tracked_model, self.settings, tracked_hw
+            ):
+                # Two or more firmwares are on record, so "the tracked firmware
+                # is the one being installed" proves nothing about which one is
+                # running. The run asks instead of pre-ticking the choice.
+                return False
+        except Exception:
+            logger.debug("Could not read the tracked firmwares for Keep Data", exc_info=True)
         try:
             from .. import keep_data
 
@@ -9175,9 +9241,13 @@ class MainWindow(QMainWindow):
                 rows = catalog.packages_for_model(self._install_first_model())
             except Exception:
                 rows = None
-            # The answer already settled it: nothing is left to confirm.
-            if journey.keep_data_allowed(rows):
-                return False
+            if not journey.keep_data_allowed(rows):
+                self._keep_data = False
+                self._keep_data_choice_locked = True
+                page = getattr(self, "_flash_page", None)
+                if page is not None and hasattr(page, "lock_keep_data"):
+                    page.lock_keep_data(False)
+            return False
         if self._install_first_already_on_target() or self._install_first_forces_no_keep_data():
             return False
         if self._keep_data_default_for_install() and not getattr(

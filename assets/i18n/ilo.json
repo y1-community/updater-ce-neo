@@ -1084,5 +1084,11 @@
  "donate_support_appeal_coffee_math": "Ti maysa a kape ket agarup a mangsaklaw iti bandwidth ti maysa a download. Pagtalinaedenna a madanon ti sumaganad a panangtarimaan.",
  "donate_family_appeal_expected": "Namnamaen da Ryan ken ti kaduana ti maladaga. Dagiti donasion nga agturong iti gastos iti panagtaray ti proyekto ken ti baro a pamiliami ket dakkel ti maapresiar.",
  "donate_family_appeal_new_arrival": "Adda baro a sumangpet iti dalan iti balay ni Ryan. Tunggal donasion nga agturong kadagiti server ken dumakdakkel a pamiliatayo ket dakkel ti kaipapanan.",
- "donate_family_appeal_nursery": "Agsagsagana da Ryan ken ti kaduana para iti anakda. No nakatulong daytoy nga alikamen, ad-adda a makatulong ti donasion para kadagiti gastos iti panagtaray ken ti dumakdakkel a pamiliatayo ngem iti ammoyo."
+ "donate_family_appeal_nursery": "Agsagsagana da Ryan ken ti kaduana para iti anakda. No nakatulong daytoy nga alikamen, ad-adda a makatulong ti donasion para kadagiti gastos iti panagtaray ken ti dumakdakkel a pamiliatayo ngem iti ammoyo.",
+ "settings_track_multiple_toggle": "Remind me about multiple releases on a single model",
+ "settings_track_multiple_desc": "Keeps a record of every release installed on the same model. With more than one on record the app cannot tell your players apart, so an install asks which software is running and whether to keep your settings and media. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_body": "With more than one release tracked for a model, every install for that model asks which software is on the player and whether to keep your settings and media, because the app cannot tell one player from another. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_accept": "Turn on",
+ "settings_add_device_dont_know": "I don't know",
+ "software_unknown": "Unknown Software"
 }

@@ -1061,5 +1061,11 @@
  "toast_update_version_fmt": "{app} v{version} est disponible.",
  "toast_update_fmt": "Une mise à jour vers {app} est disponible.",
  "install_card_title_fmt": "{software} pour {model}",
- "keep_data_which_firmware_fmt": "Quel logiciel fonctionne actuellement sur votre {model} ?"
+ "keep_data_which_firmware_fmt": "Quel logiciel fonctionne actuellement sur votre {model} ?",
+ "settings_track_multiple_toggle": "Me rappeler les versions multiples d'un même modèle",
+ "settings_track_multiple_desc": "Garde une trace de chaque version installée sur un même modèle. Avec plus d'une version enregistrée, l'app ne peut pas distinguer vos lecteurs : chaque installation demande quel logiciel est en cours et s'il faut conserver vos réglages et médias. Les rappels de mise à jour continuent de fonctionner.",
+ "settings_track_multiple_warn_body": "Avec plusieurs versions suivies pour un modèle, chaque installation demande quel logiciel se trouve sur le lecteur et s'il faut conserver vos réglages et médias, car l'app ne peut pas distinguer deux lecteurs du même modèle. Les rappels de mise à jour continuent de fonctionner.",
+ "settings_track_multiple_warn_accept": "Activer",
+ "settings_add_device_dont_know": "Je ne sais pas",
+ "software_unknown": "Logiciel inconnu"
 }

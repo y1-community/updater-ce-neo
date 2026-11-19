@@ -1084,5 +1084,11 @@
  "donate_support_appeal_coffee_math": "Մեկ սուրճը մոտավորապես ծածկում է ներբեռնման թողունակությունը: Այն հասանելի է պահում հաջորդ ուղղումը:",
  "donate_family_appeal_expected": "Ռայանն ու նրա զուգընկերը երեխայի են սպասում։ Ծրագրի ընթացիկ ծախսերի և մեր նոր ընտանիքի նվիրատվությունները մեծապես գնահատվում են:",
  "donate_family_appeal_new_arrival": "Ճանապարհին նոր ժամանում կա Ռայանի տուն: Յուրաքանչյուր նվիրատվություն սերվերներին և մեր աճող ընտանիքին մեծ գործարք է նշանակում:",
- "donate_family_appeal_nursery": "Ռայանն ու իր գործընկերը պատրաստվում են իրենց երեխային։ Եթե ​​այս գործիքը օգտակար է եղել, ընթացիկ ծախսերի և մեր աճող ընտանիքի նվիրատվությունը կօգնի ավելին, քան դուք գիտեք:"
+ "donate_family_appeal_nursery": "Ռայանն ու իր գործընկերը պատրաստվում են իրենց երեխային։ Եթե ​​այս գործիքը օգտակար է եղել, ընթացիկ ծախսերի և մեր աճող ընտանիքի նվիրատվությունը կօգնի ավելին, քան դուք գիտեք:",
+ "settings_track_multiple_toggle": "Remind me about multiple releases on a single model",
+ "settings_track_multiple_desc": "Keeps a record of every release installed on the same model. With more than one on record the app cannot tell your players apart, so an install asks which software is running and whether to keep your settings and media. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_body": "With more than one release tracked for a model, every install for that model asks which software is on the player and whether to keep your settings and media, because the app cannot tell one player from another. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_accept": "Turn on",
+ "settings_add_device_dont_know": "I don't know",
+ "software_unknown": "Unknown Software"
 }

@@ -1061,5 +1061,11 @@
  "toast_update_version_fmt": "{app} v{version} está disponible.",
  "toast_update_fmt": "Hay una actualización disponible para {app}.",
  "install_card_title_fmt": "{software} para {model}",
- "keep_data_which_firmware_fmt": "¿Qué software se está ejecutando actualmente en tu {model}?"
+ "keep_data_which_firmware_fmt": "¿Qué software se está ejecutando actualmente en tu {model}?",
+ "settings_track_multiple_toggle": "Recordarme varias versiones en un mismo modelo",
+ "settings_track_multiple_desc": "Guarda un registro de cada versión instalada en un mismo modelo. Con más de una registrada, la app no puede distinguir tus reproductores, así que cada instalación pregunta qué software está en marcha y si conservar tus ajustes y medios. Los recordatorios de actualización siguen funcionando.",
+ "settings_track_multiple_warn_body": "Con varias versiones registradas para un modelo, cada instalación pregunta qué software tiene el reproductor y si conservar tus ajustes y medios, porque la app no puede distinguir dos reproductores del mismo modelo. Los recordatorios de actualización siguen funcionando.",
+ "settings_track_multiple_warn_accept": "Activar",
+ "settings_add_device_dont_know": "No lo sé",
+ "software_unknown": "Software desconocido"
 }

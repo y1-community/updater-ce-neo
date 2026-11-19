@@ -1084,5 +1084,11 @@
  "donate_support_appeal_coffee_math": "Un caffè copre all'incirca la larghezza di banda di un download. Mantiene la correzione successiva a portata di mano.",
  "donate_family_appeal_expected": "Ryan e la sua compagna aspettano un bambino. Le donazioni per i costi di gestione del progetto e per la nostra nuova famiglia sono molto apprezzate.",
  "donate_family_appeal_new_arrival": "C'è un nuovo arrivo in arrivo a casa di Ryan. Ogni donazione ai server e alla nostra famiglia in crescita significa molto.",
- "donate_family_appeal_nursery": "Ryan e la sua compagna si stanno preparando per il loro bambino. Se questo strumento è stato utile, una donazione per le spese di gestione e per la nostra famiglia in crescita aiuterebbe più di quanto pensi."
+ "donate_family_appeal_nursery": "Ryan e la sua compagna si stanno preparando per il loro bambino. Se questo strumento è stato utile, una donazione per le spese di gestione e per la nostra famiglia in crescita aiuterebbe più di quanto pensi.",
+ "settings_track_multiple_toggle": "Remind me about multiple releases on a single model",
+ "settings_track_multiple_desc": "Keeps a record of every release installed on the same model. With more than one on record the app cannot tell your players apart, so an install asks which software is running and whether to keep your settings and media. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_body": "With more than one release tracked for a model, every install for that model asks which software is on the player and whether to keep your settings and media, because the app cannot tell one player from another. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_accept": "Turn on",
+ "settings_add_device_dont_know": "I don't know",
+ "software_unknown": "Unknown Software"
 }

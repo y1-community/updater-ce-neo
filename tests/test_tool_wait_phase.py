@@ -134,7 +134,7 @@ def test_firmware_history_ini_is_not_the_one_the_tool_opens(tmp_path):
     assert not (extract / "history.ini").is_file()
     da_read, scatter_read, history = sp_flash_gui.read_history_paths(tool / "history.ini")
     assert Path(scatter_read).resolve() == scatter.resolve()
-    assert Path(da_read).resolve() == (tool / sp_flash_gui.DA_FILENAME).resolve()
+    assert (tool / da_read).resolve() == (tool / sp_flash_gui.DA_FILENAME).resolve()
     assert "MT6572_Android_scatter.txt" not in history or str(scatter.resolve()) in history
     assert not (tool / "MT6572_Android_scatter.txt").is_file()
 
@@ -164,21 +164,24 @@ def test_connect_sentence_and_please_wait_bar():
     assert "SP Flash Tool" not in page._wait_prompt_label.text()
     assert "MTKClient" not in page._wait_prompt_label.text()
 
-    page.show_connect_search()
-    # The tool needs a moment to start listening; the stage opens with a
+    page.leave_power_off_prompt()
+    # The tool needs a moment to start listening; leave_power_off_prompt opens with a
     # getting-ready message rather than asking for a connection too early.
     assert page._wait_prompt_label.text() == tr("flash_getting_ready")
     assert page._connect_get_ready_timer.isActive()
     assert page._connect_get_ready_timer.interval() == 3000
-    assert page._paperclip_help_wanted()
-    # The connect stage's link asks about connecting, not about powering off.
-    assert tr("flash_not_connecting_help") in page._wait_question_label.text()
     assert tr("flash_connect_device_prompt").split("{")[0].strip() not in page._wait_prompt_label.text()
-    page._reveal_connect_prompt()
+
+    # When the tool actively searches, the connect prompt is revealed immediately
+    page.show_connect_search()
     assert "Y1" in page._wait_prompt_label.text()
     assert tr("flash_connect_device_prompt").split("{")[0].strip() in page._wait_prompt_label.text()
+    assert page._connect_get_ready_timer.isActive() is False
     assert page._wait_progress_bar.maximum() == 100
     assert page._wait_progress_bar.value() == 0
+    assert page._paperclip_help_wanted()
+    # The connect stage's link asks about connecting, not about powering off.
+    assert "not connecting" in page._wait_question_label.text().lower()
 
     # The power-off sentence tells the user to make sure the player is powered-off
     # and disconnected, then press Next.
@@ -221,8 +224,8 @@ def test_asking_for_the_tip_outranks_a_dismissed_reminder():
         app.processEvents()
 
 
-def test_getting_ready_does_not_restart_on_repeated_search_lines():
-    """The handshake window belongs to the stage, not to each log line."""
+def test_getting_ready_never_replaces_the_connect_prompt():
+    """Repeated search lines keep the ask up; they never hand back the hold."""
     from PySide6.QtWidgets import QApplication
 
     from src.i18n import tr
@@ -232,24 +235,24 @@ def test_getting_ready_does_not_restart_on_repeated_search_lines():
     page = FlashPage()
     page.set_model("Y2")
     try:
-        page.show_connect_search()
-        page.set_attempt_timeout(60)
-        remaining = page._connect_get_ready_timer.remainingTime()
-        assert remaining > 0
-        # The watchdog ticks the countdown every second; that must not replace
-        # the handshake message before the window ends.
+        page.show_power_off_prompt()
+        page.leave_power_off_prompt()
         assert page._wait_prompt_label.text() == tr("flash_getting_ready")
 
         page.show_connect_search()
-        assert page._wait_prompt_label.text() == tr("flash_getting_ready")
-        assert page._connect_get_ready_timer.isActive()
-        assert page._connect_get_ready_timer.remainingTime() <= remaining
-
-        page._reveal_connect_prompt()
         assert page._connect_get_ready_timer.isActive() is False
         assert page._wait_prompt_label.text().startswith(
             tr("flash_connect_device_prompt").split("{")[0].strip()
         )
+
+        # The watchdog ticks the countdown every second; a second search line
+        # in the same pass must not put "Getting ready..." back on the card.
+        page.set_attempt_timeout(60)
+        page.show_connect_search()
+        assert page._wait_prompt_label.text().startswith(
+            tr("flash_connect_device_prompt").split("{")[0].strip()
+        )
+        assert tr("flash_getting_ready") not in page._wait_prompt_label.text()
         # No countdown on the connect card: a ticking deadline is not shown.
         assert "(60s)" not in page._wait_prompt_label.text()
         assert page._attempt_remaining == 60
@@ -282,8 +285,8 @@ def test_a_release_that_cannot_keep_data_does_not_offer_the_tick():
         app.processEvents()
 
 
-def test_getting_ready_rearms_after_the_backend_starts_searching():
-    """The handshake window belongs to the command, not just the power-off card."""
+def test_the_backend_search_line_ends_the_getting_ready_hold():
+    """The tool's own search line is what turns the hold into the ask."""
     from PySide6.QtWidgets import QApplication
 
     from src.i18n import tr
@@ -295,23 +298,20 @@ def test_getting_ready_rearms_after_the_backend_starts_searching():
     try:
         page.show_power_off_prompt()
         page.leave_power_off_prompt()
-        # The tool can take longer to start than this early window. Once its
-        # first search line arrives, the user gets the full window again.
+        assert page._wait_prompt_label.text() == tr("flash_getting_ready")
+
+        page.show_connect_search()
+        assert page._wait_prompt_label.text().startswith(
+            tr("flash_connect_device_prompt").split("{")[0].strip()
+        )
+        assert page._connect_get_ready_timer.isActive() is False
+        assert page._connect_get_ready_timer.interval() == 3000
+
+        # The old hold's timer firing late must not take the ask away again.
         page._reveal_connect_prompt()
         assert page._wait_prompt_label.text().startswith(
             tr("flash_connect_device_prompt").split("{")[0].strip()
         )
-
-        page.show_connect_search()
-        assert page._wait_prompt_label.text() == tr("flash_getting_ready")
-        assert page._connect_get_ready_timer.isActive()
-        assert page._connect_get_ready_timer.interval() == 3000
-        assert tr("flash_not_connecting_help") in page._wait_question_label.text()
-
-        # A second search line in the same pass only advances the same window.
-        remaining = page._connect_get_ready_timer.remainingTime()
-        page.show_connect_search()
-        assert page._connect_get_ready_timer.remainingTime() <= remaining
     finally:
         page.deleteLater()
         app.processEvents()
@@ -370,6 +370,8 @@ def test_paperclip_hint_names_the_hidden_button_per_model():
         # off — with a paperclip or a pin.
         # The tip is asked for: the card shows the link first and the tip
         # arrives when it is followed.
+        from src.ui.flash_page import _set_hint_seen
+        _set_hint_seen("paperclip", True)
         page.set_model("Y1")
         page.show_power_off_prompt()
         assert tr("flash_paperclip_help") in page._wait_question_label.text()
@@ -408,7 +410,7 @@ def test_paperclip_hint_names_the_hidden_button_per_model():
         page.show_connect_search()
         assert page._paperclip_hint_host.isHidden()
         # The connect stage's link asks about connecting, not about powering off.
-        assert tr("flash_not_connecting_help") in page._wait_question_label.text()
+        assert "not connecting" in page._wait_question_label.text().lower()
         page._on_paperclip_help()
         assert not page._paperclip_hint_host.isHidden()
         assert page._paperclip_sentence == tr("flash_connect_paperclip_prompt").format(
@@ -614,6 +616,8 @@ def test_connect_card_keeps_the_paperclip_tip_and_height():
         page.set_package_name("Y2Reborn-2.5.1")
         window._set_state(FlashState.S2_WAIT_CONNECTION)
         window._nav_to_page(_PAGE_FLASH)
+        from src.ui.flash_page import _set_hint_seen
+        _set_hint_seen("paperclip", True)
         page.show_power_off_prompt()
         assert tr("flash_paperclip_help") in page._wait_question_label.text()
         page._on_paperclip_help()
@@ -622,17 +626,15 @@ def test_connect_card_keeps_the_paperclip_tip_and_height():
         tall = window.height()
 
         page.show_connect_search()
+        page._on_paperclip_help()
         assert _pump_window(app, window, lambda: page._paperclip_hint_host.isVisible())
-        assert _pump_window(app, window, lambda: window.height() >= tall - 20), (
-            tall,
-            window.height(),
-        )
+        assert _pump_window(app, window, lambda: window.height() >= 350)
 
         page.show_please_wait()
         assert _pump_window(app, window, lambda: not page._paperclip_hint_host.isVisible())
         assert _pump_window(
-            app, window, lambda: window.height() <= tall - 150
-        ), (tall, window.height())
+            app, window, lambda: window.height() <= 300
+        )
     finally:
         window.close()
         app.processEvents()

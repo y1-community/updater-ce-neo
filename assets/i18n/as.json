@@ -1084,5 +1084,11 @@
  "donate_support_appeal_coffee_math": "এটা কফিয়ে মোটামুটিভাৱে এটা ডাউনলোডৰ বেণ্ডউইডথ সামৰি লয়। ই পৰৱৰ্তী সমাধানটোক হাতৰ মুঠিত ৰাখে।",
  "donate_family_appeal_expected": "ৰিয়ান আৰু তেওঁৰ সংগীয়ে সন্তানৰ আশা কৰিছে। প্ৰকল্পটোৰ চলোৱা খৰচ আৰু আমাৰ নতুন পৰিয়ালৰ প্ৰতি অনুদানৰ ব্যাপক শলাগ লোৱা হয়।",
  "donate_family_appeal_new_arrival": "বাটত ৰিয়ানৰ ঘৰত নতুনকৈ আহি আছে। চাৰ্ভাৰ আৰু আমাৰ ক্ৰমবৰ্ধমান পৰিয়ালৰ প্ৰতি প্ৰতিটো অনুদানৰ অৰ্থ বহুত।",
- "donate_family_appeal_nursery": "ৰিয়ান আৰু তেওঁৰ সংগীয়ে নিজৰ সন্তানৰ বাবে সাজু হৈছে। যদি এই সঁজুলিটো উপযোগী হৈছে, তেন্তে চলোৱা খৰচ আৰু আমাৰ ক্ৰমবৰ্ধমান পৰিয়ালটোৰ বাবে এটা অনুদান আপুনি জনাতকৈও অধিক সহায় কৰিব।"
+ "donate_family_appeal_nursery": "ৰিয়ান আৰু তেওঁৰ সংগীয়ে নিজৰ সন্তানৰ বাবে সাজু হৈছে। যদি এই সঁজুলিটো উপযোগী হৈছে, তেন্তে চলোৱা খৰচ আৰু আমাৰ ক্ৰমবৰ্ধমান পৰিয়ালটোৰ বাবে এটা অনুদান আপুনি জনাতকৈও অধিক সহায় কৰিব।",
+ "settings_track_multiple_toggle": "Remind me about multiple releases on a single model",
+ "settings_track_multiple_desc": "Keeps a record of every release installed on the same model. With more than one on record the app cannot tell your players apart, so an install asks which software is running and whether to keep your settings and media. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_body": "With more than one release tracked for a model, every install for that model asks which software is on the player and whether to keep your settings and media, because the app cannot tell one player from another. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_accept": "Turn on",
+ "settings_add_device_dont_know": "I don't know",
+ "software_unknown": "Unknown Software"
 }

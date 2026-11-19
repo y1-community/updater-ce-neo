@@ -1061,5 +1061,11 @@
  "toast_update_version_fmt": "{app} v{version} 可用。",
  "toast_update_fmt": "{app} 已更新。",
  "install_card_title_fmt": "{software} 为 {model}",
- "keep_data_which_firmware_fmt": "您的 {model} 当前正在运行哪个软件？"
+ "keep_data_which_firmware_fmt": "您的 {model} 当前正在运行哪个软件？",
+ "settings_track_multiple_toggle": "提醒我同一机型上的多个版本",
+ "settings_track_multiple_desc": "记录同一机型安装过的每个版本。记录多于一个时，应用无法区分不同播放器，安装时会额外询问当前运行哪个软件，以及是否保留设置和媒体。播放器更新提醒照常工作。",
+ "settings_track_multiple_warn_body": "同一机型记录了多个版本时，每次安装都会询问播放器上运行的是哪个软件，以及是否保留设置和媒体，因为应用无法区分同一机型的两个播放器。播放器更新提醒照常工作。",
+ "settings_track_multiple_warn_accept": "开启",
+ "settings_add_device_dont_know": "我不知道",
+ "software_unknown": "未知软件"
 }

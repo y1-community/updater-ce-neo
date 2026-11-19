@@ -61,6 +61,10 @@ ANSWER_OTHER = "other"
 #: this one but the catalogue does not require it, so the window recommends it
 #: and the user decides.
 ANSWER_FIRMWARE = "firmware"
+#: The user says the player runs a firmware built from the same original
+#: software as the required base. The base is already underneath it, so the
+#: prerequisite is satisfied without asking for a version.
+ANSWER_FAMILY = "family"
 
 #: The next step the window must take.
 PROCEED = "proceed"
@@ -398,6 +402,10 @@ class Requirement:
     #: ``install_first_when``: the systems this overlay needs its base when
     #: coming *from*. Empty means "from anything".
     when_repos: tuple = ()
+    #: Repositories built from the same original software as the required base
+    #: (the ``derivative`` graph). They already contain that base, so running
+    #: one satisfies the prerequisite and the menu offers it as an answer.
+    family_repos: tuple = ()
     #: ``install_first_once``: the base only has to be installed the first
     #: time this firmware goes on the player. It never removes the question.
     once: bool = False
@@ -520,6 +528,10 @@ def running_repo_for(model: str, settings=None, hardware_type: str = "") -> str:
     from . import keep_data
 
     try:
+        # Several tracked firmwares mean the newest record cannot say what is
+        # running: the question must be asked.
+        if keep_data.tracked_is_ambiguous(model, settings, hardware_type):
+            return ""
         known = keep_data.known_running_software(model, settings, hardware_type)
         name = str((known or {}).get("software_name") or "").strip().lower()
         if not name:
@@ -603,9 +615,59 @@ def requirement_for(
     source_model = str(getattr(prerequisite, "model", "") or "").strip().upper() if prerequisite else ""
     if prerequisite is None:
         prerequisite, source_model = _shared_source_package(repo, model, packages)
+    # A firmware built from the required base already has that base underneath
+    # it. ``derivative`` says exactly that, so those rows are answers that
+    # satisfy the prerequisite without a version check of their own.
+    family_rows = list(_packages_for(model, packages))
+    for row in _catalogue_packages():
+        if row not in family_rows:
+            family_rows.append(row)
+    base_row = prerequisite
+    if base_row is None:
+        base_row = next(
+            (
+                row
+                for row in family_rows
+                if repo_key(getattr(row, "repo", "")) == repo
+            ),
+            None,
+        )
+    family_repos: tuple = ()
+    if base_row is not None:
+        family_root = _family_root(base_row, family_rows)
+        target_repo = repo_key(getattr(pkg, "repo", ""))
+        if family_root:
+            family_repos = tuple(
+                sorted(
+                    {
+                        normalize_repo(getattr(row, "repo", ""))
+                        for row in family_rows
+                        if normalize_repo(getattr(row, "repo", ""))
+                        and repo_key(getattr(row, "repo", "")) not in (repo, target_repo)
+                        and _family_root(row, family_rows) == family_root
+                    }
+                )
+            )
+    if when_repos and family_rows:
+        expanded_when = list(when_repos)
+        for w_repo in when_repos:
+            w_row = next(
+                (r for r in family_rows if repo_key(getattr(r, "repo", "")) == w_repo),
+                None,
+            )
+            if w_row is not None:
+                w_root = _family_root(w_row, family_rows)
+                if w_root:
+                    for cand in family_rows:
+                        cand_repo = repo_key(getattr(cand, "repo", ""))
+                        if cand_repo and cand_repo not in expanded_when:
+                            if _family_root(cand, family_rows) == w_root:
+                                expanded_when.append(cand_repo)
+        when_repos = tuple(expanded_when)
     return Requirement(
         repo=repo,
         when_repos=when_repos,
+        family_repos=family_repos,
         once=once,
         once_satisfied=once_satisfied,
         version_text=version_text,
@@ -748,6 +810,11 @@ def answer_for_choice(label, repo, target, requirement: Optional[Requirement]) -
             return ANSWER_PREREQUISITE
         if not normalized and text == requirement.label():
             return ANSWER_PREREQUISITE
+        # A firmware whose derivative graph goes up to the same original
+        # software already contains this base, so it is not a system the base
+        # has to be installed over.
+        if key and key in requirement.family_repos:
+            return ANSWER_FAMILY
     target_name = str(getattr(target, "name", "") or "").strip()
     if target_name and text.casefold() == target_name.casefold():
         return ANSWER_TARGET
@@ -804,6 +871,16 @@ def software_choices(
     if requirement is not None:
         add(requirement.label(), requirement.repo)
     add(str(getattr(pkg, "name", "") or ""), getattr(pkg, "repo", ""))
+    if requirement is not None and requirement.family_repos:
+        # Firmwares built from the required base are accepted even when
+        # ``install_first_when`` does not name them: Better-Y installed first
+        # satisfies an overlay whose base is the Original Software both were
+        # built from, because the base is already inside it.
+        by_repo = {repo_key(getattr(row, "repo", "")): row for row in rows}
+        for family_repo in requirement.family_repos:
+            row = by_repo.get(family_repo)
+            if row is not None:
+                add(str(getattr(row, "name", "") or ""), getattr(row, "repo", ""))
     if requirement is not None and not blocked:
         # No ``install_first_when``: the catalogue named no system this overlay
         # may be installed over, so the base and the target are the only
@@ -886,11 +963,16 @@ class InstallFirstJourney:
             # still recorded — the player may have moved to another system
             # since — but it can only offer the base, never require it.
             self.version_ok = None
-            if answer in (ANSWER_TARGET, ANSWER_PREREQUISITE):
+            if answer in (ANSWER_TARGET, ANSWER_PREREQUISITE, ANSWER_FAMILY):
                 self.version_ok = True
                 return PROCEED
             return RECOMMEND_PREREQUISITE
         if answer == ANSWER_TARGET:
+            self.version_ok = True
+            return PROCEED
+        if answer == ANSWER_FAMILY:
+            # Built from the required base, so the base is already there. Its
+            # own version is not the base's version, so nothing is compared.
             self.version_ok = True
             return PROCEED
         if answer == ANSWER_PREREQUISITE:
@@ -928,7 +1010,7 @@ class InstallFirstJourney:
 
     def needs_prerequisite(self) -> bool:
         """True when the base is required, not merely recommended."""
-        if self.answer in ("", ANSWER_TARGET, ANSWER_FIRMWARE):
+        if self.answer in ("", ANSWER_TARGET, ANSWER_FIRMWARE, ANSWER_FAMILY):
             return False
         return not self.version_ok
 
@@ -944,7 +1026,7 @@ class InstallFirstJourney:
         """
         if self.answer == ANSWER_TARGET:
             return True
-        if self.answer != ANSWER_FIRMWARE or not self.running_name:
+        if self.answer not in (ANSWER_FIRMWARE, ANSWER_FAMILY) or not self.running_name:
             return False
         model = str(getattr(self.target, "model", "") or "")
         if self.requirement is not None and self.requirement.model:

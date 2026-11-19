@@ -648,6 +648,14 @@ class SettingsPage(QWidget):
         self._onboarding_actions.setVisible(False)
         rem_layout.addWidget(self._onboarding_actions)
 
+        # Multi-firmware tracking is an optional choice in Add your players:
+        # allow tracking more than one software per model+type permutation.
+        self._cb_track_multiple = self._add_switch(
+            rem_layout, tr("settings_track_multiple_toggle")
+        )
+        self._cb_track_multiple.setToolTip(tr("settings_track_multiple_desc"))
+        self._cb_track_multiple.toggled.connect(self._on_track_multiple_toggled)
+
         self._reminders_card.set_layout(rem_layout)
         self._update_reminders_copy()
         self._reminders_card.setVisible(
@@ -1302,7 +1310,9 @@ class SettingsPage(QWidget):
     def _on_advanced_settings_toggled(self, checked: bool) -> None:
         was_revealed = bool(getattr(self, "_advanced_revealed", False))
         self._advanced_revealed = bool(checked)
-        device_tracking.set_advanced_settings_enabled(bool(checked))
+        settings = getattr(self, "settings", None)
+        (settings or QSettings("innioasis", "updater")).setValue("advanced_settings", bool(checked))
+        device_tracking.set_advanced_settings_enabled(bool(checked), settings=settings)
         self._sync_advanced_visibility()
         self._sync_linux_prep_copy()
         if not paths.IS_MAC:
@@ -1310,6 +1320,41 @@ class SettingsPage(QWidget):
         if was_revealed and not checked:
             self._revert_advanced_settings()
         self.advanced_settings_changed.emit(self._advanced_revealed)
+        win = self.window()
+        if win and hasattr(win, "_adjust_window_geometry"):
+            win._adjust_window_geometry()
+
+    def _confirm_track_multiple(self) -> bool:
+        """Explain, in the card, what extra questions this choice adds.
+
+        The release filters ask their own warning inside the card rather than
+        in a dialog window, so a choice that changes every later install gets
+        the same treatment: the words are read where the switch is.
+        """
+        return self._reminders_card.run_confirmation(
+            tr("settings_track_multiple_warn_body"),
+            tr("settings_track_multiple_warn_accept"),
+            tr("flash_btn_cancel"),
+        )
+
+    def _on_track_multiple_toggled(self, checked: bool) -> None:
+        """Persist the per-player record choice, pruning when it is turned off."""
+        if checked and not self._confirm_track_multiple():
+            # The switch was turned on but the explanation was declined: put it
+            # back without writing anything, so the card still describes the
+            # behaviour that is actually in effect.
+            self._cb_track_multiple.blockSignals(True)
+            self._cb_track_multiple.setChecked(False)
+            self._cb_track_multiple.blockSignals(False)
+            return
+        settings = getattr(self, "settings", None)
+        device_tracking.set_track_multiple_software_enabled(bool(checked), settings=settings)
+        if not checked:
+            # Back to one record per player: the extra firmwares are no longer
+            # listed anywhere, so drop them instead of leaving stale rows for a
+            # later re-enable to resurrect.
+            device_tracking.prune_tracked_softwares(settings=settings)
+        self.refresh_settings()
         win = self.window()
         if win and hasattr(win, "_adjust_window_geometry"):
             win._adjust_window_geometry()
@@ -1687,12 +1732,9 @@ class SettingsPage(QWidget):
     # Release reminders
     # ------------------------------------------------------------------
     def tracked_software_summary(self) -> str:
-        """Name only installed releases that the reminder checker tracks."""
+        """Name every installed release that the reminder checker tracks."""
         parts = []
-        for model in DEVICE_MODELS:
-            record = device_tracking.get_device_install(model)
-            if not record:
-                continue
+        for _key, record in self._tracked_installs():
             label = device_tracking.tracked_model_label(record)
             software = str(record.get("software_name") or "").strip()
             parts.append(
@@ -1763,14 +1805,24 @@ class SettingsPage(QWidget):
             switch.text = caption
 
     def _on_model_reminder_toggled(self, key: str, record: dict, checked: bool) -> None:
-        # Unchecking a row removes that model/type permutation tracked install.
+        # Unchecking a row removes that tracked firmware; a player row without
+        # a "#" removes the whole player.
         if checked:
             device_tracking.set_device_reminder_enabled(key, True)
             self.refresh_settings()
             return
-        model = record.get("model", key.split("_")[0])
+        model = record.get("model") or key.split("_")[0].split("#")[0]
         hw_type = record.get("hardware_type", "")
-        device_tracking.clear_device_install(model, hardware_type=hw_type)
+        if "#" in key:
+            device_tracking.forget_tracked_software(
+                model,
+                hw_type,
+                record.get("software_name") or "",
+                record.get("package_slug") or "",
+            )
+        else:
+            device_tracking.clear_device_install(model, hardware_type=hw_type)
+            device_tracking.clear_running_software(model, hardware_type=hw_type)
         self.refresh_settings()
 
     def _update_reminders_copy(self) -> None:
@@ -2048,6 +2100,9 @@ class SettingsPage(QWidget):
     def _on_add_device_model_changed(self, *_):
         model = self._add_device_model.currentText().strip()
         types = hardware_types_for_model(model)
+        has_types = len(types) > 1
+        self._add_device_type_label.setVisible(has_types)
+        self._add_device_type.setVisible(has_types)
         self._add_device_type.blockSignals(True)
         self._add_device_type.clear()
         for hw_type in types:
@@ -2059,20 +2114,32 @@ class SettingsPage(QWidget):
         # row is synced once the Software list has been refilled.
         self._add_device_software.blockSignals(True)
         self._add_device_software.clear()
-        self._add_device_software.addItems(catalog.software_names_for_model(model))
+        # Canonical English names stay in the item data; the label is what a
+        # language shows, and "Unknown" reads as its own placeholder.
+        from .select_page import display_software_name
+
+        for name in catalog.software_names_for_model(model):
+            self._add_device_software.addItem(display_software_name(name), name)
         self._add_device_software.blockSignals(False)
         self._on_add_device_software_changed()
 
+    def _selected_add_device_software(self) -> str:
+        """Canonical name behind the (localised) Software label."""
+        software = self._add_device_software.currentData()
+        if software:
+            return str(software).strip()
+        return self._add_device_software.currentText().strip()
+
     def _add_device_package(self):
         model = self._add_device_model.currentText().strip()
-        software = self._add_device_software.currentText().strip()
+        software = self._selected_add_device_software()
         packages = catalog.packages_for_model_software(model, software)
         return packages[0] if packages else None
 
     def _add_device_form_state(self):
         """``(model, software, types, is_original)`` for the open form."""
         model = self._add_device_model.currentText().strip()
-        software = self._add_device_software.currentText().strip()
+        software = self._selected_add_device_software()
         types = hardware_types_for_model(model)
         return model, software, types, self._is_original_software(software)
 
@@ -2142,6 +2209,7 @@ class SettingsPage(QWidget):
         for rel in releases:
             label = catalog.parse_clean_release_tag_label(rel, version_only=True)
             self._add_device_version.addItem(label, rel)
+        self._add_device_version.addItem(tr("settings_add_device_dont_know"), "UNKNOWN")
         self._add_device_version.addItem(tr("settings_add_device_other"), "OTHER")
         if not releases:
             self._add_device_status.setText(tr("settings_add_device_no_versions"))
@@ -2162,7 +2230,14 @@ class SettingsPage(QWidget):
             self._add_device_status.setText(tr("settings_add_device_pick_version"))
             return
         model = self._add_device_model.currentText().strip()
-        if rel == "OTHER":
+        first_rel = self._add_device_version.itemData(0) if self._add_device_version.count() > 0 else None
+        latest_tag = first_rel.get("tag_name", "") if isinstance(first_rel, dict) else ""
+        latest_published = first_rel.get("published_at", "") if isinstance(first_rel, dict) else ""
+
+        if rel == "UNKNOWN":
+            tag_name = "Unknown"
+            version_label = tr("settings_add_device_dont_know")
+        elif rel == "OTHER":
             # "Other" and "not known" are the same answer: the user types what
             # the player reports, and that text is what reminders compare.
             tag_name = self._add_device_version_manual.text().strip()
@@ -2178,7 +2253,7 @@ class SettingsPage(QWidget):
             self._add_device_status.setText(tr("settings_add_device_pick_version"))
             return
         types = hardware_types_for_model(model)
-        software = self._add_device_software.currentText().strip()
+        software = self._selected_add_device_software()
         if len(types) > 1 and self._is_original_software(software):
             # Original Software has no Type to pick: the version the player
             # reports names the revision (older builds are Type B units).
@@ -2190,15 +2265,22 @@ class SettingsPage(QWidget):
             hw_type = self._add_device_type.currentData() or ""
         else:
             hw_type = ""
+        pub_at = (
+            rel.get("published_at", "")
+            if isinstance(rel, dict)
+            else (latest_published if rel == "UNKNOWN" else "")
+        )
         device_tracking.record_device_install(
             model=model,
             software_name=package.name,
             tag_name=tag_name,
             release_label=version_label,
             package_slug=package.slug,
-            published_at=rel.get("published_at", "") if rel != "OTHER" else "",
-            settings=QSettings("innioasis", "updater"),
+            published_at=pub_at,
+            settings=getattr(self, "settings", None) or QSettings("innioasis", "updater"),
             hardware_type=hw_type,
+            catalogue_latest=latest_tag if rel == "UNKNOWN" else "",
+            manual=True,
         )
         # A device added here is logged for update reminders, so notices about
         # its model, revision and firmware may now be shown on Select Software.
@@ -2261,6 +2343,11 @@ class SettingsPage(QWidget):
         # the journey, so the reminders switch and its coverage line stand
         # down until the journey ends.
         self._reminders_desc.setVisible(not on)
+        if hasattr(self, "_cb_track_multiple"):
+            # Tracking several releases per model is an ordinary-settings
+            # choice: the welcome journey asks only what it needs to record a
+            # player, and this switch comes back on the Add your players card.
+            self._set_switch_row_visible(self._cb_track_multiple, not on)
         if on:
             self._reminders_card.setTitle(tr("onboarding_title"))
         else:
@@ -2302,13 +2389,20 @@ class SettingsPage(QWidget):
     def refresh_settings(self):
         """Reload and update all controls to reflect current settings."""
         self.refresh_shortcut_state()
-        persisted_adv = QSettings("innioasis", "updater").value("advanced_settings", False, type=bool)
+        settings = getattr(self, "settings", None)
+        persisted_adv = (settings or QSettings("innioasis", "updater")).value("advanced_settings", False, type=bool)
         self._advanced_revealed = bool(persisted_adv)
         if hasattr(self, "_cb_advanced_settings"):
             self._cb_advanced_settings.blockSignals(True)
             self._cb_advanced_settings.setChecked(self._advanced_revealed)
             self._cb_advanced_settings.blockSignals(False)
-        device_tracking.set_advanced_settings_enabled(self._advanced_revealed)
+        device_tracking.set_advanced_settings_enabled(self._advanced_revealed, settings=settings)
+        if hasattr(self, "_cb_track_multiple"):
+            self._cb_track_multiple.blockSignals(True)
+            self._cb_track_multiple.setChecked(
+                device_tracking.is_track_multiple_software_enabled(settings=settings)
+            )
+            self._cb_track_multiple.blockSignals(False)
         if not self._advanced_revealed:
             # Advanced is off: anything an earlier advanced session left
             # behind goes back to the app default, not just on the toggle-off.
@@ -3169,6 +3263,11 @@ class SettingsPage(QWidget):
                 tr("settings_allow_keep_data_any_desc")
             )
         self._reminders_card.retranslate()
+        if hasattr(self, "_cb_track_multiple"):
+            self._set_switch_caption(
+                self._cb_track_multiple, tr("settings_track_multiple_toggle")
+            )
+            self._cb_track_multiple.setToolTip(tr("settings_track_multiple_desc"))
         if hasattr(self, "_add_device_type_hint_btn"):
             self._add_device_type_hint_btn.setText(
                 tr("settings_add_device_type_hint_btn")

@@ -3271,15 +3271,14 @@ class FlashPage(QWidget):
         self._failed = False
         self._complete = False
         self._prompt_only = True
-        new_stage = getattr(self, "_wait_copy", "") != "connect"
-        first_backend_search = not getattr(self, "_connect_search_seen", False)
-        if new_stage or first_backend_search:
-            # A new pass through the connect stage gets its own handshake
-            # window, and repeated search lines in the same pass do not restart
-            # it. Asking for the player before the tool can answer wasted the
-            # first seconds of every connect stage.
-            self._arm_connect_prompt_delay()
-            self._connect_search_seen = True
+        # The flasher is actively searching for the device now: reveal the
+        # connect prompt immediately and cancel any getting-ready hold.
+        timer = getattr(self, "_connect_get_ready_timer", None)
+        if timer is not None:
+            timer.stop()
+        self._connect_get_ready_active = False
+        self._connect_prompt_revealed = True
+        self._connect_search_seen = True
         self._wait_copy = "connect"
         # Every handshake starts with the tip closed: the card always shows the
         # link below the sentence, and the diagram opens only when it is clicked.
@@ -5743,9 +5742,9 @@ class FlashPage(QWidget):
             self._wait_cancel_btn.setVisible(True)
         if hasattr(self, "_wait_mode_hint"):
             self._wait_mode_hint.setVisible(False)
-        # The backend search line arms the handshake window; this card only
-        # keeps "Getting ready..." up until the tool has started.
-        self._reset_connect_prompt_delay()
+        # The flasher tool is starting up in the background and not yet searching.
+        # Show "Getting ready..." until MTKclient or SP Flash Tool actively searches for the device.
+        self._arm_connect_prompt_delay()
         self.set_waiting_device()
         # SP Flash Tool's countdown starts on its "search usb" line (the worker
         # sends the seconds), so it is not started here. MTKClient keeps its own.
@@ -6151,12 +6150,14 @@ class FlashPage(QWidget):
         route = fx.donation_route()
         if route == "boosty":
             open_browser(DONATION_LINKS["boosty"])
+            self._on_not_now()
             return
         post_install_2 = getattr(self, "_post_install_url_2", "")
         if post_install_2 and self._has_post_install():
             open_browser(interstitial_url(post_install_2, thank=True))
         else:
             open_browser(DONATION_LINKS["kofi"])
+        self._on_not_now()
 
     def _open_bmc_page(self) -> None:
         """Buy Me a Coffee: always the project's own page, guide or not."""
@@ -6164,6 +6165,7 @@ class FlashPage(QWidget):
         from ..config import DONATION_LINKS
 
         open_browser(DONATION_LINKS["bmc"])
+        self._on_not_now()
 
     def _render_appeal_copy(self) -> None:
         """(Re)write the appeal's words for this language, install and model.
@@ -6441,6 +6443,7 @@ class FlashPage(QWidget):
             if hasattr(self, "_progress_card"):
                 self._progress_card.setVisible(False)
         self._appeal.setVisible(bool(visible))
+        self._apply_post_install_state()
         self.view_generation = getattr(self, "view_generation", 0) + 1
         self._notify_geometry_change()
 

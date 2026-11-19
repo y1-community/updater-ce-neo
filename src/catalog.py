@@ -1224,15 +1224,25 @@ def classify_release_list(releases, installed_tag, installed_published="", notif
     """
     rows = {}
     releases = list(releases or [])
-    installed_tag = installed_tag or ""
+    installed_tag = (installed_tag or "").strip()
     installed_rel = None
-    for rel in releases:
-        if (rel.get("tag_name") or "") == installed_tag:
-            installed_rel = rel
-            break
+    if installed_tag and installed_tag.casefold() != "unknown":
+        for rel in releases:
+            tag = (rel.get("tag_name") or "").strip()
+            if tag == installed_tag or tag.lstrip("vV") == installed_tag.lstrip("vV"):
+                installed_rel = rel
+                break
+            clean_rel = parse_clean_release_tag_label(rel, version_only=True).strip()
+            if clean_rel and (
+                clean_rel.casefold() == installed_tag.casefold()
+                or clean_rel.lstrip("vV") == installed_tag.lstrip("vV")
+            ):
+                installed_rel = rel
+                break
+
     if installed_tag and installed_rel is not None:
         installed_key = release_sort_key(installed_rel)
-    elif installed_tag:
+    elif installed_tag and installed_tag.casefold() != "unknown":
         installed_key = release_sort_key({
             "tag_name": installed_tag,
             "published_at": installed_published or "",
@@ -1242,7 +1252,13 @@ def classify_release_list(releases, installed_tag, installed_published="", notif
     newer = []
     for rel in releases:
         tag = rel.get("tag_name") or ""
-        is_installed = bool(installed_tag) and tag == installed_tag
+        is_installed = False
+        if installed_tag and installed_tag.casefold() != "unknown":
+            is_installed = (
+                (rel is installed_rel)
+                or tag == installed_tag
+                or (tag.lstrip("vV") == installed_tag.lstrip("vV"))
+            )
         is_newer = installed_key is not None and not is_installed and release_sort_key(rel) > installed_key
         rows[tag] = {"installed": is_installed, "newer": is_newer}
         if is_newer:

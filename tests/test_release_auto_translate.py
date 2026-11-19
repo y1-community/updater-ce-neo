@@ -115,6 +115,10 @@ def test_original_software_display_name_presets():
             assert display_software_name("Original Software") == text, lang
             assert display_software_name("Rockbox") == "Rockbox", lang
             assert display_software_name("JJ Launcher") == "JJ Launcher", lang
+        translator().set_language("en")
+        # The catalogue's "Unknown" row is the "I don't know my software"
+        # placeholder, not a raw string id on screen.
+        assert display_software_name("Unknown") == "Unknown Software"
     finally:
         translator().set_language(orig_lang)
 

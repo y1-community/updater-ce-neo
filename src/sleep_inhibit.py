@@ -52,7 +52,7 @@ from typing import Dict, Optional
 logger = logging.getLogger(__name__)
 
 # Default name used by the legacy acquire/release pair.
-_DEFAULT_REASON = "Firmware installation in progress"
+_DEFAULT_REASON = "Software installation in progress"
 # How often the watchdog checks that the assertion is still in place.
 _WATCHDOG_SECONDS = 20.0
 

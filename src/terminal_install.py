@@ -375,7 +375,7 @@ def _awake_wrapper_lines() -> list:
         '         --who="Innioasis Updater CE" --why=probe true 2>/dev/null; then',
         '    exec systemd-inhibit --what=idle:sleep:handle-lid-switch \\',
         '      --who="Innioasis Updater CE" \\',
-        '      --why="Firmware installation in progress" "$0" "$@"',
+        '      --why="Software installation in progress" "$0" "$@"',
         "  fi",
         "fi",
     ]

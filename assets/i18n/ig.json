@@ -1084,5 +1084,11 @@
  "donate_support_appeal_coffee_math": "Otu kọfị na-ekpuchi ike nke bandwit nke nbudata. Ọ na-edobe nrụzi na-esote na iru eru.",
  "donate_family_appeal_expected": "Ryan na onye òtù ọlụlụ ya na-atụ anya nwa. A na-enwe ekele dị ukwuu n'onyinye maka ọnụ ahịa ọrụ a na-akwụ na ezinụlọ ọhụrụ anyị.",
  "donate_family_appeal_new_arrival": "Enwere onye mbata ọhụrụ n'ụzọ n'ụlọ Ryan. Onyinye ọ bụla maka sava na ezinụlọ anyị na-eto eto pụtara nnukwu ihe.",
- "donate_family_appeal_nursery": "Ryan na onye òtù ọlụlụ ya na-ejikere maka nwa ha. Ọ bụrụ na ngwá ọrụ a bara uru, onyinye maka ọnụ ahịa na-agba ọsọ na ezinụlọ anyị na-eto eto ga-enyere aka karịa ka ị maara."
+ "donate_family_appeal_nursery": "Ryan na onye òtù ọlụlụ ya na-ejikere maka nwa ha. Ọ bụrụ na ngwá ọrụ a bara uru, onyinye maka ọnụ ahịa na-agba ọsọ na ezinụlọ anyị na-eto eto ga-enyere aka karịa ka ị maara.",
+ "settings_track_multiple_toggle": "Remind me about multiple releases on a single model",
+ "settings_track_multiple_desc": "Keeps a record of every release installed on the same model. With more than one on record the app cannot tell your players apart, so an install asks which software is running and whether to keep your settings and media. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_body": "With more than one release tracked for a model, every install for that model asks which software is on the player and whether to keep your settings and media, because the app cannot tell one player from another. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_accept": "Turn on",
+ "settings_add_device_dont_know": "I don't know",
+ "software_unknown": "Unknown Software"
 }

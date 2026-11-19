@@ -180,7 +180,7 @@ def _install_line(state: BrowseState, line: str, report) -> None:
     if stripped:
         state.install_log = (state.install_log + [stripped])[-80:]
     if report:
-        report(state.install_percent, state.install_label or "Installing firmware", stripped)
+        report(state.install_percent, state.install_label or "Installing software", stripped)
 
 
 def _install_success(state: BrowseState) -> str:
@@ -394,7 +394,7 @@ def _install_first_gate(
     journey = install_first.InstallFirstJourney(
         target=state.package, target_rel={}, requirement=requirement
     )
-    if answer == install_first.ANSWER_FIRMWARE:
+    if answer in (install_first.ANSWER_FIRMWARE, install_first.ANSWER_FAMILY):
         journey.running_name = label
     step = journey.choose(answer, version)
     if step == install_first.ASK_VERSION:
@@ -586,7 +586,7 @@ def _run_install(
             print(event["message"], flush=True)
         return _install_success(state) if events[-1]["ok"] else _install_failure(state, events[-1]["message"])
     if not row.asset_url:
-        return failover_text("download-failure", "this release has no firmware zip.")
+        return failover_text("download-failure", "this release has no software zip.")
     target = output / row.asset_name
 
     def download_report(done: int, total: int | None) -> None:
@@ -594,16 +594,16 @@ def _run_install(
             return
         percent = (done * 100.0 / total) if total else 0.0
         detail = f"{dl.human_bytes(done)} / {dl.human_bytes(total)}" if total else dl.human_bytes(done)
-        report(percent, "Downloading firmware", detail)
+        report(percent, "Downloading software", detail)
 
     try:
         if not target.exists():
             if report:
-                report(0.0, "Downloading firmware", row.asset_name)
+                report(0.0, "Downloading software", row.asset_name)
             dl.download(row.asset_url, target, progress=download_report if report else _progress_printer(row.asset_name))
         folder = output / Path(row.asset_name).stem
         if report:
-            report(0.0, "Unpacking firmware", target.name)
+            report(0.0, "Unpacking software", target.name)
         dl.extract(target, folder)
     except (RuntimeError, OSError) as exc:
         return _install_failure(state, failover_text("download-failure", str(exc)))
@@ -699,7 +699,7 @@ def _draw_progress(screen, state: BrowseState, percent: float, label: str, detai
     height, width = screen.getmaxyx()
     screen.erase()
     row = activate(state.releases, state.index)
-    title = row.label if row is not None else state.software or "Firmware"
+    title = row.label if row is not None else state.software or "Software"
     _put(screen, 0, 0, f"Updater CE {_version()}    Installing", width - 1, curses.A_BOLD)
     _put(screen, 1, 0, title[: width - 1], width - 1)
     bar_width = max(8, width - 12)
@@ -799,7 +799,7 @@ def _ask_keep_data(screen, state: BrowseState, current: bool, offered: bool = Tr
         screen.erase()
         title = f"Updater CE {_version()}    {_tr('flash_guide_title')}"
         _put(screen, 0, 0, title[: width - 1], width - 1, curses.A_BOLD)
-        _put(screen, 1, 0, (state.software or "Firmware")[: width - 1], width - 1)
+        _put(screen, 1, 0, (state.software or "Software")[: width - 1], width - 1)
         lines = _install_card_lines(state, offered, keep)
         visible = min(len(lines), max(0, height - 4))
         for offset, line in enumerate(lines[:visible]):
@@ -981,7 +981,7 @@ def _local_install_first_gate(folder, pick, confirm, ready=None):
     journey = install_first.InstallFirstJourney(
         target=pkg, requirement=requirement, local_prerequisite=base
     )
-    if answer == install_first.ANSWER_FIRMWARE:
+    if answer in (install_first.ANSWER_FIRMWARE, install_first.ANSWER_FAMILY):
         journey.running_name = label
     reported = base.version if answer == install_first.ANSWER_PREREQUISITE and base else ""
     step = journey.choose(answer, reported)
@@ -1091,7 +1091,7 @@ def _run_file(
     # package. Asking only when the package actually carries the scatter is
     # what prevents a clean-write guess from erasing a player's storage.
     offered = flash._preserve_scatter(folder) is not None
-    file_state = BrowseState(model="player", software="Firmware")
+    file_state = BrowseState(model="player", software="Software")
     if ask_keep:
         choice = ask_keep(offered, False)
     else:

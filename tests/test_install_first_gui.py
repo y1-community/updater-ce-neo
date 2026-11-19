@@ -379,12 +379,11 @@ def test_install_first_once_still_asks_a_player_running_the_base(page, monkeypat
     select = FakeSelect(base=None)
     window = make_window(page, select)
 
-    # Original Software is not named by install_first_when, but a player that
-    # runs it is still asked: the answer is what decides whether that base is
-    # new enough, and nothing tracked is a first install that needs the base.
+    # Original Software is not named by install_first_when, and the tracked
+    # software answers what runs, so the question goes straight to checking
+    # whether that base version is new enough.
     assert window._guard_install_first(target, TARGET_REL) is False
-    assert window._install_first_stage == "software"
-    assert page._keep_data_choice.count() > 3
+    assert window._install_first_stage == "version"
     assert select.started == []
 
 
@@ -426,11 +425,10 @@ def test_the_same_player_is_still_asked_without_install_first_once(page, monkeyp
     select = FakeSelect(base=None)
     window = make_window(page, select)
 
-    # Without the attribute the tracked player still gets the question; it is
-    # the drop-down, with the tracked software as its answer, that lets the
-    # base's version be checked.
+    # Without the attribute the tracked player's running software answers the
+    # system; the question checks whether the base version is new enough.
     assert window._guard_install_first(target, TARGET_REL) is False
-    assert window._install_first_stage == "software"
+    assert window._install_first_stage == "version"
 
 
 def test_untracked_player_opens_on_the_firmware_that_comes_first(page):
@@ -687,13 +685,22 @@ def test_local_portable_without_pre_stage_downloads_the_base(page, tmp_path):
 
 
 def test_the_menu_opens_on_the_tracked_software(page, isolated_settings):
+    from src import player_update_check
+
     target, _stock, requirement, _items = reborn_and_stock()
     select = FakeSelect(base=None)
     window = make_window(page, select)
+    player_update_check.set_track_multiple_software_enabled(True, window.settings)
+    player_update_check.record_device_install(
+        "Y2", "Original Software", "3.2.4", settings=window.settings, manual=True
+    )
+    player_update_check.record_device_install(
+        "Y2", "Rockbox", "1.0", settings=window.settings, manual=True
+    )
     keep_data.note_running_software("Y2", "Original Software", window.settings, "A")
 
     assert window._guard_install_first(target, TARGET_REL) is False
-    # It is a menu of firmwares, not a yes/no about the record: the tracked
+    # With multiple firmwares tracked, it is a menu of firmwares: the tracked
     # software is the row it opens on.
     assert window._install_first_stage == "software"
     assert not page._keep_data_choice.isHidden()
@@ -707,10 +714,9 @@ def test_a_tracked_base_only_asks_about_its_version(page, isolated_settings):
     target, _stock, _requirement, _items = reborn_and_stock()
     select = FakeSelect(base=None)
     window = make_window(page, select)
-    keep_data.note_running_software("Y2", "Original Software", window.settings, "A")
+    keep_data.note_running_software("Y2", "Original Software", window.settings, "")
 
     assert window._guard_install_first(target, TARGET_REL) is False
-    window._on_install_first_continue()
     assert window._install_first_stage == "version"
     assert select.started == []
 

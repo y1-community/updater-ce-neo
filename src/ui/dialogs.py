@@ -63,7 +63,7 @@ from ..diagnostics import (
     log_time_range,
     reveal_in_file_manager,
 )
-from ..i18n import is_english_language, tr, tr_brand, translator
+from ..i18n import is_english_language, software_word, tr, tr_brand, translator
 from ..updates import asset_hint, pick_platform_asset
 from .dark import T, theme_text_color
 from .glass import apply_dialog_theme
@@ -3004,7 +3004,7 @@ class ReleaseReminderDialog(QDialog):
 
         model = self.update_info.get("model", "Y1")
         device_label = device_label_for_model(model)
-        sw_name = self.update_info.get("software_name", "Firmware")
+        sw_name = self.update_info.get("software_name") or software_word()
         installed_lbl = (
             self.update_info.get("installed_label")
             or self.update_info.get("installed_tag")

@@ -628,7 +628,7 @@ def parse_progress(line: str) -> tuple[float | None, str]:
         return pct, guided or f"Writing images — {image.group(2).strip()} of {image.group(3).strip()}"
     if "of image data has been sent" in low:
         simple = re.search(r"(\d+(?:\.\d+)?)%", text)
-        return (float(simple.group(1)) if simple else None), guided or "Writing firmware image... (0%)"
+        return (float(simple.group(1)) if simple else None), guided or "Writing software image... (0%)"
     if "of da has been sent" in low:
         pct = re.search(r"(\d+(?:\.\d+)?)%", text)
         return (float(pct.group(1)) if pct else None), guided or "Downloading DA to device..."
@@ -655,11 +655,11 @@ def parse_progress(line: str) -> tuple[float | None, str]:
             return value, "Writing the system image"
         if "userdata" in low:
             return value, "Writing internal storage"
-        return value, guided or "Writing firmware image... ({pct}%)".format(pct=int(value))
+        return value, guided or "Writing software image... ({pct}%)".format(pct=int(value))
     if guided:
         return None, guided
     if "writing" in low or "write" in low:
-        return None, "Writing firmware image... (0%)"
+        return None, "Writing software image... (0%)"
     return None, ""
 
 
@@ -732,7 +732,7 @@ def flash_directory(
             staged, plan = stage_keep_data(folder, True)
         except OSError as exc:
             print(f'Could not prepare "Keep my data": {exc}', file=sys.stderr)
-            print("No firmware images were written.", file=sys.stderr)
+            print("No software images were written.", file=sys.stderr)
             return 2
         for message in plan.messages:
             print(message, flush=True)

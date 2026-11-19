@@ -140,7 +140,7 @@ def fetch_manifest(force: bool = False, timeout: float = 20.0) -> bytes:
     if bundled is not None and b"<slidia" in bundled:
         return bundled
     raise RuntimeError(
-        "could not fetch the firmware catalogue (offline, and no cached copy): "
+        "could not fetch the software catalogue (offline, and no cached copy): "
         + "; ".join(errors)
     )
 
@@ -307,7 +307,7 @@ def parse_manifest(data: bytes) -> list[Package]:
         devices = [
             part.strip().upper() for part in raw_devices.split(",") if part.strip()
         ] or [""]
-        name = _attr(element, "name", default="Firmware")
+        name = _attr(element, "name", default="Software")
         for model in devices:
             package_name = _model_package_name(element, model) or _attr(
                 element, "package_name", "package"
@@ -414,5 +414,5 @@ def resolve_download(item: Package, timeout: float = 20.0) -> tuple[str, str]:
     release = latest_release(item.repo, timeout=timeout)
     asset = pick_asset(release, item.package_name)
     if not asset:
-        raise RuntimeError(f"{item.repo}: the newest release has no firmware zip")
+        raise RuntimeError(f"{item.repo}: the newest release has no software zip")
     return asset["browser_download_url"], asset["name"]

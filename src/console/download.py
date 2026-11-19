@@ -179,7 +179,7 @@ def extract(archive: Path, dest: Path) -> list[Path]:
         tool = _rar_tool()
         if not tool:
             raise RuntimeError(
-                "this firmware is a .rar archive and no extractor is installed; "
+                "this software is a .rar archive and no extractor is installed; "
                 "install unrar or 7z (the lite installer lists the command for your distro)"
             )
         result = subprocess.run(tool + [str(archive), str(dest) + os.sep])

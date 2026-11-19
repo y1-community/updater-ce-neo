@@ -1084,5 +1084,11 @@
  "donate_support_appeal_coffee_math": "Kafée ɖokpo nɔ ɖibla sú bandwidth e è nɔ yí ɖò ɛntɛnɛti jí é. É nɔ hɛn nǔ e bɔ d’ewu é ɖó alɔ jí.",
  "donate_family_appeal_expected": "Ryan kpo mɛ e é da é kpo ɖò vǐ ɖé ɖó nukún wɛ. Nǔnina e è nɔ na dó kpé nukún dó azɔ̌ ɔ wu lɛ é kpo xwédo mǐtɔn yɔyɔ̌ ɔ kpo nɔ sù nukún mǐtɔn mɛ tawun.",
  "donate_family_appeal_new_arrival": "Mɛ yɔyɔ̌ ɖé ɖò ali jí ɖò Ryan sín xwégbe. Nǔnina ɖokpo ɖokpo e è nɔ na mɛ e nɔ hɛn nǔɖuɖu wá nú mɛ lɛ é kpo xwédo mǐtɔn e ɖò jijɛji wɛ é kpo é nɔ hɛn lè ɖaxó ɖé wá.",
- "donate_family_appeal_nursery": "Ryan kpo mɛ e é da é kpo ɖò nǔ sɔ́ wɛ nú vǐ yetɔn. Enyi azɔwanú enɛ ko hɛn lè wá ɔ, nùnina ɖé nú akwɛ e è na zán dó kpé nukún dó nǔ lɛ wu é kpo xwédo mǐtɔn e ɖò jijɛji wɛ é kpo na d’alɔ mɛ hú lee a tuùn gbɔn é."
+ "donate_family_appeal_nursery": "Ryan kpo mɛ e é da é kpo ɖò nǔ sɔ́ wɛ nú vǐ yetɔn. Enyi azɔwanú enɛ ko hɛn lè wá ɔ, nùnina ɖé nú akwɛ e è na zán dó kpé nukún dó nǔ lɛ wu é kpo xwédo mǐtɔn e ɖò jijɛji wɛ é kpo na d’alɔ mɛ hú lee a tuùn gbɔn é.",
+ "settings_track_multiple_toggle": "Remind me about multiple releases on a single model",
+ "settings_track_multiple_desc": "Keeps a record of every release installed on the same model. With more than one on record the app cannot tell your players apart, so an install asks which software is running and whether to keep your settings and media. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_body": "With more than one release tracked for a model, every install for that model asks which software is on the player and whether to keep your settings and media, because the app cannot tell one player from another. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_accept": "Turn on",
+ "settings_add_device_dont_know": "I don't know",
+ "software_unknown": "Unknown Software"
 }

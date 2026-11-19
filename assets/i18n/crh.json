@@ -1084,5 +1084,11 @@
  "donate_support_appeal_coffee_math": "Бир къаве, къабаатсыз, юклевнинъ ёл кечюв кенишлигини къаплай. О, невбеттеки тюзетювни элинде тута.",
  "donate_family_appeal_expected": "Райан ве онынъ омюр аркъадашы бала беклейлер. Проектнинъ чалышув масрафларына ве янъы къорантамызгъа бахшышлар кутьлевий шекильде къыймет кесиле.",
  "donate_family_appeal_new_arrival": "Ёлда Райаннынъ эвинде янъы кельген адам бар. Серверлерге ве оськен къорантамызгъа нисбетен эр бир бахшыш буюк бир шейни анълата.",
- "donate_family_appeal_nursery": "Райан ве онынъ омюр аркъадашы баласына азырланалар. Эгер бу алет файдалы олгъан олса, чалышув масрафлары ве бизим оськен къорантамыз ичюн бахшыш сиз бильгенден зияде ярдым этер эди."
+ "donate_family_appeal_nursery": "Райан ве онынъ омюр аркъадашы баласына азырланалар. Эгер бу алет файдалы олгъан олса, чалышув масрафлары ве бизим оськен къорантамыз ичюн бахшыш сиз бильгенден зияде ярдым этер эди.",
+ "settings_track_multiple_toggle": "Remind me about multiple releases on a single model",
+ "settings_track_multiple_desc": "Keeps a record of every release installed on the same model. With more than one on record the app cannot tell your players apart, so an install asks which software is running and whether to keep your settings and media. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_body": "With more than one release tracked for a model, every install for that model asks which software is on the player and whether to keep your settings and media, because the app cannot tell one player from another. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_accept": "Turn on",
+ "settings_add_device_dont_know": "I don't know",
+ "software_unknown": "Unknown Software"
 }

@@ -335,7 +335,7 @@ class SimulationTests(unittest.TestCase):
         finally:
             subprocess.Popen = original
         self.assertEqual(spawned, [])
-        self.assertEqual(install[0]["message"], "Downloading firmware")
+        self.assertEqual(install[0]["message"], "Downloading software")
         self.assertTrue(any("45%" in event["message"] for event in install))
         self.assertTrue(install[-1]["ok"])
         self.assertIn("Flash complete", install[-1]["message"])

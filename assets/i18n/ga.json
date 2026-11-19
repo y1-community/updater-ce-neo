@@ -1084,5 +1084,11 @@
  "donate_support_appeal_coffee_math": "Clúdaíonn caife amháin go garbh bandaleithead íoslódála. Coinníonn sé an chéad shocrú eile laistigh de bhaint amach.",
  "donate_family_appeal_expected": "Tá Ryan agus a pháirtí ag súil le leanbh. Táthar an-bhuíoch as síntiúis i dtreo chostais reatha an tionscadail agus lenár dteaghlach nua.",
  "donate_family_appeal_new_arrival": "Tá teacht nua ar an mbealach i dteach Ryan. Ciallaíonn gach deonachán do na freastalaithe agus ár dteaghlach atá ag fás go mór.",
- "donate_family_appeal_nursery": "Tá Ryan agus a pháirtí ag ullmhú dá leanbh. Má bhí an uirlis seo úsáideach, chabhródh síntiús le haghaidh na gcostas reatha agus ár dteaghlach atá ag fás níos mó ná mar is eol duit."
+ "donate_family_appeal_nursery": "Tá Ryan agus a pháirtí ag ullmhú dá leanbh. Má bhí an uirlis seo úsáideach, chabhródh síntiús le haghaidh na gcostas reatha agus ár dteaghlach atá ag fás níos mó ná mar is eol duit.",
+ "settings_track_multiple_toggle": "Remind me about multiple releases on a single model",
+ "settings_track_multiple_desc": "Keeps a record of every release installed on the same model. With more than one on record the app cannot tell your players apart, so an install asks which software is running and whether to keep your settings and media. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_body": "With more than one release tracked for a model, every install for that model asks which software is on the player and whether to keep your settings and media, because the app cannot tell one player from another. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_accept": "Turn on",
+ "settings_add_device_dont_know": "I don't know",
+ "software_unknown": "Unknown Software"
 }

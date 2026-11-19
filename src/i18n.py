@@ -713,6 +713,38 @@ _STRINGS: dict = {
         "de": "Low-Level-Flashtools und Terminal-Modi anzeigen.",
         "ja": "低レベルのフラッシュツールとターミナルモードを表示します。",
     },
+    "settings_track_multiple_toggle": {
+        "zh-CN": "提醒我同一机型上的多个版本",
+        "en": "Remind me about multiple releases on a single model",
+        "fr": "Me rappeler les versions multiples d'un même modèle",
+        "es": "Recordarme varias versiones en un mismo modelo",
+        "de": "An mehrere Releases eines Modells erinnern",
+        "ja": "同じモデルの複数リリースを通知する",
+    },
+    "settings_track_multiple_desc": {
+        "zh-CN": "记录同一机型安装过的每个版本。记录多于一个时，应用无法区分不同播放器，安装时会额外询问当前运行哪个软件，以及是否保留设置和媒体。播放器更新提醒照常工作。",
+        "en": "Keeps a record of every release installed on the same model. With more than one on record the app cannot tell your players apart, so an install asks which software is running and whether to keep your settings and media. Player update reminders keep working as usual.",
+        "fr": "Garde une trace de chaque version installée sur un même modèle. Avec plus d'une version enregistrée, l'app ne peut pas distinguer vos lecteurs : chaque installation demande quel logiciel est en cours et s'il faut conserver vos réglages et médias. Les rappels de mise à jour continuent de fonctionner.",
+        "es": "Guarda un registro de cada versión instalada en un mismo modelo. Con más de una registrada, la app no puede distinguir tus reproductores, así que cada instalación pregunta qué software está en marcha y si conservar tus ajustes y medios. Los recordatorios de actualización siguen funcionando.",
+        "de": "Merkt sich jede auf demselben Modell installierte Version. Sind mehrere erfasst, kann die App deine Player nicht auseinanderhalten: Jede Installation fragt, welche Software läuft und ob Einstellungen und Medien bleiben sollen. Update-Erinnerungen funktionieren weiterhin.",
+        "ja": "同じモデルにインストールしたすべてのリリースを記録します。複数あるとプレーヤーを区別できないため、インストール時に動作中のソフトウェアと設定・メディアを残すかを確認します。更新の通知はこれまで通り機能します。",
+    },
+    "settings_track_multiple_warn_body": {
+        "zh-CN": "同一机型记录了多个版本时，每次安装都会询问播放器上运行的是哪个软件，以及是否保留设置和媒体，因为应用无法区分同一机型的两个播放器。播放器更新提醒照常工作。",
+        "en": "With more than one release tracked for a model, every install for that model asks which software is on the player and whether to keep your settings and media, because the app cannot tell one player from another. Player update reminders keep working as usual.",
+        "fr": "Avec plusieurs versions suivies pour un modèle, chaque installation demande quel logiciel se trouve sur le lecteur et s'il faut conserver vos réglages et médias, car l'app ne peut pas distinguer deux lecteurs du même modèle. Les rappels de mise à jour continuent de fonctionner.",
+        "es": "Con varias versiones registradas para un modelo, cada instalación pregunta qué software tiene el reproductor y si conservar tus ajustes y medios, porque la app no puede distinguir dos reproductores del mismo modelo. Los recordatorios de actualización siguen funcionando.",
+        "de": "Sind für ein Modell mehrere Versionen erfasst, fragt jede Installation, welche Software auf dem Player läuft und ob Einstellungen und Medien bleiben sollen, weil die App zwei Player desselben Modells nicht unterscheiden kann. Update-Erinnerungen funktionieren weiterhin.",
+        "ja": "同じモデルで複数のリリースを記録していると、そのモデルのインストールごとに、動作中のソフトウェアと設定・メディアを残すかを確認します。同じモデルの2台を区別できないためです。更新の通知はこれまで通り機能します。",
+    },
+    "settings_track_multiple_warn_accept": {
+        "zh-CN": "开启",
+        "en": "Turn on",
+        "fr": "Activer",
+        "es": "Activar",
+        "de": "Einschalten",
+        "ja": "オンにする",
+    },
     "settings_terminal_group": {
         "zh-CN": "安装方式",
         "en": "Installation Mode",
@@ -1093,6 +1125,14 @@ _STRINGS: dict = {
         "fr": "Logiciel d'origine",
         "es": "Software original",
     },
+    "software_unknown": {
+        "zh-CN": "未知软件",
+        "en": "Unknown Software",
+        "fr": "Logiciel inconnu",
+        "es": "Software desconocido",
+        "de": "Unbekannte Software",
+        "ja": "不明なソフトウェア",
+    },
     "translate_in_app": {
         "zh-CN": "应用内翻译",
         "en": "Translate in-app",
@@ -1404,6 +1444,14 @@ _STRINGS: dict = {
         "es": "Cancelar",
         "de": "Abbrechen",
         "ja": "キャンセル",
+    },
+    "settings_add_device_dont_know": {
+        "en": "I don't know",
+        "zh-CN": "我不知道",
+        "fr": "Je ne sais pas",
+        "es": "No lo sé",
+        "de": "Ich weiß es nicht",
+        "ja": "わからない",
     },
     "settings_add_device_other": {
         "en": "Other (manual version)",
@@ -7797,6 +7845,36 @@ def _fallback_codes(code: str) -> tuple:
     return (base,) if base and base != code else ()
 
 
+def software_word() -> str:
+    """The product's word for what runs on a player, for this build.
+
+    Updater CE calls it software; the MediaTek Installer is the technical
+    tool and keeps calling it firmware. Used for copy that has to name the
+    thing without a whole sentence around it.
+    """
+    from .config import is_mediatek_installer
+
+    return "Firmware" if is_mediatek_installer() else "Software"
+
+
+def brand_term(text: str) -> str:
+    """Say "software" in Updater CE copy and "firmware" in the Installer.
+
+    One string table serves both brands, so the everyday build rewrites the
+    English word: a player runs software, and "firmware" reads as jargon to
+    the people this build is for. The MediaTek Installer keeps the technical
+    word. Translations that name the thing in their own language are
+    untouched; only the English term itself is swapped.
+    """
+    if not text:
+        return text
+    from .config import is_mediatek_installer
+
+    if is_mediatek_installer():
+        return text
+    return text.replace("Firmware", "Software").replace("firmware", "software")
+
+
 class _Translator:
     def __init__(self):
         self._lang = "en"
@@ -7816,13 +7894,14 @@ class _Translator:
             return key
         translated = catalog(self._lang).get(key)
         if translated:
-            return placeholder_safe_text(key, translated)
+            return brand_term(placeholder_safe_text(key, translated))
         for code in _fallback_codes(self._lang):
             translated = catalog(code).get(key)
             if translated:
-                return placeholder_safe_text(key, translated)
+                return brand_term(placeholder_safe_text(key, translated))
         english_catalog = catalog("en")
-        return table.get(self._lang) or english_catalog.get(key) or table.get("en") or key
+        text = table.get(self._lang) or english_catalog.get(key) or table.get("en") or key
+        return brand_term(text)
 
 
 _ENGLISH_SOURCES: dict[str, tuple] | None = None
@@ -7844,10 +7923,10 @@ def english_sources() -> dict[str, tuple]:
                 continue
             value = table.get("en")
             if isinstance(value, str) and value.strip():
-                grouped.setdefault(value, []).append(key)
+                grouped.setdefault(brand_term(value), []).append(key)
         for key, value in catalog("en").items():
             if isinstance(value, str) and value.strip():
-                keys = grouped.setdefault(value, [])
+                keys = grouped.setdefault(brand_term(value), [])
                 if key not in keys:
                     keys.append(key)
         if not grouped:

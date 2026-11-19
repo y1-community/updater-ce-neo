@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 
-DOWNLOADING = "Downloading firmware"
+DOWNLOADING = "Downloading software"
 EXTRACTING = "Extracting"
 UNPLUG = "Keep the device unplugged until the connect prompt appears."
 SEARCHING = "Connect your player now — searching for it..."
@@ -19,7 +19,7 @@ BROM = "Device detected in BROM mode..."
 DOWNLOADING_DA = "Downloading DA to device..."
 DOWNLOADING_BOOTLOADER = "Downloading Bootloader..."
 FORMAT_OK = "Flash format succeeded..."
-WRITING_IMAGE = "Writing firmware image... ({pct}%)"
+WRITING_IMAGE = "Writing software image... ({pct}%)"
 WRITING_PART = "Writing {part} ({i}/{total}): {file}"
 COMPLETE = "Flash complete! Disconnect USB and reboot."
 KEEP_USING = "Keep my data: using the package's {name}"

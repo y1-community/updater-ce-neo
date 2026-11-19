@@ -1084,5 +1084,11 @@
  "donate_support_appeal_coffee_math": "یک کافی یے نزیک ءَ ڈاؤن لوڈ ءِ بینڈوڈتھ ءَ ھوار کنت۔ اے دیمتر ءِ فکس ءَ دست ءِ تہا دار ایت۔",
  "donate_family_appeal_expected": "ریان ءُ آئی ءِ ھمراہ ءِ زھگ ءِ ھال اِنت۔ منصوبہ ءِ چلائینگ ءِ ھرچ ءُ درچ ءُ مئے نوکیں ھاندان ءِ نیمگ ءَ کمک ءِ مزنیں کچے ءَ ستا کنگ بیت۔",
  "donate_family_appeal_new_arrival": "ریان ءِ لوگ ءَ راہ ءَ نوکیں مردمے اتکگ۔ سرورز ءُ مئے دیمروئی کنوکیں ھاندان ءِ نیمگ ءَ ھرچ عطیہ ءِ مزنیں بزانتے ھست۔",
- "donate_family_appeal_nursery": "ریان ءُ آئی ءِ ھمراہ وتی چُک ءِ واستہ تیار بوھگ ءَ اَنت۔ اگر اے وسیلہ کارآمد بوتگ گڑا چلائینگ ءِ ھرچ ءُ درچ ءُ مئے دیمروئی کنوکیں ھاندان ءِ ھاترا یک کمکے چہ شما زانتگ ءَ گیشتر کمک کنت۔"
+ "donate_family_appeal_nursery": "ریان ءُ آئی ءِ ھمراہ وتی چُک ءِ واستہ تیار بوھگ ءَ اَنت۔ اگر اے وسیلہ کارآمد بوتگ گڑا چلائینگ ءِ ھرچ ءُ درچ ءُ مئے دیمروئی کنوکیں ھاندان ءِ ھاترا یک کمکے چہ شما زانتگ ءَ گیشتر کمک کنت۔",
+ "settings_track_multiple_toggle": "Remind me about multiple releases on a single model",
+ "settings_track_multiple_desc": "Keeps a record of every release installed on the same model. With more than one on record the app cannot tell your players apart, so an install asks which software is running and whether to keep your settings and media. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_body": "With more than one release tracked for a model, every install for that model asks which software is on the player and whether to keep your settings and media, because the app cannot tell one player from another. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_accept": "Turn on",
+ "settings_add_device_dont_know": "I don't know",
+ "software_unknown": "Unknown Software"
 }

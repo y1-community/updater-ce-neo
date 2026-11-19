@@ -1084,5 +1084,11 @@
  "donate_support_appeal_coffee_math": "Yiwet n lqahwa tettḍeggiɛ qrib bandwidth n yiwen n usnulfu. Yeṭṭef asenfar i d-iteddun deg ufus.",
  "donate_family_appeal_expected": "Ryan d umcic-is ttṛajun llufan. Tiwsiwin i lmend n tɣawsiwin n usseddu n usenfar-a d twacult-nneɣ tamaynut ttwaqadrent s waṭas.",
  "donate_family_appeal_new_arrival": "Yella yiwen n umdan amaynut deg ubrid deg wexxam n Ryan. Yal tikci sdat n yiqeddacen d twacult-nneɣ i d-yettnernin tesɛa azal meqqren.",
- "donate_family_appeal_nursery": "Ryan d umcic-is ttheyyin i mmi-tsen. Ma yella allal-agi yella-d d anfay, tukci n tɣawsiwin n uxeddim d twacult-nneɣ i d-yettnernin ad tɛiwen ugar n wayen tessneḍ."
+ "donate_family_appeal_nursery": "Ryan d umcic-is ttheyyin i mmi-tsen. Ma yella allal-agi yella-d d anfay, tukci n tɣawsiwin n uxeddim d twacult-nneɣ i d-yettnernin ad tɛiwen ugar n wayen tessneḍ.",
+ "settings_track_multiple_toggle": "Remind me about multiple releases on a single model",
+ "settings_track_multiple_desc": "Keeps a record of every release installed on the same model. With more than one on record the app cannot tell your players apart, so an install asks which software is running and whether to keep your settings and media. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_body": "With more than one release tracked for a model, every install for that model asks which software is on the player and whether to keep your settings and media, because the app cannot tell one player from another. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_accept": "Turn on",
+ "settings_add_device_dont_know": "I don't know",
+ "software_unknown": "Unknown Software"
 }

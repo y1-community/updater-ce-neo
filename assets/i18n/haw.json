@@ -1084,5 +1084,11 @@
  "donate_support_appeal_coffee_math": "Hoʻokahi kofe e uhi i ka bandwidth o kahi hoʻoiho. Mālama ia i ka hoʻoponopono hou aʻe i ka hiki.",
  "donate_family_appeal_expected": "Ke kali nei ʻo Ryan a me kāna hoa i kahi pēpē. Mahalo nui ʻia nā haʻawina e pili ana i nā kumukūʻai holo o ka papahana a me ko mākou ʻohana hou.",
  "donate_family_appeal_new_arrival": "Aia kahi hōʻea hou ma ke ala i ka hale o Ryan. ʻO kēlā me kēia hāʻawi i nā kikowaena a me ko mākou ʻohana e ulu nei he mea nui.",
- "donate_family_appeal_nursery": "Ke hoʻomākaukau nei ʻo Ryan a me kāna hoa no kā lāua keiki. Inā pono kēia mea hana, ʻoi aku ka maikaʻi o ka hāʻawi ʻana i nā kumukūʻai holo a me kā mākou ʻohana e ulu nei."
+ "donate_family_appeal_nursery": "Ke hoʻomākaukau nei ʻo Ryan a me kāna hoa no kā lāua keiki. Inā pono kēia mea hana, ʻoi aku ka maikaʻi o ka hāʻawi ʻana i nā kumukūʻai holo a me kā mākou ʻohana e ulu nei.",
+ "settings_track_multiple_toggle": "Remind me about multiple releases on a single model",
+ "settings_track_multiple_desc": "Keeps a record of every release installed on the same model. With more than one on record the app cannot tell your players apart, so an install asks which software is running and whether to keep your settings and media. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_body": "With more than one release tracked for a model, every install for that model asks which software is on the player and whether to keep your settings and media, because the app cannot tell one player from another. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_accept": "Turn on",
+ "settings_add_device_dont_know": "I don't know",
+ "software_unknown": "Unknown Software"
 }

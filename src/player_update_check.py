@@ -9,12 +9,18 @@ manages preferences for device reminders and donation UI visibility.
 from dataclasses import dataclass
 from datetime import datetime
 import logging
+import re
 from typing import Optional
 
 from PySide6.QtCore import QSettings
 
 from . import catalog
-from .config import DEVICE_MODELS, default_hardware_type, device_label_for_model
+from .config import (
+    DEVICE_MODELS,
+    default_hardware_type,
+    device_label_for_model,
+    hardware_types_for_model,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +37,9 @@ _KEY_SETTINGS_DONATIONS_DISMISSED = "settings_donations_section_dismissed"
 _KEY_HIDDEN_MTK_OPTIONS = "hidden_mtk_options"
 _KEY_TERMINAL_INSTALL = "terminal_install"
 _KEY_SP_AUTH_FILE = "sp_auth_file"
+_KEY_TRACK_MULTIPLE_SOFTWARE = "track_multiple_software"
+# One record per firmware a player has had installed (multi tracking only).
+_GROUP_SOFTWARES = "device_softwares"
 
 
 def _get_settings(settings: Optional[QSettings] = None) -> QSettings:
@@ -105,8 +114,45 @@ def update_notification_due(installed_tag: str, latest_tag: str, ceiling: str = 
     return True
 
 
-def _normalize_hw_type(hw: str) -> str:
-    return str(hw or "").strip().replace("Type", "").strip().upper()
+def _normalize_hw_type(hw: str, model: str = "") -> str:
+    raw = str(hw or "").strip().replace("Type", "").strip().upper()
+    if model:
+        types = hardware_types_for_model(model)
+        if not types:
+            return ""
+        return raw if raw in types else types[0]
+    return raw
+
+
+def _install_group(model: str, hardware_type: str = "") -> str:
+    """Settings group name for one player: ``{model}_{hw}`` or ``{model}``."""
+    hw = _normalize_hw_type(hardware_type, model)
+    return f"{model}_{hw}" if hw else str(model or "")
+
+
+def _software_track_key(software_name: str = "", package_slug: str = "") -> str:
+    """A settings-safe key for one tracked firmware of a player."""
+    raw = str(package_slug or "").strip() or str(software_name or "").strip()
+    key = re.sub(r"[^A-Za-z0-9._-]+", "-", raw).strip("-._")
+    return key.casefold() or "software"
+
+
+def _software_players(settings: QSettings) -> list:
+    """``(player_group, tracked software keys)`` for every multi record."""
+    settings.beginGroup(_GROUP_SOFTWARES)
+    try:
+        players = list(settings.childGroups())
+    finally:
+        settings.endGroup()
+    out = []
+    for player in players:
+        settings.beginGroup(f"{_GROUP_SOFTWARES}/{player}")
+        try:
+            keys = list(settings.childGroups())
+        finally:
+            settings.endGroup()
+        out.append((player, keys))
+    return out
 
 
 def record_device_install(
@@ -119,6 +165,7 @@ def record_device_install(
     settings: Optional[QSettings] = None,
     catalogue_latest: str = "",
     hardware_type: str = "",
+    manual: bool = False,
 ) -> None:
     """Record the one online software type last installed on ``model`` (and optional ``hardware_type``).
 
@@ -126,16 +173,22 @@ def record_device_install(
     has variants (e.g. Y1 Type A and Type B), each model + type permutation can
     be tracked independently.
     """
-    if not model or not tag_name or str(tag_name).strip().casefold() == "local":
+    if not model:
         return
-    hw = _normalize_hw_type(hardware_type)
-    if not hw:
-        hw = default_hardware_type(model)
+    
+    # Allow recording "Unknown" version/tag if software_name is provided
+    is_unknown = str(tag_name).strip().casefold() == "unknown"
+    if not model or (not tag_name and not is_unknown) or (str(tag_name).strip().casefold() == "local" and not is_unknown):
+        return
+
+    hw = _normalize_hw_type(hardware_type, model)
     group_name = f"{model}_{hw}" if hw else model
     s = _get_settings(settings)
     previous = get_device_install(model, hardware_type=hw, settings=s)
     ceiling = ""
-    if previous and _same_software(previous.get("software_name") or "", software_name or ""):
+    if is_unknown:
+        ceiling = (catalogue_latest or "").strip()
+    elif previous and _same_software(previous.get("software_name") or "", software_name or ""):
         previous_tag = previous.get("tag_name") or ""
         if _tag_sort(tag_name) < _tag_sort(previous_tag):
             ceiling = (catalogue_latest or "").strip() or (previous.get("notify_ceiling") or "")
@@ -144,21 +197,66 @@ def record_device_install(
         else:
             ceiling = previous.get("notify_ceiling") or ""
     now_iso = datetime.now().isoformat()
-    s.remove(f"{_GROUP_INSTALLS}/{group_name}")
-    if hw == default_hardware_type(model):
-        s.remove(f"{_GROUP_INSTALLS}/{model}")
-    _write_install_fields(
-        s,
-        f"{_GROUP_INSTALLS}/{group_name}",
-        software_name,
-        tag_name,
-        release_label,
-        package_slug,
-        published_at,
-        now_iso,
-        notify_ceiling=ceiling,
-        hardware_type=hw,
+
+    multi_on = is_track_multiple_software_enabled(s)
+    keep_previous_install = (
+        multi_on
+        and manual
+        and previous
+        and not _same_software(previous.get("software_name") or "", software_name or "")
     )
+
+    if not keep_previous_install:
+        s.remove(f"{_GROUP_INSTALLS}/{group_name}")
+        if not hardware_types_for_model(model):
+            s.beginGroup(_GROUP_INSTALLS)
+            subgroups = list(s.childGroups())
+            s.endGroup()
+            for sg in subgroups:
+                if sg.startswith(f"{model}_"):
+                    s.remove(f"{_GROUP_INSTALLS}/{sg}")
+        elif hw == default_hardware_type(model):
+            s.remove(f"{_GROUP_INSTALLS}/{model}")
+        _write_install_fields(
+            s,
+            f"{_GROUP_INSTALLS}/{group_name}",
+            software_name,
+            tag_name,
+            release_label,
+            package_slug,
+            published_at,
+            now_iso,
+            notify_ceiling=ceiling,
+            hardware_type=hw,
+        )
+
+    # Always keep running software in sync with the last install
+    set_running_software(model, software_name, settings=s, hardware_type=hw)
+
+    if not multi_on:
+        prune_tracked_softwares(s)
+    else:
+        # Multi-firmware tracking is on.
+        # Install completions (manual=False) update the install slot (_GROUP_INSTALLS)
+        # leaving manual entries (_GROUP_SOFTWARES) alone.
+        # Manual additions write to _GROUP_SOFTWARES only when an install is already in _GROUP_INSTALLS.
+        if manual and keep_previous_install:
+            _write_install_fields(
+                s,
+                f"{_GROUP_SOFTWARES}/{group_name}/{_software_track_key(software_name, package_slug)}",
+                software_name,
+                tag_name,
+                release_label,
+                package_slug,
+                published_at,
+                now_iso,
+                notify_ceiling=ceiling,
+                hardware_type=hw,
+            )
+        elif not manual:
+            # Clean up matching manual entry if it was previously recorded
+            s.remove(f"{_GROUP_SOFTWARES}/{group_name}/{_software_track_key(software_name, package_slug)}")
+
     # Reset last_notified_tag so future releases of this software will be notified
     set_last_notified_tag(group_name, "", settings=s)
     logger.info("Recorded install for %s: %s (%s)", group_name, software_name, tag_name)
@@ -169,26 +267,29 @@ def get_device_install(model: str, hardware_type: str = "", settings: Optional[Q
     if not model:
         return None
     s = _get_settings(settings)
-    hw = _normalize_hw_type(hardware_type)
-    if not hw:
-        hw = default_hardware_type(model)
+    hw = _normalize_hw_type(hardware_type, model)
+    if hw:
         res = _read_install_fields(s, f"{_GROUP_INSTALLS}/{model}_{hw}", model)
         if res:
             return res
+        if hw == default_hardware_type(model):
+            res = _read_install_fields(s, f"{_GROUP_INSTALLS}/{model}", model)
+            if res:
+                return res
+    else:
         res = _read_install_fields(s, f"{_GROUP_INSTALLS}/{model}", model)
         if res:
             return res
-    else:
-        res = _read_install_fields(s, f"{_GROUP_INSTALLS}/{model}_{hw}", model)
-        if res:
-            return res
-
-    if not hw:
+        def_hw = default_hardware_type(model)
+        if def_hw:
+            res = _read_install_fields(s, f"{_GROUP_INSTALLS}/{model}_{def_hw}", model)
+            if res:
+                return res
         s.beginGroup(_GROUP_INSTALLS)
         subgroups = list(s.childGroups())
         s.endGroup()
         for sg in subgroups:
-            if sg.startswith(f"{model}_"):
+            if sg == model or sg.startswith(f"{model}_"):
                 cand = _read_install_fields(s, f"{_GROUP_INSTALLS}/{sg}", model)
                 if cand:
                     return cand
@@ -199,18 +300,114 @@ def get_software_install(model: str, software_name: str, hardware_type: str = ""
     """Return this model's tracked install when it is ``software_name``."""
     if not model or not software_name:
         return None
-    rec = get_device_install(model, hardware_type=hardware_type, settings=settings)
-    if not rec:
-        return None
-    stored = (rec.get("software_name") or "").casefold()
-    wanted = software_name.casefold()
-    if stored and (stored == wanted or stored in wanted or wanted in stored):
-        return rec
+    for rec in get_tracked_installs(
+        model, hardware_type=hardware_type, settings=settings
+    ):
+        stored = (rec.get("software_name") or "").casefold()
+        wanted = software_name.casefold()
+        if stored and (stored == wanted or stored in wanted or wanted in stored):
+            return rec
     return None
 
 
-def _running_group(model: str, hardware_type: str = "") -> str:
+def get_tracked_installs(
+    model: str,
+    hardware_type: str = "",
+    settings: Optional[QSettings] = None,
+) -> list:
+    """Every firmware tracked for this player, newest first.
+
+    With multi-firmware tracking off this is the legacy single record. With it
+    on, every firmware the user installed stays on record, so the app can list
+    them and ask which one is running instead of assuming the newest.
+    """
+    if not model:
+        return []
+    s = _get_settings(settings)
     hw = _normalize_hw_type(hardware_type)
+    single = get_device_install(model, hardware_type=hw, settings=s)
+    if not is_track_multiple_software_enabled(s):
+        return [single] if single else []
+    player = _install_group(model, hw or default_hardware_type(model))
+    records = []
+    s.beginGroup(f"{_GROUP_SOFTWARES}/{player}")
+    try:
+        keys = list(s.childGroups())
+    finally:
+        s.endGroup()
+    for key in keys:
+        rec = _read_install_fields(s, f"{_GROUP_SOFTWARES}/{player}/{key}", model)
+        if rec:
+            records.append(rec)
+    if single and not any(
+        _same_software(
+            rec.get("software_name") or "", single.get("software_name") or ""
+        )
+        for rec in records
+    ):
+        records.append(single)
+    records.sort(key=lambda rec: rec.get("installed_at") or "", reverse=True)
+    return records
+
+
+def forget_tracked_software(
+    model: str,
+    hardware_type: str = "",
+    software_name: str = "",
+    package_slug: str = "",
+    settings: Optional[QSettings] = None,
+) -> None:
+    """Forget one firmware tracked for a player, leaving the others.
+
+    Removing the record the reminders and Keep Data read as the player's
+    current firmware promotes the newest remaining one, so the player stays on
+    record instead of disappearing from Settings altogether.
+    """
+    if not model:
+        return
+    s = _get_settings(settings)
+    hw = _normalize_hw_type(hardware_type) or default_hardware_type(model)
+    player = _install_group(model, hw)
+    s.remove(
+        f"{_GROUP_SOFTWARES}/{player}/{_software_track_key(software_name, package_slug)}"
+    )
+    single = _read_install_fields(s, f"{_GROUP_INSTALLS}/{player}", model)
+    if single and _same_software(single.get("software_name") or "", software_name or ""):
+        s.beginGroup(f"{_GROUP_INSTALLS}/{player}")
+        try:
+            s.remove("")
+        finally:
+            s.endGroup()
+        remaining = get_tracked_installs(model, hardware_type=hw, settings=s)
+        if remaining:
+            newest = remaining[0]
+            _write_install_fields(
+                s,
+                f"{_GROUP_INSTALLS}/{player}",
+                newest.get("software_name") or "",
+                newest.get("tag_name") or "",
+                newest.get("release_label") or "",
+                newest.get("package_slug") or "",
+                newest.get("published_at") or "",
+                newest.get("installed_at") or "",
+                notify_ceiling=newest.get("notify_ceiling") or "",
+                hardware_type=hw,
+            )
+    current = get_running_software(model, hardware_type=hw, settings=s)
+    if _same_software(current.get("software_name") or "", software_name or ""):
+        clear_running_software(model, hardware_type=hw, settings=s)
+
+
+def prune_tracked_softwares(settings: Optional[QSettings] = None) -> None:
+    """Drop the extra tracked firmwares when multi-firmware tracking is off."""
+    s = _get_settings(settings)
+    if is_track_multiple_software_enabled(s):
+        return
+    s.remove(_GROUP_SOFTWARES)
+
+
+def _running_group(model: str, hardware_type: str = "") -> str:
+    hw = _normalize_hw_type(hardware_type, model)
     return f"{_GROUP_RUNNING}/{model}_{hw}" if hw else f"{_GROUP_RUNNING}/{model}"
 
 
@@ -257,10 +454,19 @@ def get_running_software(
     if not model:
         return {}
     s = _get_settings(settings)
-    hw = _normalize_hw_type(hardware_type)
+    hw = _normalize_hw_type(hardware_type, model)
     confirmed = ""
     groups = [_running_group(model, hw)] if hw else []
-    groups.append(_running_group(model))
+    default_grp = _running_group(model)
+    if default_grp not in groups:
+        groups.append(default_grp)
+    s.beginGroup(_GROUP_RUNNING)
+    subgroups = list(s.childGroups())
+    s.endGroup()
+    for sg in subgroups:
+        cand = f"{_GROUP_RUNNING}/{sg}"
+        if (sg == model or sg.startswith(f"{model}_")) and cand not in groups:
+            groups.append(cand)
     for group in groups:
         s.beginGroup(group)
         try:
@@ -307,7 +513,7 @@ def clear_device_install(model: str, hardware_type: str = "", settings: Optional
     if not model:
         return
     s = _get_settings(settings)
-    hw = _normalize_hw_type(hardware_type)
+    hw = _normalize_hw_type(hardware_type, model)
     if hw:
         s.beginGroup(f"{_GROUP_INSTALLS}/{model}_{hw}")
         try:
@@ -320,6 +526,13 @@ def clear_device_install(model: str, hardware_type: str = "", settings: Optional
             s.remove("")
         finally:
             s.endGroup()
+        if not hardware_types_for_model(model):
+            s.beginGroup(_GROUP_INSTALLS)
+            subgroups = list(s.childGroups())
+            s.endGroup()
+            for sg in subgroups:
+                if sg.startswith(f"{model}_"):
+                    s.remove(f"{_GROUP_INSTALLS}/{sg}")
     logger.info("Cleared install history for %s (type=%s)", model, hw or "none")
 
 
@@ -330,30 +543,55 @@ def get_all_device_installs(settings: Optional[QSettings] = None) -> dict:
     s.beginGroup(_GROUP_INSTALLS)
     subgroups = list(s.childGroups())
     s.endGroup()
-    
+
     for group in subgroups:
-        # We need to know which model this group belongs to.
-        # The key in _GROUP_INSTALLS is {model}_{hw} or {model}.
-        # Let's try to infer model from the group name.
-        # This is a bit brittle, but the existing code used `k.split("_")[0]`.
         base_model = group.split("_")[0]
         rec = _read_install_fields(s, f"{_GROUP_INSTALLS}/{group}", base_model)
         if not rec:
             continue
-        
-        hw = _normalize_hw_type(rec.get("hardware_type", ""))
-        if not hw:
-            hw = default_hardware_type(base_model)
-        
-        unified_key = f"{base_model}_{hw}" if hw else base_model
-        
-        # If we already have a record for this key, keep the latest
+        types = hardware_types_for_model(base_model)
+        if types:
+            hw = _normalize_hw_type(
+                rec.get("hardware_type", "") or (group.split("_")[1] if "_" in group else ""),
+                base_model,
+            )
+            unified_key = f"{base_model}_{hw}"
+        else:
+            hw = ""
+            unified_key = base_model
+            if "_" in group:
+                s.remove(f"{_GROUP_INSTALLS}/{group}")
+
         if unified_key in out:
             existing = out[unified_key]
-            if rec.get("installed_at", "") > existing.get("installed_at", ""):
+            if (rec.get("installed_at") or "") > (existing.get("installed_at") or ""):
                 out[unified_key] = rec
         else:
             out[unified_key] = rec
+
+    if is_track_multiple_software_enabled(s):
+        for player, keys in _software_players(s):
+            base_model = player.split("_")[0]
+            types = hardware_types_for_model(base_model)
+            hw = (
+                _normalize_hw_type(player.split("_")[1] if "_" in player else "", base_model)
+                if types
+                else ""
+            )
+            unified_key = f"{base_model}_{hw}" if hw else base_model
+            for key in keys:
+                rec = _read_install_fields(
+                    s, f"{_GROUP_SOFTWARES}/{player}/{key}", base_model
+                )
+                if not rec:
+                    continue
+                existing = out.get(unified_key)
+                if existing and _same_software(
+                    existing.get("software_name") or "",
+                    rec.get("software_name") or "",
+                ):
+                    continue
+                out[f"{unified_key}#{key}"] = rec
     return out
 
 
@@ -658,6 +896,18 @@ def set_sp_auth_file(path: str, settings: Optional[QSettings] = None) -> None:
     s.setValue(f"{_GROUP_PREFS}/{_KEY_SP_AUTH_FILE}", text)
 
 
+def is_track_multiple_software_enabled(settings: Optional[QSettings] = None) -> bool:
+    """True if multi-software tracking per device is enabled."""
+    s = _get_settings(settings)
+    return s.value(f"{_GROUP_PREFS}/{_KEY_TRACK_MULTIPLE_SOFTWARE}", False, type=bool)
+
+
+def set_track_multiple_software_enabled(enabled: bool, settings: Optional[QSettings] = None) -> None:
+    """Set whether multi-software tracking per device is enabled."""
+    s = _get_settings(settings)
+    s.setValue(f"{_GROUP_PREFS}/{_KEY_TRACK_MULTIPLE_SOFTWARE}", bool(enabled))
+
+
 def _raw_is_donation_install_prompt_disabled(s: QSettings) -> bool:
     val = s.value(_KEY_DONATION_INSTALL_PROMPT_DISABLED, None)
     if val is not None:
@@ -838,89 +1088,95 @@ def check_device_updates(
         if not is_device_reminder_enabled(model, settings=settings):
             continue
 
-        install = get_device_install(model, settings=settings)
-        if not install or not install.get("tag_name"):
-            continue
+        # One check per firmware on record: with multi tracking on, every
+        # installed software can have a newer release of its own.
+        for install in get_tracked_installs(model, settings=settings):
+            if not install or not install.get("tag_name"):
+                continue
 
-        installed_tag = install["tag_name"]
-        slug = install.get("package_slug")
-        sw_name = install.get("software_name")
+            installed_tag = install["tag_name"]
+            slug = install.get("package_slug")
+            sw_name = install.get("software_name")
 
-        # Locate the corresponding package
-        packages = catalog.packages_for_model(model)
-        matched_pkg = None
-        if slug:
-            for p in packages:
-                if p.slug == slug:
-                    matched_pkg = p
+            # Locate the corresponding package
+            packages = catalog.packages_for_model(model)
+            matched_pkg = None
+            if slug:
+                for p in packages:
+                    if p.slug == slug:
+                        matched_pkg = p
+                        break
+            if not matched_pkg and sw_name:
+                for p in packages:
+                    if p.name.lower() == sw_name.lower():
+                        matched_pkg = p
+                        break
+            if not matched_pkg:
+                continue
+
+            try:
+                releases = client.releases_for_package(
+                    matched_pkg,
+                    model,
+                    show_nightly=False,
+                    force_refresh=force_refresh,
+                )
+            except Exception as e:
+                logger.debug("Failed checking releases for %s on %s: %s", matched_pkg.name, model, e)
+                continue
+
+            if not releases:
+                continue
+
+            latest_rel = releases[0]
+            latest_tag = latest_rel.get("tag_name", "")
+
+            # If the user doesn't know the version, any release is news.
+            if str(installed_tag).strip().casefold() == "unknown":
+                pass
+            elif not latest_tag or latest_tag == installed_tag:
+                continue
+
+            # Check if user chose "Do not remind me about this release"
+            if not ignore_last_notified and is_release_skipped(model, latest_tag, settings=settings):
+                continue
+
+            # Check if already notified about this exact tag
+            last_notified = get_last_notified_tag(model, settings=settings)
+            if not ignore_last_notified and last_notified == latest_tag:
+                continue
+
+            # Compare chronological sorting: newer release has a higher release_sort_key
+            installed_rel = None
+            for r in releases:
+                if r.get("tag_name") == installed_tag:
+                    installed_rel = r
                     break
-        if not matched_pkg and sw_name:
-            for p in packages:
-                if p.name.lower() == sw_name.lower():
-                    matched_pkg = p
-                    break
-        if not matched_pkg:
-            continue
 
-        try:
-            releases = client.releases_for_package(
-                matched_pkg,
-                model,
-                show_nightly=False,
-                force_refresh=force_refresh,
-            )
-        except Exception as e:
-            logger.debug("Failed checking releases for %s on %s: %s", matched_pkg.name, model, e)
-            continue
+            if installed_rel is not None:
+                installed_key = catalog.release_sort_key(installed_rel)
+            else:
+                installed_pseudo_rel = {
+                    "tag_name": installed_tag,
+                    "published_at": install.get("published_at", ""),
+                }
+                installed_key = catalog.release_sort_key(installed_pseudo_rel)
 
-        if not releases:
-            continue
+            latest_key = catalog.release_sort_key(latest_rel)
 
-        latest_rel = releases[0]
-        latest_tag = latest_rel.get("tag_name", "")
-        if not latest_tag or latest_tag == installed_tag:
-            continue
-
-        # Check if user chose "Do not remind me about this release"
-        if not ignore_last_notified and is_release_skipped(model, latest_tag, settings=settings):
-            continue
-
-        # Check if already notified about this exact tag
-        last_notified = get_last_notified_tag(model, settings=settings)
-        if not ignore_last_notified and last_notified == latest_tag:
-            continue
-
-        # Compare chronological sorting: newer release has a higher release_sort_key
-        installed_rel = None
-        for r in releases:
-            if r.get("tag_name") == installed_tag:
-                installed_rel = r
-                break
-
-        if installed_rel is not None:
-            installed_key = catalog.release_sort_key(installed_rel)
-        else:
-            installed_pseudo_rel = {
-                "tag_name": installed_tag,
-                "published_at": install.get("published_at", ""),
-            }
-            installed_key = catalog.release_sort_key(installed_pseudo_rel)
-
-        latest_key = catalog.release_sort_key(latest_rel)
-
-        if latest_key > installed_key and update_notification_due(
-            installed_tag, latest_tag, install.get("notify_ceiling") or "",
-        ):
-            updates.append({
-                "model": model,
-                "software_name": matched_pkg.name,
-                "package": matched_pkg,
-                "installed_tag": installed_tag,
-                "installed_label": install.get("release_label") or installed_tag,
-                "installed_at": install.get("installed_at", ""),
-                "latest_release": latest_rel,
-                "latest_tag": latest_tag,
-                "latest_label": catalog.format_release_display_label(latest_rel),
-            })
+            if latest_key > installed_key and update_notification_due(
+                installed_tag, latest_tag, install.get("notify_ceiling") or "",
+            ):
+                updates.append({
+                    "model": model,
+                    "software_name": matched_pkg.name,
+                    "package": matched_pkg,
+                    "installed_tag": installed_tag,
+                    "installed_label": install.get("release_label") or installed_tag,
+                    "installed_at": install.get("installed_at", ""),
+                    "latest_release": latest_rel,
+                    "latest_tag": latest_tag,
+                    "latest_label": catalog.format_release_display_label(latest_rel),
+                })
 
     return updates

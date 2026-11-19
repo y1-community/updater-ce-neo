@@ -61,8 +61,9 @@ def test_switch_has_its_own_card_not_the_advanced_card(settings_page):
     # Styled like the other cards in the column.
     assert page._keep_data_card.property("cssClass") == "card"
     # The title is the option's own words, with the switch on that line.
+    # Updater CE says software; the MediaTek Installer keeps "firmware".
     assert page._keep_data_card.title() == (
-        "Allow Keep Settings and Media on any firmware install"
+        "Allow Keep Settings and Media on any software install"
     )
     assert page._keep_data_card.isAncestorOf(page._cb_allow_keep_data_any)
     assert page._switch_rows[page._cb_allow_keep_data_any][1].isHidden()

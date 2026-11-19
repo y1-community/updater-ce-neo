@@ -119,7 +119,7 @@ COMPONENTS: dict[str, Component] = {
     "unrar": Component(
         key="unrar",
         label="unrar",
-        description="Extracts firmware published as .rar archives.",
+        description="Extracts software published as .rar archives.",
         names=("unrar", "unrar.exe"),
         manual_hint=(
             "Install unrar or 7z: Debian/Ubuntu/Mint sudo apt install unrar-free, "

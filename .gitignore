@@ -68,3 +68,13 @@ tools/.DS_Store
 
 # Local agent coordination notes (never commit)
 .coord/
+
+# Scratch patch helpers (one-off local edits; never part of the app)
+_patch_*.py
+
+# Local virtualenvs and their test-run output. requirements*.txt rebuild them.
+.venv-run/
+.venv-arm64/
+
+# Cloud-drive/editor conflict copies ("name.sync-conflict-DATE-ID.ext")
+.sync-conflict-*

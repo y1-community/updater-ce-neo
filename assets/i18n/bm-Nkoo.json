@@ -1084,5 +1084,11 @@
  "donate_support_appeal_coffee_math": "ߞߊߝߋ߫ ߞߋߟߋ߲߫ ߦߋ߫ ߟߊ߬ߖߌ߰ߟߌ ߝߊ߲߬ߞߣߐ ߘߊߕߎ߲߯ ߠߊ߫ ߝߊߦߌߘߊ߫. ߊ߬ ߘߌ߫ ߟߊ߬ߓߍ߲߬ߢߐ߲߰ߡߦߊ߬ߘߊ߫ ߣߊ߬ߕߐ ߟߊߕߊ߲߬ߞߊ߫ ߊ߬ ߛߋ߲߬ߝߍ߬.",
  "donate_family_appeal_expected": "ߙߌߦߊ߲ ߣߴߊ߬ ߞߊ߫ ߢߐ߲ߜ߭ߐ߲ ߓߋ߫ ߘߋ߲ ߡߊߞߣߐ߫. ߓߟߏߡߊߜߍ߲ ߡߍ߲ ߠߎ߬ ߦߋ߫ ߞߍ߫ ߟߊ߫ ߖߊ߬ߕߋ߬ߘߐ߬ߛߌ߮ ߟߊߓߊ߯ߙߊߟߌ ߖߐ߰ߣߍ߲ ߠߎ߬ ߣߌ߫ ߊ߲ ߞߐߙߍ߫ ߞߎߘߊ ߟߎ߬ ߦߋ߫߸ ߏ߬ ߟߎ߬ ߡߊߢߌ߬ߣߌ߲߬ߞߊ߬ߣߍ߲߫ ߠߋ߬ ߞߏߛߓߍ߫.",
  "donate_family_appeal_new_arrival": "ߡߐ߬ߜ߭ߐ ߞߎߙߊ ߘߐ߫ ߓߋ߫ ߛߌߙߊ ߞߊ߲ ߙߌߦߊ߲ ߞߊ ߛߏ ߞߣߐ߫. ߘߍ߬ߡߍ ߓߍ߯ ߡߌ߲ ߓߋ߫ ߞߍ߫ ߛߍߙߌߥߍߙߌߥߵ ߡߊ߬ ߊ߬ߣߌ߫ ߊ߲ ߞߊ߫ ߘߋ߲ߓߦߊ ߡߊ߲ ߓߋ߫ ߞߊ߬ ߗߦߊ߫ ߏ߬ ߞߙߐ ߦߋ߫ ߞߏ ߓߊ ߦߋ߫.",
- "donate_family_appeal_nursery": "ߙߌߦߊ߲ ߣߴߊ ߞߊ ߢߐ߲ߜ߭ߐ߲ ߓߋ߫ ߞߴߎ ߟߊߓߍ߲ ߎ ߘߋ߲ ߡߊ. ߣߌ߫ ߖߐ߯ߙߊ߲ ߣߌ߲߬ ߞߍ߫ ߘߊ߫ ߢߊ߬ߕߣߐ߬ߡߊ߫ ߘߌ߫߸ ߓߟߏߡߊߜߍ߲ ߘߏ߫ ߘߌ߫ ߓߊ߯ߙߊ ߖߐ߰ߣߍ߲ ߠߎ߬ ߣߴߊ߲ ߠߊ߫ ߘߋ߲ߓߦߊ ߓߎ߯ߟߌ ߡߊ߬߸ ߏ߬ ߘߌ߫ ߘߍ߬ߡߍ߲߬ ߞߍ߫ ߞߊ߬ ߕߊ߬ߡߌ߲߬ ߌ ߟߐ߲ߕߊ ߞߊ߲߬."
+ "donate_family_appeal_nursery": "ߙߌߦߊ߲ ߣߴߊ ߞߊ ߢߐ߲ߜ߭ߐ߲ ߓߋ߫ ߞߴߎ ߟߊߓߍ߲ ߎ ߘߋ߲ ߡߊ. ߣߌ߫ ߖߐ߯ߙߊ߲ ߣߌ߲߬ ߞߍ߫ ߘߊ߫ ߢߊ߬ߕߣߐ߬ߡߊ߫ ߘߌ߫߸ ߓߟߏߡߊߜߍ߲ ߘߏ߫ ߘߌ߫ ߓߊ߯ߙߊ ߖߐ߰ߣߍ߲ ߠߎ߬ ߣߴߊ߲ ߠߊ߫ ߘߋ߲ߓߦߊ ߓߎ߯ߟߌ ߡߊ߬߸ ߏ߬ ߘߌ߫ ߘߍ߬ߡߍ߲߬ ߞߍ߫ ߞߊ߬ ߕߊ߬ߡߌ߲߬ ߌ ߟߐ߲ߕߊ ߞߊ߲߬.",
+ "settings_track_multiple_toggle": "Remind me about multiple releases on a single model",
+ "settings_track_multiple_desc": "Keeps a record of every release installed on the same model. With more than one on record the app cannot tell your players apart, so an install asks which software is running and whether to keep your settings and media. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_body": "With more than one release tracked for a model, every install for that model asks which software is on the player and whether to keep your settings and media, because the app cannot tell one player from another. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_accept": "Turn on",
+ "settings_add_device_dont_know": "I don't know",
+ "software_unknown": "Unknown Software"
 }

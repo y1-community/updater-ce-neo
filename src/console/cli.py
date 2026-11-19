@@ -51,7 +51,7 @@ def cmd_list(args: argparse.Namespace) -> int:
         print(json.dumps([item.__dict__ for item in items], ensure_ascii=False), flush=True)
         return 0
     if not items:
-        print("No firmware matched. Try: list --model Y1")
+        print("No software matched. Try: list --model Y1")
         return 1
     print(f"{'MODEL':<6} {'BRAND':<12} {'NAME':<34} REPO")
     for item in items:
@@ -65,10 +65,10 @@ def cmd_download(args: argparse.Namespace) -> int:
     if args.model:
         items = [item for item in items if item.model.lower() == args.model.lower()]
     if not items:
-        print(f"No firmware matched '{args.query}'.", file=sys.stderr)
+        print(f"No software matched '{args.query}'.", file=sys.stderr)
         return 1
     if len(items) > 1 and not args.all:
-        print("Several firmwares matched; pick one with a narrower query or --model:", file=sys.stderr)
+        print("Several software packages matched; pick one with a narrower query or --model:", file=sys.stderr)
         for item in items:
             print(f"  {item.model:<5} {item.brand:<12} {item.name}", file=sys.stderr)
         return 2
@@ -107,12 +107,12 @@ def cmd_download(args: argparse.Namespace) -> int:
 def cmd_flash(args: argparse.Namespace) -> int:
     folder = Path(args.path).expanduser()
     if not folder.is_dir():
-        print(f"{folder} is not a directory. Flash takes an unpacked firmware folder.", file=sys.stderr)
+        print(f"{folder} is not a directory. Flash takes an unpacked software folder.", file=sys.stderr)
         return 2
     scatter = dl.find_scatter(folder)
     if args.engine == "mtk" and not scatter and not args.preloader:
         print(
-            f"No scatter file in {folder}. A MediaTek flash needs the scatter that ships with the firmware.",
+            f"No scatter file in {folder}. A MediaTek flash needs the scatter that ships with the software.",
             file=sys.stderr,
         )
         return 2
@@ -206,13 +206,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--json", action="store_true", help="machine-readable output")
     sub = parser.add_subparsers(dest="command")
 
-    listing = sub.add_parser("list", help="list firmware in the catalogue")
+    listing = sub.add_parser("list", help="list software in the catalogue")
     listing.add_argument("query", nargs="?", default="")
     listing.add_argument("--model", default="")
     listing.add_argument("--refresh", action="store_true")
     listing.set_defaults(func=cmd_list)
 
-    get = sub.add_parser("download", help="download a firmware zip")
+    get = sub.add_parser("download", help="download a software zip")
     get.add_argument("query")
     get.add_argument("--model", default="")
     get.add_argument("--output", default=".")
@@ -222,7 +222,7 @@ def build_parser() -> argparse.ArgumentParser:
     get.add_argument("--refresh", action="store_true")
     get.set_defaults(func=cmd_download)
 
-    take = sub.add_parser("flash", help="write an unpacked firmware to the player")
+    take = sub.add_parser("flash", help="write unpacked software to the player")
     take.add_argument("path")
     take.add_argument("--engine", choices=("mtk", "adb"), default="mtk")
     take.add_argument("--preloader", default="")

@@ -1061,5 +1061,11 @@
  "toast_update_version_fmt": "{app} v{version} איז בארעכטיגט.",
  "toast_update_fmt": "אַן דערהייַנטיקן צו {app} איז בארעכטיגט.",
  "install_card_title_fmt": "{software} פֿאַר {model}",
- "keep_data_which_firmware_fmt": "וואָס ווייכווארג איז איצט פליסנדיק אויף דיין {model}?"
+ "keep_data_which_firmware_fmt": "וואָס ווייכווארג איז איצט פליסנדיק אויף דיין {model}?",
+ "settings_track_multiple_toggle": "Remind me about multiple releases on a single model",
+ "settings_track_multiple_desc": "Keeps a record of every release installed on the same model. With more than one on record the app cannot tell your players apart, so an install asks which software is running and whether to keep your settings and media. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_body": "With more than one release tracked for a model, every install for that model asks which software is on the player and whether to keep your settings and media, because the app cannot tell one player from another. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_accept": "Turn on",
+ "settings_add_device_dont_know": "I don't know",
+ "software_unknown": "Unknown Software"
 }

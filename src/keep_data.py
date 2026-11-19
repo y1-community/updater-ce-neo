@@ -192,11 +192,43 @@ def compatible_software_names(pkg, model: str = "") -> list:
     return names
 
 
-def tracked_package(model: str, pkg, settings: Optional[QSettings] = None, hardware_type: str = ""):
-    """The tracked install's catalogue package, or ``None`` when unknown."""
-    record = get_device_install(model, hardware_type=hardware_type, settings=settings)
-    if not record:
-        return None
+def tracked_installs(
+    model: str,
+    settings: Optional[QSettings] = None,
+    hardware_type: str = "",
+) -> list:
+    """Every firmware tracked for this player (one unless multi is on)."""
+    from . import player_update_check
+
+    if not player_update_check.is_track_multiple_software_enabled(settings):
+        record = get_device_install(
+            model, hardware_type=hardware_type, settings=settings
+        )
+        return [record] if record else []
+    return list(
+        player_update_check.get_tracked_installs(
+            model, hardware_type=hardware_type, settings=settings
+        )
+        or []
+    )
+
+
+def tracked_is_ambiguous(
+    model: str,
+    settings: Optional[QSettings] = None,
+    hardware_type: str = "",
+) -> bool:
+    """True when several firmwares are tracked, so the app cannot know which runs.
+
+    The install questions then have to be put to the user: reading the newest
+    record as the answer would silently decide Keep Data for a player that may
+    be running one of the others.
+    """
+    return len(tracked_installs(model, settings, hardware_type)) > 1
+
+
+def _package_for_record(model: str, record: dict):
+    """The catalogue package one tracked record names, or ``None``."""
     name = str(record.get("software_name") or "").strip()
     packages = _packages(model)
     for candidate in packages:
@@ -209,29 +241,36 @@ def tracked_package(model: str, pkg, settings: Optional[QSettings] = None, hardw
     return None
 
 
+def tracked_package(model: str, pkg, settings: Optional[QSettings] = None, hardware_type: str = ""):
+    """The tracked install's catalogue package, or ``None`` when unknown."""
+    for record in tracked_installs(model, settings, hardware_type):
+        found = _package_for_record(model, record)
+        if found is not None:
+            return found
+    return None
+
+
 def tracked_is_same(
     model: str,
     pkg,
     settings: Optional[QSettings] = None,
     hardware_type: str = "",
 ) -> bool:
-    """True when ``pkg`` is exactly the firmware recorded for this player.
+    """True when ``pkg`` is exactly one of the firmwares recorded for this player.
 
     A family match is enough for Keep Data to be offered, but a reinstall of
-    the software already on the player is a stronger signal: it is an update,
-    not a first install or a switch to a different firmware. Only that
-    narrower case defaults the tick on. The comparison is by name and slug so
-    a local copy of the same release (no catalogue repository) still counts,
-    and it reads the tracked install for this model only.
+    software already on the player is a stronger signal: it is an update, not a
+    first install or a switch to a different firmware. Only that narrower case
+    defaults the tick on. The comparison is by name and slug so a local copy of
+    the same release (no catalogue repository) still counts, and it reads the
+    tracked installs for this model only.
     """
     if pkg is None:
         return False
-    record = get_device_install(
-        model, hardware_type=hardware_type, settings=settings
+    return any(
+        _same_software_record(pkg, record)
+        for record in tracked_installs(model, settings, hardware_type)
     )
-    if not record:
-        return False
-    return _same_software_record(pkg, record)
 
 
 def known_running_software(
@@ -300,8 +339,43 @@ def declares_family(pkg) -> bool:
     return bool(_norm(getattr(pkg, "derivative", "")))
 
 
+def _compatible_with_record(
+    model: str, pkg, record: dict, packages: Optional[Iterable] = None
+) -> Optional[bool]:
+    """Whether ``pkg`` can keep the data of one tracked install."""
+    # The same software, whichever way it was obtained: a reinstall is safe
+    # even when the incoming copy is local and has no repository.
+    if _same_software_record(pkg, record):
+        return True
+    # Another release, or the older catalogue name, of the same firmware.
+    if _record_names_firmware(pkg, record):
+        return True
+    tracked = _package_for_record(model, record)
+    # Neither side names a parent firmware, so nothing says their data
+    # partitions match. A firmware that declares no family is compatible with
+    # its own releases only, and a player that came from a different system
+    # must start on a fresh data partition.
+    if not declares_family(pkg) and not declares_family(tracked):
+        return False
+    if tracked is None:
+        return None
+    incoming_repo = _norm(getattr(pkg, "repo", ""))
+    tracked_repo = _norm(getattr(tracked, "repo", ""))
+    if incoming_repo and incoming_repo == tracked_repo:
+        return True
+    if packages is None:
+        packages = _model_packages(model or getattr(pkg, "model", ""))
+    if family_repos(pkg, packages).intersection(family_repos(tracked, packages)):
+        return True
+    # A local copy carries no repository, so its family cannot be placed. That
+    # is unknown rather than proof of a different data partition.
+    if not incoming_repo or not tracked_repo:
+        return None
+    return False
+
+
 def tracked_is_compatible(model: str, pkg, settings: Optional[QSettings] = None, hardware_type: str = "") -> Optional[bool]:
-    """True/False for a tracked install, ``None`` when it cannot be known.
+    """True/False for the tracked installs, ``None`` when it cannot be known.
 
     The ``derivative`` graph is the only evidence that two systems share a
     data partition. A reinstall of the software already tracked always shares
@@ -313,41 +387,24 @@ def tracked_is_compatible(model: str, pkg, settings: Optional[QSettings] = None,
     ``no_keep_data``/``PMT_format_needed`` vetoes are checked by the callers
     first, so they win even here. Comparison stays inside one model: a Y2
     Rockbox is never compatible with a Y1 install.
+
+    With several firmwares tracked, any one of them being compatible is enough
+    for Keep Data to be possible; the install still asks which one is running
+    (see :func:`tracked_is_ambiguous`).
     """
     if pkg is None:
         return False
-    record = get_device_install(model, hardware_type=hardware_type, settings=settings)
-    if not record:
+    records = tracked_installs(model, settings, hardware_type)
+    if not records:
         return None
-    # The same software, whichever way it was obtained: a reinstall is safe
-    # even when the incoming copy is local and has no repository.
-    if _same_software_record(pkg, record):
-        return True
-    # Another release, or the older catalogue name, of the same firmware.
-    if _record_names_firmware(pkg, record):
-        return True
-    tracked = tracked_package(model, pkg, settings=settings, hardware_type=hardware_type)
-    # Neither side names a parent firmware, so nothing says their data
-    # partitions match. That used to read as "unknown": Keep Data was offered
-    # and the install asked which firmware was running. A firmware that
-    # declares no family is compatible with its own releases only, though, and
-    # the player that came from a different system — Y2Player, Classy, stock —
-    # must start on a fresh data partition. Asking after the box was already
-    # ticked offered it to exactly those players.
-    if not declares_family(pkg) and not declares_family(tracked):
-        return False
-    if tracked is None:
-        return None
-    incoming_repo = _norm(getattr(pkg, "repo", ""))
-    tracked_repo = _norm(getattr(tracked, "repo", ""))
-    if incoming_repo and incoming_repo == tracked_repo:
-        return True
     packages = _model_packages(model or getattr(pkg, "model", ""))
-    if family_repos(pkg, packages).intersection(family_repos(tracked, packages)):
+    verdicts = [
+        _compatible_with_record(model, pkg, record, packages)
+        for record in records
+    ]
+    if any(verdict is True for verdict in verdicts):
         return True
-    # A local copy carries no repository, so its family cannot be placed. That
-    # is unknown rather than proof of a different data partition.
-    if not incoming_repo or not tracked_repo:
+    if any(verdict is None for verdict in verdicts):
         return None
     return False
 
@@ -411,6 +468,10 @@ def needs_confirmation(model: str, pkg, settings: Optional[QSettings] = None, ha
 
     if pmt_format_required(pkg, model=model, settings=settings):
         return False
+    if tracked_is_ambiguous(model, settings, hardware_type):
+        # Several firmwares are on record: only the user can say which one is
+        # actually running, and that answer is what decides Keep Data.
+        return True
     return tracked_is_compatible(model, pkg, settings=settings, hardware_type=hardware_type) is None
 
 

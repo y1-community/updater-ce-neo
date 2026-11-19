@@ -302,7 +302,7 @@ def localize_text(text: str, lang: str) -> str:
     return translated
 
 
-WARNING_PREFIX = "This firmware is usually hidden due to reports from that community that: "
+WARNING_PREFIX = "This software is usually hidden due to reports from that community that: "
 
 
 def warning_message(reason: str, lang: str = "en") -> str:

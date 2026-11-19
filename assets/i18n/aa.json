@@ -1084,5 +1084,11 @@
  "donate_support_appeal_coffee_math": "inki buni amolladih obsih bandiwixih reebisa. Ciggiltah tan massos gufneh addat dacrisa.",
  "donate_family_appeal_expected": "Rayan kee kay wakliiti alqi qambaalan. Cugayso gexsitih awqentittee kee ni qusba buxah marah tekke qokolitte kaxxam assakat le.",
  "donate_family_appeal_new_arrival": "Rayan qarih addat qusba num yamaate. Kulli qokol ayfaf yacee maraa kee ni dadalih yan buxah marah yaanam kaxxa mekla.",
- "donate_family_appeal_nursery": "Rayan kee kay wakliiti sinni baxah gulguluh yanin. ta silac xoqoysi yeellek, ardi awqenta kee ni buxah marih qokol atu taaxigeemik muxxi koo catele."
+ "donate_family_appeal_nursery": "Rayan kee kay wakliiti sinni baxah gulguluh yanin. ta silac xoqoysi yeellek, ardi awqenta kee ni buxah marih qokol atu taaxigeemik muxxi koo catele.",
+ "settings_track_multiple_toggle": "Remind me about multiple releases on a single model",
+ "settings_track_multiple_desc": "Keeps a record of every release installed on the same model. With more than one on record the app cannot tell your players apart, so an install asks which software is running and whether to keep your settings and media. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_body": "With more than one release tracked for a model, every install for that model asks which software is on the player and whether to keep your settings and media, because the app cannot tell one player from another. Player update reminders keep working as usual.",
+ "settings_track_multiple_warn_accept": "Turn on",
+ "settings_add_device_dont_know": "I don't know",
+ "software_unknown": "Unknown Software"
 }

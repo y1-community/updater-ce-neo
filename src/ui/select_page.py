@@ -167,11 +167,15 @@ def display_software_name(name):
     """User-facing software name with preset i18n replacements.
 
     Catalogue and tracking names stay canonical English (they are lookup
-    keys); only the displayed name is localised. "Original Software" has
-    a preset translation per language (``software_original``).
+    keys); only the displayed name is localised. "Original Software" and
+    the catalogue's "Unknown" placeholder have preset translations
+    (``software_original`` / ``software_unknown``).
     """
-    if (name or "").strip() == "Original Software":
+    flattened = (name or "").strip()
+    if flattened == "Original Software":
         return tr("software_original")
+    if flattened in ("Unknown", "software_unknown"):
+        return tr("software_unknown")
     return name
 
 
@@ -2302,12 +2306,24 @@ class SelectPackagePage(QWidget):
             bool(filters.rockbox_240p),
         )
 
+    def refresh_software_list(self) -> None:
+        """Repopulate the software dropdown to reflect any newly tracked/untracked software."""
+        names = catalog.software_names_for_model(
+            self.current_model(), brand=self.current_brand()
+        )
+        self._populate_software_combo(names, select=self.current_software())
+
     def refresh_release_filters(self):
         """Re-list releases after the Settings filters changed."""
+        self.refresh_software_list()
         self._refresh_releases()
 
     def _on_type_changed(self, index):
         self._selected_type = self._type_combo.currentData()
+        names = catalog.software_names_for_model(
+            self.current_model(), brand=self.current_brand()
+        )
+        self._populate_software_combo(names, select=self.current_software())
         self._refresh_releases()
         self._sync_notice_context()
         self._update_keep_data_note()
@@ -2731,13 +2747,19 @@ class SelectPackagePage(QWidget):
         curr_model = self.current_model() or "Y1"
         software_name = self.current_software() or ""
         try:
-            from .. import device_tracking
-            install_rec = device_tracking.get_software_install(
-                curr_model, software_name, settings=getattr(self, "settings", None),
-            )
-            if install_rec:
-                installed_tag = install_rec.get("tag_name") or ""
-                installed_published = install_rec.get("published_at") or ""
+            from .. import device_tracking, keep_data
+            from ..player_update_check import _same_software
+            curr_hw = self.current_hardware_type()
+            s = getattr(self, "settings", None)
+            if not keep_data.tracked_is_ambiguous(curr_model, s, curr_hw):
+                install_rec = device_tracking.get_device_install(
+                    curr_model, hardware_type=curr_hw, settings=s,
+                )
+                if install_rec and _same_software(install_rec.get("software_name") or "", software_name):
+                    installed_tag = install_rec.get("tag_name") or ""
+                    installed_published = install_rec.get("published_at") or ""
+                else:
+                    install_rec = None
         except Exception:
             pass
 
@@ -4653,8 +4675,17 @@ class SelectPackagePage(QWidget):
         """
         idx = self._software_combo.currentIndex()
         if idx < 0:
-            return self._software_combo.currentText()
-        return str(self._software_combo.itemData(idx) or self._software_combo.itemText(idx))
+            text = self._software_combo.currentText()
+            if text.startswith("● "):
+                text = text[2:].strip()
+            return text
+        data = self._software_combo.itemData(idx)
+        if data:
+            return str(data)
+        text = self._software_combo.itemText(idx)
+        if text.startswith("● "):
+            text = text[2:].strip()
+        return text
 
     def current_package(self):
         model = self.current_model()
