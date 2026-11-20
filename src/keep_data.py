@@ -409,6 +409,41 @@ def tracked_is_compatible(model: str, pkg, settings: Optional[QSettings] = None,
     return False
 
 
+def install_first_allows_keep_data(
+    model: str,
+    pkg,
+    settings: Optional[QSettings] = None,
+    hardware_type: str = "",
+) -> bool:
+    """Whether a package that specifies install_first may use Keep Data.
+
+    Generally speaking users should not be able to keep settings / retain data
+    when installing a firmware with an install_first specified, unless
+    keep_data_on_first_install="true" is declared in slidia_manifest.xml.
+    However, Keep Data is still allowed when:
+    1. Installing a newer release of the firmware already used (e.g. when that
+       first_install firmware has already been installed and a user is updating it
+       without needing to do a first install).
+    2. Going between two firmwares with a derivative relationship in the firmware manifest.
+    3. keep_data_on_first_install="true" is declared on the package.
+    """
+    if pkg is None or not str(getattr(pkg, "install_first", "") or "").strip():
+        return True
+    if getattr(pkg, "keep_data_on_first_install", False):
+        return True
+    if tracked_is_same(model, pkg, settings=settings, hardware_type=hardware_type):
+        return True
+    records = tracked_installs(model, settings, hardware_type)
+    if records:
+        packages = _model_packages(model or getattr(pkg, "model", ""))
+        for record in records:
+            tracked = _package_for_record(model, record)
+            if tracked is not None and declares_family(pkg) and declares_family(tracked):
+                if family_repos(pkg, packages).intersection(family_repos(tracked, packages)):
+                    return True
+    return False
+
+
 def incompatible_with_current(model: str, pkg, settings: Optional[QSettings] = None, hardware_type: str = "") -> bool:
     """True when Keep Data is withheld only because the installed firmware differs.
 
@@ -419,6 +454,8 @@ def incompatible_with_current(model: str, pkg, settings: Optional[QSettings] = N
     all), so it must not get this note.
     """
     if pkg is None or getattr(pkg, "do_not_keep_data", False):
+        return False
+    if not install_first_allows_keep_data(model, pkg, settings=settings, hardware_type=hardware_type):
         return False
     if allow_keep_data_any(settings):
         return False
@@ -449,6 +486,8 @@ def keep_data_available(model: str, pkg, settings: Optional[QSettings] = None, h
         return False
     if pkg is None:
         return True
+    if not install_first_allows_keep_data(model, pkg, settings=settings, hardware_type=hardware_type):
+        return False
     if allow_keep_data_any(settings):
         return True
     tracked = tracked_is_compatible(model, pkg, settings=settings, hardware_type=hardware_type)
@@ -462,7 +501,11 @@ def needs_confirmation(model: str, pkg, settings: Optional[QSettings] = None, ha
     the app cannot know. A tracked install the catalogue can compare is
     answered already, so the run does not add a question to it.
     """
-    if pkg is None or getattr(pkg, "do_not_keep_data", False) or allow_keep_data_any(settings):
+    if pkg is None or getattr(pkg, "do_not_keep_data", False):
+        return False
+    if not install_first_allows_keep_data(model, pkg, settings=settings, hardware_type=hardware_type):
+        return False
+    if allow_keep_data_any(settings):
         return False
     from .pmt_format import pmt_format_required
 

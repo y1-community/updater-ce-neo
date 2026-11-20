@@ -351,7 +351,7 @@
  "install_first_power_on_fmt": "Tuu te USB aus mache, tayn {model} aan xtele un klik uf Next.",
  "install_first_power_on_hint": "Los te xpiiler een mool uf te basis firmware aan fange, tan tuu tee aus mache fer ti neekst instaliirunge.",
  "install_first_need_title": "Instaliire {software} ëyerst?",
- "install_first_need_body": "{software} is ti basis fer {target}. Es wërt ëyerst uf tayn {model} instaliirt, tan {target} khomt automaatix noo. Hal te xpiiler in te xteke un tuu tee nët fon te xteke wëch xafe.",
+ "install_first_need_body": "{target} funktsiooniert am pëstes wëns tuu mit {software} uf tayn {model} aan fangst. Meyer tuun ëyerst {software} instaliire, tan wayter {target} automaatix.",
  "install_first_when_body": "{target} mus net richtich iwer {running} instaliirt wëre: uf tayn {model} tuut te xpiiler net richtich aan fange noo heyer. Instaliire {software} ëyerst is ti sicherheet, un {target} tan khomt automaatix. Hal te xpiiler in te xteke un tuu tee nët fon te xteke wëch xafe.",
  "install_first_when_body_unnamed": "{target} sol net richtich iwer ti softwaer instaliert wëre woo xon uf tayn {model} xteet: te xpiiler tuut net richtich aan fange noo heyer. Instaliire {software} ëyerst is ti sicherheet, un {target} tan khomt automaatix. Hal te xpiiler in te xteke un tuu tee nët fon te xteke wëch xafe.",
  "install_first_recommend_title": "Instaliire {software} ëyerst?",

@@ -353,7 +353,7 @@
  "install_first_need_title": "¿Ñawpaqta {software}ta churay?",
  "install_first_need_body": "{software} nisqaqa {target} nisqapaq firma base nisqa. Ñawpaqtaqa {model}ykipi churasqa kanqa, chaymantataq {target} kikillanmanta qatin. Pukllaqta tinkisqata waqaychay, amataq enchufeta hurquychu.",
  "install_first_when_body": "{target} mana chiqan {running} pataman churasqachu kanan tiyan: {model}ykipi pukllaq mana allintachu qallarinqa chaymanta. Ñawpaqta {software} churayqa mana imamanta manchachikuq ñanmi, chaymantataq {target} kikillanmanta qatin. Pukllaqta tinkisqata waqaychay, amataq enchufeta hurquychu.",
- "install_first_when_body_unnamed": "{target} mana chiqan software kaqpi churasqachu kanan tiyan {model} kaqpiña: pukllaq mana allintachu qallarinqa chaymanta. Ñawpaqta {software} churayqa mana imamanta manchachikuq ñanmi, chaymantataq {target} kikillanmanta qatin. Pukllaqta tinkisqata waqaychay, amataq enchufeta hurquychu.",
+ "install_first_when_body_unnamed": "{target} mana chiqan software patapi {model} kaqpi churasqachu kanan tiyan: pukllaq mana allintachu qallarinqa chaymanta. {software} ñawpaqta churayqa mana manchay ñanmi, chaymanta {target} kikinmanta qatin.",
  "install_first_recommend_title": "¿Ñawpaqta {software}ta churay?",
  "install_first_recommend_body": "{model} nisqaykiqa {running}tam kallpachkan. {target} chaymanta churayqa {running} qallariy logotipo kaqninta chaymanta dispositivo ruwasqa logotipo kaqninta waqaychanman. Ñawpaqta {software} churayqa aswan chuya ñanmi: {target} chaymanta kikillanmanta qatin. Arí {software} ñawpaqta churan; Mana instalakuna {target} kunan musuq churanakunawan chaymanta mediokunawan.",
  "install_first_starting": "Munasqa base firmware {software} manaraq {target} kaqpi churay.",

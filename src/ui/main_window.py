@@ -1025,6 +1025,7 @@ class MainWindow(QMainWindow):
         self._install_first_stage = ""
         self._install_first_after = None
         self._install_first_prerequisite_run = False
+        self._install_first_target_run = False
         # MTKclient leaves the player off after the base run, so the target's
         # prep card only asks for a power-off: the player has just been
         # powered on and disconnected by the preceding card.
@@ -3106,6 +3107,8 @@ class MainWindow(QMainWindow):
         store = QSettings("innioasis", "updater")
         store.setValue(self.ONBOARDING_KEY, True)
         store.sync()
+        self._apply_install_ui_state(False)
+        self._sync_install_nav_entry()
         self._nav_to_page(_PAGE_SELECT)
         self._fit_window_to_page()
         QTimer.singleShot(0, self._fit_window_to_page)
@@ -5942,6 +5945,12 @@ class MainWindow(QMainWindow):
                     model, pkg, self.settings, hardware_type=hardware
                 )
             )
+            if getattr(self, "_install_first_target_run", False):
+                self._keep_data_erase_required = False
+                if not getattr(pkg, "keep_data_on_first_install", False):
+                    available = False
+                    self._keep_data = False
+                    self._keep_data_choice_locked = True
             # FIX: Only show checkbox if compatible, regardless of format requirement.
             # Compatibility is already checked by keep_data_available.
             self._flash_page.set_keep_data_available(
@@ -9072,7 +9081,13 @@ class MainWindow(QMainWindow):
         if journey is None:
             return
         self._install_first_stage = ""
+        self._install_first_target_run = True
         self._install_first_power_off_only = False
+        self._keep_data_choice_locked = True
+        self._keep_data_erase_required = False
+        self._keep_data_erase_confirm_pending = False
+        self._keep_data_confirm_pending = False
+        self._keep_data = False
         self._flash_page.set_power_off_only(False)
         self._flash_page.clear_keep_data_confirmation()
         self._select_page.start_release_install(
@@ -9170,6 +9185,7 @@ class MainWindow(QMainWindow):
         journey = getattr(self, "_install_first_journey", None)
         previous, rel = self._install_first_after or (None, None)
         self._install_first_prerequisite_run = False
+        self._install_first_target_run = True
         self._install_first_after = None
         # The prerequisite's own extraction is released with the journey when
         # the target finishes; purging here would compare the target's selected
@@ -9180,6 +9196,10 @@ class MainWindow(QMainWindow):
         self._install_failed = False
         self._pre_install_guided = False
         self._keep_data = False
+        self._keep_data_choice_locked = True
+        self._keep_data_erase_required = False
+        self._keep_data_erase_confirm_pending = False
+        self._keep_data_confirm_pending = False
         self._format_all_required = False
         if journey is not None:
             self._append_log(
@@ -9231,6 +9251,7 @@ class MainWindow(QMainWindow):
         self._install_first_stage = ""
         self._install_first_after = None
         self._install_first_prerequisite_run = False
+        self._install_first_target_run = False
         self._install_first_power_off_only = False
         page = getattr(self, "_flash_page", None)
         if page is not None:
@@ -9377,6 +9398,8 @@ class MainWindow(QMainWindow):
             page.lock_keep_data(bool(self._keep_data))
 
     def _keep_data_needs_confirmation(self) -> bool:
+        if getattr(self, "_install_first_target_run", False):
+            return False
         # The install-first journey has already asked which software is on the
         # player (and has blocked Keep Data when its answer forbids it), so its
         # run must not be asked the same thing again.
@@ -10234,6 +10257,7 @@ class MainWindow(QMainWindow):
         self._install_first_stage = ""
         self._install_first_after = None
         self._install_first_prerequisite_run = False
+        self._install_first_target_run = False
         self._install_first_power_off_only = False
         self._keep_data = False
         self._keep_data_choice_locked = False
@@ -10433,6 +10457,8 @@ class MainWindow(QMainWindow):
         hidden for reasons of their own.
         """
         if locked:
+            if getattr(self, "_onboarding_nav_state", None):
+                return
             self._onboarding_nav_state = {}
             buttons = [
                 self._nav_buttons.get(key, (None,))[0]
@@ -10461,6 +10487,18 @@ class MainWindow(QMainWindow):
             except RuntimeError:  # a row that was rebuilt and deleted
                 pass
         self._onboarding_nav_state = {}
+        # Ensure Select Software and Support Us are immediately restored, visible, and enabled
+        select_entry = getattr(self, "_nav_buttons", {}).get("nav_select_package")
+        if select_entry and select_entry[0] is not None:
+            select_entry[0].setEnabled(True)
+            select_entry[0].setVisible(True)
+        if hasattr(self, "_support_btn") and self._support_btn is not None:
+            self._support_btn.setEnabled(True)
+            from .. import device_tracking
+
+            self._support_btn.setVisible(
+                not device_tracking.is_donation_ui_disabled(self.settings)
+            )
 
     def _on_settings_nav_clicked(self):
         """Opening the row under its temporary name keeps that stage on screen.

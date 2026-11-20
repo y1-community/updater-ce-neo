@@ -351,7 +351,7 @@
  "install_first_power_on_fmt": "Koppla ur USB, slå på din {model} och klicka på Nästa.",
  "install_first_power_on_hint": "Låt spelaren starta en gång på basens firmware och stäng sedan av den för nästa installation.",
  "install_first_need_title": "Installera {software} först?",
- "install_first_need_body": "{software} är basfirmware för {target}. Det kommer att installeras på din {model} först, sedan följer {target} automatiskt. Håll spelaren ansluten och koppla inte ur den.",
+ "install_first_need_body": "{target} fungerar bäst när du börjar med {software} på din {model}. Vi installerar först {software} och fortsätter sedan automatiskt till {target}.",
  "install_first_when_body": "{target} får inte installeras rakt över {running}: på din {model} kommer spelaren inte att starta ordentligt efteråt. Att installera {software} först är den säkra vägen, och {target} följer sedan automatiskt. Håll spelaren ansluten och koppla inte ur den.",
  "install_first_when_body_unnamed": "{target} får inte installeras rakt över programvaran som redan finns på din {model}: spelaren kommer inte att starta ordentligt efteråt. Att installera {software} först är den säkra vägen, och {target} följer sedan automatiskt. Håll spelaren ansluten och koppla inte ur den.",
  "install_first_recommend_title": "Installera {software} först?",

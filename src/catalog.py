@@ -114,6 +114,10 @@ class FirmwarePackage:
     # Skip the prerequisite question when the player already runs the base
     # (``install_first_once``).
     install_first_once: bool = False
+    # Whether Keep Data is allowed on a first install of this firmware when
+    # install_first is specified (``keep_data_on_first_install="true"`` in
+    # slidia_manifest.xml). Defaults to False.
+    keep_data_on_first_install: bool = False
     # Archive names declared per player and hardware revision
     # (``package_name_y2``, ``package_name_y1_type_b``,
     # ``package_name_timmkoo_a5``), keyed by the attribute's own suffix after

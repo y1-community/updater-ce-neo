@@ -353,7 +353,7 @@
  "install_first_need_title": "Inis {software} akkomw?",
  "install_first_need_body": "{software} ina ewe pisekin angang fan iten {target}. Epwe akkomw fis won noumw we {model}, mwirin {target} epwe fiti. Kopwe amwochu ewe player me kosapw suki.",
  "install_first_when_body": "{target} esapw tongeni epwe wenechar won {running}: won omw {model} ewe chon fiti esapw poputa ne fiti pwungun mwirin. Kopwe akkomw install {software} ina ewe aan mi safe, iwe {target} mwirin epwe fiti. Kopwe amwochu ewe player me kosapw suki ewe plug.",
- "install_first_when_body_unnamed": "{target} esapw tongeni epwe wenechar won ewe softwer mei fen nomw won noumw we {model}: ewe chon fiti esapw poputa ne fiti pwungun mwirin. Kopwe akkomw install {software} ina ewe aan mi safe, iwe {target} mwirin epwe fiti pwisin. Kopwe amwochu ewe player me kosapw suki ewe plug.",
+ "install_first_when_body_unnamed": "{target} esapw tongeni epwe pwungun nomw won ewe softwer mei fen nomw won omw ewe {model}: ewe chon fiti esapw poputa ne fiti pwungun mwirin. Kopwe akkomw install {software} ina ewe aan mi safe, iwe {target} epwe mwitir fiti.",
  "install_first_recommend_title": "Inis {software} akkomw?",
  "install_first_recommend_body": "Iwe {model} a tori {running}. Ika kopwe isoni {target} won epwe tongeni tumunu ewe esisinen poputan {running} me ekkewe esisinen pisekin angang mi custom. Kopwe akkomw install {software} ina ewe aan mi nimenimoch: {target} iwe epwe fiti pwisin. Ewer a install {software} akkom; Ese wor install {target} iei ren ekkewe minefoon setin me media.",
  "install_first_starting": "Kopwe fori ewe pisekin angang mi namwot {software} me mwen {target}.",

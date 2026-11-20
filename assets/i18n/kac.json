@@ -351,7 +351,7 @@
  "install_first_power_on_fmt": "USB hpe gang je kau nna, na a {model} hpe power on galaw nna Next hpe dip dat u.",
  "install_first_power_on_hint": "Player hpe base firmware kaw kalang sha hpaw dat nna, hpang na install galaw na matu power off galaw dat u.",
  "install_first_need_title": "{software} hpe shawng bang na kun?",
- "install_first_need_body": "{software} gaw {target} a matu npawt nhpang firmware re. Na a {model} kaw shawng install galaw na re, dai hpang {target} gaw shi hkrai shi hkan nang na re. Player hpe matut da nna, n-gun hkum dat.",
+ "install_first_need_body": "{target} gaw na a {model} kaw {software} hte hpang ai shaloi kaja dik htum bungli galaw ai. Anhte gaw {software} hpe shawng install galaw nna, {target} hpe shi hkrai shi matut galaw na re.",
  "install_first_when_body": "{target} hpe {running} ntsa de hkrak hkrak n mai bang ai: na a {model} kaw na player gaw dai hpang hkrak n start up na re. {software} hpe shawng install galaw ai gaw shim lum ai lam rai nna, {target} gaw shi hkrai shi hkan nang wa ai. Player hpe matut da nna, n-gun hkum dat.",
  "install_first_when_body_unnamed": "{target} hpe na a {model} kaw nga sai software ntsa de hkrak hkrak n mai bang ai: dai hpang player gaw kaja wa n hpaw na re. {software} hpe shawng install galaw ai gaw shim lum ai lam rai nna, {target} gaw shi hkrai shi hkan nang wa ai. Player hpe matut da nna, n-gun hkum dat.",
  "install_first_recommend_title": "{software} hpe shawng bang na kun?",

@@ -351,7 +351,7 @@
  "install_first_power_on_fmt": "Feuch an dì-cheangail thu an USB, cumhachd air do {model} agus cliog An ath-.",
  "install_first_power_on_hint": "Leig leis a ’chluicheadair tòiseachadh aon uair air a’ firmware bunaiteach, agus an uairsin cuir dheth e airson an ath stàladh.",
  "install_first_need_title": "Stàlaich {software} an toiseach?",
- "install_first_need_body": "Is e {software} am firmware bunaiteach airson {target}. Thèid a chuir a-steach air do {model} an toiseach, agus an uairsin leanaidh {target} gu fèin-ghluasadach. Cùm an cluicheadair ceangailte agus na thoir air falbh e.",
+ "install_first_need_body": "obraichidh {target} as fheàrr nuair a thòisicheas tu le {software} air a’ {model} agad. Stàlaichidh sinn {software} an toiseach, agus an uairsin leanaidh sinn air adhart gu {target} gu fèin-obrachail.",
  "install_first_when_body": "Cha bu chòir {target} a stàladh dìreach a-null {running}: air do {model} cha tòisich an cluicheadair ceart às a dhèidh. Is e stàladh {software} an t-slighe shàbhailte an toiseach, agus {target} an uairsin a’ leantainn gu fèin-ghluasadach. Cùm an cluicheadair ceangailte agus na dì-phlug e.",
  "install_first_when_body_unnamed": "Chan fhaod {target} a bhith air a stàladh dìreach thairis air a’ bhathar-bog a tha air do {model} mu thràth: cha tòisich an cluicheadair ceart às a dhèidh. Is e stàladh {software} an t-slighe shàbhailte an toiseach, agus {target} an uairsin a’ leantainn gu fèin-ghluasadach. Cùm an cluicheadair ceangailte agus na thoir air falbh e.",
  "install_first_recommend_title": "Stàlaich {software} an toiseach?",

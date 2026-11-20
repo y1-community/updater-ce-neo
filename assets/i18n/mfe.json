@@ -351,7 +351,7 @@
  "install_first_power_on_fmt": "Silvouple dekonekte USB-la, alim ou {model} ek klik Prosin.",
  "install_first_power_on_hint": "Les zwer-la koumans enn fwa lor mikrolozisiel baz, apre tenn li pou prosin instalasion.",
  "install_first_need_title": "Instal {software} avan?",
- "install_first_need_body": "{software} se mikrolozisiel debaz pou {target}. Li pou instale lor ou {model} avan, apre {target} swiv otomatikman. Gard zwer-la konekte e pa debrans li.",
+ "install_first_need_body": "{target} mars pli bien kan ou koumans avek {software} lor ou {model}. Nou pou instal {software} avan, apre nou pou kontinie {target} otomatikman.",
  "install_first_when_body": "{target} pa bizin instale drwat lor {running}: lor ou {model} zwer-la pa pou demare kouma bizin apre. Instal {software} avan se enn bon sime, ek {target} apre swiv otomatikman. Gard zwer-la konekte e pa debrans li.",
  "install_first_when_body_unnamed": "{target} pa bizin instale direkteman lor lozisiel ki deza lor ou {model}: zwer-la pa pou demare kouma bizin apre. Instal {software} avan se enn bon sime, ek {target} apre swiv otomatikman. Gard zwer-la konekte e pa debrans li.",
  "install_first_recommend_title": "Instal {software} avan?",

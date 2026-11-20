@@ -351,7 +351,7 @@
  "install_first_power_on_fmt": "Mi kɛnklɛn bo ɖe USB ɔ, mi hɛn {model} mitɔn bo tεn Next.",
  "install_first_power_on_hint": "Mi jó nǔxixo ɔ dó bɔ é na bɛ́ azɔn ɖokpo ɖò mɔ̌to ɔ jí, enɛ gudo hǔn, mi cí mɔ̌to ɔ jí nú nǔ e bɔ d’ewu é.",
  "install_first_need_title": "Mi zé {software} ɖó nukɔn à ?",
- "install_first_need_body": "{software} wɛ nyí xójlawema ɖaxó {target} tɔn. É na nɔ {model} towe jí jɛ nukɔn, enɛ gudo ɔ, {target} na xwedó éɖesunɔ. Hɛn nǔxixo ɔ ɖó kpɔ́ bo ma ɖè è sín kɔ́ntu mɛ ó.",
+ "install_first_need_body": "{target} nɔ w'azɔ ganji hwenu e a jɛ {software} ji ɖo {model} towe ji ɔ. Mi na zé {software} ɖ'ayi jɛ nukɔn, enɛ ɔ gudo ɔ, mi na yi nukɔn bo na zé {target} ɔ ɖ'ayi.",
  "install_first_when_body": "{target} ɖó na nɔ tlɔlɔ ɖò {running} jí ǎ: ɖò {model} towe jí ɔ, ayihunmlimlixotɔ́ ɔ na bɛ́ ganji ɖò enɛ gudo ǎ. {software} ɖiɖó jɛ nukɔn wɛ nyí ali e ɖò ayijayǐ mɛ é, bɔ {target} nɔ xwedó éɖesunɔ. Hɛn nǔxixo ɔ ɖó kpɔ́ bo ma ɖè è sín kɔ́ntu mɛ ó.",
  "install_first_when_body_unnamed": "{target} ɖó na nɔ tlɔlɔ ɖò mɔ̌to e ko ɖò {model} towe jí é jí ǎ: nǔxixotɔ́ ɔ na bɛ́ azɔ̌ ganji ɖò enɛ gudo ǎ. {software} ɖiɖó jɛ nukɔn wɛ nyí ali e ɖò ayijayǐ mɛ é, bɔ {target} nɔ xwedó éɖesunɔ. Hɛn nǔxixo ɔ ɖó kpɔ́ bo ma ɖè è sín kɔ́ntu mɛ ó.",
  "install_first_recommend_title": "Mi zé {software} ɖó nukɔn à ?",

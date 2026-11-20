@@ -351,7 +351,7 @@
  "install_first_power_on_fmt": "אנא נתק את ה-USB, הפעל את {model} שלך ולחץ על הבא.",
  "install_first_power_on_hint": "תן לנגן להתחיל פעם אחת על הקושחה הבסיסית, ולאחר מכן כבה אותו להתקנה הבאה.",
  "install_first_need_title": "להתקין תחילה את {software}?",
- "install_first_need_body": "{software} היא הקושחה הבסיסית עבור {target}. הוא יותקן תחילה על {model} שלך, ולאחר מכן {target} עוקב אחריו אוטומטית. השאר את הנגן מחובר ואל תנתק אותו.",
+ "install_first_need_body": "{target} עובד הכי טוב כשאתה מתחיל עם {software} ב-{model} שלך. נתקין תחילה את {software} ולאחר מכן נמשיך אל {target} באופן אוטומטי.",
  "install_first_when_body": "אסור להתקין את {target} ישר מעל {running}: ב-{model} שלך הנגן לא יופעל כראוי לאחר מכן. התקנת {software} תחילה היא המסלול הבטוח, ולאחר מכן {target} עוקב אחר כך באופן אוטומטי. השאר את הנגן מחובר ואל תנתק אותו.",
  "install_first_when_body_unnamed": "אסור להתקין את {target} ישר מעל התוכנה שכבר נמצאת ב-{model} שלך: הנגן לא יופעל כראוי לאחר מכן. התקנת {software} תחילה היא המסלול הבטוח, ולאחר מכן {target} עוקב אחר כך באופן אוטומטי. השאר את הנגן מחובר ואל תנתק אותו.",
  "install_first_recommend_title": "להתקין תחילה את {software}?",

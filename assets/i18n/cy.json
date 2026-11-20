@@ -351,7 +351,7 @@
  "install_first_power_on_fmt": "Datgysylltwch y USB, pwerwch ar eich {model} a chliciwch ar Next.",
  "install_first_power_on_hint": "Gadewch i'r chwaraewr ddechrau unwaith ar y firmware sylfaenol, yna ei bweru ar gyfer y gosodiad nesaf.",
  "install_first_need_title": "Gosod {software} yn gyntaf?",
- "install_first_need_body": "{software} yw'r cadarnwedd sylfaenol ar gyfer {target}. Bydd yn cael ei osod ar eich {model} yn gyntaf, yna {target} yn dilyn yn awtomatig. Cadwch y chwaraewr yn gysylltiedig a pheidiwch â'i ddad-blygio.",
+ "install_first_need_body": "Mae {target} yn gweithio orau pan fyddwch chi'n dechrau gyda {software} ar eich {model}. Byddwn yn gosod {software} yn gyntaf, yna yn parhau i {target} yn awtomatig.",
  "install_first_when_body": "Ni ddylid gosod {target} yn syth drosodd {running}: ar eich {model} ni fydd y chwaraewr yn cychwyn yn iawn wedyn. Gosod {software} yn gyntaf yw'r llwybr diogel, ac mae {target} wedyn yn dilyn yn awtomatig. Cadwch y chwaraewr yn gysylltiedig a pheidiwch â'i ddad-blygio.",
  "install_first_when_body_unnamed": "Ni ddylid gosod {target} yn syth dros y meddalwedd sydd eisoes ar eich {model}: ni fydd y chwaraewr yn cychwyn yn iawn wedyn. Gosod {software} yn gyntaf yw'r llwybr diogel, ac mae {target} wedyn yn dilyn yn awtomatig. Cadwch y chwaraewr yn gysylltiedig a pheidiwch â'i ddad-blygio.",
  "install_first_recommend_title": "Gosod {software} yn gyntaf?",

@@ -353,7 +353,7 @@
  "install_first_need_title": "Isa {software} kutanga?",
  "install_first_need_body": "{software} ndiyo yepasi yekambani ye {target}. Inozoiswa pa {model} yako kutanga, yozotevera {target} yomene. Ramba mutambi akabatanidzwa uye usaibvisa.",
  "install_first_when_body": "{target} haifaniri kuiswa yakananga pamusoro pe {running}: pa {model} yako mutambi haazotangi zvakanaka mushure mwazvo. Kuisa {software} kutanga ndiyo njira yakachengeteka, uye {target} inozotevera yega. Ramba mutambi akabatanidzwa uye usaibvisa.",
- "install_first_when_body_unnamed": "{target} haifaniri kuiswa zvakananga pamusoro pe software iripo kare pa {model} yako: mutambi haazotangi zvakanaka mushure mwazvo. Kuisa {software} kutanga ndiyo njira yakachengeteka, uye {target} inozotevera yega. Ramba mutambi akabatanidzwa uye usaibvisa.",
+ "install_first_when_body_unnamed": "{target} haifaniri kuiswa zvakananga pamusoro pe software yatove pa {model} yako: mutambi haazotangi zvakanaka mushure. Kuisa {software} kutanga ndiyo njira yakachengeteka, uye {target} inozotevera yega.",
  "install_first_recommend_title": "Isa {software} kutanga?",
  "install_first_recommend_body": "{model} yako iri kumhanya {running}. Kuisa {target} pamusoro payo kunokona kuchengeta {running}'s kutanga logo uye tsika mudziyo logos. Kuisa {software} kutanga ndiyo njira yakachena: {target} yozotevera yega. Ehe inoisa {software} kutanga; Hapana inoisa {target} zvino ine magadzirirwo matsva uye midhiya.",
  "install_first_starting": "Kuisa zvinodiwa zvepasi firmware {software} asati {target}.",

@@ -351,7 +351,7 @@
  "install_first_power_on_fmt": "Martəgəne USB dəga təmtəgə, {model} dəga fəletə kuru Next dəga rattəgə.",
  "install_first_power_on_hint": "Kolle player dəga falro badijin kəla firmware baseben, daji shiga təmzayin fuwuro install diwo nankaro.",
  "install_first_need_title": "{software} buro salakkin yike?",
- "install_first_need_body": "{software} də shima firmware {target} bewo. Shidə {model} nanzən buron təkkin, daji {target} kəlanzəlaro zəgayin. Player dəga kəllataro rowotə kuru wande shiga fəletənyi.",
+ "install_first_need_body": "{target} də zauro faidajin sa {software} lan baditin ma kəla {model} yen. Buron {software} yikin, daji {target} kəlanzəlaro goza kotin.",
  "install_first_when_body": "{target} də mburo walzənyi kəla {running} yen: kəla {model} yen player də kalkalro badijin ba ngawo adəyen. {software} buro salaklan yikodə shima diwal nəlewabewo, kuru {target} daji kəlanzəlaro zəgayin. Player dəga kəllataro rowotə kuru wande shiga fəletənyi.",
  "install_first_when_body_unnamed": "{target} də mburo walzənyi kəla software do {model} lan mbeji dəro: player də kalkalro badijin ba ngawo adəyen. {software} buro salaklan yikodə shima diwal nəlewabewo, kuru {target} daji kəlanzəlaro zəgayin. Player dəga kəllataro rowotə kuru wande shiga fəletənyi.",
  "install_first_recommend_title": "{software} buro salakkin yike?",

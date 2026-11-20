@@ -351,7 +351,7 @@
  "install_first_power_on_fmt": "USB no swkakdi, nini {model} no power khaiwi Next no click khaidi.",
  "install_first_power_on_hint": "Phiyaba khelainai borok no kaisa jora chengwi rwdi, aboni ulo tei kaisa install ni bagwi power off khai di.",
  "install_first_need_title": "{software} swkang swnamdi?",
- "install_first_need_body": "{software} wngkha {target} ni bagwi puila samung. Puila nini {model} o install wngnai, aboni ulo {target} wngwi thangnai. Player no connect khaiwi tongdi tei plug no unplug khaiwi ta tongdi.",
+ "install_first_need_body": "{target} kaham khe samung tangnai nwng nini {model} o {software} bai chengphuru. Chwng swkang {software} install khwlai nai, aboni ulo {target} no swkang swkang khwlai nai.",
  "install_first_when_body": "{target} no {running} ni sakao direct khe install khwlaiwi rwna nangya: nini {model} o player kaham khe swkang wngwi manliya. {software} swkang install khlaimani abo safe lama, tei {target} aboni ulo khe sak bai sak wngwi thango. Player no connect khaiwi tongdi tei plug no unplug khaiwi ta tongdi.",
  "install_first_when_body_unnamed": "{target} no nini {model} o tongnai software ni sakao direct khe install khlaiwi rwna nangya: aboni ulo player kaham khe swkang wngnai ya. {software} swkang install khlaimani abo safe lama, tei {target} aboni ulo khe sak bai sak wngwi thango. Player no connect khaiwi tongdi tei plug no unplug khaiwi ta tongdi.",
  "install_first_recommend_title": "{software} swkang swnamdi?",

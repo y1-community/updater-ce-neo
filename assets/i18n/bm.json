@@ -351,7 +351,7 @@
  "install_first_power_on_fmt": "Aw ye USB tigɛ, ka aw ka {model} kuran da ani ka Next digi.",
  "install_first_power_on_hint": "A to tulonkɛla ka daminɛ siɲɛ kelen basigi firimiwɛri kan, o kɔ a ka kuran faga walasa ka sigili nata kɛ.",
  "install_first_need_title": "Aw bɛ {software} sigi fɔlɔ wa?",
- "install_first_need_body": "{software} ye {target} ka basigi firimiwɛri ye. A bɛna sigi i ka {model} kan fɔlɔ, o kɔfɛ {target} bɛ tugu o kɔ a yɛrɛma. Aw bɛ to ka fɔlikɛlan ni ɲɔgɔn cɛ ani aw kana a ka fiyɛli bɔ.",
+ "install_first_need_body": "{target} bɛ baara kɛ ka ɲɛ ni i ye a daminɛ ni {software} ye i ka {model} kan. An bɛna {software} sigi fɔlɔ, o kɔfɛ, an bɛna taa a fɛ ka {target} kɛ an yɛrɛma.",
  "install_first_when_body": "{target} man kan ka sigi ka ɲɛ {running} kan: i ka {model} kan, fɔlikɛla tɛna daminɛ ka ɲɛ o kɔfɛ. {software} sigili fɔlɔ ye sira lakananen ye, o kɔfɛ {target} bɛ tugu o kɔ a yɛrɛma. Aw bɛ to ka fɔlikɛlan ni ɲɔgɔn cɛ ani aw kana a ka fiyɛli bɔ.",
  "install_first_when_body_unnamed": "{target} man kan ka sigi ka ɲɛ porogaramu kan min bɛ i ka {model} kan kaban: fɔlikɛla tɛna daminɛ ka ɲɛ o kɔfɛ. {software} sigili fɔlɔ ye sira lakananen ye, o kɔfɛ {target} bɛ tugu o kɔ a yɛrɛma. Aw bɛ to ka fɔlikɛlan ni ɲɔgɔn cɛ ani aw kana a ka fiyɛli bɔ.",
  "install_first_recommend_title": "Aw bɛ {software} sigi fɔlɔ wa?",

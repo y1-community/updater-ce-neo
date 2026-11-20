@@ -351,7 +351,7 @@
  "install_first_power_on_fmt": "Thov disconnect lub USB, lub hwj chim ntawm koj {model} thiab nias Next.",
  "install_first_power_on_hint": "Cia tus neeg uas ua ntawv pib ib zaug ntawm lub hauv paus firmware, tom qab ntawd fais fab nws tawm rau kev teeb tsa tom ntej.",
  "install_first_need_title": "Nruab {software} ua ntej?",
- "install_first_need_body": "{software} yog lub hauv paus firmware rau {target}. Nws yuav raug ntsia rau ntawm koj {model} ua ntej, ces {target} ua raws li tau txais. Khaws cov neeg uas ua ntawv txuas nrog thiab tsis txhob rub tawm.",
+ "install_first_need_body": "{target} ua haujlwm zoo tshaj plaws thaum koj pib nrog {software} ntawm koj {model}. Peb yuav nruab {software} ua ntej, ces txuas mus rau {target} tau.",
  "install_first_when_body": "{target} yuav tsum tsis txhob ntsia ncaj qha rau {running}: ntawm koj {model} tus neeg uas ua ntawv yuav tsis pib zoo tom qab ntawd. Txhim kho {software} ua ntej yog txoj hauv kev nyab xeeb, thiab {target} tom qab ntawd ua raws li. Khaws cov neeg uas ua ntawv txuas nrog thiab tsis txhob rub tawm.",
  "install_first_when_body_unnamed": "{target} yuav tsum tsis txhob ntsia ncaj qha rau ntawm lub software uas twb muaj lawm ntawm koj {model}: tus neeg uas ua ntawv yuav tsis pib zoo tom qab ntawd. Txhim kho {software} ua ntej yog txoj hauv kev nyab xeeb, thiab {target} ua raws li tau txais. Khaws cov neeg uas ua ntawv txuas nrog thiab tsis txhob rub tawm.",
  "install_first_recommend_title": "Nruab {software} ua ntej?",

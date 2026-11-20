@@ -263,6 +263,15 @@ def _packages_from_mapping(mapping: dict, description: str = "") -> list[Firmwar
                 "1",
                 "yes",
             )
+        raw_kdofi = mapping.get("keep_data_on_first_install")
+        if isinstance(raw_kdofi, bool):
+            keep_data_on_first_install = raw_kdofi
+        else:
+            keep_data_on_first_install = str(raw_kdofi or "").strip().lower() in (
+                "true",
+                "1",
+                "yes",
+            )
         raw_dnkd = mapping.get("do_not_keep_data")
         if raw_dnkd is None:
             raw_dnkd = mapping.get("no_keep_data")
@@ -343,6 +352,7 @@ def _packages_from_mapping(mapping: dict, description: str = "") -> list[Firmwar
                 install_first_version=install_first_version,
                 install_first_when=install_first_when,
                 install_first_once=install_first_once,
+                keep_data_on_first_install=keep_data_on_first_install,
             )
         )
     return out
@@ -444,6 +454,7 @@ def cache_manifest(entries):
              "install_first_version": getattr(e, "install_first_version", "") or "",
              "install_first_when": getattr(e, "install_first_when", "") or "",
              "install_first_once": bool(getattr(e, "install_first_once", False)),
+             "keep_data_on_first_install": bool(getattr(e, "keep_data_on_first_install", False)),
              "do_not_keep_data": bool(getattr(e, "do_not_keep_data", False)),
              "post_install_once": bool(getattr(e, "post_install_once", False)),
              "PMT_format_needed": bool(getattr(e, "pmt_format_needed", False))}
@@ -496,6 +507,7 @@ def load_cached_manifest(max_age=MANIFEST_CACHE_TTL_SECONDS):
                 install_first_version=e.get("install_first_version", "") or "",
                 install_first_when=e.get("install_first_when", "") or "",
                 install_first_once=bool(e.get("install_first_once", False)),
+                keep_data_on_first_install=bool(e.get("keep_data_on_first_install", False)),
                 do_not_keep_data=bool(e.get("do_not_keep_data", False)),
                 post_install_once=bool(e.get("post_install_once", False)),
                 pmt_format_needed=bool(

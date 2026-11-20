@@ -351,7 +351,7 @@
  "install_first_power_on_fmt": "Nceda uqhawule i-USB, vula i-{model} yakho kwaye ucofe Okulandelayo.",
  "install_first_power_on_hint": "Vumela umdlali aqale kube kanye kwisiseko se-firmware, emva koko uyicime kwi-install elandelayo.",
  "install_first_need_title": "Faka {software} kuqala?",
- "install_first_need_body": "{software} sisiseko se-firmware se-{target}. Iza kufakwa kweyakho {model} kuqala, emva koko {target} ilandele ngokuzenzekelayo. Gcina umdlali eqhagamshelwe kwaye ungayikhupheli iplagi.",
+ "install_first_need_body": "{target} isebenza kakuhle xa uqala nge {software} kwi {model} yakho. Siza kuhlohla {software} kuqala, emva koko siqhubeke siye {target} ngokuzenzekelayo.",
  "install_first_when_body": "{target} akufuneki ifakwe ngqo ngaphezulu {running}: kwi-{model} yakho umdlali akayi kuqalisa kakuhle emva koko. Ukufakela {software} kuqala yindlela ekhuselekileyo, kwaye {target} ilandele ngokuzenzekelayo. Gcina umdlali eqhagamshelwe kwaye ungayikhuphi.",
  "install_first_when_body_unnamed": "{target} akufuneki ifakwe ngqo phezu kwesoftware esele ikwi {model}: umdlali akayi kuqalisa kakuhle emva koko. Ukufakela {software} kuqala yindlela ekhuselekileyo, kwaye {target} ilandele ngokuzenzekelayo. Gcina umdlali eqhagamshelwe kwaye ungayikhuphi.",
  "install_first_recommend_title": "Faka {software} kuqala?",

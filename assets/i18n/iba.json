@@ -353,7 +353,7 @@
  "install_first_need_title": "Pasang {software} dulu?",
  "install_first_need_body": "{software} nya meh perisian pelasar ungkup {target}. Iya deka dipasang ba {model} nuan dulu, udah nya {target} nitihka automatik. Jaga pemain nya terus disambung lalu anang cabut plag.",
  "install_first_when_body": "{target} enda tau dipasang lurus atas {running}: ba {model} nuan pemain enda start up enggau manah udah nya. Masang {software} dulu nya jalai ti likun, lalu {target} udah nya nitihka automatik. Jaga pemain nya terus disambung lalu anang cabut plag.",
- "install_first_when_body_unnamed": "{target} enda tau dipasang terus ba atas software ti udah bisi ba {model} nuan: pemain enda deka start enggau manah udah nya. Masang {software} dulu nya jalai ti likun, lalu {target} udah nya nitihka automatik. Jaga pemain nya terus disambung lalu anang cabut plag.",
+ "install_first_when_body_unnamed": "{target} enda tau dipasang terus ba atas software ti udah bisi ba {model} nuan: pemain enda deka berengkah enggau manah udah nya. Masang {software} dulu nya jalai ti likun, lalu {target} udah nya nitihka automatik.",
  "install_first_recommend_title": "Pasang {software} dulu?",
  "install_first_recommend_body": "{model} nuan benung bejalai {running}. Masang {target} ba atas iya engka nyimpan logo pemungkal {running} enggau logo perengka adat. Masang {software} dulu nya jalai ti pemadu beresi: {target} udah nya nitihka automatik. Iya masang {software} dulu; Nadai masang {target} diatu enggau setting enggau media ti baru.",
  "install_first_starting": "Masang firmware pangkalan ti diguna {software} sebedau {target}.",
