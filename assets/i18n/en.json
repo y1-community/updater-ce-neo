@@ -849,8 +849,8 @@
  "settings_hide_donations": "Turn off Donations / Credits",
  "settings_hide_donations_tip": "Turn off to hide credits and donation prompts for a cleaner look.",
  "settings_install_rockbox_themes_btn": "Install Themes Now",
- "settings_install_themes_desc": "When enabled, Rockbox themes are automatically transferred to Y1 after a successful Rockbox install.",
- "settings_install_themes_group": "Install Rockbox 360p Themes (Y1)",
+ "settings_install_themes_desc": "When enabled, Rockbox themes are automatically transferred to Y1 and Y2 after a successful Rockbox install.",
+ "settings_install_themes_group": "Install Rockbox 360p Themes (Y1 / Y2)",
  "settings_installed_status": "Last installed: <b>{software}</b> ({version}) · {date}",
  "settings_method_group": "Install Method",
  "settings_method_group_mediatek": "Flashing Engine for MediaTek installer",
@@ -1113,5 +1113,7 @@
  "update_saved_to_fmt": "Saved to: {path}",
  "update_start_failed_fmt": "Could not start the update: {error}",
  "update_store_available_fmt": "{new} is available in the Microsoft Store (you have {current}).",
- "update_up_to_date": "You're up to date, version <b>{version}</b> is the latest."
+ "update_up_to_date": "You're up to date, version <b>{version}</b> is the latest.",
+ "drop_theme_here": "Drop Rockbox theme here",
+ "donate_completion_theme_standalone_subtitle": "Your Rockbox theme has been installed on your {model}."
 }

@@ -4,7 +4,7 @@ Values mirror the InniUpdaterChin app (APP_VERSION 1.1.2, contact email) and
 the online catalogue / donation endpoints used by Updater CE and innioasis.app.
 """
 
-APP_VERSION = "2.5.6"
+APP_VERSION = "2.5.6.1"
 APP_NAME = "Innioasis Updater"
 CONTACT_EMAIL = "updater-feedback@innioasis.com"
 
@@ -445,6 +445,8 @@ def power_on_button_for_model(model: str = "") -> str:
     """Hardware button used to power the player on after an install."""
     from .i18n import tr
 
+    if is_y2_model(model):
+        return tr("btn_power")
     if is_y1_model(model):
         return tr("btn_centre")
     # Y2 and every other model power on with the power button.

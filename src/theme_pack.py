@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shutil
 import sys
 import threading
@@ -61,6 +62,34 @@ THEME_PACK_URLS = THEME_PACK_THEME_URLS + THEME_PACK_FONT_URLS
 
 #: Remote/merged themepack archive name (downloads dir or bundled zip).
 THEME_PACK_ZIP_NAME = "rockbox_360p_themepack.zip"
+THEME_PACK_ZIP_NAME_Y2 = "rockbox_360p_themepack_y2.zip"
+
+_Y2_THEME_PATH_RE_BYTES = re.compile(rb"/(?:storage/sdcard0|sdcard0|sdcard)/\.rockbox/")
+_Y2_THEME_PATH_RE_STR = re.compile(r"/(?:storage/sdcard0|sdcard0|sdcard)/\.rockbox/")
+
+
+def patch_theme_content_for_y2(content: str | bytes) -> str | bytes:
+    """Replace /sdcard/.rockbox/ (and /sdcard0/, /storage/sdcard0/) with /.rockbox/."""
+    if isinstance(content, bytes):
+        return _Y2_THEME_PATH_RE_BYTES.sub(b"/.rockbox/", content)
+    return _Y2_THEME_PATH_RE_STR.sub("/.rockbox/", content)
+
+
+def should_apply_theme_path_fix(
+    model: str = "",
+    pkg=None,
+    rb_themes_path_fix: Optional[bool] = None,
+) -> bool:
+    """Whether theme config paths should be adapted to /.rockbox/.
+
+    Gated by ``rb_themes_path_fix`` in slidia_manifest.xml if set, otherwise defaults
+    to True for Y2 models and False for Y1/others.
+    """
+    if rb_themes_path_fix is not None:
+        return bool(rb_themes_path_fix)
+    if pkg is not None and getattr(pkg, "rb_themes_path_fix", None) is not None:
+        return bool(pkg.rb_themes_path_fix)
+    return (model or "").strip().upper() == "Y2"
 
 #: How often a launch refreshes the cached pack from the remote source. A
 #: successful refresh resets the window; the archive is no longer bundled.
@@ -408,6 +437,7 @@ def extract_theme_pack_zip(
     zip_path: Path,
     target_rockbox_dir: Path,
     progress_cb: Optional[Callable[[int, int], None]] = None,
+    apply_path_fix: bool = False,
 ) -> int:
     """Extract and merge theme pack files into the target .rockbox directory."""
     target_rockbox_dir = Path(target_rockbox_dir)
@@ -431,8 +461,10 @@ def extract_theme_pack_zip(
 
             dest_path = target_rockbox_dir / rel_part
             dest_path.parent.mkdir(parents=True, exist_ok=True)
-            with zf.open(info) as src, open(dest_path, "wb") as dst:
-                shutil.copyfileobj(src, dst)
+            data = zf.read(info)
+            if apply_path_fix and (rel_part.endswith(".cfg") or rel_part.endswith(".txt") or b"/sdcard" in data):
+                data = patch_theme_content_for_y2(data)
+            dest_path.write_bytes(data)
             extracted_count += 1
 
     if progress_cb:
@@ -730,6 +762,7 @@ def bundled_fonts_pack_zip_path() -> Path:
 def ensure_normalized_theme_pack_zip(
     target_zip_path: Optional[Path | str] = None,
     force_rebuild: bool = False,
+    apply_path_fix: bool = False,
 ) -> Path:
     """Return a path to a ready-to-transfer normalized themes+fonts zip.
 
@@ -744,7 +777,8 @@ def ensure_normalized_theme_pack_zip(
     fonts pack but not the themes archive, so a fresh cache with no download
     yields fonts only and the caller decides whether that is enough.
     """
-    target = Path(target_zip_path) if target_zip_path else (downloads_dir() / THEME_PACK_ZIP_NAME)
+    default_name = THEME_PACK_ZIP_NAME_Y2 if apply_path_fix else THEME_PACK_ZIP_NAME
+    target = Path(target_zip_path) if target_zip_path else (downloads_dir() / default_name)
     target.parent.mkdir(parents=True, exist_ok=True)
 
     if not force_rebuild and target.is_file() and target.stat().st_size > 1024:
@@ -753,7 +787,12 @@ def ensure_normalized_theme_pack_zip(
             with zipfile.ZipFile(target, "r") as zf:
                 sample = [info.filename for info in zf.infolist() if not info.is_dir()][:10]
                 if sample and not any(s.startswith("themes-themepack/") or s.startswith(".rockbox/") for s in sample):
-                    return target
+                    if apply_path_fix:
+                        cfg_samples = [s for s in zf.namelist() if s.endswith(".cfg")][:3]
+                        if not any(b"/sdcard" in zf.read(c) for c in cfg_samples):
+                            return target
+                    else:
+                        return target
         except Exception:
             pass
 
@@ -803,12 +842,194 @@ def ensure_normalized_theme_pack_zip(
     tmp_file = target.with_suffix(".tmp_build")
     with zipfile.ZipFile(tmp_file, "w", compression=zipfile.ZIP_DEFLATED) as ozf:
         for rel in sorted(entries.keys()):
-            ozf.writestr(rel, entries[rel])
+            data = entries[rel]
+            if apply_path_fix and (rel.endswith(".cfg") or rel.endswith(".txt") or b"/sdcard" in data):
+                data = patch_theme_content_for_y2(data)
+            ozf.writestr(rel, data)
 
     if tmp_file.exists():
         os.replace(tmp_file, target)
 
     return target
+
+
+def ensure_theme_zip_patched_for_y2(
+    source_zip: Path | str, target_zip: Optional[Path | str] = None
+) -> Path:
+    """Return a copy of source_zip with all /sdcard/.rockbox/ paths rewritten to /.rockbox/."""
+    src = Path(source_zip)
+    if not target_zip:
+        dst = src.with_name(f"{src.stem}_y2{src.suffix}")
+    else:
+        dst = Path(target_zip)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+
+    if dst.is_file() and dst.stat().st_mtime >= src.stat().st_mtime and dst.stat().st_size > 1024:
+        return dst
+
+    tmp_file = dst.with_suffix(".tmp_patch")
+    with zipfile.ZipFile(src, "r") as izf, zipfile.ZipFile(tmp_file, "w", compression=zipfile.ZIP_DEFLATED) as ozf:
+        for info in izf.infolist():
+            if info.is_dir() or info.filename.endswith("/"):
+                continue
+            data = izf.read(info)
+            if info.filename.endswith(".cfg") or info.filename.endswith(".txt") or b"/sdcard" in data:
+                data = patch_theme_content_for_y2(data)
+            ozf.writestr(info.filename, data)
+
+    os.replace(tmp_file, dst)
+    return dst
+
+
+def prepare_dragged_theme_payload(
+    source: Path | str,
+    target_zip: Path | str,
+    apply_path_fix: bool = False,
+) -> tuple[bool, str]:
+    """Package a dropped Rockbox theme into a normalized zip ready to merge into .rockbox.
+
+    ``source`` can be:
+    - A .zip / .rar archive containing .rockbox or theme subfolders (themes, wps, fonts...)
+    - A folder that is named .rockbox, contains a .rockbox dir, or contains theme subfolders (themes, wps...)
+    - A theme config file (.cfg or config.ini) alongside its assets or in a theme folder.
+
+    Entries inside ``target_zip`` are stored relative to .rockbox (e.g. 'themes/...', 'wps/...').
+    If ``apply_path_fix`` is True, all /sdcard/.rockbox/ path references in .cfg and .txt files
+    are rewritten to /.rockbox/.
+    """
+    src_path = Path(source)
+    if not src_path.exists():
+        return False, f"Source path does not exist: {source}"
+    target = Path(target_zip)
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    entries: dict[str, bytes] = {}
+    if src_path.is_file() and zipfile.is_zipfile(src_path):
+        try:
+            with zipfile.ZipFile(src_path, "r") as zf:
+                for info in zf.infolist():
+                    if info.is_dir() or info.filename.endswith("/"):
+                        continue
+                    name = info.filename.replace("\\", "/")
+                    if "__MACOSX" in name or ".DS_Store" in name:
+                        continue
+                    rel = normalize_rockbox_rel_path(name)
+                    if not rel:
+                        parts = name.split("/")
+                        for idx, p in enumerate(parts):
+                            if p in ("themes", "wps", "fonts", "backdrops", "icons", "apps"):
+                                rel = "/".join(parts[idx:])
+                                break
+                        if not rel and name.endswith(".cfg"):
+                            rel = f"themes/{Path(name).name}"
+                    if rel:
+                        data = zf.read(info)
+                        if apply_path_fix and (rel.endswith(".cfg") or rel.endswith(".txt") or b"/sdcard" in data):
+                            data = patch_theme_content_for_y2(data)
+                        entries[rel] = data
+        except Exception as e:
+            return False, f"Could not read zip archive: {e}"
+    elif src_path.is_dir():
+        rockbox_root = None
+        if src_path.name.lower() == ".rockbox":
+            rockbox_root = src_path
+        elif (src_path / ".rockbox").is_dir():
+            rockbox_root = src_path / ".rockbox"
+        else:
+            try:
+                for child in src_path.iterdir():
+                    if child.is_dir() and child.name.lower() == ".rockbox":
+                        rockbox_root = child
+                        break
+            except OSError:
+                pass
+            if not rockbox_root:
+                rockbox_root = src_path
+
+        for p in rockbox_root.rglob("*"):
+            if p.is_file():
+                if "__MACOSX" in str(p) or p.name == ".DS_Store":
+                    continue
+                try:
+                    rel = str(p.relative_to(rockbox_root)).replace("\\", "/")
+                except ValueError:
+                    continue
+                rel_norm = normalize_rockbox_rel_path(rel)
+                if not rel_norm:
+                    parts = rel.split("/")
+                    for idx, part in enumerate(parts):
+                        if part in ("themes", "wps", "fonts", "backdrops", "icons", "apps"):
+                            rel_norm = "/".join(parts[idx:])
+                            break
+                    if not rel_norm and rel.endswith(".cfg"):
+                        rel_norm = f"themes/{p.name}"
+                if rel_norm:
+                    try:
+                        data = p.read_bytes()
+                        if apply_path_fix and (rel_norm.endswith(".cfg") or rel_norm.endswith(".txt") or b"/sdcard" in data):
+                            data = patch_theme_content_for_y2(data)
+                        entries[rel_norm] = data
+                    except OSError:
+                        continue
+    elif src_path.is_file():
+        parent = src_path.parent
+        base_dir = parent
+        if parent.name in ("themes", "wps", "configs") and parent.parent.is_dir():
+            base_dir = parent.parent
+        elif (parent / ".rockbox").is_dir():
+            base_dir = parent / ".rockbox"
+
+        for p in base_dir.rglob("*"):
+            if p.is_file():
+                if "__MACOSX" in str(p) or p.name == ".DS_Store":
+                    continue
+                try:
+                    rel = str(p.relative_to(base_dir)).replace("\\", "/")
+                except ValueError:
+                    continue
+                rel_norm = normalize_rockbox_rel_path(rel)
+                if not rel_norm:
+                    parts = rel.split("/")
+                    for idx, part in enumerate(parts):
+                        if part in ("themes", "wps", "fonts", "backdrops", "icons", "apps"):
+                            rel_norm = "/".join(parts[idx:])
+                            break
+                    if not rel_norm and p.name == src_path.name:
+                        rel_norm = f"themes/{p.name}"
+                if rel_norm:
+                    try:
+                        data = p.read_bytes()
+                        if apply_path_fix and (rel_norm.endswith(".cfg") or rel_norm.endswith(".txt") or b"/sdcard" in data):
+                            data = patch_theme_content_for_y2(data)
+                        entries[rel_norm] = data
+                    except OSError:
+                        continue
+
+        if not any(k.endswith(src_path.name) for k in entries):
+            try:
+                data = src_path.read_bytes()
+                if apply_path_fix:
+                    data = patch_theme_content_for_y2(data)
+                dest_name = f"themes/{src_path.name}" if src_path.suffix.lower() == ".cfg" else f"themes/{src_path.stem}.cfg"
+                entries[dest_name] = data
+            except OSError as e:
+                return False, f"Could not read config file: {e}"
+
+    if not entries:
+        return False, "No valid Rockbox theme files found in dropped source"
+
+    tmp_file = target.with_suffix(".tmp_build")
+    try:
+        with zipfile.ZipFile(tmp_file, "w", compression=zipfile.ZIP_DEFLATED) as ozf:
+            for rel in sorted(entries.keys()):
+                ozf.writestr(rel, entries[rel])
+        os.replace(tmp_file, target)
+    except Exception as e:
+        if tmp_file.exists():
+            tmp_file.unlink(missing_ok=True)
+        return False, f"Failed to build theme payload zip: {e}"
+
+    return True, ""
 
 
 def bundled_rockbox_dir() -> Path:
@@ -1022,12 +1243,23 @@ class AdbPushWorker(QThread):
     log = Signal(str)  # raw adb transfer output, for the install output log
     finished = Signal(bool, str)  # success, message
 
-    def __init__(self, adb: str, serial: str, local_dir: Optional[Path] = None, parent=None, zip_path: Optional[Path] = None):
+    def __init__(
+        self,
+        adb: str,
+        serial: str,
+        local_dir: Optional[Path] = None,
+        parent=None,
+        zip_path: Optional[Path] = None,
+        model: str = "",
+        rb_themes_path_fix: Optional[bool] = None,
+    ):
         super().__init__(parent)
         self._adb = adb
         self._serial = serial
         self._local_dir = Path(local_dir) if local_dir else None
         self._zip_path = Path(zip_path) if zip_path else None
+        self._model = model
+        self._rb_themes_path_fix = rb_themes_path_fix
 
     def run(self):
         try:
@@ -1042,15 +1274,38 @@ class AdbPushWorker(QThread):
                 self.finished.emit(False, "Theme transfer cancelled")
                 return
 
+            apply_fix = should_apply_theme_path_fix(
+                model=self._model, rb_themes_path_fix=self._rb_themes_path_fix
+            )
+
             # Ensure we have our normalized zip ready
-            zip_file = self._zip_path or ensure_normalized_theme_pack_zip()
+            if self._zip_path:
+                if apply_fix:
+                    zip_file = ensure_theme_zip_patched_for_y2(self._zip_path)
+                else:
+                    zip_file = self._zip_path
+            else:
+                zip_file = ensure_normalized_theme_pack_zip(apply_path_fix=apply_fix)
 
             # The automated path stays on ADB. If the user separately enabled
             # USB mass storage, the timeout/fallback UI presents a folder picker.
             # Do not write to a discovered host volume in parallel with ADB.
 
             # Detect locations with .rockbox folders on device via ADB.
-            device_dirs = _adb.adb_find_all_rockbox_dirs(self._adb, self._serial)
+            # Rockbox may take up to 2 minutes on some devices (like Y2) to boot and create .rockbox.
+            deadline = time.monotonic() + 120.0
+            device_dirs = []
+            while not device_dirs and (time.monotonic() < deadline):
+                if self.isInterruptionRequested():
+                    self.finished.emit(False, "Theme transfer cancelled")
+                    return
+                device_dirs = _adb.adb_find_all_rockbox_dirs(self._adb, self._serial)
+                if not device_dirs:
+                    if time.monotonic() + 2.0 < deadline:
+                        self.msleep(2000)
+                    else:
+                        break
+
             if not device_dirs:
                 self.finished.emit(
                     False,
@@ -1087,7 +1342,7 @@ class AdbPushWorker(QThread):
                 import tempfile
 
                 temp_extract_dir = Path(tempfile.mkdtemp(prefix="rockbox_fallback_"))
-                extract_theme_pack_zip(zip_file, temp_extract_dir, progress_cb=None)
+                extract_theme_pack_zip(zip_file, temp_extract_dir, progress_cb=None, apply_path_fix=apply_fix)
                 local_src = temp_extract_dir
 
             total_dirs = len(device_dirs)

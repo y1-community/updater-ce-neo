@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import re
+import zipfile
 from pathlib import Path
 from typing import Iterable, Optional
 from urllib.parse import unquote, urlparse
@@ -25,21 +26,85 @@ def is_scatter_filename(name: str) -> bool:
     return "scatter" in lower and lower.endswith(".txt")
 
 
+def is_rockbox_theme_path(path: Path) -> bool:
+    """True if path points to a Rockbox theme archive, folder, or config file."""
+    path = Path(path)
+    try:
+        if not path.exists():
+            return False
+    except OSError:
+        return False
+
+    if is_scatter_filename(path.name):
+        return False
+    if path.is_dir() and folder_has_scatter(path):
+        return False
+
+    if path.is_dir():
+        if path.name.lower() == ".rockbox":
+            return True
+        if (path / ".rockbox").is_dir():
+            return True
+        try:
+            subdirs = {p.name.lower() for p in path.iterdir() if p.is_dir()}
+            if subdirs.intersection({"themes", "wps", "fonts", "backdrops", "icons"}):
+                return True
+            files = {p.name.lower() for p in path.iterdir() if p.is_file()}
+            if any(f.endswith(".cfg") or f == "config.ini" for f in files):
+                return True
+        except OSError:
+            pass
+        return False
+
+    if path.is_file():
+        suffix = path.suffix.lower()
+        if suffix in {".zip", ".rar"}:
+            if suffix == ".zip" and zipfile.is_zipfile(path):
+                try:
+                    with zipfile.ZipFile(path, "r") as zf:
+                        names = [info.filename.lower() for info in zf.infolist() if not info.is_dir()]
+                        if any("scatter" in n and n.endswith(".txt") for n in names):
+                            return False
+                        if any(".rockbox" in n for n in names):
+                            return True
+                        for n in names:
+                            for folder in ("themes/", "wps/", "fonts/", "backdrops/", "icons/"):
+                                if folder in n or n.startswith(folder):
+                                    return True
+                            if n.endswith(".cfg") or n.endswith("config.ini"):
+                                return True
+                except Exception:
+                    return False
+            return False
+        if suffix == ".cfg" or path.name.lower() in ("config.ini", "theme.cfg"):
+            return True
+
+    return False
+
+
 def classify_drop(path: Path) -> Optional[str]:
-    """Return ``archive``, ``scatter``, ``folder``, or None when the drop is ignored."""
+    """Return ``archive``, ``scatter``, ``folder``, ``rockbox_theme``, or None when the drop is ignored."""
     path = Path(path)
     try:
         if path.is_dir():
-            return "folder" if folder_has_scatter(path) else None
+            if folder_has_scatter(path):
+                return "folder"
+            if is_rockbox_theme_path(path):
+                return "rockbox_theme"
+            return None
         if not path.is_file():
             return None
     except OSError:
         return None
     suffix = path.suffix.lower()
-    if suffix in {".zip", ".rar"}:
-        return "archive"
     if is_scatter_filename(path.name):
         return "scatter"
+    if suffix in {".zip", ".rar"}:
+        if is_rockbox_theme_path(path):
+            return "rockbox_theme"
+        return "archive"
+    if is_rockbox_theme_path(path):
+        return "rockbox_theme"
     return None
 
 

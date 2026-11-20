@@ -81,7 +81,7 @@ def test_settings_card_copy_pill_and_toggle_roundtrip():
         assert page._install_themes_btn.text() == "Install Themes Now"
         assert tr("settings_install_rockbox_themes_btn") == "Install Themes Now"
         assert page._install_themes_desc.text() == (
-            "When enabled, Rockbox themes are automatically transferred to Y1 "
+            "When enabled, Rockbox themes are automatically transferred to Y1 and Y2 "
             "after a successful Rockbox install."
         )
         assert page._install_themes_desc.text() == tr("settings_install_themes_desc")
@@ -313,7 +313,7 @@ def test_auto_themes_stage_obeys_the_settings_toggle():
         app.processEvents()
 
 
-def test_manual_themes_start_refuses_y2_and_logs_it():
+def test_manual_themes_start_supports_y2():
     from src.ui.main_window import MainWindow
 
     app = _app()
@@ -322,11 +322,13 @@ def test_manual_themes_start_refuses_y2_and_logs_it():
         combo = w._select_page._model_combo
         combo.setCurrentIndex(combo.findText("Y2"))
         assert w._manual_themes_model() == "Y2"
-        assert w.start_rockbox_themes_manually() is False
-        assert not w.themes.power_on_pending
-        assert not w.themes.active
-        assert any("not installed for Y2" in line for line in w._log_lines)
+        assert w.start_rockbox_themes_manually() is True
+        assert w.themes.power_on_pending is True
+        assert w.themes.model == "Y2"
+        assert w.themes.rb_themes_path_fix is True
+        assert w.themes.is_standalone is True
     finally:
+        w.themes.clear_power_on()
         w.close()
         app.processEvents()
 
@@ -385,7 +387,7 @@ def test_manual_folder_merge_lands_the_real_payload(tmp_path):
     page.themes.model = "Y1"
     try:
         page._on_theme_fallback_next_clicked()
-        with patch.object(tp, "ensure_normalized_theme_pack_zip", return_value=payload):
+        with patch.object(tp, "ensure_normalized_theme_pack_zip", return_value=payload), patch("src.adb.adb_devices", return_value=[]):
             page._on_theme_folder_chosen(str(chosen))
             worker = page._dir_merge_worker
             assert worker is not None

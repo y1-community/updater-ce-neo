@@ -1166,20 +1166,22 @@ class MainWindow(QMainWindow):
         return paths
 
     def _drag_enter_firmware(self, event) -> bool:
-        from ..drop_install import first_accepted_drop
+        from ..drop_install import first_accepted_drop, classify_drop
 
         if self._install_run_active() or getattr(self, "_drop_check_active", False):
             event.ignore()
             return False
         paths = self._local_paths_from_mime(event.mimeData())
-        if first_accepted_drop(paths) is None:
+        drop_path = first_accepted_drop(paths)
+        if drop_path is None:
             event.ignore()
             return False
         event.acceptProposedAction()
         overlay = getattr(self, "_drop_overlay", None)
         if overlay is None:
             return True
-        overlay._label.setText(tr("drop_firmware_here"))
+        is_theme = classify_drop(drop_path) == "rockbox_theme"
+        overlay._label.setText(tr("drop_theme_here") if is_theme else tr("drop_firmware_here"))
         overlay.setGeometry(self.rect())
         overlay.raise_()
         overlay.show()
@@ -1195,7 +1197,7 @@ class MainWindow(QMainWindow):
             overlay.hide()
 
     def _drop_firmware(self, event) -> None:
-        from ..drop_install import first_accepted_drop
+        from ..drop_install import first_accepted_drop, classify_drop
 
         overlay = getattr(self, "_drop_overlay", None)
         if overlay is not None:
@@ -1206,6 +1208,9 @@ class MainWindow(QMainWindow):
             return
         event.acceptProposedAction()
         if self._install_run_active() or getattr(self, "_drop_check_active", False):
+            return
+        if classify_drop(path) == "rockbox_theme":
+            self._start_theme_drop_install(path)
             return
         self._start_drop_check(path)
 
@@ -1218,13 +1223,50 @@ class MainWindow(QMainWindow):
         from ..drop_install import classify_drop
 
         candidate = Path(path)
-        if classify_drop(candidate) is None:
+        kind = classify_drop(candidate)
+        if kind is None:
             return False
         self._show_from_tray()
         if self._install_run_active() or getattr(self, "_drop_check_active", False):
             return False
+        if kind == "rockbox_theme":
+            self._start_theme_drop_install(candidate)
+            return True
         self._start_drop_check(candidate)
         return True
+
+    def _start_theme_drop_install(self, path: Path) -> None:
+        """Start a standalone Rockbox theme install from a dropped theme file/folder."""
+        if self._install_run_active():
+            self._append_log("Theme drop ignored: an install is already running.")
+            return
+        model = self._manual_themes_model()
+        from ..theme_pack import prepare_dragged_theme_payload, should_apply_theme_path_fix
+        import tempfile
+        import time
+        apply_fix = should_apply_theme_path_fix(model=model)
+        target_zip = Path(tempfile.gettempdir()) / f"dragged_theme_{int(time.time())}_{path.stem}.zip"
+        ok, msg = prepare_dragged_theme_payload(path, target_zip, apply_path_fix=apply_fix)
+        if not ok:
+            self._show_status(f"Could not load theme: {msg}", 10000)
+            self._append_log(f"Failed to load dropped Rockbox theme {path}: {msg}")
+            return
+        self._append_log(f"Loaded dropped Rockbox theme {path.name} for {model}.")
+        self._package_model = model
+        self._package_name = path.stem or "Rockbox Theme"
+        self._install_complete = False
+        self._install_failed = False
+        self.themes.reset_completion()
+        self.themes.set_apk("", "")
+        self.themes.payload_zip_path = target_zip
+        self.themes.is_standalone = True
+        self.themes.model = model
+        self.themes.rb_themes_path_fix = apply_fix
+        self._compact_install_screen = False
+        self._is_360p_rockbox = True
+        self._flash_page.set_model(model)
+        self._nav_to_page(_PAGE_FLASH)
+        self._show_rockbox_power_on_prompt(model)
 
     def eventFilter(self, watched, event):  # noqa: N802
         """Catch a firmware drag over any child of the window.
@@ -3375,7 +3417,18 @@ class MainWindow(QMainWindow):
         self._offer_app_update(info)
 
     def _manual_themes_model(self) -> str:
-        """Y1 for a manually started themes stage (themes installation is Y1-only)."""
+        """Model for a manually started themes stage: Y1 or Y2 based on selection or device."""
+        if hasattr(self, "_select_page") and hasattr(self._select_page, "_model_combo"):
+            combo_text = self._select_page._model_combo.currentText().strip().upper()
+            if "Y2" in combo_text:
+                return "Y2"
+            if "Y1" in combo_text:
+                return "Y1"
+        pkg_model = (getattr(self, "_package_model", "") or "").upper()
+        if "Y2" in pkg_model:
+            return "Y2"
+        if "Y1" in pkg_model:
+            return "Y1"
         return "Y1"
 
     def _on_settings_install_rockbox_themes(self) -> None:
@@ -3492,8 +3545,8 @@ class MainWindow(QMainWindow):
             self._append_log("Rockbox themes shortcut ignored: an install is already running.")
             return False
         model = self._manual_themes_model()
-        if model != "Y1":
-            self._append_log("Rockbox themes are not installed for Y2; the themes stage was not started.")
+        if model not in ("Y1", "Y2"):
+            self._append_log(f"Rockbox themes are not supported for {model}; the themes stage was not started.")
             return False
         self._append_log(f"Rockbox themes & fonts stage started manually for {model}.")
         self._package_model = model
@@ -3501,6 +3554,9 @@ class MainWindow(QMainWindow):
         self._install_failed = False
         self.themes.reset_completion()
         self.themes.set_apk("", "")
+        self.themes.is_standalone = True
+        self.themes.model = model
+        self.themes.rb_themes_path_fix = (model == "Y2")
         self._compact_install_screen = False
         self._is_360p_rockbox = True
         self._flash_page.set_model(model)
@@ -3559,17 +3615,21 @@ class MainWindow(QMainWindow):
         if selected_rel:
             asset_name = str(selected_rel.get("asset_name", asset_name) or asset_name).lower()
             release_label = str(selected_rel.get("release_label", release_label) or release_label).lower()
-        if "Y1" in model or "y1" in name or "y1" in path or "y1" in slug:
-            model = "Y1"
-        elif "Y2" in model or "y2" in name or "y2" in path or "y2" in slug:
+        if "Y2" in model:
             model = "Y2"
+        elif "Y1" in model:
+            model = "Y1"
+        elif "y2" in slug or "y2" in path or "y2" in asset_name or "y2" in release_label or "y2" in name:
+            model = "Y2"
+        elif "y1" in slug or "y1" in path or "y1" in asset_name or "y1" in release_label or "y1" in name:
+            model = "Y1"
         else:
             return False, model
         is_rockbox = "rockbox" in name or "rockbox" in path or "rockbox" in slug
         is_240p = any("240p" in value for value in (name, path, asset_name, release_label))
         is_240p = is_240p or str(info.get("selected_resolution", "")).lower() == "240p"
-        # Themes installation is strictly for Y1 (Rockbox-named, non-240p).
-        wanted = bool(model == "Y1" and is_rockbox and not is_240p)
+        # Themes installation is for Y1 and Y2 (Rockbox-named, non-240p).
+        wanted = bool(model in ("Y1", "Y2") and is_rockbox and not is_240p)
         # The per-install tickbox is an opt-out: checked by default, cleared by
         # anyone who would rather install the firmware on its own. The Settings
         # auto-install toggle still has the final say on the automatic stage.
@@ -3656,6 +3716,12 @@ class MainWindow(QMainWindow):
         self, model: str, *, after_firmware: bool = False, on_continue=None, purpose: str = "themes"
     ) -> None:
         """Ask the user to boot the flashed player before ADB/theme setup."""
+        pkg_model = (getattr(self, "_package_model", "") or "").upper()
+        target_model = (model or pkg_model or "").upper()
+        if "Y2" in target_model or "Y2" in pkg_model:
+            model = "Y2"
+        elif "Y1" in target_model or "Y1" in pkg_model:
+            model = "Y1"
         logger.debug("Showing Rockbox power-on prompt for model=%s purpose=%s", model, purpose)
         self._install_complete = True
         self._install_failed = False
@@ -6173,16 +6239,18 @@ class MainWindow(QMainWindow):
         eff_model = (self._package_model or "").upper()
         pkg_low = (self._package_name or "").lower()
         path_low = (self._package_path or "").lower()
-        if "Y1" in eff_model:
-            eff_model = "Y1"
-        elif "Y2" in eff_model:
+        if "Y2" in eff_model:
             eff_model = "Y2"
-        elif "y1" in path_low or "y1" in pkg_low:
+        elif "Y1" in eff_model:
             eff_model = "Y1"
         elif "y2" in path_low or "y2" in pkg_low:
             eff_model = "Y2"
+        elif "y1" in path_low or "y1" in pkg_low:
+            eff_model = "Y1"
 
-        is_360p_rockbox, eff_model = self._rockbox_themes_required()
+        is_360p_rockbox, req_model = self._rockbox_themes_required()
+        if req_model:
+            eff_model = req_model
         apk_path, apk_url = self._apk_install_info()
         self.themes.set_apk(apk_path, apk_url)
         self._is_360p_rockbox = (
@@ -7142,16 +7210,18 @@ class MainWindow(QMainWindow):
         eff_model = (model or self._package_model or "").upper()
         pkg_low = (self._package_name or "").lower()
         path_low = (self._package_path or "").lower()
-        if "Y1" in eff_model:
-            eff_model = "Y1"
-        elif "Y2" in eff_model:
+        if "Y2" in eff_model:
             eff_model = "Y2"
-        elif "y1" in path_low or "y1" in pkg_low:
+        elif "Y1" in eff_model:
             eff_model = "Y1"
         elif "y2" in path_low or "y2" in pkg_low:
             eff_model = "Y2"
+        elif "y1" in path_low or "y1" in pkg_low:
+            eff_model = "Y1"
 
-        is_360p_rockbox, eff_model = self._rockbox_themes_required()
+        is_360p_rockbox, req_model = self._rockbox_themes_required()
+        if req_model:
+            eff_model = req_model
         is_240p_rockbox = self._rockbox_240p_detected()
         apk_path, apk_url = self._apk_install_info()
         wants_apk = bool(apk_path or apk_url)
@@ -7371,10 +7441,10 @@ class MainWindow(QMainWindow):
             return False
 
         stage_model = (self._package_model or "").upper() or "Y1"
-        if "Y1" in stage_model:
-            stage_model = "Y1"
-        elif "Y2" in stage_model:
+        if "Y2" in stage_model:
             stage_model = "Y2"
+        elif "Y1" in stage_model:
+            stage_model = "Y1"
         self._rockbox_cleanup_started = True
         self._nav_to_page(_PAGE_FLASH)
         self._install_complete = True

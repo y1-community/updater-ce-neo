@@ -60,6 +60,7 @@ from .support_appeal import (
     COMPLETION_KEYS,
     ONE_MORE_THING_KEYS,
     THEMES_COMPLETION_KEYS,
+    THEME_STANDALONE_COMPLETION_KEYS,
     DeveloperPortrait,
     SupportIntro,
 )
@@ -192,7 +193,7 @@ INSTALL_TEXT_WIDTH = 220
 ROCKBOX_SITE_THEMES_URL = "https://themes.rockbox.org/index.php?target=ipod6g"
 
 #: Settle time after ADB detection so org.rockbox can populate .rockbox.
-ROCKBOX_BOOT_WAIT_MS = 20_000
+ROCKBOX_BOOT_WAIT_MS = 120_000
 
 #: Height of the paperclip diagram. Drawn 8% larger than the original 60 px so
 #: the pin and the button it points at stay legible on a phone-sized photo.
@@ -4017,12 +4018,17 @@ class FlashPage(QWidget):
         handoff, the standalone themes run and the SP Flash Tool run all ask
         the same thing instead of three near-copies of it.
         """
-        from ..config import device_label_for_model
+        from ..config import device_label_for_model, is_y1_model, is_y2_model
 
-        label = device_label_for_model(model)
-        button = tr(
-            "button_centre" if str(model or "").upper() == "Y1" else "button_power"
-        )
+        eff_model = model or getattr(self, "_model", "") or getattr(self.themes, "model", "")
+        if is_y2_model(eff_model) or is_y2_model(getattr(self, "_model", "")):
+            eff_model = "Y2"
+        elif is_y1_model(eff_model):
+            eff_model = "Y1"
+
+        label = device_label_for_model(eff_model)
+        is_y1 = is_y1_model(eff_model) and not is_y2_model(eff_model)
+        button = tr("button_centre" if is_y1 else "button_power")
         return tr("rockbox_step1_power_on_button").format(model=label, button=button)
 
     def show_flash_question(self, text: str) -> None:
@@ -4366,7 +4372,11 @@ class FlashPage(QWidget):
         self._show_theme_fallback_usb_mode()
 
     def _show_theme_step1_disconnect_power_on(self) -> None:
-        model_str = self.themes.model.upper()
+        model_str = (self.themes.model or self._model or "").upper()
+        if "Y2" in model_str or "Y2" in getattr(self, "_model", "").upper():
+            model_str = "Y2"
+        elif "Y1" in model_str:
+            model_str = "Y1"
         self.themes.clear_usb()
         self._log_theme(f"[Rockbox Themes] Step 1: Prompting user to disconnect and power on {model_str}.")
         self._eta_label.setText("")
@@ -4554,9 +4564,18 @@ class FlashPage(QWidget):
             self._eta_label.setText(tr("rockbox_cleanup_deleting"))
             self._start_adb_cleanup(serial)
             return
-        self._log_theme(f"[Rockbox Themes] Player detected via ADB (serial: {serial}). Waiting {ROCKBOX_BOOT_WAIT_MS // 1000}s for Rockbox to populate .rockbox...")
+        from ..adb import find_adb_binary, adb_find_all_rockbox_dirs
+        adb_bin = find_adb_binary()
+        if adb_bin and adb_find_all_rockbox_dirs(adb_bin, serial):
+            self._log_theme(f"[Rockbox Themes] Player detected via ADB (serial: {serial}) with .rockbox ready. Starting push...")
+            self._eta_label.setText(tr("rockbox_stage_pushing"))
+            self._start_adb_theme_push(serial)
+            return
+
+        self._log_theme(f"[Rockbox Themes] Player detected via ADB (serial: {serial}). Waiting for Rockbox to populate .rockbox (up to {ROCKBOX_BOOT_WAIT_MS // 1000}s)...")
         self._eta_label.setText(tr("rockbox_stage_pushing"))
-        QTimer.singleShot(ROCKBOX_BOOT_WAIT_MS, lambda: self._start_adb_theme_push(serial))
+        wait_ms = min(1000, ROCKBOX_BOOT_WAIT_MS) if ROCKBOX_BOOT_WAIT_MS > 0 else 0
+        QTimer.singleShot(wait_ms, lambda: self._start_adb_theme_push(serial))
 
     def _start_adb_theme_push(self, serial: str) -> None:
         if self.themes.is_apk_stage:
@@ -4583,9 +4602,17 @@ class FlashPage(QWidget):
         self._eta_label.setText(tr("rockbox_stage_pushing"))
         self.themes.reset_progress()
         from ..adb import find_adb_binary
-        from ..theme_pack import AdbPushWorker, ensure_normalized_theme_pack_zip
+        from ..theme_pack import AdbPushWorker, ensure_normalized_theme_pack_zip, should_apply_theme_path_fix
         adb_bin = find_adb_binary()
-        norm_zip = ensure_normalized_theme_pack_zip()
+        model = getattr(self.themes, "model", "") or getattr(self, "_model", "")
+        rb_themes_path_fix = getattr(self.themes, "rb_themes_path_fix", None)
+        apply_fix = should_apply_theme_path_fix(model=model, rb_themes_path_fix=rb_themes_path_fix)
+
+        custom_zip = getattr(self.themes, "payload_zip_path", None)
+        if custom_zip and Path(custom_zip).is_file():
+            norm_zip = Path(custom_zip)
+        else:
+            norm_zip = ensure_normalized_theme_pack_zip(apply_path_fix=apply_fix)
 
         self._adb_push_worker = AdbPushWorker(
             adb_bin,
@@ -4593,6 +4620,8 @@ class FlashPage(QWidget):
             local_dir=None,
             parent=self,
             zip_path=norm_zip,
+            model=model,
+            rb_themes_path_fix=rb_themes_path_fix,
         )
         self._adb_push_worker.progress.connect(self._on_theme_push_progress)
         self._adb_push_worker.log.connect(self._log_theme)
@@ -4774,6 +4803,16 @@ class FlashPage(QWidget):
             # Cancelled. The presence watcher keeps running, so the user can
             # retry or simply plug the player in.
             return
+        from ..adb import find_adb_binary, adb_devices
+        adb_bin = find_adb_binary()
+        if adb_bin:
+            try:
+                live_devices = adb_devices(adb_bin)
+            except Exception:
+                live_devices = []
+            if self.themes.prefer_player(len(live_devices)):
+                self._on_adb_device_found(live_devices[0])
+                return
         # If the user selects a folder, run the preparation/cleanup process again
         # even if it was already attempted or if a player answered through ADB.
         self._stop_adb_presence_watch()
@@ -4808,6 +4847,7 @@ class FlashPage(QWidget):
             find_or_create_rockbox_dir,
             DirMergeWorker,
             ensure_normalized_theme_pack_zip,
+            should_apply_theme_path_fix,
         )
         dest_dir = find_or_create_rockbox_dir(chosen)
         self._log_theme(f"[Rockbox Themes] Selected folder: {chosen}. Resolved target .rockbox: {dest_dir}")
@@ -4816,7 +4856,14 @@ class FlashPage(QWidget):
         # real directory in a packaged build, so it copied nothing and sent the
         # user straight to the give-up screen.
         try:
-            payload_zip = ensure_normalized_theme_pack_zip()
+            model = getattr(self.themes, "model", "") or getattr(self, "_model", "")
+            rb_themes_path_fix = getattr(self.themes, "rb_themes_path_fix", None)
+            apply_fix = should_apply_theme_path_fix(model=model, rb_themes_path_fix=rb_themes_path_fix)
+            custom_zip = getattr(self.themes, "payload_zip_path", None)
+            if custom_zip and Path(custom_zip).is_file():
+                payload_zip = Path(custom_zip)
+            else:
+                payload_zip = ensure_normalized_theme_pack_zip(apply_path_fix=apply_fix)
         except Exception as e:
             self._log_theme(f"[Rockbox Themes] Could not prepare the themes payload: {e}")
             self._giveup_rockbox_themes_stage(str(e))
@@ -6512,11 +6559,14 @@ class FlashPage(QWidget):
         self._completion_collapsible.toggle(True)
 
         if self._complete_note_themes and not self.themes.placement_failed:
-            installed = tr("donate_completion_themes_subtitle").format(model=model)
+            if getattr(self.themes, "is_standalone", False):
+                installed = tr("donate_completion_theme_standalone_subtitle").format(model=model)
+            else:
+                installed = tr("donate_completion_themes_subtitle").format(model=model)
             self._completion_title_label.setText(f"<b>{escape(installed)}</b>")
             _apply_card_text(self._completion_title_label)
             self._complete_note.setText(installed)
-            self._complete_note.setVisible(True)
+            self._complete_note.setVisible(False)
             return
 
         if not software or software.startswith(("Get ready to install", "Installing software", "Get your")):
@@ -6542,7 +6592,7 @@ class FlashPage(QWidget):
         self._completion_title_label.setText(heading)
         _apply_card_text(self._completion_title_label)
         self._complete_note.setText(installed)
-        self._complete_note.setVisible(not has_guide)
+        self._complete_note.setVisible(bool(self.themes.placement_failed))
 
         if has_guide:
             lbl = QLabel(self._post_install_hint_html())
@@ -6626,15 +6676,10 @@ class FlashPage(QWidget):
         self._donations_shown = False
         self._completion_advice_label = None
         themes_failed = bool(self.themes.placement_failed)
-        if donations_enabled and self._has_post_install() and hasattr(self, "_appeal"):
+        self._render_completion_note(post_install_once=post_install_once)
+        if donations_enabled and hasattr(self, "_appeal") and not themes_failed:
             self._appeal_themes = bool(themes_installed)
-            if themes_failed:
-                # The letter is shown, but the stage that gave up still needs
-                # its try-again copy under it.
-                self._render_completion_note(post_install_once=post_install_once)
-                self._completion_note_container.setVisible(True)
-            else:
-                self._completion_note_container.setVisible(False)
+            self._completion_note_container.setVisible(False)
             if hasattr(self, "_post_install_hint"):
                 self._post_install_hint.setVisible(False)
             if hasattr(self, "_progress_card"):
@@ -6642,18 +6687,24 @@ class FlashPage(QWidget):
                 # above it would repeat the same news in a second shape.
                 self._progress_card.setVisible(False)
             if hasattr(self, "_intro"):
-                self._intro.set_keys(
-                    THEMES_COMPLETION_KEYS if themes_installed else ONE_MORE_THING_KEYS
-                )
-            # One fixed note for a guide install, the sentence in the
-            # reference completion screen: the ask can come and go around it,
-            # the letter does not change with the donation switch.
-            self._active_appeal_key = "donate_completion_body_small_hours"
+                if getattr(self.themes, "is_standalone", False):
+                    self._intro.set_keys(THEME_STANDALONE_COMPLETION_KEYS)
+                elif themes_installed:
+                    self._intro.set_keys(THEMES_COMPLETION_KEYS)
+                elif self._has_post_install():
+                    self._intro.set_keys(ONE_MORE_THING_KEYS)
+                else:
+                    self._intro.set_keys(COMPLETION_KEYS)
+            if self._has_post_install():
+                self._active_appeal_key = "donate_completion_body_small_hours"
+                self._set_donation_row_visible(False)
+            else:
+                import random
+                self._active_appeal_key = random.choice(COMPLETION_BODY_KEYS)
+                self._set_donation_row_visible(True)
             self._render_appeal_copy()
-            self._set_donation_row_visible(False)
-            self._appeal.setVisible(donations_enabled)
+            self._appeal.setVisible(True)
         else:
-            self._render_completion_note(post_install_once=post_install_once)
             self._completion_note_container.setVisible(True)
             if not donations_enabled and hasattr(self, "_appeal"):
                 # Without the ask the letter has nothing the simple card does
@@ -6684,7 +6735,9 @@ class FlashPage(QWidget):
         if not hasattr(self, "_appeal"):
             return
         if hasattr(self, "_intro"):
-            if themes_installed:
+            if getattr(self.themes, "is_standalone", False):
+                self._intro.set_keys(THEME_STANDALONE_COMPLETION_KEYS)
+            elif themes_installed:
                 self._intro.set_keys(THEMES_COMPLETION_KEYS)
             elif self._has_post_install():
                 # The write is not the end of this install: the letter leads

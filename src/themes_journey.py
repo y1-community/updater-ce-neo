@@ -40,6 +40,9 @@ class ThemesJourney:
         self._apk_path = ""
         self._apk_url = ""
         self._purpose = PURPOSE_THEMES
+        self.payload_zip_path = None
+        self.is_standalone = False
+        self.rb_themes_path_fix = None
         # Set once the completion screen has taken over from the stage.
         self.completion_shown = False
         # UI objects whose lifetime *is* journey state: the ADB presence
@@ -209,6 +212,9 @@ class ThemesJourney:
         self._active = False
         self._transfer_running = False
         self._prompt_pending = False
+        self.payload_zip_path = None
+        self.is_standalone = False
+        self.rb_themes_path_fix = None
 
     def mark_placement_failed(self) -> None:
         self._release_awake()
@@ -219,6 +225,9 @@ class ThemesJourney:
     def reset_completion(self) -> None:
         """A new run starts: its completion screen has not been shown yet."""
         self.completion_shown = False
+        self.payload_zip_path = None
+        self.is_standalone = False
+        self.rb_themes_path_fix = None
 
     def mark_completion_shown(self) -> None:
         self.completion_shown = True

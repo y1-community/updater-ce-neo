@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from fnmatch import fnmatch
 from pathlib import Path
+from typing import Optional
 
 from .config import (
     GITHUB_API,
@@ -118,6 +119,10 @@ class FirmwarePackage:
     # install_first is specified (``keep_data_on_first_install="true"`` in
     # slidia_manifest.xml). Defaults to False.
     keep_data_on_first_install: bool = False
+    # Whether Rockbox theme configs should have /sdcard/.rockbox/ path prefixes
+    # adapted to /.rockbox/ (rb_themes_path_fix="true"/"false" in slidia_manifest.xml).
+    # None defaults to True for Y2 models and False for Y1/others.
+    rb_themes_path_fix: Optional[bool] = None
     # Archive names declared per player and hardware revision
     # (``package_name_y2``, ``package_name_y1_type_b``,
     # ``package_name_timmkoo_a5``), keyed by the attribute's own suffix after

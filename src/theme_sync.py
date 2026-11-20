@@ -83,10 +83,13 @@ def tracked_360p_rockbox_models(settings: Optional[QSettings] = None) -> list[st
         installs = _tracking.get_all_device_installs(settings)
     except Exception:
         return []
-    for model, rec in (installs or {}).items():
+    for slot, rec in (installs or {}).items():
         try:
-            if model == "Y1" and is_rockbox_360p_record(rec):
-                models.append(model)
+            m = str(rec.get("model") or slot).upper()
+            if ("Y1" in m or "Y2" in m) and is_rockbox_360p_record(rec):
+                model_name = "Y2" if "Y2" in m else "Y1"
+                if model_name not in models:
+                    models.append(model_name)
         except Exception:
             continue
     return models
@@ -211,7 +214,7 @@ def _download_zip(url: str, dest: Path, timeout: float = 60.0) -> bool:
         return False
 
 
-def ensure_combined_payload() -> Optional[Path]:
+def ensure_combined_payload(apply_path_fix: bool = False) -> Optional[Path]:
     """Build (or reuse) the combined themes dir in a temp dir. Silent None on failure."""
     from . import theme_pack as _pack
 
@@ -227,11 +230,13 @@ def ensure_combined_payload() -> Optional[Path]:
                     base = _pack.bundled_rockbox_dir()
                     if base.is_dir():
                         _pack.merge_dirs(base, dest)
+                        if apply_path_fix:
+                            _patch_dir_for_y2(dest, _pack)
                         return dest
                     fonts = _pack.bundled_fonts_pack_zip_path()
                     if fonts.is_file():
                         logger.warning("No cached 360p themes; passive payload is fonts only")
-                        _pack.extract_theme_pack_zip(fonts, dest)
+                        _pack.extract_theme_pack_zip(fonts, dest, apply_path_fix=apply_path_fix)
                         return dest
                     return None
         try:
@@ -245,10 +250,26 @@ def ensure_combined_payload() -> Optional[Path]:
                 _pack.extract_theme_pack_zip(_pack.bundled_fonts_pack_zip_path(), dest)
             else:
                 return None
+        if apply_path_fix and dest.is_dir():
+            _patch_dir_for_y2(dest, _pack)
         return dest if dest.is_dir() else None
     except Exception:
         logger.debug("Passive payload prep failed", exc_info=True)
         return None
+
+
+def _patch_dir_for_y2(dest: Path, _pack) -> None:
+    try:
+        for p in dest.rglob("*"):
+            if p.is_file() and (p.suffix.lower() in (".cfg", ".txt") or p.name.lower() == "config.ini"):
+                try:
+                    data = p.read_bytes()
+                    if b"/sdcard" in data:
+                        p.write_bytes(_pack.patch_theme_content_for_y2(data))
+                except OSError:
+                    pass
+    except Exception:
+        pass
 
 
 def find_removable_rockbox_dirs() -> list[Path]:
@@ -346,7 +367,8 @@ class PassiveThemeSyncWorker(QThread):
                 pass
 
     def _sync_model(self, model: str, _adb, _pack) -> bool:
-        payload = ensure_combined_payload()
+        apply_fix = _pack.should_apply_theme_path_fix(model=model)
+        payload = ensure_combined_payload(apply_path_fix=apply_fix)
         if payload is None:
             return False
         self._payload_parent = payload.parent

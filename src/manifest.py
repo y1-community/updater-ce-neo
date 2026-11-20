@@ -291,6 +291,20 @@ def _packages_from_mapping(mapping: dict, description: str = "") -> list[Firmwar
             pmt_format_needed = raw_pmt
         else:
             pmt_format_needed = str(raw_pmt or "").strip().lower() in ("true", "1", "yes")
+
+        raw_rtpf = mapping.get("rb_themes_path_fix")
+        if raw_rtpf is None:
+            rb_themes_path_fix = None
+        elif isinstance(raw_rtpf, bool):
+            rb_themes_path_fix = raw_rtpf
+        else:
+            val = str(raw_rtpf).strip().lower()
+            if val in ("true", "1", "yes"):
+                rb_themes_path_fix = True
+            elif val in ("false", "0", "no"):
+                rb_themes_path_fix = False
+            else:
+                rb_themes_path_fix = None
         desc = str(mapping.get("description") or description or "").strip()
         type_a_asset = str(mapping.get("type_a_asset") or "").strip()
         type_b_asset = str(mapping.get("type_b_asset") or "").strip()
@@ -353,6 +367,7 @@ def _packages_from_mapping(mapping: dict, description: str = "") -> list[Firmwar
                 install_first_when=install_first_when,
                 install_first_once=install_first_once,
                 keep_data_on_first_install=keep_data_on_first_install,
+                rb_themes_path_fix=rb_themes_path_fix,
             )
         )
     return out

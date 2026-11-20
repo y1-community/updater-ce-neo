@@ -98,8 +98,10 @@ def test_360p_success_opens_themes_stage_before_appeal():
         tracking.set_donation_ui_disabled(False, w.settings)
         from src import paths
         old_mac = paths.IS_MAC
-        paths.IS_MAC = False  # Exercise SP success path: it boots before this stage.
-        w._flash_method = "sp"
+        paths.IS_MAC = True  # Exercise MTK method: hands back powered-off device, asking user to power on.
+        w._keep_data = True
+        w._flash_method = "mtk"
+        w._used_sp_backend = False
 
         shown = []
 
@@ -164,6 +166,7 @@ def test_360p_success_with_the_toggle_off_finishes_like_any_other_install():
     try:
         tracking.set_donation_install_prompt_disabled(False, w.settings)
         tracking.set_donation_ui_disabled(False, w.settings)
+        w._keep_data = True
         w._package_model = "Y1"
         w._package_name = "Rockbox-0.6 rom.zip"
         w._package_path = "/tmp/rockbox_rom.zip"
