@@ -1,10 +1,11 @@
 """Settings page, install method, release reminders and donation preferences."""
 
 import logging
+import re
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, QSize, Qt, QThread, QTimer, Signal
+from PySide6.QtCore import QPoint, QSettings, QSize, Qt, QThread, QTimer, Signal
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -334,6 +335,23 @@ class SettingsPage(QWidget):
                 card_h = card.heightForWidth(width)
             else:
                 card_h = card.sizeHint().height()
+            if getattr(self, "_onboarding", False) or card is getattr(self, "_reminders_card", None):
+                for btn_attr in ("_add_device_save", "_onboarding_skip", "_onboarding_done", "_onboarding_more"):
+                    btn = getattr(self, btn_attr, None)
+                    if btn is not None and btn.isVisible():
+                        try:
+                            pos = btn.mapTo(card, QPoint(0, btn.height()))
+                            card_h = max(card_h, pos.y() + 24)
+                        except Exception:
+                            pass
+                panel = getattr(self, "_add_device_panel", None)
+                if panel is not None and panel.isVisible():
+                    try:
+                        pos = panel.mapTo(card, QPoint(0, panel.height()))
+                        card_h = max(card_h, pos.y() + 24)
+                    except Exception:
+                        pass
+                card_h = max(card_h, 380)
             height = max(
                 card_h,
                 int(card.minimumSizeHint().height()),
@@ -2276,15 +2294,22 @@ class SettingsPage(QWidget):
         self._add_device_status.setText("")
         model = self._add_device_model.currentText().strip().upper()
         package = self._add_device_package()
-        rockbox_y1 = bool(
-            model == "Y1"
+        rockbox = bool(
+            model in ("Y1", "Y2")
             and package is not None
             and "rockbox" in str(getattr(package, "name", "") or "").lower()
         )
         for rel in releases:
             label = catalog.parse_clean_release_tag_label(rel, version_only=True)
-            if rockbox_y1 and not self._is_240p_release(rel):
-                label = f"{label} ({tr('rockbox_themes_only_suffix')})"
+            suffix = tr("rockbox_themes_only_suffix")
+            if (
+                rockbox
+                and not self._is_240p_release(rel)
+                and suffix.lower() not in label.lower()
+                and "themes only" not in label.lower()
+            ):
+                label = f"{label} ({suffix})"
+            label = re.sub(r"(\([^)]+\))(?:\s+\1)+", r"\1", label, flags=re.IGNORECASE)
             self._add_device_version.addItem(label, rel)
         self._add_device_version.addItem(tr("settings_add_device_dont_know"), "UNKNOWN")
         self._add_device_version.addItem(tr("settings_add_device_other"), "OTHER")

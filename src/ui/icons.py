@@ -448,6 +448,17 @@ def _sf_symbol_names(symbol_name: str) -> tuple[str, ...]:
 
 
 _SF_SYMBOL_CACHE: dict[tuple[str, int, str], Optional[QPixmap]] = {}
+_SYMBOL_PIXMAP_CACHE: dict[tuple, QPixmap] = {}
+_SYMBOL_ICON_CACHE: dict[tuple, QIcon] = {}
+_SYMBOL_DATA_URI_CACHE: dict[tuple, str] = {}
+
+
+def clear_icon_cache() -> None:
+    """Flush rendered symbol caches across theme/palette changes."""
+    _SF_SYMBOL_CACHE.clear()
+    _SYMBOL_PIXMAP_CACHE.clear()
+    _SYMBOL_ICON_CACHE.clear()
+    _SYMBOL_DATA_URI_CACHE.clear()
 
 
 def _load_sf_symbol(sf_name: str, size: int, color: str) -> Optional[QPixmap]:
@@ -1080,28 +1091,37 @@ def get_symbol_pixmap(
     where several symbols sit side by side (the sidebar).
     """
     norm_color, _ = resolve_symbol_colors(color=color, match_accent=match_accent)
+    cache_key = (symbol_name, int(size), norm_color, bool(fit_box))
+    cached = _SYMBOL_PIXMAP_CACHE.get(cache_key)
+    if cached is not None and not cached.isNull():
+        return QPixmap(cached)
 
+    res = None
     # 1. macOS: Apple SF Symbols
     if IS_MAC:
         mac_pix = _get_sf_symbol_pixmap(symbol_name, size, norm_color)
         if mac_pix and not mac_pix.isNull():
-            return fit_glyph_to_box(mac_pix) if fit_box else mac_pix
+            res = fit_glyph_to_box(mac_pix) if fit_box else mac_pix
 
     # 2. Windows: MS Segoe Symbols
-    if IS_WINDOWS:
+    if res is None and IS_WINDOWS:
         win_pix = _get_segoe_pixmap(symbol_name, size, norm_color)
         if win_pix and not win_pix.isNull():
-            return fit_glyph_to_box(win_pix) if fit_box else win_pix
+            res = fit_glyph_to_box(win_pix) if fit_box else win_pix
 
     # 3. Linux: FreeDesktop theme
-    if not IS_MAC and not IS_WINDOWS:
+    if res is None and not IS_MAC and not IS_WINDOWS:
         linux_pix = _get_freedesktop_pixmap(symbol_name, size, norm_color)
         if linux_pix and not linux_pix.isNull():
-            return fit_glyph_to_box(linux_pix) if fit_box else linux_pix
+            res = fit_glyph_to_box(linux_pix) if fit_box else linux_pix
 
     # 4. Universal high-DPI vector SVG fallback
-    svg_pix = _get_svg_pixmap(symbol_name, size, norm_color)
-    return fit_glyph_to_box(svg_pix) if fit_box else svg_pix
+    if res is None:
+        svg_pix = _get_svg_pixmap(symbol_name, size, norm_color)
+        res = fit_glyph_to_box(svg_pix) if fit_box else svg_pix
+
+    _SYMBOL_PIXMAP_CACHE[cache_key] = res
+    return QPixmap(res)
 
 
 def get_symbol_icon(
@@ -1126,6 +1146,10 @@ def get_symbol_icon(
         focused_color=focused_color,
         match_accent=match_accent,
     )
+    cache_key = (symbol_name, int(size), norm_color, foc_color, bool(fit_box))
+    cached = _SYMBOL_ICON_CACHE.get(cache_key)
+    if cached is not None and not cached.isNull():
+        return QIcon(cached)
 
     # 1. Normal pixmap (unfocused / unchecked)
     pix_norm = get_symbol_pixmap(
@@ -1166,7 +1190,8 @@ def get_symbol_icon(
     icon.addPixmap(pix_dis, QIcon.Mode.Disabled, QIcon.State.Off)
     icon.addPixmap(pix_dis, QIcon.Mode.Disabled, QIcon.State.On)
 
-    return icon
+    _SYMBOL_ICON_CACHE[cache_key] = icon
+    return QIcon(icon)
 
 
 def get_symbol_data_uri(
@@ -1176,12 +1201,20 @@ def get_symbol_data_uri(
     match_accent: bool = False,
 ) -> str:
     """Return an inline data:image/png;base64,... URI for embedding in rich text HTML labels."""
+    norm_color, _ = resolve_symbol_colors(color=color, match_accent=match_accent)
+    cache_key = (symbol_name, int(size), norm_color)
+    cached = _SYMBOL_DATA_URI_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
     from PySide6.QtCore import QBuffer, QIODevice
 
-    pix = get_symbol_pixmap(symbol_name, size=size, color=color, match_accent=match_accent)
+    pix = get_symbol_pixmap(symbol_name, size=size, color=norm_color, match_accent=match_accent)
     buf = QBuffer()
     buf.open(QIODevice.WriteOnly)
     pix.save(buf, "PNG")
     b64 = bytes(buf.data().toBase64()).decode("ascii")
-    return f"data:image/png;base64,{b64}"
+    uri = f"data:image/png;base64,{b64}"
+    _SYMBOL_DATA_URI_CACHE[cache_key] = uri
+    return uri
 

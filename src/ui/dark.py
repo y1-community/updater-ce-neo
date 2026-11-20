@@ -563,11 +563,11 @@ def _macos_appkit_dark() -> bool | None:
     fallback it used to be.
     """
     try:
-        from AppKit import NSApp
+        from AppKit import NSApp, NSApplication
     except Exception:
         return None
     try:
-        app = NSApp()
+        app = NSApp() or NSApplication.sharedApplication()
         if not app:
             return None
         appearance = app.effectiveAppearance()
@@ -595,19 +595,12 @@ def is_system_dark_mode() -> bool:
         if appkit_dark is not None:
             return appkit_dark
         try:
-            import subprocess
-            res = subprocess.run(
-                ["defaults", "read", "-g", "AppleInterfaceStyle"],
-                capture_output=True,
-                text=True,
-                timeout=1,
-            )
-            if res.returncode == 0 and "dark" in res.stdout.strip().lower():
-                return True
-            if res.returncode != 0:
-                # Key does not exist in light mode
-                return False
+            from Foundation import NSUserDefaults
+
+            val = str(NSUserDefaults.standardUserDefaults().stringForKey_("AppleInterfaceStyle") or "").lower()
+            return "dark" in val
         except Exception:
+            pass
             pass
 
     # 2. Windows: Registry check for AppsUseLightTheme
@@ -2367,6 +2360,12 @@ def refresh_theme(app: QApplication | None = None) -> None:
         if IS_LINUX:
             _state.linux_palette_from_event = False
         _apply_native_font(app)
+        try:
+            from .icons import clear_icon_cache
+
+            clear_icon_cache()
+        except Exception:
+            pass
         app.setPalette(
             _make_palette(
                 _state.is_dark,

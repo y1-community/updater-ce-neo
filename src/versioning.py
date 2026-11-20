@@ -728,19 +728,26 @@ def parse_clean_release_tag_label(
         or "240p" in str(rel.get("asset_name", "")).lower()
         or "240p" in lower_raw
     )
-    # Check if this release is for Rockbox on Y1:
+    # Beta / Alpha / RC
+    rc_match = re.search(r"\b(rc\d*|beta\d*|alpha\d*)\b", lower_raw)
+    if rc_match:
+        value = rc_match.group(1)
+        verbs.append(value.upper() if "rc" in value else value.title())
+
+    # Check if this release is for Rockbox on Y1 or Y2:
     source_repo = str(rel.get("source_repo", "") or rel.get("repo", "") or "").lower()
     rel_model = str(rel.get("model", "") or rel.get("device", "") or "").upper()
-    is_rockbox_y1 = (
+    is_rockbox_y1_or_y2 = (
         "rockbox-y1" in source_repo
-        or ("rockbox" in lower_raw and "y1" in lower_raw)
-        or ("rockbox" in source_repo and (rel_model == "Y1" or "y1" in lower_raw))
+        or "y2-rockbox" in source_repo
+        or ("rockbox" in source_repo and rel_model in ("Y1", "Y2", ""))
+        or ("rockbox" in lower_raw and ("y1" in lower_raw or "y2" in lower_raw or rel_model in ("Y1", "Y2")))
     )
 
     if is_240p:
         if "240p" not in verbs:
             verbs.append("240p")
-    elif is_rockbox_y1:
+    elif is_rockbox_y1_or_y2:
         if "360p" in verbs:
             verbs.remove("360p")
         if label_360p_y1_themes_only not in verbs:
@@ -752,12 +759,6 @@ def parse_clean_release_tag_label(
     if re.search(r"\b(?:root|magisk)\b", lower_raw) and "Root" not in verbs:
         verbs.append("Root")
 
-    # Beta / Alpha / RC
-    rc_match = re.search(r"\b(rc\d*|beta\d*|alpha\d*)\b", lower_raw)
-    if rc_match:
-        value = rc_match.group(1)
-        verbs.append(value.upper() if "rc" in value else value.title())
-
     # The tag's own date reads next to the version, ahead of the other verbs.
     if tag_date and not version_only and tag_date not in verbs:
         verbs.insert(0, tag_date)
@@ -765,11 +766,21 @@ def parse_clean_release_tag_label(
     # A same-date rebuild (``20261107-v2``) is newer than the first build and
     # displays its suffix after the date: ``November 7 2026 (v2)``.
     date_suffix = release_datestamp_suffix(raw) if date_primary else ""
-    if date_suffix and date_suffix not in verbs:
+    if date_suffix and not any(v.lower() == date_suffix.lower() for v in verbs):
         verbs.insert(0, date_suffix)
+
+    unique_verbs = []
+    seen_verbs = set()
+    for verb in verbs:
+        v_clean = verb.strip().lower()
+        if v_clean not in seen_verbs:
+            seen_verbs.add(v_clean)
+            unique_verbs.append(verb)
+    verbs = unique_verbs
 
     verb_suffix = " ".join(f"({verb})" for verb in verbs)
     label = f"{version_part} {verb_suffix}".strip()
+    label = re.sub(r"(\([^)]+\))(?:\s+\1)+", r"\1", label, flags=re.IGNORECASE)
     # A pre-release is marked after its date or version, which is what keeps
     # nightlies (shown by date) distinguishable from the stable builds beside
     # them in the same list. A beta needs no marker.

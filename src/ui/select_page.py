@@ -938,14 +938,12 @@ class SelectPackagePage(QWidget):
         self._refresh_btn.clicked.connect(self._refresh_everything)
         filter_layout.addWidget(self._refresh_btn, 2, 3)
 
-        # Why Keep Data will not be offered, said next to the software name it
-        # applies to: the install card otherwise only asks once the device is
-        # connected, and the answer is already known here.
+        # The Keep Data note is intentionally not shown on the Select Software
+        # screen; appropriate guidance is shown during the install phase.
         self._keep_data_note = QLabel(tr("sel_keep_data_incompatible"))
         self._keep_data_note.setWordWrap(True)
         self._keep_data_note.setProperty("cssClass", "hint")
         self._keep_data_note.hide()
-        filter_layout.addWidget(self._keep_data_note, 3, 0, 1, 4)
 
         filter_layout.setColumnStretch(1, 1)
         filter_layout.setColumnStretch(3, 1)
@@ -1984,6 +1982,7 @@ class SelectPackagePage(QWidget):
         if hasattr(self, "_type_help_hint_btn"):
             model = self.current_model() or "Y1"
             self._type_help_hint_btn.setText(tr("sel_type_what_type_fmt").format(model=model))
+        self._update_type_filter_visibility()
         # Software names carry preset translations: re-label the dropdown rows
         # in place, keeping the canonical English name as each row's data.
         self._software_combo.blockSignals(True)
@@ -2225,22 +2224,28 @@ class SelectPackagePage(QWidget):
             return
         self._model_combo.setCurrentIndex(idx)
 
-    def _on_model_changed(self):
-        previous_software = (
-            self.current_software() if hasattr(self, "_software_combo") else ""
-        )
-        model = self.current_model()
-        # Keep type filter visible across models; models with variants (Y1) allow A/B selection.
-        has_types = model.upper() == "Y1"
-        self._type_label.setVisible(True)
-        self._type_combo.setVisible(True)
-        if hasattr(self, "_type_help_icon"):
-            self._type_help_icon.setVisible(True)
-        if hasattr(self, "_type_help_hint_btn"):
-            self._type_help_hint_btn.setVisible(True)
-            self._type_help_hint_btn.setText(tr("sel_type_what_type_fmt").format(model=model or "Y1"))
+    def _model_has_multiple_types(self) -> bool:
+        """True if the currently selected device model has multiple hardware types."""
+        from ..config import DEVICE_MODEL_TYPES
+
+        model = (self.current_model() or "").strip().upper()
+        return model in DEVICE_MODEL_TYPES
+
+    def _update_type_filter_visibility(self, loaded_releases=None) -> None:
+        """Show the hardware type filter only for devices that have multiple types."""
+        has_types = self._model_has_multiple_types()
+        if hasattr(self, "_type_label"):
+            self._type_label.setVisible(has_types)
         if hasattr(self, "_type_field"):
-            self._type_field.setVisible(True)
+            self._type_field.setVisible(has_types)
+        if hasattr(self, "_type_combo"):
+            self._type_combo.setVisible(has_types)
+        if hasattr(self, "_type_help_icon"):
+            self._type_help_icon.setVisible(has_types)
+        if hasattr(self, "_type_help_hint_btn"):
+            self._type_help_hint_btn.setVisible(has_types)
+            model = self.current_model()
+            self._type_help_hint_btn.setText(tr("sel_type_what_type_fmt").format(model=model or "Y1"))
         if not has_types:
             self._selected_type = "A"
             if hasattr(self, "_type_combo") and self._type_combo.count() > 0:
@@ -2248,7 +2253,14 @@ class SelectPackagePage(QWidget):
                 self._type_combo.setCurrentIndex(0)
                 self._type_combo.blockSignals(False)
         else:
-            self._selected_type = self._type_combo.currentData() or "A"
+            if hasattr(self, "_type_combo"):
+                self._selected_type = self._type_combo.currentData() or "A"
+
+    def _on_model_changed(self):
+        previous_software = (
+            self.current_software() if hasattr(self, "_software_combo") else ""
+        )
+        model = self.current_model()
         names = catalog.software_names_for_model(model, brand=self.current_brand())
         # The same software name means the equivalent firmware for the new
         # model; anything else falls back to Original Software in the combo.
@@ -2257,6 +2269,7 @@ class SelectPackagePage(QWidget):
             select=self._software_name_kept_across_models(previous_software, names),
         )
         self._update_device_status_copy()
+        self._update_type_filter_visibility()
         self._on_software_changed()
         self._sync_notice_context()
 
@@ -2386,20 +2399,26 @@ class SelectPackagePage(QWidget):
         software = (self.current_software() or "").lower()
         return self.current_model().upper() == "Y2" and "rockbox" in software
 
-    def _rockbox_themes_only_suffix(self, rel) -> str:
-        """The theme-library note a non-240p Y1 Rockbox row carries.
+    def _rockbox_themes_only_suffix(self, rel, current_label: str = "") -> str:
+        """The theme-library note a non-240p Y1 or Y2 Rockbox row carries.
 
-        Y1 Rockbox no longer reads the iPod classic (240p) theme catalogue, so
-        the version alone would leave an owner expecting those themes. A 240p
+        Rockbox on Y1 and Y2 uses the 360p theme catalogue, so
+        the version alone would leave an owner expecting 240p themes. A 240p
         build is the exception: those themes are its point.
         """
-        if not self.is_rockbox_y1_browsing():
+        if not (self.is_rockbox_y1_browsing() or self.is_rockbox_y2_browsing()):
+            return ""
+        suffix = tr("rockbox_themes_only_suffix")
+        cur = str(current_label).lower()
+        if suffix and suffix.lower() in cur:
+            return ""
+        if "themes only" in cur:
             return ""
         resolution = str((rel or {}).get("selected_resolution") or "").lower()
         asset = str((rel or {}).get("asset_name") or "").lower()
         if resolution == "240p" or "240p" in asset:
             return ""
-        return f" ({tr('rockbox_themes_only_suffix')})"
+        return f" ({suffix})"
 
     def original_pre_307_listing(self) -> bool:
         """Whether Original Software releases older than 3.0.7 may be listed.
@@ -2448,25 +2467,22 @@ class SelectPackagePage(QWidget):
             self.current_model(), brand=self.current_brand()
         )
         self._populate_software_combo(names, select=self.current_software())
+        self._update_type_filter_visibility()
         self._refresh_releases()
         self._sync_notice_context()
         self._update_keep_data_note()
 
     def _on_software_changed(self):
+        self._update_type_filter_visibility()
         self._refresh_releases()
         self._sync_notice_context()
         self._update_keep_data_note()
 
     def _update_keep_data_note(self) -> None:
-        """Say in advance when the player's current firmware blocks Keep Data."""
+        """The Keep Data hint is not shown on Select Software screen (appropriate guidance is shown during installs)."""
         if not hasattr(self, "_keep_data_note"):
             return
-        from .. import keep_data
-
-        incompatible = keep_data.incompatible_with_current(
-            self.current_model(), self.current_package()
-        )
-        self._keep_data_note.setVisible(bool(incompatible))
+        self._keep_data_note.hide()
 
     def _sync_notice_context(self) -> None:
         """Report what the reader is looking at, so notices can be contextual.
@@ -2870,6 +2886,7 @@ class SelectPackagePage(QWidget):
                 pass
             return
         self._release_list.clear()
+        self._update_type_filter_visibility(loaded_releases=releases)
         releases = sorted(releases or [], key=catalog.release_sort_key, reverse=True)
         prefer_240p = self.release_listing_filters()[2]
         installed_tag = ""
@@ -2919,7 +2936,8 @@ class SelectPackagePage(QWidget):
 
         for rel in releases:
             label = catalog.parse_clean_release_tag_label(rel, prefer_240p=prefer_240p)
-            label += self._rockbox_themes_only_suffix(rel)
+            label += self._rockbox_themes_only_suffix(rel, current_label=label)
+            label = re.sub(r"(\([^)]+\))(?:\s+\1)+", r"\1", label, flags=re.IGNORECASE)
             tag = rel.get("tag_name", "")
             row = marks["rows"].get(tag) or {}
             is_installed = bool(row.get("installed"))

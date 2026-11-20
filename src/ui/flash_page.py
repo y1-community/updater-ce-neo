@@ -1799,6 +1799,45 @@ class _SvgVectorWidget(QWidget):
         pass
 
 
+class _PaperclipHintHost(QWidget):
+    """Host container for the paperclip instruction, diagram and tips.
+
+    Implements heightForWidth and sizeHint dynamically across its child
+    labels so the card and window expand to fit all lines and buttons without
+    clipping on any platform.
+    """
+
+    def hasHeightForWidth(self) -> bool:  # noqa: N802 (Qt naming)
+        return True
+
+    def heightForWidth(self, width: int) -> int:  # noqa: N802 (Qt naming)
+        layout = self.layout()
+        if layout is None:
+            return self.sizeHint().height()
+        w = max(1, int(width))
+        h = 0
+        visible_count = 0
+        for i in range(layout.count()):
+            item = layout.itemAt(i)
+            widget = item.widget() if item else None
+            if widget is not None and not widget.isHidden():
+                if widget.hasHeightForWidth():
+                    item_h = widget.heightForWidth(w)
+                else:
+                    item_h = widget.sizeHint().height()
+                h += item_h
+                visible_count += 1
+        if visible_count > 1:
+            h += layout.spacing() * (visible_count - 1)
+        m = layout.contentsMargins()
+        h += m.top() + m.bottom()
+        return max(h, self.minimumHeight())
+
+    def sizeHint(self):  # noqa: N802 (Qt naming)
+        w = self.width() if self.width() > 0 else INSTALL_TEXT_WIDTH
+        return QSize(w, self.heightForWidth(w))
+
+
 class FlashPage(QWidget):
     # Bumped whenever the card changes stage or structure; MainWindow fits the
     # window to it.
@@ -2230,7 +2269,7 @@ class FlashPage(QWidget):
         # diagram and its copy arrive when the link is followed.
         self._paperclip_revealed = False
 
-        self._paperclip_hint_host = QWidget()
+        self._paperclip_hint_host = _PaperclipHintHost()
         self._paperclip_hint_host.setObjectName("paperclipHintHost")
         self._paperclip_hint_host.setStyleSheet("background: transparent; border: none; margin-top: 2px;")
         hint_layout = QVBoxLayout(self._paperclip_hint_host)
@@ -2240,21 +2279,34 @@ class FlashPage(QWidget):
         hint_layout.addWidget(self._paperclip_img, 0, Qt.AlignmentFlag.AlignLeft)
         
         # New advice hints
-        self._charger_hint_label = QLabel(tr("flash_hint_wall_charger"))
-        self._charger_hint_label.setWordWrap(True)
+        self._charger_hint_label = _status_label(tr("flash_hint_wall_charger"))
         self._charger_hint_label.setProperty("cssClass", "dimmed")
         self._charger_hint_label.setStyleSheet(f"font-size: {_BODY_PX}px; margin-top: 2px;")
         self._charger_hint_label.setVisible(False)
         hint_layout.addWidget(self._charger_hint_label)
 
-        self._driver_hint_label = QLabel(tr("flash_hint_install_drivers"))
-        self._driver_hint_label.setWordWrap(True)
+        import re
+
+        self._driver_hint_widget = QWidget()
+        driver_hint_layout = QHBoxLayout(self._driver_hint_widget)
+        driver_hint_layout.setContentsMargins(0, 2, 0, 0)
+        driver_hint_layout.setSpacing(6)
+
+        clean_driver_hint = re.sub(r"<[^>]+>", "", tr("flash_hint_install_drivers")).strip()
+        self._driver_hint_label = QLabel(clean_driver_hint)
         self._driver_hint_label.setProperty("cssClass", "dimmed")
-        self._driver_hint_label.setStyleSheet(f"font-size: {_BODY_PX}px; margin-top: 2px;")
-        self._driver_hint_label.setTextFormat(Qt.RichText)
-        self._driver_hint_label.setOpenExternalLinks(True)
-        self._driver_hint_label.setVisible(False)
-        hint_layout.addWidget(self._driver_hint_label)
+        self._driver_hint_label.setStyleSheet(f"font-size: {_BODY_PX}px;")
+        self._driver_hint_label.setWordWrap(True)
+        driver_hint_layout.addWidget(self._driver_hint_label)
+
+        self._driver_hint_btn = QPushButton(tr("settings_download_drivers_btn"))
+        self._driver_hint_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._driver_hint_btn.clicked.connect(self._open_mediatek_drivers)
+        driver_hint_layout.addWidget(self._driver_hint_btn)
+        driver_hint_layout.addStretch(1)
+
+        self._driver_hint_widget.setVisible(False)
+        hint_layout.addWidget(self._driver_hint_widget)
 
         self._paperclip_hint_host.setVisible(False)
         # Above the tick, which sits below it: the hint says how to power the
@@ -2809,6 +2861,7 @@ class FlashPage(QWidget):
         is_power_off = (
             bool(model)
             and copy == "power_off"
+            and not getattr(self, "_rockbox_themes_prompt", False)
             and getattr(self, "_show_pin_tip", True)
             and not getattr(self, "_stop_open", False)
         )
@@ -2841,18 +2894,25 @@ class FlashPage(QWidget):
         # what to do, and the \"not connecting?\" link below it is the door. A
         # connect card that opened the diagram hid the ask behind it, and it
         # also swallowed the link the reader is meant to follow.
-        if not wanted or not revealed:
+        if not wanted or not revealed or getattr(self, "_rockbox_themes_prompt", False):
             host.setVisible(False)
             self._charger_hint_label.setVisible(False)
-            self._driver_hint_label.setVisible(False)
+            if hasattr(self, "_driver_hint_widget"):
+                self._driver_hint_widget.setVisible(False)
+            if hasattr(self, "_driver_hint_label"):
+                self._driver_hint_label.setVisible(False)
             if img_label is not None:
                 img_label.setFixedSize(0, 0)
             host.setMinimumHeight(0)
             self._note_paperclip_visibility_change(was_hidden)
             return
 
+        is_windows = sys.platform == "win32"
         self._charger_hint_label.setVisible(True)
-        self._driver_hint_label.setVisible(sys.platform == 'win32')
+        if hasattr(self, "_driver_hint_widget"):
+            self._driver_hint_widget.setVisible(is_windows)
+        elif hasattr(self, "_driver_hint_label"):
+            self._driver_hint_label.setVisible(is_windows)
 
         if is_connect:
             from ..config import device_label_for_model, is_a5_model
@@ -3521,10 +3581,13 @@ class FlashPage(QWidget):
         self._apply_post_install_state()
 
     def _open_mediatek_drivers(self) -> None:
+        import sys
         from ..browser import open_browser
-        from ..config import MEDIATEK_DRIVERS_URL
+        from ..config import MEDIATEK_DRIVERS_URL, MEDIATEK_DRIVERS_ARM64_URL
+        from ..platform_detect import is_windows_on_arm
 
-        open_browser(MEDIATEK_DRIVERS_URL)
+        is_arm64 = is_windows_on_arm() if sys.platform == "win32" else False
+        open_browser(MEDIATEK_DRIVERS_ARM64_URL if is_arm64 else MEDIATEK_DRIVERS_URL)
 
     def _set_determinate(self, bar: QProgressBar, percent) -> None:
         try:
@@ -4875,6 +4938,8 @@ class FlashPage(QWidget):
         """
         if self._power_off_recovery:
             return self._power_off_recovery_key or "err_usb_disconnected_recovery"
+        if getattr(self, "_rockbox_themes_prompt", False):
+            return "rockbox_y1_theme_warning_prompt"
         if getattr(self, "_permission_prompt", False):
             return "install_linux_permission_prompt"
         if getattr(self, "_power_off_only", False):
@@ -4888,6 +4953,23 @@ class FlashPage(QWidget):
         connect-failure wording also names the engine that failed and the one
         taking over, which only its own call site supplies.
         """
+        if getattr(self, "_rockbox_themes_prompt", False):
+            model_text = self._connect_model_text() or "Y1"
+            text = tr("rockbox_y1_theme_warning_prompt")
+            if model_text != "Y1":
+                text = (
+                    text.replace("on Y1", f"on {model_text}")
+                    .replace("sur Y1", f"sur {model_text}")
+                    .replace("auf dem Y1", f"auf dem {model_text}")
+                    .replace("en Y1", f"en {model_text}")
+                    .replace("Y1 上的", f"{model_text} 上的")
+                    .replace("Y1 の", f"{model_text} の")
+                    .replace("Y1의", f"{model_text}의")
+                    .replace("на Y1", f"на {model_text}")
+                    .replace("na Y1", f"na {model_text}")
+                    .replace("su Y1", f"su {model_text}")
+                )
+            return text
         kwargs = dict(self._power_off_recovery_kwargs or {})
         kwargs.setdefault("model", self._connect_model_text())
         text = tr(self._power_off_prompt_key()).format(**kwargs)
@@ -4913,6 +4995,7 @@ class FlashPage(QWidget):
         self._wait_copy = "power_off"
         self._power_off_recovery = False
         self._permission_prompt = bool(permission)
+        self._rockbox_themes_prompt = False
         self._power_off_recovery_key = ""
         self._power_off_recovery_kwargs = {}
         self._show_pin_tip = show_pin_tip
@@ -4940,6 +5023,40 @@ class FlashPage(QWidget):
         self.view_generation = getattr(self, "view_generation", 0) + 1
         self._notify_geometry_change()
 
+    def show_rockbox_themes_prompt(self) -> None:
+        """Prompt explaining the 360p themes requirement inside the wizard modal before power-off."""
+        self._failed = False
+        self._complete = False
+        self._prompt_only = True
+        self._wait_copy = "power_off"
+        self._power_off_recovery = False
+        self._permission_prompt = False
+        self._rockbox_themes_prompt = True
+        self.set_attempt_timeout(0)
+        self.clear_install_failure()
+        self.show_waiting()
+        self._reset_connect_prompt_delay()
+        self.clear_keep_data_confirmation()
+        self._set_yes_no_glyphs(False)
+        prompt = self._power_off_prompt_text()
+        self._wait_prompt_label.setText(prompt)
+        if hasattr(self, "_keep_data_cb"):
+            self._keep_data_force_hidden = True
+        self._sync_keep_data_visibility()
+        self._set_determinate(self._wait_progress_bar, 0)
+        self._wait_cancel_btn.setVisible(True)
+        self._wait_continue_btn.setVisible(True)
+        self._wait_continue_btn.setEnabled(True)
+        if hasattr(self, "_wait_mode_hint"):
+            self._wait_mode_hint.setVisible(False)
+        self._update_paperclip_hint()
+        self._apply_stop_hold()
+        self.view_generation = getattr(self, "view_generation", 0) + 1
+        self._notify_geometry_change()
+
+    def set_rockbox_themes_prompt(self, enabled: bool) -> None:
+        self._rockbox_themes_prompt = bool(enabled)
+
     def _keep_data_visible(self) -> bool:
         """The tick is only for the power-off-and-disconnect prompt.
 
@@ -4953,6 +5070,7 @@ class FlashPage(QWidget):
             and not getattr(self, "_format_all_required", False)
             and getattr(self, "_wait_copy", "") == "power_off"
             and not getattr(self, "_permission_prompt", False)
+            and not getattr(self, "_rockbox_themes_prompt", False)
             and not getattr(self, "_keep_data_confirm_active", False)
             and not getattr(self, "_keep_data_force_hidden", False)
             and not getattr(self, "_keep_data_locked", False)
@@ -5417,30 +5535,20 @@ class FlashPage(QWidget):
         )
 
     def _fit_paperclip_hint_height(self) -> None:
-        """Reserve the paperclip tip's height for the width it is drawn at.
-
-        The host reserves the tip plus its diagram, so its figure has to follow
-        the label's new measured height; otherwise the space saved by wrapping
-        to the card's width stays reserved under the sentence.
-        """
-        label = getattr(self, "_paperclip_hint", None)
-        if label is None or label.isHidden() or label.width() <= 0:
-            return
-        if not hasattr(label, "set_measure_width"):
-            return
-        label.set_measure_width(label.width())
+        """Reserve the paperclip tip's height for the width it is drawn at."""
         host = getattr(self, "_paperclip_hint_host", None)
-        image = getattr(self, "_paperclip_img", None)
-        if host is not None and image is not None and image.isVisible():
-            wanted = int(image.height()) + label.sizeHint().height() + 4
-            if self._charger_hint_label.isVisible():
-                wanted += self._charger_hint_label.sizeHint().height() + 4
-            if self._driver_hint_label.isVisible():
-                wanted += self._driver_hint_label.sizeHint().height() + 4
-            if host.minimumHeight() != wanted:
-                host.setMinimumHeight(wanted)
-                self._relayout_wait_card()
-                self._notify_geometry_change()
+        if host is None or host.isHidden():
+            return
+        label = getattr(self, "_paperclip_hint", None)
+        w = host.width() if host.width() > 0 else (label.width() if label and label.width() > 0 else INSTALL_TEXT_WIDTH)
+        for lbl in (label, getattr(self, "_charger_hint_label", None), getattr(self, "_driver_hint_label", None)):
+            if lbl is not None and hasattr(lbl, "set_measure_width") and w > 0:
+                lbl.set_measure_width(w)
+        wanted = host.heightForWidth(w)
+        if host.minimumHeight() != wanted:
+            host.setMinimumHeight(wanted)
+            self._relayout_wait_card()
+            self._notify_geometry_change()
 
     def _paperclip_hint_html(self, sentence: str) -> str:
         """The paperclip tip with its Got it link as the end of the sentence."""
@@ -5471,6 +5579,8 @@ class FlashPage(QWidget):
     def _paperclip_help_wanted(self) -> bool:
         """Whether the prompt line should end in the tip's How? link."""
         if getattr(self, "_stop_open", False):
+            return False
+        if getattr(self, "_rockbox_themes_prompt", False):
             return False
         if getattr(self, "_paperclip_revealed", False) and getattr(self, "_wait_copy", "") != "connect":
             # The link already opened the tip: offering it again beside the
@@ -5874,6 +5984,14 @@ class FlashPage(QWidget):
             self._keep_data_hint.setText(_styled_prompt_links(self._keep_data_explainer))
         if hasattr(self, "_keep_data_microsd_note"):
             self._keep_data_microsd_note.setText(self._microsd_note_html())
+        if hasattr(self, "_charger_hint_label"):
+            self._charger_hint_label.setText(tr("flash_hint_wall_charger"))
+        if hasattr(self, "_driver_hint_label"):
+            import re
+            clean_driver = re.sub(r"<[^>]+>", "", tr("flash_hint_install_drivers")).strip()
+            self._driver_hint_label.setText(clean_driver)
+        if hasattr(self, "_driver_hint_btn"):
+            self._driver_hint_btn.setText(tr("settings_download_drivers_btn"))
         self._update_paperclip_hint()
         self._update_keep_data_warning()
         if hasattr(self, "_post_install_hint"):
@@ -7116,6 +7234,14 @@ class FlashPage(QWidget):
             self._keep_data_cb.setAccessibleName(tr("flash_keep_data_option"))
         if hasattr(self, "_keep_data_microsd_note"):
             self._keep_data_microsd_note.setText(self._microsd_note_html())
+        if hasattr(self, "_charger_hint_label"):
+            self._charger_hint_label.setText(tr("flash_hint_wall_charger"))
+        if hasattr(self, "_driver_hint_label"):
+            import re
+            clean_driver = re.sub(r"<[^>]+>", "", tr("flash_hint_install_drivers")).strip()
+            self._driver_hint_label.setText(clean_driver)
+        if hasattr(self, "_driver_hint_btn"):
+            self._driver_hint_btn.setText(tr("settings_download_drivers_btn"))
         self._update_paperclip_hint()
         self._sync_wait_band_page()
         if hasattr(self, "_post_install_hint"):
@@ -7476,7 +7602,7 @@ class FlashPage(QWidget):
                 copy_h = 0
                 for i in range(wait_col.count()):
                     item = wait_col.itemAt(i)
-                    if item is not None and item.widget() is not None and item.widget().isVisible():
+                    if item is not None and item.widget() is not None and not item.widget().isHidden():
                         w = item.widget()
                         if w.hasHeightForWidth():
                             # A label wraps at its own width, which the layout

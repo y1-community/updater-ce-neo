@@ -32,6 +32,7 @@ import os
 import re
 import sys
 import time
+from pathlib import Path
 from typing import Optional
 from urllib.parse import quote, unquote, urlsplit
 
@@ -301,6 +302,18 @@ def _normalize_index_data(data, repo: str = "") -> Optional[dict]:
     return out
 
 
+def _disk_cache_path(repo: str) -> Optional[Path]:
+    try:
+        from .paths import app_cache_dir
+
+        safe = repo.replace("/", "_").replace("\\", "_")
+        d = app_cache_dir() / "portable"
+        d.mkdir(parents=True, exist_ok=True)
+        return d / f"{safe}.json"
+    except Exception:
+        return None
+
+
 def load_index(
     repo: str,
     fetch=None,
@@ -322,11 +335,40 @@ def load_index(
     if not force_refresh and cached and current - cached[0] < INDEX_TTL_SECONDS:
         return cached[1]
 
+    # Check on-disk cache
+    disk_file = _disk_cache_path(repo)
+    disk_data = None
+    disk_mtime = 0.0
+    if disk_file is not None and disk_file.is_file():
+        try:
+            disk_mtime = disk_file.stat().st_mtime
+            raw = json.loads(disk_file.read_text(encoding="utf-8"))
+            disk_data = _normalize_index_data(raw, repo)
+            if disk_data and not force_refresh and (current - disk_mtime < INDEX_TTL_SECONDS):
+                _INDEX_CACHE[repo] = (disk_mtime, disk_data)
+                return disk_data
+        except Exception:
+            pass
+
+    from .config import is_offline_mode
+
+    if is_offline_mode() and fetch is None:
+        if disk_data:
+            _INDEX_CACHE[repo] = (disk_mtime, disk_data)
+            return disk_data
+        return cached[1] if cached else None
+
     fetcher = fetch or _fetch_text
-    stale = cached[1] if cached else None
+    stale = cached[1] if cached else disk_data
     raw_data = None
     try:
-        raw_data = json.loads(fetcher(index_url(repo, branch)))
+        raw_text = fetcher(index_url(repo, branch))
+        raw_data = json.loads(raw_text)
+        if disk_file is not None and fetch is None:
+            try:
+                disk_file.write_text(raw_text, encoding="utf-8")
+            except Exception:
+                pass
     except Exception as error:
         logger.debug("Portable mirror index unavailable for %s: %s", repo, error)
 

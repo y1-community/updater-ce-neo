@@ -370,6 +370,22 @@ def launcher_source() -> str:
     return LAUNCHER_C.replace("@@APP_EXECUTABLE@@", name)
 
 
+def get_lipo_cmd() -> list[str]:
+    if shutil.which("llvm-lipo"):
+        return ["llvm-lipo"]
+    if sys.platform == "darwin":
+        try:
+            proc_trans = subprocess.run(
+                ["sysctl", "-n", "sysctl.proc_translated"],
+                capture_output=True, text=True, check=False
+            ).stdout.strip()
+            if proc_trans == "1":
+                return ["/usr/bin/arch", "-arm64", "lipo"]
+        except Exception:
+            pass
+    return ["lipo"]
+
+
 def compile_universal_launcher(out_path: Path):
     with tempfile.TemporaryDirectory() as td:
         tdp = Path(td)
@@ -423,16 +439,16 @@ def compile_universal_launcher(out_path: Path):
             str(arm_obj), str(tbd_file), "-o", str(arm_bin)
         ], check=True)
 
-        lipo = "llvm-lipo" if shutil.which("llvm-lipo") else "lipo"
+        lipo = get_lipo_cmd()
         subprocess.run([
-            lipo, "-create", str(x86_bin), str(arm_bin), "-output", str(out_path)
+            *lipo, "-create", str(x86_bin), str(arm_bin), "-output", str(out_path)
         ], check=True)
         os.chmod(out_path, 0o755)
 
 
 def build_universal_python(dest_python: Path):
     print(">>> Assembling Universal 2 Standalone Python runtime...")
-    lipo = "llvm-lipo" if shutil.which("llvm-lipo") else "lipo"
+    lipo = get_lipo_cmd()
 
     with tempfile.TemporaryDirectory() as td:
         tdp = Path(td)
@@ -461,10 +477,11 @@ def build_universal_python(dest_python: Path):
                 if is_macho(target_f) and x86_f.exists() and is_macho(x86_f):
                     tmp_uni = target_f.with_suffix(".universal_tmp")
                     try:
-                        subprocess.run([lipo, "-create", str(x86_f), str(target_f), "-output", str(tmp_uni)], check=True)
+                        subprocess.run([*lipo, "-create", str(x86_f), str(target_f), "-output", str(tmp_uni)], check=True)
                         tmp_uni.replace(target_f)
                         os.chmod(target_f, 0o755)
-                    except Exception:
+                    except Exception as e:
+                        print(f"WARNING: failed to lipo {target_f}: {e}")
                         if tmp_uni.exists():
                             tmp_uni.unlink()
 

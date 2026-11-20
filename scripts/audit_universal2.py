@@ -27,8 +27,22 @@ def is_macho(p: Path) -> bool:
         return False
 
 
+def arch_cmd(tool: str) -> list[str]:
+    if sys.platform == "darwin":
+        try:
+            proc_trans = subprocess.run(
+                ["sysctl", "-n", "sysctl.proc_translated"],
+                capture_output=True, text=True, check=False
+            ).stdout.strip()
+            if proc_trans == "1":
+                return ["/usr/bin/arch", "-arm64", tool]
+        except Exception:
+            pass
+    return [tool]
+
+
 def minos_for(p: Path, arch: str) -> str | None:
-    out = subprocess.run(["otool", "-arch", arch, "-l", str(p)], capture_output=True, text=True).stdout
+    out = subprocess.run([*arch_cmd("otool"), "-arch", arch, "-l", str(p)], capture_output=True, text=True).stdout
     m = re.search(r"cmd LC_BUILD_VERSION.*?minos ([0-9.]+)", out, re.S)
     if m:
         return m.group(1)
@@ -52,7 +66,7 @@ def main() -> int:
         if p.is_symlink() or not p.is_file() or not is_macho(p):
             continue
         total += 1
-        archs = subprocess.run(["lipo", "-archs", str(p)], capture_output=True, text=True).stdout.split()
+        archs = subprocess.run([*arch_cmd("lipo"), "-archs", str(p)], capture_output=True, text=True).stdout.split()
         missing = {"x86_64", "arm64"} - set(archs)
         if missing:
             bad.append(f"MISSING {sorted(missing)}: {p}")

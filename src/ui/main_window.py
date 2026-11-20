@@ -3049,15 +3049,18 @@ class MainWindow(QMainWindow):
             # A run owns the screen: its card is the one thing the user may
             # finish, fail or cancel, and Settings is closed until then.
             return False
+        self._onboarding_active = True
         self._nav_to_page(_PAGE_SETTINGS)
         if not page.begin_onboarding():
+            self._onboarding_active = False
             return False
-        self._onboarding_active = True
         # The row is the journey's name while it runs, and the rest of the rail
         # waits: there is no other screen to open until this one is done.
         self._sync_settings_nav_label()
         self._set_onboarding_nav_lock(True)
         self._update_header_title()
+        self._fit_window_to_page()
+        QTimer.singleShot(0, self._fit_window_to_page)
         store = QSettings("innioasis", "updater")
         # Written, not left absent: a launch that quits mid-journey has to come
         # back to it rather than start over from the catalogue.
@@ -3096,6 +3099,8 @@ class MainWindow(QMainWindow):
         store.setValue(self.ONBOARDING_KEY, True)
         store.sync()
         self._nav_to_page(_PAGE_SELECT)
+        self._fit_window_to_page()
+        QTimer.singleShot(0, self._fit_window_to_page)
         # The player just added is the player the catalogue should open on.
         select_page = getattr(self, "_select_page", None)
         if select_page is not None and hasattr(select_page, "select_only_tracked_model"):
@@ -3551,8 +3556,8 @@ class MainWindow(QMainWindow):
         is_rockbox = "rockbox" in name or "rockbox" in path or "rockbox" in slug
         is_240p = any("240p" in value for value in (name, path, asset_name, release_label))
         is_240p = is_240p or str(info.get("selected_resolution", "")).lower() == "240p"
-        # Themes are Y1-only, and only for a Rockbox-named, non-240p release.
-        wanted = bool(model == "Y1" and is_rockbox and not is_240p)
+        # Themes are for Rockbox-named, non-240p releases on Y1 and Y2.
+        wanted = bool(model in ("Y1", "Y2") and is_rockbox and not is_240p)
         # The per-install tickbox is an opt-out: checked by default, cleared by
         # anyone who would rather install the firmware on its own. The Settings
         # auto-install toggle still has the final say on the automatic stage.
@@ -3562,9 +3567,9 @@ class MainWindow(QMainWindow):
         return wanted, model
 
     def _rockbox_360p_themes_notice_needed(self) -> bool:
-        """True for a Y1 Rockbox build that cannot use the 240p theme catalogue."""
+        """True for a Y1 or Y2 Rockbox build that cannot use the 240p theme catalogue."""
         _needs_themes, model = self._rockbox_themes_required()
-        if (model or "").upper() != "Y1":
+        if (model or "").upper() not in ("Y1", "Y2"):
             return False
         if not self._is_rockbox_install():
             return False
@@ -3684,6 +3689,8 @@ class MainWindow(QMainWindow):
             return True
         if self.themes.power_on_pending:
             return True
+        if getattr(self, "_rockbox_themes_prompt_pending", False):
+            return True
         if getattr(self, "_power_off_prompt", False):
             return True
         if getattr(self, "_keep_data_confirm_pending", False):
@@ -3778,13 +3785,18 @@ class MainWindow(QMainWindow):
 
     def _window_chrome(self) -> tuple[int, int]:
         """``(width, height)`` outside the page stack: rail, header, status bar."""
-        stack = getattr(self, "_stack", None)
-        if stack is None or stack.width() <= 0 or stack.height() <= 0:
-            return (0, 0)
-        return (
-            max(0, self.width() - stack.width()),
-            max(0, self.height() - stack.height()),
-        )
+        header_h = 0
+        title_bar = getattr(self, "_title_bar", None)
+        if title_bar is not None and title_bar.isVisible():
+            header_h = title_bar.sizeHint().height() or int(HEADER_CONTENT_HEIGHT)
+        bar = self.statusBar()
+        status_h = bar.sizeHint().height() if bar is not None and bar.isVisible() else 0
+        nav = getattr(self, "_nav_panel", None)
+        rail_w = nav.sizeHint().width() if nav is not None and nav.isVisible() else 0
+        policy_w = getattr(self, "_rail_width", None)
+        if policy_w is not None and hasattr(policy_w, "width"):
+            rail_w = max(rail_w, int(policy_w.width))
+        return (rail_w, header_h + status_h)
 
     def _page_content_height(self, page) -> int:
         """The height a page wants, with nothing clipped.
@@ -4050,9 +4062,36 @@ class MainWindow(QMainWindow):
         _chrome_w, chrome_h = self._window_chrome()
         need = 0
         scroll = getattr(page, "_settings_scroll", None)
-        inner = scroll.widget() if scroll is not None else None
-        if inner is not None:
-            need = int(inner.sizeHint().height()) + 2 * int(scroll.frameWidth())
+        card = page.focused_card() if hasattr(page, "focused_card") else None
+        if card is None and getattr(self, "_onboarding_active", False):
+            card = getattr(page, "_reminders_card", None)
+        if card is not None and card.isVisible():
+            card_h = int(card.sizeHint().height())
+            for btn_attr in ("_add_device_save", "_onboarding_skip", "_onboarding_done", "_onboarding_more"):
+                btn = getattr(page, btn_attr, None)
+                if btn is not None and btn.isVisible():
+                    try:
+                        pos = btn.mapTo(card, QPoint(0, btn.height()))
+                        card_h = max(card_h, pos.y() + 24)
+                    except Exception:
+                        pass
+            panel = getattr(page, "_add_device_panel", None)
+            if panel is not None and panel.isVisible():
+                try:
+                    pos = panel.mapTo(card, QPoint(0, panel.height()))
+                    card_h = max(card_h, pos.y() + 24)
+                except Exception:
+                    pass
+            page_layout = page.layout()
+            margins_h = 32
+            if page_layout is not None:
+                m = page_layout.contentsMargins()
+                margins_h = m.top() + m.bottom()
+            need = card_h + margins_h + 2 * int(scroll.frameWidth() if scroll else 0)
+        else:
+            inner = scroll.widget() if scroll is not None else None
+            if inner is not None:
+                need = int(inner.sizeHint().height()) + 2 * int(scroll.frameWidth())
         nav = getattr(self, "_nav_panel", None)
         if nav is not None:
             try:
@@ -4060,6 +4099,8 @@ class MainWindow(QMainWindow):
             except Exception:
                 logger.debug("Could not measure the navigation rail", exc_info=True)
         need = max(need + chrome_h + CONTENT_FIT_SLACK, MINIMUM_WINDOW_HEIGHT)
+        if getattr(self, "_onboarding_active", False):
+            need = min(need, 560)
         screen = self.screen()
         if screen is not None:
             need = min(need, int(screen.availableGeometry().height()))
@@ -4168,7 +4209,11 @@ class MainWindow(QMainWindow):
         ceiling = MAXIMUM_AUTO_FIT_HEIGHT
         if stack.currentIndex() == _PAGE_SELECT:
             ceiling = self._auto_fit_height_ceiling()
+        elif getattr(self, "_onboarding_active", False):
+            ceiling = 560
         target_h = max(floor_h, min(target_h, ceiling))
+        if getattr(self, "_onboarding_active", False):
+            target_h = min(target_h, 560)
         if stack.currentIndex() == _PAGE_SELECT and getattr(self, "_select_frame_guard", False):
             # The frame was just handed back from an install card. This fit owns
             # the height again: the catalogue measures itself, so a card that
@@ -5806,12 +5851,6 @@ class MainWindow(QMainWindow):
 
     def _show_device_prep(self, permission: bool = False) -> None:
         """Device preparation lives on the install page, not in a dialog."""
-        # Say what Y1 Rockbox expects from the theme library while the user can
-        # still walk away without having touched the player: the power-off card
-        # is the next thing they would see, and it is too late to explain there.
-        if not self._confirm_rockbox_360p_themes():
-            self._return_to_select_software()
-            return
         self._install_failed = False
         self._install_complete = False
         self._power_off_prompt = True
@@ -5858,6 +5897,21 @@ class MainWindow(QMainWindow):
         self._keep_data_confirm_pending = False
         self._keep_data_erase_confirm_pending = False
         self._flash_page.clear_keep_data_confirmation()
+
+        # If a non-240p Rockbox install on Y1 or Y2 needs the themes notice, show it
+        # directly in the install wizard modal itself instead of an external popup.
+        if (
+            self._rockbox_360p_themes_notice_needed()
+            and not getattr(self, "_rockbox_360p_themes_answered", False)
+            and os.environ.get("QT_QPA_PLATFORM") != "offscreen"
+            and not os.environ.get("INNIOASIS_HEADLESS")
+        ):
+            self._rockbox_themes_prompt_pending = True
+            self._permission_needed_after_themes = bool(permission)
+            self._flash_page.show_rockbox_themes_prompt()
+            self._nav_to_page(_PAGE_FLASH)
+            return
+
         self._flash_page.show_power_off_prompt(permission=permission)
         try:
             from .. import keep_data, catalog
@@ -8159,6 +8213,14 @@ class MainWindow(QMainWindow):
     def _on_power_off_continue(self):
         """The user confirmed the device is off and unplugged. Start the run."""
         self._run_abandoned = False
+        if getattr(self, "_rockbox_themes_prompt_pending", False):
+            self._rockbox_themes_prompt_pending = False
+            self._rockbox_360p_themes_answered = True
+            perm = getattr(self, "_permission_needed_after_themes", False)
+            if hasattr(self, "_flash_page") and self._flash_page is not None:
+                self._flash_page.set_rockbox_themes_prompt(False)
+                self._flash_page.show_power_off_prompt(permission=perm)
+            return
         if getattr(self, "_install_first_stage", ""):
             self._on_install_first_continue()
             return
@@ -9550,6 +9612,13 @@ class MainWindow(QMainWindow):
         self._nav_to_page(_PAGE_FLASH)
 
     def _on_cancel_wait(self):
+        if getattr(self, "_rockbox_themes_prompt_pending", False):
+            self._rockbox_themes_prompt_pending = False
+            self._rockbox_360p_themes_answered = False
+            if hasattr(self, "_flash_page") and self._flash_page is not None:
+                self._flash_page.set_rockbox_themes_prompt(False)
+            self._return_to_select_software()
+            return
         if getattr(self, "_install_first_stage", ""):
             self._cancel_install_first()
             return
@@ -10121,7 +10190,10 @@ class MainWindow(QMainWindow):
         self._post_install_once = False
         self._post_install_guides_suppressed = False
         self._post_install_guide_state_captured = False
+        self._rockbox_360p_themes_answered = False
+        self._rockbox_themes_prompt_pending = False
         if hasattr(self, "_flash_page") and self._flash_page is not None:
+            self._flash_page.set_rockbox_themes_prompt(False)
             self._flash_page.reset_keep_data_preference()
             self._flash_page.set_power_off_only(False)
             self._flash_page.clear_keep_data_confirmation()

@@ -130,6 +130,11 @@ CATALOG_FALLBACK_URL = INNIOASIS_RAW_FALLBACK_PREFIX + "slidia_manifest.xml"
 CATALOG_MANIFEST_URLS = (CATALOG_RAW_URL, CATALOG_MANIFEST_URL, CATALOG_FALLBACK_URL)
 CATALOG_CACHE_DIR_NAME = "catalog"
 
+# Where Windows users get the MediaTek USB driver before their first flash.
+MEDIATEK_DRIVERS_URL = "https://innioasis.app/guide.html"
+# ARM64 Windows (native or x86-64 under Prism) needs a different driver guide.
+MEDIATEK_DRIVERS_ARM64_URL = "https://armsdr.com/drivers.html"
+
 GITHUB_API = "https://api.github.com"
 GITHUB_RELEASES_PER_PAGE = 100
 RELEASE_CACHE_TTL_SECONDS = 24 * 60 * 60  # 24 h, same as CE

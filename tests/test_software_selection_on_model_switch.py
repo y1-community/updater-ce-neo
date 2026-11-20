@@ -61,7 +61,7 @@ def _app():
     return QApplication.instance() or QApplication(["--platform", "offscreen"])
 
 
-def test_the_keep_data_note_sits_under_the_software_name(monkeypatch):
+def test_the_keep_data_note_is_not_shown_on_select_screen(monkeypatch):
     app = _app()
     saved = list(catalog.LIVE_CATALOG)
     try:
@@ -70,23 +70,11 @@ def test_the_keep_data_note_sits_under_the_software_name(monkeypatch):
         from src import keep_data
 
         monkeypatch.setattr(
-            keep_data, "incompatible_with_current", lambda *a, **k: False
+            keep_data, "incompatible_with_current", lambda *a, **k: True
         )
         page = select_page.SelectPackagePage()
         try:
             assert page._keep_data_note.isHidden()
-            monkeypatch.setattr(
-                keep_data, "incompatible_with_current", lambda *a, **k: True
-            )
-            page._update_keep_data_note()
-            assert not page._keep_data_note.isHidden()
-            assert page._keep_data_note.text() == select_page.tr(
-                "sel_keep_data_incompatible"
-            )
-
-            monkeypatch.setattr(
-                keep_data, "incompatible_with_current", lambda *a, **k: False
-            )
             page._update_keep_data_note()
             assert page._keep_data_note.isHidden()
         finally:
@@ -166,3 +154,23 @@ def test_same_name_matching_ignores_case():
     assert select_page.SelectPackagePage._software_name_kept_across_models(
         "Inniclassic", ["Rockbox", "Original Software"]
     ) == ""
+
+
+def test_type_dropdown_visibility_follows_device_model_types(monkeypatch):
+    app = _app()
+    monkeypatch.setattr(select_page, "ReleasesWorker", _StubReleasesWorker)
+    page = select_page.SelectPackagePage()
+    try:
+        # Y2 does not have multiple hardware types -> Type filter must be hidden
+        page._model_combo.setCurrentText("Y2")
+        assert page._type_field.isHidden()
+        assert page._type_label.isHidden()
+
+        # Y1 has multiple hardware types (A and B) -> Type filter must be visible
+        page._model_combo.setCurrentText("Y1")
+        assert not page._type_field.isHidden()
+        assert not page._type_label.isHidden()
+    finally:
+        page.deleteLater()
+        app.processEvents()
+        app.processEvents()
