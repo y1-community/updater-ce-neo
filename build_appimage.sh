@@ -558,7 +558,11 @@ mkdir -p "$APPDIR/usr/share/metainfo"
 mkdir -p "$APPDIR/usr/share/icons/hicolor/256x256/apps"
 
 # Copy binary payload & _internal
-(cd "$DIST_DIR/$APP_NAME" && tar --exclude='.DS_Store' -cf - .) | tar -C "$APPDIR/usr/bin" -xf -
+TAR_COPY_OPTS="--exclude=.DS_Store"
+if tar --version 2>&1 | grep -q 'GNU tar'; then
+    TAR_COPY_OPTS="--warning=no-file-changed $TAR_COPY_OPTS"
+fi
+(cd "$DIST_DIR/$APP_NAME" && { tar $TAR_COPY_OPTS -cf - . || [ $? -eq 1 ]; }) | tar -C "$APPDIR/usr/bin" -xf -
 
 if [ -d "$APPDIR/usr/bin/SP_Flash_Tool" ]; then
     chmod 0755 "$APPDIR/usr/bin/SP_Flash_Tool/flash_tool" \
