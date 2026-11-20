@@ -249,7 +249,7 @@ class _ReleaseNotesBrowser(QTextBrowser):
         from PySide6.QtGui import QTextOption
 
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.setMinimumHeight(60)
+        self.setMinimumHeight(45)
         self.setMaximumHeight(140)
         self.setWordWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
 
@@ -269,7 +269,7 @@ class _ReleaseNotesBrowser(QTextBrowser):
 
     def minimumSizeHint(self) -> QSize:
         from PySide6.QtCore import QSize
-        return QSize(50, 48)
+        return QSize(50, 45)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -854,9 +854,39 @@ class SelectPackagePage(QWidget):
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(6)
 
-        # ── Device & Software Filters (Compact 2-Row Responsive Grid) ────
+        # ── Device & Software Filters (Collapsible Responsive Grid) ────
         self._filter_group = Card()
-        filter_layout = QGridLayout()
+
+        self._filter_header = QWidget()
+        filter_header_layout = QHBoxLayout(self._filter_header)
+        filter_header_layout.setContentsMargins(4, 0, 4, 0)
+        filter_header_layout.setSpacing(6)
+        self._filter_header.setCursor(Qt.PointingHandCursor)
+
+        self._filter_header_title = QLabel(tr("sel_filters"))
+        self._filter_header_title.setStyleSheet(
+            "font-size: 13px; font-weight: 600; color: palette(window-text); background: transparent; border: none;"
+        )
+        filter_header_layout.addWidget(self._filter_header_title, 0, Qt.AlignVCenter)
+        filter_header_layout.addStretch(1)
+
+        self._filter_toggle_btn = QPushButton(self._filter_header)
+        self._filter_toggle_btn.setObjectName("filterCollapseToggle")
+        self._filter_toggle_btn.setFlat(True)
+        self._filter_toggle_btn.setCursor(Qt.PointingHandCursor)
+        self._filter_toggle_btn.setFixedSize(24, 24)
+        self._filter_toggle_btn.setStyleSheet("background: transparent; border: none; padding: 0;")
+        self._filter_toggle_btn.clicked.connect(self._toggle_filters_collapsed)
+        filter_header_layout.addWidget(self._filter_toggle_btn, 0, Qt.AlignVCenter)
+
+        def on_filter_header_press(event):
+            child = self._filter_header.childAt(event.pos())
+            if child is not self._filter_toggle_btn:
+                self._toggle_filters_collapsed()
+        self._filter_header.mousePressEvent = on_filter_header_press
+
+        self._filter_content = QWidget()
+        filter_layout = QGridLayout(self._filter_content)
         filter_layout.setContentsMargins(4, 2, 4, 2)
         filter_layout.setHorizontalSpacing(8)
         filter_layout.setVerticalSpacing(6)
@@ -947,7 +977,21 @@ class SelectPackagePage(QWidget):
 
         filter_layout.setColumnStretch(1, 1)
         filter_layout.setColumnStretch(3, 1)
-        self._filter_group.set_layout(filter_layout)
+
+        filter_card_layout = QVBoxLayout()
+        filter_card_layout.setContentsMargins(0, 0, 0, 0)
+        filter_card_layout.setSpacing(6)
+        filter_card_layout.addWidget(self._filter_header)
+        filter_card_layout.addWidget(self._filter_content)
+        self._filter_group.set_layout(filter_card_layout)
+
+        from PySide6.QtCore import QSettings
+
+        settings = self.settings or QSettings("innioasis", "updater")
+        self._filters_collapsed = bool(
+            settings.value("software_filters_collapsed", False, type=bool)
+        )
+        self._apply_filter_collapsed_state()
 
         layout.addWidget(self._filter_group)
 
@@ -1921,6 +1965,7 @@ class SelectPackagePage(QWidget):
 
     def retranslate(self):
         self._title.setText(tr("sel_title"))
+        self._apply_filter_collapsed_state()
         if hasattr(self, "_battery_toast"):
             self._battery_toast.retranslate()
         if hasattr(self, "_bg_notif_toast"):
@@ -2135,6 +2180,30 @@ class SelectPackagePage(QWidget):
         combo.setVisible(bool(brands))
         if hasattr(self, "_brand_label"):
             self._brand_label.setVisible(bool(brands))
+
+    def _apply_filter_collapsed_state(self):
+        is_collapsed = getattr(self, "_filters_collapsed", False)
+        if hasattr(self, "_filter_content"):
+            self._filter_content.setVisible(not is_collapsed)
+        arrow = "chevron.down" if is_collapsed else "chevron.up"
+        tip = tr("sel_show_filters") if is_collapsed else tr("sel_hide_filters")
+        if hasattr(self, "_filter_toggle_btn"):
+            self._filter_toggle_btn.setIcon(get_symbol_icon(arrow, 14))
+            self._filter_toggle_btn.setToolTip(tip)
+        if hasattr(self, "_filter_header_title"):
+            self._filter_header_title.setText(
+                tr("sel_show_filters") if is_collapsed else tr("sel_filters")
+            )
+            self._filter_header_title.setToolTip(tip)
+        self.content_size_changed.emit()
+
+    def _toggle_filters_collapsed(self):
+        from PySide6.QtCore import QSettings
+
+        self._filters_collapsed = not getattr(self, "_filters_collapsed", False)
+        settings = self.settings or QSettings("innioasis", "updater")
+        settings.setValue("software_filters_collapsed", self._filters_collapsed)
+        self._apply_filter_collapsed_state()
 
     def _on_brand_changed(self, *_):
         """Brand scopes the model list, and through it the release listing."""
@@ -2701,6 +2770,40 @@ class SelectPackagePage(QWidget):
             margins = layout.contentsMargins().top() + layout.contentsMargins().bottom()
         return list_h + btn_h + link_h + margins + spacing * 3
 
+    def minimum_notes_height(self) -> int:
+        """Least notes card height that shows header, scrollable body and actions."""
+        header_h = (
+            self._details_header.sizeHint().height()
+            if hasattr(self, "_details_header") and self._details_header.isVisible()
+            else 0
+        )
+        notes_h = 45
+        card_w = max(
+            160,
+            (self._notes_group.width() - 28)
+            if hasattr(self, "_notes_group") and self._notes_group.width() > 28
+            else 200,
+        )
+        trans_h = 0
+        if hasattr(self, "_translate_label") and self._translate_label.isVisible():
+            trans_h = max(
+                self._translate_label.sizeHint().height(),
+                self._translate_label.heightForWidth(card_w),
+                20,
+            )
+        see_more_h = (
+            self._see_more_label.sizeHint().height()
+            if hasattr(self, "_see_more_label") and self._see_more_label.isVisible()
+            else 0
+        )
+        margins = 24
+        if hasattr(self, "_notes_group") and self._notes_group.layout() is not None:
+            margins = (
+                self._notes_group.layout().contentsMargins().top()
+                + self._notes_group.layout().contentsMargins().bottom()
+            )
+        return header_h + notes_h + trans_h + see_more_h + margins + 12
+
     def _max_visible_rows(self) -> int:
         """Gradually scale visible release list items up on larger screens."""
         screen = self.screen()
@@ -2762,41 +2865,59 @@ class SelectPackagePage(QWidget):
         else:
             hint_h = max(self.sizeHint().height(), self.minimumSizeHint().height())
 
-        # Ensure release notes card fits header + body + translate notes + see more without overlap
+        # Ensure release notes card and available packages card can shrink as needed
+        # without compromising the ability to click Install or Install from a file,
+        # or the translation + see more buttons, or reading/scrolling release notes.
         if hasattr(self, "_notes_group") and self._notes_group.isVisible():
-            header_h = self._details_header.sizeHint().height() if hasattr(self, "_details_header") and self._details_header.isVisible() else 0
-            notes_h = max(50, self._notes.sizeHint().height()) if hasattr(self, "_notes") else 60
-            card_w = max(160, (self._notes_group.width() - 28) if self._notes_group.width() > 28 else 200)
+            min_notes = self.minimum_notes_height()
+            min_pkg = self.minimum_install_height() if hasattr(self, "_pkg_group") else min_notes
+            card_floor = max(min_notes, min_pkg)
+            self._notes_group.setMinimumHeight(card_floor)
+            if hasattr(self, "_pkg_group"):
+                self._pkg_group.setMinimumHeight(card_floor)
+
+            header_h = (
+                self._details_header.sizeHint().height()
+                if hasattr(self, "_details_header") and self._details_header.isVisible()
+                else 0
+            )
+            notes_h = max(45, min(140, self._notes.sizeHint().height())) if hasattr(self, "_notes") else 45
+            card_w = max(
+                160,
+                (self._notes_group.width() - 28)
+                if self._notes_group.width() > 28
+                else 200,
+            )
             trans_h = 0
             if hasattr(self, "_translate_label") and self._translate_label.isVisible():
-                trans_h = max(self._translate_label.sizeHint().height(), self._translate_label.heightForWidth(card_w), 24)
+                trans_h = max(
+                    self._translate_label.sizeHint().height(),
+                    self._translate_label.heightForWidth(card_w),
+                    20,
+                )
                 self._translate_label.setMinimumHeight(trans_h)
-            see_more_h = self._see_more_label.sizeHint().height() if hasattr(self, "_see_more_label") and self._see_more_label.isVisible() else 0
-            # Card contents margins (top 12, bottom 12) + spacing between rows
-            notes_needed = header_h + notes_h + trans_h + see_more_h + 36
-            if notes_needed > 0:
-                self._notes_group.setMinimumHeight(notes_needed)
-                if hasattr(self, "_pkg_group"):
-                    self._pkg_group.setMinimumHeight(notes_needed)
-                if page_layout is not None:
-                    self._invalidate_layout_tree(page_layout)
-                    page_layout.activate()
-                # Re-measure rather than substituting a constant: the pinned
-                # minimums are now part of the layout, and every other row —
-                # the notice banner above all — has to be counted with them.
-                # A fixed ``notes_needed + 140`` used to stand in for the rest
-                # of the page, so a banner that appeared after the first fit
-                # could be swallowed whole and the window never grew.
-                if content is not None:
-                    hint_h = max(
-                        hint_h,
-                        content.sizeHint().height(),
-                        content.minimumSizeHint().height(),
-                    )
-                else:
-                    hint_h = max(
-                        hint_h, self.sizeHint().height(), self.minimumSizeHint().height()
-                    )
+            see_more_h = (
+                self._see_more_label.sizeHint().height()
+                if hasattr(self, "_see_more_label") and self._see_more_label.isVisible()
+                else 0
+            )
+            ideal_notes = header_h + notes_h + trans_h + see_more_h + 36
+
+            if page_layout is not None:
+                self._invalidate_layout_tree(page_layout)
+                page_layout.activate()
+
+            if content is not None:
+                hint_h = max(
+                    hint_h,
+                    content.sizeHint().height(),
+                    content.minimumSizeHint().height(),
+                    ideal_notes + (120 if getattr(self, "_filters_collapsed", False) else 190),
+                )
+            else:
+                hint_h = max(
+                    hint_h, self.sizeHint().height(), self.minimumSizeHint().height()
+                )
         return hint_h
 
     def content_width_hint(self) -> int:

@@ -944,7 +944,7 @@ class AdbWatchWorker(QThread):
     watch_progress = Signal(float)  # 0.0-1.0
     multiple = Signal(int)  # more than one player attached: prompt the user
 
-    def __init__(self, adb: str, timeout: float = 180, parent=None):
+    def __init__(self, adb: str, timeout: float = 540, parent=None):
         super().__init__(parent)
         self._adb = adb
         self._timeout = timeout

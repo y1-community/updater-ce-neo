@@ -1680,11 +1680,18 @@ class MainWindow(QMainWindow):
         brand_text_col.addWidget(self._version_label)
 
         brand_row.addLayout(brand_text_col, 1)
+        is_linux = sys.platform.startswith("linux") or platform.system() == "Linux"
+        if is_linux:
+            self._brand_container.setVisible(False)
         return self._brand_container
 
     def _update_author_label(self):
         """Update author credit label text and styling according to current locale and theme."""
         if not hasattr(self, "_version_label") or self._version_label is None:
+            return
+        is_linux = sys.platform.startswith("linux") or platform.system() == "Linux"
+        if is_linux:
+            self._version_label.setVisible(False)
             return
         by_word = tr("author_by")
         author_color = theme_text_color().name()
@@ -1777,7 +1784,8 @@ class MainWindow(QMainWindow):
         else:
             # Windows / right-handed DEs: Brand on left, page headings beside brand, controls margin on right
             bar_layout.addWidget(brand, 0, Qt.AlignVCenter)
-            bar_layout.addSpacing(28)
+            if not is_linux:
+                bar_layout.addSpacing(28)
             title_cont_layout.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
             bar_layout.addWidget(self._title_container, 1)
             if self._window_controls is not None:
@@ -3351,21 +3359,7 @@ class MainWindow(QMainWindow):
         self._offer_app_update(info)
 
     def _manual_themes_model(self) -> str:
-        """Y1 or Y2 for a manually started themes stage."""
-        candidates = []
-        page = getattr(self, "_select_page", None)
-        if page is not None:
-            try:
-                candidates.append(page.current_model())
-            except Exception:
-                pass
-        candidates.append(getattr(self, "_package_model", "") or "")
-        for value in candidates:
-            upper = str(value or "").upper()
-            if "Y2" in upper:
-                return "Y2"
-            if "Y1" in upper:
-                return "Y1"
+        """Y1 for a manually started themes stage (themes installation is Y1-only)."""
         return "Y1"
 
     def _on_settings_install_rockbox_themes(self) -> None:
@@ -3556,8 +3550,8 @@ class MainWindow(QMainWindow):
         is_rockbox = "rockbox" in name or "rockbox" in path or "rockbox" in slug
         is_240p = any("240p" in value for value in (name, path, asset_name, release_label))
         is_240p = is_240p or str(info.get("selected_resolution", "")).lower() == "240p"
-        # Themes are for Rockbox-named, non-240p releases on Y1 and Y2.
-        wanted = bool(model in ("Y1", "Y2") and is_rockbox and not is_240p)
+        # Themes installation is strictly for Y1 (Rockbox-named, non-240p).
+        wanted = bool(model == "Y1" and is_rockbox and not is_240p)
         # The per-install tickbox is an opt-out: checked by default, cleared by
         # anyone who would rather install the firmware on its own. The Settings
         # auto-install toggle still has the final say on the automatic stage.
@@ -3641,10 +3635,10 @@ class MainWindow(QMainWindow):
         )
 
     def _show_rockbox_power_on_prompt(
-        self, model: str, *, after_firmware: bool = False, on_continue=None
+        self, model: str, *, after_firmware: bool = False, on_continue=None, purpose: str = "themes"
     ) -> None:
         """Ask the user to boot the flashed player before ADB/theme setup."""
-        logger.debug("Showing Rockbox power-on prompt for model=%s", model)
+        logger.debug("Showing Rockbox power-on prompt for model=%s purpose=%s", model, purpose)
         self._install_complete = True
         self._install_failed = False
         self.themes.ask_power_on(model, after_firmware=after_firmware)
@@ -3656,6 +3650,7 @@ class MainWindow(QMainWindow):
             on_continue=on_continue or self._continue_rockbox_power_on,
             on_recover=lambda: self.restore_original_software(model),
             after_firmware=after_firmware,
+            purpose=purpose,
         )
         self._sync_install_nav_entry()
         self._adjust_window_geometry()
@@ -7064,6 +7059,7 @@ class MainWindow(QMainWindow):
             return
         if hasattr(self, "_flash_page") and self._flash_page is not None:
             self._flash_page.dismiss_prompt_stop()
+            self._flash_page.update_partition_progress("")
         try:
             self.sm.transition_to(FlashState.S5_COMPLETE)
         except ValueError:
@@ -7373,7 +7369,7 @@ class MainWindow(QMainWindow):
                 after_firmware=True,
             )
             self._show_rockbox_power_on_prompt(
-                stage_model, after_firmware=True, on_continue=callback
+                stage_model, after_firmware=True, on_continue=callback, purpose="cleanup"
             )
         self._sync_install_nav_entry()
         self._adjust_window_geometry()
@@ -7806,6 +7802,7 @@ class MainWindow(QMainWindow):
         """Failure stays on the install progress card. Retry is where Cancel was."""
         if hasattr(self, "_flash_page") and self._flash_page is not None:
             self._flash_page.dismiss_prompt_stop()
+            self._flash_page.update_partition_progress("")
         self.themes.finish()
         self.themes.clear_power_on()
         raw = str(message or "")
@@ -9886,6 +9883,7 @@ class MainWindow(QMainWindow):
             self._sim_flash_run = None
         if hasattr(self, "_flash_page") and self._flash_page is not None:
             self._flash_page.dismiss_prompt_stop()
+            self._flash_page.update_partition_progress("")
         self._return_to_select_software()
 
     def _on_completion_not_now(self):

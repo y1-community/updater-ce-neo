@@ -6332,6 +6332,10 @@ class FlashWorker(QThread):
             pct = float(match.group(1))
         except ValueError:
             return
+        if pct >= 100.0:
+            self.partition_progress_changed.emit("")
+            return
+        pct = max(0.0, min(100.0, pct))
         task = layman_task_name(match.group(2).strip())
         self.partition_progress_changed.emit(
             tr("action_writing_task_fmt").format(task=task, pct=f"{pct:.1f}")
@@ -7132,12 +7136,16 @@ class FlashWorker(QThread):
                     f"({part_done_mb:.1f}MB/{part_tot_mb:.1f}MB), {speed_mb:.2f} MB/s ({hinfo})"
                 )
                 self._log(line)
-                task_label = layman_task_name(cur_part_name)
-                self.partition_progress_changed.emit(
-                    tr("action_writing_task_fmt").format(
-                        task=task_label, pct=f"{part_pct:.1f}"
+                if part_pct >= 100.0:
+                    self.partition_progress_changed.emit("")
+                else:
+                    part_pct = max(0.0, min(100.0, part_pct))
+                    task_label = layman_task_name(cur_part_name)
+                    self.partition_progress_changed.emit(
+                        tr("action_writing_task_fmt").format(
+                            task=task_label, pct=f"{part_pct:.1f}"
+                        )
                     )
-                )
 
         if hasattr(mtk, "config"):
             mtk.config.guiprogress = _ProgressEmitter(on_mtk_write_progress)

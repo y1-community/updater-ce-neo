@@ -1859,7 +1859,11 @@ class InstallProgress(QProgressBar):
             self.set_precise_value(value)
             return
         self._precise_value = None
-        super().setValue(int(value) if value is not None else 0)
+        try:
+            val = int(value) if value is not None else 0
+        except (TypeError, ValueError):
+            val = 0
+        super().setValue(max(0, min(100, val)))
         if self.is_busy():
             self._sync_animation()
 

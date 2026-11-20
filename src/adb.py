@@ -24,7 +24,7 @@ from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
 
-ADB_WATCH_TIMEOUT_SECONDS = 180
+ADB_WATCH_TIMEOUT_SECONDS = 540  # 3x previous 180s for automatic ADB detection and connection
 STANDARD_Y_ADB_SERIAL = "0123456789ABCDEF"
 
 # Candidate on-device locations for the Rockbox data directory, probed in

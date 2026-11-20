@@ -4119,13 +4119,23 @@ class FlashPage(QWidget):
             self._done_mark.setVisible(False)
         self._hide_theme_wizard_chips()
 
+        if hasattr(self, "_action_hold_timer") and self._action_hold_timer is not None:
+            self._action_hold_timer.stop()
+        self._action_pending_text = None
+        self._action_shown_text = ""
+        if hasattr(self, "_action_label"):
+            self._action_label.setText("")
+            self._action_label.setVisible(False)
+        self.update_partition_progress("")
+        if hasattr(self, "_partition_progress_label") and self._partition_progress_label is not None:
+            self._partition_progress_label.clear()
+            self._partition_progress_label.setVisible(False)
+
         if hasattr(self, "_status_flow"):
             self._status_flow.set_forced_stacked(True)
 
-        # The cleanup stage names its removal when the removal starts (see
-        # ``_start_adb_cleanup``): at this point it is asking the user to boot
-        # the player, and nothing is being deleted yet.
-        self.set_step("" if self._cleanup_stage else tr("rockbox_stage_installing"))
+        step_text = tr("rockbox_cleanup_step") if self._cleanup_stage else tr("rockbox_stage_installing")
+        self.set_step(step_text)
         self._progress_bar.set_precise_value(90.0 if after_firmware else 0.0)
 
         model_str = (model or "Y1").upper()
@@ -4376,7 +4386,7 @@ class FlashPage(QWidget):
             self.dismiss_flash_question()
         else:
             self.show_flash_question(usb_prompt)
-        self._eta_label.setText(adb_status)
+        self._eta_label.setText(adb_status if (self._cleanup_stage or not self.themes.automatic) else "")
         if hasattr(self, "_theme_step1_next_btn"):
             self._theme_step1_next_btn.setVisible(False)
         if hasattr(self, "_theme_fallback_next_btn"):
@@ -4412,7 +4422,7 @@ class FlashPage(QWidget):
                 self.show_flash_question(tr("rockbox_stage_disconnect_extra"))
             else:
                 adb_status = tr("rockbox_stage_waiting_adb_fmt").format(remaining=self._adb_watch_seconds)
-                self._eta_label.setText("" if self.themes.automatic else adb_status)
+                self._eta_label.setText(adb_status if (self._cleanup_stage or not self.themes.automatic) else "")
             if self._adb_watch_seconds in (100, 80, 60, 40, 20, 10, 5):
                 self._log_theme(f"[Rockbox Themes] Waiting for ADB device... ({self._adb_watch_seconds}s remaining)")
         else:
@@ -4865,7 +4875,7 @@ class FlashPage(QWidget):
             cb()
 
     def show_rockbox_power_on_prompt(
-        self, prompt: str, on_continue=None, on_recover=None, after_firmware=False
+        self, prompt: str, on_continue=None, on_recover=None, after_firmware=False, purpose="themes"
     ) -> None:
         """Keep the install card active while the user boots the flashed player."""
         self._failed = False
@@ -4886,7 +4896,19 @@ class FlashPage(QWidget):
             self._progress_card.setVisible(True)
         if hasattr(self, "_cancel_btn"):
             self._cancel_btn.setVisible(False)
-        self.set_step(tr("rockbox_stage_installing"))
+        if hasattr(self, "_action_hold_timer") and self._action_hold_timer is not None:
+            self._action_hold_timer.stop()
+        self._action_pending_text = None
+        self._action_shown_text = ""
+        if hasattr(self, "_action_label") and self._action_label is not None:
+            self._action_label.clear()
+            self._action_label.setVisible(False)
+        self.update_partition_progress("")
+        if hasattr(self, "_partition_progress_label") and self._partition_progress_label is not None:
+            self._partition_progress_label.clear()
+            self._partition_progress_label.setVisible(False)
+        step_text = tr("rockbox_cleanup_step") if (purpose == "cleanup" or self._cleanup_stage) else tr("rockbox_stage_installing")
+        self.set_step(step_text)
         self._progress_bar.set_precise_value(90.0 if after_firmware else 0.0)
         self._eta_label.setText("")
         # The boot question takes the band's slot, with the Next chip that
@@ -7036,16 +7058,35 @@ class FlashPage(QWidget):
         label = getattr(self, "_partition_progress_label", None)
         if label is None:
             return
-        text = str(text or "")
-        if not text or "100.0%" in text or "100%" in text:
+        text = str(text or "").strip()
+        if (
+            not text
+            or getattr(self, "_complete", False)
+            or getattr(self, "_failed", False)
+            or getattr(self, "_cleanup_stage", False)
+            or getattr(self, "_prompt_only", False)
+            or (hasattr(self, "themes") and self.themes.active)
+        ):
             label.clear()
             label.setVisible(False)
             self._notify_geometry_change()
             return
+
+        import re
+        match = re.search(r"(\d+(?:\.\d+)?)%", text)
+        if match:
+            try:
+                pct = float(match.group(1))
+                if pct >= 100.0:
+                    label.clear()
+                    label.setVisible(False)
+                    self._notify_geometry_change()
+                    return
+                text = text.replace(match.group(0), f"{min(100.0, pct):.1f}%")
+            except ValueError:
+                pass
+
         label.setText(text)
-        if getattr(self, "_complete", False) or getattr(self, "_failed", False):
-            label.setVisible(False)
-            return
         was_hidden = label.isHidden()
         label.setVisible(True)
         if was_hidden:
@@ -7116,6 +7157,8 @@ class FlashPage(QWidget):
         self._action_shown_text = text
 
     def _action_apply_text(self, text):
+        if getattr(self, "themes", None) is not None and (self.themes.active or self._cleanup_stage):
+            return
         self._action_label.setText(text)
         if text and not getattr(self, "_stop_open", False) and not getattr(self, "_failed", False) and not self.themes.transfer_running:
             if hasattr(self, "_step_label"):
