@@ -155,3 +155,78 @@ def test_onboarding_nav_lock_restores_buttons(qapp):
     assert support_btn.isVisible() is True
 
     w.close()
+    qapp.processEvents()
+
+
+def test_onboarding_uncheck_firmware_resets_initial_state(qapp, tmp_path):
+    from src.ui.main_window import MainWindow
+    from src import player_update_check, i18n
+
+    for m in ("Y1", "Y2", "A5", "TIMMKOO"):
+        player_update_check.clear_device_install(m)
+
+    w = MainWindow()
+    w.show()
+    qapp.processEvents()
+
+    page = w._settings_page
+    assert page is not None
+
+    # 1. Start onboarding
+    w.start_onboarding()
+    qapp.processEvents()
+
+    assert page._onboarding is True
+    assert page._add_device_panel.isVisible() is True
+    assert page._onboarding_skip.isVisible() is True
+    assert page._add_device_cancel.isVisible() is False
+    assert page._onboarding_actions.isVisible() is False
+    assert page._onboarding_body.text() == i18n.tr("onboarding_body")
+
+    # 2. Simulate recording a device install
+    player_update_check.record_device_install(
+        "Y1",
+        "Original Software",
+        "3.2.4",
+        "3.2.4",
+        "y1-stock",
+        manual=True,
+    )
+    page._hide_add_device_panel()
+    page.refresh_settings()
+    qapp.processEvents()
+
+    assert page._add_device_panel.isVisible() is False
+    assert page._onboarding_actions.isVisible() is True
+    assert page._onboarding_done.isVisible() is True
+    assert page._onboarding_more.isVisible() is True
+    assert len(page._reminder_switches) == 1
+
+    # 3. Uncheck the firmware switch during onboarding
+    key, switch = list(page._reminder_switches.items())[0]
+    switch.setChecked(False)
+    qapp.processEvents()
+
+    # 4. Verify onboarding has reset to its original initial state!
+    assert page._onboarding is True
+    assert page._add_device_panel.isVisible() is True
+    assert page._onboarding_skip.isVisible() is True
+    assert page._add_device_cancel.isVisible() is False
+    assert page._onboarding_actions.isVisible() is False
+    assert page._onboarding_body.text() == i18n.tr("onboarding_body")
+    assert page._add_device_status.text() == ""
+
+    # 5. User can click Skip to finish onboarding and use the app
+    page._onboarding_skip.click()
+    qapp.processEvents()
+
+    assert getattr(w, "_onboarding_active", False) is False
+    select_btn = w._nav_buttons["nav_select_package"][0]
+    support_btn = w._support_btn
+    assert select_btn.isEnabled() is True
+    assert support_btn.isEnabled() is True
+
+    w.close()
+    qapp.processEvents()
+
+

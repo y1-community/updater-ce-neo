@@ -1841,6 +1841,8 @@ class SettingsPage(QWidget):
             device_tracking.clear_device_install(model, hardware_type=hw_type)
             device_tracking.clear_running_software(model, hardware_type=hw_type)
         self.refresh_settings()
+        if getattr(self, "_onboarding", False) and not self._tracked_installs():
+            self._reset_onboarding_to_initial_state()
 
     def _update_reminders_copy(self) -> None:
         """Describe reminder coverage from the installs actually tracked."""
@@ -2210,6 +2212,9 @@ class SettingsPage(QWidget):
 
     def _sync_add_device_cancel_visibility(self) -> None:
         """Cancel only when a player is already on record to return to."""
+        if getattr(self, "_onboarding", False):
+            self._add_device_cancel.setVisible(False)
+            return
         self._add_device_cancel.setVisible(bool(self._tracked_installs()))
 
     def _on_add_device_software_changed(self, *_):
@@ -2399,6 +2404,44 @@ class SettingsPage(QWidget):
         self.end_onboarding()
         self.onboarding_finished.emit()
 
+    def _reset_onboarding_to_initial_state(self) -> None:
+        """Reset the onboarding journey to its initial state when no devices are tracked."""
+        if not getattr(self, "_onboarding", False):
+            return
+        if getattr(self, "_resetting_onboarding", False):
+            return
+        self._resetting_onboarding = True
+        try:
+            self._reminders_desc.setVisible(False)
+            if hasattr(self, "_cb_track_multiple"):
+                self._set_switch_row_visible(self._cb_track_multiple, False)
+            self._reminders_card.setTitle(tr("onboarding_title"))
+            self._onboarding_body.setText(tr("onboarding_body"))
+            self._onboarding_body.setVisible(True)
+            self._onboarding_footer.setVisible(False)
+            self._onboarding_actions.setVisible(False)
+            self._onboarding_done.setVisible(False)
+            self._onboarding_more.setVisible(False)
+            self._onboarding_skip.setVisible(True)
+            self._add_device_version_hint.setVisible(True)
+            self._add_device_button.setVisible(False)
+            self._add_device_status.setText("")
+            if hasattr(self, "_add_device_version_manual"):
+                self._add_device_version_manual.clear()
+                self._add_device_version_manual.setVisible(False)
+            self._reminders_card.setMinimumWidth(640)
+            self.show_card_alone(self._reminders_card)
+            gate = getattr(self, "_drivers_gate", None)
+            gate_open = gate is not None and gate.isVisible()
+            if not gate_open:
+                if not self._add_device_panel.isVisible():
+                    self._open_add_device_panel()
+                else:
+                    self._sync_add_device_cancel_visibility()
+            self.content_size_changed.emit()
+        finally:
+            self._resetting_onboarding = False
+
     def _sync_onboarding_controls(self) -> None:
         """Show the journey's copy and buttons, and hide the ordinary card."""
         if not hasattr(self, "_onboarding_done"):
@@ -2418,6 +2461,9 @@ class SettingsPage(QWidget):
         else:
             self._reminders_card.retranslate()
         tracked = bool(self._tracked_installs()) if on else False
+        if on and not tracked:
+            self._reset_onboarding_to_initial_state()
+            return
         self._onboarding_body.setVisible(on)
         # Before a player exists the journey explains why it is worth doing;
         # afterwards it says what the reminders cover for the players above.
