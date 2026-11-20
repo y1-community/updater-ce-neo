@@ -710,6 +710,12 @@ class SelectPackagePage(QWidget):
         self._conn_toast = ConnectivityToast(self._toast_container)
         self._conn_toast.action_clicked.connect(self._on_conn_toast_action)
         toast_layout.addWidget(self._conn_toast)
+        from .widgets import BackgroundNotificationsToast
+
+        self._bg_notif_toast = BackgroundNotificationsToast(self._toast_container)
+        self._bg_notif_toast.enable_clicked.connect(self._on_enable_bg_notifs)
+        self._bg_notif_toast.dismissed.connect(self._on_dismiss_bg_notif_toast)
+        toast_layout.addWidget(self._bg_notif_toast)
         layout.addWidget(self._toast_container)
         self._check_battery_toast_visibility()
 
@@ -892,8 +898,9 @@ class SelectPackagePage(QWidget):
         self._type_field = QWidget()
         type_row = QHBoxLayout(self._type_field)
         type_row.setContentsMargins(0, 0, 0, 0)
-        type_row.setSpacing(4)
-        type_row.addWidget(self._type_combo, 1)
+        type_row.setSpacing(6)
+        self._type_combo.setFixedWidth(58)
+        type_row.addWidget(self._type_combo, 0, Qt.AlignVCenter)
         self._type_help_icon = _TypeInfoMark(self._type_field)
         self._type_help_icon.setObjectName("typeHelpIcon")
         self._type_help_icon.setCursor(Qt.ArrowCursor)
@@ -902,6 +909,16 @@ class SelectPackagePage(QWidget):
         self._type_help_icon.setFixedSize(HELP_ICON_PX, HELP_ICON_PX)
         self._type_help_icon.setContentsMargins(0, 0, 0, 0)
         type_row.addWidget(self._type_help_icon, 0, Qt.AlignVCenter)
+        self._type_help_hint_btn = QPushButton(self._type_field)
+        self._type_help_hint_btn.setObjectName("typeHelpHint")
+        self._type_help_hint_btn.setFlat(True)
+        self._type_help_hint_btn.setCursor(Qt.PointingHandCursor)
+        self._type_help_hint_btn.setStyleSheet(
+            "text-align: left; padding: 0; margin: 0; background: transparent; border: none; font-size: 13px; color: palette(window-text);"
+        )
+        self._type_help_hint_btn.clicked.connect(self._show_type_hint_tip)
+        type_row.addWidget(self._type_help_hint_btn, 0, Qt.AlignVCenter)
+        type_row.addStretch(1)
         self._apply_type_help_hint()
         filter_layout.addWidget(self._type_field, 1, 3)
 
@@ -924,12 +941,11 @@ class SelectPackagePage(QWidget):
         # Why Keep Data will not be offered, said next to the software name it
         # applies to: the install card otherwise only asks once the device is
         # connected, and the answer is already known here.
-        # Removed to prevent showing keep data notice on filters card.
-        # self._keep_data_note = QLabel(tr("sel_keep_data_incompatible"))
-        # self._keep_data_note.setWordWrap(True)
-        # self._keep_data_note.setProperty("cssClass", "hint")
-        # self._keep_data_note.setVisible(False)
-        # filter_layout.addWidget(self._keep_data_note, 3, 0, 1, 4)
+        self._keep_data_note = QLabel(tr("sel_keep_data_incompatible"))
+        self._keep_data_note.setWordWrap(True)
+        self._keep_data_note.setProperty("cssClass", "hint")
+        self._keep_data_note.hide()
+        filter_layout.addWidget(self._keep_data_note, 3, 0, 1, 4)
 
         filter_layout.setColumnStretch(1, 1)
         filter_layout.setColumnStretch(3, 1)
@@ -1576,6 +1592,21 @@ class SelectPackagePage(QWidget):
             icon.setPixmap(QPixmap())
         icon.setProperty("helpSource", help_icon_source())
 
+    def _show_type_hint_tip(self) -> None:
+        btn = getattr(self, "_type_help_hint_btn", None)
+        if btn is None:
+            return
+        tip = btn.toolTip() or self._type_help_tip()
+        if not tip:
+            return
+        QToolTip.showText(
+            btn.mapToGlobal(QPoint(0, btn.height())),
+            tip,
+            btn,
+            btn.rect(),
+            TYPE_TIP_VISIBLE_MS,
+        )
+
     def _apply_type_help_hint(self) -> None:
         tip = self._type_help_tip()
         if hasattr(self, "_type_combo"):
@@ -1585,6 +1616,10 @@ class SelectPackagePage(QWidget):
         if hasattr(self, "_type_help_icon"):
             self._type_help_icon.setToolTip(tip)
             self._refresh_type_help_icon()
+        if hasattr(self, "_type_help_hint_btn"):
+            self._type_help_hint_btn.setToolTip(tip)
+            model = self.current_model() if hasattr(self, "_model_combo") else "Y1"
+            self._type_help_hint_btn.setText(tr("sel_type_what_type_fmt").format(model=model or "Y1"))
 
     def _should_prompt_pre_install(self) -> bool:
         """Whether the run asks the user to prepare the player before starting.
@@ -1769,14 +1804,22 @@ class SelectPackagePage(QWidget):
             self._local_banner.setText("")
         self._local_banner.setVisible(False)
 
+    def _update_toast_container_visibility(self) -> None:
+        if hasattr(self, "_toast_container"):
+            has_visible = any(
+                getattr(self, attr, None) is not None and getattr(self, attr).isVisible()
+                for attr in ("_battery_toast", "_conn_toast", "_bg_notif_toast")
+            )
+            self._toast_container.setVisible(has_visible)
+
     def _check_battery_toast_visibility(self) -> None:
         from PySide6.QtCore import QSettings
 
         settings = self.settings or QSettings("innioasis", "updater")
         dismissed = bool(settings.value("battery_hint_dismissed", False, type=bool))
         self._battery_toast.setVisible(not dismissed)
-        if hasattr(self, "_toast_container"):
-            self._toast_container.setVisible(not dismissed)
+        self._check_bg_notif_toast_visibility()
+        self._update_toast_container_visibility()
 
     def _on_dismiss_battery_toast(self) -> None:
         from PySide6.QtCore import QSettings
@@ -1784,9 +1827,56 @@ class SelectPackagePage(QWidget):
         settings = self.settings or QSettings("innioasis", "updater")
         settings.setValue("battery_hint_dismissed", True)
         self._battery_toast.setVisible(False)
-        if hasattr(self, "_toast_container"):
-            self._toast_container.setVisible(False)
-        # The toast spot leaves the page's height, so the window must refit.
+        self._update_toast_container_visibility()
+        self.content_size_changed.emit()
+
+    def _check_bg_notif_toast_visibility(self) -> None:
+        toast = getattr(self, "_bg_notif_toast", None)
+        if toast is None:
+            return
+        from ..tray import background_mode_supported, run_in_background_enabled
+        from PySide6.QtCore import QSettings
+
+        if not background_mode_supported():
+            toast.setVisible(False)
+            return
+        settings = self.settings or QSettings("innioasis", "updater")
+        if run_in_background_enabled(settings):
+            toast.setVisible(False)
+            return
+        dismissed = bool(settings.value("bg_notif_toast_dismissed", False, type=bool))
+        toast.setVisible(not dismissed)
+
+    def _on_enable_bg_notifs(self) -> None:
+        from ..tray import RUN_IN_BACKGROUND_KEY
+        from ..login_item import set_login_item
+        from ..notice_alerts import set_notifications_enabled
+        from PySide6.QtCore import QSettings
+        from PySide6.QtWidgets import QApplication
+
+        settings = self.settings or QSettings("innioasis", "updater")
+        settings.setValue(RUN_IN_BACKGROUND_KEY, True)
+        set_login_item(True)
+        app = QApplication.instance()
+        if app is not None:
+            app.setQuitOnLastWindowClosed(False)
+        set_notifications_enabled(True)
+        self._check_bg_notif_toast_visibility()
+        self._update_toast_container_visibility()
+        self.content_size_changed.emit()
+        win = self.window()
+        if win and hasattr(win, "_settings_page"):
+            win._settings_page.refresh_settings()
+
+    def _on_dismiss_bg_notif_toast(self) -> None:
+        from PySide6.QtCore import QSettings
+
+        settings = self.settings or QSettings("innioasis", "updater")
+        settings.setValue("bg_notif_toast_dismissed", True)
+        toast = getattr(self, "_bg_notif_toast", None)
+        if toast is not None:
+            toast.setVisible(False)
+        self._update_toast_container_visibility()
         self.content_size_changed.emit()
     def reset_selection_and_filters(self) -> None:
         """Reset filters, selections and cached firmware display back to defaults.
@@ -1835,6 +1925,10 @@ class SelectPackagePage(QWidget):
         self._title.setText(tr("sel_title"))
         if hasattr(self, "_battery_toast"):
             self._battery_toast.retranslate()
+        if hasattr(self, "_bg_notif_toast"):
+            self._bg_notif_toast.retranslate()
+        self._check_bg_notif_toast_visibility()
+        self._update_toast_container_visibility()
         self._install_from_file_link.setText(
             self._link_html("sel_install_from_file", bold=False)
         )
@@ -1885,7 +1979,11 @@ class SelectPackagePage(QWidget):
         self._apply_online_banner()
         self._apply_local_banner()
         self._type_combo.setItemText(0, tr("sel_type_a"))
-        self._type_combo.setItemText(1, tr("sel_type_b"))
+        if self._type_combo.count() > 1:
+            self._type_combo.setItemText(1, tr("sel_type_b"))
+        if hasattr(self, "_type_help_hint_btn"):
+            model = self.current_model() or "Y1"
+            self._type_help_hint_btn.setText(tr("sel_type_what_type_fmt").format(model=model))
         # Software names carry preset translations: re-label the dropdown rows
         # in place, keeping the canonical English name as each row's data.
         self._software_combo.blockSignals(True)
@@ -1926,6 +2024,8 @@ class SelectPackagePage(QWidget):
     def refresh_theme(self):
         """Update components and release notes typography to match active theme tokens."""
         self._apply_type_help_hint()
+        if hasattr(self, "_bg_notif_toast"):
+            self._bg_notif_toast.refresh_theme()
         if hasattr(self, "_notes"):
             self._notes.document().setDefaultStyleSheet(
                 "body { background: transparent; } a { color: "
@@ -2130,16 +2230,23 @@ class SelectPackagePage(QWidget):
             self.current_software() if hasattr(self, "_software_combo") else ""
         )
         model = self.current_model()
-        # Show the type filter only for models that have Type A/B variants (Y1).
+        # Keep type filter visible across models; models with variants (Y1) allow A/B selection.
         has_types = model.upper() == "Y1"
-        self._type_label.setVisible(has_types)
-        self._type_combo.setVisible(has_types)
+        self._type_label.setVisible(True)
+        self._type_combo.setVisible(True)
         if hasattr(self, "_type_help_icon"):
-            self._type_help_icon.setVisible(has_types)
+            self._type_help_icon.setVisible(True)
+        if hasattr(self, "_type_help_hint_btn"):
+            self._type_help_hint_btn.setVisible(True)
+            self._type_help_hint_btn.setText(tr("sel_type_what_type_fmt").format(model=model or "Y1"))
         if hasattr(self, "_type_field"):
-            self._type_field.setVisible(has_types)
+            self._type_field.setVisible(True)
         if not has_types:
             self._selected_type = "A"
+            if hasattr(self, "_type_combo") and self._type_combo.count() > 0:
+                self._type_combo.blockSignals(True)
+                self._type_combo.setCurrentIndex(0)
+                self._type_combo.blockSignals(False)
         else:
             self._selected_type = self._type_combo.currentData() or "A"
         names = catalog.software_names_for_model(model, brand=self.current_brand())
@@ -2239,6 +2346,8 @@ class SelectPackagePage(QWidget):
         combo.blockSignals(True)
         combo.clear()
         for name in names:
+            if (name or "").strip().lower() in ("unknown", "software_unknown"):
+                continue
             combo.addItem(display_software_name(name), name)
         idx = self._find_software_index(select) if select is not None else -1
         if idx < 0:
@@ -2276,6 +2385,21 @@ class SelectPackagePage(QWidget):
         """True when the Rockbox package for Y2 is the one being browsed."""
         software = (self.current_software() or "").lower()
         return self.current_model().upper() == "Y2" and "rockbox" in software
+
+    def _rockbox_themes_only_suffix(self, rel) -> str:
+        """The theme-library note a non-240p Y1 Rockbox row carries.
+
+        Y1 Rockbox no longer reads the iPod classic (240p) theme catalogue, so
+        the version alone would leave an owner expecting those themes. A 240p
+        build is the exception: those themes are its point.
+        """
+        if not self.is_rockbox_y1_browsing():
+            return ""
+        resolution = str((rel or {}).get("selected_resolution") or "").lower()
+        asset = str((rel or {}).get("asset_name") or "").lower()
+        if resolution == "240p" or "240p" in asset:
+            return ""
+        return f" ({tr('rockbox_themes_only_suffix')})"
 
     def original_pre_307_listing(self) -> bool:
         """Whether Original Software releases older than 3.0.7 may be listed.
@@ -2335,7 +2459,14 @@ class SelectPackagePage(QWidget):
 
     def _update_keep_data_note(self) -> None:
         """Say in advance when the player's current firmware blocks Keep Data."""
-        pass
+        if not hasattr(self, "_keep_data_note"):
+            return
+        from .. import keep_data
+
+        incompatible = keep_data.incompatible_with_current(
+            self.current_model(), self.current_package()
+        )
+        self._keep_data_note.setVisible(bool(incompatible))
 
     def _sync_notice_context(self) -> None:
         """Report what the reader is looking at, so notices can be contextual.
@@ -2788,6 +2919,7 @@ class SelectPackagePage(QWidget):
 
         for rel in releases:
             label = catalog.parse_clean_release_tag_label(rel, prefer_240p=prefer_240p)
+            label += self._rockbox_themes_only_suffix(rel)
             tag = rel.get("tag_name", "")
             row = marks["rows"].get(tag) or {}
             is_installed = bool(row.get("installed"))
@@ -3308,10 +3440,9 @@ class SelectPackagePage(QWidget):
         self._is_translating = True
         self._update_translate_link()
         if self._translate_worker is not None and self._translate_worker.isRunning():
-            self._translate_worker.wait(500)
-            # A wait that times out leaves the thread running; keeping the
-            # reference stops Qt destroying it (which aborts the process).
+            self._translate_worker.requestInterruption()
             retire_worker(self._translate_worker, self._active_workers)
+            self._translate_worker = None
         self._translate_worker = ReleaseTranslateWorker(rel, lang, self)
         self._translate_worker.translation_ready.connect(self._on_translation_ready)
         self._translate_worker.translation_failed.connect(self._on_translation_failed)
@@ -3935,10 +4066,10 @@ class SelectPackagePage(QWidget):
             lang = (translator().lang or "en").strip()
             if not is_english_language(lang) and name:
                 try:
-                    from ..translate import fetch_google_translation
-                    trans = fetch_google_translation(name, lang)
-                    if trans:
-                        name = trans
+                    from ..translate import _TRANSLATION_CACHE
+                    cached = _TRANSLATION_CACHE.get((name.strip(), lang))
+                    if cached:
+                        name = cached
                 except Exception:
                     pass
             self._current_package_name = catalog.format_install_heading(f"{name} {pkg.version}".strip(), model)
@@ -3980,10 +4111,10 @@ class SelectPackagePage(QWidget):
         lang = (translator().lang or "en").strip()
         if not is_english_language(lang) and pkg.name:
             try:
-                from ..translate import fetch_google_translation
-                trans = fetch_google_translation(pkg.name, lang)
-                if trans:
-                    name = trans
+                from ..translate import _TRANSLATION_CACHE
+                cached = _TRANSLATION_CACHE.get((pkg.name.strip(), lang))
+                if cached:
+                    name = cached
             except Exception:
                 pass
         self._details_name.setText(name)

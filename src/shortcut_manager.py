@@ -18,6 +18,7 @@ shortcuts as missing.
 
 from __future__ import annotations
 
+import functools
 import logging
 import os
 import shutil
@@ -90,7 +91,7 @@ INNO_SHORTCUT_LANGUAGES: dict[str, tuple[str, ...]] = {
     "ukrainian": ("uk",),
 }
 
-SHORTCUT_SUFFIXES = (".lnk", ".url")
+SHORTCUT_SUFFIXES = (".lnk", ".url", ".desktop")
 # Our menu folders are a couple of levels deep at most; the bound keeps a
 # runaway profile tree from hanging a state read.
 MAX_SCAN_DEPTH = 3
@@ -307,7 +308,10 @@ def _linux_menu_root() -> Path:
     return Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share") / "applications"
 
 
+@functools.lru_cache(maxsize=1)
 def _linux_desktop_root() -> Optional[Path]:
+    if paths.IS_MAC or paths.IS_WINDOWS:
+        return None
     try:
         out = subprocess.run(["xdg-user-dir", "DESKTOP"], capture_output=True, text=True, timeout=5)
         if out.returncode == 0 and out.stdout.strip():
@@ -319,12 +323,12 @@ def _linux_desktop_root() -> Optional[Path]:
 
 def _roots(kind: str) -> List[Path]:
     """Every folder a shortcut of this kind lives in, writable location first."""
-    if kind == "menu":
-        roots: List[Optional[Path]] = _windows_menu_roots() if paths.IS_WINDOWS else [_linux_menu_root()]
-    elif paths.IS_WINDOWS:
-        roots = [_user_desktop(), _common_desktop()]
+    if paths.IS_WINDOWS:
+        roots = _windows_menu_roots() if kind == "menu" else [_user_desktop(), _common_desktop()]
+    elif paths.IS_MAC:
+        roots = [Path.home() / "Applications", Path("/Applications")] if kind == "menu" else [Path.home() / "Desktop"]
     else:
-        roots = [_linux_desktop_root()]
+        roots = [_linux_menu_root()] if kind == "menu" else [_linux_desktop_root()]
     unique: List[Path] = []
     seen = set()
     for root in roots:
@@ -429,6 +433,8 @@ def _belongs(path: Path, owned_folder: str, shortcut_id: str, target: str = "") 
     """
     if _name_matches(path.stem, _foreign_app_names()):
         return False
+    if path.name == (LINUX_APP_FILE if shortcut_id == APP_ID else LINUX_TOOL_FILE):
+        return True
     if _name_matches(path.stem, shortcut_names(shortcut_id)):
         return True
     localized = _name_matches(path.stem, _localized_shortcut_names(shortcut_id))
@@ -620,7 +626,8 @@ def _target_ids(target: str) -> set:
     """The shortcut ids an executable path starts (empty when unknown)."""
     if not target:
         return set()
-    path = Path(target)
+    target_clean = target.replace("\\", "/")
+    path = Path(target_clean)
     name = path.name.lower()
     ids = set()
     if name in ("innioasisupdater.exe", "mediatekinstaller.exe", "2. install firmware.exe"):
@@ -628,7 +635,7 @@ def _target_ids(target: str) -> set:
     elif name == "flash_tool.exe":
         ids.add(TOOL_ID)
     try:
-        if path.parent.resolve() == Path(paths.INSTALL_DIR).resolve():
+        if path.is_absolute() and path.parent.resolve() == Path(paths.INSTALL_DIR).resolve():
             ids.add(APP_ID)
     except OSError:
         pass

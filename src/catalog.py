@@ -1491,6 +1491,7 @@ def parse_clean_release_tag_label(rel, prefer_240p=False, version_only=False) ->
         prefer_240p=prefer_240p,
         version_only=version_only,
         label_for_os=tr("label_for_os"),
+        label_360p_y1_themes_only=tr("rockbox_themes_only_suffix") or "360p Y1 Themes Only",
     )
 
 

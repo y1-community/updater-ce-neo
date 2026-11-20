@@ -399,21 +399,13 @@ def detect_legacy_installations() -> dict:
             result["macos_app_support"] = found_support_dirs[0]
             result["macos_app_supports"] = found_support_dirs
 
-        # Check Homebrew android-platform-tools
-        brew_cmd = shutil.which("brew")
-        if brew_cmd:
-            try:
-                proc = subprocess.run(
-                    [brew_cmd, "list", "--formula"],
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                )
-                if proc.returncode == 0 and "android-platform-tools" in proc.stdout.splitlines():
-                    result["has_platform_tools"] = True
-                    result["platform_tools_type"] = "brew"
-            except Exception:
-                pass
+        # Check Homebrew android-platform-tools via direct path check first (avoiding slow brew subprocess)
+        brew_prefix = "/opt/homebrew" if os.path.exists("/opt/homebrew") else "/usr/local"
+        pt_opt = Path(brew_prefix) / "opt" / "android-platform-tools"
+        pt_cask = Path(brew_prefix) / "Caskroom" / "android-platform-tools"
+        if pt_opt.exists() or pt_cask.exists():
+            result["has_platform_tools"] = True
+            result["platform_tools_type"] = "brew"
 
     # 2. Linux Detection
     if sys.platform.startswith("linux") or not (sys.platform == "darwin" or os.environ.get("INNIOASIS_SIMULATE_MACOS")):

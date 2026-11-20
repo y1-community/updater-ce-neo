@@ -104,9 +104,12 @@ def _restore(text: str, tokens: dict) -> str:
 
 def _one_protected(text: str, lang: str, timeout: float) -> str:
     payload, tokens = _protect(text)
-    value = _one(payload, lang, timeout)
+    try:
+        value = _one(payload, lang, timeout)
+    except Exception:
+        value = ""
     if not tokens or not value:
-        return value
+        return value or text
     restored = _restore(value, tokens)
     return restored if _safe_translation(text, restored) else text
 
@@ -338,8 +341,25 @@ def fill_language(
     existing = read_catalog(code)
     on_disk = dict(existing)
     for key, value in curated_strings(code).items():
-        if force or not (existing.get(key) or "").strip():
-            existing[key] = value
+        existing[key] = value
+
+    if code not in ("en", "en-GB", "en-US") and "app_name" in existing:
+        name = existing["app_name"]
+        cleaned = re.sub(r"\s*[\(\[]?CE[\)\]]?[\s\.]*$", "", name, flags=re.IGNORECASE)
+        cleaned = re.sub(r"^[\s\.]*[\(\[]?CE[\)\]]?\s*", "", cleaned, flags=re.IGNORECASE).strip()
+        if cleaned:
+            if cleaned[0].islower():
+                cleaned = cleaned[0].upper() + cleaned[1:]
+            existing["app_name"] = cleaned
+
+    if code in ("en-GB", "en-US"):
+        for key in source:
+            if not (existing.get(key) or "").strip():
+                existing[key] = source[key]
+        if existing != on_disk:
+            write_catalog(code, existing, source)
+        return existing
+
     if force:
         wanted = list(source)
     elif english_gaps:
@@ -369,6 +389,8 @@ def fill_language(
     for key, value in zip(wanted, values):
         if value and value.strip():
             existing[key] = value
+        else:
+            existing.setdefault(key, source[key])
     write_catalog(code, existing, source)
     return existing
 

@@ -655,9 +655,13 @@ class SettingsPage(QWidget):
 
         self._reminders_card.set_layout(rem_layout)
         self._update_reminders_copy()
-        self._reminders_card.setVisible(
-            self._may_show_card(self._reminders_card) and not is_mediatek_installer()
-        )
+        if getattr(self, "_onboarding", False):
+            self._sync_onboarding_controls()
+            self._reminders_card.setVisible(True)
+        else:
+            self._reminders_card.setVisible(
+                self._may_show_card(self._reminders_card) and not is_mediatek_installer()
+            )
         layout.addWidget(self._reminders_card)
 
         # --- Rockbox release filters ---
@@ -1099,6 +1103,7 @@ class SettingsPage(QWidget):
             lambda checked: set_allow_keep_data_any(bool(checked))
         )
         self._keep_data_card.set_layout(keep_layout)
+        self._keep_data_card.setVisible(False)
         layout.addWidget(self._keep_data_card)
 
         # The Advanced Settings card is a detail switch, not a headline: it
@@ -1826,21 +1831,44 @@ class SettingsPage(QWidget):
         """Describe reminder coverage from the installs actually tracked."""
         if not hasattr(self, "_reminders_desc"):
             return
+        from ..tray import run_in_background_enabled
+        bg_active = run_in_background_enabled(getattr(self, "settings", None))
+        is_mac = sys.platform == "darwin"
         tracked = self._tracked_installs()
         if not tracked:
-            text = tr("settings_reminders_desc")
+            key = (
+                ("settings_reminders_desc_bg_menu_bar" if is_mac else "settings_reminders_desc_bg_system_tray")
+                if bg_active
+                else "settings_reminders_desc"
+            )
+            text = tr(key)
         elif len(tracked) == 1:
             _key, record = tracked[0]
             label = device_tracking.tracked_model_label(record)
             software = str(record.get("software_name") or "").strip()
             if not software or self._is_original_software(software):
-                text = tr("settings_reminders_tracked_original").format(model=label)
+                key = (
+                    ("settings_reminders_tracked_original_bg_menu_bar" if is_mac else "settings_reminders_tracked_original_bg_system_tray")
+                    if bg_active
+                    else "settings_reminders_tracked_original"
+                )
+                text = tr(key).format(model=label)
             else:
-                text = tr("settings_reminders_tracked_named").format(
+                key = (
+                    ("settings_reminders_tracked_named_bg_menu_bar" if is_mac else "settings_reminders_tracked_named_bg_system_tray")
+                    if bg_active
+                    else "settings_reminders_tracked_named"
+                )
+                text = tr(key).format(
                     software=software, model=label
                 )
         else:
-            text = tr("settings_reminders_tracked_multi")
+            key = (
+                ("settings_reminders_tracked_multi_bg_menu_bar" if is_mac else "settings_reminders_tracked_multi_bg_system_tray")
+                if bg_active
+                else "settings_reminders_tracked_multi"
+            )
+            text = tr(key)
         self._reminders_desc.setText(text)
         self._rebuild_reminder_switches(tracked)
 
@@ -1914,6 +1942,23 @@ class SettingsPage(QWidget):
             else:
                 form.addWidget(label)
             form.addWidget(combo)
+            if combo is self._add_device_type:
+                # A line of plain words under the selector, not only the
+                # button beside its label: the question is what a first-time
+                # owner is missing, so it reads before the answer is chosen.
+                # Hovering or clicking it opens the same explanation as (i).
+                link = QLabel(self._type_hint_link_html())
+                link.setTextFormat(Qt.TextFormat.RichText)
+                link.setTextInteractionFlags(Qt.TextInteractionFlag.LinksAccessibleByMouse)
+                link.setCursor(Qt.PointingHandCursor)
+                link.setToolTip(device_type_help_tip())
+                link.linkActivated.connect(
+                    lambda _href="": self._show_add_device_type_tip()
+                )
+                link.setProperty("cssClass", "dimmed")
+                link.setVisible(False)
+                self._add_device_type_hint_link = link
+                form.addWidget(link)
 
         # The version is printed by the player itself, which is the one thing
         # someone recording a stock device cannot guess.
@@ -2040,6 +2085,18 @@ class SettingsPage(QWidget):
         self._add_device_button.setVisible(True)
         self.content_size_changed.emit()
 
+    def _type_hint_link_html(self, model: str = "") -> str:
+        """The visible Type question, naming the model being set up."""
+        text = tr("settings_add_device_type_hint_link")
+        name = (
+            model
+            or self._add_device_model.currentText().strip()
+            or tr("device_fallback_word")
+        ).upper()
+        if "{model}" in text:
+            text = text.format(model=name)
+        return f'<a href="#type-help" style="text-decoration:none;">{text}</a>'
+
     def _show_add_device_type_tip(self) -> None:
         """Show the Type tip on a click, the way the catalogue's mark does.
 
@@ -2104,6 +2161,14 @@ class SettingsPage(QWidget):
                 device_tracking.hardware_type_label(hw_type), hw_type
             )
         self._add_device_type.blockSignals(False)
+        has_types = len(types) > 1
+        self._add_device_type.setVisible(has_types)
+        if hasattr(self, "_add_device_type_label"):
+            self._add_device_type_label.setVisible(has_types)
+        if hasattr(self, "_add_device_type_hint_link"):
+            self._add_device_type_hint_link.setText(
+                self._type_hint_link_html(model)
+            )
         # Whether Type is asked depends on the Software chosen below, so the
         # row is synced once the Software list has been refilled.
         self._add_device_software.blockSignals(True)
@@ -2153,6 +2218,8 @@ class SettingsPage(QWidget):
         if row is not None:
             row.setVisible(show)
         self._add_device_type.setVisible(show)
+        if hasattr(self, "_add_device_type_hint_link"):
+            self._add_device_type_hint_link.setVisible(show)
         # The row appears and disappears with the software chosen, which changes
         # how tall the form is: the window measures it again rather than
         # leaving the next row just below the edge.
@@ -2178,7 +2245,7 @@ class SettingsPage(QWidget):
         selected_type = None
         if not is_original and len(types) > 1:
             selected_type = self._add_device_type.currentData() or None
-        self._add_device_status.setText(tr("settings_add_device_loading"))
+        self._add_device_status.setText("")
         self._add_device_version.addItem(tr("settings_add_device_loading"), "")
         request_id = object()
         self._add_device_request = request_id
@@ -2195,13 +2262,29 @@ class SettingsPage(QWidget):
         worker.finished.connect(lambda w=worker: self._add_device_workers.remove(w) if w in self._add_device_workers else None)
         worker.start()
 
+    @staticmethod
+    def _is_240p_release(rel) -> bool:
+        """Whether a release row's own asset is the 240p variant."""
+        resolution = str((rel or {}).get("selected_resolution") or "").lower()
+        asset = str((rel or {}).get("asset_name") or "").lower()
+        return resolution == "240p" or "240p" in asset
+
     def _on_add_device_releases(self, request_id, releases):
         if request_id is not getattr(self, "_add_device_request", None):
             return  # a newer selection has replaced this request
         self._add_device_version.clear()
         self._add_device_status.setText("")
+        model = self._add_device_model.currentText().strip().upper()
+        package = self._add_device_package()
+        rockbox_y1 = bool(
+            model == "Y1"
+            and package is not None
+            and "rockbox" in str(getattr(package, "name", "") or "").lower()
+        )
         for rel in releases:
             label = catalog.parse_clean_release_tag_label(rel, version_only=True)
+            if rockbox_y1 and not self._is_240p_release(rel):
+                label = f"{label} ({tr('rockbox_themes_only_suffix')})"
             self._add_device_version.addItem(label, rel)
         self._add_device_version.addItem(tr("settings_add_device_dont_know"), "UNKNOWN")
         self._add_device_version.addItem(tr("settings_add_device_other"), "OTHER")
@@ -2350,9 +2433,21 @@ class SettingsPage(QWidget):
         self._onboarding_body.setVisible(on)
         # Before a player exists the journey explains why it is worth doing;
         # afterwards it says what the reminders cover for the players above.
-        self._onboarding_body.setText(
-            tr("onboarding_after_add_body") if tracked else tr("onboarding_body")
-        )
+        if tracked:
+            from ..tray import run_in_background_enabled
+
+            bg_active = run_in_background_enabled(getattr(self, "settings", None))
+            if bg_active:
+                body_key = (
+                    "onboarding_after_add_body_background_menu_bar"
+                    if sys.platform == "darwin"
+                    else "onboarding_after_add_body_background_system_tray"
+                )
+            else:
+                body_key = "onboarding_after_add_body_in_app"
+            self._onboarding_body.setText(tr(body_key))
+        else:
+            self._onboarding_body.setText(tr("onboarding_body"))
         self._onboarding_footer.setVisible(on and tracked)
         # Done and "Add another player" belong to a player already on record:
         # before the first save the form (with its Skip) is the whole journey,
@@ -2404,9 +2499,13 @@ class SettingsPage(QWidget):
         self._sync_advanced_visibility()
         self._sync_linux_prep_copy()
         self._update_prep_card_visibility()
-        self._reminders_card.setVisible(
-            self._may_show_card(self._reminders_card) and not is_mediatek_installer()
-        )
+        if getattr(self, "_onboarding", False):
+            self._sync_onboarding_controls()
+            self._reminders_card.setVisible(True)
+        else:
+            self._reminders_card.setVisible(
+                self._may_show_card(self._reminders_card) and not is_mediatek_installer()
+            )
         self._offline_mode_card.setVisible(
             self._may_show_card(self._offline_mode_card) and not is_mediatek_installer()
         )
@@ -3267,6 +3366,9 @@ class SettingsPage(QWidget):
                 tr("settings_add_device_type_hint_btn")
             )
             self._add_device_type_hint_btn.setToolTip(device_type_help_tip())
+            if hasattr(self, "_add_device_type_hint_link"):
+                self._add_device_type_hint_link.setText(self._type_hint_link_html())
+                self._add_device_type_hint_link.setToolTip(device_type_help_tip())
         if hasattr(self, "_drivers_gate_get"):
             self._drivers_gate_title.setText(tr("settings_drivers_gate_title"))
             self._drivers_gate_body.setText(tr("settings_drivers_gate_body"))

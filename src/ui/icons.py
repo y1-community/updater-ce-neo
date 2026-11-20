@@ -447,30 +447,43 @@ def _sf_symbol_names(symbol_name: str) -> tuple[str, ...]:
     return (mapped,) if mapped else ()
 
 
+_SF_SYMBOL_CACHE: dict[tuple[str, int, str], Optional[QPixmap]] = {}
+
+
 def _load_sf_symbol(sf_name: str, size: int, color: str) -> Optional[QPixmap]:
     """One SF Symbol by system name. ``info.circle.fill`` is the information badge."""
+    cache_key = (sf_name, int(size), str(color))
+    if cache_key in _SF_SYMBOL_CACHE:
+        cached = _SF_SYMBOL_CACHE[cache_key]
+        return QPixmap(cached) if cached is not None and not cached.isNull() else None
     try:
         from AppKit import NSImage, NSImageSymbolConfiguration
 
         img = NSImage.imageWithSystemSymbolName_accessibilityDescription_(sf_name, None)
         if not img:
+            _SF_SYMBOL_CACHE[cache_key] = None
             return None
         cfg = NSImageSymbolConfiguration.configurationWithPointSize_weight_(float(size), 5)  # Medium weight
         configured = img.imageWithSymbolConfiguration_(cfg) if hasattr(img, "imageWithSymbolConfiguration_") else img
         tiff = (configured or img).TIFFRepresentation()
         if not tiff:
+            _SF_SYMBOL_CACHE[cache_key] = None
             return None
         qimg = QImage.fromData(bytes(tiff))
         if qimg.isNull():
+            _SF_SYMBOL_CACHE[cache_key] = None
             return None
         target_px = size * 2
         raw_pix = QPixmap.fromImage(qimg).scaled(
             target_px, target_px, Qt.KeepAspectRatio, Qt.SmoothTransformation
         )
         raw_pix.setDevicePixelRatio(2.0)
-        return tint_pixmap(raw_pix, color)
+        tinted = tint_pixmap(raw_pix, color)
+        _SF_SYMBOL_CACHE[cache_key] = tinted
+        return QPixmap(tinted) if tinted is not None and not tinted.isNull() else None
     except Exception as e:
         logger.debug("Failed to load SF Symbol %s: %s", sf_name, e)
+        _SF_SYMBOL_CACHE[cache_key] = None
         return None
 
 

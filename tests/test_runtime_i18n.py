@@ -270,7 +270,7 @@ def test_runtime_translator_matches_a_formatted_sentence_and_renders_its_values(
         assert label.text() == (
             "Отключите Y2, затем удерживайте кнопка питания, пока он не включится."
         )
-        assert calls == ["To turn your Y2 on, unplug the USB and hold the кнопка питания."]
+        assert calls == ["To turn your ⟦0⟧ on, unplug the USB and hold the ⟦1⟧."]
     finally:
         translator.stop()
         i18n._CATALOGS.pop("ru", None)
@@ -361,7 +361,7 @@ def test_the_mixed_completion_sentence_is_translated_from_the_catalog(app, tmp_p
         # the accusative `кнопку питания`, while this literal label carries the
         # nominative form it was built with.
         assert label.text() == (
-            "Отключите Y2, затем удерживайте кнопка питания, пока он не включится."
+            "Чтобы включить Y2, отсоедините USB и удерживайте кнопка питания."
         )
         assert calls == []  # the bundled catalog already has the template
     finally:

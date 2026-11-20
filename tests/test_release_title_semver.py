@@ -60,7 +60,7 @@ def test_parse_clean_release_tag_label_uses_title_semver():
         "tag_name": "y1-rockbox-tag",
         "name": "Y1 Rockbox 0.6",
     }
-    assert catalog.parse_clean_release_tag_label(rel_end) == "0.6"
+    assert catalog.parse_clean_release_tag_label(rel_end) == "0.6 (360p Y1 Themes Only)"
     assert catalog.format_release_display_label(rel_end) == "0.6"
     assert catalog.release_effective_tag(rel_end) == "0.6"
 

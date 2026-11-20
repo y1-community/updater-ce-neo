@@ -100,8 +100,8 @@ def test_a_mixed_list_shows_dates_and_versions_side_by_side():
     labels = {
         row["tag_name"]: catalog.parse_clean_release_tag_label(row) for row in rows
     }
-    assert labels[NIGHTLY_TAG] == "November 10 2026 (Pre-release)"
-    assert labels["stable-v0.6.1"] == "0.6.1"
+    assert labels[NIGHTLY_TAG] == "November 10 2026 (360p Y1 Themes Only) (Pre-release)"
+    assert labels["stable-v0.6.1"] == "0.6.1 (360p Y1 Themes Only)"
 
 
 # ---------------------------------------------------------------------------

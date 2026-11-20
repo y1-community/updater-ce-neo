@@ -2702,7 +2702,12 @@ class MainWindow(QMainWindow):
         super().showEvent(event)
         if not getattr(self, "_shown_once", False):
             self._shown_once = True
-            if not self._install_run_active() and not self.isMaximized() and not self.isFullScreen():
+            if (
+                not self._install_run_active()
+                and not getattr(self, "_onboarding_active", False)
+                and not self.isMaximized()
+                and not self.isFullScreen()
+            ):
                 self.resize(*default_window_size())
             # The starting size is the compact one; the page on screen may need
             # more, so it gets the chance to take it once the layout is live.
@@ -3555,6 +3560,44 @@ class MainWindow(QMainWindow):
         if wanted and opt_out is not None and not opt_out.isChecked():
             wanted = False
         return wanted, model
+
+    def _rockbox_360p_themes_notice_needed(self) -> bool:
+        """True for a Y1 Rockbox build that cannot use the 240p theme catalogue."""
+        _needs_themes, model = self._rockbox_themes_required()
+        if (model or "").upper() != "Y1":
+            return False
+        if not self._is_rockbox_install():
+            return False
+        return not self._rockbox_240p_detected()
+
+    def _confirm_rockbox_360p_themes(self) -> bool:
+        """Explain the 360p-only theme rule once, before the power-off card.
+
+        Answered once per run: the Linux permission step can enter device prep
+        twice, and the same sentence must not be repeated after the user has
+        already agreed to it.
+        """
+        if getattr(self, "_rockbox_360p_themes_answered", False):
+            return True
+        try:
+            needed = self._rockbox_360p_themes_notice_needed()
+        except Exception:
+            # A local package or an unreadable selection cannot be judged here;
+            # the install itself still decides what it can write.
+            needed = False
+        if not needed:
+            self._rockbox_360p_themes_answered = True
+            return True
+        if os.environ.get("QT_QPA_PLATFORM") == "offscreen" or os.environ.get("INNIOASIS_HEADLESS"):
+            self._rockbox_360p_themes_answered = True
+            return True
+        from .dialogs import RockboxThemesOnlyDialog
+
+        dialog = RockboxThemesOnlyDialog(parent=self)
+        if not dialog.exec():
+            return False
+        self._rockbox_360p_themes_answered = True
+        return True
 
     def _rockbox_240p_detected(self) -> bool:
         """Whether this run installs a 240p Rockbox ROM (theme-site note, no bundled push)."""
@@ -5763,6 +5806,12 @@ class MainWindow(QMainWindow):
 
     def _show_device_prep(self, permission: bool = False) -> None:
         """Device preparation lives on the install page, not in a dialog."""
+        # Say what Y1 Rockbox expects from the theme library while the user can
+        # still walk away without having touched the player: the power-off card
+        # is the next thing they would see, and it is too late to explain there.
+        if not self._confirm_rockbox_360p_themes():
+            self._return_to_select_software()
+            return
         self._install_failed = False
         self._install_complete = False
         self._power_off_prompt = True

@@ -270,6 +270,7 @@ def test_remote_rescue_flags_evaluations(temp_settings):
         # still what the shipping hosts run.
         with patch("src.tray.background_mode_supported", return_value=True):
             assert run_in_background_enabled(temp_settings) is True
+    remote_flags.clear_remote_flags_cache()
 
 
 def test_completion_screen_layout_and_post_install_buttons(app, monkeypatch):

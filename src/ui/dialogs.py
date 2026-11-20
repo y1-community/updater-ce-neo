@@ -264,6 +264,70 @@ class PreInstallGuidanceDialog(QDialog):
         layout.addLayout(btn_row)
 
 
+class RockboxThemesOnlyDialog(QDialog):
+    """Tell the user Y1 Rockbox takes 360p themes now, before prep starts.
+
+    The install card used to be the first place this appeared — after the
+    player had already been powered off. The X and arrow are the same paired
+    chips as the rest of the install wizard, so it reads as one of the run's
+    steps rather than a warning bolted onto it.
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        apply_dialog_theme(self)
+        self.setWindowTitle(tr("rockbox_y1_theme_warning_title"))
+        self.setMinimumSize(540, 240)
+        self.resize(560, 250)
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(14)
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        title = QLabel(tr("rockbox_y1_theme_warning_title"))
+        title.setWordWrap(True)
+        title.setTextFormat(Qt.TextFormat.PlainText)
+        title.setStyleSheet("font-size: 15px; font-weight: 600;")
+        layout.addWidget(title)
+
+        body = QLabel(tr("rockbox_y1_theme_warning_prompt"))
+        body.setWordWrap(True)
+        body.setTextFormat(Qt.TextFormat.PlainText)
+        body.setStyleSheet(
+            "font-size: 13px; line-height: 1.4; color: palette(window-text);"
+        )
+        layout.addWidget(body)
+
+        layout.addStretch()
+
+        from .flash_page import _RoundNextButton
+
+        chips = QHBoxLayout()
+        chips.setContentsMargins(0, 0, 0, 0)
+        chips.setSpacing(0)
+        chips.addStretch()
+
+        actions = QWidget(self)
+        actions_layout = QHBoxLayout(actions)
+        actions_layout.setContentsMargins(0, 0, 0, 0)
+        actions_layout.setSpacing(0)
+
+        cancel_btn = _RoundNextButton(symbol="cancel", accent=False)
+        cancel_btn.setText(tr("cancel"))
+        cancel_btn.clicked.connect(self.reject)
+        continue_btn = _RoundNextButton(symbol="next", accent=True)
+        continue_btn.setText(tr("dialog_pre_install_continue"))
+        continue_btn.clicked.connect(self.accept)
+
+        # One segmented pair in a zero-spacing row.
+        cancel_btn.set_segmented_pair(companion=continue_btn, is_leading=True)
+        continue_btn.set_segmented_pair(companion=cancel_btn, is_leading=False)
+        actions_layout.addWidget(cancel_btn, 0, Qt.AlignVCenter)
+        actions_layout.addWidget(continue_btn, 0, Qt.AlignVCenter)
+        chips.addWidget(actions, 0, Qt.AlignVCenter)
+        layout.addLayout(chips)
+
+
 def notice_has_page_url(url: str, notice_id: str = "") -> bool:
     """Whether a notice's link points at an actual page."""
     from urllib.parse import urlparse

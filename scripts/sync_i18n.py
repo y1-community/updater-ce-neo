@@ -49,9 +49,32 @@ def sync_language(file_path: Path, all_keys: list[str]) -> int:
         logger.error("Failed to read %s: %s", file_path, e)
         return 0
 
+    updated = False
+    # 1. Update curated keys from _STRINGS if defined for this code
+    for k in all_keys:
+        table = i18n._STRINGS.get(k, {})
+        if code in table and str(table[code]).strip():
+            curated = str(table[code]).strip()
+            if data.get(k) != curated:
+                data[k] = curated
+                updated = True
+
+    # 2. Consistent app_name (without CE for non-English)
+    if code not in ("en", "en-GB", "en-US") and "app_name" in data:
+        val = data["app_name"]
+        if val.endswith(" CE"):
+            data["app_name"] = val[:-3].strip()
+            updated = True
+        elif val.endswith(" (CE)"):
+            data["app_name"] = val[:-5].strip()
+            updated = True
+
     missing = [k for k in all_keys if k not in data or not str(data[k]).strip()]
     if not missing:
-        return 0
+        if updated:
+            sorted_data = {k: data[k] for k in sorted(data.keys())}
+            file_path.write_text(json.dumps(sorted_data, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+        return 1 if updated else 0
 
     logger.info("Language %s: translating %d missing keys...", code, len(missing))
 

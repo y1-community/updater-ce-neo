@@ -1499,6 +1499,94 @@ class NoticeToast(QFrame):
         _paint_bento_surface(self, event)
 
 
+class BackgroundNotificationsToast(QFrame):
+    """Prompt on Select Software encouraging the user to enable background notifications."""
+
+    enable_clicked = Signal()
+    dismissed = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("bgNotifToast")
+        self.setProperty("cssClass", "card")
+        self.setAutoFillBackground(False)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.setMinimumHeight(44)
+
+        row = QHBoxLayout(self)
+        row.setContentsMargins(14, 6, 8, 6)
+        row.setSpacing(10)
+
+        self._icon = QLabel("🔔", self)
+        self._icon.setStyleSheet("font-size: 14px; background: transparent; border: none;")
+        row.addWidget(self._icon, 0, Qt.AlignVCenter)
+
+        self._label = QLabel("", self)
+        self._label.setWordWrap(True)
+        self._label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        font = self._label.font()
+        font.setPixelSize(12)
+        font.setWeight(QFont.Weight.Medium)
+        self._label.setFont(font)
+        _apply_banner_text(self._label)
+        row.addWidget(self._label, 1, Qt.AlignVCenter)
+
+        self._enable_btn = QPushButton("", self)
+        self._enable_btn.setObjectName("bgNotifToastEnableBtn")
+        self._enable_btn.setCursor(Qt.PointingHandCursor)
+        self._enable_btn.clicked.connect(self._on_enable_clicked)
+        row.addWidget(self._enable_btn, 0, Qt.AlignVCenter)
+
+        from .flash_page import _RoundNextButton
+
+        self._close_btn = _RoundNextButton(symbol="cancel", accent=False)
+        self._close_btn.setObjectName("bgNotifToastClose")
+        self._close_btn.setToolTip(tr("toast_dismiss"))
+        self._close_btn.clicked.connect(self._on_dismiss_clicked)
+        row.addWidget(self._close_btn, 0, Qt.AlignVCenter)
+
+        self.retranslate()
+        self.setVisible(False)
+
+    def _toast_text(self) -> str:
+        key = (
+            "toast_background_notifications_menu_bar"
+            if sys.platform == "darwin"
+            else "toast_background_notifications_system_tray"
+        )
+        return tr(key)
+
+    def retranslate(self) -> None:
+        text = self._toast_text()
+        self._label.setText(text)
+        self._label.setToolTip(text)
+        _apply_banner_text(self._label)
+        self._enable_btn.setText(tr("toast_enable_notifications"))
+        self._close_btn.setToolTip(tr("toast_dismiss"))
+        if hasattr(self._close_btn, "retranslate"):
+            self._close_btn.retranslate()
+
+    def refresh_theme(self) -> None:
+        _apply_banner_text(self._label)
+        if hasattr(self, "_close_btn") and hasattr(self._close_btn, "refresh_theme"):
+            self._close_btn.refresh_theme()
+        self.update()
+
+    def _on_enable_clicked(self) -> None:
+        self.setVisible(False)
+        self.enable_clicked.emit()
+
+    def _on_dismiss_clicked(self) -> None:
+        from PySide6.QtWidgets import QToolTip
+
+        QToolTip.hideText()
+        self.setVisible(False)
+        self.dismissed.emit()
+
+    def paintEvent(self, event):  # noqa: N802 (Qt naming)
+        _paint_bento_surface(self, event)
+
+
 class FlowLayout(QLayout):
     """Left-to-right layout that wraps its items onto a new line when full.
 

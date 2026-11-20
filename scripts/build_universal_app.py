@@ -378,8 +378,18 @@ def compile_universal_launcher(out_path: Path):
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
         if sys.platform == "darwin":
+            cmd = ["clang"]
+            try:
+                proc_trans = subprocess.run(
+                    ["sysctl", "-n", "sysctl.proc_translated"],
+                    capture_output=True, text=True, check=False
+                ).stdout.strip()
+                if proc_trans == "1":
+                    cmd = ["/usr/bin/arch", "-arm64", "clang"]
+            except Exception:
+                pass
             subprocess.run([
-                "clang", "-arch", "x86_64", "-arch", "arm64",
+                *cmd, "-arch", "x86_64", "-arch", "arm64",
                 "-mmacosx-version-min=12.0",
                 str(c_file), "-o", str(out_path)
             ], check=True)

@@ -1002,5 +1002,9 @@
  "zu": {
   "english": "Zulu",
   "native": "Zulu"
- }
+ },
+ "settings_add_device_type_hint_link": "What type is my {model}?",
+ "rockbox_themes_only_suffix": "360p Y1 Themes Only",
+ "rockbox_themes_notice_title": "Rockbox themes on Y1",
+ "rockbox_themes_notice_body": "Rockbox on Y1 no longer supports iPod classic (240p) themes from Rockbox.org. You'll have to use 360p Rockbox themes made for Y1. Click next to continue."
 }

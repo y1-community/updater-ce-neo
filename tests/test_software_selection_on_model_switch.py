@@ -67,10 +67,13 @@ def test_the_keep_data_note_sits_under_the_software_name(monkeypatch):
     try:
         catalog.set_live_catalog(manifest.parse_manifest_xml(MODEL_XML))
         monkeypatch.setattr(select_page, "ReleasesWorker", _StubReleasesWorker)
+        from src import keep_data
+
+        monkeypatch.setattr(
+            keep_data, "incompatible_with_current", lambda *a, **k: False
+        )
         page = select_page.SelectPackagePage()
         try:
-            from src import keep_data
-
             assert page._keep_data_note.isHidden()
             monkeypatch.setattr(
                 keep_data, "incompatible_with_current", lambda *a, **k: True

@@ -2558,6 +2558,13 @@ class FlashPage(QWidget):
         # instruction rather than a footnote to the headline.
         self._appeal_power_on = QLabel()
         self._appeal_power_on.setWordWrap(True)
+        self._appeal_power_on.setTextFormat(Qt.TextFormat.RichText)
+        self._appeal_power_on.setTextInteractionFlags(
+            Qt.TextInteractionFlag.LinksAccessibleByMouse
+            | Qt.TextInteractionFlag.LinksAccessibleByKeyboard
+        )
+        self._appeal_power_on.setOpenExternalLinks(False)
+        self._appeal_power_on.linkActivated.connect(self._on_start_help_link)
         self._appeal_power_on.setAutoFillBackground(False)
         self._appeal_power_on.setStyleSheet("")
         _apply_card_text(self._appeal_power_on)
@@ -6019,14 +6026,14 @@ class FlashPage(QWidget):
 
         model = (getattr(self, "_model", "") or "").strip()
         label = device_label_for_model(model) if model else tr("device_fallback_word")
-        body = escape(tr("completion_not_starting_body").format(model=label))
+        body = escape(tr("completion_not_starting_body").format(model=label), quote=False)
         missing: list[tuple[str, str]] = []
         actions = (
             ("install-original", tr("completion_install_original")),
             ("other-software", tr("completion_other_software")),
         )
         for href, action in actions:
-            action_html = escape(action)
+            action_html = escape(action, quote=False)
             pattern = re.compile(re.escape(action_html), re.IGNORECASE)
             if pattern.search(body):
                 body = pattern.sub(
@@ -6046,13 +6053,30 @@ class FlashPage(QWidget):
             body = f"{body} {tail}"
         return body
 
+    def _start_help_hint_text(self) -> str:
+        """Shorter "What if my {model} doesn't start up?" link text."""
+        model = (getattr(self, "_model", "") or "").strip()
+        if model:
+            from ..config import device_label_for_model
+
+            label = device_label_for_model(model)
+            try:
+                return tr("completion_not_starting_hint_fmt").format(model=label)
+            except Exception:
+                pass
+        return tr("completion_not_starting_hint")
+
     def _render_start_help(self) -> None:
         """Re-write the start-up advice for this language and install."""
+        from html import escape
+
         if hasattr(self, "_start_help_hint"):
             self._start_help_hint.setText(
                 _themed_link(
-                "start-help", tr("completion_not_starting_hint"), underline=True
-            )
+                    "start-help",
+                    escape(self._start_help_hint_text(), quote=False),
+                    underline=True,
+                )
             )
         if hasattr(self, "_start_help_advice"):
             self._start_help_advice.setText(self._start_help_text())
@@ -6099,7 +6123,10 @@ class FlashPage(QWidget):
         )
         hint = getattr(self, "_start_help_hint", None)
         if hint is not None:
-            hint.setVisible(
+            hint.setVisible(False)
+        power_on = getattr(self, "_appeal_power_on", None)
+        if power_on is not None:
+            power_on.setVisible(
                 complete and not bool(getattr(self, "_cleanup_mode", False))
             )
         body = getattr(self, "_start_help_body", None)
@@ -6190,14 +6217,32 @@ class FlashPage(QWidget):
             self._intro.subtitle.setVisible(not has_guide)
             _apply_card_text(self._intro.headline)
             _apply_card_text(self._intro.subtitle)
+        start_help_link = _themed_link(
+            "start-help",
+            escape(self._start_help_hint_text(), quote=False),
+            underline=True,
+        )
         if hasattr(self, "_appeal_power_on"):
             # How to turn the player on after the write. MTKClient leaves it
             # sitting in download mode, so every MTKClient completion says
             # this, guide or not. SP Flash Tool starts the player itself, so
             # it says nothing rather than explaining a step nobody needs.
-            self._appeal_power_on.setText(escape(steps))
-            self._appeal_power_on.setVisible(self._is_mtk_active())
+            self._appeal_power_on.setTextFormat(Qt.TextFormat.RichText)
+            self._appeal_power_on.setOpenExternalLinks(False)
+            try:
+                self._appeal_power_on.linkActivated.disconnect()
+            except Exception:
+                pass
+            self._appeal_power_on.linkActivated.connect(self._on_start_help_link)
+            if self._is_mtk_active():
+                clean_steps = escape(steps.rstrip(), quote=False)
+                self._appeal_power_on.setText(f"{clean_steps} {start_help_link}")
+            else:
+                self._appeal_power_on.setText(start_help_link)
+            self._appeal_power_on.setVisible(True)
             _apply_card_text(self._appeal_power_on)
+        if hasattr(self, "_start_help_hint"):
+            self._start_help_hint.setVisible(False)
         if hasattr(self, "_completion_guide_hint"):
             self._completion_guide_hint.setText(self._completion_guide_html())
             self._completion_guide_hint.setVisible(has_guide)
@@ -6297,26 +6342,29 @@ class FlashPage(QWidget):
             _apply_card_text(lbl)
             self._completion_hint_layout.addWidget(lbl)
 
+        start_help_link = _themed_link(
+            "start-help",
+            escape(self._start_help_hint_text(), quote=False),
+            underline=True,
+        )
         if self._is_mtk_active():
             # MTKClient leaves the player in download mode; SP Flash Tool
             # starts it, so only MTKClient completions explain the button.
-            power_on = QLabel(escape(install_power_on_steps(model)))
+            clean_steps = escape(install_power_on_steps(model).rstrip(), quote=False)
+            power_on = QLabel(f"{clean_steps} {start_help_link}")
             power_on.setWordWrap(True)
+            power_on.setTextFormat(Qt.TextFormat.RichText)
+            power_on.setOpenExternalLinks(False)
+            power_on.linkActivated.connect(self._on_start_help_link)
             _apply_card_text(power_on)
             self._completion_hint_layout.addWidget(power_on)
-
-        hint_lbl = QLabel(
-            _themed_link(
-                "start-help",
-                escape(tr("completion_not_starting_hint")),
-                underline=True,
-            )
-        )
-        hint_lbl.setTextFormat(Qt.TextFormat.RichText)
-        hint_lbl.setOpenExternalLinks(False)
-        hint_lbl.linkActivated.connect(self._on_start_help_link)
-        _apply_card_text(hint_lbl)
-        self._completion_hint_layout.addWidget(hint_lbl)
+        else:
+            hint_lbl = QLabel(start_help_link)
+            hint_lbl.setTextFormat(Qt.TextFormat.RichText)
+            hint_lbl.setOpenExternalLinks(False)
+            hint_lbl.linkActivated.connect(self._on_start_help_link)
+            _apply_card_text(hint_lbl)
+            self._completion_hint_layout.addWidget(hint_lbl)
 
         # The start-up advice belongs under its own hint, closed until asked
         # for, the same way the letter carries it.

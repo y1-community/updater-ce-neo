@@ -613,6 +613,7 @@ def parse_clean_release_tag_label(
     prefer_240p=False,
     version_only=False,
     label_for_os: str = "OS {version}",
+    label_360p_y1_themes_only: str = "360p Y1 Themes Only",
 ) -> str:
     """The label beside a release row, matching the window exactly.
 
@@ -727,9 +728,23 @@ def parse_clean_release_tag_label(
         or "240p" in str(rel.get("asset_name", "")).lower()
         or "240p" in lower_raw
     )
+    # Check if this release is for Rockbox on Y1:
+    source_repo = str(rel.get("source_repo", "") or rel.get("repo", "") or "").lower()
+    rel_model = str(rel.get("model", "") or rel.get("device", "") or "").upper()
+    is_rockbox_y1 = (
+        "rockbox-y1" in source_repo
+        or ("rockbox" in lower_raw and "y1" in lower_raw)
+        or ("rockbox" in source_repo and (rel_model == "Y1" or "y1" in lower_raw))
+    )
+
     if is_240p:
         if "240p" not in verbs:
             verbs.append("240p")
+    elif is_rockbox_y1:
+        if "360p" in verbs:
+            verbs.remove("360p")
+        if label_360p_y1_themes_only not in verbs:
+            verbs.append(label_360p_y1_themes_only)
     elif "360p" in lower_raw:
         verbs.append("360p")
 

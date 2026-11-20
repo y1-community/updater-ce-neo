@@ -215,8 +215,8 @@ class RuntimeTranslator(QObject):
 
     def eventFilter(self, obj, event):
         if (
-            not self._stopped
-            and not i18n.is_english_language(self._lang)
+            not getattr(self, "_stopped", False)
+            and not i18n.is_english_language(getattr(self, "_lang", "en"))
             and event.type() == QEvent.Type.Show
             and isinstance(obj, QWidget)
             and obj.isWindow()
@@ -226,7 +226,7 @@ class RuntimeTranslator(QObject):
 
     # -- scanning ----------------------------------------------------------
     def scan(self, root=None) -> None:
-        if self._stopped or i18n.is_english_language(self._lang):
+        if getattr(self, "_stopped", False) or i18n.is_english_language(getattr(self, "_lang", "en")):
             return
         app = QApplication.instance()
         if root is not None:

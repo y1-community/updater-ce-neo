@@ -5,26 +5,32 @@
     One <package/> entry per model. Use the generator at
     https://innioasis.app/developers.html to build entries.
 
-    Attributes: name, brand, repo, device, url, type="img",
+    Attributes: name, brand, repo, device, devices, url, type="img",
     handler="Custom Firmware", package_name, package_name_<model>,
-    package_name_<model>_type_<a|b>, package_name_<brand>_<model>[_type_<a|b>],
-    asset_pattern, type_a_asset, type_b_asset, icon, icon_dark, image,
-    image_dark, post_install, post_install2, portable_zips, derivative,
-    info_repo, apk_repo, min_version, do_not_keep_data, slug, description.
+    package_name_<model>_type_<a|b>, package_name_<brand>_<model>,
+    package_name_<brand>_<model>_type_<a|b>, asset_pattern, type_a_asset,
+    type_b_asset, icon, icon_dark, image, image_dark, post_install,
+    post_install2, portable_zips, derivative, info_repo, apk_repo,
+    min_version, do_not_keep_data, slug, description.
 
-    package_name defaults to rom.zip on Y1 and rom_MODEL.zip on other models.
-    A package_name value may be a wildcard ("Y2Linux-*-first-install.zip").
-    package_name_<model> names the archive for one player of this entry, and
-    package_name_<model>_type_<a|b> for one hardware revision; put the brand
-    in front (package_name_<brand>_<model>) when two brands may use the same
-    model number, so each resolves to its own archive. The most specific
-    declaration wins and any suffix is accepted, so a new model needs no app
-    change.
+    Models: device="Y2" names one model and is unchanged. devices="Y1,Y2,G5"
+    names several models for one repository, so a project that ships one
+    release for five players needs one line, not five. An entry may carry its
+    brand as "Timmkoo/Q3" or "Timmkoo:Q3", which keeps two brands that share a
+    model number apart. Any model added to this file later is read from these
+    attributes; no code change is needed.
 
-    device may list several models ("device=\"Y1,Y2,G5\""), so one repository
-    can serve every model it publishes for from a single <package/> entry; one
-    entry per model still works exactly as before, and the per-device
-    attributes above still apply to each.
+    Package names: package_name defaults to rom.zip on Y1 and rom_MODEL.zip on
+    other models. A row that serves several models can name each model's ROM,
+    and its Type B build, without repeating the repository:
+
+      package_name_y1="rom.zip"          package_name_y1_type_b="rom_type_b.zip"
+      package_name_y2="rom_y2.zip"       package_name_a5="rom_a5.zip"
+      package_name_g5="rom_g5.zip"       package_name_timmkoo_q3="rom_q3.zip"
+
+    The most specific declaration wins: brand + model + type, model + type,
+    brand + model, model, then package_name. Attribute names are matched
+    without case, so package_name_A5 works as well as package_name_a5.
     do_not_keep_data accepts true, 1 or yes. Legacy aliases still read:
     model, package, portable_zip, post_install_2, min_app_version, image_dark.
   -->
@@ -33,33 +39,34 @@
  <!-- <package name="Stock Menu 2.1.9 Update for Type B Y1's" repo="rockbox-y1/rockbox" url="https://github.com/y1-community/com.innioasis.y1/releases/latest" android_package="org.rockbox" device="y1" type="apk" handler="App" /> -->
   <!-- Custom Firmware: Project Gallagher -->
 
-<package name="Original Software" brand="Innioasis" repo="y1-community/y1-stock-rom" portable_zips="y1-community/y1-stock-rom-mirror" device="Y1" url="https://github.com/y1-community/y1-stock-rom" type="img" handler="Custom Firmware" />
+<package name="Original Software" brand="Innioasis" repo="y1-community/y1-stock-rom" portable_zips="y1-community/y1-stock-rom-mirror" device="Y1" url="https://github.com/y1-community/y1-stock-rom" type="img" handler="Custom Firmware" icon="https://github.com/y1-community/y1-stock-rom/releases/download/3.2.4-fm/updater.jpg" />
 
-<package name="Original Software" brand="Innioasis" repo="y1-community/y1-stock-rom" portable_zips="y1-community/y1-stock-rom-mirror" device="Y2" url="https://github.com/y1-community/y1-stock-rom" type="img" handler="Custom Firmware" />
+  
+<package name="Original Software" brand="Innioasis" repo="y1-community/y1-stock-rom" portable_zips="y1-community/y1-stock-rom-mirror" device="Y2" url="https://github.com/y1-community/y1-stock-rom" type="img" handler="Custom Firmware" icon="https://github.com/y1-community/y1-stock-rom/releases/download/3.2.4-fm/updater.jpg" />
 
 <!-- Stock firmware archived per model: one repository each, package named rom_<model>.zip,
        release tag = the build folder name. No portable_zips until portable packages are built,
        and no icon attribute so they use the same stock firmware icon as Y1 and Y2. -->
 
-<package name="Original Software" brand="Innioasis" repo="y1-community/g1-stock-rom" device="G1" url="https://github.com/y1-community/g1-stock-rom" type="img" handler="Custom Firmware" package_name="rom_g1.zip" portable_zips="y1-community/g1-stock-rom-mirror" />
+<package name="Original Software" brand="Innioasis" repo="y1-community/g1-stock-rom" device="G1" url="https://github.com/y1-community/g1-stock-rom" type="img" handler="Custom Firmware" package_name="rom_g1.zip" portable_zips="y1-community/g1-stock-rom-mirror" icon="https://github.com/y1-community/y1-stock-rom/releases/download/3.2.4-fm/updater.jpg" />
 
-<package name="Original Software" brand="Innioasis" repo="y1-community/g3-stock-rom" device="G3" url="https://github.com/y1-community/g3-stock-rom" type="img" handler="Custom Firmware" package_name="rom_g3.zip" portable_zips="y1-community/g3-stock-rom-mirror" />
+<package name="Original Software" brand="Innioasis" repo="y1-community/g3-stock-rom" device="G3" url="https://github.com/y1-community/g3-stock-rom" type="img" handler="Custom Firmware" package_name="rom_g3.zip" portable_zips="y1-community/g3-stock-rom-mirror" icon="https://github.com/y1-community/y1-stock-rom/releases/download/3.2.4-fm/updater.jpg" />
 
-<package name="Original Software" brand="Innioasis" repo="y1-community/g5-stock-rom" device="G5" url="https://github.com/y1-community/g5-stock-rom" type="img" handler="Custom Firmware" package_name="rom_g5.zip" portable_zips="y1-community/g5-stock-rom-mirror" />
+<package name="Original Software" brand="Innioasis" repo="y1-community/g5-stock-rom" device="G5" url="https://github.com/y1-community/g5-stock-rom" type="img" handler="Custom Firmware" package_name="rom_g5.zip" portable_zips="y1-community/g5-stock-rom-mirror" icon="https://github.com/y1-community/y1-stock-rom/releases/download/3.2.4-fm/updater.jpg" />
 
-<!-- <package name="Original Software" brand="Innioasis" repo="y1-community/r1-stock-rom" device="R1" url="https://github.com/y1-community/r1-stock-rom" type="img" handler="Custom Firmware" package_name="rom_r1.zip" portable_zips="y1-community/r1-stock-rom-mirror" /> -->
+<!-- <package name="Original Software" brand="Innioasis" repo="y1-community/r1-stock-rom" device="R1" url="https://github.com/y1-community/r1-stock-rom" type="img" handler="Custom Firmware" package_name="rom_r1.zip" portable_zips="y1-community/r1-stock-rom-mirror" icon="https://github.com/y1-community/y1-stock-rom/releases/download/3.2.4-fm/updater.jpg" /> -->
 
-<!-- <package name="Original Software" brand="Innioasis" repo="y1-community/pr1-stock-rom" device="PR1" url="https://github.com/y1-community/pr1-stock-rom" type="img" handler="Custom Firmware" package_name="rom_pr1.zip" portable_zips="y1-community/pr1-stock-rom-mirror" /> -->
+<!-- <package name="Original Software" brand="Innioasis" repo="y1-community/pr1-stock-rom" device="PR1" url="https://github.com/y1-community/pr1-stock-rom" type="img" handler="Custom Firmware" package_name="rom_pr1.zip" portable_zips="y1-community/pr1-stock-rom-mirror" icon="https://github.com/y1-community/y1-stock-rom/releases/download/3.2.4-fm/updater.jpg" /> -->
 
-<!-- <package name="Original Software" brand="Timmkoo" repo="y1-community/sr1-stock-rom" device="SR1" url="https://github.com/y1-community/sr1-stock-rom" type="img" handler="Custom Firmware" package_name="rom_sr1.zip" portable_zips="y1-community/sr1-stock-rom-mirror" /> -->
+<!-- <package name="Original Software" brand="Timmkoo" repo="y1-community/sr1-stock-rom" device="SR1" url="https://github.com/y1-community/sr1-stock-rom" type="img" handler="Custom Firmware" package_name="rom_sr1.zip" portable_zips="y1-community/sr1-stock-rom-mirror" icon="https://github.com/y1-community/y1-stock-rom/releases/download/3.2.4-fm/updater.jpg" /> -->
 
-<package name="Original Software" brand="Timmkoo" repo="y1-community/q3-stock-rom" device="Q3" url="https://github.com/y1-community/q3-stock-rom" type="img" handler="Custom Firmware" package_name="rom_q3.zip" portable_zips="y1-community/q3-stock-rom-mirror" />
-
-<package name="Original Software" brand="Timmkoo" repo="y1-community/q5-stock-rom" device="Q5" url="https://github.com/y1-community/q5-stock-rom" type="img" handler="Custom Firmware" package_name="rom_q5.zip" portable_zips="y1-community/q5-stock-rom-mirror" />
-
+<package name="Original Software" brand="Timmkoo" repo="y1-community/q3-stock-rom" device="Q3" url="https://github.com/y1-community/q3-stock-rom" type="img" handler="Custom Firmware" package_name="rom_q3.zip" portable_zips="y1-community/q3-stock-rom-mirror" icon="https://innioasis.app/assets/timmkoo_icon.jpeg" />
+<package name="Lithium (Android 7)" brand="Timmkoo" repo="NoahDomingues/Lithium" portable_zips="y1-community/lithium-mirror" device="Q3" url="https://github.com/NoahDomingues/Lithium" type="img" handler="Custom Firmware" install_first="y1-community/q3-stock-rom" package_name="Lithium*.zip" icon="https://innioasis.app/assets/lithium_icon.jpg" />
+<package name="Original Software" brand="Timmkoo" repo="y1-community/q5-stock-rom" device="Q5" url="https://github.com/y1-community/q5-stock-rom" type="img" handler="Custom Firmware" package_name="rom_q5.zip" portable_zips="y1-community/q5-stock-rom-mirror" icon="https://innioasis.app/assets/timmkoo_icon.jpeg" />
+<package name="Lithium (Android 7)" brand="Timmkoo" repo="NoahDomingues/Lithium" portable_zips="y1-community/lithium-mirror" device="Q5" url="https://github.com/NoahDomingues/Lithium" type="img" handler="Custom Firmware" install_first="y1-community/q5-stock-rom" package_name="Lithium*.zip" icon="https://innioasis.app/assets/lithium_icon.jpg" />
 <!-- <package name="Original Software" brand="Timmkoo" repo="y1-community/q5-stock-rom" device="Q3e" url="https://github.com/y1-community/q5-stock-rom" type="img" handler="Custom Firmware" package_name="rom_q5.zip" portable_zips="y1-community/q5-stock-rom-mirror" /> -->
 
-<package name="Reborn (Y2Linux)" brand="Innioasis" repo="schulzcode/y2linux" portable_zips="y1-community/y2linux-mirror" install_first="y1-community/y1-stock-rom" install_first_version="3.2.0=>" install_first_when="ClassyPlayer/Classy,ismileblue/y1_launcher,FabianZettl/inniclassic" device="Y2" url="https://github.com/schulzcode/y2linux" type="img" do_not_keep_data="true" post_install="https://innioasis.app/y2reborn_wifibt.html" handler="Custom Firmware" package_name="Y2Linux-*-first-install.zip" />
+<package name="Reborn" brand="Innioasis" repo="schulzcode/y2linux" portable_zips="y1-community/y2linux-mirror" device="Y2" url="https://github.com/schulzcode/y2linux" type="img" post_install="https://innioasis.app/y2reborn_wifibt.html" handler="Custom Firmware" icon="https://innioasis.app/assets/reborn_icon.jpg" install_first="y1-community/y1-stock-rom" install_first_when="classyplayer/classy,FabianZettl/Inniclassic,thesolarproject/solar,y1-community/y2-ata-rom,ismileblue/y1_launcher" install_first_once="true" />
 
 <package name="Rockbox" brand="Innioasis" repo="rockbox-y1/rockbox" portable_zips="y1-community/rockbox-mirror" device="Y1" url="https://github.com/rockbox-y1/rockbox" type="img" icon="https://sc.filehippo.net/images/t_app-icon-l/p/c9b4d9fa-9b65-11e6-a6e7-00163ec9f5fa/2907264561/rockbox-icon.png" handler="Custom Firmware" />
 
@@ -67,22 +74,20 @@
 
 <package name="Rondo" brand="Innioasis" repo="jarvissax/rondo" portable_zips="y1-community/rondo-mirror" device="Y1" url="https://github.com/jarvissax/rondo" post_install="https://github.com/jarvissax/rondo/blob/main/docs/install.md#first-start" icon="https://innioasis.app/assets/rondo_icon.jpg" type="img" handler="Custom Firmware" />
 
-<package name="Koensayr" brand="Innioasis" repo="ryan-specter/koensayr-auto" portable_zips="y1-community/koensayr-auto-mirror" derivative="y1-community/y1-stock-rom" device="Y1" url="https://github.com/ryan-specter/koensayr-auto" type="img" handler="Custom Firmware" />
+<package name="Koensayr" brand="Innioasis" repo="ryan-specter/koensayr-auto" portable_zips="y1-community/koensayr-auto-mirror" derivative="y1-community/y1-stock-rom" device="Y1" url="https://github.com/ryan-specter/koensayr-auto" type="img" handler="Custom Firmware" icon="https://avatars.githubusercontent.com/u/10089013" />
 
 <package name="JJ Launcher" brand="Innioasis" repo="ismileblue/y1_launcher" portable_zips="y1-community/y1_launcher-mirror" device="Y1" url="https://github.com/ismileblue/y1_launcher" type="img" handler="Custom Firmware" />
 
-<package name="JJ Launcher" brand="Innioasis" repo="ismileblue/y1_launcher" portable_zips="y1-community/y1_launcher-mirror" device="Y2" url="https://github.com/ismileblue/y1_launcher" type="img" handler="Custom Firmware" />
+<!-- <package name="JJ Launcher" brand="Innioasis" repo="ismileblue/y1_launcher" portable_zips="y1-community/y1_launcher-mirror" device="Y2" url="https://github.com/ismileblue/y1_launcher" type="img" handler="Custom Firmware" /> -->
 
-<package name="Please Update App To Continue" device_type="0" repo="Please-Click/Updates-Available" device="Y1" url="https://github.com/Please-Click/Updates-Available/releases/latest" type="img" handler="Custom Firmware" />
+<package name="inniclassic" brand="Innioasis" repo="FabianZettl/inniclassic" portable_zips="y1-community/inniclassic-mirror" device="Y1" url="https://github.com/FabianZettl/inniclassic" type="img" handler="Custom Firmware"  />
 
-<package name="inniclassic" brand="Innioasis" repo="FabianZettl/inniclassic" device="Y1" url="https://github.com/FabianZettl/inniclassic" type="img" handler="Custom Firmware" portable_zips="y1-community/inniclassic-mirror" />
+<package name="Classy" brand="Innioasis" repo="ClassyPlayer/Classy" PMT_format_needed="true" portable_zips="y1-community/classy-mirror" device="Y2" url="https://github.com/ClassyPlayer/Classy" type="img" icon="https://github.com/ClassyPlayer/Classy/raw/main/docs/icons/icon.png" handler="Custom Firmware" />
 
-<package name="Classy" brand="Innioasis" repo="ClassyPlayer/Classy" PMT_format_needed="true" device="Y2" url="https://github.com/ClassyPlayer/Classy" type="img" icon="https://github.com/ClassyPlayer/Classy/raw/main/docs/icons/icon.png" handler="Custom Firmware" portable_zips="y1-community/classy-mirror" />
-  <!--
-<package name="Classy" brand="Innioasis" repo="ClassyPlayer/Classy" PMT_format_needed="true" device="Y1" url="https://github.com/ClassyPlayer/Classy" type="img" icon="https://github.com/ClassyPlayer/Classy/raw/main/docs/icons/icon.png" handler="Custom Firmware" portable_zips="y1-community/classy-mirror" />
-  -->
+<package name="Classy" brand="Innioasis" repo="ClassyPlayer/Classy" PMT_format_needed="true" portable_zips="y1-community/classy-mirror" device="Y1" url="https://github.com/ClassyPlayer/Classy" type="img" icon="https://github.com/ClassyPlayer/Classy/raw/main/docs/icons/icon.png" handler="Custom Firmware" />
 
-<package name="Y2Player" brand="Innioasis" repo="schulzcode/Y2Player" portable_zips="y1-community/y2player-mirror" device="Y2" url="https://github.com/schulzcode/Y2Player" type="img" handler="Custom Firmware" />
+
+<package name="Y2Player" brand="Innioasis" repo="schulzcode/Y2Player" portable_zips="y1-community/y2player-mirror" device="Y2" url="https://github.com/schulzcode/Y2Player" type="img" handler="Custom Firmware" install_first="y1-community/y1-stock-rom" install_first_when="ClassyPlayer/Classy,FabianZettl/inniclassic,ismileblue/y1_launcher,jarvissax/rondo,y1-community/y2-ata-rom" />
 
 <package name="Better-Y" brand="Innioasis" repo="Leska1337/better-Y" portable_zips="y1-community/better-y-mirror" derivative="y1-community/y1-stock-rom" device="Y1" url="https://github.com/Leska1337/better-Y" type="img" icon="https://github.com/Leska1337/better-Y/raw/main/screenshots/plus_logo.png" handler="Custom Firmware" />
 
@@ -91,6 +96,8 @@
 <package name="Android 4.4 (Dev)" brand="Innioasis" repo="y1-community/y2-ata-rom" portable_zips="y1-community/y2-ata-rom-mirror" device="Y2" url="https://github.com/y1-community/y2-ata-rom" type="img" handler="Custom Firmware" />
 
 <package name="Linux for Y1 (Dev)" brand="Innioasis" repo="y1-community/y1-linux-rom" portable_zips="y1-community/y1-linux-rom-mirror" device="Y1" url="https://github.com/y1-community/y1-linux-rom" type="img" handler="Custom Firmware" />
+
+<!--  <package name="iPod OS (Dev)" brand="Innioasis" repo="spirk0/retailos-y1" portable_zips="y1-community/retailos-y1-mirror"  device="Y1" url="https://github.com/spirk0/retailos-y1" type="img" handler="Custom Firmware" post_install="https://github.com/spirk0/retailos-y1#using-it" />  -->
 
 <package name="Solar" brand="Innioasis" repo="thesolarproject/solar" portable_zips="y1-community/solar-mirror" device="Y1" url="https://github.com/thesolarproject/solar" type="img" icon="https://github.com/thesolarproject/solar/raw/main/app/src/main/assets/logo/square_full_logo_colour.png" handler="Custom Firmware" />
 
