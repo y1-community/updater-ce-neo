@@ -2434,10 +2434,9 @@ class SettingsPage(QWidget):
             gate = getattr(self, "_drivers_gate", None)
             gate_open = gate is not None and gate.isVisible()
             if not gate_open:
-                if not self._add_device_panel.isVisible():
-                    self._open_add_device_panel()
-                else:
-                    self._sync_add_device_cancel_visibility()
+                self._open_add_device_panel()
+            self._add_device_panel.setVisible(not gate_open)
+            self._sync_add_device_cancel_visibility()
             self.content_size_changed.emit()
         finally:
             self._resetting_onboarding = False
