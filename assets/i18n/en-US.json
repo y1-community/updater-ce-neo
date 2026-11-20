@@ -230,7 +230,7 @@
  "sel_themepack_success": "Rockbox Theme Pack successfully installed onto your device!",
  "sel_show_filters": "Show Filters",
  "sel_hide_filters": "Hide Filters",
- "sel_filters": "Filters",
+ "sel_filters": "Choose my software",
  "sel_themepack_failed": "Theme Pack installation failed: {err}",
  "sel_dialog_filter": "Firmware Files (*.zip *.rar *scatter*.txt *.txt);;Archives (*.zip *.rar);;Scatter Files (*scatter*.txt *.txt);;All Files (*.*)",
  "sel_only_local": "Pick a local .zip or .rar firmware package, or a folder / scatter .txt file, for offline installation, no internet needed. Works with every Innioasis and Timmkoo audio player.",

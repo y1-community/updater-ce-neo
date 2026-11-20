@@ -502,13 +502,23 @@ def build_universal_python(dest_python: Path):
             "idlelib", "turtledemo", "turtle.py", "ensurepip", "tkinter", "test", "tests",
             # Editors/2to3/pydoc data are never imported by the app; removing
             # them saves the precompile, lipo and signature work as well.
-            "lib2to3", "distutils", "pydoc_data",
+            "lib2to3", "distutils", "pydoc_data", "unittest", "doctest.py",
         ]:
             p = lib_dir / unneeded
             if p.is_dir():
                 shutil.rmtree(p)
             elif p.is_file():
                 p.unlink()
+
+    # Clean unneeded C header files (development only, saves ~1.3 MB)
+    include_dir = dest_python / "include"
+    if include_dir.is_dir():
+        shutil.rmtree(include_dir)
+
+    # Clean pkgconfig files
+    pkgconfig_dir = dest_python / "lib" / "pkgconfig"
+    if pkgconfig_dir.is_dir():
+        shutil.rmtree(pkgconfig_dir)
 
 
 def install_universal_packages(site_packages: Path, dest_python: Path):
@@ -631,6 +641,24 @@ def install_universal_packages(site_packages: Path, dest_python: Path):
             p.unlink()
     for p in (dest_python / "lib" / "python3.11" / "lib-dynload").glob("_tkinter*"):
         p.unlink()
+
+    # Prune unit test suites from third-party crypto packages (saves ~4 MB)
+    for test_dir in (
+        site_packages / "Crypto" / "SelfTest",
+        site_packages / "Cryptodome" / "SelfTest",
+    ):
+        if test_dir.is_dir():
+            shutil.rmtree(test_dir)
+
+    # Prune package metadata directories (*.dist-info) - not needed at runtime (~1.2 MB)
+    for dist_info in list(site_packages.glob("*.dist-info")):
+        if dist_info.is_dir():
+            shutil.rmtree(dist_info)
+
+    # Prune C/C++ header directories from site-packages (e.g. capstone/include)
+    for inc_dir in list(site_packages.glob("*/include")):
+        if inc_dir.is_dir():
+            shutil.rmtree(inc_dir)
 
 
 def write_interpreter_identity(python_dir: Path) -> None:
@@ -792,6 +820,9 @@ def build():
     )
     # The vendored mtkclient is the Chinese build's fork, byte for byte: only
     # its packaging changes here, never its code (see AGENTS.md).
+    # Packaged exclusively under APP_CODE/vendor/mtkclient (which the C launcher
+    # and paths.py prioritize at the front of sys.path), saving ~58 MB by not
+    # duplicating it in site-packages.
     compile_tree_if_stale(
         [ROOT / "vendor" / "mtkclient"],
         APP_CODE / "vendor" / "mtkclient",
@@ -799,14 +830,14 @@ def build():
         strict=False,
         write_manifest=False,
     )
-    compile_tree_if_stale(
-        [ROOT / "vendor" / "mtkclient"],
-        SITE_PACKAGES / "mtkclient",
-        python=bundled_python,
-        strict=False,
-        write_manifest=False,
+    shutil.copytree(
+        ASSETS,
+        APP_CODE / "assets",
+        dirs_exist_ok=True,
+        ignore=shutil.ignore_patterns(
+            ".DS_Store", "Thumbs.db", "*.af", "*.desktop", "*.metainfo.xml", "linux-run.sh"
+        ),
     )
-    shutil.copytree(ASSETS, APP_CODE / "assets", dirs_exist_ok=True)
     # The 360p themes archive is 62 MB of every build. It is downloaded at first
     # themes install (see theme_pack.THEME_PACK_URL) and merged over the small
     # fonts pack, which stays bundled for offline/font coverage.
@@ -815,41 +846,70 @@ def build():
         bundled_themes_zip.unlink()
 
     # 5b. Unar (cross-platform .rar extractor parity with Chinese reference release)
+    tools_fw = FRAMEWORKS / "tools"
+    tools_fw.mkdir(parents=True, exist_ok=True)
+    tools_app = APP_CODE / "tools"
+    tools_app.mkdir(parents=True, exist_ok=True)
+    tools_res = RESOURCES / "tools"
+    tools_res.mkdir(parents=True, exist_ok=True)
+
     unar_src = ROOT / "tools" / "macos" / "unar"
     if unar_src.exists():
-        tools_fw = FRAMEWORKS / "tools"
-        tools_fw.mkdir(parents=True, exist_ok=True)
         shutil.copy2(unar_src, tools_fw / "unar")
         os.chmod(tools_fw / "unar", 0o755)
-        tools_app = APP_CODE / "tools"
-        tools_app.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(unar_src, tools_app / "unar")
-        os.chmod(tools_app / "unar", 0o755)
-        tools_res = RESOURCES / "tools"
-        tools_res.mkdir(parents=True, exist_ok=True)
-        try:
-            # Relative to Contents/Resources/tools/, so it must climb out of
-            # Resources before entering Frameworks. With one ".." the link
-            # points at Contents/Resources/Frameworks/tools/unar, which does not
-            # exist: it dangles, and codesign --strict then rejects the bundle.
-            (tools_res / "unar").symlink_to(Path("../../Frameworks/tools/unar"))
-        except Exception:
-            shutil.copy2(unar_src, tools_res / "unar")
+        # Relative symlinks to Frameworks/tools/unar to avoid duplicating the 4 MB binary
+        for rel_dest, target in (
+            (tools_res / "unar", Path("../../Frameworks/tools/unar")),
+            (tools_app / "unar", Path("../../../Frameworks/tools/unar")),
+        ):
+            if rel_dest.is_symlink() or rel_dest.exists():
+                rel_dest.unlink()
+            try:
+                rel_dest.symlink_to(target)
+            except Exception:
+                shutil.copy2(unar_src, rel_dest)
 
     # 5c. Bare adb, so the Rockbox themes/fonts stage can do the transfer over
     # ADB itself instead of sending the user to pick a drive folder. Both Mac
     # architectures ship in the universal bundle and ``adb.find_adb_binary``
     # looks under ``tools/adb/<platform>/adb`` (see ``candidate_adb_paths``).
-    for plat in ("macos-arm64", "macos-x64"):
-        adb_src = ROOT / "tools" / "adb" / plat / "adb"
-        if not adb_src.is_file():
-            continue
-        for base in (RESOURCES / "tools", APP_CODE / "tools", FRAMEWORKS / "tools"):
-            dest_dir = base / "adb" / plat
-            dest_dir.mkdir(parents=True, exist_ok=True)
-            dest = dest_dir / "adb"
-            shutil.copy2(adb_src, dest)
-            os.chmod(dest, 0o755)
+    # Since macos-arm64 and macos-x64 adb binaries are identical universal Mach-O
+    # binaries, store a single copy under Frameworks/tools/adb/macos-arm64/adb and
+    # use relative symlinks for macos-x64, Resources, and app/tools (saves ~90 MB).
+    adb_arm = ROOT / "tools" / "adb" / "macos-arm64" / "adb"
+    adb_x64 = ROOT / "tools" / "adb" / "macos-x64" / "adb"
+    primary_adb = adb_arm if adb_arm.is_file() else adb_x64
+    if primary_adb.is_file():
+        adb_fw = tools_fw / "adb"
+        (adb_fw / "macos-arm64").mkdir(parents=True, exist_ok=True)
+        dest_adb = adb_fw / "macos-arm64" / "adb"
+        shutil.copy2(primary_adb, dest_adb)
+        os.chmod(dest_adb, 0o755)
+
+        (adb_fw / "macos-x64").mkdir(parents=True, exist_ok=True)
+        x64_link = adb_fw / "macos-x64" / "adb"
+        if x64_link.is_symlink() or x64_link.exists():
+            x64_link.unlink()
+        x64_link.symlink_to(Path("../macos-arm64/adb"))
+
+        bare_link = adb_fw / "adb"
+        if bare_link.is_symlink() or bare_link.exists():
+            bare_link.unlink()
+        bare_link.symlink_to(Path("macos-arm64/adb"))
+
+        for rel_dest, target in (
+            (tools_res / "adb", Path("../../Frameworks/tools/adb")),
+            (tools_app / "adb", Path("../../../Frameworks/tools/adb")),
+        ):
+            if rel_dest.is_symlink() or rel_dest.exists():
+                if rel_dest.is_dir() and not rel_dest.is_symlink():
+                    shutil.rmtree(rel_dest)
+                else:
+                    rel_dest.unlink()
+            try:
+                rel_dest.symlink_to(target)
+            except Exception:
+                shutil.copytree(adb_fw, rel_dest, dirs_exist_ok=True)
 
     # 6. Icon
     icon_name = "icon_generic_mtk.icns" if IS_MEDIATEK_INSTALLER_BUILD else "icon.icns"
@@ -928,7 +988,7 @@ def build():
         print(f"  source left behind: {stray.relative_to(APP_CODE)}")
     site_leftover = [p for p in find_sources(SITE_PACKAGES) if "mtkclient" not in p.parts]
     print(f"site-packages: {sum(1 for _ in SITE_PACKAGES.rglob('*.pyc'))} bytecode files, {len(site_leftover)} source files")
-    total_size_mb = sum(f.stat().st_size for f in APP_DIR.rglob("*") if f.is_file()) / (1024 * 1024)
+    total_size_mb = sum(f.stat().st_size for f in APP_DIR.rglob("*") if f.is_file() and not f.is_symlink()) / (1024 * 1024)
     print(f"Total Bundle Size: {total_size_mb:.1f} MB")
     print(f"\n=== Build Complete: {APP_DIR} ===")
 

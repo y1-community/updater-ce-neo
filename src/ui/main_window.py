@@ -3561,9 +3561,9 @@ class MainWindow(QMainWindow):
         return wanted, model
 
     def _rockbox_360p_themes_notice_needed(self) -> bool:
-        """True for a Y1 or Y2 Rockbox build that cannot use the 240p theme catalogue."""
+        """True for a Y1 Rockbox build that cannot use the 240p theme catalogue."""
         _needs_themes, model = self._rockbox_themes_required()
-        if (model or "").upper() not in ("Y1", "Y2"):
+        if (model or "").upper() != "Y1":
             return False
         if not self._is_rockbox_install():
             return False
@@ -6390,9 +6390,23 @@ class MainWindow(QMainWindow):
         if timer is not None and timer.isActive():
             timer.stop()
         self._pending_progress = None
+        self._drop_pending_partition_progress()
+
+    def _drop_pending_partition_progress(self):
+        timer = getattr(self, "_partition_coalesce", None)
+        if timer is not None and timer.isActive():
+            timer.stop()
+        self._pending_partition_progress = None
 
     def _queue_partition_progress(self, text):
         """Keep only the newest partition line for the next UI tick."""
+        if (
+            getattr(self, "_install_complete", False)
+            or self.sm.state is FlashState.S5_COMPLETE
+            or (hasattr(self, "themes") and self.themes.active)
+            or getattr(self, "_rockbox_cleanup_started", False)
+        ):
+            return
         self._pending_partition_progress = text
         timer = getattr(self, "_partition_coalesce", None)
         if timer is None:
@@ -6407,6 +6421,13 @@ class MainWindow(QMainWindow):
     def _flush_partition_progress(self):
         text = getattr(self, "_pending_partition_progress", None)
         self._pending_partition_progress = None
+        if (
+            getattr(self, "_install_complete", False)
+            or self.sm.state is FlashState.S5_COMPLETE
+            or (hasattr(self, "themes") and self.themes.active)
+            or getattr(self, "_rockbox_cleanup_started", False)
+        ):
+            return
         if text is not None:
             self._flash_page.update_partition_progress(text)
 
@@ -7057,6 +7078,8 @@ class MainWindow(QMainWindow):
             self._record_completed_install()
             self._finish_install_first_prerequisite()
             return
+        self._drop_pending_progress()
+        self._drop_pending_partition_progress()
         if hasattr(self, "_flash_page") and self._flash_page is not None:
             self._flash_page.dismiss_prompt_stop()
             self._flash_page.update_partition_progress("")
@@ -7800,6 +7823,8 @@ class MainWindow(QMainWindow):
 
     def _show_install_failure(self, message: str):
         """Failure stays on the install progress card. Retry is where Cancel was."""
+        self._drop_pending_progress()
+        self._drop_pending_partition_progress()
         if hasattr(self, "_flash_page") and self._flash_page is not None:
             self._flash_page.dismiss_prompt_stop()
             self._flash_page.update_partition_progress("")
@@ -9881,6 +9906,8 @@ class MainWindow(QMainWindow):
         if run is not None:
             run.stop()
             self._sim_flash_run = None
+        self._drop_pending_progress()
+        self._drop_pending_partition_progress()
         if hasattr(self, "_flash_page") and self._flash_page is not None:
             self._flash_page.dismiss_prompt_stop()
             self._flash_page.update_partition_progress("")

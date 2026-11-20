@@ -278,6 +278,10 @@ class ThemesJourney:
         self._multiple_players = False
         return True
 
+    def reset_player(self) -> None:
+        """Clear the player claim (e.g. after a failed push or when entering fallback)."""
+        self._player_taken = False
+
     def prefer_player(self, live_count: int) -> bool:
         """Whether the player on ADB outranks a folder the user picked.
 

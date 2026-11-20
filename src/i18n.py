@@ -1640,12 +1640,12 @@ _STRINGS: dict = {
         "ja": "フィルターを非表示",
     },
     "sel_filters": {
-        "en": "Filters",
-        "zh-CN": "筛选器",
-        "de": "Filter",
-        "fr": "Filtres",
-        "es": "Filtros",
-        "ja": "フィルター",
+        "en": "Choose my software",
+        "zh-CN": "选择我的软件",
+        "de": "Meine Software auswählen",
+        "fr": "Choisir mon logiciel",
+        "es": "Elegir mi software",
+        "ja": "ソフトウェアを選択",
     },
     "sel_themepack_failed": {
         "zh-CN": "主题包安装失败: {err}",

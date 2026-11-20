@@ -4255,7 +4255,18 @@ class FlashPage(QWidget):
         if not adb_bin:
             self._show_theme_fallback_usb_mode()
             return
+        self.dismiss_flash_question()
+        if hasattr(self, "_theme_row"):
+            self._theme_row.setVisible(False)
+        if hasattr(self, "_theme_step1_widget"):
+            self._theme_step1_widget.setVisible(False)
+        if hasattr(self, "_theme_fallback_widget"):
+            self._theme_fallback_widget.setVisible(False)
+        if hasattr(self, "_theme_trouble_widget"):
+            self._theme_trouble_widget.setVisible(False)
+        self._hide_theme_wizard_chips()
         self.set_step(tr("rockbox_cleanup_step"))
+        self._eta_label.setText(tr("rockbox_cleanup_deleting"))
         self.themes.reset_progress()
         worker = AdbRockboxCleanupWorker(adb_bin, serial, parent=self)
         self._rockbox_cleanup_worker = worker
@@ -4281,8 +4292,15 @@ class FlashPage(QWidget):
         self._log_theme(
             f"[Rockbox Cleanup] Selected folder: {chosen}. Looking for .rockbox folders..."
         )
+        self.dismiss_flash_question()
+        if hasattr(self, "_theme_row"):
+            self._theme_row.setVisible(False)
+        if hasattr(self, "_theme_step1_widget"):
+            self._theme_step1_widget.setVisible(False)
         if hasattr(self, "_theme_fallback_widget"):
             self._theme_fallback_widget.setVisible(False)
+        if hasattr(self, "_theme_trouble_widget"):
+            self._theme_trouble_widget.setVisible(False)
         self._hide_theme_wizard_chips()
         self.set_step(tr("rockbox_cleanup_step"))
         self._eta_label.setText(tr("rockbox_cleanup_deleting"))
@@ -4447,6 +4465,16 @@ class FlashPage(QWidget):
             # completion, donation screen) in charge of what happens next.
             self.themes.settle_prompt()
             self._stop_adb_presence_watch()
+            self.dismiss_flash_question()
+            if hasattr(self, "_theme_row"):
+                self._theme_row.setVisible(False)
+            if hasattr(self, "_theme_step1_widget"):
+                self._theme_step1_widget.setVisible(False)
+            if hasattr(self, "_theme_fallback_widget"):
+                self._theme_fallback_widget.setVisible(False)
+            if hasattr(self, "_theme_trouble_widget"):
+                self._theme_trouble_widget.setVisible(False)
+            self._hide_theme_wizard_chips()
             callback = getattr(self, "_rockbox_power_on_continue_cb", None)
             self._log_theme(
                 f"[Rockbox Themes] Player detected over ADB ({serial}); continuing the stage."
@@ -4454,11 +4482,8 @@ class FlashPage(QWidget):
             if callable(callback):
                 callback()
                 return
-        # One player, one transfer: a second emitter must not push again.
-        # ADB is authoritative from here: a folder the user picked before the
-        # player answered must not be written to as well.
-        if not self.themes.take_player():
-            return
+        # One player, one transfer: claim the player or take for retry
+        self.themes.take_player()
         self._stop_adb_presence_watch()
         # The player answered: the card is writing again, not asking.
         self.dismiss_flash_question()
@@ -4466,6 +4491,12 @@ class FlashPage(QWidget):
             self._adb_watch_timer.stop()
         if hasattr(self, "_theme_row"):
             self._theme_row.setVisible(False)
+        if hasattr(self, "_theme_step1_widget"):
+            self._theme_step1_widget.setVisible(False)
+        if hasattr(self, "_theme_fallback_widget"):
+            self._theme_fallback_widget.setVisible(False)
+        if hasattr(self, "_theme_trouble_widget"):
+            self._theme_trouble_widget.setVisible(False)
         self._hide_theme_wizard_chips()
         if self.themes.is_apk_stage:
             self._log_theme(f"[APK Install] Player detected via ADB (serial: {serial}). Installing application...")
@@ -4591,6 +4622,7 @@ class FlashPage(QWidget):
 
     def _show_theme_fallback_usb_mode(self) -> None:
         self.themes.settle_prompt()
+        self.themes.reset_player()
         if hasattr(self, "_adb_watch_timer"):
             self._adb_watch_timer.stop()
         if hasattr(self, "_status_flow"):
@@ -4699,24 +4731,19 @@ class FlashPage(QWidget):
             # Cancelled. The presence watcher keeps running, so the user can
             # retry or simply plug the player in.
             return
-        if self.themes.player_taken:
-            self._log_theme(
-                "[Rockbox Themes] Player already answered over ADB; ignoring the picked folder."
-            )
-            return
-        # The picker is modal, so the watcher may have been a beat behind: ask
-        # once more before committing to the folder. ADB wins because it knows
-        # every .rockbox mount and unpacks on the device.
-        from ..adb import adb_devices, find_adb_binary
-
-        adb_bin = find_adb_binary()
-        live = adb_devices(adb_bin) if adb_bin else []
-        if self.themes.prefer_player(len(live)):
-            self._log_theme(
-                "[Rockbox Themes] Player appeared over ADB; using it instead of the picked folder."
-            )
-            self._on_adb_device_found(live[0])
-            return
+        # If the user selects a folder, run the preparation/cleanup process again
+        # even if it was already attempted or if a player answered through ADB.
+        self._stop_adb_presence_watch()
+        self.dismiss_flash_question()
+        if hasattr(self, "_theme_row"):
+            self._theme_row.setVisible(False)
+        if hasattr(self, "_theme_step1_widget"):
+            self._theme_step1_widget.setVisible(False)
+        if hasattr(self, "_theme_fallback_widget"):
+            self._theme_fallback_widget.setVisible(False)
+        if hasattr(self, "_theme_trouble_widget"):
+            self._theme_trouble_widget.setVisible(False)
+        self._hide_theme_wizard_chips()
         if self._cleanup_stage:
             self._start_local_cleanup(chosen)
             return
