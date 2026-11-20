@@ -302,13 +302,14 @@ try:
     # The 360p themes archive is ~62 MB and is refreshed weekly from the remote
     # pack; only the small fonts pack stays in the build. The macOS builder
     # already did this, and the Linux/Windows spec used to ship the archive.
-    _themes_zip = _app_dir / "assets" / "360p" / "themes-themepack.zip"
-    if _themes_zip.is_file():
-        _themes_zip.unlink()
-        print("[spec] removed the bundled 360p themes archive")
-    _themes_dir = _app_dir / "assets" / "360p" / "themes-themepack"
-    if _themes_dir.exists():
-        shutil.rmtree(_themes_dir, ignore_errors=True)
+    for _assets_cand in (_app_dir / "assets", _app_dir / "_internal" / "assets"):
+        _themes_zip = _assets_cand / "360p" / "themes-themepack.zip"
+        if _themes_zip.is_file():
+            _themes_zip.unlink()
+            print(f"[spec] removed the bundled 360p themes archive from {_themes_zip}")
+        _themes_dir = _assets_cand / "360p" / "themes-themepack"
+        if _themes_dir.exists():
+            shutil.rmtree(_themes_dir, ignore_errors=True)
 
     _sp_target = _app_dir / "SP_Flash_Tool"
     if SP_FLASH_SRC and SP_FLASH_SRC.exists():

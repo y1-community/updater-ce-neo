@@ -73,8 +73,31 @@ TOOLS_DIR = INSTALL_DIR / "tools"
 # repo root in dev mode), so BUNDLE_DIR / "mtkclient" does not resolve.
 if not (BUNDLE_DIR / "mtkclient").exists() and (REPO_ROOT / "vendor" / "mtkclient").exists():
     MTKCLIENT_DIR = REPO_ROOT / "vendor" / "mtkclient"
-if not (BUNDLE_DIR / "assets").exists() and (REPO_ROOT / "assets").exists():
-    RESOURCES_DIR = REPO_ROOT / "assets"
+
+# Locate assets directory across dev checkout, PyInstaller onedir (_internal/assets
+# or assets beside exe), and packaged/installed layouts.
+_asset_candidates = [
+    BUNDLE_DIR / "assets",
+    INSTALL_DIR / "assets",
+    INSTALL_DIR / "_internal" / "assets",
+    REPO_ROOT / "assets",
+]
+if getattr(sys, "frozen", False):
+    try:
+        _exe_parent = Path(sys.executable).resolve().parent
+        _asset_candidates.extend([
+            _exe_parent / "assets",
+            _exe_parent / "_internal" / "assets",
+        ])
+    except Exception:
+        pass
+
+for _cand in _asset_candidates:
+    if (_cand / "i18n").is_dir() or (_cand / "i18n" / "languages.json").is_file() or _cand.is_dir():
+        RESOURCES_DIR = _cand
+        if (_cand / "i18n" / "languages.json").is_file():
+            break
+
 COMPAT_DIR = RESOURCES_DIR / "compat"
 
 

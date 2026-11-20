@@ -7888,11 +7888,39 @@ def catalog_dir() -> Path:
     try:
         from . import paths
 
-        candidates = [paths.RESOURCES_DIR / "i18n", paths.REPO_ROOT / "assets" / "i18n"]
+        candidates = [
+            paths.RESOURCES_DIR / "i18n",
+            paths.BUNDLE_DIR / "assets" / "i18n",
+            paths.BUNDLE_DIR / "i18n",
+            paths.INSTALL_DIR / "assets" / "i18n",
+            paths.INSTALL_DIR / "_internal" / "assets" / "i18n",
+            paths.REPO_ROOT / "assets" / "i18n",
+        ]
+        if getattr(sys, "frozen", False):
+            try:
+                exe_parent = Path(sys.executable).resolve().parent
+                candidates.extend([
+                    exe_parent / "assets" / "i18n",
+                    exe_parent / "_internal" / "assets" / "i18n",
+                ])
+            except Exception:
+                pass
     except Exception:  # paths is optional when i18n is used standalone
         candidates = [Path(__file__).resolve().parent.parent / "assets" / "i18n"]
+        if getattr(sys, "frozen", False):
+            try:
+                exe_parent = Path(sys.executable).resolve().parent
+                candidates.extend([
+                    exe_parent / "assets" / "i18n",
+                    exe_parent / "_internal" / "assets" / "i18n",
+                ])
+            except Exception:
+                pass
     for candidate in candidates:
         if (candidate / "languages.json").is_file():
+            return candidate
+    for candidate in candidates:
+        if candidate.is_dir() and any(candidate.glob("*.json")):
             return candidate
     return candidates[0]
 
@@ -7946,6 +7974,18 @@ def is_language_code(code: str | None) -> bool:
     return bool(text) and text != "languages" and bool(_LANGUAGE_CODE.match(text))
 
 
+_CURATED_LANGUAGE_NAMES: dict[str, dict[str, str]] = {
+    "en": {"native": "English", "english": "English"},
+    "en-GB": {"native": "English (UK)", "english": "English (UK)"},
+    "en-US": {"native": "English (US)", "english": "English (US)"},
+    "zh-CN": {"native": "简体中文", "english": "Chinese (Simplified)"},
+    "de": {"native": "Deutsch", "english": "German"},
+    "fr": {"native": "Français", "english": "French"},
+    "es": {"native": "Español", "english": "Spanish"},
+    "ja": {"native": "日本語", "english": "Japanese"},
+}
+
+
 def languages() -> dict:
     """``{code: {"native": ..., "english": ...}}`` as shipped in languages.json."""
     if "table" not in _LANGUAGES:
@@ -7961,6 +8001,8 @@ def languages() -> dict:
             }
         except Exception:
             logger.debug("Language list unavailable", exc_info=True)
+        for code, entry in _CURATED_LANGUAGE_NAMES.items():
+            data.setdefault(code, dict(entry))
         _LANGUAGES["table"] = data
     return _LANGUAGES["table"]
 
@@ -8289,9 +8331,7 @@ class _Translator:
             self._lang = code
 
     def t(self, key: str) -> str:
-        table = _STRINGS.get(key)
-        if not table:
-            return key
+        table = _STRINGS.get(key) or {}
         translated = catalog(self._lang).get(key)
         if translated:
             return brand_term(placeholder_safe_text(key, translated))
@@ -8498,3 +8538,16 @@ def tr_brand(key: str) -> str:
     if is_mediatek_installer() and f"{key}_mediatek" in _STRINGS:
         return tr(f"{key}_mediatek")
     return tr(key)
+
+
+def _sync_curated_strings() -> None:
+    """Ensure curated language tables in _STRINGS are complete from shipped catalogs."""
+    for _code in ("fr", "es", "de", "ja", "zh-CN"):
+        _cat = catalog(_code)
+        if _cat:
+            for _k, _tbl in _STRINGS.items():
+                if isinstance(_tbl, dict) and _code not in _tbl and _k in _cat:
+                    _tbl[_code] = _cat[_k]
+
+
+_sync_curated_strings()
