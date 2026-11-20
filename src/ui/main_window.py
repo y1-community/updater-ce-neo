@@ -1665,12 +1665,16 @@ class MainWindow(QMainWindow):
         brand_letter_spacing = "normal" if is_mac else "-0.02em"
 
         self._brand_label = QLabel(get_brand_name())
+        self._brand_label.setObjectName("brandLabel")
+        self._brand_label._skip_runtime_i18n = True
         self._brand_label.setStyleSheet(
             f"font-size: {brand_font_size}; font-weight: {brand_font_weight}; color: palette(window-text); letter-spacing: {brand_letter_spacing}; background: transparent; border: none;"
         )
         title_version_row.addWidget(self._brand_label)
 
         self._brand_version = QLabel(APP_VERSION)
+        self._brand_version.setObjectName("brandVersion")
+        self._brand_version._skip_runtime_i18n = True
         self._brand_version.setStyleSheet(
             f"font-size: {brand_font_size}; font-weight: {brand_font_weight}; color: palette(window-text); letter-spacing: {brand_letter_spacing}; background: transparent; border: none;"
         )

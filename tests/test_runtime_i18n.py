@@ -397,3 +397,33 @@ def test_shortcut_card_relabels_without_rebuilding_its_layout(app):
         assert switch.text() == ""
     finally:
         i18n.translator().set_language(old)
+
+
+def test_brand_title_excluded_from_runtime_translation(app, tmp_path, monkeypatch):
+    """Ensure updater title is not queued for external translation fetching."""
+    _patch_sources(monkeypatch, tmp_path)
+    calls = []
+
+    def fetch(text, lang):
+        calls.append((text, lang))
+        return "Updated"
+
+    brand_label = QLabel("Updater")
+    brand_label.setObjectName("brandLabel")
+    brand_label._skip_runtime_i18n = True
+
+    translator = RuntimeTranslator(
+        cache_path=tmp_path / "runtime.json",
+        fetch=fetch,
+        scan_interval_ms=600_000,
+    )
+    translator.start("de")
+    try:
+        translator.scan(brand_label)
+        assert calls == []
+        assert brand_label.text() == "Updater"
+        assert translator._source_for("Updater") == ""
+        assert translator._source_for("Innioasis Updater") == ""
+    finally:
+        translator.stop()
+

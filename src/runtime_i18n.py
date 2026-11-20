@@ -261,6 +261,11 @@ class RuntimeTranslator(QObject):
             self._loading_timer.stop()
 
     def _collect_widget(self, widget) -> None:
+        if getattr(widget, "_skip_runtime_i18n", False):
+            return
+        name = widget.objectName()
+        if name in ("brandLabel", "brandVersion", "brandContainer"):
+            return
         if isinstance(widget, QLabel):
             self._add_target(widget, "text", widget.text, widget.setText)
         elif isinstance(widget, QAbstractButton):
@@ -497,6 +502,8 @@ class RuntimeTranslator(QObject):
             candidates += (text.replace("&", ""), text.replace("&", "").strip())
         for candidate in candidates:
             if candidate and candidate in sources:
+                if candidate in ("Updater", "Innioasis Updater", "MediaTek Installer", "Installer"):
+                    return ""
                 return candidate
         return ""
 

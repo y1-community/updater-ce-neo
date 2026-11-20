@@ -44,7 +44,9 @@ _STRINGS: dict = {
         "en": "Innioasis Updater",
         "fr": "Programme de mise à jour",
         "es": "Actualizador",
-        "de": "Updater",
+        "de": "Aktualisierer",
+        "nl": "Bijwerker",
+        "ro": "Actualizator",
         "ja": "アップデーター",
     },
     "app_name_short": {
@@ -52,7 +54,9 @@ _STRINGS: dict = {
         "en": "Updater",
         "fr": "Programme de mise à jour",
         "es": "Actualizador",
-        "de": "Updater",
+        "de": "Aktualisierer",
+        "nl": "Bijwerker",
+        "ro": "Actualizator",
         "ja": "アップデーター",
     },
     "app_title": {

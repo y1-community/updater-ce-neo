@@ -41,6 +41,39 @@ def _same_shape(source: str, translated: str) -> bool:
     return source.count("<b>") == translated.count("<b>") and source.count("</b>") == translated.count("</b>")
 
 
+UPDATED_UPDATER_TITLES = {
+    "bik": "Tagapag-update",
+    "bs": "Ažuriratelj",
+    "ceb": "Tig-update",
+    "ch": "Tinilaika",
+    "cnh": "A thar tuahnak",
+    "co": "Aghjurnatore",
+    "de": "Aktualisierer",
+    "ha": "Mai sabuntawa",
+    "hil": "Manug-update",
+    "hmn": "Hloov kho",
+    "jam": "Updieta",
+    "jw": "Panganyari",
+    "ku": "Nûveker",
+    "la": "Renovator",
+    "lb": "Aktualiséierer",
+    "li": "Aktualiseerder",
+    "lus": "Tithar tu",
+    "mak": "Pammari",
+    "mg": "Mpanavao",
+    "my": "အဆင့်မြှင့်တင်မှု",
+    "nl": "Bijwerker",
+    "pag": "Manag-update",
+    "pam": "Talapag-update",
+    "ro": "Actualizator",
+    "sm": "Faʻafouina",
+    "sn": "Chigadzirisi",
+    "sus": "Mafinikɛ",
+    "tl": "Tagapag-update",
+    "tpi": "Apdet",
+}
+
+
 def sync_language(file_path: Path, all_keys: list[str]) -> int:
     code = file_path.stem
     try:
@@ -60,7 +93,15 @@ def sync_language(file_path: Path, all_keys: list[str]) -> int:
                 updated = True
 
     # 2. Consistent app_name (Innioasis Updater for English, without CE for all)
-    if "app_name" in data:
+    if code in UPDATED_UPDATER_TITLES:
+        title = UPDATED_UPDATER_TITLES[code]
+        if data.get("app_name") != title:
+            data["app_name"] = title
+            updated = True
+        if data.get("app_name_short") != title:
+            data["app_name_short"] = title
+            updated = True
+    elif "app_name" in data:
         val = data["app_name"]
         if code in ("en", "en-GB", "en-US"):
             if val != "Innioasis Updater":
@@ -75,7 +116,12 @@ def sync_language(file_path: Path, all_keys: list[str]) -> int:
 
     # 3. Short app name (e.g. "Updater" in English, localized "Updater" in others)
     if "app_name_short" in all_keys:
-        if code in ("en", "en-GB", "en-US"):
+        if code in UPDATED_UPDATER_TITLES:
+            title = UPDATED_UPDATER_TITLES[code]
+            if data.get("app_name_short") != title:
+                data["app_name_short"] = title
+                updated = True
+        elif code in ("en", "en-GB", "en-US"):
             if data.get("app_name_short") != "Updater":
                 data["app_name_short"] = "Updater"
                 updated = True
