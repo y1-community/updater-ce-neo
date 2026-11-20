@@ -310,7 +310,7 @@ def test_completion_screen_layout_and_post_install_buttons(app, monkeypatch):
         # One letter layout: the message stays above the signature, guide or not.
         assert not fp._appeal_body.isHidden()
         assert not fp._appeal_signature_row.isHidden()
-        assert fp._appeal_signature.text() == "~ Ryan · Maintainer of Updater CE"
+        assert fp._appeal_signature.text() == "~ Ryan · Maintainer of Innioasis Updater"
         # The heading carries the firmware icon (or its squircle stand-in).
         assert fp._intro.icon is not None
         assert not fp._intro.icon.pixmap().isNull()

@@ -371,7 +371,7 @@ class _LinuxBackend(_Backend):
             [
                 "systemd-inhibit",
                 "--what=idle:sleep:handle-lid-switch",
-                "--who=Updater CE",
+                "--who=Innioasis Updater",
                 f"--why={reason}",
                 "sleep",
                 "infinity",

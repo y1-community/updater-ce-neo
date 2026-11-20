@@ -372,9 +372,9 @@ def _awake_wrapper_lines() -> list:
         '    exec caffeinate -i "$0" "$@"',
         "  elif command -v systemd-inhibit >/dev/null 2>&1 \\",
         '      && systemd-inhibit --what=idle:sleep:handle-lid-switch \\',
-        '         --who="Innioasis Updater CE" --why=probe true 2>/dev/null; then',
+        '         --who="Innioasis Updater" --why=probe true 2>/dev/null; then',
         '    exec systemd-inhibit --what=idle:sleep:handle-lid-switch \\',
-        '      --who="Innioasis Updater CE" \\',
+        '      --who="Innioasis Updater" \\',
         '      --why="Software installation in progress" "$0" "$@"',
         "  fi",
         "fi",
@@ -383,7 +383,7 @@ def _awake_wrapper_lines() -> list:
 
 def build_script(
     command: Sequence[str],
-    title: str = "Innioasis Updater CE",
+    title: str = "Innioasis Updater",
     cwd=None,
     env: Optional[dict] = None,
     is_windows: Optional[bool] = None,

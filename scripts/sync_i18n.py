@@ -59,10 +59,14 @@ def sync_language(file_path: Path, all_keys: list[str]) -> int:
                 data[k] = curated
                 updated = True
 
-    # 2. Consistent app_name (without CE for non-English)
-    if code not in ("en", "en-GB", "en-US") and "app_name" in data:
+    # 2. Consistent app_name (Innioasis Updater for English, without CE for all)
+    if "app_name" in data:
         val = data["app_name"]
-        if val.endswith(" CE"):
+        if code in ("en", "en-GB", "en-US"):
+            if val != "Innioasis Updater":
+                data["app_name"] = "Innioasis Updater"
+                updated = True
+        elif val.endswith(" CE"):
             data["app_name"] = val[:-3].strip()
             updated = True
         elif val.endswith(" (CE)"):

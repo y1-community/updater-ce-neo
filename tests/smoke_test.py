@@ -900,8 +900,8 @@ def test_ui_construction():
     # Select Package is the start page (no separate Home tab).
     assert w._stack.currentIndex() == 0
     # Follows config.APP_VERSION: the title must not hardcode a release number.
-    assert w.windowTitle() == f"Updater CE v{APP_VERSION}", w.windowTitle()
-    assert w._brand_label.text() == "Updater CE"
+    assert w.windowTitle() == f"Innioasis Updater v{APP_VERSION}", w.windowTitle()
+    assert w._brand_label.text() == "Innioasis Updater"
     assert w._icon_label.pixmap() is not None and not w._icon_label.pixmap().isNull()
     # Version badge sits beside the brand with no "v" prefix.
     assert w._brand_version.text() == APP_VERSION, (
@@ -6162,16 +6162,16 @@ def test_updater_ce_branding():
     from src.i18n import translator, tr
     from src.ui.main_window import MainWindow
 
-    assert APP_NAME == "Updater CE"
+    assert APP_NAME == "Innioasis Updater"
 
-    # "CE" is Community Edition, so the name is translated into each language
-    # rather than transliterated; only English keeps the bare abbreviation.
+    # "CE" is removed, so the name is translated into each language
+    # rather than transliterated; only English keeps "Innioasis Updater".
     t = translator()
     for lang in ("zh-CN", "en", "fr", "es"):
         t.set_language(lang)
         name = tr("app_name")
         assert name, lang
-        assert (name == "Updater CE") == (lang == "en"), (lang, name)
+        assert (name == "Innioasis Updater") == (lang == "en"), (lang, name)
         assert name in tr("donate_title"), (
             f"donate_title in {lang} should mention {name}, got {tr('donate_title')}"
         )
@@ -6188,8 +6188,8 @@ def test_updater_ce_branding():
     w.show()
     app.processEvents()
 
-    assert w.windowTitle().startswith(f"Updater CE v{APP_VERSION}")
-    assert w._brand_label.text() == "Updater CE"
+    assert w.windowTitle().startswith(f"Innioasis Updater v{APP_VERSION}")
+    assert w._brand_label.text() == "Innioasis Updater"
 
     # Verify icon label
     assert w._icon_label is not None
@@ -6310,15 +6310,15 @@ def test_generic_mtk_mode_and_offline_branding():
     assert not config.is_generic_mtk()
     assert not config.is_offline_mode()
     assert not config.is_mediatek_installer()
-    assert config.get_app_name() == "Updater CE"
-    assert config.get_brand_name() == "Updater CE"
+    assert config.get_app_name() == "Innioasis Updater"
+    assert config.get_brand_name() == "Innioasis Updater"
 
     w = MainWindow()
     w.show()
     app.processEvents()
 
-    assert w.windowTitle().startswith("Updater CE")
-    assert w._brand_label.text() == "Updater CE"
+    assert w.windowTitle().startswith("Innioasis Updater")
+    assert w._brand_label.text() == "Innioasis Updater"
     assert w._select_page._tabs.count() >= 2
     assert w._select_page._tabs.tabBar().isVisible()
     assert w._support_btn.isVisible()
@@ -6328,7 +6328,7 @@ def test_generic_mtk_mode_and_offline_branding():
     assert not w._settings_page._rockbox_card.isHidden()
 
     # Toggle offline mode in Settings Page: this hides the online catalogue
-    # only. The Updater CE brand must survive it untouched — offline mode is
+    # only. The Updater brand must survive it untouched — offline mode is
     # not the MediaTek Installer.
     w._settings_page._cb_offline_mode.setChecked(True)
     app.processEvents()
@@ -6336,9 +6336,9 @@ def test_generic_mtk_mode_and_offline_branding():
     assert config.is_generic_mtk()
     assert config.is_offline_mode()
     assert not config.is_mediatek_installer()
-    assert config.get_app_name() == "Updater CE"
-    assert w.windowTitle().startswith("Updater CE")
-    assert w._brand_label.text() == "Updater CE"
+    assert config.get_app_name() == "Innioasis Updater"
+    assert w.windowTitle().startswith("Innioasis Updater")
+    assert w._brand_label.text() == "Innioasis Updater"
     assert not w._select_page._tabs.tabBar().isVisible()
     assert w._support_btn.isVisible()
     # Offline mode keeps local donations and credits visible (local donors.csv)
@@ -6362,8 +6362,8 @@ def test_generic_mtk_mode_and_offline_branding():
     app.processEvents()
 
     assert not config.is_generic_mtk()
-    assert config.get_app_name() == "Updater CE"
-    assert w.windowTitle().startswith("Updater CE")
+    assert config.get_app_name() == "Innioasis Updater"
+    assert w.windowTitle().startswith("Innioasis Updater")
     assert w._select_page._tabs.tabBar().isVisible()
     assert w._support_btn.isVisible()
     assert w._credits_btn.isVisible()
@@ -6404,8 +6404,8 @@ def test_mediatek_installer_mode():
         for loc, text in i18n._STRINGS[key].items():
             for brand in ("Themes Gallery", "Community Firmware", "Galerie de Thèmes", "Galería de Temas"):
                 assert brand not in text, (key, loc, brand)
-    # CE keeps its own wording.
-    assert "Updater CE" in i18n._STRINGS["app_name"]["en"]
+    # English keeps its own wording.
+    assert "Innioasis Updater" in i18n._STRINGS["app_name"]["en"]
 
     try:
         _reset_app_settings()
@@ -6462,8 +6462,8 @@ def test_mediatek_installer_mode():
         w._apply_generic_mtk_branding()
         w._settings_page._cb_advanced_settings.setChecked(True)
         app.processEvents()
-        assert w.windowTitle().startswith("Updater CE")
-        assert w._brand_label.text() == "Updater CE"
+        assert w.windowTitle().startswith("Innioasis Updater")
+        assert w._brand_label.text() == "Innioasis Updater"
         assert not w._settings_page._offline_mode_card.isHidden()
         assert not w._settings_page._rockbox_card.isHidden()
         assert w._credits_btn.isVisible()

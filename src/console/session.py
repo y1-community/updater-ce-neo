@@ -422,7 +422,7 @@ def screen_lines(state: BrowseState, version: str = APP_VERSION) -> list[str]:
         )
     )
     lines = [
-        f"Updater CE {version}    Select Software",
+        f"Innioasis Updater {version}    Select Software",
         filters,
         "Available System Software",
     ]
@@ -1163,7 +1163,7 @@ def _write_shared_language(code: str) -> None:
 
 def credits_lines(version: str = APP_VERSION) -> list[str]:
     return [
-        f"Updater CE {version}",
+        f"Innioasis Updater {version}",
         "by Ryan Specter and the Innioasis community",
         "Community catalogue and installer for Innioasis players.",
         "",

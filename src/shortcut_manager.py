@@ -46,7 +46,7 @@ SHORTCUT_IDS = (APP_ID, TOOL_ID)
 # for the desktop icon, so the desktop name is the brand's display name.
 APP_NAME = "Innioasis Updater"
 TOOL_NAME = "SP Flash Tool"
-DESKTOP_APP_NAME = "Innioasis Updater CE"
+DESKTOP_APP_NAME = "Innioasis Updater"
 DESKTOP_APP_NAME_MEDIATEK = "MediaTek Installer"
 
 LINUX_APP_FILE = "innioasis-updater.desktop"
@@ -128,8 +128,8 @@ def shortcut_names(shortcut_id: str) -> Tuple[str, ...]:
     if _is_mediatek_brand():
         # The installer names this brand's menu entry after the updater too, so
         # both spellings are ours.
-        return (DESKTOP_APP_NAME_MEDIATEK, APP_NAME, DESKTOP_APP_NAME, "Updater CE")
-    return (APP_NAME, DESKTOP_APP_NAME, "Updater CE")
+        return (DESKTOP_APP_NAME_MEDIATEK, APP_NAME, DESKTOP_APP_NAME, "Innioasis Updater CE", "Updater CE", "Updater")
+    return (APP_NAME, DESKTOP_APP_NAME, "Innioasis Updater CE", "Updater CE", "Updater")
 
 
 def _foreign_app_names() -> Tuple[str, ...]:
@@ -219,14 +219,14 @@ def _localized_shortcut_names(shortcut_id: str) -> Tuple[str, ...]:
 def app_shortcut_names_for_cleanup(
     codes: Iterable[str] | None = None,
 ) -> Tuple[str, ...]:
-    """Every Updater CE shortcut name that may need removing, all languages.
+    """Every Updater shortcut name that may need removing, all languages.
 
     The Windows installer bakes this list into Setup, which cannot otherwise
     know the name of a shortcut the app created in a language its own
     [Languages] section does not offer. The app uses the same set when it
     renames an existing shortcut after a language change.
     """
-    names = [APP_NAME, DESKTOP_APP_NAME, "Updater CE"]
+    names = [APP_NAME, DESKTOP_APP_NAME, "Innioasis Updater CE", "Updater CE", "Updater"]
     names.extend(_all_localized_app_names(codes))
     unique: List[str] = []
     seen = set()
@@ -750,6 +750,15 @@ def _creation_path(shortcut_id: str, kind: str) -> Optional[Path]:
     return roots[0] / (LINUX_APP_FILE if shortcut_id == APP_ID else LINUX_TOOL_FILE)
 
 
+def _has_ce_suffix(stem: str) -> bool:
+    s = (stem or "").casefold()
+    return " ce" in s or "(ce)" in s or "updater ce" in s
+
+
+def _is_exact_match(stem: str, target: str) -> bool:
+    return bool(stem and target and stem.strip().casefold() == target.strip().casefold())
+
+
 def _prune_other_language_shortcuts(
     shortcut_id: str, kind: str, existing: Iterable[Path]
 ) -> List[Path]:
@@ -768,7 +777,8 @@ def _prune_other_language_shortcuts(
     known = app_shortcut_names_for_cleanup()
     kept: List[Path] = []
     for path in existing:
-        if _name_matches(path.stem, known) and not _name_matches(path.stem, (current,)):
+        is_known = _name_matches(path.stem, known) or _has_ce_suffix(path.stem)
+        if is_known and not _is_exact_match(path.stem, current):
             try:
                 path.unlink()
                 continue
@@ -783,10 +793,11 @@ def _prune_other_language_shortcuts(
 def reconcile_shortcut_names() -> None:
     """Rename existing app shortcuts to the active language, in place.
 
-    Called after a language change. It never creates a shortcut and never
-    changes the Settings switches: a kind with no shortcut stays off. Renaming
-    keeps the shortcut's folder, target, arguments and icon; a shortcut the
-    person renamed is left alone because its name is not a known app name.
+    Called after a language change and at application startup. It never
+    creates a shortcut and never changes the Settings switches: a kind with no
+    shortcut stays off. Renaming keeps the shortcut's folder, target, arguments
+    and icon; a shortcut the person renamed is left alone because its name is
+    not a known app name.
     """
     if not supported() or _is_mediatek_brand():
         return
@@ -803,17 +814,17 @@ def reconcile_shortcut_names() -> None:
         claimed = {
             _path_key(path)
             for path in existing
-            if _name_matches(path.stem, (current,))
+            if _is_exact_match(path.stem, current)
         }
         for path in existing:
-            if _name_matches(path.stem, (current,)):
+            if _is_exact_match(path.stem, current):
                 continue
-            if not _name_matches(path.stem, known):
+            if not (_name_matches(path.stem, known) or _has_ce_suffix(path.stem)):
                 continue
             destination = path.with_name(f"{current}{path.suffix}")
             destination_key = _path_key(destination)
             if destination.exists() or destination_key in claimed:
-                if destination_key in existing_keys or destination_key in claimed:
+                if destination_key in existing_keys or destination_key in claimed or destination.exists():
                     try:
                         path.unlink()
                     except OSError:

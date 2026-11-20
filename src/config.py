@@ -5,7 +5,7 @@ the online catalogue / donation endpoints used by Updater CE and innioasis.app.
 """
 
 APP_VERSION = "2.5.6"
-APP_NAME = "Updater CE"
+APP_NAME = "Innioasis Updater"
 CONTACT_EMAIL = "updater-feedback@innioasis.com"
 
 # --- Staggered releases -----------------------------------------------------

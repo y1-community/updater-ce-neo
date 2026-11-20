@@ -25,6 +25,7 @@ def _sandbox(tmp_path, monkeypatch):
             roots[kind].append(folder)
     monkeypatch.setattr(sm, "_roots", lambda kind: list(roots[kind]))
     monkeypatch.setattr(sm, "supported", lambda: True)
+    monkeypatch.setattr(sm.paths, "IS_WINDOWS", True)
     # Shortcut targets are read through PowerShell on Windows; tests that care
     # about them supply their own map.
     monkeypatch.setattr(sm, "_lnk_targets", lambda files: {})

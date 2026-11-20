@@ -1,7 +1,7 @@
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=Updater CE
+Name=Innioasis Updater
 GenericName=Firmware Flasher
 GenericName[ar]=أداة تثبيت البرامج الثابتة
 GenericName[bg]=Инструмент за флашване на фърмуер
@@ -77,6 +77,6 @@ Icon=innioasis-updater
 Terminal=false
 Categories=Utility;AudioVideo;
 Keywords=innioasis;timmkoo;y1;y2;a5;mtk;flash;firmware;rockbox;solar;
-StartupWMClass=Updater CE
+StartupWMClass=Innioasis Updater
 X-AppImage-Author=Ryan Specter
 MimeType=application/zip;application/x-zip-compressed;application/vnd.rar;

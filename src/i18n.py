@@ -41,7 +41,7 @@ _STRINGS: dict = {
     # spelling under the same key.
     "app_name": {
         "zh-CN": "更新程序",
-        "en": "Updater CE",
+        "en": "Innioasis Updater",
         "fr": "Programme de mise à jour",
         "es": "Actualizador",
         "de": "Updater",
@@ -787,7 +787,7 @@ _STRINGS: dict = {
     },
     "settings_sp_gui_desc": {
         "zh-CN": "关闭 更新程序 并打开 SP Flash Tool 图形界面，自动加载所选固件的 scatter 文件和镜像。",
-        "en": "Closes Updater CE and opens SP Flash Tool GUI with the selected firmware scatter file and partition images preloaded.",
+        "en": "Closes Innioasis Updater and opens SP Flash Tool GUI with the selected firmware scatter file and partition images preloaded.",
         "fr": "Ferme Programme de mise à jour et ouvre l'interface SP Flash Tool avec le fichier scatter et les images préchargés.",
         "es": "Cierra Actualizador y abre la GUI de SP Flash Tool con el archivo scatter y las imágenes precargadas.",
     },
@@ -883,7 +883,7 @@ _STRINGS: dict = {
     },
     "terminal_install_prompt_body": {
         "zh-CN": "即将打开{terminal_name}运行 {method}。\n\n• 如果设备尚未关机，请关闭您的{device}。\n• 如果已连接 USB，请先断开连接。\n{hint}\n• {terminal_name}窗口打开后，将设备连接到电脑。\n\n点击“确定”将打开窗口并退出 更新程序。",
-        "en": "{terminal_name} will now open running {method}.\n\n• If it isn't already off, power off your {device}.\n• If it is connected to USB, disconnect it first.\n{hint}\n• Connect your device to your computer when the {terminal_name} window has opened.\n\nClick OK to launch and exit Updater CE.",
+        "en": "{terminal_name} will now open running {method}.\n\n• If it isn't already off, power off your {device}.\n• If it is connected to USB, disconnect it first.\n{hint}\n• Connect your device to your computer when the {terminal_name} window has opened.\n\nClick OK to launch and exit Innioasis Updater.",
         "fr": "{terminal_name} va s'ouvrir pour exécuter {method}.\n\n• Si l'appareil n'est pas déjà éteint, éteignez votre {device}.\n• S'il est connecté en USB, débranchez-le d'abord.\n{hint}\n• Connectez votre appareil à l'ordinateur lorsque la fenêtre {terminal_name} s'ouvrira.\n\nCliquez sur OK pour lancer et quitter Programme de mise à jour.",
         "es": "Se abrirá {terminal_name} ejecutando {method}.\n\n• Si no está apagado, apaga tu {device}.\n• Si está conectado al USB, desconéctalo primero.\n{hint}\n• Conecta tu dispositivo al ordenador cuando la ventana de {terminal_name} se haya abierto.\n\nHaz clic en Aceptar para iniciar y salir de Actualizador.",
     },
@@ -907,7 +907,7 @@ _STRINGS: dict = {
     },
     "sp_gui_install_prompt_body": {
         "zh-CN": "SP Flash Tool 图形界面即将打开，并已预载固件。\n\n• 在 SP Flash Tool 下拉菜单中选择“Download”。\n• 点击“Download”按钮。\n• 请确保您的{device}已关机并断开 USB 连接。\n{hint}\n• 点击 Download 后，将 USB 线连接到电脑开始刷机。\n\n点击“确定”将启动 SP Flash Tool 并退出 更新程序。",
-        "en": "SP Flash Tool GUI will now open with your firmware preloaded.\n\n• In SP Flash Tool, select \"Download\" from the dropdown box.\n• Click the \"Download\" button.\n• Make sure your {device} is powered off and disconnected.\n{hint}\n• Connect the USB cable to your computer after clicking Download.\n\nClick OK to launch SP Flash Tool and exit Updater CE.",
+        "en": "SP Flash Tool GUI will now open with your firmware preloaded.\n\n• In SP Flash Tool, select \"Download\" from the dropdown box.\n• Click the \"Download\" button.\n• Make sure your {device} is powered off and disconnected.\n{hint}\n• Connect the USB cable to your computer after clicking Download.\n\nClick OK to launch SP Flash Tool and exit Innioasis Updater.",
         "fr": "L'interface SP Flash Tool va s'ouvrir avec votre micrologiciel préchargé.\n\n• Dans SP Flash Tool, sélectionnez « Download » dans la liste déroulante.\n• Cliquez sur le bouton « Download ».\n• Assurez-vous que votre {device} est éteint et débranché.\n{hint}\n• Connectez le câble USB à l'ordinateur après avoir cliqué sur Download.\n\nCliquez sur OK pour lancer SP Flash Tool et quitter Programme de mise à jour.",
         "es": "La interfaz de SP Flash Tool se abrirá con el firmware precargado.\n\n• En SP Flash Tool, selecciona \"Download\" en el menú desplegable.\n• Haz clic en el botón \"Download\".\n• Asegúrate de que tu {device} esté apagado y desconectado.\n{hint}\n• Conecta el cable USB al ordenador después de hacer clic en Download.\n\nHaz clic en Aceptar para iniciar SP Flash Tool y salir de Actualizador.",
     },
@@ -2930,7 +2930,7 @@ _STRINGS: dict = {
     },
     "settings_run_as_admin_restart_needed": {
         "zh-CN": "更新程序 需要重启，安装才能获得这些权限。",
-        "en": "Updater CE must restart for installs to run with these rights.",
+        "en": "Innioasis Updater must restart for installs to run with these rights.",
         "fr": "Programme de mise à jour doit redémarrer pour que les installations disposent de ces droits.",
         "es": "Actualizador debe reiniciarse para que las instalaciones tengan estos permisos.",
     },
@@ -3387,7 +3387,7 @@ _STRINGS: dict = {
         "es": "Preparando el equipo para la actualización…",
     },
     "install_restarting_as_admin": {
-        "en": "Restarting Updater CE with administrator rights…",
+        "en": "Restarting Innioasis Updater with administrator rights…",
         "zh-CN": "正在以管理员权限重启 更新程序…",
         "fr": "Redémarrage d'Programme de mise à jour avec les droits d'administrateur…",
         "es": "Reiniciando Actualizador con permisos de administrador…",
@@ -3825,7 +3825,7 @@ _STRINGS: dict = {
     },
     "log_filter_gui": {
         "zh-CN": "更新程序 (应用日志)",
-        "en": "Updater CE (App)",
+        "en": "Innioasis Updater (App)",
         "fr": "Programme de mise à jour (Application)",
         "es": "Actualizador (Aplicación)",
     },
@@ -4065,7 +4065,7 @@ _STRINGS: dict = {
     # Donation dialog
     "donate_title": {
         "zh-CN": "支持 更新程序",
-        "en": "Support Updater CE",
+        "en": "Support Innioasis Updater",
         "fr": "Soutenir Programme de mise à jour",
         "es": "Apoya a Actualizador",
     },
@@ -4269,12 +4269,12 @@ _STRINGS: dict = {
     # The letter signs off with the maintainer's name and picture. The picture
     # is the appeal's, not the heading's: it belongs to the personal note.
     "donate_completion_signature": {
-        "zh-CN": "- Ryan - Updater CE 维护者",
-        "en": "~ Ryan · Maintainer of Updater CE",
-        "fr": "- Ryan - Mainteneur d'Updater CE",
-        "es": "- Ryan - Mantenedor de Updater CE",
-        "de": "- Ryan - Maintainer von Updater CE",
-        "ja": "- Ryan - Updater CE のメンテナー",
+        "zh-CN": "- Ryan - 更新程序维护者",
+        "en": "~ Ryan · Maintainer of Innioasis Updater",
+        "fr": "- Ryan - Mainteneur d'Innioasis Updater",
+        "es": "- Ryan - Mantenedor de Innioasis Updater",
+        "de": "- Ryan - Maintainer von Innioasis Updater",
+        "ja": "- Ryan - Innioasis Updater のメンテナー",
     },
     "donate_completion_coffee": {
         "zh-CN": "在 Ko-fi 上捐赠",
@@ -4306,13 +4306,13 @@ _STRINGS: dict = {
     },
     "donate_intro_success": {
         "zh-CN": "我们已将 <b>{software}</b> 安装到您的 <b>{model}</b>。<br><br>你好！我是 Ryan，更新程序、社区固件档案和主题画廊的开发者。我每月自掏腰包约 200 美元用于服务器和存储，您的捐助能分担这笔开销，也帮助支持我的家人。如果这个工具帮到了您，请考虑捐助。",
-        "en": "We've installed <b>{software}</b> on your <b>{model}</b>.<br><br>Hey! I'm Ryan, the developer behind Updater CE, the Community Firmware Archive, and the Themes Gallery. I pay around $200 a month out of my own pocket for servers and storage, and your donation helps cover that and supports my family. If this tool helped you, please consider donating.",
+        "en": "We've installed <b>{software}</b> on your <b>{model}</b>.<br><br>Hey! I'm Ryan, the developer behind Innioasis Updater, the Community Firmware Archive, and the Themes Gallery. I pay around $200 a month out of my own pocket for servers and storage, and your donation helps cover that and supports my family. If this tool helped you, please consider donating.",
         "fr": "Nous avons installé <b>{software}</b> sur votre <b>{model}</b>.<br><br>Salut ! Je suis Ryan, le développeur derrière Programme de mise à jour, l'Archive Communautaire de Firmwares et la Galerie de Thèmes. Je paie environ 200 $ par mois de ma poche pour les serveurs et le stockage, et votre don couvre ces frais et aide ma famille. Si cet outil vous a aidé, pensez à faire un don.",
         "es": "Hemos instalado <b>{software}</b> en tu <b>{model}</b>.<br><br>¡Hola! Soy Ryan, el desarrollador detrás de Actualizador, el Archivo Comunitario de Firmwares y la Galería de Temas. Pago unos 200 $ al mes de mi bolsillo por los servidores y el almacenamiento, y tu donación cubre esos gastos y ayuda a mi familia. Si esta herramienta te ayudó, considera donar.",
     },
     "donate_intro_general": {
         "zh-CN": "你好！我是 Ryan，更新程序、社区固件档案和主题画廊的开发者。服务器、存储和域名的费用都由我自己承担，每月约 200 美元；您的捐助能分担这笔开销，也帮助支持我的家人。您的任何支持都能让这些工具继续服务下一位用户。",
-        "en": "Hey! I'm Ryan, the developer behind Updater CE, the Community Firmware Archive, and the Themes Gallery. I pay for the servers, storage and domains out of my own pocket, around $200 a month, and your donation helps cover that and supports my family. Any support you give keeps these tools going for the next owner.",
+        "en": "Hey! I'm Ryan, the developer behind Innioasis Updater, the Community Firmware Archive, and the Themes Gallery. I pay for the servers, storage and domains out of my own pocket, around $200 a month, and your donation helps cover that and supports my family. Any support you give keeps these tools going for the next owner.",
         "fr": "Salut ! Je suis Ryan, le développeur derrière Programme de mise à jour, l'Archive Communautaire de Firmwares et la Galerie de Thèmes. Je paie les serveurs, le stockage et les domaines de ma poche, environ 200 $ par mois, et votre don couvre ces frais et aide ma famille. Votre aide permet à ces outils de continuer pour le prochain utilisateur.",
         "es": "¡Hola! Soy Ryan, el desarrollador detrás de Actualizador, el Archivo Comunitario de Firmwares y la Galería de Temas. Pago los servidores, el almacenamiento y los dominios de mi bolsillo, unos 200 $ al mes, y tu donación cubre esos gastos y ayuda a mi familia. Cualquier apoyo mantiene estas herramientas para el próximo usuario.",
     },
@@ -4817,7 +4817,7 @@ _STRINGS: dict = {
     },
     "portable_dont_ask_hint": {
         "zh-CN": "更新程序正以便携模式运行，不会在这台电脑上保存任何内容，因此此设置不可用。下次运行时会再次询问。",
-        "en": "Updater CE is running as a portable app and won't store anything on this computer, so this setting is unavailable. You'll be asked again next time.",
+        "en": "Innioasis Updater is running as a portable app and won't store anything on this computer, so this setting is unavailable. You'll be asked again next time.",
         "fr": "Le programme fonctionne en mode portable et n'enregistre rien sur cet ordinateur : ce réglage n'est pas disponible. La question sera reposée la prochaine fois.",
         "es": "El actualizador se ejecuta como aplicación portátil y no guarda nada en este equipo, así que esta opción no está disponible. Se volverá a preguntar la próxima vez.",
         "de": "Der Updater läuft als portable App und speichert nichts auf diesem Computer. Diese Einstellung ist daher nicht verfügbar; beim nächsten Start wird erneut gefragt.",
@@ -4904,11 +4904,11 @@ _STRINGS: dict = {
         "ur": "ریان اسپیکٹر اور کمیونٹی کے معاون",
     },
     "donate_support_role": {
-        "en": "Lead Developer · Updater CE & Community Firmware Project",
-        "zh-CN": "首席开发者 · Updater CE 与社区固件项目",
-        "fr": "Développeur principal · Updater CE et projet de micrologiciel communautaire",
-        "es": "Desarrollador principal · Updater CE y proyecto de firmware comunitario",
-        "is": "Aðalforritari · Updater CE og Community Firmware verkefnið",
+        "en": "Lead Developer · Innioasis Updater & Community Firmware Project",
+        "zh-CN": "首席开发者 · 更新程序与社区固件项目",
+        "fr": "Développeur principal · Innioasis Updater et projet de micrologiciel communautaire",
+        "es": "Desarrollador principal · Innioasis Updater y proyecto de firmware comunitario",
+        "is": "Aðalforritari · Innioasis Updater og Community Firmware verkefnið",
     },
     "donate_support_appeal_full": {
         "en": "Donations cover the cost of our projects, the servers behind them, and they help me support my family. If this tool saved you time or rescued your player today, please consider a small donation, it truly means the world to us.",
@@ -4999,7 +4999,7 @@ _STRINGS: dict = {
         "ja": "企業ではなく一人の個人開発者が作っています。少額の寄付がサーバー費、検証用端末、そして家族の支えになります",
     },
     "donate_appeal_keep_going": {
-        "en": "If Updater CE saved your player today, consider donating, it pays for servers, test hardware, and puts food on our table",
+        "en": "If Innioasis Updater saved your player today, consider donating, it pays for servers, test hardware, and puts food on our table",
         "zh-CN": "如果本工具今天成功救回了您的播放器，请考虑支持一下, , 这能帮助支付服务器费用并维持全家生计",
         "fr": "Si Programme de mise à jour a sauvé votre appareil aujourd'hui, pensez à donner : cela paie les serveurs, le matériel et nourrit notre famille",
         "es": "Si Actualizador revivió tu reproductor hoy, considera apoyarnos: financia servidores, hardware de prueba y comida en nuestra mesa",
@@ -5087,7 +5087,7 @@ _STRINGS: dict = {
         "ja": "サイレントな基板改変による故障から、大切な機器を守ります。",
     },
     "support_story_1_body": {
-        "en": "Innioasis regularly rolls out newer firmwares for players like the Y1 (targeting hidden board revisions like 6.0, 7.0, and 8.0) that silently break older devices. Worse, their website provides zero warnings and zero access to previous working firmwares to recover from a bricked state. Updater CE and the Community Firmware project pick up the pieces: we archive every legacy stock ROM, automatically verify your hardware revision, and keep your player running safely.",
+        "en": "Innioasis regularly rolls out newer firmwares for players like the Y1 (targeting hidden board revisions like 6.0, 7.0, and 8.0) that silently break older devices. Worse, their website provides zero warnings and zero access to previous working firmwares to recover from a bricked state. Innioasis Updater and the Community Firmware project pick up the pieces: we archive every legacy stock ROM, automatically verify your hardware revision, and keep your player running safely.",
         "zh-CN": "Innioasis 经常为 Y1 等播放器推出针对隐藏主板版本（如 6.0、7.0、8.0）的新固件，这些固件刷入较旧机器时可能导致异常甚至变砖。更糟糕的是，原厂官网既不提供硬件版本警示，也不提供历史旧固件供用户救砖回退。更新程序 与社区固件归档项目应运而生：我们归档了所有已知的原厂历史 ROM，自动校验硬件适配，让您的播放器长久安全运行。",
         "fr": "Innioasis publie régulièrement de nouveaux micrologiciels pour des modèles comme le Y1 (pour des révisions internes 6.0, 7.0, 8.0) qui rendent les anciens appareils inutilisables. Pire encore, aucun avertissement ni archive des anciennes versions ne figure sur leur site. Programme de mise à jour et l'archive communautaire prennent le relais : nous conservons chaque ROM officielle, vérifions votre matériel et assurons la pérennité de votre lecteur.",
         "es": "Innioasis lanza periódicamente firmwares para reproductores como el Y1 (para revisiones como 6.0, 7.0 u 8.0) que rompen los modelos anteriores. Peor aún, no ofrecen advertencias ni copias de firmwares anteriores para recuperar el equipo. Actualizador y el archivo comunitario rescatan tu dispositivo: archivamos cada ROM de fábrica, comprobamos tu hardware y mantenemos tu reproductor funcionando con seguridad.",
@@ -5201,7 +5201,7 @@ _STRINGS: dict = {
         "ja": "Rockbox、軽量カスタム OS、そして妥協なき高音質再生環境をお届けします。",
     },
     "support_story_3_body": {
-        "en": "Stock factory software only scratches the surface of what your Y1 or Y2 hardware can do. Our community brought Rockbox, lightweight custom operating systems, audiophile codec playback, and custom themes to life. We buy physical hardware variations out-of-pocket to test, reverse engineer, and verify every install. Supporting Updater CE directly funds these test units and accelerates custom firmware development.",
+        "en": "Stock factory software only scratches the surface of what your Y1 or Y2 hardware can do. Our community brought Rockbox, lightweight custom operating systems, audiophile codec playback, and custom themes to life. We buy physical hardware variations out-of-pocket to test, reverse engineer, and verify every install. Supporting Innioasis Updater directly funds these test units and accelerates custom firmware development.",
         "zh-CN": "原厂自带软件仅仅发挥了 Y1/Y2 硬件潜力的很小一部分。我们社区开发并移植了 Rockbox、轻量级定制操作系统、发烧级无损音频解码支持与丰富的主题。为了确保万无一失，开发者自费购买了各种硬件变体样机进行逆向和实机测试。您的支持能直接分担购机测试成本，加速更多固件与功能的开发。",
         "fr": "Le logiciel d'usine n'exploite qu'une fraction des capacités matérielles du Y1 ou Y2. Notre communauté a porté Rockbox, conçu des systèmes personnalisés légers et optimisé la lecture audiophile. Nous achetons nous-mêmes le matériel pour tester et vérifier chaque installation. Votre soutien finance ces appareils de test et accélère le développement.",
         "es": "El software de fábrica apenas aprovecha el hardware del Y1 o Y2. Nuestra comunidad ha hecho realidad Rockbox, sistemas personalizados ligeros, reproducción audiófila y temas exclusivos. Compramos de nuestro bolsillo diferentes variantes para probarlas. Tu apoyo financia estas unidades de prueba y acelera el desarrollo.",
@@ -5257,7 +5257,7 @@ _STRINGS: dict = {
         "ja": "愛用の音楽プレイヤーを電子ゴミにさせない、草の根の維持・保存活動。",
     },
     "support_story_4_body": {
-        "en": "When a hardware company moves on to their next gadget, older models get abandoned. Innioasis provides no Linux support, no transparent changelogs, and no easy way to recover when an install fails. Updater CE exists because passionate users shouldn't have to throw away a perfectly good music player. 100% of community contributions go directly into keeping this tool open for everyone.",
+        "en": "When a hardware company moves on to their next gadget, older models get abandoned. Innioasis provides no Linux support, no transparent changelogs, and no easy way to recover when an install fails. Innioasis Updater exists because passionate users shouldn't have to throw away a perfectly good music player. 100% of community contributions go directly into keeping this tool open for everyone.",
         "zh-CN": "当硬件厂商转向新产品线时，老款设备往往被彻底遗忘。Innioasis 原厂不提供 Linux 支持、不公开详细变更日志，设备刷坏后也无简易救砖途径。更新程序 的存在就是为了让音乐爱好者不必丢弃性能完好的播放器。每一笔社区捐赠都 100% 用于维持这项服务，让它始终对所有人开放。",
         "fr": "Quand un fabricant passe au produit suivant, les anciens modèles sont délaissés. Innioasis n'offre aucun support Linux, pas de journal des modifications transparent ni de solution simple en cas de panne. Programme de mise à jour existe pour que personne n'ait à jeter un excellent lecteur. 100% des dons financent les serveurs et la gratuité pour tous.",
         "es": "Cuando una empresa pasa al siguiente producto, los modelos antiguos quedan abandonados. Innioasis no ofrece soporte en Linux, ni registros de cambios transparentes ni soluciones fáciles de recuperación. Actualizador existe para que no tires un reproductor perfectamente funcional. El 100% de las aportaciones financia servidores y mantiene todo libre.",
@@ -6074,7 +6074,7 @@ _STRINGS: dict = {
     },
     "simulated_mac_body": {
         "zh-CN": "MTKClient 将成为唯一的安装方式，并显示 macOS 专属提示。更新程序 需要重启才能应用。",
-        "en": "MTKClient becomes the only install method and macOS-specific prompts are shown. Updater CE needs to restart to apply this.",
+        "en": "MTKClient becomes the only install method and macOS-specific prompts are shown. Innioasis Updater needs to restart to apply this.",
         "fr": "MTKClient devient la seule méthode d'installation et les invites macOS sont affichées. Programme de mise à jour doit redémarrer pour appliquer ce réglage.",
         "es": "MTKClient pasa a ser el único método de instalación y se muestran los avisos de macOS. Actualizador debe reiniciarse para aplicarlo.",
     },
@@ -7676,7 +7676,7 @@ _STRINGS: dict = {
     },
     "legacy_cleanup_platform_tools_hint": {
         "zh-CN": "如果您在 更新程序 之外不需要使用 ADB 或 Fastboot，可取消勾选以卸载并释放更多空间。",
-        "en": "If you do not use ADB or Fastboot outside Updater CE, uncheck to uninstall and reclaim additional storage.",
+        "en": "If you do not use ADB or Fastboot outside Innioasis Updater, uncheck to uninstall and reclaim additional storage.",
         "fr": "Si vous n'utilisez pas ADB ou Fastboot en dehors d'Programme de mise à jour, décochez pour désinstaller et libérer de l'espace.",
         "es": "Si no utiliza ADB o Fastboot fuera de Actualizador, desmárquelo para desinstalar y liberar espacio.",
     },

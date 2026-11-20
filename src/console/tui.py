@@ -127,7 +127,7 @@ def _load_rows(state: BrowseState, items: list, refresh: bool) -> str:
 
 
 def _prepare(refresh: bool) -> tuple[BrowseState, list, str]:
-    print("Updater CE — loading the catalogue…", flush=True)
+    print("Innioasis Updater — loading the catalogue…", flush=True)
     state = BrowseState()
     apply_saved_filters(state)
     items, error = _load_items(refresh)
@@ -258,7 +258,7 @@ def _install_first_pick(
             screen,
             0,
             0,
-            f"Updater CE {_version()}    {_tr('install_first_title')}"[: width - 1],
+            f"Innioasis Updater {_version()}    {_tr('install_first_title')}"[: width - 1],
             width - 1,
             curses.A_BOLD,
         )
@@ -299,7 +299,7 @@ def _install_first_confirm(screen, title: str, detail: str = "") -> bool | None:
             screen,
             0,
             0,
-            f"Updater CE {_version()}    {_tr('install_first_title')}"[: width - 1],
+            f"Innioasis Updater {_version()}    {_tr('install_first_title')}"[: width - 1],
             width - 1,
             curses.A_BOLD,
         )
@@ -700,7 +700,7 @@ def _draw_progress(screen, state: BrowseState, percent: float, label: str, detai
     screen.erase()
     row = activate(state.releases, state.index)
     title = row.label if row is not None else state.software or "Software"
-    _put(screen, 0, 0, f"Updater CE {_version()}    Installing", width - 1, curses.A_BOLD)
+    _put(screen, 0, 0, f"Innioasis Updater {_version()}    Installing", width - 1, curses.A_BOLD)
     _put(screen, 1, 0, title[: width - 1], width - 1)
     bar_width = max(8, width - 12)
     filled = int(bar_width * max(0.0, min(100.0, percent)) / 100.0)
@@ -797,7 +797,7 @@ def _ask_keep_data(screen, state: BrowseState, current: bool, offered: bool = Tr
     while True:
         height, width = screen.getmaxyx()
         screen.erase()
-        title = f"Updater CE {_version()}    {_tr('flash_guide_title')}"
+        title = f"Innioasis Updater {_version()}    {_tr('flash_guide_title')}"
         _put(screen, 0, 0, title[: width - 1], width - 1, curses.A_BOLD)
         _put(screen, 1, 0, (state.software or "Software")[: width - 1], width - 1)
         lines = _install_card_lines(state, offered, keep)
@@ -1354,7 +1354,7 @@ def _curses_run(state: BrowseState, items: list, output: Path) -> int:
         height, width = screen.getmaxyx()
         screen.erase()
         version = _version()
-        _put(screen, 0, 0, f"Updater CE {version}    Select Software", width - 1, curses.A_BOLD)
+        _put(screen, 0, 0, f"Innioasis Updater {version}    Select Software", width - 1, curses.A_BOLD)
         type_label = state.hardware_type or "—"
         filters = _filter_text(state)
         _put(screen, 1, 0, filters, width - 1)
@@ -1811,9 +1811,9 @@ def _prepare_machine() -> None:
     if is_wsl():
         print(startup_note(), flush=True)
     if getattr(sys, "frozen", False):
-        print("Updater CE — this build already includes its tools.", flush=True)
+        print("Innioasis Updater — this build already includes its tools.", flush=True)
         return
-    print("Updater CE — preparing this computer.", flush=True)
+    print("Innioasis Updater — preparing this computer.", flush=True)
     print("The menu opens when this finishes. The window's Qt libraries are not loaded.", flush=True)
     from .flash import ensure_mtk_python
 
@@ -1860,5 +1860,5 @@ def run(refresh: bool = False, simulate: bool = False) -> int:
         if exc.__class__.__module__.startswith("curses") or isinstance(exc, ImportError):
             print(failover_text("curses"), file=sys.stderr)
             return _plain(state, items, refresh, output)
-        print(f"Updater CE stopped: {exc}", file=sys.stderr)
+        print(f"Innioasis Updater stopped: {exc}", file=sys.stderr)
         return 1

@@ -143,7 +143,7 @@ def test_english_keeps_the_dialect_the_system_asks_for(monkeypatch):
     try:
         translator().set_language("en-US")
         assert tr("button_centre") == "center button"
-        assert tr("app_name") == "Updater CE"
+        assert tr("app_name") == "Innioasis Updater"
         translator().set_language("en-GB")
         assert tr("button_centre") == "centre button"
         assert tr("settings_offline_mode_desc").startswith(

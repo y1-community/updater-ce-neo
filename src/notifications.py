@@ -471,7 +471,7 @@ def show_system_notification(
         if notify_send:
             try:
                 subprocess.Popen(
-                    [notify_send, "-a", "Innioasis Updater CE", title, message],
+                    [notify_send, "-a", "Innioasis Updater", title, message],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )

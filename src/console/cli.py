@@ -1,4 +1,4 @@
-"""Command line interface for Updater CE on machines without Qt.
+"""Command line interface for Innioasis Updater on machines without Qt.
 
     innioasis-updater-lite list --model Y1
     innioasis-updater-lite download Y1 --output ~/firmware
@@ -167,7 +167,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     if args.json:
         print(json.dumps(info, ensure_ascii=False), flush=True)
         return 0
-    print("Updater CE terminal check")
+    print("Innioasis Updater terminal check")
     for key in ("python", "platform", "machine", "tty", "mtkclient", "adb", "unrar", "mount"):
         value = info.get(key) or "(not found)"
         print(f"  {key:<10} {value}")
@@ -200,9 +200,9 @@ def cmd_tui(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="innioasis-updater-lite",
-        description="Updater CE for headless and low-power Linux machines.",
+        description="Innioasis Updater for headless and low-power Linux machines.",
     )
-    parser.add_argument("--version", action="version", version=f"Updater CE {_version()} (terminal)")
+    parser.add_argument("--version", action="version", version=f"Innioasis Updater {_version()} (terminal)")
     parser.add_argument("--json", action="store_true", help="machine-readable output")
     sub = parser.add_subparsers(dest="command")
 

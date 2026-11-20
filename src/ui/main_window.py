@@ -952,6 +952,15 @@ class MainWindow(QMainWindow):
         from ..online_refresh import next_interval_ms
 
         QTimer.singleShot(2000, lambda: self._online_refresh_timer.start(next_interval_ms()))
+
+        def _startup_shortcut_reconcile():
+            try:
+                from ..shortcut_manager import reconcile_shortcut_names
+                reconcile_shortcut_names()
+            except Exception:
+                logger.debug("Could not reconcile shortcuts at startup", exc_info=True)
+
+        QTimer.singleShot(1500, _startup_shortcut_reconcile)
         # Only one all-repository sweep runs at a time; its result reloads the
         # visible release list without another manifest fetch.
         self._release_refresh_worker = None

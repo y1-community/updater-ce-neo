@@ -20,7 +20,7 @@
   #ifdef MyIsMediaTek
     #define MyAppName "MediaTek Installer"
   #else
-    #define MyAppName "Innioasis Updater CE"
+    #define MyAppName "Innioasis Updater"
   #endif
 #endif
 ; Install folder under Program Files (or x86) / the per-user Programs folder.
@@ -298,7 +298,7 @@ StepLegacy=Cleaning up old data and install folders...
 ; Shortcut names match the app's own localized names (src/shortcut_manager.py),
 ; so removing and recreating one never changes its name or leaves a duplicate.
 AppShortcutName=Innioasis Updater
-DesktopAppShortcutName=Innioasis Updater CE
+DesktopAppShortcutName=Innioasis Updater
 ; Every other language's name is generated from the app's own catalogs, so
 ; Setup writes exactly the file name the app writes, renames and deletes.
 #include "build_windows_installer_names.iss"
@@ -953,7 +953,9 @@ begin
       IsLocalizedAppShortcut(Name) or
       NameContains(Name, 'Innioasis') or
       NameContains(Name, 'SP Flash') or
-      NameContains(Name, 'Updater CE')
+      NameContains(Name, 'Updater CE') or
+      NameContains(Name, ' CE') or
+      NameContains(Name, ' (CE)')
     );
 end;
 
@@ -1074,7 +1076,7 @@ begin
       Path := Root + '\' + FindRec.Name;
       if (FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0 then
         PurgeLocalizedAppShortcutsAt(Path, Depth + 1)
-      else if IsLocalizedAppShortcut(FindRec.Name) then
+      else if IsLocalizedAppShortcut(FindRec.Name) or (IsShortcutFile(FindRec.Name) and (NameContains(FindRec.Name, ' CE') or NameContains(FindRec.Name, ' (CE)') or NameContains(FindRec.Name, 'Updater CE'))) then
         DeleteFile(Path);
     until not FindNext(FindRec);
   finally
@@ -1101,7 +1103,10 @@ begin
     IsShortcutFile(Name) and (
       NameContains(Name, 'SP Flash') or
       NameContains(Name, 'Innioasis Updater CE') or
+      NameContains(Name, 'Updater CE') or
       NameContains(Name, 'MediaTek Installer') or
+      NameContains(Name, ' CE') or
+      NameContains(Name, ' (CE)') or
       (NameContains(Name, 'Innioasis Updater') and not IsLocalizedAppShortcut(Name))
     );
 end;

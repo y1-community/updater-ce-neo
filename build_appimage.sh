@@ -153,7 +153,7 @@ fi
 
 BRAND="$(printf '%s' "${BUILD_BRAND:-updater_ce}" | tr '[:upper:]-' '[:lower:]_')"
 APP_NAME="InnioasisUpdater"
-DISPLAY_NAME="Updater CE"
+DISPLAY_NAME="Innioasis Updater"
 APP_ID="io.github.y1_community.InnioasisUpdater"
 BRAND_SLUG="InnioasisUpdater"
 case "$BRAND" in
