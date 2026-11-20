@@ -3492,6 +3492,8 @@ class SettingsPage(QWidget):
         self._background_desc.setText(run_in_background_desc())
         if hasattr(self, "_install_themes_card"):
             self._install_themes_card.retranslate()
+            if is_mediatek_installer():
+                self._install_themes_card.setVisible(False)
         if hasattr(self, "_install_themes_desc"):
             self._install_themes_desc.setText(tr("settings_install_themes_desc"))
         if hasattr(self, "_themes_beta_pill"):

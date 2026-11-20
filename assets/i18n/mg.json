@@ -24,6 +24,7 @@
  "app_name": "Updater",
  "app_name_mediatek_installer": "MediaTek Installer",
  "app_name_mediatek_installer_short": "Installer",
+ "app_name_short": "Updater",
  "app_title": "Flash upgrade",
  "author_by": "ny",
  "brand_author_by": "avy amin'ny {author}",

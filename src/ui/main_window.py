@@ -1664,7 +1664,7 @@ class MainWindow(QMainWindow):
         brand_font_weight = "600" if is_mac else "800"
         brand_letter_spacing = "normal" if is_mac else "-0.02em"
 
-        self._brand_label = QLabel(get_app_name())
+        self._brand_label = QLabel(get_brand_name())
         self._brand_label.setStyleSheet(
             f"font-size: {brand_font_size}; font-weight: {brand_font_weight}; color: palette(window-text); letter-spacing: {brand_letter_spacing}; background: transparent; border: none;"
         )
@@ -3541,6 +3541,8 @@ class MainWindow(QMainWindow):
         suffix; they are the native 360p Rockbox build. Explicit 240p assets
         must remain excluded for either model.
         """
+        if is_mediatek_installer():
+            return False, ""
         model = (getattr(self, "_package_model", "") or "").upper()
         name = (getattr(self, "_package_name", "") or "").lower()
         path = (getattr(self, "_package_path", "") or "").lower()

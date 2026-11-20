@@ -108,10 +108,13 @@ def get_app_name() -> str:
 
 
 def get_brand_name() -> str:
-    """Short brand shown beside the version badge ("Installer 2.5")."""
+    """Short brand shown beside the version badge ("Installer 2.5", "Updater 2.5")."""
     from .i18n import tr
     if is_mediatek_installer():
         return tr("app_name_mediatek_installer_short")
+    val = tr("app_name_short")
+    if val and val != "app_name_short":
+        return val
     return tr("app_name")
 
 # --- Online firmware catalogue ---------------------------------------------

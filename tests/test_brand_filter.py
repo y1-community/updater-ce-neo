@@ -201,3 +201,32 @@ def test_a_brand_with_no_releases_is_not_offered():
         assert catalog.brand_names() == []
     finally:
         catalog.set_live_catalog(saved)
+
+
+def test_rockbox_theme_checkbox_hidden_in_mediatek_branding(monkeypatch):
+    """Ensure rockbox theme installs checkboxes are not shown in mediatek branding."""
+    from src import config
+    from src.ui.main_window import MainWindow
+
+    monkeypatch.setattr(config, "IS_MEDIATEK_INSTALLER", True)
+    w = MainWindow()
+    assert config.is_mediatek_installer()
+    # Checkbox on SelectPage
+    page = w._select_page
+    assert hasattr(page, "_local_rockbox_themes_cb")
+    assert not page._local_rockbox_themes_cb.isVisible()
+    # Test setting installer mode false or retranslating does not expose it
+    page.apply_installer_mode(False)
+    assert not page._local_rockbox_themes_cb.isVisible()
+    page.retranslate()
+    assert not page._local_rockbox_themes_cb.isVisible()
+    # SettingsPage card and switch
+    settings = w._settings_page
+    if hasattr(settings, "_install_themes_card"):
+        assert not settings._install_themes_card.isVisible()
+    # Check title heading uses short name (Installer in mediatek)
+    assert w._brand_label.text() == "Installer"
+    # Check rockbox themes required returns False
+    assert w._rockbox_themes_required() == (False, "")
+    w.close()
+

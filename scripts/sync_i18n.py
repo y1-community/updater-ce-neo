@@ -73,6 +73,24 @@ def sync_language(file_path: Path, all_keys: list[str]) -> int:
             data["app_name"] = val[:-5].strip()
             updated = True
 
+    # 3. Short app name (e.g. "Updater" in English, localized "Updater" in others)
+    if "app_name_short" in all_keys:
+        if code in ("en", "en-GB", "en-US"):
+            if data.get("app_name_short") != "Updater":
+                data["app_name_short"] = "Updater"
+                updated = True
+        else:
+            short_app = data.get("app_name", "").strip()
+            if not data.get("app_name_short") or data.get("app_name_short") != short_app:
+                data["app_name_short"] = short_app
+                updated = True
+
+    # 4. onboarding_title clean without Innioasis prefix where appropriate
+    if "onboarding_title" in data and code in ("en", "en-GB", "en-US"):
+        if data["onboarding_title"] != "Let's set up Updater":
+            data["onboarding_title"] = "Let's set up Updater"
+            updated = True
+
     missing = [k for k in all_keys if k not in data or not str(data[k]).strip()]
     if not missing:
         if updated:

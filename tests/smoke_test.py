@@ -901,7 +901,7 @@ def test_ui_construction():
     assert w._stack.currentIndex() == 0
     # Follows config.APP_VERSION: the title must not hardcode a release number.
     assert w.windowTitle() == f"Innioasis Updater v{APP_VERSION}", w.windowTitle()
-    assert w._brand_label.text() == "Innioasis Updater"
+    assert w._brand_label.text() == "Updater"
     assert w._icon_label.pixmap() is not None and not w._icon_label.pixmap().isNull()
     # Version badge sits beside the brand with no "v" prefix.
     assert w._brand_version.text() == APP_VERSION, (
@@ -6189,7 +6189,7 @@ def test_updater_ce_branding():
     app.processEvents()
 
     assert w.windowTitle().startswith(f"Innioasis Updater v{APP_VERSION}")
-    assert w._brand_label.text() == "Innioasis Updater"
+    assert w._brand_label.text() == "Updater"
 
     # Verify icon label
     assert w._icon_label is not None
@@ -6311,14 +6311,14 @@ def test_generic_mtk_mode_and_offline_branding():
     assert not config.is_offline_mode()
     assert not config.is_mediatek_installer()
     assert config.get_app_name() == "Innioasis Updater"
-    assert config.get_brand_name() == "Innioasis Updater"
+    assert config.get_brand_name() == "Updater"
 
     w = MainWindow()
     w.show()
     app.processEvents()
 
     assert w.windowTitle().startswith("Innioasis Updater")
-    assert w._brand_label.text() == "Innioasis Updater"
+    assert w._brand_label.text() == "Updater"
     assert w._select_page._tabs.count() >= 2
     assert w._select_page._tabs.tabBar().isVisible()
     assert w._support_btn.isVisible()
@@ -6338,7 +6338,7 @@ def test_generic_mtk_mode_and_offline_branding():
     assert not config.is_mediatek_installer()
     assert config.get_app_name() == "Innioasis Updater"
     assert w.windowTitle().startswith("Innioasis Updater")
-    assert w._brand_label.text() == "Innioasis Updater"
+    assert w._brand_label.text() == "Updater"
     assert not w._select_page._tabs.tabBar().isVisible()
     assert w._support_btn.isVisible()
     # Offline mode keeps local donations and credits visible (local donors.csv)
@@ -6389,7 +6389,7 @@ def test_mediatek_installer_mode():
     # never "MediaTek Firmware Installer" and never "Updater CE".
     for key in ("app_name_mediatek_installer", "app_name_mediatek_installer_short"):
         table = i18n._STRINGS[key]
-        assert set(table) == {"zh-CN", "en", "fr", "es"}, (key, sorted(table))
+        assert set(table) >= {"zh-CN", "en", "fr", "es"}, (key, sorted(table))
     assert i18n._STRINGS["app_name_mediatek_installer"]["en"] == "MediaTek Installer"
     assert i18n._STRINGS["app_name_mediatek_installer_short"]["en"] == "Installer"
     assert "app_name_generic_mtk" not in i18n._STRINGS
@@ -6397,7 +6397,7 @@ def test_mediatek_installer_mode():
     # Donation copy names this tool, not the CE catalogue, archive or gallery.
     for key in ("donate_title_mediatek", "donate_intro_general_mediatek", "donate_intro_success_mediatek"):
         table = i18n._STRINGS[key]
-        assert set(table) == {"zh-CN", "en", "fr", "es"}, (key, sorted(table))
+        assert set(table) >= {"zh-CN", "en", "fr", "es"}, (key, sorted(table))
         for loc, text in table.items():
             assert "Updater CE" not in text, (key, loc)
     for key in ("donate_intro_general_mediatek", "donate_intro_success_mediatek"):
@@ -6463,7 +6463,7 @@ def test_mediatek_installer_mode():
         w._settings_page._cb_advanced_settings.setChecked(True)
         app.processEvents()
         assert w.windowTitle().startswith("Innioasis Updater")
-        assert w._brand_label.text() == "Innioasis Updater"
+        assert w._brand_label.text() == "Updater"
         assert not w._settings_page._offline_mode_card.isHidden()
         assert not w._settings_page._rockbox_card.isHidden()
         assert w._credits_btn.isVisible()

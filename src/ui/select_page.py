@@ -1494,7 +1494,7 @@ class SelectPackagePage(QWidget):
             if widget is not None:
                 widget.setVisible(not enabled)
         if hasattr(self, "_local_rockbox_themes_cb"):
-            self._local_rockbox_themes_cb.setVisible(not enabled)
+            self._local_rockbox_themes_cb.setVisible(not enabled and not is_mediatek_installer() and not self._installer_mode)
         if enabled:
             self._prefill_da()
         self._sync_auth_file_ui()
@@ -2018,6 +2018,8 @@ class SelectPackagePage(QWidget):
         self._update_local_labels()
         if hasattr(self, "_local_rockbox_themes_cb"):
             self._local_rockbox_themes_cb.setText(tr("sel_local_rockbox_themes_option"))
+            if is_mediatek_installer() or self._installer_mode:
+                self._local_rockbox_themes_cb.setVisible(False)
         self._start_btn.setText(tr("sel_btn_start"))
         self._apply_online_banner()
         self._apply_local_banner()

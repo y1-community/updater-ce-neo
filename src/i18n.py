@@ -47,6 +47,14 @@ _STRINGS: dict = {
         "de": "Updater",
         "ja": "アップデーター",
     },
+    "app_name_short": {
+        "zh-CN": "更新程序",
+        "en": "Updater",
+        "fr": "Programme de mise à jour",
+        "es": "Actualizador",
+        "de": "Updater",
+        "ja": "アップデーター",
+    },
     "app_title": {
         "zh-CN": "刷机升级",
         "en": "Flash Upgrade",
@@ -5795,8 +5803,12 @@ _STRINGS: dict = {
     # player, which is what makes reminders, keep-data and install help work
     # before the first install through this app.
     "onboarding_title": {
-        "zh-CN": "让我们来设置 Innioasis Updater",
-        "en": "Let's set up Innioasis Updater",
+        "zh-CN": "让我们来设置更新程序",
+        "en": "Let's set up Updater",
+        "fr": "Configurons le programme de mise à jour",
+        "es": "Configuremos el Actualizador",
+        "de": "Richten wir den Updater ein",
+        "ja": "アップデーターを設定しましょう",
     },
     "onboarding_after_add_body": {
         "en": "We'll notify you in the app about updates and issues reported by the community for the software on these models:",
